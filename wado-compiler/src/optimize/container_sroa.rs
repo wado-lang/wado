@@ -95,10 +95,8 @@ fn classify_array_method_sig(func: &NirFunction, type_table: &TypeTable) -> Opti
     let is_list_of_t = |ty: TypeId| type_table.as_list(ty).is_some_and(is_t);
     let is_ref_list_of_t =
         |ty: TypeId| matches!(type_table.get(ty), ResolvedType::Ref(inner) if is_list_of_t(*inner));
-    let is_mut_ref_list_of_t =
-        |ty: TypeId| matches!(type_table.get(ty), ResolvedType::MutRef(inner) if is_list_of_t(*inner));
-    let is_array_of_t =
-        |ty: TypeId| matches!(type_table.get(ty), ResolvedType::BuiltinArray(inner) if is_t(*inner));
+    let is_mut_ref_list_of_t = |ty: TypeId| matches!(type_table.get(ty), ResolvedType::MutRef(inner) if is_list_of_t(*inner));
+    let is_array_of_t = |ty: TypeId| matches!(type_table.get(ty), ResolvedType::BuiltinArray(inner) if is_t(*inner));
     let is_i32 = |ty: TypeId| ty == TypeTable::I32;
     let is_unit = |ty: TypeId| ty == TypeTable::UNIT;
     // Names the impl exactly, the receiver being `List<T>` already: a second
@@ -204,6 +202,13 @@ enum ElementLayout {
     /// The `key` identifies the exact struct type so we reject literals
     /// of a different (even structurally-compatible) struct.
     Struct { key: TypeKey },
+}
+
+impl ElementLayout {
+    /// Whether a struct literal of `ty` builds this layout's element.
+    fn is_struct(&self, ty: TypeId, type_table: &TypeTable) -> bool {
+        matches!(self, Self::Struct { key } if type_table.type_key(ty) == *key)
+    }
 }
 
 /// How the candidate was initialized, and so how each field's list is built.
@@ -424,7 +429,7 @@ fn build_method_catalog(
         if mono.impl_type_args.len() != 1 {
             continue;
         }
-        let element_ty = type_table.type_key(mono.impl_type_args[0]);
+        let element = type_table.type_key(mono.impl_type_args[0]);
         let sig_key: SigKey = (
             method_info.trait_name.clone(),
             method_info.method_name.clone(),
@@ -434,7 +439,7 @@ fn build_method_catalog(
         id_sigkeys.insert(func_id, sig_key.clone());
         // First-writer wins (there should only be one per (T, sig)).
         catalog
-            .entry((element_ty, sig_key.clone()))
+            .entry((element, sig_key.clone()))
             .or_insert((func_ref, func_id));
 
         // Classify this method by signature shape. A method family (same
@@ -447,7 +452,7 @@ fn build_method_catalog(
             .or_else(|| classify_array_method_sig(&func, type_table));
         if let Some(kind) = kind {
             kind_index
-                .entry((element_ty, kind))
+                .entry((element, kind))
                 .or_insert_with(|| sig_key.clone());
             sig_kinds.entry(sig_key).or_insert(kind);
             id_kinds.insert(func_id, kind);
@@ -1112,7 +1117,8 @@ fn plan_body(
     // Also track which `ListMethodKind`s were observed on each whitelisted use,
     // so step 3 can demand only the monomorphizations that will actually be
     // emitted per field (rather than unconditionally requiring all four kinds).
-    let (safe_indices, used_kinds_map) = compute_safe_set(body, type_table, &candidates, sig, value_copy_ids);
+    let (safe_indices, used_kinds_map) =
+        compute_safe_set(body, type_table, &candidates, sig, value_copy_ids);
     if safe_indices.is_empty() {
         return None;
     }
@@ -1642,10 +1648,7 @@ impl WhitelistChecker<'_> {
                 fields,
                 ..
             } => {
-                let ElementLayout::Struct { key } = expected_layout else {
-                    return false;
-                };
-                if self.type_table.type_key(*struct_type) != *key {
+                if !expected_layout.is_struct(*struct_type, self.type_table) {
                     return false;
                 }
                 if fields.len() != expected_arity {
@@ -2176,10 +2179,7 @@ impl Rewriter<'_, '_> {
                 fields,
                 ..
             } => {
-                let ElementLayout::Struct { key } = expected_layout else {
-                    return None;
-                };
-                if ctx.type_table.type_key(*struct_type) != *key {
+                if !expected_layout.is_struct(*struct_type, ctx.type_table) {
                     return None;
                 }
                 if fields.len() != expected_arity {

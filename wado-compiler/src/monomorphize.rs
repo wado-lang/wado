@@ -32,11 +32,10 @@ use crate::synthesis::affine_drop;
 use crate::synthesis::affine_drop::Generics;
 use crate::synthesis::template::hole_fmt_helpers;
 use crate::tir::{
-    MonomorphInfo, ResolvedType, StructDef, TemplateId, TirFunction, TirModule,
-    TirStruct, TypeId,
+    MonomorphInfo, ResolvedType, StructDef, TemplateId, TirFunction, TirModule, TirStruct, TypeId,
 };
 use crate::tir_visitor::TirRefVisitor;
-use crate::type_table::{AnonStructId, TypeTable};
+use crate::type_table::{AnonStructId, TypeKey, TypeTable};
 
 use state::Monomorphizer;
 
@@ -102,8 +101,7 @@ pub(crate) struct Pool {
     by_template: IndexMap<TemplateId, FunctionId>,
     /// What waits on a type no scanned body has held a value of yet.
     waiting: IndexMap<TypeHead, Vec<FunctionId>>,
-    held: IndexSet<TypeHead>,
-    seen: IndexSet<TypeId>,
+    held: IndexSet<TypeKey>,
 }
 
 impl Pool {
@@ -133,7 +131,7 @@ impl Pool {
     ) {
         let mut stack = vec![id];
         while let Some(id) = stack.pop() {
-            if !self.seen.insert(id) {
+            if !self.held.insert(type_table.type_key(id)) {
                 continue;
             }
             stack.extend(type_table.get_newtype_base(id));
@@ -144,9 +142,6 @@ impl Pool {
             let Some(head) = type_head(type_table, id) else {
                 continue;
             };
-            if !self.held.insert(head.clone()) {
-                continue;
-            }
             for key in self.waiting.swap_remove(&head).into_iter().flatten() {
                 unscanned.extend(self.by_key.swap_remove(&key));
             }
@@ -365,7 +360,11 @@ impl Monomorphizer {
         self.take_from_pool(&callees(body, type_table), unscanned);
     }
 
-    fn take_from_pool(&mut self, callees: &[Callee], unscanned: &mut Vec<Rc<RefCell<TirFunction>>>) {
+    fn take_from_pool(
+        &mut self,
+        callees: &[Callee],
+        unscanned: &mut Vec<Rc<RefCell<TirFunction>>>,
+    ) {
         unscanned.extend(callees.iter().filter_map(|callee| self.pool.take(callee)));
     }
 
@@ -603,7 +602,12 @@ impl Monomorphizer {
             let mut made_progress = false;
 
             while let Some(func_rc) = unscanned.pop() {
-                self.scan_taken(&func_rc, &module.type_table, &generic_functions, &mut unscanned);
+                self.scan_taken(
+                    &func_rc,
+                    &module.type_table,
+                    &generic_functions,
+                    &mut unscanned,
+                );
                 module.functions.push(func_rc);
                 made_progress = true;
             }

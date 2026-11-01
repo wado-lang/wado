@@ -505,20 +505,17 @@ fn scope_to_function<'a>(wir: &'a str, scope: &str) -> Option<&'a str> {
         "WIR function matching {scope:?} is never closed"
     );
     let suffix = scope.trim_end_matches('"');
-    let ending: Vec<&str> = bodies
-        .iter()
-        .filter(|(name, _)| name.trim_end_matches('"').ends_with(suffix))
-        .map(|(_, body)| *body)
-        .collect();
-    let candidates = if ending.is_empty() {
+    let named = |test: &dyn Fn(&str) -> bool| -> Vec<&str> {
         bodies
             .iter()
-            .filter(|(name, _)| name.contains(scope))
+            .filter(|(name, _)| test(name))
             .map(|(_, body)| *body)
             .collect()
-    } else {
-        ending
     };
+    let mut candidates = named(&|name| name.trim_end_matches('"').ends_with(suffix));
+    if candidates.is_empty() {
+        candidates = named(&|name| name.contains(scope));
+    }
     assert!(
         candidates.len() <= 1,
         "wir_scope {scope:?} names {} functions; qualify it",

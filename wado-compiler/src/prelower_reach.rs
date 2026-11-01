@@ -18,9 +18,7 @@ use crate::name::{
 };
 use crate::nir_package::NirPackage;
 use crate::reflect_marker::{bridge_callee, is_marker_bridge};
-use crate::tir::{
-    ResolvedType, TemplateId, TirBlock, TirExpr, TirExprKind, TirFunction, TypeId,
-};
+use crate::tir::{ResolvedType, TemplateId, TirBlock, TirExpr, TirExprKind, TirFunction, TypeId};
 use crate::tir_visitor::TirRefVisitor;
 use crate::trace;
 use crate::type_table::TypeTable;
@@ -75,14 +73,19 @@ impl Roots {
             .and_then(LocalMethodName::trait_decl)
     }
 
-    /// Whether `lower` or a later phase may call `func` with no TIR body naming
-    /// it.
-    fn before_lower(&self, func: &TirFunction) -> bool {
+    /// Whether the host or what `lower` mints calls `func`.
+    fn entry_point(&self, func: &TirFunction) -> bool {
         func.is_cm_export
             || (func.is_export && self.wasm_modules.contains(&func.module_source))
             || func
                 .compiler_item
                 .is_some_and(CompilerItem::minted_after_tir)
+    }
+
+    /// Whether `lower` or a later phase may call `func` with no TIR body naming
+    /// it.
+    fn before_lower(&self, func: &TirFunction) -> bool {
+        self.entry_point(func)
             || (is_type_bridge(&func.name) && !is_marker_bridge(&func.name))
             || Self::impl_trait(func).is_some_and(|def| self.mintable.contains(&def))
     }
@@ -97,9 +100,7 @@ impl Roots {
     /// erased types, which no instance spells before erasure. A bridge and an
     /// impl belong to one type, so they wait for a scanned body to hold it.
     pub(crate) fn before_monomorphize(&self, func: &TirFunction, type_table: &TypeTable) -> Entry {
-        let root = func.is_cm_export
-            || (func.is_export && self.wasm_modules.contains(&func.module_source))
-            || func.compiler_item.is_some_and(CompilerItem::minted_after_tir)
+        let root = self.entry_point(func)
             || (func.compiler_item.is_some() && func.method_info.is_none())
             || is_effect_default(&func.name)
             || func.is_dispatch_wrapper
@@ -350,22 +351,12 @@ pub(crate) struct Callee {
 
 /// The functions `body` names.
 pub(crate) fn callees(body: &TirBlock, type_table: &TypeTable) -> Vec<Callee> {
-    let mut collector = Callees {
-        type_table,
-        callees: Vec::new(),
-    };
-    collector.walk_block(body);
-    collector.callees
+    Callees::collect(type_table, |collector| collector.walk_block(body))
 }
 
 /// The functions `expr` names.
 pub(crate) fn expr_callees(expr: &TirExpr, type_table: &TypeTable) -> Vec<Callee> {
-    let mut collector = Callees {
-        type_table,
-        callees: Vec::new(),
-    };
-    collector.visit_expr(expr);
-    collector.callees
+    Callees::collect(type_table, |collector| collector.visit_expr(expr))
 }
 
 struct Callees<'a> {
@@ -373,7 +364,16 @@ struct Callees<'a> {
     callees: Vec<Callee>,
 }
 
-impl Callees<'_> {
+impl<'a> Callees<'a> {
+    fn collect(type_table: &'a TypeTable, walk: impl FnOnce(&mut Self)) -> Vec<Callee> {
+        let mut collector = Self {
+            type_table,
+            callees: Vec::new(),
+        };
+        walk(&mut collector);
+        collector.callees
+    }
+
     fn push(&mut self, module_source: &ModuleSource, name: &str, template: Option<&TemplateId>) {
         self.callees.push(Callee {
             key: FunctionId::free(module_source, name),
