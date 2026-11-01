@@ -95,18 +95,10 @@ fn covered_heads(program: &Program, trait_: TraitDeclId) -> IndexSet<TypeDeclId>
 /// The head `def` answers at every instance, at the trait's default
 /// arguments; `None` where it answers fewer.
 fn covered_head(program: &Program, def: &ImplDef) -> Option<TypeDeclId> {
-    match &def.target {
-        SolverType::Decl(head, _) if covers_every_instance(def) && at_defaults(program, def) => {
-            Some(*head)
-        }
-        SolverType::Decl(..)
-        | SolverType::Param(_)
-        | SolverType::Pack(_)
-        | SolverType::Ref { .. }
-        | SolverType::Tuple(_)
-        | SolverType::Projection { .. }
-        | SolverType::AnyRow => None,
-    }
+    let SolverType::Decl(head, _) = def.target else {
+        return None;
+    };
+    (covers_every_instance(def) && at_defaults(program, def)).then_some(head)
 }
 
 /// Whether a source of `trait_` holds of `decl` at its own parameters, which

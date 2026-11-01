@@ -1174,9 +1174,8 @@ impl TypeSystem {
         chain
     }
 
-    /// Each bound a written impl of `trait_` over every instance of
-    /// `type_id`'s declaration puts on one of its arguments, with the argument
-    /// ([`SolverBridge::written_over`]). `None` where no such impl is written.
+    /// [`SolverBridge::written_over`] at `type_id`'s declaration, each bound
+    /// with the argument it is on.
     fn written_bounded_args(&self, type_id: TypeId, trait_: DefId) -> Option<Vec<(TypeId, DefId)>> {
         let bounds = self
             .solver()

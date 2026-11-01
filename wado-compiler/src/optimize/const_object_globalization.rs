@@ -1675,9 +1675,9 @@ impl Gate<'_> {
         if self.param_refs_mutably(param) {
             return true;
         }
-        f.body.as_ref().is_none_or(|body| {
-            !is_readonly_body(body, &Aliases::of(body), param.local_index, self)
-        })
+        f.body
+            .as_ref()
+            .is_none_or(|body| !is_readonly_body(body, &Aliases::of(body), param.local_index, self))
     }
 
     /// Whether parameter `param_pos` is taken by value and never written or

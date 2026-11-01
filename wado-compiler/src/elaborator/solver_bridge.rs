@@ -2161,9 +2161,7 @@ impl SolverBridge {
             .is_none_or(|declaration| sourced(&self.program, trait_, declaration))
     }
 
-    /// Each bound a written impl of `trait_` over every instance of `decl`
-    /// puts on one of its arguments, by the argument's position
-    /// ([`written_over`]).
+    /// [`written_over`] at `decl`.
     pub(super) fn written_over(&self, decl: DefId, trait_: DefId) -> Option<Vec<(usize, DefId)>> {
         let bounds = written_over(
             &self.program,
