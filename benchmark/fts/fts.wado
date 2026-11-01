@@ -32,6 +32,7 @@ fn fts_run(n: i32) -> FtsResult {
     return FtsResult { total_bytes, byte_sum };
 }
 
+#[workload]
 test "smoke" {
     let r = fts_run(100);
     assert r.total_bytes > 0;
@@ -39,7 +40,7 @@ test "smoke" {
 }
 
 test "fuel" {
-    measure("format", || fts_run(1000000));
+    measure("compute/fts", || fts_run(1000000));
 }
 
 export fn run() with (Stdout, MonotonicClock) {

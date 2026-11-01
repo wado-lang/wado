@@ -559,14 +559,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // (`Add<Feet>`), so render the head with the right-hand type: a
             // defaulted `Rhs = Self` impl then reads like a written one.
             .map(|info| match info.rhs_type {
-                Some(t) => display_generic_name(
-                    info.trait_name.base_name(),
-                    &[tt.type_name(tt.peel_refs(t))],
-                ),
+                Some(t) => {
+                    display_generic_name(info.trait_name.base_name(), &[tt.name(tt.peel_refs(t))])
+                }
                 None => info.trait_name.base_name().to_string(),
             })
             .collect();
-        let type_name = tt.type_name(base_type_id);
+        let type_name = tt.name(base_type_id);
         drop(tt);
         let _ = self.emit(TypeError::AmbiguousOperatorRhs {
             op: binary_op_str(op).to_string(),
@@ -670,7 +669,7 @@ impl TypeSystem {
 }
 
 impl<H: CompilerHost> Elaborator<'_, H> {
-    /// [`Self::declaring_module_at`] for a caller holding a rendered head and
+    /// [`Self::declaring_module_at`] for a caller holding a mangled head and
     /// no reference site.
     pub(super) fn declaring_module_of(&self, struct_name: &str) -> ModuleSource {
         self.declaring_module_at(None, struct_name)
@@ -730,7 +729,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
             // Generic instances like Box<i32> use the base name "Box" for method lookup.
             ResolvedType::GenericInstance { def, type_args } => {
-                let name = &self.tysys.type_table.borrow().def_name(*def).to_string();
+                let name = &self.tysys.type_table.borrow().decl_name(*def).to_string();
                 let module_source = &self.tysys.type_table.borrow().def_module(*def).clone();
                 if self.tysys.type_table.borrow().is_tuple_def(*def) {
                     let elems = type_args;
@@ -846,17 +845,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .expect("an enum or variant names a declaration");
                 (name, Some(module_source), None, None)
             }
-            // Generic resource types (Future<T>, Stream<T>, etc.)
-            ResolvedType::GenericResource { def, type_args } => (
-                self.tysys.type_table.borrow().def_name(*def).to_string(),
-                Some(self.tysys.type_table.borrow().def_module(*def).clone()),
-                if type_args.is_empty() {
-                    None
-                } else {
-                    Some(type_args.clone())
-                },
-                None,
-            ),
             _ => return None,
         };
 
@@ -929,7 +917,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         // Instance methods declared on a resource. A resource receiver's
-        // `ResolvedType::Resource` / `GenericResource` always carries the
+        // `ResolvedType::Resource` / `GenericInstance` always carries the
         // resource's defining `module_source` (resolved through imports,
         // re-export chains included), so the method is found in that module
         // directly — no global scan. `None`-module receivers (primitives,
@@ -1297,15 +1285,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ) -> Vec<(DefId, TargetBinding)> {
         let (key, args) = {
             let tt = self.tysys.type_table.borrow();
-            let (ResolvedType::GenericInstance { def, type_args }
-            | ResolvedType::GenericResource { def, type_args }) = tt.get(receiver)
-            else {
+            let ResolvedType::GenericInstance { def, type_args } = tt.get(receiver) else {
                 return Vec::new();
             };
             if tt.is_tuple_def(*def) {
                 return Vec::new();
             }
-            let key = self.impl_target_of(receiver, &DeclName::new(tt.def_name(*def)));
+            let key = self.impl_target_of(receiver, &DeclName::new(tt.decl_name(*def)));
             (key, type_args.clone())
         };
         let trait_env = Arc::clone(&self.tysys.trait_env);
@@ -1616,7 +1602,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .tysys
             .type_table
             .borrow()
-            .type_name(self.tysys.get_base_type(receiver_type));
+            .name(self.tysys.get_base_type(receiver_type));
         let _ = self.emit(TypeError::UninferredMethodTypeArgs {
             receiver,
             method: method_name.to_string(),

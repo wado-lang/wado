@@ -30,10 +30,11 @@ test "smoke" {
     }
 }
 
+#[workload]
 test "fuel" {
     let data = #include_bytes("../json_twitter/twitter.json");
-    let compressed = measure("compress", || zlib_compress(&data));
-    let decompressed = measure("decompress", || inflate_zlib(&compressed).unwrap());
+    let compressed = measure("codec/zlib/compress", || zlib_compress(&data));
+    let decompressed = measure("codec/zlib/decompress", || inflate_zlib(&compressed).unwrap());
     assert decompressed.len() == data.len();
 }
 

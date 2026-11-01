@@ -876,7 +876,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             return;
         }
         let _ = self.emit(types::TypeError::MissingReturn {
-            return_type: self.tysys.type_table.borrow().type_name(return_type),
+            return_type: self.tysys.type_table.borrow().name(return_type),
             span: func.span,
         });
     }
@@ -1544,7 +1544,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             // never parsed.
             if let Some(key) = self.type_decl_key(current) {
                 let defs = self.tysys.resolutions.defs();
-                if self.tysys.decl_render_name(key) == impl_name
+                if self.tysys.decl_mangled_name(key) == impl_name
                     || FqTypeName::declared(defs, key).to_mangled() == impl_name
                 {
                     return Some(key);
@@ -1876,6 +1876,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     }
                 }
                 Item::Resource(resource_decl) => {
+                    self.record_decl_type_params(resource_decl.id, &resource_decl.type_params);
                     self.record_effect_ops(resource_decl.id);
                     self.reject_unsupported_operation_clauses(
                         &resource_decl.name,
@@ -2287,7 +2288,7 @@ impl TypeSystem {
 
     /// The spelling `def` renders to in a mangled head — its declared name,
     /// with a function-local declaration's disambiguator applied.
-    pub(super) fn decl_render_name(&self, def: DefId) -> String {
+    pub(super) fn decl_mangled_name(&self, def: DefId) -> String {
         trait_env::render_decl_name(self.resolutions.defs(), def)
     }
 

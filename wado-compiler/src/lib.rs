@@ -525,8 +525,9 @@ pub struct CompilerOptions {
     /// When `Some`, instrument the modules this scope measures and carry
     /// their plan in the `org.wado-lang.coverage` section. Test world only.
     pub coverage: Option<coverage::CoverageScope>,
-    /// When `Some`, mark cold each region the profile recorded no run of. A
-    /// module is looked up under its name ([`coverage::ModulePlan::name`]).
+    /// The entry's profile. Where `-f pgo` is in force, mark cold each region
+    /// it recorded no run of. A module is looked up under its name
+    /// ([`coverage::ModulePlan::name`]).
     pub profile: Option<Arc<pgo::Profile>>,
     /// How many threads the optimizer visits functions on. The output does not
     /// depend on it. A host compiling several files at once passes 1.
@@ -1586,7 +1587,10 @@ fn compile_after_load<H: CompilerHost>(
         logger,
         true,
         options.coverage,
-        options.profile.as_deref(),
+        options
+            .profile
+            .as_deref()
+            .filter(|_| codegen_flags.pgo.applies()),
         &LivenessScope::Compilation,
     );
     if !sem.is_complete() {
@@ -2156,6 +2160,7 @@ fn compile_after_load<H: CompilerHost>(
     {
         let _span = logger.span("monomorphize");
         lower::contract_checks::check_marked_calls(&flat);
+        prelower_reach::before_monomorphize(&mut flat);
         let mut mono = monomorphize(&mut flat);
         refuse_expanding_instances(&mono, logger)?;
         #[cfg(debug_assertions)]
@@ -2417,6 +2422,7 @@ pub async fn dump_with_host<H: CompilerHost>(
         None,
         OptOverrides::default(),
         &[],
+        None,
         &param_resolution::ParamInputs::default(),
         kiln::InvocationIndex::default(),
         1,
@@ -2441,6 +2447,7 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
     allocator: Option<&str>,
     opt: OptOverrides,
     codegen_flags: &[String],
+    profile: Option<&pgo::Profile>,
     params: &param_resolution::ParamInputs,
     invocations: kiln::InvocationIndex,
     parallelism: usize,
@@ -2511,6 +2518,12 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
     let wasm_assets = load_result.wasm_assets.clone();
     let implicit_modules = load_result.implicit_modules.clone();
     let loaded_module_sources: Vec<ModuleSource> = load_result.modules.keys().cloned().collect();
+    let parsed_codegen_flags = parse_codegen_flags(
+        codegen_flags,
+        opt_level,
+        target_world == Some(TEST_WORLD),
+        &logger,
+    )?;
 
     // === Phases 5-7: ast index, analyze, elaborate ===
     //
@@ -2525,7 +2538,7 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
         &logger,
         true,
         None,
-        None,
+        profile.filter(|_| parsed_codegen_flags.pgo.applies()),
         &LivenessScope::Compilation,
     );
     let symbols = sem.symbols.clone();
@@ -2584,12 +2597,7 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
                 package.target_world = world.to_string();
             }
             package.wasm_assets.clone_from(&wasm_assets);
-            package.codegen_flags = parse_codegen_flags(
-                codegen_flags,
-                opt_level,
-                package.is_test_world(),
-                &logger,
-            )?;
+            package.codegen_flags = parsed_codegen_flags;
 
             // Validate target world (test world is synthetic, not in registry)
             if !package.is_test_world()
@@ -2631,6 +2639,7 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
             {
                 let _span = logger.span("monomorphize");
                 lower::contract_checks::check_marked_calls(&flat);
+                prelower_reach::before_monomorphize(&mut flat);
                 let mut mono = monomorphize(&mut flat);
                 refuse_expanding_instances(&mono, &logger)?;
                 bind_monomorphized(&mut flat, &mut mono, &logger)?;

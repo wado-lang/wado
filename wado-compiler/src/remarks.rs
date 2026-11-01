@@ -230,7 +230,7 @@ impl Collector<'_> {
                 {
                     let nth = self.copied_here.iter().filter(|&&t| t == type_id).count();
                     self.copied_here.push(type_id);
-                    let type_name = self.type_table.type_name(type_id);
+                    let type_name = self.type_table.name(type_id);
                     self.sink.push_nth(
                         Remark {
                             message: format!("a copy of `{type_name}` survives optimization"),

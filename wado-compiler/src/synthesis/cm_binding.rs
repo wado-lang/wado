@@ -364,7 +364,7 @@ fn unresolvable_record_in_payload(
         )
         && registry.interface_of_decl(tt.defs().ast_id(def)).is_none()
     {
-        return Some(tt.def_name(def).to_string());
+        return Some(tt.decl_name(def).to_string());
     }
     // Codegen peels aliases, so check through them here too.
     if let ResolvedType::Newtype { base_type, .. } = tt.get(type_id) {
@@ -1042,7 +1042,7 @@ fn validate_imports_representable(project: &Package) -> Result<(), SynthesisErro
             module
                 .resources
                 .iter()
-                .filter(|r| !r.is_generic)
+                .filter(|r| r.type_params.is_empty())
                 .flat_map(|r| &r.operations),
         );
         for op in operations.filter(|op| op.cm_name.is_some()) {
@@ -1195,7 +1195,7 @@ fn validate_result_wrapper_agrees(
     if user_is_unit && world.args.first().is_some_and(Type::is_unit) {
         return Ok(());
     }
-    let user_return_name = tt.type_name(user_func.return_type);
+    let user_return_name = tt.name(user_func.return_type);
     Err(format!(
         "export function `{}` has return type `{user_return_name}`, \
          but the world expects a `{result_name}<_, _>` (unit stands in only \
@@ -1226,7 +1226,7 @@ fn validate_flat_shape_agrees(
         "{site} is `{}`, which lowers to different Component Model values than \
          the world's `{world_name}`. Change the signature to the type the world \
          declares.",
-        tt.type_name(user_type)
+        tt.name(user_type)
     ))
 }
 

@@ -92,10 +92,9 @@ pub trait TirMutVisitor {
                     self.visit_pattern(binding);
                 }
             }
-            TirPattern::Enum { .. }
-            | TirPattern::ConstantValue { .. }
-            | TirPattern::Range { .. }
-            | TirPattern::PerInstance { .. } => {}
+            TirPattern::Enum { .. } | TirPattern::Range { .. } | TirPattern::PerInstance { .. } => {
+            }
+            TirPattern::ConstantValue { expr } => self.visit_expr(expr),
             TirPattern::Narrow { test, .. } => self.visit_expr(test),
             TirPattern::Struct { fields, .. } => {
                 for field in fields {
@@ -289,10 +288,9 @@ pub trait TirRefVisitor {
                     self.visit_pattern(binding);
                 }
             }
-            TirPattern::Enum { .. }
-            | TirPattern::ConstantValue { .. }
-            | TirPattern::Range { .. }
-            | TirPattern::PerInstance { .. } => {}
+            TirPattern::Enum { .. } | TirPattern::Range { .. } | TirPattern::PerInstance { .. } => {
+            }
+            TirPattern::ConstantValue { expr } => self.visit_expr(expr),
             TirPattern::Narrow { test, .. } => self.visit_expr(test),
             TirPattern::Struct { fields, .. } => {
                 for field in fields {

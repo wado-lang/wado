@@ -28,8 +28,9 @@ fn gen_rust() -> i32 {
     return out.source.len();
 }
 
+#[workload]
 test "fuel" {
-    assert measure("generate", || gen_rust()) > 0;
+    assert measure("gale/generate", || gen_rust()) > 0;
 }
 
 export fn run() with (Stdout, MonotonicClock) {

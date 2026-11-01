@@ -34,6 +34,7 @@ use wado_compiler::{
 };
 use wado_host::engine::default_config;
 pub use wado_host::fixture::opt_level_name;
+use wado_host::fuel::meter_fuel;
 use wado_host::kiln::local::run_local_generators;
 use wado_host::timezone;
 pub use wado_host::tls_trust::install_default_crypto_provider;
@@ -351,9 +352,9 @@ pub fn epoch_deadline_ticks(timeout_ms: u64) -> u64 {
 /// Guest instructions a test may execute before wasmtime traps it.
 ///
 /// Measured with `WADO_TEST_FUEL_REPORT=1` across every execution path: a test
-/// world's heaviest spends 1.9M, a CLI world runs a whole program and reaches
-/// 15M. Thirteen times that ceiling still catches a loop that never ends.
-pub const DEFAULT_FUEL: u64 = 200_000_000;
+/// world's heaviest spends 2.4M, a CLI world runs a whole program and reaches
+/// 140M. Four times that ceiling still catches a loop that never ends.
+pub const DEFAULT_FUEL: u64 = 600_000_000;
 
 /// The share of [`DEFAULT_FUEL`] that `timeout_ms` buys, so a site raising its
 /// budget raises both limits together.
@@ -424,11 +425,11 @@ pub fn engine() -> &'static Engine {
         config.wasm_backtrace_details(wasmtime::WasmBacktraceDetails::Enable);
         // Enable epoch-based interruption for timeout enforcement
         config.epoch_interruption(true);
-        // Meter guest execution. Fuel counts instructions the guest actually
+        // Meter guest execution. Fuel prices the operators the guest actually
         // runs, so a test that waits on a host call spends none of it — the
         // budget bounds runaway guest work without charging for wall time the
         // guest did not consume.
-        config.consume_fuel(true);
+        meter_fuel(&mut config);
         let engine = Engine::new(&config).expect("Failed to create wasmtime Engine");
 
         // Start background epoch ticker thread
@@ -1000,6 +1001,7 @@ pub fn world_surface(host: &impl CompilerHost, source: &str, world_fq: &str) -> 
         None,
         wado_compiler::OptOverrides::default(),
         &[],
+        None,
         &wado_compiler::param_resolution::ParamInputs::default(),
         wado_compiler::kiln::InvocationIndex::default(),
         1,

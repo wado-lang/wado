@@ -831,7 +831,7 @@ fn sub_generic_instantiation(
     gi.instance_type = sub(tt, gi.instance_type, subst);
     if let Some(name) = gi.mangled_name.as_mut()
         && let ResolvedType::GenericInstance { def, type_args } = tt.get(gi.instance_type).clone()
-        && let base = tt.def_name(def).to_string()
+        && let base = tt.decl_name(def).to_string()
     {
         let arg_names: Vec<String> = type_args
             .iter()

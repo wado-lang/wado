@@ -934,15 +934,13 @@ fn slot_shape(payload: TypeId, type_table: &TypeTable) -> Option<SlotShape> {
             PrimitiveType::Char => Some(SlotShape::Direct(Pad::Char)),
             PrimitiveType::V128 => None,
         },
-        ResolvedType::Resource { .. } | ResolvedType::GenericResource { .. }
-            if type_table.is_resource_object(payload) =>
-        {
-            Some(SlotShape::Wrapped)
+        _ if type_table.is_resource_object(payload) => Some(SlotShape::Wrapped),
+        ResolvedType::GenericInstance { def, .. } if type_table.is_resource_def(*def) => {
+            Some(SlotShape::Direct(Pad::Int(payload)))
         }
-        ResolvedType::Resource { .. }
-        | ResolvedType::GenericResource { .. }
-        | ResolvedType::Enum { .. }
-        | ResolvedType::Flags { .. } => Some(SlotShape::Direct(Pad::Int(payload))),
+        ResolvedType::Resource { .. } | ResolvedType::Enum { .. } | ResolvedType::Flags { .. } => {
+            Some(SlotShape::Direct(Pad::Int(payload)))
+        }
         ResolvedType::Struct { .. }
         | ResolvedType::BuiltinArray(_)
         | ResolvedType::Variant { .. } => Some(SlotShape::Wrapped),
@@ -976,13 +974,14 @@ fn slot_shape(payload: TypeId, type_table: &TypeTable) -> Option<SlotShape> {
 /// shape `wir_optimize::nullable_ref` collapses an `Option` around.
 fn is_gc_ref(type_id: TypeId, type_table: &TypeTable) -> bool {
     match type_table.get(type_id) {
+        ResolvedType::Resource { .. } => type_table.is_resource_object(type_id),
+        ResolvedType::GenericInstance { def, .. } if type_table.is_resource_def(*def) => {
+            type_table.is_resource_object(type_id)
+        }
         ResolvedType::Struct { .. }
         | ResolvedType::Variant { .. }
         | ResolvedType::GenericInstance { .. }
         | ResolvedType::BuiltinArray(_) => true,
-        ResolvedType::Resource { .. } | ResolvedType::GenericResource { .. } => {
-            type_table.is_resource_object(type_id)
-        }
         ResolvedType::Newtype { base_type, .. } => is_gc_ref(*base_type, type_table),
         ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => is_gc_ref(*inner, type_table),
         ResolvedType::Primitive(_)
@@ -1729,7 +1728,7 @@ struct Rebind<'t> {
     /// The key of each declared local type, references stripped: `&T` is `T` at
     /// WIR level (`wir_build::context`), what needs a cell arriving as `Box<T>`.
     peeled_keys: Vec<TypeKey>,
-    /// Declared `Box<T>` local type → (`T`'s key, the struct's rendered name).
+    /// Declared `Box<T>` local type → (`T`'s key, the struct's mangled name).
     boxes: IndexMap<TypeId, (TypeKey, String)>,
 }
 
@@ -1747,7 +1746,7 @@ impl<'t> Rebind<'t> {
                         declared,
                         (
                             type_table.type_key(type_args[0]),
-                            type_table.struct_rendered_name(*def, type_args),
+                            type_table.struct_mangled_name(*def, type_args),
                         ),
                     ))
                 }

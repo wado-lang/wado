@@ -6,13 +6,17 @@ use std::sync::{Arc, Mutex};
 use wado_manifest::{DependencySource, MANIFEST_FILENAME, MetadataSection, registry_url};
 
 use lexopt::Arg::Value;
-use wado_compiler::{CompilerHost as _, Diagnostic, Severity, wit_bundle};
+use wado_compiler::codegen_flags::Pgo;
+use wado_compiler::pgo::{self, Profile};
+use wado_compiler::world_registry::TEST_WORLD;
+use wado_compiler::{CodegenFlags, CompilerHost as _, Diagnostic, Logger, Severity, wit_bundle};
 use wado_lsp::host::discovery::normalize_path;
 use wado_lsp::host::{PackageWalk, dependency_key};
 
 use crate::args::{self, CliExit};
 use crate::build_dep::{GENERATOR_WORLD_FQ, locked_generator_versions, spec_key};
 use crate::compiler_host::FilesystemCompilerHost;
+use crate::coverage_host::profile_file;
 use crate::dep_component::{
     Acquisition, Resolution, fetch_component_dependencies, resolve_inline_component_dependencies,
     resolve_inline_git_dependencies,
@@ -389,6 +393,8 @@ pub async fn try_compile_with_run_cache(
         .map_err(|e| TryCompileError::reported(e.to_string()))?;
 
     let knobs = &flags.knobs;
+    let profile = entry_profile(path, knobs, flags.target_world.as_deref(), &host)
+        .map_err(TryCompileError::reported)?;
     let options = wado_compiler::CompilerOptions {
         opt_level: knobs.opt_level.to_compiler(),
         skip_validation: knobs.skip_validation,
@@ -406,6 +412,7 @@ pub async fn try_compile_with_run_cache(
         retain_wir: flags.retain_wir,
         embed_wit_contract: flags.embed_wit_contract.clone(),
         coverage: flags.coverage,
+        profile,
         ..Default::default()
     };
 
@@ -415,6 +422,50 @@ pub async fn try_compile_with_run_cache(
             is_todo_module: failure.is_todo_module,
             message: render_error_diagnostics(&host.diagnostics()),
         })
+}
+
+/// The profile a compile of the entry `path` applies: the one `wado test --pgo`
+/// records its workloads into, where `-f pgo` is in force. The compile depends
+/// on that file, there or not, so a cached build follows it.
+pub(crate) fn entry_profile(
+    path: &Path,
+    knobs: &CompileKnobs,
+    target_world: Option<&str>,
+    host: &FilesystemCompilerHost,
+) -> Result<Option<Arc<Profile>>, String> {
+    let test_world = target_world == Some(TEST_WORLD);
+    let parsed = CodegenFlags::parse(
+        &knobs.codegen_flags,
+        knobs.opt_level.to_compiler(),
+        test_world,
+    );
+    // An unknown flag is the compile's to report.
+    let Ok(CodegenFlags { pgo, .. }) = parsed else {
+        return Ok(None);
+    };
+    if !pgo.applies() {
+        return Ok(None);
+    }
+    let Some(file) = profile_file(path) else {
+        return Ok(None);
+    };
+    host.run_cache().depend_on_file(&file);
+    let text = match fs::read_to_string(&file) {
+        Ok(text) => text,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+            if pgo == Pgo::Requested {
+                Logger::new(host, knobs.log_level).info(format!(
+                    "-f pgo: no profile at {}, so none is applied",
+                    file.display()
+                ));
+            }
+            return Ok(None);
+        }
+        Err(e) => return Err(format!("Error reading '{}': {e}", file.display())),
+    };
+    pgo::parse(&text)
+        .map(|profile| Some(Arc::new(profile)))
+        .map_err(|e| format!("{}: {e}", file.display()))
 }
 
 /// The errors among `diagnostics`, one per line as `wado compile` prints them.

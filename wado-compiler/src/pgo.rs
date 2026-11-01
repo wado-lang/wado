@@ -243,6 +243,12 @@ impl ColdMap {
                 ));
                 continue;
             }
+            // Workloads are tests, so a build's own entry, and whatever only
+            // it reaches, never runs under them: a function they never entered
+            // says nothing about how often it runs.
+            if !profiled.counts.contains_key(&0) {
+                continue;
+            }
             for (index, id) in ids.into_iter().enumerate() {
                 counts[id as usize] =
                     Some(profiled.counts.get(&(index as u32)).copied().unwrap_or(0));

@@ -209,16 +209,16 @@ impl<'a> StorageReach<'a> {
     /// copies on every read.
     fn storage_of(&self, ty: TypeId) -> Vec<Storage> {
         let tt = self.type_table;
-        if matches!(
-            tt.get(ty),
-            ResolvedType::Primitive(_)
-                | ResolvedType::Unit
-                | ResolvedType::Never
-                | ResolvedType::Enum { .. }
-                | ResolvedType::Flags { .. }
-                | ResolvedType::Resource { .. }
-                | ResolvedType::GenericResource { .. }
-        ) {
+        if tt.is_resource_type(ty)
+            || matches!(
+                tt.get(ty),
+                ResolvedType::Primitive(_)
+                    | ResolvedType::Unit
+                    | ResolvedType::Never
+                    | ResolvedType::Enum { .. }
+                    | ResolvedType::Flags { .. }
+            )
+        {
             return Vec::new();
         }
         let mut out = vec![Storage::Of(tt.type_key(ty))];
@@ -265,6 +265,9 @@ impl<'a> StorageReach<'a> {
                     None => Members::Unknown,
                 }
             }
+            ResolvedType::GenericInstance { def, .. } if tt.is_resource_def(*def) => {
+                Members::Held(Vec::new())
+            }
             ResolvedType::GenericInstance { def, type_args } => {
                 match tt.variant_template_cases(*def) {
                     Some(cases) => Members::Held(
@@ -293,8 +296,7 @@ impl<'a> StorageReach<'a> {
             | ResolvedType::Never
             | ResolvedType::Enum { .. }
             | ResolvedType::Flags { .. }
-            | ResolvedType::Resource { .. }
-            | ResolvedType::GenericResource { .. } => Members::Held(Vec::new()),
+            | ResolvedType::Resource { .. } => Members::Held(Vec::new()),
             ResolvedType::TypeParam { .. }
             | ResolvedType::AssocParam { .. }
             | ResolvedType::AssocTypeProjection { .. }

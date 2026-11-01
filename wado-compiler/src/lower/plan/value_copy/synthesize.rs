@@ -438,7 +438,6 @@ fn is_synth_safe_element(
     let resolved = type_table.borrow().get(elem_type).clone();
     match resolved {
         ResolvedType::Resource { .. }
-        | ResolvedType::GenericResource { .. }
         | ResolvedType::Function { .. }
         | ResolvedType::TypeParam { .. }
         | ResolvedType::TypePack { .. } => false,

@@ -4231,7 +4231,7 @@ impl<'a> TirUnparser<'a> {
     /// dump's function names and the WIR dump spell it.
     fn type_spelling(&self, id: TypeId) -> String {
         if self.source_form {
-            self.type_table.type_name(id)
+            self.type_table.name(id)
         } else {
             self.type_table.mangle_type_arg_for_generic(id)
         }

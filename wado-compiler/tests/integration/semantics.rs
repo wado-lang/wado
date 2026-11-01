@@ -513,7 +513,7 @@ export fn run() {
     let one_ty = sem
         .expression_type(one_id)
         .expect("the `1` literal must record an expression type");
-    assert_eq!(sem.types.type_name(one_ty), "i32");
+    assert_eq!(sem.types.name(one_ty), "i32");
 
     // Line 4: "    let _y = x;"
     //                     ^c14
@@ -524,7 +524,7 @@ export fn run() {
     let x_ty = sem
         .expression_type(x_use_id)
         .expect("the `x` use site must record an expression type");
-    assert_eq!(sem.types.type_name(x_ty), "i32");
+    assert_eq!(sem.types.name(x_ty), "i32");
 }
 
 /// WEP 2026-05-26: `try_coerce_*` sub-helpers record the
@@ -583,14 +583,14 @@ export fn run() {
     // (the only literals are the two `1` / `2` args, which must surface as
     // i64 after type-arg inference).
     let any_i32 = sem.iter_expression_types().any(|(id, type_id)| {
-        sem.module_of_id(id) == Some(&entry) && sem.types.type_name(type_id) == "i32"
+        sem.module_of_id(id) == Some(&entry) && sem.types.name(type_id) == "i32"
     });
     assert!(
         !any_i32,
         "post-inference recoerce_literal_args must overwrite the pre-inference i32 entry",
     );
     let saw_i64 = sem.iter_expression_types().any(|(id, type_id)| {
-        sem.module_of_id(id) == Some(&entry) && sem.types.type_name(type_id) == "i64"
+        sem.module_of_id(id) == Some(&entry) && sem.types.name(type_id) == "i64"
     });
     assert!(
         saw_i64,
@@ -657,5 +657,5 @@ export fn run() {
     let match_ty = sem
         .expression_type(match_id)
         .expect("stmt-position match must record an expression type");
-    assert_eq!(sem.types.type_name(match_ty), "()");
+    assert_eq!(sem.types.name(match_ty), "()");
 }

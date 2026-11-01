@@ -162,7 +162,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             .type_implements_trait(&self.annotate_ctx, handler_type, &trait_)
                     }))
             {
-                let type_name = self.tysys.type_table.borrow().type_name(handler_type);
+                let type_name = self.tysys.type_table.borrow().name(handler_type);
                 let _ = self.emit(TypeError::HandlerEffectNotImplemented {
                     type_name,
                     interface_name: interface_name.to_string(),
@@ -179,7 +179,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // implementing `Stream<u8>` satisfies it for `with Stream<i32>`.
                 // Dispatch synthesis has no plan for the instantiation the
                 // clause names, so say so here rather than reach that panic.
-                let type_name = self.tysys.type_table.borrow().type_name(handler_type);
+                let type_name = self.tysys.type_table.borrow().name(handler_type);
                 let _ = self.emit(TypeError::HandlerEffectNotImplemented {
                     type_name,
                     interface_name: self.get_type_name(effect_ty),
@@ -236,7 +236,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             | ResolvedType::Newtype { .. }
             | ResolvedType::Flags { .. }
             | ResolvedType::Resource { .. }
-            | ResolvedType::GenericResource { .. }
             | ResolvedType::GenericInstance { .. }
             | ResolvedType::Primitive(_) => {}
             // Anything else can't be the target of an `impl Effect for T`
@@ -244,7 +243,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // common is a `&T` where `T` is a generic parameter — so we
             // emit a proper diagnostic instead of panicking.
             ref other => {
-                let type_name = self.tysys.type_table.borrow().type_name(handler_type);
+                let type_name = self.tysys.type_table.borrow().name(handler_type);
                 let type_kind = describe_resolved_type_kind(other);
                 let _ = self.emit(TypeError::BundledHandlerUnsupportedHandlerType {
                     type_name,
@@ -395,11 +394,10 @@ impl TypeSystem {
     fn handler_impl_target_name(&self, handler_type: TypeId) -> String {
         let resolved = self.type_table.borrow().get(handler_type).clone();
         match &resolved {
-            ResolvedType::GenericInstance { def, .. }
-            | ResolvedType::GenericResource { def, .. } => {
-                self.type_table.borrow().def_name(*def).to_string()
+            ResolvedType::GenericInstance { def, .. } => {
+                self.type_table.borrow().decl_name(*def).to_string()
             }
-            _ => self.type_table.borrow().type_name(handler_type),
+            _ => self.type_table.borrow().name(handler_type),
         }
     }
 }
@@ -407,7 +405,7 @@ impl TypeSystem {
 /// Short label for a [`ResolvedType`] variant, used in diagnostic
 /// messages emitted by the bundled-handler elaborator. Only covers the
 /// shapes the elaborator rejects; the supported shapes return their own
-/// canonical names via `TypeTable::type_name`.
+/// names via `TypeTable::name`.
 fn describe_resolved_type_kind(ty: &ResolvedType) -> String {
     match ty {
         ResolvedType::TypeParam { .. } => "type parameter".to_string(),

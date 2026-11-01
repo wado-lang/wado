@@ -31,11 +31,14 @@ test "smoke" {
     assert count_points(&back) == 2;
 }
 
+#[workload]
 test "fuel" {
     let fc = json_from_bytes::<FeatureCollection, _>(#include_bytes("../json_canada/canada.json")).unwrap();
     let cbor = cbor_to_bytes::<FeatureCollection>(&fc).unwrap();
-    measure("canada/ser", || cbor_to_bytes::<FeatureCollection>(&fc).unwrap().len());
-    let total_points = measure("canada/de", || count_points(&cbor_from_bytes::<FeatureCollection, _>(cbor).unwrap()));
+    measure("serde/cbor/canada/ser", || cbor_to_bytes::<FeatureCollection>(&fc).unwrap().len());
+    let total_points = measure("serde/cbor/canada/de", || count_points(
+        &cbor_from_bytes::<FeatureCollection, _>(cbor).unwrap(),
+    ));
     assert total_points == 55563;
 }
 

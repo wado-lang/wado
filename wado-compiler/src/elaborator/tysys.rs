@@ -177,14 +177,11 @@ impl TypeSystem {
     /// handed it may write: one it is or holds at any depth, or one behind a
     /// function or resource, whose captures and state no type shows.
     pub(crate) fn reaches_mut_ref(&self, type_id: TypeId) -> bool {
-        self.reaches(type_id, &|_, resolved| {
+        self.reaches(type_id, &|reached, resolved| {
             matches!(
                 resolved,
-                ResolvedType::MutRef(_)
-                    | ResolvedType::Function { .. }
-                    | ResolvedType::Resource { .. }
-                    | ResolvedType::GenericResource { .. }
-            )
+                ResolvedType::MutRef(_) | ResolvedType::Function { .. }
+            ) || self.type_table.borrow().is_resource_type(reached)
         })
     }
 
@@ -280,10 +277,14 @@ impl TypeSystem {
             | ResolvedType::Enum { .. }
             | ResolvedType::Flags { .. }
             | ResolvedType::Resource { .. }
-            | ResolvedType::GenericResource { .. }
             | ResolvedType::InferVar(_)
             | ResolvedType::Unknown
             | ResolvedType::Error => return false,
+            ResolvedType::GenericInstance { def, .. }
+                if self.type_table.borrow().is_resource_def(def) =>
+            {
+                return false;
+            }
             ResolvedType::BuiltinArray(inner) => (vec![inner], Vec::new()),
             ResolvedType::Newtype { base_type, .. } => (vec![base_type], Vec::new()),
             ResolvedType::Struct { type_args, .. }
@@ -334,9 +335,12 @@ impl TypeSystem {
         }
         let reached = match resolved {
             ResolvedType::MutRef(inner) => vec![inner],
-            ResolvedType::Function { .. }
-            | ResolvedType::Resource { .. }
-            | ResolvedType::GenericResource { .. } => return false,
+            ResolvedType::Function { .. } | ResolvedType::Resource { .. } => return false,
+            ResolvedType::GenericInstance { def, .. }
+                if self.type_table.borrow().is_resource_def(def) =>
+            {
+                return false;
+            }
             // A parameter is answered where it is bound: an instance walks its
             // arguments.
             ResolvedType::Primitive(_)
@@ -636,10 +640,10 @@ impl TypeSystem {
         loop {
             match self.type_table.borrow().get(current).clone() {
                 ResolvedType::Struct { def, .. } => {
-                    return self.type_table.borrow().struct_head_name(def);
+                    return self.type_table.borrow().struct_head_mangled_name(def);
                 }
                 ResolvedType::GenericInstance { def, .. } => {
-                    return self.type_table.borrow().def_name(def).to_string();
+                    return self.type_table.borrow().decl_name(def).to_string();
                 }
                 ResolvedType::Newtype { base_type, .. } => current = base_type,
                 ResolvedType::Flags { .. } => return TypeTable::FLAGS_BASE_NAME.to_string(),
@@ -647,7 +651,7 @@ impl TypeSystem {
                 // (its type args are carried separately), not the full
                 // `type_name` spelling `Array<T>`.
                 ResolvedType::BuiltinArray(_) => return ARRAY_TYPE_NAME.to_string(),
-                _ => return self.type_table.borrow().type_name(current),
+                _ => return self.type_table.borrow().name(current),
             }
         }
     }
@@ -767,9 +771,9 @@ impl TypeSystem {
         bound_param_name(&self.type_table.borrow(), type_id).cloned()
     }
 
-    /// [`TypeTable::type_name`], the one diagnostic spelling of a type.
+    /// [`TypeTable::name`], the one diagnostic spelling of a type.
     pub(crate) fn type_id_to_string(&self, type_id: TypeId) -> String {
-        self.type_table.borrow().type_name(type_id)
+        self.type_table.borrow().name(type_id)
     }
 
     /// Whether `==` / `!=` compares these operands as unrestricted resource
@@ -928,8 +932,7 @@ fn constituents(table: &TypeTable, ty: TypeId) -> (Option<DefId>, Vec<TypeId>) {
             type_args,
         }
         | ResolvedType::Newtype { def, type_args, .. } => (Some(*def), type_args.clone()),
-        ResolvedType::GenericInstance { def, type_args }
-        | ResolvedType::GenericResource { def, type_args } => (Some(*def), type_args.clone()),
+        ResolvedType::GenericInstance { def, type_args } => (Some(*def), type_args.clone()),
         ResolvedType::Ref(inner)
         | ResolvedType::MutRef(inner)
         | ResolvedType::BuiltinArray(inner) => (None, vec![*inner]),
@@ -1060,14 +1063,15 @@ impl TypeSystem {
             let base = table.representation_head(type_id);
             (base, table.get(base).clone())
         };
+        let resource = self.type_table.borrow().resource_def_of(base);
+        if let Some(def) = resource {
+            return if self.type_table.borrow().is_unrestricted_resource(def) {
+                Held::Nothing
+            } else {
+                Held::Affine
+            };
+        }
         match resolved {
-            ResolvedType::Resource { def } | ResolvedType::GenericResource { def, .. } => {
-                if self.type_table.borrow().is_unrestricted_resource(def) {
-                    Held::Nothing
-                } else {
-                    Held::Affine
-                }
-            }
             ResolvedType::Ref(_) | ResolvedType::MutRef(_) => Held::Nothing,
             ResolvedType::BuiltinArray(element) => Held::Members {
                 decl: None,

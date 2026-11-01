@@ -1681,7 +1681,7 @@ impl<T: ReflectStruct<FieldTypes = [..F], FieldInputs = [..F]>, ..F: Serialize> 
     fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError> {
         let members = ReflectStruct::<T>::members();
         let policy = Reflect::<T>::wire_name_policy();
-        let mut st = s.begin_struct(&Reflect::<T>::type_name(), members.len())?;
+        let mut st = s.begin_struct(&Reflect::<T>::decl_name(), members.len())?;
         for let f of members {
             let name = wire_name(&f, policy);
             st.field(&name, &f.get(self))?;
@@ -1695,14 +1695,14 @@ impl<T: ReflectStruct<FieldTypes = [..F], FieldInputs = [..F]>, ..F: Serialize> 
 impl<V: ReflectVariant<CasePayloads = [..P]>, ..P: Serialize> Serialize for V {
     fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError> {
         let policy = Reflect::<V>::wire_name_policy();
-        let type_name = Reflect::<V>::type_name();
+        let decl_name = Reflect::<V>::decl_name();
         for let case of ReflectVariant::<V>::members() {
             if case.holds(self) {
                 let name = wire_name(&case, policy);
                 // A compile-time fact, so an untagged variant keeps none of this.
                 if let Some(tag) = ReflectVariant::<V>::wire_tag() {
                     if case.is_unit() {
-                        let mut st = s.begin_struct(&type_name, 1)?;
+                        let mut st = s.begin_struct(&decl_name, 1)?;
                         st.field(&tag, &name)?;
                         return st.end();
                     }
@@ -1710,9 +1710,9 @@ impl<V: ReflectVariant<CasePayloads = [..P]>, ..P: Serialize> Serialize for V {
                     return payload.serialize(&mut TaggedCaseSerializer { inner: s, tag, case_name: name });
                 }
                 if case.is_unit() {
-                    return s.serialize_unit_variant(&type_name, &name, case.discriminant());
+                    return s.serialize_unit_variant(&decl_name, &name, case.discriminant());
                 }
-                let mut var = s.begin_variant(&type_name, &name, case.discriminant())?;
+                let mut var = s.begin_variant(&decl_name, &name, case.discriminant())?;
                 let payload = case.extract(self);
                 var.payload(&payload)?;
                 return var.end();
@@ -1730,7 +1730,7 @@ impl<E: ReflectEnum<Members = [..M]>, ..M> Serialize for E {
             if case.holds(self) {
                 let name = wire_name(&case, policy);
                 return s.serialize_unit_variant(
-                    &Reflect::<E>::type_name(),
+                    &Reflect::<E>::decl_name(),
                     &name,
                     case.discriminant(),
                 );
@@ -1814,7 +1814,7 @@ impl<T: ReflectStruct<FieldTypes = [..F], FieldInputs = [..F]> + FieldSchema, ..
         // Starting empty is what makes a filled slot mean "the wire wrote
         // this", so a repeat needs no second record to detect.
         let mut slots = ReflectStruct::<T>::empty_slots();
-        let mut sd = d.begin_struct(&Reflect::<T>::type_name(), slots.len())?;
+        let mut sd = d.begin_struct(&Reflect::<T>::decl_name(), slots.len())?;
         while let Some(index) = sd.next_field::<T>()? {
             let mut taken = false;
             for let [i, _] of slots.enumerate() {
@@ -1865,7 +1865,7 @@ impl<V: ReflectVariant<CasePayloads = [..P]>, ..P: Deserialize> Deserialize for 
         let policy = Reflect::<V>::wire_name_policy();
         if let Some(tag) = ReflectVariant::<V>::wire_tag() {
             let on_duplicate = d.on_duplicate_field();
-            let mut sd = d.begin_struct(&Reflect::<V>::type_name(), members.len())?;
+            let mut sd = d.begin_struct(&Reflect::<V>::decl_name(), members.len())?;
             let name = sd.tag(&tag, on_duplicate)?;
             for let case of members {
                 if wire_name(&case, policy) == name {
@@ -1887,7 +1887,7 @@ impl<V: ReflectVariant<CasePayloads = [..P]>, ..P: Deserialize> Deserialize for 
                 path: tag,
             });
         }
-        let mut va = d.begin_variant(&Reflect::<V>::type_name(), members.len())?;
+        let mut va = d.begin_variant(&Reflect::<V>::decl_name(), members.len())?;
         let key = case_key(&mut va)?;
         for let case of members {
             // `wire_name` resolves at the use site, where the member and the
@@ -1921,7 +1921,7 @@ impl<V: ReflectVariant<CasePayloads = [..P]>, ..P: Deserialize> Deserialize for 
 impl<E: ReflectEnum<Members = [..M]>, ..M> Deserialize for E {
     fn deserialize<D: Deserializer>(d: &mut D) -> Result<E, DeserializeError> {
         let members = ReflectEnum::<E>::members();
-        let mut va = d.begin_variant(&Reflect::<E>::type_name(), members.len())?;
+        let mut va = d.begin_variant(&Reflect::<E>::decl_name(), members.len())?;
         let policy = Reflect::<E>::wire_name_policy();
         let key = case_key(&mut va)?;
         for let case of members {

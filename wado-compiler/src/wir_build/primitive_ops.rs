@@ -926,15 +926,16 @@ impl FunctionTranslator<'_, '_> {
 
         // Determine appropriate array get instruction based on element type
         let elem_resolved = self.type_table.get(element_type_id);
-        let is_ref = matches!(
-            elem_resolved,
-            ResolvedType::GenericInstance { .. }
-                | ResolvedType::Struct { .. }
-                | ResolvedType::Function { .. }
-                | ResolvedType::Ref(_)
-                | ResolvedType::MutRef(_)
-                | ResolvedType::Variant { .. }
-        );
+        let is_ref = !self.type_table.is_resource_type(element_type_id)
+            && matches!(
+                elem_resolved,
+                ResolvedType::GenericInstance { .. }
+                    | ResolvedType::Struct { .. }
+                    | ResolvedType::Function { .. }
+                    | ResolvedType::Ref(_)
+                    | ResolvedType::MutRef(_)
+                    | ResolvedType::Variant { .. }
+            );
 
         let elem_result_ty = self.array_element_wir_type(&raw_type);
         let get_instr = if matches!(

@@ -1,0 +1,22 @@
+// `-f no-pgo` ignores the profile: `kept`'s `then`, which the profile never
+// ran, stays unmarked.
+use { println, Stdout } from "core:cli";
+
+fn kept(x: i32) -> i32 {
+    if x < 0 {
+        return 0;
+    }
+    return x;
+}
+
+export fn run() with Stdout {
+    println(`${kept(1)}`);
+}
+
+__DATA__
+{
+  "profile": "testdata/pgo_flag_off.pgo",
+  "codegen_flags": ["no-pgo"],
+  "cold_regions": [],
+  "stdout": "1\n"
+}

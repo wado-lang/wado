@@ -61,6 +61,7 @@ fn mandelbrot_total(width: i32, height: i32, max_iter: i32) -> i32 {
     return total;
 }
 
+#[workload]
 test "smoke" {
     // tiny grid; verify the work runs and produces a sane non-zero count.
     let total = mandelbrot_total(32, 24, 32);
@@ -68,7 +69,7 @@ test "smoke" {
 }
 
 test "fuel" {
-    measure("render", || mandelbrot_total(1024, 768, 256));
+    measure("compute/mandelbrot", || mandelbrot_total(1024, 768, 256));
 }
 
 export fn run() with (Stdout, MonotonicClock) {

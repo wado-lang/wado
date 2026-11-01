@@ -602,13 +602,14 @@ fn analyze_expr(body: &Body, id: ExprId, result: &mut AnalysisResult, ctx: &Anal
 /// Over-approximation of `lower::plan::value_copy::needs_value_copy`;
 /// a `true` here can only cost a missed propagation.
 fn needs_value_copy(type_id: TypeId, type_table: &TypeTable) -> bool {
-    matches!(
-        type_table.get(type_id),
-        ResolvedType::Struct { .. }
-            | ResolvedType::GenericInstance { .. }
-            | ResolvedType::Variant { .. }
-            | ResolvedType::BuiltinArray(_)
-    )
+    !type_table.is_resource_type(type_id)
+        && matches!(
+            type_table.get(type_id),
+            ResolvedType::Struct { .. }
+                | ResolvedType::GenericInstance { .. }
+                | ResolvedType::Variant { .. }
+                | ResolvedType::BuiltinArray(_)
+        )
 }
 
 /// Whether `let target = source` binds two locals nothing ever writes, which

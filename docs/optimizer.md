@@ -159,7 +159,9 @@ Scalars and dataflow:
 - `copy_prop` — propagate a trivial copy and drop the binding.
 - `param_spec` — specialize a callee on the constant arguments its callers
   pass, and on the constant fields of a struct they pass by reference, a
-  reference to a struct literal included.
+  reference to a struct literal included. A literal argument stays passed to a
+  callee taking a `&mut`, and a read of a field the caller holds constant
+  binds even there.
 - `dae` — drop a parameter the callee never reads.
 - `drve` — drop a return value every caller discards.
 - `store_load_forward` — forward a stored value to a later load.
@@ -289,15 +291,16 @@ markers are worth to the whole pipeline.
 
 ## Profile-Guided Optimization
 
-Not implemented yet; see
+See
 [WEP: Profile-Guided Optimization](./wep-2026-10-25-profile-guided-optimization.md).
 
 A package commits a profile, `pgo/default.pgo`, that `wado test --pgo` records
-from its `#[workload]` tests. A compile marks each outermost region the
-workloads never ran with `cold_path()`, so every pass that reads a marker
-treats it as it treats one the author wrote. The test world reads no profile unless `-f pgo`
-asks. `-f no-pgo` ignores the profile, and `-f no-cold-paths` ignores every
-marker, so three builds of one program can be compared.
+from its `#[workload]` tests. A compile marks with `cold_path()` each
+outermost region the workloads never ran in a function they entered, so every
+pass that reads a marker
+treats it as it treats one the author wrote. The test world reads no profile
+unless `-f pgo` asks. `-f no-pgo` ignores the profile, and `-f no-cold-paths`
+ignores every marker, so three builds of one program can be compared.
 
 Two questions stay open while profiles spread, and each optimizer change that
 touches cold paths answers them again:

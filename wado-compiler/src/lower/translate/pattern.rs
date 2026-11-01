@@ -58,8 +58,46 @@ fn coerce_value_to_binding(
         ),
         // A `&primitive` / `&variant` / `&fn` binding type that boxing
         // has redefined to its `Box<T>` struct: build the struct literal.
+<<<<<<< HEAD
         ResolvedType::Struct { .. } if type_table.box_payload_of(binding_type).is_some() => {
             box_literal(value, binding_type, type_table, span)
+||||||| edbe8c1aa
+        ResolvedType::Struct { def, type_args }
+            if type_table.box_payload_of(binding_type).is_some() =>
+        {
+            let struct_name = type_table.struct_rendered_name(*def, type_args);
+            TirExpr::new(
+                TirExprKind::StructLiteral {
+                    struct_type: binding_type,
+                    struct_name,
+                    fields: vec![TirStructField {
+                        name: "value".to_string(),
+                        value,
+                        field_index: 0,
+                    }],
+                },
+                binding_type,
+                span,
+            )
+=======
+        ResolvedType::Struct { def, type_args }
+            if type_table.box_payload_of(binding_type).is_some() =>
+        {
+            let struct_name = type_table.struct_mangled_name(*def, type_args);
+            TirExpr::new(
+                TirExprKind::StructLiteral {
+                    struct_type: binding_type,
+                    struct_name,
+                    fields: vec![TirStructField {
+                        name: "value".to_string(),
+                        value,
+                        field_index: 0,
+                    }],
+                },
+                binding_type,
+                span,
+            )
+>>>>>>> origin/main
         }
         _ => value,
     }

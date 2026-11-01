@@ -783,7 +783,7 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
             scope.reject_provided_from(target, source, impl_block.span);
         }
         if scope.tysys.type_table.borrow().is_never(target) {
-            let type_name = scope.tysys.type_table.borrow().type_name(target);
+            let type_name = scope.tysys.type_table.borrow().name(target);
             let _ = scope.emit(TypeError::ImplForNever {
                 type_name,
                 span: impl_block.span,
@@ -836,8 +836,8 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
             };
             let header = format!(
                 "{} for {}",
-                display_generic_name("From", &[tt.type_name(source)]),
-                tt.type_name(target)
+                display_generic_name("From", &[tt.name(source)]),
+                tt.name(target)
             );
             (provided, header)
         };
@@ -1378,7 +1378,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         | ResolvedType::Enum { .. }
                         | ResolvedType::Variant { .. }
                 ),
-                tt.type_name(self_ty),
+                tt.name(self_ty),
             )
         };
         if is_concrete_value && !self.tysys.carries_affine(self_ty) {
@@ -1553,7 +1553,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             let _ = self.emit(TypeError::UnpublishedAtCmBoundary {
                 function: function.name.clone(),
                 position: position.to_string(),
-                ty: self.tysys.type_table.borrow().type_name(ty),
+                ty: self.tysys.type_table.borrow().name(ty),
                 span,
             });
         }
@@ -1584,10 +1584,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     fn is_storage_reference(&self, type_id: TypeId) -> bool {
         let tt = self.tysys.type_table.borrow();
         match tt.get(tt.representation_head(type_id)) {
-            ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => !matches!(
-                tt.get(tt.representation_head(*inner)),
-                ResolvedType::Resource { .. } | ResolvedType::GenericResource { .. }
-            ),
+            ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
+                !tt.is_resource_type(tt.representation_head(*inner))
+            }
             _ => false,
         }
     }
@@ -1654,8 +1653,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             {
                 fields.into_iter().map(|(_, t)| t).collect()
             }
-            ResolvedType::GenericInstance { type_args, .. }
-            | ResolvedType::GenericResource { type_args, .. } => type_args,
+            ResolvedType::GenericInstance { type_args, .. } => type_args,
             _ => Vec::new(),
         };
         within
@@ -2133,7 +2131,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// resource. That `Self` type comes back too, because it is the receiver's.
     ///
     /// It is constructed after the type params are in scope, so a generic
-    /// resource's `GenericResource` instance can reference its own `TypeParam`s
+    /// resource's `GenericInstance` can reference its own `TypeParam`s
     /// (which gap-2 substitution then specialises per impl-block instantiation).
     /// A non-generic resource is a plain `Resource { def }`.
     fn enter_operation_scope(
@@ -2161,10 +2159,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     .tysys
                     .type_table
                     .borrow_mut()
-                    .intern(ResolvedType::GenericResource {
-                        def,
-                        type_args: type_arg_ids,
-                    })
+                    .make_generic_instance(def, type_arg_ids)
             } else {
                 scope.tysys.type_table.borrow_mut().make_resource(def)
             }
@@ -2526,14 +2521,20 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
 
     /// Resolve a variant declaration
     pub(super) fn resolve_variant_decl(&mut self, variant_decl: &ast::VariantDecl) {
-        let type_params = self
-            .enter_decl_params_scope(&variant_decl.type_params)
-            .data_type_params(&variant_decl.type_params);
+        self.record_decl_type_params(variant_decl.id, &variant_decl.type_params);
+    }
 
-        self.sem
-            .types
-            .decl_type_params
-            .insert(variant_decl.id, type_params);
+    /// Record a data declaration's type parameters, defaults resolved in its
+    /// own scope, for reify to read back.
+    pub(super) fn record_decl_type_params(
+        &mut self,
+        decl_id: ast::AstId,
+        params: &[ast::GenericParam],
+    ) {
+        let type_params = self
+            .enter_decl_params_scope(params)
+            .data_type_params(params);
+        self.sem.types.decl_type_params.insert(decl_id, type_params);
     }
 
     /// Resolve `func`'s canonical signature (see
@@ -2696,7 +2697,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 let _ = scope.emit(TypeError::RefAtCmBoundary {
                     function: func.name.clone(),
                     position: format!("parameter '{}'", param.name),
-                    reference: scope.tysys.type_table.borrow().type_name(reference),
+                    reference: scope.tysys.type_table.borrow().name(reference),
                     span: param.span,
                 });
             }
@@ -2728,7 +2729,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             let _ = scope.emit(TypeError::RefAtCmBoundary {
                 function: func.name.clone(),
                 position: "return type".to_string(),
-                reference: scope.tysys.type_table.borrow().type_name(reference),
+                reference: scope.tysys.type_table.borrow().name(reference),
                 span: func.span,
             });
         }

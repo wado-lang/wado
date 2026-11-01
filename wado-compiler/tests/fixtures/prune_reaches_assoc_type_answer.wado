@@ -1,0 +1,38 @@
+// `Bar` is reached only as `<Foo as Src>::Item`: no expression is typed `Bar`
+// until monomorphization resolves the projection. The prune before it must
+// still keep `Bar`'s `Default` impl, which the instance `dflt::<Bar>` calls.
+use { println, Stdout } from "core:cli";
+
+trait Src with () {
+    type Item: Default;
+}
+
+struct Bar {
+    v: i32 = 7,
+}
+
+struct Foo {}
+
+impl Src for Foo {
+    type Item = Bar;
+}
+
+struct W<I: Src> {
+    item: I::Item,
+}
+
+fn dflt<T: Default>() -> T {
+    return T::default();
+}
+
+fn make<I: Src>() -> W<I> {
+    return W::<I> { item: dflt::<I::Item>() };
+}
+
+export fn run() with Stdout {
+    let w = make::<Foo>();
+    println(`${w:?}`);
+}
+
+__DATA__
+{"stdout": "W { item: Bar { v: 7 } }\n"}

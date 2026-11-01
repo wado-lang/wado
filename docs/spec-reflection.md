@@ -12,15 +12,18 @@ type's identity. Each kind trait carries the structure of that kind.
 
 | Trait             | Implemented for                | Carries                                                                                       |
 | ----------------- | ------------------------------ | --------------------------------------------------------------------------------------------- |
-| `Reflect`         | every type below               | `type_name()`, `wire_name_policy()`                                                           |
+| `Reflect`         | every type below               | `decl_name()`, `wire_name_policy()`                                                           |
 | `ReflectStruct`   | every struct                   | `FieldTypes`, `FieldInputs`, `FieldSlots`, `Members`, `members()`, `from_fields()`, the slots |
 | `ReflectVariant`  | every variant                  | `CasePayloads`, `Members`, `members()`, `discriminant()`, `wire_tag()`                        |
 | `ReflectEnum`     | every enum                     | `Members`, `members()`, `discriminant()`, `from_discriminant()`                               |
 | `ReflectFlags`    | every flags type               | `Members`, `members()`, `bits()`, `from_bits()`                                               |
 | `ReflectNewtype`  | every newtype                  | `Base`                                                                                        |
+| `ReflectResource` | every affine resource          | `id()`                                                                                        |
 | `ReflectTemplate` | the shape of a tagged template | see [Tagged Template Literals](./spec-literals.md#tagged-template-literals)                   |
 
 The prelude declares all of them, so a bound names one with no import.
+
+> Not yet implemented: `ReflectResource` is not declared.
 
 Each kind trait has `Reflect` as a
 [supertrait](./spec-traits.md#supertraits). So a kind bound alone reaches the
@@ -31,7 +34,7 @@ root's methods:
 ```wado
 // `T: ReflectStruct` alone reaches `Reflect`'s methods
 fn struct_name<T: ReflectStruct>() -> String {
-    return Reflect::<T>::type_name();
+    return Reflect::<T>::decl_name();
 }
 
 test "a kind bound reaches the root" {
@@ -42,7 +45,7 @@ test "a kind bound reaches the root" {
 ### Trait-Qualified Calls
 
 A reflection method is called through its trait, as
-`Reflect::<T>::type_name()` or `ReflectStruct::<T>::members()`. The type's own
+`Reflect::<T>::decl_name()` or `ReflectStruct::<T>::members()`. The type's own
 namespace stays its author's, so a type may declare a function of the same name:
 
 <!-- {"fixture":"spec_reflection_family.wado"} -->
@@ -53,14 +56,14 @@ struct Tagged {
 }
 
 impl Tagged {
-    fn type_name() -> String {    // the type's own function, not reflection's
+    fn decl_name() -> String {    // the type's own function, not reflection's
         return "tagged";
     }
 }
 
 test "reflection leaves the type's namespace alone" {
-    assert Tagged::type_name() == "tagged";
-    assert Reflect::<Tagged>::type_name() == "Tagged";
+    assert Tagged::decl_name() == "tagged";
+    assert Reflect::<Tagged>::decl_name() == "Tagged";
 }
 ```
 
@@ -69,7 +72,7 @@ A reflection trait takes exactly one type argument, the subject:
 <!-- {"fixture":"spec_reflection_subject_arity_error.wado"} -->
 
 ```wado
-let n = Reflect::<Point, i32>::type_name();  // ERROR: one subject, found 2
+let n = Reflect::<Point, i32>::decl_name();  // ERROR: one subject, found 2
 ```
 
 ### Sealed Traits
@@ -103,34 +106,34 @@ let f: EnumCase<Point> = EnumCase {  // ERROR: field `discriminant` of struct
 
 ## Identity
 
-### Type Names
+### Declaration Names
 
-`Reflect::<T>::type_name()` returns the name of the declaration, and `""` for an
+`Reflect::<T>::decl_name()` returns the name of the declaration, and `""` for an
 [anonymous struct](./spec-types.md#anonymous-structs), which names none. A
 generic type answers without its type arguments:
 
-<!-- {"fixture":"spec_reflection_type_name.wado"} -->
+<!-- {"fixture":"spec_reflection_decl_name.wado"} -->
 
 ```wado
 test "a generic type is named without its arguments" {
-    assert Reflect::<Pair<i32>>::type_name() == "Pair";
-    assert Reflect::<Pair<String>>::type_name() == "Pair";
-    assert Reflect::<Option<i32>>::type_name() == "Option";
+    assert Reflect::<Pair<i32>>::decl_name() == "Pair";
+    assert Reflect::<Pair<String>>::decl_name() == "Pair";
+    assert Reflect::<Option<i32>>::decl_name() == "Option";
 }
 ```
 
 A newtype answers with its own name, not its base's. In a chain, each link
 answers for itself:
 
-<!-- {"fixture":"spec_reflection_type_name.wado"} -->
+<!-- {"fixture":"spec_reflection_decl_name.wado"} -->
 
 ```wado
 type Meters = f64;
 type Distance = Meters;
 
 test "a newtype names its own link of the chain" {
-    assert Reflect::<Meters>::type_name() == "Meters";
-    assert Reflect::<Distance>::type_name() == "Distance";
+    assert Reflect::<Meters>::decl_name() == "Meters";
+    assert Reflect::<Distance>::decl_name() == "Distance";
 }
 ```
 
@@ -541,7 +544,7 @@ struct Point {
 type Spot = Point;
 
 test "a newtype names itself and walks its base's members" {
-    assert Reflect::<Spot>::type_name() == "Spot";
+    assert Reflect::<Spot>::decl_name() == "Spot";
     let mut names = "";
     for let f of ReflectStruct::<Spot>::members() {
         names.push_str(f.name());
@@ -582,7 +585,7 @@ impl Show for String {
 
 impl<T: ReflectStruct<FieldTypes = [..F]>, ..F: Show> Show for T {
     fn show(&self) -> String {
-        let mut out = `${Reflect::<T>::type_name()}(`;
+        let mut out = `${Reflect::<T>::decl_name()}(`;
         for let f of ReflectStruct::<T>::members() {
             out.push_str(`${f.name()}=${f.get(self).show()};`);
         }
@@ -763,7 +766,7 @@ therefore always allowed, private fields included:
 ```wado
 test "a closed struct still reads through reflection" {
     let o = make_opaque();              // `pub struct Opaque { root: i32, size: i32 }`
-    assert Reflect::<Opaque>::type_name() == "Opaque";
+    assert Reflect::<Opaque>::decl_name() == "Opaque";
     assert field_names(&o) == "root size ";
     assert `${o:?}` == "Opaque { root: 0, size: 0 }";
 }

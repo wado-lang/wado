@@ -1,6 +1,6 @@
 //! `wado test --pgo`: which tests it runs, where the profile goes, how it names
-//! modules, and when it writes nothing. The profile's format is
-//! `wado_compiler::pgo`'s to test.
+//! modules, and when it writes nothing. Then a build reading it back under
+//! `-f pgo`. The profile's format is `wado_compiler::pgo`'s to test.
 
 use std::fs;
 use std::path::Path;
@@ -158,7 +158,8 @@ fn a_run_with_nothing_sound_to_record_keeps_the_profile() {
         ));
     assert_eq!(fs::read_to_string(&profile).unwrap(), "kept\n");
 
-    // A pending TODO does not fail the run, but its workload trapped all the same.
+    // A `#![TODO]` file that does not compile is pending, and does not fail the
+    // run, but none of what it holds was recorded.
     fs::write(
         tmp.path().join("bench_test.wado"),
         "#![TODO]\n\n#[workload]\ntest \"pending\" {\n    assert 1 == 2;\n}\n",
@@ -208,6 +209,52 @@ fn a_package_left_with_no_workload_loses_its_profile() {
         .stdout(predicate::str::contains("pgo: wrote a/pgo/default.pgo"))
         .stdout(predicate::str::contains("pgo: removed b/pgo/default.pgo"));
     assert!(!stale.exists());
+}
+
+/// A build applies the profile `--pgo` recorded unless `-f no-pgo` says not
+/// to. The conflict remark on the `cold_path()` the workload ran shows it was
+/// applied.
+#[test]
+fn a_build_applies_the_entry_profile_under_pgo() {
+    let tmp = tempfile::tempdir().unwrap();
+    fs::write(
+        tmp.path().join("prog.wado"),
+        "use { println, Stdout } from \"core:cli\";\n\n\
+         fn pick(x: i32) -> i32 {\n    if x > 0 {\n        builtin::cold_path();\n        return 2;\n    }\n    return 0;\n}\n\n\
+         #[workload]\ntest {\n    assert pick(1) == 2;\n}\n\n\
+         export fn run() with Stdout {\n    println(`${pick(1)}`);\n}\n",
+    )
+    .unwrap();
+    let remark = "`cold_path()` marks a path the profile ran once";
+    let missing = "-f pgo: no profile at";
+    let run = || {
+        wado_in(tmp.path())
+            .args(["run", "--log-level", "info", "prog.wado"])
+            .assert()
+            .success()
+            .stdout("2\n")
+    };
+    let compile = |flags: &[&str]| {
+        wado_in(tmp.path())
+            .args(["compile", "--log-level", "info", "-o", "out.wasm"])
+            .args(flags)
+            .arg("prog.wado")
+            .assert()
+            .success()
+    };
+
+    run().stderr(predicate::str::contains(remark).not());
+    wado_in(tmp.path())
+        .args(["test", "--pgo", "prog.wado"])
+        .assert()
+        .success();
+    // The build cached above depended on the profile's absence.
+    run().stderr(predicate::str::contains(remark));
+    compile(&["-f", "no-pgo"]).stderr(predicate::str::contains(remark).not());
+
+    fs::remove_file(tmp.path().join("pgo/prog.pgo")).unwrap();
+    compile(&["-f", "pgo"]).stderr(predicate::str::contains(missing));
+    compile(&[]).stderr(predicate::str::contains(missing).not());
 }
 
 #[test]

@@ -557,7 +557,7 @@ impl Semantics {
     /// the binding's body.
     #[must_use]
     pub fn local_type_name(&self, id: AstId) -> Option<String> {
-        Some(self.types.type_name(self.local_type(id)?))
+        Some(self.types.name(self.local_type(id)?))
     }
 
     /// Inferred [`TypeId`] for the local binding at `id` (a `let` pattern, a
@@ -1835,6 +1835,7 @@ mod tests {
 
     use super::*;
     use crate::compiler_host::InMemoryCompilerHost;
+    use crate::coverage::RegionKind;
     use crate::hashmap;
     use crate::pgo;
     use crate::tir::{TirExpr, TirExprKind};
@@ -2054,9 +2055,9 @@ mod tests {
         out
     }
 
-    /// A profile marks in reify each outermost region it recorded no run of,
-    /// with the compiler's marker: a function that never ran once, at its
-    /// start.
+    /// A profile marks in reify each outermost region it recorded no run of
+    /// in a function that ran, with the compiler's marker. A function that
+    /// never ran gets none.
     #[test]
     fn a_profile_marks_what_never_ran_cold() {
         let source = "fn ran(x: i32) -> i32 { if x > 0 { return 1; } return 0; }
@@ -2086,15 +2087,11 @@ mod tests {
         let sem = analyzed(source, None, Some(&profile));
         assert_eq!(
             sem.cold_regions(),
-            [
-                "entry.wado:1:47 else",
-                "entry.wado:1:48 rest",
-                "entry.wado:2:38 fn"
-            ]
+            ["entry.wado:1:47 else", "entry.wado:1:48 rest"]
         );
         let markers = markers([&sem.tir_modules[&sem.entry_module_source]]);
         assert_eq!(markers["ran"], ["$known_cold_path", "$known_cold_path"]);
-        assert_eq!(markers["never"], ["$known_cold_path"]);
+        assert_eq!(markers["never"], [] as [String; 0]);
         assert_eq!(markers["run"], [] as [String; 0]);
     }
 
@@ -2103,17 +2100,30 @@ mod tests {
     #[test]
     fn a_profiled_compile_seeds_from_a_marked_snapshot() {
         let probed = get_or_init_snapshot(Some(STDLIB), None).expect("not building");
-        let plan = probed
+        // A function that ran, with one region inside its body that did not:
+        // the profile marks exactly that one.
+        let (plan, function) = probed
             .coverage
             .as_ref()
             .expect("the snapshot measures the stdlib")
             .modules
             .iter()
-            .find(|plan| plan.path == "core:prelude/array.wado")
-            .expect("the prelude holds `Array`");
-        let function = &plan.functions[0];
+            .find_map(|plan| {
+                let regions = plan.regions_by_function();
+                let function =
+                    plan.functions
+                        .iter()
+                        .zip(&regions)
+                        .find_map(|(function, ids)| {
+                            (ids.len() == 2
+                                && plan.regions[ids[1] as usize].kind != RegionKind::Rhs)
+                                .then_some(function)
+                        })?;
+                Some((plan, function))
+            })
+            .expect("the stdlib has a function with one branch");
         let profile = pgo::parse(&format!(
-            "wado-pgo 1\nmodule {}\nfn {:016x} {} {}\n",
+            "wado-pgo 1\nmodule {}\nfn {:016x} {} {}\n0 1\n",
             plan.path, function.hash, function.line, function.name
         ))
         .expect("it parses");
@@ -2133,7 +2143,7 @@ mod tests {
 
         let sem = analyzed("export fn run() {}", None, Some(&profile));
         let region = &marked.cold_regions()[0];
-        assert!(region.starts_with("core:prelude/array.wado:"), "{region}");
+        assert!(region.starts_with(&format!("{}:", plan.path)), "{region}");
         assert_eq!(sem.cold_regions(), marked.cold_regions());
     }
 

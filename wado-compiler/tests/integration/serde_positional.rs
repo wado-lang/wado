@@ -5,8 +5,9 @@
 //! deserializable struct the synthesiser emits `FieldSchema::positional_at`
 //! enumerating positional fields in declaration order, and `lookup` omits them
 //! (a positional field is never matched by name). These functions are reachable
-//! only through a positional format (`core:args`), so they are verified here
-//! against the monomorphized TIR rather than at runtime.
+//! only through a positional format (`core:args`), so the source parses through
+//! one, and they are verified here against the monomorphized TIR rather than at
+//! runtime.
 
 use crate::common::{block_on, in_memory_host};
 use wado_compiler::{OptLevel, dump_with_host_and_world};
@@ -23,6 +24,7 @@ fn monomorphized_tir(source: &str) -> String {
         None,
         wado_compiler::OptOverrides::default(),
         &[],
+        None,
         &wado_compiler::param_resolution::ParamInputs::default(),
         wado_compiler::kiln::InvocationIndex::default(),
         1,
@@ -60,6 +62,7 @@ fn function_body<'a>(tir: &'a str, sig_prefix: &str) -> &'a str {
 
 const SOURCE: &str = r#"
 use { Deserialize } from "core:serde";
+use { parse } from "core:args";
 
 struct Cli {
     #[wire(positional)] input: String,
@@ -70,7 +73,9 @@ struct Cli {
 
 impl Deserialize for Cli;
 
-export fn run() {}
+export fn run() {
+    let _cli = parse::<Cli>([]);
+}
 "#;
 
 #[test]

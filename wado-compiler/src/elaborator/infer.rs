@@ -139,16 +139,8 @@ pub(super) fn unify(
             ResolvedType::GenericInstance {
                 def: expected_def,
                 type_args: expected_args,
-            }
-            | ResolvedType::GenericResource {
-                def: expected_def,
-                type_args: expected_args,
             },
             ResolvedType::GenericInstance {
-                def: actual_def,
-                type_args: actual_args,
-            }
-            | ResolvedType::GenericResource {
                 def: actual_def,
                 type_args: actual_args,
             },

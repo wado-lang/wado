@@ -1224,17 +1224,17 @@ impl TypeSystem {
                     )
                 })
         };
+        let resource = self.type_table.borrow().resource_def_in(resolved);
+        if let Some(def) = resource {
+            // The host interns handles, so two are equal exactly when they name one object.
+            return (tr == OnBoundTrait::Eq
+                && self.type_table.borrow().is_unrestricted_resource(def))
+            .then_some(true);
+        }
         match resolved {
             ResolvedType::Enum { .. } => Some(true),
             // A bitmask has no members to recurse into, like a plain `enum`.
             ResolvedType::Flags { .. } => Some(true),
-            // The host interns handles, so two are equal exactly when they name one object.
-            ResolvedType::Resource { def }
-                if tr == OnBoundTrait::Eq
-                    && self.type_table.borrow().is_unrestricted_resource(*def) =>
-            {
-                Some(true)
-            }
             ResolvedType::Struct { def, .. } => {
                 // An anonymous struct has fields to walk like any other; it
                 // just has no declaration to reach them through. Asking the
@@ -1350,6 +1350,11 @@ impl TypeSystem {
     /// The `Ref` marker's eligibility: whether a value of this type is a Wasm GC
     /// reference (WEP 2026-01-20). A `Newtype` follows its base type.
     pub(super) fn is_ref_identity(&self, resolved: &ResolvedType) -> bool {
+        let resource = self.type_table.borrow().resource_def_in(resolved);
+        if let Some(def) = resource {
+            // An affine resource is an object, its box (WEP: Affine Types).
+            return !self.type_table.borrow().is_unrestricted_resource(def);
+        }
         match resolved {
             // `i128` / `u128` are prelude structs, so they answer through the
             // `Struct` arm rather than here.
@@ -1365,11 +1370,7 @@ impl TypeSystem {
                 let base = self.type_table.borrow().get(*base_type).clone();
                 self.is_ref_identity(&base)
             }
-            // An affine resource is an object, its box (WEP: Affine Types).
-            ResolvedType::Resource { def } => {
-                !self.type_table.borrow().is_unrestricted_resource(*def)
-            }
-            ResolvedType::GenericResource { .. } => true,
+            ResolvedType::Resource { .. } => unreachable!("a resource is answered above"),
             ResolvedType::Enum { .. }
             | ResolvedType::Flags { .. }
             | ResolvedType::Unit
@@ -2863,7 +2864,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let (trait_name, trait_) = {
                 let table = self.tysys.type_table.borrow();
                 (
-                    table.def_name(trait_ref.decl).to_string(),
+                    table.decl_name(trait_ref.decl).to_string(),
                     table.trait_ref_name(trait_ref),
                 )
             };
@@ -3043,11 +3044,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             {
                 continue;
             }
-            let (type_name, expected_name, actual_name) = (
-                tt.type_name(type_arg),
-                tt.type_name(expected),
-                tt.type_name(actual),
-            );
+            let (type_name, expected_name, actual_name) =
+                (tt.name(type_arg), tt.name(expected), tt.name(actual));
             drop(tt);
             let _ = self.emit(TypeError::AssocTypeBoundNotSatisfied {
                 type_name,

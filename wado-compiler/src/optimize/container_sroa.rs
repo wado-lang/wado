@@ -819,8 +819,7 @@ fn holds_element(type_table: &TypeTable, ty: TypeId, element: TypeKey) -> bool {
         | ResolvedType::MutRef(inner)
         | ResolvedType::BuiltinArray(inner) => holds_element(type_table, *inner, element),
         ResolvedType::Struct { type_args, .. }
-        | ResolvedType::GenericInstance { type_args, .. }
-        | ResolvedType::GenericResource { type_args, .. } => type_args
+        | ResolvedType::GenericInstance { type_args, .. } => type_args
             .iter()
             .any(|t| holds_element(type_table, *t, element)),
         ResolvedType::Newtype {
@@ -1348,7 +1347,7 @@ fn element_layout_of(
         && let module_source = &type_table.struct_head_module(*def).clone()
     {
         let key = (
-            type_table.struct_rendered_name(*def, type_args),
+            type_table.struct_mangled_name(*def, type_args),
             module_source.clone(),
         );
         let tir_struct = struct_index.get(&key)?;

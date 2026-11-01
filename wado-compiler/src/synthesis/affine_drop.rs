@@ -276,8 +276,12 @@ impl<'a> AffineTypes<'a> {
             let base = tt.representation_head(type_id);
             (base, tt.get(base).clone())
         };
-        if let ResolvedType::Resource { def } = resolved {
+        let resource = self.tt.borrow().resource_def_of(base);
+        if let Some(def) = resource {
             let tt = self.tt.borrow();
+            if tt.is_stream_or_future_end(def) {
+                return Layout::End;
+            }
             if tt.is_unrestricted_resource(def) {
                 return Layout::Opaque;
             }
@@ -290,9 +294,6 @@ impl<'a> AffineTypes<'a> {
             } else {
                 Layout::Opaque
             };
-        }
-        if let ResolvedType::GenericResource { .. } = resolved {
-            return Layout::End;
         }
         if let ResolvedType::BuiltinArray(elem) = resolved {
             return Layout::Array { elem };
@@ -956,7 +957,7 @@ fn is_future_writable(type_id: TypeId, cx: &Cx) -> bool {
 /// could write stands in for the value the reader waits for, so the trap names
 /// the end (WEP: Affine Types).
 fn unwritten_future_trap(type_id: TypeId, cx: &Cx) -> TirStmt {
-    let type_name = cx.affine_types.tt.borrow().type_name(type_id);
+    let type_name = cx.affine_types.tt.borrow().name(type_id);
     expr_stmt(panic_with(
         format!("`{type_name}` dropped before its write: its reader would wait forever"),
         cx,
@@ -2395,7 +2396,7 @@ fn store_into_object(place: TirExpr, stored: TirExpr, repoint: TirStmt, cx: &mut
 /// it already is, `place`: the move into `stored` nulled the only place that
 /// owned it, and a reference owns nothing (WEP: Affine Types).
 fn refuse_self_store(place: TirExpr, stored: TirExpr, cx: &Cx) -> TirStmt {
-    let type_name = cx.affine_types.tt.borrow().type_name(stored.type_id);
+    let type_name = cx.affine_types.tt.borrow().name(stored.type_id);
     let trap = panic_with(
         format!(
             "a store through a reference moves `{type_name}` into the object it was moved out \

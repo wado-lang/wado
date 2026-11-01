@@ -429,7 +429,7 @@ Three things, none of them comparable:
 - Diagnostics. A message says what the programmer wrote, read off the site —
   except in the one case where what the programmer wrote does not separate the
   two sides: `expected 'Point', found 'Point'`, two declarations of that name.
-  `TypeTable::type_names_for_mismatch` renders both plainly and qualifies each
+  `TypeTable::names_for_mismatch` renders both plainly and qualifies each
   only when the two strings are equal, so every other message keeps its short
   form. The qualified spelling is the `MODULE#SYMBOL` notation of WEP
   2026-06-14, and comes from the same renderer the plain one does, so the two

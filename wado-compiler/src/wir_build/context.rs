@@ -735,7 +735,7 @@ impl<'a> WirContext<'a> {
             type_table.is_stackless(type_id),
             "[WIR] {} disagrees with `is_stackless`: a type the signature lists and the body \
              drops (or the reverse) desyncs the two",
-            type_table.type_name(type_id),
+            type_table.name(type_id),
         );
         wir
     }
@@ -864,6 +864,15 @@ impl<'a> WirContext<'a> {
             // A `Never`-typed expression diverges, so it leaves no value behind —
             // the same absence `Unit` denotes.
             ResolvedType::Never => WirType::Unit,
+            ResolvedType::Resource { .. } | ResolvedType::GenericInstance { .. }
+                if type_table.is_resource_type(type_id) =>
+            {
+                if type_table.is_unrestricted_handle(type_id) {
+                    self.lookup_wir_type(type_table, TypeTable::U64)?
+                } else {
+                    Self::ref_to(self.handle_box())
+                }
+            }
             // A list instance is one wrapper struct whether spelled as the
             // instance or as its monomorphized struct.
             ResolvedType::Struct { type_args, .. }
@@ -884,11 +893,11 @@ impl<'a> WirContext<'a> {
                 } else {
                     type_table.struct_head_module(*def).clone()
                 };
-                // The WIR struct map is keyed on the rendered spelling: each
+                // The WIR struct map is keyed on the mangled spelling: each
                 // instantiation is its own struct type.
                 let lookup_name = StructName::new(
                     lookup_module,
-                    type_table.struct_rendered_name(*def, type_args),
+                    type_table.struct_mangled_name(*def, type_args),
                 );
                 let Some(type_id) = self.struct_type_map.get(&lookup_name) else {
                     return Err(UnregisteredType::struct_ref(format!(
@@ -916,11 +925,11 @@ impl<'a> WirContext<'a> {
                 Self::ref_to(&type_id)
             }
             ResolvedType::GenericInstance { def, type_args } => {
-                // The rendered name, which is what the registrar wrote: a
+                // The mangled name, which is what the registrar wrote: a
                 // function-local declaration's spelling carries its
                 // disambiguator, and two sibling functions' `struct Box<T>`
                 // are two registrations.
-                let name = &type_table.decl_render_name(*def);
+                let name = &type_table.decl_mangled_name(*def);
                 let module_source = &type_table.def_module(*def).clone();
                 // A generic instance is either a struct or a variant, and the
                 // two live in different maps. Registration aliases the
@@ -955,7 +964,8 @@ impl<'a> WirContext<'a> {
             }
             // Option<T> is handled as GenericInstance (variant).
             ResolvedType::Enum { def } => {
-                let key = wir_enum_type_key(type_table.def_module(*def), type_table.def_name(*def));
+                let key =
+                    wir_enum_type_key(type_table.def_module(*def), type_table.decl_name(*def));
                 let Some(type_id) = self.type_map.get(&key) else {
                     return Err(UnregisteredType::enum_i32(format!("enum `{key}`")));
                 };
@@ -964,7 +974,7 @@ impl<'a> WirContext<'a> {
                 }
             }
             ResolvedType::Variant { def } => {
-                let key = wir_type_key(type_table.def_module(*def), type_table.def_name(*def));
+                let key = wir_type_key(type_table.def_module(*def), type_table.decl_name(*def));
                 let Some(type_id) = self.type_map.get(&key) else {
                     return Err(UnregisteredType::struct_ref(format!("variant `{key}`")));
                 };
@@ -997,15 +1007,9 @@ impl<'a> WirContext<'a> {
                 // Newtypes resolve to their base type
                 self.lookup_wir_type(type_table, *base_type)?
             }
-            ResolvedType::Resource { .. } | ResolvedType::GenericResource { .. } => {
-                if type_table.is_unrestricted_handle(type_id) {
-                    self.lookup_wir_type(type_table, TypeTable::U64)?
-                } else {
-                    Self::ref_to(self.handle_box())
-                }
-            }
             // Flags are bitmasks stored as i32
             ResolvedType::Flags { .. } => WirType::I32,
+            ResolvedType::Resource { .. } => unreachable!("a resource is handled above"),
             // These should never reach codegen — must be resolved by monomorphization
             ResolvedType::TypeParam { name, index } => {
                 panic!("unsubstituted TypeParam `{name}` (index {index}) reached codegen")

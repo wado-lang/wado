@@ -27,11 +27,12 @@ test "smoke" {
     assert event_count(&back) == 0;
 }
 
+#[workload]
 test "fuel" {
     let json_data = #include_bytes("./citm_catalog.json");
     let catalog = from_bytes::<CitmCatalog, _>(json_data).unwrap();
-    measure("ser", || to_bytes::<CitmCatalog>(&catalog).unwrap().len());
-    let events = measure("de", || event_count(&from_bytes::<CitmCatalog, _>(json_data).unwrap()));
+    measure("serde/json/catalog/ser", || to_bytes::<CitmCatalog>(&catalog).unwrap().len());
+    let events = measure("serde/json/catalog/de", || event_count(&from_bytes::<CitmCatalog, _>(json_data).unwrap()));
     assert events == 184;
 }
 

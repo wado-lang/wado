@@ -685,6 +685,23 @@ impl<'a> Reify<'a> {
         )
     }
 
+    /// [`Self::with_body_ownership`] for one element of a tuple `for-of`: its
+    /// overlay holds the types and dispatches that decide which places of
+    /// `body` move, and the enclosing body's walk saw none of them.
+    fn with_element_ownership<R>(
+        &mut self,
+        body: &ast::Block,
+        reify: impl FnOnce(&mut Self) -> R,
+    ) -> R {
+        let affine_params = self
+            .body_ownership
+            .as_ref()
+            .expect("a tuple `for-of` is reified inside a body")
+            .affine_params
+            .clone();
+        self.with_body_ownership(body, affine_params, reify)
+    }
+
     /// [`Self::with_body_ownership`] for an expression reified where no body
     /// is: a default, a global's initializer, an associated constant.
     fn with_expr_ownership<R>(
@@ -1366,18 +1383,21 @@ impl<'a> Reify<'a> {
 
     /// Reify a `resource R<T> { … }` declaration. Resource methods take
     /// a synthesised `self` parameter (`&Self` or `&mut Self`) at index
-    /// 0; for generic resources `Self = GenericResource<…>` with the
+    /// 0; for generic resources `Self` is a `GenericInstance` with the
     /// decl's own `TypeParam`s as type args. The op signatures are read
     /// from the facts the body walk recorded.
     fn reify_resource_decl(&mut self, decl: &ast::ResourceDecl) -> tir::TirResource {
         let operations = self
             .ann_effect_ops(decl.id)
             .expect("`record_effect_ops` records op signatures for every resource reify emits");
+        let type_params = self
+            .ann_decl_type_params(decl.id)
+            .expect("the body walk records the type params for every resource reify emits");
         tir::TirResource {
             head: DeclaredHead::new(self.tysys.resolutions.defs(), self.tysys.def_at(decl.id)),
             visibility: decl.visibility,
             operations,
-            is_generic: !decl.type_params.is_empty(),
+            type_params,
             span: decl.span,
         }
     }
@@ -3741,7 +3761,9 @@ impl<'a> Reify<'a> {
                     }
                 }
 
-                let body = this.reify_block(&for_of.body, ctx, None);
+                let body = this.with_element_ownership(&for_of.body, |this| {
+                    this.reify_block(&for_of.body, ctx, None)
+                });
                 block_stmts.extend(body.stmts);
                 block_stmts
             });
@@ -4742,7 +4764,11 @@ impl<'a> Reify<'a> {
                 .clone();
             // The name the shape was registered under, not the one a message
             // shows: both render the shape, and only the mangle is a key.
-            (tt.struct_head_name(*def), shape, tt.anon_shape_is_open(*id))
+            (
+                tt.struct_head_mangled_name(*def),
+                shape,
+                tt.anon_shape_is_open(*id),
+            )
         };
         let hole_types = shape.hole_types();
         assert_eq!(values.len(), hole_types.len());

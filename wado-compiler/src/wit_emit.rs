@@ -914,7 +914,7 @@ impl<'a> Emitter<'a> {
         Err(WitEmitError::UnrepresentableType {
             description: format!(
                 "`{}` has no emittable declaration",
-                self.types.def_name(def)
+                self.types.decl_name(def)
             ),
         })
     }
@@ -971,14 +971,8 @@ impl<'a> Emitter<'a> {
                         err: self.non_unit(*err),
                     },
                     (Some(CompilerItem::AsyncCall), [arg]) => self.classify_resolved(*arg),
-                    _ => CmShape::Leaf,
-                }
-            }
-            ResolvedType::GenericResource { def, type_args } => {
-                let elem = type_args.first().copied();
-                match self.types.compiler_type_item(*def) {
-                    Some(CompilerItem::Future) => CmShape::Future(elem),
-                    Some(CompilerItem::Stream) => CmShape::Stream(elem),
+                    (Some(CompilerItem::Future), args) => CmShape::Future(args.first().copied()),
+                    (Some(CompilerItem::Stream), args) => CmShape::Stream(args.first().copied()),
                     _ => CmShape::Leaf,
                 }
             }
@@ -990,6 +984,9 @@ impl<'a> Emitter<'a> {
     /// resource becomes its bare WIT name (`own<R>`); a borrowed one becomes
     /// `borrow<R>`.
     fn map_resolved_leaf(&mut self, id: TypeId) -> Result<Type, WitEmitError> {
+        if self.types.is_unrestricted_handle(id) {
+            return Ok(Type::F64);
+        }
         match self.types.get(id) {
             ResolvedType::Primitive(p) => map_primitive(*p),
             ResolvedType::Struct { .. } if self.types.is_string(id) => Ok(Type::String),
@@ -1004,19 +1001,15 @@ impl<'a> Emitter<'a> {
                     .expect("a nominal type names a declaration");
                 Ok(self.named(def))
             }
-            ResolvedType::Resource { def } if self.types.is_unrestricted_resource(*def) => {
-                Ok(Type::F64)
-            }
             ResolvedType::Resource { def } => {
-                Ok(Type::named(to_cm_name(self.types.def_name(*def))))
+                Ok(Type::named(to_cm_name(self.types.decl_name(*def))))
             }
             ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
                 let inner = *inner;
-                if let ResolvedType::Resource { def } = self.types.get(inner) {
-                    if self.types.is_unrestricted_resource(*def) {
-                        return Ok(Type::F64);
-                    }
-                    Ok(Type::borrow(to_cm_name(self.types.def_name(*def))))
+                if self.types.is_unrestricted_handle(inner) {
+                    Ok(Type::F64)
+                } else if let ResolvedType::Resource { def } = self.types.get(inner) {
+                    Ok(Type::borrow(to_cm_name(self.types.decl_name(*def))))
                 } else {
                     self.map_type(inner)
                 }
@@ -1033,7 +1026,7 @@ impl<'a> Emitter<'a> {
             ResolvedType::TypeParam { name, .. } => format!("type parameter `{name}`"),
             ResolvedType::Unit => "unit `()`".to_string(),
             ResolvedType::Never => "never `!`".to_string(),
-            _ => format!("`{}`", self.types.type_name(id)),
+            _ => format!("`{}`", self.types.name(id)),
         }
     }
 
@@ -1054,7 +1047,7 @@ impl<'a> Emitter<'a> {
     fn named(&mut self, def: DefId) -> Type {
         if !self.emitted.contains(&def) {
             self.pending
-                .insert((self.types.def_name(def).to_string(), def));
+                .insert((self.types.decl_name(def).to_string(), def));
         }
         Type::named(self.wit_type_name(def))
     }
@@ -1065,7 +1058,7 @@ impl<'a> Emitter<'a> {
         to_cm_name(
             self.published_names
                 .get(&def)
-                .map_or(self.types.def_name(def), String::as_str),
+                .map_or(self.types.decl_name(def), String::as_str),
         )
     }
 }

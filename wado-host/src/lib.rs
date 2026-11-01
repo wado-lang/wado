@@ -5,6 +5,7 @@
 pub mod atomic_write;
 pub mod engine;
 pub mod fixture;
+pub mod fuel;
 pub mod kiln;
 pub mod random;
 #[cfg(unix)]

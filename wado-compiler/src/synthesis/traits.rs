@@ -561,7 +561,7 @@ fn collect_reflect_targets(module: &TirModule) -> Vec<ReflectTarget> {
         .collect()
 }
 
-/// Synthesize one struct's `type_name()` and `members()` methods, register
+/// Synthesize one struct's `decl_name()` and `members()` methods, register
 /// its `FieldTypes` / `Members` associated tuple types, and emit the
 /// per-field-type `$field_get$S$F` bridge helpers.
 fn generate_struct_reflect_methods(
@@ -587,12 +587,12 @@ fn generate_struct_reflect_methods(
         .map(|f| (f.name.clone(), f.type_id, f.index))
         .collect();
 
-    let type_name_fn = generate_type_name_fn(
+    let decl_name_fn = generate_decl_name_fn(
         receiver,
         &type_table.borrow().struct_reflect_name(*def),
         env.string_type,
         &env.root_trait_name,
-        &env.type_name_method,
+        &env.decl_name_method,
         span,
     );
 
@@ -701,7 +701,7 @@ fn generate_struct_reflect_methods(
     );
 
     let mut functions = vec![
-        type_name_fn,
+        decl_name_fn,
         members_fn,
         from_fields_fn,
         default_slot_fn,
@@ -798,10 +798,10 @@ struct ReflectSynthEnv {
     /// The declaration `member_struct_name` spells; the name is only rendered
     /// into the synthesised bodies.
     member_struct_def: DefId,
-    /// `type_name` is declared on the identity root, not on the kind, so the
+    /// `decl_name` is declared on the identity root, not on the kind, so the
     /// mangled name it is minted under names `Reflect` (WEP 2026-06-13).
     root_trait_name: FqTraitName,
-    type_name_method: String,
+    decl_name_method: String,
     members_method: String,
     from_fields_method: String,
     default_slot_method: String,
@@ -834,7 +834,7 @@ impl ReflectSynthEnv {
             member_struct_name,
             member_struct_def,
             root_trait_name: items.trait_fq(CompilerItem::Reflect),
-            type_name_method: items.method_name(CompilerItem::ReflectTypeName).to_string(),
+            decl_name_method: items.method_name(CompilerItem::ReflectDeclName).to_string(),
             members_method: items
                 .method_name(CompilerItem::ReflectStructMembers)
                 .to_string(),
@@ -1554,20 +1554,20 @@ fn generate_read_helper(
     )
 }
 
-/// Build `Type^ReflectKind::type_name() -> String { return "Type"; }` —
+/// Build `Type^ReflectKind::decl_name() -> String { return "Type"; }` —
 /// shared by every kind's synthesis.
 ///
 /// `display_name` is the caller's because it belongs to the declaration
 /// namespace: an anonymous shape's head is its mangle, module paths and all.
-fn generate_type_name_fn(
+fn generate_decl_name_fn(
     receiver: &FqTypeName,
     display_name: &str,
     string_type: TypeId,
     reflect_trait_name: &FqTraitName,
-    type_name_method: &str,
+    decl_name_method: &str,
     span: Span,
 ) -> TirFunction {
-    let method_info = trait_method_info(receiver, reflect_trait_name, type_name_method);
+    let method_info = trait_method_info(receiver, reflect_trait_name, decl_name_method);
     let qualified_name = method_info.to_mangled_name();
 
     let literal = TirExpr::new(
@@ -1588,7 +1588,7 @@ fn generate_type_name_fn(
 }
 
 /// Generate the `ReflectTemplate` impl of every tagged template shape
-/// (WEP 2026-01-10): `type_name()`, `wire_name_policy()`, `members()`,
+/// (WEP 2026-01-10): `decl_name()`, `wire_name_policy()`, `members()`,
 /// `tail()`, `raw_tail()`, plus the per-hole-type `$hole_get` and `$hole_ref`
 /// bridges. The `$hole_fmt` bridge is minted by `synthesis::template`, beside
 /// the specifier lowering it reuses.
@@ -1731,12 +1731,12 @@ fn generate_template_reflect_impls(
             span,
         );
         let mut functions = vec![
-            generate_type_name_fn(
+            generate_decl_name_fn(
                 receiver,
                 &display_name,
                 env.string_type,
                 &env.root_trait_name,
-                &env.type_name_method,
+                &env.decl_name_method,
                 span,
             ),
             generate_wire_name_policy_fn(
@@ -1892,7 +1892,7 @@ fn generate_template_members_fn(
 }
 
 /// Generate the `ReflectVariant` members for each requested variant
-/// (WEP 2026-06-13 §3d): `type_name()`, `discriminant(&self)`, `cases()`, plus
+/// (WEP 2026-06-13 §3d): `decl_name()`, `discriminant(&self)`, `cases()`, plus
 /// the per-payload `extract` / `construct` helpers.
 pub fn synthesize_reflect_variant(project: &mut Package) {
     synthesize_reflect_kind(
@@ -1992,7 +1992,7 @@ struct ReflectVariantSynthEnv {
     /// into the synthesised bodies.
     member_struct_def: DefId,
     root_trait_name: FqTraitName,
-    type_name_method: String,
+    decl_name_method: String,
     discriminant_method: String,
     cases_method: String,
     case_style_type: TypeId,
@@ -2012,7 +2012,7 @@ impl ReflectVariantSynthEnv {
             member_struct_name,
             member_struct_def,
             root_trait_name: items.trait_fq(CompilerItem::Reflect),
-            type_name_method: items.method_name(CompilerItem::ReflectTypeName).to_string(),
+            decl_name_method: items.method_name(CompilerItem::ReflectDeclName).to_string(),
             discriminant_method: items
                 .method_name(CompilerItem::ReflectVariantDiscriminant)
                 .to_string(),
@@ -2035,7 +2035,7 @@ impl ReflectVariantSynthEnv {
 /// like [`REFLECT_FIELD_TYPES_ASSOC`].
 pub(crate) const REFLECT_CASE_PAYLOADS_ASSOC: &str = "CasePayloads";
 
-/// Synthesize one variant's `type_name()`, `discriminant(&self)`, and `cases()`
+/// Synthesize one variant's `decl_name()`, `discriminant(&self)`, and `cases()`
 /// methods, plus the per-payload-type `Case` `extract` / `construct` helpers its
 /// members dispatch to.
 fn generate_variant_reflect_methods(
@@ -2046,12 +2046,12 @@ fn generate_variant_reflect_methods(
 ) -> Vec<TirFunction> {
     let span = target.span;
 
-    let type_name_fn = generate_type_name_fn(
+    let decl_name_fn = generate_decl_name_fn(
         &target.receiver,
         target.receiver.head().name(),
         env.string_type,
         &env.root_trait_name,
-        &env.type_name_method,
+        &env.decl_name_method,
         span,
     );
 
@@ -2126,7 +2126,7 @@ fn generate_variant_reflect_methods(
         generate_variant_wire_tag_fn(type_table, env, variant_trait_name, target, span);
 
     let mut functions = vec![
-        type_name_fn,
+        decl_name_fn,
         discriminant_fn,
         cases_fn,
         wire_name_policy_fn,
@@ -2622,7 +2622,7 @@ pub(super) fn generate_variant_instance_discriminant_fn(
 }
 
 /// Generate the `ReflectEnum` members for each requested enum
-/// (WEP 2026-06-13 §3b): `type_name()`, `discriminant(&self)`,
+/// (WEP 2026-06-13 §3b): `decl_name()`, `discriminant(&self)`,
 /// `from_discriminant(disc)`, and `members()`.
 pub fn synthesize_reflect_enum(project: &mut Package) {
     synthesize_reflect_kind(
@@ -2745,7 +2745,7 @@ struct ScalarReflectSynthEnv {
     /// into the synthesised bodies.
     member_struct_def: DefId,
     root_trait_name: FqTraitName,
-    type_name_method: String,
+    decl_name_method: String,
     /// `discriminant(&self)` on an enum, `bits(&self)` on a flags type.
     value_method: String,
     /// `from_discriminant(raw)` / `from_bits(raw)`.
@@ -2767,7 +2767,7 @@ impl ScalarReflectSynthEnv {
             member_struct_name,
             member_struct_def,
             root_trait_name: items.trait_fq(CompilerItem::Reflect),
-            type_name_method: items.method_name(CompilerItem::ReflectTypeName).to_string(),
+            decl_name_method: items.method_name(CompilerItem::ReflectDeclName).to_string(),
             value_method: items.method_name(kind.value).to_string(),
             from_value_method: items.method_name(kind.from_value).to_string(),
             members_method: items.method_name(kind.members).to_string(),
@@ -2778,7 +2778,7 @@ impl ScalarReflectSynthEnv {
     }
 }
 
-/// Synthesize one enum's `type_name()`, `discriminant(&self)`,
+/// Synthesize one enum's `decl_name()`, `discriminant(&self)`,
 /// `from_discriminant(disc)`, and `members()` methods.
 fn generate_enum_reflect_methods(
     type_table: &RefCell<TypeTable>,
@@ -2789,12 +2789,12 @@ fn generate_enum_reflect_methods(
     assert_eq!(env.kind, ScalarKind::Enum);
     let span = target.span;
 
-    let type_name_fn = generate_type_name_fn(
+    let decl_name_fn = generate_decl_name_fn(
         &target.receiver,
         target.receiver.head().name(),
         env.string_type,
         &env.root_trait_name,
-        &env.type_name_method,
+        &env.decl_name_method,
         span,
     );
 
@@ -2859,7 +2859,7 @@ fn generate_enum_reflect_methods(
     );
 
     vec![
-        type_name_fn,
+        decl_name_fn,
         discriminant_fn,
         from_discriminant_fn,
         members_fn,
@@ -3057,7 +3057,7 @@ fn generate_enum_from_discriminant_fn(
 }
 
 /// Generate the `ReflectNewtype` impl of every newtype (WEP 2026-06-13): the
-/// root's `type_name()` and the `Base` associated type. The kind with no
+/// root's `decl_name()` and the `Base` associated type. The kind with no
 /// members needs no member channel and no value bridge — a newtype's `From` is
 /// bidirectional and already generated. Declaration-driven like the struct
 /// kind, since every newtype is nameable.
@@ -3084,7 +3084,7 @@ fn generate_newtype_reflect_impls(
             .iter()
             .map(|nt| ReflectNewtypeTarget {
                 receiver: FqTypeName::declared(tt.defs(), nt.def),
-                display_name: tt.def_name(nt.def).to_string(),
+                display_name: tt.decl_name(nt.def).to_string(),
                 type_params: nt.type_params.clone(),
                 span: nt.span,
             })
@@ -3098,7 +3098,7 @@ fn generate_newtype_reflect_impls(
         string_type,
         case_style_type,
         root_trait_name,
-        type_name_method,
+        decl_name_method,
         policy_method,
         newtype_trait_key,
     ) = {
@@ -3110,7 +3110,7 @@ fn generate_newtype_reflect_impls(
             string_type,
             case_style_type,
             items.trait_fq(CompilerItem::Reflect),
-            items.method_name(CompilerItem::ReflectTypeName).to_string(),
+            items.method_name(CompilerItem::ReflectDeclName).to_string(),
             items
                 .method_name(CompilerItem::ReflectWireNamePolicy)
                 .to_string(),
@@ -3120,18 +3120,18 @@ fn generate_newtype_reflect_impls(
 
     let mut generated = Vec::new();
     for target in &targets {
-        let mut type_name = generate_type_name_fn(
+        let mut decl_name = generate_decl_name_fn(
             &target.receiver,
             &target.display_name,
             string_type,
             &root_trait_name,
-            &type_name_method,
+            &decl_name_method,
             target.span,
         );
         // A generic declaration is one impl over `N<T, …>`, instantiated per
         // use — the shape the struct kind already takes.
-        type_name.impl_type_params.clone_from(&target.type_params);
-        generated.push(Rc::new(RefCell::new(type_name)));
+        decl_name.impl_type_params.clone_from(&target.type_params);
+        generated.push(Rc::new(RefCell::new(decl_name)));
 
         // Reached only over a base with no `Reflect` kind: over one with a kind,
         // dispatch answers with the base's policy (`TypeTable::wire_policy_subject`).
@@ -3169,7 +3169,7 @@ struct ReflectNewtypeTarget {
 }
 
 /// Generate the `ReflectFlags` members for each requested flags type
-/// (WEP 2026-06-13 §3c): `type_name()`, `bits(&self)`, `from_bits(raw)` — the
+/// (WEP 2026-06-13 §3c): `decl_name()`, `bits(&self)`, `from_bits(raw)` — the
 /// u64-normalized bit bridge — and `members()`.
 pub fn synthesize_reflect_flags(project: &mut Package) {
     synthesize_reflect_kind(
@@ -3239,7 +3239,7 @@ struct ReflectFlagsTarget {
     wire_name_policy: Option<NamePolicy>,
 }
 
-/// Synthesize one flags type's `type_name()`, `bits(&self)`, `from_bits(raw)`,
+/// Synthesize one flags type's `decl_name()`, `bits(&self)`, `from_bits(raw)`,
 /// and `members()` methods.
 fn generate_flags_reflect_methods(
     type_table: &RefCell<TypeTable>,
@@ -3250,12 +3250,12 @@ fn generate_flags_reflect_methods(
     assert_eq!(env.kind, ScalarKind::Flags);
     let span = target.span;
 
-    let type_name_fn = generate_type_name_fn(
+    let decl_name_fn = generate_decl_name_fn(
         &target.receiver,
         target.receiver.head().name(),
         env.string_type,
         &env.root_trait_name,
-        &env.type_name_method,
+        &env.decl_name_method,
         span,
     );
 
@@ -3315,7 +3315,7 @@ fn generate_flags_reflect_methods(
     );
 
     vec![
-        type_name_fn,
+        decl_name_fn,
         bits_fn,
         from_bits_fn,
         members_fn,
@@ -3796,6 +3796,7 @@ fn generate_eq_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, '_, '_>)
                 let ref_type = tt.make_ref(ty);
                 generate_scalar_eq_fn(
                     &target.receiver,
+                    &target.type_params,
                     ty,
                     ref_type,
                     &eq_trait_name,
@@ -3866,9 +3867,21 @@ fn eq_targets(
             continue;
         }
         let receiver = FqTypeName::declared(tt.defs(), def);
-        targets.extend(eq_target(&requested, receiver, Vec::new(), r.span, || {
-            EqMembers::Scalar(tt.make_resource(def), common::handle_bits)
-        }));
+        targets.extend(eq_target(
+            &requested,
+            receiver,
+            r.type_params.clone(),
+            r.span,
+            || {
+                let ty = if r.type_params.is_empty() {
+                    tt.make_resource(def)
+                } else {
+                    let ids = make_type_param_ids(&r.type_params, tt);
+                    tt.make_generic_instance(def, ids)
+                };
+                EqMembers::Scalar(ty, common::handle_bits)
+            },
+        ));
     }
     for (_name, fields, span, def) in collect_struct_fields(module) {
         let receiver = tt.fq_struct_head(def);
@@ -4338,7 +4351,7 @@ fn generate_inspect_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, '_,
     let resource_infos: Vec<(String, Span, DefId)> = module
         .resources
         .iter()
-        .filter(|r| !r.is_generic)
+        .filter(|r| r.type_params.is_empty())
         .map(|r| (r.head.name().to_string(), r.span, r.head.def()))
         .collect();
 
@@ -4366,7 +4379,7 @@ fn generate_inspect_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, '_,
             continue;
         }
         let ref_type = tt.make_ref(type_id);
-        let type_name = tt.type_name(type_id);
+        let type_name = tt.name(type_id);
         generated.push(Rc::new(RefCell::new(generate_opaque_inspect_fn(
             &tt.fq_base_type_name(type_id),
             &type_arg_names,
@@ -4715,7 +4728,7 @@ fn generate_opaque_inspect_fn(
     let fmt = || local_expr(1, "f", fmt_type, span);
     let deref_self = deref_local(0, "self", ref_type, resource_type, span);
     let mut locals = inspect_locals(ref_type, fmt_type);
-    let body = if let ResolvedType::Resource { def } = *tt.get(resource_type)
+    let body = if let Some(def) = tt.resource_def_of(resource_type)
         && tt.is_unrestricted_resource(def)
     {
         unrestricted_inspect_body(
@@ -4798,7 +4811,7 @@ fn unrestricted_inspect_body(
                 common::i32_const(i32::from(lo)),
                 TypeTable::BOOL,
             );
-            let owner_name = common::string_lit(tt.def_name(owner), string_type, synth_span());
+            let owner_name = common::string_lit(tt.decl_name(owner), string_type, synth_span());
             TirExpr::new(
                 TirExprKind::If {
                     condition: Box::new(is_owner),
@@ -4908,8 +4921,7 @@ fn resolve_impl_module_via_env(
         | ResolvedType::Variant { .. }
         | ResolvedType::Newtype { .. }
         | ResolvedType::Flags { .. }
-        | ResolvedType::GenericInstance { .. }
-        | ResolvedType::GenericResource { .. } => tt.nominal_head(type_id).map(|(_, m)| m),
+        | ResolvedType::GenericInstance { .. } => tt.nominal_head(type_id).map(|(_, m)| m),
         ResolvedType::Primitive(prim) => Some(ModuleSource::of_primitive(*prim)),
         ResolvedType::Unit => Some(ModuleSource::primitive()),
         ResolvedType::BuiltinArray(_) => Some(ModuleSource::array()),
@@ -4931,8 +4943,8 @@ fn resolve_impl_module_via_env(
 fn collect_generic_resource_instances(tt: &TypeTable) -> Vec<(TypeId, DefId, Vec<FqTypeName>)> {
     tt.all_types()
         .filter_map(|(id, resolved)| match resolved {
-            ResolvedType::GenericResource { def, type_args }
-                if type_args.iter().all(|t| tt.is_concrete(*t)) =>
+            ResolvedType::GenericInstance { def, type_args }
+                if tt.is_resource_def(*def) && type_args.iter().all(|t| tt.is_concrete(*t)) =>
             {
                 let args = type_args.iter().map(|t| tt.fq_type_name(*t)).collect();
                 Some((id, *def, args))
@@ -4960,6 +4972,7 @@ struct FnSignature {
 /// the scalar `scalar` maps each dereferenced operand to.
 fn generate_scalar_eq_fn(
     receiver: &FqTypeName,
+    impl_type_params: &[TirTypeParam],
     ty: TypeId,
     ref_type: TypeId,
     eq_trait_name: &FqTraitName,
@@ -4981,14 +4994,16 @@ fn generate_scalar_eq_fn(
     );
     let body = TirBlock::new(vec![return_stmt(comparison, span)], span);
 
-    make_synthetic_method(
+    let mut function = make_synthetic_method(
         qualified_name,
         method_info,
         binary_method_params(ref_type, span),
         TypeTable::BOOL,
         body,
         binary_method_locals(ref_type),
-    )
+    );
+    function.impl_type_params = impl_type_params.to_vec();
+    function
 }
 
 /// Generate `EnumName^Ord::cmp(&self, &Self) -> Ordering`, comparing the two

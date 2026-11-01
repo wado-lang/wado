@@ -921,7 +921,7 @@ impl TypeSystem {
             {
                 return self.callee_ident_for_type_param("Self", suffix, self_type_id);
             }
-            let self_name = self.type_table.borrow().type_name(self_type_id);
+            let self_name = self.type_table.borrow().name(self_type_id);
             // `Self` names the receiver, not one of its bounds: an impl
             // *provides* the trait whose default body this is.
             return CalleeIdentKind::Rewritten(format!("{self_name}::{suffix}"));
@@ -1273,10 +1273,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let (kind, result) = {
             let tt = self.tysys.type_table.borrow();
             let bare_generic_of_arg = bare_generic
-                && matches!(
-                    tt.get(arg),
-                    ResolvedType::GenericInstance { .. } | ResolvedType::GenericResource { .. }
-                )
+                && matches!(tt.get(arg), ResolvedType::GenericInstance { .. })
                 && tt.nominal_def(arg).is_some()
                 && tt.nominal_def(arg) == tt.nominal_def(receiver)
                 && tt
@@ -1321,7 +1318,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     fn check_wrap_in_case(&mut self, call: AstId, target: TypeId, source: TypeId, span: Span) {
         let (target_name, source_name) = {
             let tt = self.tysys.type_table.borrow();
-            (tt.type_name(target), tt.type_name(source))
+            (tt.name(target), tt.name(source))
         };
         let why = match self.wrapped_case(target, source) {
             Ok(index) => {
@@ -1460,7 +1457,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // Not "unknown function": the name is a value. A binding whose
             // initializer already reported keeps the one diagnostic it earned.
             if value_ty != TypeTable::ERROR {
-                let type_name = self.tysys.type_table.borrow().type_name(value_ty);
+                let type_name = self.tysys.type_table.borrow().name(value_ty);
                 let _ = self.emit(TypeError::CalleeNotCallable {
                     type_name,
                     span: call.callee.span(),
@@ -1504,7 +1501,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // when the callee already resolved to the error type so we
             // don't pile a second diagnostic on top of the first.
             if callee_type != TypeTable::ERROR {
-                let type_name = self.tysys.type_table.borrow().type_name(callee_type);
+                let type_name = self.tysys.type_table.borrow().name(callee_type);
                 let _ = self.emit(TypeError::CalleeNotCallable {
                     type_name,
                     span: call.callee.span(),
@@ -2962,7 +2959,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     && expected_type != TypeTable::UNKNOWN
                     && s.logger.offered_error_count() == errors_before
                 {
-                    let expected_name = s.tysys.type_table.borrow().type_name(expected_type);
+                    let expected_name = s.tysys.type_table.borrow().name(expected_type);
                     let name = &defaults[i].0;
                     panic!(
                         "compiler bug: default expression for parameter '{name}' \

@@ -424,7 +424,7 @@ fn check_cm_boundary_representable_inner(
         return Err(format!(
             "recursive type `{}` cannot cross the Component Model boundary \
              — WIT has no recursive types",
-            type_table.type_name(type_id)
+            type_table.name(type_id)
         ));
     }
     visited.push(type_id);
@@ -474,7 +474,7 @@ fn check_cm_boundary_representable_inner(
                 PrimitiveType::V128 | PrimitiveType::F16 | PrimitiveType::Bf16,
             ) => Err(format!(
                 "`{}` has no Component Model value representation",
-                type_table.type_name(type_id)
+                type_table.name(type_id)
             )),
             ResolvedType::Unit if slot == Slot::Value => Err(
                 "`()` has no Component Model representation here — it stands only where a \
@@ -489,7 +489,7 @@ fn check_cm_boundary_representable_inner(
                 Err(format!(
                     "`{}` declares no case, and an empty enum, flags or variant has no \
                      Component Model representation — add at least one",
-                    type_table.type_name(type_id)
+                    type_table.name(type_id)
                 ))
             }
             // Scalars, plain discriminants, bitflags, and plain resource
@@ -502,7 +502,9 @@ fn check_cm_boundary_representable_inner(
             // The handle is an i32, but its payload is lifted and lowered by
             // value, so it must be classifiable too — `()` is representable
             // yet has no payload type.
-            ResolvedType::GenericResource { def, type_args } => {
+            ResolvedType::GenericInstance { def, type_args }
+                if type_table.is_resource_def(*def) =>
+            {
                 let item = type_table.compiler_type_item(*def);
                 let args = type_args.clone();
                 for &a in &args {
@@ -527,7 +529,7 @@ fn check_cm_boundary_representable_inner(
                 if type_table.is_string(type_id) {
                     return Ok(());
                 }
-                let name = type_table.struct_head_name(*def);
+                let name = type_table.struct_head_mangled_name(*def);
                 match struct_decl_of(*def, type_args, tir_modules) {
                     Some(decl) if decl.fields.is_empty() => Err(format!(
                         "record `{name}` has no fields; an empty record has no \
@@ -581,7 +583,7 @@ fn check_cm_boundary_representable_inner(
                 } else {
                     Err(format!(
                         "generic type `{}` has no Component Model value representation",
-                        type_table.type_name(type_id)
+                        type_table.name(type_id)
                     ))
                 }
             }
@@ -593,15 +595,14 @@ fn check_cm_boundary_representable_inner(
                 if boundary == Boundary::Import =>
             {
                 let inner = *inner;
-                match type_table.get(type_table.representation_head(inner)) {
-                    ResolvedType::Resource { .. } | ResolvedType::GenericResource { .. } => {
-                        recurse(inner, Slot::Value, visited)
-                    }
-                    _ => Err(format!(
+                if type_table.is_resource_type(type_table.representation_head(inner)) {
+                    recurse(inner, Slot::Value, visited)
+                } else {
+                    Err(format!(
                         "a reference crosses a Component Model import only as a borrowed \
                          resource handle, and `{}` refers to no resource",
-                        type_table.type_name(type_id)
-                    )),
+                        type_table.name(type_id)
+                    ))
                 }
             }
             ResolvedType::Never
@@ -618,7 +619,7 @@ fn check_cm_boundary_representable_inner(
             | ResolvedType::Unknown
             | ResolvedType::Error => Err(format!(
                 "type `{}` has no Component Model value representation",
-                type_table.type_name(type_id)
+                type_table.name(type_id)
             )),
         }
     })(visited);
@@ -941,11 +942,11 @@ fn flat_types_from_type_id_inner(
                 // component (the memory lowerer panics on the same condition).
                 panic!(
                     "struct `{}` has no TIR declaration; cannot compute its flat CM types",
-                    type_table.struct_head_name(*def)
+                    type_table.struct_head_mangled_name(*def)
                 );
             }
         }
-        ResolvedType::Resource { .. } | ResolvedType::GenericResource { .. } => {
+        _ if type_table.is_resource_type(type_id) => {
             out.push(if type_table.is_unrestricted_handle(type_id) {
                 cm_abi::CmValType::F64
             } else {
@@ -1190,8 +1191,7 @@ pub(super) fn type_id_to_ast_type(
     let to_ast = |tid: &TypeId| type_id_to_ast_type(*tid, type_table, cm_interface_registry);
     if let Some(item) = cm_item_of_type(type_table, type_id) {
         let args = match resolved {
-            ResolvedType::GenericInstance { type_args, .. }
-            | ResolvedType::GenericResource { type_args, .. } => {
+            ResolvedType::GenericInstance { type_args, .. } => {
                 type_args.iter().map(to_ast).collect()
             }
             _ => Vec::new(),
@@ -1243,8 +1243,7 @@ pub(super) fn type_id_to_ast_type(
         ResolvedType::GenericInstance { def, type_args } if type_table.is_tuple_def(*def) => {
             Type::Tuple(type_args.iter().map(to_ast).collect())
         }
-        ResolvedType::GenericInstance { def, type_args }
-        | ResolvedType::GenericResource { def, type_args } => {
+        ResolvedType::GenericInstance { def, type_args } => {
             declared(*def, type_args.iter().map(to_ast).collect())
         }
         ResolvedType::Ref(inner) => Type::Reference(Box::new(to_ast(inner))),

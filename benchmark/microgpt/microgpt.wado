@@ -551,14 +551,15 @@ fn train_tokens(tok: &Tokenizer, steps: i32) -> f64 {
     return total as f64;
 }
 
+#[workload]
 test "smoke" {
     assert train(2) > 0.0;
     assert infer(1).len() > 0;
 }
 
 test "fuel" {
-    measure("train", || train(STEPS));
-    measure("infer", || infer(SAMPLES));
+    measure("ml/microgpt/train", || train(STEPS));
+    measure("ml/microgpt/infer", || infer(SAMPLES));
 }
 
 export fn run() with (Stdout, MonotonicClock) {

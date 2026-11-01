@@ -128,7 +128,7 @@ access are unchanged: `self.password` is still `String`.
 - Value-opaque: no API returns the inner value; user code cannot define an
   unwrap. Legitimate code uses direct field access instead.
 - Type-transparent: value-free static operations delegate to `T`
-  (`Secret<T>::json_schema()` → `T::json_schema()`, `type_name`, …), so
+  (`Secret<T>::json_schema()` → `T::json_schema()`, `decl_name`, …), so
   `[..F::method()]` type-level expansions — schema derivation in particular —
   keep working.
 - Wrap-only: anyone can construct `Secret<T>` from a `T` (the inbound path

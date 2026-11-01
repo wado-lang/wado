@@ -261,7 +261,7 @@ fn instantiation_label(
     type_args: &[TypeId],
     type_table: &TypeTable,
 ) -> String {
-    let base = effect_namespace(effect.module(), effect.rendered());
+    let base = effect_namespace(effect.module(), effect.mangled());
     instance_name(&base, type_args, type_table)
 }
 
@@ -2695,11 +2695,9 @@ fn declaring_resource(method_info: &LocalMethodName) -> Option<DefId> {
 /// The type args of a resource type behind any `Ref`/`MutRef`, if the type is
 /// a resource.
 fn resource_type_args(type_id: TypeId, type_table: &TypeTable) -> Option<Vec<TypeId>> {
-    match type_table.get(type_table.peel_refs(type_id)) {
-        ResolvedType::Resource { .. } => Some(Vec::new()),
-        ResolvedType::GenericResource { type_args, .. } => Some(type_args.clone()),
-        _ => None,
-    }
+    let head = type_table.peel_refs(type_id);
+    type_table.resource_def_of(head)?;
+    Some(type_table.generic_type_args(head).unwrap_or_default())
 }
 
 fn rewrite_calls_in_block(block: &mut TirBlock, ctx: &RewriteCtx<'_>) {

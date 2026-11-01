@@ -1,0 +1,24 @@
+// ReflectStruct per-struct synthesis (WEP 2026-06-13): trait-qualified static
+// metadata `Reflect::<T>::decl_name()`.
+
+struct Point {
+    x: i32,
+    y: i32,
+}
+
+struct Named {
+    id: i32,
+    label: String,
+    active: bool,
+}
+
+struct Unit {}
+
+test "decl_name is the struct name" {
+    assert Reflect::<Point>::decl_name() == "Point";
+    assert Reflect::<Named>::decl_name() == "Named";
+    assert Reflect::<Unit>::decl_name() == "Unit";
+}
+
+__DATA__
+{"test": {}}

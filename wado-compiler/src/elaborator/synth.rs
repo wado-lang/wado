@@ -349,7 +349,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 "argument synthesis under-approximated at {span:?}: argument {} elaborated to \
                  `{}`, which the synthesized class {class:?} excludes",
                 index + 1,
-                self.tysys.type_table.borrow().type_name(arg),
+                self.tysys.type_table.borrow().name(arg),
             );
         }
     }
@@ -702,8 +702,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let base = self.tysys.get_base_type(receiver);
         let name = self.tysys.struct_name_for_type(base)?;
         let type_args = match self.tysys.type_table.borrow().get(base) {
-            ResolvedType::GenericInstance { type_args, .. }
-            | ResolvedType::GenericResource { type_args, .. } => Some(type_args.clone()),
+            ResolvedType::GenericInstance { type_args, .. } => Some(type_args.clone()),
             _ => None,
         };
         let ref_kind =
@@ -1028,9 +1027,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
         let tt = self.tysys.type_table.borrow();
         match tt.get(type_id) {
-            ResolvedType::GenericInstance { .. } | ResolvedType::GenericResource { .. } => {
-                ArgClass::Head(tt.fq_base_type_name(type_id))
-            }
+            ResolvedType::GenericInstance { .. } => ArgClass::Head(tt.fq_base_type_name(type_id)),
             _ => ArgClass::Opaque(OpaqueReason::Inference),
         }
     }
@@ -1112,7 +1109,7 @@ impl TypeSystem {
     pub(super) fn describe_arg_class(&self, class: &ArgClass) -> String {
         let tt = self.type_table.borrow();
         match class {
-            ArgClass::Exact(t) => format!("has type `{}`", tt.type_name(*t)),
+            ArgClass::Exact(t) => format!("has type `{}`", tt.name(*t)),
             ArgClass::Head(head) => format!(
                 "is a `{}` whose type arguments are not pinned here",
                 head.to_display()

@@ -356,7 +356,6 @@ fn needs_rebuild(actual: TypeId, expected: TypeId, fixed: bool) -> bool {
 fn declaration_instance(id: TypeId, type_table: &TypeTable) -> Option<(DefId, &[TypeId])> {
     match type_table.get(id) {
         ResolvedType::GenericInstance { def, type_args }
-        | ResolvedType::GenericResource { def, type_args }
         | ResolvedType::Newtype { def, type_args, .. } => Some((*def, type_args.as_slice())),
         _ => None,
     }
@@ -467,7 +466,7 @@ fn unwrap_ref(type_id: TypeId, type_table: &TypeTable) -> (TypeId, bool) {
 /// The strings are materialised at the rejection site (while the
 /// [`TypeTable`] is still borrowed) so the caller can drop the type
 /// table before emitting the diagnostic. Both fields use the same
-/// [`TypeTable::type_name`] formatting that the original
+/// [`TypeTable::name`] formatting that the original
 /// `TypeError::TypeMismatch` diagnostic used.
 #[derive(Debug, Clone)]
 pub(crate) struct TypeMismatchPayload {
@@ -493,7 +492,7 @@ impl TypeSystem {
         let type_table = self.type_table.borrow();
         match check_assignable(actual, expected, &type_table) {
             TypeCheckResult::Incompatible => {
-                let (expected, found) = type_table.type_names_for_mismatch(expected, actual);
+                let (expected, found) = type_table.names_for_mismatch(expected, actual);
                 Err(TypeMismatchPayload { expected, found })
             }
             TypeCheckResult::Compatible | TypeCheckResult::Deferred => Ok(()),
@@ -671,7 +670,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         {
             return;
         }
-        let (expected_name, found_name) = (table.type_name(expected), table.type_name(actual));
+        let (expected_name, found_name) = (table.name(expected), table.name(actual));
         drop(table);
         let _ = self.emit(TypeError::TypeMismatch {
             expected: expected_name,

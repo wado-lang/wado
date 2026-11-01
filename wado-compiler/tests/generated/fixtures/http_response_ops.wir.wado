@@ -394,9 +394,9 @@ type "functype//http_response_ops.wado/http_response_ops.wado/$tmpl$adb1edf8e8d0
 
 type "functype//http_response_ops.wado/http_response_ops.wado/$tmpl$adb1edf8e8d0b122^core:prelude/traits.wado/ReflectTemplate::tail" = fn(ref "http_response_ops.wado//$tmpl$adb1edf8e8d0b122") -> ref "core:prelude/string.wado//StrSlice";  // TypeId(97)
 
-type "functype//core:prelude/traits.wado/wasi:http/types.wado/StatusCode^core:prelude/traits.wado/Inspect::inspect" = fn(ref "core:prelude/types.wado//Box<u16>", ref "core:prelude/format.wado//Formatter");  // TypeId(98)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::format<http_response_ops.wado/$tmpl$adb1edf8e8d0b122,[wasi:http/types.wado/StatusCode]>" = fn(ref "http_response_ops.wado//$tmpl$adb1edf8e8d0b122") -> ref "core:prelude/string.wado//String";  // TypeId(98)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::format<http_response_ops.wado/$tmpl$adb1edf8e8d0b122,[wasi:http/types.wado/StatusCode]>" = fn(ref "http_response_ops.wado//$tmpl$adb1edf8e8d0b122") -> ref "core:prelude/string.wado//String";  // TypeId(99)
+type "functype//core:prelude/traits.wado/wasi:http/types.wado/StatusCode^core:prelude/traits.wado/Inspect::inspect" = fn(ref "core:prelude/types.wado//Box<u16>", ref "core:prelude/format.wado//Formatter");  // TypeId(99)
 
 type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(100)
 
@@ -1275,15 +1275,6 @@ fn "http_response_ops.wado/http_response_ops.wado/$tmpl$adb1edf8e8d0b122^core:pr
     };
 }
 
-fn "core:prelude/traits.wado/wasi:http/types.wado/StatusCode^core:prelude/traits.wado/Inspect::inspect"(self, f) {
-    let $load_1: ref "core:prelude/string.wado//String";
-    let s_13: ref "core:prelude/string.wado//String";
-    "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(self.value, f);
-    "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec0"(local.tee $load_1(f.buf), global:core:prelude/traits.wado::$const_obj_2);
-    s_13 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("StatusCode"), used: 10 };
-    "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec1"($load_1, s_13);
-}
-
 fn "core:prelude/string.wado/core:prelude/string.wado/String::format<http_response_ops.wado/$tmpl$adb1edf8e8d0b122,[wasi:http/types.wado/StatusCode]>"(t) {
     let $load_2: ref "core:prelude/string.wado//String";
     let $load_3: ref "core:prelude/string.wado//String";
@@ -1305,6 +1296,15 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<http_respon
     self_9 = "http_response_ops.wado/http_response_ops.wado/$tmpl$adb1edf8e8d0b122^core:prelude/traits.wado/ReflectTemplate::tail"(t);
     "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_view"(out_3, self_9.repr, self_9.start, self_9.end);
     return out_3;
+}
+
+fn "core:prelude/traits.wado/wasi:http/types.wado/StatusCode^core:prelude/traits.wado/Inspect::inspect"(self, f) {
+    let $load_1: ref "core:prelude/string.wado//String";
+    let s_13: ref "core:prelude/string.wado//String";
+    "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(self.value, f);
+    "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec0"(local.tee $load_1(f.buf), global:core:prelude/traits.wado::$const_obj_2);
+    s_13 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("StatusCode"), used: 10 };
+    "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec1"($load_1, s_13);
 }
 
 fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>"(self, is_negative, alt_prefix, digit_count) {

@@ -157,7 +157,7 @@ impl Monomorphizer {
                 {
                     continue;
                 }
-                let name = &type_table.def_name(*def).to_string();
+                let name = &type_table.decl_name(*def).to_string();
                 let module_source = &type_table.def_module(*def).clone();
 
                 // Only process if all type args are concrete (no TypeParams)
@@ -239,7 +239,7 @@ impl Monomorphizer {
                 })
             }
             ResolvedType::GenericInstance { def, type_args } => {
-                let name = type_table.def_name(def).to_string();
+                let name = type_table.decl_name(def).to_string();
                 let module_source = type_table.def_module(def).clone();
                 if type_args.is_empty() {
                     if !substitution.is_empty() {
@@ -337,7 +337,7 @@ impl Monomorphizer {
 
                 type_table.make_generic_instance(def, new_args)
             }
-            // Delegate leaf cases (TypeParam, TypePack, GenericResource,
+            // Delegate leaf cases (TypeParam, TypePack,
             // AssocTypeProjection, and other non-composite types) to the
             // shared implementation.
             _ => type_table.substitute_type_params(type_id, substitution),
@@ -472,10 +472,10 @@ impl TirMutVisitor for TypeRewriter<'_> {
             } else {
                 match self.type_table.get(new_type_id) {
                     ResolvedType::Struct { def, type_args } => {
-                        *struct_name = self.type_table.struct_rendered_name(*def, type_args);
+                        *struct_name = self.type_table.struct_mangled_name(*def, type_args);
                     }
                     ResolvedType::GenericInstance { def, type_args } => {
-                        *struct_name = self.type_table.generic_rendered_name(*def, type_args);
+                        *struct_name = self.type_table.generic_mangled_name(*def, type_args);
                     }
                     _ => {}
                 }

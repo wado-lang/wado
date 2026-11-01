@@ -53,9 +53,9 @@ test "sieve to 200k" {
 
 `wado test` runs a workload like any other test, so a workload that breaks
 fails the suite instead of rotting. The attribute combines with
-`#[timeout_ms]` and `#[synopsis]`. With `#[expect_trap]` or `#[TODO]` it is a
-compile error: such a test traps by design, and a workload that traps fails
-the recording (below).
+`#[timeout_ms]` and `#[synopsis]`. With `#[expect_trap]` or `#[TODO]`, or in a
+module marked `#![TODO]`, it is a compile error: such a test traps by design,
+and a workload that traps fails the recording (below).
 
 A workload should be deterministic and small. Its counts then come out the same
 on every run, so the committed profile changes only when the code or the
@@ -189,16 +189,19 @@ an author learns when to record again.
 
 ### A region that never ran is marked cold
 
-In every function the profile covers, reify inserts a `builtin::cold_path()`
+In every function the workloads entered, reify inserts a `builtin::cold_path()`
 at the start of each outermost region whose count is zero. Reify is where
 coverage inserts its probes, so a region means the same thing to both. From
 there, the optimizer's passes act on the marker as they do on one the author
 wrote.
 
-A function whose body region never ran thus gets one marker, at its start, and
-nothing inside it. Marking every region with a zero count would have
-`cold_outline` outline each branch of such a function into a function of its
-own, and put a marker on both sides of its `if`s. A region that ran any number
+A function whose body region never ran gets no marker. Workloads are tests, so
+a build's own entry never runs under them, and neither does whatever only it
+reaches, such as a benchmark's timing loop: a function they never entered says
+nothing about how often it runs. Marking such functions at their start made
+every benchmark slower, by 24% to 74%. The optimizer does not inline into a
+function only cold sites reach, and that took in the whole path the benchmark
+measures. A region that ran any number
 of times gets no marker. The counts beyond zero decide only whether a `?`'s
 failure path stays cold (see below). Using them to optimize a hot path harder
 than the rest is left to a later proposal.
@@ -268,6 +271,13 @@ hint section, the trap-derived hints included. It answers what branch hints are
 worth to wasmtime; `-f no-cold-paths` answers what the markers are worth to the
 whole pipeline.
 
+A marker in an arm that `match_to_switch` turns into a `br_table` target still
+reaches every optimizer pass, but no hint: Wasm's branch-hint section has no
+form for `br_table`. That is accepted. A hint only moves a block in wasmtime's
+code layout, and across every shape tried, branch hints have not made wasmtime's
+code measurably faster. Carrying one there would take a guard ahead of the
+table, a compare on every dispatch, for a gain nobody has measured.
+
 ### A profile changes no output
 
 A profile, stale or wrong, only moves where the optimizer spends its effort. It
@@ -289,7 +299,7 @@ level.
    whose hash differs is skipped, and the conflict remark is emitted. An e2e
    fixture can name a profile in its `__DATA__`, so a fixture states which
    regions end up cold.
-5. [ ] `-f pgo` and `-f no-pgo`. The CLI hands a compile the entry's profile,
+5. [x] `-f pgo` and `-f no-pgo`. The CLI hands a compile the entry's profile,
    and the compile looks each module up by its name.
 6. [ ] A `?`'s failure path the profile ran 1% or more of the time loses its
    marker, with the remark. An e2e fixture states both sides of the threshold.
@@ -313,14 +323,6 @@ level.
 - [ ] A region is measured once for all of a generic function's
   instantiations, so an instantiation the workload never ran shares the counts
   of one it ran.
-- [ ] A workload that traps fails the recording, so a package cannot profile a
-  path that ends in a trap.
-- [ ] `#[workload]` in a module marked `#![TODO]` compiles. Every test of such
-  a module is pending, so the workload fails the recording if it traps, and is
-  reported as unexpectedly passing if it returns.
-- [ ] Wasm's branch-hint section has no form for `br_table`, so a cold marker in
-  an arm `match_to_switch` turns into a `br_table` target reaches no hint the
-  engine reads.
 - [ ] A NIR `match` is read as if every arm's guard ran only on some paths. The
   first arm's guard runs on every path through the `match`, so a marker under
   it covers the `match` but is not read that way.

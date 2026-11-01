@@ -54,6 +54,7 @@ fn sieve_count(is_prime: &mut List<bool>, limit: i32) -> i32 {
     return count;
 }
 
+#[workload]
 test "smoke" {
     // π(100) = 25
     let mut is_prime = List::<bool>::filled(101, true);
@@ -63,7 +64,7 @@ test "smoke" {
 test "fuel" {
     let limit = 2000000;
     let mut is_prime = List::<bool>::filled(limit + 1, true);
-    measure("count", || sieve_count(&mut is_prime, limit));
+    measure("compute/sieve", || sieve_count(&mut is_prime, limit));
 }
 
 export fn run() with (Stdout, MonotonicClock) {
