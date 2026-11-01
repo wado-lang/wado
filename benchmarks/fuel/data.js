@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1793515268315,
+  "lastUpdate": 1793517495094,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -17369,6 +17369,360 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/add0aad758c85b3d684b7f8a69243021809843a5"
         },
         "date": 1793515264837,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "cbor/canada/de (-O1)",
+            "value": 78986195,
+            "unit": "fuel"
+          },
+          {
+            "name": "cbor/canada/de (-O2)",
+            "value": 78652809,
+            "unit": "fuel"
+          },
+          {
+            "name": "cbor/canada/de (-O3)",
+            "value": 78652807,
+            "unit": "fuel"
+          },
+          {
+            "name": "cbor/canada/ser (-O1)",
+            "value": 55136689,
+            "unit": "fuel"
+          },
+          {
+            "name": "cbor/canada/ser (-O2)",
+            "value": 52844931,
+            "unit": "fuel"
+          },
+          {
+            "name": "cbor/canada/ser (-O3)",
+            "value": 52622387,
+            "unit": "fuel"
+          },
+          {
+            "name": "cbor/catalog/de (-O1)",
+            "value": 26459062,
+            "unit": "fuel"
+          },
+          {
+            "name": "cbor/catalog/de (-O2)",
+            "value": 26312128,
+            "unit": "fuel"
+          },
+          {
+            "name": "cbor/catalog/de (-O3)",
+            "value": 26306295,
+            "unit": "fuel"
+          },
+          {
+            "name": "cbor/catalog/ser (-O1)",
+            "value": 10093739,
+            "unit": "fuel"
+          },
+          {
+            "name": "cbor/catalog/ser (-O2)",
+            "value": 9274714,
+            "unit": "fuel"
+          },
+          {
+            "name": "cbor/catalog/ser (-O3)",
+            "value": 8780272,
+            "unit": "fuel"
+          },
+          {
+            "name": "cbor/twitter/de (-O1)",
+            "value": 17280214,
+            "unit": "fuel"
+          },
+          {
+            "name": "cbor/twitter/de (-O2)",
+            "value": 17280242,
+            "unit": "fuel"
+          },
+          {
+            "name": "cbor/twitter/de (-O3)",
+            "value": 17280242,
+            "unit": "fuel"
+          },
+          {
+            "name": "cbor/twitter/ser (-O1)",
+            "value": 5284296,
+            "unit": "fuel"
+          },
+          {
+            "name": "cbor/twitter/ser (-O2)",
+            "value": 4947175,
+            "unit": "fuel"
+          },
+          {
+            "name": "cbor/twitter/ser (-O3)",
+            "value": 4683825,
+            "unit": "fuel"
+          },
+          {
+            "name": "fts/format (-O1)",
+            "value": 1132716914,
+            "unit": "fuel"
+          },
+          {
+            "name": "fts/format (-O2)",
+            "value": 1119716906,
+            "unit": "fuel"
+          },
+          {
+            "name": "fts/format (-O3)",
+            "value": 1119716904,
+            "unit": "fuel"
+          },
+          {
+            "name": "gale_gen/generate (-O1)",
+            "value": 651184662,
+            "unit": "fuel"
+          },
+          {
+            "name": "gale_gen/generate (-O2)",
+            "value": 598887495,
+            "unit": "fuel"
+          },
+          {
+            "name": "gale_gen/generate (-O3)",
+            "value": 594983505,
+            "unit": "fuel"
+          },
+          {
+            "name": "json_canada/de (-O1)",
+            "value": 188651325,
+            "unit": "fuel"
+          },
+          {
+            "name": "json_canada/de (-O2)",
+            "value": 183295595,
+            "unit": "fuel"
+          },
+          {
+            "name": "json_canada/de (-O3)",
+            "value": 173653773,
+            "unit": "fuel"
+          },
+          {
+            "name": "json_canada/ser (-O1)",
+            "value": 140928278,
+            "unit": "fuel"
+          },
+          {
+            "name": "json_canada/ser (-O2)",
+            "value": 138255370,
+            "unit": "fuel"
+          },
+          {
+            "name": "json_canada/ser (-O3)",
+            "value": 138255366,
+            "unit": "fuel"
+          },
+          {
+            "name": "json_catalog/de (-O1)",
+            "value": 76389245,
+            "unit": "fuel"
+          },
+          {
+            "name": "json_catalog/de (-O2)",
+            "value": 68601891,
+            "unit": "fuel"
+          },
+          {
+            "name": "json_catalog/de (-O3)",
+            "value": 67806320,
+            "unit": "fuel"
+          },
+          {
+            "name": "json_catalog/ser (-O1)",
+            "value": 24116686,
+            "unit": "fuel"
+          },
+          {
+            "name": "json_catalog/ser (-O2)",
+            "value": 23629354,
+            "unit": "fuel"
+          },
+          {
+            "name": "json_catalog/ser (-O3)",
+            "value": 23629352,
+            "unit": "fuel"
+          },
+          {
+            "name": "json_twitter/de (-O1)",
+            "value": 40955697,
+            "unit": "fuel"
+          },
+          {
+            "name": "json_twitter/de (-O2)",
+            "value": 39511650,
+            "unit": "fuel"
+          },
+          {
+            "name": "json_twitter/de (-O3)",
+            "value": 39392908,
+            "unit": "fuel"
+          },
+          {
+            "name": "json_twitter/ser (-O1)",
+            "value": 23212802,
+            "unit": "fuel"
+          },
+          {
+            "name": "json_twitter/ser (-O2)",
+            "value": 23034594,
+            "unit": "fuel"
+          },
+          {
+            "name": "json_twitter/ser (-O3)",
+            "value": 23034592,
+            "unit": "fuel"
+          },
+          {
+            "name": "mandelbrot/render (-O1)",
+            "value": 1930724364,
+            "unit": "fuel"
+          },
+          {
+            "name": "mandelbrot/render (-O2)",
+            "value": 1930724356,
+            "unit": "fuel"
+          },
+          {
+            "name": "mandelbrot/render (-O3)",
+            "value": 1930724354,
+            "unit": "fuel"
+          },
+          {
+            "name": "microgpt/infer (-O1)",
+            "value": 503122792,
+            "unit": "fuel"
+          },
+          {
+            "name": "microgpt/infer (-O2)",
+            "value": 492706016,
+            "unit": "fuel"
+          },
+          {
+            "name": "microgpt/infer (-O3)",
+            "value": 495629406,
+            "unit": "fuel"
+          },
+          {
+            "name": "microgpt/train (-O1)",
+            "value": 757289053,
+            "unit": "fuel"
+          },
+          {
+            "name": "microgpt/train (-O2)",
+            "value": 751311724,
+            "unit": "fuel"
+          },
+          {
+            "name": "microgpt/train (-O3)",
+            "value": 752995989,
+            "unit": "fuel"
+          },
+          {
+            "name": "sieve/count (-O1)",
+            "value": 142441276,
+            "unit": "fuel"
+          },
+          {
+            "name": "sieve/count (-O2)",
+            "value": 93054139,
+            "unit": "fuel"
+          },
+          {
+            "name": "sieve/count (-O3)",
+            "value": 93054137,
+            "unit": "fuel"
+          },
+          {
+            "name": "sqlite_parse/parse (-O1)",
+            "value": 9038892,
+            "unit": "fuel"
+          },
+          {
+            "name": "sqlite_parse/parse (-O2)",
+            "value": 9022019,
+            "unit": "fuel"
+          },
+          {
+            "name": "sqlite_parse/parse (-O3)",
+            "value": 9022015,
+            "unit": "fuel"
+          },
+          {
+            "name": "syntax_highlight/highlight (-O1)",
+            "value": 12222264,
+            "unit": "fuel"
+          },
+          {
+            "name": "syntax_highlight/highlight (-O2)",
+            "value": 11052646,
+            "unit": "fuel"
+          },
+          {
+            "name": "syntax_highlight/highlight (-O3)",
+            "value": 10991163,
+            "unit": "fuel"
+          },
+          {
+            "name": "zlib/compress (-O1)",
+            "value": 100593264,
+            "unit": "fuel"
+          },
+          {
+            "name": "zlib/compress (-O2)",
+            "value": 100593009,
+            "unit": "fuel"
+          },
+          {
+            "name": "zlib/compress (-O3)",
+            "value": 100592998,
+            "unit": "fuel"
+          },
+          {
+            "name": "zlib/decompress (-O1)",
+            "value": 20819462,
+            "unit": "fuel"
+          },
+          {
+            "name": "zlib/decompress (-O2)",
+            "value": 20787911,
+            "unit": "fuel"
+          },
+          {
+            "name": "zlib/decompress (-O3)",
+            "value": 20787908,
+            "unit": "fuel"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "d44b7d0afe925371f9d94920b6d7e65dd199dc4c",
+          "message": "Merge pull request #2512 from wado-lang/pgo-roadmap\n\nfix(pgo): reject #[workload] in a #![TODO] module",
+          "timestamp": "2026-11-01T16:03:26+09:00",
+          "tree_id": "55f4bdcd937c6100fefd704165f36658beb06bce",
+          "url": "https://github.com/wado-lang/wado/commit/d44b7d0afe925371f9d94920b6d7e65dd199dc4c"
+        },
+        "date": 1793517491445,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
