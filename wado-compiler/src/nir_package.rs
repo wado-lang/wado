@@ -13,6 +13,7 @@ use std::rc::Rc;
 use crate::ast::cm_function_path;
 use crate::builtin_registry::BuiltinRegistry;
 use crate::codegen_flags::CodegenFlags;
+use crate::defs::DefId;
 use crate::component_model::{
     CmFunctionInfo, CmInterfaceInfo, CmInterfaceRegistry, ResKind, parse_resource_func,
 };
@@ -178,8 +179,8 @@ pub struct NirPackage {
     pub enums: Vec<NirEnum>,
     /// All variant declarations (each carries its own `module_source`)
     pub variants: Vec<NirVariantDecl>,
-    /// Index: `(module_source, name)` → index into `variants`.
-    pub variant_index: IndexMap<(ModuleSource, String), usize>,
+    /// Each declaration's position in `variants`.
+    pub variant_index: IndexMap<DefId, usize>,
     /// All flags declarations (each carries its own `module_source`)
     pub flags: Vec<NirFlags>,
     /// All global variable declarations (each carries its own `module_source`)
@@ -913,11 +914,34 @@ impl NirPackage {
         self.world_registry.generator_world(&self.target_world)
     }
 
-    /// Look up a variant by `(module_source, name)`.
-    pub fn find_variant(&self, ms: &ModuleSource, name: &str) -> Option<&NirVariantDecl> {
+    /// The variant `def` declares, while the package holds it.
+    pub fn find_variant(&self, def: DefId) -> Option<&NirVariantDecl> {
         self.variant_index
-            .get(&(ms.clone(), name.to_string()))
-            .and_then(|&idx| self.variants.get(idx))
+            .get(&def)
+            .map(|&idx| &self.variants[idx])
+    }
+
+    /// Each case of the variant `def` at `type_args`: its name, and its
+    /// payload at those arguments, as WIR lowers the instance. `None` where
+    /// the package holds no variant `def`.
+    pub fn variant_cases(&self, def: DefId, type_args: &[TypeId]) -> Option<Vec<(String, TypeId)>> {
+        let variant = self.find_variant(def)?;
+        assert_eq!(
+            variant.type_params.iter().filter(|p| !p.is_effect).count(),
+            type_args.len(),
+            "an instance gives each type parameter of its variant an argument"
+        );
+        let mut table = self.type_table.borrow_mut();
+        Some(
+            variant
+                .cases
+                .iter()
+                .map(|case| {
+                    let payload = table.substitute_positional(case.payload, type_args);
+                    (case.name.clone(), payload)
+                })
+                .collect(),
+        )
     }
 
     /// Rebuild variant lookup indices after the variants list has been modified
@@ -925,9 +949,8 @@ impl NirPackage {
     pub fn rebuild_variant_indices(&mut self) {
         self.variant_index.clear();
         for (i, v) in self.variants.iter().enumerate() {
-            self.variant_index
-                .entry((v.module_source.clone(), v.name.clone()))
-                .or_insert(i);
+            let previous = self.variant_index.insert(v.def, i);
+            assert!(previous.is_none(), "one declaration is one variant");
         }
     }
 

@@ -55,8 +55,6 @@ pub struct FlatPackage {
     pub enums: Vec<TirEnum>,
     /// All variant declarations (each carries its own `module_source`)
     pub variants: Vec<TirVariantDecl>,
-    /// Index: `(module_source, name)` → index into `variants`.
-    pub variant_index: IndexMap<(ModuleSource, String), usize>,
     /// All flags declarations (each carries its own `module_source`)
     pub flags: Vec<TirFlags>,
     /// All global variable declarations (each carries its own `module_source`)
@@ -145,24 +143,6 @@ impl FlatPackage {
             if let Some(body) = func_rc.borrow_mut().body.as_mut() {
                 visitor.visit_block(body);
             }
-        }
-    }
-
-    /// Look up a variant by `(module_source, name)`.
-    pub fn find_variant(&self, ms: &ModuleSource, name: &str) -> Option<&TirVariantDecl> {
-        self.variant_index
-            .get(&(ms.clone(), name.to_string()))
-            .and_then(|&idx| self.variants.get(idx))
-    }
-
-    /// Rebuild variant lookup indices after the variants list has been modified
-    /// (e.g., after DCE removes unreachable variants).
-    pub fn rebuild_variant_indices(&mut self) {
-        self.variant_index.clear();
-        for (i, v) in self.variants.iter().enumerate() {
-            self.variant_index
-                .entry((v.module_source.clone(), v.name.clone()))
-                .or_insert(i);
         }
     }
 

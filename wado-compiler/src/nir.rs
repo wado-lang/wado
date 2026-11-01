@@ -12,6 +12,7 @@ use std::sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard};
 
 use crate::ast;
 use crate::compiler_item::CompilerItem;
+use crate::defs::DefId;
 use crate::hashmap::{IndexMap, IndexSet};
 
 use crate::module_source::ModuleSource;
@@ -1112,6 +1113,7 @@ pub struct NirFlagsMember {
 /// e.g., `variant Shape { Circle(f64), Rectangle(f64, f64), Point }`
 #[derive(Debug, Clone)]
 pub struct NirVariantDecl {
+    pub def: DefId,
     pub name: String,
     pub module_source: ModuleSource,
     pub visibility: ast::Visibility,

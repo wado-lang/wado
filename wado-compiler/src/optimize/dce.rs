@@ -1704,40 +1704,26 @@ fn populate_type_reachability(
 /// lowers the instance with them. A reachable instance keeps these, where the
 /// declaration's own payloads name only its type parameters.
 fn variant_instance_payloads(project: &NirPackage) -> Vec<(TypeId, Vec<TypeId>)> {
-    let mut type_table = project.type_table.borrow_mut();
-    let instances: Vec<(TypeId, Vec<TypeId>, Vec<TypeId>)> = type_table
-        .iter_type_ids()
-        .filter_map(|id| {
-            let ResolvedType::GenericInstance { def, type_args } = type_table.get(id) else {
-                return None;
-            };
-            if type_args
-                .iter()
-                .any(|&arg| type_table.contains_type_param(arg))
-            {
-                return None;
-            }
-            let variant = project
-                .find_variant(
-                    type_table.def_module(*def),
-                    &type_table.def_name(*def).to_string(),
-                )
-                .filter(|v| !v.type_params.is_empty())?;
-            Some((
-                id,
-                type_args.clone(),
-                variant.cases.iter().map(|case| case.payload).collect(),
-            ))
-        })
-        .collect();
+    let instances: Vec<(TypeId, DefId, Vec<TypeId>)> = {
+        let type_table = project.type_table.borrow();
+        type_table
+            .iter_type_ids()
+            .filter_map(|id| {
+                let ResolvedType::GenericInstance { def, type_args } = type_table.get(id) else {
+                    return None;
+                };
+                let concrete = !type_args
+                    .iter()
+                    .any(|&arg| type_table.contains_type_param(arg));
+                concrete.then(|| (id, *def, type_args.clone()))
+            })
+            .collect()
+    };
     instances
         .into_iter()
-        .map(|(id, type_args, payloads)| {
-            let substituted = payloads
-                .into_iter()
-                .map(|payload| type_table.substitute_positional(payload, &type_args))
-                .collect();
-            (id, substituted)
+        .filter_map(|(id, def, type_args)| {
+            let cases = project.variant_cases(def, &type_args)?;
+            Some((id, cases.into_iter().map(|(_, payload)| payload).collect()))
         })
         .collect()
 }

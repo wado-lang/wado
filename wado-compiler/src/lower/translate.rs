@@ -111,7 +111,6 @@ pub fn translate(flat: FlatPackage, plan: LowerPlan, profiler: &dyn SpanEmitter)
         structs,
         enums,
         variants,
-        variant_index,
         flags,
         globals,
         tests,
@@ -188,7 +187,7 @@ pub fn translate(flat: FlatPackage, plan: LowerPlan, profiler: &dyn SpanEmitter)
             .collect(),
         enums: enums.iter().map(convert_enum).collect(),
         variants: variants.iter().map(convert_variant_decl).collect(),
-        variant_index,
+        variant_index: IndexMap::default(),
         flags: flags.iter().map(convert_flags).collect(),
         globals: globals
             .iter()
@@ -240,6 +239,7 @@ pub fn translate(flat: FlatPackage, plan: LowerPlan, profiler: &dyn SpanEmitter)
         reshapes: IndexMap::default(),
         renamed: Vec::new(),
     };
+    nir.rebuild_variant_indices();
     // Finalize the born-resolved callee ids: append the interned extern stubs,
     // set every function's `id` to its store position (`FuncId == position`), and
     // publish the reverse index. Replaces the former post-pass `assign_func_ids`.
@@ -3064,6 +3064,7 @@ fn convert_flags(f: &TirFlags) -> NirFlags {
 
 fn convert_variant_decl(v: &TirVariantDecl) -> NirVariantDecl {
     NirVariantDecl {
+        def: v.def,
         name: v.name.clone(),
         module_source: v.module_source.clone(),
         visibility: v.visibility,

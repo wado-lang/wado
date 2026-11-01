@@ -6,6 +6,7 @@
 //! Also contains type-ordering utilities (topological sort) used during registration.
 
 use crate::compiler_item::SeqField;
+use crate::defs::DefId;
 use crate::module_source::ModuleSource;
 use crate::name::{FqTypeName, StructName};
 use crate::nir::{NirStruct, NirVariantDecl};
@@ -853,7 +854,7 @@ fn register_mono_variants(ctx: &mut WirContext<'_>) {
         struct Candidate {
             mangled: String,
             module_source: ModuleSource,
-            template_cases: Vec<(String, TypeId)>,
+            def: DefId,
             type_args: Vec<TypeId>,
         }
 
@@ -887,48 +888,23 @@ fn register_mono_variants(ctx: &mut WirContext<'_>) {
                 if ctx.variant_type_map.contains_key(&fq) {
                     continue;
                 }
-                // Find the base variant declaration using module_source directly.
-                let Some(base) = ctx
-                    .package
-                    .find_variant(module_source, name)
-                    .filter(|v| !v.type_params.is_empty())
-                else {
-                    continue;
-                };
                 candidates.push(Candidate {
                     mangled,
                     module_source: module_source.clone(),
-                    template_cases: base
-                        .cases
-                        .iter()
-                        .map(|case| (case.name.clone(), case.payload))
-                        .collect(),
+                    def: *def,
                     type_args: type_args.clone(),
                 });
             }
         }
 
-        // Phase 2: substitute each template payload against the
-        // instance's type args (interns, hence the mutable borrow).
-        let substituted: Vec<(String, ModuleSource, Vec<(String, TypeId)>)> = {
-            let type_table = &mut *ctx.package.type_table.borrow_mut();
-            candidates
-                .into_iter()
-                .map(|c| {
-                    let cases = c
-                        .template_cases
-                        .into_iter()
-                        .map(|(name, payload)| {
-                            (
-                                name,
-                                type_table.substitute_positional(payload, &c.type_args),
-                            )
-                        })
-                        .collect();
-                    (c.mangled, c.module_source, cases)
-                })
-                .collect()
-        };
+        // Phase 2: each case's payload at the instance's arguments.
+        let substituted: Vec<(String, ModuleSource, Vec<(String, TypeId)>)> = candidates
+            .into_iter()
+            .filter_map(|c| {
+                let cases = ctx.package.variant_cases(c.def, &c.type_args)?;
+                Some((c.mangled, c.module_source, cases))
+            })
+            .collect();
 
         // Phase 3: convert the concrete payloads to WIR types.
         let mut to_register: Vec<(
@@ -1440,32 +1416,27 @@ fn fixup_abstract_struct_fields(ctx: &mut WirContext<'_>) {
 
     // Phase 1b: Fix variant type case payload types (may be abstract if the payload's
     // generic variant type was not registered when the parent variant was registered).
-    // For non-generic variants: look up the TIR variant declaration by module_source + name.
+    // A declared variant is registered under its own name, so each declaration
+    // reaches the WIR type it registered.
     let mut variant_payload_fixups: Vec<(usize, usize, usize, WirType)> = Vec::new();
-    for (wir_idx, typedef) in ctx.types.iter().enumerate() {
-        let WirTypeDef::Variant(vt) = typedef else {
+    for variant in &ctx.package.variants {
+        let Some(registered) = ctx
+            .variant_type_map
+            .get(&wir_type_key(&variant.module_source, &variant.name))
+        else {
             continue;
         };
-        let variant_module_source = vt.meta.module_source.clone();
-        let variant_display =
-            unqualified_name(&vt.name.fq, variant_module_source.as_ref()).to_string();
+        let wir_idx = registered.index() as usize;
+        let WirTypeDef::Variant(vt) = &ctx.types[wir_idx] else {
+            unreachable!("a variant registers a variant type");
+        };
         for (case_idx, case) in vt.cases.iter().enumerate() {
             for (payload_idx, payload_ty) in case.payload.iter().enumerate() {
                 if !is_abstract_ref(payload_ty) {
                     continue;
                 }
-                // Try to find the TIR variant by module_source and display name
-                let Some(ms) = &variant_module_source else {
-                    continue;
-                };
                 let type_table = &*ctx.package.type_table.borrow();
-                let Some(tir_variant) = ctx.package.find_variant(ms, &variant_display) else {
-                    continue;
-                };
-                let Some(tir_case) = tir_variant.cases.get(case_idx) else {
-                    continue;
-                };
-                let tir_payload_id = tir_case.payload;
+                let tir_payload_id = variant.cases[case_idx].payload;
                 let new_ty = ctx.type_id_to_wir_type_pending(type_table, tir_payload_id);
                 if !is_abstract_ref(&new_ty) {
                     variant_payload_fixups.push((

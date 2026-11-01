@@ -23,7 +23,6 @@ use super::arena_query;
 use super::gate::{FunctionGate, GatedPass};
 use crate::compiler_item::CompilerItem;
 use crate::compiler_trace;
-use crate::module_source::ModuleSource;
 use crate::nir_visitor::reachable_exprs;
 use crate::parallel::Executor;
 
@@ -868,35 +867,12 @@ fn tail_call_callees(body: &Body) -> Vec<FuncId> {
 /// The variant declaration behind a return type, with its case payloads
 /// substituted against the instance's type arguments.
 fn variant_cases(project: &NirPackage, type_id: TypeId) -> Option<(Vec<String>, Vec<TypeId>)> {
-    let (name, module_source, type_args) = {
-        let type_table = project.type_table.borrow();
-        match type_table.get(type_id) {
-            ResolvedType::Variant { .. } => {
-                let (n, m) = type_table.nominal_head(type_id)?;
-                (n, m, Vec::new())
-            }
-            ResolvedType::GenericInstance { type_args, .. } => {
-                let args = type_args.clone();
-                let (n, m) = type_table.nominal_head(type_id)?;
-                (n, m, args)
-            }
-            _ => return None,
-        }
+    let (def, type_args) = match project.type_table.borrow().get(type_id) {
+        ResolvedType::Variant { def } => (*def, Vec::new()),
+        ResolvedType::GenericInstance { def, type_args } => (*def, type_args.clone()),
+        _ => return None,
     };
-    let decl = project.find_variant(&module_source, &name)?;
-    let names: Vec<String> = decl.cases.iter().map(|c| c.name.clone()).collect();
-    let templates: Vec<TypeId> = decl.cases.iter().map(|c| c.payload).collect();
-    let substitution: IndexMap<u32, TypeId> = type_args
-        .iter()
-        .enumerate()
-        .map(|(i, arg)| (u32::try_from(i).expect("too many type params"), *arg))
-        .collect();
-    let mut type_table = project.type_table.borrow_mut();
-    let payloads = templates
-        .into_iter()
-        .map(|t| type_table.substitute_type_params(t, &substitution))
-        .collect();
-    Some((names, payloads))
+    Some(project.variant_cases(def, &type_args)?.into_iter().unzip())
 }
 
 /// How a payload type reaches its slot.
@@ -1036,7 +1012,12 @@ fn compute_layout(project: &NirPackage, variant_type: TypeId) -> Option<Layout> 
                 // `wir_build` registers an `Option<T>` instance off the
                 // declaration; without it the minted slot type has no WIR
                 // registration and codegen panics.
-                project.find_variant(&option_module(project)?, "Option")?;
+                project.find_variant(
+                    project
+                        .type_table
+                        .borrow()
+                        .compiler_item_def(CompilerItem::Option)?,
+                )?;
                 let option_type = project.type_table.borrow_mut().make_option(*payload);
                 (option_type, Pad::NoneOf(option_type), true)
             }
@@ -1087,15 +1068,6 @@ fn compute_layout(project: &NirPackage, variant_type: TypeId) -> Option<Layout> 
     })
 }
 
-/// Where `Option` is declared, per `#[compiler_item("option")]`.
-fn option_module(project: &NirPackage) -> Option<ModuleSource> {
-    project
-        .type_table
-        .borrow()
-        .compiler_items()
-        .variant_module(CompilerItem::Option)
-        .cloned()
-}
 
 /// The `{Unit, Payload(GC ref)}` shape `wir_optimize::nullable_ref` erases.
 fn is_nullable_ref_shape(payloads: &[TypeId], project: &NirPackage) -> bool {

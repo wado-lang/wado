@@ -152,14 +152,6 @@ pub fn link(package: Package) -> FlatPackage {
     #[cfg(debug_assertions)]
     assert_no_stub_shadowing(&functions, "link");
 
-    // Build variant lookup indices.
-    let mut variant_index = IndexMap::default();
-    for (i, v) in variants.iter().enumerate() {
-        variant_index
-            .entry((v.module_source.clone(), v.name.clone()))
-            .or_insert(i);
-    }
-
     FlatPackage {
         entry_module_source: package.entry_module_source,
         type_table,
@@ -169,7 +161,6 @@ pub fn link(package: Package) -> FlatPackage {
         structs,
         enums,
         variants,
-        variant_index,
         flags,
         globals,
         tests,
