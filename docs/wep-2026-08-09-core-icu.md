@@ -10,7 +10,8 @@ By capability: in the `wado-bundled-icu/` spike an all-features ICU4X component
 is ~3.7 MB, of which segmentation is ~2.35 MB and collation ~1.12 MB, against
 ~44 KB for the character property tries.
 
-By locale, measured with `bdp-spike/datagen` against icu4x 2.2 and CLDR 48.2.0:
+By locale, measured with `wado-bundled-icu/bdp-spike/datagen` (at e52a46286)
+against icu4x 2.2 and CLDR 48.2.0:
 
 | markers                                       | root (`und`) | `und,ja` | every locale |
 | --------------------------------------------- | -----------: | -------: | -----------: |
@@ -493,7 +494,8 @@ dedup following genuine runtime data dependencies rather than taxonomy.
   — the mechanism this consumes, here reduced to an archive lookup.
 - [research: splitting large libraries](./research-library-splitting.md) — the
   capability-axis measurements. The locale-axis table in Context comes from
-  `bdp-spike/datagen`'s `coll-loc` and `fmt-loc` sets, which reproduce it.
+  `bdp-spike/datagen`'s `coll-loc` and `fmt-loc` sets, which reproduce it at
+  e52a46286.
 - [Wasm CM Component Import](./wep-2026-06-26-wasm-cm-component-import.md) — how
   the implementation asset is consumed and composed.
 - [Provider Metadata](./wep-2026-07-26-provider-metadata.md) — why a `core:*` API

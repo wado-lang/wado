@@ -217,5 +217,6 @@ cd runtime-check && cargo run --release
 Both worlds bake their data in via `compiled_data`. The alternative is a
 **data-free feature component** that loads a postcard blob at runtime via
 ICU4X's `BlobDataProvider`, with the blob supplied by a shared **data**
-component composed in over the Component Model. It is validated in
-[`bdp-spike/`](bdp-spike/).
+component composed in over the Component Model. The `bdp-spike/` directory
+validated it; it was removed after e52a46286, where `bdp-spike/build.sh` still
+reproduces the measurements.
