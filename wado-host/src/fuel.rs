@@ -96,8 +96,7 @@ fn operator_cost() -> OperatorCost {
     price!(c, units(18); ArrayNew, ArrayNewDefault, ArrayNewFixed, ArrayNewData, ArrayNewElem);
     price!(c, units(12); ArrayFill, ArrayInitData, ArrayInitElem);
     price!(c, units(13); ArrayCopy);
-    // A libcall into `memmove` / `memset`. Its per-byte time is under a
-    // hundredth of a unit, so it charges nothing per byte.
+    // The libcall into `memmove` / `memset`.
     price!(c, units(14); MemoryCopy, MemoryFill, MemoryInit);
 
     c.variable = VariableOperatorCost {
@@ -109,11 +108,15 @@ fn operator_cost() -> OperatorCost {
         array_init_elem_per_element: UNIT,
         array_new_data_per_element: HALF_UNIT,
         array_init_data_per_element: HALF_UNIT,
-        // A copy is a `memmove`; growth and table operations are priced flat.
-        array_copy_per_element: 0,
-        memory_copy_per_byte: 0,
-        memory_fill_per_byte: 0,
-        memory_init_per_byte: 0,
+        // A `memmove` / `memset` takes a small fraction of this per byte, but
+        // the least nonzero price is the one that keeps a fuel budget a bound
+        // on time: at zero, a loop of 1 GiB fills costs a flat price each.
+        array_copy_per_element: HALF_UNIT,
+        memory_copy_per_byte: HALF_UNIT,
+        memory_fill_per_byte: HALF_UNIT,
+        memory_init_per_byte: HALF_UNIT,
+        // Growth and table operations are priced flat; a memory's and a
+        // table's ceiling bound how often they can repeat.
         memory_grow_per_page: 0,
         table_copy_per_element: 0,
         table_fill_per_element: 0,
@@ -137,7 +140,11 @@ mod tests {
         (func (export "div") (param i32) (result i32)
             (i32.div_u (local.get 0) (local.get 0)))
         (func (export "array") (param i32) (result i32)
-            (array.len (array.new_default $words (local.get 0)))))"#;
+            (array.len (array.new_default $words (local.get 0))))
+        (memory 1)
+        (func (export "fill") (param i32) (result i32)
+            (memory.fill (i32.const 0) (i32.const 0) (local.get 0))
+            (i32.const 0)))"#;
 
     /// The fuel `MODULE`'s `export` spends on one call with `arg`.
     fn fuel_of(export: &str, arg: i32) -> u64 {
@@ -168,5 +175,14 @@ mod tests {
         let empty = fuel_of("array", 0);
         let hundred = fuel_of("array", 100);
         assert_eq!(hundred - empty, 100 * u64::from(UNIT));
+    }
+
+    /// A fuel budget bounds a `core:eval` program's time only if a bulk
+    /// operation pays for its length.
+    #[test]
+    fn memory_fill_charges_each_byte() {
+        let small = fuel_of("fill", 1000);
+        let large = fuel_of("fill", 2000);
+        assert_eq!(large - small, 1000 * u64::from(HALF_UNIT));
     }
 }

@@ -40,8 +40,10 @@ budget then bounds time, which is what the harness and `core:eval` use one for.
   collector: `struct.new` and the `array.new` family, casts, `call_ref`, and
   bulk memory. wasmtime charges a bulk operator a flat price plus a whole
   number per element. It fills an array one element at a time, so those
-  operators pay per element. A copy or a fill of linear memory is a `memmove`
-  or `memset` whose time per byte rounds to nothing, so it pays flat.
+  operators pay per element. A copy, and a fill of linear memory, is a
+  `memmove` or `memset` that takes a small fraction of a unit per byte. It
+  still pays half a unit per byte or element, the least nonzero price, since
+  at zero a loop of large copies would escape a fuel budget.
 
 The `Benchmark` workflow stores the series under a suite name that changes with
 the prices, since figures under two price lists do not compare. Each list starts
@@ -117,9 +119,11 @@ The wall-clock series on gh-pages stops. Its history stays where it is.
   surviving object's with its size, which no per-operator price can see. The
   prices assume a small live set; the wall-clock benchmarks in `benchmark/`
   show the rest.
-- A copy pays nothing per byte, so a large one is priced low. A copy whose
-  length is a constant of at most 128 bytes runs inline at almost no cost, and
-  pays the same flat price as one that calls `memmove`.
+- A copy or a fill is priced several times what it takes: half a unit per byte
+  against a `memmove` that takes about a thirtieth of that, and per `i32` array
+  element about six times. A price has no finer step than one fuel per element.
+  A copy whose length is a constant of at most 128 bytes runs inline at almost
+  no cost, and pays the same price as one that calls `memmove`.
 - An array pays the same per element whatever its element type, though an `i8`
   element costs about a third of an `i32` one.
 - No pull request is held to a wasm size. A growth shows only in the record on
