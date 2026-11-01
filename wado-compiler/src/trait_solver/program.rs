@@ -105,6 +105,25 @@ impl SolverType {
         self.mentions(&|p| matches!(p, Self::Param(i) | Self::Pack(i) if *i == index))
     }
 
+    /// Whether `self` holds an associated type projected off a parameter or
+    /// pack, which no bound on the parameters answers for: only an instance,
+    /// where the projection reads the binding, does. A declaration among
+    /// `projecting` holds one off whatever its arguments mention.
+    #[must_use]
+    pub fn projects_param(&self, projecting: &IndexSet<TypeDeclId>) -> bool {
+        let mentions_any = || self.mentions(&|_| true);
+        match self {
+            Self::Projection { .. } => mentions_any(),
+            Self::Decl(head, inner) => {
+                (projecting.contains(head) && mentions_any())
+                    || inner.iter().any(|t| t.projects_param(projecting))
+            }
+            Self::Tuple(inner) => inner.iter().any(|t| t.projects_param(projecting)),
+            Self::Ref { inner, .. } => inner.projects_param(projecting),
+            Self::Param(_) | Self::Pack(_) | Self::AnyRow => false,
+        }
+    }
+
     /// Whether `self` mentions the parameter or pack at `index` other than
     /// behind a reference.
     #[must_use]
@@ -374,14 +393,33 @@ impl Declaration {
     /// is each element of the tuple its argument is.
     #[must_use]
     pub fn members_at(&self, args: &[SolverType]) -> Vec<SolverType> {
+        Self::instantiated(self.members.iter(), self.params, args)
+    }
+
+    /// The members [`SolverType::projects_param`] holds of, at the instance
+    /// whose arguments are `args`.
+    #[must_use]
+    pub fn projected_members_at(
+        &self,
+        args: &[SolverType],
+        projecting: &IndexSet<TypeDeclId>,
+    ) -> Vec<SolverType> {
+        let projected = self.members.iter().filter(|m| m.projects_param(projecting));
+        Self::instantiated(projected, self.params, args)
+    }
+
+    fn instantiated<'a>(
+        members: impl Iterator<Item = &'a SolverType>,
+        params: u32,
+        args: &[SolverType],
+    ) -> Vec<SolverType> {
         assert_eq!(
             args.len(),
-            self.params as usize,
+            params as usize,
             "an instance argues every parameter"
         );
         let arg = |index: u32| Some(args[index as usize].clone());
-        self.members
-            .iter()
+        members
             .flat_map(|member| match (member, member.map_params(&arg)) {
                 (SolverType::Pack(_), Some(SolverType::Tuple(elems))) => elems,
                 (_, Some(at)) => vec![at],
@@ -449,6 +487,8 @@ pub struct Program {
     pub tuple: Option<TypeDeclId>,
     /// Each declaration's members, which a structural body owes the bodies of.
     pub declarations: IndexMap<TypeDeclId, Declaration>,
+    /// The declarations [`SolverType::projects_param`] holds of a member of.
+    pub projecting: IndexSet<TypeDeclId>,
     /// The sources of each structural trait's derived bodies, one per
     /// reflection kind. A derived impl stands for its source, so
     /// [`super::derive`] admits only a declaration one of them holds of
@@ -540,6 +580,33 @@ pub struct Env {
 }
 
 impl Program {
+    /// Adds `declarations`, and grows [`Self::projecting`] to every
+    /// declaration a member of reaches a projection off a parameter through
+    /// the others.
+    pub fn declare(&mut self, declarations: &[Declaration]) {
+        for decl in declarations {
+            self.declarations.insert(decl.id, decl.clone());
+        }
+        loop {
+            let reached: Vec<TypeDeclId> = self
+                .declarations
+                .values()
+                .filter(|decl| {
+                    !self.projecting.contains(&decl.id)
+                        && decl
+                            .members
+                            .iter()
+                            .any(|m| m.projects_param(&self.projecting))
+                })
+                .map(|decl| decl.id)
+                .collect();
+            if reached.is_empty() {
+                break;
+            }
+            self.projecting.extend(reached);
+        }
+    }
+
     /// The id the next [`Self::push_impl`] gives: every id from it on is an
     /// impl added after this call.
     #[must_use]

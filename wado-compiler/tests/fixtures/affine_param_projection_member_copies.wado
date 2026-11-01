@@ -1,0 +1,34 @@
+// A member that is an associated type of an `affine` parameter copies as the
+// associated type is declared, whatever the parameter is: `Any<G>` holds no
+// `G`, so it copies, and a list of it walks through `List`'s unmarked impls.
+affine trait Holds {
+    type T<E>;
+}
+
+variant Any<affine G: Holds> {
+    F(G::T<f32>),
+    I(G::T<i64>),
+}
+
+struct Dev {
+    n: i32,
+}
+
+impl Holds for Dev {
+    type T<E> = List<E>;
+}
+
+fn floats<affine G: Holds>(xs: List<Any<G>>) -> i32 {
+    let mut n = 0;
+    for let a of xs {
+        if a matches { F(_) } {
+            n += 1;
+        }
+    }
+    return n;
+}
+
+test {
+    let xs: List<Any<Dev>> = [Any::F([1.0, 2.0]), Any::I([3]), Any::F([])];
+    assert floats(xs) == 2;
+}
