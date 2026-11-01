@@ -2,10 +2,11 @@
 //! The deterministic cost of a region of a test.
 //!
 //! [`measure`] runs a closure and, under `wado test --report-fuel`, reports
-//! the fuel it spent: about one unit per Wasm instruction the guest ran. Fuel
-//! does not depend on the host, so one run gives a figure that only a change to
-//! the program or to wasmtime moves. It leaves out what the host does for the
-//! guest, GC included, and it prices every instruction alike.
+//! the fuel it spent: each Wasm instruction the guest ran, priced near the
+//! time it takes (an `i32.add` costs 2). Fuel does not depend on the host, so
+//! one run gives a figure that only a change to the program or to wasmtime
+//! moves. The prices are approximate, and an allocation's share of collection
+//! grows with the live set, which no price sees.
 //!
 //! Without `--report-fuel` the closure just runs. Only `wado test` supports
 //! it, and a program for any other world that reaches this module does not

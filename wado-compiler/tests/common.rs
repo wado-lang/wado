@@ -33,6 +33,7 @@ use wado_compiler::{
     OptLevel,
 };
 use wado_host::engine::default_config;
+use wado_host::fuel::meter_fuel;
 pub use wado_host::fixture::opt_level_name;
 use wado_host::kiln::local::run_local_generators;
 use wado_host::timezone;
@@ -424,11 +425,11 @@ pub fn engine() -> &'static Engine {
         config.wasm_backtrace_details(wasmtime::WasmBacktraceDetails::Enable);
         // Enable epoch-based interruption for timeout enforcement
         config.epoch_interruption(true);
-        // Meter guest execution. Fuel counts instructions the guest actually
+        // Meter guest execution. Fuel prices the operators the guest actually
         // runs, so a test that waits on a host call spends none of it — the
         // budget bounds runaway guest work without charging for wall time the
         // guest did not consume.
-        config.consume_fuel(true);
+        meter_fuel(&mut config);
         let engine = Engine::new(&config).expect("Failed to create wasmtime Engine");
 
         // Start background epoch ticker thread

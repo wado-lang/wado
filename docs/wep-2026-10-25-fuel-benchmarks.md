@@ -14,9 +14,38 @@ JavaScript. That comparison needs a quiet machine, not a shared runner.
 ## Decision
 
 CI measures fuel, not time. Fuel is wasmtime's count of the Wasm instructions
-the guest ran, about one unit each. It does not depend on the host, so one run
-on any machine gives the figure that only a change to the program or to
-wasmtime moves.
+the guest ran, each priced near the time it takes. It does not depend on the
+host, so one run on any machine gives the figure that only a change to the
+program, to the prices or to wasmtime moves.
+
+### Fuel prices each operator near its time
+
+wasmtime's default prices every operator at one, so an integer division, a
+call and an allocation each cost what an `i32.add` does. `wado-host/src/fuel.rs`
+gives `Config::operator_cost` a table instead, and every metered engine takes
+it: `--report-fuel`, Kiln generators, `core:eval` and the e2e harness. A fuel
+budget then bounds time, which is what the harness and `core:eval` use one for.
+
+- An `i32.add` costs 2. A price is a `u8`, so a finer unit would push the
+  heaviest operators past 255. A coarser one could not price a local or a
+  constant at half an add, which is about what they cost once Cranelift has
+  them in registers.
+- The classes are the Internet Computer's instruction weights
+  (`instruction_to_cost` in dfinity/ic), benchmarked per operator and in line
+  with Agner Fog's tables: a division costs 10 adds, a call 5, an `f64.sqrt` 8.
+  No price list is shared across runtimes, and that one is measured on a JIT
+  rather than set adversarially as a chain's gas is.
+- What that table does not price for wasmtime is priced from microbenchmarks
+  of each operator against `i32.add` under Cranelift with the copying
+  collector: `struct.new` and the `array.new` family, casts, `call_ref`, and
+  bulk memory. wasmtime charges a bulk operator a flat price plus a whole
+  number per element. It fills an array one element at a time, so those
+  operators pay per element. A copy or a fill of linear memory is a `memmove`
+  or `memset` whose time per byte rounds to nothing, so it pays flat.
+
+The `Benchmark` workflow stores the series under a suite name that changes with
+the prices, since figures under two price lists do not compare. Each list starts
+a history of its own on the page, and the older ones stay in its data.
 
 ### `core:fuel` measures a region of a test
 
@@ -81,12 +110,17 @@ The wall-clock series on gh-pages stops. Its history stays where it is.
 
 ## Known gaps
 
-- Fuel prices every instruction alike, so a branch shape or a cache effect does
+- A price is one figure per operator, so a branch shape or a cache effect does
   not show.
-- Fuel misses most of what an allocation costs. `struct.new` and `array.new`
-  cost one unit like any instruction, while the collector's work for them runs
-  in the host. That work grows with the live set, which no per-instruction
-  price can see. The wall-clock benchmarks in `benchmark/` still show it.
+- An allocation's share of collection grows with the live set, and a
+  surviving object's with its size, which no per-operator price can see. The
+  prices assume a small live set; the wall-clock benchmarks in `benchmark/`
+  show the rest.
+- A copy pays nothing per byte, so a large one is priced low. A copy whose
+  length is a constant of at most 128 bytes runs inline at almost no cost, and
+  pays the same flat price as one that calls `memmove`.
+- An array pays the same per element whatever its element type, though an `i8`
+  element costs about a third of an `i32` one.
 - No pull request is held to a wasm size. A growth shows only in the record on
   gh-pages, after the merge.
 - A region that reads `wasi:random/random`, a clock, or I/O can spend different
