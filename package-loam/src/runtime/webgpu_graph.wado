@@ -74,19 +74,14 @@ impl Graph for WebGpuBackend {
         };
     }
 
-    /// A constant only other constants read is never kept.
+    /// A constant is kept only where a launch reads it, so neither one only
+    /// other constants read nor one a kernel writes in.
     fn compiled(&mut self, record: fn(&mut Recorder) -> Recorded with _) -> Option<WebGpuProgram> with _ {
         let recorded = record(&mut Recorder::new());
         let folded = constants(&recorded);
         let plan = planned(&recorded, &splats_of(&folded));
-        let mut read: List<i32> = recorded.body.results;
-        for let [id, node] of recorded.nodes.into_iter().enumerate() {
-            if !folded.contains_key(id) {
-                read.extend(&node.operands);
-            }
-        }
         let mut kept = HashMap::<i32, Any<WebGpuBackend>>::new();
-        for let id of read {
+        for let id of plan.reads(&recorded) {
             if let Some(value) = folded.get(id) && !kept.contains_key(id) {
                 kept[id] = match value {
                     F32(t) => Any::F32(self.keep(&t)),

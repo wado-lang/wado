@@ -165,4 +165,6 @@ test "only a node that reads an argument is launched" {
     };
     assert k.operands.len() == 1;
     assert splats_of(&constants(&recorded))[three.id] == Option::Some(3.0);
+    // The kernel writes the splat in, so no launch reads it.
+    assert plan.reads(&recorded) == [y.id, x.id] as List<i32>;
 }

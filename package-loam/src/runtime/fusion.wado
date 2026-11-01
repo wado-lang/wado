@@ -45,6 +45,33 @@ pub struct KernelOperand {
     pub extents: List<i32>,
 }
 
+impl Plan {
+    /// The nodes it returns, and every node a launch of it, or of a branch
+    /// within it, reads.
+    pub fn reads(&self, recorded: &Recorded) -> List<i32> {
+        let mut reads = self.results;
+        for let launch of self.launches {
+            match launch {
+                Node(id) => reads.extend(&recorded.nodes[id].operands),
+                Kernel(k) => {
+                    for let o of k.operands {
+                        reads.push(o.node);
+                    }
+                    if let Some(p) = k.product {
+                        reads.extend(&recorded.nodes[p].operands);
+                    }
+                },
+                Case([id, first, second]) => {
+                    reads.push(recorded.nodes[id].operands[0]);
+                    reads.extend(&first.reads(recorded));
+                    reads.extend(&second.reads(recorded));
+                },
+            }
+        }
+        return reads;
+    }
+}
+
 /// Each node `constants` holds, by the one value every element of it holds
 /// where there is one.
 pub fn splats_of(constants: &HashMap<i32, Any<Cpu>>) -> HashMap<i32, Option<f32>> {
