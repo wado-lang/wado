@@ -1587,7 +1587,6 @@ fn pattern_has_bindings(body: &Body, pattern: PatId) -> bool {
 
 /// The declared type of a tuple's `i`-th element. Arity is fixed by type
 /// checking, so an out-of-range index is a lowering bug.
-#[track_caller]
 /// `value` wrapped in the `Box<T>` struct `box_wir` references.
 fn box_new(box_wir: &WirType, value: WirInstr) -> WirInstr {
     let WirType::Ref { type_id, .. } = box_wir else {
@@ -1599,6 +1598,7 @@ fn box_new(box_wir: &WirType, value: WirInstr) -> WirInstr {
     }
 }
 
+#[track_caller]
 fn tuple_element_type(element_types: &[TypeId], index: usize) -> TypeId {
     *element_types.get(index).unwrap_or_else(|| {
         panic!(
