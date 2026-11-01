@@ -2114,18 +2114,25 @@ fn rewrite_call_sites(
         // than left to it. An aliased temp is not a pure destructure target, and
         // retyping it would hand a tuple to a reference cell the rebox can no
         // longer repair. A temp that fails is dropped and reboxed instead.
-        bound.retain(|&local, &mut f| {
-            !func.address_taken_locals.contains(&local)
-                && temp_uses_rewritable(&body, local, &rebind, &candidates[&f].layout)
+        let layouts: IndexMap<u32, &Layout> = bound
+            .iter()
+            .map(|(&local, f)| (local, &candidates[f].layout))
+            .collect();
+        let unrewritable = unrewritable_temps(&body, &layouts, &rebind);
+        bound.retain(|local, _| {
+            !func.address_taken_locals.contains(local) && !unrewritable.contains(local)
         });
         if !bound.is_empty() {
-            for (&local, &f) in &bound {
-                let tuple_type = candidates[&f].layout.tuple_type;
+            let tuple_types: IndexMap<u32, TypeId> = bound
+                .iter()
+                .map(|(&local, f)| (local, candidates[f].layout.tuple_type))
+                .collect();
+            for (&local, &tuple_type) in &tuple_types {
                 let slot = &mut func.locals[local as usize].type_id;
                 changed |= *slot != tuple_type;
                 *slot = tuple_type;
-                changed |= retype_let(&mut body, local, tuple_type);
             }
+            changed |= retype_lets(&mut body, &tuple_types);
             let names: Vec<String> = func.locals.iter().map(|l| l.name.clone()).collect();
             let root = body.root();
             let bound: IndexMap<u32, Candidate> = bound
@@ -2682,90 +2689,54 @@ fn rewrite_temp_uses(body: &mut Body, node: NodeRef, cx: &mut SiteCx) -> bool {
     changed
 }
 
-/// Whether every mention of `local` is one the rewrite lowers: a destructure, or
-/// a bare read it rebuilds the variant for. A `Match` arm deeper than one level
-/// has no tag form, and leaves the site to the rebox.
-fn temp_uses_rewritable(body: &Body, local: u32, rebind: &Rebind, layout: &Layout) -> bool {
-    let mut ok = true;
-    check_temp_uses(
-        body,
-        NodeRef::Block(body.root()),
-        local,
-        rebind,
-        layout,
-        &mut ok,
-    );
-    ok
+/// The temps of `layouts` some mention of which the rewrite cannot lower. It
+/// lowers a destructure and a bare read, which it rebuilds the variant for,
+/// but a `Match` arm deeper than one level has no tag form, and leaves the
+/// site to the rebox. One walk answers for every temp.
+fn unrewritable_temps(body: &Body, layouts: &IndexMap<u32, &Layout>, rebind: &Rebind) -> IndexSet<u32> {
+    let mut refused = IndexSet::default();
+    let mut binding: Vec<u32> = Vec::new();
+    refuse_temp_uses(body, NodeRef::Block(body.root()), layouts, rebind, &mut binding, &mut refused);
+    refused
 }
 
-fn check_temp_uses(
+/// Refuses each temp a `Match` under `node` cannot be lowered for. `binding`
+/// holds the temps whose own initializer `node` is in, which is the call and
+/// not a use.
+fn refuse_temp_uses(
     body: &Body,
     node: NodeRef,
-    local: u32,
+    layouts: &IndexMap<u32, &Layout>,
     rebind: &Rebind,
-    layout: &Layout,
-    ok: &mut bool,
+    binding: &mut Vec<u32>,
+    refused: &mut IndexSet<u32>,
 ) {
-    if !*ok {
-        return;
-    }
     if let NodeRef::Stmt(s) = node
         && let StmtKind::Let {
             local_index, value, ..
         } = &body.stmts[s].kind
-        && *local_index == local
+        && layouts.contains_key(local_index)
+        && let Some(e) = value.as_expr()
+        && matches!(&body.exprs[e].kind, ExprKind::Call { .. })
     {
-        // The binding's own initializer is the call, not a use.
-        if let Some(e) = value.as_expr()
-            && matches!(&body.exprs[e].kind, ExprKind::Call { .. })
-        {
-            return;
-        }
+        binding.push(*local_index);
+        body.for_each_child(node, |c| refuse_temp_uses(body, c, layouts, rebind, binding, refused));
+        binding.pop();
+        return;
     }
-    if let NodeRef::Expr(e) = node {
-        match &body.exprs[e].kind {
-            ExprKind::VariantTag { expr }
-            | ExprKind::VariantTest { expr, .. }
-            | ExprKind::VariantPayload { expr, .. } => {
-                if is_local(body, *expr, local) {
-                    return;
-                }
-            }
-            ExprKind::Match { expr: scrut, arms } => {
-                if is_local(body, *scrut, local) {
-                    if !arms_are_one_level(body, arms, rebind, layout) {
-                        *ok = false;
-                        return;
-                    }
-                    let arms = arms.clone();
-                    for a in &arms {
-                        if let Some(g) = a.guard
-                            && let Some(ge) = g.as_expr()
-                        {
-                            check_temp_uses(body, NodeRef::Expr(ge), local, rebind, layout, ok);
-                        }
-                        if let Some(be) = a.body.as_expr() {
-                            check_temp_uses(body, NodeRef::Expr(be), local, rebind, layout, ok);
-                        }
-                    }
-                    return;
-                }
-            }
-            ExprKind::Local { index, .. } if *index == local => {
-                return;
-            }
-            _ => {}
-        }
+    if let NodeRef::Expr(e) = node
+        && let ExprKind::Match { expr: scrut, arms } = &body.exprs[e].kind
+        && let Some(local) = scrut.as_expr().and_then(|s| match &body.exprs[s].kind {
+            ExprKind::Local { index, .. } => Some(*index),
+            _ => None,
+        })
+        && let Some(layout) = layouts.get(&local)
+        && !binding.contains(&local)
+        && !arms_are_one_level(body, arms, rebind, layout)
+    {
+        refused.insert(local);
     }
-    body.for_each_child(node, |c| {
-        check_temp_uses(body, c, local, rebind, layout, ok);
-    });
-}
-
-fn is_local(body: &Body, op: Operand, local: u32) -> bool {
-    op.as_expr().is_some_and(
-        |e| matches!(&body.exprs[e].kind, ExprKind::Local { index, .. } if *index == local),
-    )
+    body.for_each_child(node, |c| refuse_temp_uses(body, c, layouts, rebind, binding, refused));
 }
 
 fn temp_local<V>(body: &Body, op: Operand, bound: &IndexMap<u32, V>) -> Option<u32> {

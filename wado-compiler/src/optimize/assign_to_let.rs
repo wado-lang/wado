@@ -11,7 +11,7 @@ use crate::hashmap::{IndexMap, IndexSet};
 use crate::nir::{NirLocal, NirParam};
 use crate::nir_arena::{BlockId, Body, ExprKind, NodeRef, Operand, PatKind, StmtId, StmtKind};
 
-use super::arena_query::{mentions_local_except, operand_read_locals, stmt_mentions_local};
+use super::arena_query::operand_read_locals;
 
 /// Promote every such assignment in `body`. Answers whether any changed.
 pub(super) fn promote_lone_assignments(
@@ -23,31 +23,27 @@ pub(super) fn promote_lone_assignments(
     if lone.is_empty() {
         return false;
     }
-    let mut blocks: Vec<BlockId> = Vec::new();
-    body.for_each_reachable_node(|node| {
-        if let NodeRef::Block(b) = node {
-            blocks.push(b);
-        }
-    });
+    let mut census = Census {
+        lone: &lone,
+        path: Vec::new(),
+        mentions: IndexMap::default(),
+        assignments: Vec::new(),
+    };
+    census.walk(body, NodeRef::Block(body.root()));
     let mut promoted: Vec<(StmtId, u32, Operand)> = Vec::new();
-    for block in blocks {
-        let stmts = &body.blocks[block].stmts;
-        for (at, &stmt) in stmts.iter().enumerate() {
-            if let Some((local, value)) = assignment_statement(body, stmt)
-                && lone.contains(&local)
-                && !operand_read_locals(body, value).contains(&local)
-                && !stmts[..at]
-                    .iter()
-                    .any(|&s| stmt_mentions_local(body, s, local))
-                && !mentions_local_except(
-                    body,
-                    NodeRef::Block(body.root()),
-                    Some(NodeRef::Block(block)),
-                    local,
-                )
-            {
-                promoted.push((stmt, local, value));
-            }
+    for (stmt, local, value, at) in &census.assignments {
+        let [enclosing @ .., (block, index)] = at.as_slice() else {
+            unreachable!("a statement sits in a block");
+        };
+        // Every mention follows the assignment in its block.
+        let after = |path: &Vec<(BlockId, usize)>| {
+            path.len() >= at.len()
+                && path[..enclosing.len()] == *enclosing
+                && path[enclosing.len()].0 == *block
+                && path[enclosing.len()].1 >= *index
+        };
+        if !operand_read_locals(body, *value).contains(local) && census.mentions[local].iter().all(after) {
+            promoted.push((*stmt, *local, *value));
         }
     }
     for &(stmt, local, value) in &promoted {
@@ -62,6 +58,51 @@ pub(super) fn promote_lone_assignments(
         };
     }
     !promoted.is_empty()
+}
+
+/// Where each lone local is mentioned and assigned, as the statements
+/// enclosing the mention: each a block and the statement's index in it. One
+/// walk answers for every assignment, so a body of many costs one walk.
+struct Census<'a> {
+    lone: &'a IndexSet<u32>,
+    path: Vec<(BlockId, usize)>,
+    mentions: IndexMap<u32, Vec<Vec<(BlockId, usize)>>>,
+    assignments: Vec<(StmtId, u32, Operand, Vec<(BlockId, usize)>)>,
+}
+
+impl Census<'_> {
+    fn walk(&mut self, body: &Body, node: NodeRef) {
+        if let NodeRef::Block(b) = node {
+            for (index, &stmt) in body.blocks[b].stmts.iter().enumerate() {
+                self.path.push((b, index));
+                if let Some((local, value)) = assignment_statement(body, stmt)
+                    && self.lone.contains(&local)
+                {
+                    self.assignments.push((stmt, local, value, self.path.clone()));
+                }
+                self.walk(body, NodeRef::Stmt(stmt));
+                self.path.pop();
+            }
+            return;
+        }
+        let mut read = IndexSet::default();
+        if let NodeRef::Expr(e) = node
+            && let ExprKind::Local { index, .. } = &body.exprs[e].kind
+        {
+            read.insert(*index);
+        }
+        body.for_each_operand(node, |op| {
+            if let Some(v) = op.as_value() {
+                body.values.collect_opaque_locals(v, &mut read);
+            }
+        });
+        for local in read {
+            if self.lone.contains(&local) {
+                self.mentions.entry(local).or_default().push(self.path.clone());
+            }
+        }
+        body.for_each_child(node, |c| self.walk(body, c));
+    }
 }
 
 /// The locals one assignment writes as a whole and nothing binds: no `let`,
