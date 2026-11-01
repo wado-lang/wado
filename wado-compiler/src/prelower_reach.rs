@@ -166,7 +166,6 @@ fn type_head(type_table: &TypeTable, id: TypeId) -> Option<Head> {
         | ResolvedType::Enum { .. }
         | ResolvedType::Variant { .. }
         | ResolvedType::Resource { .. }
-        | ResolvedType::GenericResource { .. }
         | ResolvedType::GenericInstance { .. }
         | ResolvedType::Newtype { .. }
         | ResolvedType::Flags { .. }
