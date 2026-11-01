@@ -1219,8 +1219,8 @@ fn "core:prelude/types.wado/core:prelude/types.wado/ReadCopy<u8>^core:prelude/tr
     let started_2: ref null "core:prelude/types.wado//StartedRead<u8>";
     let $drop_spill_7: ref "core:prelude/types.wado//StreamChunk<u8>";
     let ptr_22: i32;
-    let arr_28: ref Array<u8>;
-    let self_43: ref "core:prelude//List<core:prelude/types.wado/CopySettlement>";
+    let arr_30: ref Array<u8>;
+    let self_45: ref "core:prelude//List<core:prelude/types.wado/CopySettlement>";
     let i: i32;
     let w: i64;
     let $licm_arith_7: i32;
@@ -1247,11 +1247,11 @@ fn "core:prelude/types.wado/core:prelude/types.wado/ReadCopy<u8>^core:prelude/tr
                     let $mv$$local_7$1: i32;
                     multivalue_bind [$load_5, $mv$$local_7$1] = "core:prelude/types.wado/settled_copy_at$sroa[return]"($load_4.handle);
                     if $load_5 == 1 -> i32 {
-                        self_43 = global:core:prelude/types.wado::SETTLED_COPIES; $load_5 = global:core:prelude/types.wado::SETTLED_COPIES.used; if @unlikely($mv$$local_7$1 >=u $load_5) {
+                        self_45 = global:core:prelude/types.wado::SETTLED_COPIES; $load_5 = global:core:prelude/types.wado::SETTLED_COPIES.used; if @unlikely($mv$$local_7$1 >=u $load_5) {
                             cold_path;
                             "core:prelude/types.wado/core:prelude/types.wado/CopyBuffer::wait_on$cold0$dae[self]"($mv$$local_7$1, $load_5);
                             unreachable;
-                        }; builtin::array_get_value<ref "core:prelude/types.wado//CopySettlement">(self_43.repr, $mv$$local_7$1).packed;
+                        }; builtin::array_get_value<ref "core:prelude/types.wado//CopySettlement">(self_45.repr, $mv$$local_7$1).packed;
                     } else {
                         break $inline_core_prelude_types_wado_CopyBuffer__wait_on_sroa_return__0: $load_5 = 0;
                     }
@@ -1281,21 +1281,21 @@ fn "core:prelude/types.wado/core:prelude/types.wado/ReadCopy<u8>^core:prelude/tr
             started_2.items;
         } else {
             ptr_22 = started_2.buffer.ptr;
-            arr_28 = builtin::array_new<u8>($mv$$local_7$1);
+            arr_30 = builtin::array_new<u8>($mv$$local_7$1);
             i = 0;
             $licm_arith_7 = $mv$$local_7$1 - 8;
             b132: block {
                 l133: loop {
                     break_if b132 i > $licm_arith_7;
                     w = builtin::load_i64(ptr_22 + i);
-                    builtin::array_set_u8(arr_28, i, builtin::i32_wrap_i64(w));
-                    builtin::array_set_u8(arr_28, i + 1, builtin::i32_wrap_i64(w >> 8_i64));
-                    builtin::array_set_u8(arr_28, i + 2, builtin::i32_wrap_i64(w >> 16_i64));
-                    builtin::array_set_u8(arr_28, i + 3, builtin::i32_wrap_i64(w >> 24_i64));
-                    builtin::array_set_u8(arr_28, i + 4, builtin::i32_wrap_i64(w >> 32_i64));
-                    builtin::array_set_u8(arr_28, i + 5, builtin::i32_wrap_i64(w >> 40_i64));
-                    builtin::array_set_u8(arr_28, i + 6, builtin::i32_wrap_i64(w >> 48_i64));
-                    builtin::array_set_u8(arr_28, i + 7, builtin::i32_wrap_i64(w >> 56_i64));
+                    builtin::array_set_u8(arr_30, i, builtin::i32_wrap_i64(w));
+                    builtin::array_set_u8(arr_30, i + 1, builtin::i32_wrap_i64(w >> 8_i64));
+                    builtin::array_set_u8(arr_30, i + 2, builtin::i32_wrap_i64(w >> 16_i64));
+                    builtin::array_set_u8(arr_30, i + 3, builtin::i32_wrap_i64(w >> 24_i64));
+                    builtin::array_set_u8(arr_30, i + 4, builtin::i32_wrap_i64(w >> 32_i64));
+                    builtin::array_set_u8(arr_30, i + 5, builtin::i32_wrap_i64(w >> 40_i64));
+                    builtin::array_set_u8(arr_30, i + 6, builtin::i32_wrap_i64(w >> 48_i64));
+                    builtin::array_set_u8(arr_30, i + 7, builtin::i32_wrap_i64(w >> 56_i64));
                     i = i + 8;
                     continue l133;
                 };
@@ -1303,12 +1303,12 @@ fn "core:prelude/types.wado/core:prelude/types.wado/ReadCopy<u8>^core:prelude/tr
             b134: block {
                 l135: loop {
                     break_if b134 i >= $mv$$local_7$1;
-                    builtin::array_set_u8(arr_28, i, builtin::load_u8(ptr_22 + i));
+                    builtin::array_set_u8(arr_30, i, builtin::load_u8(ptr_22 + i));
                     i = i + 1;
                     continue l135;
                 };
             };
-            struct.new "core:prelude//List<u8>" { repr: arr_28, used: $mv$$local_7$1 };
+            struct.new "core:prelude//List<u8>" { repr: arr_30, used: $mv$$local_7$1 };
         }), result: (if local.tee $load_5($load_5 & 15) == 0 -> "core:prelude/types.wado//enum:CopyResult" {
             0;
         } else if $load_5 == 1 -> "core:prelude/types.wado//enum:CopyResult" {

@@ -1909,7 +1909,7 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StartedRead<u8>::settle$dae[
     let $drop_spill_7: ref "core:prelude/types.wado//StreamChunk<u8>";
     let self_7: ref null "core:prelude/types.wado//CopyBuffer";
     let ptr_10: i32;
-    let arr_16: ref Array<u8>;
+    let arr_18: ref Array<u8>;
     let i: i32;
     let w: i64;
     let $licm_arith_7: i32;
@@ -1917,21 +1917,21 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StartedRead<u8>::settle$dae[
         self.items;
     } else {
         ptr_10 = self.buffer.ptr;
-        arr_16 = builtin::array_new<u8>(count_3);
+        arr_18 = builtin::array_new<u8>(count_3);
         i = 0;
         $licm_arith_7 = count_3 - 8;
         b221: block {
             l222: loop {
                 break_if b221 i > $licm_arith_7;
                 w = builtin::load_i64(ptr_10 + i);
-                builtin::array_set_u8(arr_16, i, builtin::i32_wrap_i64(w));
-                builtin::array_set_u8(arr_16, i + 1, builtin::i32_wrap_i64(w >> 8_i64));
-                builtin::array_set_u8(arr_16, i + 2, builtin::i32_wrap_i64(w >> 16_i64));
-                builtin::array_set_u8(arr_16, i + 3, builtin::i32_wrap_i64(w >> 24_i64));
-                builtin::array_set_u8(arr_16, i + 4, builtin::i32_wrap_i64(w >> 32_i64));
-                builtin::array_set_u8(arr_16, i + 5, builtin::i32_wrap_i64(w >> 40_i64));
-                builtin::array_set_u8(arr_16, i + 6, builtin::i32_wrap_i64(w >> 48_i64));
-                builtin::array_set_u8(arr_16, i + 7, builtin::i32_wrap_i64(w >> 56_i64));
+                builtin::array_set_u8(arr_18, i, builtin::i32_wrap_i64(w));
+                builtin::array_set_u8(arr_18, i + 1, builtin::i32_wrap_i64(w >> 8_i64));
+                builtin::array_set_u8(arr_18, i + 2, builtin::i32_wrap_i64(w >> 16_i64));
+                builtin::array_set_u8(arr_18, i + 3, builtin::i32_wrap_i64(w >> 24_i64));
+                builtin::array_set_u8(arr_18, i + 4, builtin::i32_wrap_i64(w >> 32_i64));
+                builtin::array_set_u8(arr_18, i + 5, builtin::i32_wrap_i64(w >> 40_i64));
+                builtin::array_set_u8(arr_18, i + 6, builtin::i32_wrap_i64(w >> 48_i64));
+                builtin::array_set_u8(arr_18, i + 7, builtin::i32_wrap_i64(w >> 56_i64));
                 i = i + 8;
                 continue l222;
             };
@@ -1939,12 +1939,12 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StartedRead<u8>::settle$dae[
         b223: block {
             l224: loop {
                 break_if b223 i >= count_3;
-                builtin::array_set_u8(arr_16, i, builtin::load_u8(ptr_10 + i));
+                builtin::array_set_u8(arr_18, i, builtin::load_u8(ptr_10 + i));
                 i = i + 1;
                 continue l224;
             };
         };
-        struct.new "core:prelude//List<u8>" { repr: arr_16, used: count_3 };
+        struct.new "core:prelude//List<u8>" { repr: arr_18, used: count_3 };
     }), result: (if local.tee packed_2(packed_2 & 15) == 0 -> "core:prelude/types.wado//enum:CopyResult" {
         0;
     } else if packed_2 == 1 -> "core:prelude/types.wado//enum:CopyResult" {
