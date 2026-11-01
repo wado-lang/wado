@@ -1114,27 +1114,10 @@ fn plan_body(
         return None;
     }
 
-    // Step 2: escape analysis. Build safe-set via whitelist + tuple-source fixpoint.
-    // Also track which `ListMethodKind`s were observed on each whitelisted use,
-    // so step 3 can demand only the monomorphizations that will actually be
-    // emitted per field (rather than unconditionally requiring all four kinds).
-    let (safe_indices, used_kinds_map) =
-        compute_safe_set(body, type_table, &candidates, sig, value_copy_ids);
-    if safe_indices.is_empty() {
-        return None;
-    }
-
-    // Step 3: verify that every required (element_ty, sig) is present in the catalog.
-    // Required kinds = `Constructor` (always, for the initializer) ∪ observed
-    // kinds. If any candidate has missing monomorphizations, drop it.
-    let empty_used: IndexSet<(ListMethodKind, FuncId)> = IndexSet::default();
+    let safe = compute_safe_set(body, type_table, &candidates, sig, catalog, value_copy_ids);
     let safe_candidates: Vec<Candidate> = candidates
         .into_iter()
-        .filter(|c| safe_indices.contains(&c.local_index))
-        .filter(|c| {
-            let used = used_kinds_map.get(&c.local_index).unwrap_or(&empty_used);
-            required_methods_available(c, used, type_table, sig, catalog)
-        })
+        .filter(|c| safe.contains(&c.local_index))
         .collect();
     (!safe_candidates.is_empty()).then_some(safe_candidates)
 }
@@ -1478,18 +1461,17 @@ fn sig_key_of_id(sig: &MethodSig, func_id: FuncId) -> Option<SigKey> {
     sig.id_sigkeys.get(&func_id).cloned()
 }
 
-/// Compute the set of safe (decomposable) candidate locals via whitelist escape
-/// analysis plus a fixpoint for element-source dependency.
+/// The candidate locals that can be decomposed: whitelist escape analysis, and
+/// a catalog entry for every per-field method a candidate's uses need, to a
+/// fixpoint, since a candidate that falls out takes out the ones fed from it.
 fn compute_safe_set(
     body: &Body,
     type_table: &TypeTable,
     candidates: &[Candidate],
     sig: &MethodSig,
+    catalog: &MethodCatalog,
     value_copy_ids: &IndexSet<FuncId>,
-) -> (
-    IndexSet<u32>,
-    IndexMap<u32, IndexSet<(ListMethodKind, FuncId)>>,
-) {
+) -> IndexSet<u32> {
     let shape_of: IndexMap<u32, CandidateShape> = candidates
         .iter()
         .map(|c| {
@@ -1504,11 +1486,9 @@ fn compute_safe_set(
         })
         .collect();
 
-    // Iterate to fixpoint: start with all candidates safe, then remove any that
-    // reference an escaped candidate via element-source push. The used-kinds map
-    // is rebuilt from scratch each iteration so it reflects the final safe set.
+    let empty_used: IndexSet<(ListMethodKind, FuncId)> = IndexSet::default();
     let mut safe: IndexSet<u32> = candidates.iter().map(|c| c.local_index).collect();
-    let used_kinds = loop {
+    loop {
         let mut checker = WhitelistChecker {
             type_table,
             safe: &safe,
@@ -1519,14 +1499,25 @@ fn compute_safe_set(
             used_kinds: IndexMap::default(),
         };
         checker.visit(body, NodeRef::Block(body.root()));
-        if checker.escaped.is_empty() {
-            break checker.used_kinds;
+        let mut dropped = checker.escaped;
+        dropped.extend(
+            candidates
+                .iter()
+                .filter(|c| safe.contains(&c.local_index))
+                .filter(|c| {
+                    let used = checker.used_kinds.get(&c.local_index);
+                    let used = used.unwrap_or(&empty_used);
+                    !required_methods_available(c, used, type_table, sig, catalog)
+                })
+                .map(|c| c.local_index),
+        );
+        if dropped.is_empty() {
+            return safe;
         }
-        for idx in checker.escaped {
+        for idx in dropped {
             safe.shift_remove(&idx);
         }
-    };
-    (safe, used_kinds)
+    }
 }
 
 /// The per-candidate facts the whitelist walk keys on.

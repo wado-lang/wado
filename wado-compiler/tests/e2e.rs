@@ -470,6 +470,7 @@ fn wir_scope_names_one_function_whatever_the_order() {
     assert_eq!(body(".wado/run\""), Some("c;"));
     assert_eq!(body("export"), Some("a;"));
     assert_eq!(body("missing"), None);
+    assert_eq!(body("fn"), None);
 }
 
 /// The body of the function in `wir` that `scope` names, from its `fn` line to
@@ -490,8 +491,8 @@ fn scope_to_function<'a>(wir: &'a str, scope: &str) -> Option<&'a str> {
                 if let Some(rest) = line.strip_prefix("fn \"")
                     && let Some(end) = rest.find('"')
                 {
-                    // With its closing quote, which a scope may spell.
-                    start = Some((offset, &line[..4 + end + 1]));
+                    // Quoted, as a scope may spell it.
+                    start = Some((offset, &line[3..4 + end + 1]));
                 }
             }
             _ => {}
