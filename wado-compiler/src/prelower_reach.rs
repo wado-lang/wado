@@ -13,7 +13,8 @@ use crate::flat_package::FlatPackage;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::name::{
-    FunctionId, LocalMethodName, Receiver, TypeHead, global_init_function, is_effect_default,
+    FreeFunctionName, LocalMethodName, Receiver, TypeHead, global_init_function,
+    is_effect_default,
     is_type_bridge,
 };
 use crate::nir_package::NirPackage;
@@ -31,8 +32,11 @@ fn enabled() -> bool {
 
 /// The identity `nir::FunctionRef::function_id` keys on. A mangled instance
 /// carries its type arguments in `name`, so module and name alone settle it.
-pub(crate) fn function_key(func: &TirFunction) -> FunctionId {
-    FunctionId::free(&func.module_source, &func.name)
+/// Every TIR function is keyed so, and a [`crate::name::FunctionId`] is over
+/// four times the size: a map of thousands of them spends its time copying keys
+/// as it grows.
+pub(crate) fn function_key(func: &TirFunction) -> FreeFunctionName {
+    FreeFunctionName::from_module_source(&func.module_source, &func.name)
 }
 
 /// The traits `lower` dispatches to from a node that names no callee — a match
@@ -202,20 +206,20 @@ pub(crate) fn expr_types(body: &TirBlock) -> Vec<TypeId> {
 /// What [`reachable`] found, against the population it walked.
 pub(crate) struct Reached {
     /// Every function present at TIR, and how many of them `lower` translates.
-    present: IndexSet<FunctionId>,
+    present: IndexSet<FreeFunctionName>,
     bodied: usize,
-    reached: IndexSet<FunctionId>,
+    reached: IndexSet<FreeFunctionName>,
     /// Every callee any TIR body names, reached or not.
-    named: IndexSet<FunctionId>,
+    named: IndexSet<FreeFunctionName>,
 }
 
 /// Every function the program reaches from its roots. Walks only the bodies it
 /// reaches, which is the work [`prune`] saves.
-fn reach(flat: &FlatPackage) -> IndexSet<FunctionId> {
+fn reach(flat: &FlatPackage) -> IndexSet<FreeFunctionName> {
     let roots = Roots::new(flat);
     let type_table = flat.type_table.borrow();
-    let mut bodies: IndexMap<FunctionId, &Rc<RefCell<TirFunction>>> = IndexMap::default();
-    let mut work: Vec<FunctionId> = Vec::new();
+    let mut bodies: IndexMap<FreeFunctionName, &Rc<RefCell<TirFunction>>> = IndexMap::default();
+    let mut work: Vec<FreeFunctionName> = Vec::new();
     for func_rc in &flat.functions {
         let func = func_rc.borrow();
         let key = function_key(&func);
@@ -224,7 +228,7 @@ fn reach(flat: &FlatPackage) -> IndexSet<FunctionId> {
         }
         bodies.insert(key, func_rc);
     }
-    let mut reached: IndexSet<FunctionId> = IndexSet::default();
+    let mut reached: IndexSet<FreeFunctionName> = IndexSet::default();
     while let Some(key) = work.pop() {
         if !reached.insert(key.clone()) {
             continue;
@@ -241,8 +245,8 @@ fn reach(flat: &FlatPackage) -> IndexSet<FunctionId> {
 
 /// [`reach`], against the population it walked, for [`audit`] to report.
 fn reachable(flat: &FlatPackage) -> Reached {
-    let mut present: IndexSet<FunctionId> = IndexSet::default();
-    let mut named: IndexSet<FunctionId> = IndexSet::default();
+    let mut present: IndexSet<FreeFunctionName> = IndexSet::default();
+    let mut named: IndexSet<FreeFunctionName> = IndexSet::default();
     let mut bodied = 0;
     let type_table = flat.type_table.borrow();
     for func_rc in &flat.functions {
@@ -268,21 +272,22 @@ pub(crate) fn audit(found: Option<&Reached>, package: &NirPackage) {
         return;
     };
     // `dce` marks rather than removes, so the live set is what it left bodied.
-    let live: Vec<FunctionId> = package
+    let live: Vec<FreeFunctionName> = package
         .functions
         .iter()
         .filter_map(|func_rc| {
             let func = func_rc.borrow();
-            (!func.is_dead).then(|| FunctionId::free(&func.module_source, &func.name))
+            (!func.is_dead)
+                .then(|| FreeFunctionName::from_module_source(&func.module_source, &func.name))
         })
         .collect();
-    let mut unreached: Vec<FunctionId> = live
+    let mut unreached: Vec<FreeFunctionName> = live
         .iter()
         .filter(|name| found.present.contains(*name) && !found.reached.contains(*name))
         .cloned()
         .collect();
     unreached.sort_by_cached_key(ToString::to_string);
-    let (chained, minted): (Vec<&FunctionId>, Vec<&FunctionId>) = unreached
+    let (chained, minted): (Vec<&FreeFunctionName>, Vec<&FreeFunctionName>) = unreached
         .iter()
         .partition(|name| found.named.contains(*name));
     compiler_trace!(
@@ -332,7 +337,7 @@ fn prune(flat: &mut FlatPackage) {
         let key = function_key(&func_rc.borrow());
         let keep = reached.contains(&key);
         if !keep {
-            pruned.insert(key);
+            pruned.insert(key.into());
         }
         keep
     });
@@ -345,7 +350,7 @@ fn prune(flat: &mut FlatPackage) {
 
 /// A function a body names, and the declaration it selected.
 pub(crate) struct Callee {
-    pub key: FunctionId,
+    pub key: FreeFunctionName,
     pub template: Option<TemplateId>,
 }
 
@@ -376,7 +381,7 @@ impl<'a> Callees<'a> {
 
     fn push(&mut self, module_source: &ModuleSource, name: &str, template: Option<&TemplateId>) {
         self.callees.push(Callee {
-            key: FunctionId::free(module_source, name),
+            key: FreeFunctionName::from_module_source(module_source, name),
             template: template.cloned(),
         });
     }

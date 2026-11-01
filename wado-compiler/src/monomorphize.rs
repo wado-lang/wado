@@ -123,15 +123,15 @@ impl Unrewritten {
 /// takes it out, to be scanned like any reached function.
 #[derive(Default)]
 pub(crate) struct Pool {
-    by_key: IndexMap<FunctionId, Rc<RefCell<TirFunction>>>,
-    by_template: IndexMap<TemplateId, FunctionId>,
+    by_key: IndexMap<FreeFunctionName, Rc<RefCell<TirFunction>>>,
+    by_template: IndexMap<TemplateId, FreeFunctionName>,
     /// What waits on a type no scanned body has held a value of yet.
-    waiting: IndexMap<TypeHead, Vec<FunctionId>>,
+    waiting: IndexMap<TypeHead, Vec<FreeFunctionName>>,
     held: IndexSet<TypeKey>,
 }
 
 impl Pool {
-    fn insert(&mut self, func_rc: Rc<RefCell<TirFunction>>) -> FunctionId {
+    fn insert(&mut self, func_rc: Rc<RefCell<TirFunction>>) -> FreeFunctionName {
         let func = func_rc.borrow();
         let key = function_key(&func);
         if let Some(template) = func.template_id() {
@@ -258,7 +258,7 @@ impl Monomorphization {
             pool.len(),
             pool.len() + flat.functions.len()
         );
-        flat.pruned.extend(pool.into_keys());
+        flat.pruned.extend(pool.into_keys().map(FunctionId::from));
     }
 
     /// The error refusing a template whose instances never end, with the
@@ -573,7 +573,7 @@ impl Monomorphizer {
 
         // Phase 7.25: leave in the pool what no root is, for a reached body
         // naming it to take out.
-        let mut declared_order: IndexMap<FunctionId, usize> = IndexMap::default();
+        let mut declared_order: IndexMap<FreeFunctionName, usize> = IndexMap::default();
         if let Some(roots) = roots {
             for func_rc in std::mem::take(&mut module.functions) {
                 declared_order.insert(function_key(&func_rc.borrow()), declared_order.len());
