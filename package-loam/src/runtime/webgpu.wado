@@ -1101,21 +1101,38 @@ impl WebGpuBackend {
         op: &Expr,
         reduced: bool,
     ) -> Placed<f32, Axes> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
-        let rows = op.folds_rows();
-        let computed = if rows {
-            self.row_kernel(operands, extents, op, 1, reduced);
-        } else {
-            self.elementwise(operands, extents, op);
-        };
-        if let Some(out) = computed {
+        if op.folds_rows() {
+            return self.rows_over::<Axes, Axes>(operands, extents, op, 1, reduced);
+        }
+        if let Some(out) = self.elementwise(operands, extents, op) {
             return Placed::Device(out);
         }
         let held = self.held(operands);
-        let reads = self.cpu_reads::<Axes>(&held, operands);
-        if rows {
-            return Placed::Host(fused_rows::<Axes, Axes>(&reads, op, 1, reduced, extents));
+        return Placed::Host(fused(&self.cpu_reads::<Axes>(&held, operands), op, extents));
+    }
+
+    /// `op` over `operands` row by row of `extents`, a row being its last
+    /// `row_axes` axes, writing one value a row where `reduced`: on the device
+    /// where they fit a dispatch and on the CPU otherwise.
+    fn rows_over<In, Out>(
+        &mut self,
+        operands: &List<DeviceTensor>,
+        extents: List<i32>,
+        op: &Expr,
+        row_axes: i32,
+        reduced: bool,
+    ) -> Placed<f32, Out> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
+        if let Some(out) = self.row_kernel(operands, extents, op, row_axes, reduced) {
+            return Placed::Device(out);
         }
-        return Placed::Host(fused(&reads, op, extents));
+        let held = self.held(operands);
+        return Placed::Host(fused_rows::<In, Out>(
+            &self.cpu_reads::<In>(&held, operands),
+            op,
+            row_axes,
+            reduced,
+            extents,
+        ));
     }
 
     /// Each operand's elements on the host, for a kernel the device cannot run.
@@ -1875,11 +1892,7 @@ impl Backend for WebGpuBackend {
         reduced: bool,
     ) -> Placed<f32, Out> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
         let all = operand_views(&operands);
-        if let Some(out) = self.row_kernel(&all, broadcast_all(&all), op, row_axes, reduced) {
-            return Placed::Device(out);
-        }
-        let held = self.held(&all);
-        return Placed::Host(self.cpu.rows::<In, Out>(self.cpu_reads::<In>(&held, &all), op, row_axes, reduced));
+        return self.rows_over::<In, Out>(&all, broadcast_all(&all), op, row_axes, reduced);
     }
 
     fn cast<A: Element, B: Element, Axes>(

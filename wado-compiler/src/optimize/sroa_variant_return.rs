@@ -1068,7 +1068,6 @@ fn compute_layout(project: &NirPackage, variant_type: TypeId) -> Option<Layout> 
     })
 }
 
-
 /// The `{Unit, Payload(GC ref)}` shape `wir_optimize::nullable_ref` erases.
 fn is_nullable_ref_shape(payloads: &[TypeId], project: &NirPackage) -> bool {
     if payloads.len() != 2 {

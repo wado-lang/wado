@@ -13,10 +13,10 @@ use std::rc::Rc;
 use crate::ast::cm_function_path;
 use crate::builtin_registry::BuiltinRegistry;
 use crate::codegen_flags::CodegenFlags;
-use crate::defs::DefId;
 use crate::component_model::{
     CmFunctionInfo, CmInterfaceInfo, CmInterfaceRegistry, ResKind, parse_resource_func,
 };
+use crate::defs::DefId;
 use crate::elaborator::trait_env::TraitEnv;
 use crate::hashmap;
 use crate::hashmap::{IndexMap, IndexSet};
@@ -916,9 +916,7 @@ impl NirPackage {
 
     /// The variant `def` declares, while the package holds it.
     pub fn find_variant(&self, def: DefId) -> Option<&NirVariantDecl> {
-        self.variant_index
-            .get(&def)
-            .map(|&idx| &self.variants[idx])
+        self.variant_index.get(&def).map(|&idx| &self.variants[idx])
     }
 
     /// Each case of the variant `def` at `type_args`: its name, and its
