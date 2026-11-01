@@ -499,21 +499,38 @@ impl<affine G: Graph> Programs<G> {
 pub fn run<affine G: Graph>(g: &mut G, recorded: &Recorded, arguments: &List<Any<G>>) -> List<Any<G>> with _
     contract arguments.len() == recorded.parameters
 {
-    let mut state = Run::<G> {
-        values: HashMap::new(),
-        parts: HashMap::new(),
-    };
-    return state.region(g, recorded, &recorded.body, arguments);
+    return Run::<G>::new().region(g, recorded, &recorded.body, arguments);
+}
+
+/// The value of each node of `recorded` that reads no argument, computed on
+/// `Cpu`: what a program computes once, when it is compiled.
+pub fn constants(recorded: &Recorded) -> HashMap<i32, Any<Cpu>> {
+    let mut cpu = Cpu {};
+    let mut state = Run::<Cpu>::new();
+    for let [id, node] of recorded.nodes.into_iter().enumerate() {
+        let reads_none = match node.op {
+            Parameter(_) | Case(_) | Yield | Attention(_) | Part(_) => false,
+            _ => node.operands.into_iter().all(|o| state.values.contains_key(o)),
+        };
+        if reads_none {
+            state.values[id] = state.computed(&mut cpu, id, &node, &[]);
+        }
+    }
+    return state.values;
 }
 
 /// The values a run has computed, each by its node's id.
-struct Run<affine G: Graph> {
-    values: HashMap<i32, Any<G>>,
+internal struct Run<affine G: Graph> {
+    internal values: HashMap<i32, Any<G>>,
     /// Each attention node's presents, which its `Part`s read.
     parts: HashMap<i32, List<Any<G>>>,
 }
 
 impl<affine G: Graph> Run<G> {
+    internal fn new() -> Run<G> {
+        return Run { values: HashMap::new(), parts: HashMap::new() };
+    }
+
     /// Runs `region`'s nodes, and returns what it yields.
     fn region(
         &mut self,
@@ -552,7 +569,7 @@ impl<affine G: Graph> Run<G> {
         return f32_of::<G, Axes>(g, &self.operand(node, i));
     }
 
-    fn computed(&mut self, g: &mut G, id: i32, node: &RecordedNode, arguments: &List<Any<G>>) -> Any<G> with _ {
+    internal fn computed(&mut self, g: &mut G, id: i32, node: &RecordedNode, arguments: &List<Any<G>>) -> Any<G> with _ {
         let extents = node.extents;
         return match node.op {
             Parameter(i) => arguments[i],
@@ -730,7 +747,7 @@ fn i64s<affine G: Holds>(a: &Any<G>) -> G::Tensor<i64, Untyped> {
     return t;
 }
 
-fn bools<affine G: Holds>(a: &Any<G>) -> G::Tensor<bool, Untyped> {
+internal fn bools<affine G: Holds>(a: &Any<G>) -> G::Tensor<bool, Untyped> {
     let Bool(t) = *a else {
         unreachable();
     };

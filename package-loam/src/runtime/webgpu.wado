@@ -99,7 +99,7 @@ pub variant Placed<E, Axes> {
 /// An operand of a fused or row kernel whose output has the axes `Axes`: a
 /// view under its own extents, aligned with the output's from the end.
 pub struct PlacedRead<Axes> {
-    view: DeviceTensor,
+    internal view: DeviceTensor,
 }
 
 /// A buffer the backend owns. A struct, so a list hands one out by reference,
@@ -1090,6 +1090,34 @@ impl WebGpuBackend {
         }
         let held = self.held(operands);
         return Placed::Host(self.cpu.fused(self.cpu_reads::<Axes>(&held, operands), op));
+    }
+
+    /// `op` over `operands` at each element of `extents`, or row by row of its
+    /// last axis where it folds one, writing one value a row where `reduced`:
+    /// on the device where they fit a dispatch and on the CPU otherwise.
+    internal fn grouped<Axes>(
+        &mut self,
+        operands: &List<DeviceTensor>,
+        extents: List<i32>,
+        op: &Expr,
+        reduced: bool,
+    ) -> Placed<f32, Axes> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
+        let rows = op.folds_rows();
+        let computed = if rows {
+            self.row_kernel(operands, extents, op, 1, reduced);
+        } else {
+            self.elementwise(operands, extents, op);
+        };
+        if let Some(out) = computed {
+            return Placed::Device(out);
+        }
+        assert broadcast_all(operands) == extents, "the CPU's kernels iterate their operands' extents";
+        let held = self.held(operands);
+        let reads = self.cpu_reads::<Axes>(&held, operands);
+        if rows {
+            return Placed::Host(self.cpu.rows::<Axes, Axes>(reads, op, 1, reduced));
+        }
+        return Placed::Host(self.cpu.fused(reads, op));
     }
 
     /// Each operand's elements on the host, for a kernel the device cannot run.

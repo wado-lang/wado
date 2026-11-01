@@ -1,0 +1,135 @@
+use { Binary, DotDims, Graph, Unary } from "./hlo.wado";
+use { Plan, planned, splats_of } from "./fusion.wado";
+use { Recorded, Recorder, Untyped, Value, constants } from "./recorded.wado";
+use { Holds, Tensor } from "./tensor.wado";
+
+fn plan_of(recorded: &Recorded) -> Plan {
+    return planned(recorded, &splats_of(&constants(recorded)));
+}
+
+/// The launches of `plan` as `node 3` and `kernel 7` say them.
+fn spelled(plan: &Plan) -> List<String> {
+    return plan.launches.into_iter().map(|l| match l {
+        Node(id) => `node ${id}`,
+        Kernel(k) => `kernel ${k.root}`,
+        Case([id, _, _]) => `case ${id}`,
+    }).collect();
+}
+
+/// An RMS normalization of `x` along its last axis, scaled by `w`, as the
+/// generator records one from ONNX's `SimplifiedLayerNormalization`.
+fn rms_norm(r: &mut Recorder, x: &Value<f32, Untyped>, w: &Value<f32, Untyped>) -> Value<f32, Untyped> {
+    let squared = r.binary(Binary::Multiply, x, x);
+    let sum = r.reduce::<Untyped, Untyped>(&squared, Binary::Add, 0.0, [2]);
+    let two = r.upload(&Tensor::<f32, []> { data: [2.0], extents: [] });
+    let count = r.broadcast_in_dim::<f32, [], Untyped>(&two, [1, 4], []);
+    let mean = r.binary(Binary::Divide, &sum, &count);
+    let kept = r.reshape::<f32, Untyped, Untyped>(&mean, [1, 4, 1]);
+    let small = r.upload(&Tensor::<f32, []> { data: [0.000001], extents: [] });
+    let eps = r.broadcast_in_dim::<f32, [], Untyped>(&small, [1, 4, 1], []);
+    let root = r.unary(Unary::Sqrt, &r.binary(Binary::Add, &kept, &eps));
+    let spread = r.broadcast_in_dim::<f32, Untyped, Untyped>(&root, [1, 4, 2], [0, 1, 2]);
+    let normal = r.binary(Binary::Divide, x, &spread);
+    let scale = r.broadcast_in_dim::<f32, Untyped, Untyped>(w, [1, 4, 2], [2]);
+    return r.binary(Binary::Multiply, &normal, &scale);
+}
+
+test "a normalization is one row kernel, its constants folded in and its weight's broadcast a view" {
+    let mut r = Recorder::new();
+    let x = r.parameter::<f32, Untyped>([1, 4, 2]);
+    let w = r.parameter::<f32, Untyped>([2]);
+    let y = rms_norm(&mut r, &x, &w);
+    let recorded = r.finished([y.id]);
+    let plan = plan_of(&recorded);
+    let scale = recorded.nodes[y.id].operands[1];
+    assert spelled(&plan) == [`node ${x.id}`, `node ${w.id}`, `node ${scale}`, `kernel ${y.id}`] as List<String>;
+    let Kernel(k) = plan.launches[3] else {
+        unreachable();
+    };
+    assert k.op.folds_rows() && !k.reduced && k.extents == [1, 4, 2] as List<i32>;
+    assert k.operands.into_iter().map(|o| o.node).collect() == [x.id, scale] as List<i32>;
+}
+
+test "a value read outside the kernel is written by a kernel of its own" {
+    for let returned of [false, true] as List<bool> {
+        let mut r = Recorder::new();
+        let x = r.parameter::<f32, Untyped>([3, 4]);
+        let gate = r.unary(Unary::Logistic, &x);
+        let y = r.binary(Binary::Multiply, &x, &gate);
+        let recorded = r.finished(if returned { [y.id, gate.id] } else { [y.id] });
+        let kernels = plan_of(&recorded).launches.into_iter().filter(|l| l matches { Kernel(_) }).count();
+        assert kernels == if returned { 2 } else { 1 };
+    }
+}
+
+test "a fold whose result the kernel reads per row writes one value a row" {
+    let mut r = Recorder::new();
+    let x = r.parameter::<f32, Untyped>([3, 5]);
+    let largest = r.reduce::<Untyped, Untyped>(&x, Binary::Maximum, f32::NEG_INFINITY, [1]);
+    let recorded = r.finished([largest.id]);
+    let plan = plan_of(&recorded);
+    assert spelled(&plan) == [`node ${x.id}`, `kernel ${largest.id}`] as List<String>;
+    let Kernel(k) = plan.launches[1] else {
+        unreachable();
+    };
+    assert k.reduced && k.extents == [3, 5] as List<i32>;
+}
+
+test "a broadcast along a row's axis is a view the kernel reads, not a step of it" {
+    let mut r = Recorder::new();
+    let x = r.parameter::<f32, Untyped>([3, 2]);
+    let column = r.reduce::<Untyped, Untyped>(&x, Binary::Add, 0.0, [0]);
+    let spread = r.broadcast_in_dim::<f32, Untyped, Untyped>(&column, [3, 2], [1]);
+    let y = r.binary(Binary::Subtract, &x, &spread);
+    let recorded = r.finished([y.id]);
+    // The column's sum folds the first axis, which no row kernel does.
+    assert spelled(&plan_of(&recorded)) == [`node ${x.id}`, `node ${column.id}`, `node ${spread.id}`, `kernel ${y.id}`] as List<String>;
+}
+
+test "a gated layer is one product with the gate in its epilogue, the other product written" {
+    let mut r = Recorder::new();
+    let x = r.parameter::<f32, Untyped>([1, 4, 2]);
+    let gate_w = r.parameter::<f32, Untyped>([2, 8]);
+    let up_w = r.parameter::<f32, Untyped>([2, 8]);
+    let dims = DotDims { lhs_batch: [], rhs_batch: [], lhs_contracting: [2], rhs_contracting: [0] };
+    let gate = r.dot_general::<Untyped, Untyped, Untyped>(&x, &gate_w, &dims);
+    let up = r.dot_general::<Untyped, Untyped, Untyped>(&x, &up_w, &dims);
+    let silu = r.binary(Binary::Multiply, &gate, &r.unary(Unary::Logistic, &gate));
+    let y = r.binary(Binary::Multiply, &silu, &up);
+    let recorded = r.finished([y.id]);
+    let plan = plan_of(&recorded);
+    assert spelled(&plan) == [`node ${x.id}`, `node ${gate_w.id}`, `node ${up_w.id}`, `kernel ${gate.id}`, `kernel ${y.id}`] as List<String>;
+    let Kernel(k) = plan.launches[4] else {
+        unreachable();
+    };
+    assert k.product == Option::Some(up.id);
+    assert k.operands.into_iter().map(|o| o.node).collect() == [gate.id] as List<i32>;
+}
+
+test "a value the product reads is not computed in its epilogue" {
+    let mut r = Recorder::new();
+    let x = r.parameter::<f32, Untyped>([3, 2]);
+    let w = r.parameter::<f32, Untyped>([2, 2]);
+    let dims = DotDims { lhs_batch: [], rhs_batch: [], lhs_contracting: [1], rhs_contracting: [0] };
+    let doubled = r.binary(Binary::Add, &x, &x);
+    let product = r.dot_general::<Untyped, Untyped, Untyped>(&doubled, &w, &dims);
+    let y = r.binary(Binary::Add, &product, &doubled);
+    let recorded = r.finished([y.id]);
+    assert spelled(&plan_of(&recorded)) == [`node ${x.id}`, `node ${w.id}`, `kernel ${doubled.id}`, `kernel ${y.id}`] as List<String>;
+}
+
+test "only a node that reads an argument is launched" {
+    let mut r = Recorder::new();
+    let x = r.parameter::<f32, Untyped>([2]);
+    let one = r.upload(&Tensor::<f32, Untyped> { data: [1.0, 1.0], extents: [2] });
+    let three = r.binary(Binary::Add, &one, &r.binary(Binary::Add, &one, &one));
+    let y = r.binary(Binary::Multiply, &x, &three);
+    let recorded = r.finished([y.id]);
+    let plan = plan_of(&recorded);
+    assert spelled(&plan) == [`node ${x.id}`, `kernel ${y.id}`] as List<String>;
+    let Kernel(k) = plan.launches[1] else {
+        unreachable();
+    };
+    assert k.operands.len() == 1;
+    assert splats_of(&constants(&recorded))[three.id] == Option::Some(3.0);
+}

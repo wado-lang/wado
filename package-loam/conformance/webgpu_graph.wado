@@ -88,7 +88,11 @@ export fn run() with (Stdout, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuC
         [5, 2],
     ] as List<[i32, i32]> {
         let input = gated_input(positions);
+        let before = gpu.dispatches();
         let on_device = gated::compute(&mut gpu, &input, &mut on_gpu);
+        // The normalization, the gate's product, the value's with the gate in
+        // its epilogue, and the product down.
+        assert gpu.dispatches() - before == 4, "one dispatch for each kernel the plan forms";
         let reference = gated::compute(cpu, &input, &mut on_cpu);
         assert on_gpu.programs.len() == programs, "one program per shape class";
         println(`compiled gated ${positions} ${deviation(&on_device.data, &reference.data)}`);
