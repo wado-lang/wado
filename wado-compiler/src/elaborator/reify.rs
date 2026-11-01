@@ -5638,10 +5638,14 @@ impl<'a> Reify<'a> {
             )
         };
 
+        // A failure is no trap, so its rarity is a guess, which the profile
+        // overrides.
+        let failure_marker = (!self.cold.is_some_and(|cold| cold.is_warm_try(qm.id)))
+            .then(|| cold_path_stmt(qm.span));
         let mut desugared = if is_option {
-            self.reify_question_mark_option(inner, ctx, qm.span)
+            self.reify_question_mark_option(inner, ctx, qm.span, failure_marker)
         } else if is_result {
-            self.reify_question_mark_result(inner, ctx, qm.span, qm.id)
+            self.reify_question_mark_result(inner, ctx, qm.span, qm.id, failure_marker)
         } else {
             // Annotate already diagnosed; produce a Unit-typed
             // placeholder of `ERROR` so downstream phases see the
@@ -5666,6 +5670,7 @@ impl<'a> Reify<'a> {
         inner: TirExpr,
         ctx: &mut FunctionContext,
         span: Span,
+        failure_marker: Option<TirStmt>,
     ) -> TirExpr {
         let inner_type = inner.type_id;
         let (some_type, some_name, some_index, none_name, none_index) = {
@@ -5724,10 +5729,9 @@ impl<'a> Reify<'a> {
             guard: None,
             body: TirExpr::new(
                 TirExprKind::Block(TirBlock::new(
-                    vec![
-                        // A failure is no trap, so its rarity is a guess.
-                        cold_path_stmt(span),
-                        TirStmt::new(
+                    failure_marker
+                        .into_iter()
+                        .chain([TirStmt::new(
                             TirStmtKind::Return {
                                 // `Option<U>` and the operand's `Option<T>`
                                 // are distinct GC types, so the propagated
@@ -5735,8 +5739,8 @@ impl<'a> Reify<'a> {
                                 value: Some(TirExpr::new(TirExprKind::Null, ctx.return_type, span)),
                             },
                             span,
-                        ),
-                    ],
+                        )])
+                        .collect(),
                     span,
                 )),
                 TypeTable::NEVER,
@@ -5764,6 +5768,7 @@ impl<'a> Reify<'a> {
         ctx: &mut FunctionContext,
         span: Span,
         qm_id: AstId,
+        failure_marker: Option<TirStmt>,
     ) -> TirExpr {
         let inner_type = inner.type_id;
         let return_type = ctx.return_type;
@@ -5858,15 +5863,15 @@ impl<'a> Reify<'a> {
             guard: None,
             body: TirExpr::new(
                 TirExprKind::Block(TirBlock::new(
-                    vec![
-                        cold_path_stmt(span),
-                        TirStmt::new(
+                    failure_marker
+                        .into_iter()
+                        .chain([TirStmt::new(
                             TirStmtKind::Return {
                                 value: Some(err_variant),
                             },
                             span,
-                        ),
-                    ],
+                        )])
+                        .collect(),
                     span,
                 )),
                 TypeTable::NEVER,

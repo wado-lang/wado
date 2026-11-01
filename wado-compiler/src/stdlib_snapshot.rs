@@ -27,7 +27,7 @@ use crate::hashmap::{IndexMap, IndexSet};
 use crate::loader::{ModuleLoader, cached_stdlib_module};
 use crate::logger::Logger;
 use crate::module_source::ModuleSource;
-use crate::pgo::Profile;
+use crate::pgo::{Applied, Profile, Summary};
 use crate::resolve::Resolutions;
 use crate::semantics::{Semantics, semantics_with_logger};
 use crate::stdlib;
@@ -61,8 +61,9 @@ pub(crate) fn is_building() -> bool {
 }
 
 /// What a profiled snapshot was built for: the coverage it measures the
-/// stdlib with, and the stdlib part of the profile it applied.
-type ProfiledKey = (Option<CoverageScope>, Profile);
+/// stdlib with, the stdlib part of the profile it applied, and the summary of
+/// the whole profile.
+type ProfiledKey = (Option<CoverageScope>, Profile, Summary);
 
 /// Return the current thread's stdlib [`Semantics`] snapshot for a compile
 /// measuring `coverage` and applying `profile`, building it on first call by
@@ -75,16 +76,16 @@ type ProfiledKey = (Option<CoverageScope>, Profile);
 /// in the shipped stdlib, which is not recoverable.
 pub(crate) fn get_or_init_snapshot(
     coverage: Option<CoverageScope>,
-    profile: Option<&Profile>,
+    profile: Option<Applied<'_>>,
 ) -> Option<Rc<Semantics>> {
     if is_building() {
         return None;
     }
     let probed = coverage.filter(|scope| scope.stdlib);
     let key = profile
-        .map(Profile::stdlib_part)
-        .filter(|part| !part.is_empty())
-        .map(|part| (probed, part));
+        .map(|applied| (applied.profile.stdlib_part(), applied.summary))
+        .filter(|(part, _)| !part.is_empty())
+        .map(|(part, summary)| (probed, part, summary));
     if let Some(key) = key {
         return Some(PROFILED_SNAPSHOT.with(|cell| {
             if let Some((built, snap)) = &*cell.borrow()
@@ -92,7 +93,11 @@ pub(crate) fn get_or_init_snapshot(
             {
                 return snap.clone();
             }
-            let snap = Rc::new(build_guarded(probed, Some(&key.1)));
+            let applied = Applied {
+                profile: &key.1,
+                summary: key.2,
+            };
+            let snap = Rc::new(build_guarded(probed, Some(applied)));
             *cell.borrow_mut() = Some((key, snap.clone()));
             snap
         }));
@@ -109,7 +114,7 @@ pub(crate) fn get_or_init_snapshot(
 }
 
 /// [`build_snapshot`] with [`BUILDING`] set while it runs.
-fn build_guarded(coverage: Option<CoverageScope>, profile: Option<&Profile>) -> Semantics {
+fn build_guarded(coverage: Option<CoverageScope>, profile: Option<Applied<'_>>) -> Semantics {
     // Drop guard so the flag is cleared even if `build_snapshot` panics —
     // otherwise an upstream `catch_unwind` (test harness, fuzzer) would leave
     // `BUILDING` stuck at `true` for the rest of the thread's lifetime,
@@ -161,7 +166,7 @@ pub fn prelude_names() -> Vec<(String, DefKind)> {
 /// subset every real compile loads. Under `coverage`, the stdlib takes the
 /// probes a compile measuring it would, and under `profile` the cold markers a
 /// compile applying it would.
-fn build_snapshot(coverage: Option<CoverageScope>, profile: Option<&Profile>) -> Semantics {
+fn build_snapshot(coverage: Option<CoverageScope>, profile: Option<Applied<'_>>) -> Semantics {
     let host = SnapshotHost;
     let logger = Logger::new(&host, LogLevel::Error);
 

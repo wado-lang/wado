@@ -79,6 +79,98 @@ impl Profile {
     pub(crate) fn is_empty(&self) -> bool {
         self.modules.is_empty()
     }
+
+    /// This profile read against its own summary under `cutoffs`.
+    #[must_use]
+    pub fn applied(&self, cutoffs: Cutoffs) -> Applied<'_> {
+        Applied {
+            profile: self,
+            summary: Summary::of(self, cutoffs),
+        }
+    }
+
+    fn counts(&self) -> impl Iterator<Item = i64> + '_ {
+        self.modules
+            .values()
+            .flatten()
+            .flat_map(|function| function.counts.values().copied())
+    }
+}
+
+/// The shares of all runs, in parts per million, that place the hot and the
+/// cold line. The defaults are LLVM's for its options of the same names.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Cutoffs {
+    pub hot: u32,
+    pub cold: u32,
+}
+
+impl Cutoffs {
+    pub const PER_MILLION: u32 = 1_000_000;
+}
+
+impl Default for Cutoffs {
+    fn default() -> Self {
+        Self {
+            hot: 990_000,
+            cold: 999_999,
+        }
+    }
+}
+
+/// Where a profile's counts turn hot and cold. With every count sorted from
+/// the largest down, a line is the smallest count still inside its cutoff's
+/// share of all runs.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct Summary {
+    hot: i64,
+    cold: i64,
+}
+
+impl Summary {
+    fn of(profile: &Profile, cutoffs: Cutoffs) -> Self {
+        assert!(
+            cutoffs.hot <= Cutoffs::PER_MILLION && cutoffs.cold <= Cutoffs::PER_MILLION,
+            "a cutoff is a share of all runs: {cutoffs:?}"
+        );
+        let mut counts: Vec<i64> = profile.counts().collect();
+        counts.sort_unstable_by(|a, b| b.cmp(a));
+        let total: u128 = counts.iter().map(|&count| count as u128).sum();
+        let line = |cutoff: u32| {
+            let share = (total * u128::from(cutoff)).div_ceil(u128::from(Cutoffs::PER_MILLION));
+            let mut runs = 0;
+            counts
+                .iter()
+                .copied()
+                .find(|&count| {
+                    runs += count as u128;
+                    runs >= share
+                })
+                .unwrap_or(i64::MAX)
+        };
+        Self {
+            hot: line(cutoffs.hot),
+            cold: line(cutoffs.cold),
+        }
+    }
+
+    fn is_hot(self, count: i64) -> bool {
+        count >= self.hot
+    }
+
+    /// Hot is asked first, as LLVM's inliner does, so a count on both lines
+    /// is hot.
+    fn is_cold(self, count: i64) -> bool {
+        !self.is_hot(count) && count <= self.cold
+    }
+}
+
+/// A profile a compile applies, with the summary its counts are read against.
+/// The summary is the whole profile's, wherever a part of it is applied.
+#[derive(Debug, Clone, Copy)]
+pub struct Applied<'a> {
+    pub(crate) profile: &'a Profile,
+    pub(crate) summary: Summary,
 }
 
 /// Why a profile's text does not parse, at its 1-based `line`.
@@ -167,6 +259,9 @@ fn parse_count(line: &str) -> Option<(u32, i64)> {
 pub(crate) struct ColdMap {
     /// The sites reify puts a cold marker at.
     sites: IndexSet<(ProbeSite, AstId)>,
+    /// The `?` nodes whose failure path reify leaves unmarked: the profile ran
+    /// it more often than its summary calls cold.
+    warm_tries: IndexSet<AstId>,
     /// The modules applied, which a compile seeded with this map leaves alone.
     sources: IndexSet<ModuleSource>,
     /// Each region marked, as `module:line:column kind`.
@@ -181,7 +276,7 @@ impl ColdMap {
     pub(crate) fn build<'a>(
         seed: Option<&ColdMap>,
         modules: impl IntoIterator<Item = (&'a ModuleSource, &'a ast::Module)>,
-        profile: &Profile,
+        applied: Applied<'_>,
         rt_unreachable_calls: &IndexSet<AstId>,
     ) -> Self {
         let mut map = seed.cloned().unwrap_or_default();
@@ -189,10 +284,14 @@ impl ColdMap {
             if map.sources.contains(source) {
                 continue;
             }
-            let Some(functions) = profile.modules.get(&source.to_string()) else {
+            let Some(functions) = applied.profile.modules.get(&source.to_string()) else {
                 continue;
             };
-            map.apply(plan_module(source, module, rt_unreachable_calls), functions);
+            map.apply(
+                plan_module(source, module, rt_unreachable_calls),
+                functions,
+                applied.summary,
+            );
             map.sources.insert(source.clone());
         }
         map
@@ -201,8 +300,9 @@ impl ColdMap {
     /// Mark each outermost region of `planned` that `functions` recorded no
     /// run of. A function is matched by its name, the `n`th of a name to the
     /// `n`th recorded, and its counts apply only where its hash is the
-    /// recorded one.
-    fn apply(&mut self, planned: PlannedModule, functions: &[ProfiledFunction]) {
+    /// recorded one. A `?`'s marker stays only on a count `summary` calls
+    /// cold.
+    fn apply(&mut self, planned: PlannedModule, functions: &[ProfiledFunction], summary: Summary) {
         let PlannedModule {
             plan,
             sites,
@@ -282,10 +382,10 @@ impl ColdMap {
             ));
         }
         for (marker, span, region) in markers {
-            let Some(runs) = counts[region as usize].filter(|&runs| runs > 0) else {
+            let Some(count) = counts[region as usize].filter(|&runs| runs > 0) else {
                 continue;
             };
-            let runs = match runs {
+            let runs = match count {
                 1 => "once".to_string(),
                 n => format!("{n} times"),
             };
@@ -293,10 +393,19 @@ impl ColdMap {
                 Marker::ColdPath => {
                     format!("`cold_path()` marks a path the profile ran {runs}; the marker stays")
                 }
-                Marker::Try => format!(
-                    "`?` marks its failure path cold, and the profile ran it {runs}; the marker \
-                     stays"
-                ),
+                Marker::Try(_) if summary.is_cold(count) => continue,
+                Marker::Try(id) => {
+                    self.warm_tries.insert(id);
+                    let line = if summary.is_hot(count) {
+                        format!("the hot line is {}", summary.hot)
+                    } else {
+                        format!("the cold line is {}", summary.cold)
+                    };
+                    format!(
+                        "`?` marks its failure path cold, but the profile ran it {runs}, and \
+                         {line}; the marker is dropped"
+                    )
+                }
             };
             self.remarks.push((span, message));
         }
@@ -308,6 +417,12 @@ impl ColdMap {
         self.sites.contains(&(site, id))
     }
 
+    /// Whether reify leaves the failure path of the `?` node `id` unmarked.
+    #[must_use]
+    pub(crate) fn is_warm_try(&self, id: AstId) -> bool {
+        self.warm_tries.contains(&id)
+    }
+
     /// Each region marked, as `module:line:column kind`.
     #[must_use]
     pub(crate) fn regions(&self) -> &[String] {
@@ -315,7 +430,8 @@ impl ColdMap {
     }
 
     /// What applying the profile says about its counts: a function's
-    /// discarded, a marker on a path the profile ran.
+    /// discarded, an author's marker on a path the profile ran, a `?`'s
+    /// marker dropped.
     #[must_use]
     pub(crate) fn remarks(&self) -> &[(Span, String)] {
         &self.remarks
@@ -406,6 +522,30 @@ mod tests {
                 },
             ]
         );
+    }
+
+    fn summary(counts: &[i64], cutoffs: Cutoffs) -> Summary {
+        let mut text = format!("{HEADER}\nmodule a\nfn 00000000000000ab 1 f\n");
+        for (region, count) in counts.iter().enumerate() {
+            let _ = writeln!(text, "{region} {count}");
+        }
+        Summary::of(&parse(&text).expect("it parses"), cutoffs)
+    }
+
+    #[test]
+    fn each_line_is_the_smallest_count_inside_its_share() {
+        let lines = summary(&[600, 300, 60, 30, 10], Cutoffs { hot: 900_000, cold: 990_000 });
+        assert_eq!(lines, Summary { hot: 300, cold: 30 });
+        assert!(lines.is_hot(300) && !lines.is_cold(300));
+        assert!(!lines.is_hot(60) && !lines.is_cold(60));
+        assert!(lines.is_cold(30) && lines.is_cold(10));
+    }
+
+    #[test]
+    fn a_count_on_both_lines_is_hot() {
+        let lines = summary(&[1, 1, 1], Cutoffs::default());
+        assert_eq!(lines, Summary { hot: 1, cold: 1 });
+        assert!(lines.is_hot(1) && !lines.is_cold(1));
     }
 
     #[test]

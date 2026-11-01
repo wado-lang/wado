@@ -1,6 +1,6 @@
-// An author's `cold_path()` on a path the profile ran stays, and a remark
-// names it with the count. So does the cold path a `?` takes on a failure,
-// a guess as the author's is. The workload ran each of them once.
+// An author's `cold_path()` on a path the profile ran once stays, with a
+// remark. A `?`'s failure path ran once too, but in a profile this small both
+// lines are 1, so that count is hot and the `?`'s marker is dropped.
 use { println, Stdout } from "core:cli";
 
 fn parse_digit(c: char) -> Result<i32, String> {
@@ -37,7 +37,7 @@ __DATA__
       },
       {
         "contains": [
-          "pgo_cold_path_conflict.wado:17:18 remark: `?` marks its failure path cold, and the profile ran it once; the marker stays"
+          "pgo_cold_path_conflict.wado:17:18 remark: `?` marks its failure path cold, but the profile ran it once, and the hot line is 1; the marker is dropped"
         ],
         "count": 1
       }

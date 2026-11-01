@@ -421,10 +421,6 @@ profile's count for that path is not cold, the marker is dropped, and the
 compile names it and the count at `--log-level info`. Where it is cold, the
 marker stays, and the compile says nothing.
 
-> Not yet implemented: a `?`'s marker is never dropped. Where the profile ran
-> its failure path at all, the marker stays and the compile names it and the
-> count.
-
 Rationale: [WEP: Profile-Guided Optimization](./wep-2026-10-25-profile-guided-optimization.md).
 
 ## Example Test File

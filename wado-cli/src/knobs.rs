@@ -82,6 +82,8 @@ pub enum CompileKnobOpt {
     OptIterations,
     Specializations,
     OptThreads,
+    ProfileSummaryCutoffHot,
+    ProfileSummaryCutoffCold,
     LogLevel,
     Allocator,
     Feature,
@@ -131,6 +133,18 @@ impl CompileKnobOpt {
                 short: None,
                 value: Some("<n>"),
                 desc: "Threads the optimizer runs on; the output does not depend on it\n(default: the available cores, shared among the files compiled\nat once: 1 each under `wado test`)",
+            },
+            Self::ProfileSummaryCutoffHot => OptSpec {
+                long: Some("optimize-profile-summary-cutoff-hot"),
+                short: None,
+                value: Some("<ppm>"),
+                desc: "The share of all runs, in parts per million, whose smallest count\nis the profile's hot line (default: 990000)",
+            },
+            Self::ProfileSummaryCutoffCold => OptSpec {
+                long: Some("optimize-profile-summary-cutoff-cold"),
+                short: None,
+                value: Some("<ppm>"),
+                desc: "The share of all runs, in parts per million, whose smallest count\nis the profile's cold line (default: 999999)",
             },
             Self::LogLevel => OptSpec {
                 long: Some("log-level"),
@@ -290,6 +304,18 @@ impl CompileKnobs {
                 }
                 self.opt_threads = Some(threads as usize);
             }
+            CompileKnobOpt::ProfileSummaryCutoffHot => {
+                self.opt.profile_summary_cutoff_hot = Some(parse_cutoff_arg(
+                    "--optimize-profile-summary-cutoff-hot",
+                    parser,
+                )?);
+            }
+            CompileKnobOpt::ProfileSummaryCutoffCold => {
+                self.opt.profile_summary_cutoff_cold = Some(parse_cutoff_arg(
+                    "--optimize-profile-summary-cutoff-cold",
+                    parser,
+                )?);
+            }
             CompileKnobOpt::LogLevel => self.log_level = args::parse_log_level_arg(parser)?,
             CompileKnobOpt::Allocator => self.allocator = Some(args::require_string(parser)?),
             CompileKnobOpt::Feature => self.codegen_flags.push(args::require_string(parser)?),
@@ -301,6 +327,18 @@ impl CompileKnobs {
         }
         Ok(())
     }
+}
+
+/// Parse a share of all runs in parts per million.
+fn parse_cutoff_arg(opt: &str, parser: &mut Parser) -> Result<u32, CliExit> {
+    let per_million = wado_compiler::pgo::Cutoffs::PER_MILLION;
+    let cutoff = args::parse_u32_arg(opt, parser)?;
+    if cutoff > per_million {
+        return Err(CliExit::error(format!(
+            "{opt} is a share in parts per million, at most {per_million}, got {cutoff}"
+        )));
+    }
+    Ok(cutoff)
 }
 
 /// A knob shared by the subcommands that host a guest (`run` / `serve` /

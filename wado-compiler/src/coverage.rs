@@ -531,8 +531,8 @@ type ForOfBodies = Vec<(AstId, Range<u32>)>;
 pub(crate) enum Marker {
     /// The author's `builtin::cold_path()`.
     ColdPath,
-    /// The one reify puts on the failure path of a `?`.
-    Try,
+    /// The one reify puts on the failure path of the `?` node.
+    Try(AstId),
 }
 
 /// One module planned, and where its regions lie in the source.
@@ -1089,7 +1089,7 @@ impl AstVisitor<'_> for Planner<'_> {
                     Some((Pos::end(t.span), 0)),
                 );
                 self.sites.push((ProbeSite::TryExit, t.id, region));
-                self.markers.push((Marker::Try, t.span, region));
+                self.markers.push((Marker::Try(t.id), t.span, region));
             }
             Expr::Call(call) if is_builtin_call(call, "cold_path") => {
                 if let Some(region) = self.region {

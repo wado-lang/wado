@@ -24,7 +24,7 @@ use crate::component_model::CmInterfaceRegistry;
 use crate::coverage::{CoverageMap, CoverageScope};
 use crate::logger::{Bail, Logger, ModuleDiag};
 use crate::module_source::{ModuleSource, ModuleSourceInterner};
-use crate::pgo::{ColdMap, Profile};
+use crate::pgo::{Applied, ColdMap};
 use crate::symbol::SymbolTable;
 use crate::tir::{TirModule, TypeId};
 use crate::type_table::TypeTable;
@@ -1386,7 +1386,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         snapshot: Option<&Semantics>,
         build_tir: bool,
         coverage: Option<CoverageScope>,
-        profile: Option<&Profile>,
+        profile: Option<Applied<'_>>,
         liveness_scope: &LivenessScope,
     ) -> Result<IndexMap<ModuleSource, TirModule>, Bail> {
         let mut result = IndexMap::default();

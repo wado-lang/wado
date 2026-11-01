@@ -144,6 +144,8 @@ impl Opt {
         CompileKnobOpt::OptIterations,
         CompileKnobOpt::Specializations,
         CompileKnobOpt::OptThreads,
+        CompileKnobOpt::ProfileSummaryCutoffHot,
+        CompileKnobOpt::ProfileSummaryCutoffCold,
         CompileKnobOpt::LogLevel,
         CompileKnobOpt::Allocator,
         CompileKnobOpt::NoCache,

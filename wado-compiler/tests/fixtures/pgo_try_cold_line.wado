@@ -1,0 +1,44 @@
+// A `?` marks its failure path cold. The marker stays while the profile
+// summary calls that path's count cold, and is dropped, with a remark, where
+// it is not. This profile's hot line is 1000000 and its cold line 10.
+use { println, Stdout } from "core:cli";
+
+fn digit(c: char) -> Result<i32, String> {
+    if c < '0' || c > '9' {
+        return Err("not a digit");
+    }
+    return Ok(c as i32 - '0' as i32);
+}
+
+fn rarely(c: char) -> Result<i32, String> {
+    return Ok(digit(c)? * 2);
+}
+
+fn often(c: char) -> Result<i32, String> {
+    return Ok(digit(c)? + 1);
+}
+
+export fn run() with Stdout {
+    println(`${rarely('4').unwrap()} ${often('x').is_err()}`);
+}
+
+__DATA__
+{
+  "profile": "testdata/pgo_try_cold_line.pgo",
+  "cold_regions": [],
+  "remarks": {
+    "O2": [
+      {
+        "contains": [
+          "pgo_try_cold_line.wado:18:15 remark: `?` marks its failure path cold, but the profile ran it 1000 times, and the cold line is 50; the marker is dropped"
+        ],
+        "count": 1
+      },
+      {
+        "contains": [":14:15 remark:"],
+        "count": 0
+      }
+    ]
+  },
+  "stdout": "8 true\n"
+}

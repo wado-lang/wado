@@ -452,6 +452,22 @@ pub struct OptOverrides {
     pub iterations: Option<u32>,
     /// The clones constant-argument specialization may mint over the module.
     pub specializations: Option<usize>,
+    /// The shares of all runs, in parts per million, that place a profile's
+    /// hot and cold lines.
+    pub profile_summary_cutoff_hot: Option<u32>,
+    pub profile_summary_cutoff_cold: Option<u32>,
+}
+
+impl OptOverrides {
+    /// The cutoffs a profile is summarized under.
+    #[must_use]
+    pub fn cutoffs(&self) -> pgo::Cutoffs {
+        let default = pgo::Cutoffs::default();
+        pgo::Cutoffs {
+            hot: self.profile_summary_cutoff_hot.unwrap_or(default.hot),
+            cold: self.profile_summary_cutoff_cold.unwrap_or(default.cold),
+        }
+    }
 }
 
 /// Compilation options for the compiler
@@ -1590,7 +1606,8 @@ fn compile_after_load<H: CompilerHost>(
         options
             .profile
             .as_deref()
-            .filter(|_| codegen_flags.pgo.applies()),
+            .filter(|_| codegen_flags.pgo.applies())
+            .map(|profile| profile.applied(options.opt.cutoffs())),
         &LivenessScope::Compilation,
     );
     if !sem.is_complete() {
@@ -2538,7 +2555,9 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
         &logger,
         true,
         None,
-        profile.filter(|_| parsed_codegen_flags.pgo.applies()),
+        profile
+            .filter(|_| parsed_codegen_flags.pgo.applies())
+            .map(|profile| profile.applied(opt.cutoffs())),
         &LivenessScope::Compilation,
     );
     let symbols = sem.symbols.clone();

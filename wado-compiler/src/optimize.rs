@@ -176,6 +176,9 @@ pub fn optimize(
         inline_growth,
         iterations: opt_iterations,
         specializations,
+        // Read where the profile is applied, in reify.
+        profile_summary_cutoff_hot: _,
+        profile_summary_cutoff_cold: _,
     } = opt;
     let specializations = specializations.unwrap_or(param_spec::MAX_TOTAL_SPECIALIZATIONS);
     let exec = Arc::new(Executor::new(parallelism));

@@ -31,7 +31,7 @@ use crate::logger::Logger;
 use crate::marker::write_out_markers;
 use crate::module_source::{ModuleSource, ModuleSourceInterner, ParseModules};
 use crate::name::resolve_import_with_entry;
-use crate::pgo::{ColdMap, Profile};
+use crate::pgo::{Applied, ColdMap};
 use crate::resolve::Resolutions;
 use crate::stdlib_snapshot::{get_or_init_snapshot, reparsed_snapshot_module, stdlib_sources};
 use crate::symbol::{Symbol, SymbolTable};
@@ -1534,7 +1534,7 @@ pub(crate) fn semantics_with_logger<H: CompilerHost>(
     logger: &Logger<'_, H>,
     build_tir: bool,
     coverage: Option<CoverageScope>,
-    profile: Option<&Profile>,
+    profile: Option<Applied<'_>>,
     liveness_scope: &LivenessScope,
 ) -> Semantics {
     // Before any phase reports: a diagnostic's span names the file it indexes
@@ -1917,7 +1917,7 @@ mod tests {
     fn analyzed(
         source: &str,
         coverage: Option<CoverageScope>,
-        profile: Option<&Profile>,
+        profile: Option<&pgo::Profile>,
     ) -> Semantics {
         let host = InMemoryCompilerHost::new();
         let loaded = block_on(load(
@@ -1933,7 +1933,7 @@ mod tests {
             &Logger::new(&host, LogLevel::default()),
             true,
             coverage,
-            profile,
+            profile.map(|profile| profile.applied(pgo::Cutoffs::default())),
             &LivenessScope::Compilation,
         )
     }
@@ -2095,6 +2095,45 @@ mod tests {
         assert_eq!(markers["run"], [] as [String; 0]);
     }
 
+    /// A `?` keeps its failure path's marker where the profile's count for it
+    /// is cold, and loses it where the count is not.
+    #[test]
+    fn a_profile_drops_the_marker_of_a_warm_try() {
+        let source = "fn half(x: i32) -> Option<i32> { if x % 2 == 0 { return Option::Some(x / 2); } return null; }
+             fn rarely(x: i32) -> Option<i32> { return Option::Some(half(x)? + 1); }
+             fn often(x: i32) -> Option<i32> { return Option::Some(half(x)? + 2); }
+             export fn run() { rarely(2); often(3); }";
+        let plain = analyzed(source, Some(CoverageScope::default()), None);
+        let plan = &plain
+            .coverage
+            .as_ref()
+            .expect("the compile measures")
+            .modules[0];
+        let hash = |name: &str| {
+            plan.functions
+                .iter()
+                .find(|f| f.name == name)
+                .expect("planned")
+                .hash
+        };
+        // Region 1 of each caller is its `?`'s failure path. The hot line is
+        // 1000000 and the cold line 50.
+        let profile = pgo::parse(&format!(
+            "wado-pgo 1\nmodule entry.wado\n\
+             fn {:016x} 1 rarely\n0 1000000\n1 50\n\
+             fn {:016x} 2 often\n0 1000000\n1 1000\n\
+             fn {:016x} 3 half\n0 2000000\n1 1998950\n2 1050\n3 1050\n",
+            hash("rarely"),
+            hash("often"),
+            hash("half"),
+        ))
+        .expect("it parses");
+        let sem = analyzed(source, None, Some(&profile));
+        let markers = markers([&sem.tir_modules[&sem.entry_module_source]]);
+        assert_eq!(markers["rarely"], ["cold_path"]);
+        assert_eq!(markers["often"], [] as [String; 0]);
+    }
+
     /// The snapshot a compile applying a profile to the stdlib seeds from has
     /// the stdlib's markers in place, and the compile reports them as its own.
     #[test]
@@ -2129,7 +2168,8 @@ mod tests {
         .expect("it parses");
 
         let plain = get_or_init_snapshot(None, None).expect("not building");
-        let marked = get_or_init_snapshot(None, Some(&profile)).expect("not building");
+        let applied = profile.applied(pgo::Cutoffs::default());
+        let marked = get_or_init_snapshot(None, Some(applied)).expect("not building");
         let count = |snap: &Semantics| {
             markers(snap.tir_modules.values())
                 .values()
@@ -2138,7 +2178,7 @@ mod tests {
                 .count()
         };
         assert_eq!(count(&marked), count(&plain) + 1);
-        let again = get_or_init_snapshot(None, Some(&profile)).expect("not building");
+        let again = get_or_init_snapshot(None, Some(applied)).expect("not building");
         assert!(std::rc::Rc::ptr_eq(&marked, &again));
 
         let sem = analyzed("export fn run() {}", None, Some(&profile));

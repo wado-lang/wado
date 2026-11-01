@@ -212,16 +212,13 @@ applied, so a profiled compile seeds from the snapshot as a plain one does.
 
 A count alone says little: a million runs is a sliver of one program and most
 of another. So a compile reads each count against a summary of the whole
-profile, as LLVM's `ProfileSummaryInfo` does. With every count the profile holds
-sorted from the largest down, the hot line is the smallest count still inside
-the share of all runs that `--optimize-profile-summary-cutoff-hot` names, and
-the cold line the same for `--optimize-profile-summary-cutoff-cold`. A count at
-or above the hot line is hot, and any other at or below the cold line is cold.
-A profile whose counts are nearly all one value puts both lines on it, and such
-a count is hot: as in LLVM's inliner, hot is asked first. Both shares are in
-parts per million, with LLVM's defaults for its options of the same names:
-990000 and 999999. A share of all runs stays put when a workload
-runs twice, so a workload need not be large, only like real use.
+profile, as LLVM's `ProfileSummaryInfo` does, under LLVM's option names and
+defaults; [Applying a Profile](./spec-testing.md#applying-a-profile) states the
+hot and cold lines. A count on both lines is hot, since LLVM's inliner asks hot
+first. A share of all runs stays put when a workload runs twice, so a workload
+need not be large, only like real use. It must still run the common paths far
+more often than the rare ones: in a profile of a few runs each, both lines fall
+on the smallest count, so every `?` failure path the workload ran is hot.
 
 The inliner prices a call site by what the summary says of the region holding
 it. A hot site may inline a callee of up to
@@ -325,7 +322,7 @@ level.
    regions end up cold.
 5. [x] `-f pgo` and `-f no-pgo`. The CLI hands a compile the entry's profile,
    and the compile looks each module up by its name.
-6. [ ] The profile summary. A compile derives the hot and cold lines from its
+6. [x] The profile summary. A compile derives the hot and cold lines from its
    profile under `--optimize-profile-summary-cutoff-hot` and
    `--optimize-profile-summary-cutoff-cold`, and a `?`'s failure path that is
    not cold loses its marker, with the remark. An e2e fixture states both
