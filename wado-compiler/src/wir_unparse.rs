@@ -5,6 +5,7 @@
 //! and WAT-style mnemonics for arithmetic instructions (i32.add, f64.mul, etc.).
 
 use crate::tir::EffectRef;
+use crate::unparse::ListWriter;
 use crate::wir::{
     WirAbstractHeapType, WirArrayType, WirData, WirEnumType, WirExport, WirExportDesc, WirField,
     WirFlagsType, WirFuncType, WirFunction, WirGlobal, WirImport, WirImportDesc, WirInstr,
@@ -42,6 +43,12 @@ struct WirUnparser<'a> {
     label_stack: Vec<(LabelBlockKind, String)>,
     /// Counter for generating unique labels.
     label_next_id: usize,
+}
+
+impl ListWriter for WirUnparser<'_> {
+    fn output(&mut self) -> &mut String {
+        &mut self.output
+    }
 }
 
 impl<'a> WirUnparser<'a> {
@@ -314,18 +321,13 @@ impl<'a> WirUnparser<'a> {
         self.write_indent();
         self.write("enum ");
         self.write(&e.name.fq);
-        self.write(" { ");
-
-        for (i, case) in e.cases.iter().enumerate() {
-            if i > 0 {
-                self.write(", ");
-            }
-            self.write(&case.name);
-            self.write(" = ");
-            self.write(&case.discriminant.to_string());
-        }
-
-        self.write(" };");
+        self.write(" ");
+        self.braced(&e.cases, |s, case| {
+            s.write(&case.name);
+            s.write(" = ");
+            s.write(&case.discriminant.to_string());
+        });
+        self.write(";");
         self.unparse_type_comment(type_idx);
         self.newline();
     }
@@ -334,18 +336,13 @@ impl<'a> WirUnparser<'a> {
         self.write_indent();
         self.write("flags ");
         self.write(&f.name.fq);
-        self.write(" { ");
-
-        for (i, bit) in f.bits.iter().enumerate() {
-            if i > 0 {
-                self.write(", ");
-            }
-            self.write(&bit.name);
-            self.write(" = ");
-            self.write(&format!("bit{}", bit.position));
-        }
-
-        self.write(" };");
+        self.write(" ");
+        self.braced(&f.bits, |s, bit| {
+            s.write(&bit.name);
+            s.write(" = ");
+            s.write(&format!("bit{}", bit.position));
+        });
+        self.write(";");
         self.unparse_type_comment(type_idx);
         self.newline();
     }
@@ -1324,20 +1321,16 @@ impl<'a> WirUnparser<'a> {
                 let field_names = self.struct_field_names(type_id);
                 self.write("struct.new ");
                 self.write_name(&tid);
-                self.write(" { ");
-                for (i, f) in fields.iter().enumerate() {
-                    if i > 0 {
-                        self.write(", ");
-                    }
+                self.write(" ");
+                self.braced(fields.iter().enumerate(), |s, (i, f)| {
                     if let Some(ref names) = field_names
                         && let Some(name) = names.get(i)
                     {
-                        self.write(name);
-                        self.write(": ");
+                        s.write(name);
+                        s.write(": ");
                     }
-                    self.unparse_instr_inline(f);
-                }
-                self.write(" }");
+                    s.unparse_instr_inline(f);
+                });
             }
             WirInstr::StructGet {
                 field_name, expr, ..

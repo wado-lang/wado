@@ -1,0 +1,38 @@
+// A branching construct whose every branch is a bare `null` is an `Option<!>`,
+// as a `let` bound to `null` is, and widens wherever it goes.
+
+struct T { n: i32 }
+
+fn count(o: Option<T>) -> i32 {
+    return if let Some(t) = o { t.n } else { -1 };
+}
+
+fn by_if(c: bool) -> i32 {
+    let x = if c { null } else { null };
+    return count(x);
+}
+
+fn by_match(c: bool) -> i32 {
+    let x = match c {
+        true => null,
+        false => null,
+    };
+    return count(x);
+}
+
+fn by_break() -> i32 {
+    let x = found: {
+        break found: null;
+    };
+    return count(x);
+}
+
+test "every branch a null makes an Option<!>" {
+    assert by_if(builtin::black_box(true)) == -1;
+    assert by_if(builtin::black_box(false)) == -1;
+    assert by_match(builtin::black_box(true)) == -1;
+    assert by_break() == -1;
+}
+
+__DATA__
+{"test": {}}

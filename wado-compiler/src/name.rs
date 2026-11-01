@@ -413,6 +413,13 @@ pub fn variant_tag_helper_name(mangled_variant: &str) -> String {
     format!("$variant_tag${mangled_variant}")
 }
 
+/// The helper rebuilding a value of one type, holding an `Option<!>`, as the
+/// type holding an `Option<T>` there, both identified by their structural
+/// mangles.
+pub fn widen_helper_name(mangled_from: &str, mangled_to: &str) -> String {
+    format!("$widen${mangled_from}${mangled_to}")
+}
+
 /// The name of the synthesized `StructField::<S, F>::get` helper for a struct and one
 /// of its field types, both identified by their structural mangles (same
 /// identity discipline as [`case_extract_helper_name`]). Lowering rewrites

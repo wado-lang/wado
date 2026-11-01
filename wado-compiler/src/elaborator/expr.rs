@@ -764,20 +764,25 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             Expr::TupleLiteral(tuple_lit) => {
                 self.resolve_tuple_literal(tuple_lit, ctx, expected_type)
             }
-            Expr::LabeledBlock(lb) => {
-                let overlays_before = self.tuple_overlay_counts();
-                let mut frame = ctx.enter_labeled_block(lb.label.clone(), expected_type);
+            Expr::LabeledBlock(lb) => self.resolve_branching(expected_type, |this, expected| {
+                let overlays_before = this.tuple_overlay_counts();
+                let mut frame = ctx.enter_labeled_block(lb.label.clone(), expected);
                 // A labeled block yields via `break label: value`, not a tail
                 // expression, so its trailing statement stays in statement
                 // position (a discarded tail `match` may have arms of
                 // differing types).
-                self.resolve_block(&lb.block, &mut frame, expected_type);
+                this.resolve_block(&lb.block, &mut frame, expected);
                 let target = frame.finish();
 
                 // Reify rebuilds the `LabeledBlock` from the AST, re-running
                 // the same unification; project only the result type.
-                self.unify_labeled_block(lb, &target.break_types, expected_type, &overlays_before)
-            }
+                let type_id =
+                    this.unify_labeled_block(lb, &target.break_types, expected, &overlays_before);
+                let mut branches: Vec<TypeId> =
+                    target.break_types.iter().map(|&(_, t)| t).collect();
+                branches.push(this.labeled_block_tail_type(lb));
+                (type_id, branches)
+            }),
             Expr::Matches(m) => self.desugar_matches_expr(m, ctx, expected_type),
             Expr::Spread(..) => {
                 panic!("Spread expression should only appear inside TupleLiteral handling")
@@ -830,12 +835,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let result_type =
             expected_type.unwrap_or_else(|| self.tysys.representative_branch_type(&branch_types));
 
-        // Report a `break label: null` whose `Option<...>` inner could not be
-        // inferred against a resolved non-`Option` result. A type still UNKNOWN
-        // means every break was a bare `null`, which the first call reports.
-        if !self.report_uninferable_result(result_type, lb.span, "labeled block") {
-            self.report_unresolved_null_breaks(result_type, &lb.block, &lb.label);
-        }
+        self.report_unresolved_null_breaks(result_type, &lb.block, &lb.label);
 
         for &branch_type in &branch_types {
             if branch_type != TypeTable::NEVER {
@@ -2472,6 +2472,53 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         ctx: &mut FunctionContext,
         expected_type: Option<TypeId>,
     ) -> TypeId {
+        self.resolve_branching(expected_type, |this, expected| {
+            let type_id = this.resolve_if_once(if_expr, ctx, expected);
+            let mut branches = vec![this.ast_block_result_type(&if_expr.then_block)];
+            branches.extend(
+                if_expr
+                    .else_block
+                    .as_ref()
+                    .map(|b| this.ast_block_result_type(b)),
+            );
+            (type_id, branches)
+        })
+    }
+
+    /// A branching expression's type by `resolve`, which answers it beside
+    /// each branch's, resolved again under that type where a branch is still
+    /// indefinite. Such a branch was resolved before a sibling settled the
+    /// type, so it typed its parts by an unresolved `null`'s `Option<!>`: a
+    /// tuple, a generic struct or a payload holding a `null`. Only the
+    /// expectation reaches those parts, as an annotation does.
+    fn resolve_branching(
+        &mut self,
+        expected_type: Option<TypeId>,
+        mut resolve: impl FnMut(&mut Self, Option<TypeId>) -> (TypeId, Vec<TypeId>),
+    ) -> TypeId {
+        let overlays_before = self.tuple_overlay_counts();
+        let (agreed, branches) = resolve(self, expected_type);
+        let retyped = self.settled_result_expectation(expected_type).is_none() && {
+            let table = self.tysys.type_table.borrow();
+            !table.is_indefinite(agreed) && branches.iter().any(|&b| table.is_indefinite(b))
+        };
+        if retyped {
+            // The retry records each tuple for-of inside again; reify pairs an
+            // instantiation with each walk it makes, so the first pass's go.
+            for (key, instantiations) in &mut self.sem.types.tuple_overlays {
+                instantiations.truncate(overlays_before.get(key).copied().unwrap_or(0));
+            }
+            return resolve(self, Some(agreed)).0;
+        }
+        agreed
+    }
+
+    fn resolve_if_once(
+        &mut self,
+        if_expr: &IfExpr,
+        ctx: &mut FunctionContext,
+        expected_type: Option<TypeId>,
+    ) -> TypeId {
         match &if_expr.condition {
             Condition::LetChain { elements, .. } => {
                 self.record_desugar(if_expr.id, DesugarKind::IfLetChain);
@@ -2550,15 +2597,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         };
 
-        // Both branches a bare `null` leaves the type indefinite, which is
-        // reported instead of the tails.
-        if !self.report_uninferable_result(type_id, if_expr.span, "if expression") {
-            let mut blocks: Vec<&ast::Block> = vec![&if_expr.then_block];
-            if let Some(eb) = &if_expr.else_block {
-                blocks.push(eb);
-            }
-            self.report_unresolved_null_tails_in_blocks(type_id, &blocks);
+        let mut blocks: Vec<&ast::Block> = vec![&if_expr.then_block];
+        if let Some(eb) = &if_expr.else_block {
+            blocks.push(eb);
         }
+        self.report_unresolved_null_tails_in_blocks(type_id, &blocks);
 
         // A settled expectation skipped agreement, so each branch is checked here
         // lest one push the wrong type; `Unit` is statement position, where none is kept.
@@ -2601,26 +2644,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 span,
             });
         }
-    }
-
-    /// Reports a `CannotInferType` error when every branch of a construct
-    /// produced an indefinite type, leaving the result one too. Returns `true`
-    /// when an error was reported, so the caller can skip the `null`-patching
-    /// pass (which requires a resolved target type).
-    fn report_uninferable_result(
-        &mut self,
-        result_type: TypeId,
-        span: Span,
-        construct: &str,
-    ) -> bool {
-        if !self.tysys.type_table.borrow().is_indefinite(result_type) {
-            return false;
-        }
-        let _ = self.emit(TypeError::CannotInferType {
-            message: format!("cannot infer the type of this {construct}; add a type annotation"),
-            span,
-        });
-        true
     }
 
     /// Reports each `null` branch value that could not be reconciled with a
@@ -2956,6 +2979,23 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         ctx: &mut FunctionContext,
         expected_type: Option<TypeId>,
     ) -> TypeId {
+        self.resolve_branching(expected_type, |this, expected| {
+            let type_id = this.resolve_match_once(match_expr, ctx, expected);
+            let arms = match_expr
+                .arms
+                .iter()
+                .filter_map(|arm| this.ast_expr_type(&arm.body))
+                .collect();
+            (type_id, arms)
+        })
+    }
+
+    fn resolve_match_once(
+        &mut self,
+        match_expr: &ast::MatchExpr,
+        ctx: &mut FunctionContext,
+        expected_type: Option<TypeId>,
+    ) -> TypeId {
         let mut scrutinee_type = self.resolve_expr(&match_expr.expr, ctx, None);
 
         // Resolve each arm for its facts (binding + guard + body). Surface only
@@ -3035,15 +3075,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             })
         };
 
-        // Report any `null`-bodied arm whose `Option<???>` inner could not be
-        // inferred against a resolved non-`Option` result — AST mirror of the
-        // old `patch_unresolved_null` pass (whose TIR mutation was dead). When
-        // the match type itself stayed UNKNOWN (every arm a bare `null`)
-        // `report_uninferable_result` already fired and the null pass is
-        // skipped.
-        if !self.report_uninferable_result(type_id, match_expr.span, "match expression") {
-            self.report_unresolved_null_match_arms(type_id, match_expr);
-        }
+        self.report_unresolved_null_match_arms(type_id, match_expr);
 
         // Retarget literal arms to the unified type before the arm-agreement
         // check below would reject their `i32`/`f64` default.
@@ -3742,7 +3774,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
             for (elem, expected) in tuple_lit.elements.iter().zip(expected_elems) {
                 let resolved = self.resolve_expr(elem, ctx, Some(expected));
-                self.typecheck(resolved, expected, elem.span());
+                self.typecheck_value(elem, resolved, expected);
             }
             self.sem
                 .types
@@ -3757,7 +3789,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             && expected_elems.is_some()
         {
             let resolved = self.resolve_expr(&cast.expr, ctx, Some(target_type));
-            self.typecheck(resolved, target_type, cast.expr.span());
+            self.typecheck_value(&cast.expr, resolved, target_type);
             return target_type;
         }
 
@@ -4156,7 +4188,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // here would compare `[…]` against the sequence it is about to
                 // become. The second pass checks it once coerced.
                 if !check_deferred && let Some(expected_type_id) = expected_field_type {
-                    self.typecheck(type_id, expected_type_id, field.value.span());
+                    self.typecheck_value(&field.value, type_id, expected_type_id);
                 }
 
                 let decl_idx = struct_field_types
@@ -4355,7 +4387,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         && !table.contains_fillable_slot(value_type)
                 };
                 if settled {
-                    self.typecheck(value_type, concrete_type, ast_field.value.span());
+                    self.typecheck_value(&ast_field.value, value_type, concrete_type);
                 }
             }
 
@@ -4419,6 +4451,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         if let (Some(base_ty), Some(spread)) = (spread_base_type, named_spread) {
             self.typecheck(base_ty, struct_type, spread.span);
+            self.record_widening(spread.expr.id(), base_ty, struct_type);
         }
 
         // Reify rebuilds the `StructLiteral` (`reify_struct_literal`)

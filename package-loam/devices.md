@@ -114,16 +114,25 @@ rather than computing, it adds nodes to a graph. `build<G: Graph>` takes the
 inputs, the weights and the cache as nodes of `G`, and returns the outputs.
 
 `Graph` is a trait whose methods are the operations below, each typed by its
-axes as the kernels are today. A tensor is `G::Value<E, Axes>`, a node of the
+axes as the kernels are today. A tensor is `G::Tensor<E, Axes>`, a node of the
 graph being built.
 
 - A device backend's `Graph` records the nodes. The runtime runs `build` once
   per shape class and hands the recorded graph to the device's compiler.
+  `Recorder` in `src/runtime/recorded.wado` is that `Graph`. A branch passes
+  each result through `yielded`, which is how the recorder learns what the
+  branch returns.
 - `Cpu`'s `Graph` computes each node as it is added. So `Cpu` runs the same
-  body as the devices and stays the reference they are held to.
+  body as the devices and stays the reference they are held to. `run` executes
+  a recorded graph on `Cpu` node by node, so a compiled program has something
+  to agree with.
+- Until its compiler lands, `WebGpuBackend`'s `Graph` computes each node as it
+  is added, as `Cpu`'s does, through the kernels `forward` dispatches.
+  `conformance/webgpu_graph.wado` holds it to `Cpu` on the graphs in
+  `src/runtime/graph_cases.wado`.
 
-`Holds` is what a backend and a graph share: a tensor type, `upload` and
-`extents_of`. `Backend` and `Graph` both extend it, so `Cache<H>` and
+`Holds` is what a backend and a graph share: a tensor type, `upload`,
+`extents_of`, and the pass `begin` starts and `retain` keeps a tensor through. `Backend` and `Graph` both extend it, so `Cache<H>` and
 `Passed<H>` serve the kernels' `pass` and the graph's `build` alike until the
 WebGPU compiler replaces `pass`. The weights a graph reads are `Params<G>`, each
 a tensor of the graph in the element type it computes in.
@@ -289,14 +298,22 @@ each symbolic axis whether it can promise that, at build time:
   of the axis yields the valid length, a value, and so does a `ReduceMean`'s
   divisor. A graph that computes from the count, as a causal mask's slice
   does, computes from the value. A slice whose start then depends on the value
-  becomes a `dynamic_slice`. That operation has no stride, so a slice of
-  `length` elements with a step other than 1 takes `(length - 1) * step + 1`
-  elements, and a strided `slice` follows it.
+  becomes a `gather` of each row's window, since each row has its own value
+  and a `dynamic_slice` takes one start for all of them. A `gather` has no
+  stride, so a slice of `length` elements with a step other than 1 takes
+  `(length - 1) * step + 1` elements, and a strided `slice` follows it.
 - A `Concat` along a padded axis would put padding between the parts, so it
   becomes a `scatter` that writes the second part at the first part's valid
   length.
 - A merge of a padded axis with an axis after it keeps the valid elements a
   prefix.
+- An extent that may fall as a length rises, such as a `Range` by the length,
+  would hold fewer elements at the capacity than at the length, so the
+  generator refuses to pad that length.
+- An attention that is not causal reads every key, the padded ones too, so
+  the generator refuses the lengths it reads.
+- A length the graph owes equal to a sum with a refused length is refused
+  too, since its capacity would not match the refused length's exact extent.
 - Any other operation that reads across a padded axis, such as a merge with an
   axis before it, which would interleave the padding, makes the generator
   refuse to pad that axis. It then compiles one program per length of that
@@ -306,6 +323,19 @@ A valid length is one per row of the batch axis, since the rows of one pass are
 different requests (see
 [Requests share a pass through slots](#requests-share-a-pass-through-slots)).
 So each mask, count and write above reads its row's own.
+
+The generated module takes them so:
+
+- `build` takes `lengths: &Lengths<G>`, a value of `[]` for each padded length
+  it reads as a value. A build that reads none takes no `lengths`. Every
+  extent the inputs give is a capacity. A condition the graph owes over a
+  padded length is not checked there, since a capacity need not meet what its
+  length meets.
+- `compute` takes the inputs on the host. It checks them, and what the graph
+  owes, against their own lengths. It pads each padded length to its
+  capacity, the next power of two, builds, and cuts the outputs back to their
+  lengths. A graph with a cache passes it to `compute` too, as the next
+  section says.
 
 An `If` whose condition the shape class decides is chosen when the graph is
 built. One whose condition depends on a value is a `case` with both branches.
@@ -325,6 +355,17 @@ class, copied once.
 
 This builds on [the decoder's cache](./design.md#the-decoders-cache), which is
 one value already.
+
+`compute` holds the cache so. The past's length is what the graph owes it to
+be given the other inputs' lengths: Gemma's attention owes the total to be the
+past and the sequence, so the past is the mask's length less the ids'. The
+past takes the capacity of the present, `capacity_of(past + sequence)`, which
+the mask's total takes too. `compute` fits each field of the cache to it,
+padding with zeros or cutting, before the pass and after it. A
+`GroupQueryAttention` given the past's valid length reads its past as
+onnxruntime's shared buffer: the present is the past's buffer, the new
+positions written from the valid length on. A graph that owes its past's
+length no such equality gets no `compute`.
 
 ### Requests share a pass through slots
 
@@ -368,14 +409,33 @@ How a weight is stored is the device compiler's choice, made per model and per
 device, not per shape class, since every shape class reads the same weights.
 On WebGPU that covers the layouts measured today, column by column, in pairs,
 concatenated, and in bf16 where nothing is lost. On a TPU it is bf16 where
-nothing is lost, and the graph's own type otherwise. `Prepared` holds the stored weights without spelling their
-layout, so a backend can change a layout without changing the generated module.
+nothing is lost, and the graph's own type otherwise. `Model` holds the stored
+weights without spelling their layout, so a backend can change a layout without
+changing the generated module.
+
+### A model holds its weights and its programs
+
+The generated module's `Model<Bk>` holds the weights as the device stores them
+and a program for each shape class it has met. The caller owns it, and
+`compute` takes it by `&mut`, since a call may compile a program into it.
+
+- A program binds the weights it reads, in the layouts the device compiler
+  chose for them. Held in one value, a program can only meet the weights it was
+  compiled against, and no run time check is needed for it.
+- Dropping the model frees the weights, the programs and their memory
+  together. A backend holds nothing past a call, so one backend serves any
+  number of models without a key to tell their programs apart.
+- `Model` is shared by every request; `Cache` is one request's. Slots (step 7)
+  and the weights an expert routing loads stay in the model.
+- On `Cpu` a program is empty, since `Cpu` computes `build` directly and stays
+  the reference.
 
 ### What a call does
 
 1. Check the inputs against the graph, as `forward` does now, and each valid
    length against its capacity.
-2. Find the shape class's program, building and compiling it on first use.
+2. Find the shape class's program in the model, building and compiling it on
+   first use.
 3. Write the inputs and the per-call values.
 4. Run the program.
 5. Read back what it returns: token ids from a decoding program, the outputs
@@ -383,16 +443,16 @@ layout, so a backend can change a layout without changing the generated module.
 
 ### What this changes
 
-| WEP section                                 | Change                                                                                                     |
-| ------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
-| Context                                     | Serving many requests on a TPU joins inference on the user's device as a goal.                             |
-| A Decoder's Cache Is One Value              | A field the past's length gives holds a capacity of positions and a valid length, and is written in place. |
-| The Backend Is a Trait                      | The trait builds a graph of StableHLO's operations. A device compiles it once per shape class.             |
-| Fusion Is Decided by Operator Kind          | Fusion is the WebGPU compiler's, run over the graph at run time. The PJRT backend fuses nothing.           |
-| The MVP Is Tier 1 Only                      | Tier 2 is built: capacities, a valid length for each, and a cache of compiled programs.                    |
-| Weights Are Prepared Once                   | The device compiler chooses a weight's layout. `Prepared` no longer spells it.                             |
-| A Branch Is a Block of `forward`            | A branch the shape class decides is chosen when the graph is built. Any other branch is a `case`.          |
-| The Generator Reports Every Fusion Decision | `loam dump` reports the build-time analyses. The device compiler's decisions are reported when it runs.    |
+| WEP section                                 | Change                                                                                                       |
+| ------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| Context                                     | Serving many requests on a TPU joins inference on the user's device as a goal.                               |
+| A Decoder's Cache Is One Value              | A field the past's length gives holds a capacity of positions and a valid length, and is written in place.   |
+| The Backend Is a Trait                      | The trait builds a graph of StableHLO's operations. A device compiles it once per shape class.               |
+| Fusion Is Decided by Operator Kind          | Fusion is the WebGPU compiler's, run over the graph at run time. The PJRT backend fuses nothing.             |
+| The MVP Is Tier 1 Only                      | Tier 2 is built: capacities, a valid length for each, and a cache of compiled programs.                      |
+| Weights Are Prepared Once                   | The device compiler chooses a weight's layout. `Model` holds the weights beside the programs that bind them. |
+| A Branch Is a Block of `forward`            | A branch the shape class decides is chosen when the graph is built. Any other branch is a `case`.            |
+| The Generator Reports Every Fusion Decision | `loam dump` reports the build-time analyses. The device compiler's decisions are reported when it runs.      |
 
 ## Plan
 
@@ -402,7 +462,7 @@ layout, so a backend can change a layout without changing the generated module.
    through it. Finished when every conformance case, the tiny GPT-2 and Gemma 3
    (270M) pass on `Cpu` through `build`, and the CPU time per token is recorded
    as a ratio to today's ([measured](#the-graph-on-the-cpu)).
-2. [ ] Capacities and valid lengths. The padding analysis, the masks it adds,
+2. [x] Capacities and valid lengths. The padding analysis, the masks it adds,
    and the cache of fixed capacity. Finished when Gemma 3 decodes on `Cpu`
    from padded inputs with onnxruntime's tokens, and `loam dump` reports each
    padded axis or the node that refused it.
@@ -419,7 +479,9 @@ layout, so a backend can change a layout without changing the generated module.
    on `WebGpuBackend` is at most today's, with the host's time per token
    recorded beside the device's, the conformance cases with an `If` pass with
    no read back but the outputs, and the generator's plan and the fused trait
-   methods are deleted.
+   methods are deleted. The merged tiny GPT-2 pads its lengths and gets a
+   `compute` there, though a `Slice` starts at its past's length and the graph
+   owes the total equal to the past and the sequence only inside a branch.
 5. [ ] Attention matched from its parts. Finished when GPT-2's attention runs
    as the composite on `WebGpuBackend` with onnxruntime's tokens, and its
    dispatches a layer are recorded beside the ten
@@ -441,10 +503,10 @@ layout, so a backend can change a layout without changing the generated module.
 Gemma 3 (270M) picking `generate.json`'s tokens greedily on `Cpu`, the test
 CPU time of each entry, the weights' loading included:
 
-| Entry                    | Ratio to `pass` |
-| ------------------------ | --------------- |
-| `pass`, the kernels      | 1               |
-| `build`, the graph's ops | 0.85            |
+| Entry                                        | Ratio to `pass` |
+| -------------------------------------------- | --------------- |
+| `pass`, the kernels                          | 1               |
+| `compute`, the graph's ops at the capacities | 0.89            |
 
 Each is one test of `example/gemma3-270m/generate_test.wado`, run alone:
 
@@ -456,6 +518,14 @@ wado test --collector drc gemma3-270m/generate_test.wado --test-name "graph buil
 
 ## Known gaps
 
+- A valid length is one value for every row, which is a batch of one, until
+  slots (step 7) give each row its own.
+- `build` cannot check what the graph owes over a padded length, which only
+  `compute` knows on the host. A caller of `build` vouches for it.
+- `compute` takes no capacities from the caller.
+- On `Cpu` a pass still copies the cache it writes into, since `scatter`
+  returns a new tensor. Writing in place waits for the device compiler,
+  which plans the memory.
 - The first call of a shape class waits for its program to compile. At build
   time no user waits on the generator, and at first use one does. The cache on
   disk spares a second process on PJRT, and nothing spares a first call on

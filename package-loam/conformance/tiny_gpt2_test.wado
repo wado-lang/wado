@@ -8,7 +8,8 @@ use { StoredTensor, write_safetensors } from "lib:loam/src/safetensors.wado";
 use gpt2 from "./tiny_gpt2.wado";
 
 /// The logits `forward` computes from one data set's inputs, and those the
-/// graph `build` adds to computes, against the ones onnxruntime computed.
+/// graph `build` adds to computes from them padded, against the ones
+/// onnxruntime computed.
 fn reproduces(input_ids: ByteList, attention_mask: ByteList, logits: ByteList) {
     let [ids, ids_extents] = ints_of(input_ids);
     let [mask, mask_extents] = ints_of(attention_mask);
@@ -24,7 +25,7 @@ fn reproduces(input_ids: ByteList, attention_mask: ByteList, logits: ByteList) {
     assert_close(&got.data, &want);
 
     let params = gpt2::Params::load(&mut cpu, &checkpoint).unwrap();
-    let built = gpt2::build(&mut cpu, &ids, &mask, &params);
+    let built = gpt2::compute(&mut cpu, &ids, &mask, &params);
     assert built.extents == want_extents;
     assert_close(&built.data, &want);
 }

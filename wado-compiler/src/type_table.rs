@@ -5501,6 +5501,17 @@ impl TypeTable {
         id != TypeTable::NEVER && mentions(self, id)
     }
 
+    /// [`Self::contains_never_arg`] where the value holds the `!` itself: not
+    /// in a function type, which a function computes, nor behind a reference.
+    pub fn holds_never_arg_by_value(&self, id: TypeId) -> bool {
+        match self.get(id) {
+            ResolvedType::Function { .. } | ResolvedType::Ref(_) | ResolvedType::MutRef(_) => false,
+            _ => self.any_constituent(id, &mut |t| {
+                t == TypeTable::NEVER || self.holds_never_arg_by_value(t)
+            }),
+        }
+    }
+
     /// Whether `id` names no type of its own: it still holds UNKNOWN, or it is
     /// a bare `null`'s `Option<!>`. Such a type never decides a branch
     /// construct's result — a sibling with a definite type does.

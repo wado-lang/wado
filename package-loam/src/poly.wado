@@ -30,7 +30,7 @@ pub struct Poly {
 
 /// An operation no polynomial expresses, which `forward` computes a derived
 /// symbol by.
-enum Op {
+pub enum Op {
     /// The lesser of two operands.
     Min,
     /// The greater of two operands.
@@ -85,6 +85,26 @@ impl Ord for Symbol {
 impl Symbol {
     fn is_derived(&self) -> bool {
         return self.derivation matches { Some(_) };
+    }
+
+    fn reads(&self, name: &String) -> bool {
+        return Poly::of(*self).symbols().contains_str(name);
+    }
+
+    /// Whether the value never falls as the input symbol `name`, which it
+    /// reads, rises.
+    fn grows_with(&self, name: &String) -> bool {
+        let Some(d) = self.derivation else {
+            return true;
+        };
+        let [a, b] = [&d.operands[0], d.operands.get(1)];
+        return match d.op {
+            Min | Max => a.grows_with(name) && b.unwrap().grows_with(name),
+            CeilDiv | FloorDiv => a.grows_with(name) && !b.unwrap().symbols().contains_str(name),
+            // The index itself or the index past the extent, whichever it takes.
+            FromEnd => !a.symbols().contains_str(name) && b.unwrap().grows_with(name),
+            Wrap32 => false,
+        };
     }
 
     /// The symbol read as `Poly::presumed` reads it.
@@ -144,6 +164,19 @@ pub fn owe_equal(
     };
     owe(conditions, site, &above, condition)?;
     return owe(conditions, site, &below, condition);
+}
+
+/// The slacks `conditions` owe to be 0, as `owe_equal` owes an equality: each
+/// owed beside its negation.
+pub fn equalities(conditions: &List<Condition>) -> List<Poly> {
+    let mut zero: List<Poly> = [];
+    for let c of conditions {
+        let negated = Poly::constant(0).try_sub(&c.slack);
+        if conditions.into_iter().any(|d| Option::Some(d.slack) == negated) {
+            zero.push(c.slack);
+        }
+    }
+    return zero;
 }
 
 /// `owe` for `Poly::presumed`: whether the reading holds, which it does not
@@ -549,6 +582,26 @@ impl Poly {
         return Poly::collected(terms);
     }
 
+    /// Whether the value never falls as the input symbol `name` rises, every
+    /// other symbol held. A term reading it must be a positive multiple of
+    /// one factor, or of factors that are each nonnegative, and each factor
+    /// reading `name` must grow with it.
+    pub fn grows_with(&self, name: &String) -> bool {
+        for let t of &self.terms {
+            let reading: List<Symbol> = t.symbols.into_iter().filter(|s| s.reads(name)).collect();
+            if reading.is_empty() {
+                continue;
+            }
+            if t.coefficient < 0 || !reading.into_iter().all(|s| s.grows_with(name)) {
+                return false;
+            }
+            if t.symbols.len() > 1 && !t.symbols.into_iter().all(|s| s.range[0] >= 0) {
+                return false;
+            }
+        }
+        return true;
+    }
+
     /// `[c, rest]` where this is `c * name + rest` and `rest` reads no `name`,
     /// or `None` where it reads `name` other than as one term of its own.
     pub fn linear_in(&self, name: &String) -> Option<[i64, Poly]> {
@@ -559,10 +612,8 @@ impl Poly {
                 coefficient = t.coefficient;
                 continue;
             }
-            for let s of &t.symbols {
-                if Poly::of(*s).symbols().contains_str(name) {
-                    return null;
-                }
+            if t.symbols.into_iter().any(|s| s.reads(name)) {
+                return null;
             }
             rest.push(*t);
         }
@@ -849,5 +900,52 @@ impl Poly {
 impl Display for Poly {
     fn fmt(&self, f: &mut Formatter) {
         f.write_str(self.written(&HashMap::<String, String>::new(), false));
+    }
+}
+
+/// What `Poly::lowered` writes a polynomial into: each step an expression
+/// built from its operands', as a graph computes a value the run gives.
+pub trait Lowers with () {
+    fn constant(&mut self, c: i64) -> String;
+    /// The input symbol `name`.
+    fn symbol(&mut self, name: &String) -> String;
+    fn add(&mut self, a: String, b: String) -> String;
+    fn mul(&mut self, a: String, b: String) -> String;
+    fn derived(&mut self, op: Op, operands: List<String>) -> String;
+}
+
+impl Poly {
+    /// The polynomial as `to` writes it: each term a product, scaled where its
+    /// coefficient is not 1, and the terms summed.
+    pub fn lowered<L: Lowers>(&self, to: &mut L) -> String {
+        if self.terms.is_empty() {
+            return to.constant(0);
+        }
+        let mut sum: Option<String> = null;
+        for let t of &self.terms {
+            let mut written: Option<String> = if t.coefficient != 1 || t.symbols.is_empty() {
+                Option::Some(to.constant(t.coefficient));
+            } else {
+                null;
+            };
+            for let s of &t.symbols {
+                let factor = match s.derivation {
+                    Some(d) => {
+                        let operands: List<String> = d.operands.into_iter().map(|o| o.lowered(to)).collect();
+                        to.derived(d.op, operands);
+                    },
+                    None => to.symbol(&s.name),
+                };
+                written = Option::Some(match written {
+                    Some(p) => to.mul(p, factor),
+                    None => factor,
+                });
+            }
+            sum = Option::Some(match sum {
+                Some(s) => to.add(s, written.unwrap()),
+                None => written.unwrap(),
+            });
+        }
+        return sum.unwrap();
     }
 }

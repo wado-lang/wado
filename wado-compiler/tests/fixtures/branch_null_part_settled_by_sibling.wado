@@ -1,0 +1,85 @@
+// A branch holding a `null` inside a tuple, a generic struct, a payload, a
+// list or a generic call, its type settled only by a sibling branch, produced
+// invalid Wasm: the branch was typed before the sibling, so each part kept the
+// unresolved `null`'s `Option<!>`.
+
+struct T { n: i32 }
+struct Pair<A> { a: A, b: i32 }
+
+fn count(a: &Option<T>) -> i32 {
+    return if a matches { Some(_) } { 1 } else { 0 };
+}
+
+fn wrap<X>(x: X) -> [X, i32] {
+    return [x, 1];
+}
+
+fn tuple_by_if(c: bool) -> i32 {
+    let [p, q] = if c {
+        [Option::Some(T { n: 1 }), Option::Some(T { n: 2 })];
+    } else {
+        [null, null];
+    };
+    return count(&p) + count(&q);
+}
+
+fn tuple_by_match(k: i32) -> i32 {
+    let [p, [q, n]] = match k {
+        0 => [null, [null, 0]],
+        _ => [Option::Some(T { n: 1 }), [Option::Some(T { n: 2 }), 1]],
+    };
+    return count(&p) + count(&q) + n;
+}
+
+fn tuple_by_break(c: bool) -> i32 {
+    let [p, q] = found: {
+        if c {
+            break found: [null, null];
+        }
+        [Option::Some(T { n: 1 }), Option::Some(T { n: 2 })]
+    };
+    return count(&p) + count(&q);
+}
+
+fn generic_struct(c: bool) -> i32 {
+    let p = if c { Pair { a: null, b: 0 } } else { Pair { a: Option::Some(T { n: 1 }), b: 1 } };
+    return count(&p.a) + p.b;
+}
+
+fn payload(c: bool) -> i32 {
+    let p = if c { Option::Some(null) } else { Option::Some(Option::Some(T { n: 1 })) };
+    let Some(inner) = p else {
+        return 9;
+    };
+    return count(&inner);
+}
+
+fn list(c: bool) -> i32 {
+    let p = if c { [null] } else { [Option::Some(T { n: 1 })] as List<Option<T>> };
+    return count(&p[0]);
+}
+
+fn generic_call(c: bool) -> i32 {
+    let p = if c { wrap(null) } else { wrap(Option::Some(T { n: 1 })) };
+    return count(&p.0);
+}
+
+test "a null inside a branch takes the type its sibling branch settles" {
+    assert tuple_by_if(builtin::black_box(false)) == 0;
+    assert tuple_by_if(builtin::black_box(true)) == 2;
+    assert tuple_by_match(builtin::black_box(0)) == 0;
+    assert tuple_by_match(builtin::black_box(1)) == 3;
+    assert tuple_by_break(builtin::black_box(true)) == 0;
+    assert tuple_by_break(builtin::black_box(false)) == 2;
+    assert generic_struct(builtin::black_box(true)) == 0;
+    assert generic_struct(builtin::black_box(false)) == 2;
+    assert payload(builtin::black_box(true)) == 0;
+    assert payload(builtin::black_box(false)) == 1;
+    assert list(builtin::black_box(true)) == 0;
+    assert list(builtin::black_box(false)) == 1;
+    assert generic_call(builtin::black_box(true)) == 0;
+    assert generic_call(builtin::black_box(false)) == 1;
+}
+
+__DATA__
+{"test": {}}

@@ -123,7 +123,7 @@ struct StaticTypeArgs {
 /// template's argument is the template itself, which no source spells.
 #[derive(Clone, Copy)]
 pub(super) enum ArgSite {
-    Written(Span),
+    Written { span: Span, value: AstId },
     Template(Span),
 }
 
@@ -132,14 +132,21 @@ impl ArgSite {
     pub(super) fn of(raw_args: &[Expr], i: usize, call_span: Span) -> Self {
         raw_args
             .get(i)
-            .map_or(Self::Template(call_span), |arg| Self::Written(arg.span()))
+            .map_or(Self::Template(call_span), Self::written)
+    }
+
+    pub(super) fn written(value: &Expr) -> Self {
+        Self::Written {
+            span: value.span(),
+            value: value.id(),
+        }
     }
 
     /// The argument's type mismatch. A template's is the tag's parameter at
     /// fault, since no source spells the template's type.
     pub(super) fn mismatch(self, expected: String, found: String) -> TypeError {
         match self {
-            Self::Written(span) => TypeError::TypeMismatch {
+            Self::Written { span, .. } => TypeError::TypeMismatch {
                 expected,
                 found,
                 span,
@@ -153,7 +160,7 @@ impl ArgSite {
 
     pub(super) fn span(self) -> Span {
         match self {
-            Self::Written(span) | Self::Template(span) => span,
+            Self::Written { span, .. } | Self::Template(span) => span,
         }
     }
 }
@@ -5026,7 +5033,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .unwrap_or_default();
         if let Some(payload) = payload {
             let declared = self.substitute_in_frame(case_data.payload, &type_args);
-            self.typecheck(payload, declared, raw_args.first().map_or(span, Expr::span));
+            match raw_args.first() {
+                Some(value) => self.typecheck_value(value, payload, declared),
+                None => self.typecheck(payload, declared, span),
+            }
         }
         self.record_generic_instantiation(site, type_args, variant_type);
         variant_type

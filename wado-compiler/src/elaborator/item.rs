@@ -1289,7 +1289,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         } else {
             defaulted
         };
-        self.typecheck(resolved, expected, default_ast.span());
+        self.typecheck_value(default_ast, resolved, expected);
     }
 
     /// Bind a parameter in its function's body frame. A default is walked for
@@ -1742,7 +1742,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         for (field, &type_id) in struct_decl.fields.iter().zip(field_types) {
             if let Some(default_ast) = &field.default {
                 let resolved = self.resolve_expr(default_ast, &mut field_ctx, Some(type_id));
-                self.typecheck(resolved, type_id, default_ast.span());
+                self.typecheck_value(default_ast, resolved, type_id);
             }
         }
     }
@@ -2520,7 +2520,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
 
         let initializer_type = self.resolve_expr(&global_decl.initializer, &mut ctx, Some(ty));
 
-        self.typecheck(initializer_type, ty, global_decl.initializer.span());
+        self.typecheck_value(&global_decl.initializer, initializer_type, ty);
         self.record_param_attr(global_decl);
     }
 

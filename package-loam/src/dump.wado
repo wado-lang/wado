@@ -9,6 +9,7 @@ use { Serialize } from "core:serde";
 use { CodeWriter } from "lib:wadopoet";
 use { Graph, Known, Node, ValueInfo, element_of } from "./graph.wado";
 use { Checked } from "./infer.wado";
+use { Judged, padding } from "./pad.wado";
 use { Kind, Lowering, Plan, Reason, branches, plan } from "./plan.wado";
 use { Poly } from "./poly.wado";
 use { Shape } from "./shape.wado";
@@ -19,6 +20,9 @@ pub struct Report {
     /// The default domain's opset, `None` where the graph names none.
     pub opset: Option<i64>,
     pub scope: ScopeReport,
+    /// Each length the inputs read: padded to a capacity, or the node that
+    /// refused it.
+    pub padding: List<Judged>,
 }
 
 impl Serialize for Report;
@@ -114,7 +118,12 @@ pub struct TensorReport {
 /// The report for `graph`, checked as `checked`, its kernels fused where
 /// `fuse` lets them.
 pub fn report(graph: &Graph, checked: &Checked, fuse: bool) -> Report {
-    return Report { graph: graph.name, opset: graph.opset, scope: scope(graph, checked, fuse) };
+    return Report {
+        graph: graph.name,
+        opset: graph.opset,
+        scope: scope(graph, checked, fuse),
+        padding: padding(graph, checked),
+    };
 }
 
 /// `report` as text.
@@ -128,6 +137,14 @@ pub fn render_dump(graph: &Graph, checked: &Checked, fuse: bool) -> String {
     w.line(`graph ${r.graph} (opset ${opset})`);
     let mut tally = Tally {};
     write_scope(&mut w, &r.scope, &mut tally);
+    if !r.padding.is_empty() {
+        w.line("padding");
+        w.indent();
+        for let judged of &r.padding {
+            w.line(`${*judged}`);
+        }
+        w.dedent();
+    }
     w.blank();
     w.line(
         `${tally.kernels} kernels, ${tally.fused} fused, ${tally.folded} folded, ${tally.aliases} aliases, ${tally.branches} branches, ${tally.spread} reshapes spread, ${tally.viewed} transposes viewed`,

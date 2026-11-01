@@ -22,6 +22,9 @@ pub global PREPARED: String = "Prepared";
 /// The struct `build` reads the weights from, each a tensor of the graph.
 pub global PARAMS: String = "Params";
 
+/// The struct `build` reads the valid lengths from.
+pub global LENGTHS: String = "Lengths";
+
 /// The struct a decoder's state crosses from one pass to the next in.
 pub global CACHE: String = "Cache";
 
@@ -37,10 +40,11 @@ pub global MAP: String = "HashMap";
 pub global RUNTIME_NAMES: List<String> = [
     "Attention", "Backend", "Binary", "BinaryOp", "CheckpointBytes", "Columns", "Comparison", "Concat", "Convolution",
     "DotDims", "Epilogue", "Expected", "Expr", "GatherDims", "Graph", "Holds", "LoadError", "Merged", "One", "Paired",
-    "Prologue", "RowOp", "Step", "Tensor", "Unary", "UnaryOp", "Window", "WindowReduce", "axis_mismatch", "expect_len",
-    "extent_mismatch", "extents_mismatch", "from_end", "from_end_indices", "full", "input_mismatch", "lifted", "narrow",
-    "payload_at", "range_i64", "read_checkpoint", "read_shards", "reduce_mean", "refuse", "softmax", "softmax_flattened",
-    "to_extent", "unmet",
+    "Prologue", "RowOp", "Step", "Tensor", "Unary", "UnaryOp", "Window", "WindowReduce", "assembled", "axis_mismatch",
+    "capacity_of", "expect_len", "extent_mismatch", "extents_mismatch", "fitted", "from_end", "from_end_indices", "full",
+    "input_mismatch", "joined_at", "lifted", "masked", "narrow", "payload_at", "quotient", "range_i64",
+    "read_checkpoint", "read_shards", "reduce_mean", "refuse", "resized", "softmax", "softmax_flattened",
+    "strided_gather", "to_extent", "unmet",
 ];
 
 /// Whether `name` already means something in the generated module.
@@ -57,6 +61,9 @@ pub fn module_idents() -> HashSet<String> {
     reserved.insert("forward");
     reserved.insert("pass");
     reserved.insert("build");
+    reserved.insert("compute");
+    reserved.insert(LENGTHS);
+    reserved.insert("lengths");
     reserved.insert(PARAMS);
     reserved.insert("params");
     reserved.insert(OUTPUTS);

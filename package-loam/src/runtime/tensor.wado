@@ -84,6 +84,14 @@ pub fn checked_element_count(extents: &List<i32>) -> Option<i32> {
     return Option::Some(if empty { 0 } else { count });
 }
 
+/// A reference to what `t` holds, where it holds something.
+pub fn optional<T>(t: &Option<T>) -> Option<&T> {
+    return match t {
+        Some(held) => Option::Some(held),
+        None => null,
+    };
+}
+
 /// The elements a tensor of `extents` holds, which a list must be able to hold.
 pub fn element_count(extents: &List<i32>) -> i32 {
     let Some(count) = checked_element_count(extents) else {
@@ -1539,6 +1547,9 @@ pub fn narrow<E: Held, Axes>(t: &Tensor<f32, Axes>) -> Tensor<E, Axes> {
 /// to another as ONNX's `Cast` does: a bool is 1 or 0, and anything nonzero is
 /// true.
 pub trait Element with () {
+    /// Which element this is, for a graph that records its operations rather
+    /// than computing them.
+    fn kind() -> ElementKind;
     fn cast_to<T: Element>(&self) -> T;
     fn from_f32(v: f32) -> Self;
     fn from_i64(v: i64) -> Self;
@@ -1546,7 +1557,7 @@ pub trait Element with () {
     /// Whether this is `f32`, the one element a GPU computes in: WGSL has
     /// neither `i64` nor a stored `bool`.
     fn is_f32() -> bool {
-        return false;
+        return Self::kind() matches { F32 };
     }
     /// Whether an f32 holds every value of this exactly, so a GPU can store
     /// it as one: `f32` itself, and `bool` as 1.0 and 0.0.
@@ -1555,13 +1566,20 @@ pub trait Element with () {
     }
 }
 
+/// Each [`Element`].
+pub enum ElementKind {
+    F32,
+    I64,
+    Bool,
+}
+
 impl Element for f32 {
-    fn cast_to<T: Element>(&self) -> T {
-        return T::from_f32(*self);
+    fn kind() -> ElementKind {
+        return ElementKind::F32;
     }
 
-    fn is_f32() -> bool {
-        return true;
+    fn cast_to<T: Element>(&self) -> T {
+        return T::from_f32(*self);
     }
 
     fn from_f32(v: f32) -> f32 {
@@ -1578,6 +1596,10 @@ impl Element for f32 {
 }
 
 impl Element for i64 {
+    fn kind() -> ElementKind {
+        return ElementKind::I64;
+    }
+
     fn cast_to<T: Element>(&self) -> T {
         return T::from_i64(*self);
     }
@@ -1596,6 +1618,10 @@ impl Element for i64 {
 }
 
 impl Element for bool {
+    fn kind() -> ElementKind {
+        return ElementKind::Bool;
+    }
+
     fn cast_to<T: Element>(&self) -> T {
         return T::from_bool(*self);
     }
@@ -1630,13 +1656,24 @@ pub enum UnaryOp {
     Abs,
 }
 
-/// A two-operand operator of an [`Expr`].
+/// A two-operand operator of an [`Expr`]. The cases past `Pow` are
+/// StableHLO's, named apart from any ONNX operator, which the generator reads
+/// a case by: `maximum` and `minimum` are NaN where either operand is, and a
+/// comparison is IEEE's, a NaN equal to nothing, and 1.0 where it holds.
 pub enum BinaryOp {
     Add,
     Sub,
     Mul,
     Div,
     Pow,
+    Maximum,
+    Minimum,
+    Eq,
+    Ne,
+    Lt,
+    Le,
+    Gt,
+    Ge,
 }
 
 /// A fold of a step along a row of a row kernel.
@@ -1978,7 +2015,20 @@ fn binary_over(op: BinaryOp, a: &Slice<f32>, b: &Slice<f32>) -> List<f32> {
         Mul => pairwise(a, b, |x, y| x * y),
         Div => pairwise(a, b, |x, y| x / y),
         Pow => pairwise(a, b, |x, y| f32::pow(x, y)),
+        Maximum => pairwise(a, b, |x, y| f32::ieee754_max(x, y)),
+        Minimum => pairwise(a, b, |x, y| f32::ieee754_min(x, y)),
+        Eq => pairwise(a, b, |x, y| holds(x.ieee754_eq(y))),
+        Ne => pairwise(a, b, |x, y| holds(!x.ieee754_eq(y))),
+        Lt => pairwise(a, b, |x, y| holds(x.ieee754_lt(y))),
+        Le => pairwise(a, b, |x, y| holds(x.ieee754_le(y))),
+        Gt => pairwise(a, b, |x, y| holds(x.ieee754_gt(y))),
+        Ge => pairwise(a, b, |x, y| holds(x.ieee754_ge(y))),
     };
+}
+
+/// A condition as the f32 an `Expr` holds it in.
+fn holds(condition: bool) -> f32 {
+    return if condition { 1.0 } else { 0.0 };
 }
 
 fn each(v: &Slice<f32>, f: fn(f32) -> f32) -> List<f32> {
@@ -2199,6 +2249,20 @@ pub affine trait Holds with _ {
     }
     /// `t`'s extents.
     fn extents_of<E: Element, Axes>(&self, t: &Self::Tensor<E, Axes>) -> List<i32>;
+    /// `t` back on the host.
+    fn download<E: Element, Axes>(&mut self, t: &Self::Tensor<E, Axes>) -> Tensor<E, Axes>;
+    /// The start of a pass. What the pass before computed is dead, but for
+    /// what it retained: a caller of `pass` reads its outputs before the next
+    /// pass, and `forward` and `compute` have downloaded them, so a backend
+    /// may release it.
+    fn begin(&mut self) {
+    }
+    /// Keeps `t` alive through the next [`Self::begin`], for the pass after
+    /// it to read, as a model retains the attention cache it still holds just
+    /// before it begins. The begin after that releases it, unless `t` is
+    /// retained again.
+    fn retain<E: Element, Axes>(&mut self, t: &Self::Tensor<E, Axes>) {
+    }
 }
 
 /// Where the kernels run. `forward` is instantiated at each backend, and the
@@ -2215,8 +2279,6 @@ pub affine trait Backend: Holds with _ {
     /// alone, which no other kernel reads.
     affine type Rhs<K, N>;
 
-    /// `t` back on the host.
-    fn download<E: Element, Axes>(&mut self, t: &Self::Tensor<E, Axes>) -> Tensor<E, Axes>;
     /// `t`, a weight read only as a matrix product's right operand, held for
     /// every pass in the layout [`Self::matmul_rhs`] reads it in.
     fn keep_rhs<K, N>(&mut self, t: &Tensor<f32, [K, N]>) -> Self::Rhs<K, N>;
@@ -2231,19 +2293,6 @@ pub affine trait Backend: Holds with _ {
     fn prepare_rhs_transposed<E: Held, K, N>(&mut self, t: &Tensor<E, [N, K]>) -> Self::Rhs<K, N> {
         return self.keep_rhs_transposed(&widen(t));
     }
-    /// The start of a forward pass. What the pass before computed is dead,
-    /// but for what it retained: a caller of `pass` reads its outputs before
-    /// the next pass, and `forward` has downloaded them, so a backend may
-    /// release it.
-    fn begin(&mut self) {
-    }
-    /// Keeps `t` alive through the next [`Self::begin`], for the pass after
-    /// it to read, as a model retains the attention cache it still holds just
-    /// before it begins. The begin after that releases it, unless `t` is
-    /// retained again.
-    fn retain<E: Element, Axes>(&mut self, t: &Self::Tensor<E, Axes>) {
-    }
-
     fn filled<E: Element, Axes>(&mut self, extents: List<i32>, value: E) -> Self::Tensor<E, Axes>;
     fn range_i64<A>(&mut self, start: i64, count: i32, delta: i64) -> Self::Tensor<i64, [A]>;
 
@@ -2482,15 +2531,15 @@ impl Holds for Cpu {
     fn extents_of<E: Element, Axes>(&self, t: &Tensor<E, Axes>) -> List<i32> {
         return t.extents;
     }
+
+    fn download<E: Element, Axes>(&mut self, t: &Tensor<E, Axes>) -> Tensor<E, Axes> {
+        return *t;
+    }
 }
 
 impl Backend for Cpu {
     type Operand<Axes> = Read<Axes>;
     type Rhs<K, N> = Packed<K, N>;
-
-    fn download<E: Element, Axes>(&mut self, t: &Tensor<E, Axes>) -> Tensor<E, Axes> {
-        return *t;
-    }
 
     fn keep_rhs<K, N>(&mut self, t: &Tensor<f32, [K, N]>) -> Packed<K, N> {
         let cols = t.extents[1];
