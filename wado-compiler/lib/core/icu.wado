@@ -42,11 +42,7 @@ impl Locale {
     /// letters is refused: BCP 47 reserves the length, and no language has one.
     pub fn is_well_formed<S: AsStrSlice>(tag: S) -> bool {
         let mut s = Scanner::new(tag.as_str_slice());
-        if s.take(is_language) matches { None } {
-            return false;
-        }
-        s.script_and_region();
-        if !s.distinct_variants() {
+        if s.take(is_language) matches { None } || !s.language_tail() {
             return false;
         }
         let mut singletons: List<u8> = [];
@@ -219,7 +215,13 @@ impl Scanner {
         ];
     }
 
-    /// Steps past the variants; whether no variant repeats.
+    /// Steps past what may follow a language subtag; whether no variant
+    /// repeats.
+    fn language_tail(&mut self) -> bool {
+        self.script_and_region();
+        return self.distinct_variants();
+    }
+
     fn distinct_variants(&mut self) -> bool {
         let mut seen: List<StrSlice> = [];
         while let Some(subtag) = self.take(is_variant) {
@@ -237,8 +239,7 @@ impl Scanner {
     fn transformed_extension(&mut self) -> bool {
         let mut any = false;
         if self.take(|p| is_alpha_of(p, 2, 3) || is_alpha_of(p, 5, 8)) matches { Some(_) } {
-            self.script_and_region();
-            if !self.distinct_variants() {
+            if !self.language_tail() {
                 return false;
             }
             any = true;
