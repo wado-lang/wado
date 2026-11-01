@@ -27,7 +27,8 @@ Each property has three exports of its own: its ranges, whether it holds one
 character, and the parser of its value names, strict or loose per UAX #44. A
 value crosses as its position in the property's list, a `u16`. Since a call
 reaches one property's exports, the toolchain's collection keeps that
-property's data alone.
+property's data alone. The binary properties are the exception: they are one
+property here, `binary-property`, so naming one keeps all 63.
 
 The property interface is generated, with the Rust tables behind it and the
 Wado enums `core:icu` names the values with. `gen/` holds the generator, and

@@ -231,7 +231,8 @@ same baked data the case does and approximates nothing.
 
 The enum is the size knob. Each property has its own exports in the asset, one
 for its ranges, one for a single character and one for its parser, so a call
-roots one property and the collection keeps that property's data alone. Two
+roots one property and the collection keeps that property's data alone. The
+binary properties share one set of exports, which is a known gap below. Two
 choices follow from it:
 
 - A value crosses the boundary as its position in its enum, a `u16`, rather

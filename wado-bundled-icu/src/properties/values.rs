@@ -870,7 +870,7 @@ impl wit::Guest for Component {
                 "Unified_Ideograph" | "UIdeo" => 56,
                 "Uppercase" | "Upper" => 57,
                 "Variation_Selector" | "VS" => 58,
-                "White_Space" | "WSpace" => 59,
+                "White_Space" | "WSpace" | "space" => 59,
                 "xdigit" => 60,
                 "XID_Continue" | "XIDC" => 61,
                 "XID_Start" | "XIDS" => 62,

@@ -209,22 +209,21 @@ fn category() -> Property {
     }
 }
 
-/// The binary properties, each optionally with the folded aliases UAX #44
-/// gives it beyond its long and short names. ICU4X has no name table to parse
-/// these by, so the list is the table.
+/// The binary properties, each optionally with the aliases `PropertyAliases.txt`
+/// gives it beyond the long and short names ICU4X knows. ICU4X has no name
+/// table to parse these by, so the list is the table.
 macro_rules! binary_properties {
     ($($ty:ident $(=> [$($alias:literal),+])?),+ $(,)?) => {
         fn binary() -> Property {
             let values = vec![$({
-                let strict_names = ucd_names(
+                let strict_names: Vec<String> = ucd_names(
                     <icu_properties::props::$ty as BinaryProperty>::NAME,
                     <icu_properties::props::$ty as BinaryProperty>::SHORT_NAME,
-                );
-                let loose_names = strict_names
-                    .iter()
-                    .map(|n| fold(n))
-                    .chain([$($($alias.to_string()),+)?])
-                    .collect();
+                )
+                .into_iter()
+                .chain([$($($alias.to_string()),+)?])
+                .collect();
+                let loose_names = strict_names.iter().map(|n| fold(n)).collect();
                 Value {
                     case: stringify!($ty).to_string(),
                     icu: stringify!($ty).to_string(),

@@ -8,7 +8,8 @@ Unicode character properties, locale-aware collation and case mapping, and
 grapheme segmentation, from the ICU4X component bundled with the toolchain.
 
 A property value is an enum case of its property (`Script::Latin`), and a
-program carries the data of the properties it names and no others. A name
+program carries the data of the properties it names and no others, except
+that naming one binary property carries all of them. A name
 read at run time parses through `FromStr` or `LenientFromStr`, and one this
 build does not answer is refused, never approximated: `Block`,
 `Decomposition_Type` and the contributory `Other_*` are withheld.

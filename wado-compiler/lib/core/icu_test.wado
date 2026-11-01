@@ -26,6 +26,7 @@ test "a General_Category group spans its categories" {
 test "a strict name is spelled as UCD spells it" {
     assert BinaryProperty::from_str("White_Space") == Result::Ok(BinaryProperty::WhiteSpace);
     assert BinaryProperty::from_str("WSpace") == Result::Ok(BinaryProperty::WhiteSpace);
+    assert BinaryProperty::from_str("space") == Result::Ok(BinaryProperty::WhiteSpace);
     assert Script::from_str("Hira") == Result::Ok(Script::Hiragana);
     assert BinaryProperty::from_str("white space") matches { Err(_) };
     assert Script::from_str("hiragana") matches { Err(_) };
