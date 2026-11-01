@@ -1000,6 +1000,7 @@ pub fn world_surface(host: &impl CompilerHost, source: &str, world_fq: &str) -> 
         None,
         wado_compiler::OptOverrides::default(),
         &[],
+        None,
         &wado_compiler::param_resolution::ParamInputs::default(),
         wado_compiler::kiln::InvocationIndex::default(),
         1,

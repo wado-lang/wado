@@ -303,8 +303,6 @@ changes only what the program costs, never what it computes. It combines with
 `#[timeout_ms]` and `#[synopsis]`, and is an error with `#[expect_trap]` or
 `#[TODO]`, since a workload must not trap.
 
-> Not yet implemented: no `wado` command hands a compile the profile.
-
 Rationale: [WEP: Profile-Guided Optimization](./wep-2026-10-25-profile-guided-optimization.md).
 
 ### `#[coverage(off)]`

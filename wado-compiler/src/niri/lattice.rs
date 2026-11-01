@@ -74,7 +74,7 @@ impl Interpreter<'_> {
     /// place, never out of `env`; only [`Self::projected_lattice`] resolves one,
     /// unless nothing can write the place, where the reference reads as its
     /// referent's value just as `&place` itself does.
-    fn local_lattice(&self, idx: u32) -> Lattice {
+    pub(super) fn local_lattice(&self, idx: u32) -> Lattice {
         if self.frame.holds_place_field(idx, &[]) {
             return Lattice::Unevaluated;
         }

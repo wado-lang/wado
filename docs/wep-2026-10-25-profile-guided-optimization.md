@@ -189,16 +189,19 @@ an author learns when to record again.
 
 ### A region that never ran is marked cold
 
-In every function the profile covers, reify inserts a `builtin::cold_path()`
+In every function the workloads entered, reify inserts a `builtin::cold_path()`
 at the start of each outermost region whose count is zero. Reify is where
 coverage inserts its probes, so a region means the same thing to both. From
 there, the optimizer's passes act on the marker as they do on one the author
 wrote.
 
-A function whose body region never ran thus gets one marker, at its start, and
-nothing inside it. Marking every region with a zero count would have
-`cold_outline` outline each branch of such a function into a function of its
-own, and put a marker on both sides of its `if`s. A region that ran any number
+A function whose body region never ran gets no marker. Workloads are tests, so
+a build's own entry never runs under them, and neither does whatever only it
+reaches, such as a benchmark's timing loop: a function they never entered says
+nothing about how often it runs. Marking such functions at their start made
+every benchmark slower, by 24% to 74%. The optimizer does not inline into a
+function only cold sites reach, and that took in the whole path the benchmark
+measures. A region that ran any number
 of times gets no marker. The counts beyond zero decide only whether a `?`'s
 failure path stays cold (see below). Using them to optimize a hot path harder
 than the rest is left to a later proposal.
@@ -289,7 +292,7 @@ level.
    whose hash differs is skipped, and the conflict remark is emitted. An e2e
    fixture can name a profile in its `__DATA__`, so a fixture states which
    regions end up cold.
-5. [ ] `-f pgo` and `-f no-pgo`. The CLI hands a compile the entry's profile,
+5. [x] `-f pgo` and `-f no-pgo`. The CLI hands a compile the entry's profile,
    and the compile looks each module up by its name.
 6. [ ] A `?`'s failure path the profile ran 1% or more of the time loses its
    marker, with the remark. An e2e fixture states both sides of the threshold.

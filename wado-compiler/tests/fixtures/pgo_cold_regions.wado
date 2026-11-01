@@ -1,6 +1,6 @@
-// A profile marks cold each outermost region it never ran: the `then` of
-// `x < 0` in `sign`, the `-1` arm in `weigh`, and the whole of `unprofiled`,
-// once at its start rather than once per branch inside it.
+// A profile marks cold each outermost region it never ran in a function the
+// workloads entered: the `then` of `x < 0` in `sign` and the `-1` arm in
+// `weigh`. `unprofiled`, which they never entered, keeps its code unmarked.
 use { println, Stdout } from "core:cli";
 
 fn sign(x: i32) -> i32 {
@@ -44,8 +44,7 @@ __DATA__
   "profile": "testdata/pgo_cold_regions.pgo",
   "cold_regions": [
     "pgo_cold_regions.wado:7:14 then",
-    "pgo_cold_regions.wado:20:19 arm",
-    "pgo_cold_regions.wado:31:30 fn"
+    "pgo_cold_regions.wado:20:19 arm"
   ],
   "stdout": "0 3\n"
 }
