@@ -2370,16 +2370,16 @@ async fn run_one_package(
     let compile_ok = compiled_count + todo_compile_errors.len();
     let compile_failed = compile_failures.len();
     let load_failed = load_failures.len();
+    let todo_compile_pending = u32::try_from(todo_compile_errors.len()).unwrap_or(u32::MAX);
 
     // `--no-run`: stages 2 and 3 were short-circuited, so there are no
     // test results — only the TODO-module compile-error axis is
     // observable here.
     let totals = if no_run {
-        let todo_pending = u32::try_from(todo_compile_errors.len()).unwrap_or(u32::MAX);
         PackageTotals {
             compile_ok,
             compile_failed,
-            todo_pending,
+            todo_pending: todo_compile_pending,
             timings,
             ..PackageTotals::default()
         }
@@ -2395,7 +2395,7 @@ async fn run_one_package(
             cached_files: cached.len(),
             test_passed: test_passed + cached_tests.passed,
             test_failed,
-            todo_pending: todo_pending + cached_tests.todo_pending,
+            todo_pending: todo_pending + cached_tests.todo_pending + todo_compile_pending,
             todo_resolved,
             timings,
         }
