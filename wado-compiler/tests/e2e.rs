@@ -1497,18 +1497,11 @@ test "passes unexpectedly" {
     assert true;
 }
 "#;
-    let options = CompilerOptions {
-        opt_level: OptLevel::O0,
-        target_world: Some("test".to_string()),
-        ..Default::default()
-    };
-    let path = std::path::Path::new("synthetic_todo_resolved.wado");
-    let compile_result = common::compile_source_with_compiler_options(path, source, options)
-        .expect("compilation should succeed");
+    let wasm = compile_synthetic(source, Some("test"));
 
     let payload = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         common::run_test_world(
-            &compile_result.wasm,
+            &wasm,
             "synthetic-todo-resolved",
             indexmap::IndexMap::new(),
             indexmap::IndexMap::new(),
@@ -1537,7 +1530,7 @@ fn compile_synthetic(source: &str, target_world: Option<&str>) -> Vec<u8> {
         target_world: target_world.map(str::to_string),
         ..Default::default()
     };
-    let path = std::path::Path::new("synthetic_budget.wado");
+    let path = std::path::Path::new("synthetic.wado");
     common::compile_source_with_compiler_options(path, source, options)
         .expect("compilation should succeed")
         .wasm
