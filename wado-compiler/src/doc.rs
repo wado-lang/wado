@@ -10,8 +10,7 @@ use crate::ast::{
 use crate::attribute::SYNOPSIS;
 use crate::comment::{Comment, CommentKind, TriviaMap};
 use crate::lexer::is_ident_continue;
-use crate::loader::resolve_wasm_asset_path;
-use crate::module_source::{ModuleSource, ModuleSourceInterner, WasmAssetKind};
+use crate::module_source::ModuleSource;
 use crate::primitive::PrimitiveType;
 use crate::semantics::Semantics;
 use crate::token::Span;
@@ -21,9 +20,7 @@ use crate::unparse::{
     unparse_struct_signature, unparse_trait_header, unparse_type_into,
 };
 use crate::use_declaration;
-use crate::wit_consume::build_bindings;
 use crate::{ParseResult, ast, parse, stdlib};
-use wit_component::DecodedWasm;
 
 #[derive(Debug, Clone, Serialize)]
 pub struct DocModule {
@@ -941,10 +938,6 @@ pub fn extract_stdlib_doc_with(
     if !reexport_sources.is_empty() {
         let exported_names = collect_pub_use_names(&parsed.ast);
         for reexport_source in &reexport_sources {
-            if let Some(sub_doc) = component_reexport_doc(module_name, reexport_source) {
-                merge_reexported_items(&mut doc, &sub_doc, &exported_names);
-                continue;
-            }
             if let Some(sub_source) = stdlib::get_stdlib_module(reexport_source) {
                 let sub_parsed = parse_stdlib_for_doc(reexport_source, sub_source);
                 // Admit `internal` items so a `pub use` re-export can publish
@@ -1012,32 +1005,6 @@ pub fn extract_stdlib_doc_with(
 }
 
 /// Collect source paths from `pub use { ... } from "source"` declarations.
-/// Items a stdlib module re-exports from a bundled component asset
-/// (`pub use { X } from "./icu.wat"`). The types come from the component's WIT
-/// rather than from Wado source, so they carry no doc comments.
-fn component_reexport_doc(module_name: &str, reexport_source: &str) -> Option<DocModule> {
-    let mut interner = ModuleSourceInterner::new();
-    let from = interner.core(module_name.strip_prefix("core:")?);
-    let path = resolve_wasm_asset_path(&from, reexport_source, "").ok()?;
-    let bytes = stdlib::get_stdlib_wasm_asset(&path)?;
-    let binary = wat::parse_bytes(bytes).ok()?;
-    let decoded = wit_component::decode(&binary).ok()?;
-    let DecodedWasm::Component(resolve, world) = decoded else {
-        return None;
-    };
-    let component = interner.wasm(&path, WasmAssetKind::Wat);
-    let bindings = build_bindings(&resolve, world, &component).ok()?;
-    Some(extract_doc_filtered(
-        &bindings.module,
-        &TriviaMap::default(),
-        "",
-        &path,
-        false,
-        true,
-        None,
-    ))
-}
-
 fn collect_pub_use_sources(module: &Module) -> Vec<String> {
     let mut sources = IndexSet::default();
     for item in &module.items {
