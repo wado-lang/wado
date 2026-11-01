@@ -1664,7 +1664,11 @@ fn compile_after_load<H: CompilerHost>(
     // === Phase 6b: Effect, Purity and Move Checks ===
     check_effects_and_moves(
         &mut sem,
-        options.providers.iter().map(|p| p.import_fq.clone()).collect(),
+        options
+            .providers
+            .iter()
+            .map(|p| p.import_fq.clone())
+            .collect(),
         logger,
     )?;
 

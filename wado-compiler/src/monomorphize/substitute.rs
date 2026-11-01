@@ -173,7 +173,7 @@ impl Monomorphizer {
         let mut variants = Vec::new();
         for id in ids {
             if let ResolvedType::GenericInstance { def, type_args } = type_table.get(id) {
-                if self.pool.drives_structs && self.pool.generic_variants.contains_key(def) {
+                if self.pool.generic_variants.contains_key(def) {
                     variants.push(id);
                     continue;
                 }

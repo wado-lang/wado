@@ -29,5 +29,7 @@ fn dump_rejects_what_compile_rejects() {
     wado_in(root)
         .args(["dump", "--tir-monomorphized", "entry.wado"])
         .assert()
-        .stderr(predicate::str::contains(rejection).and(predicate::str::contains("panicked").not()));
+        .stderr(
+            predicate::str::contains(rejection).and(predicate::str::contains("panicked").not()),
+        );
 }

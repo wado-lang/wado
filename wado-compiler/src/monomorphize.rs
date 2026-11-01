@@ -33,7 +33,8 @@ use crate::synthesis::affine_drop;
 use crate::synthesis::affine_drop::Generics;
 use crate::synthesis::template::hole_fmt_helpers;
 use crate::tir::{
-    MonomorphInfo, ResolvedType, StructDef, TemplateId, TirFunction, TirGlobal, TirModule, TirStruct, TypeId,
+    MonomorphInfo, ResolvedType, StructDef, TemplateId, TirFunction, TirGlobal, TirModule,
+    TirStruct, TypeId,
 };
 use crate::tir_visitor::TirRefVisitor;
 use crate::type_table::{AnonStructId, TypeKey, TypeTable};
@@ -108,7 +109,11 @@ impl Unrewritten {
     }
 
     fn globals(self, module: &TirModule) -> &[TirGlobal] {
-        if self.scanned == 0 { &module.globals } else { &[] }
+        if self.scanned == 0 {
+            &module.globals
+        } else {
+            &[]
+        }
     }
 
     fn globals_mut(self, module: &mut TirModule) -> &mut [TirGlobal] {
@@ -165,10 +170,9 @@ impl Pool {
     /// is built over: release what waited on one, and keep each
     /// `GenericInstance` for the struct drain.
     fn hold(&mut self, id: TypeId, type_table: &TypeTable) {
-        for id in built_over(id, type_table, &mut self.held) {
-            if matches!(type_table.get(id), ResolvedType::GenericInstance { .. }) {
-                self.instances.push(id);
-            }
+        let found = built_over(id, type_table, &mut self.held);
+        self.keep_instances(&found, type_table);
+        for id in found {
             let Some(head) = type_head(type_table, id) else {
                 continue;
             };
@@ -182,11 +186,17 @@ impl Pool {
     /// member of type `id` is built over. A declaration is no reached body, so
     /// it releases nothing.
     fn lay_out(&mut self, id: TypeId, type_table: &TypeTable) {
-        for id in built_over(id, type_table, &mut self.laid_out) {
-            if matches!(type_table.get(id), ResolvedType::GenericInstance { .. }) {
-                self.instances.push(id);
-            }
-        }
+        let found = built_over(id, type_table, &mut self.laid_out);
+        self.keep_instances(&found, type_table);
+    }
+
+    fn keep_instances(&mut self, found: &[TypeId], type_table: &TypeTable) {
+        self.instances.extend(
+            found
+                .iter()
+                .copied()
+                .filter(|&id| matches!(type_table.get(id), ResolvedType::GenericInstance { .. })),
+        );
     }
 
     /// The function `callee` names, if it is still here. A template's body
@@ -237,21 +247,27 @@ pub fn monomorphize(flat: &mut FlatPackage) -> Monomorphization {
         elaborated_functions: 0,
         roots: prunes().then(|| Roots::new(flat)),
     };
-    let pool = &mut session.monomorphizer.pool;
-    pool.drives_structs = prunes();
-    let type_table = flat.type_table.borrow();
-    for variant in &flat.variants {
-        let payloads = variant.cases.iter().map(|case| case.payload);
-        if variant.type_params.is_empty() {
-            for payload in payloads {
-                pool.lay_out(payload, &type_table);
+    if prunes() {
+        let pool = &mut session.monomorphizer.pool;
+        pool.drives_structs = true;
+        let type_table = flat.type_table.borrow();
+        for variant in &flat.variants {
+            let payloads = variant.cases.iter().map(|case| case.payload);
+            if variant.type_params.is_empty() {
+                for payload in payloads {
+                    pool.lay_out(payload, &type_table);
+                }
+            } else {
+                let params = variant
+                    .type_params
+                    .iter()
+                    .map(|param| param.index)
+                    .collect();
+                pool.generic_variants
+                    .insert(variant.def, (params, payloads.collect()));
             }
-        } else {
-            let params = variant.type_params.iter().map(|param| param.index).collect();
-            pool.generic_variants.insert(variant.def, (params, payloads.collect()));
         }
     }
-    drop(type_table);
     session.run(flat);
     session
 }
@@ -505,11 +521,9 @@ impl Monomorphizer {
                     &mut type_table.borrow_mut(),
                 );
                 if let Some(concrete) = concrete {
-                    let tt = type_table.borrow();
                     for field in &concrete.fields {
-                        self.pool.lay_out(field.type_id, &tt);
+                        self.pool.lay_out(field.type_id, &type_table.borrow());
                     }
-                    drop(tt);
                     new_structs.push(concrete);
                 }
             }
@@ -831,7 +845,7 @@ impl Monomorphizer {
                 new_functions.push(Rc::new(RefCell::new(concrete)));
             }
 
-            if !made_progress && unscanned.is_empty() && self.pool.instances.is_empty() {
+            if !made_progress && unscanned.is_empty() {
                 break;
             }
         }

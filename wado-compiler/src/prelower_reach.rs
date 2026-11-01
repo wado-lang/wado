@@ -13,8 +13,7 @@ use crate::flat_package::FlatPackage;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::name::{
-    FreeFunctionName, LocalMethodName, Receiver, TypeHead, global_init_function,
-    is_effect_default,
+    FreeFunctionName, LocalMethodName, Receiver, TypeHead, global_init_function, is_effect_default,
     is_type_bridge,
 };
 use crate::nir_package::NirPackage;
