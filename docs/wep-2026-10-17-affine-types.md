@@ -482,7 +482,8 @@ pub affine trait Drop with () {
   declares none. A resource's drop is benign in its own effect, and a type
   whose `drop` performs another names it with
   [`#[benign(E)]`](./spec-attributes.md#benigne-), which any function may
-  carry already. `AsyncCall`'s drop is `#[benign(Subtask)]`. A flush is output
+  carry already. `AsyncCall`'s drop needs none: its signature names
+  `AsyncCall`, whose field holds the `Subtask`. A flush is output
   a caller observes, so a writer that buffers ahead of a stream flushes by an
   explicit call, not in its drop.
 
@@ -753,14 +754,15 @@ it has none. The standard library implements the trait on the values that own
 a waitable handle, and nothing else may. A loop's variant derives it with the
 marker `impl Waitable for V;`, which the compiler writes out case by case: a
 case with a payload asks the payload, and one without is
-`Settled(Unreported)`. `Subtask` stays public, since a function waiting on a call it was neither
-handed nor started names it as an effect, but no value of it can be had
-outside `core`.
+`Settled(Unreported)`. `Subtask` stays public, since a `WaitableSet<Subtask>`
+names it, but no value of it can be had outside `core`.
 
-Since that resource is internal, no caller can install a handler for it, and a
-caller asked for it as an effect could only pass it on. The set's methods
-therefore declare its operations `#[benign(RawWaitableSet)]`, the way a drop's
-effects are benign, and `AsyncCall::wait` performs only `Subtask`.
+Neither resource is asked of a caller. A method of `WaitableSet` names the set
+in its signature, and the set's field is the `RawWaitableSet`; a method of
+`AsyncCall` names the call, whose field is the `Subtask`. Each therefore holds
+its resource as
+[Resources in a Signature](./spec-effects.md#resources-in-a-signature) says,
+and declares nothing.
 
 ### Web handles
 

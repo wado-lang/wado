@@ -937,8 +937,8 @@ internal fn cm_packed_upper(packed: i32) -> i32 {
 }
 
 /// The host's waitable set, which holds handles. `WaitableSet` wraps one and
-/// holds the values behind them. Waiting on one is benign in it: the set
-/// observes nothing outside the values its owner joined.
+/// holds the values behind them, so each of its methods holds this resource
+/// through its signature.
 internal resource RawWaitableSet {
     #[cm("waitable-set-new")]
     fn new() -> RawWaitableSet;
@@ -980,7 +980,6 @@ pub struct Ready<affine W> {
 }
 
 impl<affine W: Waitable> WaitableSet<W> {
-    #[benign(RawWaitableSet)]
     pub fn new() -> WaitableSet<W> {
         return WaitableSet { raw: RawWaitableSet::new(), members: [], ready: [] };
     }
@@ -1000,7 +999,6 @@ impl<affine W: Waitable> WaitableSet<W> {
     /// Blocks until a member is ready, and moves it out: a copy once it
     /// settled, a call once it resolved. A member ready without the host comes
     /// first. Traps on an empty set.
-    #[benign(RawWaitableSet)]
     pub fn wait(&mut self) -> Ready<W> {
         assert !self.is_empty(), "a set waits on a member";
         if !self.ready.is_empty() {
@@ -1015,7 +1013,6 @@ impl<affine W: Waitable> WaitableSet<W> {
 
     /// The member that is ready, as `wait` means it, moved out, or None where
     /// none is yet.
-    #[benign(RawWaitableSet)]
     pub fn poll(&mut self) -> Option<Ready<W>> {
         if !self.ready.is_empty() {
             return Option::Some(self.ready.remove(0));
@@ -1088,7 +1085,6 @@ impl<affine W: Waitable> WaitableSet<W> {
 impl<affine W: Waitable> Drop for WaitableSet<W> {
     /// Drops the members first, each leaving the host's set as it drops: the
     /// host traps on dropping a set that still has one.
-    #[benign(RawWaitableSet)]
     fn drop(self) {
         builtin::drop(self.members);
         builtin::drop(self.ready);
@@ -1162,7 +1158,7 @@ pub affine struct AsyncCall<affine T> {
 
 impl<affine T> AsyncCall<T> {
     /// Wait for the subtask to complete and return the lifted result.
-    pub fn wait(self) -> T with Subtask {
+    pub fn wait(self) -> T {
         let mut call = self;
         if let Some(subtask) = call.subtask.take() {
             let mut set = WaitableSet::<Subtask>::new();
@@ -1178,7 +1174,7 @@ impl<affine T> AsyncCall<T> {
 
     /// Cancel the in-flight subtask. A result it returned before the cancel
     /// is lifted and dropped, since it may own handles.
-    pub fn cancel(self) with Subtask {
+    pub fn cancel(self) {
         builtin::drop(self);
     }
 }
@@ -1186,7 +1182,6 @@ impl<affine T> AsyncCall<T> {
 impl<affine T> Drop for AsyncCall<T> {
     /// Cancels a call nobody waited on, and drops a result the callee
     /// returned, which owns handles only a lift reaches.
-    #[benign(Subtask)]
     fn drop(self) {
         let mut returned = true;
         if let Some(subtask) = self.subtask {
