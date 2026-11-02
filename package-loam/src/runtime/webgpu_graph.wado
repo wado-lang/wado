@@ -42,6 +42,7 @@ use {
     Attention,
     BinaryOp,
     Element,
+    ElementKind,
     Epilogue,
     Expr,
     Holds,
@@ -573,13 +574,8 @@ fn kernel_replayed(
         return kernel_result(g, values, recorded, k);
     };
     let key = [program.serial, k.root] as List<i32>;
-    let kind = recorded.nodes[k.root].kind;
     if let Some(out) = g.replayed(key, &reads) {
-        return match kind {
-            F32 => Any::F32(Placed::Device(out)),
-            Bool => Any::Bool(Placed::Device(out)),
-            I64 => unreachable(),
-        };
+        return of_kind(g, recorded.nodes[k.root].kind, Placed::Device(out));
     }
     g.tape();
     let value = kernel_result(g, values, recorded, k);
@@ -593,7 +589,11 @@ fn kernel_replayed(
 
 /// The views `k` reads, its product's operands first, or `None` where one is
 /// on the host.
-fn device_reads(values: &HashMap<i32, Any<WebGpuBackend>>, recorded: &Recorded, k: &Kernel) -> Option<List<DeviceTensor>> {
+fn device_reads(
+    values: &HashMap<i32, Any<WebGpuBackend>>,
+    recorded: &Recorded,
+    k: &Kernel,
+) -> Option<List<DeviceTensor>> {
     let mut nodes: List<i32> = [];
     if let Some(p) = k.product {
         nodes.extend(&recorded.nodes[p].operands);
@@ -605,7 +605,9 @@ fn device_reads(values: &HashMap<i32, Any<WebGpuBackend>>, recorded: &Recorded, 
     for let id of nodes {
         match values[id] {
             F32(Device(d)) | Bool(Device(d)) => reads.push(d),
-            _ => return null,
+            _ => {
+                return null;
+            },
         }
     }
     return Option::Some(reads);
@@ -655,8 +657,12 @@ fn kernel_result(
         },
     };
     let root = &recorded.nodes[k.root];
-    let computed = g.reshape::<f32, Untyped, Untyped>(&grouped, root.extents);
-    return match root.kind {
+    return of_kind(g, root.kind, g.reshape::<f32, Untyped, Untyped>(&grouped, root.extents));
+}
+
+/// A kernel's f32 result as the element `kind` its root computes.
+fn of_kind(g: &mut WebGpuBackend, kind: ElementKind, computed: Placed<f32, Untyped>) -> Any<WebGpuBackend> {
+    return match kind {
         F32 => Any::F32(computed),
         Bool => Any::Bool(as_element(g, computed)),
         I64 => unreachable(),

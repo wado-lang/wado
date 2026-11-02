@@ -201,7 +201,13 @@ pub fn take_arg_max(graph: &mut Graph, checked: &Checked, output: &String, axis:
         op: "ArgMax",
         outputs: [*output],
         inputs: [scores],
-        attrs: [Attr { name: "axis", values: [`${axis}`], is_list: false }],
+        attrs: [
+            Attr {
+                name: "axis",
+                values: [`${axis}`],
+                is_list: false,
+            },
+        ],
     });
     graph.outputs[at].dtype = "int64";
     if let Dims(declared) = graph.outputs[at].rank {

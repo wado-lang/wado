@@ -95,7 +95,10 @@ export fn run() with (Stdout, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuC
         [5, 2, 4],
     ] as List<[i32, i32, i32]> {
         let input = gated_input(positions);
-        let [before, replayed] = [gpu.dispatches(), gpu.replays()];
+        let [before, replayed] = [
+            gpu.dispatches(),
+            gpu.replays(),
+        ];
         let on_device = gated::compute(&mut gpu, &input, &mut on_gpu);
         // The normalization, the gate's product, the value's with the gate in
         // its epilogue, and the product down.

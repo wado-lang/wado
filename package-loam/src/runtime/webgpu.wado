@@ -310,8 +310,7 @@ pub affine struct WebGpuBackend {
     recording: List<Recording>,
     /// The dispatches recorded and not yet submitted.
     unsubmitted: i32,
-    /// Each bind group made, and its place by its key: the shader's place in
-    /// `pipelines`, then each span's buffer `id`, first word and words.
+    /// Each bind group made, and its place by its `group_key`.
     groups: Places<CachedGroup>,
     group_at: HashMap<List<i32>, i32>,
     /// The commands of the launch being recorded: none where no launch is, or
@@ -960,37 +959,35 @@ impl WebGpuBackend {
 
     /// The place in `groups` of the bind group of `spans` to the shader at
     /// `pipeline`, made where none is.
-    fn group_of(&mut self, pipeline: i32, spans: &List<Span>) -> i32 with (GpuDevice, GpuBuffer, GpuBindGroupLayout, GpuBindGroup) {
-        let mut bound: List<i32> = [pipeline];
-        for let s of spans {
-            assert s.first % self.alignment == 0 && s.count <= self.max_binding;
-            bound.push(self.slot(s.slot).id);
-            bound.push(s.first);
-            bound.push(s.count);
-        }
-        return match self.group_at.get(bound) {
+    fn group_of(
+        &mut self,
+        pipeline: i32,
+        spans: &List<Span>,
+    ) -> i32 with (GpuDevice, GpuBuffer, GpuBindGroupLayout, GpuBindGroup) {
+        let key = self.group_key(pipeline, spans);
+        return match self.group_at.get(key) {
             Some(at) => at,
-            None => self.bind_group(pipeline, spans, bound),
+            None => self.bind_group(pipeline, spans, key),
         };
     }
 
     /// Whether the bind group at `at` in `groups` binds `spans` to the shader
-    /// at `pipeline`, as `group_of` keys it.
+    /// at `pipeline`.
     fn binds_at(&self, at: i32, pipeline: i32, spans: &List<Span>) -> bool {
-        let Some(cached) = &self.groups.held[at] else {
-            return false;
-        };
-        let key = &cached.key;
-        if key.len() != 3 * spans.len() + 1 || key[0] != pipeline {
-            return false;
+        return self.groups.held[at] matches { Some(cached) && cached.key == self.group_key(pipeline, spans) };
+    }
+
+    /// What a bind group is cached under: the shader's place in `pipelines`,
+    /// then each span's buffer `id`, first word and words.
+    fn group_key(&self, pipeline: i32, spans: &List<Span>) -> List<i32> {
+        let mut key: List<i32> = [pipeline];
+        for let s of spans {
+            assert s.first % self.alignment == 0 && s.count <= self.max_binding;
+            key.push(self.slot(s.slot).id);
+            key.push(s.first);
+            key.push(s.count);
         }
-        for let i of 0..<spans.len() {
-            let s = &spans[i];
-            if key[3 * i + 1] != self.slot(s.slot).id || key[3 * i + 2] != s.first || key[3 * i + 3] != s.count {
-                return false;
-            }
-        }
-        return true;
+        return key;
     }
 
     /// A new bind group of `spans` to the shader at `pipeline`, cached under
@@ -1917,7 +1914,10 @@ impl WebGpuBackend {
         let mut slots = Renamed::new();
         for let i of 0..<reads.len() {
             let [was, now] = [&e.reads[i], &reads[i]];
-            let laid_out = was.offset == now.offset && was.extents == now.extents && was.strides == now.strides && was.half == now.half;
+            let laid_out = was.offset == now.offset
+                && was.extents == now.extents
+                && was.strides == now.strides
+                && was.half == now.half;
             if !laid_out || !slots.bound(was.slot, now.slot) {
                 return null;
             }

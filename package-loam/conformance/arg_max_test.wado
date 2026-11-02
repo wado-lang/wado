@@ -46,11 +46,17 @@ fn ranked_by_hand(seq: i32) -> List<i64> {
 }
 
 fn x(seq: i32) -> Tensor<f32, [N, S, X2]> {
-    return Tensor { data: X[0..<2 * seq * 4].to_list(), extents: [2, seq, 4] };
+    return Tensor {
+        data: X[0..<2 * seq * 4].to_list(),
+        extents: [2, seq, 4],
+    };
 }
 
 fn w() -> Tensor<f32, [X2, W1]> {
-    return Tensor { data: W, extents: [4, 3] };
+    return Tensor {
+        data: W,
+        extents: [4, 3],
+    };
 }
 
 test "the lanes rank different indices, so the case tells them apart" {
