@@ -60,7 +60,7 @@ Where Gale departs from the jar:
   table leave such a kind to the simulator, and a sync set a wildcard
   contributed to admits it. Pinned by "a wildcard takes a kind past the
   grammar's" in `src/codegen_test.wado` and "a wildcard predicts a kind past
-  the grammar's" in `src/atn_sim_test.wado`. No upstream report names it yet.
+  the grammar's" in `src/lower_test.wado`. No upstream report names it yet.
 
 ### Grammars Gale accepts and ANTLR4 rejects
 
@@ -929,9 +929,9 @@ relevant sites.
    stepped over, ends back at a `*` or `+` loop, which may run again or
    stop. Resuming past it would kill every config on the loop's second
    iteration. Fixture `tests/grammars/scan_optional_lookahead_restore.g4`.
-   The expansion case is pinned in `src/dump_test.wado`, the second
-   iteration in `src/codegen_test.wado` ("a prediction walks a loop
-   through more than one iteration").
+   Both are pinned in `src/codegen_test.wado`: the expansion case by the
+   dump, the second iteration by "a prediction walks a loop through more
+   than one iteration".
 7. A scan-side optional rewinds to its entry position when its body
    fails, because a failed optional means "skip". Leaving the callee's
    `-1` in the scan position both mis-scans the elements after it and
