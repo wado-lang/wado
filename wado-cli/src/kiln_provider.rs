@@ -51,7 +51,7 @@ use sha2::{Digest, Sha256};
 use wado_compiler::kiln::{GeneratorModule, InvocationPath, OptionsDescriptor};
 use wado_compiler::remote::{Integrity, is_remote};
 use wado_compiler::{CompilerHost, CompilerOptions, Diagnostic, LogLevel, ModuleDir};
-use wado_lsp::host::discovery::normalize_path;
+use wado_lsp::host::discovery::{Disk, normalize_path};
 use wado_manifest::registry_url;
 
 use crate::build_dep::{GENERATOR_WORLD_SEGMENT, parse_spec, resolve_generator_version};
@@ -590,7 +590,7 @@ fn make_relative_sources(base: &Path, raw: Vec<(String, [u8; 32])>) -> Vec<(Stri
 /// read the lock pinned is recorded by its URL, so only that entry, not the
 /// whole lock, decides whether a generator built on it is current.
 fn locked_digest(base: &Path, url: &str) -> Option<[u8; 32]> {
-    let pin = locked_pin(&package_root(base)?, url, None).ok()??;
+    let pin = locked_pin(&package_root(base, &Disk)?, url, None).ok()??;
     hex32_to_array(&pin.hex())
 }
 

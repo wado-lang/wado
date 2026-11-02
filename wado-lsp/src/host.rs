@@ -21,7 +21,7 @@ use wado_compiler::{
 pub mod discovery;
 pub mod prefetch;
 
-use discovery::{DependencyEntry, absolutize, normalize_path, slash_separated};
+use discovery::{DependencyEntry, Disk, PackageFiles, absolutize, normalize_path, slash_separated};
 
 /// Read the stdlib `wado-compiler` was built beside and hand it over, so a dev
 /// build serves what is on disk now and the compiler itself reads no file.
@@ -114,13 +114,12 @@ impl FilesystemCompilerHost {
         self.buffer().push(diagnostic);
     }
 
-    /// [`CompilerHost::module_dir`], telling `probed` each file the walk for
-    /// the package root looks for and whether one is there. The directory is
-    /// the module's as the OS resolves it, `..` after a symlink included,
-    /// since that is the directory [`CompilerHost::load_source`] reads from. A
-    /// directory that does not exist lies in no package, and the load of the
-    /// module reports it.
-    pub fn module_dir_probing(&self, path: &str, probed: impl FnMut(&Path, bool)) -> ModuleDir {
+    /// [`CompilerHost::module_dir`], reading the package's files through
+    /// `files`. The directory is the module's as the OS resolves it, `..` after
+    /// a symlink included, since that is the directory
+    /// [`CompilerHost::load_source`] reads from. A directory that does not
+    /// exist lies in no package, and the load of the module reports it.
+    pub fn module_dir_with(&self, path: &str, files: &dyn PackageFiles) -> ModuleDir {
         let file = self.base_path.join(path);
         let parent = file.parent().expect("a module path names a file");
         let (Ok(dir), Ok(base)) = (
@@ -129,12 +128,12 @@ impl FilesystemCompilerHost {
         ) else {
             return ModuleDir::unpackaged(path);
         };
-        let package = discovery::nearest_manifest_dir_probing(&dir, probed).map(|root| {
+        let package = discovery::nearest_manifest_dir(&dir, files).map(|root| {
             let inside = dir
                 .strip_prefix(&root)
                 .expect("a directory lies under its package root");
             PackageDir {
-                coordinate: package_coordinate(&root),
+                coordinate: package_coordinate(&root, files),
                 dir: slash_separated(inside),
                 root: root.display().to_string(),
             }
@@ -144,12 +143,19 @@ impl FilesystemCompilerHost {
             path: relative_path(&base, &dir),
         }
     }
+
+    /// [`CompilerHost::package_index`], reading the package's files through
+    /// `files`.
+    #[must_use]
+    pub fn package_index_with(&self, root: &str, files: &dyn PackageFiles) -> DependencyIndex {
+        manifest_index(Path::new(root), &self.base_path, files)
+    }
 }
 
 /// The package rooted at `root` as its `[package]` names it. `None` where it
 /// has none, or where its manifest does not parse, which its index reports.
-fn package_coordinate(root: &Path) -> Option<String> {
-    let package = read_manifest(root).ok()?.package?;
+fn package_coordinate(root: &Path, files: &dyn PackageFiles) -> Option<String> {
+    let package = read_manifest(root, files).ok()?.package?;
     Some(package.coordinate())
 }
 
@@ -275,14 +281,14 @@ impl CompilerHost for FilesystemCompilerHost {
     /// An invalid manifest yields an empty index that says why, so the editor
     /// keeps answering and each dependency import reports the manifest.
     fn dependency_index(&self) -> DependencyIndex {
-        match discovery::nearest_manifest_dir(&self.base_path) {
-            Some(dir) => manifest_index(&dir, &self.base_path),
+        match discovery::nearest_manifest_dir(&self.base_path, &Disk) {
+            Some(dir) => manifest_index(&dir, &self.base_path, &Disk),
             None => DependencyIndex::default(),
         }
     }
 
     fn package_index(&self, root: &str) -> DependencyIndex {
-        manifest_index(Path::new(root), &self.base_path)
+        self.package_index_with(root, &Disk)
     }
 
     fn serves_core(&self) -> bool {
@@ -290,7 +296,7 @@ impl CompilerHost for FilesystemCompilerHost {
     }
 
     fn module_dir(&self, path: &str) -> ModuleDir {
-        self.module_dir_probing(path, |_, _| {})
+        self.module_dir_with(path, &Disk)
     }
 
     /// The language service recompiles on every edit and caches no outcome.
@@ -326,9 +332,10 @@ pub fn dependency_index_from(
     manifest: &wado_manifest::Manifest,
     manifest_dir: &Path,
     base: &Path,
+    files: &dyn PackageFiles,
 ) -> DependencyIndex {
-    let (mut index, entries) = package_index(manifest, manifest_dir, base);
-    index_packages(&mut index, entries, base);
+    let (mut index, entries) = package_index(manifest, manifest_dir, base, files);
+    index_packages(&mut index, entries, base, files);
     index
 }
 
@@ -360,8 +367,13 @@ fn physical(path: &Path) -> PathBuf {
 
 /// Add to `index.packages` the package of each source dependency entry module
 /// in `entries`, and of each source dependency those reach, at any depth.
-pub fn index_packages(index: &mut DependencyIndex, entries: Vec<PathBuf>, base: &Path) {
-    let mut walk = PackageWalk::new(entries, base);
+pub fn index_packages(
+    index: &mut DependencyIndex,
+    entries: Vec<PathBuf>,
+    base: &Path,
+    files: &dyn PackageFiles,
+) {
+    let mut walk = PackageWalk::new(entries, base, files);
     while let Some(package) = walk.next(index) {
         walk.index(index, package);
     }
@@ -370,9 +382,10 @@ pub fn index_packages(index: &mut DependencyIndex, entries: Vec<PathBuf>, base: 
 /// The walk over the source dependencies an index reaches, at any depth, each
 /// package once by its key. A driver may act on a package [`Self::next`] hands
 /// out before [`Self::index`] lists what it depends on.
-pub struct PackageWalk {
+pub struct PackageWalk<'a> {
     pending: VecDeque<PathBuf>,
     base: PathBuf,
+    files: &'a dyn PackageFiles,
 }
 
 /// A package [`PackageWalk::next`] hands out: its key, root and manifest.
@@ -382,13 +395,15 @@ pub struct WalkedPackage {
     pub manifest: wado_manifest::Manifest,
 }
 
-impl PackageWalk {
-    /// A walk from the dependency entry modules `entries`, keyed from `base`.
+impl<'a> PackageWalk<'a> {
+    /// A walk from the dependency entry modules `entries`, keyed from `base`,
+    /// reading each package's files through `files`.
     #[must_use]
-    pub fn new(entries: Vec<PathBuf>, base: &Path) -> Self {
+    pub fn new(entries: Vec<PathBuf>, base: &Path, files: &'a dyn PackageFiles) -> Self {
         Self {
             pending: entries.into(),
             base: base.to_path_buf(),
+            files,
         }
     }
 
@@ -400,7 +415,7 @@ impl PackageWalk {
             if index.packages.contains_key(&lib) {
                 continue;
             }
-            match discovery::lib_package(&entry) {
+            match discovery::lib_package(&entry, self.files) {
                 Some((root, manifest)) => {
                     return Some(WalkedPackage {
                         lib,
@@ -417,12 +432,13 @@ impl PackageWalk {
     }
 
     /// Index `package` into `index`, and queue the packages it depends on.
-    pub fn index<'a>(
+    pub fn index<'i>(
         &mut self,
-        index: &'a mut DependencyIndex,
+        index: &'i mut DependencyIndex,
         package: WalkedPackage,
-    ) -> &'a mut DependencyIndex {
-        let (own, reached) = package_index(&package.manifest, &package.root, &self.base);
+    ) -> &'i mut DependencyIndex {
+        let (own, reached) =
+            package_index(&package.manifest, &package.root, &self.base, self.files);
         self.pending.extend(reached);
         index.packages.entry(package.lib).or_insert(own)
     }
@@ -435,6 +451,7 @@ pub fn package_index(
     manifest: &wado_manifest::Manifest,
     manifest_dir: &Path,
     base: &Path,
+    files: &dyn PackageFiles,
 ) -> (DependencyIndex, Vec<PathBuf>) {
     let root = normalize_path(&absolutize(manifest_dir));
     let exports = manifest.package.iter().flat_map(|p| &p.exports);
@@ -449,7 +466,7 @@ pub fn package_index(
         ..DependencyIndex::default()
     };
     let mut entries = Vec::new();
-    for (name, entry) in discovery::resolve_all(manifest, manifest_dir) {
+    for (name, entry) in discovery::resolve_all(manifest, manifest_dir, files) {
         match entry {
             Ok(DependencyEntry::Source(path)) => {
                 index.resolved.insert(name, dependency_key(&path, base));
@@ -467,9 +484,9 @@ pub fn package_index(
 }
 
 /// The index of the package whose `wado.toml` is in `dir`, keyed from `base`.
-fn manifest_index(dir: &Path, base: &Path) -> DependencyIndex {
-    match read_manifest(dir) {
-        Ok(manifest) => dependency_index_from(&manifest, dir, base),
+fn manifest_index(dir: &Path, base: &Path, files: &dyn PackageFiles) -> DependencyIndex {
+    match read_manifest(dir, files) {
+        Ok(manifest) => dependency_index_from(&manifest, dir, base, files),
         Err(error) => unreadable_manifest(dir, error),
     }
 }
@@ -487,10 +504,11 @@ fn unreadable_manifest(dir: &Path, error: String) -> DependencyIndex {
 }
 
 /// The `wado.toml` in `dir`, parsed, or why it cannot be.
-fn read_manifest(dir: &Path) -> Result<wado_manifest::Manifest, String> {
-    let text = std::fs::read_to_string(dir.join(wado_manifest::MANIFEST_FILENAME))
+fn read_manifest(dir: &Path, files: &dyn PackageFiles) -> Result<wado_manifest::Manifest, String> {
+    let text = files
+        .read(&dir.join(wado_manifest::MANIFEST_FILENAME))
         .map_err(|e| e.to_string())?;
-    discovery::resolve_member_manifest(dir, &text).map_err(|e| e.to_string())
+    discovery::resolve_member_manifest(dir, &text, files).map_err(|e| e.to_string())
 }
 
 /// The absolute path of the `wado.toml` in `dir`, as diagnostics name it.

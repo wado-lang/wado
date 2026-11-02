@@ -4,9 +4,11 @@
 //! 2026-10-25 (Profile-Guided Optimization).
 
 use std::collections::{BTreeMap, BTreeSet};
+
 use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
+use wado_lsp::host::discovery::Disk;
 
 use wado_compiler::coverage::{
     self, Coverage, CoverageScope, DecodedPlans, FileCoverage, PlanMismatch, Registered, TestReport,
@@ -368,7 +370,7 @@ fn write_profiles(
 pub fn profile_file(entry: &Path) -> Option<PathBuf> {
     let entry = entry.canonicalize().ok()?;
     let dir = entry.parent().expect("an entry is a file");
-    if let Some(root) = package_root(dir) {
+    if let Some(root) = package_root(dir, &Disk) {
         return Some(root.join("pgo").join("default.pgo"));
     }
     // Several programs in no package may share a directory, so each keeps a

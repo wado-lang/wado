@@ -22,8 +22,10 @@
 //! from a member directory is an error pointing at the workspace.
 
 use std::fmt::Write as _;
+
 use std::path::Path;
 use std::process::Command;
+use wado_lsp::host::discovery::Disk;
 
 use unicode_normalization::UnicodeNormalization;
 use wado_manifest::{
@@ -116,7 +118,7 @@ pub async fn run(opts: PublishOptions) -> Result<(), CliExit> {
     if let Some(workspace) = workspace_in(&cwd).map_err(CliExit::error)? {
         return publish_workspace(&cwd, &workspace, opts.dry_run).await;
     }
-    let Some(project) = discover(&cwd).map_err(CliExit::error)? else {
+    let Some(project) = discover(&cwd, &Disk).map_err(CliExit::error)? else {
         let enclosing = cwd
             .ancestors()
             .find(|dir| dir.join(WORKSPACE_FILENAME).is_file());
@@ -234,7 +236,7 @@ async fn publish_workspace(
     // Keep each candidate's `ProjectManifest` so a non-dry-run publish can build it.
     let mut candidates: Vec<(String, ProjectManifest)> = Vec::new();
     for dir in member_dirs {
-        let project = discover(&dir)
+        let project = discover(&dir, &Disk)
             .map_err(CliExit::error)?
             .ok_or_else(|| CliExit::error(format!("no wado.toml in member {}", dir.display())))?;
         emit_manifest_warnings(&project);

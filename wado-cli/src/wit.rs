@@ -6,7 +6,9 @@
 //! `wep-2026-05-02-wit-interoperability.md`.
 
 use std::fs;
+
 use std::path::{Path, PathBuf};
+use wado_lsp::host::discovery::Disk;
 
 use lexopt::Arg::Value;
 use wado_compiler::CompilerOptions;
@@ -179,7 +181,7 @@ async fn world_snapshot_and_surface(
         .map_err(|e| CliExit::error(format!("reading '{}': {e}", path.display())))?;
     let base_path = path.parent().map(Path::to_path_buf).unwrap_or_default();
 
-    let manifest_pair = load_nearest_manifest(path).map_err(CliExit::error)?;
+    let manifest_pair = load_nearest_manifest(path, &Disk).map_err(CliExit::error)?;
     let interface_name = default_interface_name(&input, manifest_pair.as_ref());
     let host = analysis_host(&base_path, manifest_pair.as_ref(), &source).await?;
     let invocations = run_generators(path, &host, manifest_pair).await?;

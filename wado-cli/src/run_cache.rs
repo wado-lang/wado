@@ -14,11 +14,12 @@
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
+use std::{fs, io};
 
 use sha2::{Digest, Sha256};
 use wado_compiler::hashmap::IndexMap;
-use wado_lsp::host::discovery::{absolutize, normalize_path};
-use wado_lsp::host::read_prefix;
+use wado_lsp::host::discovery::{PackageFiles, absolutize, normalize_path};
+use wado_lsp::host::{is_absent, read_prefix};
 
 use crate::fingerprint::{Input, InputKey};
 use wado_host::kiln::component_cache::ComponentCache;
@@ -100,20 +101,6 @@ impl RunCache {
         self.record(path, None, None);
     }
 
-    /// Record that what was read depends on what `path` holds now, for a file
-    /// the compile reads around the host, such as a manifest. The run's watch
-    /// is left out: it names moved sources. Only a scoped view reads the file,
-    /// since nothing asks any other what it depended on.
-    pub fn depend_on_file(&self, path: &Path) {
-        if self.reads.is_none() {
-            return;
-        }
-        match Input::on_disk(normalize_path(&absolutize(path)), None) {
-            Some(input) => self.record_input(input),
-            None => self.observe_untracked(),
-        }
-    }
-
     /// Record that what was read depends on `path`, which the run's watch
     /// already holds whole, as it does every stdlib file.
     pub fn depend_on_watched(&self, path: &Path) {
@@ -182,6 +169,23 @@ impl RunCache {
         for input in reads {
             self.record_input(input.clone());
         }
+    }
+}
+
+/// A scoped view records the bytes each read returns. The run's watch leaves
+/// package files out: it names moved sources, and a run writes the `wado.lock`
+/// it reads.
+impl PackageFiles for RunCache {
+    fn read(&self, path: &Path) -> io::Result<String> {
+        let read = fs::read_to_string(path);
+        if self.reads.is_some() {
+            match &read {
+                Ok(text) => self.record(path, None, Some(Sha256::digest(text).into())),
+                Err(e) if is_absent(e) => self.observe_absent(path),
+                Err(_) => self.observe_untracked(),
+            }
+        }
+        read
     }
 }
 

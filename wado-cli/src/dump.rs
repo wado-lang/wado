@@ -1,6 +1,8 @@
 use std::fmt::Write as FmtWrite;
+
 use std::fs;
 use std::path::Path;
+use wado_lsp::host::discovery::Disk;
 
 use lexopt::Arg::Value;
 
@@ -345,7 +347,7 @@ async fn run_single(opts: &DumpOptions, input: &str) -> Result<(), CliExit> {
         .parent()
         .map(std::path::Path::to_path_buf)
         .unwrap_or_default();
-    let manifest_pair = load_nearest_manifest(path).map_err(CliExit::error)?;
+    let manifest_pair = load_nearest_manifest(path, &Disk).map_err(CliExit::error)?;
     let (host, invocations) = build_load(
         path,
         &source,

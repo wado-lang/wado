@@ -1,10 +1,12 @@
 use std::collections::BTreeSet;
+
 use std::fmt::Write as _;
 use std::future::Future;
 use std::path::{Path, PathBuf};
 use std::pin::Pin;
 use std::sync::{Arc, Mutex, Weak};
 use std::time::{Duration, Instant};
+use wado_lsp::host::discovery::Disk;
 
 use anyhow::Result;
 use futures::stream::{self, StreamExt};
@@ -103,7 +105,7 @@ impl TestGrants {
                 let root = lock(roots)
                     .entry(dir.to_path_buf())
                     .or_insert_with(|| {
-                        package_root(dir)
+                        package_root(dir, &Disk)
                             .unwrap_or_else(|| PathBuf::from("."))
                             .display()
                             .to_string()
@@ -638,7 +640,7 @@ fn pgo_profiles(runs: &[PackageRun]) -> Result<BTreeSet<PathBuf>, CliExit> {
     }
     let roots: BTreeSet<PathBuf> = files
         .iter()
-        .filter_map(|file| package_root(file.parent().expect("a test file has a directory")))
+        .filter_map(|file| package_root(file.parent().expect("a test file has a directory"), &Disk))
         .collect();
     for root in roots {
         for file in discover::package_files(&root, &|pkg| test_filters(pkg, &[]))? {

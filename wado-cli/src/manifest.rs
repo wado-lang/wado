@@ -1,15 +1,14 @@
-use std::collections::BTreeSet;
 use std::env;
 use std::path::{Component, Path, PathBuf};
 use std::{fs, io};
 
 use wado_compiler::remote::Integrity;
 use wado_lsp::host::discovery::{
-    absolutize, governing_workspace, normalize_path, resolve_member_manifest,
+    Disk, PackageFiles, absolutize, governing_workspace, normalize_path, resolve_member_manifest,
 };
 use wado_manifest::{
-    DependencySource, LOCK_FILENAME, MANIFEST_FILENAME, Manifest, ManifestError,
-    WORKSPACE_FILENAME, WorkspaceManifest,
+    LOCK_FILENAME, MANIFEST_FILENAME, Manifest, ManifestError, WORKSPACE_FILENAME,
+    WorkspaceManifest,
 };
 
 use crate::args::CliExit;
@@ -42,18 +41,22 @@ impl std::fmt::Display for DiscoveryError {
 
 impl std::error::Error for DiscoveryError {}
 
-/// Search for `wado.toml` starting from `start_dir` and walking up to parent directories.
+/// Search for `wado.toml` starting from `start_dir` and walking up to parent
+/// directories, reading through `files`.
 ///
 /// Returns `None` if no `wado.toml` is found.
 ///
 /// # Errors
 ///
 /// Returns an error if `wado.toml` is found but cannot be read or parsed.
-pub fn discover(start_dir: &Path) -> Result<Option<ProjectManifest>, DiscoveryError> {
-    let Some(root) = package_root(start_dir) else {
+pub fn discover(
+    start_dir: &Path,
+    files: &dyn PackageFiles,
+) -> Result<Option<ProjectManifest>, DiscoveryError> {
+    let Some(root) = package_root(start_dir, files) else {
         return Ok(None);
     };
-    let manifest = manifest_in(&root)?.expect("`package_root` found a `wado.toml` there");
+    let manifest = manifest_in(&root, files)?.expect("`package_root` found a `wado.toml` there");
     Ok(Some(ProjectManifest { manifest, root }))
 }
 
@@ -76,13 +79,13 @@ pub(crate) fn hold_lock_file(root: &Path) -> Result<LockFileHeld, String> {
 
 /// The nearest directory at or above `start_dir` holding a `wado.toml`, short
 /// of one holding a `wado-workspace.toml`, which no package encloses.
-pub(crate) fn package_root(start_dir: &Path) -> Option<PathBuf> {
+pub(crate) fn package_root(start_dir: &Path, files: &dyn PackageFiles) -> Option<PathBuf> {
     let mut dir = start_dir.to_path_buf();
     loop {
-        if dir.join(MANIFEST_FILENAME).is_file() {
+        if files.is_file(&dir.join(MANIFEST_FILENAME)) {
             return Some(openable_dir(&dir).to_path_buf());
         }
-        if dir.join(WORKSPACE_FILENAME).is_file() {
+        if files.is_file(&dir.join(WORKSPACE_FILENAME)) {
             return None;
         }
         dir = parent_dir(&dir)?;
@@ -100,50 +103,18 @@ pub(crate) fn workspace_in(dir: &Path) -> Result<Option<WorkspaceManifest>, Disc
     content.parse().map(Some).map_err(DiscoveryError::Parse)
 }
 
-/// The files besides sources that decide how the package at `root` resolves
-/// its imports: for it and each path dependency at any depth, the manifest,
-/// which names the package's entry and its own dependencies, the lock, and the
-/// workspace file governing it. A git dependency's checkout is immutable, so
-/// nothing in it is watched.
-pub(crate) fn resolution_inputs(root: &Path) -> Vec<PathBuf> {
-    let mut files = Vec::new();
-    let mut seen = BTreeSet::new();
-    let mut pending = vec![root.to_path_buf()];
-    while let Some(root) = pending.pop() {
-        if !seen.insert(fs::canonicalize(&root).unwrap_or_else(|_| root.clone())) {
-            continue;
-        }
-        let manifest_path = root.join(MANIFEST_FILENAME);
-        files.push(manifest_path.clone());
-        files.push(root.join(LOCK_FILENAME));
-        if let Some(workspace) = governing_workspace_root_dir(&root) {
-            files.push(workspace.join(WORKSPACE_FILENAME));
-        }
-        let manifest = match fs::read_to_string(&manifest_path) {
-            Ok(content) => resolve_manifest(&root, &content).ok(),
-            Err(_) => None,
-        };
-        for dependency in manifest.iter().flat_map(|m| m.dependencies.values()) {
-            // A single-file dependency has no manifest of its own to watch.
-            if let DependencySource::Path { path, .. } = &dependency.source
-                && root.join(path).is_dir()
-            {
-                pending.push(root.join(path));
-            }
-        }
-    }
-    files
-}
-
 /// The `wado.toml` in `dir` itself, parsed: `None` when `dir` has none, an
 /// error when the one there cannot be read or parsed.
-pub(crate) fn manifest_in(dir: &Path) -> Result<Option<Manifest>, DiscoveryError> {
+pub(crate) fn manifest_in(
+    dir: &Path,
+    files: &dyn PackageFiles,
+) -> Result<Option<Manifest>, DiscoveryError> {
     let candidate = dir.join(MANIFEST_FILENAME);
-    if !candidate.is_file() {
+    if !files.is_file(&candidate) {
         return Ok(None);
     }
-    let content = fs::read_to_string(&candidate).map_err(DiscoveryError::Io)?;
-    resolve_manifest(dir, &content).map(Some)
+    let content = files.read(&candidate).map_err(DiscoveryError::Io)?;
+    resolve_manifest(dir, &content, files).map(Some)
 }
 
 /// The directory above `dir`, spelled the way `dir` is: a relative path stays
@@ -193,14 +164,15 @@ pub(crate) fn absolute(path: &Path) -> PathBuf {
 pub(crate) fn resolve_manifest(
     member_dir: &Path,
     member_content: &str,
+    files: &dyn PackageFiles,
 ) -> Result<Manifest, DiscoveryError> {
-    resolve_member_manifest(member_dir, member_content).map_err(DiscoveryError::Parse)
+    resolve_member_manifest(member_dir, member_content, files).map_err(DiscoveryError::Parse)
 }
 
 /// The directory of the workspace governing the package at `member_dir`, if it
 /// is a workspace member. Used to gate `wado publish` to the workspace.
 pub(crate) fn governing_workspace_root_dir(member_dir: &Path) -> Option<PathBuf> {
-    governing_workspace(member_dir).map(|(dir, _)| dir)
+    governing_workspace(member_dir, &Disk).map(|(dir, _)| dir)
 }
 
 /// The directory a `license-file` path resolves against: the package's own root
@@ -344,7 +316,7 @@ pub fn resolve_lib_project(
     } else {
         let cwd = env::current_dir()
             .map_err(|e| CliExit::error(format!("cannot get current directory: {e}")))?;
-        match discover(&cwd) {
+        match discover(&cwd, &Disk) {
             Ok(Some(p)) => p,
             Ok(None) => {
                 return Err(CliExit::error_with_usage(
@@ -420,7 +392,7 @@ pub fn world_declaring(project: &ProjectManifest, path: &Path) -> Option<String>
 fn load_from_dir(dir: &Path) -> Result<ProjectManifest, DiscoveryError> {
     let candidate = dir.join(MANIFEST_FILENAME);
     let content = fs::read_to_string(&candidate).map_err(DiscoveryError::Io)?;
-    let manifest = resolve_manifest(dir, &content)?;
+    let manifest = resolve_manifest(dir, &content, &Disk)?;
     Ok(ProjectManifest {
         manifest,
         root: dir.to_path_buf(),
@@ -488,7 +460,7 @@ pub fn resolve_input(
     let cwd = env::current_dir()
         .map_err(|e| CliExit::error(format!("cannot get current directory: {e}")))?;
 
-    let project = match discover(&cwd) {
+    let project = match discover(&cwd, &Disk) {
         Ok(Some(p)) => p,
         Ok(None) => {
             return Err(CliExit::error_with_usage(
@@ -552,7 +524,7 @@ command = "src/main.wado"
 "#;
         fs::write(tmp.path().join("wado.toml"), toml).unwrap();
 
-        let result = discover(tmp.path()).unwrap().unwrap();
+        let result = discover(tmp.path(), &Disk).unwrap().unwrap();
         assert_eq!(result.root, tmp.path());
         let pkg = result.manifest.package.as_ref().unwrap();
         assert_eq!(pkg.name, "test-app");
@@ -572,7 +544,7 @@ command = "src/main.wado"
         let subdir = tmp.path().join("src").join("deep");
         fs::create_dir_all(&subdir).unwrap();
 
-        let result = discover(&subdir).unwrap().unwrap();
+        let result = discover(&subdir, &Disk).unwrap().unwrap();
         assert_eq!(result.root, tmp.path());
     }
 
@@ -584,7 +556,7 @@ command = "src/main.wado"
         let subdir = tmp.path().join("no-manifest");
         fs::create_dir_all(&subdir).unwrap();
 
-        let found = discover(&subdir).unwrap();
+        let found = discover(&subdir, &Disk).unwrap();
         assert!(found.is_none_or(|manifest| !manifest.root.starts_with(tmp.path())));
     }
 
@@ -593,7 +565,7 @@ command = "src/main.wado"
         let tmp = tempfile::tempdir().unwrap();
         fs::write(tmp.path().join("wado.toml"), "invalid [[[toml").unwrap();
 
-        let err = discover(tmp.path()).unwrap_err();
+        let err = discover(tmp.path(), &Disk).unwrap_err();
         assert_matches!(err, DiscoveryError::Parse(_));
     }
 
@@ -611,7 +583,7 @@ version = "0.1.0"
 "#;
         fs::write(tmp.path().join("wado.toml"), toml).unwrap();
 
-        let project = discover(tmp.path()).unwrap().unwrap();
+        let project = discover(tmp.path(), &Disk).unwrap().unwrap();
         assert_eq!(
             resolve_entry_point(&project, EntryPointKind::Command),
             Some(tmp.path().join("src/main.wado"))
@@ -809,7 +781,7 @@ version = "0.1.0"
 "#;
         fs::write(tmp.path().join("wado.toml"), toml).unwrap();
 
-        let project = discover(tmp.path()).unwrap().unwrap();
+        let project = discover(tmp.path(), &Disk).unwrap().unwrap();
         assert!(resolve_entry_point(&project, EntryPointKind::Service).is_none());
     }
 
@@ -839,7 +811,7 @@ authors = ["Alice"]
             &member_dir.join("wado.toml"),
             "[package]\nname = \"core\"\nlib = \"src/lib.wado\"\n",
         );
-        let project = discover(&member_dir).unwrap().unwrap();
+        let project = discover(&member_dir, &Disk).unwrap().unwrap();
         let pkg = project.manifest.package.unwrap();
         assert_eq!(pkg.name, "core");
         assert_eq!(pkg.version, "0.1.0");
@@ -861,7 +833,7 @@ authors = ["Alice"]
                 DiscoveryError::Parse(ManifestError::PackageInWorkspace)
             )
         };
-        assert!(refused(discover(tmp.path()).unwrap_err()));
+        assert!(refused(discover(tmp.path(), &Disk).unwrap_err()));
         assert!(refused(workspace_in(tmp.path()).unwrap_err()));
     }
 
@@ -875,7 +847,7 @@ authors = ["Alice"]
         let workspace = tmp.path().join("ws");
         write(&workspace.join(WORKSPACE_FILENAME), WS_ROOT);
         fs::create_dir_all(workspace.join("tools")).unwrap();
-        assert_eq!(package_root(&workspace.join("tools")), None);
+        assert_eq!(package_root(&workspace.join("tools"), &Disk), None);
     }
 
     #[test]
@@ -979,7 +951,7 @@ authors = ["Alice"]
             &outside.join("wado.toml"),
             "[package]\nname = \"helper\"\nlib = \"src/lib.wado\"\n",
         );
-        let err = discover(&outside).unwrap_err();
+        let err = discover(&outside, &Disk).unwrap_err();
         assert_matches!(
             &err,
             DiscoveryError::Parse(e)

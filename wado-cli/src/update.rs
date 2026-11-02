@@ -1,7 +1,9 @@
 //! `wado update` — resolve the project's dependency graph and write `wado.lock`.
 
 use std::fmt::Write as _;
+
 use std::fs;
+use wado_lsp::host::discovery::Disk;
 
 use wado_manifest::{LOCK_FILENAME, LockFile};
 
@@ -42,7 +44,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<UpdateOptions, CliExit> 
 pub async fn run(_opts: UpdateOptions) -> Result<(), CliExit> {
     let cwd = std::env::current_dir()
         .map_err(|e| CliExit::error(format!("cannot get current directory: {e}")))?;
-    let project = discover(&cwd)
+    let project = discover(&cwd, &Disk)
         .map_err(CliExit::error)?
         .ok_or_else(|| CliExit::error("no wado.toml found"))?;
     emit_manifest_warnings(&project);

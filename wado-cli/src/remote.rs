@@ -27,6 +27,7 @@ use wado_host::atomic_write::write_atomic;
 use wado_host::sync::{joined, lock};
 use wado_host::tls_trust::extra_ca_certs;
 use wado_lsp::host::FileReader;
+use wado_lsp::host::discovery::{Disk, PackageFiles};
 use wado_manifest::{LOCK_FILENAME, LockFile, LockFileError, LockedRemote};
 
 use crate::cache;
@@ -272,7 +273,8 @@ fn reason(error: &reqwest::Error) -> String {
 }
 
 /// The first `extent` bytes of `url`, or all of it, held to `use_pin` or to
-/// what the `wado.lock` of the package at `lock_root` pins.
+/// what the `wado.lock` of the package at `lock_root`, read through `files`,
+/// pins.
 ///
 /// # Errors
 ///
@@ -284,8 +286,9 @@ pub async fn load(
     extent: Option<u64>,
     use_pin: Option<Integrity>,
     lock_root: Option<&Path>,
+    files: &dyn PackageFiles,
 ) -> Result<Vec<u8>, SourceError> {
-    let pin = Pins::of(url, use_pin, lock_root)?.at(extent);
+    let pin = Pins::of(url, use_pin, lock_root, files)?.at(extent);
     if let Some((pin, pinned_by)) = pin
         && let Some(bytes) = cached(pin)
         && is_extent(url, pin, pinned_by, &bytes, extent)
@@ -341,13 +344,13 @@ async fn hold_and_record(
 ) -> Result<(), SourceError> {
     let mut held = Vec::new();
     loop {
-        let (_, pins) = lock_pins(root, url)?;
+        let (_, pins) = lock_pins(root, url, &Disk)?;
         let fresh: Vec<_> = pins.into_iter().filter(|pin| !held.contains(pin)).collect();
         hold_to_locked_extents(url, extent, bytes, &fresh).await?;
         held.extend(fresh);
 
         let hold = hold_lock_file(root).map_err(|message| lock_error(root, message))?;
-        let (lock_file, pins) = lock_pins(root, url)?;
+        let (lock_file, pins) = lock_pins(root, url, &Disk)?;
         if pins.iter().all(|pin| held.contains(pin)) {
             if pin_at(&pins, extent).is_none() {
                 record_pin(&hold, root, lock_file, url, extent, actual)?;
@@ -371,7 +374,7 @@ pub async fn open(
     use_pin: Option<Integrity>,
     lock_root: Option<&Path>,
 ) -> Result<Arc<dyn SourceReader>, SourceError> {
-    let pins = Pins::of(url, use_pin, lock_root)?;
+    let pins = Pins::of(url, use_pin, lock_root, &Disk)?;
     let longest = pins
         .all()
         .into_iter()
@@ -443,12 +446,13 @@ impl Pins {
         url: &str,
         use_pin: Option<Integrity>,
         lock_root: Option<&Path>,
+        files: &dyn PackageFiles,
     ) -> Result<Self, SourceError> {
         if let Some(pin) = use_pin {
             return Ok(Self::Use(pin));
         }
         Ok(Self::Lock(match lock_root {
-            Some(root) => lock_pins(root, url)?.1,
+            Some(root) => lock_pins(root, url, files)?.1,
             None => Vec::new(),
         }))
     }
@@ -543,8 +547,8 @@ fn lock_error(root: &Path, message: String) -> SourceError {
 
 /// The lock of the package at `root`, `None` only where there is none: a lock
 /// that cannot be read is an error, never one to write afresh.
-fn read_lock(root: &Path) -> Result<Option<LockFile>, SourceError> {
-    let text = match std::fs::read_to_string(root.join(LOCK_FILENAME)) {
+fn read_lock(root: &Path, files: &dyn PackageFiles) -> Result<Option<LockFile>, SourceError> {
+    let text = match files.read(&root.join(LOCK_FILENAME)) {
         Ok(text) => text,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
         Err(e) => return Err(lock_error(root, e.to_string())),
@@ -559,8 +563,9 @@ fn read_lock(root: &Path) -> Result<Option<LockFile>, SourceError> {
 fn lock_pins(
     root: &Path,
     url: &str,
+    files: &dyn PackageFiles,
 ) -> Result<(Option<LockFile>, Vec<(Option<u64>, Integrity)>), SourceError> {
-    let lock = read_lock(root)?;
+    let lock = read_lock(root, files)?;
     let pins = lock
         .iter()
         .flat_map(|lock| &lock.remotes)
@@ -589,7 +594,7 @@ pub fn locked_pin(
     url: &str,
     extent: Option<u64>,
 ) -> Result<Option<Integrity>, SourceError> {
-    Ok(Pins::of(url, None, Some(root))?
+    Ok(Pins::of(url, None, Some(root), &Disk)?
         .at(extent)
         .map(|(pin, _)| pin))
 }
@@ -609,7 +614,7 @@ fn record_pin(
         Some(lock_file) => lock_file,
         None => LockFile {
             version: 1,
-            deps_hash: discover(root)
+            deps_hash: discover(root, &Disk)
                 .map_err(|e| lock_error(root, e.to_string()))?
                 .expect("a lock root holds a `wado.toml`")
                 .manifest

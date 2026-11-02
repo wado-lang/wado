@@ -27,7 +27,7 @@ use wado_compiler::{
 };
 use wado_lsp::FilesystemCompilerHost;
 use wado_lsp::host::dependency_index_from;
-use wado_lsp::host::discovery::{absolutize, normalize_path};
+use wado_lsp::host::discovery::{Disk, PackageFiles, absolutize, normalize_path};
 
 use crate::COMPILER_STACK_SIZE;
 use crate::cache::derived_dir;
@@ -35,7 +35,6 @@ use crate::compile::{load_nearest_manifest, render_error_diagnostics};
 use crate::fingerprint::{Input, compiler_digest, hash_field, write_entry};
 use crate::kiln_provider::hex32;
 use crate::knobs::CompileKnobs;
-use crate::manifest::resolution_inputs;
 use crate::runtime::CAPTURED_STDIO_CAPACITY;
 use wado_host::engine::{DEFAULT_GC_HEAP_INITIAL_SIZE, fuel_engine};
 use wado_host::random;
@@ -359,12 +358,13 @@ impl Dependencies {
             caller_root: None,
             cache_dir,
         };
-        let project = match load_nearest_manifest(caller) {
+        // What the index binds keys an outcome, so the files it read need not.
+        let project = match load_nearest_manifest(caller, &Disk) {
             Ok(Some(project)) => project,
             Ok(None) => return none(derived_dir(None, "eval")),
             Err(_) => return none(None),
         };
-        let index = dependency_index_from(&project.manifest, &project.root, &base);
+        let index = dependency_index_from(&project.manifest, &project.root, &base, &Disk);
         let absolute = |entry: &String| normalize_path(&absolutize(&base.join(entry)));
         Self {
             roots: index
@@ -452,11 +452,15 @@ impl DependencyHost {
             read: Mutex::default(),
         }
     }
+}
 
-    /// Record `file` as an input, present or not.
-    fn observe(&self, file: &Path) {
-        let bytes = std::fs::read(file).ok();
-        lock(&self.read).push(Input::of(file.to_path_buf(), bytes.as_deref()));
+/// Each file read is an input, present or not.
+impl PackageFiles for DependencyHost {
+    fn read(&self, path: &Path) -> std::io::Result<String> {
+        let read = std::fs::read_to_string(path);
+        let bytes = read.as_ref().ok().map(String::as_bytes);
+        lock(&self.read).push(Input::of(path.to_path_buf(), bytes));
+        read
     }
 }
 
@@ -496,15 +500,11 @@ impl CompilerHost for DependencyHost {
     }
 
     fn module_dir(&self, path: &str) -> ModuleDir {
-        self.packages
-            .module_dir_probing(path, |manifest, _| self.observe(manifest))
+        self.packages.module_dir_with(path, self)
     }
 
     fn package_index(&self, root: &str) -> DependencyIndex {
-        for file in resolution_inputs(Path::new(root)) {
-            self.observe(&file);
-        }
-        self.packages.package_index(root)
+        self.packages.package_index_with(root, self)
     }
 
     /// An outcome is keyed by [`compiler_digest`], which covers the whole
