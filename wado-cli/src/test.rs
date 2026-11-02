@@ -1550,8 +1550,8 @@ struct PipelineOutcome {
 
 /// Increments the wasmtime epoch on every registered engine. The registry
 /// holds `Weak<Engine>`, so an engine is freed once the last `LoadedModule`
-/// for it drops, and the next tick prunes its entry: a package run loading
-/// many modules does not accumulate engines.
+/// for it drops, and the next tick prunes its entry: a run loading many
+/// modules does not accumulate engines.
 struct EpochTicker {
     engines: Arc<Mutex<Vec<Weak<Engine>>>>,
     _ticker: Ticker,
@@ -1603,9 +1603,10 @@ impl EpochTicker {
 /// therefore small (just enough to keep the pipeline non-bursty), with
 /// the real limits enforced at the per-task-acquire points.
 ///
-/// Under `--no-run`, the load and execute stages are replaced with
-/// "drain to /dev/null" tasks so the compile stage producers don't
-/// block on a full channel — all the work after stage 1 disappears.
+/// Under `--no-run`, where the run has no `epoch_ticker`, the load and
+/// execute stages are replaced with "drain to /dev/null" tasks so the
+/// compile stage producers don't block on a full channel — all the work
+/// after stage 1 disappears.
 async fn run_pipeline(
     paths: &[String],
     flags: Arc<CompileFlags>,
@@ -1615,7 +1616,7 @@ async fn run_pipeline(
     execute_jobs: usize,
     grants: Arc<TestGrants>,
     eval_host: Arc<EvalHost>,
-    no_run: bool,
+    epoch_ticker: Option<Arc<EpochTicker>>,
     profile: ProfileMode,
     runtime_knobs: RuntimeKnobs,
     profiler_slot: Option<GuestProfilerSlot>,
@@ -1645,14 +1646,6 @@ async fn run_pipeline(
     let compile_observer = Arc::new(StageObserver::new());
     let load_observer = Arc::new(StageObserver::new());
     let execute_observer = Arc::new(StageObserver::new());
-
-    // Epoch ticker lives only when execute will run; in `--no-run` mode
-    // no engines are loaded and there's nothing to tick.
-    let tick = match &profile {
-        ProfileMode::Guest { interval_ms, .. } => Duration::from_millis(*interval_ms),
-        _ => Duration::from_millis(EPOCH_INTERVAL_MS),
-    };
-    let epoch_ticker = (!no_run).then(|| Arc::new(EpochTicker::start(tick)));
 
     let paths_owned: Vec<String> = paths.to_vec();
     let compile_future = run_compile_stage(
@@ -1731,8 +1724,6 @@ async fn run_pipeline(
         tokio::spawn(collect_into_vec(lfail_rx)),
         tokio::spawn(collect_into_vec(result_rx)),
     ));
-
-    drop(epoch_ticker); // Stops the tick thread.
 
     PipelineOutcome {
         compiled_count,
@@ -2309,7 +2300,7 @@ async fn run_one_package(
     grants: Arc<TestGrants>,
     eval_host: Arc<EvalHost>,
     show_banner: bool,
-    no_run: bool,
+    epoch_ticker: Option<Arc<EpochTicker>>,
     profile: ProfileMode,
     runtime_knobs: RuntimeKnobs,
     profiler_slot: Option<GuestProfilerSlot>,
@@ -2319,6 +2310,7 @@ async fn run_one_package(
     test_cache: Option<&TestCache>,
     cached: &[(String, Tally)],
 ) -> (PackageTotals, Option<Vec<TestResult>>) {
+    let no_run = epoch_ticker.is_none();
     let report_fuel = runtime_knobs.report_fuel;
     let mut cached_tests = Tally::default();
     for (path, tally) in cached {
@@ -2336,7 +2328,7 @@ async fn run_one_package(
         execute_jobs,
         grants,
         eval_host,
-        no_run,
+        epoch_ticker,
         profile,
         runtime_knobs,
         profiler_slot,
@@ -2595,6 +2587,13 @@ pub async fn run(opts: TestOptions) -> Result<(), CliExit> {
     // the run's only profiler and the write below happens once.
     let profiler_slot = matches!(profile, ProfileMode::Guest { .. })
         .then(|| Arc::new(Mutex::new(None)) as GuestProfilerSlot);
+    // One ticker for every package, since they run at once; `--no-run` loads
+    // no engine to tick.
+    let tick = match &profile {
+        ProfileMode::Guest { interval_ms, .. } => Duration::from_millis(*interval_ms),
+        _ => Duration::from_millis(EPOCH_INTERVAL_MS),
+    };
+    let epoch_ticker = (!no_run).then(|| Arc::new(EpochTicker::start(tick)));
     // One package alone leaves cores idle while its last files finish.
     let packages = package_runs.iter().zip(&cached).map(|(pkg_run, cached)| {
         run_one_package(
@@ -2607,7 +2606,7 @@ pub async fn run(opts: TestOptions) -> Result<(), CliExit> {
             Arc::clone(&grants),
             Arc::clone(&eval_host),
             multi_pkg,
-            no_run,
+            epoch_ticker.clone(),
             profile.clone(),
             runtime_knobs.clone(),
             profiler_slot.clone(),
@@ -2626,6 +2625,7 @@ pub async fn run(opts: TestOptions) -> Result<(), CliExit> {
             metered.extend(results);
         }
     }
+    drop(epoch_ticker); // Stops the tick thread.
 
     reporter.on_run_done(&grand, multi_pkg, overall_start.elapsed());
 
