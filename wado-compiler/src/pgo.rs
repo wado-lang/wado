@@ -4,8 +4,8 @@
 //! [WEP: Profile-Guided Optimization](../../docs/wep-2026-10-25-profile-guided-optimization.md).
 //!
 //! The format is the specification's,
-//! [The Profile Format](../../docs/spec-pgo.md#the-profile-format). A `module` line is a
-//! [`Coverage::files`] key, which `--pgo` makes the module's name.
+//! [The Profile Format](../../docs/spec-pgo.md#the-profile-format). A `module`
+//! line is a [`Coverage::files`] key, which `--pgo` makes the module's name.
 
 use std::collections::BTreeMap;
 use std::fmt::{self, Write as _};
