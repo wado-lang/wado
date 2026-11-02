@@ -442,8 +442,10 @@ global NARROW: i32 = 4;
 /// The most rows a product runs `narrow_product_shader` for. A tile of 16
 /// rows leaves 15 of 16 lanes idle on a model's step over one token. The
 /// narrow product's time grows with its rows and the tiled one's does not:
-/// on GPT-2 (124M)'s layers on an RTX 4060 Ti the two meet at about 7.
-global NARROW_ROWS: i32 = 6;
+/// on GPT-2 (124M)'s layers on an RTX 4060 Ti the two meet at about 7, and on
+/// Gemma 3 (270M)'s narrower ones the narrow product still runs a prompt
+/// padded to 8 rows 1.3x as fast.
+global NARROW_ROWS: i32 = 8;
 
 /// The invocations of one workgroup of `narrow_product_shader`.
 global NARROW_LANES: i32 = 256;
