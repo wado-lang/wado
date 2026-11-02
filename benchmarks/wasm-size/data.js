@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1793602546403,
+  "lastUpdate": 1793613452635,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -73713,6 +73713,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/713ad0851902d9ccbef0fea7a4ae263e1c61517d"
         },
         "date": 1793602545586,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3099,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7303,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21809,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 316578,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "bf5c50d3b0a224b97381ff702ba4d8028c474831",
+          "message": "Merge pull request #2528 from wado-lang/pgo-profile-summary\n\nfeat(pgo): judge each region unlikely and cold apart, as LLVM and GCC do",
+          "timestamp": "2026-11-02T18:42:50+09:00",
+          "tree_id": "0fac7a2d50f831c4d5dcab77aeba1e5643cf538a",
+          "url": "https://github.com/wado-lang/wado/commit/bf5c50d3b0a224b97381ff702ba4d8028c474831"
+        },
+        "date": 1793613451601,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
