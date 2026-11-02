@@ -108,9 +108,10 @@ impl Graph for WebGpuBackend {
         let mut kept: List<Any<WebGpuBackend>> = [];
         for let at of 0..<count {
             let host = load(at)?;
-            kept.push(match [contracted[at], host] {
-                [Some(axis), F32(t)] => Any::F32(self.kept_contracted(&t, axis)),
-                _ => kept_any(self, &host),
+            kept.push(if let Some(axis) = contracted[at] && let F32(t) = &host {
+                Any::F32(self.kept_contracted(t, axis));
+            } else {
+                kept_any(self, &host);
             });
         }
         return Result::Ok(kept);

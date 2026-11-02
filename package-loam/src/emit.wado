@@ -609,7 +609,7 @@ fn emit_weights(
     ImplSpec::new("Weights").emit_begin(w);
     let mut hosts = HashMap::<String, String>::new();
     for let vi of &graph.initializers {
-        hosts[vi.name] = `&self.${names.get(&vi.name)}`;
+        hosts[vi.name] = `self.${names.get(&vi.name)}`;
     }
     for let [holder, method, doc] of [
         [Holder::Kernels, "prepare", "/// These weights as `backend`'s kernels compute with them."],
@@ -663,7 +663,7 @@ fn emit_prepared_fields(
         let ident = names.get(&vi.name);
         let host = hosts[vi.name];
         if holder matches { Built } {
-            w.line(`${ident}: ${preparation(checked, held, &vi.name, host, Holding::Keep)},`);
+            w.line(`${ident}: ${preparation(checked, held, &vi.name, `&${host}`, Holding::Keep)},`);
             continue;
         }
         if together.elsewhere.contains(vi.name) {
@@ -671,15 +671,15 @@ fn emit_prepared_fields(
         }
         let call = if let Some(second) = together.paired.get(vi.name) {
             let verb = if converted(checked, held, &vi.name) { "prepare_rhs_paired" } else { "keep_rhs_paired" };
-            `backend.${verb}(${host}, ${hosts[second]})`;
+            `backend.${verb}(&${host}, &${hosts[second]})`;
         } else if let Some(parts) = together.concat.get(vi.name) {
-            let mut joined = `Columns::of(${host})`;
+            let mut joined = `Columns::of(&${host})`;
             for let part of parts[1..<parts.len()].to_list() {
-                joined = `${joined}.then(${hosts[part]})`;
+                joined = `${joined}.then(&${hosts[part]})`;
             }
             preparation(checked, held, &vi.name, `&${joined}.joined()`, Holding::KeepRhs);
         } else {
-            preparation(checked, held, &vi.name, host, weight_holding(rhs, &vi.name));
+            preparation(checked, held, &vi.name, `&${host}`, weight_holding(rhs, &vi.name));
         };
         w.line(`${ident}: ${call},`);
     }
@@ -934,7 +934,7 @@ fn emit_constructor(
             Some(_) => `List::<${primitive}>::from_le_bytes(${EMBEDDED_DATA}(${at}))`,
             None => checkpoint_payload(&e, &primitive, placement),
         };
-        hosts[vi.name] = `&Tensor::<${primitive}, [${axis_list(&shape)}]> { data: ${data}, extents: ${e.extents} }`;
+        hosts[vi.name] = `Tensor::<${primitive}, [${axis_list(&shape)}]> { data: ${data}, extents: ${e.extents} }`;
     }
     if held_for_records {
         emit_held_call(w, graph, checked, held, &hosts, loads);
@@ -963,8 +963,8 @@ fn emit_held_call(
     w.begin(`return ${PARAMS}::held::<${error}>(backend, |at| Result::Ok(match at`);
     for let [at, vi] of graph.initializers.into_iter().enumerate() {
         let host = hosts[vi.name];
-        let widened = if converted(checked, held, &vi.name) { `&widen(${host})` } else { host };
-        w.line(`${at} => host_of(${widened}),`);
+        let widened = if converted(checked, held, &vi.name) { `widen(&${host})` } else { host };
+        w.line(`${at} => ${checked.primitives[vi.name]}_host(${widened}),`);
     }
     w.line("_ => unreachable(),");
     w.end_with(if fallible { "));" } else { ")).unwrap();" });

@@ -1630,7 +1630,7 @@ g (float[N, 2] X) => (float[N, 3] Y)
     );
     assert out.contains("W: f32_of::<Bk, [X1, Y1]>(backend, &weights[0]),");
     assert out.contains("return Params::held::<!>(backend, |at| Result::Ok(match at {");
-    assert out.contains("0 => host_of(&self.W),");
+    assert out.contains("0 => f32_host(self.W),");
 }
 
 test "a one-element constant that raises the output's rank is a tensor, not a folded scalar" {

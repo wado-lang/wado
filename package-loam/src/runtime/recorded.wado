@@ -431,6 +431,22 @@ pub fn host_of<E: Element, Axes>(t: &Tensor<E, Axes>) -> Any<Cpu> {
     };
 }
 
+/// `t`, an f32 tensor, as `Cpu` holds it among a program's arguments. It takes
+/// `t` by value so that a weight's data is not copied once more on the way.
+pub fn f32_host<Axes>(t: Tensor<f32, Axes>) -> Any<Cpu> {
+    return Any::F32(Tensor { data: t.data, extents: t.extents });
+}
+
+/// `t`, an i64 tensor, as `f32_host` takes an f32 one.
+pub fn i64_host<Axes>(t: Tensor<i64, Axes>) -> Any<Cpu> {
+    return Any::I64(Tensor { data: t.data, extents: t.extents });
+}
+
+/// `t`, a bool tensor, as `f32_host` takes an f32 one.
+pub fn bool_host<Axes>(t: Tensor<bool, Axes>) -> Any<Cpu> {
+    return Any::Bool(Tensor { data: t.data, extents: t.extents });
+}
+
 /// `t`, held on the host, as `h` keeps it.
 pub fn kept_any<affine H: Holds>(h: &mut H, t: &Any<Cpu>) -> Any<H> with _ {
     return match t {
