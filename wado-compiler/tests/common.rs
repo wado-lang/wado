@@ -483,6 +483,7 @@ pub fn http_engine() -> &'static Engine {
 
 /// Mock spec for a single outgoing HTTP response
 #[derive(Debug, Clone, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct OutgoingMockResponse {
     /// HTTP status code (default: 200)
     #[serde(default = "default_status_200")]
@@ -615,6 +616,7 @@ fn fixture_wasi_ctx(builder: &mut WasiCtxBuilder) -> WasiCtx {
 /// Keys in `tls_mocks` are matched against the `server_name` argument the
 /// guest passes to `Connector::connect(this, server_name)`.
 #[derive(Debug, Clone, serde::Deserialize, Default)]
+#[serde(deny_unknown_fields)]
 pub struct TlsMockResponse {
     /// Cleartext bytes the mock delivers to the guest's `Connector::receive`
     /// stream as if they were decrypted from the server. Read-side closes

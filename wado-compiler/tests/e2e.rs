@@ -53,6 +53,7 @@ fn http_path_default() -> String {
 
 /// HTTP request input for `"wasi:http/service"` tests
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 struct HttpRequestSpec {
     /// HTTP method (default: `"GET"`)
     #[serde(default = "http_method_default")]
@@ -96,6 +97,7 @@ impl Default for HttpRequestSpec {
 /// }
 /// ```
 #[derive(Debug, Deserialize, Default)]
+#[serde(deny_unknown_fields)]
 struct HttpServiceSpec {
     /// Injected HTTP request (defaults to `GET /`)
     #[serde(default)]
@@ -120,6 +122,7 @@ struct HttpServiceSpec {
 
 /// Test world spec for `"test": {}` — no sub-fields, presence signals the test world.
 #[derive(Debug, Deserialize, Default)]
+#[serde(deny_unknown_fields)]
 struct TestWorldSpec {}
 
 /// Expected test results from __DATA__ section (JSON format)
