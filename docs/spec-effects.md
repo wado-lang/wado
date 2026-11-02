@@ -419,7 +419,7 @@ An ambient effect is best-effort. It uses a capability the component already has
 
 > Not yet implemented: the compiler holds to this for `Stdout` and `Stderr` alone. An ambient body that performs another host-backed effect imports it.
 
-It is for output that must work from any function: `log_stdout` is `#[ambient(Stdout)]`, `log_stderr` is `#[ambient(Stderr)]`, and the `core:log` facade is `#[ambient(Log)]`. Whether a call whose result goes unused runs is [unspecified](./spec-overview.md#behavior-classes), so its output may never appear.
+It is for output that must work from any function: `log_stdout` is `#[ambient(Stdout)]`, and `log_stderr` is `#[ambient(Stderr)]`. Whether a call whose result goes unused runs is [unspecified](./spec-overview.md#behavior-classes), so its output may never appear.
 
 <!-- {"fixture":"spec_effects_ambient.wado"} -->
 

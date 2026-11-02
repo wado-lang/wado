@@ -12,8 +12,11 @@
 //! `enabled(level)` exposes the same ladder for guarding fields too expensive
 //! to build.
 //!
-//! The facade is `#[ambient]`, so performing `Log` adds no `with Log` to a
-//! caller's signature, and every operation carries a default implementation, so
+//! The facade performs `Log` without a `with Log` in a caller's signature. The
+//! functions that emit or record are `#[benign(Log)]`: what they log is
+//! outside what the program computes. `enabled`, `span` and `current` hand a
+//! value back, so they are `#[ambient(Log)]`. Every operation carries a
+//! default implementation, so
 //! a program that installs nothing still logs — `Info` and above, one text line
 //! per event on stderr. Installing a sink replaces that for its scope; `NopSink`
 //! is how a program asks for silence.
@@ -271,7 +274,7 @@ pub fn enabled(level: Level) -> bool {
 /// apply here too; only tier 1 comes out weaker, since a level that is not a
 /// literal is not a comparison the optimizer can fold. Location defaults
 /// resolve at the call site.
-#[ambient(Log)]
+#[benign(Log)]
 pub fn event<T: Serialize = NoFields>(
     level: Level,
     message: String,
@@ -289,7 +292,7 @@ pub fn event<T: Serialize = NoFields>(
 /// Build the event and hand it to the subscriber, gates already passed. The
 /// level wrappers call this rather than [`event`] so an emitted event runs the
 /// tier-3 dispatch once, not twice.
-#[ambient(Log)]
+#[benign(Log)]
 fn emit<T: Serialize = NoFields>(level: Level, message: String, fields: T, target: String, file: String, line: i32) {
     if DEPTH >= MAX_DEPTH {
         return;
@@ -307,7 +310,7 @@ fn emit<T: Serialize = NoFields>(level: Level, message: String, fields: T, targe
 // One wrapper per level: each knows its level as a literal, which is what lets
 // tier 1 fold the comparison away once a parameter reaches it.
 
-#[ambient(Log)]
+#[benign(Log)]
 pub fn trace<T: Serialize = NoFields>(
     message: String,
     fields: T = NoFields {},
@@ -321,7 +324,7 @@ pub fn trace<T: Serialize = NoFields>(
     emit(Level::Trace, message, fields, target, file, line);
 }
 
-#[ambient(Log)]
+#[benign(Log)]
 pub fn debug<T: Serialize = NoFields>(
     message: String,
     fields: T = NoFields {},
@@ -335,7 +338,7 @@ pub fn debug<T: Serialize = NoFields>(
     emit(Level::Debug, message, fields, target, file, line);
 }
 
-#[ambient(Log)]
+#[benign(Log)]
 pub fn info<T: Serialize = NoFields>(
     message: String,
     fields: T = NoFields {},
@@ -349,7 +352,7 @@ pub fn info<T: Serialize = NoFields>(
     emit(Level::Info, message, fields, target, file, line);
 }
 
-#[ambient(Log)]
+#[benign(Log)]
 pub fn warn<T: Serialize = NoFields>(
     message: String,
     fields: T = NoFields {},
@@ -363,7 +366,7 @@ pub fn warn<T: Serialize = NoFields>(
     emit(Level::Warn, message, fields, target, file, line);
 }
 
-#[ambient(Log)]
+#[benign(Log)]
 pub fn error<T: Serialize = NoFields>(
     message: String,
     fields: T = NoFields {},
@@ -388,20 +391,20 @@ impl Span {
     }
 
     /// Add fields to an open span.
-    #[ambient(Log)]
+    #[benign(Log)]
     pub fn record<T: Serialize>(&self, fields: T) {
         Log::record_fields(self.id, box_fields(fields));
     }
 
     /// Record a non-parent causal link: this span follows from `cause`.
-    #[ambient(Log)]
+    #[benign(Log)]
     pub fn follows_from(&self, cause: &Span) {
         Log::follows_from(self.id, cause.id);
     }
 
     /// Close a span entered by hand. [`in_span`] closes on every exit path, so
     /// this is only for a span the caller opened without it.
-    #[ambient(Log)]
+    #[benign(Log)]
     pub fn close(&self) {
         Log::close(self.id);
     }
@@ -434,7 +437,7 @@ pub fn current() -> Option<Span> {
 
 /// Run `body` inside `s`. A closure can't skip the exit/close calls, so they
 /// run on every body exit path, an early `return` included.
-#[ambient(Log)]
+#[benign(Log)]
 pub fn in_span<T, effect E>(s: &Span, mut body: fn mut() -> T with E) -> T with E {
     Log::enter(s.id());
     let r = body();
