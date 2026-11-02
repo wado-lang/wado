@@ -707,13 +707,6 @@ impl TypeTable {
         self.types.ids()
     }
 
-    /// The live ids interned at `from` or later, and the id to ask from next
-    /// time. Interning only appends, so a caller re-reading the table reads
-    /// only what was added since.
-    pub fn type_ids_since(&self, from: TypeId) -> (impl Iterator<Item = TypeId> + '_, TypeId) {
-        (self.types.ids_from(from), self.types.next_id())
-    }
-
     /// Look up a struct `TypeId` by its name and module source.
     /// Returns `None` if no struct with that name exists in the given module.
     pub fn find_struct_by_name(&self, name: &str, module_source: &ModuleSource) -> Option<TypeId> {
@@ -3779,18 +3772,6 @@ impl TypeTable {
             })
             .or_default()
             .insert(trait_ref.args, filled, resolved_id, None);
-    }
-
-    /// Every associated type a concrete receiver answers, with that receiver.
-    pub fn assoc_type_answers(&self) -> impl Iterator<Item = (&InstanceKey, TypeId)> {
-        self.assoc_type_resolutions
-            .iter()
-            .flat_map(|(key, answers)| {
-                answers
-                    .0
-                    .iter()
-                    .map(|answer| (&key.receiver, answer.answer))
-            })
     }
 
     /// Each associated type `receiver` answers: what synthesis registered for
@@ -7280,16 +7261,7 @@ impl<V> TypeMap<V> {
 
     /// Iterate the `TypeId`s of every live slot.
     pub(crate) fn ids(&self) -> impl Iterator<Item = TypeId> + '_ {
-        self.ids_from(TypeId(0))
-    }
-
-    /// Iterate the `TypeId`s of every live slot at `from` or later.
-    pub(crate) fn ids_from(&self, from: TypeId) -> impl Iterator<Item = TypeId> + '_ {
-        let start = (from.0 as usize).min(self.slots.len());
-        self.slots[start..]
-            .iter()
-            .enumerate()
-            .filter_map(move |(i, slot)| slot.as_ref().map(|_| TypeId((start + i) as u32)))
+        self.iter().map(|(id, _)| id)
     }
 }
 

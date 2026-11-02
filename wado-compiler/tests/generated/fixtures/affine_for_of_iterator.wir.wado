@@ -29,9 +29,10 @@ struct affine_for_of_iterator.wado//Counter {  // TypeId(7)
     mut token: ref null "affine_for_of_iterator.wado//Token",
 }
 
-struct core:prelude/traits.wado//IterZip<affine_for_of_iterator.wado/Counter,core:prelude/traits.wado/IterStepBy<core:prelude/traits.wado/IterChain<affine_for_of_iterator.wado/Counter,affine_for_of_iterator.wado/Counter>>> {  // TypeId(8)
+struct core:prelude/traits.wado//IterChain<affine_for_of_iterator.wado/Counter,affine_for_of_iterator.wado/Counter> {  // TypeId(8)
     mut first: ref null "affine_for_of_iterator.wado//Counter",
-    mut second: ref null "core:prelude/traits.wado//IterStepBy<core:prelude/traits.wado/IterChain<affine_for_of_iterator.wado/Counter,affine_for_of_iterator.wado/Counter>>",
+    mut second: ref null "affine_for_of_iterator.wado//Counter",
+    mut first_done: bool,
 }
 
 struct core:prelude/traits.wado//IterStepBy<core:prelude/traits.wado/IterChain<affine_for_of_iterator.wado/Counter,affine_for_of_iterator.wado/Counter>> {  // TypeId(9)
@@ -40,15 +41,14 @@ struct core:prelude/traits.wado//IterStepBy<core:prelude/traits.wado/IterChain<a
     mut started: bool,
 }
 
-struct core:prelude/traits.wado//IterChain<affine_for_of_iterator.wado/Counter,affine_for_of_iterator.wado/Counter> {  // TypeId(10)
+struct core:prelude/traits.wado//IterZip<affine_for_of_iterator.wado/Counter,core:prelude/traits.wado/IterStepBy<core:prelude/traits.wado/IterChain<affine_for_of_iterator.wado/Counter,affine_for_of_iterator.wado/Counter>>> {  // TypeId(10)
     mut first: ref null "affine_for_of_iterator.wado//Counter",
-    mut second: ref null "affine_for_of_iterator.wado//Counter",
-    mut first_done: bool,
+    mut second: ref null "core:prelude/traits.wado//IterStepBy<core:prelude/traits.wado/IterChain<affine_for_of_iterator.wado/Counter,affine_for_of_iterator.wado/Counter>>",
 }
 
-struct core:prelude/traits.wado//IterEnumerate<core:prelude/traits.wado/IterFilter<core:prelude/traits.wado/IterMap<affine_for_of_iterator.wado/Counter,fn mut(i32)->i32>,fn mut(i32)->bool>> {  // TypeId(11)
-    mut inner: ref null "core:prelude/traits.wado//IterFilter<core:prelude/traits.wado/IterMap<affine_for_of_iterator.wado/Counter,fn mut(i32)->i32>,fn mut(i32)->bool>",
-    mut count: i32,
+struct core:prelude/traits.wado//IterMap<affine_for_of_iterator.wado/Counter,fn mut(i32)->i32> {  // TypeId(11)
+    mut inner: ref null "affine_for_of_iterator.wado//Counter",
+    mut f: ref struct,
 }
 
 struct core:prelude/traits.wado//IterFilter<core:prelude/traits.wado/IterMap<affine_for_of_iterator.wado/Counter,fn mut(i32)->i32>,fn mut(i32)->bool> {  // TypeId(12)
@@ -56,9 +56,9 @@ struct core:prelude/traits.wado//IterFilter<core:prelude/traits.wado/IterMap<aff
     mut pred: ref struct,
 }
 
-struct core:prelude/traits.wado//IterMap<affine_for_of_iterator.wado/Counter,fn mut(i32)->i32> {  // TypeId(13)
-    mut inner: ref null "affine_for_of_iterator.wado//Counter",
-    mut f: ref struct,
+struct core:prelude/traits.wado//IterEnumerate<core:prelude/traits.wado/IterFilter<core:prelude/traits.wado/IterMap<affine_for_of_iterator.wado/Counter,fn mut(i32)->i32>,fn mut(i32)->bool>> {  // TypeId(13)
+    mut inner: ref null "core:prelude/traits.wado//IterFilter<core:prelude/traits.wado/IterMap<affine_for_of_iterator.wado/Counter,fn mut(i32)->i32>,fn mut(i32)->bool>",
+    mut count: i32,
 }
 
 type "functype/$canonical_closure_fn_0" = fn(ref null struct, i32) -> bool;  // TypeId(14)

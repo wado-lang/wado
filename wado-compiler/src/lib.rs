@@ -428,6 +428,9 @@ pub struct DumpResult {
     pub wir_package: Option<wir::WirPackage>,
     /// AstId-keyed trivia for unparsing the dumped AST.
     pub trivia: comment::TriviaMap,
+    /// Whether the checks `compile` runs before synthesis rejected the
+    /// program, reported already, leaving the views after them empty.
+    pub rejected: bool,
 }
 
 /// A provider component supplied to satisfy a dependency's guest-effect import.
@@ -1399,27 +1402,15 @@ async fn resolve_inline_providers<H: CompilerHost>(
     parent: &CompilerOptions,
     logger: &Logger<'_, H>,
 ) -> Result<Vec<ProviderComponent>, Bail> {
-    let entry_source = load_result.entry_module_source.clone();
-    let entry_dir = entry_dir_of(Some(&entry_source));
-
-    // (importing module source, use decl, provider path, where the path is
-    // written) for every provider directive, collected before the on-demand
-    // compiles below.
-    let mut jobs: Vec<(ModuleSource, UseDecl, String, DiagnosticSpan)> = Vec::new();
-    for (src, module) in &load_result.modules {
-        for item in &module.items {
-            if let Item::Use(use_decl) = item
-                && let Some((path, span)) =
-                    use_decl.attributes.as_ref().and_then(|a| a.provider_path())
-            {
-                let at = DiagnosticSpan::from_span(&span, Some(&src.source_path()));
-                jobs.push((src.clone(), use_decl.clone(), path.to_string(), at));
-            }
-        }
-    }
-
+    let entry_dir = entry_dir_of(Some(&load_result.entry_module_source));
     let mut providers = Vec::new();
-    for (src, use_decl, prov_path, at) in jobs {
+    for ProviderDirective {
+        src,
+        prov_path,
+        at,
+        fq,
+    } in provider_directives(load_result, logger)?
+    {
         let report = |diagnostic: Diagnostic| {
             let _ = logger.error(diagnostic);
             Bail
@@ -1433,6 +1424,89 @@ async fn resolve_inline_providers<H: CompilerHost>(
             })
         };
         let bail_load = |error: LoadError| report(Diagnostic::from(error.at_path(at.clone())));
+        let resolved =
+            loader::resolve_wasm_asset_path(&src, &prov_path, &entry_dir).map_err(bail_load)?;
+        let bytes = host
+            .load_source(&resolved)
+            .await
+            .map_err(|e| bail_load(LoadError::reading(e, &prov_path)))?;
+        let provider_src = String::from_utf8_lossy_owned(bytes);
+        // Inherit the parent's compilation options so the provider is built the
+        // same way (optimization, `-D` params, codegen flags, log level); only
+        // the world is overridden, and `providers` stays empty (the
+        // provider is a leaf — see the `is_provider` guard above).
+        let opts = CompilerOptions {
+            lib_world: Some(fq.clone()),
+            is_provider: true,
+            opt_level: parent.opt_level,
+            opt: parent.opt,
+            log_level: parent.log_level,
+            codegen_flags: parent.codegen_flags.clone(),
+            params: parent.params.clone(),
+            ..Default::default()
+        };
+        let result = Box::pin(compile_with_options(
+            &provider_src,
+            host,
+            Some(&resolved),
+            opts,
+        ))
+        .await
+        .map_err(|e| {
+            bail(
+                Code::EffectHandlerInvalid,
+                format!("provider `{prov_path}` failed to compile: {e}"),
+            )
+        })?;
+        providers.push(ProviderComponent {
+            source: prov_path,
+            import_fq: fq,
+            bytes: result.wasm,
+        });
+    }
+    Ok(providers)
+}
+
+/// A `with { provider: "./p.wado" }` directive, and the one guest-effect
+/// interface its dependency imports, which the provider satisfies.
+struct ProviderDirective {
+    src: ModuleSource,
+    prov_path: String,
+    at: DiagnosticSpan,
+    fq: String,
+}
+
+/// Every provider directive the loaded modules write, each checked to name a
+/// component that imports exactly one guest effect.
+fn provider_directives<H: CompilerHost>(
+    load_result: &mut loader::LoadResult,
+    logger: &Logger<'_, H>,
+) -> Result<Vec<ProviderDirective>, Bail> {
+    let entry_source = load_result.entry_module_source.clone();
+    let mut jobs: Vec<(ModuleSource, UseDecl, String, DiagnosticSpan)> = Vec::new();
+    for (src, module) in &load_result.modules {
+        for item in &module.items {
+            if let Item::Use(use_decl) = item
+                && let Some((path, span)) =
+                    use_decl.attributes.as_ref().and_then(|a| a.provider_path())
+            {
+                let at = DiagnosticSpan::from_span(&span, Some(&src.source_path()));
+                jobs.push((src.clone(), use_decl.clone(), path.to_string(), at));
+            }
+        }
+    }
+
+    let mut directives = Vec::new();
+    for (src, use_decl, prov_path, at) in jobs {
+        let bail = |code: Code, message: String| {
+            let _ = logger.error(Diagnostic {
+                severity: Severity::Error,
+                code,
+                message,
+                span: Some(at.clone()),
+            });
+            Bail
+        };
         // Resolve against the loader's own interner so the `ModuleSource`'s
         // interned strings match the loaded binding module's key (identity, not
         // string, equality).
@@ -1479,48 +1553,44 @@ async fn resolve_inline_providers<H: CompilerHost>(
                 ));
             }
         };
-
-        let resolved =
-            loader::resolve_wasm_asset_path(&src, &prov_path, &entry_dir).map_err(bail_load)?;
-        let bytes = host
-            .load_source(&resolved)
-            .await
-            .map_err(|e| bail_load(LoadError::reading(e, &prov_path)))?;
-        let provider_src = String::from_utf8_lossy_owned(bytes);
-        // Inherit the parent's compilation options so the provider is built the
-        // same way (optimization, `-D` params, codegen flags, log level); only
-        // the world is overridden, and `providers` stays empty (the
-        // provider is a leaf — see the `is_provider` guard above).
-        let opts = CompilerOptions {
-            lib_world: Some(fq.clone()),
-            is_provider: true,
-            opt_level: parent.opt_level,
-            opt: parent.opt,
-            log_level: parent.log_level,
-            codegen_flags: parent.codegen_flags.clone(),
-            params: parent.params.clone(),
-            ..Default::default()
-        };
-        let result = Box::pin(compile_with_options(
-            &provider_src,
-            host,
-            Some(&resolved),
-            opts,
-        ))
-        .await
-        .map_err(|e| {
-            bail(
-                Code::EffectHandlerInvalid,
-                format!("provider `{prov_path}` failed to compile: {e}"),
-            )
-        })?;
-        providers.push(ProviderComponent {
-            source: prov_path,
-            import_fq: fq,
-            bytes: result.wasm,
+        directives.push(ProviderDirective {
+            src,
+            prov_path,
+            at,
+            fq,
         });
     }
-    Ok(providers)
+    Ok(directives)
+}
+
+/// The effect, purity and affine move checks, which read `Semantics` (the AST
+/// and its recorded facts) rather than the emitted TIR, so they see every
+/// source function whatever reify emits, and share their logic with the LSP.
+/// Every pipeline runs them before synthesis: a later phase assumes a program
+/// they passed.
+fn check_effects_and_moves<H: CompilerHost>(
+    sem: &mut semantics::Semantics,
+    provided_import_fqs: hashmap::IndexSet<String>,
+    logger: &Logger<'_, H>,
+) -> Result<(), Bail> {
+    let _span = logger.span("effect-check");
+    let diags = effect_check::check_semantics(sem, provided_import_fqs);
+    let move_errors = affine_move_check::check_affine_moves_semantic(sem);
+    let had_error = !diags.is_empty() || !move_errors.is_empty();
+    sem.redirect_effect_vars(&diags.rows);
+    for error in diags.effects {
+        let _ = logger.error(error);
+    }
+    for error in diags.purity {
+        let _ = logger.error(error);
+    }
+    for error in move_errors {
+        let _ = logger.error(error);
+    }
+    if had_error {
+        return Err(Bail);
+    }
+    Ok(())
 }
 
 /// Internal: run compilation phases after module loading.
@@ -1631,34 +1701,16 @@ fn compile_after_load<H: CompilerHost>(
         }
     }
 
-    // === Phase 6b: Effect and Purity Checks ===
-    // Both are produced from `Semantics` (AST + recorded facts), not the
-    // emitted TIR, so they see every source function regardless of what reify
-    // emits and share their logic with the LSP.
-    {
-        let _span = logger.span("effect-check");
-        let provided_import_fqs: hashmap::IndexSet<String> = options
+    // === Phase 6b: Effect, Purity and Move Checks ===
+    check_effects_and_moves(
+        &mut sem,
+        options
             .providers
             .iter()
             .map(|p| p.import_fq.clone())
-            .collect();
-        let diags = effect_check::check_semantics(&sem, provided_import_fqs);
-        let move_errors = affine_move_check::check_affine_moves_semantic(&sem);
-        let had_error = !diags.is_empty() || !move_errors.is_empty();
-        sem.redirect_effect_vars(&diags.rows);
-        for error in diags.effects {
-            let _ = logger.error(error);
-        }
-        for error in diags.purity {
-            let _ = logger.error(error);
-        }
-        for error in move_errors {
-            let _ = logger.error(error);
-        }
-        if had_error {
-            return Err(Bail);
-        }
-    }
+            .collect(),
+        logger,
+    )?;
 
     // === Phase 6c: Kiln `Options` descriptor extraction ===
     // An `Options` no descriptor describes fails here: no options table could
@@ -2160,12 +2212,12 @@ fn compile_after_load<H: CompilerHost>(
     {
         let _span = logger.span("monomorphize");
         lower::contract_checks::check_marked_calls(&flat);
-        prelower_reach::before_monomorphize(&mut flat);
         let mut mono = monomorphize(&mut flat);
         refuse_expanding_instances(&mono, logger)?;
         #[cfg(debug_assertions)]
         link::assert_no_stub_shadowing(&flat.functions, "monomorphize");
         bind_monomorphized(&mut flat, &mut mono, logger)?;
+        mono.finish(&mut flat);
         synthesis::traits::synthesize_monomorphized_fn_inspect_stubs(&mut flat);
     }
 
@@ -2500,7 +2552,7 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
     }
 
     // === Phase 4: Load all modules ===
-    let load_result = {
+    let mut load_result = {
         let module_loader = loader::ModuleLoader::new(host, compiler_host::LogLevel::default())
             .with_invocations(invocations);
         module_loader
@@ -2511,6 +2563,12 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
                 Bail
             })?
     };
+    // Dump builds no provider, but the effect check discharges what one
+    // supplies, as under `compile`.
+    let provided_import_fqs = provider_directives(&mut load_result, &logger)?
+        .into_iter()
+        .map(|directive| directive.fq)
+        .collect();
 
     // Everything the back end needs past `semantics_with_logger`, which
     // consumes `load_result` — the same partial-clone `compile_with_options`
@@ -2533,7 +2591,7 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
     // into `TypeId`s the cached `TirModule`s do not carry, and left an
     // `Iterator::Item` projection to reach WIR build and panic on programs
     // `compile` handled fine.
-    let sem = semantics::semantics_with_logger(
+    let mut sem = semantics::semantics_with_logger(
         load_result,
         &logger,
         true,
@@ -2541,6 +2599,9 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
         profile.filter(|_| parsed_codegen_flags.pgo.applies()),
         &LivenessScope::Compilation,
     );
+    // A rejected program reaches no phase after these, as under `compile`.
+    let checked = sem.is_complete()
+        && check_effects_and_moves(&mut sem, provided_import_fqs, &logger).is_ok();
     let symbols = sem.symbols.clone();
     let interner = sem.interner.clone();
     let entry_module_source_out = sem.entry_module_source.clone();
@@ -2560,6 +2621,7 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
         // snapshot rather than the frozen dump view.
         if let Some(resolved_modules) = tir_modules_by_source
             .as_ref()
+            .filter(|_| checked)
             .map(snapshot_tir_modules)
         {
             let module_name = filename.clone().unwrap_or_else(|| "module".to_string());
@@ -2639,10 +2701,10 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
             {
                 let _span = logger.span("monomorphize");
                 lower::contract_checks::check_marked_calls(&flat);
-                prelower_reach::before_monomorphize(&mut flat);
                 let mut mono = monomorphize(&mut flat);
                 refuse_expanding_instances(&mono, &logger)?;
                 bind_monomorphized(&mut flat, &mut mono, &logger)?;
+                mono.finish(&mut flat);
                 synthesis::traits::synthesize_monomorphized_fn_inspect_stubs(&mut flat);
             }
             lower_instance_patterns(&flat, &logger)?;
@@ -2704,6 +2766,7 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
         optimized_package,
         wir_package,
         trivia,
+        rejected: !checked,
     })
 }
 

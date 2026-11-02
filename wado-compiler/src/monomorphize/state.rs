@@ -8,7 +8,7 @@ use crate::defs::DefId;
 use crate::elaborator::trait_env::TraitEnv;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
-use crate::monomorphize::Templates;
+use crate::monomorphize::{Pool, Templates};
 use crate::name::{FqTraitName, FqTypeName, LocalMethodName, MethodName, mangle_generic_name};
 use crate::synthesis::template::written_impl_at;
 use crate::tir::{InstantiationKey, ResolvedType, TemplateId, TirFunction, TirTypeParam, TypeId};
@@ -31,12 +31,12 @@ pub(super) struct StructInstState {
     /// How long the type table's shape substitution log was when the last
     /// batch was read from it.
     pub anon_scanned: usize,
-    /// Where the last scan for instantiation sites stopped in the type table.
-    /// A type is immutable once interned, so only a generic struct missing
-    /// from [`Self::sites_tested`] can turn one it skipped into a site.
-    pub sites_scanned: TypeId,
     /// Every generic struct a scan has tested the types against.
     pub sites_tested: IndexSet<DefId>,
+    /// The held `GenericInstance`s that named no generic struct when read. A
+    /// type is immutable once interned, so only a generic struct missing from
+    /// [`Self::sites_tested`] can turn one into a site.
+    pub unmatched: Vec<TypeId>,
     /// Substitutions into closed shapes, as the shape and the substitution's
     /// index, whose origin's methods are yet to be instantiated.
     pub pending_shapes: Vec<(AnonStructId, usize)>,
@@ -122,6 +122,7 @@ impl FuncInstState {
 pub(super) struct Monomorphizer {
     pub structs: StructInstState,
     pub functions: FuncInstState,
+    pub pool: Pool,
     /// How many leading substitution slots of the function being instantiated
     /// are its impl's type params rather than its own.
     pub current_impl_type_param_count: usize,
@@ -172,8 +173,8 @@ impl Monomorphizer {
                 type_to_mangled_name: IndexMap::default(),
                 anon_sites: IndexMap::default(),
                 anon_scanned: 0,
-                sites_scanned: TypeId(0),
                 sites_tested: IndexSet::default(),
+                unmatched: Vec::new(),
                 pending_shapes: Vec::new(),
                 open_shape_heads: IndexMap::default(),
                 shape_methods: IndexMap::default(),
@@ -187,6 +188,7 @@ impl Monomorphizer {
                 templates: Rc::new(Templates::default()),
                 concrete_names: IndexMap::default(),
             },
+            pool: Pool::default(),
             current_impl_type_param_count: 0,
             current_impl_receiver: None,
             current_param_substitution_key: IndexMap::default(),

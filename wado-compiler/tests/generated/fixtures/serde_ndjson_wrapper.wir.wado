@@ -87,8 +87,8 @@ global global:core:json::$const_obj_39: ref Array<u8> = array.new_fixed<u8>(125)
 global global:core:json::$const_obj_40: ref Array<u8> = array.new_fixed<u8>(116, 114, 117, 101);
 global global:core:json::$const_obj_41: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(111, 107), used: 2 };
 global global:core:json::$const_obj_42: ref Array<u8> = array.new_fixed<u8>(123);
-global global:core:json::$const_obj_49: ref Array<u8> = array.new_fixed<u8>(34, 58);
-global global:core:json::$const_obj_51: ref Array<u8> = array.new_fixed<u8>(44, 34);
+global global:core:json::$const_obj_46: ref Array<u8> = array.new_fixed<u8>(34, 58);
+global global:core:json::$const_obj_48: ref Array<u8> = array.new_fixed<u8>(44, 34);
 global global:core:builtin::$unit_case$core:prelude/types.wado//Option<char>$0: ref "core:prelude/types.wado//Option<char>" = struct.new "core:prelude/types.wado//Option<char>" { 0 };
 
 fn "serde_ndjson_wrapper.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {
@@ -288,7 +288,7 @@ fn "core:json/core:json/write_plain_key<&core:prelude/string.wado/String>$spec1"
         }
         start_18 = buf.used;
         buf.used = count;
-        builtin::array_copy<u8>(local.tee $load_3(buf.repr), start_18, global:core:json::$const_obj_51, 0, 2);
+        builtin::array_copy<u8>(local.tee $load_3(buf.repr), start_18, global:core:json::$const_obj_48, 0, 2);
         if @unlikely(local.tee count(buf.used + 4) > builtin::array_len($load_3)) {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(buf, count);
@@ -297,7 +297,7 @@ fn "core:json/core:json/write_plain_key<&core:prelude/string.wado/String>$spec1"
         buf.used = count;
         builtin::array_copy<u8>(local.tee $load_3(buf.repr), start_18, name.repr, 0, 2);
         count = start_18 + 2;
-        builtin::array_copy<u8>($load_3, count, global:core:json::$const_obj_49, 0, 2);
+        builtin::array_copy<u8>($load_3, count, global:core:json::$const_obj_46, 0, 2);
         return;
     }
     if @unlikely(local.tee count(buf.used + 1) > builtin::array_len(buf.repr)) {
@@ -315,7 +315,7 @@ fn "core:json/core:json/write_plain_key<&core:prelude/string.wado/String>$spec1"
     buf.used = count;
     builtin::array_copy<u8>(local.tee $load_3(buf.repr), start_18, name.repr, 0, 2);
     count = start_18 + 2;
-    builtin::array_copy<u8>($load_3, count, global:core:json::$const_obj_49, 0, 2);
+    builtin::array_copy<u8>($load_3, count, global:core:json::$const_obj_46, 0, 2);
 }
 
 fn "core:prelude/string.wado/core:prelude/string.wado/String::realloc_to"(self, new_capacity) {

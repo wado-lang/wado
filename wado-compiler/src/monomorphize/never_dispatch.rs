@@ -10,7 +10,9 @@ use crate::tir::{TirBlock, TirExpr, TirExprKind, TirModule, TirStmt, TirStmtKind
 use crate::tir_visitor::TirMutVisitor;
 use crate::type_table::TypeTable;
 
-pub(super) fn trap_never_dispatch_in_module(module: &mut TirModule) {
+use super::Unrewritten;
+
+pub(super) fn trap_never_dispatch_in_module(module: &mut TirModule, unrewritten: Unrewritten) {
     let never_heads = {
         let tt = module.type_table.borrow();
         tt.all_types()
@@ -19,13 +21,13 @@ pub(super) fn trap_never_dispatch_in_module(module: &mut TirModule) {
             .collect()
     };
     let mut trapper = NeverDispatch { never_heads };
-    for func_rc in &module.functions {
+    for func_rc in unrewritten.functions(module) {
         let mut func = func_rc.borrow_mut();
         if let Some(body) = func.body.as_mut() {
             trapper.visit_block(body);
         }
     }
-    for global in &mut module.globals {
+    for global in unrewritten.globals_mut(module) {
         trapper.visit_expr(global.init.slot_expr_mut());
     }
 }

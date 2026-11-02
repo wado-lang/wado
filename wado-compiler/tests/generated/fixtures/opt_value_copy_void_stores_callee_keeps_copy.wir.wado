@@ -70,9 +70,9 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/String::reallo
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(25)
 
-type "functype//core:prelude/list.wado/core:prelude/list.wado/List<opt_value_copy_void_stores_callee_keeps_copy.wado/Sink>::grow" = fn(ref "core:prelude//List<opt_value_copy_void_stores_callee_keeps_copy.wado/Sink>");  // TypeId(26)
+type "functype//core:prelude/list.wado/core:prelude/list.wado/List<opt_value_copy_void_stores_callee_keeps_copy.wado/Item>::grow" = fn(ref "core:prelude//List<opt_value_copy_void_stores_callee_keeps_copy.wado/Item>");  // TypeId(26)
 
-type "functype//core:prelude/list.wado/core:prelude/list.wado/List<opt_value_copy_void_stores_callee_keeps_copy.wado/Item>::grow" = fn(ref "core:prelude//List<opt_value_copy_void_stores_callee_keeps_copy.wado/Item>");  // TypeId(27)
+type "functype//core:prelude/list.wado/core:prelude/list.wado/List<opt_value_copy_void_stores_callee_keeps_copy.wado/Sink>::grow" = fn(ref "core:prelude//List<opt_value_copy_void_stores_callee_keeps_copy.wado/Sink>");  // TypeId(27)
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::format<opt_value_copy_void_stores_callee_keeps_copy.wado/$tmpl$fb51c04d54491732,[i32]>$spec0$spec1$sroa[t.h0]" = fn(i32) -> ref "core:prelude/string.wado//String";  // TypeId(28)
 
@@ -300,19 +300,19 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, min_ca
     "core:prelude/string.wado/core:prelude/string.wado/String::realloc_to"(self, select i32(min_capacity > 8, local.tee min_capacity(select i32(capacity > min_capacity, local.tee capacity(capacity * 2), min_capacity)), 8));
 }
 
-fn "core:prelude/list.wado/core:prelude/list.wado/List<opt_value_copy_void_stores_callee_keeps_copy.wado/Sink>::grow"(self) {
-    let $load_0: ref "Array<opt_value_copy_void_stores_callee_keeps_copy.wado/Sink>";
-    let new_repr: ref "Array<opt_value_copy_void_stores_callee_keeps_copy.wado/Sink>";
-    let a: i32;
-    builtin::array_copy<ref "opt_value_copy_void_stores_callee_keeps_copy.wado//Sink">(local.tee new_repr(builtin::array_new<ref "opt_value_copy_void_stores_callee_keeps_copy.wado//Sink">(select i32(a > 4, local.tee a(builtin::array_len(local.tee $load_0(self.repr)) * 2), 4))), 0, $load_0, 0, self.used);
-    self.repr = new_repr;
-}
-
 fn "core:prelude/list.wado/core:prelude/list.wado/List<opt_value_copy_void_stores_callee_keeps_copy.wado/Item>::grow"(self) {
     let $load_0: ref "Array<opt_value_copy_void_stores_callee_keeps_copy.wado/Item>";
     let new_repr: ref "Array<opt_value_copy_void_stores_callee_keeps_copy.wado/Item>";
     let a: i32;
     builtin::array_copy<ref "opt_value_copy_void_stores_callee_keeps_copy.wado//Item">(local.tee new_repr(builtin::array_new<ref "opt_value_copy_void_stores_callee_keeps_copy.wado//Item">(select i32(a > 4, local.tee a(builtin::array_len(local.tee $load_0(self.repr)) * 2), 4))), 0, $load_0, 0, self.used);
+    self.repr = new_repr;
+}
+
+fn "core:prelude/list.wado/core:prelude/list.wado/List<opt_value_copy_void_stores_callee_keeps_copy.wado/Sink>::grow"(self) {
+    let $load_0: ref "Array<opt_value_copy_void_stores_callee_keeps_copy.wado/Sink>";
+    let new_repr: ref "Array<opt_value_copy_void_stores_callee_keeps_copy.wado/Sink>";
+    let a: i32;
+    builtin::array_copy<ref "opt_value_copy_void_stores_callee_keeps_copy.wado//Sink">(local.tee new_repr(builtin::array_new<ref "opt_value_copy_void_stores_callee_keeps_copy.wado//Sink">(select i32(a > 4, local.tee a(builtin::array_len(local.tee $load_0(self.repr)) * 2), 4))), 0, $load_0, 0, self.used);
     self.repr = new_repr;
 }
 

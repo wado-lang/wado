@@ -137,11 +137,11 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/String::format
 
 type "functype//from_literal_nested_generic.wado/from_literal_nested_generic.wado/NestedMap<core:prelude/list.wado/List<core:prelude/string.wado/String>,i32>^core:prelude/traits.wado/From<Array<[core:prelude/string.wado/String,V]>>::from" = fn(ref "Array<[core:prelude/string.wado/String,i32]>") -> [ref "core:prelude//List<core:prelude/string.wado/String>", ref "core:prelude//List<i32>"];  // TypeId(47)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(48)
+type "functype//core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>::grow" = fn(ref "core:prelude//List<core:prelude/string.wado/String>");  // TypeId(48)
 
-type "functype//core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>::grow" = fn(ref "core:prelude//List<core:prelude/string.wado/String>");  // TypeId(49)
+type "functype//core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow" = fn(ref "core:prelude//List<i32>");  // TypeId(49)
 
-type "functype//core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow" = fn(ref "core:prelude//List<i32>");  // TypeId(50)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(50)
 
 type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::write_char_n$sroa[self.buf]" = fn(ref "core:prelude/string.wado//String", char, i32);  // TypeId(51)
 
@@ -692,6 +692,22 @@ fn "from_literal_nested_generic.wado/from_literal_nested_generic.wado/NestedMap<
     return $sroa_out_keys_32, $sroa_out_values_33;
 }
 
+fn "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>::grow"(self) {
+    let $load_0: ref "Array<core:prelude/string.wado/String>";
+    let new_repr: ref "Array<core:prelude/string.wado/String>";
+    let a: i32;
+    builtin::array_copy<ref "core:prelude/string.wado//String">(local.tee new_repr(builtin::array_new<ref "core:prelude/string.wado//String">(select i32(a > 4, local.tee a(builtin::array_len(local.tee $load_0(self.repr)) * 2), 4))), 0, $load_0, 0, self.used);
+    self.repr = new_repr;
+}
+
+fn "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(self) {
+    let $load_0: ref Array<i32>;
+    let new_repr: ref Array<i32>;
+    let a: i32;
+    builtin::array_copy<i32>(local.tee new_repr(builtin::array_new<i32>(select i32(a > 4, local.tee a(builtin::array_len(local.tee $load_0(self.repr)) * 2), 4))), 0, $load_0, 0, self.used);
+    self.repr = new_repr;
+}
+
 fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>"(self, is_negative, alt_prefix, digit_count) {
     let $load_6: i32;
     let $load_26: char;
@@ -749,22 +765,6 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
         }
         return "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(alt_prefix, digit_count);
     }
-}
-
-fn "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>::grow"(self) {
-    let $load_0: ref "Array<core:prelude/string.wado/String>";
-    let new_repr: ref "Array<core:prelude/string.wado/String>";
-    let a: i32;
-    builtin::array_copy<ref "core:prelude/string.wado//String">(local.tee new_repr(builtin::array_new<ref "core:prelude/string.wado//String">(select i32(a > 4, local.tee a(builtin::array_len(local.tee $load_0(self.repr)) * 2), 4))), 0, $load_0, 0, self.used);
-    self.repr = new_repr;
-}
-
-fn "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(self) {
-    let $load_0: ref Array<i32>;
-    let new_repr: ref Array<i32>;
-    let a: i32;
-    builtin::array_copy<i32>(local.tee new_repr(builtin::array_new<i32>(select i32(a > 4, local.tee a(builtin::array_len(local.tee $load_0(self.repr)) * 2), 4))), 0, $load_0, 0, self.used);
-    self.repr = new_repr;
 }
 
 fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_char_n$sroa[self.buf]"(self, c, n) {

@@ -20,7 +20,7 @@ use crate::tir_visitor::{TirMutVisitor, TirRefVisitor};
 use crate::type_table::{AnonStructId, TypeTable};
 
 use super::state::Monomorphizer;
-use super::{Templates, module_source_for_trait_impl};
+use super::{Templates, Unrewritten, module_source_for_trait_impl};
 use crate::name::FqTraitName;
 use crate::synthesis::template::{
     blanket_impl_args, blanket_is_reflect_keyed, has_reflect_kind, method_template_at,
@@ -30,8 +30,13 @@ use crate::synthesis::template::{
 use crate::tir;
 use crate::token::Span;
 
-/// Lower remaining comparison operators on non-primitive types in all module functions.
-pub fn lower_comparisons_in_module(module: &mut TirModule, trait_env: &Arc<TraitEnv>) {
+/// Lower the comparison operators left on non-primitive types in what is
+/// `unrewritten`.
+pub(super) fn lower_comparisons_in_module(
+    module: &mut TirModule,
+    unrewritten: Unrewritten,
+    trait_env: &Arc<TraitEnv>,
+) {
     let type_table_rc = module.type_table.clone();
 
     struct ComparisonLowerer<'a> {
@@ -72,7 +77,7 @@ pub fn lower_comparisons_in_module(module: &mut TirModule, trait_env: &Arc<Trait
         type_table: &type_table_rc,
     };
 
-    for func_rc in &module.functions {
+    for func_rc in unrewritten.functions(module) {
         let mut func = func_rc.borrow_mut();
         if let Some(mut body) = func.body.take() {
             lowerer.visit_block(&mut body);
@@ -80,23 +85,25 @@ pub fn lower_comparisons_in_module(module: &mut TirModule, trait_env: &Arc<Trait
         }
     }
 
-    for global in &mut module.globals {
+    for global in unrewritten.globals_mut(module) {
         lowerer.visit_expr(global.init.slot_expr_mut());
     }
 }
 
-/// Expand every `TypePackExpansion` whose own site settled the pack, in every
-/// body of the module: a function's and a global initializer's alike.
+/// Expand every `TypePackExpansion` whose own site settled the pack, in each of
+/// `functions`.
 ///
 /// Such a node sits in a caller that may declare no type parameter, which
 /// `instantiate_function` never visits. Runs before instantiation sites are
 /// collected, so the calls it produces are monomorphized like any other.
-pub fn expand_settled_packs_in_module(mono: &mut Monomorphizer, module: &mut TirModule) {
+pub fn expand_settled_packs(
+    mono: &mut Monomorphizer,
+    type_table_rc: &Rc<RefCell<TypeTable>>,
+    functions: &[Rc<RefCell<TirFunction>>],
+) {
     mono.current_param_substitution_key = IndexMap::default();
     mono.current_impl_type_param_count = 0;
     mono.current_impl_receiver = None;
-
-    let type_table_rc = module.type_table.clone();
 
     struct SettledPackExpander<'a> {
         mono: &'a Monomorphizer,
@@ -141,7 +148,7 @@ pub fn expand_settled_packs_in_module(mono: &mut Monomorphizer, module: &mut Tir
         }
     }
 
-    for func_rc in &module.functions {
+    for func_rc in functions {
         let mut func = func_rc.borrow_mut();
         let Some(mut body) = func.body.take() else {
             continue;
@@ -150,7 +157,7 @@ pub fn expand_settled_packs_in_module(mono: &mut Monomorphizer, module: &mut Tir
         let mut locals = std::mem::take(&mut func.locals);
         SettledPackExpander {
             mono,
-            type_table: &type_table_rc,
+            type_table: type_table_rc,
             local_count: &mut local_count,
             locals: &mut locals,
         }
@@ -742,7 +749,7 @@ impl Monomorphizer {
         &mut self,
         module: &TirModule,
         generic_functions: &Templates,
-        scanned: usize,
+        unrewritten: Unrewritten,
     ) {
         let mut type_table = module.type_table.borrow_mut();
         let mut collector = InstantiationCollector {
@@ -750,7 +757,7 @@ impl Monomorphizer {
             generic_functions,
             type_table: &mut type_table,
         };
-        for func_rc in &module.functions[scanned..] {
+        for func_rc in unrewritten.functions(module) {
             let func = func_rc.borrow();
             // A template's body is scanned once instantiated, in Phase 9.
             if func.is_template() {
@@ -761,12 +768,8 @@ impl Monomorphizer {
             }
         }
 
-        // Global initializers, on the first run only: a resume adds no globals,
-        // and the first run left these rewritten too.
-        if scanned == 0 {
-            for global in &module.globals {
-                collector.visit_expr(global.init.slot_expr());
-            }
+        for global in unrewritten.globals(module) {
+            collector.visit_expr(global.init.slot_expr());
         }
     }
 

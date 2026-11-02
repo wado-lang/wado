@@ -637,5 +637,8 @@ async fn run_single(opts: &DumpOptions, input: &str) -> Result<(), CliExit> {
             println!();
         }
     }
+    if result.rejected {
+        return Err(CliExit::silent_failure(1));
+    }
     Ok(())
 }
