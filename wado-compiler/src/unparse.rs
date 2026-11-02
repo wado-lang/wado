@@ -2689,7 +2689,7 @@ impl<'a> Unparser<'a> {
     }
 
     fn unparse_template_string(&mut self, t: &TemplateStringExpr) {
-        let hashes = t.quote.hashes();
+        let hashes = "#".repeat(t.quote.hash_count());
         self.output.push_str(&hashes);
         self.output.push('`');
         for part in &t.parts {

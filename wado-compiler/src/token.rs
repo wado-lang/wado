@@ -37,12 +37,12 @@ pub enum TemplateQuote {
 }
 
 impl TemplateQuote {
-    /// The run of `#`s on each end.
+    /// How many `#`s stand on each end.
     #[must_use]
-    pub fn hashes(self) -> String {
+    pub fn hash_count(self) -> usize {
         match self {
-            Self::Cooked => String::new(),
-            Self::Raw { hashes } => "#".repeat(hashes),
+            Self::Cooked => 0,
+            Self::Raw { hashes } => hashes,
         }
     }
 

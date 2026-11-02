@@ -1366,10 +1366,7 @@ impl<'a> Lexer<'a> {
         let start_line = self.line;
         let start_column = self.column;
 
-        let hashes = match quote {
-            TemplateQuote::Cooked => 0,
-            TemplateQuote::Raw { hashes } => hashes,
-        };
+        let hashes = quote.hash_count();
         self.advance_n(hashes + 1); // the opening `#`s and backtick
 
         let mut parts = Vec::new();
