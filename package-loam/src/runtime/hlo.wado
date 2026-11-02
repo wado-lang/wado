@@ -295,8 +295,9 @@ pub affine trait Graph: Holds with _ {
         );
     }
 
-    /// ONNX's `ArgMax` keeping its axis, as `Backend::arg_max` ranks it.
-    fn arg_max<Axes>(&mut self, x: &Self::Tensor<f32, Axes>, axis: i32) -> Self::Tensor<i64, Axes> with _;
+    /// ONNX's `ArgMax` keeping its axis, as `Backend::arg_max` ranks it. Named
+    /// apart from it, so a call on a type that is both is not ambiguous.
+    fn index_of_max<Axes>(&mut self, x: &Self::Tensor<f32, Axes>, axis: i32) -> Self::Tensor<i64, Axes> with _;
 }
 
 /// `Graph::group_query_attention`'s decomposition, which a graph that runs
@@ -807,7 +808,7 @@ impl Graph for Cpu {
         return Tensor { data, extents: x.extents };
     }
 
-    fn arg_max<Axes>(&mut self, x: &Tensor<f32, Axes>, axis: i32) -> Tensor<i64, Axes> {
+    fn index_of_max<Axes>(&mut self, x: &Tensor<f32, Axes>, axis: i32) -> Tensor<i64, Axes> {
         return arg_max(x, axis);
     }
 

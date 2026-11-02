@@ -66,7 +66,7 @@ pub variant Operation {
     Convolution(Convolution),
     ReduceWindow([Binary, f32, WindowReduce]),
     Reverse(List<i32>),
-    /// `Graph::arg_max` along the axis.
+    /// `Graph::index_of_max` along the axis.
     ArgMax(i32),
     /// A `case` on its operand, the condition. Outside the node, each result
     /// of the first branch names the result of whichever branch ran.
@@ -342,7 +342,7 @@ impl Graph for Recorder {
         return self.value(Operation::Reverse(dims), [x.id], E::kind(), self.extents(x.id));
     }
 
-    fn arg_max<Axes>(&mut self, x: &Value<f32, Axes>, axis: i32) -> Value<i64, Axes> {
+    fn index_of_max<Axes>(&mut self, x: &Value<f32, Axes>, axis: i32) -> Value<i64, Axes> {
         let mut extents = self.extents(x.id);
         extents[axis] = 1;
         return self.value(Operation::ArgMax(axis), [x.id], ElementKind::I64, extents);
@@ -715,7 +715,7 @@ impl<affine G: Graph> Run<G> {
                 init,
                 &window,
             )),
-            ArgMax(axis) => Any::I64(g.arg_max::<Untyped>(&f32s(&self.operand(node, 0)), axis)),
+            ArgMax(axis) => Any::I64(g.index_of_max::<Untyped>(&f32s(&self.operand(node, 0)), axis)),
             Attention(attention) => {
                 let [attended, present_k, present_v] = self.attended(g, node, &attention);
                 self.parts[id] = [present_k, present_v];
