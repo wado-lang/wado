@@ -140,6 +140,8 @@ foo(100);                      // integer literal coerced to i64
 "Hello"         // String
 `Hello, ${name}` // Template string
 `{"key": ${v}}` // Braces are literal → {"key": <v>}
+#`C:\Users\${name}`#  // Raw template: a backslash is itself, holes still open
+##`a`#b`##       // More #s on both ends let the text hold a backtick
 "Hello,
 world!"         // Multi-line string
 

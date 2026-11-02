@@ -639,6 +639,31 @@ or a comment does not close it.
 Whitespace around the expression and around the specifier is ignored, so
 `${ x : 5 }` reads as `${x:5}`.
 
+### Raw Template Strings
+
+A raw template is a template between `` #` `` and `` `# ``. A backslash in it is
+itself: it starts no escape, so no escape is an error there. `${` still opens an
+interpolation, and everything else, line breaks included, is literal text. A
+raw template means what the template that escapes each of its backslashes and
+backticks means, so it is a `String`, and a tag before it takes it as it takes
+any template.
+
+The opener may carry more `#`s, and the closer is a backtick followed by as
+many. So the text may hold a backtick, or a backtick followed by fewer `#`s:
+
+<!-- {"fixture":"raw_template_literal.wado"} -->
+
+```wado
+assert #`\d+\w\b`# == "\\d+\\w\\b";
+assert #`C:\Users\${name}`# == "C:\\Users\\Ann";
+assert #`\n`#.len() == 2;
+assert #`trailing \`# == "trailing \\";
+assert ##`a`b`#c`## == "a`b`#c";
+assert #`$ and {} and $x`# == "$ and {} and $x";
+```
+
+A literal `${` cannot be written in a raw template.
+
 ### Format Specifiers
 
 ```text
@@ -1069,12 +1094,14 @@ assert s == "C:\\bin\\run.exe";
 ```
 
 The tag is a function name or a static method path, with no whitespace before
-the backtick. The backtick is a postfix on the path and binds as a call does.
-Any other expression before a backtick, such as a call result or a
-parenthesized expression, is a syntax error. A path naming a variant case or a
-closure-typed binding is rejected as a tag. The literal is lexed exactly as an
-untagged template, so every escape must still be one the lexer knows even where
-the tag preserves it.
+the template's opening backtick or `#`. The template is a postfix on the path
+and binds as a call does. Any other expression before a backtick, such as a
+call result or a parenthesized expression, is a syntax error. A path naming a
+variant case or a closure-typed binding is rejected as a tag. The literal is
+lexed exactly as an untagged template, so every escape in a cooked template
+must still be one the lexer knows even where the tag preserves it; a text full
+of backslashes is written as a
+[raw template](#raw-template-strings) instead.
 
 A tag is an ordinary function whose first parameter takes the template by value
 and is bound by `ReflectTemplate`, the reflected kind of a template literal. The
@@ -1120,7 +1147,8 @@ test "the tag sees each hole in its own type" {
 
 A hole handle (`TemplateHole<T, V>`) answers `index()` (its position, from 0),
 `lit(&t)` / `raw(&t)` (the preceding segment of `t`, escapes processed or
-preserved), `get(&t)` (a copy of the value, `V`), `get_ref(&t)` (a reference
+preserved; a raw template's segment is preserved as the cooked template equal
+to it spells it, so ``#`\d`#`` reads `\d` and `\\d`), `get(&t)` (a copy of the value, `V`), `get_ref(&t)` (a reference
 to it, `&V`), `spec()` (the specifier as written, or `None`), `has_spec()`, and
 `fmt(&t, f)` (rendering the value through the trait its specifier selects, as
 [Format Types](#format-types) states). A tag declaring `affine ..V` takes an
@@ -1131,8 +1159,9 @@ last hole. A segment is a `StrSlice` over the template's own text, so reading
 one copies nothing. `index()`, `spec()` and `has_spec()` are constants of the
 shape. A hole handle is minted only by `members()`.
 
-A template value inspects as the template it was written as: each segment raw,
-and each hole as its value inspected, followed by its specifier.
+A template value inspects as the cooked template it was written as, or equals:
+each segment raw, and each hole as its value inspected, followed by its
+specifier.
 `` `${t:?}` `` on `` id`n=${n:04}\n` `` with `n = 7` renders
 `` `n=${7:04}\n` ``. `==` compares the text as well as the holes, so the form
 shows the text.

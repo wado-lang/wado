@@ -184,7 +184,10 @@ of the tag's signature. `String::raw` is a tag that reads `raw(t)` and
 `raw_tail(t)`. A raw segment is
 still a template segment, so it spells only the escapes the language has:
 `` String::raw`a\nb` `` is `a\nb` as written, and `\p` is the error it is in
-any template.
+any cooked template. A text full of backslashes, such as a regular expression,
+is a raw template, ``#`…`#``, which takes every backslash as itself and
+reaches a tag as the cooked template equal to it
+([WEP: Re](./wep-2026-11-02-re.md)).
 
 A template value inspects as the template it was written as: the raw segments,
 and each hole's value inspected and followed by its specifier. The form is a
