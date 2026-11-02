@@ -95,8 +95,8 @@ use crate::synthesis::common::{
     known_cold_path_stmt, not_expr, ord_bool_from_cmp, rt_call,
 };
 use crate::tir::{
-    EffectRef, StructDef, TemplateId, TirEffectOp, TirField, TirImpl, TirParam, TirTypeParam,
-    agree_branch_types,
+    EffectRef, ExitScope, StructDef, TemplateId, TirEffectOp, TirField, TirImpl, TirParam,
+    TirTypeParam, agree_branch_types,
 };
 use crate::tir::{
     FunctionKind, FunctionRef, InlineHint, MonomorphInfo, ReturnAbi, TemplateHole, TemplateShape,
@@ -10520,47 +10520,39 @@ fn half_literal(bits: u64, ty: TypeId, span: Span) -> TirExpr {
 /// Whether `stmt` holds a `return`, or a `break` / `continue` leaving `stmt`.
 fn exits_normally(stmt: &TirStmt) -> bool {
     let mut finder = ExitFinder {
-        loops: 0,
-        labels: Vec::new(),
+        scope: ExitScope::default(),
         found: false,
     };
     finder.visit_stmt(stmt);
     finder.found
 }
 
-/// The loops and labeled blocks it is inside are those an exit stays within.
 struct ExitFinder {
-    loops: usize,
-    labels: Vec<String>,
+    scope: ExitScope,
     found: bool,
 }
 
 impl ExitFinder {
     fn within_label(&mut self, label: &str, block: &TirBlock) {
-        self.labels.push(label.to_string());
+        self.scope.enter_label(label);
         self.visit_block(block);
-        self.labels.pop();
+        self.scope.leave_label();
     }
 }
 
 impl TirRefVisitor for ExitFinder {
     fn visit_stmt(&mut self, stmt: &TirStmt) {
+        self.found |= self.scope.exits(&stmt.kind);
         match &stmt.kind {
-            TirStmtKind::Return { .. } => self.found = true,
-            TirStmtKind::Break {
-                label: Some(label), ..
-            } if !self.labels.contains(label) => self.found = true,
-            TirStmtKind::Break { label: None, .. } | TirStmtKind::Continue if self.loops == 0 => {
-                self.found = true;
-            }
             TirStmtKind::Loop { .. } | TirStmtKind::VariadicForOf { .. } => {
-                self.loops += 1;
+                self.scope.enter_loop();
                 self.walk_stmt(stmt);
-                self.loops -= 1;
+                self.scope.leave_loop();
             }
             TirStmtKind::LabeledBlock { label, block } => self.within_label(label, block),
             TirStmtKind::Let { .. }
             | TirStmtKind::Expr(_)
+            | TirStmtKind::Return { .. }
             | TirStmtKind::TaskReturn { .. }
             | TirStmtKind::If { .. }
             | TirStmtKind::Break { .. }
