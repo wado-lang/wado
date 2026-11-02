@@ -123,6 +123,16 @@ export fn run() with (Stdout, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuC
         assert on_gpu.programs.len() == programs, "one program per shape class";
         println(`compiled gated ${positions} ${deviation(&on_device.data, &reference.data)}`);
     }
+    // Launches idle for 256 passes free the buffers and parameters they own,
+    // and a value a call returned is the caller's, freed when it drops. What
+    // stays is the weights and each program's constants.
+    let busy = gpu.kept_bytes();
+    idle(&mut gpu);
+    let idle_bytes = gpu.kept_bytes();
+    assert idle_bytes < busy, "an idle launch frees what it owns";
+    gated::compute(&mut gpu, &rows_of::<[gated::N, gated::S, gated::X2]>(3), &mut on_gpu);
+    idle(&mut gpu);
+    assert gpu.kept_bytes() == idle_bytes, "a call leaves nothing once its launches idle";
 
     // The three projections of one input are one product, by their weights
     // kept side by side.
@@ -142,6 +152,13 @@ export fn run() with (Stdout, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuC
             &on_device.K.data,
             &reference.K.data,
         )} ${deviation(&on_device.Z.data, &reference.Z.data)}`);
+    }
+}
+
+/// Passes enough that every launch is idle.
+fn idle(gpu: &mut WebGpuBackend) with (GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBindGroup, GpuBuffer) {
+    for let _ of 0..<258 {
+        gpu.begin();
     }
 }
 

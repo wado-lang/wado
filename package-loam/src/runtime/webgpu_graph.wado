@@ -161,8 +161,18 @@ impl Graph for WebGpuBackend {
                 returned.push(d.slot);
             }
         }
-        self.ran_program(program.serial, &returned);
-        return results;
+        let moved = self.ran_program(program.serial, &returned);
+        return results.into_iter().map(|r| match r {
+            F32(Device(d)) && moved.contains_key(d.slot) => Any::<WebGpuBackend>::F32(Placed::Device(DeviceTensor {
+                ..d,
+                slot: moved[d.slot],
+            })),
+            Bool(Device(d)) && moved.contains_key(d.slot) => Any::<WebGpuBackend>::Bool(Placed::Device(DeviceTensor {
+                ..d,
+                slot: moved[d.slot],
+            })),
+            _ => r,
+        }).collect();
     }
 
     fn iota<E: Element, Axes>(&mut self, extents: List<i32>, dimension: i32) -> Placed<E, Axes> {
