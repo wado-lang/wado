@@ -1625,7 +1625,9 @@ g (float[N, 2] X) => (float[N, 3] Y)
     assert out.contains(
         "fn held<Er>(backend: &mut Bk, load: fn(i32) -> Result<Any<Cpu>, Er> with _) -> Result<Params<Bk>, Er> with _ {",
     );
-    assert out.contains("let weights = backend.kept_weights(|recorder| recorded(recorder, &least_extents()), 1, 1, load)?;");
+    assert out.contains(
+        "let weights = backend.kept_weights(|recorder| recorded(recorder, &least_extents()), 1, 1, load)?;",
+    );
     assert out.contains("W: f32_of::<Bk, [X1, Y1]>(backend, &weights[0]),");
     assert out.contains("return Params::held::<!>(backend, |at| Result::Ok(match at {");
     assert out.contains("0 => host_of(&self.W),");

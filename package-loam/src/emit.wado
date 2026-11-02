@@ -948,9 +948,9 @@ fn emit_constructor(
     w.end();
 }
 
-/// The return of `Params::held` over each initializer's host tensor in
-/// `hosts`, by its place among them: its result where `fallible`, a `load`
-/// does, and the struct, which nothing fails to hold, otherwise.
+/// A `return` of `Params::held` over the initializers' host tensors in
+/// `hosts`, each by its place among them: the `Result` where `fallible`, as a
+/// `load` returns one, and the unwrapped struct otherwise.
 fn emit_held_call(
     w: &mut CodeWriter,
     graph: &Graph,
@@ -1100,6 +1100,13 @@ impl Symbols {
         self.requires[*symbol] = value.symbols();
         self.order = self.order.into_iter().filter(|s| s != *symbol).collect();
         self.order.push(*symbol);
+    }
+
+    /// Each grown symbol bound to the length the graph owes it, as `owed` says.
+    fn derive_owed(&mut self, owed: &List<[Grown, Poly]>) {
+        for let [g, length] of *owed {
+            self.derive(&g.symbol, &length);
+        }
     }
 
     /// The symbols as `build` reads them where `padded` names a symbol: its
@@ -1475,10 +1482,7 @@ fn emit_compute(
     let has_cache = crossing.has_cache();
     // The cache holds a past at a capacity, so its length is what the graph
     // owes it to be, given the other inputs'.
-    for let [g, length] of *owed {
-        symbols.derive(&g.symbol, &length);
-    }
-    let grown: List<Grown> = (*owed).into_iter().map(|o| o.0).collect();
+    symbols.derive_owed(owed);
     let mut compute = FnSpec::new("compute", Vis::Pub);
     compute.add_generic(GRAPH_BOUND).add_param("backend", `&mut ${BACKEND_PARAM}`);
     let mut lines: List<String> = [];
@@ -1506,7 +1510,7 @@ fn emit_compute(
         compute.add_param("cache", `&${CACHE}<${BACKEND_PARAM}>`);
     }
     lines.extend(&owed_checks(checked, &mut symbols)?);
-    let mut capacities = at_capacities(&mut symbols, &mut lines, padded, &grown, names)?;
+    let mut capacities = at_capacities(&mut symbols, &mut lines, padded, owed, names)?;
     // The cache was computed before the pass this call begins.
     if has_cache {
         lines.push("cache.retain(backend);");
@@ -1520,7 +1524,7 @@ fn emit_compute(
         arguments.push(`&${ident}`);
     }
     // The cache at the capacities, both as the pass takes it and as it returns it.
-    let fitted_cache = fitted_at_capacities(checked, names, crossing, &grown, padded, &mut capacities)?;
+    let fitted_cache = fitted_at_capacities(checked, names, crossing, owed, padded, &mut capacities)?;
     if has_cache {
         lines.push(`let cache = ${fitted_cache};`);
         arguments.push("&cache");
@@ -1547,7 +1551,13 @@ fn emit_compute(
             fields.push(`${ident}: backend.upload(&Tensor::<i64, []> { data: [${symbols.spell(
                 &Poly::symbol(&symbol),
             )?}], extents: [] })`);
-            taken_args.push(ProgramArgument { crossed: Crossed::Length, tensor: symbol, ident, element: "i64", axes: "[]" });
+            taken_args.push(ProgramArgument {
+                crossed: Crossed::Length,
+                tensor: symbol,
+                ident,
+                element: "i64",
+                axes: "[]",
+            });
         }
         lines.push(`let lengths = ${LENGTHS} { ${fields.join(", ")} };`);
         arguments.push("&lengths");
@@ -1649,15 +1659,16 @@ fn emit_least_extents(
     taken: &List<ProgramArgument>,
 ) -> Result<(), EmitError> {
     let mut symbols = Symbols::at_one(carriers, names);
-    for let [g, length] of *owed {
-        symbols.derive(&g.symbol, &length);
-    }
-    let grown: List<Grown> = (*owed).into_iter().map(|o| o.0).collect();
+    symbols.derive_owed(owed);
     let mut lines: List<String> = [];
-    let mut capacities = at_capacities(&mut symbols, &mut lines, padded, &grown, names)?;
+    let mut capacities = at_capacities(&mut symbols, &mut lines, padded, owed, names)?;
     let mut extents: List<String> = [];
     for let a of *taken {
-        extents.push(if a.crossed matches { Length } { "[]" } else { capacities.spell_shape(&checked.shapes[a.tensor])? });
+        extents.push(if a.crossed matches { Length } {
+            "[]";
+        } else {
+            capacities.spell_shape(&checked.shapes[a.tensor])?;
+        });
     }
     for let symbol of capacities.used {
         symbols.used.insert(symbol);
@@ -1695,7 +1706,9 @@ fn emit_held(w: &mut CodeWriter, graph: &Graph, checked: &Checked, names: &Names
     w.begin(`return Result::Ok(${PARAMS}`);
     for let [at, vi] of graph.initializers.into_iter().enumerate() {
         let axes = axis_list(&checked.shapes[vi.name]);
-        w.line(`${names.get(&vi.name)}: ${checked.primitives[vi.name]}_of::<${BACKEND_PARAM}, [${axes}]>(backend, &weights[${at}]),`);
+        w.line(
+            `${names.get(&vi.name)}: ${checked.primitives[vi.name]}_of::<${BACKEND_PARAM}, [${axes}]>(backend, &weights[${at}]),`,
+        );
     }
     emit_kept_fields(w, names, kept);
     w.end_with(");");
@@ -1710,13 +1723,13 @@ fn at_capacities(
     symbols: &mut Symbols,
     lines: &mut List<String>,
     padded: &List<String>,
-    grown: &List<Grown>,
+    owed: &List<[Grown, Poly]>,
     names: &Names,
 ) -> Result<Symbols, EmitError> {
     let mut capacities = *symbols;
     for let symbol of *padded {
-        let reach = match grown.into_iter().find(|g| g.symbol == symbol) {
-            Some(g) => g.present,
+        let reach = match owed.into_iter().find(|o| o.0.symbol == symbol) {
+            Some([g, _]) => g.present,
             None => Poly::symbol(&symbol),
         };
         let length = symbols.spell(&reach)?;
@@ -1940,7 +1953,7 @@ fn fitted_at_capacities(
     checked: &Checked,
     names: &Names,
     crossing: &Crossing,
-    grown: &List<Grown>,
+    owed: &List<[Grown, Poly]>,
     padded: &List<String>,
     capacities: &mut Symbols,
 ) -> Result<String, EmitError> {
@@ -1949,7 +1962,7 @@ fn fitted_at_capacities(
         let ident = names.get(&past);
         let mut field = `cache.${ident}`;
         let typed = `${checked.primitives[past]}, [${axis_list(&checked.shapes[past])}]`;
-        for let g of *grown {
+        for let [g, _] of *owed {
             if g.past != past || !padded.contains(&g.symbol) {
                 continue;
             }

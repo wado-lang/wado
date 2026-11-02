@@ -516,7 +516,9 @@ fn contracted_axis(recorded: &Recorded, weight: i32) -> Option<i32> {
             continue;
         }
         let read = match node.op {
-            DotGeneral(dims) && node.operands[0] != weight && dims.rhs_contracting.len() == 1 && dims.rhs_batch.is_empty() => dims.rhs_contracting[0],
+            DotGeneral(dims) && node.operands[0] != weight
+                && dims.rhs_contracting.len() == 1
+                && dims.rhs_batch.is_empty() => dims.rhs_contracting[0],
             Gather(dims) && node.operands[0] == weight
                 && taken_axis(extents, recorded.nodes[node.operands[1]].extents.len(), &dims) == Option::Some(0) => 1,
             _ => {
