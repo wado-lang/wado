@@ -1,5 +1,5 @@
 use { Binary, DotDims, Graph, Unary } from "./hlo.wado";
-use { Plan, planned, splats_of } from "./fusion.wado";
+use { Plan, planned, replanned, splats_of } from "./fusion.wado";
 use { Recorded, Recorder, Untyped, Value, constants } from "./recorded.wado";
 use { Holds, Tensor } from "./tensor.wado";
 
@@ -39,6 +39,31 @@ fn rms_norm(r: &mut Recorder, x: &Value<f32, Untyped>, w: &Value<f32, Untyped>) 
     let normal = r.binary(Binary::Divide, x, &spread);
     let scale = r.broadcast_in_dim::<f32, Untyped, Untyped>(w, [1, 4, 2], [2]);
     return r.binary(Binary::Multiply, &normal, &scale);
+}
+
+/// Each row of a `[rows, width]` parameter less its sum.
+fn centered(rows: i32, width: i32) -> Recorded {
+    let mut r = Recorder::new();
+    let x = r.parameter::<f32, Untyped>([rows, width]);
+    let sum = r.reduce::<Untyped, Untyped>(&x, Binary::Add, 0.0, [1]);
+    let spread = r.broadcast_in_dim::<f32, Untyped, Untyped>(&sum, [rows, width], [0]);
+    let y = r.binary(Binary::Subtract, &x, &spread);
+    return r.finished([y.id]);
+}
+
+fn replanned_from(was: &Recorded, now: &Recorded) -> Option<Plan> {
+    return replanned(was, &plan_of(was), &splats_of(&constants(was)), now, &splats_of(&constants(now)));
+}
+
+test "a plan reused at other extents is the one planning them gives" {
+    let now = centered(5, 4);
+    assert replanned_from(&centered(3, 4), &now) == Option::Some(plan_of(&now));
+}
+
+test "extents one recording tells apart and another does not plan apart" {
+    // 4 rows of 4 meet where 5 rows of 4 do not, and a row of 1 is no row.
+    assert replanned_from(&centered(4, 4), &centered(5, 4)) matches { None };
+    assert replanned_from(&centered(1, 4), &centered(3, 4)) matches { None };
 }
 
 test "a normalization is one row kernel, its constants folded in and its weight's broadcast a view" {

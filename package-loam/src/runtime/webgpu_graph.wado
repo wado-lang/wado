@@ -53,8 +53,8 @@ use {
     element_count,
     operand,
 } from "./tensor.wado";
-use { Kernel, Plan, binary_op, compared_op, planned, splats_of, unary_of } from "./fusion.wado";
-use { Any, Recorded, Recorder, Run, Untyped, bools, constants, kept_any } from "./recorded.wado";
+use { Kernel, Plan, binary_op, compared_op, planned, replanned, splats_of, unary_of } from "./fusion.wado";
+use { Any, Operation, Recorded, Recorder, Run, Untyped, bools, constants, kept_any } from "./recorded.wado";
 use { DeviceTensor, Placed, PlacedRead, WebGpuBackend, contiguous, permuted, sliced } from "./webgpu.wado";
 
 /// A pass recorded once per shape class and planned into kernels, which each
@@ -63,9 +63,17 @@ use { DeviceTensor, Placed, PlacedRead, WebGpuBackend, contiguous, permuted, sli
 pub struct WebGpuProgram {
     recorded: Recorded,
     plan: Plan,
+    /// What `plan` folds of the nodes that read no argument.
+    splats: HashMap<i32, Option<f32>>,
     constants: HashMap<i32, Any<WebGpuBackend>>,
-    /// What the backend keys the launches it recorded of this program by.
+    /// What the backend keys this program's launches by: one serial for every
+    /// program of one structure, each shape class of a graph, so a launch of a
+    /// new class binds the buffers and parameters another class's made.
     serial: i32,
+    /// The signature of each kernel, by its root: what its commands depend on
+    /// beside the views it reads, so a recording of one class replays in
+    /// another only where they agree.
+    signatures: HashMap<i32, i32>,
 }
 
 impl Graph for WebGpuBackend {
@@ -80,17 +88,39 @@ impl Graph for WebGpuBackend {
 
     /// A constant is kept only where a launch reads it, so neither one only
     /// other constants read nor one a kernel writes in.
-    fn compiled(&mut self, record: fn(&mut Recorder) -> Recorded with _) -> Option<WebGpuProgram> with _ {
+    /// A program takes the plan of an earlier one of its structure where the
+    /// extents let it.
+    fn compiled(
+        &mut self,
+        record: fn(&mut Recorder) -> Recorded with _,
+        earlier: &List<&WebGpuProgram>,
+    ) -> Option<WebGpuProgram> with _ {
         let recorded = record(&mut Recorder::new());
         let folded = constants(&recorded);
-        let plan = planned(&recorded, &splats_of(&folded));
+        let splats = splats_of(&folded);
+        let serial = self.program_serial(structure_of(&recorded));
+        let mut reused: Option<Plan> = null;
+        for let p of *earlier {
+            if p.serial == serial {
+                reused = replanned(&p.recorded, &p.plan, &p.splats, &recorded, &splats);
+                if reused matches { Some(_) } {
+                    break;
+                }
+            }
+        }
+        let plan = match reused {
+            Some(p) => p,
+            None => planned(&recorded, &splats),
+        };
         let mut kept = HashMap::<i32, Any<WebGpuBackend>>::new();
         for let id of plan.reads(&recorded) {
             if let Some(value) = folded.get(id) && !kept.contains_key(id) {
                 kept[id] = kept_any(self, &value);
             }
         }
-        return Option::Some(WebGpuProgram { recorded, plan, constants: kept, serial: self.program_serial() });
+        let mut signatures = HashMap::<i32, i32>::new();
+        signed(self, &recorded, &plan, &mut signatures);
+        return Option::Some(WebGpuProgram { recorded, plan, splats, constants: kept, serial, signatures });
     }
 
     /// A weight read only as products' right matrix, or as a gather's rows, is
@@ -711,6 +741,62 @@ fn launched(
     return plan.results.into_iter().map(|r| state.values[r]).collect();
 }
 
+/// What every shape class of one graph records alike: each node's operation,
+/// without its attributes, and the nodes it reads, and the body's results.
+fn structure_of(recorded: &Recorded) -> List<i32> {
+    let mut structure: List<i32> = [];
+    for let node of &recorded.nodes {
+        structure.push(ReflectVariant::<Operation>::discriminant(&node.op));
+        structure.push(node.operands.len());
+        structure.extend(&node.operands);
+    }
+    structure.extend(&recorded.body.results);
+    return structure;
+}
+
+/// Adds the signature of each kernel of `plan`, or of a branch within it, to
+/// `signatures` by its root.
+fn signed(g: &mut WebGpuBackend, recorded: &Recorded, plan: &Plan, signatures: &mut HashMap<i32, i32>) {
+    for let launch of plan.launches {
+        match launch {
+            Node(_) => {
+            },
+            Kernel(k) => {
+                signatures[k.root] = g.signature(kernel_signature(recorded, &k));
+            },
+            Joined(ks) => {
+                for let k of ks {
+                    signatures[k.root] = g.signature(kernel_signature(recorded, &k));
+                }
+            },
+            Case([_, first, second]) => {
+                signed(g, recorded, &first, signatures);
+                signed(g, recorded, &second, signatures);
+            },
+        }
+    }
+}
+
+/// What `kernel_result` reads of `k` and `recorded` beside the views of the
+/// nodes it reads.
+fn kernel_signature(recorded: &Recorded, k: &Kernel) -> String {
+    let operands: List<List<i32>> = k.operands.into_iter().map(|o| o.extents).collect();
+    let product = match k.product {
+        Some(_) => `${product_dims(recorded, k):?}`,
+        None => "",
+    };
+    let root = &recorded.nodes[k.root];
+    return `${k.op:?} ${operands:?} ${k.extents:?} ${k.reduced} ${product} ${root.extents:?} ${root.kind:?}`;
+}
+
+/// How the product `k` computes contracts.
+fn product_dims(recorded: &Recorded, k: &Kernel) -> DotDims {
+    let DotGeneral(dims) = recorded.nodes[k.product.unwrap()].op else {
+        unreachable();
+    };
+    return dims;
+}
+
 /// The value of `k`'s root: the commands the backend recorded of it replayed
 /// where they were recorded over views laid out as the ones it reads now,
 /// computed and recorded otherwise.
@@ -724,7 +810,7 @@ fn kernel_replayed(
     let Some(reads) = device_reads(values, recorded, k) else {
         return kernel_result(g, values, recorded, k);
     };
-    let key = [program.serial, k.root] as List<i32>;
+    let key = [program.serial, k.root, program.signatures[k.root]] as List<i32>;
     if let Some(out) = g.replayed(key, &reads) {
         return of_kind(g, recorded.nodes[k.root].kind, Placed::Device(out));
     }
@@ -762,9 +848,7 @@ fn joined_replayed(
 ) -> List<Any<WebGpuBackend>> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
     let recorded = &program.recorded;
     let first = &recorded.nodes[ks[0].product.unwrap()];
-    let DotGeneral(dims) = first.op else {
-        unreachable();
-    };
+    let dims = product_dims(recorded, &ks[0]);
     let free = 1 - dims.rhs_contracting[0];
     let mut rights: List<DeviceTensor> = [];
     for let k of *ks {
@@ -781,6 +865,7 @@ fn joined_replayed(
     let mut key = [program.serial] as List<i32>;
     for let k of *ks {
         key.push(k.root);
+        key.push(program.signatures[k.root]);
     }
     let product = match g.replayed(key, &reads) {
         Some(out) => Placed::<f32, Untyped>::Device(out),

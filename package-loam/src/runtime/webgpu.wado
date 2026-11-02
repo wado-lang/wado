@@ -413,8 +413,10 @@ pub affine struct WebGpuBackend {
     /// Each launch recorded, by its program's serial and its root node, or
     /// each of its roots for a product joined from several.
     encoded: HashMap<List<i32>, List<Encoded>>,
-    /// The programs `compiled` has made.
-    programs: i32,
+    /// The serial of the programs of each structure `compiled` met.
+    programs: HashMap<List<i32>, i32>,
+    /// The number of each launch signature `compiled` met.
+    signatures: HashMap<String, i32>,
     /// The buffers each launch of a program makes, by the program's serial and
     /// the launch's root node, in the order a launch makes them.
     owned: HashMap<List<i32>, List<Owned>>,
@@ -579,7 +581,8 @@ impl WebGpuBackend {
             group_at: HashMap::new(),
             taping: null,
             encoded: HashMap::new(),
-            programs: 0,
+            programs: HashMap::new(),
+            signatures: HashMap::new(),
             owned: HashMap::new(),
             launch_parameters: HashMap::new(),
             carved: [],
@@ -2230,10 +2233,24 @@ impl WebGpuBackend {
         self.dispatch(shader(bound.bindings), spans, params, groups);
     }
 
-    /// A serial no other program of the backend has.
-    internal fn program_serial(&mut self) -> i32 {
-        self.programs += 1;
-        return self.programs;
+    /// The serial of the programs of `structure`: one no other structure has.
+    internal fn program_serial(&mut self, structure: List<i32>) -> i32 {
+        if let Some(serial) = self.programs.get(structure) {
+            return serial;
+        }
+        let serial = self.programs.len();
+        self.programs[structure] = serial;
+        return serial;
+    }
+
+    /// A number for the signature `text`, the one it had where one had it.
+    internal fn signature(&mut self, text: String) -> i32 {
+        if let Some(n) = self.signatures.get(text) {
+            return n;
+        }
+        let n = self.signatures.len();
+        self.signatures[text] = n;
+        return n;
     }
 
     /// Starts recording the commands of a launch.

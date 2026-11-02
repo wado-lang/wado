@@ -6,7 +6,7 @@
 
 use { HashMap } from "core:collections";
 use { Binary, Comparison, Unary } from "./hlo.wado";
-use { Any, Recorded, RecordedNode, Region } from "./recorded.wado";
+use { Any, Operation, Recorded, RecordedNode, Region } from "./recorded.wado";
 use { BinaryOp, Cpu, Expr, RowOp, UnaryOp, constant, operand } from "./tensor.wado";
 
 /// What a program runs for one region, in order, and the nodes it yields.
@@ -129,6 +129,92 @@ fn splat(values: &List<f32>) -> Option<f32> {
 /// which a kernel folds in.
 pub fn planned(recorded: &Recorded, splats: &HashMap<i32, Option<f32>>) -> Plan {
     return planned_region(recorded, &recorded.body, splats);
+}
+
+/// `plan`, planned for `was` folding `splats_was`, as `planned` plans `now`
+/// folding `splats`, where `now` records what `was` does at other extents:
+/// `None` where the two may plan apart. Planning reads an extent only to
+/// compare it with 1 or with another, so where each extent of `was` stands for
+/// one of `now`, and 1 for 1, it groups alike, and only the extents differ.
+pub fn replanned(
+    was: &Recorded,
+    plan: &Plan,
+    splats_was: &HashMap<i32, Option<f32>>,
+    now: &Recorded,
+    splats: &HashMap<i32, Option<f32>>,
+) -> Option<Plan>
+    contract was.nodes.len() == now.nodes.len()
+{
+    if !same_splats(splats_was, splats) {
+        return null;
+    }
+    let mut to = HashMap::<i32, i32>::new();
+    let mut from = HashMap::<i32, i32>::new();
+    to[1] = 1;
+    from[1] = 1;
+    for let i of 0..<now.nodes.len() {
+        let [a, b] = [&was.nodes[i], &now.nodes[i]];
+        if a.kind != b.kind || a.extents.len() != b.extents.len() || planned_apart(&a.op, &b.op) {
+            return null;
+        }
+        for let [x, y] of a.extents.into_iter().zip(b.extents.into_iter()) {
+            if to.get(x) matches { Some(t) && t != y } || from.get(y) matches { Some(f) && f != x } {
+                return null;
+            }
+            to[x] = y;
+            from[y] = x;
+        }
+    }
+    return Option::Some(mapped_plan(plan, &to));
+}
+
+/// Whether planning reads `a` and `b`, one node's operation in two
+/// recordings, apart: their attributes where it reads those, or a kernel's
+/// `Expr` holds them.
+fn planned_apart(a: &Operation, b: &Operation) -> bool {
+    return match a {
+        Parameter(_) | Unary(_) | Binary(_) | Compare(_) | BroadcastInDim(_) | Reduce(_) | DotGeneral(_) | Case(_) => a != b,
+        _ => false,
+    };
+}
+
+fn same_splats(a: &HashMap<i32, Option<f32>>, b: &HashMap<i32, Option<f32>>) -> bool {
+    if a.len() != b.len() {
+        return false;
+    }
+    for let [id, v] of a.entries() {
+        let same = match [*v, b.get(*id)] {
+            [None, Some(None)] => true,
+            [Some(x), Some(Some(y))] => x.to_bits() == y.to_bits(),
+            _ => false,
+        };
+        if !same {
+            return false;
+        }
+    }
+    return true;
+}
+
+fn mapped_plan(plan: &Plan, to: &HashMap<i32, i32>) -> Plan {
+    let mapped = |e: &List<i32>| -> List<i32> {
+        (*e).into_iter().map(|x| to[x]).collect();
+    };
+    let kernel = |k: &Kernel| Kernel {
+        ..*k,
+        operands: k.operands.into_iter().map(|o| KernelOperand { node: o.node, extents: mapped(&o.extents) }).collect(),
+        extents: mapped(&k.extents),
+    };
+    let launches: List<Launch> = plan.launches.into_iter().map(|launch| match launch {
+        Node(id) => Launch::Node(id),
+        Kernel(k) => Launch::Kernel(kernel(&k)),
+        Joined(ks) => Launch::Joined(ks.into_iter().map(|k| kernel(&k)).collect()),
+        Case([id, first, second]) => Launch::Case([
+            id,
+            mapped_plan(&first, to),
+            mapped_plan(&second, to),
+        ]),
+    }).collect();
+    return Plan { launches, results: plan.results };
 }
 
 /// The nodes a kernel computes, the last of them `root`.

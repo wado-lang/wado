@@ -515,10 +515,14 @@ impl<affine G: Graph> Programs<G> {
         arguments: fn() -> List<Any<G>> with _,
     ) -> Option<List<Any<G>>> with _ {
         if !self.held.contains_key(class) {
+            let mut earlier: List<&G::Program> = [];
+            for let c of self.held.keys() {
+                earlier.push(&self.held[*c]);
+            }
             let Some(program) = g.compiled(|r| {
                 let given = arguments();
                 return record(r, &given.into_iter().map(|a| extents_of_any(g, &a)).collect());
-            }) else {
+            }, &earlier) else {
                 return null;
             };
             self.held[class] = program;
