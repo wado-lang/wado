@@ -17,16 +17,17 @@ use super::context::{SplitParam, WirContext};
 use crate::canonical::CanonicalIntrinsic;
 use crate::compiler_item::CompilerItem;
 use crate::name::{
-    COLD_PATH_INTRINSIC, MangledName, StructName, closure_call_wrapper_name,
-    closure_inspect_wrapper_name, multi_value_split_local,
+    MangledName, StructName, closure_call_wrapper_name, closure_inspect_wrapper_name,
+    multi_value_split_local,
 };
 use crate::nir_arena::{
     ArenaStructField, BlockId, Body, ExprId, ExprKind, NodeRef, Operand, StmtId, StmtKind,
 };
 use crate::nir_value_graph::{ValueId, ValueKind};
-use crate::optimize::arena_query::ColdRuns;
+use crate::optimize::arena_query::{ColdRuns, Markers};
 use crate::optimize::multi_value_return::{block_tail, block_tail_call};
 use crate::optimize::sroa_variant_return::settled_locals;
+use crate::rarity::{Mark, Rarity};
 use crate::token::Span;
 use crate::wir::{
     CmImportViolation, TraitBoundViolation, WirAbstractHeapType, WirFuncId, WirLocals, WirMeta,
@@ -736,7 +737,8 @@ fn else_is_empty(else_body: &Option<Vec<WirInstr>>) -> bool {
     }
 }
 
-/// Finalize `builtin::cold_path()` markers into `metadata.code.branch_hint`
+/// Finalize the markers that state an unlikely branch (`cold_path()`,
+/// `unlikely_path()`) into `metadata.code.branch_hint`
 /// entries by wrapping the enclosing condition in [`WirInstr::BranchHint`]. Two
 /// shapes: a marker inside an `if` branch hints that branch unlikely, and an
 /// else-less `if cond { <diverges> }` whose fall-through reaches a marker hints
@@ -749,7 +751,7 @@ fn apply_cold_path_hints(instrs: &mut [WirInstr]) {
 }
 
 /// Backward fall-through pass for the guard-clause idiom. `reaches_cold` says
-/// whether the path just *after* this slice reaches a `cold_path()` marker
+/// whether the path just *after* this slice reaches such a marker
 /// before any non-cold divergence; the return value says the same for the path
 /// *before* it. A guard in front of a cold path gets its taken branch hinted
 /// likely. Descends transparent `Seq`/`Block` tails, so desugarings still match.
@@ -764,7 +766,7 @@ fn hint_guard_fall_through(instrs: &mut [WirInstr], mut reaches_cold: bool) -> b
             } = &mut instrs[i]
             && else_is_empty(else_body)
             && then_body.iter().any(WirInstr::always_diverges)
-            && !WirInstr::marks_cold_path(then_body)
+            && !WirInstr::is_rare(then_body, Rarity::Unlikely)
         {
             WirInstr::hint_condition(condition, true);
         }
@@ -772,7 +774,7 @@ fn hint_guard_fall_through(instrs: &mut [WirInstr], mut reaches_cold: bool) -> b
         // marker makes the path cold; a transparent group propagates through its
         // own backward pass; any other unconditional divergence ends it.
         match &mut instrs[i] {
-            WirInstr::ColdPath => reaches_cold = true,
+            WirInstr::Rare(mark) if mark.states(Rarity::Unlikely) => reaches_cold = true,
             WirInstr::Seq(body) | WirInstr::Block { body, .. } => {
                 reaches_cold = hint_guard_fall_through(body, reaches_cold);
             }
@@ -796,10 +798,10 @@ fn apply_cold_path_hints_instr(instr: &mut WirInstr) {
             if let Some(else_body) = else_body {
                 apply_cold_path_hints(else_body);
             }
-            let then_cold = WirInstr::marks_cold_path(then_body);
+            let then_cold = WirInstr::is_rare(then_body, Rarity::Unlikely);
             let else_cold = else_body
                 .as_ref()
-                .is_some_and(|b| WirInstr::marks_cold_path(b));
+                .is_some_and(|b| WirInstr::is_rare(b, Rarity::Unlikely));
             // Only a single cold side yields an unambiguous hint.
             let likely = match (then_cold, else_cold) {
                 (true, false) => false,
@@ -818,7 +820,7 @@ fn apply_cold_path_hints_instr(instr: &mut WirInstr) {
 pub fn translate_function_bodies(ctx: &mut WirContext<'_>) {
     let pending: Vec<_> = std::mem::take(&mut ctx.pending_bodies);
     let ctx_has_multi_value_returns = !ctx.multi_value_return_funcs.is_empty();
-    let cold_marker = ctx.package.builtin_func_id(COLD_PATH_INTRINSIC);
+    let markers = Markers::of(ctx.package);
 
     for pending_body in &pending {
         let tir_func = pending_body.tir_func.borrow();
@@ -907,12 +909,7 @@ pub fn translate_function_bodies(ctx: &mut WirContext<'_>) {
                     multi_value_results_taken: false,
                     force_fixed_string_repr: false,
                     discovered_local_types: IndexMap::default(),
-                    cold_heads: {
-                        let runs = ColdRuns::of(body, cold_marker);
-                        runs.heads(body)
-                            .filter(|&s| !runs.is_marker(body, s))
-                            .collect()
-                    },
+                    rare_heads: rare_heads(body, markers),
                 };
                 translator.translate_block(body.root())
             };
@@ -921,6 +918,22 @@ pub fn translate_function_bodies(ctx: &mut WirContext<'_>) {
             ctx.functions[pending_body.wir_func_index].body = Some(wir_body);
         }
     }
+}
+
+/// Where each rare run of `body` opens, and in which halves. A run whose head
+/// is a marker stating its half has its [`WirInstr::Rare`] already.
+fn rare_heads(body: &Body, markers: Markers) -> IndexMap<StmtId, Mark> {
+    let heads = |rarity| {
+        let runs = ColdRuns::of(body, markers, rarity);
+        runs.heads(body)
+            .filter(|&s| !runs.is_run_marker(body, s))
+            .collect::<IndexSet<_>>()
+    };
+    let (unlikely, cold) = (heads(Rarity::Unlikely), heads(Rarity::Cold));
+    unlikely
+        .union(&cold)
+        .filter_map(|&s| Mark::of(unlikely.contains(&s), cold.contains(&s)).map(|mark| (s, mark)))
+        .collect()
 }
 
 /// Tracks a Wasm block scope in the label stack for computing br depths.
@@ -985,9 +998,9 @@ pub(super) struct FunctionTranslator<'a, 'b> {
     /// Local types read off the body's `Let` statements, for a function that
     /// reaches here without the lower phase's local allocation.
     discovered_local_types: IndexMap<u32, TypeId>,
-    /// The statements a cold run opens with, markers aside: each already
-    /// translates to one.
-    cold_heads: IndexSet<StmtId>,
+    /// The statements a rare run opens with, and in which halves, by
+    /// [`rare_heads`].
+    rare_heads: IndexMap<StmtId, Mark>,
 }
 
 impl FunctionTranslator<'_, '_> {
@@ -1954,11 +1967,11 @@ impl FunctionTranslator<'_, '_> {
         }
     }
 
-    /// Put a marker ahead of `stmt` when a cold run opens there, so a WIR reader
-    /// finds each run where it starts: an arm is cold when it opens with one.
+    /// Put a marker ahead of `stmt` when a rare run opens there, so a WIR reader
+    /// finds each run where it starts: an arm is rare when it opens with one.
     fn open_cold_run(&self, stmt: StmtId, instrs: &mut Vec<WirInstr>) {
-        if self.cold_heads.contains(&stmt) {
-            instrs.push(WirInstr::ColdPath);
+        if let Some(&mark) = self.rare_heads.get(&stmt) {
+            instrs.push(WirInstr::Rare(mark));
         }
     }
 

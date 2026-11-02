@@ -212,7 +212,7 @@ fn a_package_left_with_no_workload_loses_its_profile() {
 }
 
 /// A build applies the profile `--pgo` recorded unless `-f no-pgo` says not
-/// to. The conflict remark on the `cold_path()` the workload ran shows it was
+/// to. The remark overriding the `cold_path()` the workload ran shows it was
 /// applied.
 #[test]
 fn a_build_applies_the_entry_profile_under_pgo() {
@@ -225,7 +225,7 @@ fn a_build_applies_the_entry_profile_under_pgo() {
          export fn run() with Stdout {\n    println(`${pick(1)}`);\n}\n",
     )
     .unwrap();
-    let remark = "`cold_path()` marks a path the profile ran once";
+    let remark = "`cold_path()` marks this path rare, but the profile ran it once";
     let missing = "-f pgo: no profile at";
     let run = || {
         wado_in(tmp.path())

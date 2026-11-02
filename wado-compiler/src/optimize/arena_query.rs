@@ -23,6 +23,7 @@ use crate::nir_value_graph::{ValueId, ValueKind};
 use crate::nir_visitor::NirRefVisitor;
 use crate::optimize::mod_ref;
 use crate::optimize::value_copy::mutation::MutationOracle;
+use crate::rarity::{Mark, Rarity};
 use crate::tir::{ResolvedType, TypeId};
 use crate::type_table::TypeTable;
 
@@ -532,72 +533,111 @@ fn block_breaks_innermost_loop(body: &Body, block: BlockId) -> bool {
     search.0
 }
 
-/// Whether `stmt` is a bare `cold_path()` call.
-fn is_cold_marker(body: &Body, stmt: StmtId, cold: FuncId) -> bool {
-    let StmtKind::Expr(op) = &body.stmts[stmt].kind else {
-        return false;
-    };
-    let Some(expr) = op.as_expr() else {
-        return false;
-    };
-    matches!(&body.exprs[expr].kind, ExprKind::Call { func_id, .. } if *func_id == cold)
+/// The program's marker builtins, each with what it states.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct Markers([(Option<FuncId>, Mark); 3]);
+
+impl Markers {
+    pub(crate) fn of(project: &NirPackage) -> Self {
+        Self(Mark::ALL.map(|mark| (project.builtin_func_id(mark.builtin()), mark)))
+    }
+
+    /// What a call to `func` states, where `func` is a marker.
+    pub(crate) fn mark(self, func: FuncId) -> Option<Mark> {
+        self.0
+            .iter()
+            .find(|(named, _)| *named == Some(func))
+            .map(|&(_, mark)| mark)
+    }
+
+    /// Whether a call to `func` states `rarity`.
+    pub(crate) fn states(self, func: FuncId, rarity: Rarity) -> bool {
+        self.mark(func).is_some_and(|mark| mark.states(rarity))
+    }
+
+    /// Whether the program names no marker stating `rarity`.
+    fn none_states(self, rarity: Rarity) -> bool {
+        !self
+            .0
+            .iter()
+            .any(|&(named, mark)| named.is_some() && mark.states(rarity))
+    }
 }
 
-/// What the `cold_path()` markers of one body make cold: per block, the
-/// position from which its statements, and everything under them, run only on
-/// a path through a marker. That is the marker's basic block, read in nested IR
-/// as the points every path through which passes the marker: the statements
-/// after it, and the ones ahead of it that cannot leave the block first. A
-/// statement covers its block as a marker does when every path through it
-/// passes one: a loop or a labeled block whose block is cold from its start,
-/// or a branch each of whose arms is.
-#[derive(Default, Clone)]
+/// What the markers of one body stating one [`Rarity`] make rare: per block,
+/// the position from which its statements, and everything under them, run
+/// only on a path through a marker. That is the marker's basic block, read in
+/// nested IR as the points every path through which passes the marker: the
+/// statements after it, and the ones ahead of it that cannot leave the block
+/// first. A statement covers its block as a marker does when every path
+/// through it passes one: a loop or a labeled block whose block is rare from
+/// its start, or a branch each of whose arms is.
+#[derive(Clone)]
 pub(crate) struct ColdRuns {
-    marker: Option<FuncId>,
+    markers: Markers,
+    rarity: Rarity,
     starts: IndexMap<BlockId, usize>,
 }
 
 impl ColdRuns {
-    /// The runs of `body`, or none when the program names no marker.
-    pub(crate) fn of(body: &Body, marker: Option<FuncId>) -> Self {
-        let mut runs = Self {
-            marker,
+    /// No run, for a function without a body.
+    pub(crate) fn none(markers: Markers, rarity: Rarity) -> Self {
+        Self {
+            markers,
+            rarity,
             starts: IndexMap::default(),
-        };
+        }
+    }
+
+    /// The runs of `body`, or none when the program names no marker stating
+    /// `rarity`.
+    pub(crate) fn of(body: &Body, markers: Markers, rarity: Rarity) -> Self {
+        let mut runs = Self::none(markers, rarity);
         // Nearly every body holds no marker, which one pass over the arena
         // settles more cheaply than the walk.
-        let named = |m| {
-            body.exprs
-                .values()
-                .any(|n| matches!(&n.kind, ExprKind::Call { func_id, .. } if *func_id == m))
+        let named = || {
+            body.exprs.values().any(|n| {
+                matches!(&n.kind, ExprKind::Call { func_id, .. }
+                    if markers.states(*func_id, rarity))
+            })
         };
-        if marker.is_some_and(named)
-            && let Some(mut scan) = runs.scan(body)
-        {
-            scan.block(body.root());
+        if !markers.none_states(rarity) && named() {
+            runs.scan(body).block(body.root());
         }
         runs
     }
 
     /// Record the runs under `e`, a subtree spliced in since.
     pub(crate) fn add_under(&mut self, body: &Body, e: ExprId) {
-        if let Some(mut scan) = self.scan(body) {
-            scan.expr(e);
+        if !self.markers.none_states(self.rarity) {
+            self.scan(body).expr(e);
         }
     }
 
-    fn scan<'a>(&'a mut self, body: &'a Body) -> Option<RunScan<'a>> {
-        Some(RunScan {
+    fn scan<'a>(&'a mut self, body: &'a Body) -> RunScan<'a> {
+        RunScan {
             body,
-            marker: self.marker?,
+            markers: self.markers,
+            rarity: self.rarity,
             starts: &mut self.starts,
-        })
+        }
     }
 
-    /// Whether `stmt` is a marker, which emits nothing.
-    pub(crate) fn is_marker(&self, body: &Body, stmt: StmtId) -> bool {
-        self.marker
-            .is_some_and(|marker| is_cold_marker(body, stmt, marker))
+    /// What `stmt` states, where it is a call to a marker, which emits nothing.
+    pub(crate) fn marker_at(&self, body: &Body, stmt: StmtId) -> Option<Mark> {
+        let StmtKind::Expr(op) = &body.stmts[stmt].kind else {
+            return None;
+        };
+        match &body.exprs[op.as_expr()?].kind {
+            ExprKind::Call { func_id, .. } => self.markers.mark(*func_id),
+            _ => None,
+        }
+    }
+
+    /// Whether `stmt` is a marker stating the rarity these runs are of.
+    pub(crate) fn is_run_marker(&self, body: &Body, stmt: StmtId) -> bool {
+        self.marker_at(body, stmt)
+            .is_some_and(|mark| mark.states(self.rarity))
     }
 
     /// Whether no block turns cold.
@@ -643,7 +683,8 @@ impl ColdRuns {
 /// One walk over a body's reachable blocks, recording each cold run.
 struct RunScan<'a> {
     body: &'a Body,
-    marker: FuncId,
+    markers: Markers,
+    rarity: Rarity,
     starts: &'a mut IndexMap<BlockId, usize>,
 }
 
@@ -699,7 +740,7 @@ impl RunScan<'_> {
     fn expr(&mut self, e: ExprId) -> bool {
         let body = self.body;
         match &body.exprs[e].kind {
-            ExprKind::Call { func_id, .. } if *func_id == self.marker => true,
+            ExprKind::Call { func_id, .. } if self.markers.states(*func_id, self.rarity) => true,
             // The right operand runs only when the left does not decide.
             ExprKind::Binary {
                 left,
@@ -870,7 +911,7 @@ fn escapes_from<'a>(
 /// function reference), so it is an entry. `call_sites` counts each function's
 /// sites, and `edges` names what a function calls from the sites that count.
 ///
-/// Over the sites no `cold_path()` marker covers, it answers the cold
+/// Over the sites no cold marker covers, it answers the cold
 /// functions: whatever runs in one runs only once a cold path is taken.
 pub(super) fn unreached_through<'a>(
     project: &NirPackage,
@@ -900,7 +941,7 @@ pub(super) fn unreached_through<'a>(
 
 /// The cold functions, by [`unreached_through`] over a fresh walk of every live
 /// body.
-pub(super) fn cold_functions_of(project: &NirPackage, cold_path: Option<FuncId>) -> Vec<bool> {
+pub(super) fn cold_functions_of(project: &NirPackage, markers: Markers) -> Vec<bool> {
     let mut call_sites = vec![0usize; project.functions.len()];
     let hot_callees: Vec<IndexSet<FuncId>> = project
         .functions
@@ -911,7 +952,7 @@ pub(super) fn cold_functions_of(project: &NirPackage, cold_path: Option<FuncId>)
             let Some(body) = f.body.as_ref().filter(|_| !f.is_dead) else {
                 return hot;
             };
-            let cold = ColdRuns::of(body, cold_path).exprs(body);
+            let cold = ColdRuns::of(body, markers, Rarity::Cold).exprs(body);
             body.for_each_reachable_node(|node| {
                 if let NodeRef::Expr(e) = node
                     && let ExprKind::Call { func_id, .. } = &body.exprs[e].kind

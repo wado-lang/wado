@@ -1,6 +1,6 @@
 //! The profile `wado test --pgo` records: how often each region of each
 //! measured function ran, in a text file the package commits. A compile given
-//! one marks the regions that never ran cold. See
+//! one marks each region unlikely, cold, or both, by what it measured. See
 //! [WEP: Profile-Guided Optimization](../../docs/wep-2026-10-25-profile-guided-optimization.md).
 //!
 //! The format is the specification's,
@@ -14,6 +14,7 @@ use crate::ast::{self, AstId};
 use crate::coverage::{Coverage, Marker, PlannedModule, ProbeSite, RegionKind, plan_module};
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
+use crate::rarity::Mark;
 use crate::stdlib::core_module_file;
 use crate::token::Span;
 
@@ -79,6 +80,150 @@ impl Profile {
     pub(crate) fn is_empty(&self) -> bool {
         self.modules.is_empty()
     }
+
+    /// This profile read under `thresholds`, against its own summary.
+    #[must_use]
+    pub fn applied(&self, thresholds: Thresholds) -> Applied<'_> {
+        Applied {
+            profile: self,
+            reading: Reading {
+                summary: Summary::of(self, thresholds.hot, thresholds.cold),
+                predictable_branch: thresholds.predictable_branch,
+            },
+        }
+    }
+
+    fn counts(&self) -> impl Iterator<Item = i64> + '_ {
+        self.modules
+            .values()
+            .flatten()
+            .flat_map(|function| function.counts.values().copied())
+    }
+}
+
+/// A share of all runs, in parts per million.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Cutoff(u32);
+
+impl Cutoff {
+    pub const PER_MILLION: u32 = 1_000_000;
+
+    /// `per_million` as a share, where it is at most the whole.
+    #[must_use]
+    pub fn new(per_million: u32) -> Option<Self> {
+        (per_million <= Self::PER_MILLION).then_some(Self(per_million))
+    }
+}
+
+/// A share of a branch's runs, in percent.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Percent(u32);
+
+impl Percent {
+    pub const WHOLE: u32 = 100;
+
+    /// `percent` as a share, where it is at most the whole.
+    #[must_use]
+    pub fn new(percent: u32) -> Option<Self> {
+        (percent <= Self::WHOLE).then_some(Self(percent))
+    }
+}
+
+/// How a compile reads a profile's counts: the shares that place the summary's
+/// hot and cold lines, and the share of a branch's runs past which the branch
+/// is predictable. The defaults are LLVM's for its options of the same names.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Thresholds {
+    pub hot: Cutoff,
+    pub cold: Cutoff,
+    pub predictable_branch: Percent,
+}
+
+impl Default for Thresholds {
+    fn default() -> Self {
+        Self {
+            hot: Cutoff(990_000),
+            cold: Cutoff(999_999),
+            predictable_branch: Percent(99),
+        }
+    }
+}
+
+/// What a profile's counts mean to a compile: a region is cold by its count
+/// against the summary, and unlikely by its count against the code around it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct Reading {
+    summary: Summary,
+    predictable_branch: Percent,
+}
+
+impl Reading {
+    /// Whether a region the profile ran `runs` times is cold. A region that
+    /// never ran is, whatever the summary's lines, as GCC's
+    /// `probably_never_executed` holds: a profile too small to place them
+    /// rounds both to zero.
+    fn is_cold(self, runs: i64) -> bool {
+        runs == 0 || self.summary.is_cold(runs)
+    }
+
+    /// Whether a region the profile ran `runs` times, where the code around it
+    /// ran `around` times, is entered on the rare side of a predictable branch.
+    fn is_unlikely(self, runs: i64, around: i64) -> bool {
+        let rare = u128::from(Percent::WHOLE - self.predictable_branch.0);
+        runs as u128 * u128::from(Percent::WHOLE) <= around as u128 * rare
+    }
+}
+
+/// Where a profile's counts turn hot and cold. With every count sorted from
+/// the largest down, a line is the smallest count still inside its cutoff's
+/// share of all runs, the share rounded down as LLVM's `ProfileSummaryBuilder`
+/// rounds it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct Summary {
+    hot: i64,
+    cold: i64,
+}
+
+impl Summary {
+    fn of(profile: &Profile, hot: Cutoff, cold: Cutoff) -> Self {
+        let mut counts: Vec<i64> = profile.counts().collect();
+        counts.sort_unstable_by(|a, b| b.cmp(a));
+        let total: u128 = counts.iter().map(|&count| count as u128).sum();
+        let line = |cutoff: Cutoff| {
+            let share = total * u128::from(cutoff.0) / u128::from(Cutoff::PER_MILLION);
+            let (mut runs, mut line) = (0, 0);
+            for &count in &counts {
+                if runs >= share {
+                    break;
+                }
+                runs += count as u128;
+                line = count;
+            }
+            line
+        };
+        Self {
+            hot: line(hot),
+            cold: line(cold),
+        }
+    }
+
+    fn is_hot(self, count: i64) -> bool {
+        count >= self.hot
+    }
+
+    /// Hot is asked first, as LLVM's inliner does, so a count on both lines
+    /// is hot.
+    fn is_cold(self, count: i64) -> bool {
+        !self.is_hot(count) && count <= self.cold
+    }
+}
+
+/// A profile a compile applies, with how its counts are read. The summary is
+/// the whole profile's, wherever a part of it is applied.
+#[derive(Debug, Clone, Copy)]
+pub struct Applied<'a> {
+    pub(crate) profile: &'a Profile,
+    pub(crate) reading: Reading,
 }
 
 /// Why a profile's text does not parse, at its 1-based `line`.
@@ -161,27 +306,37 @@ fn parse_count(line: &str) -> Option<(u32, i64)> {
     Some((region.parse().ok()?, runs))
 }
 
-/// Where a profile marks a compile's code cold, and the remarks applying it
-/// makes.
+fn times(runs: i64) -> String {
+    match runs {
+        1 => "once".to_string(),
+        n => format!("{n} times"),
+    }
+}
+
+/// Where a profile marks a compile's code rare, the source's markers it
+/// overrides, and the remarks applying it makes.
 #[derive(Debug, Clone, Default)]
-pub(crate) struct ColdMap {
-    /// The sites reify puts a cold marker at.
-    sites: IndexSet<(ProbeSite, AstId)>,
+pub(crate) struct MarkMap {
+    /// The sites reify puts a marker at.
+    sites: IndexMap<(ProbeSite, AstId), Mark>,
+    /// The nodes of the author's `cold_path()` calls and the `?`s whose
+    /// markers reify leaves out, the profile having measured their regions.
+    overridden: IndexSet<AstId>,
     /// The modules applied, which a compile seeded with this map leaves alone.
     sources: IndexSet<ModuleSource>,
-    /// Each region marked, as `module:line:column kind`.
-    regions: Vec<String>,
+    /// Each region marked, as `module:line:column kind mark`.
+    marked: Vec<String>,
     remarks: Vec<(Span, String)>,
 }
 
-impl ColdMap {
-    /// Apply `profile` to the modules it names. The modules `seed` applied
+impl MarkMap {
+    /// Apply the profile to the modules it names. The modules `seed` applied
     /// keep what it found: they come from the stdlib snapshot with their
     /// markers already in place.
     pub(crate) fn build<'a>(
-        seed: Option<&ColdMap>,
+        seed: Option<&MarkMap>,
         modules: impl IntoIterator<Item = (&'a ModuleSource, &'a ast::Module)>,
-        profile: &Profile,
+        applied: Applied<'_>,
         rt_unreachable_calls: &IndexSet<AstId>,
     ) -> Self {
         let mut map = seed.cloned().unwrap_or_default();
@@ -189,20 +344,24 @@ impl ColdMap {
             if map.sources.contains(source) {
                 continue;
             }
-            let Some(functions) = profile.modules.get(&source.to_string()) else {
+            let Some(functions) = applied.profile.modules.get(&source.to_string()) else {
                 continue;
             };
-            map.apply(plan_module(source, module, rt_unreachable_calls), functions);
+            map.apply(
+                plan_module(source, module, rt_unreachable_calls),
+                functions,
+                applied.reading,
+            );
             map.sources.insert(source.clone());
         }
         map
     }
 
-    /// Mark each outermost region of `planned` that `functions` recorded no
-    /// run of. A function is matched by its name, the `n`th of a name to the
-    /// `n`th recorded, and its counts apply only where its hash is the
-    /// recorded one.
-    fn apply(&mut self, planned: PlannedModule, functions: &[ProfiledFunction]) {
+    /// Mark each region of `planned` by what `functions` recorded of it, read
+    /// as `reading` says. A function is matched by its name, the `n`th of a
+    /// name to the `n`th recorded, and its counts apply only where its hash is
+    /// the recorded one.
+    fn apply(&mut self, planned: PlannedModule, functions: &[ProfiledFunction], reading: Reading) {
         let PlannedModule {
             plan,
             sites,
@@ -258,64 +417,133 @@ impl ColdMap {
             .into_iter()
             .map(|(site, id, region)| (region, (site, id)))
             .collect();
-        for (id, region) in plan.regions.iter().enumerate() {
-            // A region in an expression has no statement position to mark.
-            if counts[id] != Some(0) || region.kind == RegionKind::Rhs {
-                continue;
+        let count_of = |region: Option<u32>| region.and_then(|r| counts[r as usize]);
+        // Unlikely: entered on the rare side of a predictable branch. The ratio
+        // to the code around it is that branch's for a path past a branch or a
+        // leaving statement, and bounds it from above for a loop's body, whose
+        // test also runs once per iteration. A function's body and a closure's
+        // are entered by a call, not a branch.
+        let unlikely = |id: usize| match (counts[id], count_of(parents[id])) {
+            (Some(runs), Some(around)) => reading.is_unlikely(runs, around),
+            _ => false,
+        };
+        // Cold, here and in everything under it: a marker covers what follows
+        // it, so one over a hot loop would make the loop cold.
+        let mut cold: Vec<bool> = counts
+            .iter()
+            .map(|count| count.is_some_and(|runs| reading.is_cold(runs)))
+            .collect();
+        for id in (0..cold.len()).rev() {
+            if let Some(parent) = parents[id] {
+                assert!(
+                    (parent as usize) < id,
+                    "a region is numbered after its parent"
+                );
+                cold[parent as usize] &= cold[id];
             }
+        }
+        // The region a marker for `id` sits under: a region in an expression
+        // has no statement position to mark.
+        let markable_parent = |id: usize| {
             let mut parent = parents[id];
             while let Some(p) = parent
                 && plan.regions[p as usize].kind == RegionKind::Rhs
             {
                 parent = parents[p as usize];
             }
-            if parent.is_some_and(|p| counts[p as usize] == Some(0)) {
+            parent
+        };
+        for (id, region) in plan.regions.iter().enumerate() {
+            if counts[id].is_none() || region.kind == RegionKind::Rhs {
                 continue;
             }
-            self.sites.insert(site_of[&(id as u32)]);
-            self.regions.push(format!(
-                "{}:{}:{} {}",
+            let parent = markable_parent(id);
+            // Under a region that never ran, whose marker covers this one.
+            if count_of(parent) == Some(0) {
+                continue;
+            }
+            let outermost_cold = cold[id] && !parent.is_some_and(|p| cold[p as usize]);
+            let Some(mark) = Mark::of(unlikely(id), outermost_cold) else {
+                continue;
+            };
+            self.sites.insert(site_of[&(id as u32)], mark);
+            self.marked.push(format!(
+                "{}:{}:{} {} {}",
                 plan.name,
                 region.start.line,
                 region.start.column,
-                region.kind.label()
+                region.kind.label(),
+                mark.label()
             ));
         }
         for (marker, span, region) in markers {
-            let Some(runs) = counts[region as usize].filter(|&runs| runs > 0) else {
+            let region = region as usize;
+            // Where the profile has no count, or cannot place a marker of its
+            // own, the source's stays.
+            let Some(runs) = counts[region] else {
                 continue;
             };
-            let runs = match runs {
-                1 => "once".to_string(),
-                n => format!("{n} times"),
+            if plan.regions[region].kind == RegionKind::Rhs {
+                continue;
+            }
+            self.overridden.insert(marker.node());
+            // A path that never ran is unlikely and cold whatever the summary,
+            // which the marker said.
+            if runs == 0 {
+                continue;
+            }
+            let verdict = match Mark::of(unlikely(region), cold[region]) {
+                Some(Mark::ColdPath) => continue,
+                Some(Mark::Unlikely) => "unlikely but not cold",
+                Some(Mark::Cold) => "cold but not unlikely",
+                None => "neither unlikely nor cold",
             };
-            let message = match marker {
-                Marker::ColdPath => {
-                    format!("`cold_path()` marks a path the profile ran {runs}; the marker stays")
+            let subject = match marker {
+                Marker::ColdPath(_) => "`cold_path()` marks this path rare",
+                Marker::Try(_) => "`?` marks its failure path rare",
+            };
+            // A loop's body may run more often than the code around it.
+            let measured = match count_of(parents[region]) {
+                Some(around) => {
+                    format!(
+                        "{} where the code around it ran {}",
+                        times(runs),
+                        times(around)
+                    )
                 }
-                Marker::Try => format!(
-                    "`?` marks its failure path cold, and the profile ran it {runs}; the marker \
-                     stays"
-                ),
+                None => times(runs),
             };
-            self.remarks.push((span, message));
+            self.remarks.push((
+                span,
+                format!(
+                    "{subject}, but the profile ran it {measured}, so it is {verdict}; the \
+                     profile overrides the marker"
+                ),
+            ));
         }
     }
 
-    /// Whether reify puts a cold marker at `site` on node `id`.
+    /// The marker reify puts at `site` on node `id`, if any.
     #[must_use]
-    pub(crate) fn marks(&self, site: ProbeSite, id: AstId) -> bool {
-        self.sites.contains(&(site, id))
+    pub(crate) fn mark(&self, site: ProbeSite, id: AstId) -> Option<Mark> {
+        self.sites.get(&(site, id)).copied()
     }
 
-    /// Each region marked, as `module:line:column kind`.
+    /// Whether reify leaves out the marker the source states at node `id`.
     #[must_use]
-    pub(crate) fn regions(&self) -> &[String] {
-        &self.regions
+    pub(crate) fn overrides(&self, id: AstId) -> bool {
+        self.overridden.contains(&id)
+    }
+
+    /// Each region marked, as `module:line:column kind mark`.
+    #[must_use]
+    pub(crate) fn marked(&self) -> &[String] {
+        &self.marked
     }
 
     /// What applying the profile says about its counts: a function's
-    /// discarded, a marker on a path the profile ran.
+    /// discarded, a source's marker overridden by a measurement that
+    /// disagrees with it.
     #[must_use]
     pub(crate) fn remarks(&self) -> &[(Span, String)] {
         &self.remarks
@@ -406,6 +634,57 @@ mod tests {
                 },
             ]
         );
+    }
+
+    fn summary(counts: &[i64], hot: Cutoff, cold: Cutoff) -> Summary {
+        let mut text = format!("{HEADER}\nmodule a\nfn 00000000000000ab 1 f\n");
+        for (region, count) in counts.iter().enumerate() {
+            let _ = writeln!(text, "{region} {count}");
+        }
+        Summary::of(&parse(&text).expect("it parses"), hot, cold)
+    }
+
+    fn default_summary(counts: &[i64]) -> Summary {
+        let Thresholds { hot, cold, .. } = Thresholds::default();
+        summary(counts, hot, cold)
+    }
+
+    #[test]
+    fn each_line_is_the_smallest_count_inside_its_share() {
+        let lines = summary(&[600, 300, 60, 30, 10], Cutoff(900_000), Cutoff(990_000));
+        assert_eq!(lines, Summary { hot: 300, cold: 30 });
+        assert!(lines.is_hot(300) && !lines.is_cold(300));
+        assert!(!lines.is_hot(60) && !lines.is_cold(60));
+        assert!(lines.is_cold(30) && lines.is_cold(10));
+    }
+
+    /// LLVM rounds the share down: of 4 runs, 99% is 3, so the 3 alone is
+    /// inside it, and the 1 is cold.
+    #[test]
+    fn a_share_is_rounded_down() {
+        let lines = default_summary(&[3, 1]);
+        assert_eq!(lines, Summary { hot: 3, cold: 3 });
+        assert!(lines.is_cold(1));
+    }
+
+    #[test]
+    fn a_count_on_both_lines_is_hot() {
+        let lines = default_summary(&[1, 1, 1]);
+        assert_eq!(lines, Summary { hot: 1, cold: 1 });
+        assert!(lines.is_hot(1) && !lines.is_cold(1));
+    }
+
+    /// LLVM's default: a branch is predictable when one side takes 99% of its
+    /// runs, so the other side is unlikely at 1% or less.
+    #[test]
+    fn a_side_is_unlikely_at_the_predictable_branchs_complement() {
+        let reading = Reading {
+            summary: default_summary(&[1]),
+            predictable_branch: Thresholds::default().predictable_branch,
+        };
+        assert!(reading.is_unlikely(10, 1000));
+        assert!(!reading.is_unlikely(11, 1000));
+        assert!(reading.is_unlikely(0, 1));
     }
 
     #[test]

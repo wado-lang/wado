@@ -4,6 +4,7 @@
 use lexopt::Parser;
 use wado_compiler::LogLevel;
 use wado_compiler::param_resolution::ParamInputs;
+use wado_compiler::pgo::{Cutoff, Percent};
 
 use crate::args::{self, CliExit, OptSpec};
 use crate::process_host::ProcessGrant;
@@ -82,6 +83,9 @@ pub enum CompileKnobOpt {
     OptIterations,
     Specializations,
     OptThreads,
+    ProfileSummaryCutoffHot,
+    ProfileSummaryCutoffCold,
+    PredictableBranchThreshold,
     LogLevel,
     Allocator,
     Feature,
@@ -131,6 +135,24 @@ impl CompileKnobOpt {
                 short: None,
                 value: Some("<n>"),
                 desc: "Threads the optimizer runs on; the output does not depend on it\n(default: the available cores, shared among the files compiled\nat once: 1 each under `wado test`)",
+            },
+            Self::ProfileSummaryCutoffHot => OptSpec {
+                long: Some("optimize-profile-summary-cutoff-hot"),
+                short: None,
+                value: Some("<ppm>"),
+                desc: "The share of all runs, in parts per million, whose smallest count\nis the profile's hot line (default: 990000)",
+            },
+            Self::ProfileSummaryCutoffCold => OptSpec {
+                long: Some("optimize-profile-summary-cutoff-cold"),
+                short: None,
+                value: Some("<ppm>"),
+                desc: "The share of all runs, in parts per million, whose smallest count\nis the profile's cold line (default: 999999)",
+            },
+            Self::PredictableBranchThreshold => OptSpec {
+                long: Some("optimize-predictable-branch-threshold"),
+                short: None,
+                value: Some("<pct>"),
+                desc: "The share of a branch's runs, in percent, one side must take for\nthe profile to call the other side unlikely (default: 99)",
             },
             Self::LogLevel => OptSpec {
                 long: Some("log-level"),
@@ -290,6 +312,26 @@ impl CompileKnobs {
                 }
                 self.opt_threads = Some(threads as usize);
             }
+            CompileKnobOpt::ProfileSummaryCutoffHot => {
+                self.opt.profile_summary_cutoff_hot = Some(parse_cutoff_arg(
+                    "--optimize-profile-summary-cutoff-hot",
+                    parser,
+                )?);
+            }
+            CompileKnobOpt::ProfileSummaryCutoffCold => {
+                self.opt.profile_summary_cutoff_cold = Some(parse_cutoff_arg(
+                    "--optimize-profile-summary-cutoff-cold",
+                    parser,
+                )?);
+            }
+            CompileKnobOpt::PredictableBranchThreshold => {
+                self.opt.predictable_branch_threshold = Some(parse_share_arg(
+                    "--optimize-predictable-branch-threshold",
+                    parser,
+                    ("percent", Percent::WHOLE),
+                    Percent::new,
+                )?);
+            }
             CompileKnobOpt::LogLevel => self.log_level = args::parse_log_level_arg(parser)?,
             CompileKnobOpt::Allocator => self.allocator = Some(args::require_string(parser)?),
             CompileKnobOpt::Feature => self.codegen_flags.push(args::require_string(parser)?),
@@ -301,6 +343,31 @@ impl CompileKnobs {
         }
         Ok(())
     }
+}
+
+/// Parse a share of all runs in parts per million.
+fn parse_cutoff_arg(opt: &str, parser: &mut Parser) -> Result<Cutoff, CliExit> {
+    parse_share_arg(
+        opt,
+        parser,
+        ("parts per million", Cutoff::PER_MILLION),
+        Cutoff::new,
+    )
+}
+
+/// Parse a share counted in `unit`, of which `whole` is all.
+fn parse_share_arg<T>(
+    opt: &str,
+    parser: &mut Parser,
+    (unit, whole): (&str, u32),
+    share: fn(u32) -> Option<T>,
+) -> Result<T, CliExit> {
+    let n = args::parse_u32_arg(opt, parser)?;
+    share(n).ok_or_else(|| {
+        CliExit::error(format!(
+            "{opt} is a share in {unit}, at most {whole}, got {n}"
+        ))
+    })
 }
 
 /// A knob shared by the subcommands that host a guest (`run` / `serve` /

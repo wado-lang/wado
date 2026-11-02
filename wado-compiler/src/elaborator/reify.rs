@@ -88,11 +88,12 @@ use crate::name::{
     display_function_name, effect_default_impl_name, for_body_label, mangle_local_item_name,
     minted_name, range_local_name, template_block_label, template_hole_local, test_function_name,
 };
-use crate::pgo::ColdMap;
+use crate::pgo::MarkMap;
+use crate::rarity::Mark;
 use crate::symbol::{Symbol, SymbolKind};
 use crate::synthesis::common::{
-    bare_cast, bool_lit, builtin_call, cold_path_stmt, handle_bits, is_cold_marker_stmt,
-    known_cold_path_stmt, not_expr, ord_bool_from_cmp, rt_call,
+    bare_cast, bool_lit, builtin_call, cold_path_stmt, handle_bits, known_cold_path_stmt,
+    marker_stmt_mark, not_expr, ord_bool_from_cmp, rt_call,
 };
 use crate::tir::{
     EffectRef, StructDef, TemplateId, TirEffectOp, TirField, TirImpl, TirParam, TirTypeParam,
@@ -532,8 +533,8 @@ pub(crate) struct Reify<'a> {
     /// The coverage plan whose probes reify puts in, under
     /// `wado test --coverage` or `--pgo`. See `probe.rs`.
     pub(crate) coverage: Option<&'a CoverageMap>,
-    /// Where the profile marks code cold. See `probe.rs`.
-    pub(crate) cold: Option<&'a ColdMap>,
+    /// Where the profile marks code rare. See `probe.rs`.
+    pub(crate) marks: Option<&'a MarkMap>,
     /// The probe ids reify has put in so far.
     pub(crate) probes_emitted: IndexSet<u32>,
     /// The probe ids of code reify emits no instance of: a tuple `for-of` body
@@ -663,7 +664,7 @@ impl<'a> Reify<'a> {
             pending_template_structs: Vec::new(),
             pending_local_newtypes: IndexMap::default(),
             coverage: None,
-            cold: None,
+            marks: None,
             probes_emitted: IndexSet::default(),
             probes_without_instance: IndexSet::default(),
             body_ownership: None,
@@ -2135,9 +2136,10 @@ impl<'a> Reify<'a> {
         let mut out: Vec<TirStmt> = Vec::with_capacity(stmts.len() + 1);
         // A marker makes its whole basic block cold, so one per block is all
         // there is to place, and a synthesis site that placed its own keeps it.
+        // A profile's marker stating one half leaves the other to this one.
         let mut marked = false;
         for s in stmts {
-            marked = marked || is_cold_marker_stmt(&s);
+            marked = marked || marker_stmt_mark(&s) == Some(Mark::ColdPath);
             if diverges(&s) && !marked {
                 out.push(known_cold_path_stmt(s.span));
                 marked = true;
@@ -2744,6 +2746,11 @@ impl<'a> Reify<'a> {
                 self.reify_method_call(method_call, ctx, recorded_type)
             }
             ast::Expr::Binary(binary) => self.reify_binary(binary, ctx, recorded_type),
+            // The profile measured the author's `cold_path()` and marks its
+            // region by what it found.
+            ast::Expr::Call(call) if self.overridden(call.id) => {
+                TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, call.span)
+            }
             ast::Expr::Call(call) => self.reify_call(call, ctx, recorded_type),
             ast::Expr::Match(match_expr) => self.reify_match_expr(
                 match_expr,
@@ -5648,14 +5655,23 @@ impl<'a> Reify<'a> {
             // same shape annotate's recovery path produced.
             return TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, qm.span);
         };
-        // The early return is the desugared match's last arm.
-        if let TirExprKind::Match { arms, .. } = &mut desugared.kind
-            && let Some(exit) = arms.last_mut()
-        {
-            let placeholder = TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, qm.span);
-            let body = std::mem::replace(&mut exit.body, placeholder);
-            exit.body = self.probe_expr(ProbeSite::TryExit, qm.id, body);
+        let TirExprKind::Match { arms, .. } = &mut desugared.kind else {
+            unreachable!("a `?` desugars to a match");
+        };
+        let [_, exit] = arms.as_mut_slice() else {
+            unreachable!("a `?`'s match has a continuing arm and an early return");
+        };
+        let placeholder = TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, qm.span);
+        let mut body = std::mem::replace(&mut exit.body, placeholder);
+        // A failure is no trap, so its rarity is a guess, which the profile
+        // overrides.
+        if !self.overridden(qm.id) {
+            let TirExprKind::Block(block) = &mut body.kind else {
+                unreachable!("a `?`'s early return is a block");
+            };
+            block.stmts.insert(0, cold_path_stmt(qm.span));
         }
+        exit.body = self.probe_expr(ProbeSite::TryExit, qm.id, body);
         desugared
     }
 
@@ -5724,19 +5740,15 @@ impl<'a> Reify<'a> {
             guard: None,
             body: TirExpr::new(
                 TirExprKind::Block(TirBlock::new(
-                    vec![
-                        // A failure is no trap, so its rarity is a guess.
-                        cold_path_stmt(span),
-                        TirStmt::new(
-                            TirStmtKind::Return {
-                                // `Option<U>` and the operand's `Option<T>`
-                                // are distinct GC types, so the propagated
-                                // `None` is the enclosing function's.
-                                value: Some(TirExpr::new(TirExprKind::Null, ctx.return_type, span)),
-                            },
-                            span,
-                        ),
-                    ],
+                    vec![TirStmt::new(
+                        TirStmtKind::Return {
+                            // `Option<U>` and the operand's `Option<T>` are
+                            // distinct GC types, so the propagated `None` is
+                            // the enclosing function's.
+                            value: Some(TirExpr::new(TirExprKind::Null, ctx.return_type, span)),
+                        },
+                        span,
+                    )],
                     span,
                 )),
                 TypeTable::NEVER,
@@ -5858,15 +5870,12 @@ impl<'a> Reify<'a> {
             guard: None,
             body: TirExpr::new(
                 TirExprKind::Block(TirBlock::new(
-                    vec![
-                        cold_path_stmt(span),
-                        TirStmt::new(
-                            TirStmtKind::Return {
-                                value: Some(err_variant),
-                            },
-                            span,
-                        ),
-                    ],
+                    vec![TirStmt::new(
+                        TirStmtKind::Return {
+                            value: Some(err_variant),
+                        },
+                        span,
+                    )],
                     span,
                 )),
                 TypeTable::NEVER,
