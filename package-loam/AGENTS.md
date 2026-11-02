@@ -31,6 +31,23 @@ directory and names the WEP's section.
 - Test data and models may be copied in and read, each directory carrying its
   source and license, as `tests/onnx/` and `tests/models/` do.
 
+## Testing a change
+
+Each semantics is written once per device: `Cpu`, `WebGpuBackend`, and a TPU
+to come. Generated code reaches all of them, so a change can break code it
+never touched. Test outward from the change, and run the whole package once,
+last:
+
+1. The test beside the file changed, such as `src/runtime/recorded_test.wado`.
+2. `conformance/backend_test.wado`, for a change to a runtime trait (`Graph`,
+   `Backend`, `Holds`) or to what `emit.wado` writes. It compiles generated
+   modules against a backend outside the package that wraps `Cpu`. A generated
+   module imports every runtime trait, so a method name two traits share fails
+   to compile there.
+3. `cargo test --test compute loam` in `wado-run-webgpu/`, for a change
+   `WebGpuBackend` runs. It checks each result against `Cpu`'s.
+4. `wado test package-loam`.
+
 ## Oracles
 
 `conformance/operators_test.wado` and `semantics_test.wado` take their
