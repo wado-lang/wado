@@ -582,6 +582,21 @@ impl TypeTable {
         )
     }
 
+    /// The struct `id` instantiates, with its arguments: a `Struct`, or the
+    /// `GenericInstance` spelling that settles into one.
+    #[must_use]
+    pub fn struct_parts(&self, id: TypeId) -> Option<(StructDef, &[TypeId])> {
+        match self.get(id) {
+            ResolvedType::Struct { def, type_args } => Some((*def, type_args)),
+            ResolvedType::GenericInstance { def, type_args }
+                if self.defs.kind(*def) == DefKind::Struct && !self.is_tuple_def(*def) =>
+            {
+                Some((StructDef::Decl(*def), type_args))
+            }
+            _ => None,
+        }
+    }
+
     /// [`Self::type_key`] of each id, in order.
     #[must_use]
     pub fn type_keys(&self, ids: &[TypeId]) -> Vec<TypeKey> {

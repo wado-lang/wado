@@ -35,7 +35,7 @@ use crate::nir_arena::{Body, ExprKind, NodeRef};
 use crate::parallel::Executor;
 use crate::tir::{BuiltinDeclaration, BuiltinDeclarations, TypeId};
 use crate::token::Span;
-use crate::type_table::TypeTable;
+use crate::type_table::{TypeKey, TypeTable};
 use crate::wir_build::component_plan::ComponentPlan;
 use crate::world_registry::{self, WorldInfo, WorldRegistry};
 
@@ -467,8 +467,8 @@ impl<'a> NarrowedParam<'a> {
 /// One field `optimize/sroa_param` projected a parameter through.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct SroaParamProjection {
-    /// The struct, as `(name, module_source)`.
-    pub struct_key: (String, ModuleSource),
+    /// The struct type.
+    pub struct_key: TypeKey,
     /// The field's declaration index and name in it.
     pub field_index: u32,
     pub field_name: String,
@@ -1029,7 +1029,7 @@ fn retarget_calls(body: &mut Body, merged: &IndexMap<FuncId, FuncId>) -> bool {
 #[cfg(test)]
 mod tests {
     use super::{FieldForm, ParamShape, Reshape, ReturnShape, Spelled, SroaParamProjection};
-    use crate::module_source::ModuleSource;
+    use crate::type_table::TypeTable;
 
     fn reshape(params: &[&str]) -> Reshape {
         Reshape {
@@ -1050,7 +1050,7 @@ mod tests {
 
     fn narrow_as(r: &mut Reshape, position: usize, field: &str, form: FieldForm) {
         let projection = SroaParamProjection {
-            struct_key: ("S".to_string(), ModuleSource::builtin()),
+            struct_key: TypeTable::new().type_key(TypeTable::I32),
             field_index: 0,
             field_name: field.to_string(),
             form,

@@ -1028,10 +1028,8 @@ pub type StructInstance = (StructDef, Vec<TypeKey>);
 /// The instance `type_id` is, when it is a struct type.
 #[must_use]
 pub fn struct_instance(type_id: TypeId, type_table: &TypeTable) -> Option<StructInstance> {
-    let tir::ResolvedType::Struct { def, type_args } = type_table.get(type_id) else {
-        return None;
-    };
-    Some((*def, type_table.type_keys(type_args)))
+    let (def, type_args) = type_table.struct_parts(type_id)?;
+    Some((def, type_table.type_keys(type_args)))
 }
 
 impl NirStruct {
@@ -1090,6 +1088,39 @@ impl<'a> StructDecls<'a> {
     #[must_use]
     pub fn of_type(&self, type_id: TypeId, type_table: &TypeTable) -> Option<&'a NirStruct> {
         self.0.get(&struct_instance(type_id, type_table)?).copied()
+    }
+
+    /// Each declaration's field types, for a holder that outlives the borrow.
+    #[must_use]
+    pub fn field_types(&self) -> StructFieldTypes {
+        StructFieldTypes(
+            self.0
+                .iter()
+                .map(|(instance, decl)| {
+                    let types = decl.fields_in_order().iter().map(|f| f.type_id).collect();
+                    (instance.clone(), types)
+                })
+                .collect(),
+        )
+    }
+}
+
+/// [`StructDecls`] reduced to field types, in field order.
+#[derive(Default, PartialEq)]
+pub struct StructFieldTypes(IndexMap<StructInstance, Vec<TypeId>>);
+
+impl StructFieldTypes {
+    #[must_use]
+    pub fn new(structs: &[NirStruct], type_table: &TypeTable) -> Self {
+        StructDecls::new(structs, type_table).field_types()
+    }
+
+    /// The field types of `type_id`, when it is a concrete struct type.
+    #[must_use]
+    pub fn of_type(&self, type_id: TypeId, type_table: &TypeTable) -> Option<&[TypeId]> {
+        self.0
+            .get(&struct_instance(type_id, type_table)?)
+            .map(Vec::as_slice)
     }
 }
 

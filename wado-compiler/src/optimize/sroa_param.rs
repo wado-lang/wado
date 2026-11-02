@@ -20,13 +20,13 @@
 
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
-use crate::nir::{FuncCell, FunctionRef, NirFunction, NirUnaryOp};
+use crate::nir::{FuncCell, FunctionRef, NirFunction, NirUnaryOp, StructDecls, StructFieldTypes};
 use crate::nir_arena::{Body, ExprId, ExprKind, ExprNode, NodeRef, Operand};
 use crate::nir_package::{FieldForm, NirPackage, ParamShape, Reshape, SroaParamProjection};
 use crate::parallel::Executor;
 use crate::tir::{ResolvedType, TypeId};
 use crate::token::Span;
-use crate::type_table::TypeTable;
+use crate::type_table::{TypeKey, TypeTable};
 
 use cranelift_entity::EntityRef;
 
@@ -43,8 +43,9 @@ type FnKey = FuncId;
 /// Per-candidate metadata captured during Phase 1.
 #[derive(Clone)]
 struct SroaInfo {
-    /// Canonical struct identity — `(struct_name, module_source)`.
-    struct_key: (String, ModuleSource),
+    /// The struct the parameter holds or references.
+    struct_type: TypeId,
+    struct_key: TypeKey,
     /// Type of the field the callee reads — the new scalar parameter type.
     inner_type_id: TypeId,
     /// Name of the field the callee reads.
@@ -114,23 +115,6 @@ fn become_expr(body: &mut Body, id: ExprId, src: ExprId) {
 // Phase 1 + 2
 // -----------------------------------------------------------------------
 
-/// Every field of each struct, in declaration order.
-type FieldTableIndex = IndexMap<(String, ModuleSource), Vec<(String, TypeId)>>;
-
-fn build_field_table_index(project: &NirPackage) -> FieldTableIndex {
-    let mut out: FieldTableIndex = IndexMap::default();
-    for s in &project.structs {
-        out.insert(
-            (s.name.clone(), s.module_source.clone()),
-            s.fields
-                .iter()
-                .map(|f| (f.name.clone(), f.type_id))
-                .collect(),
-        );
-    }
-    out
-}
-
 /// What a candidate parameter is used for. A parameter qualifies exactly when
 /// every use agrees on one field, so this is that agreement or its failure —
 /// resolved to a fixpoint, since a use may be "whatever the position I forward
@@ -163,9 +147,9 @@ fn collect_and_validate(
     state: &mut SroaParamState,
 ) -> IndexMap<(FnKey, usize), SroaInfo> {
     let type_table = project.type_table.borrow();
-    let field_table = build_field_table_index(project);
-    let struct_fields = build_struct_fields_index(project);
     let types = &*type_table;
+    let structs = StructDecls::new(&project.structs, types);
+    let struct_fields = structs.field_types();
     let own = state.0.refresh(project, gate.exec(), |f| {
         f.body.as_ref().map(|body| OwnWrites::of(body, types))
     });
@@ -200,7 +184,7 @@ fn collect_and_validate(
             {
                 continue;
             }
-            let Some(mut info) = candidate_info_for(param.type_id, types, &field_table) else {
+            let Some(mut info) = candidate_info_for(param.type_id, types, &structs) else {
                 continue;
             };
             // A struct this position was already unwrapped from reaches itself
@@ -260,7 +244,7 @@ fn collect_and_validate(
             )
         }))
         .collect();
-    let mut shared_by_type: IndexMap<TypeId, Vec<(String, ModuleSource)>> = IndexMap::default();
+    let mut shared_by_type: IndexMap<TypeId, Vec<TypeKey>> = IndexMap::default();
     loop {
         let entries: Vec<(&(FnKey, usize), &SroaInfo)> = candidates.iter().collect();
         let uses = gate.exec().map(&entries, |&(&(key, pi), info)| {
@@ -303,17 +287,17 @@ fn collect_and_validate(
         }
         for (k, fi) in &resolved {
             let info = &mut candidates[k];
-            let Some(fields) = field_table.get(&info.struct_key) else {
-                invalid.insert(*k);
-                continue;
-            };
-            let Some((name, ty)) = fields.get(*fi as usize).cloned() else {
+            let fields = structs
+                .of_type(info.struct_type, types)
+                .expect("a candidate's struct is declared")
+                .fields_in_order();
+            let Some(field) = fields.get(*fi as usize) else {
                 invalid.insert(*k);
                 continue;
             };
             info.field_index = *fi;
-            info.field_name = name;
-            info.inner_type_id = ty;
+            info.field_name = field.name.clone();
+            info.inner_type_id = field.type_id;
         }
         for k in &widened {
             candidates[k].form = FieldForm::Mutable;
@@ -380,20 +364,19 @@ fn collect_and_validate(
 fn candidate_info_for(
     param_type: TypeId,
     type_table: &TypeTable,
-    field_table: &FieldTableIndex,
+    structs: &StructDecls<'_>,
 ) -> Option<SroaInfo> {
-    let key = struct_key_behind_ref(param_type, type_table)?;
-    let fields = field_table.get(&key)?;
-    if fields.is_empty() {
-        return None;
-    }
+    let struct_type = struct_behind_ref(param_type, type_table)?;
+    let fields = structs.of_type(struct_type, type_table)?.fields_in_order();
     // Seed on field 0; a wider struct has this overwritten once its uses agree.
-    let (field_name, field_type) = fields[0].clone();
+    let first = fields.first()?;
+    let (field_name, field_type) = (first.name.clone(), first.type_id);
     // One `Box` holds `&X` and `&mut X` alike, its field typed by whichever it
     // met first; the parameter's own payload says which this one holds.
     let inner_type_id = type_table.box_payload_of(param_type).unwrap_or(field_type);
     Some(SroaInfo {
-        struct_key: key,
+        struct_type,
+        struct_key: type_table.type_key(struct_type),
         inner_type_id,
         field_name,
         field_index: if fields.len() == 1 { 0 } else { u32::MAX },
@@ -416,32 +399,30 @@ fn is_sroa_eligible_inner_type(type_id: TypeId, type_table: &TypeTable) -> bool 
     ty != TypeTable::UNIT && ty != TypeTable::NEVER
 }
 
-fn struct_key_of(type_id: TypeId, type_table: &TypeTable) -> Option<(String, ModuleSource)> {
-    match type_table.get(type_id) {
-        ResolvedType::Struct { def, .. } => Some((
-            type_table.struct_list_name(type_id)?,
-            type_table.struct_head_module(*def).clone(),
-        )),
-        _ => None,
-    }
+fn struct_key_of(type_id: TypeId, type_table: &TypeTable) -> Option<TypeKey> {
+    type_table
+        .struct_parts(type_id)
+        .map(|_| type_table.type_key(type_id))
 }
 
-fn reference_param_struct_key(
-    type_id: TypeId,
-    type_table: &TypeTable,
-) -> Option<(String, ModuleSource)> {
+/// The struct a reference `type_id` points to.
+fn referenced_struct(type_id: TypeId, type_table: &TypeTable) -> Option<TypeId> {
     match type_table.get(type_id) {
-        ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => struct_key_of(*inner, type_table),
+        ResolvedType::Ref(inner) | ResolvedType::MutRef(inner)
+            if type_table.struct_parts(*inner).is_some() =>
+        {
+            Some(*inner)
+        }
         _ => None,
     }
 }
 
 /// The struct `type_id` names, whether it is the struct or one reference to it.
-fn struct_key_behind_ref(
-    type_id: TypeId,
-    type_table: &TypeTable,
-) -> Option<(String, ModuleSource)> {
-    struct_key_of(type_id, type_table).or_else(|| reference_param_struct_key(type_id, type_table))
+fn struct_behind_ref(type_id: TypeId, type_table: &TypeTable) -> Option<TypeId> {
+    match type_table.struct_parts(type_id) {
+        Some(_) => Some(type_id),
+        None => referenced_struct(type_id, type_table),
+    }
 }
 
 /// What [`param_snapshot_unsound`] weighs a candidate against: everything the
@@ -450,7 +431,7 @@ struct WriteReach<'a> {
     writes: &'a ReachableWrites,
     targets: &'a WriteTargets,
     type_table: &'a TypeTable,
-    struct_fields: &'a StructFieldsIndex,
+    struct_fields: &'a StructFieldTypes,
 }
 
 /// Reject a reference candidate whose call-time snapshot the callee could
@@ -461,17 +442,17 @@ struct WriteReach<'a> {
 fn param_snapshot_unsound(
     func: &NirFunction,
     pi: usize,
-    stale: &[(String, ModuleSource)],
+    stale: &[TypeKey],
     reach: &WriteReach<'_>,
 ) -> bool {
     let type_table = reach.type_table;
     let param_type = func.params[pi].type_id;
-    let candidate_is_ref = reference_param_struct_key(param_type, type_table).is_some();
+    let candidate_is_ref = referenced_struct(param_type, type_table).is_some();
     let candidate_is_boxed_ref = type_table.box_payload_of(param_type).is_some();
     if !candidate_is_ref && !candidate_is_boxed_ref {
         return false;
     }
-    stale.iter().any(|struct_key| {
+    stale.iter().any(|&struct_key| {
         may_write_aliasing_location(
             reach.writes,
             struct_key,
@@ -501,20 +482,15 @@ fn param_snapshot_unsound(
 fn by_value_structs(
     ty: TypeId,
     type_table: &TypeTable,
-    struct_fields: &StructFieldsIndex,
-    out: &mut IndexSet<(String, ModuleSource)>,
+    struct_fields: &StructFieldTypes,
+    out: &mut IndexSet<TypeKey>,
 ) {
     match type_table.get(ty) {
-        ResolvedType::Struct { def, type_args } => {
-            let key = (
-                type_table.struct_mangled_name(*def, type_args),
-                type_table.struct_head_module(*def).clone(),
-            );
-            let fields = struct_fields.get(&key).cloned();
-            if out.insert(key)
-                && let Some(fields) = fields
+        ResolvedType::Struct { .. } => {
+            if out.insert(type_table.type_key(ty))
+                && let Some(fields) = struct_fields.of_type(ty, type_table)
             {
-                for field in fields {
+                for &field in fields {
                     by_value_structs(field, type_table, struct_fields, out);
                 }
             }
@@ -523,8 +499,7 @@ fn by_value_structs(
         // for, whose arguments may still sit in it by value.
         ResolvedType::GenericInstance { def, .. } if type_table.is_resource_def(*def) => {}
         ResolvedType::GenericInstance { type_args, .. } => {
-            let key = generic_instance_key(ty, type_table);
-            if out.insert(key) {
+            if out.insert(type_table.type_key(ty)) {
                 for &arg in type_args {
                     by_value_structs(arg, type_table, struct_fields, out);
                 }
@@ -537,20 +512,6 @@ fn by_value_structs(
     }
 }
 
-/// The key a `GenericInstance` is written under in a write target, as
-/// [`struct_key_of`] keys a `Struct`.
-fn generic_instance_key(ty: TypeId, type_table: &TypeTable) -> (String, ModuleSource) {
-    let ResolvedType::GenericInstance { def, .. } = type_table.get(ty) else {
-        unreachable!("only a generic instance is keyed here");
-    };
-    (
-        type_table
-            .struct_list_name(ty)
-            .expect("a generic instance renders a list name"),
-        type_table.def_module(*def).clone(),
-    )
-}
-
 /// Whether a parameter's *own* storage can be written through: the pointee of a
 /// plain `MutRef`, or a `&mut T` boxing collapsed onto `Box<T>`. Everything else
 /// arrives as a copy or a read-only handle — but its interior may still hand out
@@ -558,20 +519,6 @@ fn generic_instance_key(ty: TypeId, type_table: &TypeTable) -> (String, ModuleSo
 fn param_root_writable(param_type: TypeId, type_table: &TypeTable) -> bool {
     matches!(type_table.get(param_type), ResolvedType::MutRef(_))
         || type_table.is_mut_box(param_type)
-}
-
-/// Map a struct's identity → its field types, for transitive-containment queries.
-type StructFieldsIndex = IndexMap<(String, ModuleSource), Vec<TypeId>>;
-
-fn build_struct_fields_index(project: &NirPackage) -> StructFieldsIndex {
-    let mut out: StructFieldsIndex = IndexMap::default();
-    for s in &project.structs {
-        out.insert(
-            (s.name.clone(), s.module_source.clone()),
-            s.fields.iter().map(|f| f.type_id).collect(),
-        );
-    }
-    out
 }
 
 /// A shared `&T` collapsed onto `Box<T>`: the wrapper may be reachable, but
@@ -591,27 +538,23 @@ fn is_shared_box(ty: TypeId, type_table: &TypeTable) -> bool {
 fn mut_reachable_contains(
     ty: TypeId,
     writable: bool,
-    target: &(String, ModuleSource),
+    target: TypeKey,
     type_table: &TypeTable,
-    struct_fields: &StructFieldsIndex,
+    struct_fields: &StructFieldTypes,
     visited: &mut IndexSet<(TypeId, bool)>,
 ) -> bool {
     if !visited.insert((ty, writable)) {
         return false;
     }
     let (inner, inner_writable) = match type_table.get(ty) {
-        ResolvedType::Struct { def, type_args } => {
-            let key = (
-                type_table.struct_mangled_name(*def, type_args),
-                type_table.struct_head_module(*def).clone(),
-            );
+        ResolvedType::Struct { .. } => {
             let writable_here = writable || type_table.is_mut_box(ty);
-            if writable_here && &key == target {
+            if writable_here && type_table.type_key(ty) == target {
                 return true;
             }
-            let Some(fields) = struct_fields.get(&key) else {
-                return false;
-            };
+            let fields = struct_fields
+                .of_type(ty, type_table)
+                .expect("every struct type is declared");
             let fields_writable = writable_here && !is_shared_box(ty, type_table);
             return fields.iter().any(|&ft| {
                 mut_reachable_contains(
@@ -631,10 +574,7 @@ fn mut_reachable_contains(
             base_type: inner, ..
         } => (*inner, writable),
         ResolvedType::GenericInstance { def, type_args } => {
-            if writable
-                && !type_table.is_resource_def(*def)
-                && generic_instance_key(ty, type_table) == *target
-            {
+            if writable && !type_table.is_resource_def(*def) && type_table.type_key(ty) == target {
                 return true;
             }
             return type_args.iter().any(|&t| {
@@ -855,10 +795,10 @@ fn transitive_reachable_writes(
 /// [`Opaque`](ReachableWrites::Opaque) answers `true` unconditionally.
 fn may_write_aliasing_location(
     writes: &ReachableWrites,
-    target: &(String, ModuleSource),
+    target: TypeKey,
     targets: &WriteTargets,
     type_table: &TypeTable,
-    struct_fields: &StructFieldsIndex,
+    struct_fields: &StructFieldTypes,
 ) -> bool {
     match writes {
         ReachableWrites::Opaque => true,
@@ -1120,7 +1060,7 @@ fn mint_scalarized_clones(
         for pi in positions {
             let info = &candidates[&(*key, *pi)];
             let projection = SroaParamProjection {
-                struct_key: info.struct_key.clone(),
+                struct_key: info.struct_key,
                 field_index: info.field_index,
                 field_name: info.field_name.clone(),
                 form: info.form,
@@ -1379,7 +1319,7 @@ fn rewrite_call_sites(
             // through. Read from the package, not from this run's `clones`: a clone
             // minted on an earlier fixpoint iteration is still a clone, and losing
             // that fact projects the wrapper's field onto it a second time.
-            let scalar_param_struct: IndexMap<u32, (String, ModuleSource)> = reshapes
+            let scalar_param_struct: IndexMap<u32, TypeKey> = reshapes
                 .get(&key)
                 .map(|reshape| {
                     func.params
@@ -1388,7 +1328,7 @@ fn rewrite_call_sites(
                         .filter_map(|(position, param)| match reshape.shape(position) {
                             ParamShape::Narrowed(path) => {
                                 let held = path.last().expect("a narrowing projects a field");
-                                Some((param.local_index, held.struct_key.clone()))
+                                Some((param.local_index, held.struct_key))
                             }
                             ParamShape::Kept => None,
                             ParamShape::Dropped => unreachable!("a dropped parameter is gone"),
@@ -1431,7 +1371,7 @@ fn rewrite_calls_node(
     body: &mut Body,
     node: NodeRef,
     sroa_positions: &IndexMap<FnKey, (FnKey, IndexMap<usize, SroaInfo>)>,
-    scalar_param_struct: &IndexMap<u32, (String, ModuleSource)>,
+    scalar_param_struct: &IndexMap<u32, TypeKey>,
     type_table: &TypeTable,
 ) -> bool {
     let mut kids = Vec::new();
@@ -1450,7 +1390,7 @@ fn rewrite_call_expr(
     body: &mut Body,
     id: ExprId,
     sroa_positions: &IndexMap<FnKey, (FnKey, IndexMap<usize, SroaInfo>)>,
-    scalar_param_struct: &IndexMap<u32, (String, ModuleSource)>,
+    scalar_param_struct: &IndexMap<u32, TypeKey>,
     type_table: &TypeTable,
 ) -> bool {
     let ExprKind::Call { func_id, args, .. } = &body.exprs[id].kind else {
@@ -1525,7 +1465,7 @@ fn plan_call_site(
     body: &Body,
     args: &[Operand],
     positions: &IndexMap<usize, SroaInfo>,
-    scalar_param_struct: &IndexMap<u32, (String, ModuleSource)>,
+    scalar_param_struct: &IndexMap<u32, TypeKey>,
     type_table: &TypeTable,
 ) -> Vec<(usize, ArgPlan)> {
     let mut plan: Vec<(usize, ArgPlan)> = positions
@@ -1569,12 +1509,12 @@ fn classify_arg(
     body: &Body,
     op: Operand,
     info: &SroaInfo,
-    scalar_param_struct: &IndexMap<u32, (String, ModuleSource)>,
+    scalar_param_struct: &IndexMap<u32, TypeKey>,
     type_table: &TypeTable,
 ) -> ArgPlan {
     // Matched as an operand, since the promoted form of that local reads it
     // just as the skeleton one does.
-    if scalarized_from(body, op, scalar_param_struct).as_ref() == Some(&info.struct_key) {
+    if scalarized_from(body, op, scalar_param_struct) == Some(info.struct_key) {
         return ArgPlan::Forwarded;
     }
     if let Some(arg) = op.as_expr()
@@ -1589,7 +1529,7 @@ fn classify_arg(
         None => op.as_value().and_then(|v| body.values.type_of(v)),
     };
     match arg_ty {
-        Some(ty) if denotes_struct(ty, &info.struct_key, type_table) => ArgPlan::Projected,
+        Some(ty) if denotes_struct(ty, info.struct_key, type_table) => ArgPlan::Projected,
         _ => ArgPlan::Blocked,
     }
 }
@@ -1598,12 +1538,12 @@ fn classify_arg(
 fn scalarized_from(
     body: &Body,
     op: Operand,
-    scalar_param_struct: &IndexMap<u32, (String, ModuleSource)>,
-) -> Option<(String, ModuleSource)> {
+    scalar_param_struct: &IndexMap<u32, TypeKey>,
+) -> Option<TypeKey> {
     scalar_param_struct
         .iter()
         .find(|(local, _)| is_local_operand(body, op, **local))
-        .map(|(_, key)| key.clone())
+        .map(|(_, key)| *key)
 }
 
 /// The single auto-ref wrapper [`rewrite_arg`] peels, so validation and rewrite
@@ -1619,11 +1559,11 @@ fn peel_one_ref(body: &Body, arg: ExprId) -> ExprId {
 }
 
 /// Whether `ty` names the wrapper struct, directly or behind a reference or box.
-fn denotes_struct(ty: TypeId, key: &(String, ModuleSource), type_table: &TypeTable) -> bool {
-    struct_key_behind_ref(ty, type_table).as_ref() == Some(key)
+fn denotes_struct(ty: TypeId, key: TypeKey, type_table: &TypeTable) -> bool {
+    struct_behind_ref(ty, type_table).map(|s| type_table.type_key(s)) == Some(key)
         || type_table
             .box_payload_of(ty)
-            .is_some_and(|p| struct_key_of(p, type_table).as_ref() == Some(key))
+            .is_some_and(|p| struct_key_of(p, type_table) == Some(key))
 }
 
 /// The argument operand at a scalarized parameter position. The position exists
@@ -1648,13 +1588,13 @@ fn rewrite_arg_operand(
     body: &mut Body,
     op: Operand,
     info: &SroaInfo,
-    scalar_param_struct: &IndexMap<u32, (String, ModuleSource)>,
+    scalar_param_struct: &IndexMap<u32, TypeKey>,
     type_table: &TypeTable,
     span: Span,
 ) -> Operand {
     // The promoted form of Case 2: the local already holds the field, so the
     // call carries it unchanged.
-    if scalarized_from(body, op, scalar_param_struct).as_ref() == Some(&info.struct_key) {
+    if scalarized_from(body, op, scalar_param_struct) == Some(info.struct_key) {
         return op;
     }
     let Some(arg) = op.as_expr() else {
@@ -1668,7 +1608,7 @@ fn rewrite_arg(
     body: &mut Body,
     arg: ExprId,
     info: &SroaInfo,
-    scalar_param_struct: &IndexMap<u32, (String, ModuleSource)>,
+    scalar_param_struct: &IndexMap<u32, TypeKey>,
     type_table: &TypeTable,
 ) {
     // Peel auto-ref wrappers (`&x`, `&mut x`).
@@ -1705,8 +1645,7 @@ fn rewrite_arg(
     }
 
     // Case 2: a local whose own param was SROA'd from the same struct.
-    if scalarized_from(body, Operand::Expr(arg), scalar_param_struct).as_ref()
-        == Some(&info.struct_key)
+    if scalarized_from(body, Operand::Expr(arg), scalar_param_struct) == Some(info.struct_key)
     {
         body.exprs[arg].type_id = info.scalar_type_id;
         return;
@@ -1744,7 +1683,7 @@ fn literal_field(
     else {
         return None;
     };
-    if struct_key_of(*struct_type, type_table).as_ref() != Some(&info.struct_key)
+    if struct_key_of(*struct_type, type_table) != Some(info.struct_key)
         || !fields
             .iter()
             .all(|f| f.field_index == info.field_index || discardable_field(body, f.value))
