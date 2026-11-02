@@ -1,0 +1,42 @@
+# Code scanning on what reaches main, and weekly for the queries CodeQL added.
+# Not on pull requests: a Rust analysis holds a runner for over 20 minutes, and
+# runner concurrency is what a pull request's CI waits on. This advanced setup
+# replaces the repository's default setup, which must be off for it to upload.
+name: CodeQL
+
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "37 18 * * 0"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions: {}
+
+jobs:
+  analyze:
+    name: Analyze (${{ matrix.language }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      security-events: write
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [actions, rust]
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: github/codeql-action/init@v4
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: none
+      - uses: github/codeql-action/analyze@v4
+        with:
+          category: /language:${{ matrix.language }}

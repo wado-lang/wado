@@ -101,7 +101,36 @@ run = "mkdir -p target && git ls-files '*.rs' > target/rust-paths.txt"
 [tasks.check-rust-paths]
 description = "Fail if a Rust file gained a `crate::` / `super::` path outside a module-level `use` item"
 depends = ["rust-corpus"]
-run = "scripts/dev-bin.sh wado run package-gale/tools/rust_inline_paths.wado -- --check --paths-from target/rust-paths.txt"
+run = """
+#!/usr/bin/env bash
+set -euo pipefail
+# A `wado run` parses on one core, so the corpus goes to one run per core,
+# dealt in turn so the large files of one directory spread across them. The
+# check is per file, so a shard needs no other's paths.
+wado="$(scripts/dev-bin.sh --path wado)"
+tool=package-gale/tools/rust_inline_paths.wado
+shards="$(getconf _NPROCESSORS_ONLN)"
+rm -f target/rust-paths.shard-*
+i=0
+while IFS= read -r path; do
+    echo "${path}" >> "target/rust-paths.shard-$((i % shards))"
+    i=$((i + 1))
+done < target/rust-paths.txt
+# Compiles the tool into the build cache once, rather than once per shard.
+head -n 1 target/rust-paths.txt > target/rust-paths.warm
+"${wado}" run "${tool}" -- --check --paths-from target/rust-paths.warm > /dev/null
+pids=()
+for shard in target/rust-paths.shard-*; do
+    "${wado}" run "${tool}" -- --check --paths-from "${shard}" > "${shard}.log" 2>&1 &
+    pids+=("$!")
+done
+status=0
+for pid in "${pids[@]}"; do
+    wait "${pid}" || status=1
+done
+cat target/rust-paths.shard-*.log
+exit "${status}"
+"""
 
 [tasks.list-rust-paths]
 description = "List the inline `crate::` / `super::` paths the named Rust files carry"

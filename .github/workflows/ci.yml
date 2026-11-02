@@ -17,15 +17,23 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  # A change to Markdown no gate reads skips every test job below, and the
-  # aggregator `test` reports success on their behalf.
+  # The binaries the test jobs run, each compiled once per run and handed over
+  # as an artifact. The runners' concurrency cap, not any one job, is what a run
+  # waits on, so a compile repeated per job is paid for in queue time: `wado`
+  # was compiled nine times a run and the e2e binary five.
   #
-  # The skip is a job-level `if`, not a workflow-level `paths-ignore`: a
-  # path-ignored workflow never creates the "Test" check run, so the required
-  # check would stay stuck "Expected" and block the PR. A job-level skip counts
-  # as passing.
-  changes:
-    name: Detect changes
+  # The jobs that compile more start from this one's target/, so the workspace
+  # compiles once too. `mise run check-unit-graph` keeps their feature
+  # resolution the same as this build's, without which they would share no unit.
+  #
+  # It first decides whether the change reaches any test: a change to Markdown
+  # no gate reads skips every job below, and the aggregator `test` reports
+  # success on their behalf. The skip is a job-level `if`, not a workflow-level
+  # `paths-ignore`: a path-ignored workflow never creates the "Test" check run,
+  # so the required check would stay stuck "Expected" and block the PR. A
+  # job-level skip counts as passing.
+  build-wado:
+    name: Build (wado)
     runs-on: ubuntu-latest
     timeout-minutes: 60
     permissions:
@@ -38,8 +46,10 @@ jobs:
       # `.git/config`.
       - uses: actions/checkout@v7
         with:
-          fetch-depth: 0
           persist-credentials: false
+      # Comparing two trees needs neither the history between them nor any
+      # other commit, so the base is fetched alone. One that cannot be fetched
+      # (a new branch, a force push) runs everything.
       - id: filter
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
@@ -47,12 +57,12 @@ jobs:
         run: |
           set -euo pipefail
           base="${BASE_SHA:-$BEFORE_SHA}"
-          if [ -z "$base" ] || ! git cat-file -e "${base}^{commit}" 2>/dev/null; then
+          if [ -z "$base" ] || ! git fetch --quiet --no-tags --depth=1 origin "$base"; then
             echo "No usable base ref; running full CI."
             echo "code=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          files="$(git diff --name-only "${base}...HEAD")"
+          files="$(git diff --name-only "$base" HEAD)"
           echo "Changed files:"
           echo "$files"
           # Feed grep a here-string, not `printf | grep -q`: under `pipefail`
@@ -69,48 +79,32 @@ jobs:
             echo "code=false" >> "$GITHUB_OUTPUT"
           fi
 
-  # The binaries the test jobs run, each compiled once per run and handed over
-  # as an artifact. The runners' concurrency cap, not any one job, is what a run
-  # waits on, so a compile repeated per job is paid for in queue time: `wado`
-  # was compiled nine times a run and the e2e binary five.
-  #
-  # The jobs that compile more start from this one's target/, so the workspace
-  # compiles once too. `mise run check-unit-graph` keeps their feature
-  # resolution the same as this build's, without which they would share no unit.
-  build-wado:
-    name: Build (wado)
-    needs: changes
-    if: needs.changes.outputs.code == 'true'
-    runs-on: ubuntu-latest
-    timeout-minutes: 60
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          persist-credentials: false
-      - uses: ./.github/actions/setup
+      - if: steps.filter.outputs.code == 'true'
+        uses: ./.github/actions/setup
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
       # cargo-cache.yml builds this same command, so only the workspace crates
       # compile here.
-      - run: node scripts/prebuilt.ts build wado
-      - uses: actions/upload-artifact@v7
+      - if: steps.filter.outputs.code == 'true'
+        run: node scripts/prebuilt.ts build wado
+      - if: steps.filter.outputs.code == 'true'
+        uses: actions/upload-artifact@v7
         with:
           name: prebuilt-wado
           path: |
             target/debug/wado
             target/debug/wado-dev-tools
           if-no-files-found: error
-      - uses: ./.github/actions/target-handoff
+      - if: steps.filter.outputs.code == 'true'
+        uses: ./.github/actions/target-handoff
         with:
           mode: save
 
   build-e2e:
     name: Build (E2E)
-    needs: [changes, build-wado]
-    if: needs.changes.outputs.code == 'true'
+    needs: build-wado
+    if: needs.build-wado.outputs.code == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 60
     permissions:
@@ -142,8 +136,8 @@ jobs:
   # every I/O call delegated to the wado-cli host.
   test-core:
     name: Test (Rust)
-    needs: [changes, build-wado]
-    if: needs.changes.outputs.code == 'true'
+    needs: build-wado
+    if: needs.build-wado.outputs.code == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 60
     permissions:
@@ -180,6 +174,7 @@ jobs:
   test-level:
     name: Test (${{ matrix.level }})
     needs: [build-wado, build-e2e]
+    if: needs.build-wado.outputs.code == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 60
     permissions:
@@ -225,6 +220,7 @@ jobs:
   test-wado:
     name: Test (packages)
     needs: build-wado
+    if: needs.build-wado.outputs.code == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 60
     permissions:
@@ -247,6 +243,7 @@ jobs:
   test-gale-o2:
     name: Test (Gale)
     needs: build-wado
+    if: needs.build-wado.outputs.code == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 60
     permissions:
@@ -263,37 +260,13 @@ jobs:
 
       - run: mise run test-gale-o2
 
-  # benchmark/'s tests. Fuel does not depend on the host, so the `test "fuel"`
-  # regions are held to `benchmark/fuel.json` exactly, at -O2. The publish dry
-  # run rides here because this job finishes early.
-  test-fuel:
-    name: Test (benchmark)
-    needs: build-wado
-    runs-on: ubuntu-latest
-    timeout-minutes: 60
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          persist-credentials: false
-      - uses: ./.github/actions/setup
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          rust-cache: false
-          prebuilt: wado
-
-      - run: mise run test-fuel
-      - run: scripts/dev-bin.sh wado test -O2 --format tap benchmark
-      - run: scripts/dev-bin.sh wado publish --dry-run
-
   # The sandbox's escape tests, on what no other job runs: Seatbelt, and the
   # seccomp filter's arm64 branch, whose architecture check and system call
   # table differ from x86_64's. See docs/wep-2026-10-21-core-process.md.
   test-sandbox:
     name: Test (sandbox, ${{ matrix.name }})
-    needs: changes
-    if: needs.changes.outputs.code == 'true'
+    needs: build-wado
+    if: needs.build-wado.outputs.code == 'true'
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
     permissions:
@@ -331,10 +304,13 @@ jobs:
             done
 
   # `wado-run-webgpu` is its own workspace, so no job above builds, lints or
-  # tests it. The corpus checks ride here because this job finishes early.
+  # tests it. The corpus checks and benchmark/ ride here because this job
+  # finishes early. Each step after the runner's build leaves cores idle on its
+  # own, so they run in groups sized to fit the runner's memory.
   test-webgpu:
-    name: Test (WebGPU, corpus)
+    name: Test (WebGPU, corpus, benchmark)
     needs: build-wado
+    if: needs.build-wado.outputs.code == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 60
     permissions:
@@ -376,28 +352,34 @@ jobs:
           - run: mise run check-grammar
           - run: mise run check-highlight
           - run: mise run test-web-glue
+      # Fuel does not depend on the host, so the `test "fuel"` regions are held
+      # to `benchmark/fuel.json` exactly, at -O2.
+      - parallel:
+          - run: mise run test-fuel
+          - run: scripts/dev-bin.sh wado test -O2 --format tap benchmark
+          - run: scripts/dev-bin.sh wado publish --dry-run
 
   test:
     name: Test
     if: always()
-    needs: [changes, build-wado, build-e2e, test-core, test-wado, test-gale-o2, test-fuel, test-level, test-webgpu, test-sandbox]
+    needs: [build-wado, build-e2e, test-core, test-wado, test-gale-o2, test-level, test-webgpu, test-sandbox]
     runs-on: ubuntu-latest
     timeout-minutes: 60
     permissions: {}
     steps:
-      # Every job named in `needs` must have succeeded, `changes` included, so
-      # adding one there is the only edit needed. A matrix (`test-level`,
+      # Every job named in `needs` must have succeeded, `build-wado` included,
+      # so adding one there is the only edit needed. A matrix (`test-level`,
       # `test-sandbox`) counts as one job, successful only if every entry was.
       - name: Check all jobs passed
         env:
           NEEDS: ${{ toJSON(needs) }}
-          CHANGES_RESULT: ${{ needs.changes.result }}
-          CODE: ${{ needs.changes.outputs.code }}
+          BUILD_RESULT: ${{ needs.build-wado.result }}
+          CODE: ${{ needs.build-wado.outputs.code }}
         run: |
           set -euo pipefail
           # Docs-only change: the test jobs were skipped on purpose, so
           # report success and let the required "Test" check go green at once.
-          if [ "$CHANGES_RESULT" = "success" ] && [ "$CODE" != "true" ]; then
+          if [ "$BUILD_RESULT" = "success" ] && [ "$CODE" != "true" ]; then
             echo "Docs-only change: test jobs skipped, reporting success."
             exit 0
           fi

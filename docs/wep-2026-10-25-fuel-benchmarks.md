@@ -94,7 +94,7 @@ and `ml/`.
 
 ### CI holds fuel exactly and records it
 
-`benchmark/fuel.json` is the baseline, `-O2` alone. CI's `test-fuel` job, a
+`benchmark/fuel.json` is the baseline, `-O2` alone. CI's `test-fuel` step, a
 test like any other, fails on any difference from it, either way, and names
 each series that moved. `-O2` is the level a performance change answers for;
 `-O1` and `-O3` are for reference, so the `Benchmark` workflow records them and
