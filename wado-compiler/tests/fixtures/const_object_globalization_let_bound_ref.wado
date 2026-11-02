@@ -1,0 +1,36 @@
+// Constant Object Globalization of a literal bound by reference:
+// `let s: &String = &"literal"; out.append(s)`, the shape inlining
+// `Reflect::decl_name` into `Inspect` leaves. Handing `s` to a `&` parameter
+// that neither writes nor keeps it is a read, as handing `&"literal"` directly
+// is, so the literal is built once at instantiation, not once per call.
+
+use { println, Stdout } from "core:cli";
+
+struct Out { text: String }
+
+impl Out {
+    #[inline(never)]
+    fn append(&mut self, s: &String) {
+        self.text.push_str(s);
+    }
+}
+
+#[inline(never)]
+fn emit(out: &mut Out) {
+    let s: &String = &"created_at";
+    out.append(s);
+}
+
+export fn run() with Stdout {
+    let mut out = Out { text: builtin::black_box("") };
+    for let mut k = 0; k < 3; k += 1 {
+        emit(&mut out);
+    }
+    println(out.text);
+}
+
+__DATA__
+{
+    "stdout": "created_atcreated_atcreated_at\n",
+    "wir_expect:O2": ["(out, global:const_object_globalization_let_bound_ref.wado::$const_obj"]
+}

@@ -2472,13 +2472,16 @@ fn call_arg_readonly_operand(
 }
 
 /// A binding handed to a call as an argument. `&` is a read; `&mut`
-/// escapes; passing the binding itself by value is a read only where the
-/// parameter only reads it.
+/// escapes; passing the binding itself is a read only where the parameter only
+/// reads it: by value, or, for a binding that is itself a `&`, by a shared
+/// reference the callee does not deliver.
 fn call_arg_readonly(body: &Body, arg: ExprId, idx: u32, gate: &Gate<'_>, arg_use: ArgUse) -> bool {
     match &body.exprs[arg].kind {
         ExprKind::Local { index, .. } => {
             *index != idx
-                || matches!(arg_use, ArgUse::Param(callee, pos) if gate.callee_param_readonly(callee, pos))
+                || matches!(arg_use, ArgUse::Param(callee, pos)
+                    if gate.callee_param_readonly(callee, pos)
+                        || gate.callee_only_refs_arg(callee, pos))
         }
         ExprKind::Unary {
             op: NirUnaryOp::MutRef,
