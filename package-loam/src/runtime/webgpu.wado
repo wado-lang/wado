@@ -291,9 +291,6 @@ struct Renamed {
     to: List<i32>,
 }
 
-/// The slots `now` names in place of those `was` named, where each of `now` is
-/// laid out as the one of `was` at its place: at the same place in its buffer,
-/// and two in one buffer exactly where those were.
 /// Whether the bind group cached under `key`, as `group_key` spells one, binds
 /// a buffer whose `id` is among `ids`.
 fn binds_any(key: &List<i32>, ids: &HashSet<i32>) -> bool {
@@ -305,6 +302,21 @@ fn binds_any(key: &List<i32>, ids: &HashSet<i32>) -> bool {
     return false;
 }
 
+/// How many of `seen` are `value`, which then joins them.
+fn occurrence(seen: &mut List<i32>, value: i32) -> i32 {
+    let mut n = 0;
+    for let v of seen {
+        if *v == value {
+            n += 1;
+        }
+    }
+    seen.push(value);
+    return n;
+}
+
+/// The slots `now` names in place of those `was` named, where each of `now` is
+/// laid out as the one of `was` at its place: at the same place in its buffer,
+/// and two in one buffer exactly where those were.
 fn renamed_over(was: &List<DeviceTensor>, now: &List<DeviceTensor>) -> Option<Renamed> {
     let mut slots = Renamed::new();
     for let i of 0..<now.len() {
@@ -674,13 +686,7 @@ impl WebGpuBackend {
             return null;
         };
         let key = r.launch;
-        let mut nth = 0;
-        for let words of &r.made {
-            if *words == count {
-                nth += 1;
-            }
-        }
-        r.made.push(count);
+        let mut nth = occurrence(&mut r.made, count);
         if !self.owned.contains_key(key) {
             self.owned[key] = [];
         }
@@ -700,7 +706,8 @@ impl WebGpuBackend {
     }
 
     /// Starts the launch whose root is the node `root` of the program
-    /// `serial`, which makes its buffers in those its calls own.
+    /// `serial`, which makes its buffers in those its calls own and binds the
+    /// parameters they bound.
     internal fn launching(&mut self, serial: i32, root: i32) {
         let launch = [serial, root] as List<i32>;
         if !self.launch_parameters.contains_key(launch) {
@@ -742,13 +749,7 @@ impl WebGpuBackend {
         if !r.own {
             return self.parameter_span(params);
         }
-        let mut nth = 0;
-        for let p of &r.dispatched {
-            if *p == pipeline {
-                nth += 1;
-            }
-        }
-        r.dispatched.push(pipeline);
+        let mut nth = occurrence(&mut r.dispatched, pipeline);
         let own = &mut self.launch_parameters[r.launch];
         for let i of 0..<own.spans.len() {
             if own.pipelines[i] != pipeline {
