@@ -720,8 +720,12 @@ literal
     | 'null'
     ;
 
+// A raw template's closer repeats its opener's `#`s, which a lexer mode can
+// count only by holding one mode per count. Two cover the corpus.
 templateString
     : BACKTICK templatePart* BACKTICK
+    | RAW_OPEN templatePart* RAW_CLOSE
+    | RAW2_OPEN templatePart* RAW2_CLOSE
     ;
 
 templatePart
@@ -779,6 +783,14 @@ RBRACE
 
 BACKTICK
     : '`' -> pushMode(TEMPLATE)
+    ;
+
+RAW_OPEN
+    : '#`' -> pushMode(RAW_TEMPLATE)
+    ;
+
+RAW2_OPEN
+    : '##`' -> pushMode(RAW2_TEMPLATE)
     ;
 
 CHAR_LITERAL
@@ -843,4 +855,42 @@ DOLLAR_TEXT
 
 TEMPLATE_END
     : '`' -> type(BACKTICK), popMode
+    ;
+
+// A backslash is text. The longest match takes `${` over `$`, and the closer
+// over a lone backtick.
+mode RAW_TEMPLATE;
+
+RAW_CLOSE
+    : '`#' -> popMode
+    ;
+
+RAW_INTERP_OPEN
+    : '${' -> type(INTERP_OPEN), pushMode(DEFAULT_MODE)
+    ;
+
+RAW_TEXT
+    : ~[`$]+ -> type(TEMPLATE_TEXT)
+    ;
+
+RAW_LONE
+    : [`$] -> type(TEMPLATE_TEXT)
+    ;
+
+mode RAW2_TEMPLATE;
+
+RAW2_CLOSE
+    : '`##' -> popMode
+    ;
+
+RAW2_INTERP_OPEN
+    : '${' -> type(INTERP_OPEN), pushMode(DEFAULT_MODE)
+    ;
+
+RAW2_TEXT
+    : ~[`$]+ -> type(TEMPLATE_TEXT)
+    ;
+
+RAW2_LONE
+    : [`$] -> type(TEMPLATE_TEXT)
     ;

@@ -5,8 +5,10 @@ use std::fmt;
 use crate::ast::AstIdSpace;
 #[derive(Debug, Clone, PartialEq)]
 pub enum TemplateTokenPart {
-    /// Literal text with escape sequences resolved (e.g. `\$` → `$`). Only
-    /// `${` opens an interpolation, so bare `{` / `}` stay literal.
+    /// Literal text as a cooked template spells it, escapes unresolved: the
+    /// elaborator's unescaper decodes it. A raw template's text arrives
+    /// respelled that way. Only `${` opens an interpolation, so bare `{` / `}`
+    /// stay literal.
     Literal(String),
     /// An interpolation. The lexer splits the content at the top-level `:`, so
     /// `expr` is the raw expression source (without enclosing braces) and
@@ -22,6 +24,49 @@ pub enum TemplateTokenPart {
         /// back on the file they came from.
         origin: Position,
     },
+}
+
+/// How a template literal is delimited, which decides what a backslash in it
+/// means.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TemplateQuote {
+    /// `` `…` ``: a backslash starts an escape.
+    Cooked,
+    /// `` #`…`# ``, with `hashes` `#`s on each end: a backslash is itself.
+    Raw { hashes: usize },
+}
+
+impl TemplateQuote {
+    /// The run of `#`s on each end.
+    #[must_use]
+    pub fn hashes(self) -> String {
+        match self {
+            Self::Cooked => String::new(),
+            Self::Raw { hashes } => "#".repeat(hashes),
+        }
+    }
+
+    /// A segment as this quoting writes it, from the cooked spelling the lexer
+    /// gave it. In a raw template every backslash there is one the lexer added,
+    /// before a `\` or a backtick.
+    #[must_use]
+    pub fn spell(self, cooked: &str) -> String {
+        match self {
+            Self::Cooked => cooked.to_string(),
+            Self::Raw { .. } => {
+                let mut text = String::with_capacity(cooked.len());
+                let mut chars = cooked.chars();
+                while let Some(c) = chars.next() {
+                    text.push(if c == '\\' {
+                        chars.next().expect("the lexer escapes a character")
+                    } else {
+                        c
+                    });
+                }
+                text
+            }
+        }
+    }
 }
 
 impl TemplateTokenPart {
@@ -151,7 +196,10 @@ pub enum TokenKind {
     ByteStringLit(String),
     /// Byte literal `b'x'`: raw source between the quotes. Lowers to a `u8`.
     ByteCharLit(String),
-    TemplateStringLit(Vec<TemplateTokenPart>), // Structured template string parts
+    TemplateStringLit {
+        parts: Vec<TemplateTokenPart>,
+        quote: TemplateQuote,
+    },
     /// Char literal: raw source text between the quotes (escape sequences not interpreted).
     CharLit(String),
     NumberLit(String), // String representation only, type determined by context in elaborator
@@ -265,7 +313,7 @@ impl fmt::Display for TokenKind {
             Self::ByteStringLit(_) => return f.write_str("a byte string literal"),
             Self::ByteCharLit(_) => return f.write_str("a byte literal"),
             Self::CharLit(_) => return f.write_str("a character literal"),
-            Self::TemplateStringLit(_) => return f.write_str("a template literal"),
+            Self::TemplateStringLit { .. } => return f.write_str("a template literal"),
             Self::Eof => return f.write_str("end of file"),
             Self::LParen => "(",
             Self::RParen => ")",

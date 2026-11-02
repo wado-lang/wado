@@ -1,0 +1,27 @@
+// A tag over a raw template sees the text as written in `lit`, and in `raw`
+// the spelling a cooked template would give the same text, so a raw template
+// inspects as the cooked template it equals.
+use { println, Stdout } from "core:cli";
+use { ReflectTemplate } from "core:prelude";
+
+fn segments<T: ReflectTemplate<Holes = [..V]>, ..V>(t: T) -> String {
+    let mut out = "";
+    for let h of ReflectTemplate::<T>::members() {
+        out.push_str(&`[${h.lit(&t)}|${h.raw(&t)}]`);
+    }
+    out.push_str(&`[${ReflectTemplate::<T>::tail(&t)}|${ReflectTemplate::<T>::raw_tail(&t)}]`);
+    return out;
+}
+
+fn inspected<T: ReflectTemplate<Holes = [..V]> + Inspect, affine ..V>(t: T) -> String {
+    return `${t:?}`;
+}
+
+export fn run() with Stdout {
+    let n = builtin::black_box(7);
+    println(segments##`\d${n}a`b`##);
+    println(inspected#`\d=${n}`#);
+}
+
+__DATA__
+{"stdout": "[\\d|\\\\d][a`b|a\\`b]\n`\\\\d=${7}`\n"}

@@ -3790,12 +3790,32 @@ fn test_format_attribute_numeric_arg_preserved() {
 
 #[test]
 fn test_format_tagged_template_keeps_tag_adjacent() {
-    let source =
-        "fn foo() {\n    let s = sql`id = ${id:>4} \\n`;\n    let r = String::raw`a\\nb`;\n}\n";
+    let source = "fn foo() {\n    let s = sql`id = ${id:>4} \\n`;\n    let r = re#`\\d+`#;\n}\n";
     let formatted = wado_compiler::format(source).expect("format failed");
     assert_eq!(
         formatted, source,
         "a tag prints directly before the backtick"
+    );
+    let formatted2 = wado_compiler::format(&formatted).expect("format failed");
+    assert_eq!(formatted, formatted2, "format should be idempotent");
+}
+
+#[test]
+fn test_format_raw_template_kept_as_written() {
+    let source = r"fn foo() {
+    let a = #`\d+\${ n }\`#;
+    let b = ##`a`#b ${#`\`#}`##;
+}
+";
+    let expected = r"fn foo() {
+    let a = #`\d+\${n}\`#;
+    let b = ##`a`#b ${#`\`#}`##;
+}
+";
+    let formatted = wado_compiler::format(source).expect("format failed");
+    assert_eq!(
+        formatted, expected,
+        "a raw template keeps its delimiters and backslashes"
     );
     let formatted2 = wado_compiler::format(&formatted).expect("format failed");
     assert_eq!(formatted, formatted2, "format should be idempotent");
@@ -3984,7 +4004,7 @@ fn token_starts(source: &str) -> Vec<(usize, usize, usize)> {
     fn collect(tokens: &[Token], out: &mut Vec<(usize, usize, usize)>) {
         for token in tokens {
             out.push((token.span.start, token.span.line, token.span.column));
-            let TokenKind::TemplateStringLit(parts) = &token.kind else {
+            let TokenKind::TemplateStringLit { parts, .. } = &token.kind else {
                 continue;
             };
             for part in parts {

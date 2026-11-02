@@ -14,7 +14,7 @@ use crate::escape::escape_string;
 use crate::hashmap::IndexMap;
 use crate::lexer::WILDCARD;
 use crate::name::{UNIT_TYPE_NAME, repeated_element};
-use crate::token::Span;
+use crate::token::{Span, TemplateQuote};
 
 /// Identity of one `AstId` allocation space — one per parse. Each top-level
 /// [`crate::parser::Parser`] draws a fresh one from a process-global counter and
@@ -4240,7 +4240,10 @@ pub struct ClosureParam {
 #[derive(Debug, Clone)]
 pub struct TemplateStringExpr {
     pub id: AstId,
+    /// Spelled as a cooked template, whatever the `quote`.
     pub parts: Vec<TemplatePart>,
+    /// What the source wrote, which only printing the source back reads.
+    pub quote: TemplateQuote,
     pub span: Span,
 }
 

@@ -343,27 +343,36 @@ fn generate_textmate_grammar(def: &SyntaxDefinition) -> serde_json::Value {
                         ]
                     },
                     {
+                        "name": "string.interpolated.raw.wado",
+                        "begin": "(#+)`",
+                        "end": "`\\1",
+                        "patterns": [
+                            { "include": "#template-interpolation" }
+                        ]
+                    },
+                    {
                         "name": "string.interpolated.wado",
                         "begin": "`",
                         "end": "`",
                         "patterns": [
                             { "include": "#string-escapes" },
-                            {
-                                "name": "meta.interpolation.wado",
-                                "begin": "\\$\\{",
-                                "end": "\\}",
-                                "beginCaptures": {
-                                    "0": { "name": "punctuation.definition.interpolation.begin.wado" }
-                                },
-                                "endCaptures": {
-                                    "0": { "name": "punctuation.definition.interpolation.end.wado" }
-                                },
-                                "patterns": [
-                                    { "include": "$self" }
-                                ]
-                            }
+                            { "include": "#template-interpolation" }
                         ]
                     }
+                ]
+            },
+            "template-interpolation": {
+                "name": "meta.interpolation.wado",
+                "begin": "\\$\\{",
+                "end": "\\}",
+                "beginCaptures": {
+                    "0": { "name": "punctuation.definition.interpolation.begin.wado" }
+                },
+                "endCaptures": {
+                    "0": { "name": "punctuation.definition.interpolation.end.wado" }
+                },
+                "patterns": [
+                    { "include": "$self" }
                 ]
             },
             "string-escapes": {

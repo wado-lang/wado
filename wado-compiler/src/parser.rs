@@ -30,7 +30,9 @@ use crate::escape::{quoted, unescape_string};
 use crate::lexer::{LexResult, WILDCARD, defaults_to_float, is_decimal_integer, lex_interpolation};
 use crate::name::{contract_holder_name, namespaced_name, repeat_pack_name};
 use crate::syntax::statement_keyword_name_message;
-use crate::token::{Position, Span, TemplateTokenPart, Token, TokenKind, TokenKind as T};
+use crate::token::{
+    Position, Span, TemplateQuote, TemplateTokenPart, Token, TokenKind, TokenKind as T,
+};
 use crate::{ast, format_spec, hashmap};
 use std::sync::Arc;
 
@@ -4634,7 +4636,9 @@ impl Parser {
                 // and comments never reach the token stream, so a byte gap is
                 // the adjacency test; with a gap the literal is left for the
                 // ordinary unexpected-token error.
-                TokenKind::TemplateStringLit(_) if expr.span().end == self.peek().span.start => {
+                TokenKind::TemplateStringLit { .. }
+                    if expr.span().end == self.peek().span.start =>
+                {
                     if !matches!(expr, Expr::Ident(_)) {
                         return Err(self.error_at_span(
                             self.peek().span,
@@ -4642,20 +4646,17 @@ impl Parser {
                         ));
                     }
                     let template_token = self.advance();
-                    let TokenKind::TemplateStringLit(parts) = template_token.kind.clone() else {
+                    let TokenKind::TemplateStringLit { parts, quote } = template_token.kind.clone()
+                    else {
                         unreachable!("matched a template literal token")
                     };
                     let template_span = template_token.span;
-                    let Expr::TemplateString(template) =
-                        self.parse_template_string_parts(parts, template_span)?
-                    else {
-                        unreachable!("template parts parse to a template string")
-                    };
+                    let template = self.parse_template_string_parts(parts, quote, template_span)?;
                     let span = expr.span().merge(&template_span);
                     expr = Expr::TaggedTemplate(Box::new(TaggedTemplateExpr {
                         id: self.alloc_ast_id(),
                         tag: expr,
-                        template: *template,
+                        template,
                         span,
                     }));
                 }
@@ -4971,9 +4972,10 @@ impl Parser {
                 Ok(self.consume_literal(Literal::Bytes(raw), start_span))
             }
             TokenKind::ByteCharLit(raw) => Ok(self.consume_literal(Literal::Byte(raw), start_span)),
-            TokenKind::TemplateStringLit(parts) => {
+            TokenKind::TemplateStringLit { parts, quote } => {
                 self.advance();
-                self.parse_template_string_parts(parts, start_span)
+                let template = self.parse_template_string_parts(parts, quote, start_span)?;
+                Ok(Expr::TemplateString(Box::new(template)))
             }
             TokenKind::True => Ok(self.consume_literal(Literal::Bool(true), start_span)),
             TokenKind::False => Ok(self.consume_literal(Literal::Bool(false), start_span)),
@@ -7147,8 +7149,9 @@ impl Parser {
     fn parse_template_string_parts(
         &mut self,
         token_parts: Vec<TemplateTokenPart>,
+        quote: TemplateQuote,
         span: Span,
-    ) -> ParseResult<Expr> {
+    ) -> ParseResult<TemplateStringExpr> {
         let mut parts = Vec::new();
 
         for token_part in token_parts {
@@ -7197,11 +7200,12 @@ impl Parser {
             }
         }
 
-        Ok(Expr::TemplateString(Box::new(TemplateStringExpr {
+        Ok(TemplateStringExpr {
             id: self.alloc_ast_id(),
             parts,
+            quote,
             span,
-        })))
+        })
     }
 
     /// Reject a malformed format specifier. `origin` is where the specifier

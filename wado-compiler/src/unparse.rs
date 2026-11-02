@@ -2688,14 +2688,13 @@ impl<'a> Unparser<'a> {
         self.unparse_body(c.span.start, &c.body, closure_body_needs_parens(&c.body));
     }
 
-    /// Twin of [`unparse_template_string_into`], which prints the same shape
-    /// without comment tracking; keep the two in step.
     fn unparse_template_string(&mut self, t: &TemplateStringExpr) {
+        let hashes = t.quote.hashes();
+        self.output.push_str(&hashes);
         self.output.push('`');
         for part in &t.parts {
             match part {
-                // Literal segments are stored raw, escapes and all.
-                TemplatePart::String(s) => self.output.push_str(s),
+                TemplatePart::String(s) => self.output.push_str(&t.quote.spell(s)),
                 TemplatePart::Interpolation { expr, format, open } => {
                     self.output.push_str("${");
                     // A comment inside these braces keeps its place, a line
@@ -2715,6 +2714,7 @@ impl<'a> Unparser<'a> {
             }
         }
         self.output.push('`');
+        self.output.push_str(&hashes);
     }
 
     fn unparse_cast(&mut self, c: &CastExpr) {

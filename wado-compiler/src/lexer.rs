@@ -16,7 +16,7 @@ use crate::compiler_host::{Code, Diagnostic, DiagnosticSpan, Severity};
 use crate::elaborator::float_literal::FloatFormat;
 use crate::primitive::PrimitiveType;
 use crate::token;
-use crate::token::{Position, Span, TemplateTokenPart, Token, TokenKind};
+use crate::token::{Position, Span, TemplateQuote, TemplateTokenPart, Token, TokenKind};
 
 /// Whether `c` may open an identifier: `[a-zA-Z_]`.
 pub fn is_ident_start(c: char) -> bool {
@@ -77,7 +77,7 @@ pub fn lex_interpolation(source: &str, origin: Position, space: AstIdSpace) -> L
     let mut result = lex_in(source, space);
     for token in &mut result.tokens {
         token.span = rebase_span(token.span, origin);
-        if let TokenKind::TemplateStringLit(parts) = &mut token.kind {
+        if let TokenKind::TemplateStringLit { parts, .. } = &mut token.kind {
             for part in parts {
                 if let TemplateTokenPart::Interpolation { origin: nested, .. } = part {
                     *nested = rebase_position(*nested, origin);
@@ -105,7 +105,7 @@ pub fn lex_interpolation(source: &str, origin: Position, space: AstIdSpace) -> L
 pub fn comments_deep(source: &str) -> Vec<Comment> {
     fn descend(tokens: &[Token], out: &mut Vec<Comment>) {
         for token in tokens {
-            let TokenKind::TemplateStringLit(parts) = &token.kind else {
+            let TokenKind::TemplateStringLit { parts, .. } = &token.kind else {
                 continue;
             };
             for part in parts {
@@ -215,6 +215,10 @@ enum Scan {
     /// A nested `` `…` `` literal. Backticks strictly alternate open and close,
     /// so a flag counts the same characters a depth would.
     Template,
+    /// A nested `` #`…`# `` literal, closed by a backtick and `hashes` `#`s.
+    RawTemplate {
+        hashes: usize,
+    },
     LineComment,
     BlockComment,
 }
@@ -227,7 +231,7 @@ impl Scan {
             Self::Char => '\'',
             Self::Template => '`',
             Self::LineComment => '\n',
-            Self::Code | Self::BlockComment => {
+            Self::Code | Self::BlockComment | Self::RawTemplate { .. } => {
                 unreachable!("no single-character terminator")
             }
         }
@@ -565,7 +569,7 @@ impl<'a> Lexer<'a> {
             '\'' => self.lex_char(),
 
             // Template strings
-            '`' => self.lex_template_string(),
+            '`' => self.lex_template_string(TemplateQuote::Cooked),
 
             // Punctuation and operators
             '(' => {
@@ -788,10 +792,13 @@ impl<'a> Lexer<'a> {
                     _ => TokenKind::Ampersand,
                 }
             }
-            '#' => {
-                self.advance();
-                TokenKind::Hash
-            }
+            '#' => match self.hash_run_then_backtick() {
+                Some(hashes) => self.lex_template_string(TemplateQuote::Raw { hashes }),
+                None => {
+                    self.advance();
+                    TokenKind::Hash
+                }
+            },
 
             _ => {
                 // Unrecognised character: consume it, record an error, and
@@ -1331,12 +1338,39 @@ impl<'a> Lexer<'a> {
         }
     }
 
-    fn lex_template_string(&mut self) -> TokenKind {
+    /// The number of `#`s from the cursor, when a backtick follows them.
+    fn hash_run_then_backtick(&self) -> Option<usize> {
+        let rest = self.input[self.pos..].as_bytes();
+        let hashes = rest.iter().take_while(|&&b| b == b'#').count();
+        (rest.get(hashes) == Some(&b'`')).then_some(hashes)
+    }
+
+    /// Whether the `hashes` characters after the cursor are all `#`.
+    fn at_hashes(&self, hashes: usize) -> bool {
+        self.input[self.pos..]
+            .as_bytes()
+            .get(..hashes)
+            .is_some_and(|run| run.iter().all(|&b| b == b'#'))
+    }
+
+    fn advance_n(&mut self, n: usize) {
+        for _ in 0..n {
+            self.advance();
+        }
+    }
+
+    /// A raw template's text reaches the parser spelled as a cooked template
+    /// would spell it, so every phase after this one reads one form.
+    fn lex_template_string(&mut self, quote: TemplateQuote) -> TokenKind {
         let start = self.pos;
         let start_line = self.line;
         let start_column = self.column;
 
-        self.advance(); // consume opening `
+        let hashes = match quote {
+            TemplateQuote::Cooked => 0,
+            TemplateQuote::Raw { hashes } => hashes,
+        };
+        self.advance_n(hashes + 1); // the opening `#`s and backtick
 
         let mut parts = Vec::new();
         let mut current_literal = String::new();
@@ -1351,7 +1385,11 @@ impl<'a> Lexer<'a> {
                     if !current_literal.is_empty() {
                         parts.push(TemplateTokenPart::Literal(current_literal));
                     }
-                    return TokenKind::TemplateStringLit(parts);
+                    return TokenKind::TemplateStringLit { parts, quote };
+                }
+                Some((_, '\\')) if matches!(quote, TemplateQuote::Raw { .. }) => {
+                    self.advance();
+                    current_literal.push_str(r"\\");
                 }
                 Some((_, '\\')) => {
                     // Scanned by the shared rules, copied verbatim: the
@@ -1394,12 +1432,16 @@ impl<'a> Lexer<'a> {
                         // Outer template terminated mid-interpolation. The
                         // error was already recorded; surface whatever parts
                         // we have so the parser still sees a TemplateString.
-                        return TokenKind::TemplateStringLit(parts);
+                        return TokenKind::TemplateStringLit { parts, quote };
                     }
                 }
                 Some((_, '`')) => {
                     self.advance();
-                    break;
+                    if self.at_hashes(hashes) {
+                        self.advance_n(hashes);
+                        break;
+                    }
+                    current_literal.push_str(r"\`");
                 }
                 Some((_, '\r')) => {
                     if self.advance_literal_cr() {
@@ -1417,7 +1459,7 @@ impl<'a> Lexer<'a> {
             parts.push(TemplateTokenPart::Literal(current_literal));
         }
 
-        TokenKind::TemplateStringLit(parts)
+        TokenKind::TemplateStringLit { parts, quote }
     }
 
     /// Collect an interpolation, split into expression source and optional format
@@ -1488,6 +1530,16 @@ impl<'a> Lexer<'a> {
                     }
                     continue;
                 }
+                Scan::RawTemplate { hashes } => {
+                    if ch == '`' && self.at_hashes(hashes) {
+                        for _ in 0..hashes {
+                            self.advance();
+                            push(&mut expr, &mut format, '#');
+                        }
+                        scan = Scan::Code;
+                    }
+                    continue;
+                }
                 Scan::LineComment => {
                     if ch == '\n' {
                         scan = Scan::Code;
@@ -1510,6 +1562,16 @@ impl<'a> Lexer<'a> {
                 // Wado has no lifetimes, so `'` always delimits a char literal.
                 '\'' => scan = Scan::Char,
                 '`' => scan = Scan::Template,
+                '#' => {
+                    if let Some(more) = self.hash_run_then_backtick() {
+                        // The rest of the opener: further `#`s, then the backtick.
+                        for _ in 0..=more {
+                            let opener = self.advance().expect("the opener was scanned");
+                            push(&mut expr, &mut format, opener);
+                        }
+                        scan = Scan::RawTemplate { hashes: more + 1 };
+                    }
+                }
                 '/' => match self.peek_char() {
                     Some('/') => {
                         self.advance();
@@ -2019,7 +2081,7 @@ test data";
         let short = tokens(r"`\u12`");
         assert_matches!(
             &short[0].kind,
-            TokenKind::TemplateStringLit(parts)
+            TokenKind::TemplateStringLit { parts, .. }
                 if parts.as_slice() == [TemplateTokenPart::Literal(r"\u12".to_string())]
         );
 
@@ -2028,7 +2090,7 @@ test data";
         let unclosed = tokens(r"`\u{12` + 1");
         assert_matches!(
             &unclosed[0].kind,
-            TokenKind::TemplateStringLit(parts)
+            TokenKind::TemplateStringLit { parts, .. }
                 if parts.as_slice() == [TemplateTokenPart::Literal(r"\u{12".to_string())]
         );
         assert_matches!(unclosed[1].kind, TokenKind::Plus);
@@ -2043,7 +2105,7 @@ test data";
     /// splits out, for a template holding exactly one `${…}`.
     fn interpolation(source: &str) -> (String, Option<String>) {
         let t = tokens(source);
-        let TokenKind::TemplateStringLit(parts) = &t[0].kind else {
+        let TokenKind::TemplateStringLit { parts, .. } = &t[0].kind else {
             panic!("expected a template, got {:?}", t[0].kind)
         };
         parts
@@ -2143,8 +2205,31 @@ test data";
         let t = tokens(r"`a\`b\{c\$d\u{1F600}eAf`");
         assert_matches!(
             &t[0].kind,
-            TokenKind::TemplateStringLit(parts)
+            TokenKind::TemplateStringLit { parts, quote: TemplateQuote::Cooked }
                 if parts.as_slice() == [TemplateTokenPart::Literal( r"a\`b\{c\$d\u{1F600}eAf".to_string() )]
+        );
+    }
+
+    /// A raw template's backslashes and inner backticks reach the parser
+    /// escaped, as a cooked template spells the same text.
+    #[test]
+    fn test_raw_template_respelled_cooked() {
+        let t = tokens(r"##`a\d`#b`## + 1");
+        assert_matches!(
+            &t[0].kind,
+            TokenKind::TemplateStringLit { parts, quote: TemplateQuote::Raw { hashes: 2 } }
+                if parts.as_slice() == [TemplateTokenPart::Literal(r"a\\d\`#b".to_string())]
+        );
+        assert_matches!(t[1].kind, TokenKind::Plus);
+    }
+
+    /// A raw template nested in a hole closes at its own closer, so a backslash
+    /// before its backtick does not hide the end.
+    #[test]
+    fn test_interpolation_skips_raw_template() {
+        assert_eq!(
+            interpolation(r"`${f(#`\`#)}`"),
+            (r"f(#`\`#)".to_string(), None)
         );
     }
 
