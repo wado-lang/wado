@@ -498,7 +498,7 @@ impl Graph for WebGpuBackend {
             };
             assert !shared || valid + query.extents[1] <= positions, "a shared past holds the new positions after its valid ones";
             let biased = match bias {
-                Some(b) => Option::Some(sliced(&self.device_view(b), 3, 0, valid + query.extents[1])),
+                Some(b) => Option::Some(self.device_view(b)),
                 None => null,
             };
             if let Some([out, present_k, present_v]) = self.attended(

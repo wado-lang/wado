@@ -236,21 +236,52 @@ struct Encoded {
     used: i32,
 }
 
-/// A buffer a launch of a program makes its `at`th buffer in, which lives as
-/// long as the backend, so each call binds the one the call before bound.
+/// A buffer a launch of a program makes its `n`th buffer of `words` in, which
+/// lives as long as the backend, so each call binds the one the call before
+/// bound. Counted by size, a buffer one call makes and another does not, such
+/// as a cache moved to a larger one, leaves the others where they were.
 struct Owned {
     slot: i32,
     words: i32,
     /// Whether a call returned what it held, which is the caller's from then
-    /// on, so a later call makes its `at`th buffer in the pass.
+    /// on, so a later call makes that buffer in the pass.
     returned: bool,
 }
 
+/// The parameters of a launch's dispatches, each at a span of its own in
+/// `carved`, which the dispatch binds on every call, so a call finds its bind
+/// groups made.
+struct LaunchParameters {
+    /// Each dispatch's span, the place in `pipelines` of its shader, and the
+    /// words on the device, in the order the calls first dispatched them. A
+    /// dispatch takes the span of the `n`th dispatch of its shader, so one a
+    /// call makes and another does not, such as a copy of a cache, leaves the
+    /// others where they were.
+    spans: List<Span>,
+    pipelines: List<i32>,
+    words: List<List<u32>>,
+    /// The last pass a call bound them in.
+    pass: i32,
+}
+
+/// A buffer of parameters that lives as long as the backend, and how many of
+/// its words launches hold spans of.
+struct Carved {
+    slot: i32,
+    used: i32,
+}
+
 /// The launch of a program running, by the program's serial and the launch's
-/// root node, and how many buffers it has made.
+/// root node, the words of each buffer it has made, and the shader of each
+/// dispatch.
 struct Running {
     launch: List<i32>,
-    made: i32,
+    made: List<i32>,
+    dispatched: List<i32>,
+    /// Whether its dispatches bind the launch's own parameters. A second call
+    /// in one pass binds the pass's, since a write to them reaches the device
+    /// before the first call's dispatches run.
+    own: bool,
 }
 
 /// The slots a recorded launch named, and those its replay names in their
@@ -366,6 +397,10 @@ pub affine struct WebGpuBackend {
     /// The buffers each launch of a program makes, by the program's serial and
     /// the launch's root node, in the order a launch makes them.
     owned: HashMap<List<i32>, List<Owned>>,
+    /// The parameters of each launch of a program, by the same key.
+    launch_parameters: HashMap<List<i32>, LaunchParameters>,
+    /// The buffer launches' parameters are carved from: none before the first.
+    carved: Option<Carved>,
     running: Option<Running>,
     /// The passes `begin` has started.
     passes: i32,
@@ -523,6 +558,8 @@ impl WebGpuBackend {
             encoded: HashMap::new(),
             programs: 0,
             owned: HashMap::new(),
+            launch_parameters: HashMap::new(),
+            carved: null,
             running: null,
             passes: 0,
             next_id: 0,
@@ -636,31 +673,43 @@ impl WebGpuBackend {
         let Some(r) = &mut self.running else {
             return null;
         };
-        let [key, at] = [r.launch, r.made];
-        r.made += 1;
+        let key = r.launch;
+        let mut nth = 0;
+        for let words of &r.made {
+            if *words == count {
+                nth += 1;
+            }
+        }
+        r.made.push(count);
         if !self.owned.contains_key(key) {
             self.owned[key] = [];
         }
-        if at == self.owned[key].len() {
-            self.kept.push(self.created(count));
-            let slot = -self.kept.len();
-            self.owned[key].push(Owned { slot, words: count, returned: false });
-            return Option::Some(slot);
+        for let o of &self.owned[key] {
+            if o.words != count {
+                continue;
+            }
+            if nth == 0 {
+                return if o.returned { null } else { Option::Some(o.slot) };
+            }
+            nth -= 1;
         }
-        let o = self.owned[key][at];
-        if o.returned || o.words != count {
-            return null;
-        }
-        return Option::Some(o.slot);
+        self.kept.push(self.created(count));
+        let slot = -self.kept.len();
+        self.owned[key].push(Owned { slot, words: count, returned: false });
+        return Option::Some(slot);
     }
 
     /// Starts the launch whose root is the node `root` of the program
     /// `serial`, which makes its buffers in those its calls own.
     internal fn launching(&mut self, serial: i32, root: i32) {
-        self.running = Option::Some(Running {
-            launch: [serial, root],
-            made: 0,
-        });
+        let launch = [serial, root] as List<i32>;
+        if !self.launch_parameters.contains_key(launch) {
+            self.launch_parameters[launch] = LaunchParameters { spans: [], pipelines: [], words: [], pass: -1 };
+        }
+        let parameters = &mut self.launch_parameters[launch];
+        let own = parameters.pass < self.passes;
+        parameters.pass = self.passes;
+        self.running = Option::Some(Running { launch, made: [], dispatched: [], own });
     }
 
     /// Ends a call of the program `serial`, which returned the values at the
@@ -680,6 +729,74 @@ impl WebGpuBackend {
                 }
             }
         }
+    }
+
+    /// The span of `params` a dispatch of the shader at `pipeline` binds: the
+    /// running launch's own, carved where its calls have not dispatched the
+    /// shader that often yet, and the pass's where no launch runs or where it
+    /// binds the pass's.
+    fn parameters_for(&mut self, pipeline: i32, params: &List<u32>) -> Span with (GpuDevice, GpuQueue, GpuBuffer) {
+        let Some(r) = &mut self.running else {
+            return self.parameter_span(params);
+        };
+        if !r.own {
+            return self.parameter_span(params);
+        }
+        let mut nth = 0;
+        for let p of &r.dispatched {
+            if *p == pipeline {
+                nth += 1;
+            }
+        }
+        r.dispatched.push(pipeline);
+        let own = &mut self.launch_parameters[r.launch];
+        for let i of 0..<own.spans.len() {
+            if own.pipelines[i] != pipeline {
+                continue;
+            }
+            if nth > 0 {
+                nth -= 1;
+                continue;
+            }
+            let span = own.spans[i];
+            if span.count != params.len() {
+                return self.parameter_span(params);
+            }
+            if own.words[i] != *params {
+                own.words[i] = *params;
+                self.write(span.slot, span.first, span.first + span.count, |w| params[w - span.first]);
+            }
+            return span;
+        }
+        let span = self.carved_span(params.len());
+        self.write(span.slot, span.first, span.first + span.count, |w| params[w - span.first]);
+        own.spans.push(span);
+        own.pipelines.push(pipeline);
+        own.words.push(*params);
+        return span;
+    }
+
+    /// A span of `count` words of parameters that lives as long as the
+    /// backend.
+    fn carved_span(&mut self, count: i32) -> Span with (GpuDevice, GpuBuffer)
+        contract count <= PARAMETER_WORDS
+    {
+        if let Some(c) = &mut self.carved {
+            let first = self.aligned(c.used);
+            if first + count <= PARAMETER_WORDS {
+                c.used = first + count;
+                return Span { slot: c.slot, first, count };
+            }
+        }
+        self.kept.push(self.created(PARAMETER_WORDS));
+        let slot = -self.kept.len();
+        self.carved = Option::Some(Carved { slot, used: count });
+        return Span { slot, first: 0, count };
+    }
+
+    /// `words` rounded up to a multiple of the binding alignment.
+    fn aligned(&self, words: i32) -> i32 {
+        return (words + self.alignment - 1) / self.alignment * self.alignment;
     }
 
     /// A buffer of the pass of `count` 32-bit words, and its slot, which no
@@ -758,7 +875,7 @@ impl WebGpuBackend {
         contract params.len() <= PARAMETER_WORDS
     {
         let at = match &self.parameters {
-            Some(p) => (p.words.len() + self.alignment - 1) / self.alignment * self.alignment,
+            Some(p) => self.aligned(p.words.len()),
             None => PARAMETER_WORDS,
         };
         if at + params.len() > PARAMETER_WORDS {
@@ -1064,7 +1181,7 @@ impl WebGpuBackend {
         let [x, y, z] = groups;
         self.dispatches += 1;
         let mut all = spans;
-        all.push(self.parameter_span(&params));
+        all.push(self.parameters_for(pipeline, &params));
         let at = match hint {
             Some(at) && self.binds_at(at, pipeline, &all) => at,
             _ => self.group_of(pipeline, &all),
@@ -1893,7 +2010,10 @@ impl WebGpuBackend {
         ];
         attend_operands.extend(&tables);
         if let Some(b) = bias {
-            let over = [batch, heads, s, total] as List<i32>;
+            // Bound over every position it holds, as the cache is, so its
+            // binding too stays the step before's. The kernel reads `total`.
+            assert b.extents[3] >= total, "a bias holds every position attended";
+            let over = [batch, heads, s, b.extents[3]] as List<i32>;
             attend_operands.push(DeviceTensor { ..*b, strides: stretched(b, &over), extents: over });
         }
         if !self.binds(&append_operands) || !self.binds(&attend_operands) {
