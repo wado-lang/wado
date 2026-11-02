@@ -208,6 +208,69 @@ struct Parameters {
     written: i32,
 }
 
+/// What a launch did to the device, in order, which a replay does again
+/// without working it out.
+variant Command {
+    /// A buffer of that many words, made at that slot.
+    Allocated([i32, i32]),
+    Dispatched(Dispatch),
+}
+
+/// A dispatch as `dispatched` takes it, its spans but the parameters', and
+/// the place in `groups` of the bind group it bound.
+struct Dispatch {
+    pipeline: i32,
+    spans: List<Span>,
+    params: List<u32>,
+    groups: [i32, i32, i32],
+    group: i32,
+}
+
+/// The commands of a launch over `reads`, which a later launch reading views
+/// laid out as those replays.
+struct Encoded {
+    reads: List<DeviceTensor>,
+    commands: List<Command>,
+    result: DeviceTensor,
+    /// The last pass that recorded or replayed it.
+    used: i32,
+}
+
+/// The slots a recorded launch named, and those its replay names in their
+/// place.
+struct Renamed {
+    from: List<i32>,
+    to: List<i32>,
+}
+
+impl Renamed {
+    fn new() -> Renamed {
+        return Renamed { from: [], to: [] };
+    }
+
+    /// Whether `from` is named `to`, taking that name where neither is named
+    /// yet.
+    fn bound(&mut self, from: i32, to: i32) -> bool {
+        for let i of 0..<self.from.len() {
+            if self.from[i] == from || self.to[i] == to {
+                return self.from[i] == from && self.to[i] == to;
+            }
+        }
+        self.from.push(from);
+        self.to.push(to);
+        return true;
+    }
+
+    fn of(&self, from: i32) -> i32 {
+        for let i of 0..<self.from.len() {
+            if self.from[i] == from {
+                return self.to[i];
+            }
+        }
+        panic("loam: a launch binds a buffer it neither reads nor makes");
+    }
+}
+
 /// The kernels on a WebGPU device, and on the CPU where no shader is written.
 pub affine struct WebGpuBackend {
     device: GpuDevice,
@@ -251,6 +314,13 @@ pub affine struct WebGpuBackend {
     /// `pipelines`, then each span's buffer `id`, first word and words.
     groups: Places<CachedGroup>,
     group_at: HashMap<List<i32>, i32>,
+    /// The commands of the launch being recorded: none where no launch is, or
+    /// where it wrote a host value or read one back, which a replay would not.
+    taping: Option<List<Command>>,
+    /// Each launch recorded, by its program's serial and its root node.
+    encoded: HashMap<List<i32>, Encoded>,
+    /// The programs `compiled` has made.
+    programs: i32,
     /// The passes `begin` has started.
     passes: i32,
     next_id: i32,
@@ -265,6 +335,7 @@ pub affine struct WebGpuBackend {
     read_backs: i32,
     dispatches: i32,
     bind_groups: i32,
+    replays: i32,
     internal cpu: Cpu,
 }
 
@@ -390,6 +461,9 @@ impl WebGpuBackend {
             unsubmitted: 0,
             groups: Places::new(),
             group_at: HashMap::new(),
+            taping: null,
+            encoded: HashMap::new(),
+            programs: 0,
             passes: 0,
             next_id: 0,
             parameters: null,
@@ -399,6 +473,7 @@ impl WebGpuBackend {
             read_backs: 0,
             dispatches: 0,
             bind_groups: 0,
+            replays: 0,
             cpu: Cpu {},
         });
     }
@@ -445,6 +520,12 @@ impl WebGpuBackend {
         return self.bind_groups;
     }
 
+    /// How many launches of a program did again what an earlier call of it
+    /// recorded, rather than working out their dispatches.
+    pub fn replays(&self) -> i32 {
+        return self.replays;
+    }
+
     /// The buffer at `slot`: a kept one where it is negative, one of the pass
     /// otherwise.
     fn buffer(&self, slot: i32) -> &GpuBuffer {
@@ -478,6 +559,16 @@ impl WebGpuBackend {
             self.kept.push(self.created(count));
             return -self.kept.len();
         }
+        let slot = self.pass_buffer(count);
+        if let Some(commands) = &mut self.taping {
+            commands.push(Command::Allocated([count, slot]));
+        }
+        return slot;
+    }
+
+    /// A buffer of the pass of `count` 32-bit words, and its slot, which no
+    /// launch records: a spare of that size, or a new one.
+    fn pass_buffer(&mut self, count: i32) -> i32 with (GpuDevice, GpuBuffer) {
         let mut at = -1;
         for let i of 0..<self.spare.len() {
             if self.spare[i].words == count {
@@ -512,6 +603,7 @@ impl WebGpuBackend {
     /// slot. The words are encoded one write at a time, so a tensor never has
     /// a second copy whole on the host.
     fn written(&mut self, count: i32, word: fn(i32) -> u32, kept: bool) -> i32 with (GpuDevice, GpuQueue, GpuBuffer) {
+        self.taping = null;
         let slot = self.allocated(count, kept);
         self.write(slot, 0, count, word);
         return slot;
@@ -553,7 +645,7 @@ impl WebGpuBackend {
         };
         if at + params.len() > PARAMETER_WORDS {
             self.write_parameters();
-            let slot = self.allocated(PARAMETER_WORDS, false);
+            let slot = self.pass_buffer(PARAMETER_WORDS);
             self.parameters = Option::Some(Parameters { slot, words: [], written: 0 });
             return self.parameter_span(params);
         }
@@ -701,6 +793,7 @@ impl WebGpuBackend {
             return [];
         }
         self.read_backs += 1;
+        self.taping = null;
         let whole = self.materialized(t);
         self.flush();
         let size = byte_size(count);
@@ -809,24 +902,36 @@ impl WebGpuBackend {
         if x == 0 || y == 0 || z == 0 {
             return;
         }
-        self.dispatches += 1;
         let found = match self.compiled.get(key) {
             Some(at) => at,
             None => self.compile(&key),
         };
+        self.dispatched(found, spans, params, groups, null);
+    }
+
+    /// Records the shader at `pipeline` in `pipelines` as `dispatch` does.
+    /// `hint` is the place in `groups` of the bind group a dispatch bound
+    /// when it was recorded, which binds these spans where they are the ones
+    /// it bound.
+    fn dispatched(
+        &mut self,
+        pipeline: i32,
+        spans: List<Span>,
+        params: List<u32>,
+        groups: [i32, i32, i32],
+        hint: Option<i32>,
+    ) with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuComputePassEncoder) {
+        let [x, y, z] = groups;
+        self.dispatches += 1;
         let mut all = spans;
         all.push(self.parameter_span(&params));
-        let mut bound: List<i32> = [found];
-        for let s of &all {
-            assert s.first % self.alignment == 0 && s.count <= self.max_binding;
-            bound.push(self.slot(s.slot).id);
-            bound.push(s.first);
-            bound.push(s.count);
-        }
-        let at = match self.group_at.get(bound) {
-            Some(at) => at,
-            None => self.bind_group(found, &all, bound),
+        let at = match hint {
+            Some(at) && self.binds_at(at, pipeline, &all) => at,
+            _ => self.group_of(pipeline, &all),
         };
+        if let Some(commands) = &mut self.taping {
+            commands.push(Command::Dispatched(Dispatch { pipeline, spans, params, groups, group: at }));
+        }
         let cached = self.groups.get_mut(at);
         cached.used = self.passes;
         if self.recording.is_empty() {
@@ -838,7 +943,7 @@ impl WebGpuBackend {
             self.recording.push(Recording { encoder, pass });
         }
         let pass = &self.recording[0].pass;
-        pass.set_pipeline(&self.pipelines[found].compiled);
+        pass.set_pipeline(&self.pipelines[pipeline].compiled);
         let Ok(_) = pass.set_bind_group(0, Option::Some(&cached.group), null, null, null) else {
             panic("loam: a kernel's buffers did not bind");
         };
@@ -851,6 +956,41 @@ impl WebGpuBackend {
         if self.unsubmitted >= SUBMIT_EVERY {
             self.flush();
         }
+    }
+
+    /// The place in `groups` of the bind group of `spans` to the shader at
+    /// `pipeline`, made where none is.
+    fn group_of(&mut self, pipeline: i32, spans: &List<Span>) -> i32 with (GpuDevice, GpuBuffer, GpuBindGroupLayout, GpuBindGroup) {
+        let mut bound: List<i32> = [pipeline];
+        for let s of spans {
+            assert s.first % self.alignment == 0 && s.count <= self.max_binding;
+            bound.push(self.slot(s.slot).id);
+            bound.push(s.first);
+            bound.push(s.count);
+        }
+        return match self.group_at.get(bound) {
+            Some(at) => at,
+            None => self.bind_group(pipeline, spans, bound),
+        };
+    }
+
+    /// Whether the bind group at `at` in `groups` binds `spans` to the shader
+    /// at `pipeline`, as `group_of` keys it.
+    fn binds_at(&self, at: i32, pipeline: i32, spans: &List<Span>) -> bool {
+        let Some(cached) = &self.groups.held[at] else {
+            return false;
+        };
+        let key = &cached.key;
+        if key.len() != 3 * spans.len() + 1 || key[0] != pipeline {
+            return false;
+        }
+        for let i of 0..<spans.len() {
+            let s = &spans[i];
+            if key[3 * i + 1] != self.slot(s.slot).id || key[3 * i + 2] != s.first || key[3 * i + 3] != s.count {
+                return false;
+            }
+        }
+        return true;
     }
 
     /// A new bind group of `spans` to the shader at `pipeline`, cached under
@@ -1738,6 +1878,69 @@ impl WebGpuBackend {
         spans.push(Span { slot: out, first: 0, count });
         self.dispatch(shader(bound.bindings), spans, params, groups);
     }
+
+    /// A serial no other program of the backend has.
+    internal fn program_serial(&mut self) -> i32 {
+        self.programs += 1;
+        return self.programs;
+    }
+
+    /// Starts recording the commands of a launch.
+    internal fn tape(&mut self) {
+        self.taping = Option::Some([]);
+    }
+
+    /// Ends the recording `tape` started, keeping it under `key` as the
+    /// commands of a launch over `reads` that yields `result` on the device,
+    /// where it wrote no host value and read none back.
+    internal fn taped(&mut self, key: List<i32>, reads: List<DeviceTensor>, result: Option<DeviceTensor>) {
+        let taping = self.taping;
+        self.taping = null;
+        if let Some(commands) = taping && let Some(r) = result {
+            self.encoded[key] = Encoded { reads, commands, result: r, used: self.passes };
+        }
+    }
+
+    /// What the launch recorded under `key` yields, its commands done again
+    /// over `reads`, or `None` where none is recorded, or `reads` are not laid
+    /// out as the ones it was recorded over: each at the same place in its
+    /// buffer, and two in one buffer exactly where those were.
+    internal fn replayed(
+        &mut self,
+        key: List<i32>,
+        reads: &List<DeviceTensor>,
+    ) -> Option<DeviceTensor> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuComputePassEncoder) {
+        if !self.encoded.contains_key(key) {
+            return null;
+        }
+        let e = &mut self.encoded[key];
+        let mut slots = Renamed::new();
+        for let i of 0..<reads.len() {
+            let [was, now] = [&e.reads[i], &reads[i]];
+            let laid_out = was.offset == now.offset && was.extents == now.extents && was.strides == now.strides && was.half == now.half;
+            if !laid_out || !slots.bound(was.slot, now.slot) {
+                return null;
+            }
+        }
+        e.used = self.passes;
+        self.replays += 1;
+        for let c of &e.commands {
+            match c {
+                Allocated([count, slot]) => {
+                    let fresh = slots.bound(*slot, self.allocated(*count, false));
+                    assert fresh, "a buffer a launch makes is no buffer it reads";
+                },
+                Dispatched(d) => {
+                    let mut spans: List<Span> = [];
+                    for let s of &d.spans {
+                        spans.push(Span { ..*s, slot: slots.of(s.slot) });
+                    }
+                    self.dispatched(d.pipeline, spans, d.params, d.groups, Option::Some(d.group));
+                },
+            }
+        }
+        return Option::Some(DeviceTensor { ..e.result, slot: slots.of(e.result.slot) });
+    }
 }
 
 impl Holds for WebGpuBackend {
@@ -1768,8 +1971,9 @@ impl Holds for WebGpuBackend {
 
     /// Submits what the pass before recorded and releases its buffers, so a
     /// tensor of that pass is no longer one to read, but for those it
-    /// retained, which live through this pass. A spare it did not take, and
-    /// a bind group it did not bind, are dropped.
+    /// retained, which live through this pass. A spare it did not take, a
+    /// bind group it did not bind, and a launch it neither recorded nor
+    /// replayed are dropped.
     fn begin(&mut self) with (GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBindGroup, GpuBuffer) {
         self.flush();
         self.parameters = null;
@@ -1808,6 +2012,15 @@ impl Holds for WebGpuBackend {
                 self.group_at.remove(g.key);
                 self.groups.remove(at);
             }
+        }
+        let mut stale: List<List<i32>> = [];
+        for let [key, e] of self.encoded.entries() {
+            if e.used < self.passes {
+                stale.push(*key);
+            }
+        }
+        for let key of stale {
+            self.encoded.remove(key);
         }
         self.passes += 1;
     }

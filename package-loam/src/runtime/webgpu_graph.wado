@@ -62,6 +62,8 @@ pub struct WebGpuProgram {
     recorded: Recorded,
     plan: Plan,
     constants: HashMap<i32, Any<WebGpuBackend>>,
+    /// What the backend keys the launches it recorded of this program by.
+    serial: i32,
 }
 
 impl Graph for WebGpuBackend {
@@ -90,7 +92,7 @@ impl Graph for WebGpuBackend {
                 };
             }
         }
-        return Option::Some(WebGpuProgram { recorded, plan, constants: kept });
+        return Option::Some(WebGpuProgram { recorded, plan, constants: kept, serial: self.program_serial() });
     }
 
     fn executed(
@@ -102,7 +104,7 @@ impl Graph for WebGpuBackend {
         for let [id, value] of program.constants.entries() {
             state.values[*id] = *value;
         }
-        return launched(self, &mut state, &program.recorded, &program.plan, arguments);
+        return launched(self, &mut state, program, &program.plan, arguments);
     }
 
     fn iota<E: Element, Axes>(&mut self, extents: List<i32>, dimension: i32) -> Placed<E, Axes> {
@@ -526,10 +528,11 @@ fn dotted(
 fn launched(
     g: &mut WebGpuBackend,
     state: &mut Run<WebGpuBackend>,
-    recorded: &Recorded,
+    program: &WebGpuProgram,
     plan: &Plan,
     arguments: &List<Any<WebGpuBackend>>,
 ) -> List<Any<WebGpuBackend>> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
+    let recorded = &program.recorded;
     for let launch of plan.launches {
         match launch {
             Node(id) => {
@@ -537,15 +540,15 @@ fn launched(
                 state.values[id] = value;
             },
             Kernel(k) => {
-                let value = kernel_result(g, &state.values, recorded, &k);
+                let value = kernel_replayed(g, &state.values, program, &k);
                 state.values[k.root] = value;
             },
             Case([id, first, second]) => {
                 let pred = bools(&state.values[recorded.nodes[id].operands[0]]);
                 let yielded = g.conditional::<Untyped, List<Any<WebGpuBackend>>>(
                     &pred,
-                    || launched(g, state, recorded, &first, arguments),
-                    || launched(g, state, recorded, &second, arguments),
+                    || launched(g, state, program, &first, arguments),
+                    || launched(g, state, program, &second, arguments),
                 );
                 for let [k, result] of first.results.into_iter().enumerate() {
                     state.values[result] = yielded[k];
@@ -554,6 +557,58 @@ fn launched(
         }
     }
     return plan.results.into_iter().map(|r| state.values[r]).collect();
+}
+
+/// The value of `k`'s root: the commands the backend recorded of it replayed
+/// where they were recorded over views laid out as the ones it reads now,
+/// computed and recorded otherwise.
+fn kernel_replayed(
+    g: &mut WebGpuBackend,
+    values: &HashMap<i32, Any<WebGpuBackend>>,
+    program: &WebGpuProgram,
+    k: &Kernel,
+) -> Any<WebGpuBackend> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
+    let recorded = &program.recorded;
+    let Some(reads) = device_reads(values, recorded, k) else {
+        return kernel_result(g, values, recorded, k);
+    };
+    let key = [program.serial, k.root] as List<i32>;
+    let kind = recorded.nodes[k.root].kind;
+    if let Some(out) = g.replayed(key, &reads) {
+        return match kind {
+            F32 => Any::F32(Placed::Device(out)),
+            Bool => Any::Bool(Placed::Device(out)),
+            I64 => unreachable(),
+        };
+    }
+    g.tape();
+    let value = kernel_result(g, values, recorded, k);
+    let result = match value {
+        F32(Device(d)) | Bool(Device(d)) => Option::Some(d),
+        _ => null,
+    };
+    g.taped(key, reads, result);
+    return value;
+}
+
+/// The views `k` reads, its product's operands first, or `None` where one is
+/// on the host.
+fn device_reads(values: &HashMap<i32, Any<WebGpuBackend>>, recorded: &Recorded, k: &Kernel) -> Option<List<DeviceTensor>> {
+    let mut nodes: List<i32> = [];
+    if let Some(p) = k.product {
+        nodes.extend(&recorded.nodes[p].operands);
+    }
+    for let o of &k.operands {
+        nodes.push(o.node);
+    }
+    let mut reads: List<DeviceTensor> = [];
+    for let id of nodes {
+        match values[id] {
+            F32(Device(d)) | Bool(Device(d)) => reads.push(d),
+            _ => return null,
+        }
+    }
+    return Option::Some(reads);
 }
 
 /// The value of `k`'s root, each operand read at the extents it names.
