@@ -16,8 +16,39 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
+  # The bundled Wasm language server the extension loads on activation (see
+  # docs/wep-2026-04-18-lsp-architecture.md) is the same file on every
+  # platform, so it is built once here and handed to the others.
   test-wado-vscode:
+    name: ubuntu-latest
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    steps:
+      # The job runs the pull request's own code, which would otherwise read
+      # the token out of `.git/config`.
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      # The Rust-only task: the composite action below compiles the TS bundle.
+      - name: Build wado-lsp.wasm (wasm32-wasip1)
+        run: mise run build-wado-lsp-wasm-rust
+      - uses: actions/upload-artifact@v7
+        with:
+          name: wado-lsp-wasm
+          path: wado-vscode/out/wado_lsp.wasm
+          if-no-files-found: error
+
+      - uses: ./.github/actions/wado-vscode-test
+
+  test-wado-vscode-elsewhere:
     name: ${{ matrix.os }}
+    needs: test-wado-vscode
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
     permissions:
@@ -25,54 +56,14 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        os: [macos-latest, windows-latest]
     steps:
       - uses: actions/checkout@v7
-
-      - uses: ./.github/actions/setup
         with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-
-      - uses: actions/setup-node@v7.1.0
+          persist-credentials: false
+      - uses: actions/download-artifact@v8
         with:
-          node-version: 26
-          cache: npm
-          cache-dependency-path: wado-vscode/package-lock.json
+          name: wado-lsp-wasm
+          path: wado-vscode/out
 
-      # Node 26 bundles npm 11, below what `engines.npm` asks for.
-      - name: Install the npm required by package.json
-        shell: bash
-        working-directory: wado-vscode
-        run: npm install -g "npm@$(node -p "require('./package.json').engines.npm")"
-
-      # Build the bundled Wasm language server that the extension loads on
-      # activation. See docs/wep-2026-04-18-lsp-architecture.md for rationale.
-      # The TS bundle is compiled by the explicit `npm ci` + `npm run compile`
-      # steps below, so this job uses the Rust-only task to avoid redoing it.
-      - name: Build wado-lsp.wasm (wasm32-wasip1)
-        run: mise run build-wado-lsp-wasm-rust
-
-      - name: Install npm dependencies
-        working-directory: wado-vscode
-        run: npm ci
-
-      - name: Compile TypeScript
-        working-directory: wado-vscode
-        run: npm run compile
-
-      - name: Run unit tests
-        working-directory: wado-vscode
-        run: npm run test:unit
-
-      # VS Code E2E tests require a display; xvfb is only available on Linux.
-      - name: Run E2E tests (Linux)
-        if: runner.os == 'Linux'
-        working-directory: wado-vscode
-        run: xvfb-run -a npm test
-        env:
-          ELECTRON_DISABLE_SANDBOX: "1"
-
-      - name: Run E2E tests (macOS / Windows)
-        if: runner.os != 'Linux'
-        working-directory: wado-vscode
-        run: npm test
+      - uses: ./.github/actions/wado-vscode-test
