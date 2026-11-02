@@ -221,6 +221,13 @@ struct TestSpec {
     #[serde(flatten)]
     compile: CompileInputs,
 
+    /// The keys neither this struct nor `compile` reads. `flatten` rules out
+    /// `deny_unknown_fields`, so a misspelt or stale key lands here instead of
+    /// passing as unset. It must follow `compile`, which takes its own keys
+    /// first.
+    #[serde(flatten)]
+    unknown: indexmap::IndexMap<String, serde_json::Value>,
+
     /// Mock responses for outgoing HTTP requests (keyed by URL or path).
     /// When present, any `wasi:http/client#send` from the guest will be
     /// intercepted and matched against these entries.
@@ -800,6 +807,11 @@ fn run_fixture_test_with_opt(fixture_path: &Path, source: &str, opt_level: OptLe
             ..Default::default()
         },
     };
+    assert!(
+        spec.unknown.is_empty(),
+        "[{test_id}] __DATA__ names keys the harness does not read: {:?}",
+        spec.unknown.keys().collect::<Vec<_>>()
+    );
 
     if !spec.runs_at(opt_level) {
         eprintln!(
