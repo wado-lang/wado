@@ -84,10 +84,13 @@ jobs:
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
-      # cargo-cache.yml builds this same command, so only the workspace crates
-      # compile here.
+      # cargo-cache.yml builds these same commands, so only the workspace crates
+      # compile here. The e2e binary is built here rather than in a job of its
+      # own: a job waits for the whole of the one it needs, queue included.
       - if: steps.filter.outputs.code == 'true'
-        run: node scripts/prebuilt.ts build wado
+        run: |
+          node scripts/prebuilt.ts build wado
+          node scripts/prebuilt.ts build e2e
       - if: steps.filter.outputs.code == 'true'
         uses: actions/upload-artifact@v7
         with:
@@ -97,35 +100,15 @@ jobs:
             target/debug/wado-dev-tools
           if-no-files-found: error
       - if: steps.filter.outputs.code == 'true'
-        uses: ./.github/actions/target-handoff
-        with:
-          mode: save
-
-  build-e2e:
-    name: Build (E2E)
-    needs: build-wado
-    if: needs.build-wado.outputs.code == 'true'
-    runs-on: ubuntu-latest
-    timeout-minutes: 60
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          persist-credentials: false
-      - uses: ./.github/actions/setup
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-      - uses: ./.github/actions/target-handoff
-        with:
-          mode: restore
-
-      - run: node scripts/prebuilt.ts build e2e
-      - uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@v7
         with:
           name: prebuilt-e2e
           path: target/debug/e2e
           if-no-files-found: error
+      - if: steps.filter.outputs.code == 'true'
+        uses: ./.github/actions/target-handoff
+        with:
+          mode: save
 
   # The Rust tests, preceded by the static gates: each gate is sub-minute, so a
   # Cargo.lock drift, a hook break, an internal-name regression, or a wasm32
@@ -173,7 +156,7 @@ jobs:
   # which ones break says where the bug is.
   test-level:
     name: Test (${{ matrix.level }})
-    needs: [build-wado, build-e2e]
+    needs: build-wado
     if: needs.build-wado.outputs.code == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 60
@@ -364,7 +347,7 @@ jobs:
   test:
     name: Test
     if: always()
-    needs: [build-wado, build-e2e, test-core, test-wado, test-gale-o2, test-level, test-webgpu, test-sandbox]
+    needs: [build-wado, test-core, test-wado, test-gale-o2, test-level, test-webgpu, test-sandbox]
     runs-on: ubuntu-latest
     timeout-minutes: 60
     permissions: {}
