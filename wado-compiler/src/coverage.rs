@@ -529,14 +529,14 @@ type ForOfBodies = Vec<(AstId, Range<u32>)>;
 
 /// A cold marker the source states, which a profile overrides.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum Marker {
+pub(crate) enum SourceMarker {
     /// The author's `builtin::cold_path()`, by the call's node.
     ColdPath(AstId),
     /// The one reify puts on the failure path of the `?` node.
     Try(AstId),
 }
 
-impl Marker {
+impl SourceMarker {
     /// The node reify finds the marker at.
     #[must_use]
     pub(crate) fn node(self) -> AstId {
@@ -558,7 +558,7 @@ pub(crate) struct PlannedModule {
     /// Where each function's name, or a closure, is written.
     pub names: Vec<Span>,
     /// Each cold marker, with the region whose runs reach it.
-    pub markers: Vec<(Marker, Span, u32)>,
+    pub markers: Vec<(SourceMarker, Span, u32)>,
 }
 
 /// Plan one module: its regions, the site each region's probe goes at, and
@@ -625,7 +625,7 @@ struct Planner<'a> {
     sites: Sites,
     parents: Vec<Option<u32>>,
     names: Vec<Span>,
-    markers: Vec<(Marker, Span, u32)>,
+    markers: Vec<(SourceMarker, Span, u32)>,
     function: u32,
     /// The innermost region the walk is in, `None` outside a function.
     region: Option<u32>,
@@ -1100,12 +1100,12 @@ impl AstVisitor<'_> for Planner<'_> {
                     Some((Pos::end(t.span), 0)),
                 );
                 self.sites.push((ProbeSite::TryExit, t.id, region));
-                self.markers.push((Marker::Try(t.id), t.span, region));
+                self.markers.push((SourceMarker::Try(t.id), t.span, region));
             }
             Expr::Call(call) if is_builtin_call(call, COLD_PATH_INTRINSIC) => {
                 if let Some(region) = self.region {
                     self.markers
-                        .push((Marker::ColdPath(call.id), call.span, region));
+                        .push((SourceMarker::ColdPath(call.id), call.span, region));
                 }
             }
             _ => walk_expr(self, expr),

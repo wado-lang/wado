@@ -2024,10 +2024,10 @@ mod tests {
         assert!(probes.0.iter().any(|&id| id < u64::from(seed_end)));
     }
 
-    /// The cold markers in `block`, by who placed them and what they state.
-    struct Markers(Vec<String>);
+    /// The rarity markers in `block`, by who placed them and what they state.
+    struct MarkerCalls(Vec<String>);
 
-    impl TirRefVisitor for Markers {
+    impl TirRefVisitor for MarkerCalls {
         fn visit_expr(&mut self, expr: &TirExpr) {
             if let TirExprKind::Call { func, .. } = &expr.kind
                 && let Some(name) = func
@@ -2040,7 +2040,7 @@ mod tests {
         }
     }
 
-    /// The cold markers in each function of `modules`, by function name.
+    /// The rarity markers in each function of `modules`, by function name.
     fn markers<'m>(
         modules: impl IntoIterator<Item = &'m TirModule>,
     ) -> IndexMap<String, Vec<String>> {
@@ -2048,7 +2048,7 @@ mod tests {
         for module in modules {
             for func in &module.functions {
                 let func = func.borrow();
-                let mut markers = Markers(Vec::new());
+                let mut markers = MarkerCalls(Vec::new());
                 if let Some(body) = func.body.as_ref() {
                     markers.visit_block(body);
                 }

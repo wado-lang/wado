@@ -11,7 +11,7 @@ use std::collections::BTreeMap;
 use std::fmt::{self, Write as _};
 
 use crate::ast::{self, AstId};
-use crate::coverage::{Coverage, Marker, PlannedModule, ProbeSite, RegionKind, plan_module};
+use crate::coverage::{Coverage, PlannedModule, ProbeSite, RegionKind, SourceMarker, plan_module};
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::rarity::Mark;
@@ -499,8 +499,8 @@ impl MarkMap {
                 None => "neither unlikely nor cold",
             };
             let subject = match marker {
-                Marker::ColdPath(_) => "`cold_path()` marks this path rare",
-                Marker::Try(_) => "`?` marks its failure path rare",
+                SourceMarker::ColdPath(_) => "`cold_path()` marks this path rare",
+                SourceMarker::Try(_) => "`?` marks its failure path rare",
             };
             // A loop's body may run more often than the code around it.
             let measured = match count_of(parents[region]) {

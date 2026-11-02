@@ -89,7 +89,8 @@ pub enum CtfeBuiltin {
     /// `array_release`: reading a released slot yields an unspecified value of
     /// its type, so the interpreter may leave the elements in place.
     ArrayRelease,
-    ColdPath,
+    /// A rarity marker: `cold_path`, `unlikely_path` or `cold_code`.
+    RarityMarker,
     Select,
     I32AsChar,
     /// `f32_is_nan` and `f64_is_nan`, IEEE's NaN test, which no operator
@@ -148,7 +149,7 @@ impl CtfeBuiltin {
             | Self::ArrayNew
             | Self::ArrayClonePrefix
             | Self::ArrayRelease
-            | Self::ColdPath
+            | Self::RarityMarker
             | Self::Select
             | Self::I32AsChar
             | Self::FloatIsNan
@@ -333,7 +334,7 @@ pub(crate) fn build_ctfe_builtin_map(project: &NirPackage) -> CtfeBuiltinMap {
             Some("array_copy" | "array_move") => CtfeBuiltin::ArrayCopy,
             Some("array_clone_prefix") => CtfeBuiltin::ArrayClonePrefix,
             Some("array_release") => CtfeBuiltin::ArrayRelease,
-            Some(marker) if Mark::of_builtin(marker).is_some() => CtfeBuiltin::ColdPath,
+            Some(marker) if Mark::of_builtin(marker).is_some() => CtfeBuiltin::RarityMarker,
             Some("select") => CtfeBuiltin::Select,
             Some("i32_as_char") => CtfeBuiltin::I32AsChar,
             Some("f32_is_nan" | "f64_is_nan") => CtfeBuiltin::FloatIsNan,

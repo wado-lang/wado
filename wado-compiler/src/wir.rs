@@ -1586,8 +1586,8 @@ pub enum WirInstr {
         then_body: Vec<WirInstr>,
         else_body: Option<Vec<WirInstr>>,
     },
-    /// Branch hint annotation, synthesized from `builtin::cold_path()` by
-    /// `apply_cold_path_hints` during WIR finalization or inferred from
+    /// Branch hint annotation, synthesized from the unlikely markers by
+    /// `apply_unlikely_hints` during WIR finalization or inferred from
     /// trapping control flow by `wir_optimize::branch_hint`. Wraps a condition
     /// expression; consumed by the emitter when it appears as the condition of
     /// an `If` or `BrIf` instruction, which records a
@@ -1620,7 +1620,7 @@ pub enum WirInstr {
     /// No operation (for structure).
     Nop,
     /// A marker that the path it starts is rare, in the halves `Mark` states.
-    /// Produces no Wasm. `apply_cold_path_hints` reads the unlikely half during
+    /// Produces no Wasm. `apply_unlikely_hints` reads the unlikely half during
     /// WIR finalization, wrapping the enclosing conditional's condition in a
     /// `BranchHint` so the side reaching the marker is hinted unlikely (see
     /// that pass for the recognized shapes).
