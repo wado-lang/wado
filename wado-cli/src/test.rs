@@ -703,12 +703,13 @@ pub(crate) struct LoadFailure {
     pub(crate) path: String,
 }
 
-/// Pipeline-wide resource caps.
+/// The run's resource caps, shared by every package's pipeline, since the
+/// packages run at once.
 ///
 /// `cpu` caps total CPU-bound tasks across all three stages — every worker
 /// acquires one permit. This makes `--parallel N` a truthful global cap
-/// that per-stage buffer sizes can't multiply. It is the whole run's
-/// budget, shared with `core:eval`, whose compiles can outlive a package.
+/// that per-stage buffer sizes and the number of packages can't multiply.
+/// `core:eval`, whose compiles can outlive a package, shares it too.
 ///
 /// `modules` caps live wasmtime `Component`s independently of channel
 /// buffering, bounding peak memory. The permit is held via
@@ -1549,8 +1550,8 @@ struct PipelineOutcome {
 
 /// Increments the wasmtime epoch on every registered engine. The registry
 /// holds `Weak<Engine>`, so an engine is freed once the last `LoadedModule`
-/// for it drops, and the next tick prunes its entry: a package run loading
-/// many modules does not accumulate engines.
+/// for it drops, and the next tick prunes its entry: a run loading many
+/// modules does not accumulate engines.
 struct EpochTicker {
     engines: Arc<Mutex<Vec<Weak<Engine>>>>,
     _ticker: Ticker,
@@ -1602,19 +1603,20 @@ impl EpochTicker {
 /// therefore small (just enough to keep the pipeline non-bursty), with
 /// the real limits enforced at the per-task-acquire points.
 ///
-/// Under `--no-run`, the load and execute stages are replaced with
-/// "drain to /dev/null" tasks so the compile stage producers don't
-/// block on a full channel — all the work after stage 1 disappears.
+/// Under `--no-run`, where the run has no `epoch_ticker`, the load and
+/// execute stages are replaced with "drain to /dev/null" tasks so the
+/// compile stage producers don't block on a full channel — all the work
+/// after stage 1 disappears.
 async fn run_pipeline(
     paths: &[String],
     flags: Arc<CompileFlags>,
-    cpu: Arc<Semaphore>,
+    budget: Arc<PipelineBudget>,
     compile_jobs: usize,
     load_jobs: usize,
     execute_jobs: usize,
     grants: Arc<TestGrants>,
     eval_host: Arc<EvalHost>,
-    no_run: bool,
+    epoch_ticker: Option<Arc<EpochTicker>>,
     profile: ProfileMode,
     runtime_knobs: RuntimeKnobs,
     profiler_slot: Option<GuestProfilerSlot>,
@@ -1623,7 +1625,6 @@ async fn run_pipeline(
     coverage_run: Option<Arc<CoverageRun>>,
 ) -> PipelineOutcome {
     let opt_level = flags.knobs.opt_level.to_wasmtime();
-    let budget = Arc::new(PipelineBudget::new(cpu, compile_jobs, execute_jobs));
 
     // Inter-stage channel capacities: small. The `modules` semaphore
     // and per-stage `buffer_unordered` caps are what actually limit
@@ -1645,14 +1646,6 @@ async fn run_pipeline(
     let compile_observer = Arc::new(StageObserver::new());
     let load_observer = Arc::new(StageObserver::new());
     let execute_observer = Arc::new(StageObserver::new());
-
-    // Epoch ticker lives only when execute will run; in `--no-run` mode
-    // no engines are loaded and there's nothing to tick.
-    let tick = match &profile {
-        ProfileMode::Guest { interval_ms, .. } => Duration::from_millis(*interval_ms),
-        _ => Duration::from_millis(EPOCH_INTERVAL_MS),
-    };
-    let epoch_ticker = (!no_run).then(|| Arc::new(EpochTicker::start(tick)));
 
     let paths_owned: Vec<String> = paths.to_vec();
     let compile_future = run_compile_stage(
@@ -1731,8 +1724,6 @@ async fn run_pipeline(
         tokio::spawn(collect_into_vec(lfail_rx)),
         tokio::spawn(collect_into_vec(result_rx)),
     ));
-
-    drop(epoch_ticker); // Stops the tick thread.
 
     PipelineOutcome {
         compiled_count,
@@ -2297,17 +2288,19 @@ fn tally_test_results(results: &[TestResult]) -> (u32, u32, u32, u32) {
     (passed, failed, todo_pending, todo_resolved)
 }
 
+/// Runs one package's files, and answers its totals and, under
+/// `--report-fuel`, its test results.
 async fn run_one_package(
     pkg_run: &PackageRun,
     flags: Arc<CompileFlags>,
-    cpu: Arc<Semaphore>,
+    budget: Arc<PipelineBudget>,
     compile_jobs: usize,
     load_jobs: usize,
     execute_jobs: usize,
     grants: Arc<TestGrants>,
     eval_host: Arc<EvalHost>,
     show_banner: bool,
-    no_run: bool,
+    epoch_ticker: Option<Arc<EpochTicker>>,
     profile: ProfileMode,
     runtime_knobs: RuntimeKnobs,
     profiler_slot: Option<GuestProfilerSlot>,
@@ -2316,10 +2309,9 @@ async fn run_one_package(
     coverage_run: Option<Arc<CoverageRun>>,
     test_cache: Option<&TestCache>,
     cached: &[(String, Tally)],
-    metered: Option<&mut Vec<TestResult>>,
-) -> PackageTotals {
-    reporter.on_package_start(pkg_run, show_banner);
-
+) -> (PackageTotals, Option<Vec<TestResult>>) {
+    let no_run = epoch_ticker.is_none();
+    let report_fuel = runtime_knobs.report_fuel;
     let mut cached_tests = Tally::default();
     for (path, tally) in cached {
         reporter.on_cached(path, *tally);
@@ -2330,13 +2322,13 @@ async fn run_one_package(
     let outcome = run_pipeline(
         &pkg_run.paths,
         flags,
-        cpu,
+        budget,
         compile_jobs,
         load_jobs,
         execute_jobs,
         grants,
         eval_host,
-        no_run,
+        epoch_ticker,
         profile,
         runtime_knobs,
         profiler_slot,
@@ -2404,6 +2396,7 @@ async fn run_one_package(
 
     reporter.on_package_done(PackageDoneArgs {
         pkg_run,
+        show_banner,
         totals: &totals,
         test_results: &test_results,
         todo_compile_errors: &todo_compile_errors,
@@ -2412,10 +2405,7 @@ async fn run_one_package(
         no_run,
     });
 
-    if let Some(metered) = metered {
-        metered.extend(test_results);
-    }
-    totals
+    (totals, report_fuel.then_some(test_results))
 }
 
 /// Cache each file in `cacheable` whose every test passed, or trapped as a
@@ -2542,8 +2532,8 @@ pub async fn run(opts: TestOptions) -> Result<(), CliExit> {
     // `jobs` (= `--parallel N`, default `cpus`) is the **true** cap
     // on peak in-flight CPU work, enforced by the run's shared `cpu`
     // semaphore: every per-fixture worker — compile, load, execute —
-    // and every `eval` compile acquires one CPU permit before doing
-    // its work. Per-stage `*_jobs` caps below only
+    // of every package, and every `eval` compile, acquires one CPU permit
+    // before doing its work. Per-stage `*_jobs` caps below only
     // shape queueing depth and how upstream backpressure is
     // distributed; they cannot exceed `jobs` in actual concurrency.
     //
@@ -2552,10 +2542,14 @@ pub async fn run(opts: TestOptions) -> Result<(), CliExit> {
     // load workers on top of internal Cranelift threading thrashes
     // more than it helps. The shared cpu semaphore enforces the
     // cross-stage total either way.
-    let cpu = Arc::new(Semaphore::new(jobs));
     let compile_jobs = jobs;
     let load_jobs = (jobs / 2).max(1);
     let execute_jobs = jobs;
+    let budget = Arc::new(PipelineBudget::new(
+        Arc::new(Semaphore::new(jobs)),
+        compile_jobs,
+        execute_jobs,
+    ));
 
     // A cached file reports its tally and nothing else, so a run measuring the
     // tests (a profile, coverage, fuel) runs them all, and `--no-run` has no
@@ -2588,25 +2582,31 @@ pub async fn run(opts: TestOptions) -> Result<(), CliExit> {
 
     // One view of the source tree for the whole run, across packages.
     let run_cache = Arc::new(RunCache::new());
-    let eval_host = Arc::new(EvalHost::new(&flags.knobs, Arc::clone(&cpu), jobs));
+    let eval_host = Arc::new(EvalHost::new(&flags.knobs, Arc::clone(&budget.cpu), jobs));
     // `parse_args` admits one file under `--profile`, so this one slot holds
     // the run's only profiler and the write below happens once.
     let profiler_slot = matches!(profile, ProfileMode::Guest { .. })
         .then(|| Arc::new(Mutex::new(None)) as GuestProfilerSlot);
-    let mut grand = PackageTotals::default();
-    let mut metered = runtime_knobs.report_fuel.then(Vec::new);
-    for (pkg_run, cached) in package_runs.iter().zip(&cached) {
-        let totals = run_one_package(
+    // One ticker for every package, since they run at once; `--no-run` loads
+    // no engine to tick.
+    let tick = match &profile {
+        ProfileMode::Guest { interval_ms, .. } => Duration::from_millis(*interval_ms),
+        _ => Duration::from_millis(EPOCH_INTERVAL_MS),
+    };
+    let epoch_ticker = (!no_run).then(|| Arc::new(EpochTicker::start(tick)));
+    // One package alone leaves cores idle while its last files finish.
+    let packages = package_runs.iter().zip(&cached).map(|(pkg_run, cached)| {
+        run_one_package(
             pkg_run,
             Arc::clone(&flags),
-            Arc::clone(&cpu),
+            Arc::clone(&budget),
             compile_jobs,
             load_jobs,
             execute_jobs,
             Arc::clone(&grants),
             Arc::clone(&eval_host),
             multi_pkg,
-            no_run,
+            epoch_ticker.clone(),
             profile.clone(),
             runtime_knobs.clone(),
             profiler_slot.clone(),
@@ -2615,11 +2615,17 @@ pub async fn run(opts: TestOptions) -> Result<(), CliExit> {
             coverage_run.clone(),
             test_cache.as_ref(),
             cached,
-            metered.as_mut(),
         )
-        .await;
+    });
+    let mut grand = PackageTotals::default();
+    let mut metered = runtime_knobs.report_fuel.then(Vec::new);
+    for (totals, results) in futures::future::join_all(packages).await {
         grand.merge(&totals);
+        if let (Some(metered), Some(results)) = (metered.as_mut(), results) {
+            metered.extend(results);
+        }
     }
+    drop(epoch_ticker); // Stops the tick thread.
 
     reporter.on_run_done(&grand, multi_pkg, overall_start.elapsed());
 
