@@ -411,7 +411,8 @@ level.
   left.
 - [ ] An author's `cold_path()` in the right operand of `&&` or `||` stays
   when the profile measured it, since the profile has no statement position
-  there for a marker of its own.- [ ] A region that starts in an expression, the right operand of `&&` or
+  there for a marker of its own.
+- [ ] A region that starts in an expression, the right operand of `&&` or
   `||`, has no statement position for a marker, so the regions inside one that
   never ran are marked in its place.
 - [ ] A region is measured once for all of a generic function's
