@@ -20,8 +20,6 @@
 (BACKTICK) @string
 (RAW_OPEN) @string
 (RAW_CLOSE) @string
-(RAW2_OPEN) @string
-(RAW2_CLOSE) @string
 (INTERP_OPEN) @string
 (interpolationEnd "}" @string)
 

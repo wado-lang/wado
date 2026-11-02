@@ -3,6 +3,12 @@
 
 grammar Wado;
 
+options { language = Wado; }
+
+@lexer::members {
+    raw_hashes: List<i32> = []
+}
+
 sourceFile
     : innerAttribute* item* EOF
     ;
@@ -720,12 +726,9 @@ literal
     | 'null'
     ;
 
-// A raw template's closer repeats its opener's `#`s, which a lexer mode can
-// count only by holding one mode per count. Two cover the corpus.
 templateString
     : BACKTICK templatePart* BACKTICK
     | RAW_OPEN templatePart* RAW_CLOSE
-    | RAW2_OPEN templatePart* RAW2_CLOSE
     ;
 
 templatePart
@@ -785,12 +788,10 @@ BACKTICK
     : '`' -> pushMode(TEMPLATE)
     ;
 
+// A raw template's closer repeats its opener's `#`s. The count is a stack,
+// since a hole may hold a raw template of its own.
 RAW_OPEN
-    : '#`' -> pushMode(RAW_TEMPLATE)
-    ;
-
-RAW2_OPEN
-    : '##`' -> pushMode(RAW2_TEMPLATE)
+    : '#'+ '`' { lx.raw_hashes.push(pos - start - 1) } -> pushMode(RAW_TEMPLATE)
     ;
 
 CHAR_LITERAL
@@ -858,11 +859,14 @@ TEMPLATE_END
     ;
 
 // A backslash is text. The longest match takes `${` over `$`, and the closer
-// over a lone backtick.
+// over a lone backtick. The closer takes no more `#`s than the opener had, so
+// one `#` past them is text.
 mode RAW_TEMPLATE;
 
 RAW_CLOSE
-    : '`#' -> popMode
+    : '`' ({ pos - start <= lx.raw_hashes.last().unwrap() }? '#')+
+      { pos - start == lx.raw_hashes.last().unwrap() + 1 }?
+      { lx.raw_hashes.pop() } -> popMode
     ;
 
 RAW_INTERP_OPEN
@@ -874,23 +878,5 @@ RAW_TEXT
     ;
 
 RAW_LONE
-    : [`$] -> type(TEMPLATE_TEXT)
-    ;
-
-mode RAW2_TEMPLATE;
-
-RAW2_CLOSE
-    : '`##' -> popMode
-    ;
-
-RAW2_INTERP_OPEN
-    : '${' -> type(INTERP_OPEN), pushMode(DEFAULT_MODE)
-    ;
-
-RAW2_TEXT
-    : ~[`$]+ -> type(TEMPLATE_TEXT)
-    ;
-
-RAW2_LONE
     : [`$] -> type(TEMPLATE_TEXT)
     ;
