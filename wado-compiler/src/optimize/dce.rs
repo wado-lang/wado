@@ -181,7 +181,8 @@ pub(super) fn analyze_dce(
     analysis
 }
 
-/// Callers relevant to interprocedural facts, including cached rewrite targets.
+/// The functions reachable from the entries and from `cached`, the clones a
+/// later call may be pointed at.
 pub(super) fn reachable_function_positions(
     project: &NirPackage,
     cache: &mut DescriptorCache,
