@@ -1838,6 +1838,7 @@ mod tests {
     use crate::coverage::RegionKind;
     use crate::hashmap;
     use crate::pgo;
+    use crate::rarity::Mark;
     use crate::tir::{TirExpr, TirExprKind};
     use crate::tir_visitor::TirRefVisitor;
 
@@ -2031,7 +2032,7 @@ mod tests {
             if let TirExprKind::Call { func, .. } = &expr.kind
                 && let Some(name) = func
                     .intrinsic()
-                    .filter(|&name| crate::rarity::Mark::of_builtin(name).is_some())
+                    .filter(|&name| Mark::of_builtin(name).is_some())
             {
                 self.0.push(name.to_string());
             }
