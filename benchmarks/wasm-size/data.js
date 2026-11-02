@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1793572907489,
+  "lastUpdate": 1793582386188,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -73493,6 +73493,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/36a43cdfbd92a9bc296b769174d31e1ef362d12e"
         },
         "date": 1793572906529,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3099,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7303,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21809,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 316578,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "330330b11201256ea70fdcab17ee7b4ef25e337e",
+          "message": "Merge pull request #2523 from wado-lang/ccr-67696f54-x3aizq\n\nperf(mono): monomorphize only what the roots reach",
+          "timestamp": "2026-11-02T10:05:30+09:00",
+          "tree_id": "ccb40d5a97d9bc10654dec230849410b298edf88",
+          "url": "https://github.com/wado-lang/wado/commit/330330b11201256ea70fdcab17ee7b4ef25e337e"
+        },
+        "date": 1793582384938,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
