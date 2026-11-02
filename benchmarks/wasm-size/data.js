@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1793582386188,
+  "lastUpdate": 1793592076659,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -73537,6 +73537,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/330330b11201256ea70fdcab17ee7b4ef25e337e"
         },
         "date": 1793582384938,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3099,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7303,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21809,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 316578,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "4d4cc648f0679c43b9568170961e00b98f923278",
+          "message": "Merge pull request #2524 from wado-lang/ccr-afbcc3e1-8wj63p\n\nperf(ci): fewer jobs and runner minutes per push",
+          "timestamp": "2026-11-02T12:41:39+09:00",
+          "tree_id": "209540536657438211826c2d8028d88b1860b58b",
+          "url": "https://github.com/wado-lang/wado/commit/4d4cc648f0679c43b9568170961e00b98f923278"
+        },
+        "date": 1793592075664,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
