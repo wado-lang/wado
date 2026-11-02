@@ -37,7 +37,6 @@ use crate::type_table::TypeTable;
 use cranelift_entity::EntityRef;
 
 use super::arena_query::{self, ColdRuns, Markers, stmt_diverges, unreached_through};
-use crate::rarity::Rarity;
 use super::body_memo::BodyMemo;
 use super::gate::{FunctionGate, GatedPass};
 use crate::compiler_trace;
@@ -47,6 +46,7 @@ use crate::optimize::alias::{CallImmutability, call_verdicts, first_param_types}
 use crate::optimize::dce::{DescriptorCache, ReachabilityCache, reachable_function_positions};
 use crate::optimize::mod_ref::SummaryCache;
 use crate::parallel::{Executor, lock};
+use crate::rarity::Rarity;
 use crate::token::Span;
 use crate::trace::filter;
 

@@ -21,6 +21,7 @@ use crate::attribute;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::lexer::normalize_line_breaks;
 use crate::module_source::ModuleSource;
+use crate::name::COLD_PATH_INTRINSIC;
 use crate::token::Span;
 
 /// Name of the custom section embedded in instrumented test-world components.
@@ -1101,7 +1102,7 @@ impl AstVisitor<'_> for Planner<'_> {
                 self.sites.push((ProbeSite::TryExit, t.id, region));
                 self.markers.push((Marker::Try(t.id), t.span, region));
             }
-            Expr::Call(call) if is_builtin_call(call, "cold_path") => {
+            Expr::Call(call) if is_builtin_call(call, COLD_PATH_INTRINSIC) => {
                 if let Some(region) = self.region {
                     self.markers
                         .push((Marker::ColdPath(call.id), call.span, region));

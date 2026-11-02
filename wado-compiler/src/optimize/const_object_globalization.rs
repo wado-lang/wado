@@ -27,7 +27,6 @@ use super::arena_query::{
     reachable_nodes, strip_refs,
 };
 use crate::ast::Visibility;
-use crate::rarity::Rarity;
 use crate::name::{CONST_OBJ_GLOBAL_PREFIX, MODULE_INIT_FUNCTION, MODULES_INIT_FUNCTION};
 use crate::nir::aggregate_field_info;
 use crate::nir::{FuncId, NirParam, NirStruct};
@@ -41,6 +40,7 @@ use crate::optimize::arena_query::{
 use crate::optimize::mod_ref::compute_fn_effects;
 use crate::optimize::shared_escape::SharedEscape;
 use crate::primitive::PrimitiveType;
+use crate::rarity::Rarity;
 use crate::tir::GlobalInit;
 use crate::token::Span;
 use crate::wir_build::packed_array_is_eager;

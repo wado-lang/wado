@@ -26,7 +26,6 @@ use crate::token::Span;
 use crate::type_table::{TypeKey, TypeTable};
 
 use super::arena_query::{ColdRuns, Markers};
-use crate::rarity::Rarity;
 use super::body_memo::BodyMemo;
 use super::const_branch_prune::BranchPruneRule;
 use super::const_folding::ConstFoldRule;
@@ -41,6 +40,7 @@ use crate::module_source::ModuleSource;
 use crate::name::param_spec_name;
 use crate::nir::NirLocal;
 use crate::parallel::Executor;
+use crate::rarity::Rarity;
 
 /// Default whole-module cap on synthesized clones, so a pathological program
 /// cannot trade unbounded code size for constant propagation;

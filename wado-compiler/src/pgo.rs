@@ -505,7 +505,11 @@ impl MarkMap {
             // A loop's body may run more often than the code around it.
             let measured = match count_of(parents[region]) {
                 Some(around) => {
-                    format!("{} where the code around it ran {}", times(runs), times(around))
+                    format!(
+                        "{} where the code around it ran {}",
+                        times(runs),
+                        times(around)
+                    )
                 }
                 None => times(runs),
             };

@@ -34,12 +34,12 @@ use crate::tir::{ResolvedType, TypeId};
 use crate::type_table::TypeTable;
 
 use super::arena_query::{ColdRuns, Markers, control_escapes};
-use crate::rarity::Rarity;
 use super::inline::{InlineCtx, splice_stmt};
 use crate::ast::Visibility;
 use crate::compiler_trace;
 use crate::name::cold_region_helper_name;
 use crate::optimize::inline::{call_site_size, region_size};
+use crate::rarity::Rarity;
 
 /// Split every cold region the preconditions admit, in every function —
 /// including the ones this pass itself creates, so a region nested inside a
