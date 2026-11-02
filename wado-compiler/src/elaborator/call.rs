@@ -1987,6 +1987,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     &mut substituted,
                 );
                 self.recoerce_literal_args(&call.args, &mut args, &substituted);
+                self.record_call_param_types(call.id, substituted.clone());
                 // Per-argument checking alone passes a call of the wrong length:
                 // the loop below reaches neither a missing argument nor a
                 // surplus one, and the call reaches codegen as an invalid
