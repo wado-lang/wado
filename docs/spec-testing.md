@@ -413,7 +413,8 @@ A compile reads each count against the profile as a whole. With every count
 sorted from the largest down, the hot line is the smallest count still inside
 the share of all runs that `--optimize-profile-summary-cutoff-hot` names, and
 the cold line the same for `--optimize-profile-summary-cutoff-cold`. Both are in
-parts per million, 990000 and 999999 by default. A count at or above the hot
+parts per million, 990000 and 999999 by default, and a share is rounded down to
+a whole run. A count at or above the hot
 line is hot, and any other at or below the cold line is cold.
 
 The compiler marks the failure path of a `?` cold as an author would. Where the
