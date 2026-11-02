@@ -840,17 +840,22 @@ impl NirPackage {
 
     /// The function bound to each item an optimizer rewrite calls. Only an
     /// item [`CompilerItem::rewritten_from`] declares is here: DCE keeps no
-    /// other for a call the rewrite has yet to write.
+    /// other for a call the rewrite has yet to write. A dead one is absent: DCE
+    /// dropped it because nothing it is rewritten from is reachable, so no call
+    /// remains for the rewrite to replace.
     pub fn rewrite_targets(&self) -> IndexMap<CompilerItem, FuncId> {
         let mut targets = IndexMap::default();
         for cell in &self.functions {
             let func = cell.borrow();
             if let Some(item) = func.compiler_item
                 && !item.rewritten_from().is_empty()
+                && !func.is_dead
             {
-                targets
-                    .entry(item)
-                    .or_insert_with(|| func.id.expect("func_id assigned at lower"));
+                let id = func.id.expect("func_id assigned at lower");
+                assert!(
+                    targets.insert(item, id).is_none(),
+                    "a rewrite target is bound to one live function"
+                );
             }
         }
         targets

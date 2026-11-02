@@ -1238,9 +1238,9 @@ type "functype//core:json/core:json/JsonDeserializer::scan_string_run$sroa[self.
 
 type "functype//core:json/core:json/JsonDeserializer::append_scanned_run$sroa[self.input]" = fn(ref Array<u8>, i32, i32, ref "core:prelude/string.wado//String", i32, i32, bool) -> ref null "core:serde//DeserializeError";  // TypeId(429)
 
-type "functype//core:json/core:json/JsonDeserializer::take_scanned_run$sroa[self.input,return]" = fn(ref Array<u8>, i32, i32, i32, i32, bool) -> [i32, ref null "core:prelude/string.wado//String", ref null "core:serde//DeserializeError"];  // TypeId(430)
+type "functype//core:serde/serde_struct_derive.wado/User^core:serde/Serialize::serialize<core:json/JsonSerializer>$spec0$sroa[s.buf]" = fn(ref "serde_struct_derive.wado//User", ref "core:prelude/string.wado//String") -> ref null "core:serde//SerializeError";  // TypeId(430)
 
-type "functype//core:serde/serde_struct_derive.wado/User^core:serde/Serialize::serialize<core:json/JsonSerializer>$spec0$sroa[s.buf]" = fn(ref "serde_struct_derive.wado//User", ref "core:prelude/string.wado//String") -> ref null "core:serde//SerializeError";  // TypeId(431)
+type "functype//core:json/core:json/JsonDeserializer::take_scanned_run$sroa[self.input,return]" = fn(ref Array<u8>, i32, i32, i32, i32, bool) -> [i32, ref null "core:prelude/string.wado//String", ref null "core:serde//DeserializeError"];  // TypeId(431)
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::format<core:serde/$tmpl$5d09a9f8d325483d,[core:prelude/string.wado/String]>$spec0$spec1$sroa[t.h0]" = fn(ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//String";  // TypeId(432)
 
@@ -10391,6 +10391,39 @@ fn "core:json/core:json/JsonDeserializer::append_scanned_run$sroa[self.input]"($
     return ref.null none;
 }
 
+fn "core:serde/serde_struct_derive.wado/User^core:serde/Serialize::serialize<core:json/JsonSerializer>$spec0$sroa[s.buf]"(self, s) {
+    let $load_8: ref Array<u8>;
+    let new_used_33: i32;
+    let start_34: i32;
+    let v_47: ref "core:prelude/string.wado//String";
+    if @unlikely(local.tee new_used_33(s.used + 1) > builtin::array_len(s.repr)) {
+        cold_path;
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(s, new_used_33);
+    }
+    start_34 = s.used;
+    s.used = new_used_33;
+    builtin::array_copy<u8>(s.repr, start_34, global:core:serde::$const_obj_65, 0, 1);
+    v_47 = self.name;
+    "core:json/core:json/write_plain_key<&core:prelude/string.wado/String>$spec0"(s, global:core:serde::$const_obj_64, 0);
+    "core:json/core:json/write_escaped_string<&core:prelude/string.wado/String>"(s, v_47);
+    "core:json/core:json/write_plain_key<&core:prelude/string.wado/String>$spec1"(s, global:core:serde::$const_obj_63, 1);
+    if @unlikely(local.tee new_used_33(s.used + 1) > builtin::array_len(s.repr)) {
+        cold_path;
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(s, new_used_33);
+    }
+    start_34 = s.used;
+    s.used = new_used_33;
+    "core:prelude/primitive.wado/write_decimal_digits"(local.tee $load_8(s.repr), start_34, 3_i64, 1);
+    if @unlikely(local.tee new_used_33(s.used + 1) > builtin::array_len($load_8)) {
+        cold_path;
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(s, new_used_33);
+    }
+    start_34 = s.used;
+    s.used = new_used_33;
+    builtin::array_copy<u8>(s.repr, start_34, global:core:serde::$const_obj_62, 0, 1);
+    return ref.null none;
+}
+
 fn "core:json/core:json/JsonDeserializer::take_scanned_run$sroa[self.input,return]"($mv$self$repr, $mv$self$start, $mv$self$end, start, end, valid) {
     let s_4: ref "core:prelude/string.wado//String";
     let $qm_e: ref "core:serde//DeserializeError";
@@ -10424,39 +10457,6 @@ fn "core:json/core:json/JsonDeserializer::take_scanned_run$sroa[self.input,retur
         break $thread_$inline_core_json_JsonDeserializer__append_scanned_run_1;
     };
     return 0, s_4, ref.null none;
-}
-
-fn "core:serde/serde_struct_derive.wado/User^core:serde/Serialize::serialize<core:json/JsonSerializer>$spec0$sroa[s.buf]"(self, s) {
-    let $load_8: ref Array<u8>;
-    let new_used_33: i32;
-    let start_34: i32;
-    let v_47: ref "core:prelude/string.wado//String";
-    if @unlikely(local.tee new_used_33(s.used + 1) > builtin::array_len(s.repr)) {
-        cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(s, new_used_33);
-    }
-    start_34 = s.used;
-    s.used = new_used_33;
-    builtin::array_copy<u8>(s.repr, start_34, global:core:serde::$const_obj_65, 0, 1);
-    v_47 = self.name;
-    "core:json/core:json/write_plain_key<&core:prelude/string.wado/String>$spec0"(s, global:core:serde::$const_obj_64, 0);
-    "core:json/core:json/write_escaped_string<&core:prelude/string.wado/String>"(s, v_47);
-    "core:json/core:json/write_plain_key<&core:prelude/string.wado/String>$spec1"(s, global:core:serde::$const_obj_63, 1);
-    if @unlikely(local.tee new_used_33(s.used + 1) > builtin::array_len(s.repr)) {
-        cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(s, new_used_33);
-    }
-    start_34 = s.used;
-    s.used = new_used_33;
-    "core:prelude/primitive.wado/write_decimal_digits"(local.tee $load_8(s.repr), start_34, 3_i64, 1);
-    if @unlikely(local.tee new_used_33(s.used + 1) > builtin::array_len($load_8)) {
-        cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(s, new_used_33);
-    }
-    start_34 = s.used;
-    s.used = new_used_33;
-    builtin::array_copy<u8>(s.repr, start_34, global:core:serde::$const_obj_62, 0, 1);
-    return ref.null none;
 }
 
 fn "core:prelude/string.wado/core:prelude/string.wado/String::format<core:serde/$tmpl$5d09a9f8d325483d,[core:prelude/string.wado/String]>$spec0$spec1$sroa[t.h0]"(t) {

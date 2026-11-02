@@ -204,7 +204,8 @@ enum LenTerm {
 /// write in the same run would measure a buffer the run itself grew.
 pub(super) struct AppendFuseRule {
     push_str_ids: IndexSet<FuncId>,
-    push_ascii_id: FuncId,
+    /// `None` once DCE dropped `push_ascii_byte`, when no call names it.
+    push_ascii_id: Option<FuncId>,
     ids: FusedIds,
 }
 
@@ -213,7 +214,7 @@ impl AppendFuseRule {
     pub(super) fn new(ctx: &Ctx) -> Option<Self> {
         Some(Self {
             push_str_ids: ctx.push_str_ids.clone(),
-            push_ascii_id: ctx.push_ascii_id?,
+            push_ascii_id: ctx.push_ascii_id,
             ids: ctx.fused?,
         })
     }
@@ -231,7 +232,7 @@ impl AppendFuseRule {
         let [arg] = args else {
             return None;
         };
-        if func_id == self.push_ascii_id {
+        if Some(func_id) == self.push_ascii_id {
             let byte = u8::try_from(body.operand_const_int(arg.expr)?).ok()?;
             return Some((recv, Piece::Byte(byte)));
         }

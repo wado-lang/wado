@@ -22,6 +22,7 @@ use crate::module_source::ModuleSource;
 use crate::name::{
     FqTypeName, FreeFunctionName, FunctionId, MODULE_INIT_FUNCTION, MethodName, UNIT_TYPE_NAME,
     is_fn_type_name, mangle_generic_name, mangle_local_trait_method, mangle_method_generic,
+    retired_name,
 };
 use crate::nir::{FuncId, FunctionRef, NirFunction, NirImport, NirStruct};
 use crate::nir_arena::{
@@ -314,29 +315,38 @@ fn extend_reachable_for_optimizer_passes(
     graph: &AnalysisGraph,
     reachable: &mut Reached,
 ) {
-    // A generic item marks one id per monomorph, so any of them counts.
-    let mut reached_items: IndexSet<CompilerItem> = IndexSet::default();
-    let mut targets: Vec<(CompilerItem, Target)> = Vec::new();
-    for (pos, func_rc) in project.functions.iter().enumerate() {
-        let Some(item) = func_rc.borrow().compiler_item else {
-            continue;
-        };
-        if reachable.contains(&Target::Stored(pos)) {
-            reached_items.insert(item);
-        }
-        if !item.rewritten_from().is_empty() {
-            targets.push((item, Target::Stored(pos)));
-        }
-    }
+    let items: Vec<(CompilerItem, Target)> = project
+        .functions
+        .iter()
+        .enumerate()
+        .filter_map(|(pos, func_rc)| Some((func_rc.borrow().compiler_item?, Target::Stored(pos))))
+        .collect();
     // Rooted wherever what a rewrite replaces is reachable, though the rewrite
-    // may never fire: the DCE after the loop drops what no rewrite called.
-    let rooted = targets.into_iter().filter_map(|(item, target)| {
-        item.rewritten_from()
+    // may never fire: the DCE after the loop drops what no rewrite called. A
+    // rooted target may itself be what another rewrite replaces, so to a
+    // fixpoint. A generic item marks one id per monomorph, so any of them counts.
+    loop {
+        let reached_items: IndexSet<CompilerItem> = items
             .iter()
-            .any(|from| reached_items.contains(from))
-            .then_some(target)
-    });
-    reachable.extend(compute_reachable(graph, rooted));
+            .filter(|(_, target)| reachable.contains(target))
+            .map(|(item, _)| *item)
+            .collect();
+        let rooted: Vec<Target> = items
+            .iter()
+            .filter(|(item, target)| {
+                !reachable.contains(target)
+                    && item
+                        .rewritten_from()
+                        .iter()
+                        .any(|from| reached_items.contains(from))
+            })
+            .map(|(_, target)| target.clone())
+            .collect();
+        if rooted.is_empty() {
+            break;
+        }
+        reachable.extend(compute_reachable(graph, rooted));
+    }
 
     // An `array_clone::<T>` site reaches its helper through the element type
     // rather than a call edge, so seed one root per value-typed site.
@@ -1404,10 +1414,12 @@ fn compute_reachable(graph: &AnalysisGraph, roots: impl IntoIterator<Item = Targ
 /// and codegen already skip `body.is_none()`, and the type / global / string
 /// reachability is filtered by reachable *position* (not body presence), so
 /// clearing the body is behavior-preserving versus the old `retain` removal.
+/// Returns the live functions the cleared bodies called, whose callers just
+/// shrank.
 pub fn remove_unreachable_functions(
     project: &mut NirPackage,
     reachable_positions: &IndexSet<usize>,
-) {
+) -> IndexSet<FuncId> {
     // Dense `Vec<bool>` indexed by original position avoids hashing each
     // index against `reachable_positions` once per step.
     let mut keep = vec![false; project.functions.len()];
@@ -1416,16 +1428,37 @@ pub fn remove_unreachable_functions(
             keep[pos] = true;
         }
     }
+    let mut orphaned = IndexSet::default();
+    let mut retired = Vec::new();
     for (i, func_rc) in project.functions.iter().enumerate() {
         // A borrow counts as a write, so one already dead is left unborrowed:
         // the optimizer loop drops the unreachable every round, and a write
         // would make each `BodyMemo` re-derive it every time.
-        if !keep[i] && !func_rc.borrow().is_dead {
-            let mut func = func_rc.borrow_mut();
-            func.is_dead = true;
-            func.body = None;
+        if keep[i] || func_rc.borrow().is_dead {
+            continue;
         }
+        let mut func = func_rc.borrow_mut();
+        func.is_dead = true;
+        let Some(body) = func.body.take() else {
+            continue;
+        };
+        body.for_each_reachable_node(|node| {
+            if let NodeRef::Expr(e) = node
+                && let ExprKind::Call { func_id, .. } = &body.exprs[e].kind
+            {
+                orphaned.insert(*func_id);
+            }
+        });
+        let method = func.method_info.as_ref().map(|m| retired_name(&m.method_name, i));
+        retired.push((FuncId::new(i), retired_name(&func.name, i), method));
     }
+    // A pass that finds a function by its name to reuse it, rather than mint
+    // one, must not find a dead one: nothing would emit it. A live function
+    // may then take the name.
+    let merged = project.rename_functions(retired);
+    assert!(merged.is_empty(), "a retired name is unique by its position");
+    orphaned.retain(|id| !project.functions[id.index()].borrow().is_dead);
+    orphaned
 }
 
 impl DceAnalysis {

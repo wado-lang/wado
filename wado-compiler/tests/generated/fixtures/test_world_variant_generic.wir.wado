@@ -284,9 +284,9 @@ type "functype//core:prelude/string.wado/$template_segment$core:prelude/string.w
 
 type "functype//core:prelude/string.wado/$template_segment$core:prelude/string.wado/$tmpl$b145b32c9a586330$spec2$dae[index]" = fn(ref "core:prelude/string.wado//$tmpl$b145b32c9a586330") -> ref "core:prelude/string.wado//String";  // TypeId(77)
 
-type "functype//sub/test_world_variant_generic_helper.wado/sub/test_world_variant_generic_helper.wado/walk_node<sub/test_world_variant_generic_helper.wado/Recorder>$sroa[node.children]" = fn(ref "sub/test_world_variant_generic_helper.wado//Recorder", ref "core:prelude//List<sub/test_world_variant_generic_helper.wado/CstChild>");  // TypeId(78)
+type "functype//sub/test_world_variant_generic_helper.wado/to_tree$sroa[node.children]" = fn(ref "core:prelude//List<sub/test_world_variant_generic_helper.wado/CstChild>") -> [ref "core:prelude/string.wado//String", ref "core:prelude//List<sub/test_world_variant_generic_helper.wado/CstChild>"];  // TypeId(78)
 
-type "functype//sub/test_world_variant_generic_helper.wado/to_tree$sroa[node.children]" = fn(ref "core:prelude//List<sub/test_world_variant_generic_helper.wado/CstChild>") -> [ref "core:prelude/string.wado//String", ref "core:prelude//List<sub/test_world_variant_generic_helper.wado/CstChild>"];  // TypeId(79)
+type "functype//sub/test_world_variant_generic_helper.wado/sub/test_world_variant_generic_helper.wado/walk_node<sub/test_world_variant_generic_helper.wado/Recorder>$sroa[node.children]" = fn(ref "sub/test_world_variant_generic_helper.wado//Recorder", ref "core:prelude//List<sub/test_world_variant_generic_helper.wado/CstChild>");  // TypeId(79)
 
 type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::new" = fn(ref "core:prelude/string.wado//String") -> ref "core:prelude/format.wado//Formatter";  // TypeId(80)
 
@@ -1424,33 +1424,6 @@ fn "core:prelude/string.wado/$template_segment$core:prelude/string.wado/$tmpl$b1
     };
 }
 
-fn "sub/test_world_variant_generic_helper.wado/sub/test_world_variant_generic_helper.wado/walk_node<sub/test_world_variant_generic_helper.wado/Recorder>$sroa[node.children]"(v, node) {
-    let n: ref "sub/test_world_variant_generic_helper.wado//NodeData";
-    let end: i32;
-    let ref_val: ref "sub/test_world_variant_generic_helper.wado//CstChild";
-    let $sroa_$iter_0_repr_22: ref "Array<sub/test_world_variant_generic_helper.wado/CstChild>";
-    let $sroa_$iter_0_index_23: i32;
-    v.count = v.count + 1;
-    end = node.used;
-    $sroa_$iter_0_repr_22 = node.repr;
-    $sroa_$iter_0_index_23 = 0;
-    b181: block {
-        l182: loop {
-            break_if b181 $sroa_$iter_0_index_23 >= end;
-            ref_val = builtin::array_get_value<ref "sub/test_world_variant_generic_helper.wado//CstChild">($sroa_$iter_0_repr_22, $sroa_$iter_0_index_23);
-            $sroa_$iter_0_index_23 = $sroa_$iter_0_index_23 + 1;
-            if ref.test "sub/test_world_variant_generic_helper.wado//CstChild::TokenChild"(ref_val) {
-                drop(ref.cast "sub/test_world_variant_generic_helper.wado//CstChild::TokenChild"(ref_val).payload_0);
-                v.count = v.count + 1;
-            } else {
-                n = ref.cast "sub/test_world_variant_generic_helper.wado//CstChild::NodeChild"(ref_val).payload_0;
-                "sub/test_world_variant_generic_helper.wado/sub/test_world_variant_generic_helper.wado/walk_node<sub/test_world_variant_generic_helper.wado/Recorder>$sroa[node.children]"(v, n.children);
-            }
-            continue l182;
-        };
-    };
-}
-
 fn "sub/test_world_variant_generic_helper.wado/to_tree$sroa[node.children]"(node) {
     let $load_1: ref Array<u8>;
     let rec: ref "sub/test_world_variant_generic_helper.wado//Recorder";
@@ -1482,6 +1455,33 @@ fn "sub/test_world_variant_generic_helper.wado/to_tree$sroa[node.children]"(node
     }; start_142 = out_5.used; out_5.used = is_negative_67; "core:prelude/primitive.wado/write_decimal_digits"(out_5.repr, start_142, x, $sroa_t_h0_103); $inline_core_prelude_string_wado_String__internal_push_view_40: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_40;
     }; out_5, struct.new "core:prelude//List<sub/test_world_variant_generic_helper.wado/CstChild>" { repr: array.new_fixed<ref "sub/test_world_variant_generic_helper.wado//CstChild">(), used: 0 };
+}
+
+fn "sub/test_world_variant_generic_helper.wado/sub/test_world_variant_generic_helper.wado/walk_node<sub/test_world_variant_generic_helper.wado/Recorder>$sroa[node.children]"(v, node) {
+    let n: ref "sub/test_world_variant_generic_helper.wado//NodeData";
+    let end: i32;
+    let ref_val: ref "sub/test_world_variant_generic_helper.wado//CstChild";
+    let $sroa_$iter_0_repr_22: ref "Array<sub/test_world_variant_generic_helper.wado/CstChild>";
+    let $sroa_$iter_0_index_23: i32;
+    v.count = v.count + 1;
+    end = node.used;
+    $sroa_$iter_0_repr_22 = node.repr;
+    $sroa_$iter_0_index_23 = 0;
+    b185: block {
+        l186: loop {
+            break_if b185 $sroa_$iter_0_index_23 >= end;
+            ref_val = builtin::array_get_value<ref "sub/test_world_variant_generic_helper.wado//CstChild">($sroa_$iter_0_repr_22, $sroa_$iter_0_index_23);
+            $sroa_$iter_0_index_23 = $sroa_$iter_0_index_23 + 1;
+            if ref.test "sub/test_world_variant_generic_helper.wado//CstChild::TokenChild"(ref_val) {
+                drop(ref.cast "sub/test_world_variant_generic_helper.wado//CstChild::TokenChild"(ref_val).payload_0);
+                v.count = v.count + 1;
+            } else {
+                n = ref.cast "sub/test_world_variant_generic_helper.wado//CstChild::NodeChild"(ref_val).payload_0;
+                "sub/test_world_variant_generic_helper.wado/sub/test_world_variant_generic_helper.wado/walk_node<sub/test_world_variant_generic_helper.wado/Recorder>$sroa[node.children]"(v, n.children);
+            }
+            continue l186;
+        };
+    };
 }
 
 fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"(buf) {

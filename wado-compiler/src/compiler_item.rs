@@ -1690,7 +1690,7 @@ impl CompilerItem {
     /// The items whose calls an optimizer rewrite turns into calls of this
     /// one; empty for an item no rewrite calls. Such a call has no edge until
     /// the rewrite fires, so DCE keeps this item wherever one of these is
-    /// reachable, and a rewrite resolves its callee through
+    /// reachable or kept, and a rewrite resolves its callee through
     /// `NirPackage::rewrite_targets`, which holds no item not declared here.
     pub fn rewritten_from(self) -> &'static [CompilerItem] {
         if self == Self::StringPushAscii {
@@ -1703,8 +1703,9 @@ impl CompilerItem {
                 | Self::StringSetByteUnchecked
                 | Self::StringWriteStrAt
         ) {
-            // `nir/string_push`'s append fusion, over a run of either append.
-            &[Self::StringPushStr, Self::StringPushChar]
+            // `nir/string_push`'s append fusion, over a run of the appends
+            // `AppendFuseRule::piece_of` takes.
+            &[Self::StringPushStr, Self::StringPushAscii]
         } else {
             &[]
         }
