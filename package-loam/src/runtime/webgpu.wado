@@ -246,11 +246,9 @@ struct Owned {
     returned: bool,
 }
 
-/// The program a call is running, the launch of it running, by the
-/// program's serial and the launch's root node, and how many buffers the
-/// launch has made.
+/// The launch of a program running, by the program's serial and the launch's
+/// root node, and how many buffers it has made.
 struct Running {
-    serial: i32,
     launch: List<i32>,
     made: i32,
 }
@@ -654,31 +652,22 @@ impl WebGpuBackend {
         return Option::Some(o.slot);
     }
 
-    /// Starts a call of the program `serial`, whose launches make their
-    /// buffers in those their calls own.
-    internal fn run_program(&mut self, serial: i32) {
-        self.running = Option::Some(Running { serial, launch: [serial, -1], made: 0 });
+    /// Starts the launch whose root is the node `root` of the program
+    /// `serial`, which makes its buffers in those its calls own.
+    internal fn launching(&mut self, serial: i32, root: i32) {
+        self.running = Option::Some(Running {
+            launch: [serial, root],
+            made: 0,
+        });
     }
 
-    /// Starts the running program's launch whose root is the node `root`.
-    internal fn launching(&mut self, root: i32) {
-        let Some(r) = &mut self.running else {
-            unreachable();
-        };
-        r.launch = [r.serial, root];
-        r.made = 0;
-    }
-
-    /// Ends the call `run_program` started, which returned the values at the
+    /// Ends a call of the program `serial`, which returned the values at the
     /// slots `returned`.
-    internal fn ran_program(&mut self, returned: &List<i32>) {
-        let Some(r) = self.running else {
-            unreachable();
-        };
+    internal fn ran_program(&mut self, serial: i32, returned: &List<i32>) {
         self.running = null;
         let mut launches: List<List<i32>> = [];
         for let key of self.owned.keys() {
-            if key[0] == r.serial {
+            if key[0] == serial {
                 launches.push(*key);
             }
         }

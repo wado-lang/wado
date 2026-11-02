@@ -154,15 +154,14 @@ impl Graph for WebGpuBackend {
         for let [id, value] of program.constants.entries() {
             state.values[*id] = *value;
         }
-        self.run_program(program.serial);
         let results = launched(self, &mut state, program, &program.plan, arguments);
         let mut returned: List<i32> = [];
         for let r of &results {
-            if let F32(Device(d)) | Bool(Device(d)) = r {
+            if let Some(d) = on_device(r) {
                 returned.push(d.slot);
             }
         }
-        self.ran_program(&returned);
+        self.ran_program(program.serial, &returned);
         return results;
     }
 
@@ -673,7 +672,7 @@ fn launched(
 ) -> List<Any<WebGpuBackend>> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
     let recorded = &program.recorded;
     for let launch of plan.launches {
-        g.launching(match &launch {
+        g.launching(program.serial, match &launch {
             Node(id) | Case([id, _, _]) => *id,
             Kernel(k) => k.root,
             Joined(ks) => ks[0].root,
@@ -728,12 +727,16 @@ fn kernel_replayed(
     }
     g.tape();
     let value = kernel_result(g, values, recorded, k);
-    let result = match value {
-        F32(Device(d)) | Bool(Device(d)) => Option::Some(d),
+    g.taped(key, reads, on_device(&value));
+    return value;
+}
+
+/// The view `value` is, where it is on the device.
+fn on_device(value: &Any<WebGpuBackend>) -> Option<DeviceTensor> {
+    return match value {
+        F32(Device(d)) | Bool(Device(d)) => Option::Some(*d),
         _ => null,
     };
-    g.taped(key, reads, result);
-    return value;
 }
 
 /// The values of the roots of `ks`, a `Joined` launch: one product by their
@@ -751,17 +754,13 @@ fn joined_replayed(
         unreachable();
     };
     let free = 1 - dims.rhs_contracting[0];
-    let device = |id: i32| match values[id] {
-        F32(Device(d)) => Option::Some(d),
-        _ => null,
-    };
     let mut rights: List<DeviceTensor> = [];
     for let k of *ks {
-        if let Some(d) = device(recorded.nodes[k.product.unwrap()].operands[1]) {
+        if let Some(d) = on_device(&values[recorded.nodes[k.product.unwrap()].operands[1]]) {
             rights.push(d);
         }
     }
-    let lhs = device(first.operands[0]);
+    let lhs = on_device(&values[first.operands[0]]);
     let joined = if rights.len() == ks.len() { side_by_side(&rights, free) } else { null };
     let [Some(l), Some(r)] = [lhs, joined] else {
         return (*ks).into_iter().map(|k| kernel_replayed(g, values, program, &k)).collect();
@@ -823,12 +822,7 @@ fn device_reads(
 ) -> Option<List<DeviceTensor>> {
     let mut reads: List<DeviceTensor> = [];
     for let id of k.reads(recorded) {
-        match values[id] {
-            F32(Device(d)) | Bool(Device(d)) => reads.push(d),
-            _ => {
-                return null;
-            },
-        }
+        reads.push(on_device(&values[id])?);
     }
     return Option::Some(reads);
 }
