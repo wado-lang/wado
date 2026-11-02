@@ -192,6 +192,16 @@ impl Root {
         }
     }
 
+    /// What a profile measures here: the package and its dependencies, and the
+    /// standard library only where it is the code under test. A profile
+    /// naming a `core:` module rebuilds the stdlib snapshot for each compile.
+    fn coverage_scope(self) -> CoverageScope {
+        CoverageScope {
+            include_deps: true,
+            stdlib: self == Root::Stdlib,
+        }
+    }
+
     fn dir(self) -> PathBuf {
         repository_root().join(self.rel_dir())
     }
@@ -448,6 +458,9 @@ enum Excluded {
     NotTestWorld,
     /// The instrumented compile or its run failed, so no plan keys a profile.
     MeasureFailed(String),
+    /// The tests enter no function the root measures, so a profile has
+    /// nothing to judge.
+    NothingProfiled,
     /// The findings of the profile stage: a profile moved the output, the trap
     /// or test verdict, or made the compile fail or crash.
     ProfileChangedOutput {
@@ -491,6 +504,7 @@ impl Excluded {
             Excluded::GuardCrashed { .. } => "guard crashed the compiler",
             Excluded::NotTestWorld => "not run under the test world",
             Excluded::MeasureFailed(_) => "its tests could not be measured",
+            Excluded::NothingProfiled => "its tests enter no measured function",
             Excluded::ProfileChangedOutput { .. } => "profile changed the output",
             Excluded::ProfileTrapped { .. } => "profile changed whether it traps",
             Excluded::ProfileCrashed { .. } => "profile crashed the compiler",
@@ -507,7 +521,8 @@ impl Excluded {
             Excluded::Todo
             | Excluded::NoInjectionSite
             | Excluded::NoBindingInScope
-            | Excluded::NotTestWorld => String::new(),
+            | Excluded::NotTestWorld
+            | Excluded::NothingProfiled => String::new(),
             Excluded::BaselineCompileFailed { level, detail }
             | Excluded::BaselineUnhealthy { level, detail }
             | Excluded::BaselineOutOfBudget { level, detail }
@@ -1791,7 +1806,7 @@ fn random_counts(measured: &Coverage, seed: u64) -> Coverage {
 fn measure(path: &Path, text: &str, spec: &Spec) -> Result<Coverage, String> {
     let caught = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         let options = CompilerOptions {
-            coverage: Some(CoverageScope::default()),
+            coverage: Some(spec.root.coverage_scope()),
             ..spec.compiler_options(OptLevel::O0)
         };
         let compiled = compile(path, text, spec, options)?;
@@ -1870,6 +1885,10 @@ fn profile(subject: &Source, source: &str) -> Result<Eligible, Excluded> {
             profiles,
         });
     }
+    let judged = |program: &Program| program.profiles[0].judged().len();
+    if judged(&programs[0]) == 0 {
+        return Err(Excluded::NothingProfiled);
+    }
 
     let mut alive: Vec<(usize, usize)> = programs
         .iter()
@@ -1910,7 +1929,6 @@ fn profile(subject: &Source, source: &str) -> Result<Eligible, Excluded> {
         }
     }
 
-    let judged = |program: &Program| program.profiles[0].judged().len();
     Ok(Eligible {
         name,
         sites: programs.iter().map(judged).sum(),
