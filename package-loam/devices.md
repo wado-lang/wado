@@ -265,6 +265,12 @@ and makes a pass that runs from a list of dispatches:
   concatenated products. It does so over the graph rather than in the
   generator, since some rules depend on the device, such as whether a prologue
   fits workgroup memory.
+- It shares the work of one graph's shape classes, since its shaders take
+  extents as parameters. A class whose extents stand one for one for another
+  class's, 1 for 1, takes that class's plan. Each class binds the buffers and
+  parameters another class's launches made, and replays a launch's recorded
+  dispatches where its kernel and the views it reads agree. A TPU compiles each
+  class anew, since XLA compiles static shapes.
 - It runs a composite as its kernel where one exists for the device.
 - It picks each kernel's variant for the device's features and for the shape
   class's extents.

@@ -86,10 +86,9 @@ impl Graph for WebGpuBackend {
         };
     }
 
-    /// A constant is kept only where a launch reads it, so neither one only
-    /// other constants read nor one a kernel writes in.
     /// A program takes the plan of an earlier one of its structure where the
-    /// extents let it.
+    /// extents let it. A constant is kept only where a launch reads it, so
+    /// neither one only other constants read nor one a kernel writes in.
     fn compiled(
         &mut self,
         record: fn(&mut Recorder) -> Recorded with _,

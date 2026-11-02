@@ -303,6 +303,16 @@ fn binds_any(key: &List<i32>, ids: &HashSet<i32>) -> bool {
     return false;
 }
 
+/// The number `numbers` gives `key`, the next one where it gives none.
+fn numbered<K: Hash>(numbers: &mut HashMap<K, i32>, key: K) -> i32 {
+    if let Some(n) = numbers.get(key) {
+        return n;
+    }
+    let n = numbers.len();
+    numbers[key] = n;
+    return n;
+}
+
 /// How many of `seen` are `value`, which then joins them.
 fn occurrence(seen: &mut List<i32>, value: i32) -> i32 {
     let mut n = 0;
@@ -2235,22 +2245,12 @@ impl WebGpuBackend {
 
     /// The serial of the programs of `structure`: one no other structure has.
     internal fn program_serial(&mut self, structure: List<i32>) -> i32 {
-        if let Some(serial) = self.programs.get(structure) {
-            return serial;
-        }
-        let serial = self.programs.len();
-        self.programs[structure] = serial;
-        return serial;
+        return numbered(&mut self.programs, structure);
     }
 
     /// A number for the signature `text`, the one it had where one had it.
     internal fn signature(&mut self, text: String) -> i32 {
-        if let Some(n) = self.signatures.get(text) {
-            return n;
-        }
-        let n = self.signatures.len();
-        self.signatures[text] = n;
-        return n;
+        return numbered(&mut self.signatures, text);
     }
 
     /// Starts recording the commands of a launch.
