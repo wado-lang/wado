@@ -6,7 +6,7 @@
 
 use crate::defs::DefId;
 use crate::hashmap::IndexMap;
-use crate::nir::{NirField, StructInstance, struct_instance};
+use crate::nir::{StructInstance, struct_instance};
 use crate::nir_package::NirPackage;
 use crate::tir::{ResolvedType, TypeId};
 use crate::type_table::{TypeKey, TypeTable};
@@ -40,7 +40,7 @@ fn variant_instance(type_id: TypeId, type_table: &TypeTable) -> Option<VariantIn
 /// fold that would have written that type, never correctness.
 #[derive(Default)]
 pub struct AggregateShapes {
-    /// Fields in `field_index` order, which is how a struct literal lowers.
+    /// Fields in `field_index` order.
     structs: IndexMap<StructInstance, Vec<FieldShape>>,
     /// Cases in declaration order, payloads at the instance's arguments.
     cases: IndexMap<VariantInstance, Vec<(String, CaseShape)>>,
@@ -58,15 +58,10 @@ impl AggregateShapes {
             let Some(instance) = decl.instance(&type_table) else {
                 continue;
             };
-            let mut fields: Vec<&NirField> = decl.fields.iter().collect();
-            fields.sort_by_key(|f| f.index);
-            if fields.iter().enumerate().any(|(k, f)| f.index != k as u32) {
-                continue;
-            }
             structs.insert(
                 instance,
-                fields
-                    .into_iter()
+                decl.fields_in_order()
+                    .iter()
                     .map(|f| FieldShape {
                         name: f.name.clone(),
                         type_id: f.type_id,

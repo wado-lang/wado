@@ -33,7 +33,6 @@ use super::gate::{FunctionGate, GatedPass};
 use crate::compiler_item::{CompilerItem, SeqField};
 use crate::lower::plan::value_copy;
 use crate::name::{FqTraitName, LocalMethodName, minted_what};
-use crate::nir::NirField;
 use crate::nir_value_graph::{ValueId, ValueKind};
 use crate::niri::{CtfeBuiltin, build_ctfe_builtin_map};
 
@@ -1320,21 +1319,13 @@ fn element_layout_of(
     if let Some(tuple_elems) = type_table.as_tuple(elem_ty) {
         return Some((ElementLayout::Tuple, tuple_elems));
     }
-    // User struct element (e.g., `List<Point>`). Generic struct instances
-    // appear as `ResolvedType::Struct` after monomorphization.
-    if let Some(tir_struct) = struct_index.of_type(elem_ty, type_table) {
-        if tir_struct.fields.is_empty() {
+    // User struct element (e.g., `List<Point>`).
+    if let Some(decl) = struct_index.of_type(elem_ty, type_table) {
+        let fields = decl.fields_in_order();
+        if fields.is_empty() {
             return None;
         }
-        // Fields indexed 0..N by declaration order. We sort defensively.
-        let mut ordered: Vec<&NirField> = tir_struct.fields.iter().collect();
-        ordered.sort_by_key(|f| f.index);
-        for (i, f) in ordered.iter().enumerate() {
-            if f.index != i as u32 {
-                return None;
-            }
-        }
-        let field_types: Vec<TypeId> = ordered.iter().map(|f| f.type_id).collect();
+        let field_types: Vec<TypeId> = fields.iter().map(|f| f.type_id).collect();
         let layout = ElementLayout::Struct {
             key: type_table.type_key(elem_ty),
         };

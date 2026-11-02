@@ -1047,6 +1047,19 @@ impl NirStruct {
             .map_or(&[][..], |m| &m.impl_type_args);
         Some((self.def, type_table.type_keys(args)))
     }
+
+    /// The fields in `field_index` order, which is how a struct literal lowers.
+    #[must_use]
+    pub fn fields_in_order(&self) -> &[NirField] {
+        assert!(
+            self.fields
+                .iter()
+                .enumerate()
+                .all(|(k, f)| f.index == k as u32),
+            "struct fields are declared in field index order"
+        );
+        &self.fields
+    }
 }
 
 /// The concrete struct declarations by the type each one reifies.
@@ -1055,12 +1068,20 @@ pub struct StructDecls<'a>(IndexMap<StructInstance, &'a NirStruct>);
 impl<'a> StructDecls<'a> {
     #[must_use]
     pub fn new(structs: &'a [NirStruct], type_table: &TypeTable) -> Self {
-        let mut by_instance = IndexMap::default();
+        let mut by_instance: IndexMap<StructInstance, &NirStruct> = IndexMap::default();
         for decl in structs {
-            if let Some(instance) = decl.instance(type_table) {
-                let previous = by_instance.insert(instance, decl);
-                assert!(previous.is_none(), "one struct type is one declaration");
-            }
+            let Some(instance) = decl.instance(type_table) else {
+                continue;
+            };
+            // Instances whose arguments differ only by a newtype are declared
+            // apart and become one type once newtypes are erased.
+            let first = *by_instance.entry(instance).or_insert(decl);
+            let field_types =
+                |s: &NirStruct| s.fields.iter().map(|f| f.type_id).collect::<Vec<_>>();
+            assert!(
+                type_table.same_types(&field_types(first), &field_types(decl)),
+                "one struct type has one layout"
+            );
         }
         Self(by_instance)
     }
@@ -1068,9 +1089,7 @@ impl<'a> StructDecls<'a> {
     /// The declaration `type_id` reifies, when it is a concrete struct type.
     #[must_use]
     pub fn of_type(&self, type_id: TypeId, type_table: &TypeTable) -> Option<&'a NirStruct> {
-        self.0
-            .get(&struct_instance(type_id, type_table)?)
-            .copied()
+        self.0.get(&struct_instance(type_id, type_table)?).copied()
     }
 }
 
@@ -1086,9 +1105,9 @@ pub fn aggregate_field_info(
         let names: Vec<String> = (0..elems.len()).map(|i| i.to_string()).collect();
         return Some((elems, names, false));
     }
-    let s = structs.of_type(type_id, type_table)?;
-    let types: Vec<TypeId> = s.fields.iter().map(|f| f.type_id).collect();
-    let names: Vec<String> = s.fields.iter().map(|f| f.name.clone()).collect();
+    let fields = structs.of_type(type_id, type_table)?.fields_in_order();
+    let types: Vec<TypeId> = fields.iter().map(|f| f.type_id).collect();
+    let names: Vec<String> = fields.iter().map(|f| f.name.clone()).collect();
     Some((types, names, true))
 }
 
