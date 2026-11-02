@@ -1389,7 +1389,9 @@ The task runs `scripts/extract_antlr4_descriptors.wado` from the
 repository root, with the Java the jar needs. Generated `.g4` and
 `.wado` files go directly under `package-gale/tests/`. The Stage B′
 phase reaches `java` through `[process] read` in the user config (or
-`--process-read`); without a JDK it is skipped with a warning.
+`--process-read`). Without a JDK it is skipped with a warning, and the
+driver files are left as committed: a driver file holds every stage's
+claims on its grammars, so it cannot be written without the Stage B′ ones.
 
 The pipeline is **manually re-run**, not a CI step. Generated
 artefacts are committed; CI just runs `wado test` on the existing

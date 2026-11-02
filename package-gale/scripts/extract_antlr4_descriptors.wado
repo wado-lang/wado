@@ -774,18 +774,25 @@ fn emit_module_use(w: &mut CodeWriter, module: &GrammarModule) {
     w.line("    };");
 }
 
+/// The modules `chunks` read, each once, in the order they first appear.
+fn modules_of(chunks: Slice<TestChunk>) -> List<GrammarModule> {
+    let mut modules: List<GrammarModule> = [];
+    for let chunk of chunks {
+        if !modules.iter_ref().any(|m: &GrammarModule| m.name == chunk.module.name) {
+            modules.push(chunk.module);
+        }
+    }
+    return modules;
+}
+
 /// Wrap `chunks` as one entry module for `category`.
 fn emit_category_test_file<S: AsStrSlice, S1: AsStrSlice>(attr: S, category: S1, chunks: Slice<TestChunk>) -> String {
     let mut helpers: List<String> = [];
-    let mut modules: List<GrammarModule> = [];
     for let chunk of chunks {
         for let helper of &chunk.tree_helpers {
             if !helpers.contains(helper) {
                 helpers.push(*helper);
             }
-        }
-        if !modules.iter_ref().any(|m: &GrammarModule| m.name == chunk.module.name) {
-            modules.push(chunk.module);
         }
     }
     let mut w = CodeWriter::new();
@@ -798,7 +805,7 @@ fn emit_category_test_file<S: AsStrSlice, S1: AsStrSlice>(attr: S, category: S1,
         w.blank();
         w.line(`use { ${join_names(&helpers)} } from "../../../support/tree_compare.wado";`);
     }
-    for let module of &modules {
+    for let module of &modules_of(chunks) {
         w.blank();
         emit_module_use(&mut w, module);
     }
@@ -1999,13 +2006,7 @@ export fn run() with (Stdout, Stderr, Environment, Preopens, Exit, Process, Syst
             },
         };
         files += write_category_test_files(&cat_dir, &generator_attr(), &output.category, &output.chunks);
-        let mut names: List<String> = [];
-        for let chunk of &output.chunks {
-            if !names.contains(&chunk.module.name) {
-                names.push(chunk.module.name);
-            }
-        }
-        modules += names.len();
+        modules += modules_of(output.chunks.as_slice()).len();
     }
     println(`extract: drivers — ${modules} generated module(s) in ${files} test file(s)`);
 }
@@ -2021,7 +2022,7 @@ struct CategoryOutput {
 
 /// Run the oracle on every `oracle-pending/<C>/<N>.input` against its
 /// action-body-stripped grammar, writing the tree to `<N>.expected`. A case
-/// the oracle cannot pin gets no `.expected`, which finalize reads as stale.
+/// the oracle cannot pin gets no `.expected`, which phase 3 reads as stale.
 /// `Err` when an entry could not be read or the oracle could not run at all.
 fn invoke_stage_b_oracle(jar: &Jar) -> Result<(), String> with (Stdout, Stderr, Environment, Preopens, Process, Random) {
     let pending_root = fs::join(compat_root_dir(), "oracle-pending");
@@ -2188,7 +2189,7 @@ fn add_stage_b_oracle_chunks(
         let pending_cat = match open_dir(&pending_root, &category, false) {
             Ok(d) => d,
             Err(_) => {
-                eprintln(`finalize: cannot open oracle-pending/${category}/`);
+                eprintln(`extract: cannot open oracle-pending/${category}/`);
                 exit(1);
             },
         };
@@ -2206,7 +2207,7 @@ fn add_stage_b_oracle_chunks(
             let start_text = match read_file_to_string(&pending_cat, &start_filename) {
                 Ok(s) => s,
                 Err(_) => {
-                    eprintln(`finalize: missing oracle-pending/${category}/${start_filename} — dropping stale test`);
+                    eprintln(`extract: missing oracle-pending/${category}/${start_filename} — dropping stale test`);
                     pending_no_expected += 1;
                     continue;
                 },
@@ -2223,7 +2224,7 @@ fn add_stage_b_oracle_chunks(
                 Ok(s) => s,
                 Err(_) => {
                     eprintln(
-                        `finalize: cannot read oracle-pending/${category}/${*input_filename} — dropping stale test`,
+                        `extract: cannot read oracle-pending/${category}/${*input_filename} — dropping stale test`,
                     );
                     pending_no_expected += 1;
                     continue;
@@ -2252,9 +2253,9 @@ fn add_stage_b_oracle_chunks(
             emitted += 1;
         }
     }
-    println(`finalize: emitted ${emitted} Stage B′ test(s) (${emitted_todo} #[TODO])`);
-    println(`finalize:           ${skip_dropped} dropped via [stage_b_oracle_skip]`);
-    println(`finalize:           ${pending_no_expected} pending without .expected (oracle did not produce output)`);
+    println(`extract: stage B′ — emitted ${emitted} test(s) (${emitted_todo} #[TODO])`);
+    println(`extract:           ${skip_dropped} dropped via [stage_b_oracle_skip]`);
+    println(`extract:           ${pending_no_expected} pending without .expected (oracle did not produce output)`);
 }
 
 /// Drop TestRig's trailing ` <EOF>` so the oracle's tree matches
@@ -2925,9 +2926,8 @@ test "parse_cli_args: no category selects every category" {
     assert parse_cli_args([]).unwrap().want_all;
 }
 
-// Regenerating the committed corpus exercises the Stage A / Stage B
-// emitters end-to-end, but the Stage B′ oracle emitter only runs in the
-// JDK-gated finalize phase, so pin its output against a committed file.
+// The Stage B′ emitter runs only on trees the jar pinned, so a run without a
+// JDK never reaches it: pin its output against a committed file.
 test "emit_stage_b_oracle_test_chunk reproduces its committed chunk verbatim" {
     let committed = #include_str("../tests/antlr4-compat/drivers/Sets/Sets_2_test.wado");
     let chunk = emit_stage_b_oracle_test_chunk(
