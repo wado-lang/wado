@@ -63,9 +63,12 @@ no count applies to it.
 
 A build applies its entry's profile, the one `wado test --pgo` records the
 entry's workloads into. `-f pgo` turns this on and `-f no-pgo` off. It is on
-by default in every world but the test world: a test checks what a program
-computes, which a profile never changes. A build that finds no profile compiles
-without one, and under `-f pgo` says so at `--log-level info`.
+by default in every world, the test world included, so a test runs the code a
+build ships. A build that finds no profile compiles without one, and under
+`-f pgo` says so at `--log-level info`.
+
+`wado test --pgo` applies no profile: it would read the file it rewrites, and
+no count depends on what a profile marks.
 
 ### Rarity
 

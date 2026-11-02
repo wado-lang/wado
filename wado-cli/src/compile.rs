@@ -396,8 +396,14 @@ pub async fn try_compile_with_run_cache(
         .map_err(|e| TryCompileError::reported(e.to_string()))?;
 
     let knobs = &flags.knobs;
-    let profile = entry_profile(path, knobs, flags.target_world.as_deref(), &host)
-        .map_err(TryCompileError::reported)?;
+    // A run recording the profile reads none: it would depend on the file it
+    // rewrites, and no count depends on the markers a profile places.
+    let profile = if flags.test_selection.workloads_only {
+        None
+    } else {
+        entry_profile(path, knobs, flags.target_world.as_deref(), &host)
+            .map_err(TryCompileError::reported)?
+    };
     let options = wado_compiler::CompilerOptions {
         opt_level: knobs.opt_level.to_compiler(),
         skip_validation: knobs.skip_validation,

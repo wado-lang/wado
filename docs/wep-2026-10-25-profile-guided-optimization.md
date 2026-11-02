@@ -37,7 +37,7 @@ where profile-guided optimization should prove itself first.
 
 A package states its real workload as tests marked `#[workload]`. Running them
 records how often each region ran into a profile, and the package commits it.
-Every later compile outside the test world reads the profile and marks each
+Every later compile reads the profile and marks each
 region by what it measured, so the optimizer's existing cold-path machinery
 acts on measurement instead of guesses.
 
@@ -321,17 +321,15 @@ of these: that arm is `unreachable`.
 
 ### Flags switch the marks
 
-`-f pgo` reads the profile and `-f no-pgo` ignores it. The default depends on
-the world:
+`-f pgo` reads the profile and `-f no-pgo` ignores it. It is on by default in
+every world, the test world included. A profile never changes what a program
+computes, but the markers it places steer inlining and outlining, so a test
+world without them would test code no build ships, and a pass that miscompiles
+only under a profile would go unseen.
 
-| Build                        | Default |
-| ---------------------------- | ------- |
-| the test world (`wado test`) | off     |
-| any other world              | on      |
-
-A test checks what a program computes, which a profile never changes, so the
-test world has no use for one by default. `-f pgo` turns it on there, mainly for
-fuzzing the application of profiles.
+`wado test --pgo` reads no profile. It rewrites the file, so reading it would
+make the run depend on what it overwrites, and the counts it records depend on
+no marker.
 
 A build that finds no profile compiles as one with `-f no-pgo`. Under an
 explicit `-f pgo` it also says so at `--log-level info`, since the author asked

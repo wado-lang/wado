@@ -1,0 +1,22 @@
+// The test world applies the profile too, so a test runs the code a build
+// ships: `pick`'s `rest`, which the profile never ran, is marked.
+fn pick(x: i32) -> i32 {
+    if x > 0 {
+        return 2;
+    }
+    return 0;
+}
+
+#[workload]
+test {
+    for let i of 1..=100 {
+        assert pick(i) == 2;
+    }
+}
+
+__DATA__
+{
+  "test": {},
+  "profile": "testdata/pgo_test_world.pgo",
+  "marked_regions": ["pgo_test_world.wado:7:5 rest unlikely cold"]
+}
