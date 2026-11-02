@@ -2295,6 +2295,8 @@ impl EffectIndex<'_> {
         let target = self
             .types
             .fq_type_name_with_rows(self.types.impl_target_whole(block));
+        // A blanket impl's target is its own parameter, which no spelling of
+        // the handler names: its bounds leave the effect parameter open.
         let args = self
             .spellings(handler, rows)
             .into_iter()
@@ -3492,14 +3494,12 @@ impl AstVisitor<'_> for PurityWalker<'_> {
                 }
                 let mut added: Vec<EffectRef> = Vec::new();
                 for binding in &with_handler.handlers {
-                    for (handled, effects) in
-                        binding_performed_effects(
-                            self.annotations,
-                            self.index,
-                            binding,
-                            &Rows::default(),
-                        )
-                    {
+                    for (handled, effects) in binding_performed_effects(
+                        self.annotations,
+                        self.index,
+                        binding,
+                        &Rows::default(),
+                    ) {
                         if self.unanswered(&effects) {
                             self.flag(
                                 Impurity::Install(handled.name().to_string()),

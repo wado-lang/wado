@@ -810,8 +810,9 @@ assert o.lines == ["b"];
 The handler expressions are evaluated before the body, outside the handlers they install.
 
 A handler runs on behalf of the code that installs it, so installing one demands
-what it performs: every effect its methods declare, and `E` itself where the
-block ends in `..forward` (see
+what it performs: every effect its methods declare, a method's `with _` read at
+the handler's type as a call reads it, and `E` itself where the block ends in
+`..forward` (see
 [Operations a Handler Leaves Out](#operations-a-handler-leaves-out)). Bindings on one `with`
 install in source order, each inside the ones before it, so a binding's handler
 also holds the effects the earlier bindings install.
