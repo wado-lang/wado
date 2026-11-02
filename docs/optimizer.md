@@ -295,18 +295,12 @@ markers are worth to the whole pipeline.
 The rules are in [the specification](./spec-pgo.md), and the design in
 [WEP: Profile-Guided Optimization](./wep-2026-10-25-profile-guided-optimization.md).
 
-A package commits a profile, `pgo/default.pgo`, that `wado test --pgo` records
-from its `#[workload]` tests. A compile splits rarity in two, as LLVM does. A
-region is unlikely when its branch takes it rarely, against
-`--optimize-predictable-branch-threshold`, and cold when its count is cold
-against the profile's summary, whose lines `--optimize-profile-summary-cutoff-hot`
-and `-cold` place. An unlikely and cold region gets `cold_path()`. An unlikely
+Applying a profile marks each region by the two halves of rarity
+(`crate::rarity`). An unlikely and cold region gets `cold_path()`. An unlikely
 one alone gets `unlikely_path()`, which only the branch hints read. A cold one
 alone gets `cold_code()`, which every other pass reads and the hints do not.
-The profile overrides the author's and the `?`'s markers in a region it
-measured. The test world reads no profile unless `-f pgo` asks. `-f no-pgo`
-ignores the profile, and `-f no-cold-paths` ignores every marker, so three
-builds of one program can be compared.
+`-f no-pgo` ignores the profile, and `-f no-cold-paths` ignores every marker,
+so three builds of one program can be compared.
 
 Two questions stay open while profiles spread, and each optimizer change that
 touches cold paths answers them again:

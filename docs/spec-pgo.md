@@ -1,7 +1,7 @@
 # Profile-Guided Optimization
 
 A package records how often its code runs under its real workload, commits the
-record as a profile, and every build of it compiles by the profile. A profile
+record as a profile, and a build of it compiles by the profile. A profile
 changes only what a program costs, never what it computes.
 
 ## Recording a Profile
@@ -70,7 +70,7 @@ without one, and under `-f pgo` says so at `--log-level info`.
 ### Rarity
 
 A compile applying a profile judges each region of a function the workloads
-entered on two questions:
+entered, and whose hash matches, on two questions:
 
 - Is it unlikely? A region is unlikely when it ran at most `100 - n` percent of
   the times the code around it ran, where `n` is
@@ -78,6 +78,11 @@ entered on two questions:
   is entered by a call, so it is never unlikely.
 - Is it cold? A region is cold when its count is cold against the whole
   profile, as below, or zero.
+
+A function the workloads never entered is not judged: workloads are tests, so a
+build's own entry, and whatever only it reaches, never runs under them. Nor is
+one whose hash differs, and the compile says so at `--log-level info`. Each is
+compiled as without a profile, with the markers its source states.
 
 The profile reads its counts against itself as a whole. With every count sorted
 from the largest down, the hot line is the smallest count still inside the
@@ -99,16 +104,10 @@ the code under it is cold: a marker covers what follows it, so one over a hot
 loop would make the loop cold. A region under one that never ran is left to
 that region's marker.
 
-A function that never ran gets no marker: workloads are tests, so a build's own
-entry, and whatever only it reaches, never runs under them. A function the
-profile has no count for is compiled as without one. Where that is because its
-hash differs, the compile says so at `--log-level info`.
-
-The profile overrides the markers the source states: an author's
-`cold_path()`, and the one the compiler puts on the failure path of a `?`.
-Where the profile has a count for the region holding such a marker, the marker
-is dropped, and the region's own marks stand. Where the profile's answers are
-not both yes, the compile names the marker, the count, and what the region was
-found to be at `--log-level info`.
+In a function it judges, the profile overrides the markers the source states:
+an author's `cold_path()`, and the one the compiler puts on the failure path of
+a `?`. Such a marker is dropped, and the region's own marks stand. Where the
+profile's answers are not both yes, the compile names the marker, the count,
+and what the region was found to be at `--log-level info`.
 
 Rationale: [WEP: Profile-Guided Optimization](./wep-2026-10-25-profile-guided-optimization.md).

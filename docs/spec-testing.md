@@ -338,8 +338,8 @@ Rationale: [WEP: Test Coverage](./wep-2026-09-28-test-coverage.md).
 
 ## Profiles
 
-`wado test --pgo` runs the `#[workload]` tests to record a profile.
-[Profile-Guided Optimization](./spec-pgo.md) states the rules.
+[Recording a Profile](./spec-pgo.md#recording-a-profile) states what
+`wado test --pgo` does.
 
 ## Example Test File
 

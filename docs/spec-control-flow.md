@@ -705,8 +705,7 @@ test {
 }
 ```
 
-A build applying a profile replaces the marker with what the profile measured,
-as [Markers](./spec-pgo.md#markers) states.
+A profile may override the marker ([Markers](./spec-pgo.md#markers)).
 
 ## Optimization Barrier
 
@@ -843,5 +842,9 @@ fn outer() -> Result<i32, String> {
 
 Inside a closure, `?` returns from the closure
 ([Closures](./spec-functions.md#closures)).
+
+The early return is marked as rarely run, as
+[`builtin::cold_path()`](#branch-hints) marks a path. A profile may override
+the mark ([Markers](./spec-pgo.md#markers)).
 
 Rationale: [WEP: Conversion Traits](./wep-2026-03-16-conversion-traits.md).

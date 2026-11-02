@@ -296,12 +296,10 @@ Rationale: [WEP: Synopsis Tests](./wep-2026-04-26-synopsis-tests.md).
 ### `#[workload]`
 
 Test block attribute. The test runs like any other, and it also states the
-package's real workload: `wado test --pgo` runs the workloads and records how
-often each region ran into a profile the package commits, `pgo/default.pgo`
-(see [Profile-Guided Optimization](./spec-pgo.md)). A compile that reads the profile
-changes only what the program costs, never what it computes. It combines with
-`#[timeout_ms]` and `#[synopsis]`, and is an error with `#[expect_trap]` or
-`#[TODO]`, or in a module marked `#![TODO]`, since a workload must not trap.
+package's real workload, which
+[Recording a Profile](./spec-pgo.md#recording-a-profile) measures. It combines
+with `#[timeout_ms]` and `#[synopsis]`, and is an error with `#[expect_trap]`
+or `#[TODO]`, or in a module marked `#![TODO]`, since a workload must not trap.
 
 Rationale: [WEP: Profile-Guided Optimization](./wep-2026-10-25-profile-guided-optimization.md).
 
