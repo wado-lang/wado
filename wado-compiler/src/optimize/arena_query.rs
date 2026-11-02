@@ -589,7 +589,8 @@ impl ColdRuns {
         }
     }
 
-    /// The runs of `body`, or none when the program names no marker.
+    /// The runs of `body`, or none when the program names no marker stating
+    /// `rarity`.
     pub(crate) fn of(body: &Body, markers: Markers, rarity: Rarity) -> Self {
         let mut runs = Self::none(markers, rarity);
         // Nearly every body holds no marker, which one pass over the arena

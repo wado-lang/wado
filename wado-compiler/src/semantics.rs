@@ -2029,9 +2029,9 @@ mod tests {
     impl TirRefVisitor for Markers {
         fn visit_expr(&mut self, expr: &TirExpr) {
             if let TirExprKind::Call { func, .. } = &expr.kind
-                && let Some(
-                    name @ ("cold_path" | "$known_cold_path" | "unlikely_path" | "cold_code"),
-                ) = func.intrinsic()
+                && let Some(name) = func
+                    .intrinsic()
+                    .filter(|&name| crate::rarity::Mark::of_builtin(name).is_some())
             {
                 self.0.push(name.to_string());
             }

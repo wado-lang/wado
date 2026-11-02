@@ -106,9 +106,10 @@ impl WirMutVisitor for EmptyCallElider<'_> {
     }
 }
 
-/// Whether `instrs` does nothing but set `flag` to a constant: rarity markers, `global.set flag (i32.const _)`, and calls into `setters` of the
-/// same flag, which is how a guard reads once `nir/cold_outline` has moved its
-/// tail into a function of its own.
+/// Whether `instrs` does nothing but set `flag` to a constant: rarity markers,
+/// `global.set flag (i32.const _)`, and calls into `setters` of the same flag,
+/// which is how a guard reads once `nir/cold_outline` has moved its tail into a
+/// function of its own.
 fn sets_only(instrs: &[WirInstr], flag: &str, setters: &IndexMap<u32, String>) -> bool {
     instrs.iter().all(|instr| match instr {
         WirInstr::Rare(_) => true,
