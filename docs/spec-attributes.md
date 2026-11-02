@@ -61,15 +61,15 @@ On a global, the listed effects are admitted in its initializer:
 <!-- {"fixture":"global_benign_initializer.wado"} -->
 
 ```wado
-use { println, Stdout } from "core:cli";
+use { InsecureSeed } from "wasi:random";
 
-fn announce() -> i32 with Stdout {
-    println("initialized");
+fn seeded() -> i32 with InsecureSeed {
+    let [_, _] = InsecureSeed::get_insecure_seed();
     return 7;
 }
 
-#[benign(Stdout)]
-global SEVEN: i32 = announce();
+#[benign(InsecureSeed)]
+global SEVEN: i32 = seeded();
 
 test {
     assert SEVEN == 7;
@@ -78,9 +78,9 @@ test {
 
 Rationale: [WEP: Effect System and Randomness in Collections](./wep-2026-01-20-effect-system-randomness.md) and [WEP: HashMap](./wep-2026-10-01-hash-map.md).
 
-### `#[ambient]`
+### `#[ambient(E, ...)]`
 
-Exempts a function's body from effect checking. [Ambient Functions](./spec-effects.md#ambient-functions) states the rule.
+Lets a function perform the listed effects without declaring them, where the component already has them, and nowhere else. It names its effects the way `#[benign]` does. [Ambient Functions](./spec-effects.md#ambient-functions) states the rule.
 
 ### `#[secret]`
 
