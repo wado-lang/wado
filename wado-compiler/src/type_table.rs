@@ -105,7 +105,8 @@ pub struct TypeTable {
     /// settled as it arrives.
     instances_settled: bool,
     /// The settled spellings minted as keys that nothing has interned as a
-    /// type yet, which the name indexes leave out until something does.
+    /// type yet, which `newtype_decls` and [`Self::monomorphized_struct_of`]
+    /// leave out until something does.
     unindexed: IndexSet<TypeId>,
     /// Reverse mapping `Box<T>` `TypeId` → `T`'s `TypeId`, populated by the
     /// boxing pass (`lower/plan/boxing.rs`). The pass rewrites `&T` /
@@ -120,14 +121,11 @@ pub struct TypeTable {
     /// The `Box<T>` a slot holds a value in, for the types
     /// [`Self::boxes_slot`] names, keyed by the type.
     slot_boxes: IndexMap<TypeKey, TypeId>,
-    /// Index from (struct name, module source) to `TypeId` for O(1) lookup.
-    /// Populated incrementally when Struct types are interned.
-    struct_name_index: IndexMap<(String, ModuleSource), TypeId>,
-    /// `(name, module) -> TypeId` for the nominal declarations that are not
-    /// structs. `find_decl_type_by_name` scanned every interned type for these,
-    /// which an instantiation now pays on the way in — see
-    /// `make_generic_instance`.
-    decl_name_index: IndexMap<(String, ModuleSource), TypeId>,
+    /// The first type interned for each newtype declaration: its base is part
+    /// of the intern key, so the declaration alone is no key into `intern_map`.
+    newtype_decls: IndexMap<DefId, TypeId>,
+    /// Each struct declaration's instances, for [`Self::monomorphized_struct_of`].
+    monomorphized_structs: IndexMap<DefId, Vec<TypeId>>,
     /// Canonical map: declared-type symbol → `TypeId`, populated whenever the
     /// elaborator mints a decl-backed type, so an LSP-style query can go from an
     /// [`AstId`](crate::ast::AstId) to its type without searching by name.
@@ -309,8 +307,8 @@ impl TypeTable {
             unindexed: IndexSet::default(),
             box_payload_types: TypeMap::default(),
             slot_boxes: IndexMap::default(),
-            struct_name_index: IndexMap::default(),
-            decl_name_index: IndexMap::default(),
+            newtype_decls: IndexMap::default(),
+            monomorphized_structs: IndexMap::default(),
             type_by_symbol: IndexMap::default(),
             symbol_by_type: TypeMap::default(),
             bound_driven_synth_requests: IndexSet::default(),
@@ -385,21 +383,17 @@ impl TypeTable {
     }
 
     fn index_type(&mut self, id: TypeId, ty: &ResolvedType) {
-        // Update struct name index for O(1) lookups by (name, module_source).
-        // Keyed on the *mangled* spelling: every instantiation of a generic
-        // struct is a distinct type, and keying on the declaration would
-        // collapse them all onto one entry.
-        if let ResolvedType::Struct { def, type_args } = ty {
-            let mangled = self.struct_mangled_name(*def, type_args);
-            let module_source = self.struct_head_module(*def).clone();
-            self.struct_name_index.insert((mangled, module_source), id);
-        }
-        if let Some(def) = Self::nominal_key(ty) {
-            let key = (
-                self.decl_name(def).to_string(),
-                self.def_module(def).clone(),
-            );
-            self.decl_name_index.insert(key, id);
+        match ty {
+            ResolvedType::Newtype { def, .. } => {
+                self.newtype_decls.entry(*def).or_insert(id);
+            }
+            ResolvedType::Struct {
+                def: StructDef::Decl(def),
+                type_args,
+            } if !type_args.is_empty() => {
+                self.monomorphized_structs.entry(*def).or_default().push(id);
+            }
+            _ => {}
         }
     }
 
@@ -480,7 +474,7 @@ impl TypeTable {
     }
 
     /// The id `spelling` interns to, minted where no type spells it yet. A
-    /// minted one enters the name indexes only once something interns it as a
+    /// minted one is a declaration's type only once something interns it as a
     /// type: until then the type it settles is there under its own spelling.
     fn intern_settled(&mut self, spelling: ResolvedType) -> TypeId {
         if let Some(&id) = self.intern_map.get(&spelling) {
@@ -731,14 +725,6 @@ impl TypeTable {
     /// Iterate over all live type IDs in the table. Erased slots are skipped.
     pub fn iter_type_ids(&self) -> impl Iterator<Item = TypeId> + '_ {
         self.types.ids()
-    }
-
-    /// Look up a struct `TypeId` by its name and module source.
-    /// Returns `None` if no struct with that name exists in the given module.
-    pub fn find_struct_by_name(&self, name: &str, module_source: &ModuleSource) -> Option<TypeId> {
-        self.struct_name_index
-            .get(&(name.to_string(), module_source.clone()))
-            .copied()
     }
 
     pub fn mark_unrestricted_resource(&mut self, def: DefId, classes: Option<HandleClasses>) {
@@ -1751,9 +1737,7 @@ impl TypeTable {
             CompilerItem::ReflectTemplateHole,
         ]
         .into_iter()
-        .filter_map(|item| self.compiler_items().struct_owned_opt(item))
-        .filter_map(|(module_source, name)| self.find_struct_by_name(&name, &module_source))
-        .any(|sealed| self.symbol_by_type.get(sealed) == Some(&decl))
+        .any(|item| self.compiler_items.decl(item) == Some(decl))
     }
 
     /// The `TypeId` of `Array<element>`, when the program already has one.
@@ -1778,23 +1762,6 @@ impl TypeTable {
     #[must_use]
     pub fn is_seq_container(&self, type_id: TypeId) -> bool {
         self.is_string(type_id) || self.is_list(type_id)
-    }
-
-    /// Find the `TypeId` of a user-declared type (struct, enum, variant, flags,
-    /// newtype, resource) by its source-level name and owning module. Returns
-    /// only non-monomorphized declarations — monomorphized generic instances
-    /// are skipped because they do not correspond to an `AstId` of their own.
-    pub fn find_decl_type_by_name(
-        &self,
-        name: &str,
-        module_source: &ModuleSource,
-    ) -> Option<TypeId> {
-        if let Some(id) = self.find_struct_by_name(name, module_source) {
-            return Some(id);
-        }
-        self.decl_name_index
-            .get(&(name.to_string(), module_source.clone()))
-            .copied()
     }
 
     /// Every type the registries answer each associated type with, and the
@@ -1958,8 +1925,8 @@ impl TypeTable {
             .retain(|_, id| effective_keep.contains(id));
         // Rebuild intern map from the surviving entries.
         self.intern_map.clear();
-        self.struct_name_index.clear();
-        self.decl_name_index.clear();
+        self.newtype_decls.clear();
+        self.monomorphized_structs.clear();
         for (id, ty) in self.types.iter() {
             // A redefined reference keeps its spelling in the slot alone.
             // Re-interning it would hand a later `intern(&T)` an id that no
@@ -1976,18 +1943,6 @@ impl TypeTable {
             .collect();
         for (id, ty) in indexed {
             self.index_type(id, &ty);
-        }
-    }
-
-    /// The declaration a non-struct nominal type interns under.
-    fn nominal_key(ty: &ResolvedType) -> Option<DefId> {
-        match ty {
-            ResolvedType::Enum { def }
-            | ResolvedType::Resource { def }
-            | ResolvedType::Flags { def }
-            | ResolvedType::Variant { def }
-            | ResolvedType::Newtype { def, .. } => Some(*def),
-            _ => None,
         }
     }
 
@@ -2951,7 +2906,7 @@ impl TypeTable {
             .copied()
     }
 
-    /// The type `def` declares, of any kind a Component Model interface names.
+    /// The type `def` declares, of any nominal kind.
     pub fn find_named_type_by_def(&self, def: DefId) -> Option<TypeId> {
         self.find_struct_type(StructDef::Decl(def))
             .or_else(|| self.find_variant_type(def))
@@ -2961,13 +2916,8 @@ impl TypeTable {
             .or_else(|| self.find_newtype_type(def))
     }
 
-    /// The non-generic newtype `def` declares, once interned. Its base is part
-    /// of the intern key, so the declaration alone is no key into it.
     fn find_newtype_type(&self, def: DefId) -> Option<TypeId> {
-        self.all_types().find_map(|(id, ty)| {
-            matches!(ty, ResolvedType::Newtype { def: d, type_args, .. } if *d == def && type_args.is_empty())
-                .then_some(id)
-        })
+        self.newtype_decls.get(&def).copied()
     }
 
     /// [`Self::cm_decl_in`] addressed by the module's path rather than by a
@@ -5146,7 +5096,8 @@ impl TypeTable {
         for id in ids {
             let redirect = match self.types.get(id).unwrap() {
                 ResolvedType::Newtype { .. } => {
-                    Some(self.monomorphized_or_self(self.representation_head(id)))
+                    let head = self.representation_head(id);
+                    Some(self.monomorphized_or_self(head))
                 }
                 ResolvedType::Flags { .. } => Some(TypeTable::U32),
                 _ => None,
@@ -5215,25 +5166,74 @@ impl TypeTable {
     }
 
     /// The monomorphized `Struct` an instantiation of `def` became, when the run
-    /// made one. Monomorphization registers each one under this spelling.
+    /// made one: [`Self::make_monomorphized_struct_from_args`] interns it.
     pub fn monomorphized_struct_of(&self, def: DefId, type_args: &[TypeId]) -> Option<TypeId> {
-        let name = self.generic_mangled_name(def, type_args);
-        self.find_struct_by_name(&name, self.def_module(def))
+        self.monomorphized_structs.get(&def)?.iter().copied().find(|&id| {
+            let ResolvedType::Struct { type_args: held, .. } = self.get(id) else {
+                unreachable!("only a struct instance is filed here");
+            };
+            self.same_instance_args(held, type_args)
+        })
     }
 
-    /// The monomorphized `Struct` a `GenericInstance` became. Monomorphization
-    /// rewrites the sites its walk reaches; a newtype base it never reached
-    /// still spells the instance, and a value of the newtype carries the struct.
-    pub fn monomorphized_struct(&self, id: TypeId) -> Option<TypeId> {
-        let ResolvedType::GenericInstance { def, type_args } = self.types.get(id)? else {
-            return None;
+    /// Whether two argument lists spell one instance before monomorphization
+    /// settles the spellings: an instance of a struct is written either as the
+    /// `GenericInstance` or as the `Struct` it becomes, and a function type's
+    /// row tells no two instances apart.
+    fn same_instance_args(&self, a: &[TypeId], b: &[TypeId]) -> bool {
+        a.len() == b.len() && a.iter().zip(b).all(|(&x, &y)| self.same_instance(x, y))
+    }
+
+    fn same_instance(&self, a: TypeId, b: TypeId) -> bool {
+        if a == b {
+            return true;
+        }
+        if let (Some((da, aa)), Some((db, ab))) = (self.struct_parts(a), self.struct_parts(b)) {
+            return da == db && self.same_instance_args(aa, ab);
+        }
+        match (self.get(a), self.get(b)) {
+            (ResolvedType::Ref(x), ResolvedType::Ref(y))
+            | (ResolvedType::MutRef(x), ResolvedType::MutRef(y))
+            | (ResolvedType::BuiltinArray(x), ResolvedType::BuiltinArray(y)) => {
+                self.same_instance(*x, *y)
+            }
+            (
+                ResolvedType::GenericInstance {
+                    def: da,
+                    type_args: aa,
+                },
+                ResolvedType::GenericInstance {
+                    def: db,
+                    type_args: ab,
+                },
+            ) => da == db && self.same_instance_args(aa, ab),
+            (
+                ResolvedType::Function {
+                    is_mut: ma,
+                    params: pa,
+                    return_type: ra,
+                    ..
+                },
+                ResolvedType::Function {
+                    is_mut: mb,
+                    params: pb,
+                    return_type: rb,
+                    ..
+                },
+            ) => ma == mb && self.same_instance_args(pa, pb) && self.same_instance(*ra, *rb),
+            _ => false,
+        }
+    }
+
+    /// The monomorphized `Struct` a `GenericInstance` became, else `id` itself.
+    /// Monomorphization rewrites the sites its walk reaches; a newtype base it
+    /// never reached still spells the instance, and a value of the newtype
+    /// carries the struct.
+    fn monomorphized_or_self(&self, id: TypeId) -> TypeId {
+        let Some(ResolvedType::GenericInstance { def, type_args }) = self.types.get(id) else {
+            return id;
         };
-        self.monomorphized_struct_of(*def, type_args)
-    }
-
-    /// [`Self::monomorphized_struct`] where there is one, else `id` itself.
-    pub fn monomorphized_or_self(&self, id: TypeId) -> TypeId {
-        self.monomorphized_struct(id).unwrap_or(id)
+        self.monomorphized_struct_of(*def, type_args).unwrap_or(id)
     }
 
     /// Get the base type if this is a newtype, or None otherwise
@@ -5374,21 +5374,11 @@ impl TypeTable {
             ResolvedType::Enum { .. } => Some(CompilerItem::ReflectEnum),
             ResolvedType::Flags { .. } => Some(CompilerItem::ReflectFlags),
             ResolvedType::Newtype { .. } => Some(CompilerItem::ReflectNewtype),
-            ResolvedType::GenericInstance { def, .. } => {
-                let def = *def;
-                // A variant is asked first: a variant declaration also registers
-                // a struct-shaped payload layout under its own name, so the
-                // struct lookup answers for both kinds.
-                if self.find_variant_type(def).is_some() {
-                    Some(CompilerItem::ReflectVariant)
-                } else if self
-                    .find_struct_by_name(self.decl_name(def), self.def_module(def))
-                    .is_some()
-                {
-                    Some(CompilerItem::ReflectStruct)
-                } else {
-                    None
-                }
+            ResolvedType::GenericInstance { def, .. } if self.defs.kind(*def) == DefKind::Variant => {
+                Some(CompilerItem::ReflectVariant)
+            }
+            ResolvedType::GenericInstance { .. } if self.struct_parts(id).is_some() => {
+                Some(CompilerItem::ReflectStruct)
             }
             _ => None,
         }

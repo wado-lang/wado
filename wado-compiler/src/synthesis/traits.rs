@@ -450,14 +450,13 @@ fn generate_struct_reflect_impls(
         return;
     }
 
-    let module_source = module.module_source.clone();
     let env = ReflectSynthEnv::resolve(&mut module.type_table.borrow_mut());
 
     let mut generated = Vec::new();
     for target in &targets {
         let tt = module.type_table.borrow();
         let eligible = tt
-            .find_decl_type_by_name(&target.name, &module_source)
+            .find_struct_type(target.def)
             .is_some_and(|type_id| tt.is_reflect_eligible(type_id));
         drop(tt);
         if !eligible {
@@ -492,9 +491,6 @@ struct ReflectFieldInfo {
 /// A struct selected for `ReflectStruct` synthesis. `type_params` is empty for
 /// a plain struct; a generic one gets a single impl over `S<T, …>`.
 struct ReflectTarget {
-    name: String,
-    /// The declaration selected, carried from the `TirStruct` rather than
-    /// looked back up by `name`.
     def: StructDef,
     /// The head every synthesised method of this target hangs off, rendered
     /// once from [`Self::def`] so no sub-pass spells the receiver.
@@ -531,7 +527,6 @@ fn collect_reflect_targets(module: &TirModule) -> Vec<ReflectTarget> {
             StructDef::Decl(_) => true,
         })
         .map(|s| ReflectTarget {
-            name: s.name.clone(),
             def: s.def,
             receiver: tt.fq_struct_head(s.def),
             type_params: s.type_params.clone(),
@@ -571,7 +566,6 @@ fn generate_struct_reflect_methods(
     target: &ReflectTarget,
 ) -> Vec<TirFunction> {
     let ReflectTarget {
-        name: _,
         def,
         receiver,
         type_params,
@@ -1957,8 +1951,7 @@ fn collect_reflect_variant_targets(module: &TirModule) -> Vec<ReflectVariantTarg
         .iter()
         .filter(|v| {
             let tt = module.type_table.borrow();
-            tt.find_decl_type_by_name(&v.name, &v.module_source)
-                .is_some_and(|type_id| tt.is_reflect_eligible(type_id))
+            tt.find_named_type_by_def(v.def).is_some_and(|type_id| tt.is_reflect_eligible(type_id))
         })
         .map(|v| ReflectVariantTarget {
             def: v.def,

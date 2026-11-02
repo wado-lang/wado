@@ -1885,8 +1885,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 continue;
             }
             let key = symbol.defined_at;
-            let decl_module = symbol.module_source();
-            if let Some(type_id) = tt.find_decl_type_by_name(&symbol.name, decl_module) {
+            if let Some(def) = tt.defs().of_ast_id(key)
+                && let Some(type_id) = tt.find_named_type_by_def(def)
+            {
                 tt.register_decl_type(key, type_id);
             }
         }

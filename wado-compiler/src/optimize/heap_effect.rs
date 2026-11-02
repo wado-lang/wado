@@ -616,9 +616,7 @@ impl HeapEffects<'_> {
             }
             ResolvedType::GenericInstance { def, .. } if tt.is_resource_def(*def) => {}
             ResolvedType::GenericInstance { def, type_args } => {
-                if let Some(mono) = tt.monomorphized_struct(ty) {
-                    self.reach_into(mono, seen, out);
-                } else if let Some(fields) = self.struct_field_types(ty) {
+                if let Some(fields) = self.struct_field_types(ty) {
                     out.insert(tt.type_key(ty));
                     for &f in fields {
                         self.reach_into(f, seen, out);
