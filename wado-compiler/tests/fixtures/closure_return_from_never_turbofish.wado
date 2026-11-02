@@ -26,6 +26,14 @@ impl Loader {
     }
 }
 
+fn held_open<Er>(load: fn(i32) -> Result<i32, Er> with _) -> Result<i32, Er> with _ {
+    return load(5);
+}
+
+test "a turbofish of `!` types an effect-polymorphic closure's return" {
+    assert held_open::<!>(|at| Result::Ok(at)).unwrap() == 5;
+}
+
 test "a free function's turbofish of `!` types the closure's return" {
     let r = held::<!>(|at| Result::Ok(at * 2));
     assert r.unwrap() == [0, 2, 4] as List<i32>;

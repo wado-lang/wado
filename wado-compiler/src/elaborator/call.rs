@@ -88,6 +88,9 @@ pub(super) struct CalleeSignature {
     param_types: Vec<TypeId>,
     /// The slots the types mention, for the call site to instantiate.
     slots: Vec<TypeId>,
+    /// How many of `slots` the declaring block's are, ahead of the method's
+    /// own, which a turbofish names.
+    declaring: usize,
     /// `None` when the declaration declares no return type.
     return_type: Option<TypeId>,
 }
@@ -97,7 +100,15 @@ impl CalleeSignature {
         Self {
             param_types: decl.param_types.clone(),
             slots: decl.type_param_ids(),
+            declaring: 0,
             return_type: decl.return_type,
+        }
+    }
+
+    fn of_method(sig: &MethodSig) -> Self {
+        Self {
+            declaring: sig.declaring_type_params().len(),
+            ..Self::of(&sig.decl)
         }
     }
 }
@@ -1673,6 +1684,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let CalleeSignature {
             mut param_types,
             slots: callee_slots,
+            declaring,
             return_type: declared_return,
         } = signature.unwrap_or_default();
         // The declaration's own frame, before instantiation replaces its slots
@@ -1683,6 +1695,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Read before the instantiation below, which answers a named slot with
         // it. A `_` resolves to UNKNOWN.
         let mut type_args: Vec<TypeId> = self.resolve_turbofish_args(&call.type_args);
+        // The turbofish names the method's own slots, after the declaring
+        // block's, which the arguments answer.
+        let slot_args: Vec<TypeId> = if type_args.is_empty() {
+            Vec::new()
+        } else {
+            std::iter::repeat_n(TypeTable::UNKNOWN, declaring)
+                .chain(type_args.iter().copied())
+                .collect()
+        };
 
         // Instantiate the callee's slots before an argument is resolved
         // against one of its parameter types. A rigid slot is the callee's
@@ -1696,7 +1717,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     kind: InstanceKind::Function,
                     name: effective_name,
                     span: call.span,
-                    type_args: &type_args,
+                    type_args: &slot_args,
                     self_binding: None,
                     impl_args: &[],
                 },
@@ -2758,6 +2779,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return Some(CalleeSignature {
                 param_types: decl.param_types.clone(),
                 slots: Vec::new(),
+                declaring: 0,
                 return_type: decl.return_type,
             });
         }
@@ -2776,7 +2798,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // branches below to answer, rather than ending the lookup: an
             // expected type is what makes a sequence literal coerce.
             if let Some(sig) = self.unique_qualified_method_sig(prefix, suffix) {
-                return Some(CalleeSignature::of(&sig.decl));
+                return Some(CalleeSignature::of_method(&sig));
             }
             let key = self.impl_target(prefix);
             if let Some(sig) = self.derived_method_signature(&key, suffix) {
@@ -2817,7 +2839,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     {
                         return Some(CalleeSignature {
                             param_types: sig.value_param_types(),
-                            ..CalleeSignature::of(&sig.decl)
+                            ..CalleeSignature::of_method(&sig)
                         });
                     }
                     if let Some(sig) = self.derived_method_signature(&ns_key, method_name) {
@@ -2858,13 +2880,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .type_table
             .borrow_mut()
             .intern(ResolvedType::Ref(receiver));
+        let slots = self
+            .type_lookup()
+            .declared_type_param_ids(def)
+            .unwrap_or_default()
+            .to_vec();
         Some(CalleeSignature {
             param_types: vec![receiver_ref, receiver_ref],
-            slots: self
-                .type_lookup()
-                .declared_type_param_ids(def)
-                .unwrap_or_default()
-                .to_vec(),
+            declaring: slots.len(),
+            slots,
             return_type: Some(return_type),
         })
     }
@@ -4275,22 +4299,21 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 &expected_args,
             )
             .map_or(0, |sig| sig.own_type_params().len());
-        let (impl_args, mut method_args) =
-            if !written.is_empty() && !turbofish_leaves_slot(&written, own_slots) {
-                (Vec::new(), written)
-            } else {
-                let (impl_args, inferred) = self.infer_static_call_type_args(
-                    callee.type_name,
-                    callee.method_name,
-                    raw_args,
-                    args,
-                    expected_type,
-                    span,
-                    callee.receiver_key,
-                );
-                merge_turbofish_type_args(&mut written, &inferred);
-                (impl_args, written)
-            };
+        // The receiver's own level is inferred whatever the turbofish writes,
+        // since it names only the method's.
+        let (impl_args, inferred) = self.infer_static_call_type_args(
+            callee.type_name,
+            callee.method_name,
+            raw_args,
+            args,
+            expected_type,
+            span,
+            callee.receiver_key,
+        );
+        if written.is_empty() || turbofish_leaves_slot(&written, own_slots) {
+            merge_turbofish_type_args(&mut written, &inferred);
+        }
+        let mut method_args = written;
         // A method-level parameter bound only through another's associated
         // type (`..V` off `Holes`) is projected once the owner is inferred, as
         // the free-function path does; the bound check then sees it concrete.
