@@ -276,6 +276,38 @@ fn the_lock_pins_a_remote_module_on_its_first_read() {
         .stdout("remote\n");
 }
 
+/// A pass is keyed by the lock its compile wrote, which is the lock the next
+/// run reads, so that run reuses it, and one without the lock compiles again
+/// to pin the module afresh.
+#[test]
+fn a_test_pass_is_keyed_by_the_pin_its_compile_wrote() {
+    let server = Server::start();
+    server.serve("util.wado", UTIL.as_bytes());
+    let project = tempfile::tempdir().unwrap();
+    let wado_root = tempfile::tempdir().unwrap();
+    write_package(project.path(), "");
+    std::fs::write(
+        project.path().join("src/util_test.wado"),
+        format!(
+            "use {{ exclaim }} from \"{}\";\n\ntest {{\n    assert exclaim(\"a\") == \"a!\";\n}}\n",
+            server.url("util.wado")
+        ),
+    )
+    .unwrap();
+    let test = || {
+        wado(project.path(), wado_root.path())
+            .args(["test", "src/util_test.wado"])
+            .assert()
+            .success()
+    };
+
+    test().stdout(predicate::str::contains("cached:").not());
+    test().stdout(predicate::str::contains("cached:  1 files"));
+    std::fs::remove_file(project.path().join("wado.lock")).unwrap();
+    test().stdout(predicate::str::contains("cached:").not());
+    assert!(project.path().join("wado.lock").is_file());
+}
+
 /// A file in no package has no lock to record in, so its `use` must pin the
 /// module, and the error says what to write.
 #[test]

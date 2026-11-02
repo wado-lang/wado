@@ -82,10 +82,10 @@ pub(crate) fn hold_lock_file(root: &Path) -> Result<LockFileHeld, String> {
 pub(crate) fn package_root(start_dir: &Path, files: &dyn PackageFiles) -> Option<PathBuf> {
     let mut dir = start_dir.to_path_buf();
     loop {
-        if files.is_file(&dir.join(MANIFEST_FILENAME)) {
+        if files.find(&dir.join(MANIFEST_FILENAME)).is_some() {
             return Some(openable_dir(&dir).to_path_buf());
         }
-        if files.is_file(&dir.join(WORKSPACE_FILENAME)) {
+        if files.find(&dir.join(WORKSPACE_FILENAME)).is_some() {
             return None;
         }
         dir = parent_dir(&dir)?;
@@ -109,11 +109,10 @@ pub(crate) fn manifest_in(
     dir: &Path,
     files: &dyn PackageFiles,
 ) -> Result<Option<Manifest>, DiscoveryError> {
-    let candidate = dir.join(MANIFEST_FILENAME);
-    if !files.is_file(&candidate) {
+    let Some(content) = files.find(&dir.join(MANIFEST_FILENAME)) else {
         return Ok(None);
-    }
-    let content = files.read(&candidate).map_err(DiscoveryError::Io)?;
+    };
+    let content = content.map_err(DiscoveryError::Io)?;
     resolve_manifest(dir, &content, files).map(Some)
 }
 

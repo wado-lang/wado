@@ -144,6 +144,17 @@ impl FilesystemCompilerHost {
         }
     }
 
+    /// [`CompilerHost::dependency_index`], reading the package's files through
+    /// `files`. An invalid manifest yields an empty index that says why, so the
+    /// editor keeps answering and each dependency import reports the manifest.
+    #[must_use]
+    pub fn dependency_index_with(&self, files: &dyn PackageFiles) -> DependencyIndex {
+        match discovery::nearest_manifest_dir(&self.base_path, files) {
+            Some(dir) => manifest_index(&dir, &self.base_path, files),
+            None => DependencyIndex::default(),
+        }
+    }
+
     /// [`CompilerHost::package_index`], reading the package's files through
     /// `files`.
     #[must_use]
@@ -230,10 +241,13 @@ pub fn read_prefix(path: &Path, prefix: Option<u64>) -> std::io::Result<Vec<u8>>
 
 /// Whether `e` says the file is not there. A path through a file, such as
 /// `wado.toml` under a path dependency naming a file, is as absent as a
-/// missing one.
+/// missing one, and so is a directory.
 #[must_use]
 pub fn is_absent(e: &std::io::Error) -> bool {
-    matches!(e.kind(), ErrorKind::NotFound | ErrorKind::NotADirectory)
+    matches!(
+        e.kind(),
+        ErrorKind::NotFound | ErrorKind::NotADirectory | ErrorKind::IsADirectory
+    )
 }
 
 fn io_error(path: &Path, e: &std::io::Error) -> SourceError {
@@ -278,13 +292,8 @@ impl CompilerHost for FilesystemCompilerHost {
         self.collect_diagnostic(diagnostic);
     }
 
-    /// An invalid manifest yields an empty index that says why, so the editor
-    /// keeps answering and each dependency import reports the manifest.
     fn dependency_index(&self) -> DependencyIndex {
-        match discovery::nearest_manifest_dir(&self.base_path, &Disk) {
-            Some(dir) => manifest_index(&dir, &self.base_path, &Disk),
-            None => DependencyIndex::default(),
-        }
+        self.dependency_index_with(&Disk)
     }
 
     fn package_index(&self, root: &str) -> DependencyIndex {

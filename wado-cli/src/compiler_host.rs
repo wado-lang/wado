@@ -328,15 +328,19 @@ impl CompilerHost for FilesystemCompilerHost {
         loaded
     }
 
-    /// A pin settles the bytes, so a read records no file but the `wado.lock`
-    /// that pinned it, and only a failure leaves the compile untracked.
+    /// A pin settles the bytes, so a read records no file but what found the
+    /// `wado.lock` that pinned it, and only a failure leaves the compile
+    /// untracked. A `use` writing its own pin reads no lock.
     async fn load_remote(
         &self,
         url: &str,
         extent: Option<u64>,
         integrity: Option<Integrity>,
     ) -> Result<Vec<u8>, SourceError> {
-        let lock_root = package_root(self.base_path(), &*self.run);
+        let lock_root = integrity
+            .is_none()
+            .then(|| package_root(self.base_path(), &*self.run))
+            .flatten();
         let loaded = Box::pin(remote::load(
             url,
             extent,
@@ -385,7 +389,7 @@ impl CompilerHost for FilesystemCompilerHost {
     fn dependency_index(&self) -> wado_compiler::DependencyIndex {
         match &self.dep_index {
             Some(index) => index.clone(),
-            None => self.inner.dependency_index(),
+            None => self.inner.dependency_index_with(&*self.run),
         }
     }
 

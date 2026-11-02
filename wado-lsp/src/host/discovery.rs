@@ -18,7 +18,7 @@ use wado_manifest::{
     registry_url,
 };
 
-use crate::host::prefetch;
+use crate::host::{is_absent, prefetch};
 
 /// What a resolution reads a package's own files through: its `wado.toml`, its
 /// `wado.lock`, and the `wado-workspace.toml` governing it. A caller keying an
@@ -32,25 +32,22 @@ pub trait PackageFiles: Sync {
     /// Whatever reading the file fails with.
     fn read(&self, path: &Path) -> io::Result<String>;
 
-    /// Whether a file is at `path`. Read too, as only its bytes, or its
-    /// absence, record that the answer still holds.
-    fn is_file(&self, path: &Path) -> bool {
-        let found = path.is_file();
-        let _ = self.read(path);
-        found
+    /// The text of the file at `path`, `None` where no file is. Presence is
+    /// what the read found, so it is recorded with the bytes.
+    fn find(&self, path: &Path) -> Option<io::Result<String>> {
+        match self.read(path) {
+            Err(e) if is_absent(&e) => None,
+            read => Some(read),
+        }
     }
 }
 
-/// The files as the disk holds them, recorded nowhere, so a probe reads none.
+/// The files as the disk holds them, recorded nowhere.
 pub struct Disk;
 
 impl PackageFiles for Disk {
     fn read(&self, path: &Path) -> io::Result<String> {
         std::fs::read_to_string(path)
-    }
-
-    fn is_file(&self, path: &Path) -> bool {
-        path.is_file()
     }
 }
 
@@ -65,10 +62,10 @@ impl PackageFiles for Disk {
 pub fn nearest_manifest_dir(start: &Path, files: &dyn PackageFiles) -> Option<PathBuf> {
     let mut dir = absolutize(start);
     loop {
-        if files.is_file(&dir.join(MANIFEST_FILENAME)) {
+        if files.find(&dir.join(MANIFEST_FILENAME)).is_some() {
             return Some(dir);
         }
-        if files.is_file(&dir.join(WORKSPACE_FILENAME)) || !dir.pop() {
+        if files.find(&dir.join(WORKSPACE_FILENAME)).is_some() || !dir.pop() {
             return None;
         }
     }
@@ -148,7 +145,7 @@ pub fn resolve_member_manifest(
     member_content: &str,
     files: &dyn PackageFiles,
 ) -> Result<Manifest, ManifestError> {
-    if files.is_file(&member_dir.join(WORKSPACE_FILENAME)) {
+    if files.find(&member_dir.join(WORKSPACE_FILENAME)).is_some() {
         return Err(ManifestError::PackageInWorkspace);
     }
     match governing_workspace(member_dir, files) {

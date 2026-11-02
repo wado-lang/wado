@@ -32,6 +32,7 @@ use wado_manifest::{LOCK_FILENAME, LockFile, LockFileError, LockedRemote};
 
 use crate::cache;
 use crate::manifest::{LockFileHeld, discover, hold_lock_file};
+use crate::run_cache::RunCache;
 
 /// How much a [`RemoteReader`] fetches at once: a probe reads a header a few
 /// bytes at a time, and each read of its own would be a round trip.
@@ -274,7 +275,7 @@ fn reason(error: &reqwest::Error) -> String {
 
 /// The first `extent` bytes of `url`, or all of it, held to `use_pin` or to
 /// what the `wado.lock` of the package at `lock_root` pins, the lock read
-/// through `files`.
+/// through `run` and a pin it writes recorded there.
 ///
 /// # Errors
 ///
@@ -286,9 +287,9 @@ pub async fn load(
     extent: Option<u64>,
     use_pin: Option<Integrity>,
     lock_root: Option<&Path>,
-    files: &dyn PackageFiles,
+    run: &RunCache,
 ) -> Result<Vec<u8>, SourceError> {
-    let pin = Pins::of(url, use_pin, lock_root, files)?.at(extent);
+    let pin = Pins::of(url, use_pin, lock_root, run)?.at(extent);
     if let Some((pin, pinned_by)) = pin
         && let Some(bytes) = cached(pin)
         && is_extent(url, pin, pinned_by, &bytes, extent)
@@ -299,7 +300,7 @@ pub async fn load(
     let actual = Integrity::of(&bytes);
     match (pin, lock_root) {
         (Some((pin, pinned_by)), _) => check_digest(url, actual, pin, pinned_by)?,
-        (None, Some(root)) => hold_and_record(root, url, extent, &bytes, actual).await?,
+        (None, Some(root)) => hold_and_record(root, url, extent, &bytes, actual, run).await?,
         (None, None) => {
             return Err(SourceError::Unpinned {
                 url: url.to_string(),
@@ -341,6 +342,7 @@ async fn hold_and_record(
     extent: Option<u64>,
     bytes: &[u8],
     actual: Integrity,
+    run: &RunCache,
 ) -> Result<(), SourceError> {
     let mut held = Vec::new();
     loop {
@@ -353,7 +355,7 @@ async fn hold_and_record(
         let (lock_file, pins) = lock_pins(root, url, &Disk)?;
         if pins.iter().all(|pin| held.contains(pin)) {
             if pin_at(&pins, extent).is_none() {
-                record_pin(&hold, root, lock_file, url, extent, actual)?;
+                record_pin(&hold, root, lock_file, url, extent, actual, run)?;
             }
             return Ok(());
         }
@@ -601,7 +603,8 @@ pub fn locked_pin(
 
 /// Record `actual` as the pin of `url`'s first `extent` bytes in `lock_file`,
 /// the lock of the package at `root` as it is while held, or a new one where
-/// there is none.
+/// there is none. `run` records the lock written, which is what a later run
+/// reads.
 fn record_pin(
     _: &LockFileHeld,
     root: &Path,
@@ -609,6 +612,7 @@ fn record_pin(
     url: &str,
     extent: Option<u64>,
     actual: Integrity,
+    run: &RunCache,
 ) -> Result<(), SourceError> {
     let mut lock_file = match lock_file {
         Some(lock_file) => lock_file,
@@ -629,8 +633,11 @@ fn record_pin(
         extent,
         integrity: actual.to_string(),
     });
-    write_atomic(&root.join(LOCK_FILENAME), lock_file.to_toml().as_bytes())
-        .map_err(|e| lock_error(root, e.to_string()))
+    let path = root.join(LOCK_FILENAME);
+    let text = lock_file.to_toml();
+    write_atomic(&path, text.as_bytes()).map_err(|e| lock_error(root, e.to_string()))?;
+    run.observe_written(&path, text.as_bytes());
+    Ok(())
 }
 
 fn blob_path(integrity: Integrity) -> Option<PathBuf> {

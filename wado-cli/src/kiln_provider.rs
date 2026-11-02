@@ -444,6 +444,7 @@ impl CliGeneratorProvider {
         let loaded = Arc::new(Mutex::new(Vec::<(String, [u8; 32])>::new()));
         let loaded_for_task = loaded.clone();
         let log_level = self.log_level;
+        let shared_cache = self.run.clone();
 
         // `compile_with_options` captures a `Logger<H>` whose internal
         // `Cell<usize>` makes the returned future `!Send`. Run the whole
@@ -452,8 +453,14 @@ impl CliGeneratorProvider {
         // able `spawn_blocking` future.
         let artifacts: Result<CompileArtifacts, ProviderError> = joined(
             tokio::task::spawn_blocking(move || {
+                let mut inner = FilesystemCompilerHost::with_log_level(base_path, log_level);
+                // The resolution's view, so the package files the generator's
+                // imports resolve through are kept with the generator.
+                if let Some(cache) = shared_cache {
+                    inner = inner.with_shared_run_cache(cache);
+                }
                 let host = SilentHost {
-                    inner: FilesystemCompilerHost::with_log_level(base_path, log_level),
+                    inner,
                     loaded: loaded_for_task,
                 };
                 let options = CompilerOptions {
