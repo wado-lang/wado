@@ -762,9 +762,13 @@ is the `RawWaitableSet`, so each holds that resource as
 [Resources in a Signature](./spec-effects.md#resources-in-a-signature) says,
 and declares nothing. `AsyncCall`'s drop holds the `Subtask` the same way.
 `AsyncCall::wait` and `cancel` declare `with Subtask`, since waiting is
-something a caller observes: a function that started the call, or names it in
-its signature, holds `Subtask` already, and one that reached it any other way,
-through a global say, declares it.
+something a caller observes. That costs a caller nothing where it already holds
+the call's effect. An interface whose operation returns an `AsyncCall`
+mentions `Subtask` in that signature, so holding the interface holds `Subtask`
+([Implied Resources](./spec-effects.md#implied-resources)): a function that
+started the call declared the interface to start it. A function that names the
+call in its signature holds `Subtask` the same way. Only one that reached the
+call otherwise, through a global say, declares it.
 
 ### Web handles
 
