@@ -4612,7 +4612,7 @@ impl<'a> Reify<'a> {
         let lone_string = {
             let tt = self.tysys.type_table.borrow();
             matches!(holes.as_slice(), [(value, None)]
-                if tt.type_key(value.type_id) == tt.type_key(string_type))
+                if tt.same_type(value.type_id, string_type))
                 && segments
                     .iter()
                     .all(|[cooked, raw]| cooked.is_empty() && raw.is_empty())
@@ -9763,7 +9763,7 @@ impl TypeSystem {
     /// on a target that drops it.
     fn ascribed_binding_type(&self, scrutinee_type: TypeId, target: TypeId) -> TypeId {
         let tt = self.type_table.borrow();
-        if tt.type_key(scrutinee_type) == tt.type_key(target) || tt.peel_refs(target) != target {
+        if tt.same_type(scrutinee_type, target) || tt.peel_refs(target) != target {
             return target;
         }
         drop(tt);
@@ -9917,7 +9917,7 @@ fn adjust_receiver_for_self_kind(
     let target = adjusted_receiver_type(receiver.type_id, self_kind, self_layers, type_table);
     let tt = type_table.borrow();
     let held = tt.ref_depth(target);
-    if tt.type_key(tt.ref_layers(receiver.type_id, held)) == tt.type_key(target) {
+    if tt.same_type(tt.ref_layers(receiver.type_id, held), target) {
         return deref_to_layers(receiver, held, &tt);
     }
     to_layers_of(deref_to_layers(receiver, held - 1, &tt), target, &tt)

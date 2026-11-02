@@ -502,7 +502,7 @@ pub fn hold_hole(field: &mut TirStructField, hole_ty: TypeId, tt: &mut TypeTable
     // drained, while one generic instance may still be spelled both as a
     // `GenericInstance` and as its struct.
     let same = |tt: &TypeTable, a: TypeId, b: TypeId| {
-        tt.type_key(a) == tt.type_key(b) || tt.instance_key(a) == tt.instance_key(b)
+        tt.same_type(a, b) || tt.instance_key(a) == tt.instance_key(b)
     };
     if same(tt, field_ty, hole_ty) || same(tt, field.value.type_id, field_ty) {
         return None;

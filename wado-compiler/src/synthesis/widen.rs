@@ -68,7 +68,7 @@ impl Widener<'_> {
         let from = value.type_id;
         let (from_name, to_name) = {
             let tt = self.tt.borrow();
-            if tt.type_key(from) == tt.type_key(to) {
+            if tt.same_type(from, to) {
                 return value;
             }
             (

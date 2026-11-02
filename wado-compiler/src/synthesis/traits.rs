@@ -1951,7 +1951,8 @@ fn collect_reflect_variant_targets(module: &TirModule) -> Vec<ReflectVariantTarg
         .iter()
         .filter(|v| {
             let tt = module.type_table.borrow();
-            tt.find_named_type_by_def(v.def).is_some_and(|type_id| tt.is_reflect_eligible(type_id))
+            tt.find_named_type_by_def(v.def)
+                .is_some_and(|type_id| tt.is_reflect_eligible(type_id))
         })
         .map(|v| ReflectVariantTarget {
             def: v.def,

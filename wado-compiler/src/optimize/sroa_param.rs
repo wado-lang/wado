@@ -296,7 +296,7 @@ fn collect_and_validate(
                 continue;
             };
             info.field_index = *fi;
-            info.field_name = field.name.clone();
+            info.field_name.clone_from(&field.name);
             info.inner_type_id = field.type_id;
         }
         for k in &widened {
@@ -1645,8 +1645,7 @@ fn rewrite_arg(
     }
 
     // Case 2: a local whose own param was SROA'd from the same struct.
-    if scalarized_from(body, Operand::Expr(arg), scalar_param_struct) == Some(info.struct_key)
-    {
+    if scalarized_from(body, Operand::Expr(arg), scalar_param_struct) == Some(info.struct_key) {
         body.exprs[arg].type_id = info.scalar_type_id;
         return;
     }

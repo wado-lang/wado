@@ -204,7 +204,7 @@ pub(super) fn unify(
             },
         ) if {
             let table = type_table.borrow();
-            table.type_key(*expected_base) == table.type_key(*actual_base)
+            table.same_type(*expected_base, *actual_base)
         } && expected_name == actual_name
             && expected_trait == actual_trait
             && expected_args.len() == actual_args.len() =>

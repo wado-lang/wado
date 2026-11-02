@@ -880,7 +880,7 @@ fn is_open(resolved: &ResolvedType) -> bool {
 fn may_name_one_type(table: &TypeTable, a: TypeId, b: TypeId) -> bool {
     let (a, b) = (table.representation_head(a), table.representation_head(b));
     let (ra, rb) = (table.get(a), table.get(b));
-    if table.type_key(a) == table.type_key(b) || is_open(ra) || is_open(rb) {
+    if table.same_type(a, b) || is_open(ra) || is_open(rb) {
         return true;
     }
     let both = |x: Vec<TypeId>, y: Vec<TypeId>| {

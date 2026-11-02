@@ -255,7 +255,7 @@ pub(super) fn spelled_at(trait_: &FqTraitName, at: &[(FqTypeName, FqTypeName)]) 
 /// Whether `actual` is the type a constraint written `expected` names. A
 /// reference is not its referent: `from_iter` pushes the items it is handed.
 fn satisfies(tt: &TypeTable, expected: TypeId, actual: TypeId) -> bool {
-    tt.type_key(expected) == tt.type_key(actual)
+    tt.same_type(expected, actual)
 }
 
 /// A bound question on the open stack, closed when dropped.
@@ -791,10 +791,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let comparable = |id: TypeId| {
                 !table.contains_assoc_type_projection(id) && !table.awaits_inference(id)
             };
-            if !comparable(expected)
-                || !comparable(found)
-                || table.type_key(expected) == table.type_key(found)
-            {
+            if !comparable(expected) || !comparable(found) || table.same_type(expected, found) {
                 continue;
             }
             drop(table);
@@ -3417,7 +3414,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return false;
         };
         let table = self.tysys.type_table.borrow();
-        table.type_key(rhs) == table.type_key(receiver)
+        table.same_type(rhs, receiver)
             && self
                 .tysys
                 .trait_env

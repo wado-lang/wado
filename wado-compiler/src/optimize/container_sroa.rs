@@ -95,15 +95,14 @@ fn classify_array_method_sig(func: &NirFunction, type_table: &TypeTable) -> Opti
         |ty: TypeId| matches!(type_table.get(ty), ResolvedType::Ref(inner) if is_list_of_t(*inner));
     let is_mut_ref_list_of_t = |ty: TypeId| matches!(type_table.get(ty), ResolvedType::MutRef(inner) if is_list_of_t(*inner));
     let is_array_of_t = |ty: TypeId| matches!(type_table.get(ty), ResolvedType::BuiltinArray(inner) if is_t(*inner));
-    let is = |ty: TypeId, want: TypeId| type_table.type_key(ty) == type_table.type_key(want);
-    let is_i32 = |ty: TypeId| is(ty, TypeTable::I32);
-    let is_unit = |ty: TypeId| is(ty, TypeTable::UNIT);
+    let is_i32 = |ty: TypeId| type_table.same_type(ty, TypeTable::I32);
+    let is_unit = |ty: TypeId| type_table.same_type(ty, TypeTable::UNIT);
     // Names the impl exactly, the receiver being `List<T>` already: a second
     // `From<Array<T>>` for it would overlap.
     let from = type_table.compiler_items().trait_def(CompilerItem::From);
     let is_from_impl = from.is_some() && info.trait_decl() == from;
     // Length-invariant query return types: i32 (len, capacity) or bool (is_empty).
-    let is_query_return = |ty: TypeId| is_i32(ty) || is(ty, TypeTable::BOOL);
+    let is_query_return = |ty: TypeId| is_i32(ty) || type_table.same_type(ty, TypeTable::BOOL);
 
     match params.as_slice() {
         // fn(&List<T>) -> i32 | bool — Query

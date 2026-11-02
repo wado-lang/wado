@@ -829,7 +829,7 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
             if !tt.converts_without_impl(target, source) {
                 return;
             }
-            let provided = if tt.type_key(target) == tt.type_key(source) {
+            let provided = if tt.same_type(target, source) {
                 "every type converts to itself"
             } else {
                 "a newtype converts to and from each type down its chain"

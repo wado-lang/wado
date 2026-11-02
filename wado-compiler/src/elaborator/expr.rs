@@ -581,10 +581,8 @@ fn slice_list_conversion(tt: &TypeTable, source: TypeId, target: TypeId) -> Opti
         _ => None,
     };
     let list_elem = |id| tt.as_list(tt.representation_head(id));
-    let same = |a: Option<TypeId>, b: Option<TypeId>| {
-        a.zip(b)
-            .is_some_and(|(a, b)| tt.type_key(a) == tt.type_key(b))
-    };
+    let same =
+        |a: Option<TypeId>, b: Option<TypeId>| a.zip(b).is_some_and(|(a, b)| tt.same_type(a, b));
     if same(slice_elem(source), list_elem(target)) {
         Some("to_list")
     } else if same(slice_elem(target), list_elem(source)) {
@@ -3397,7 +3395,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .find_map(|(guardless, earlier)| match earlier {
                 Pat::Narrow(earlier)
                     if *guardless
-                        && (tt.type_key(*earlier) == tt.type_key(*target)
+                        && (tt.same_type(*earlier, *target)
                             || tt.is_resource_narrowing(*earlier, *target)) =>
                 {
                     Some(format!(

@@ -23,6 +23,7 @@ use crate::name::{
     FqTypeName, FreeFunctionName, FunctionId, MODULE_INIT_FUNCTION, MethodName, UNIT_TYPE_NAME,
     is_fn_type_name, mangle_generic_name, mangle_local_trait_method, mangle_method_generic,
 };
+use crate::nir;
 use crate::nir::{FuncId, FunctionRef, NirFunction, NirImport, NirStruct, StructInstance};
 use crate::nir_arena::{
     BlockId, BlockNode, Body, ExprId, ExprKind, NodeRef, Operand, PatKind, StmtId, StmtKind,
@@ -36,7 +37,6 @@ use crate::optimize::arena_query::{
 };
 use crate::tir::{ResolvedType, StructDef, TypeId, projection_arguments};
 use crate::type_table::TypeTable;
-use crate::nir;
 
 /// What a call reaches: a function in `project.functions`, by position, or a
 /// name none of them carries, such as a host builtin's.
@@ -1445,10 +1445,7 @@ impl DceAnalysis {
 /// every use away is what makes a declaration look unreachable, and the pass
 /// re-derives its layout to recognise its own earlier work. A kept declaration
 /// keeps its payload types too, or `register_mono_variants` panics.
-fn variant_decls_kept_past_use(
-    project: &NirPackage,
-    type_table: &TypeTable,
-) -> IndexSet<DefId> {
+fn variant_decls_kept_past_use(project: &NirPackage, type_table: &TypeTable) -> IndexSet<DefId> {
     project
         .functions
         .iter()

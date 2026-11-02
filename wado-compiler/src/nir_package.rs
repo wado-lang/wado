@@ -827,14 +827,16 @@ impl NirPackage {
         use cranelift_entity::EntityRef;
         let func = self.functions[id.index()].borrow();
         let types = self.type_table.borrow();
-        let same = |x: TypeId, y: TypeId| types.type_key(x) == types.type_key(y);
-        (same(func.return_type, ret) || func.scalarized_from.is_some_and(|v| same(v, ret)))
+        (types.same_type(func.return_type, ret)
+            || func
+                .scalarized_from
+                .is_some_and(|v| types.same_type(v, ret)))
             && func.params.len() == params.len()
             && func
                 .params
                 .iter()
                 .zip(params)
-                .all(|(p, &t)| same(p.type_id, t))
+                .all(|(p, &t)| types.same_type(p.type_id, t))
     }
 
     /// Retire function `id`, which `rename_functions` merged into another

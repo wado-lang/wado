@@ -2785,7 +2785,7 @@ impl TypeTable {
         if let Some(elem) = self.list_element(ty) {
             let backs = |kind: TypeKey| {
                 matches!(self.get(kind.0), ResolvedType::BuiltinArray(array_elem)
-                    if self.type_key(*array_elem) == self.type_key(elem))
+                    if self.same_type(*array_elem, elem))
             };
             return matches!(target, Reach::Object(kind) if backs(kind))
                 || self.reaches_in(elem, target, args, walked);
@@ -3595,13 +3595,13 @@ impl TypeTable {
                     ..
                 },
             ) => {
-                self.type_key(*base_a) == self.type_key(*base_b)
+                self.same_type(*base_a, *base_b)
                     && name_a == name_b
                     && self.same_types(args_a, args_b)
                     && trait_a == trait_b
                     && self.trait_args_agree(trait_args_a.as_deref(), trait_args_b.as_deref())
             }
-            _ => self.type_key(a) == self.type_key(b),
+            _ => self.same_type(a, b),
         }
     }
 
@@ -5168,12 +5168,19 @@ impl TypeTable {
     /// The monomorphized `Struct` an instantiation of `def` became, when the run
     /// made one: [`Self::make_monomorphized_struct_from_args`] interns it.
     pub fn monomorphized_struct_of(&self, def: DefId, type_args: &[TypeId]) -> Option<TypeId> {
-        self.monomorphized_structs.get(&def)?.iter().copied().find(|&id| {
-            let ResolvedType::Struct { type_args: held, .. } = self.get(id) else {
-                unreachable!("only a struct instance is filed here");
-            };
-            self.instance_args(held) == self.instance_args(type_args)
-        })
+        self.monomorphized_structs
+            .get(&def)?
+            .iter()
+            .copied()
+            .find(|&id| {
+                let ResolvedType::Struct {
+                    type_args: held, ..
+                } = self.get(id)
+                else {
+                    unreachable!("only a struct instance is filed here");
+                };
+                self.instance_args(held) == self.instance_args(type_args)
+            })
     }
 
     /// `ids` as struct instance arguments.
@@ -5192,9 +5199,7 @@ impl TypeTable {
         }
         match self.get(id) {
             ResolvedType::Ref(inner) => InstanceArg::Ref(Box::new(self.instance_arg(*inner))),
-            ResolvedType::MutRef(inner) => {
-                InstanceArg::MutRef(Box::new(self.instance_arg(*inner)))
-            }
+            ResolvedType::MutRef(inner) => InstanceArg::MutRef(Box::new(self.instance_arg(*inner))),
             ResolvedType::BuiltinArray(element) => {
                 InstanceArg::Array(Box::new(self.instance_arg(*element)))
             }
@@ -5364,7 +5369,9 @@ impl TypeTable {
             ResolvedType::Enum { .. } => Some(CompilerItem::ReflectEnum),
             ResolvedType::Flags { .. } => Some(CompilerItem::ReflectFlags),
             ResolvedType::Newtype { .. } => Some(CompilerItem::ReflectNewtype),
-            ResolvedType::GenericInstance { def, .. } if self.defs.kind(*def) == DefKind::Variant => {
+            ResolvedType::GenericInstance { def, .. }
+                if self.defs.kind(*def) == DefKind::Variant =>
+            {
                 Some(CompilerItem::ReflectVariant)
             }
             ResolvedType::GenericInstance { .. } if self.struct_parts(id).is_some() => {
@@ -5413,7 +5420,7 @@ impl TypeTable {
     /// - One is a newtype of the other
     /// - Both are newtypes with the same ultimate base type
     pub fn share_common_base(&self, a: TypeId, b: TypeId) -> bool {
-        self.type_key(self.representation_head(a)) == self.type_key(self.representation_head(b))
+        self.same_type(self.representation_head(a), self.representation_head(b))
     }
 
     /// Whether `id` is `List<u8>` or a newtype chain over it (`ByteList`): what
@@ -7040,7 +7047,7 @@ impl TypeTable {
             return self.fq_base_type_name(written).head()
                 == self.fq_base_type_name(concrete).head();
         }
-        self.type_key(written) == self.type_key(concrete)
+        self.same_type(written, concrete)
     }
 
     /// Whether two receiver-side types can be one, answering an open variable
@@ -7053,7 +7060,7 @@ impl TypeTable {
         binding: &mut TargetBinding,
     ) -> bool {
         let (a, b) = (binding.answered(a), binding.answered(b));
-        if self.type_key(a) == self.type_key(b) {
+        if self.same_type(a, b) {
             return true;
         }
         let closed = |ty: TypeId| !self.any_infer_var(ty, &mut |var| open(var));
@@ -7138,7 +7145,7 @@ impl TypeTable {
             return true;
         }
         self.zip_shapes(a.1, b.1, |x, y| self.unify_apart((a.0, x), (b.0, y), subst))
-            .unwrap_or_else(|| self.type_key(a.1) == self.type_key(b.1))
+            .unwrap_or_else(|| self.same_type(a.1, b.1))
     }
 
     /// `term` past every parameter the substitution has bound.

@@ -361,9 +361,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let fills = |key: &DefId| {
             let written = &self.tysys.signatures.impl_sig(*key).trait_type_args;
             written.len() == trait_type_args.len()
-                && std::iter::zip(written, trait_type_args).all(|(&slot, &arg)| {
-                    tt.type_key(slot) == tt.type_key(arg) || self.tysys.is_open_slot(slot)
-                })
+                && std::iter::zip(written, trait_type_args)
+                    .all(|(&slot, &arg)| tt.same_type(slot, arg) || self.tysys.is_open_slot(slot))
         };
         keys.iter()
             .find(|key| implements(key) && fills(key))
