@@ -32,8 +32,8 @@ pub trait PackageFiles: Sync {
     /// Whatever reading the file fails with.
     fn read(&self, path: &Path) -> io::Result<String>;
 
-    /// Whether a file is at `path`. Read too, since what the answer stands on
-    /// is the file being there, which only its bytes, or its absence, record.
+    /// Whether a file is at `path`. Read too, as only its bytes, or its
+    /// absence, record that the answer still holds.
     fn is_file(&self, path: &Path) -> bool {
         let found = path.is_file();
         let _ = self.read(path);

@@ -5,15 +5,14 @@
 //! `wado check` command".
 
 use std::fmt::Write as _;
-
 use std::path::{Path, PathBuf};
-use wado_lsp::host::discovery::Disk;
 
 use indexmap::IndexMap;
 use lexopt::Arg::Value;
 use wado_compiler::Code;
 use wado_compiler::kiln::InvocationIndex;
 use wado_compiler::path::normalize;
+use wado_lsp::host::discovery::Disk;
 
 use crate::args::{self, CliExit};
 use crate::build;

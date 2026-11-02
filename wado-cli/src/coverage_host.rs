@@ -4,11 +4,9 @@
 //! 2026-10-25 (Profile-Guided Optimization).
 
 use std::collections::{BTreeMap, BTreeSet};
-
 use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
-use wado_lsp::host::discovery::Disk;
 
 use wado_compiler::coverage::{
     self, Coverage, CoverageScope, DecodedPlans, FileCoverage, PlanMismatch, Registered, TestReport,
@@ -17,6 +15,7 @@ use wado_compiler::pgo;
 #[cfg(debug_assertions)]
 use wado_compiler::stdlib::DEV_STDLIB_ROOT;
 use wado_compiler::stdlib::core_module_file;
+use wado_lsp::host::discovery::Disk;
 use wasmtime::component::{HasSelf, Linker};
 
 use crate::args::CliExit;

@@ -1,12 +1,10 @@
 use std::collections::BTreeSet;
-
 use std::fmt::Write as _;
 use std::future::Future;
 use std::path::{Path, PathBuf};
 use std::pin::Pin;
 use std::sync::{Arc, Mutex, Weak};
 use std::time::{Duration, Instant};
-use wado_lsp::host::discovery::Disk;
 
 use anyhow::Result;
 use futures::stream::{self, StreamExt};
@@ -18,6 +16,7 @@ use wado_compiler::TestSelection;
 use wado_compiler::ast::TodoMark;
 use wado_compiler::coverage::{CoverageScope, read_from_component};
 use wado_compiler::hashmap::{IndexMap, IndexSet};
+use wado_lsp::host::discovery::Disk;
 use wasmtime::component::{Component, Linker};
 use wasmtime::{Engine, GuestProfiler, Trap, UpdateDeadline};
 

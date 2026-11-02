@@ -3,10 +3,9 @@
 //! yet.
 
 use std::future::{Future, ready};
-
 use std::path::PathBuf;
-use wado_lsp::host::discovery::Disk;
 
+use wado_lsp::host::discovery::Disk;
 use wado_manifest::{
     DependencyProvider, GitTagInfo, Manifest, ProviderError, RegistryPackageInfo, Version,
 };

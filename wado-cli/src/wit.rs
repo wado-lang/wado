@@ -6,13 +6,12 @@
 //! `wep-2026-05-02-wit-interoperability.md`.
 
 use std::fs;
-
 use std::path::{Path, PathBuf};
-use wado_lsp::host::discovery::Disk;
 
 use lexopt::Arg::Value;
 use wado_compiler::CompilerOptions;
 use wado_compiler::wit_emit::{self, WitEmitOptions, WitEmitSnapshot, WitScope};
+use wado_lsp::host::discovery::Disk;
 
 use crate::args::{self, CliExit, OptSpec};
 use crate::compile::{

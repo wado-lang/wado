@@ -5,12 +5,11 @@
 //! reads of a completed (marker-present) worktree take none.
 
 use std::collections::BTreeMap;
-
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use wado_lsp::host::discovery::{Disk, package_lib_entry};
 
+use wado_lsp::host::discovery::{Disk, package_lib_entry};
 use wado_manifest::{GitTagInfo, Manifest, ProviderError};
 
 use crate::cache::{hold, root};

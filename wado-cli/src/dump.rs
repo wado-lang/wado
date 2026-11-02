@@ -1,10 +1,9 @@
 use std::fmt::Write as FmtWrite;
-
 use std::fs;
 use std::path::Path;
-use wado_lsp::host::discovery::Disk;
 
 use lexopt::Arg::Value;
+use wado_lsp::host::discovery::Disk;
 
 use crate::args::{self, CliExit};
 use crate::compile::{Settled, build_load, entry_profile, load_nearest_manifest};

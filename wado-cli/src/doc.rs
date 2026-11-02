@@ -1,8 +1,6 @@
 use std::fmt::Write as FmtWrite;
-
 use std::fs;
 use std::path::Path;
-use wado_lsp::host::discovery::Disk;
 
 use lexopt::Arg::Value;
 use wado_compiler::LogLevel;
@@ -13,6 +11,7 @@ use wado_compiler::doc::{
 };
 use wado_compiler::kiln::InvocationIndex;
 use wado_compiler::semantics::{Semantics, semantics_for_world};
+use wado_lsp::host::discovery::Disk;
 
 use crate::args::{self, CliExit};
 use crate::compile::{Settled, build_load, load_nearest_manifest};

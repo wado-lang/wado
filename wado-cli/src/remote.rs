@@ -273,8 +273,8 @@ fn reason(error: &reqwest::Error) -> String {
 }
 
 /// The first `extent` bytes of `url`, or all of it, held to `use_pin` or to
-/// what the `wado.lock` of the package at `lock_root`, read through `files`,
-/// pins.
+/// what the `wado.lock` of the package at `lock_root` pins, the lock read
+/// through `files`.
 ///
 /// # Errors
 ///

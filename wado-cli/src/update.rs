@@ -1,10 +1,9 @@
 //! `wado update` — resolve the project's dependency graph and write `wado.lock`.
 
 use std::fmt::Write as _;
-
 use std::fs;
-use wado_lsp::host::discovery::Disk;
 
+use wado_lsp::host::discovery::Disk;
 use wado_manifest::{LOCK_FILENAME, LockFile};
 
 use crate::args::{self, CliExit};

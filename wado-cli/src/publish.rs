@@ -22,12 +22,11 @@
 //! from a member directory is an error pointing at the workspace.
 
 use std::fmt::Write as _;
-
 use std::path::Path;
 use std::process::Command;
-use wado_lsp::host::discovery::Disk;
 
 use unicode_normalization::UnicodeNormalization;
+use wado_lsp::host::discovery::Disk;
 use wado_manifest::{
     Manifest, Package, PublishError, WORKSPACE_FILENAME, WorkspaceManifest, validate_for_publish,
 };

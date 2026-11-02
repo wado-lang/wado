@@ -9,15 +9,14 @@
 //! path deps from the nearest manifest itself.
 
 use std::fmt::Write as _;
-
 use std::num::NonZero;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use wado_lsp::host::discovery::Disk;
 
 use sha2::{Digest, Sha256};
 use tokio::sync::Semaphore;
 use tokio::task::JoinSet;
+use wado_lsp::host::discovery::Disk;
 
 use crate::args::{self, CliExit};
 use crate::compile::{self, Artifact, CompileFlags, CompileOptions};
