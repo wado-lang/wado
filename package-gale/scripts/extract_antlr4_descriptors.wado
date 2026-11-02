@@ -19,8 +19,7 @@
 //! and the Stage B′ manifest under `oracle-pending/`), the jar run on each
 //! Stage B′ candidate (its grammar with action bodies stripped), and the write
 //! of `drivers/<Category>/`, every claim on a grammar in the file that imports
-//! it. Without a JDK the last two are skipped with a warning, and the
-//! committed drivers stay as they are.
+//! it. It needs a JDK, and without one it stops before writing anything.
 //!
 //! Usage (from the repository root), every category or those named:
 //!   mise run extract-gale-descriptors [all | Category ...]
@@ -1443,6 +1442,22 @@ export fn run() with (Stdout, Stderr, Environment, Preopens, Exit, Process, Syst
     }
     let root = dirs.remove(0).0;
 
+    // A driver file holds every claim on its grammars, Stage B′ included, so no
+    // driver can be written without the oracle's trees.
+    match find_jdk() {
+        Ok(_) => {
+        },
+        Err(Missing(reason)) => {
+            eprintln(`extract: a JDK is required — ${reason}.`);
+            eprintln("extract: install a JDK 17+ (e.g. apt install default-jdk).");
+            exit(1);
+        },
+        Err(Unreachable(reason)) => {
+            eprintln(`extract: ${reason}`);
+            exit(1);
+        },
+    }
+
     println("==> Phase 1/3: extract");
     // Open the antlr4 descriptors source. If missing, error out — never auto-init.
     let src_root = match open_dir(&root, &descriptors_root(), false) {
@@ -1957,24 +1972,6 @@ export fn run() with (Stdout, Stderr, Environment, Preopens, Exit, Process, Syst
     );
 
     println("==> Phase 2/3: Stage B′ oracle invocation");
-    match find_jdk() {
-        Ok(_) => {
-        },
-        // A driver file holds every claim on its grammars, Stage B′ included,
-        // and without the oracle there are no Stage B′ claims to write. Phase 1
-        // has also just re-created the pending manifests without any
-        // `.expected`, so writing would delete every committed Stage B′ test.
-        Err(Missing(reason)) => {
-            eprintln(`extract: skipping Stage B′ oracle invocation — ${reason}.`);
-            eprintln("extract: install a JDK 17+ (e.g. apt install default-jdk) to regenerate the drivers.");
-            eprintln("==> Phase 3/3: skipped — oracle did not run; leaving committed drivers/ tests intact.");
-            return;
-        },
-        Err(Unreachable(reason)) => {
-            eprintln(`extract: ${reason}`);
-            exit(1);
-        },
-    }
     let jar = match ensure_jar(env("ANTLR4_VERSION")) {
         Ok(jar) => jar,
         Err(message) => {
@@ -2928,8 +2925,8 @@ test "parse_cli_args: no category selects every category" {
     assert parse_cli_args([]).unwrap().want_all;
 }
 
-// The Stage B′ emitter runs only on trees the jar pinned, so a run without a
-// JDK never reaches it: pin its output against a committed file.
+// The Stage B′ emitter runs only on trees the jar pinned, which no test has:
+// pin its output against a committed file.
 test "emit_stage_b_oracle_test_chunk reproduces its committed chunk verbatim" {
     let committed = #include_str("../tests/antlr4-compat/drivers/Sets/Sets_2_test.wado");
     let chunk = emit_stage_b_oracle_test_chunk(
