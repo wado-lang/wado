@@ -267,8 +267,6 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode";
 
-global global:core:prelude/string.wado::$const_obj_2: ref Array<u8> = array.new_fixed<u8>(101, 120, 112, 101, 99, 116, 101, 100, 32, 112, 111, 115, 61, 49, 44, 32, 103, 111, 116, 32, 112, 111, 115, 61);
-
 fn "mut_ref_if_return.wado/parse_item$sroa[return]"(p) {
     let $load_0: ref "core:prelude//List<mut_ref_if_return.wado/Token>";
     let $load_2: i32;
@@ -1547,13 +1545,12 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
 
 fn "core:prelude/string.wado/core:prelude/string.wado/String::format<mut_ref_if_return.wado/$tmpl$fb51c04d54491732,[i32]>$spec1$spec0$sroa[t.h0]"(t) {
     let out_3: ref "core:prelude/string.wado//String";
-    let repr_32: ref Array<u8>;
     let is_negative: bool;
     let x: i64;
-    out_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(40), used: 0 };
-    repr_32 = global:core:prelude/string.wado::$const_obj_2;
-    out_3.used = 24;
-    builtin::array_copy<u8>(out_3.repr, 0, repr_32, 0, 24);
+    let $sroa_$bound_117_repr_118: ref Array<u8>;
+    $sroa_$bound_117_repr_118 = array.new_data<u8>("expected pos=1, got pos=");
+    local.tee out_3(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(40), used: 0 }).used = 24;
+    builtin::array_copy<u8>(out_3.repr, 0, $sroa_$bound_117_repr_118, 0, 24);
     is_negative = t < 0;
     t = "core:prelude/primitive.wado/count_digits_u64"(local.tee x(x = builtin::i64_extend_i32_s(t); select i64(x < 0_i64, 0_i64 - x, x)));
     is_negative = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"(out_3, is_negative, t);

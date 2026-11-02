@@ -183,7 +183,7 @@ type "functype//from_impl_on_namespaced_error_type.wado/$test_0_each___picks_the
 
 type "functype//from_impl_on_namespaced_error_type.wado/$test_0_each___picks_the_from_impl_of_its_own_target$cold1" = fn(i32);  // TypeId(32)
 
-type "functype//core:prelude/intparse.wado/parse_u64_digits$unchecked$sroa[return]" = fn(ref Array<u8>, i32, i32, u32) -> [i32, u64, "core:prelude/intparse.wado//enum:IntErrorKind"];  // TypeId(33)
+type "functype//core:prelude/intparse.wado/parse_u64_digits$unchecked$sroa[return]$dae[radix]" = fn(ref Array<u8>, i32, i32) -> [i32, u64, "core:prelude/intparse.wado//enum:IntErrorKind"];  // TypeId(33)
 
 type "functype//core:prelude/intparse.wado/split_sign$sroa[return]" = fn(ref "core:prelude/string.wado//StrSlice") -> [i32, ref null "tuple//[bool, core:prelude/string.wado/StrSlice]", "core:prelude/intparse.wado//enum:IntErrorKind"];  // TypeId(34)
 
@@ -414,7 +414,7 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode";
 
-global global:core:prelude/primitive.wado::$const_obj_2: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
+global global:core:prelude/primitive.wado::$const_obj_0: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
 
 fn "from_impl_on_namespaced_error_type.wado/$test_0_each___picks_the_from_impl_of_its_own_target"() {
     if @unlikely(local.tee $mv$$vr_3_10$0($thread_$inline_parse_remote_1: block -> ref "sub/from_impl_on_namespaced_error_dep.wado//AppError" {
@@ -501,7 +501,7 @@ parse_remote(\"x\").unwrap_err().code: "), used: 208 }, s1: struct.new "core:pre
     unreachable;
 }
 
-fn "core:prelude/intparse.wado/parse_u64_digits$unchecked$sroa[return]"($mv$s$repr, $mv$s$start, $mv$s$end, radix) {
+fn "core:prelude/intparse.wado/parse_u64_digits$unchecked$sroa[return]$dae[radix]"($mv$s$repr, $mv$s$start, $mv$s$end) {
     let len: i32;
     let acc: u64;
     let i: i32;
@@ -2253,7 +2253,7 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(self, f) {
     let abs_val: u64;
     is_negative = self < 0;
     self = "core:prelude/primitive.wado/count_digits_u64"(local.tee abs_val("core:prelude/primitive.wado/i64::abs"(builtin::i64_extend_i32_s(self))));
-    is_negative = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>"(f, is_negative, global:core:prelude/primitive.wado::$const_obj_2, self);
+    is_negative = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>"(f, is_negative, global:core:prelude/primitive.wado::$const_obj_0, self);
     "core:prelude/primitive.wado/write_decimal_digits"(f.buf.repr, is_negative, abs_val, self);
 }
 
@@ -2273,7 +2273,7 @@ fn "core:prelude/primitive.wado/u32::fmt_decimal$sroa[self.value]"(self, f) {
     let value: u64;
     let offset: i32;
     self = "core:prelude/primitive.wado/count_digits_u64"(local.tee value(builtin::i64_extend_i32_u(self)));
-    offset = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>"(f, 0, global:core:prelude/primitive.wado::$const_obj_2, self);
+    offset = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>"(f, 0, global:core:prelude/primitive.wado::$const_obj_0, self);
     "core:prelude/primitive.wado/write_decimal_digits"(f.buf.repr, offset, value, self);
 }
 
@@ -2355,7 +2355,7 @@ fn "core:prelude/primitive.wado/i32^core:prelude/traits.wado/FromStr::from_str<c
         $contract_arg_0 = $local_25.1;
         let $mv$$vr_27$1: u64;
         let $mv$$vr_27$2: "core:prelude/intparse.wado//enum:IntErrorKind";
-        multivalue_bind [$mv$$vr_26$2, $mv$$vr_27$1, $mv$$vr_27$2] = "core:prelude/intparse.wado/parse_u64_digits$unchecked$sroa[return]"($contract_arg_0.repr, $contract_arg_0.start, $contract_arg_0.end, 10);
+        multivalue_bind [$mv$$vr_26$2, $mv$$vr_27$1, $mv$$vr_27$2] = "core:prelude/intparse.wado/parse_u64_digits$unchecked$sroa[return]$dae[radix]"($contract_arg_0.repr, $contract_arg_0.start, $contract_arg_0.end);
         if $mv$$vr_26$2 == 0 -> ref "tuple//[i32, i64, core:prelude/types.wado/Option<core:prelude/intparse.wado/ParseIntError>]" {
             if $mv$$vr_26$0 -> ref "tuple//[i32, i64, core:prelude/types.wado/Option<core:prelude/intparse.wado/ParseIntError>]" {
                 if $mv$$vr_27$1 >u 2147483648_i64 -> ref "tuple//[i32, i64, core:prelude/types.wado/Option<core:prelude/intparse.wado/ParseIntError>]" {

@@ -814,6 +814,23 @@ fn run_optimization_passes(
     while i < limit {
         i += 1;
         iter_changed.clear();
+        // What a round leaves unreachable — a callee inlined into every caller,
+        // the original every call of which now reaches a clone — is otherwise
+        // carried to the DCE after the loop, and every pass walks it each round
+        // until then. On a Gale test that is a third of the bodies. A clone a
+        // later call may be pointed at again is a root, as `param_spec` keeps it.
+        run_pass("nir/drop_unreachable", project, profiler, |p| {
+            let cached = param_spec_state.cached_clones(p);
+            let reachable = dce::reachable_function_positions(
+                p,
+                descriptor_cache,
+                &mut reachability,
+                exec,
+                cached,
+            );
+            remove_unreachable_functions(p, &reachable);
+            false
+        });
         in_span(profiler, &format!("nir/iteration {i}"), || {
             macro_rules! record {
                 ($name:expr, $c:expr) => {{

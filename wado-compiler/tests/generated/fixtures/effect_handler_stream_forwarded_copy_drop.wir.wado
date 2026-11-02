@@ -471,12 +471,12 @@ import fn wasi/stream-cancel-write from "wasi/stream-cancel-write";
 global mut global:core:prelude/types.wado::SETTLED_COPIES: ref null "core:prelude//List<core:prelude/types.wado/CopySettlement>" = ref.null none;
 global mut global:effect_handler_stream_forwarded_copy_drop.wado::$effect_core:prelude/types.wado/Stream<u8>: ref null "effect_handler_stream_forwarded_copy_drop.wado//$Dispatch_core:prelude/types.wado/Stream<u8>" = ref.null none;
 global mut global:effect_handler_stream_forwarded_copy_drop.wado::$modules_initialized: bool = 0;
-global global:effect_handler_stream_forwarded_copy_drop.wado::$const_obj_2: ref Array<u8> = array.new_fixed<u8>(4, 5);
-global global:effect_handler_stream_forwarded_copy_drop.wado::$const_obj_3: ref Array<u8> = array.new_fixed<u8>(100, 114, 111, 112, 112, 101, 100);
-global global:core:prelude/format.wado::$const_obj_5: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(38, 109, 117, 116, 32), used: 5 };
-global global:core:prelude/array.wado::$const_obj_16: ref Array<u8> = array.new_fixed<u8>(46, 46, 46);
-global global:core:prelude/array.wado::$const_obj_17: ref Array<u8> = array.new_fixed<u8>(44, 32, 46, 46, 46);
-global global:core:prelude/array.wado::$const_obj_18: ref Array<u8> = array.new_fixed<u8>(44, 32);
+global global:effect_handler_stream_forwarded_copy_drop.wado::$const_obj_0: ref Array<u8> = array.new_fixed<u8>(4, 5);
+global global:effect_handler_stream_forwarded_copy_drop.wado::$const_obj_1: ref Array<u8> = array.new_fixed<u8>(100, 114, 111, 112, 112, 101, 100);
+global global:core:prelude/format.wado::$const_obj_2: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(38, 109, 117, 116, 32), used: 5 };
+global global:core:prelude/array.wado::$const_obj_13: ref Array<u8> = array.new_fixed<u8>(46, 46, 46);
+global global:core:prelude/array.wado::$const_obj_14: ref Array<u8> = array.new_fixed<u8>(44, 32, 46, 46, 46);
+global global:core:prelude/array.wado::$const_obj_15: ref Array<u8> = array.new_fixed<u8>(44, 32);
 global global:core:builtin::$unit_case$core:prelude/types.wado//Option<core:prelude/types.wado/Stream<u8>>$0: ref "core:prelude/types.wado//Option<core:prelude/types.wado/Stream<u8>>" = struct.new "core:prelude/types.wado//Option<core:prelude/types.wado/Stream<u8>>" { 0 };
 global global:core:builtin::$unit_case$core:prelude/types.wado//Option<[core:prelude/types.wado/Stream<u8>,core:prelude/types.wado/StartedRead<u8>]>$0: ref "core:prelude/types.wado//Option<[core:prelude/types.wado/Stream<u8>,core:prelude/types.wado/StartedRead<u8>]>" = struct.new "core:prelude/types.wado//Option<[core:prelude/types.wado/Stream<u8>,core:prelude/types.wado/StartedRead<u8>]>" { 0 };
 global global:core:builtin::$unit_case$core:prelude/types.wado//Option<[core:prelude/types.wado/StreamWritable<u8>,core:prelude/types.wado/StartedWrite<u8>]>$0: ref "core:prelude/types.wado//Option<[core:prelude/types.wado/StreamWritable<u8>,core:prelude/types.wado/StartedWrite<u8>]>" = struct.new "core:prelude/types.wado//Option<[core:prelude/types.wado/StreamWritable<u8>,core:prelude/types.wado/StartedWrite<u8>]>" { 0 };
@@ -566,13 +566,13 @@ fn "effect_handler_stream_forwarded_copy_drop.wado/run"() with Stdout {
     }).0;
     outer_rx = $local_2_191.1;
     handle_211 = "effect_handler_stream_forwarded_copy_drop.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(inner_rx);
-    builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>(8)), 0, global:effect_handler_stream_forwarded_copy_drop.wado::$const_obj_3, 0, 7);
+    builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>(8)), 0, global:effect_handler_stream_forwarded_copy_drop.wado::$const_obj_1, 0, 7);
     builtin::array_set_u8(new_repr, 7, 10);
     "core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]$dae[return]"(outer_rx.value, new_repr);
     "wasi/stream-drop-writable"(outer_rx.value);
     "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(handle_211);
     handle_211 = inner_tx.value;
-    ptr_43 = builtin::i32_wrap_i64(ptr_43 = "mem/realloc"(0, 0, 1, 2); new_repr = global:effect_handler_stream_forwarded_copy_drop.wado::$const_obj_2; i = 0; b6: block {
+    ptr_43 = builtin::i32_wrap_i64(ptr_43 = "mem/realloc"(0, 0, 1, 2); new_repr = global:effect_handler_stream_forwarded_copy_drop.wado::$const_obj_0; i = 0; b6: block {
         l7: loop {
             break_if b6 i > -6;
             $cm_pair_5_194 = ((((((builtin::i64_extend_i32_u(builtin::array_get_value_u8(new_repr, i)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(new_repr, i + 1)) << 8_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(new_repr, i + 2)) << 16_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(new_repr, i + 3)) << 24_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(new_repr, i + 4)) << 32_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(new_repr, i + 5)) << 40_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(new_repr, i + 6)) << 48_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(new_repr, i + 7)) << 56_i64);
@@ -1290,7 +1290,7 @@ fn "core:prelude/array.wado/core:prelude/array.wado/write_seq_inspect<u8>$dae[st
                 } else {
                 }
                 start_22 = self_7.used;
-                builtin::array_copy<u8>(self_7.repr, start_22, global:core:prelude/array.wado::$const_obj_18, 0, 2);
+                builtin::array_copy<u8>(self_7.repr, start_22, global:core:prelude/array.wado::$const_obj_15, 0, 2);
             } else {
             }
             is_negative_30 = local.tee start_22(builtin::array_get_value<u8>(repr, i_6)) < 0;
@@ -1407,7 +1407,7 @@ fn "core:prelude/array.wado/core:prelude/array.wado/write_seq_inspect<u8>$dae[st
             }
             limit = self_7.used;
             self_7.used = end;
-            builtin::array_copy<u8>(self_7.repr, limit, global:core:prelude/array.wado::$const_obj_17, 0, 5);
+            builtin::array_copy<u8>(self_7.repr, limit, global:core:prelude/array.wado::$const_obj_14, 0, 5);
         } else {
             if @unlikely(local.tee end(local.tee self_7(f.buf).used + 3) > builtin::array_len(self_7.repr)) {
                 cold_path;
@@ -1415,7 +1415,7 @@ fn "core:prelude/array.wado/core:prelude/array.wado/write_seq_inspect<u8>$dae[st
             }
             limit = self_7.used;
             self_7.used = end;
-            builtin::array_copy<u8>(self_7.repr, limit, global:core:prelude/array.wado::$const_obj_16, 0, 3);
+            builtin::array_copy<u8>(self_7.repr, limit, global:core:prelude/array.wado::$const_obj_13, 0, 3);
         }
     }
     if @unlikely(local.tee end(local.tee self_7(f.buf).used + 1) > builtin::array_len(self_7.repr)) {
@@ -2089,7 +2089,7 @@ fn "core:prelude/types.wado/core:prelude/types.wado/WriteCopy<u8>^core:prelude/t
 fn "core:prelude/format.wado/&mut bool^core:prelude/traits.wado/Inspect::inspect"(self, f) {
     let self_3: ref "core:prelude/string.wado//String";
     self_3 = f.buf;
-    "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec0"(global:core:prelude/format.wado::$const_obj_5, self_3);
+    "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec0"(global:core:prelude/format.wado::$const_obj_2, self_3);
     "core:prelude/primitive.wado/bool::fmt_into$sroa[self.value]"(self.value.value, f);
 }
 

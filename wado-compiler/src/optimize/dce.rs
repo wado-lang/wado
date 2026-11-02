@@ -173,7 +173,7 @@ pub(super) fn analyze_dce(
     let mut graph = build_analysis_graph(project, descriptors, exec);
 
     let mut analysis = DceAnalysis::empty();
-    let reachable = compute_function_reachability(project, &mut graph);
+    let reachable = compute_function_reachability(project, &mut graph, &[]);
     resolve_imports(project, &graph, &reachable);
     analysis.functions = stored_positions(&reachable).collect();
     analysis.globals = compute_global_reachability(&graph, &analysis.functions);
@@ -193,9 +193,11 @@ pub(super) fn reachable_function_positions(
     let functors = functor_methods(project);
     let analyses = walks.analyses(project, exec, descriptors, &functors);
     let mut graph = assemble_analysis_graph(project, Cow::Borrowed(analyses), functors);
-    let mut reachable = compute_function_reachability(project, &mut graph);
-    let roots = cached.into_iter().map(|id| Target::Stored(id.index()));
-    reachable.extend(compute_reachable(&graph, roots));
+    let roots: Vec<Target> = cached
+        .into_iter()
+        .map(|id| Target::Stored(id.index()))
+        .collect();
+    let reachable = compute_function_reachability(project, &mut graph, &roots);
     stored_positions(&reachable).collect()
 }
 
@@ -265,12 +267,17 @@ pub(super) fn callee_descriptor(descriptors: &[FunctionRef], func_id: FuncId) ->
 /// Consumes the call graph (and its pending inspect edges) built in the single
 /// AST walk of [`build_analysis_graph`]; mutates the graph by adding the gated
 /// per-functor `$Closure_N^Inspect` edges once the inspectable-signature set
-/// is known.
-fn compute_function_reachability(project: &NirPackage, graph: &mut AnalysisGraph) -> Reached {
+/// is known. `extra_roots` are reached as entries are, so every phase below
+/// sees what they reach.
+fn compute_function_reachability(
+    project: &NirPackage,
+    graph: &mut AnalysisGraph,
+    extra_roots: &[Target],
+) -> Reached {
     // Phase 2a: compute the provisional reachable set from the raw graph
     // (without per-functor `$Closure_N^Inspect` edges). This is what
     // determines whether a `:?` / `:#?` call site is actually live.
-    let reachable_v1 = compute_reachable_from_entries(project, graph);
+    let reachable_v1 = compute_reachable_from_entries(project, graph, extra_roots);
 
     // Phase 2b: derive the inspectable `(arity, ret)` set from the reachable
     // functions only, then add the gated inspect edges to the call graph. The
@@ -281,7 +288,7 @@ fn compute_function_reachability(project: &NirPackage, graph: &mut AnalysisGraph
     apply_inspect_edges(graph, &inspectable);
 
     // Phase 2c: re-compute the reachable set from the augmented graph.
-    let mut reachable = compute_reachable_from_entries(project, graph);
+    let mut reachable = compute_reachable_from_entries(project, graph, extra_roots);
 
     // Phase 3: extend reachable set with optimizer-induced virtual edges.
     // A pass may *synthesize* calls during the optimization loop. Their targets
@@ -309,11 +316,16 @@ fn extend_reachable_for_optimizer_passes(
     // monomorph; any of them reaching the fusion keeps the primitives alive.
     let mut append_ids: Vec<Target> = Vec::new();
     let mut fused: Vec<Target> = Vec::new();
+    let mut push_chars: Vec<Target> = Vec::new();
+    let mut push_asciis: Vec<Target> = Vec::new();
     for (pos, func_rc) in project.functions.iter().enumerate() {
         match func_rc.borrow().compiler_item {
-            Some(CompilerItem::StringPushStr | CompilerItem::StringPushChar) => {
+            Some(CompilerItem::StringPushStr) => append_ids.push(Target::Stored(pos)),
+            Some(CompilerItem::StringPushChar) => {
                 append_ids.push(Target::Stored(pos));
+                push_chars.push(Target::Stored(pos));
             }
+            Some(CompilerItem::StringPushAscii) => push_asciis.push(Target::Stored(pos)),
             Some(
                 CompilerItem::StringLen
                 | CompilerItem::StringReserveUninit
@@ -330,12 +342,14 @@ fn extend_reachable_for_optimizer_passes(
     // wherever an append is reachable at all. Ungated beyond that: the fusion
     // reads a run out of a block rather than a single recognisable call, and a
     // later DCE drops the four again when no run fused.
-    //
-    // `push_ascii_byte` needs no root: both rules only recognise it, and
-    // `Ctx::resolve` reads the compiler item off an entry this pass leaves in
-    // place.
     if append_ids.iter().any(|id| reachable.contains(id)) {
         reachable.extend(compute_reachable(graph, fused));
+    }
+    // `nir/string_push`'s constant-ASCII rule retargets a `push` call to
+    // `push_ascii_byte`. `push`'s own body calls it too, but only until the
+    // inliner splices it there, which leaves it unreachable while `push` is not.
+    if push_chars.iter().any(|id| reachable.contains(id)) {
+        reachable.extend(compute_reachable(graph, push_asciis));
     }
 
     // An `array_clone::<T>` site reaches its helper through the element type
@@ -389,7 +403,11 @@ fn extend_reachable_for_optimizer_passes(
 /// Entry points are:
 /// - `is_cm_export`: synthesized CM export wrappers (world-specific, always correct)
 /// - `is_export` in `wasm_module` sources: raw wasm exports with no CM wrapper
-fn compute_reachable_from_entries(project: &NirPackage, graph: &AnalysisGraph) -> Reached {
+fn compute_reachable_from_entries(
+    project: &NirPackage,
+    graph: &AnalysisGraph,
+    extra_roots: &[Target],
+) -> Reached {
     let roots = project
         .functions
         .iter()
@@ -402,7 +420,8 @@ fn compute_reachable_from_entries(project: &NirPackage, graph: &AnalysisGraph) -
                         .wasm_module_sources
                         .contains_key(&func.module_source));
             is_root.then_some(Target::Stored(pos))
-        });
+        })
+        .chain(extra_roots.iter().cloned());
     compute_reachable(graph, roots)
 }
 
@@ -1412,7 +1431,10 @@ pub fn remove_unreachable_functions(
         }
     }
     for (i, func_rc) in project.functions.iter().enumerate() {
-        if !keep[i] {
+        // A borrow counts as a write, so one already dead is left unborrowed:
+        // the optimizer loop drops the unreachable every round, and a write
+        // would make each `BodyMemo` re-derive it every time.
+        if !keep[i] && !func_rc.borrow().is_dead {
             let mut func = func_rc.borrow_mut();
             func.is_dead = true;
             func.body = None;

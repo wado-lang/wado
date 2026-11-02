@@ -413,6 +413,16 @@ impl ParamSpecState {
         self.cap_hit.clone()
     }
 
+    /// The clones a later call may be pointed at again, which reachability
+    /// must keep though no call reaches them yet.
+    pub(super) fn cached_clones(&self, project: &NirPackage) -> Vec<FuncId> {
+        self.clones
+            .values()
+            .chain(project.sroa_param_clones.iter())
+            .copied()
+            .collect()
+    }
+
     /// Whether `func` is itself a clone this pass minted.
     fn is_clone(&self, func: FuncId) -> bool {
         self.param_consts.contains_key(&func)
@@ -1428,12 +1438,7 @@ pub(super) fn specialize_const_params(
     descriptors: &mut DescriptorCache,
     reachability: &mut ReachabilityCache,
 ) -> bool {
-    let cached: Vec<_> = state
-        .clones
-        .values()
-        .chain(project.sroa_param_clones.iter())
-        .copied()
-        .collect();
+    let cached = state.cached_clones(project);
     let mut reachable =
         reachable_function_positions(project, descriptors, reachability, gate.exec(), cached);
     let mut changed = false;

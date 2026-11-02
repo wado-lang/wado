@@ -179,8 +179,8 @@ import fn wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode f
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
-global global:const_global_dedup.wado::$const_obj_2: ref Array<u8> = array.new_fixed<u8>(44);
-global global:const_global_dedup.wado::$const_obj_3: ref Array<i32> = array.new_fixed<i32>(10, 20, 30, 40);
+global global:const_global_dedup.wado::$const_obj_0: ref Array<u8> = array.new_fixed<u8>(44);
+global global:const_global_dedup.wado::$const_obj_1: ref Array<i32> = array.new_fixed<i32>(10, 20, 30, 40);
 
 fn "const_global_dedup.wado/run"() with Stdout {
     let $load_0: ref Array<u8>;
@@ -201,7 +201,7 @@ fn "const_global_dedup.wado/run"() with Stdout {
                 cold_path;
                 "const_global_dedup.wado/sum_a$cold0$dae[n,$v1]"(s_17);
                 unreachable;
-            }; builtin::array_get_value<i32>(global:const_global_dedup.wado::$const_obj_3, s_17);
+            }; builtin::array_get_value<i32>(global:const_global_dedup.wado::$const_obj_1, s_17);
             i_18 = i_18 + 1;
             continue l1;
         };
@@ -216,7 +216,7 @@ fn "const_global_dedup.wado/run"() with Stdout {
                 cold_path;
                 "const_global_dedup.wado/sum_b$cold0$dae[n,$v1]"(i_18);
                 unreachable;
-            }; builtin::array_get_value<i32>(global:const_global_dedup.wado::$const_obj_3, i_18);
+            }; builtin::array_get_value<i32>(global:const_global_dedup.wado::$const_obj_1, i_18);
             i_38 = i_38 + 1;
             continue l4;
         };
@@ -229,7 +229,7 @@ fn "const_global_dedup.wado/run"() with Stdout {
     s_17 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_129(x_129 = builtin::i64_extend_i32_s(s_17); select i64(x_129 < 0_i64, 0_i64 - x_129, x_129)));
     n_15 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"(out_58, n_15, s_17);
     "core:prelude/primitive.wado/write_decimal_digits"(local.tee $load_0(out_58.repr), n_15, x_129, s_17);
-    repr_148 = global:const_global_dedup.wado::$const_obj_2;
+    repr_148 = global:const_global_dedup.wado::$const_obj_0;
     if @unlikely(local.tee n_15(out_58.used + 1) > builtin::array_len($load_0)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_58, n_15);
