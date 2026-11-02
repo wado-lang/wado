@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1793613452635,
+  "lastUpdate": 1793655740058,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -73757,6 +73757,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/bf5c50d3b0a224b97381ff702ba4d8028c474831"
         },
         "date": 1793613451601,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3099,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7303,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21809,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 316578,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "9fe413243f50d9df6fb590429fa6671a34dd796e",
+          "message": "Merge pull request #2530 from wado-lang/ccr-52b7fd41-lzjtwq\n\nfeat(pgo): test the code a profiled build ships, and fuzz profiles in EMI",
+          "timestamp": "2026-11-03T06:30:28+09:00",
+          "tree_id": "111e173aedff43adc2d1d82196686692228a8a07",
+          "url": "https://github.com/wado-lang/wado/commit/9fe413243f50d9df6fb590429fa6671a34dd796e"
+        },
+        "date": 1793655738948,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
