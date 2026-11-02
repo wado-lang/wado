@@ -162,15 +162,8 @@ impl Graph for WebGpuBackend {
             }
         }
         let moved = self.ran_program(program.serial, &returned);
-        return results.into_iter().map(|r| match r {
-            F32(Device(d)) && moved.contains_key(d.slot) => Any::<WebGpuBackend>::F32(Placed::Device(DeviceTensor {
-                ..d,
-                slot: moved[d.slot],
-            })),
-            Bool(Device(d)) && moved.contains_key(d.slot) => Any::<WebGpuBackend>::Bool(Placed::Device(DeviceTensor {
-                ..d,
-                slot: moved[d.slot],
-            })),
+        return results.into_iter().map(|r| match on_device(&r) {
+            Some(d) && moved.contains_key(d.slot) => at_slot(&r, moved[d.slot]),
             _ => r,
         }).collect();
     }
@@ -746,6 +739,15 @@ fn on_device(value: &Any<WebGpuBackend>) -> Option<DeviceTensor> {
     return match value {
         F32(Device(d)) | Bool(Device(d)) => Option::Some(*d),
         _ => null,
+    };
+}
+
+/// `value`, a view on the device, of the buffer at `slot`.
+fn at_slot(value: &Any<WebGpuBackend>, slot: i32) -> Any<WebGpuBackend> {
+    return match value {
+        F32(Device(d)) => Any::F32(Placed::Device(DeviceTensor { ..*d, slot })),
+        Bool(Device(d)) => Any::Bool(Placed::Device(DeviceTensor { ..*d, slot })),
+        _ => unreachable(),
     };
 }
 

@@ -481,8 +481,8 @@ global SUBMIT_EVERY: i32 = 32;
 global LAYOUTS: i32 = 4;
 
 /// The passes a launch's commands, buffers and parameters, and a bind group
-/// of buffers that live, outlive their last use by. A generation's first steps come round again
-/// only with the next prompt.
+/// of buffers that live, outlive their last use by. A generation's first
+/// steps come round again only with the next prompt.
 global IDLE_PASSES: i32 = 256;
 
 /// The slot of a buffer not allocated yet, which `binds` reads a view of
@@ -614,7 +614,8 @@ impl WebGpuBackend {
     }
 
     /// The bytes of the buffers that outlive a pass: those `keep` and
-    /// `keep_rhs` wrote, and those launches of programs own.
+    /// `keep_rhs` wrote, and those launches of programs own or carve
+    /// parameters from.
     pub fn kept_bytes(&self) -> u64 with GpuBuffer {
         let mut bytes: u64 = 0;
         for let at of self.held.values() {
@@ -726,8 +727,12 @@ impl WebGpuBackend {
 
     /// Drops the held buffer at `slot`, adding its `id` to `dropped`.
     fn dropped_held(&mut self, slot: i32, dropped: &mut HashSet<i32>) {
-        let at = self.held[slot];
+        self.dropped_buffer(self.held[slot], dropped);
         self.held.remove(slot);
+    }
+
+    /// Drops the buffer at `at` in `buffers`, adding its `id` to `dropped`.
+    fn dropped_buffer(&mut self, at: i32, dropped: &mut HashSet<i32>) {
         dropped.insert(self.buffers.get(at).id);
         self.buffers.remove(at);
     }
@@ -747,9 +752,9 @@ impl WebGpuBackend {
     }
 
     /// Ends a call of the program `serial`, which returned the values at the
-    /// slots `returned`. A buffer one of its launches owns and a value was
-    /// returned in moves to the pass, as the caller's, and the slot it takes
-    /// there is the one the result maps the owned one to.
+    /// slots `returned`. Each buffer a launch owns that holds a returned value
+    /// moves to the pass, as the caller's. The result maps each such buffer's
+    /// slot to the one it takes in the pass.
     internal fn ran_program(&mut self, serial: i32, returned: &List<i32>) -> HashMap<i32, i32> {
         self.running = null;
         let mut launches: List<List<i32>> = [];
@@ -2339,8 +2344,7 @@ impl Holds for WebGpuBackend {
         self.parameters = null;
         let mut dropped = HashSet::<i32>::new();
         while let Some(s) = self.spare.pop() {
-            dropped.insert(self.buffers.get(s.at).id);
-            self.buffers.remove(s.at);
+            self.dropped_buffer(s.at, &mut dropped);
         }
         let mut carried: List<Carried> = [];
         let start = self.pass_start;
