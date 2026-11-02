@@ -425,7 +425,9 @@ output at every level. It is a nightly campaign, not a gate.
       match.
     - The stdlib snapshot. It is keyed by the whole profile's summary, so a
       change to the user's counts rebuilds it. Keying it by the marks it
-      receives would rebuild it only when they change.
+      receives would rebuild it only when they change. Each thread holds one
+      profiled snapshot, so under `wado test` every worker builds its own for
+      each package whose profile names a `core:` module.
     - The inliner's `branch_weight` guard reads the cold half, while the layout
       it protects follows the unlikely hint. The table settles which half it
       should read.
@@ -436,9 +438,9 @@ output at every level. It is a nightly campaign, not a gate.
   where the plan finds its regions, so nothing reads the difference
   `$known_cold_path` keeps through TIR. The distinction may have no reader
   left.
-- [ ] An author's `cold_path()` in the right operand of `&&` or `||` stays
-  when the profile measured it, since the profile has no statement position
-  there for a marker of its own.
+- [ ] An author's `cold_path()`, or a `?`, in the right operand of `&&` or
+  `||` keeps its marker when the profile measured it, since the profile has no
+  statement position there for a marker of its own.
 - [ ] A region that starts in an expression, the right operand of `&&` or
   `||`, has no statement position for a marker, so the regions inside one that
   never ran are marked in its place.

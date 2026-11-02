@@ -72,7 +72,7 @@ function read(file: string): Stage {
         continue;
       }
       if (section === 'guard shapes') {
-        const shape = line.match(/^(\S+): (\d+) source\(s\) \((\d+) sites\)$/);
+        const shape = line.match(/^(\S+): (\d+) source\(s\) \((\d+) [^)]+\)$/);
         if (shape) {
           const seen = stage.shapes.get(shape[1]) ?? { sources: 0, sites: 0 };
           stage.shapes.set(shape[1], {
@@ -139,7 +139,7 @@ function render(title: string, stage: Stage): string[] {
   out.push(
     ...table(
       'Guard shapes',
-      ['Shape', 'Sources', 'Sites'],
+      ['Shape', 'Sources', stage.total.unit],
       [...stage.shapes].map(([name, { sources, sites }]) => [name, `${sources}`, `${sites}`]),
     ),
     ...table(

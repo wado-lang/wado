@@ -1720,11 +1720,14 @@ impl Counts {
     /// This profile with every function outside `kept` never entered, which a
     /// compile treats as unprofiled.
     fn only(&self, kept: &[ProfiledFn]) -> Coverage {
-        let kept: IndexSet<&ProfiledFn> = kept.iter().collect();
+        let kept: IndexSet<(&str, usize)> = kept
+            .iter()
+            .map(|(module, index)| (module.as_str(), *index))
+            .collect();
         let mut coverage = self.coverage.clone();
         for (module, file) in &mut coverage.files {
             for (index, ids) in file.plan.regions_by_function().into_iter().enumerate() {
-                if !kept.contains(&(module.clone(), index)) {
+                if !kept.contains(&(module.as_str(), index)) {
                     for id in ids {
                         file.counts.remove(&id);
                     }
@@ -1753,11 +1756,12 @@ fn random_count(rng: &mut ChaCha12Rng) -> i64 {
     base + rng.random_range(0..base)
 }
 
+/// SHA-256 rather than `DefaultHasher`, whose algorithm Rust may change in any
+/// release, so a seed rebuilds the same profile on every toolchain.
 fn seed(parts: &[&str]) -> u64 {
-    use std::hash::{Hash, Hasher};
-    let mut hasher = std::hash::DefaultHasher::new();
-    parts.hash(&mut hasher);
-    hasher.finish()
+    use sha2::{Digest, Sha256};
+    let digest = Sha256::digest(parts.join("\0"));
+    u64::from_le_bytes(digest[..8].try_into().expect("a digest holds eight bytes"))
 }
 
 /// Counts no workload would record, under `measured`'s plans: a function is
@@ -1788,12 +1792,13 @@ fn random_counts(measured: &Coverage, seed: u64) -> Coverage {
     coverage
 }
 
-/// What `text`'s own tests ran, under the plans a profile is keyed by.
-fn measure(path: &Path, text: &str, spec: &Spec) -> Result<Coverage, String> {
+/// What `text`'s own tests ran at `level`, under the plans a profile is keyed
+/// by. The plans and the counts are the same at every level.
+fn measure(path: &Path, text: &str, spec: &Spec, level: OptLevel) -> Result<Coverage, String> {
     let caught = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         let options = CompilerOptions {
             coverage: Some(spec.root.coverage_scope()),
-            ..spec.compiler_options(OptLevel::O0)
+            ..spec.compiler_options(level)
         };
         let compiled = compile(path, text, spec, options)?;
         let plans = read_from_component(&compiled.wasm)
@@ -1851,29 +1856,41 @@ fn profile(subject: &Source, source: &str) -> Result<Eligible, Excluded> {
             .iter()
             .map(|shape| (shape.keyword, inject(&canonical, shape, &sites, ""))),
     );
+    let levels = levels();
+    let mut refusals = Refusals::default();
     let mut programs = Vec::new();
     for (key, text) in texts {
-        let measured = measure(path, &text, &spec)
-            .map_err(|detail| Excluded::MeasureFailed(format!("{key}: {detail}")))?;
-        let random = (0..random_profiles()).map(|index| Counts {
-            key: format!("random{index}"),
-            coverage: random_counts(&measured, seed(&[&name, key, &index.to_string()])),
-        });
-        let profiles = std::iter::once(Counts {
-            key: "measured".to_string(),
-            coverage: measured.clone(),
-        })
-        .chain(random)
-        .collect();
+        let measured = match measure(path, &text, &spec, levels[0]) {
+            Ok(coverage) => Counts {
+                key: "measured".to_string(),
+                coverage,
+            },
+            // The source decides whether the source is a subject; a mutant
+            // that does not measure drops out alone.
+            Err(detail) if programs.is_empty() => return Err(Excluded::MeasureFailed(detail)),
+            Err(detail) => {
+                refusals.note(Excluded::MeasureFailed(format!("{key}: {detail}")));
+                continue;
+            }
+        };
+        if programs.is_empty() && measured.judged().is_empty() {
+            return Err(Excluded::NothingProfiled);
+        }
+        let random: Vec<Counts> = (0..random_profiles())
+            .map(|index| Counts {
+                key: format!("random{index}"),
+                coverage: random_counts(
+                    &measured.coverage,
+                    seed(&[&name, key, &index.to_string()]),
+                ),
+            })
+            .collect();
+        let profiles = std::iter::once(measured).chain(random).collect();
         programs.push(Program {
             key,
             text,
             profiles,
         });
-    }
-    let judged = |program: &Program| program.profiles[0].judged().len();
-    if judged(&programs[0]) == 0 {
-        return Err(Excluded::NothingProfiled);
     }
 
     let mut alive: Vec<(usize, usize)> = programs
@@ -1881,8 +1898,7 @@ fn profile(subject: &Source, source: &str) -> Result<Eligible, Excluded> {
         .enumerate()
         .flat_map(|(p, program)| (0..program.profiles.len()).map(move |c| (p, c)))
         .collect();
-    let mut refusals = Refusals::default();
-    for level in levels() {
+    for level in levels {
         let baseline = baseline(path, &canonical, &spec, level)?;
         let mut survivors = Vec::new();
         for (p, c) in alive {
@@ -1915,10 +1931,13 @@ fn profile(subject: &Source, source: &str) -> Result<Eligible, Excluded> {
         }
     }
 
+    let mut covered: Vec<&Program> = alive.iter().map(|&(p, _)| &programs[p]).collect();
+    covered.dedup_by_key(|program| program.key);
+    let judged = |program: &&Program| program.profiles[0].judged().len();
     Ok(Eligible {
         name,
-        sites: programs.iter().map(judged).sum(),
-        shapes: programs
+        sites: covered.iter().map(judged).sum(),
+        shapes: covered
             .iter()
             .filter(|program| program.key != "source")
             .map(|program| (program.key, judged(program)))
@@ -1942,7 +1961,7 @@ struct ProfiledRun<'a> {
     program: &'a Program,
     spec: &'a Spec,
     level: OptLevel,
-    /// The source's output: calibration proved each mutant's is the same.
+    /// The source's output, which calibration found each mutant's to match.
     baseline: &'a Outcome,
     counts: &'a Counts,
     label: String,
@@ -1987,9 +2006,11 @@ impl ProfiledRun<'_> {
                 }
                 (what, self.baseline.differences(&outcome).join("; "))
             }
-            // The program compiles without the profile, so a profile that
-            // makes the compile fail is as wrong as one that crashes it.
+            // Where the program compiles and runs without the profile, a
+            // profile that makes the compile fail is as wrong as one that
+            // crashes it. Calibration checked that only at the levels it ran.
             Evaluation::CompileError(detail) | Evaluation::Crashed(detail) => {
+                baseline(self.path, &self.program.text, self.spec, level)?;
                 (Misbehaviour::Crashed, detail)
             }
             Evaluation::OutOfBudget(detail) => {
@@ -2361,9 +2382,9 @@ fn write_report(results: &Results, subjects: &[Source], stage: &str, unit: &str)
         results.findings.len(),
     ));
     report.push_str(&per_reason(results));
-    report.push_str(&per_root(results, subjects));
-    report.push_str(&costliest(results));
-    report.push_str(&per_shape(results));
+    report.push_str(&per_root(results, subjects, unit));
+    report.push_str(&costliest(results, unit));
+    report.push_str(&per_shape(results, unit));
     report.push_str(&dropped(results));
 
     if !results.findings.is_empty() {
@@ -2414,7 +2435,7 @@ fn per_reason(results: &Results) -> String {
 
 /// What each root contributed, so material that pays for its compile time can
 /// be told from material that does not.
-fn per_root(results: &Results, subjects: &[Source]) -> String {
+fn per_root(results: &Results, subjects: &[Source], unit: &str) -> String {
     let mut out = String::from("\n=== corpus ===\n");
     for root in ROOTS {
         let scanned = subjects.iter().filter(|s| s.root == root).count();
@@ -2437,7 +2458,7 @@ fn per_root(results: &Results, subjects: &[Source]) -> String {
             .map(|(_, cost)| *cost)
             .sum();
         out.push_str(&format!(
-            "{}: {}/{scanned} eligible ({sites} sites), {excluded} excluded, {findings} finding(s), {:.0}s\n",
+            "{}: {}/{scanned} eligible ({sites} {unit}), {excluded} excluded, {findings} finding(s), {:.0}s\n",
             root.name(),
             eligible.len(),
             cost.as_secs_f64(),
@@ -2448,7 +2469,7 @@ fn per_root(results: &Results, subjects: &[Source]) -> String {
 
 /// The sources that cost the stage most, with the sites each brought: a
 /// source dear for its sites is the first to sample or drop.
-fn costliest(results: &Results) -> String {
+fn costliest(results: &Results, unit: &str) -> String {
     const SHOWN: usize = 20;
     let mut out = String::from("\n=== costliest sources ===\n");
     for (name, cost) in results.costs.iter().take(SHOWN) {
@@ -2456,7 +2477,7 @@ fn costliest(results: &Results) -> String {
             .eligible
             .iter()
             .find(|e| &e.name == name)
-            .map_or_else(|| "excluded".to_string(), |e| format!("{} sites", e.sites));
+            .map_or_else(|| "excluded".to_string(), |e| format!("{} {unit}", e.sites));
         out.push_str(&format!("{:>7.1}s  {name} ({sites})\n", cost.as_secs_f64()));
     }
     out
@@ -2464,7 +2485,7 @@ fn costliest(results: &Results) -> String {
 
 /// What each guard shape survived on, so a shape that costs its compile time
 /// without reaching anything is visible.
-fn per_shape(results: &Results) -> String {
+fn per_shape(results: &Results, unit: &str) -> String {
     let mut out = String::from("\n=== guard shapes ===\n");
     for shape in &SHAPES {
         let reached: Vec<usize> = results
@@ -2473,7 +2494,7 @@ fn per_shape(results: &Results) -> String {
             .filter_map(|e| e.shapes.get(shape.keyword).copied())
             .collect();
         out.push_str(&format!(
-            "{}: {} source(s) ({} sites)\n",
+            "{}: {} source(s) ({} {unit})\n",
             shape.keyword,
             reached.len(),
             reached.iter().sum::<usize>(),
@@ -2585,7 +2606,7 @@ test \"pick\" {
     let spec = Root::Fixtures.default_spec();
     let measured = Counts {
         key: "measured".to_string(),
-        coverage: measure(&path, SOURCE, &spec).expect("the program measures"),
+        coverage: measure(&path, SOURCE, &spec, OptLevel::O0).expect("the program measures"),
     };
 
     let judged = measured.judged();
@@ -2698,9 +2719,15 @@ fn the_shape_report_counts_each_shape_s_own_sites() {
         }],
         ..Results::default()
     };
-    let report = per_shape(&results);
-    assert!(report.contains("if: 1 source(s) (10 sites)"), "{report}");
-    assert!(report.contains("while: 1 source(s) (4 sites)"), "{report}");
+    let report = per_shape(&results, INJECTION_SITES);
+    assert!(
+        report.contains("if: 1 source(s) (10 injection sites)"),
+        "{report}"
+    );
+    assert!(
+        report.contains("while: 1 source(s) (4 injection sites)"),
+        "{report}"
+    );
 }
 
 #[test]
