@@ -491,7 +491,7 @@ type "functype//core:rt/gc_array_to_memory$spec0$dae[src_start]" = fn(ref Array<
 
 type "functype//core:prelude/types.wado/$case_ref$core:prelude/types.wado/Option<core:prelude/string.wado/String>$core:prelude/string.wado/String$sroa[v.value]$spec0$dae[index]" = fn(ref null "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//String";  // TypeId(132)
 
-type "functype//wasi:filesystem/types.wado/$case_ref$wasi:filesystem/types.wado/ErrorCode$core:prelude/types.wado/Option<core:prelude/string.wado/String>$sroa[v.value]$spec0$dae[index]" = fn(ref "wasi:filesystem/types.wado//ErrorCode") -> ref "core:prelude/types.wado//Box<core:prelude/types.wado/Option<core:prelude/string.wado/String>>";  // TypeId(133)
+type "functype//wasi:filesystem/types.wado/$case_ref$wasi:filesystem/types.wado/ErrorCode$core:prelude/types.wado/Option<core:prelude/string.wado/String>$sroa[v.value]$spec0$dae[index]" = fn(ref "wasi:filesystem/types.wado//ErrorCode") -> ref null "core:prelude/string.wado//String";  // TypeId(133)
 
 type "functype//core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]" = fn(i32, ref Array<u8>) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(134)
 
@@ -2332,7 +2332,7 @@ fn "wasi:filesystem/types.wado/$case_ref$wasi:filesystem/types.wado/ErrorCode$co
     if @unlikely(v.discriminant != 36) {
         unreachable;
     }
-    return struct.new "core:prelude/types.wado//Box<core:prelude/types.wado/Option<core:prelude/string.wado/String>>" { value: ref.cast "wasi:filesystem/types.wado//ErrorCode::Other"(v).payload_0 };
+    return ref.cast "wasi:filesystem/types.wado//ErrorCode::Other"(v).payload_0;
 }
 
 fn "core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]"(handle, data) {
@@ -3555,7 +3555,7 @@ fn "core:prelude/traits.wado/wasi:filesystem/types.wado/ErrorCode^core:prelude/t
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec4"(local.tee $load_1(f.buf), global:core:prelude/traits.wado::$const_obj_144);
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec0"($load_1, global:core:prelude/traits.wado::$const_obj_130);
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec9"($load_1, global:core:prelude/traits.wado::$const_obj_142);
-        "core:prelude/traits.wado/core:prelude/traits.wado/inspect_variant_payload<core:prelude/types.wado/Option<core:prelude/string.wado/String>>"("wasi:filesystem/types.wado/$case_ref$wasi:filesystem/types.wado/ErrorCode$core:prelude/types.wado/Option<core:prelude/string.wado/String>$sroa[v.value]$spec0$dae[index]"(self), f);
+        "core:prelude/traits.wado/core:prelude/traits.wado/inspect_variant_payload<core:prelude/types.wado/Option<core:prelude/string.wado/String>>"(let $mv_value_1: ref null "core:prelude/string.wado//String"; multivalue_bind [$mv_value_1] = "wasi:filesystem/types.wado/$case_ref$wasi:filesystem/types.wado/ErrorCode$core:prelude/types.wado/Option<core:prelude/string.wado/String>$sroa[v.value]$spec0$dae[index]"(self); struct.new "core:prelude/types.wado//Box<core:prelude/types.wado/Option<core:prelude/string.wado/String>>" { value: $mv_value_1 }, f);
     }
 }
 

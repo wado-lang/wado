@@ -811,7 +811,7 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/String::intern
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::internal_set_byte_unchecked" = fn(ref "core:prelude/string.wado//String", i32, u8);  // TypeId(212)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::as_bytes" = fn(ref Array<u8>, i32) -> ref "core:prelude/slice.wado//Slice<u8>";  // TypeId(213)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::as_bytes" = fn(ref Array<u8>, i32) -> [ref Array<u8>, i32, i32];  // TypeId(213)
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::realloc_to" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(214)
 
@@ -5096,7 +5096,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::internal_set_byte_
 }
 
 fn "core:prelude/string.wado/core:prelude/string.wado/String::as_bytes"($mv$self$repr, $mv$self$used) {
-    return struct.new "core:prelude/slice.wado//Slice<u8>" { repr: $mv$self$repr, start: 0, end: $mv$self$used };
+    return $mv$self$repr, 0, $mv$self$used;
 }
 
 fn "core:prelude/string.wado/core:prelude/string.wado/String::realloc_to"(self, new_capacity) {
@@ -6053,7 +6053,7 @@ fn "core:cbor/core:cbor/CborStructAccess^core:serde/DeserializeStruct::next_fiel
     cold_path;
     let $mv$$vr_42$1: ref null "core:prelude/string.wado//String";
     multivalue_bind [$load_3, $mv$$vr_42$1, $sroa_slot_110] = "core:cbor/core:cbor/CborDeserializer^core:serde/Deserializer::deserialize_string$sroa[return]"(self_87);
-    multivalue_bind [$load_3, $load_5] = "partial_turbofish_infer_test.wado/partial_turbofish_infer_test.wado/Blob^core:serde/FieldSchema::lookup$sroa[return]"(local.tee $load_4("core:prelude/string.wado/core:prelude/string.wado/String::as_bytes"(local.tee key((if $load_3 == 0 -> ref "core:prelude/string.wado//String" {
+    multivalue_bind [$load_3, $load_5] = (multivalue_bind [$mv_field_1, $load_3, $load_5] = "core:prelude/string.wado/core:prelude/string.wado/String::as_bytes"(local.tee key((if $load_3 == 0 -> ref "core:prelude/string.wado//String" {
         ref.as_non_null($mv$$vr_42$1);
     } else if @unlikely($load_3 == 1) -> ref "core:prelude/string.wado//String" {
         cold_path;
@@ -6062,7 +6062,7 @@ fn "core:cbor/core:cbor/CborStructAccess^core:serde/DeserializeStruct::next_fiel
         return 1, 0, 0, $qm_e_91;
     } else {
         unreachable;
-    })).repr, key.used)).repr, $load_4.start, $load_4.end);
+    })).repr, key.used); "partial_turbofish_infer_test.wado/partial_turbofish_infer_test.wado/Blob^core:serde/FieldSchema::lookup$sroa[return]"($mv_field_1, $load_3, $load_5));
     $load_3 = (if $load_3 == 1 -> i32 {
         $load_5;
     } else if @likely($load_3 == 0) -> i32 {

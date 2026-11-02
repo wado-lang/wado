@@ -160,7 +160,7 @@ type "functype//match_mut_binding_in_guard.wado/run$cold1" = fn(i32);  // TypeId
 
 type "functype//match_mut_binding_in_guard.wado/run$cold3" = fn(i32);  // TypeId(36)
 
-type "functype//match_mut_binding_in_guard.wado/$case_ref$match_mut_binding_in_guard.wado/Tag$i32$sroa[v.value]$spec0$dae[index]" = fn(ref "match_mut_binding_in_guard.wado//Tag") -> ref "core:prelude/types.wado//Box<i32>";  // TypeId(37)
+type "functype//match_mut_binding_in_guard.wado/$case_ref$match_mut_binding_in_guard.wado/Tag$i32$sroa[v.value]$spec0$dae[index]" = fn(ref "match_mut_binding_in_guard.wado//Tag") -> i32;  // TypeId(37)
 
 type "functype//match_mut_binding_in_guard.wado/$case_ref$match_mut_binding_in_guard.wado/Tag$core:prelude/string.wado/String$sroa[v.value]$spec0$dae[index]" = fn(ref "match_mut_binding_in_guard.wado//Tag") -> ref "core:prelude/string.wado//String";  // TypeId(38)
 
@@ -210,7 +210,7 @@ type "functype//core:prelude/traits.wado/core:prelude/traits.wado/inspect_varian
 
 type "functype//core:prelude/types.wado/$case_ref$core:prelude/types.wado/Option<core:prelude/string.wado/String>$core:prelude/string.wado/String$sroa[v.value]$spec0$dae[index]" = fn(ref null "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//String";  // TypeId(61)
 
-type "functype//core:prelude/types.wado/$case_ref$core:prelude/types.wado/Option<i32>$i32$sroa[v.value]$spec0$dae[index]" = fn(ref "core:prelude/types.wado//Option<i32>") -> ref "core:prelude/types.wado//Box<i32>";  // TypeId(62)
+type "functype//core:prelude/types.wado/$case_ref$core:prelude/types.wado/Option<i32>$i32$sroa[v.value]$spec0$dae[index]" = fn(ref "core:prelude/types.wado//Option<i32>") -> i32;  // TypeId(62)
 
 type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::new" = fn(ref "core:prelude/string.wado//String") -> ref "core:prelude/format.wado//Formatter";  // TypeId(63)
 
@@ -660,7 +660,7 @@ fn "match_mut_binding_in_guard.wado/$case_ref$match_mut_binding_in_guard.wado/Ta
     if @unlikely(v.discriminant != 0) {
         unreachable;
     }
-    return struct.new "core:prelude/types.wado//Box<i32>" { value: ref.cast "match_mut_binding_in_guard.wado//Tag::A"(v).payload_0 };
+    return ref.cast "match_mut_binding_in_guard.wado//Tag::A"(v).payload_0;
 }
 
 fn "match_mut_binding_in_guard.wado/$case_ref$match_mut_binding_in_guard.wado/Tag$core:prelude/string.wado/String$sroa[v.value]$spec0$dae[index]"(v) {
@@ -1123,7 +1123,7 @@ fn "core:prelude/types.wado/$case_ref$core:prelude/types.wado/Option<i32>$i32$sr
     if @unlikely(v.discriminant != 1) {
         unreachable;
     }
-    return struct.new "core:prelude/types.wado//Box<i32>" { value: ref.cast "core:prelude/types.wado//Option<i32>::Some"(v).payload_0 };
+    return ref.cast "core:prelude/types.wado//Option<i32>::Some"(v).payload_0;
 }
 
 fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"(buf) {
@@ -1501,7 +1501,7 @@ fn "core:prelude/traits.wado/match_mut_binding_in_guard.wado/Tag^core:prelude/tr
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec3"(local.tee $load_1(f.buf), global:core:prelude/traits.wado::$const_obj_46);
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec0"($load_1, global:core:prelude/traits.wado::$const_obj_8);
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec2"($load_1, global:core:prelude/traits.wado::$const_obj_47);
-        "core:prelude/traits.wado/core:prelude/traits.wado/inspect_variant_payload<i32>$sroa[payload.value]"("match_mut_binding_in_guard.wado/$case_ref$match_mut_binding_in_guard.wado/Tag$i32$sroa[v.value]$spec0$dae[index]"(self).value, f);
+        "core:prelude/traits.wado/core:prelude/traits.wado/inspect_variant_payload<i32>$sroa[payload.value]"(let $mv_value_1: i32; multivalue_bind [$mv_value_1] = "match_mut_binding_in_guard.wado/$case_ref$match_mut_binding_in_guard.wado/Tag$i32$sroa[v.value]$spec0$dae[index]"(self); $mv_value_1, f);
     }
     if $load_0 == 1 {
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec3"(local.tee $load_1(f.buf), global:core:prelude/traits.wado::$const_obj_46);
@@ -1562,7 +1562,7 @@ fn "core:prelude/traits.wado/core:prelude/types.wado/Option<i32>^core:prelude/tr
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec1"(local.tee $load_1(f.buf), global:core:prelude/traits.wado::$const_obj_9);
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec0"($load_1, global:core:prelude/traits.wado::$const_obj_8);
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec4"($load_1, global:core:prelude/traits.wado::$const_obj_7);
-        "core:prelude/traits.wado/core:prelude/traits.wado/inspect_variant_payload<i32>$sroa[payload.value]"("core:prelude/types.wado/$case_ref$core:prelude/types.wado/Option<i32>$i32$sroa[v.value]$spec0$dae[index]"(self).value, f);
+        "core:prelude/traits.wado/core:prelude/traits.wado/inspect_variant_payload<i32>$sroa[payload.value]"(multivalue_bind [$load_0] = "core:prelude/types.wado/$case_ref$core:prelude/types.wado/Option<i32>$i32$sroa[v.value]$spec0$dae[index]"(self); $load_0, f);
     }
 }
 
