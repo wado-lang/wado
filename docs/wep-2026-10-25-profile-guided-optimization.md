@@ -404,6 +404,31 @@ level.
    three builds the flags give. A workload runs a smaller input than the
    benchmark measures, so the table does not judge a profile on the run that
    trained it.
+10. [ ] The design weighed against LLVM, GCC and Go. Each option below is
+    measured on the pilot's table, then adopted, or recorded as a known gap
+    with what it lost to. These are options, not the decision.
+    - The counts reach the optimizer. Three markers carry two bits per region,
+      so nothing weighs one side against the other, and the summary's hot line
+      only keeps a count out of cold. LLVM keeps branch weights (`!prof`) and
+      function entry counts on the IR, and its inliner raises the threshold at
+      a hot call site.
+    - Counts per calling context. One function holds one set of counts, so a
+      function cold overall but hot from one caller is cold everywhere, and a
+      cold call inside a hot region has nowhere to be marked. LLVM's CSPGO
+      records again after inlining, and Go's PGO keys its counts by call edge.
+    - Code the workloads never entered. It is compiled as unprofiled, so a
+      library's paths no workload takes are never cold. GCC's
+      `-fprofile-partial-training` lets the author choose between the two.
+    - Stale profiles. A changed hash is said once per function at `info`, and
+      counts that drift through a caller's change go unsaid. Clang warns at
+      `-Wprofile-instr-out-of-date` with the share of functions that no longer
+      match.
+    - The stdlib snapshot. It is keyed by the whole profile's summary, so a
+      change to the user's counts rebuilds it. Keying it by the marks it
+      receives would rebuild it only when they change.
+    - The inliner's `branch_weight` guard reads the cold half, while the layout
+      it protects follows the unlikely hint. The table settles which half it
+      should read.
 
 ## Known gaps
 
