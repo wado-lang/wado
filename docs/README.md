@@ -38,6 +38,7 @@
 - [Compiler Attributes](./spec-attributes.md)
 - [Diagnostics](./spec-diagnostics.md)
 - [Testing](./spec-testing.md)
+- [Profile-Guided Optimization](./spec-pgo.md)
 
 ## Wado Evolution Proposals
 

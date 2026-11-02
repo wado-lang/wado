@@ -535,9 +535,9 @@ fn block_breaks_innermost_loop(body: &Body, block: BlockId) -> bool {
 
 /// The program's marker builtins, each with what it states.
 #[derive(Debug, Clone, Copy)]
-pub(crate) struct Markers([(Option<FuncId>, Mark); 3]);
+pub(crate) struct MarkerBuiltins([(Option<FuncId>, Mark); 3]);
 
-impl Markers {
+impl MarkerBuiltins {
     pub(crate) fn of(project: &NirPackage) -> Self {
         Self(Mark::ALL.map(|mark| (project.builtin_func_id(mark.builtin()), mark)))
     }
@@ -573,15 +573,15 @@ impl Markers {
 /// through it passes one: a loop or a labeled block whose block is rare from
 /// its start, or a branch each of whose arms is.
 #[derive(Clone)]
-pub(crate) struct ColdRuns {
-    markers: Markers,
+pub(crate) struct RareRuns {
+    markers: MarkerBuiltins,
     rarity: Rarity,
     starts: IndexMap<BlockId, usize>,
 }
 
-impl ColdRuns {
+impl RareRuns {
     /// No run, for a function without a body.
-    pub(crate) fn none(markers: Markers, rarity: Rarity) -> Self {
+    pub(crate) fn none(markers: MarkerBuiltins, rarity: Rarity) -> Self {
         Self {
             markers,
             rarity,
@@ -591,7 +591,7 @@ impl ColdRuns {
 
     /// The runs of `body`, or none when the program names no marker stating
     /// `rarity`.
-    pub(crate) fn of(body: &Body, markers: Markers, rarity: Rarity) -> Self {
+    pub(crate) fn of(body: &Body, markers: MarkerBuiltins, rarity: Rarity) -> Self {
         let mut runs = Self::none(markers, rarity);
         // Nearly every body holds no marker, which one pass over the arena
         // settles more cheaply than the walk.
@@ -640,31 +640,31 @@ impl ColdRuns {
             .is_some_and(|mark| mark.states(self.rarity))
     }
 
-    /// Whether no block turns cold.
+    /// Whether no block turns rare.
     pub(crate) fn is_empty(&self) -> bool {
         self.starts.is_empty()
     }
 
-    /// Where `block` turns cold, if it does.
+    /// Where `block` turns rare, if it does.
     pub(crate) fn start(&self, block: BlockId) -> Option<usize> {
         self.starts.get(&block).copied()
     }
 
-    /// The statements of `block` ahead of its cold run: all of them when it has
+    /// The statements of `block` ahead of its rare run: all of them when it has
     /// none.
     pub(crate) fn hot<'b>(&self, body: &'b Body, block: BlockId) -> &'b [StmtId] {
         let stmts = &body.blocks[block].stmts;
         &stmts[..self.start(block).unwrap_or(stmts.len())]
     }
 
-    /// The statement each cold run opens with.
+    /// The statement each rare run opens with.
     pub(crate) fn heads<'b>(&'b self, body: &'b Body) -> impl Iterator<Item = StmtId> + 'b {
         self.starts
             .iter()
             .map(|(&block, &start)| body.blocks[block].stmts[start])
     }
 
-    /// Every expression a cold run holds.
+    /// Every expression a rare run holds.
     pub(crate) fn exprs(&self, body: &Body) -> IndexSet<ExprId> {
         let mut out = IndexSet::default();
         for (&block, &start) in &self.starts {
@@ -680,16 +680,16 @@ impl ColdRuns {
     }
 }
 
-/// One walk over a body's reachable blocks, recording each cold run.
+/// One walk over a body's reachable blocks, recording each rare run.
 struct RunScan<'a> {
     body: &'a Body,
-    markers: Markers,
+    markers: MarkerBuiltins,
     rarity: Rarity,
     starts: &'a mut IndexMap<BlockId, usize>,
 }
 
 impl RunScan<'_> {
-    /// Record `block`'s cold run, and answer whether it covers the whole block.
+    /// Record `block`'s rare run, and answer whether it covers the whole block.
     fn block(&mut self, block: BlockId) -> bool {
         let body = self.body;
         let stmts = &body.blocks[block].stmts;
@@ -941,7 +941,7 @@ pub(super) fn unreached_through<'a>(
 
 /// The cold functions, by [`unreached_through`] over a fresh walk of every live
 /// body.
-pub(super) fn cold_functions_of(project: &NirPackage, markers: Markers) -> Vec<bool> {
+pub(super) fn cold_functions_of(project: &NirPackage, markers: MarkerBuiltins) -> Vec<bool> {
     let mut call_sites = vec![0usize; project.functions.len()];
     let hot_callees: Vec<IndexSet<FuncId>> = project
         .functions
@@ -952,7 +952,7 @@ pub(super) fn cold_functions_of(project: &NirPackage, markers: Markers) -> Vec<b
             let Some(body) = f.body.as_ref().filter(|_| !f.is_dead) else {
                 return hot;
             };
-            let cold = ColdRuns::of(body, markers, Rarity::Cold).exprs(body);
+            let cold = RareRuns::of(body, markers, Rarity::Cold).exprs(body);
             body.for_each_reachable_node(|node| {
                 if let NodeRef::Expr(e) = node
                     && let ExprKind::Call { func_id, .. } = &body.exprs[e].kind

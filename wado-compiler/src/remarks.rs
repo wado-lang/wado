@@ -23,7 +23,7 @@ use crate::niri::{
     build_callee_map, build_ctfe_builtin_map, is_ctfe_runnable, materializing_globals,
     region_queries,
 };
-use crate::optimize::arena_query::{ColdRuns, Markers};
+use crate::optimize::arena_query::{MarkerBuiltins, RareRuns};
 use crate::optimize::is_constant_arg;
 use crate::parallel::Executor;
 use crate::rarity::Rarity;
@@ -495,7 +495,7 @@ pub fn collect_const_region_remarks(package: &NirPackage, entry: &EntryCode) -> 
         .iter()
         .map(|f| !f.borrow().effects.is_empty())
         .collect();
-    let markers = Markers::of(package);
+    let markers = MarkerBuiltins::of(package);
     let type_table_ref = package.type_table.borrow();
     let type_table: &TypeTable = &type_table_ref;
 
@@ -505,7 +505,7 @@ pub fn collect_const_region_remarks(package: &NirPackage, entry: &EntryCode) -> 
             let span = body.exprs[e].span;
             Some((entry.module_of(span, &func.module_source)?.clone(), span))
         };
-        let cold = ColdRuns::of(body, markers, Rarity::Cold).exprs(body);
+        let cold = RareRuns::of(body, markers, Rarity::Cold).exprs(body);
         for region in region_queries(body, &callees, &ctfe_builtins, &materializing, type_table) {
             // Reading an outer local, or performing an effect, means no
             // constant to miss; writing one means an inner block of a template,
@@ -545,7 +545,7 @@ pub fn collect_const_region_remarks(package: &NirPackage, entry: &EntryCode) -> 
                 callee_body,
                 NodeRef::Block(callee_body.root()),
                 &names,
-                &ColdRuns::of(callee_body, markers, Rarity::Cold).exprs(callee_body),
+                &RareRuns::of(callee_body, markers, Rarity::Cold).exprs(callee_body),
             );
             sink.push(Remark {
                 message: format!("this call computes a constant at run time: {cause}"),

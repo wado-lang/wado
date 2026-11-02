@@ -37,7 +37,7 @@ where profile-guided optimization should prove itself first.
 
 A package states its real workload as tests marked `#[workload]`. Running them
 records how often each region ran into a profile, and the package commits it.
-Every later compile outside the test world reads the profile and marks each
+Every later compile reads the profile and marks each
 region by what it measured, so the optimizer's existing cold-path machinery
 acts on measurement instead of guesses.
 
@@ -124,7 +124,7 @@ call, the length load, the bounds check and the load on every run.
 
 The profile is a text file, so the repository holds no binary for it. It holds
 one record per line, so a merge conflicts only where the counts moved. Its
-format is in the [specification](./spec-testing.md#profiles). A file under
+format is in the [specification](./spec-pgo.md#the-profile-format). A file under
 `build/` would not reach CI or a release build, so their output would differ
 from the author's.
 
@@ -236,13 +236,13 @@ times the code around it did, under
 `--optimize-predictable-branch-threshold`, LLVM's name and default. It is cold
 when its count is cold against the summary, under LLVM's
 `--optimize-profile-summary-cutoff-hot` and `-cold`, or zero, as GCC holds.
-[Applying a Profile](./spec-testing.md#applying-a-profile) states both rules.
-For a path past a branch, or past a statement that can leave, that ratio is the
-branch's probability. A loop's test also runs once per pass through its body,
-so for a loop's body the ratio bounds the probability from above, and a body
-it calls unlikely is. A count on both summary lines is hot, since LLVM's inliner asks hot first. A
-share stays put when a workload runs twice, so a workload need not be large,
-only like real use. The thresholds are LLVM's for now; the benchmark machine
+[Rarity](./spec-pgo.md#rarity) states both rules. For a path past a branch, or
+past a statement that can leave, that ratio is the branch's probability. A
+loop's test also runs once per pass through its body, so for a loop's body the
+ratio bounds the probability from above, and a body it calls unlikely is. A
+count on both summary lines is hot, since LLVM's inliner asks hot first. A share
+stays put when a workload runs twice, so a workload need not be large, only like
+real use. The thresholds are LLVM's for now; the benchmark machine
 settles Wado's own.
 
 ### The profile marks each region by its answers
@@ -321,17 +321,15 @@ of these: that arm is `unreachable`.
 
 ### Flags switch the marks
 
-`-f pgo` reads the profile and `-f no-pgo` ignores it. The default depends on
-the world:
+`-f pgo` reads the profile and `-f no-pgo` ignores it. It is on by default in
+every world, the test world included. A profile never changes what a program
+computes, but the markers it places steer inlining and outlining, so a test
+world without them would test code no build ships, and a pass that miscompiles
+only under a profile would go unseen.
 
-| Build                        | Default |
-| ---------------------------- | ------- |
-| the test world (`wado test`) | off     |
-| any other world              | on      |
-
-A test checks what a program computes, which a profile never changes, so the
-test world has no use for one by default. `-f pgo` turns it on there, mainly for
-fuzzing the application of profiles.
+`wado test --pgo` reads no profile. It rewrites the file, so reading it would
+make the run depend on what it overwrites, and the counts it records depend on
+no marker.
 
 A build that finds no profile compiles as one with `-f no-pgo`. Under an
 explicit `-f pgo` it also says so at `--log-level info`, since the author asked
@@ -369,10 +367,10 @@ table, a compare on every dispatch, for a gain nobody has measured.
 ### A profile changes no output
 
 A profile, stale or wrong, only moves where the optimizer spends its effort. It
-never changes what a program computes. A test checks this the way
-[EMI](./optimizer.md#differential-testing-emi) checks injected dead code: the
-same program compiled with random profiles prints the same output at every
-level.
+never changes what a program computes. EMI's profile stage checks this
+([WEP: Compiler Fuzzing](./wep-2026-08-19-compiler-fuzzing.md#a-profile-is-a-third-axis)):
+the program compiled under its recorded profile and random ones prints the same
+output at every level. It is a nightly campaign, not a gate.
 
 ## Roadmap
 
@@ -400,12 +398,39 @@ level.
    `--optimize-inline-cold-callsite-threshold`, and the benchmarks, against
    `-f no-pgo`, settle their defaults and those of the summary's cutoffs and
    `--optimize-predictable-branch-threshold`.
-8. [ ] The random-profile differential test.
+8. [x] The random-profile differential test, as EMI's profile stage.
 9. [ ] The `benchmark/` pilot. Each benchmark gains a workload and a committed
    profile, `http_routing` a test to carry it first, and a table compares the
    three builds the flags give. A workload runs a smaller input than the
    benchmark measures, so the table does not judge a profile on the run that
    trained it.
+10. [ ] The design weighed against LLVM, GCC and Go. Each option below is
+    measured on the pilot's table, then adopted, or recorded as a known gap
+    with what it lost to. These are options, not the decision.
+    - The counts reach the optimizer. Three markers carry two bits per region,
+      so nothing weighs one side against the other, and the summary's hot line
+      only keeps a count out of cold. LLVM keeps branch weights (`!prof`) and
+      function entry counts on the IR, and its inliner raises the threshold at
+      a hot call site.
+    - Counts per calling context. One function holds one set of counts, so a
+      function cold overall but hot from one caller is cold everywhere, and a
+      cold call inside a hot region has nowhere to be marked. LLVM's CSPGO
+      records again after inlining, and Go's PGO keys its counts by call edge.
+    - Code the workloads never entered. It is compiled as unprofiled, so a
+      library's paths no workload takes are never cold. GCC's
+      `-fprofile-partial-training` lets the author choose between the two.
+    - Stale profiles. A changed hash is said once per function at `info`, and
+      counts that drift through a caller's change go unsaid. Clang warns at
+      `-Wprofile-instr-out-of-date` with the share of functions that no longer
+      match.
+    - The stdlib snapshot. It is keyed by the whole profile's summary, so a
+      change to the user's counts rebuilds it. Keying it by the marks it
+      receives would rebuild it only when they change. Each thread holds one
+      profiled snapshot, so under `wado test` every worker builds its own for
+      each package whose profile names a `core:` module.
+    - The inliner's `branch_weight` guard reads the cold half, while the layout
+      it protects follows the unlikely hint. The table settles which half it
+      should read.
 
 ## Known gaps
 
@@ -413,9 +438,9 @@ level.
   where the plan finds its regions, so nothing reads the difference
   `$known_cold_path` keeps through TIR. The distinction may have no reader
   left.
-- [ ] An author's `cold_path()` in the right operand of `&&` or `||` stays
-  when the profile measured it, since the profile has no statement position
-  there for a marker of its own.
+- [ ] An author's `cold_path()`, or a `?`, in the right operand of `&&` or
+  `||` keeps its marker when the profile measured it, since the profile has no
+  statement position there for a marker of its own.
 - [ ] A region that starts in an expression, the right operand of `&&` or
   `||`, has no statement position for a marker, so the regions inside one that
   never ran are marked in its place.

@@ -47,9 +47,8 @@ pub struct CodegenFlags {
     /// otherwise (see [`CodegenFlags::for_build`]).
     pub contract_checks: bool,
 
-    /// Apply the entry's profile. On outside the test world, off in it (see
-    /// [`CodegenFlags::for_build`]): a test checks what a program computes,
-    /// which a profile never changes.
+    /// Apply the entry's profile. On in every world, so a test runs the code a
+    /// build ships.
     pub pgo: Pgo,
 }
 
@@ -90,15 +89,13 @@ impl CodegenFlags {
     /// The defaults for a build, before any `-f` flag is applied.
     ///
     /// Identical to [`CodegenFlags::default`] except that `-Os` turns
-    /// [`bare_asserts`](Self::bare_asserts) on, the test world, `-O0` or
-    /// `-O1` turns [`contract_checks`](Self::contract_checks) on, and the test
-    /// world turns [`pgo`](Self::pgo) off.
+    /// [`bare_asserts`](Self::bare_asserts) on, and the test world, `-O0` or
+    /// `-O1` turns [`contract_checks`](Self::contract_checks) on.
     #[must_use]
     pub fn for_build(opt_level: OptLevel, test_world: bool) -> Self {
         Self {
             bare_asserts: matches!(opt_level, OptLevel::Os),
             contract_checks: test_world || matches!(opt_level, OptLevel::O0 | OptLevel::O1),
-            pgo: if test_world { Pgo::Off } else { Pgo::On },
             ..Self::default()
         }
     }
@@ -251,9 +248,9 @@ mod tests {
     }
 
     #[test]
-    fn pgo_defaults_on_outside_the_test_world() {
+    fn pgo_defaults_on_in_every_world() {
         assert_eq!(CodegenFlags::for_build(OptLevel::O2, false).pgo, Pgo::On);
-        assert_eq!(CodegenFlags::for_build(OptLevel::O2, true).pgo, Pgo::Off);
+        assert_eq!(CodegenFlags::for_build(OptLevel::O2, true).pgo, Pgo::On);
     }
 
     #[test]

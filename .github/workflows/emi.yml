@@ -47,14 +47,15 @@ jobs:
     name: Calibrate (shard ${{ matrix.shard }})
     needs: plan
     runs-on: ubuntu-latest
-    # A cold build, then both stages over this shard's slice. Each source is
-    # compiled and run once per level, shape and payload, so an eighth of the
-    # corpus costs about what a quarter did at two levels and one shape.
-    timeout-minutes: 180
+    # A cold build, then the three stages over this shard's slice. Each source
+    # is compiled and run once per level and shape, and then per payload in
+    # the mutation stage and per profile in the profile stage, which costs
+    # about what the mutation stage does.
+    timeout-minutes: 300
     permissions:
       contents: read
-    # Both stages must run the same levels, or the mutation stage takes a
-    # corpus calibrated for levels it does not run.
+    # Every stage must run the same levels, or a later one takes a corpus
+    # calibrated for levels it does not run.
     env:
       WADO_EMI_LEVELS: ${{ inputs.levels }}
     strategy:
@@ -74,10 +75,13 @@ jobs:
           WADO_EMI_FILTER: ${{ inputs.filter }}
         run: cargo test --locked --workspace --test emi -- --ignored --nocapture calibrate_corpus
       # Same job as the calibration it consumes: the corpus this shard wrote is
-      # already its slice, and the mutation stage takes that file whole.
+      # already its slice, and the later stages take that file whole.
       - name: Mutate
         if: always()
         run: cargo test --locked --workspace --test emi -- --ignored --nocapture mutate_corpus
+      - name: Profile
+        if: always()
+        run: cargo test --locked --workspace --test emi -- --ignored --nocapture profile_corpus
       - uses: actions/upload-artifact@v7
         if: always()
         with:

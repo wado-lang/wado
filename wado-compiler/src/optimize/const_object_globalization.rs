@@ -22,7 +22,7 @@ use crate::tir::{ArrayElementAccess, ResolvedType, TypeId};
 use crate::type_table::TypeTable;
 
 use super::arena_query::{
-    ColdRuns, Markers, bare_promoted_local, bare_promoted_reads, buried_promoted_reads,
+    MarkerBuiltins, RareRuns, bare_promoted_local, bare_promoted_reads, buried_promoted_reads,
     cold_functions_of, collect_reads, expr_mentions_local, is_local, promoted_local_reads,
     reachable_nodes, strip_refs,
 };
@@ -131,7 +131,7 @@ pub fn globalize_const_objects(project: &mut NirPackage, exec: &Executor) -> boo
     // A global is built at instantiation by the start function, which wasmtime
     // compiles as one body whose cost grows faster than its length. A cold
     // object is built when its path runs, rarely, so it stays where it is.
-    let markers = Markers::of(project);
+    let markers = MarkerBuiltins::of(project);
     let cold_functions = cold_functions_of(project, markers);
     // One id serves every instantiation — the hoisted type rides the call node.
     let is_uninitialized = project.intern_extern(&nir::FunctionRef {
@@ -338,7 +338,7 @@ fn hoist_candidate(body: &mut Body, name: &str, cand: &Candidate, is_uninitializ
 fn collect_candidates(
     body: &Body,
     gate: &Gate<'_>,
-    markers: Markers,
+    markers: MarkerBuiltins,
     func_idx: usize,
     module_source: &ModuleSource,
     out: &mut Vec<Candidate>,
@@ -353,7 +353,7 @@ fn collect_candidates(
     let leaked_ref_args = ref_args_that_escape(body, &aliases, gate);
     let (immediate_args, immediate_locals) = immediate_operands(body, gate);
     let first = out.len();
-    let cold = ColdRuns::of(body, markers, Rarity::Cold);
+    let cold = RareRuns::of(body, markers, Rarity::Cold);
     let mut stack = vec![NodeRef::Block(body.root())];
     while let Some(node) = stack.pop() {
         if let NodeRef::Block(block) = node {

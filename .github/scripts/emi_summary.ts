@@ -12,7 +12,15 @@ const dirs = existsSync(root) ? readdirSync(root).sort() : [];
 const FINDINGS = 'findings';
 
 type Stage = {
-  total: { scanned: number; eligible: number; sites: number; excluded: number; findings: number };
+  // `unit` is what `sites` counts: injection sites, or profiled functions.
+  total: {
+    scanned: number;
+    eligible: number;
+    sites: number;
+    unit: string;
+    excluded: number;
+    findings: number;
+  };
   buckets: Map<string, number>;
   shapes: Map<string, { sources: number; sites: number }>;
   // Every other section's lines, concatenated across shards, so a section the
@@ -28,7 +36,7 @@ function count(text: string, pattern: RegExp): number {
 
 function read(file: string): Stage {
   const stage: Stage = {
-    total: { scanned: 0, eligible: 0, sites: 0, excluded: 0, findings: 0 },
+    total: { scanned: 0, eligible: 0, sites: 0, unit: '', excluded: 0, findings: 0 },
     buckets: new Map(),
     shapes: new Map(),
     sections: new Map(),
@@ -43,7 +51,11 @@ function read(file: string): Stage {
     const text = readFileSync(path, 'utf8');
     stage.total.scanned += count(text, /^sources scanned: (\d+)$/m);
     stage.total.eligible += count(text, /^eligible: (\d+)/m);
-    stage.total.sites += count(text, /^eligible: \d+ \((\d+) injection sites\)$/m);
+    const eligible = text.match(/^eligible: \d+ \((\d+) (.+)\)$/m);
+    if (eligible) {
+      stage.total.sites += Number(eligible[1]);
+      stage.total.unit = eligible[2];
+    }
     stage.total.excluded += count(text, /^excluded: (\d+)$/m);
     stage.total.findings += count(text, /^findings: (\d+)$/m);
 
@@ -60,7 +72,7 @@ function read(file: string): Stage {
         continue;
       }
       if (section === 'guard shapes') {
-        const shape = line.match(/^(\S+): (\d+) source\(s\) \((\d+) sites\)$/);
+        const shape = line.match(/^(\S+): (\d+) source\(s\) \((\d+) [^)]+\)$/);
         if (shape) {
           const seen = stage.shapes.get(shape[1]) ?? { sources: 0, sites: 0 };
           stage.shapes.set(shape[1], {
@@ -113,7 +125,7 @@ function render(title: string, stage: Stage): string[] {
       ['Metric', 'Value'],
       [
         ['sources scanned', `${stage.total.scanned}`],
-        ['eligible', `${stage.total.eligible} (${stage.total.sites} injection sites)`],
+        ['eligible', `${stage.total.eligible} (${stage.total.sites} ${stage.total.unit})`],
         ['excluded', `${stage.total.excluded}`],
         ['findings', `${stage.total.findings}`],
       ],
@@ -127,7 +139,7 @@ function render(title: string, stage: Stage): string[] {
   out.push(
     ...table(
       'Guard shapes',
-      ['Shape', 'Sources', 'Sites'],
+      ['Shape', 'Sources', stage.total.unit],
       [...stage.shapes].map(([name, { sources, sites }]) => [name, `${sources}`, `${sites}`]),
     ),
     ...table(
@@ -151,5 +163,6 @@ process.stdout.write(
   `${[
     ...render('EMI calibration', read('calibration.txt')),
     ...render('EMI mutation', read('mutation.txt')),
+    ...render('EMI profile', read('profile.txt')),
   ].join('\n')}\n`,
 );
