@@ -1558,6 +1558,11 @@ export fn run() with (Stdout, Stderr, Environment, Preopens, Exit, Process, Syst
                 exit(1);
             },
         };
+        // Phase 3 writes a Stage B′ test for every manifest here, so one left
+        // by a descriptor this run does not reach would outlive it.
+        for let stale of list_files_with_suffix(&oracle_pending_cat_dir, "") {
+            remove_stale(&oracle_pending_cat_dir, &stale);
+        }
 
         let txt_files = list_files_with_suffix(&cat_src_dir, ".txt");
         let mut entries: List<DescriptorEntry> = [];
@@ -1769,13 +1774,10 @@ export fn run() with (Stdout, Stderr, Environment, Preopens, Exit, Process, Syst
             //     checking that the normalised output starts with `(<start>`.
             // Anything else is silently skipped (auto-skip counter); explicit
             // [stage_b_skip] / [stage_b_todo] entries override the default.
-            // Stage B′ manifest: default-clear here so every Stage B
-            // path leaves a clean slate; the auto-skip branches below
-            // re-write the files when the descriptor is a candidate.
+            // The auto-skip branches below write the Stage B′ manifest when
+            // the descriptor is a candidate.
             let oracle_input_filename = `${base}.input`;
             let oracle_start_filename = `${base}.start`;
-            remove_stale(&oracle_pending_cat_dir, &oracle_input_filename);
-            remove_stale(&oracle_pending_cat_dir, &oracle_start_filename);
             let oracle_triage = stage_b_oracle_triage_map.lookup(&key);
             let oracle_intrinsic = stage_b_oracle_eligible(&parsed);
             let oracle_eligible = oracle_intrinsic && !oracle_triage matches { Skip(_) };
@@ -1980,7 +1982,7 @@ export fn run() with (Stdout, Stderr, Environment, Preopens, Exit, Process, Syst
             exit(1);
         },
     };
-    // Finalize reads a missing `.expected` as stale, so an entry the oracle never
+    // Phase 3 reads a missing `.expected` as stale, so an entry the oracle never
     // saw must stop the run here rather than sweep its committed test.
     if let Err(message) = invoke_stage_b_oracle(&jar) {
         eprintln(`extract: ${message}`);

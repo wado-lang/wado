@@ -4377,10 +4377,10 @@ fn optional_decision(atn: &Atn) -> i32 {
     return -1;
 }
 
-/// Kind of the state reached by `alt`'s edge out of decision `d`.
-fn alt_target_kind(atn: &Atn, d: i32, alt: i32) -> i32 {
+/// Kind of the state reached by `chosen`'s edge out of decision `d`.
+fn alt_target_kind(atn: &Atn, d: i32, chosen: i32) -> i32 {
     let s = &atn.states[atn.decision_state[d]];
-    return atn.states[s.transitions[alt].target].kind;
+    return atn.states[s.transitions[chosen].target].kind;
 }
 
 /// Decision number of rule `rule`'s `STAR_LOOP_ENTRY` (the LR loop entry).
@@ -4466,9 +4466,9 @@ ID : 'a'..'z'+ ;
 WS : ' ' -> skip ;
 ";
 
-/// The action id of the predicate opening `rule`'s alternative `alt`.
-fn left_edge_pred_id(g: &Grammar, rule: i32, alt: i32) -> i32 {
-    return g.parser_rules[rule].alternatives[alt].left_edge_predicates()[0].source.action_id;
+/// The action id of the predicate opening `rule`'s alternative `index`.
+fn left_edge_pred_id(g: &Grammar, rule: i32, index: i32) -> i32 {
+    return g.parser_rules[rule].alternatives[index].left_edge_predicates()[0].source.action_id;
 }
 
 // ANTLR4 finds the viable alternatives first and only then drops the ones a
@@ -4587,9 +4587,9 @@ test "non-greedy ?? picks the exit alt on the dangling-else conflict" {
         mk(7),
         mk(4),
     ];
-    let alt = adaptive_predict(&sim, d, &to_kinds(&toks), 0, eof);
+    let chosen = adaptive_predict(&sim, d, &to_kinds(&toks), 0, eof);
     // The chosen alt's edge must lead to BlockEnd: non-greedy prefers EXIT.
-    assert alt_target_kind(&atn, d, alt) == ATN_BLOCK_END, "non-greedy must choose the exit alt";
+    assert alt_target_kind(&atn, d, chosen) == ATN_BLOCK_END, "non-greedy must choose the exit alt";
 }
 
 test "greedy ? picks the enter alt on the same conflict" {
@@ -4604,9 +4604,9 @@ test "greedy ? picks the enter alt on the same conflict" {
         mk(7),
         mk(4),
     ];
-    let alt = adaptive_predict(&sim, d, &to_kinds(&toks), 0, eof);
+    let chosen = adaptive_predict(&sim, d, &to_kinds(&toks), 0, eof);
     // Greedy prefers ENTER: the chosen alt's edge must NOT go to BlockEnd.
-    assert alt_target_kind(&atn, d, alt) != ATN_BLOCK_END, "greedy must choose the enter alt";
+    assert alt_target_kind(&atn, d, chosen) != ATN_BLOCK_END, "greedy must choose the enter alt";
 }
 
 // Full-context: the SAME `??` decision binds differently depending on the
@@ -4635,8 +4635,8 @@ test "full-context: inner ifStatement ?? skips the else (binds to outer)" {
         mk(7),
         mk(4),
     ];
-    let alt = atn_predict_with_stack(&sim, d, &stack, &to_kinds(&toks), 0, eof);
-    assert alt_target_kind(&atn, d, alt) == ATN_BLOCK_END, "inner ?? must EXIT (let the outer take the else)";
+    let chosen = atn_predict_with_stack(&sim, d, &stack, &to_kinds(&toks), 0, eof);
+    assert alt_target_kind(&atn, d, chosen) == ATN_BLOCK_END, "inner ?? must EXIT (let the outer take the else)";
 }
 
 test "full-context: outer ifStatement ?? consumes the else" {
@@ -4653,8 +4653,8 @@ test "full-context: outer ifStatement ?? consumes the else" {
         mk(7),
         mk(4),
     ];
-    let alt = atn_predict_with_stack(&sim, d, &stack, &to_kinds(&toks), 0, eof);
-    assert alt_target_kind(&atn, d, alt) != ATN_BLOCK_END, "outer ?? must ENTER (consume the else)";
+    let chosen = atn_predict_with_stack(&sim, d, &stack, &to_kinds(&toks), 0, eof);
+    assert alt_target_kind(&atn, d, chosen) != ATN_BLOCK_END, "outer ?? must ENTER (consume the else)";
 }
 
 // A recorded verdict answers only the caller stack it was asked under: the two
@@ -4780,8 +4780,8 @@ test "LR loop-entry prediction terminates (no naive left recursion)" {
         mk(5),
         mk(0),
     ];
-    let alt = adaptive_predict(&sim, d, &to_kinds(&toks), 0, eof);
-    assert alt >= 0 && alt < 3, "LR loop-entry prediction out of range";
+    let chosen = adaptive_predict(&sim, d, &to_kinds(&toks), 0, eof);
+    assert chosen >= 0 && chosen < 3, "LR loop-entry prediction out of range";
 }
 
 // P4.3: the loop-entry precedence predicate `{prec_i >= pr}?` prunes

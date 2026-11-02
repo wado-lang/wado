@@ -5165,8 +5165,8 @@ test "gen --output writes the parser into the first grant and prints nothing" {
     let outcome = gale_with([out, src], ["gen", "--output", "expr.wado", "Expr.g4"]);
     assert outcome.result matches { Ok(_) };
     assert outcome.stdout() == "";
-    let printed = gale_in(&src, ["gen", "Expr.g4"]).stdout();
-    assert fs::read_to_string(`${out}/expr.wado`).unwrap() == printed;
+    let stdout = gale_in(&src, ["gen", "Expr.g4"]).stdout();
+    assert fs::read_to_string(`${out}/expr.wado`).unwrap() == stdout;
 }
 
 test "gen with a .scm query adds the highlighter" {
@@ -5184,9 +5184,9 @@ test "gen --trace builds a parser that can log its decisions" {
     let dir = scratch(SUITE, "gen-trace");
     put(&dir, "Expr.g4", EXPR);
     let plain = gale_in(&dir, ["gen", "Expr.g4"]);
-    let traced = gale_in(&dir, ["gen", "--trace", "Expr.g4"]);
+    let tracing = gale_in(&dir, ["gen", "--trace", "Expr.g4"]);
     assert !plain.stdout().contains("trace_to_stderr");
-    assert traced.stdout().contains("trace_to_stderr");
+    assert tracing.stdout().contains("trace_to_stderr");
 }
 
 test "gen --atn never refuses a grammar only the simulator can parse" {
