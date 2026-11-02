@@ -493,11 +493,19 @@ fn local_leaks_through_call(body: &Body, idx: u32, gate: &Gate<'_>) -> bool {
                     // a raw `Array<T>` (WEP 2026-08-24) — or a field of it.
                     Some(_) if gate.reads_element(*func_id) => false,
                     None => false,
+                    Some(_)
+                        if gate.instruction_passes_through(
+                            *func_id,
+                            pos,
+                            body.operand_type(arg.expr),
+                        ) =>
+                    {
+                        false
+                    }
                     Some(RefShape::Direct) => gate.callee_ref_param_leaks(*func_id, pos),
-                    Some(RefShape::Derived(arg_ty)) => {
-                        !gate.instruction_passes_through(*func_id, pos, arg_ty)
-                            && (gate.callee_ref_param_leaks(*func_id, pos)
-                                || gate.callee_param_writes_through(*func_id, pos))
+                    Some(RefShape::Derived) => {
+                        gate.callee_ref_param_leaks(*func_id, pos)
+                            || gate.callee_param_writes_through(*func_id, pos)
                     }
                 }
             }),
@@ -519,10 +527,10 @@ enum RefShape {
     /// The local itself, or an explicit `&` / `&mut` / `*` of it. A write
     /// through one is spelled in the caller, so [`is_readonly_body`] sees it.
     Direct,
-    /// A handle reached by projection or accessor, carrying its own type.
-    /// Nothing in the caller marks it mutable — `&mut xs[i]` reduces to the
-    /// accessor result — so only the callee says whether it writes.
-    Derived(TypeId),
+    /// A handle reached by projection or accessor. Nothing in the caller marks
+    /// it mutable — `&mut xs[i]` reduces to the accessor result — so only the
+    /// callee says whether it writes.
+    Derived,
 }
 
 /// [`refs_local`] over an operand. A promoted argument is still an argument.
@@ -549,7 +557,7 @@ fn refs_local(body: &Body, expr: ExprId, idx: u32, gate: &Gate<'_>) -> Option<Re
         | ExprKind::Index { expr: base, .. }
         | ExprKind::Cast { expr: base, .. } => (gate.is_reference_type(body.exprs[expr].type_id)
             && operand_refs_local(body, *base, idx, gate).is_some())
-        .then_some(RefShape::Derived(body.exprs[expr].type_id)),
+        .then_some(RefShape::Derived),
         // `xs[i]` reaches this pass as a receiverless `array_get_value(&xs.repr,
         // i)` once `container_sroa` has run, so the receiver is not the only
         // argument that can carry the handle out. Which of them does is the
@@ -560,7 +568,7 @@ fn refs_local(body: &Body, expr: ExprId, idx: u32, gate: &Gate<'_>) -> Option<Re
                 operand_refs_local(body, arg.expr, idx, gate).is_some()
                     && gate.callee_ref_param_leaks(*func_id, pos)
             }))
-        .then_some(RefShape::Derived(body.exprs[expr].type_id)),
+        .then_some(RefShape::Derived),
         _ => None,
     }
 }
@@ -573,14 +581,20 @@ fn refs_local(body: &Body, expr: ExprId, idx: u32, gate: &Gate<'_>) -> Option<Re
 /// referenced hands every caller the same object to mutate.
 fn ref_args_that_escape(body: &Body, aliases: &Aliases, gate: &Gate<'_>) -> IndexSet<ExprId> {
     let mut out: IndexSet<ExprId> = IndexSet::default();
-    let is_ref = |body: &Body, e: ExprId| {
-        matches!(
-            body.exprs[e].kind,
+    // The `&` node itself, seen through a cast: `&LIT as &T` hands over the
+    // same referent.
+    let ref_node = |body: &Body, mut e: ExprId| loop {
+        match &body.exprs[e].kind {
             ExprKind::Unary {
                 op: NirUnaryOp::Ref,
                 ..
-            }
-        )
+            } => return Some(e),
+            ExprKind::Cast {
+                expr: Operand::Expr(inner),
+                ..
+            } => e = *inner,
+            _ => return None,
+        }
     };
     for node in reachable_nodes(body) {
         match node {
@@ -590,8 +604,7 @@ fn ref_args_that_escape(body: &Body, aliases: &Aliases, gate: &Gate<'_>) -> Inde
                 if let StmtKind::Let {
                     local_index, value, ..
                 } = &body.stmts[st].kind
-                    && let Some(e) = value.as_expr()
-                    && is_ref(body, e)
+                    && let Some(e) = value.as_expr().and_then(|v| ref_node(body, v))
                     && (local_leaks_through_call(body, *local_index, gate)
                         || !is_readonly_body(body, aliases, *local_index, gate))
                 {
@@ -608,30 +621,25 @@ fn ref_args_that_escape(body: &Body, aliases: &Aliases, gate: &Gate<'_>) -> Inde
                         let Some(arg_expr) = arg.expr.as_expr() else {
                             continue;
                         };
-                        if is_ref(body, arg_expr) && gate.callee_ref_param_leaks(*func_id, pos) {
-                            out.insert(arg_expr);
+                        if let Some(ref_expr) = ref_node(body, arg_expr)
+                            && gate.callee_ref_param_leaks(*func_id, pos)
+                            && !gate.instruction_passes_through(
+                                *func_id,
+                                pos,
+                                body.exprs[arg_expr].type_id,
+                            )
+                        {
+                            out.insert(ref_expr);
                         }
                     }
                 }
                 // An indirect call names no callee, so there is no body to ask
                 // and every reference handed over is assumed to escape.
-                ExprKind::IndirectCall { args, .. } => {
-                    for &arg in args {
-                        if let Some(a) = arg.as_expr()
-                            && is_ref(body, a)
-                        {
-                            out.insert(a);
-                        }
-                    }
-                }
-                ExprKind::CmRawCall { args, .. } => {
-                    for &arg in args {
-                        if let Some(a) = arg.as_expr()
-                            && is_ref(body, a)
-                        {
-                            out.insert(a);
-                        }
-                    }
+                ExprKind::IndirectCall { args, .. } | ExprKind::CmRawCall { args, .. } => {
+                    out.extend(
+                        args.iter()
+                            .filter_map(|a| a.as_expr().and_then(|a| ref_node(body, a))),
+                    );
                 }
                 _ => {}
             },
@@ -2473,15 +2481,16 @@ fn call_arg_readonly_operand(
 
 /// A binding handed to a call as an argument. `&` is a read; `&mut`
 /// escapes; passing the binding itself is a read only where the parameter only
-/// reads it: by value, or, for a binding that is itself a `&`, by a shared
-/// reference the callee does not deliver.
+/// reads it: by value, through a plain instruction, or, for a binding that is
+/// itself a `&`, by a shared reference the callee does not deliver.
 fn call_arg_readonly(body: &Body, arg: ExprId, idx: u32, gate: &Gate<'_>, arg_use: ArgUse) -> bool {
     match &body.exprs[arg].kind {
         ExprKind::Local { index, .. } => {
             *index != idx
                 || matches!(arg_use, ArgUse::Param(callee, pos)
                     if gate.callee_param_readonly(callee, pos)
-                        || gate.callee_only_refs_arg(callee, pos))
+                        || gate.callee_only_refs_arg(callee, pos)
+                        || gate.instruction_passes_through(callee, pos, body.exprs[arg].type_id))
         }
         ExprKind::Unary {
             op: NirUnaryOp::MutRef,
