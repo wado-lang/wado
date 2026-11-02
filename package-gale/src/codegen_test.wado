@@ -20,7 +20,7 @@ use { parse_highlight_query } from "./highlight_query.wado";
 use { parse, parse_checked } from "./g4/parser.wado";
 use { count_occurrences } from "../tests/support/text.wado";
 use { lexer_dump } from "../tests/support/fixtures.wado";
-use { eval, Output } from "core:eval";
+use { eval, EvalHost, Output } from "core:eval";
 use { wado } from "lib:wadopoet";
 
 global DEFAULT_OPTIONS: GenerateOptions = GenerateOptions {};
@@ -54,7 +54,7 @@ fn parses<S: AsStrSlice>(
     rule: String,
     inputs: List<String>,
     options: &GenerateOptions = &DEFAULT_OPTIONS,
-) -> String {
+) -> String with EvalHost {
     return parses_each(grammar, inputs.into_iter().map(|input| [rule, input]).collect(), options);
 }
 
@@ -64,7 +64,7 @@ fn parses_each<S: AsStrSlice>(
     grammar: S,
     cases: List<[String, String]>,
     options: &GenerateOptions = &DEFAULT_OPTIONS,
-) -> String {
+) -> String with EvalHost {
     let mut body = String::new();
     for let [rule, input] of cases {
         body.push_str(wado`show("${input}", parse_${rule}("${input}"));\n`);
@@ -75,7 +75,7 @@ fn parses_each<S: AsStrSlice>(
 /// The tokens the lexer generated from `grammar` makes of each input, one line
 /// each: `input => NAME:text ...`, with `error` naming what no rule matched,
 /// then any action output.
-fn lexes<S: AsStrSlice>(grammar: S, inputs: List<String>) -> String {
+fn lexes<S: AsStrSlice>(grammar: S, inputs: List<String>) -> String with EvalHost {
     let mut body = String::new();
     for let input of inputs {
         body.push_str(wado`lex("${input}");\n`);
@@ -85,25 +85,25 @@ fn lexes<S: AsStrSlice>(grammar: S, inputs: List<String>) -> String {
 
 /// Runs `body` beside the parser generated from `grammar` and the `items`
 /// declared with it, and returns what it printed.
-fn printed<S: AsStrSlice>(grammar: S, body: String, items: String = "") -> String {
+fn printed<S: AsStrSlice>(grammar: S, body: String, items: String = "") -> String with EvalHost {
     return run_beside(gen_source(grammar), body, items).stdout;
 }
 
 /// What the traced parser generated from `grammar` logs while `body` runs.
-fn traced<S: AsStrSlice>(grammar: S, body: String) -> String {
+fn traced<S: AsStrSlice>(grammar: S, body: String) -> String with EvalHost {
     let source = gen_with(grammar, &GenerateOptions { trace: true }).source;
     return run_beside(source, `trace_to_stderr(|| ${body});\n`).stderr;
 }
 
 /// Runs `body` beside the parser `source` and the `items` declared with it.
-fn run_beside(source: String, body: String, items: String = "") -> Output {
+fn run_beside(source: String, body: String, items: String = "") -> Output with EvalHost {
     let out = eval_beside(source, body, items);
     assert out.status matches { Exited(0) };
     return out;
 }
 
 /// `run_beside` for a run that may trap.
-fn eval_beside(source: String, body: String, items: String = "") -> Output {
+fn eval_beside(source: String, body: String, items: String = "") -> Output with EvalHost {
     // The generated source opens with inner attributes, which come first.
     return eval(`${source}
 use { println, Stdout } from "core:cli";

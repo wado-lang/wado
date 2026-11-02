@@ -11,6 +11,7 @@ use { HashMap } from "core:collections";
 use { Graph } from "lib:loam/src/graph.wado";
 use { read } from "lib:loam/src/onnx_proto.wado";
 use { TOLERANCE, generated, program_over, ran } from "./oracle.wado";
+use { EvalHost } from "core:eval";
 
 /// The lengths of `X` the oracle ran each case at.
 global LENGTHS: List<i32> = [3, 10];
@@ -49,7 +50,7 @@ impl Entry {
 /// What Loam computes from `model` through `entry` at each of `LENGTHS`, in
 /// the oracle's lines, and past them why it computes nothing more: the build's
 /// refusal, or how the run stopped.
-fn loam(model: ByteList, entry: Entry) -> String {
+fn loam(model: ByteList, entry: Entry) -> String with EvalHost {
     let graph = read(model).unwrap();
     return match generated(&graph) {
         Ok(source) => run(source, &graph, entry),
@@ -59,7 +60,7 @@ fn loam(model: ByteList, entry: Entry) -> String {
 
 /// `source` with a `run` that calls `entry` at each of `LENGTHS` and prints
 /// what it returns, run under `eval`.
-fn run(source: String, graph: &Graph, entry: Entry) -> String {
+fn run(source: String, graph: &Graph, entry: Entry) -> String with EvalHost {
     let mut args = "";
     for let vi of graph.inputs {
         args.push_str(`&${INPUTS[vi.name]}, `);
@@ -90,7 +91,7 @@ export fn run() with Stdout {
 
 /// Loam computes from `model` what onnxruntime does, which `onnx` states,
 /// through either entry.
-fn assert_agrees(model: ByteList, onnx: String) {
+fn assert_agrees(model: ByteList, onnx: String) with EvalHost {
     let [forward, compute] = [
         loam(model, Entry::Forward),
         loam(model, Entry::Compute),
