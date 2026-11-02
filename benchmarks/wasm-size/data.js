@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1793655740058,
+  "lastUpdate": 1793656663631,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -73801,6 +73801,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/9fe413243f50d9df6fb590429fa6671a34dd796e"
         },
         "date": 1793655738948,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3099,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7303,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21809,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 316578,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "d0e5efa6dbbc0e76454a3971288a888862caaec8",
+          "message": "Merge pull request #2529 from wado-lang/claude/awesome-mendel-jhnwrw\n\nperf(optimize): drop unreachable functions every round, and stop marking returns cold",
+          "timestamp": "2026-11-03T06:33:48+09:00",
+          "tree_id": "a03559c33e1bbc2218cb2fbb220efe29acebb407",
+          "url": "https://github.com/wado-lang/wado/commit/d0e5efa6dbbc0e76454a3971288a888862caaec8"
+        },
+        "date": 1793656663188,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
