@@ -26,10 +26,10 @@ use crate::synthesis::common::{
     option_some, panic_call, ref_expr, synth_span, unreachable_call,
 };
 use crate::tir::{
-    CallArg, CaptureSource, EffectRef, FunctionKind, FunctionRef, GlobalInit, InlineHint,
-    LetStorage, MonomorphInfo, ResolvedType, StructDef, TemplateId, TirBlock, TirCapture,
-    TirEffectOp, TirExpr, TirExprKind, TirField, TirFunction, TirGlobal, TirLocal, TirMatchArm,
-    TirParam, TirPattern, TirStmt, TirStmtKind, TirStruct, TirStructField, TypeId,
+    CallArg, CaptureSource, EffectRef, ExitScope, FunctionKind, FunctionRef, GlobalInit,
+    InlineHint, LetStorage, MonomorphInfo, ResolvedType, StructDef, TemplateId, TirBlock,
+    TirCapture, TirEffectOp, TirExpr, TirExprKind, TirField, TirFunction, TirGlobal, TirLocal,
+    TirMatchArm, TirParam, TirPattern, TirStmt, TirStmtKind, TirStruct, TirStructField, TypeId,
     positional_substitution,
 };
 use crate::tir_visitor::TirRefVisitor;
@@ -1919,14 +1919,8 @@ struct ExitRedirector<'a, 'b> {
     /// The label of the body's block, which each redirected jump breaks.
     label: &'a str,
     type_table: &'a Rc<RefCell<TypeTable>>,
-    /// Number of anonymous loops (`loop { }` / `VariadicForOf`)
-    /// currently open along the walk. While positive, bare
-    /// `break`/`continue` stay inside the `with` body.
-    inner_loop_depth: u32,
-    /// Stack of labels declared by `LabeledBlock` (statement or
-    /// expression form) along the walk. `break L` whose `L` is in
-    /// this stack stays inside the `with` body.
-    inner_labels: Vec<String>,
+    /// What the walk entered inside the `with` body.
+    scope: ExitScope,
     ctx: &'b mut LowerCtx,
     /// The redirected jumps, in the order the walk met them.
     exits: Vec<Exit>,
@@ -1937,8 +1931,7 @@ impl<'a, 'b> ExitRedirector<'a, 'b> {
         Self {
             label,
             type_table,
-            inner_loop_depth: 0,
-            inner_labels: Vec::new(),
+            scope: ExitScope::default(),
             ctx,
             exits: Vec::new(),
         }
@@ -1950,7 +1943,7 @@ impl<'a, 'b> ExitRedirector<'a, 'b> {
             // Nested exits inside an `If`/`Match`/`LabeledBlock`/loop body are
             // redirected first, then the stmt itself if it is one.
             self.visit_stmt(&mut block.stmts[i]);
-            if !self.is_exit_stmt(&block.stmts[i].kind) {
+            if !self.scope.exits(&block.stmts[i].kind) {
                 i += 1;
                 continue;
             }
@@ -1994,20 +1987,20 @@ impl<'a, 'b> ExitRedirector<'a, 'b> {
             }
             TirStmtKind::Continue => {}
             TirStmtKind::Loop { body } => {
-                self.inner_loop_depth += 1;
+                self.scope.enter_loop();
                 self.visit_block(body);
-                self.inner_loop_depth -= 1;
+                self.scope.leave_loop();
             }
             TirStmtKind::VariadicForOf { iterable, body, .. } => {
                 self.visit_expr(iterable);
-                self.inner_loop_depth += 1;
+                self.scope.enter_loop();
                 self.visit_block(body);
-                self.inner_loop_depth -= 1;
+                self.scope.leave_loop();
             }
             TirStmtKind::LabeledBlock { label, block } => {
-                self.inner_labels.push(label.clone());
+                self.scope.enter_label(label);
                 self.visit_block(block);
-                self.inner_labels.pop();
+                self.scope.leave_label();
             }
             TirStmtKind::If {
                 condition,
@@ -2027,9 +2020,9 @@ impl<'a, 'b> ExitRedirector<'a, 'b> {
         match &mut expr.kind {
             TirExprKind::Block(block) => self.visit_block(block),
             TirExprKind::LabeledBlock { label, block, .. } => {
-                self.inner_labels.push(label.clone());
+                self.scope.enter_label(label);
                 self.visit_block(block);
-                self.inner_labels.pop();
+                self.scope.leave_label();
             }
             TirExprKind::If {
                 condition,
@@ -2150,16 +2143,6 @@ impl<'a, 'b> ExitRedirector<'a, 'b> {
             | TirExprKind::GlobalVarGet { .. }
             | TirExprKind::Capture { .. }
             | TirExprKind::EnumConstruct { .. } => {}
-        }
-    }
-
-    fn is_exit_stmt(&self, kind: &TirStmtKind) -> bool {
-        match kind {
-            TirStmtKind::Return { .. } => true,
-            TirStmtKind::Continue => self.inner_loop_depth == 0,
-            TirStmtKind::Break { label: None, .. } => self.inner_loop_depth == 0,
-            TirStmtKind::Break { label: Some(l), .. } => !self.inner_labels.iter().any(|x| x == l),
-            _ => false,
         }
     }
 }

@@ -96,15 +96,15 @@ use crate::synthesis::common::{
     marker_stmt_mark, not_expr, ord_bool_from_cmp, rt_call,
 };
 use crate::tir::{
-    EffectRef, StructDef, TemplateId, TirEffectOp, TirField, TirImpl, TirParam, TirTypeParam,
-    agree_branch_types,
+    EffectRef, ExitScope, StructDef, TemplateId, TirEffectOp, TirField, TirImpl, TirParam,
+    TirTypeParam, agree_branch_types,
 };
 use crate::tir::{
     FunctionKind, FunctionRef, InlineHint, MonomorphInfo, ReturnAbi, TemplateHole, TemplateShape,
     TirHandlerBinding, TirLiteralPattern, TirMatchArm, TirStructField, TirStructPatternField,
     deref_to_layers, hold_hole, to_layers_of, wrapped_reference,
 };
-use crate::tir_visitor::TirMutVisitor;
+use crate::tir_visitor::{TirMutVisitor, TirRefVisitor};
 use crate::token::Span;
 use crate::unparse::{unparse_expr_source, unparse_pattern_source};
 
@@ -2125,11 +2125,13 @@ impl<'a> Reify<'a> {
     /// Marking here rather than at each synthesis site is what gives a
     /// `panic(…)` written in source the same treatment as the ones this file
     /// builds. A `return` / `break` ends a path too, but a normal exit is not a
-    /// cold one, so it is left alone.
+    /// cold one, so it is left alone, and so is a `!` statement that takes one
+    /// on some path: a `let … else` desugars to such a `match`.
     fn mark_diverging_stmts(&self, stmts: Vec<TirStmt>) -> Vec<TirStmt> {
         let tt = self.tysys.type_table.borrow();
-        let diverges =
-            |s: &TirStmt| matches!(&s.kind, TirStmtKind::Expr(e) if tt.is_never(e.type_id));
+        let diverges = |s: &TirStmt| {
+            matches!(&s.kind, TirStmtKind::Expr(e) if tt.is_never(e.type_id)) && !exits_normally(s)
+        };
         if !stmts.iter().any(diverges) {
             return stmts;
         }
@@ -10522,4 +10524,57 @@ fn half_literal(bits: u64, ty: TypeId, span: Span) -> TirExpr {
         ty,
         span,
     )
+}
+
+/// Whether `stmt` holds a `return`, or a `break` / `continue` leaving `stmt`.
+fn exits_normally(stmt: &TirStmt) -> bool {
+    let mut finder = ExitFinder {
+        scope: ExitScope::default(),
+        found: false,
+    };
+    finder.visit_stmt(stmt);
+    finder.found
+}
+
+struct ExitFinder {
+    scope: ExitScope,
+    found: bool,
+}
+
+impl ExitFinder {
+    fn within_label(&mut self, label: &str, block: &TirBlock) {
+        self.scope.enter_label(label);
+        self.visit_block(block);
+        self.scope.leave_label();
+    }
+}
+
+impl TirRefVisitor for ExitFinder {
+    fn visit_stmt(&mut self, stmt: &TirStmt) {
+        self.found |= self.scope.exits(&stmt.kind);
+        match &stmt.kind {
+            TirStmtKind::Loop { .. } | TirStmtKind::VariadicForOf { .. } => {
+                self.scope.enter_loop();
+                self.walk_stmt(stmt);
+                self.scope.leave_loop();
+            }
+            TirStmtKind::LabeledBlock { label, block } => self.within_label(label, block),
+            TirStmtKind::Let { .. }
+            | TirStmtKind::Expr(_)
+            | TirStmtKind::Return { .. }
+            | TirStmtKind::TaskReturn { .. }
+            | TirStmtKind::If { .. }
+            | TirStmtKind::Break { .. }
+            | TirStmtKind::Continue
+            | TirStmtKind::LetDestructure { .. } => self.walk_stmt(stmt),
+        }
+    }
+
+    fn visit_expr(&mut self, expr: &TirExpr) {
+        if let TirExprKind::LabeledBlock { label, block, .. } = &expr.kind {
+            self.within_label(label, block);
+        } else {
+            self.walk_expr_in_frame(expr);
+        }
+    }
 }

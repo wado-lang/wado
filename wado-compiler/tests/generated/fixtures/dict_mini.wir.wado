@@ -55,9 +55,9 @@ type "functype//core:prelude/list.wado/core:prelude/list.wado/List<[core:prelude
 
 type "functype//dict_mini.wado/dict_mini.wado/MiniDict<core:prelude/string.wado/String,core:prelude/string.wado/String>::set$sroa[&mut(self.entries)]" = fn(ref "core:prelude//List<[core:prelude/string.wado/String,core:prelude/string.wado/String]>", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(21)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0$sroa[self.buf]" = fn(ref "core:prelude/string.wado//String", ref Array<u8>, i32);  // TypeId(22)
+type "functype//dict_mini.wado/dict_mini.wado/MiniDict<core:prelude/string.wado/String,core:prelude/string.wado/String>::get$spec0$sroa[self.entries,key.repr]" = fn(ref "core:prelude//List<[core:prelude/string.wado/String,core:prelude/string.wado/String]>", ref Array<u8>) -> ref null "core:prelude/string.wado//String";  // TypeId(22)
 
-type "functype//dict_mini.wado/dict_mini.wado/MiniDict<core:prelude/string.wado/String,core:prelude/string.wado/String>::get$spec0$sroa[self.entries,key.repr]" = fn(ref "core:prelude//List<[core:prelude/string.wado/String,core:prelude/string.wado/String]>", ref Array<u8>) -> ref null "core:prelude/string.wado//String";  // TypeId(23)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0$sroa[self.buf]" = fn(ref "core:prelude/string.wado//String", ref Array<u8>, i32);  // TypeId(23)
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(24)
 
@@ -808,6 +808,70 @@ fn "dict_mini.wado/dict_mini.wado/MiniDict<core:prelude/string.wado/String,core:
     self.used = $load_0 + 1;
 }
 
+fn "dict_mini.wado/dict_mini.wado/MiniDict<core:prelude/string.wado/String,core:prelude/string.wado/String>::get$spec0$sroa[self.entries,key.repr]"(self, key) {
+    let i_2: i32;
+    let self_12: ref "core:prelude/string.wado//String";
+    let a: ref Array<u8>;
+    let a_end: i32;
+    let i_28: i32;
+    let $licm_used_38: i32;
+    let $licm_repr_39: ref "Array<[core:prelude/string.wado/String,core:prelude/string.wado/String]>";
+    i_2 = 0;
+    $licm_used_38 = self.used;
+    $licm_repr_39 = self.repr;
+    b117: block {
+        l118: loop {
+            break_if b117 i_2 >= $licm_used_38;
+            self_12 = builtin::array_get_value<ref "tuple//[core:prelude/string.wado/String, core:prelude/string.wado/String]">($licm_repr_39, i_2).0;
+            if $inline_core_prelude_array_wado_seq_eq_u8__4: block -> bool {
+                a = self_12.repr;
+                if local.tee a_end(self_12.used) != 4 {
+                    break $inline_core_prelude_array_wado_seq_eq_u8__4: 0;
+                }
+                i_28 = 0;
+                b121: block {
+                    l122: loop {
+                        break_if b121 (((i_28 >= a_end) | ((i_28 + 1) >= a_end)) | (((i_28 + 1) + 1) >= a_end)) | ((((i_28 + 1) + 1) + 1) >= a_end);
+                        if builtin::array_get_value<u8>(a, i_28) != builtin::array_get_value<u8>(key, i_28) {
+                            break $inline_core_prelude_array_wado_seq_eq_u8__4: 0;
+                        }
+                        i_28 = i_28 + 1;
+                        if builtin::array_get_value<u8>(a, i_28) != builtin::array_get_value<u8>(key, i_28) {
+                            break $inline_core_prelude_array_wado_seq_eq_u8__4: 0;
+                        }
+                        i_28 = i_28 + 1;
+                        if builtin::array_get_value<u8>(a, i_28) != builtin::array_get_value<u8>(key, i_28) {
+                            break $inline_core_prelude_array_wado_seq_eq_u8__4: 0;
+                        }
+                        i_28 = i_28 + 1;
+                        if builtin::array_get_value<u8>(a, i_28) != builtin::array_get_value<u8>(key, i_28) {
+                            break $inline_core_prelude_array_wado_seq_eq_u8__4: 0;
+                        }
+                        i_28 = i_28 + 1;
+                        continue l122;
+                    };
+                };
+                b127: block {
+                    l128: loop {
+                        break_if b127 i_28 >= a_end;
+                        if builtin::array_get_value<u8>(a, i_28) != builtin::array_get_value<u8>(key, i_28) {
+                            break $inline_core_prelude_array_wado_seq_eq_u8__4: 0;
+                        }
+                        i_28 = i_28 + 1;
+                        continue l128;
+                    };
+                };
+                break $inline_core_prelude_array_wado_seq_eq_u8__4: 1;
+            } {
+                return builtin::array_get_value<ref "tuple//[core:prelude/string.wado/String, core:prelude/string.wado/String]">($licm_repr_39, i_2).1;
+            }
+            i_2 = i_2 + 1;
+            continue l118;
+        };
+    };
+    return ref.null none;
+}
+
 fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0$sroa[self.buf]"(self, $mv$content$repr, $mv$content$used) {
     let new_used_19: i32;
     let start_20: i32;
@@ -822,70 +886,6 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelud
         builtin::array_copy<u8>(self.repr, start_20, $mv$content$repr, 0, $mv$content$used);
     };
     return;
-}
-
-fn "dict_mini.wado/dict_mini.wado/MiniDict<core:prelude/string.wado/String,core:prelude/string.wado/String>::get$spec0$sroa[self.entries,key.repr]"(self, key) {
-    let i_2: i32;
-    let self_12: ref "core:prelude/string.wado//String";
-    let a: ref Array<u8>;
-    let a_end: i32;
-    let i_28: i32;
-    let $licm_used_38: i32;
-    let $licm_repr_39: ref "Array<[core:prelude/string.wado/String,core:prelude/string.wado/String]>";
-    i_2 = 0;
-    $licm_used_38 = self.used;
-    $licm_repr_39 = self.repr;
-    b118: block {
-        l119: loop {
-            break_if b118 i_2 >= $licm_used_38;
-            self_12 = builtin::array_get_value<ref "tuple//[core:prelude/string.wado/String, core:prelude/string.wado/String]">($licm_repr_39, i_2).0;
-            if $inline_core_prelude_array_wado_seq_eq_u8__4: block -> bool {
-                a = self_12.repr;
-                if local.tee a_end(self_12.used) != 4 {
-                    break $inline_core_prelude_array_wado_seq_eq_u8__4: 0;
-                }
-                i_28 = 0;
-                b122: block {
-                    l123: loop {
-                        break_if b122 (((i_28 >= a_end) | ((i_28 + 1) >= a_end)) | (((i_28 + 1) + 1) >= a_end)) | ((((i_28 + 1) + 1) + 1) >= a_end);
-                        if builtin::array_get_value<u8>(a, i_28) != builtin::array_get_value<u8>(key, i_28) {
-                            break $inline_core_prelude_array_wado_seq_eq_u8__4: 0;
-                        }
-                        i_28 = i_28 + 1;
-                        if builtin::array_get_value<u8>(a, i_28) != builtin::array_get_value<u8>(key, i_28) {
-                            break $inline_core_prelude_array_wado_seq_eq_u8__4: 0;
-                        }
-                        i_28 = i_28 + 1;
-                        if builtin::array_get_value<u8>(a, i_28) != builtin::array_get_value<u8>(key, i_28) {
-                            break $inline_core_prelude_array_wado_seq_eq_u8__4: 0;
-                        }
-                        i_28 = i_28 + 1;
-                        if builtin::array_get_value<u8>(a, i_28) != builtin::array_get_value<u8>(key, i_28) {
-                            break $inline_core_prelude_array_wado_seq_eq_u8__4: 0;
-                        }
-                        i_28 = i_28 + 1;
-                        continue l123;
-                    };
-                };
-                b128: block {
-                    l129: loop {
-                        break_if b128 i_28 >= a_end;
-                        if builtin::array_get_value<u8>(a, i_28) != builtin::array_get_value<u8>(key, i_28) {
-                            break $inline_core_prelude_array_wado_seq_eq_u8__4: 0;
-                        }
-                        i_28 = i_28 + 1;
-                        continue l129;
-                    };
-                };
-                break $inline_core_prelude_array_wado_seq_eq_u8__4: 1;
-            } {
-                return builtin::array_get_value<ref "tuple//[core:prelude/string.wado/String, core:prelude/string.wado/String]">($licm_repr_39, i_2).1;
-            }
-            i_2 = i_2 + 1;
-            continue l119;
-        };
-    };
-    return ref.null none;
 }
 
 export fn "dict_mini.wado/$cm_export__run" as "run"

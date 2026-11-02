@@ -389,8 +389,8 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode";
 
-global global:value_copy_array_get_mono.wado::$const_obj_2: ref "Array<value_copy_array_get_mono.wado/Cell>" = array.new_fixed<ref "value_copy_array_get_mono.wado//Cell">(struct.new "value_copy_array_get_mono.wado//Cell" { v: 1 }, struct.new "value_copy_array_get_mono.wado//Cell" { v: 2 });
-global global:core:prelude/primitive.wado::$const_obj_3: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
+global global:value_copy_array_get_mono.wado::$const_obj_0: ref "Array<value_copy_array_get_mono.wado/Cell>" = array.new_fixed<ref "value_copy_array_get_mono.wado//Cell">(struct.new "value_copy_array_get_mono.wado//Cell" { v: 1 }, struct.new "value_copy_array_get_mono.wado//Cell" { v: 2 });
+global global:core:prelude/primitive.wado::$const_obj_1: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
 
 fn "value_copy_array_get_mono.wado/$test_3_element_pushed_into_another_list_is_independent"() {
     let $load_1: ref "Array<value_copy_array_get_mono.wado/Cell>";
@@ -427,7 +427,7 @@ fn "value_copy_array_get_mono.wado/$test_4_copy_in_a_loop_body"() {
     b3: block {
         l4: loop {
             break_if b3 i >= 2;
-            $sroa_e_v_54 = builtin::array_get_value<ref "value_copy_array_get_mono.wado//Cell">(global:value_copy_array_get_mono.wado::$const_obj_2, i).v + 100;
+            $sroa_e_v_54 = builtin::array_get_value<ref "value_copy_array_get_mono.wado//Cell">(global:value_copy_array_get_mono.wado::$const_obj_0, i).v + 100;
             sum = sum + $sroa_e_v_54;
             i = i + 1;
             continue l4;
@@ -2078,7 +2078,7 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(self, f) {
     let abs_val: u64;
     is_negative = self < 0;
     self = "core:prelude/primitive.wado/count_digits_u64"(local.tee abs_val("core:prelude/primitive.wado/i64::abs"(builtin::i64_extend_i32_s(self))));
-    is_negative = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>"(f, is_negative, global:core:prelude/primitive.wado::$const_obj_3, self);
+    is_negative = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>"(f, is_negative, global:core:prelude/primitive.wado::$const_obj_1, self);
     "core:prelude/primitive.wado/write_decimal_digits"(f.buf.repr, is_negative, abs_val, self);
 }
 
@@ -2092,7 +2092,7 @@ fn "core:prelude/primitive.wado/u32::fmt_decimal$sroa[self.value]"(self, f) {
     let value: u64;
     let offset: i32;
     self = "core:prelude/primitive.wado/count_digits_u64"(local.tee value(builtin::i64_extend_i32_u(self)));
-    offset = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>"(f, 0, global:core:prelude/primitive.wado::$const_obj_3, self);
+    offset = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>"(f, 0, global:core:prelude/primitive.wado::$const_obj_1, self);
     "core:prelude/primitive.wado/write_decimal_digits"(f.buf.repr, offset, value, self);
 }
 

@@ -1661,10 +1661,11 @@ impl CompilerItem {
     /// one is called from code the elaborator or synthesis wrote, which its walk
     /// follows. `lower`'s `Interner::resolve` catches an omission.
     pub fn minted_after_tir(self) -> bool {
-        matches!(
-            self,
-            // `lower`
-            Self::AssertFailed
+        !self.rewritten_from().is_empty()
+            || matches!(
+                self,
+                // `lower`
+                Self::AssertFailed
                 | Self::FormatterWriteLiteral
                 | Self::I128FromF64
                 | Self::I128FromI64
@@ -1679,15 +1680,35 @@ impl CompilerItem {
                 | Self::U128FromI64
                 | Self::U128FromPair
                 | Self::U128FromU64
-                // `optimize`
-                | Self::StringLen
-                | Self::StringPushAscii
+                // `optimize` recognises these calls, rewriting them to the
+                // items `rewritten_from` names.
                 | Self::StringPushChar
                 | Self::StringPushStr
+            )
+    }
+
+    /// The items whose calls an optimizer rewrite turns into calls of this
+    /// one; empty for an item no rewrite calls. Such a call has no edge until
+    /// the rewrite fires, so DCE keeps this item wherever one of these is
+    /// reachable or kept, and a rewrite resolves its callee through
+    /// `NirPackage::rewrite_targets`, which holds no item not declared here.
+    pub fn rewritten_from(self) -> &'static [CompilerItem] {
+        if self == Self::StringPushAscii {
+            // `nir/string_push`'s constant-ASCII rule.
+            &[Self::StringPushChar]
+        } else if matches!(
+            self,
+            Self::StringLen
                 | Self::StringReserveUninit
                 | Self::StringSetByteUnchecked
                 | Self::StringWriteStrAt
-        )
+        ) {
+            // `nir/string_push`'s append fusion, over a run of the appends
+            // `AppendFuseRule::piece_of` takes.
+            &[Self::StringPushStr, Self::StringPushAscii]
+        } else {
+            &[]
+        }
     }
 
     /// The kind of declaration this item must be attached to. Used by

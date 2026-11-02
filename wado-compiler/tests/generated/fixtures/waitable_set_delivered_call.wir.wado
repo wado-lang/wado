@@ -527,11 +527,11 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/StrSlice::slic
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/StrSlice::byte_at$unchecked$spec0$dae[index]" = fn(ref Array<u8>, i32) -> u8;  // TypeId(174)
 
-type "functype//core:prelude/types.wado/core:prelude/types.wado/WaitableSet<core:prelude/types.wado/Subtask>::member_at$sroa[self.members]" = fn(ref null "core:prelude//List<core:prelude/types.wado/Subtask>", i32) -> i32;  // TypeId(175)
+type "functype//core:prelude/types.wado/core:prelude/types.wado/WaitableSet<waitable_set_delivered_call.wado/Timer>::member_at$sroa[self.members]" = fn(ref null "core:prelude//List<waitable_set_delivered_call.wado/Timer>", i32) -> i32;  // TypeId(175)
 
-type "functype//core:prelude/types.wado/core:prelude/types.wado/WaitableSet<waitable_set_delivered_call.wado/Timer>::member_at$sroa[self.members]" = fn(ref null "core:prelude//List<waitable_set_delivered_call.wado/Timer>", i32) -> i32;  // TypeId(176)
+type "functype//core:prelude/types.wado/core:prelude/types.wado/WaitableSet<core:prelude/types.wado/AsyncCall<()>>::member_at$sroa[self.members]" = fn(ref null "core:prelude//List<core:prelude/types.wado/AsyncCall<()>>", i32) -> i32;  // TypeId(176)
 
-type "functype//core:prelude/types.wado/core:prelude/types.wado/WaitableSet<core:prelude/types.wado/AsyncCall<()>>::member_at$sroa[self.members]" = fn(ref null "core:prelude//List<core:prelude/types.wado/AsyncCall<()>>", i32) -> i32;  // TypeId(177)
+type "functype//core:prelude/types.wado/core:prelude/types.wado/WaitableSet<core:prelude/types.wado/Subtask>::member_at$sroa[self.members]" = fn(ref null "core:prelude//List<core:prelude/types.wado/Subtask>", i32) -> i32;  // TypeId(177)
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(178)
 
@@ -3530,41 +3530,6 @@ fn "core:prelude/string.wado/core:prelude/string.wado/StrSlice::byte_at$unchecke
     return builtin::array_get_value<u8>($mv$self$repr, $mv$self$start);
 }
 
-fn "core:prelude/types.wado/core:prelude/types.wado/WaitableSet<core:prelude/types.wado/Subtask>::member_at$sroa[self.members]"(self, handle) {
-    let at: i32;
-    let end: i32;
-    let ref_val: ref null "core:prelude//$Resource";
-    let $sroa_$iter_0_repr_17: ref null "Array<core:prelude/types.wado/Subtask>";
-    let $sroa_$iter_0_index_18: i32;
-    at = 0;
-    end = self.used;
-    $sroa_$iter_0_repr_17 = self.repr;
-    $sroa_$iter_0_index_18 = 0;
-    b450: block {
-        l451: loop {
-            break_if b450 $sroa_$iter_0_index_18 >= end;
-            ref_val = builtin::array_get_value<ref null "core:prelude//$Resource">($sroa_$iter_0_repr_17, $sroa_$iter_0_index_18);
-            $sroa_$iter_0_index_18 = $sroa_$iter_0_index_18 + 1;
-            let $mv$$vr_7$0: i32;
-            let $mv$$vr_7$1: ref null "core:prelude/types.wado//ResourceId";
-            let $mv$$vr_7$2: ref null "core:prelude/types.wado//ReadyEvent";
-            multivalue_bind [$mv$$vr_7$0, $mv$$vr_7$1, $mv$$vr_7$2] = "core:prelude/types.wado/core:prelude/types.wado/Subtask^core:prelude/types.wado/Waitable::wait_on$sroa[return]"(ref_val);
-            if (if $mv$$vr_7$0 == 0 -> bool {
-                $mv$$vr_7$1.handle == handle;
-            } else {
-                0;
-            }) {
-                return at;
-            }
-            at = at + 1;
-            continue l451;
-        };
-    };
-    cold_path;
-    "core:rt/unreachable"();
-    unreachable;
-}
-
 fn "core:prelude/types.wado/core:prelude/types.wado/WaitableSet<waitable_set_delivered_call.wado/Timer>::member_at$sroa[self.members]"(self, handle) {
     let at: i32;
     let $vr_7: ref "tuple//[i32, core:prelude/types.wado/Option<core:prelude/types.wado/ResourceId>, core:prelude/types.wado/Option<core:prelude/types.wado/ReadyEvent>]";
@@ -3578,9 +3543,9 @@ fn "core:prelude/types.wado/core:prelude/types.wado/WaitableSet<waitable_set_del
     end = self.used;
     $sroa_$iter_0_repr_21 = self.repr;
     $sroa_$iter_0_index_22 = 0;
-    b454: block {
-        l455: loop {
-            break_if b454 $sroa_$iter_0_index_22 >= end;
+    b450: block {
+        l451: loop {
+            break_if b450 $sroa_$iter_0_index_22 >= end;
             ref_val = builtin::array_get_value<ref null "core:prelude/types.wado//Box<waitable_set_delivered_call.wado/Timer>">($sroa_$iter_0_repr_21, $sroa_$iter_0_index_22);
             $sroa_$iter_0_index_22 = $sroa_$iter_0_index_22 + 1;
             $member = ref.cast "waitable_set_delivered_call.wado//Timer::Only"(ref_val.value).payload_0;
@@ -3602,7 +3567,7 @@ fn "core:prelude/types.wado/core:prelude/types.wado/WaitableSet<waitable_set_del
                 return at;
             }
             at = at + 1;
-            continue l455;
+            continue l451;
         };
     };
     cold_path;
@@ -3622,9 +3587,9 @@ fn "core:prelude/types.wado/core:prelude/types.wado/WaitableSet<core:prelude/typ
     end = self.used;
     $sroa_$iter_0_repr_19 = self.repr;
     $sroa_$iter_0_index_20 = 0;
-    b459: block {
-        l460: loop {
-            break_if b459 $sroa_$iter_0_index_20 >= end;
+    b455: block {
+        l456: loop {
+            break_if b455 $sroa_$iter_0_index_20 >= end;
             ref_val = builtin::array_get_value<ref null "core:prelude/types.wado//AsyncCall<()>">($sroa_$iter_0_repr_19, $sroa_$iter_0_index_20);
             $sroa_$iter_0_index_20 = $sroa_$iter_0_index_20 + 1;
             let $match_scrut_0: ref null "core:prelude/types.wado//Option<core:prelude/types.wado/Subtask>";
@@ -3646,7 +3611,42 @@ fn "core:prelude/types.wado/core:prelude/types.wado/WaitableSet<core:prelude/typ
                 return at;
             }
             at = at + 1;
-            continue l460;
+            continue l456;
+        };
+    };
+    cold_path;
+    "core:rt/unreachable"();
+    unreachable;
+}
+
+fn "core:prelude/types.wado/core:prelude/types.wado/WaitableSet<core:prelude/types.wado/Subtask>::member_at$sroa[self.members]"(self, handle) {
+    let at: i32;
+    let end: i32;
+    let ref_val: ref null "core:prelude//$Resource";
+    let $sroa_$iter_0_repr_17: ref null "Array<core:prelude/types.wado/Subtask>";
+    let $sroa_$iter_0_index_18: i32;
+    at = 0;
+    end = self.used;
+    $sroa_$iter_0_repr_17 = self.repr;
+    $sroa_$iter_0_index_18 = 0;
+    b460: block {
+        l461: loop {
+            break_if b460 $sroa_$iter_0_index_18 >= end;
+            ref_val = builtin::array_get_value<ref null "core:prelude//$Resource">($sroa_$iter_0_repr_17, $sroa_$iter_0_index_18);
+            $sroa_$iter_0_index_18 = $sroa_$iter_0_index_18 + 1;
+            let $mv$$vr_7$0: i32;
+            let $mv$$vr_7$1: ref null "core:prelude/types.wado//ResourceId";
+            let $mv$$vr_7$2: ref null "core:prelude/types.wado//ReadyEvent";
+            multivalue_bind [$mv$$vr_7$0, $mv$$vr_7$1, $mv$$vr_7$2] = "core:prelude/types.wado/core:prelude/types.wado/Subtask^core:prelude/types.wado/Waitable::wait_on$sroa[return]"(ref_val);
+            if (if $mv$$vr_7$0 == 0 -> bool {
+                $mv$$vr_7$1.handle == handle;
+            } else {
+                0;
+            }) {
+                return at;
+            }
+            at = at + 1;
+            continue l461;
         };
     };
     cold_path;
