@@ -26,7 +26,11 @@ jobs:
     permissions:
       contents: read
     steps:
+      # The job runs the pull request's own code, which would otherwise read
+      # the token out of `.git/config`.
       - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
       - uses: ./.github/actions/setup
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
@@ -55,6 +59,8 @@ jobs:
         os: [macos-latest, windows-latest]
     steps:
       - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
       - uses: actions/download-artifact@v8
         with:
           name: wado-lsp-wasm
