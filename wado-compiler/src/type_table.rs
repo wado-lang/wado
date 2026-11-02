@@ -409,6 +409,14 @@ impl TypeTable {
         if let Some(&settled) = self.settled_spellings.get(id) {
             return settled;
         }
+        // An erased newtype among an instance's arguments is its base, as it
+        // is everywhere else once erasure redirects it.
+        let resolved = self.resolved_id(id);
+        if resolved != id {
+            let settled = self.settle_spelling(resolved);
+            self.settled_spellings.set_growing(id, settled);
+            return settled;
+        }
         let spelling = self.types.get(id).expect("an interned type").clone();
         let rebuilt = match &spelling {
             ResolvedType::GenericInstance { def, type_args }
