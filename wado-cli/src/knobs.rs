@@ -3,6 +3,7 @@
 
 use lexopt::Parser;
 use wado_compiler::LogLevel;
+use wado_compiler::pgo::Cutoff;
 use wado_compiler::param_resolution::ParamInputs;
 
 use crate::args::{self, CliExit, OptSpec};
@@ -330,15 +331,14 @@ impl CompileKnobs {
 }
 
 /// Parse a share of all runs in parts per million.
-fn parse_cutoff_arg(opt: &str, parser: &mut Parser) -> Result<u32, CliExit> {
-    let per_million = wado_compiler::pgo::Cutoffs::PER_MILLION;
-    let cutoff = args::parse_u32_arg(opt, parser)?;
-    if cutoff > per_million {
-        return Err(CliExit::error(format!(
-            "{opt} is a share in parts per million, at most {per_million}, got {cutoff}"
-        )));
-    }
-    Ok(cutoff)
+fn parse_cutoff_arg(opt: &str, parser: &mut Parser) -> Result<Cutoff, CliExit> {
+    let per_million = args::parse_u32_arg(opt, parser)?;
+    Cutoff::new(per_million).ok_or_else(|| {
+        CliExit::error(format!(
+            "{opt} is a share in parts per million, at most {}, got {per_million}",
+            Cutoff::PER_MILLION
+        ))
+    })
 }
 
 /// A knob shared by the subcommands that host a guest (`run` / `serve` /

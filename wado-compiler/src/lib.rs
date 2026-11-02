@@ -452,10 +452,9 @@ pub struct OptOverrides {
     pub iterations: Option<u32>,
     /// The clones constant-argument specialization may mint over the module.
     pub specializations: Option<usize>,
-    /// The shares of all runs, in parts per million, that place a profile's
-    /// hot and cold lines.
-    pub profile_summary_cutoff_hot: Option<u32>,
-    pub profile_summary_cutoff_cold: Option<u32>,
+    /// The shares of all runs that place a profile's hot and cold lines.
+    pub profile_summary_cutoff_hot: Option<pgo::Cutoff>,
+    pub profile_summary_cutoff_cold: Option<pgo::Cutoff>,
 }
 
 impl OptOverrides {

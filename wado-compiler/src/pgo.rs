@@ -97,30 +97,41 @@ impl Profile {
     }
 }
 
-/// The shares of all runs, in parts per million, that place the hot and the
-/// cold line. The defaults are LLVM's for its options of the same names.
+/// A share of all runs, in parts per million.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct Cutoffs {
-    pub hot: u32,
-    pub cold: u32,
+pub struct Cutoff(u32);
+
+impl Cutoff {
+    pub const PER_MILLION: u32 = 1_000_000;
+
+    /// `per_million` as a share, where it is at most the whole.
+    #[must_use]
+    pub fn new(per_million: u32) -> Option<Self> {
+        (per_million <= Self::PER_MILLION).then_some(Self(per_million))
+    }
 }
 
-impl Cutoffs {
-    pub const PER_MILLION: u32 = 1_000_000;
+/// The shares that place the hot and the cold line. The defaults are LLVM's
+/// for its options of the same names.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Cutoffs {
+    pub hot: Cutoff,
+    pub cold: Cutoff,
 }
 
 impl Default for Cutoffs {
     fn default() -> Self {
         Self {
-            hot: 990_000,
-            cold: 999_999,
+            hot: Cutoff(990_000),
+            cold: Cutoff(999_999),
         }
     }
 }
 
 /// Where a profile's counts turn hot and cold. With every count sorted from
 /// the largest down, a line is the smallest count still inside its cutoff's
-/// share of all runs.
+/// share of all runs, the share rounded down as LLVM's `ProfileSummaryBuilder`
+/// rounds it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct Summary {
     hot: i64,
@@ -129,25 +140,20 @@ pub(crate) struct Summary {
 
 impl Summary {
     fn of(profile: &Profile, cutoffs: Cutoffs) -> Self {
-        assert!(
-            cutoffs.hot <= Cutoffs::PER_MILLION && cutoffs.cold <= Cutoffs::PER_MILLION,
-            "a cutoff is a share of all runs: {cutoffs:?}"
-        );
         let mut counts: Vec<i64> = profile.counts().collect();
         counts.sort_unstable_by(|a, b| b.cmp(a));
         let total: u128 = counts.iter().map(|&count| count as u128).sum();
-        let line = |cutoff: u32| {
-            let share = (total * u128::from(cutoff)).div_ceil(u128::from(Cutoffs::PER_MILLION));
-            let mut runs = 0;
-            counts
-                .iter()
-                .copied()
-                .find(|&count| {
-                    runs += count as u128;
-                    runs >= share
-                })
-                // A profile with no count has nothing to read a line against.
-                .unwrap_or(i64::MAX)
+        let line = |cutoff: Cutoff| {
+            let share = total * u128::from(cutoff.0) / u128::from(Cutoff::PER_MILLION);
+            let (mut runs, mut line) = (0, 0);
+            for &count in &counts {
+                if runs >= share {
+                    break;
+                }
+                runs += count as u128;
+                line = count;
+            }
+            line
         };
         Self {
             hot: line(cutoffs.hot),
@@ -538,14 +544,23 @@ mod tests {
         let lines = summary(
             &[600, 300, 60, 30, 10],
             Cutoffs {
-                hot: 900_000,
-                cold: 990_000,
+                hot: Cutoff(900_000),
+                cold: Cutoff(990_000),
             },
         );
         assert_eq!(lines, Summary { hot: 300, cold: 30 });
         assert!(lines.is_hot(300) && !lines.is_cold(300));
         assert!(!lines.is_hot(60) && !lines.is_cold(60));
         assert!(lines.is_cold(30) && lines.is_cold(10));
+    }
+
+    /// LLVM rounds the share down: of 4 runs, 99% is 3, so the 3 alone is
+    /// inside it, and the 1 is cold.
+    #[test]
+    fn a_share_is_rounded_down() {
+        let lines = summary(&[3, 1], Cutoffs::default());
+        assert_eq!(lines, Summary { hot: 3, cold: 3 });
+        assert!(lines.is_cold(1));
     }
 
     #[test]

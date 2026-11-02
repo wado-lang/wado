@@ -760,8 +760,9 @@ fn test_profile_summary_cutoffs_are_shares_per_million() {
         "a.wado",
     ]);
     let opts = wado_cli::compile::parse_args(parser).unwrap();
-    assert_eq!(opts.knobs.opt.profile_summary_cutoff_hot, Some(900_000));
-    assert_eq!(opts.knobs.opt.profile_summary_cutoff_cold, Some(1_000_000));
+    let cutoff = wado_compiler::pgo::Cutoff::new;
+    assert_eq!(opts.knobs.opt.profile_summary_cutoff_hot, cutoff(900_000));
+    assert_eq!(opts.knobs.opt.profile_summary_cutoff_cold, cutoff(1_000_000));
 
     let parser = Parser::from_args(&["--optimize-profile-summary-cutoff-hot", "1000001", "a.wado"]);
     let Err(err) = wado_cli::compile::parse_args(parser) else {
