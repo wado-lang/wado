@@ -3,7 +3,7 @@
 //! otherwise. An `i64` tensor stays on the host, as it does for the kernels.
 //! A compiled program launches the kernels `fusion.wado` plans instead.
 
-use { HashMap } from "core:collections";
+use { HashMap, HashSet } from "core:collections";
 use {
     GpuDevice,
     GpuQueue,
@@ -95,8 +95,9 @@ impl Graph for WebGpuBackend {
 
     /// A weight read only as products' right matrix, or as a gather's rows, is
     /// kept as `keep_rhs` keeps one: column by column along the axis the
-    /// products contract, in bf16 where that loses nothing. Any other is kept
-    /// as `keep` keeps it.
+    /// products contract, in bf16 where that loses nothing. The weights of a
+    /// `Joined` launch are kept so as one matrix, side by side, each a view of
+    /// it. Any other is kept as `keep` keeps it.
     fn kept_weights<Er>(
         &mut self,
         record: fn(&mut Recorder) -> Recorded with _,
@@ -104,17 +105,44 @@ impl Graph for WebGpuBackend {
         count: i32,
         load: fn(i32) -> Result<Any<Cpu>, Er> with _,
     ) -> Result<List<Any<WebGpuBackend>>, Er> with _ {
-        let contracted = contracted_axes(&record(&mut Recorder::new()), first, count);
-        let mut kept: List<Any<WebGpuBackend>> = [];
+        let recorded = record(&mut Recorder::new());
+        let contracted = contracted_axes(&recorded, first, count);
+        let mut kept = List::<Option<Any<WebGpuBackend>>>::filled(count, null);
+        for let run of joined_weights(&recorded, first, count, &contracted) {
+            let axis = contracted[run[0]].unwrap();
+            let free = 1 - axis;
+            let mut parts: List<Tensor<f32, Untyped>> = [];
+            for let at of run {
+                let F32(t) = load(at)? else {
+                    unreachable();
+                };
+                parts.push(t);
+            }
+            let mut joined = parts[0];
+            for let p of parts[1..<parts.len()].to_list() {
+                joined = self.cpu.concatenate::<f32, Untyped, Untyped, Untyped>(&joined, &p, free);
+            }
+            let Device(d) = self.kept_contracted(&joined, axis) else {
+                unreachable();
+            };
+            let mut start = 0;
+            for let [at, p] of run.into_iter().zip(parts.into_iter()) {
+                kept[at] = Option::Some(Any::F32(Placed::Device(sliced(&d, free, start, p.extents[free]))));
+                start += p.extents[free];
+            }
+        }
         for let at of 0..<count {
+            if kept[at] matches { Some(_) } {
+                continue;
+            }
             let host = load(at)?;
-            kept.push(if let Some(axis) = contracted[at] && let F32(t) = &host {
+            kept[at] = Option::Some(if let Some(axis) = contracted[at] && let F32(t) = &host {
                 Any::F32(self.kept_contracted(t, axis));
             } else {
                 kept_any(self, &host);
             });
         }
-        return Result::Ok(kept);
+        return Result::Ok(kept.into_iter().map(|k| k.unwrap()).collect());
     }
 
     fn executed(
@@ -506,6 +534,36 @@ internal fn contracted_axes(recorded: &Recorded, first: i32, count: i32) -> List
     return axes;
 }
 
+/// The right matrices of each `Joined` launch `recorded` plans into, by their
+/// places among the `count` weights it takes from its parameter `first` on:
+/// each run whose weights `contracted` keeps along one axis, and which share
+/// none with a run before it.
+fn joined_weights(recorded: &Recorded, first: i32, count: i32, contracted: &List<Option<i32>>) -> List<List<i32>> {
+    let mut taken = HashSet::<i32>::new();
+    let mut runs: List<List<i32>> = [];
+    for let ks of planned(recorded, &splats_of(&constants(recorded))).joined() {
+        let run: List<i32> = ks.into_iter().map(
+            |k| match recorded.nodes[recorded.nodes[k.product.unwrap()].operands[1]].op {
+                Parameter(p) => p - first,
+                _ => unreachable(),
+            },
+        ).collect();
+        if !run.into_iter().all(|w| 0 <= w < count) {
+            continue;
+        }
+        let axis = contracted[run[0]];
+        let mut own = HashSet::<i32>::new();
+        let kept_alike = run.into_iter().all(|w| contracted[w] == axis && !taken.contains(w) && own.insert(w));
+        if axis matches { Some(_) } && kept_alike {
+            for let w of run {
+                taken.insert(w);
+            }
+            runs.push(run);
+        }
+    }
+    return runs;
+}
+
 fn contracted_axis(recorded: &Recorded, weight: i32) -> Option<i32> {
     let extents = &recorded.nodes[weight].extents;
     if extents.len() != 2 || !recorded.nodes[weight].kind matches { F32 } || recorded.body.results.contains(&weight) {
@@ -607,6 +665,12 @@ fn launched(
                 let value = kernel_replayed(g, &state.values, program, &k);
                 state.values[k.root] = value;
             },
+            Joined(ks) => {
+                let values = joined_replayed(g, &state.values, program, &ks);
+                for let [k, value] of ks.into_iter().zip(values.into_iter()) {
+                    state.values[k.root] = value;
+                }
+            },
             Case([id, first, second]) => {
                 let pred = bools(&state.values[recorded.nodes[id].operands[0]]);
                 let yielded = g.conditional::<Untyped, List<Any<WebGpuBackend>>>(
@@ -648,6 +712,85 @@ fn kernel_replayed(
     };
     g.taped(key, reads, result);
     return value;
+}
+
+/// The values of the roots of `ks`, a `Joined` launch: one product by their
+/// right matrices as one, each root a slice of it, where those lie side by
+/// side on the device; each kernel on its own otherwise.
+fn joined_replayed(
+    g: &mut WebGpuBackend,
+    values: &HashMap<i32, Any<WebGpuBackend>>,
+    program: &WebGpuProgram,
+    ks: &List<Kernel>,
+) -> List<Any<WebGpuBackend>> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
+    let recorded = &program.recorded;
+    let first = &recorded.nodes[ks[0].product.unwrap()];
+    let DotGeneral(dims) = first.op else {
+        unreachable();
+    };
+    let free = 1 - dims.rhs_contracting[0];
+    let device = |id: i32| match values[id] {
+        F32(Device(d)) => Option::Some(d),
+        _ => null,
+    };
+    let mut rights: List<DeviceTensor> = [];
+    for let k of *ks {
+        if let Some(d) = device(recorded.nodes[k.product.unwrap()].operands[1]) {
+            rights.push(d);
+        }
+    }
+    let lhs = device(first.operands[0]);
+    let joined = if rights.len() == ks.len() { side_by_side(&rights, free) } else { null };
+    let [Some(l), Some(r)] = [lhs, joined] else {
+        return (*ks).into_iter().map(|k| kernel_replayed(g, values, program, &k)).collect();
+    };
+    let reads = [l, r] as List<DeviceTensor>;
+    let key = [program.serial, ks[0].root] as List<i32>;
+    let product = match g.replayed(key, &reads) {
+        Some(out) => Placed::<f32, Untyped>::Device(out),
+        None => {
+            g.tape();
+            let computed = dotted(g, &l, &r, &dims, &null);
+            g.taped(key, reads, if let Device(d) = computed {
+                Option::Some(d);
+            } else {
+                null;
+            });
+            computed;
+        },
+    };
+    let extents = dot_extents(&l.extents, &r.extents, &dims);
+    let last = extents.len() - 1;
+    let mut start = List::<i32>::filled(extents.len(), 0);
+    let mut out: List<Any<WebGpuBackend>> = [];
+    for let [k, right] of (*ks).into_iter().zip(rights.into_iter()) {
+        let mut limit = extents;
+        limit[last] = start[last] + right.extents[free];
+        let part = g.slice::<f32, Untyped, Untyped>(&product, start, limit, List::<i32>::filled(extents.len(), 1));
+        out.push(Any::F32(g.reshape::<f32, Untyped, Untyped>(&part, recorded.nodes[k.root].extents)));
+        start[last] = limit[last];
+    }
+    return out;
+}
+
+/// The matrices `parts` as one, side by side along the axis `along`, where
+/// each starts in its buffer where the one before ends.
+fn side_by_side(parts: &List<DeviceTensor>, along: i32) -> Option<DeviceTensor> {
+    let mut joined = parts[0];
+    for let p of parts[1..<parts.len()].to_list() {
+        let mut extents = p.extents;
+        extents[along] = joined.extents[along];
+        let next = joined.offset + joined.extents[along] * joined.strides[along];
+        if p.slot != joined.slot
+            || p.half != joined.half
+            || p.strides != joined.strides
+            || extents != joined.extents
+            || p.offset != next {
+            return null;
+        }
+        joined.extents[along] += p.extents[along];
+    }
+    return Option::Some(joined);
 }
 
 /// The views `k` reads, its product's operands first, or `None` where one is

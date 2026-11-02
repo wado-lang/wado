@@ -19,6 +19,10 @@ pub variant Launch {
     /// A node the device computes as its `Graph` adds it.
     Node(i32),
     Kernel(Kernel),
+    /// Product kernels of one left matrix, each by a parameter and writing the
+    /// product alone, which a device runs as one where their right matrices
+    /// lie side by side.
+    Joined(List<Kernel>),
     /// A `Case` node, each branch planned on its own.
     Case([i32, Plan, Plan]),
 }
@@ -53,12 +57,10 @@ impl Plan {
         for let launch of self.launches {
             match launch {
                 Node(id) => reads.extend(&recorded.nodes[id].operands),
-                Kernel(k) => {
-                    for let o of k.operands {
-                        reads.push(o.node);
-                    }
-                    if let Some(p) = k.product {
-                        reads.extend(&recorded.nodes[p].operands);
+                Kernel(k) => reads.extend(&k.reads(recorded)),
+                Joined(ks) => {
+                    for let k of ks {
+                        reads.extend(&k.reads(recorded));
                     }
                 },
                 Case([id, first, second]) => {
@@ -67,6 +69,34 @@ impl Plan {
                     reads.extend(&second.reads(recorded));
                 },
             }
+        }
+        return reads;
+    }
+
+    /// The kernels of each `Joined` launch of it, or of a branch within it.
+    pub fn joined(&self) -> List<List<Kernel>> {
+        let mut runs: List<List<Kernel>> = [];
+        for let launch of self.launches {
+            match launch {
+                Joined(ks) => runs.push(ks),
+                Case([_, first, second]) => {
+                    runs.extend(&first.joined());
+                    runs.extend(&second.joined());
+                },
+                _ => {
+                },
+            }
+        }
+        return runs;
+    }
+}
+
+impl Kernel {
+    /// The nodes it reads: its operands, then its product's.
+    pub fn reads(&self, recorded: &Recorded) -> List<i32> {
+        let mut reads: List<i32> = self.operands.into_iter().map(|o| o.node).collect();
+        if let Some(p) = self.product {
+            reads.extend(&recorded.nodes[p].operands);
         }
         return reads;
     }
@@ -187,7 +217,72 @@ fn planned_region(recorded: &Recorded, region: &Region, splats: &HashMap<i32, Op
             launches.push(Launch::Node(id));
         }
     }
-    return Plan { launches, results: region.results };
+    return Plan { launches: joined_products(recorded, launches), results: region.results };
+}
+
+/// `launches` with the product kernels `joinable` finds of one left matrix,
+/// by one `DotDims`, as one `Joined` launch where the first of them was. Each
+/// reads only that matrix and a parameter, both there by then.
+fn joined_products(recorded: &Recorded, launches: List<Launch>) -> List<Launch> {
+    let mut first_of = HashMap::<i32, i32>::new();
+    let mut out: List<Launch> = [];
+    for let launch of launches {
+        if let Kernel(k) = launch && let Some(lhs) = joinable(recorded, &k) {
+            if let Some(at) = first_of.get(lhs) && same_dims(recorded, &out[at], &k) {
+                out[at] = match out[at] {
+                    Kernel(first) => Launch::Joined([first, k]),
+                    Joined(ks) => {
+                        let mut more = ks;
+                        more.push(k);
+                        Launch::Joined(more);
+                    },
+                    _ => unreachable(),
+                };
+                continue;
+            }
+            first_of[lhs] = out.len();
+        }
+        out.push(launch);
+    }
+    return out;
+}
+
+/// The left matrix of `k`'s product, where `k` writes the product alone and
+/// its right matrix is a parameter, a matrix with one axis contracted.
+fn joinable(recorded: &Recorded, k: &Kernel) -> Option<i32> {
+    let Some(p) = k.product else {
+        return null;
+    };
+    let node = &recorded.nodes[p];
+    let DotGeneral(dims) = node.op else {
+        unreachable();
+    };
+    let rhs = &recorded.nodes[node.operands[1]];
+    if !k.operands.is_empty()
+        || k.reduced
+        || k.op != operand(0)
+        || !rhs.op matches { Parameter(_) }
+        || rhs.extents.len() != 2
+        || !dims.rhs_batch.is_empty()
+        || dims.rhs_contracting.len() != 1 {
+        return null;
+    }
+    return Option::Some(node.operands[0]);
+}
+
+/// Whether the products of `launch`, a kernel or a joined run, and of `k`
+/// contract alike.
+fn same_dims(recorded: &Recorded, launch: &Launch, k: &Kernel) -> bool {
+    let first = match launch {
+        Kernel(f) => f,
+        Joined(ks) => &ks[0],
+        _ => unreachable(),
+    };
+    let dims_of = |k: &Kernel| match recorded.nodes[k.product.unwrap()].op {
+        DotGeneral(dims) => dims,
+        _ => unreachable(),
+    };
+    return dims_of(first) == dims_of(k);
 }
 
 fn read_by(readers: &mut HashMap<i32, List<i32>>, of: i32, by: i32) {

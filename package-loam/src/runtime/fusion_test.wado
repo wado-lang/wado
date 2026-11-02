@@ -12,6 +12,7 @@ fn spelled(plan: &Plan) -> List<String> {
     return plan.launches.into_iter().map(|l| match l {
         Node(id) => `node ${id}`,
         Kernel(k) => `kernel ${k.root}`,
+        Joined(ks) => `joined ${ks.into_iter().map(|k| `${k.root}`).collect().join(" ")}`,
         Case([id, _, _]) => `case ${id}`,
     }).collect();
 }
@@ -129,6 +130,31 @@ test "a gated layer is one product with the gate in its epilogue, the other prod
     };
     assert k.product == Option::Some(up.id);
     assert k.operands.into_iter().map(|o| o.node).collect() == [gate.id] as List<i32>;
+}
+
+test "products of one left matrix by weights, with nothing in their epilogues, launch as one" {
+    let mut r = Recorder::new();
+    let x = r.parameter::<f32, Untyped>([1, 4, 2]);
+    let q_w = r.parameter::<f32, Untyped>([2, 8]);
+    let k_w = r.parameter::<f32, Untyped>([2, 4]);
+    let v_w = r.parameter::<f32, Untyped>([2, 4]);
+    let normal = r.unary(Unary::Tanh, &x);
+    let dims = DotDims {
+        lhs_batch: [],
+        rhs_batch: [],
+        lhs_contracting: [2],
+        rhs_contracting: [0],
+    };
+    let q = r.dot_general::<Untyped, Untyped, Untyped>(&normal, &q_w, &dims);
+    let k = r.dot_general::<Untyped, Untyped, Untyped>(&normal, &k_w, &dims);
+    let v = r.dot_general::<Untyped, Untyped, Untyped>(&normal, &v_w, &dims);
+    let scaled = r.unary(Unary::Negate, &v);
+    let recorded = r.finished([q.id, k.id, scaled.id]);
+    // `v`'s epilogue negates it, so it is a product of its own.
+    assert spelled(&plan_of(&recorded)) == [
+        `node ${x.id}`, `node ${q_w.id}`, `node ${k_w.id}`, `node ${v_w.id}`, `kernel ${normal.id}`,
+        `joined ${q.id} ${k.id}`, `kernel ${scaled.id}`,
+    ] as List<String>;
 }
 
 test "a value the product reads is not computed in its epilogue" {

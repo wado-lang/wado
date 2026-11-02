@@ -243,6 +243,21 @@ struct Renamed {
     to: List<i32>,
 }
 
+/// The slots `now` names in place of those `was` named, where each of `now` is
+/// laid out as the one of `was` at its place: at the same place in its buffer,
+/// and two in one buffer exactly where those were.
+fn renamed_over(was: &List<DeviceTensor>, now: &List<DeviceTensor>) -> Option<Renamed> {
+    let mut slots = Renamed::new();
+    for let i of 0..<now.len() {
+        let [a, b] = [&was[i], &now[i]];
+        let laid_out = a.offset == b.offset && a.extents == b.extents && a.strides == b.strides && a.half == b.half;
+        if !laid_out || !slots.bound(a.slot, b.slot) {
+            return null;
+        }
+    }
+    return Option::Some(slots);
+}
+
 impl Renamed {
     fn new() -> Renamed {
         return Renamed { from: [], to: [] };
@@ -317,7 +332,7 @@ pub affine struct WebGpuBackend {
     /// where it wrote a host value or read one back, which a replay would not.
     taping: Option<List<Command>>,
     /// Each launch recorded, by its program's serial and its root node.
-    encoded: HashMap<List<i32>, Encoded>,
+    encoded: HashMap<List<i32>, List<Encoded>>,
     /// The programs `compiled` has made.
     programs: i32,
     /// The passes `begin` has started.
@@ -370,6 +385,16 @@ global PARAMETER_WORDS: i32 = 65536;
 /// The dispatches recorded before they are submitted, so the device runs the
 /// first while the host records the rest.
 global SUBMIT_EVERY: i32 = 32;
+
+/// The layouts of its reads a launch keeps the commands of. A generation's
+/// first step reads a cache the prompt wrote, laid out unlike the one a step
+/// writes, and its first step past a capacity reads one just refitted.
+global LAYOUTS: i32 = 4;
+
+/// The passes a launch's commands outlive their last use by. They hold slots,
+/// not buffers, so they cost the host alone, and a generation's first steps
+/// come round again only with the next prompt.
+global ENCODED_PASSES: i32 = 256;
 
 /// The slot of a buffer not allocated yet, which `binds` reads a view of
 /// before the buffer exists. No buffer is ever at it.
@@ -1916,7 +1941,18 @@ impl WebGpuBackend {
         let taping = self.taping;
         self.taping = null;
         if let Some(commands) = taping && let Some(r) = result {
-            self.encoded[key] = Encoded { reads, commands, result: r, used: self.passes };
+            let mut layouts = self.encoded.get(key).unwrap_or([]);
+            if layouts.len() >= LAYOUTS {
+                let mut oldest = 0;
+                for let i of 1..<layouts.len() {
+                    if layouts[i].used < layouts[oldest].used {
+                        oldest = i;
+                    }
+                }
+                layouts.remove(oldest);
+            }
+            layouts.push(Encoded { reads, commands, result: r, used: self.passes });
+            self.encoded[key] = layouts;
         }
     }
 
@@ -1932,18 +1968,18 @@ impl WebGpuBackend {
         if !self.encoded.contains_key(key) {
             return null;
         }
-        let e = &mut self.encoded[key];
-        let mut slots = Renamed::new();
-        for let i of 0..<reads.len() {
-            let [was, now] = [&e.reads[i], &reads[i]];
-            let laid_out = was.offset == now.offset
-                && was.extents == now.extents
-                && was.strides == now.strides
-                && was.half == now.half;
-            if !laid_out || !slots.bound(was.slot, now.slot) {
-                return null;
+        let layouts = &mut self.encoded[key];
+        let mut found: Option<[i32, Renamed]> = null;
+        for let at of 0..<layouts.len() {
+            if let Some(slots) = renamed_over(&layouts[at].reads, reads) {
+                found = Option::Some([at, slots]);
+                break;
             }
         }
+        let Some([at, mut slots]) = found else {
+            return null;
+        };
+        let e = &mut layouts[at];
         e.used = self.passes;
         self.replays += 1;
         for let c of &e.commands {
@@ -1993,9 +2029,9 @@ impl Holds for WebGpuBackend {
 
     /// Submits what the pass before recorded and releases its buffers, so a
     /// tensor of that pass is no longer one to read, but for those it
-    /// retained, which live through this pass. A spare it did not take, a
-    /// bind group it did not bind, and a launch it neither recorded nor
-    /// replayed are dropped.
+    /// retained, which live through this pass. A spare it did not take and a
+    /// bind group it did not bind are dropped, and so is a launch's layout
+    /// that the last `ENCODED_PASSES` passes neither recorded nor replayed.
     fn begin(&mut self) with (GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBindGroup, GpuBuffer) {
         self.flush();
         self.parameters = null;
@@ -2036,13 +2072,19 @@ impl Holds for WebGpuBackend {
             }
         }
         let mut stale: List<List<i32>> = [];
-        for let [key, e] of self.encoded.entries() {
-            if e.used < self.passes {
+        let oldest = self.passes - ENCODED_PASSES;
+        for let [key, layouts] of self.encoded.entries() {
+            if layouts.into_iter().any(|e| e.used < oldest) {
                 stale.push(*key);
             }
         }
         for let key of stale {
-            self.encoded.remove(key);
+            let kept: List<Encoded> = self.encoded[key].into_iter().filter(|e| e.used >= oldest).collect();
+            if kept.is_empty() {
+                self.encoded.remove(key);
+            } else {
+                self.encoded[key] = kept;
+            }
         }
         self.passes += 1;
     }

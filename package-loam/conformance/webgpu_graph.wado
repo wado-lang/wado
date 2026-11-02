@@ -30,6 +30,11 @@ use gated from "./gated.onnxtext"
         type: "onnxtext",
         generator: { module: "lib:loam" },
     };
+use projected from "./projected.onnxtext"
+    with {
+        type: "onnxtext",
+        generator: { module: "lib:loam" },
+    };
 
 export fn run() with (Stdout, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder, GpuSupportedLimits, RecordOptionGpuSize64) {
     let Some(mut gpu) = WebGpuBackend::new() else {
@@ -85,7 +90,8 @@ export fn run() with (Stdout, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuC
 
     // `compute` compiles one program per shape class and replays it: 3 and 4
     // positions share a capacity, 5 takes the next. A program's second call
-    // does again what its first recorded of each kernel.
+    // does again what its first recorded of each kernel, and so does a call
+    // after passes of another program.
     let kept = gpu.kept_bytes();
     let mut on_gpu = gated::Model::new(gated::Params::embedded(&mut gpu));
     // The normalization's weight and the folded epsilon in f32, and the
@@ -97,8 +103,9 @@ export fn run() with (Stdout, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuC
         [4, 1, 4],
         [5, 2, 0],
         [5, 2, 4],
+        [3, 2, 4],
     ] as List<[i32, i32, i32]> {
-        let input = gated_input(positions);
+        let input = rows_of::<[gated::N, gated::S, gated::X2]>(positions);
         let [before, replayed] = [
             gpu.dispatches(),
             gpu.replays(),
@@ -112,10 +119,30 @@ export fn run() with (Stdout, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuC
         assert on_gpu.programs.len() == programs, "one program per shape class";
         println(`compiled gated ${positions} ${deviation(&on_device.data, &reference.data)}`);
     }
+
+    // The three projections of one input are one product, by their weights
+    // kept side by side.
+    let mut projected_gpu = projected::Model::new(projected::Params::embedded(&mut gpu));
+    let mut projected_cpu = projected::Model::new(projected::Params::embedded(cpu));
+    for let positions of [1, 3] as List<i32> {
+        let input = rows_of::<[projected::N, projected::S, projected::X2]>(positions);
+        let before = gpu.dispatches();
+        let on_device = projected::compute(&mut gpu, &input, &mut projected_gpu);
+        // The normalization, the products, the softmax and the mean, and over
+        // more than one row a copy of `K`, a slice of the products' columns,
+        // to return it.
+        let copied = if positions > 1 { 1 } else { 0 };
+        assert gpu.dispatches() - before == 4 + copied, "products of one input are one dispatch";
+        let reference = projected::compute(cpu, &input, &mut projected_cpu);
+        println(`compiled projected ${positions} ${deviation(&on_device.Y.data, &reference.Y.data)} ${deviation(
+            &on_device.K.data,
+            &reference.K.data,
+        )} ${deviation(&on_device.Z.data, &reference.Z.data)}`);
+    }
 }
 
 /// `positions` rows of two features, each a distinct value.
-fn gated_input(positions: i32) -> Tensor<f32, [gated::N, gated::S, gated::X2]> {
+fn rows_of<Axes>(positions: i32) -> Tensor<f32, Axes> {
     let mut data: List<f32> = [];
     for let i of 0..<positions * 2 {
         data.push((i % 7) as f32 * 0.25 - 0.75);
