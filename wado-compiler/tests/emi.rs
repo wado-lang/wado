@@ -22,6 +22,8 @@
 use wado_compiler_tests as common;
 
 use common::repository_root;
+use rand::rngs::ChaCha12Rng;
+use rand::{RngExt, SeedableRng};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
@@ -1743,28 +1745,11 @@ fn parsed(coverage: &Coverage) -> Arc<pgo::Profile> {
     Arc::new(pgo::parse(&pgo::to_text(coverage)).expect("a rendered profile parses"))
 }
 
-/// SplitMix64, so a random profile is rebuilt from its seed alone.
-struct SplitMix(u64);
-
-impl SplitMix {
-    fn next(&mut self) -> u64 {
-        self.0 = self.0.wrapping_add(0x9e37_79b9_7f4a_7c15);
-        let mut z = self.0;
-        z = (z ^ (z >> 30)).wrapping_mul(0xbf58_476d_1ce4_e5b9);
-        z = (z ^ (z >> 27)).wrapping_mul(0x94d0_49bb_1331_11eb);
-        z ^ (z >> 31)
-    }
-
-    fn one_in(&mut self, n: u64) -> bool {
-        self.next().is_multiple_of(n)
-    }
-
-    /// A count spread evenly over its magnitude, from 1 to 2^20, so one region
-    /// may run a million times as often as another.
-    fn count(&mut self) -> i64 {
-        let base = 1u64 << (self.next() % 20);
-        i64::try_from(base + self.next() % base).expect("a count fits in i64")
-    }
+/// A count spread evenly over its magnitude, from 1 to 2^20, so one region may
+/// run a million times as often as another.
+fn random_count(rng: &mut ChaCha12Rng) -> i64 {
+    let base = 1i64 << rng.random_range(0..20);
+    base + rng.random_range(0..base)
 }
 
 fn seed(parts: &[&str]) -> u64 {
@@ -1779,7 +1764,7 @@ fn seed(parts: &[&str]) -> u64 {
 /// three, and the rest run whatever count, its parent's notwithstanding. A
 /// profile, consistent or not, must not change what a program computes.
 fn random_counts(measured: &Coverage, seed: u64) -> Coverage {
-    let mut rng = SplitMix(seed);
+    let mut rng = ChaCha12Rng::seed_from_u64(seed);
     let mut coverage = measured.clone();
     for file in coverage.files.values_mut() {
         file.counts.clear();
@@ -1789,12 +1774,12 @@ fn random_counts(measured: &Coverage, seed: u64) -> Coverage {
             .iter()
             .zip(file.plan.regions_by_function())
         {
-            if rng.one_in(8) {
+            if rng.random_ratio(1, 8) {
                 continue;
             }
             for id in ids {
-                if id == function.region || !rng.one_in(3) {
-                    file.counts.insert(id, rng.count());
+                if id == function.region || !rng.random_ratio(1, 3) {
+                    file.counts.insert(id, random_count(&mut rng));
                 }
             }
         }

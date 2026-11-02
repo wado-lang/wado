@@ -120,8 +120,8 @@ built on the plans the recorded one reads, so every function they name matches
 its hash and is judged. Each enters a function seven times in eight, never runs
 a region one time in three, and gives the rest counts spread over six orders of
 magnitude, whatever the parent's count. That is a profile no workload records,
-and no profile, however inconsistent, may change the output. Each is built from
-a seed, the source's name and its place in the list.
+and no profile, however inconsistent, may change the output. Each is seeded by
+the source's name, the program, and its place in the list, so a run repeats.
 
 A profile that moves the output, flips a trap or test verdict, or makes a
 compile that succeeds without it fail or crash is a finding. One that pushes a
