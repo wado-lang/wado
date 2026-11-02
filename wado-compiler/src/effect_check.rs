@@ -8,7 +8,7 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use crate::attribute::{AMBIENT, BENIGN};
+use crate::attribute::ADMITS_EFFECTS;
 use crate::hashmap::{IndexMap, IndexSet};
 
 use crate::module_source::ModuleSource;
@@ -1331,9 +1331,9 @@ fn check_function_effects_sem(
     walk_body_effects(sem, module, annotations, index, walk, out, solved);
 }
 
-/// A test holds every effect, so nothing it performs is missing. A function value it moves into a `fn` type is still
-/// bound by that type's row: the callee holding the value performs it without
-/// holding what the test holds.
+/// A test holds every effect, so nothing it performs is missing. A function
+/// value it moves into a `fn` type is still bound by that type's row: the
+/// callee holding the value performs it without holding what the test holds.
 fn check_test_effects_sem(
     sem: &Semantics,
     module: &ModuleSource,
@@ -1750,7 +1750,7 @@ fn admitted_effect_names(attrs: &[Attribute]) -> Vec<AdmittedName> {
     attrs
         .iter()
         .filter_map(|attr| {
-            [BENIGN, AMBIENT]
+            ADMITS_EFFECTS
                 .into_iter()
                 .find(|admitting| attr.name == *admitting)
                 .map(|attribute| (attribute, attr))

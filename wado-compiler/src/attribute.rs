@@ -12,6 +12,8 @@ pub const ALLOC: &str = "allocator";
 pub const ALLOW: &str = "allow";
 pub const AMBIENT: &str = "ambient";
 pub const BENIGN: &str = "benign";
+/// The attributes whose arguments are effects a body performs undeclared.
+pub const ADMITS_EFFECTS: [&str; 2] = [BENIGN, AMBIENT];
 pub const CANONICAL: &str = "canonical";
 pub const CM: &str = "cm";
 pub const CM_EXPORT: &str = "cm_export";

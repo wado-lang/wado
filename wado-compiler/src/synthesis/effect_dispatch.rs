@@ -157,7 +157,8 @@ fn identify_active_effects(
 ///
 /// [`identify_active_effects`] keys on handler impls and `cm_binding` lowers
 /// only `#[cm]`-tagged operations, so an effect called with no `impl` anywhere
-/// falls through both — reachable because `#[ambient]` bypasses effect-check.
+/// falls through both. `#[ambient(E)]` reaches one: a body performs `E` with
+/// no caller declaring it, so nothing need install a handler.
 /// The ordinary dispatch triple lowers the call to its wrapper, whose
 /// no-handler branch traps like any uninstalled handler.
 fn identify_uncovered_effects(
