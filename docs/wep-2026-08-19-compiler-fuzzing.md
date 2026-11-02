@@ -221,3 +221,7 @@ loses the payload at every site, and the report lists it under
   counts as in scope. Every payload then uses it after the move.
 - A bare case name in a `let` pattern (`let Only = e;`) matches rather than
   binds, but the harness counts it as a binding.
+
+The profile stage takes only test-world sources, since the coverage probes a
+profile is keyed by exist only there. Most fixtures run as commands, so their
+programs never compile under a profile in this campaign.
