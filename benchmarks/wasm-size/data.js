@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1793599594149,
+  "lastUpdate": 1793601802675,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -73625,6 +73625,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/11e947317b0ee787d86b060f2ba821e1cce9daf6"
         },
         "date": 1793599593392,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3099,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7303,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21809,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 316578,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "0d295aadc94d9d78ef724106de87827d1aebc21b",
+          "message": "Merge pull request #2526 from wado-lang/ccr-afbcc3e1-8wj63p\n\nperf(test): run every package at once",
+          "timestamp": "2026-11-02T15:30:58+09:00",
+          "tree_id": "bbfd0235da45aa73223900ea6b3a49cba78c53a6",
+          "url": "https://github.com/wado-lang/wado/commit/0d295aadc94d9d78ef724106de87827d1aebc21b"
+        },
+        "date": 1793601801670,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
