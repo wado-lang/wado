@@ -412,6 +412,42 @@ fn a_test_reads_paths_from_its_package_root_unless_dir_is_given() {
         .success();
 }
 
+// Packages run at once: `b` compiles while `a`'s one test is still waiting, so
+// before `a` reports it.
+#[test]
+fn packages_run_at_once() {
+    let tmp = tempfile::tempdir().unwrap();
+    for (pkg, body) in [
+        (
+            "a",
+            "use { MonotonicClock } from \"wasi:clocks\";\n\ntest \"a waits\" {\n    MonotonicClock::wait_for(2_000_000_000).wait();\n}\n",
+        ),
+        ("b", "test \"b runs\" {\n    assert 1 == 1;\n}\n"),
+    ] {
+        let dir = tmp.path().join(pkg);
+        fs::create_dir_all(&dir).unwrap();
+        fs::write(
+            dir.join("wado.toml"),
+            format!("[package]\nname = \"{pkg}\"\nversion = \"0.1.0\"\n"),
+        )
+        .unwrap();
+        fs::write(dir.join("t_test.wado"), body).unwrap();
+    }
+
+    let output = wado_in(tmp.path())
+        .args(["test", "--format", "verbose", "--parallel", "2"])
+        .output()
+        .unwrap();
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert!(output.status.success(), "{stdout}");
+    let at = |line: &str| {
+        stdout
+            .find(line)
+            .unwrap_or_else(|| panic!("no `{line}` in:\n{stdout}"))
+    };
+    assert!(at("Compiled b/t_test.wado") < at("ok   a waits"), "{stdout}");
+}
+
 #[test]
 fn test_help_shows_init_command() {
     let tmp = tempfile::tempdir().unwrap();
