@@ -353,10 +353,12 @@ jobs:
           - run: mise run check-highlight
           - run: mise run test-web-glue
       # Fuel does not depend on the host, so the `test "fuel"` regions are held
-      # to `benchmark/fuel.json` exactly, at -O2.
+      # to `benchmark/fuel.json` exactly, at -O2. benchmark/'s two runs take
+      # turns: all three at once peak near the runner's 16 GB.
       - parallel:
-          - run: mise run test-fuel
-          - run: scripts/dev-bin.sh wado test -O2 --format tap benchmark
+          - run: |
+              mise run test-fuel
+              scripts/dev-bin.sh wado test -O2 --format tap benchmark
           - run: scripts/dev-bin.sh wado publish --dry-run
 
   test:
