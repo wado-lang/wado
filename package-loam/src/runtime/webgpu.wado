@@ -317,7 +317,9 @@ fn occurrence(seen: &mut List<i32>, value: i32) -> i32 {
 /// The slots `now` names in place of those `was` named, where each of `now` is
 /// laid out as the one of `was` at its place: at the same place in its buffer,
 /// and two in one buffer exactly where those were.
-fn renamed_over(was: &List<DeviceTensor>, now: &List<DeviceTensor>) -> Option<Renamed> {
+fn renamed_over(was: &List<DeviceTensor>, now: &List<DeviceTensor>) -> Option<Renamed>
+    contract was.len() == now.len(), "a launch reads as many views on every call"
+{
     let mut slots = Renamed::new();
     for let i of 0..<now.len() {
         let [a, b] = [&was[i], &now[i]];
@@ -402,7 +404,8 @@ pub affine struct WebGpuBackend {
     /// The commands of the launch being recorded: none where no launch is, or
     /// where it wrote a host value or read one back, which a replay would not.
     taping: Option<List<Command>>,
-    /// Each launch recorded, by its program's serial and its root node.
+    /// Each launch recorded, by its program's serial and its root node, or
+    /// each of its roots for a product joined from several.
     encoded: HashMap<List<i32>, List<Encoded>>,
     /// The programs `compiled` has made.
     programs: i32,

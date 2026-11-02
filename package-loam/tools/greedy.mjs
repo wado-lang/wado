@@ -80,13 +80,22 @@ export async function writeGenerated({ dir, model, prompts, layers, emptyPast, f
         const [token, margin, out] = await next(session, fresh, caches, seen);
         if (s === 0) started = performance.now();
         seen += fresh.length;
+        released(caches);
         caches = out;
         generated.push(token);
         fresh = [token];
         lead = Math.min(lead, margin);
       }
+      released(caches);
       timed.push({ prompt, ids, generated, ms_per_token: (performance.now() - started) / (STEPS - 1) });
     }
     return { prompts: timed, lead };
+  }
+}
+
+/** Frees the caches a step returned on the device, which only `dispose` does. */
+function released(caches) {
+  for (const t of Object.values(caches)) {
+    if (t.location === 'gpu-buffer') t.dispose();
   }
 }

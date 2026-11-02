@@ -766,7 +766,10 @@ fn joined_replayed(
         return (*ks).into_iter().map(|k| kernel_replayed(g, values, program, &k)).collect();
     };
     let reads = [l, r] as List<DeviceTensor>;
-    let key = [program.serial, ks[0].root] as List<i32>;
+    let mut key = [program.serial] as List<i32>;
+    for let k of *ks {
+        key.push(k.root);
+    }
     let product = match g.replayed(key, &reads) {
         Some(out) => Placed::<f32, Untyped>::Device(out),
         None => {

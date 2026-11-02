@@ -47,10 +47,10 @@ impl Key {
 struct Avail {
     chains: IndexMap<Key, usize>,
     /// The chains read off each local, and through each field, so a write
-    /// reaches the chains it ends and no others. A list may still hold a
-    /// chain already forgotten.
-    by_root: IndexMap<String, Vec<Key>>,
-    by_field: IndexMap<String, Vec<Key>>,
+    /// reaches the chains it ends and no others. They hold exactly the keys of
+    /// `chains`, as every `If` clones them.
+    by_root: IndexMap<String, IndexSet<Key>>,
+    by_field: IndexMap<String, IndexSet<Key>>,
 }
 
 impl Avail {
@@ -62,18 +62,26 @@ impl Avail {
         self.by_root
             .entry(key.root.clone())
             .or_default()
-            .push(key.clone());
+            .insert(key.clone());
         for (_, field) in &key.fields {
             self.by_field
                 .entry(field.clone())
                 .or_default()
-                .push(key.clone());
+                .insert(key.clone());
         }
         self.chains.insert(key, id);
     }
 
     fn retain(&mut self, mut keep: impl FnMut(&Key, usize) -> bool) {
-        self.chains.retain(|key, id| keep(key, *id));
+        let dropped: Vec<Key> = self
+            .chains
+            .iter()
+            .filter(|(key, id)| !keep(key, **id))
+            .map(|(key, _)| key.clone())
+            .collect();
+        for key in dropped {
+            self.forget(&key);
+        }
     }
 
     fn forget_written(&mut self, writes: &Footprint) {
@@ -83,12 +91,27 @@ impl Avail {
         };
         let ended: Vec<Key> = writes
             .locals()
-            .filter_map(|local| self.by_root.swap_remove(local))
-            .chain(fields.filter_map(|field| self.by_field.swap_remove(field)))
+            .filter_map(|local| self.by_root.get(local))
+            .chain(fields.filter_map(|field| self.by_field.get(field)))
             .flatten()
+            .cloned()
             .collect();
         for key in ended {
-            self.chains.swap_remove(&key);
+            self.forget(&key);
+        }
+    }
+
+    fn forget(&mut self, key: &Key) {
+        if self.chains.swap_remove(key).is_none() {
+            return;
+        }
+        if let Some(keys) = self.by_root.get_mut(&key.root) {
+            keys.swap_remove(key);
+        }
+        for (_, field) in &key.fields {
+            if let Some(keys) = self.by_field.get_mut(field) {
+                keys.swap_remove(key);
+            }
         }
     }
 }
