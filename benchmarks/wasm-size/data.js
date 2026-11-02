@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1793592076659,
+  "lastUpdate": 1793599594149,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -73581,6 +73581,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/4d4cc648f0679c43b9568170961e00b98f923278"
         },
         "date": 1793592075664,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3099,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7303,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21809,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 316578,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "11e947317b0ee787d86b060f2ba821e1cce9daf6",
+          "message": "Merge pull request #2525 from wado-lang/ccr-cbbc73c2-la4hai\n\nperf(gale): compile each test grammar and the generator's test harness once",
+          "timestamp": "2026-11-02T14:52:37+09:00",
+          "tree_id": "2e1c5ae6ab5afef531b66d9e7ce4614a6c14e64d",
+          "url": "https://github.com/wado-lang/wado/commit/11e947317b0ee787d86b060f2ba821e1cce9daf6"
+        },
+        "date": 1793599593392,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
