@@ -974,10 +974,9 @@ impl TraitEnv {
         let mut trait_decl_headers: IndexMap<DefId, TraitDeclHeader> = IndexMap::default();
         let mut function_type_params: IndexMap<(ModuleSource, String), Vec<ast::GenericParam>> =
             IndexMap::default();
-        // Every type declaration, for the orphan rule's "does this package own
-        // it?" check. A declaration, so a user type shadowing a stdlib name
-        // cannot vouch for the stdlib type it shadows.
-        let mut type_decl_index: IndexSet<DefId> = IndexSet::default();
+        // The tuple type's declarations, for the orphan rule's "does this
+        // package own the tuple?" check.
+        let mut tuple_decls: Vec<DefId> = Vec::new();
 
         let mut impl_method_index: ImplMethodIndex = IndexMap::default();
         let mut resource_static_method_index: ResourceStaticMethodIndex = IndexMap::default();
@@ -1013,14 +1012,8 @@ impl TraitEnv {
                             }
                         }
                     }
-                    Item::Struct(_)
-                    | Item::Variant(_)
-                    | Item::Enum(_)
-                    | Item::Flags(_)
-                    | Item::Newtype(_)
-                    | Item::BuiltinTypeDecl(_)
-                    | Item::TupleTypeDecl(_) => {
-                        type_decl_index.insert(defs.def_at(item.id()));
+                    Item::TupleTypeDecl(_) => {
+                        tuple_decls.push(defs.def_at(item.id()));
                     }
                     _ => {}
                 }
@@ -1201,8 +1194,7 @@ impl TraitEnv {
         let mut violations = check_all_orphan_rules(
             defs,
             &impl_headers,
-            &decl_index,
-            &type_decl_index,
+            &tuple_decls,
             &resolve_written,
         );
 
@@ -2010,14 +2002,23 @@ pub(super) fn is_user_local(ms: &ModuleSource) -> bool {
 /// names. The orphan rule asks "does this package own the thing this name
 /// refers to?" — a question a spelling cannot answer, because a user
 /// declaration shadowing a stdlib name would otherwise vouch for the stdlib
-/// type it shadows.
-struct LocalDecls {
-    types: IndexSet<DefId>,
-    traits: IndexSet<DefId>,
+/// type it shadows. Ownership is the declaring module's package, whatever the
+/// declaration's kind: an `interface` or a `resource` is as local as a `trait`
+/// or a `struct`.
+struct LocalDecls<'a> {
+    defs: &'a DefTable,
+    package: PackageId,
     /// Whether a user module declares the tuple type (`pub type [..T];`). The
     /// tuple is one global shape rather than a per-module declaration, so
     /// ownership of it is a yes/no fact about the package.
     tuple: bool,
+}
+
+impl LocalDecls<'_> {
+    fn owns(&self, def: DefId) -> bool {
+        let module = self.defs.module(def);
+        is_user_local(module) && module.package_id() == self.package
+    }
 }
 
 /// Describes the orphan-rule "classification" of a position in the impl sequence.
@@ -2060,7 +2061,7 @@ fn classify_position(
         // resolving to nothing is foreign, not uncovered.
         Type::Named(_) | Type::Generic(_) | Type::NamespacedGeneric(_) => {
             match resolve(&header.module, ty, &header.type_params) {
-                ImplTargetKey::Decl(key) if local.types.contains(&key) => PositionKind::LocalType,
+                ImplTargetKey::Decl(key) if local.owns(key) => PositionKind::LocalType,
                 ImplTargetKey::Decl(_)
                 | ImplTargetKey::Ref(_)
                 | ImplTargetKey::TypeParam(..)
@@ -2527,8 +2528,7 @@ pub(super) fn inherent_impl_overlaps(
 fn check_all_orphan_rules(
     defs: &DefTable,
     impl_headers: &IndexMap<DefId, ImplHeader>,
-    decl_index: &IndexSet<DefId>,
-    type_decl_index: &IndexSet<DefId>,
+    tuple_decls: &[DefId],
     resolve: ResolveWritten<'_>,
 ) -> Vec<(ModuleSource, TypeError)> {
     let mut violations = Vec::new();
@@ -2540,18 +2540,13 @@ fn check_all_orphan_rules(
         }
         let package = header.module.package_id();
         let local: &LocalDecls = by_package.entry(package.clone()).or_insert_with(|| {
-            let owned = |def: &&DefId| {
-                let module = defs.module(**def);
-                is_user_local(module) && module.package_id() == package
+            let mut local = LocalDecls {
+                defs,
+                package,
+                tuple: false,
             };
-            LocalDecls {
-                types: type_decl_index.iter().filter(owned).copied().collect(),
-                traits: decl_index.iter().filter(owned).copied().collect(),
-                tuple: type_decl_index
-                    .iter()
-                    .filter(owned)
-                    .any(|def| defs.name(*def) == name::TUPLE_TYPE_NAME),
-            }
+            local.tuple = tuple_decls.iter().any(|&def| local.owns(def));
+            local
         });
 
         let Some(trait_key) = header.trait_key() else {
@@ -2574,7 +2569,7 @@ fn check_all_orphan_rules(
         };
 
         // If the trait is local, always allowed
-        if matches!(trait_key, ImplTargetKey::Decl(key) if local.traits.contains(key)) {
+        if matches!(trait_key, ImplTargetKey::Decl(key) if local.owns(*key)) {
             continue;
         }
 
