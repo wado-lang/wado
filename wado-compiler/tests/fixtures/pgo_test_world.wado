@@ -1,5 +1,6 @@
 // The test world applies the profile too, so a test runs the code a build
-// ships: `pick`'s `rest`, which the profile never ran, is marked.
+// ships: `pick`'s omitted `else` and `rest`, which the profile never ran, are
+// marked.
 fn pick(x: i32) -> i32 {
     if x > 0 {
         return 2;
@@ -18,5 +19,8 @@ __DATA__
 {
   "test": {},
   "profile": "testdata/pgo_test_world.pgo",
-  "marked_regions": ["pgo_test_world.wado:7:5 rest unlikely cold"]
+  "marked_regions": [
+    "pgo_test_world.wado:7:6 else unlikely cold",
+    "pgo_test_world.wado:8:5 rest unlikely cold"
+  ]
 }

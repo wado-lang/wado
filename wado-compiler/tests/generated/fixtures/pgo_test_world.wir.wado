@@ -371,9 +371,12 @@ fn "pgo_test_world.wado/$test_0"() {
                 if $sroa_$iter_0_start_18 == 100 {
                     $sroa_$iter_0_exhausted_20 = 1;
                     if @unlikely((local.tee $v1($inline_pick_2: block -> i32 {
-                        if current > 0 {
+                        if @likely(current > 0) {
                             break $inline_pick_2: 2;
+                        } else {
+                            cold_path;
                         }
+                        cold_path;
                         break $inline_pick_2: 0;
                     }) == 2) == 0) {
                         cold_path;
@@ -391,9 +394,12 @@ fn "pgo_test_world.wado/$test_0"() {
                     break $inline_core_prelude_range_wado_RangeInclusive_i32__core_prelude_traits_wado_Iterator__next_sroa_return__spec0_0__$fused_$inline_i32_core_prelude_range_wado_Step__next_step_sroa_self_value_return__0;
                 };
                 if @unlikely((local.tee $v1($inline_pick_2: block -> i32 {
-                    if current > 0 {
+                    if @likely(current > 0) {
                         break $inline_pick_2: 2;
+                    } else {
+                        cold_path;
                     }
+                    cold_path;
                     break $inline_pick_2: 0;
                 }) == 2) == 0) {
                     cold_path;
@@ -414,9 +420,9 @@ fn "pgo_test_world.wado/$cm_export__$test_0"() {
 
 fn "pgo_test_world.wado/$test_0$cold0"(i, $v1) {
     let $mv_arg_1: ref "core:prelude/string.wado//String";
-    "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<pgo_test_world.wado/$tmpl$4432d2d1cbeba55c,[i32,i32]>"(struct.new "pgo_test_world.wado//$tmpl$4432d2d1cbeba55c" { h0: i, h1: $v1, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_0 at pgo_test_world.wado:13
+    "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<pgo_test_world.wado/$tmpl$4432d2d1cbeba55c,[i32,i32]>"(struct.new "pgo_test_world.wado//$tmpl$4432d2d1cbeba55c" { h0: i, h1: $v1, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_0 at pgo_test_world.wado:14
 condition: pick(i) == 2
-i: "), used: 81 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_0 at pgo_test_world.wado:13
+i: "), used: 81 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_0 at pgo_test_world.wado:14
 condition: pick(i) == 2
 i: "), used: 81 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 pick(i): "), used: 10 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
