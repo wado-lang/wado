@@ -23,7 +23,7 @@ use crate::name::{
 use crate::nir_arena::{Body, ExprBody, Tracked};
 use crate::tir::{self, DeclarationLookup, EffectRef, StructDef, TypeId};
 use crate::token::Span;
-use crate::type_table::{TypeKey, TypeTable};
+use crate::type_table::{InstanceArg, TypeTable};
 
 /// Canonical identity of a function entity. Minted in `lower` over the
 /// post-monomorphization function set and intrinsic to the entity — not its
@@ -1023,13 +1023,13 @@ pub struct NirStruct {
 
 /// A concrete struct type as its declaration and argument types: what tells
 /// two instances apart whichever ids spell their arguments.
-pub type StructInstance = (StructDef, Vec<TypeKey>);
+pub type StructInstance = (StructDef, Vec<InstanceArg>);
 
 /// The instance `type_id` is, when it is a struct type.
 #[must_use]
 pub fn struct_instance(type_id: TypeId, type_table: &TypeTable) -> Option<StructInstance> {
     let (def, type_args) = type_table.struct_parts(type_id)?;
-    Some((def, type_table.type_keys(type_args)))
+    Some((def, type_table.instance_args(type_args)))
 }
 
 impl NirStruct {
@@ -1043,7 +1043,7 @@ impl NirStruct {
             .monomorph_info
             .as_ref()
             .map_or(&[][..], |m| &m.impl_type_args);
-        Some((self.def, type_table.type_keys(args)))
+        Some((self.def, type_table.instance_args(args)))
     }
 
     /// The fields in `field_index` order, which is how a struct literal lowers.
@@ -1071,13 +1071,15 @@ impl<'a> StructDecls<'a> {
             let Some(instance) = decl.instance(type_table) else {
                 continue;
             };
-            // Instances whose arguments differ only by a newtype are declared
-            // apart and become one type once newtypes are erased.
+            // Instances whose arguments differ only by a newtype or a row are
+            // declared apart and are one type.
             let first = *by_instance.entry(instance).or_insert(decl);
-            let field_types =
-                |s: &NirStruct| s.fields.iter().map(|f| f.type_id).collect::<Vec<_>>();
+            let field_types = |s: &NirStruct| {
+                let ids: Vec<TypeId> = s.fields.iter().map(|f| f.type_id).collect();
+                type_table.instance_args(&ids)
+            };
             assert!(
-                type_table.same_types(&field_types(first), &field_types(decl)),
+                field_types(first) == field_types(decl),
                 "one struct type has one layout"
             );
         }

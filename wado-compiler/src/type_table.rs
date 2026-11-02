@@ -5172,56 +5172,46 @@ impl TypeTable {
             let ResolvedType::Struct { type_args: held, .. } = self.get(id) else {
                 unreachable!("only a struct instance is filed here");
             };
-            self.same_instance_args(held, type_args)
+            self.instance_args(held) == self.instance_args(type_args)
         })
     }
 
-    /// Whether two argument lists spell one instance before monomorphization
-    /// settles the spellings: an instance of a struct is written either as the
-    /// `GenericInstance` or as the `Struct` it becomes, and a function type's
-    /// row tells no two instances apart.
-    fn same_instance_args(&self, a: &[TypeId], b: &[TypeId]) -> bool {
-        a.len() == b.len() && a.iter().zip(b).all(|(&x, &y)| self.same_instance(x, y))
+    /// `ids` as struct instance arguments.
+    #[must_use]
+    pub fn instance_args(&self, ids: &[TypeId]) -> Vec<InstanceArg> {
+        ids.iter().map(|&id| self.instance_arg(id)).collect()
     }
 
-    fn same_instance(&self, a: TypeId, b: TypeId) -> bool {
-        if a == b {
-            return true;
+    /// `id` as a struct instance argument: an instance of a struct is written
+    /// either as the `GenericInstance` or as the `Struct` it becomes, and a
+    /// function type's row tells no two instances apart.
+    #[must_use]
+    pub fn instance_arg(&self, id: TypeId) -> InstanceArg {
+        if let Some((def, args)) = self.struct_parts(id) {
+            return InstanceArg::Struct(def, self.instance_args(args));
         }
-        if let (Some((da, aa)), Some((db, ab))) = (self.struct_parts(a), self.struct_parts(b)) {
-            return da == db && self.same_instance_args(aa, ab);
-        }
-        match (self.get(a), self.get(b)) {
-            (ResolvedType::Ref(x), ResolvedType::Ref(y))
-            | (ResolvedType::MutRef(x), ResolvedType::MutRef(y))
-            | (ResolvedType::BuiltinArray(x), ResolvedType::BuiltinArray(y)) => {
-                self.same_instance(*x, *y)
+        match self.get(id) {
+            ResolvedType::Ref(inner) => InstanceArg::Ref(Box::new(self.instance_arg(*inner))),
+            ResolvedType::MutRef(inner) => {
+                InstanceArg::MutRef(Box::new(self.instance_arg(*inner)))
             }
-            (
-                ResolvedType::GenericInstance {
-                    def: da,
-                    type_args: aa,
-                },
-                ResolvedType::GenericInstance {
-                    def: db,
-                    type_args: ab,
-                },
-            ) => da == db && self.same_instance_args(aa, ab),
-            (
-                ResolvedType::Function {
-                    is_mut: ma,
-                    params: pa,
-                    return_type: ra,
-                    ..
-                },
-                ResolvedType::Function {
-                    is_mut: mb,
-                    params: pb,
-                    return_type: rb,
-                    ..
-                },
-            ) => ma == mb && self.same_instance_args(pa, pb) && self.same_instance(*ra, *rb),
-            _ => false,
+            ResolvedType::BuiltinArray(element) => {
+                InstanceArg::Array(Box::new(self.instance_arg(*element)))
+            }
+            ResolvedType::GenericInstance { def, type_args } => {
+                InstanceArg::Generic(*def, self.instance_args(type_args))
+            }
+            ResolvedType::Function {
+                is_mut,
+                params,
+                return_type,
+                ..
+            } => InstanceArg::Function {
+                is_mut: *is_mut,
+                params: self.instance_args(params),
+                ret: Box::new(self.instance_arg(*return_type)),
+            },
+            _ => InstanceArg::Type(self.type_key(id)),
         }
     }
 
@@ -7592,6 +7582,22 @@ enum Reach {
     MutRef,
     /// An object of this [`TypeTable::object_kind`].
     Object(TypeKey),
+}
+
+/// One argument of a struct instance, as [`TypeTable::instance_arg`] reads it.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum InstanceArg {
+    Type(TypeKey),
+    Struct(StructDef, Vec<InstanceArg>),
+    Generic(DefId, Vec<InstanceArg>),
+    Ref(Box<InstanceArg>),
+    MutRef(Box<InstanceArg>),
+    Array(Box<InstanceArg>),
+    Function {
+        is_mut: bool,
+        params: Vec<InstanceArg>,
+        ret: Box<InstanceArg>,
+    },
 }
 
 /// What a [`TypeId`] resolves to, as a value to compare or key a map by.
