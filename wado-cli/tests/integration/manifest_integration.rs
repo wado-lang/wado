@@ -422,7 +422,7 @@ fn packages_run_at_once() {
             "a",
             "use { MonotonicClock } from \"wasi:clocks\";\n\ntest \"a waits\" {\n    MonotonicClock::wait_for(2_000_000_000).wait();\n}\n",
         ),
-        ("b", "test \"b runs\" {\n    assert 1 == 1;\n}\n"),
+        ("b", "test \"b runs\" {\n    assert 1 + 1 == 2;\n}\n"),
     ] {
         let dir = tmp.path().join(pkg);
         fs::create_dir_all(&dir).unwrap();
@@ -445,7 +445,10 @@ fn packages_run_at_once() {
             .find(line)
             .unwrap_or_else(|| panic!("no `{line}` in:\n{stdout}"))
     };
-    assert!(at("Compiled b/t_test.wado") < at("ok   a waits"), "{stdout}");
+    assert!(
+        at("Compiled b/t_test.wado") < at("ok   a waits"),
+        "{stdout}"
+    );
 }
 
 #[test]

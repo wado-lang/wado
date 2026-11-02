@@ -2595,9 +2595,7 @@ pub async fn run(opts: TestOptions) -> Result<(), CliExit> {
     // the run's only profiler and the write below happens once.
     let profiler_slot = matches!(profile, ProfileMode::Guest { .. })
         .then(|| Arc::new(Mutex::new(None)) as GuestProfilerSlot);
-    // Every package runs at once: one run alone leaves cores idle while its
-    // last files finish, and the shared budget holds the whole run to the
-    // CPU permits and live components one package had.
+    // One package alone leaves cores idle while its last files finish.
     let packages = package_runs.iter().zip(&cached).map(|(pkg_run, cached)| {
         run_one_package(
             pkg_run,

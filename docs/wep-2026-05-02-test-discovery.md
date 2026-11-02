@@ -111,7 +111,8 @@ Three axes in the summary:
 When more than one package ran (the no-args case under sub-package
 recursion), each package emits its own three-axis line under a
 `=== package: <label> ===` banner, followed by an `=== aggregate ===`
-block summing the axes across packages.
+block summing the axes across packages. The packages run at once under one
+`--parallel` budget, so each package's block prints when that package finishes.
 
 Any non-zero compile-failed, test-failed, or `todo resolved` count makes the
 process exit non-zero.
