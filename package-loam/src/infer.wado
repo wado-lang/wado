@@ -1122,23 +1122,27 @@ fn infer_node(
     if op == "Expand" {
         return expanded(node, &operand_at(node, shapes, 0), known, owed, classes);
     }
-    if is_reduction(&op) || op == "ArgMax" {
+    if op == "ArgMax" {
         let x = operand_at(node, shapes, 0);
-        let reduced: List<i32> = if op == "ArgMax" {
-            [arg_max_axis(node, x.rank())?];
+        let axis = arg_max_axis(node, x.rank())?;
+        let mut axes = x.axes;
+        if int_attr(node, "keepdims", 1)? != 0 {
+            // An index is no position along the axis it ranks, and an output
+            // sharing that axis's name would leave the name no single extent.
+            axes[axis] = new_axis(&node.outputs[0], axis, Extent::Static(1), classes);
         } else {
-            reduced_axes(node, known, x.rank())?;
-        };
+            axes.remove(axis);
+        }
+        return Result::Ok(Shape { axes });
+    }
+    if is_reduction(&op) {
+        let x = operand_at(node, shapes, 0);
+        let reduced = reduced_axes(node, known, x.rank())?;
         let keep = int_attr(node, "keepdims", 1)? != 0;
         let mut axes: List<Axis> = [];
         for let [i, axis] of x.axes.into_iter().enumerate() {
             if !reduced.contains(&i) {
                 axes.push(axis);
-            } else if keep && op == "ArgMax" {
-                // An index is no position along the axis it ranks, and an
-                // output sharing that axis's name would leave the name no
-                // single extent.
-                axes.push(new_axis(&node.outputs[0], i, Extent::Static(1), classes));
             } else if keep {
                 axes.push(Axis { ..axis, extent: Extent::Static(1) });
             }
