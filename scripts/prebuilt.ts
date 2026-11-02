@@ -31,8 +31,11 @@ const BUILDS = {
 };
 
 // Each build that starts from another's units, after the one it starts from.
-// CI hands `wado`'s target/ to the e2e and test builds; a session starts from
-// the shared cache, which holds the test build's units.
+// CI builds `wado` then `e2e` in one job and hands that target/ to the test
+// build; a session starts from the shared cache, which holds the test build's
+// units. `e2e` to `test` is left out: a crate only a proc macro of the e2e
+// build reaches is compiled for the host alone there, and shared with the
+// program in the test build.
 const REUSES: [from: keyof typeof BUILDS, to: keyof typeof BUILDS][] = [
   ["wado", "e2e"],
   ["wado", "test"],
