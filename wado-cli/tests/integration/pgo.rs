@@ -257,6 +257,46 @@ fn a_build_applies_the_entry_profile_under_pgo() {
     compile(&[]).stderr(predicate::str::contains(missing).not());
 }
 
+/// The test world applies the profile, so a cached pass depends on it: its
+/// arrival and each edit run the tests again.
+#[test]
+fn a_cached_test_pass_follows_the_profile() {
+    let tmp = tempfile::tempdir().unwrap();
+    fs::write(
+        tmp.path().join("prog.wado"),
+        format!("{PICK}\n#[workload]\ntest {{\n    assert pick(1) == 2;\n}}\n"),
+    )
+    .unwrap();
+    let test = |cached: bool| {
+        let hit = predicate::str::contains("cached:  1 files");
+        let assert = wado_in(tmp.path())
+            .args(["test", "prog.wado"])
+            .assert()
+            .success();
+        if cached {
+            assert.stdout(hit);
+        } else {
+            assert.stdout(hit.not());
+        }
+    };
+
+    test(false);
+    test(true);
+    wado_in(tmp.path())
+        .args(["test", "--pgo", "prog.wado"])
+        .assert()
+        .success();
+    test(false);
+    test(true);
+
+    let profile = tmp.path().join("pgo/prog.pgo");
+    let recorded = fs::read_to_string(&profile).unwrap();
+    let edited = recorded.replace("\n0 1\n", "\n0 7\n");
+    assert_ne!(edited, recorded, "`pick` ran once\n{recorded}");
+    fs::write(&profile, edited).unwrap();
+    test(false);
+}
+
 #[test]
 fn pgo_runs_every_workload_of_a_package() {
     let tmp = tempfile::tempdir().unwrap();

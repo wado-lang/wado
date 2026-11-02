@@ -92,6 +92,22 @@ fn levels() -> Vec<OptLevel> {
     )
 }
 
+/// The knobs a stage reads, parsed before the campaign silences panics, so a
+/// malformed one stops the run with its message rather than inside a worker.
+struct Knobs {
+    levels: Vec<OptLevel>,
+    random_profiles: u64,
+}
+
+impl Knobs {
+    fn read() -> Self {
+        Self {
+            levels: levels(),
+            random_profiles: random_profiles(),
+        }
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Guard
 // ---------------------------------------------------------------------------
@@ -1429,7 +1445,7 @@ fn is_calibration_finding(excluded: &Excluded) -> bool {
 ///
 /// A payload the compiler refuses is dropped rather than the source, which
 /// stays a subject as long as one payload survives.
-fn mutate(subject: &Source, source: &str) -> Result<Eligible, Excluded> {
+fn mutate(subject: &Source, source: &str, knobs: &Knobs) -> Result<Eligible, Excluded> {
     let name = subject.name();
     let spec = Spec::parse(subject.root, source)?;
     let canonical =
@@ -1448,7 +1464,7 @@ fn mutate(subject: &Source, source: &str) -> Result<Eligible, Excluded> {
     let mut refusals = Refusals::default();
     let path = &subject.path;
 
-    for level in levels() {
+    for &level in &knobs.levels {
         let baseline = baseline(path, &canonical, &spec, level)?;
         let mut survivors = Vec::new();
         for (shape, payload) in alive {
@@ -1607,7 +1623,7 @@ fn flat_name(name: &str) -> String {
     name.replace('/', "-")
 }
 
-fn calibrate(subject: &Source, source: &str) -> Result<Eligible, Excluded> {
+fn calibrate(subject: &Source, source: &str, knobs: &Knobs) -> Result<Eligible, Excluded> {
     let name = subject.name();
     let path = &subject.path;
     let spec = Spec::parse(subject.root, source)?;
@@ -1631,7 +1647,7 @@ fn calibrate(subject: &Source, source: &str) -> Result<Eligible, Excluded> {
     let mut alive: Vec<&Shape> = subject.shapes.clone();
     let mut refusals = Refusals::default();
 
-    for level in levels() {
+    for &level in &knobs.levels {
         let baseline = baseline(path, &canonical, &spec, level)?;
         if baseline.test_failed {
             return Err(Excluded::BaselineUnhealthy {
@@ -1840,7 +1856,7 @@ struct Program {
 /// under the profile its tests record and under random ones, at every level.
 /// The output must be the source's own. An empty guard is a region no run
 /// enters, which a profile marks cold.
-fn profile(subject: &Source, source: &str) -> Result<Eligible, Excluded> {
+fn profile(subject: &Source, source: &str, knobs: &Knobs) -> Result<Eligible, Excluded> {
     let name = subject.name();
     let path = &subject.path;
     let spec = Spec::parse(subject.root, source)?;
@@ -1856,7 +1872,7 @@ fn profile(subject: &Source, source: &str) -> Result<Eligible, Excluded> {
             .iter()
             .map(|shape| (shape.keyword, inject(&canonical, shape, &sites, ""))),
     );
-    let levels = levels();
+    let levels = &knobs.levels;
     let mut refusals = Refusals::default();
     let mut programs = Vec::new();
     for (key, text) in texts {
@@ -1876,7 +1892,7 @@ fn profile(subject: &Source, source: &str) -> Result<Eligible, Excluded> {
         if programs.is_empty() && measured.judged().is_empty() {
             return Err(Excluded::NothingProfiled);
         }
-        let random: Vec<Counts> = (0..random_profiles())
+        let random: Vec<Counts> = (0..knobs.random_profiles)
             .map(|index| Counts {
                 key: format!("random{index}"),
                 coverage: random_counts(
@@ -1898,7 +1914,7 @@ fn profile(subject: &Source, source: &str) -> Result<Eligible, Excluded> {
         .enumerate()
         .flat_map(|(p, program)| (0..program.profiles.len()).map(move |c| (p, c)))
         .collect();
-    for level in levels {
+    for &level in levels {
         let baseline = baseline(path, &canonical, &spec, level)?;
         let mut survivors = Vec::new();
         for (p, c) in alive {
@@ -2217,9 +2233,10 @@ impl Drop for SilencedPanics {
 /// output disqualifies a source, while a payload that moves it is wrong code.
 fn campaign(
     subjects: &[Source],
-    stage: impl Fn(&Source, &str) -> Result<Eligible, Excluded> + Sync,
+    stage: impl Fn(&Source, &str, &Knobs) -> Result<Eligible, Excluded> + Sync,
     is_finding: impl Fn(&Excluded) -> bool + Sync,
 ) -> Results {
+    let knobs = Knobs::read();
     let total = subjects.len();
     assert!(
         total > 0,
@@ -2245,7 +2262,7 @@ fn campaign(
                     let name = subject.name();
 
                     let started = Instant::now();
-                    let outcome = stage(subject, &source);
+                    let outcome = stage(subject, &source, &knobs);
                     let cost = started.elapsed();
                     let finished = done.fetch_add(1, Ordering::Relaxed) + 1;
                     if finished.is_multiple_of(50) {
@@ -2925,7 +2942,7 @@ __DATA__
         Root::Fixtures,
         Root::Fixtures.dir().join("emi_clock_nondeterminism.wado"),
     );
-    let excluded = calibrate(&subject, source)
+    let excluded = calibrate(&subject, source, &Knobs::read())
         .err()
         .expect("a printed clock reading cannot be an oracle");
     assert_eq!(excluded.kind(), "source is nondeterministic");

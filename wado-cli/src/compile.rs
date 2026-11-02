@@ -458,10 +458,10 @@ pub(crate) fn entry_profile(
     let Some(file) = profile_file(path) else {
         return Ok(None);
     };
-    host.run_cache().depend_on_file(&file);
     let text = match fs::read_to_string(&file) {
         Ok(text) => text,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+            host.run_cache().observe_absent(&file);
             if pgo == Pgo::Requested {
                 Logger::new(host, knobs.log_level).info(format!(
                     "-f pgo: no profile at {}, so none is applied",
@@ -472,6 +472,8 @@ pub(crate) fn entry_profile(
         }
         Err(e) => return Err(format!("Error reading '{}': {e}", file.display())),
     };
+    // The bytes compiled, so an edit mid-run is reported as a source's is.
+    host.run_cache().observe(&file, None, text.as_bytes());
     pgo::parse(&text)
         .map(|profile| Some(Arc::new(profile)))
         .map_err(|e| format!("{}: {e}", file.display()))
