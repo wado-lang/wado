@@ -467,26 +467,17 @@ impl CompilerHost for DependencyHost {
                 path: path.to_string(),
             });
         }
-        // An absent file is an input too: the outcome changes once it appears.
-        match std::fs::read(&file) {
-            Ok(bytes) => {
-                self.read.record(Input::of(file, Some(&bytes)));
-                Ok(bytes)
-            }
-            Err(e) if is_absent(&e) => {
-                self.read.record(Input::of(file, None));
-                Err(SourceError::NotFound {
-                    path: path.to_string(),
-                })
-            }
-            Err(e) => {
-                self.read.untrack();
-                Err(SourceError::IoError {
-                    path: path.to_string(),
+        self.read.read_bytes(&file).map_err(|e| {
+            let path = path.to_string();
+            if is_absent(&e) {
+                SourceError::NotFound { path }
+            } else {
+                SourceError::IoError {
+                    path,
                     message: e.to_string(),
-                })
+                }
             }
-        }
+        })
     }
 
     fn emit_diagnostic(&self, diagnostic: Diagnostic) {
@@ -525,7 +516,10 @@ fn spawn_compile(
     options: CompilerOptions,
     deps: Arc<Dependencies>,
     held: Arc<Mutex<Vec<OwnedSemaphorePermit>>>,
-) -> (oneshot::Receiver<(Compiled, Option<Vec<Input>>)>, CompileThread) {
+) -> (
+    oneshot::Receiver<(Compiled, Option<Vec<Input>>)>,
+    CompileThread,
+) {
     let (report, compiled) = oneshot::channel();
     let panicked = Arc::new(AtomicBool::new(false));
     let flag = Arc::clone(&panicked);

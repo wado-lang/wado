@@ -328,9 +328,9 @@ impl CompilerHost for FilesystemCompilerHost {
         loaded
     }
 
-    /// A pin settles the bytes, so a read records no file but what found the
-    /// `wado.lock` that pinned it, and only a failure leaves the compile
-    /// untracked. A `use` writing its own pin reads no lock.
+    /// A pin settles the bytes, so a read records only the `wado.lock` that
+    /// pinned them and the package files that led to it. A `use` writing its
+    /// own pin reads neither. Only a failure leaves the compile untracked.
     async fn load_remote(
         &self,
         url: &str,

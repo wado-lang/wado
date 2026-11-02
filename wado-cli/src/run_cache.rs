@@ -197,7 +197,7 @@ pub(crate) struct ReadLog {
 }
 
 impl ReadLog {
-    pub(crate) fn record(&self, input: Input) {
+    fn record(&self, input: Input) {
         let mut inputs = lock(&self.inputs);
         match inputs.entry(input.key()) {
             Entry::Occupied(first) if *first.get() != input => self.untrack(),
@@ -210,12 +210,12 @@ impl ReadLog {
 
     /// Record that `path` holds `bytes`, written by the compile itself, in
     /// place of what it held when first read.
-    pub(crate) fn wrote(&self, path: &Path, bytes: &[u8]) {
-        let input = Input::of(normalize_path(&absolutize(path)), Some(bytes));
+    fn wrote(&self, path: &Path, bytes: &[u8]) {
+        let input = file_input(path, Some(bytes));
         lock(&self.inputs).insert(input.key(), input);
     }
 
-    pub(crate) fn untrack(&self) {
+    fn untrack(&self) {
         self.untracked.store(true, Ordering::Relaxed);
     }
 
@@ -227,25 +227,28 @@ impl ReadLog {
         Some(lock(&self.inputs).values().cloned().collect())
     }
 
-    /// The text of the file at `path`, recording the bytes the read returned,
-    /// or that it found none.
+    /// The text of the file at `path`, recorded as [`Self::read_bytes`] does.
     pub(crate) fn read(&self, path: &Path) -> io::Result<String> {
-        let key = normalize_path(&absolutize(path));
-        match fs::read(path) {
-            Ok(bytes) => {
-                self.record(Input::of(key, Some(&bytes)));
-                String::from_utf8(bytes).map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))
-            }
-            Err(e) => {
-                if is_absent(&e) {
-                    self.record(Input::of(key, None));
-                } else {
-                    self.untrack();
-                }
-                Err(e)
-            }
-        }
+        String::from_utf8(self.read_bytes(path)?)
+            .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))
     }
+
+    /// The bytes of the file at `path`, recording what the read returned, or
+    /// that it found none.
+    pub(crate) fn read_bytes(&self, path: &Path) -> io::Result<Vec<u8>> {
+        let read = fs::read(path);
+        match &read {
+            Ok(bytes) => self.record(file_input(path, Some(bytes))),
+            Err(e) if is_absent(e) => self.record(file_input(path, None)),
+            Err(_) => self.untrack(),
+        }
+        read
+    }
+}
+
+/// `path` holding `bytes`, or no file, keyed as every read of it is.
+fn file_input(path: &Path, bytes: Option<&[u8]>) -> Input {
+    Input::of(normalize_path(&absolutize(path)), bytes)
 }
 
 /// Generators resolved by this run, keyed by manifest root + module. The first
@@ -657,7 +660,10 @@ mod tests {
             log.read(&file).unwrap_err().kind(),
             io::ErrorKind::InvalidData
         );
-        assert_eq!(log.reads().expect("tracked"), [Input::of(file, Some(&[0xff]))]);
+        assert_eq!(
+            log.reads().expect("tracked"),
+            [Input::of(file, Some(&[0xff]))]
+        );
     }
 
     #[test]

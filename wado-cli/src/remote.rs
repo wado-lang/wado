@@ -550,12 +550,11 @@ fn lock_error(root: &Path, message: String) -> SourceError {
 /// The lock of the package at `root`, `None` only where there is none: a lock
 /// that cannot be read is an error, never one to write afresh.
 fn read_lock(root: &Path, files: &dyn PackageFiles) -> Result<Option<LockFile>, SourceError> {
-    let text = match files.read(&root.join(LOCK_FILENAME)) {
-        Ok(text) => text,
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
-        Err(e) => return Err(lock_error(root, e.to_string())),
+    let Some(text) = files.find(&root.join(LOCK_FILENAME)) else {
+        return Ok(None);
     };
-    text.parse()
+    text.map_err(|e| lock_error(root, e.to_string()))?
+        .parse()
         .map(Some)
         .map_err(|e: LockFileError| lock_error(root, e.to_string()))
 }
