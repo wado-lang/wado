@@ -2149,9 +2149,9 @@ pub fn inline_functions(
     // borrow-safe), so a call site is recognized by its stamped id rather than the
     // call node's `FunctionRef`. Indexed by `func_id.index()` (== store position).
     let descriptors = descriptor_cache.descriptors(project);
-    let cold = MarkerBuiltins::of(project);
+    let markers = MarkerBuiltins::of(project);
     let InlineScans { bodies, read } = scans;
-    let scans = bodies.refresh(project, gate.exec(), |f| scan_body(f, cold));
+    let scans = bodies.refresh(project, gate.exec(), |f| scan_body(f, markers));
     let sites = argument_sites(scans, &live);
     // Taken every round, unlike the prices below: a callee's only site is one
     // where its splice pays back.
@@ -2263,8 +2263,8 @@ pub fn inline_functions(
     let cold_runs: Vec<RareRuns> = exec.map_indices(functions.len(), |i| {
         let func = functions[i].borrow();
         func.body.as_ref().map_or_else(
-            || RareRuns::none(cold, Rarity::Cold),
-            |b| RareRuns::of(b, cold, Rarity::Cold),
+            || RareRuns::none(markers, Rarity::Cold),
+            |b| RareRuns::of(b, markers, Rarity::Cold),
         )
     });
     let spliced: Vec<usize> = exec.map_indices(functions.len(), |i| {

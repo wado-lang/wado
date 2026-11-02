@@ -1462,14 +1462,14 @@ fn specialize_round(
         Signatures::build(project, &types, &recursive, gate.exec())
     };
     let facts = summarize_params(project, &signatures, gate.exec());
-    let cold = MarkerBuiltins::of(project);
+    let markers = MarkerBuiltins::of(project);
     let per_caller = collect_sites(
         project,
         state,
         &signatures,
         &facts,
         &constants,
-        cold,
+        markers,
         gate.exec(),
     );
     if per_caller.is_empty() {
@@ -1621,7 +1621,7 @@ fn collect_sites(
     signatures: &Signatures,
     facts: &IndexMap<(FuncId, u32), ParamFacts>,
     constants: &CallConsts,
-    cold: MarkerBuiltins,
+    markers: MarkerBuiltins,
     exec: &Executor,
 ) -> Vec<(usize, Vec<Site>)> {
     let types = project.type_table.borrow();
@@ -1632,7 +1632,7 @@ fn collect_sites(
         let body = func.body.as_ref().filter(|_| !func.is_dead)?;
         let seed = state.param_consts.get(&FuncId::new(index));
         let roots = collect_roots(&func, body, types, signatures, facts, seed);
-        let cold_calls = RareRuns::of(body, cold, Rarity::Cold).exprs(body);
+        let cold_calls = RareRuns::of(body, markers, Rarity::Cold).exprs(body);
         let mut sites = select_sites(
             &func.locals,
             body,

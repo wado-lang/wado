@@ -47,7 +47,7 @@ use crate::rarity::Rarity;
 pub fn outline_cold_regions(project: &mut NirPackage) -> bool {
     // The markers' own ids, so recognising one is an integer compare rather
     // than a descriptor lookup per call node.
-    let cold = MarkerBuiltins::of(project);
+    let markers = MarkerBuiltins::of(project);
     // Interned once: the table is borrowed immutably while a region is being
     // classified, and both are what a helper can return.
     let exits = {
@@ -64,7 +64,7 @@ pub fn outline_cold_regions(project: &mut NirPackage) -> bool {
         // A helper this pass made has the one site that replaced its region.
         let root_copied = sites.get(fi).is_some_and(|&n| n > 1);
         let mut ordinal = 0;
-        while let Some(region) = find_region(project, fi, cold, exits, root_copied) {
+        while let Some(region) = find_region(project, fi, markers, exits, root_copied) {
             outline(project, fi, region, ordinal);
             ordinal += 1;
             changed = true;
@@ -129,7 +129,7 @@ fn call_site_counts(project: &NirPackage) -> Vec<usize> {
 fn find_region(
     project: &NirPackage,
     fi: usize,
-    cold: MarkerBuiltins,
+    markers: MarkerBuiltins,
     exits: Exits,
     root_copied: bool,
 ) -> Option<Region> {
@@ -138,7 +138,7 @@ fn find_region(
         return None;
     }
     let body = func.body.as_ref()?;
-    let runs = RareRuns::of(body, cold, Rarity::Cold);
+    let runs = RareRuns::of(body, markers, Rarity::Cold);
     if runs.is_empty() {
         return None;
     }
