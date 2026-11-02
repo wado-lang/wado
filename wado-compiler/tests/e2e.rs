@@ -492,7 +492,7 @@ fn scope_to_function<'a>(wir: &'a str, scope: &str) -> Option<&'a str> {
                     && let Some(end) = rest.find('"')
                 {
                     // Quoted, as a scope may spell it.
-                    start = Some((offset, &line[3..4 + end + 1]));
+                    start = Some((offset, &line[3..=4 + end]));
                 }
             }
             _ => {}
