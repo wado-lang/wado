@@ -76,7 +76,7 @@ wado test package-gale/src/codegen_test.wado   # one file
 leaves this package out. CI runs it as `test-gale-o2`, which also catches the
 miscompiles a compiler change slips past the e2e fixtures.
 
-- Pass the package directory, never a hand-written glob. The descriptor corpus sits one directory deeper (`tests/antlr4-compat/stage_*/<Category>/`), so a flat glob passes on about a third of the suite, and the fixtures it never reaches drift behind the generator.
+- Pass the package directory, never a hand-written glob. The descriptor corpus sits one directory deeper (`tests/antlr4-compat/drivers/<Category>/`), so a flat glob passes on about a third of the suite, and the fixtures it never reaches drift behind the generator.
 - A test that calls `generate` belongs in `src/codegen_test.wado`, or in `src/main_test.wado` for the two entry points that wrap it. Any file reaching `generate` compiles the whole generator, so keeping such tests in one file pays that once. Nothing enforces this; a slow compile in `wado test` output shows the breach.
 - A codegen test asserts what the generated parser does, with the expected trees taken from the jar. Match the source text only for what running cannot show: that an unused feature emits nothing, or which strategy the emitter picked.
 - A new e2e grammar goes in `tests/grammars/` with a parse test in `src/g4/integration_test.wado` and a driver test importing it through the generator. It opens with a comment saying which shape it pins and why that shape is hard. A grammar taken from elsewhere also carries `// Source:` (its URL) and `// License:`; one written here carries neither.
