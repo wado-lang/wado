@@ -199,6 +199,8 @@ impl Opt {
         CompileKnobOpt::NoLint,
         CompileKnobOpt::Lint,
         CompileKnobOpt::LintGenerated,
+        CompileKnobOpt::RetainMemory,
+        CompileKnobOpt::NoRetainMemory,
     ];
 
     const fn spec(self) -> args::OptSpec {

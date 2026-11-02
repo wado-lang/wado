@@ -94,6 +94,8 @@ pub enum CompileKnobOpt {
     NoLint,
     Lint,
     LintGenerated,
+    RetainMemory,
+    NoRetainMemory,
 }
 
 impl CompileKnobOpt {
@@ -204,6 +206,19 @@ impl CompileKnobOpt {
                 short: None,
                 value: None,
                 desc: "Report lint warnings in `#![generated]` modules too",
+            },
+            // The two set one value, so the last one given wins.
+            Self::RetainMemory => OptSpec {
+                long: Some("retain-memory"),
+                short: None,
+                value: None,
+                desc: "Keep the memory wado frees for reuse instead of returning it to\nthe OS, which saves a compile rebuilding it (default: on, but\noff under serve, whose resident set would stay at its peak)",
+            },
+            Self::NoRetainMemory => OptSpec {
+                long: Some("no-retain-memory"),
+                short: None,
+                value: None,
+                desc: "Return the memory wado frees to the OS (undoes --retain-memory)",
             },
         }
     }
@@ -340,6 +355,8 @@ impl CompileKnobs {
             CompileKnobOpt::NoLint => self.lints = wado_compiler::Lints::Off,
             CompileKnobOpt::Lint => self.lints = wado_compiler::Lints::Own,
             CompileKnobOpt::LintGenerated => self.lints = wado_compiler::Lints::Generated,
+            CompileKnobOpt::RetainMemory => crate::host_memory::retain_freed(true),
+            CompileKnobOpt::NoRetainMemory => crate::host_memory::retain_freed(false),
         }
         Ok(())
     }

@@ -78,6 +78,8 @@ impl Opt {
         CompileKnobOpt::Allocator,
         CompileKnobOpt::NoCache,
         CompileKnobOpt::Feature,
+        CompileKnobOpt::RetainMemory,
+        CompileKnobOpt::NoRetainMemory,
     ];
 
     /// Whether this names a pipeline stage, which help lists under `Phases:`.
