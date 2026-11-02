@@ -1,6 +1,7 @@
 //! Shared utility functions for WIR optimization passes.
 
 use crate::hashmap::{IndexMap, IndexSet};
+use crate::rarity::Rarity;
 use crate::wir::{WirExportDesc, WirInstr, WirLocals, WirPackage, WirType, WirTypeId};
 
 use super::nullability::Nullability;
@@ -251,7 +252,7 @@ pub(super) fn arm_callees<'c>(
     arm: &[WirInstr],
     callees: Option<&'c CalleeWrites>,
 ) -> Option<&'c CalleeWrites> {
-    callees.filter(|_| !WirInstr::marks_cold_path(arm))
+    callees.filter(|_| !WirInstr::is_rare(arm, Rarity::Cold))
 }
 
 /// The struct fields each defined function may write, its callees' writes

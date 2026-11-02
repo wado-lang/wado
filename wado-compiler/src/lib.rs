@@ -68,6 +68,7 @@ pub mod path;
 pub mod pgo;
 mod prelower_reach;
 pub mod primitive;
+pub mod rarity;
 mod reflect_marker;
 pub mod remarks;
 pub mod remote;

@@ -22,11 +22,12 @@ use crate::tir::{ArrayElementAccess, ResolvedType, TypeId};
 use crate::type_table::TypeTable;
 
 use super::arena_query::{
-    ColdRuns, Markers, Rarity, bare_promoted_local, bare_promoted_reads, buried_promoted_reads,
+    ColdRuns, Markers, bare_promoted_local, bare_promoted_reads, buried_promoted_reads,
     cold_functions_of, collect_reads, expr_mentions_local, is_local, promoted_local_reads,
     reachable_nodes, strip_refs,
 };
 use crate::ast::Visibility;
+use crate::rarity::Rarity;
 use crate::name::{CONST_OBJ_GLOBAL_PREFIX, MODULE_INIT_FUNCTION, MODULES_INIT_FUNCTION};
 use crate::nir::aggregate_field_info;
 use crate::nir::{FuncId, NirParam, NirStruct};

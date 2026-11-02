@@ -14,6 +14,7 @@ use crate::ast::{self, AstId};
 use crate::coverage::{Coverage, Marker, PlannedModule, ProbeSite, RegionKind, plan_module};
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
+use crate::rarity::Mark;
 use crate::stdlib::core_module_file;
 use crate::token::Span;
 
@@ -119,10 +120,12 @@ impl Cutoff {
 pub struct Percent(u32);
 
 impl Percent {
+    pub const WHOLE: u32 = 100;
+
     /// `percent` as a share, where it is at most the whole.
     #[must_use]
     pub fn new(percent: u32) -> Option<Self> {
-        (percent <= 100).then_some(Self(percent))
+        (percent <= Self::WHOLE).then_some(Self(percent))
     }
 }
 
@@ -147,7 +150,7 @@ impl Default for Thresholds {
 }
 
 /// What a profile's counts mean to a compile: a region is cold by its count
-/// against the summary, and unlikely by its count against its branch's.
+/// against the summary, and unlikely by its count against the code around it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct Reading {
     summary: Summary,
@@ -163,11 +166,11 @@ impl Reading {
         runs == 0 || self.summary.is_cold(runs)
     }
 
-    /// Whether a region the profile ran `runs` times, out of the `branch` times
-    /// its branch ran, is the rare side of a predictable branch.
-    fn is_unlikely(self, runs: i64, branch: i64) -> bool {
-        let rare = u128::from(100 - self.predictable_branch.0);
-        runs as u128 * 100 <= branch as u128 * rare
+    /// Whether a region the profile ran `runs` times, where the code around it
+    /// ran `around` times, is entered on the rare side of a predictable branch.
+    fn is_unlikely(self, runs: i64, around: i64) -> bool {
+        let rare = u128::from(Percent::WHOLE - self.predictable_branch.0);
+        runs as u128 * u128::from(Percent::WHOLE) <= around as u128 * rare
     }
 }
 
@@ -303,34 +306,10 @@ fn parse_count(line: &str) -> Option<(u32, i64)> {
     Some((region.parse().ok()?, runs))
 }
 
-/// What a profile measured a region to be, as the marker reify puts at its
-/// start states it.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum Mark {
-    /// Unlikely and cold: `cold_path`.
-    ColdPath,
-    /// Unlikely, not cold: `unlikely_path`.
-    Unlikely,
-    /// Cold, not unlikely: `cold_code`.
-    Cold,
-}
-
-impl Mark {
-    fn of(unlikely: bool, cold: bool) -> Option<Self> {
-        match (unlikely, cold) {
-            (true, true) => Some(Self::ColdPath),
-            (true, false) => Some(Self::Unlikely),
-            (false, true) => Some(Self::Cold),
-            (false, false) => None,
-        }
-    }
-
-    fn label(self) -> &'static str {
-        match self {
-            Self::ColdPath => "unlikely cold",
-            Self::Unlikely => "unlikely",
-            Self::Cold => "cold",
-        }
+fn times(runs: i64) -> String {
+    match runs {
+        1 => "once".to_string(),
+        n => format!("{n} times"),
     }
 }
 
@@ -439,10 +418,13 @@ impl MarkMap {
             .map(|(site, id, region)| (region, (site, id)))
             .collect();
         let count_of = |region: Option<u32>| region.and_then(|r| counts[r as usize]);
-        // Unlikely: the rare side of a predictable branch. A function's body
-        // and a closure's are no side of one.
+        // Unlikely: entered on the rare side of a predictable branch. The ratio
+        // to the code around it is that branch's for a path past a branch or a
+        // leaving statement, and bounds it from above for a loop's body, whose
+        // test also runs once per iteration. A function's body and a closure's
+        // are entered by a call, not a branch.
         let unlikely = |id: usize| match (counts[id], count_of(parents[id])) {
-            (Some(runs), Some(branch)) => reading.is_unlikely(runs, branch),
+            (Some(runs), Some(around)) => reading.is_unlikely(runs, around),
             _ => false,
         };
         // Cold, here and in everything under it: a marker covers what follows
@@ -505,8 +487,12 @@ impl MarkMap {
                 continue;
             }
             self.overridden.insert(marker.node());
+            // A path that never ran is unlikely and cold whatever the summary,
+            // which the marker said.
+            if runs == 0 {
+                continue;
+            }
             let verdict = match Mark::of(unlikely(region), cold[region]) {
-                _ if runs == 0 => continue,
                 Some(Mark::ColdPath) => continue,
                 Some(Mark::Unlikely) => "unlikely but not cold",
                 Some(Mark::Cold) => "cold but not unlikely",
@@ -516,10 +502,12 @@ impl MarkMap {
                 Marker::ColdPath(_) => "`cold_path()` marks this path rare",
                 Marker::Try(_) => "`?` marks its failure path rare",
             };
+            // A loop's body may run more often than the code around it.
             let measured = match count_of(parents[region]) {
-                Some(branch) => format!("in {runs} of {branch} runs"),
-                None if runs == 1 => "once".to_string(),
-                None => format!("{runs} times"),
+                Some(around) => {
+                    format!("{} where the code around it ran {}", times(runs), times(around))
+                }
+                None => times(runs),
             };
             self.remarks.push((
                 span,

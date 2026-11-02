@@ -33,7 +33,8 @@ use crate::nir_visitor::reachable_exprs;
 use crate::tir::{ResolvedType, TypeId};
 use crate::type_table::TypeTable;
 
-use super::arena_query::{ColdRuns, Markers, Rarity, control_escapes};
+use super::arena_query::{ColdRuns, Markers, control_escapes};
+use crate::rarity::Rarity;
 use super::inline::{InlineCtx, splice_stmt};
 use crate::ast::Visibility;
 use crate::compiler_trace;
@@ -152,7 +153,7 @@ fn find_region(
         // a nested construct covers has none of its own to keep, and its
         // markers are reached inside it.
         let run = &body.blocks[block].stmts[start..];
-        let Some(&marker) = run.iter().find(|&&s| runs.is_marker(body, s)) else {
+        let Some(&marker) = run.iter().find(|&&s| runs.is_run_marker(body, s)) else {
             continue;
         };
         let region: Vec<StmtId> = run.iter().copied().filter(|&s| s != marker).collect();

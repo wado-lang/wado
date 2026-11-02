@@ -25,7 +25,8 @@ use crate::tir::{ResolvedType, TypeId};
 use crate::token::Span;
 use crate::type_table::{TypeKey, TypeTable};
 
-use super::arena_query::{ColdRuns, Markers, Rarity};
+use super::arena_query::{ColdRuns, Markers};
+use crate::rarity::Rarity;
 use super::body_memo::BodyMemo;
 use super::const_branch_prune::BranchPruneRule;
 use super::const_folding::ConstFoldRule;

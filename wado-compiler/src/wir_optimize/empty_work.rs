@@ -106,13 +106,12 @@ impl WirMutVisitor for EmptyCallElider<'_> {
     }
 }
 
-/// Whether `instrs` does nothing but set `flag` to a constant: `cold_path`
-/// markers, `global.set flag (i32.const _)`, and calls into `setters` of the
+/// Whether `instrs` does nothing but set `flag` to a constant: rarity markers, `global.set flag (i32.const _)`, and calls into `setters` of the
 /// same flag, which is how a guard reads once `nir/cold_outline` has moved its
 /// tail into a function of its own.
 fn sets_only(instrs: &[WirInstr], flag: &str, setters: &IndexMap<u32, String>) -> bool {
     instrs.iter().all(|instr| match instr {
-        WirInstr::ColdPath => true,
+        WirInstr::Rare(_) => true,
         WirInstr::GlobalSet { name, value } => {
             name.fq == flag && matches!(**value, WirInstr::I32Const(_))
         }
@@ -264,6 +263,7 @@ mod tests {
     use std::rc::Rc;
 
     use super::*;
+    use crate::rarity::Mark;
     use crate::wir::{
         WirFuncId, WirFuncType, WirFunction, WirLocals, WirMeta, WirName, WirType, WirTypeDef,
         WirTypeId,
@@ -413,7 +413,7 @@ mod tests {
                         result_ty: WirType::I32,
                     }),
                 },
-                WirInstr::ColdPath,
+                WirInstr::Rare(Mark::ColdPath),
                 tail,
             ],
         }
@@ -448,7 +448,7 @@ mod tests {
     fn a_guard_whose_set_was_outlined_is_still_one() {
         let mut module = package(vec![
             func("f", vec![guard_with("dead", call(1, Vec::new()))]),
-            func("f$cold0", vec![WirInstr::ColdPath, set("dead")]),
+            func("f$cold0", vec![WirInstr::Rare(Mark::ColdPath), set("dead")]),
         ]);
         elide_empty_work(&mut module);
         assert!(module.functions[0].body.as_ref().unwrap().is_empty());

@@ -314,7 +314,7 @@ fn is_control_barrier(instr: &WirInstr) -> bool {
             | WirInstr::BrTable { .. }
             | WirInstr::Return { .. }
             | WirInstr::Unreachable
-            | WirInstr::ColdPath
+            | WirInstr::Rare(_)
             | WirInstr::Select { .. }
     )
 }

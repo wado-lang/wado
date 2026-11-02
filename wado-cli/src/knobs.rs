@@ -325,14 +325,12 @@ impl CompileKnobs {
                 )?);
             }
             CompileKnobOpt::PredictableBranchThreshold => {
-                let opt = "--optimize-predictable-branch-threshold";
-                let percent = args::parse_u32_arg(opt, parser)?;
-                self.opt.predictable_branch_threshold =
-                    Some(Percent::new(percent).ok_or_else(|| {
-                        CliExit::error(format!(
-                            "{opt} is a share in percent, at most 100, got {percent}"
-                        ))
-                    })?);
+                self.opt.predictable_branch_threshold = Some(parse_share_arg(
+                    "--optimize-predictable-branch-threshold",
+                    parser,
+                    ("percent", Percent::WHOLE),
+                    Percent::new,
+                )?);
             }
             CompileKnobOpt::LogLevel => self.log_level = args::parse_log_level_arg(parser)?,
             CompileKnobOpt::Allocator => self.allocator = Some(args::require_string(parser)?),
@@ -349,11 +347,25 @@ impl CompileKnobs {
 
 /// Parse a share of all runs in parts per million.
 fn parse_cutoff_arg(opt: &str, parser: &mut Parser) -> Result<Cutoff, CliExit> {
-    let per_million = args::parse_u32_arg(opt, parser)?;
-    Cutoff::new(per_million).ok_or_else(|| {
+    parse_share_arg(
+        opt,
+        parser,
+        ("parts per million", Cutoff::PER_MILLION),
+        Cutoff::new,
+    )
+}
+
+/// Parse a share counted in `unit`, of which `whole` is all.
+fn parse_share_arg<T>(
+    opt: &str,
+    parser: &mut Parser,
+    (unit, whole): (&str, u32),
+    share: fn(u32) -> Option<T>,
+) -> Result<T, CliExit> {
+    let n = args::parse_u32_arg(opt, parser)?;
+    share(n).ok_or_else(|| {
         CliExit::error(format!(
-            "{opt} is a share in parts per million, at most {}, got {per_million}",
-            Cutoff::PER_MILLION
+            "{opt} is a share in {unit}, at most {whole}, got {n}"
         ))
     })
 }

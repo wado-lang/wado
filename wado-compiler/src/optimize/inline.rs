@@ -36,7 +36,8 @@ use crate::type_table::TypeTable;
 
 use cranelift_entity::EntityRef;
 
-use super::arena_query::{self, ColdRuns, Markers, Rarity, stmt_diverges, unreached_through};
+use super::arena_query::{self, ColdRuns, Markers, stmt_diverges, unreached_through};
+use crate::rarity::Rarity;
 use super::body_memo::BodyMemo;
 use super::gate::{FunctionGate, GatedPass};
 use crate::compiler_trace;
@@ -365,7 +366,7 @@ impl<'a> CostWalk<'a> {
         };
         let mut total = 0;
         for &stmt in stmts {
-            if self.cold.is_marker(self.body, stmt) {
+            if self.cold.marker_at(self.body, stmt).is_some() {
                 continue;
             }
             total += self.stmt(stmt, seen);

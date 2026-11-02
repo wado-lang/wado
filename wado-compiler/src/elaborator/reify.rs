@@ -89,10 +89,11 @@ use crate::name::{
     minted_name, range_local_name, template_block_label, template_hole_local, test_function_name,
 };
 use crate::pgo::MarkMap;
+use crate::rarity::Mark;
 use crate::symbol::{Symbol, SymbolKind};
 use crate::synthesis::common::{
-    bare_cast, bool_lit, builtin_call, cold_path_stmt, handle_bits, is_cold_marker_stmt,
-    known_cold_path_stmt, not_expr, ord_bool_from_cmp, rt_call,
+    bare_cast, bool_lit, builtin_call, cold_path_stmt, handle_bits, known_cold_path_stmt,
+    marker_stmt_mark, not_expr, ord_bool_from_cmp, rt_call,
 };
 use crate::tir::{
     EffectRef, StructDef, TemplateId, TirEffectOp, TirField, TirImpl, TirParam, TirTypeParam,
@@ -2135,9 +2136,10 @@ impl<'a> Reify<'a> {
         let mut out: Vec<TirStmt> = Vec::with_capacity(stmts.len() + 1);
         // A marker makes its whole basic block cold, so one per block is all
         // there is to place, and a synthesis site that placed its own keeps it.
+        // A profile's marker stating one half leaves the other to this one.
         let mut marked = false;
         for s in stmts {
-            marked = marked || is_cold_marker_stmt(&s);
+            marked = marked || marker_stmt_mark(&s) == Some(Mark::ColdPath);
             if diverges(&s) && !marked {
                 out.push(known_cold_path_stmt(s.span));
                 marked = true;

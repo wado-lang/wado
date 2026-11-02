@@ -23,7 +23,8 @@ use crate::niri::{
     build_callee_map, build_ctfe_builtin_map, is_ctfe_runnable, materializing_globals,
     region_queries,
 };
-use crate::optimize::arena_query::{ColdRuns, Markers, Rarity};
+use crate::optimize::arena_query::{ColdRuns, Markers};
+use crate::rarity::Rarity;
 use crate::optimize::is_constant_arg;
 use crate::parallel::Executor;
 use crate::tir::TypeId;

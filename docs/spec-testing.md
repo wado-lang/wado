@@ -400,10 +400,10 @@ without one, and under `-f pgo` says so at `--log-level info`.
 A compile applying a profile judges each region of a function the workloads
 entered on two questions:
 
-- Is it unlikely? A region is unlikely when it is one side of a branch and ran
-  at most `100 - n` percent of the times the code around it ran, where `n` is
+- Is it unlikely? A region is unlikely when it ran at most `100 - n` percent of
+  the times the code around it ran, where `n` is
   `--optimize-predictable-branch-threshold`, 99 by default. A function's body
-  is no side of a branch.
+  is entered by a call, so it is never unlikely.
 - Is it cold? A region is cold when its count is cold against the whole
   profile, as below, or zero.
 

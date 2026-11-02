@@ -231,13 +231,16 @@ nothing about a branch: a profile of under a million runs puts the cold line on
 about its smallest count, so a ratio of 0.1% and one of 50% look the same to
 it.
 
-So a compile asks both. A region is unlikely when it is a side of a branch and
-ran at most 1% of the times the code around it did, under
+So a compile asks both. A region is unlikely when it ran at most 1% of the
+times the code around it did, under
 `--optimize-predictable-branch-threshold`, LLVM's name and default. It is cold
 when its count is cold against the summary, under LLVM's
 `--optimize-profile-summary-cutoff-hot` and `-cold`, or zero, as GCC holds.
 [Applying a Profile](./spec-testing.md#applying-a-profile) states both rules.
-A count on both summary lines is hot, since LLVM's inliner asks hot first. A
+For a path past a branch, or past a statement that can leave, that ratio is the
+branch's probability. A loop's test also runs once per pass through its body,
+so for a loop's body the ratio bounds the probability from above, and a body
+it calls unlikely is. A count on both summary lines is hot, since LLVM's inliner asks hot first. A
 share stays put when a workload runs twice, so a workload need not be large,
 only like real use. The thresholds are LLVM's for now; the benchmark machine
 settles Wado's own.
@@ -249,7 +252,8 @@ each region by its answers: `builtin::cold_path()` where it is unlikely and
 cold, `builtin::unlikely_path()` where it is only unlikely, and
 `builtin::cold_code()` where it is only cold. The branch hints read
 `cold_path()` and `unlikely_path()`, and every other pass reads `cold_path()`
-and `cold_code()`. The two halves are `internal` to `core:`, so no author
+and `cold_code()`. WIR keeps the split: its marker carries the halves it
+states, so a WIR pass reads the one it needs as a NIR pass does. The two halves are `internal` to `core:`, so no author
 writes one. Reify is where coverage inserts its probes, so a region means the
 same thing to both.
 
@@ -298,7 +302,7 @@ the expect's.
 
 Where what the profile found is not both unlikely and cold, the compile says so
 in an optimizer remark at `--log-level info`. It names the marker, the region's
-count and its branch's, and what the region was found to be. The remark audits
+count and the count of the code around it, and what the region was found to be. The remark audits
 a guess against measurement, as LLVM's [`-pgo-warn-misexpect`][llvm-misexpect]
 does, so an author learns which markers the workload contradicts. A `?`'s guess
 is usually right, since an HTTP service answers well under 1% of its requests

@@ -11,6 +11,7 @@ use crate::module_source::ModuleSource;
 use crate::name::{
     COLD_CODE_INTRINSIC, COLD_PATH_INTRINSIC, MangledName, UNLIKELY_PATH_INTRINSIC, cm_import_alias,
 };
+use crate::rarity::Mark;
 use crate::tir::TypeId;
 use crate::type_table::TypeTable;
 use crate::wir::{WirInstr, WirType, WirTypeDef, WirTypeId};
@@ -834,9 +835,9 @@ impl FunctionTranslator<'_, '_> {
             }
 
             "unreachable" => Some(WirInstr::Unreachable),
-            COLD_PATH_INTRINSIC | UNLIKELY_PATH_INTRINSIC => Some(WirInstr::ColdPath),
-            // Only the optimizer reads cold code; a branch hint does not.
-            COLD_CODE_INTRINSIC => Some(WirInstr::Nop),
+            marker @ (COLD_PATH_INTRINSIC | UNLIKELY_PATH_INTRINSIC | COLD_CODE_INTRINSIC) => {
+                Mark::of_builtin(marker).map(WirInstr::Rare)
+            }
             "select" => {
                 let cond = self.translate_operand(args[0].expr);
                 let a = self.translate_operand(args[1].expr);

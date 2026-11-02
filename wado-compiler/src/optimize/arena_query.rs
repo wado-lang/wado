@@ -13,7 +13,6 @@ use cranelift_entity::EntityRef;
 use super::value_copy::mutation::{Witness, expr_witnesses};
 use crate::hashmap;
 use crate::hashmap::{IndexMap, IndexSet};
-use crate::name::{COLD_CODE_INTRINSIC, COLD_PATH_INTRINSIC, UNLIKELY_PATH_INTRINSIC};
 use crate::nir::{FuncId, NirBinaryOp, NirLocal, NirUnaryOp};
 use crate::nir_arena::{
     BlockId, Body, ExprId, ExprKind, NodeRef, Operand, PatId, PatKind, StmtId, StmtKind,
@@ -24,6 +23,7 @@ use crate::nir_value_graph::{ValueId, ValueKind};
 use crate::nir_visitor::NirRefVisitor;
 use crate::optimize::mod_ref;
 use crate::optimize::value_copy::mutation::MutationOracle;
+use crate::rarity::{Mark, Rarity};
 use crate::tir::{ResolvedType, TypeId};
 use crate::type_table::TypeTable;
 
@@ -533,57 +533,34 @@ fn block_breaks_innermost_loop(body: &Body, block: BlockId) -> bool {
     search.0
 }
 
-/// The half of rarity a pass reads, as LLVM splits it between a branch's
-/// weights and the profile summary.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum Rarity {
-    /// The path runs rarely in the whole program: what pricing, inlining and
-    /// outlining read.
-    Cold,
-    /// The branch to the path is rarely taken: what a branch hint reads.
-    Unlikely,
-}
-
-/// The program's marker builtins: `cold_path`, which states both halves of
-/// rarity, and the two a profile writes where it measured only one.
+/// The program's marker builtins, each with what it states.
 #[derive(Debug, Clone, Copy)]
-pub(crate) struct Markers {
-    cold_path: Option<FuncId>,
-    unlikely_path: Option<FuncId>,
-    cold_code: Option<FuncId>,
-}
+pub(crate) struct Markers([(Option<FuncId>, Mark); 3]);
 
 impl Markers {
     pub(crate) fn of(project: &NirPackage) -> Self {
-        Self {
-            cold_path: project.builtin_func_id(COLD_PATH_INTRINSIC),
-            unlikely_path: project.builtin_func_id(UNLIKELY_PATH_INTRINSIC),
-            cold_code: project.builtin_func_id(COLD_CODE_INTRINSIC),
-        }
+        Self(Mark::ALL.map(|mark| (project.builtin_func_id(mark.builtin()), mark)))
     }
 
-    /// The markers stating `rarity`, where the program names them.
-    fn stating(self, rarity: Rarity) -> [Option<FuncId>; 2] {
-        let half = match rarity {
-            Rarity::Cold => self.cold_code,
-            Rarity::Unlikely => self.unlikely_path,
-        };
-        [self.cold_path, half]
+    /// What a call to `func` states, where `func` is a marker.
+    pub(crate) fn mark(self, func: FuncId) -> Option<Mark> {
+        self.0
+            .iter()
+            .find(|(named, _)| *named == Some(func))
+            .map(|&(_, mark)| mark)
     }
 
     /// Whether a call to `func` states `rarity`.
     pub(crate) fn states(self, func: FuncId, rarity: Rarity) -> bool {
-        self.stating(rarity).contains(&Some(func))
-    }
-
-    /// Whether a call to `func` is a marker, which emits nothing.
-    pub(crate) fn is_marker(self, func: FuncId) -> bool {
-        [self.cold_path, self.unlikely_path, self.cold_code].contains(&Some(func))
+        self.mark(func).is_some_and(|mark| mark.states(rarity))
     }
 
     /// Whether the program names no marker stating `rarity`.
     fn none_states(self, rarity: Rarity) -> bool {
-        self.stating(rarity).iter().all(Option::is_none)
+        !self
+            .0
+            .iter()
+            .any(|&(named, mark)| named.is_some() && mark.states(rarity))
     }
 }
 
@@ -645,15 +622,21 @@ impl ColdRuns {
         }
     }
 
-    /// Whether `stmt` is a marker of either half, which emits nothing.
-    pub(crate) fn is_marker(&self, body: &Body, stmt: StmtId) -> bool {
+    /// What `stmt` states, where it is a call to a marker, which emits nothing.
+    pub(crate) fn marker_at(&self, body: &Body, stmt: StmtId) -> Option<Mark> {
         let StmtKind::Expr(op) = &body.stmts[stmt].kind else {
-            return false;
+            return None;
         };
-        op.as_expr().is_some_and(|e| {
-            matches!(&body.exprs[e].kind, ExprKind::Call { func_id, .. }
-                if self.markers.is_marker(*func_id))
-        })
+        match &body.exprs[op.as_expr()?].kind {
+            ExprKind::Call { func_id, .. } => self.markers.mark(*func_id),
+            _ => None,
+        }
+    }
+
+    /// Whether `stmt` is a marker stating the rarity these runs are of.
+    pub(crate) fn is_run_marker(&self, body: &Body, stmt: StmtId) -> bool {
+        self.marker_at(body, stmt)
+            .is_some_and(|mark| mark.states(self.rarity))
     }
 
     /// Whether no block turns cold.

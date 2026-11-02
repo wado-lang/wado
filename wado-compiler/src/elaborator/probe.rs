@@ -9,8 +9,7 @@ use crate::ast::{AstId, Block};
 use crate::compiler_item::CompilerItem;
 use crate::coverage::ProbeSite;
 use crate::hashmap::IndexSet;
-use crate::pgo::Mark;
-use crate::synthesis::common::{cold_code_stmt, known_cold_path_stmt, rt_call, unlikely_path_stmt};
+use crate::synthesis::common::{profile_marker_stmt, rt_call};
 use crate::tir::{TirBlock, TirExpr, TirExprKind, TirStmt, TirStmtKind};
 use crate::token::Span;
 use crate::type_table::TypeTable;
@@ -24,11 +23,7 @@ impl Reify<'_> {
         let marker = self
             .marks
             .and_then(|marks| marks.mark(site, id))
-            .map(|mark| match mark {
-                Mark::ColdPath => known_cold_path_stmt(span),
-                Mark::Unlikely => unlikely_path_stmt(span),
-                Mark::Cold => cold_code_stmt(span),
-            });
+            .map(|mark| profile_marker_stmt(mark, span));
         marker
             .into_iter()
             .chain(self.probe(site, id, span))
