@@ -3041,6 +3041,7 @@ fn convert_test(test: &TirTest) -> NirTest {
 
 fn convert_enum(e: &TirEnum) -> NirEnum {
     NirEnum {
+        def: e.def,
         name: e.name.clone(),
         module_source: e.module_source.clone(),
         visibility: e.visibility,

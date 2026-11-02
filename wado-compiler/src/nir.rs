@@ -1159,6 +1159,7 @@ pub struct NirField {
 
 #[derive(Debug, Clone)]
 pub struct NirEnum {
+    pub def: DefId,
     pub name: String,
     pub module_source: ModuleSource,
     pub visibility: ast::Visibility,

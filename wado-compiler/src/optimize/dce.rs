@@ -23,7 +23,7 @@ use crate::name::{
     FqTypeName, FreeFunctionName, FunctionId, MODULE_INIT_FUNCTION, MethodName, UNIT_TYPE_NAME,
     is_fn_type_name, mangle_generic_name, mangle_local_trait_method, mangle_method_generic,
 };
-use crate::nir::{FuncId, FunctionRef, NirFunction, NirImport, NirStruct};
+use crate::nir::{FuncId, FunctionRef, NirFunction, NirImport, NirStruct, StructInstance};
 use crate::nir_arena::{
     BlockId, BlockNode, Body, ExprId, ExprKind, NodeRef, Operand, PatKind, StmtId, StmtKind,
     StmtNode,
@@ -36,7 +36,7 @@ use crate::optimize::arena_query::{
 };
 use crate::tir::{ResolvedType, StructDef, TypeId, projection_arguments};
 use crate::type_table::TypeTable;
-use crate::{hashmap, nir};
+use crate::nir;
 
 /// What a call reaches: a function in `project.functions`, by position, or a
 /// name none of them carries, such as a host builtin's.
@@ -106,46 +106,24 @@ pub struct DceAnalysis {
     /// Reachable type IDs (transitively closed over struct fields,
     /// variant payloads, and per-type dependencies).
     pub types: IndexSet<TypeId>,
-    /// Non-monomorphized `Struct` types in `types`, keyed by (name, module).
-    pub struct_exact: IndexSet<(String, ModuleSource)>,
-    /// Monomorphized struct names in `types` (e.g. `"Box<i32>"`).
-    pub struct_monomorph_names: IndexSet<String>,
-    /// Base names of monomorphized structs in `types` (e.g. `"Box"`).
-    pub struct_monomorph_bases: IndexSet<String>,
-    /// `GenericInstance` names in `types`.
-    pub generic_instance_names: IndexSet<String>,
-    /// `Variant` types in `types`, keyed by (name, module).
-    pub variant_exact: IndexSet<(String, ModuleSource)>,
-    /// `Enum` types in `types`, keyed by (name, module).
-    pub enum_exact: IndexSet<(String, ModuleSource)>,
+    /// The struct instances in `types`.
+    pub structs: IndexSet<StructInstance>,
+    /// The heads of [`Self::structs`].
+    pub struct_heads: IndexSet<StructDef>,
+    /// The variant and enum declarations `types` names.
+    pub nominal_defs: IndexSet<DefId>,
 }
 
 impl DceAnalysis {
     /// Whether `s` survives the sweep — the one predicate, read both by the walk
     /// that pulls a struct's field types into the reachable set and by the retain
-    /// that drops the rest. A struct's stored `name` predates newtype / flags
-    /// erasure while the reachable set renders after it (`FlagsBit<Perms>`
-    /// against `FlagsBit<u32>`), so both spellings count.
+    /// that drops the rest. A generic declaration survives while any instance
+    /// of it does.
     fn keeps_struct(&self, s: &NirStruct, type_table: &TypeTable) -> bool {
-        let Some(mono) = &s.monomorph_info else {
-            return self
-                .struct_exact
-                .contains(&(s.name.clone(), s.module_source.clone()))
-                || self.generic_instance_names.contains(s.name.as_str())
-                || self.struct_monomorph_bases.contains(s.name.as_str());
-        };
-        if self.struct_monomorph_names.contains(s.name.as_str()) {
-            return true;
+        match s.instance(type_table) {
+            Some(instance) => self.structs.contains(&instance),
+            None => self.struct_heads.contains(&s.def),
         }
-        // The struct's own head, not a declaration found by `generic_name`:
-        // that index answers with whichever declaration of a spelling came
-        // first, so two functions' `struct Box<T>` answered one name and one
-        // of them was swept while its uses survived.
-        let mangled = type_table.struct_mangled_name(s.def, &mono.impl_type_args);
-        self.struct_monomorph_names.contains(mangled.as_str())
-            || type_table
-                .find_struct_by_name(&mangled, &s.module_source)
-                .is_some_and(|id| self.types.contains(&id))
     }
 }
 
@@ -1426,61 +1404,34 @@ impl DceAnalysis {
             functions: IndexSet::default(),
             globals: IndexSet::default(),
             types: IndexSet::default(),
-            struct_exact: IndexSet::default(),
-            struct_monomorph_names: IndexSet::default(),
-            struct_monomorph_bases: IndexSet::default(),
-            generic_instance_names: IndexSet::default(),
-            variant_exact: IndexSet::default(),
-            enum_exact: IndexSet::default(),
+            structs: IndexSet::default(),
+            struct_heads: IndexSet::default(),
+            nominal_defs: IndexSet::default(),
         }
     }
 
-    /// Rebuild the name-keyed type-index views from the current
-    /// `self.types`. Cheap relative to the alternative of `iter().any()`
-    /// lookups — see [`populate_type_reachability`]'s Phase 2 comment.
+    /// Rebuild the declaration views from the current `self.types`. Cheap
+    /// relative to the alternative of `iter().any()` lookups — see
+    /// [`populate_type_reachability`]'s Phase 2 comment.
     fn refresh_indexes(&mut self, type_table: &TypeTable) {
-        self.struct_exact.clear();
-        self.struct_monomorph_names.clear();
-        self.struct_monomorph_bases.clear();
-        self.generic_instance_names.clear();
-        self.variant_exact.clear();
-        self.enum_exact.clear();
+        self.structs.clear();
+        self.struct_heads.clear();
+        self.nominal_defs.clear();
         for &id in &self.types {
+            // A dead local still declares its type as a `GenericInstance`, and
+            // `wir_build` declares a Wasm local for it, so that spelling keeps
+            // the struct too.
+            if let Some(instance) = nir::struct_instance(id, type_table) {
+                self.struct_heads.insert(instance.0);
+                self.structs.insert(instance);
+                continue;
+            }
             match type_table.get(id) {
-                ResolvedType::Struct { def, type_args } => {
-                    let decl_name = type_table.struct_head_mangled_name(*def);
-                    let module_source = type_table.struct_head_module(*def);
-                    if type_args.is_empty() {
-                        self.struct_exact.insert((decl_name, module_source.clone()));
-                    } else {
-                        self.struct_monomorph_names
-                            .insert(type_table.struct_mangled_name(*def, type_args));
-                        self.struct_monomorph_bases.insert(decl_name);
-                    }
+                ResolvedType::Variant { def } | ResolvedType::Enum { def } => {
+                    self.nominal_defs.insert(*def);
                 }
-                ResolvedType::Variant { def } => {
-                    self.variant_exact.insert((
-                        type_table.decl_name(*def).to_string(),
-                        type_table.def_module(*def).clone(),
-                    ));
-                }
-                ResolvedType::Enum { def } => {
-                    self.enum_exact.insert((
-                        type_table.decl_name(*def).to_string(),
-                        type_table.def_module(*def).clone(),
-                    ));
-                }
-                ResolvedType::GenericInstance { def, type_args }
-                    if !type_table.is_resource_def(*def) =>
-                {
-                    self.generic_instance_names
-                        .insert(type_table.decl_name(*def).to_string());
-                    // The spelling a live `Struct` with type args records, so
-                    // `keeps_struct` recognises the monomorph either way: a dead
-                    // local still declares its type, and `wir_build` declares a
-                    // Wasm local for it.
-                    self.struct_monomorph_names
-                        .insert(type_table.struct_mangled_name(StructDef::Decl(*def), type_args));
+                ResolvedType::GenericInstance { def, .. } if !type_table.is_resource_def(*def) => {
+                    self.nominal_defs.insert(*def);
                 }
                 _ => {}
             }
@@ -1497,25 +1448,17 @@ impl DceAnalysis {
 fn variant_decls_kept_past_use(
     project: &NirPackage,
     type_table: &TypeTable,
-) -> hashmap::IndexSet<(String, ModuleSource)> {
-    let mut kept: hashmap::IndexSet<(String, ModuleSource)> = project
+) -> IndexSet<DefId> {
+    project
         .functions
         .iter()
         .filter_map(|f| f.borrow().scalarized_from)
         .filter_map(|t| match type_table.get(t) {
-            ResolvedType::Variant { .. } | ResolvedType::GenericInstance { .. } => {
-                type_table.nominal_head(t)
-            }
+            ResolvedType::Variant { def } | ResolvedType::GenericInstance { def, .. } => Some(*def),
             _ => None,
         })
-        .collect();
-    if let Some(ms) = type_table
-        .compiler_items()
-        .variant_module(CompilerItem::Option)
-    {
-        kept.insert(("Option".to_string(), ms.clone()));
-    }
-    kept
+        .chain(type_table.compiler_item_def(CompilerItem::Option))
+        .collect()
 }
 
 /// Populate `analysis.types` and the name-keyed type-index views. A type is
@@ -1654,16 +1597,7 @@ fn populate_type_reachability(
         // its last use keeps payloads alive. The same predicate gates the
         // `project.variants` retain in `remove_unreachable_types`.
         for variant in &project.variants {
-            let base_reachable = analysis
-                .variant_exact
-                .contains(&(variant.name.clone(), variant.module_source.clone()));
-            let instance_reachable = analysis
-                .generic_instance_names
-                .contains(variant.name.as_str());
-
-            if base_reachable
-                || instance_reachable
-                || kept_past_use.contains(&(variant.name.clone(), variant.module_source.clone()))
+            if analysis.nominal_defs.contains(&variant.def) || kept_past_use.contains(&variant.def)
             {
                 for case in &variant.cases {
                     collect_type_transitive(case.payload, &type_table, &mut analysis.types);
@@ -1832,18 +1766,12 @@ pub fn remove_unreachable_types(project: &mut NirPackage, analysis: &DceAnalysis
         let type_table = project.type_table.borrow();
         variant_decls_kept_past_use(project, &type_table)
     };
-    project.variants.retain(|v| {
-        analysis
-            .variant_exact
-            .contains(&(v.name.clone(), v.module_source.clone()))
-            || analysis.generic_instance_names.contains(v.name.as_str())
-            || kept_past_use.contains(&(v.name.clone(), v.module_source.clone()))
-    });
-    project.enums.retain(|e| {
-        analysis
-            .enum_exact
-            .contains(&(e.name.clone(), e.module_source.clone()))
-    });
+    project
+        .variants
+        .retain(|v| analysis.nominal_defs.contains(&v.def) || kept_past_use.contains(&v.def));
+    project
+        .enums
+        .retain(|e| analysis.nominal_defs.contains(&e.def));
 
     // Remove unreachable entries from the shared TypeTable.
     // This ensures that subsequent phases (WIR type registration, codegen) do not
