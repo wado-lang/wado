@@ -218,8 +218,8 @@ global global:inline.wado::$const_obj_2: ref Array<u8> = array.new_fixed<u8>(51)
 global global:inline.wado::$const_obj_3: ref Array<u8> = array.new_fixed<u8>(112, 111, 115, 105, 116, 105, 118, 101);
 global global:inline.wado::$const_obj_4: ref Array<u8> = array.new_fixed<u8>(122, 101, 114, 111);
 global global:inline.wado::$const_obj_5: ref Array<u8> = array.new_fixed<u8>(110, 101, 103, 97, 116, 105, 118, 101);
-global global:core:prelude/string.wado::$const_obj_14: ref Array<u8> = array.new_fixed<u8>(44, 32);
-global global:core:prelude/string.wado::$const_obj_15: ref Array<u8> = array.new_fixed<u8>(82, 101, 115, 117, 108, 116, 58, 32);
+global global:core:prelude/string.wado::$const_obj_8: ref Array<u8> = array.new_fixed<u8>(44, 32);
+global global:core:prelude/string.wado::$const_obj_9: ref Array<u8> = array.new_fixed<u8>(82, 101, 115, 117, 108, 116, 58, 32);
 
 fn "inline.wado/test_array_append_minimal"() with Stdout {
     let arr: ref "core:prelude//List<i32>";
@@ -1758,15 +1758,31 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<inline.wado
     let $sroa_view_repr_191: ref Array<u8>;
     let $sroa_view_repr_203: ref Array<u8>;
     out_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(42), used: 0 };
+<<<<<<< HEAD
     $sroa_view_repr_191 = global:core:prelude/string.wado::$const_obj_15;
+||||||| 330330b11
+    repr_37 = global:core:prelude/string.wado::$const_obj_15;
+=======
+    repr_37 = global:core:prelude/string.wado::$const_obj_9;
+>>>>>>> origin/main
     out_3.used = 8;
     builtin::array_copy<u8>(out_3.repr, 0, $sroa_view_repr_191, 0, 8);
     is_negative_70 = $mv$t$h0 < 0;
     $mv$t$h0 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_74(x_74 = builtin::i64_extend_i32_s($mv$t$h0); select i64(x_74 < 0_i64, 0_i64 - x_74, x_74)));
     is_negative_70 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"(out_3, is_negative_70, $mv$t$h0);
+<<<<<<< HEAD
     "core:prelude/primitive.wado/write_decimal_digits"(local.tee $sroa_view_repr_191(out_3.repr), is_negative_70, x_74, $mv$t$h0);
     $sroa_view_repr_203 = global:core:prelude/string.wado::$const_obj_14;
     if @unlikely(local.tee $mv$t$h0(out_3.used + 2) > builtin::array_len($sroa_view_repr_191)) {
+||||||| 330330b11
+    "core:prelude/primitive.wado/write_decimal_digits"(local.tee repr_37(out_3.repr), is_negative_70, x_74, $mv$t$h0);
+    repr_93 = global:core:prelude/string.wado::$const_obj_14;
+    if @unlikely(local.tee $mv$t$h0(out_3.used + 2) > builtin::array_len(repr_37)) {
+=======
+    "core:prelude/primitive.wado/write_decimal_digits"(local.tee repr_37(out_3.repr), is_negative_70, x_74, $mv$t$h0);
+    repr_93 = global:core:prelude/string.wado::$const_obj_8;
+    if @unlikely(local.tee $mv$t$h0(out_3.used + 2) > builtin::array_len(repr_37)) {
+>>>>>>> origin/main
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_3, $mv$t$h0);
     }

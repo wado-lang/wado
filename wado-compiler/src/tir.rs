@@ -1971,6 +1971,53 @@ pub fn block_result_type(tt: &TypeTable, block: &TirBlock) -> TypeId {
         .unwrap_or(TypeTable::UNIT)
 }
 
+/// The loops and labeled blocks a walk has entered since the region it
+/// started at: a bare `break` / `continue` inside one of the loops, and a
+/// `break L` inside `L`, stay in the region.
+#[derive(Default)]
+pub struct ExitScope {
+    loops: u32,
+    labels: Vec<String>,
+}
+
+impl ExitScope {
+    /// Whether `kind` leaves the region: a `return`, or a jump past every loop
+    /// and label the walk entered.
+    pub fn exits(&self, kind: &TirStmtKind) -> bool {
+        match kind {
+            TirStmtKind::Return { .. } => true,
+            TirStmtKind::Break {
+                label: Some(label), ..
+            } => !self.labels.contains(label),
+            TirStmtKind::Break { label: None, .. } | TirStmtKind::Continue => self.loops == 0,
+            TirStmtKind::Let { .. }
+            | TirStmtKind::Expr(_)
+            | TirStmtKind::TaskReturn { .. }
+            | TirStmtKind::If { .. }
+            | TirStmtKind::Loop { .. }
+            | TirStmtKind::LabeledBlock { .. }
+            | TirStmtKind::LetDestructure { .. }
+            | TirStmtKind::VariadicForOf { .. } => false,
+        }
+    }
+
+    pub fn enter_loop(&mut self) {
+        self.loops += 1;
+    }
+
+    pub fn leave_loop(&mut self) {
+        self.loops -= 1;
+    }
+
+    pub fn enter_label(&mut self, label: &str) {
+        self.labels.push(label.to_string());
+    }
+
+    pub fn leave_label(&mut self) {
+        self.labels.pop();
+    }
+}
+
 /// Combine two branch result types under the elaborator's rule:
 /// equal types agree; a `Never` branch defers to the other; two
 /// `extends`-related resources agree on the ancestor; an outright

@@ -188,6 +188,9 @@ impl Opt {
         CompileKnobOpt::OptIterations,
         CompileKnobOpt::Specializations,
         CompileKnobOpt::OptThreads,
+        CompileKnobOpt::ProfileSummaryCutoffHot,
+        CompileKnobOpt::ProfileSummaryCutoffCold,
+        CompileKnobOpt::PredictableBranchThreshold,
         CompileKnobOpt::LogLevel,
         CompileKnobOpt::NoValidate,
         CompileKnobOpt::NoCache,
@@ -393,8 +396,14 @@ pub async fn try_compile_with_run_cache(
         .map_err(|e| TryCompileError::reported(e.to_string()))?;
 
     let knobs = &flags.knobs;
-    let profile = entry_profile(path, knobs, flags.target_world.as_deref(), &host)
-        .map_err(TryCompileError::reported)?;
+    // A run recording the profile reads none: it would depend on the file it
+    // rewrites, and no count depends on the markers a profile places.
+    let profile = if flags.test_selection.workloads_only {
+        None
+    } else {
+        entry_profile(path, knobs, flags.target_world.as_deref(), &host)
+            .map_err(TryCompileError::reported)?
+    };
     let options = wado_compiler::CompilerOptions {
         opt_level: knobs.opt_level.to_compiler(),
         skip_validation: knobs.skip_validation,
@@ -449,10 +458,10 @@ pub(crate) fn entry_profile(
     let Some(file) = profile_file(path) else {
         return Ok(None);
     };
-    host.run_cache().depend_on_file(&file);
     let text = match fs::read_to_string(&file) {
         Ok(text) => text,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+            host.run_cache().observe_absent(&file);
             if pgo == Pgo::Requested {
                 Logger::new(host, knobs.log_level).info(format!(
                     "-f pgo: no profile at {}, so none is applied",
@@ -463,6 +472,8 @@ pub(crate) fn entry_profile(
         }
         Err(e) => return Err(format!("Error reading '{}': {e}", file.display())),
     };
+    // The bytes compiled, so an edit mid-run is reported as a source's is.
+    host.run_cache().observe(&file, None, text.as_bytes());
     pgo::parse(&text)
         .map(|profile| Some(Arc::new(profile)))
         .map_err(|e| format!("{}: {e}", file.display()))

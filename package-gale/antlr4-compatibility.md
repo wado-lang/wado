@@ -60,7 +60,7 @@ Where Gale departs from the jar:
   table leave such a kind to the simulator, and a sync set a wildcard
   contributed to admits it. Pinned by "a wildcard takes a kind past the
   grammar's" in `src/codegen_test.wado` and "a wildcard predicts a kind past
-  the grammar's" in `src/atn_sim_test.wado`. No upstream report names it yet.
+  the grammar's" in `src/lower_test.wado`. No upstream report names it yet.
 
 ### Grammars Gale accepts and ANTLR4 rejects
 
@@ -270,12 +270,9 @@ Test sources covering Stage A:
    `tests/antlr4-compat/<category>_test.wado` (`#![generated]`-tagged)
    for claim (a).
 3. **Descriptor drivers** under
-   `tests/antlr4-compat/stage_a/<Category>/<Category>_<k>_test.wado`
-   for claims (b), (c), (d). Each file carries up to
-   `DESCRIPTORS_PER_FILE` descriptors, each importing its grammar under
-   a namespace of its own (`t_<Name>`). Every entry module is a
-   whole-program `-O3` build, so grouping compiles the shared Gale
-   runtime once per file rather than once per descriptor. A
+   `tests/antlr4-compat/drivers/<Category>/<Category>_<k>_test.wado`
+   for claims (b), (c), (d). The drivers of every stage share these
+   files; [Driver files](#driver-files) says how they are grouped. A
    descriptor's claim is one of:
    - claim (b): assert `t_<N>::parse(&input)` returns
      `Ok`. Eligibility: `[type]` is `Parser`, non-empty `[input]`,
@@ -300,11 +297,25 @@ Test sources covering Stage A:
    `[errors]`, so at most one per descriptor is emitted. A
    single `[stage_a_todo]` / `[stage_a_skip]` triage entry keyed by
    `Category/Name` unambiguously addresses whichever claim fires.
-   All claims share `tests/generated/antlr4_compat_a/<C>/<N>/` for
-   the generated parser/lexer.
 
 The rest of this document covers (2) and (3); (1) is just standard
 package tests.
+
+#### Driver files
+
+A driver file holds every claim, of every stage, on up to
+`GRAMMARS_PER_FILE` grammars of one category. Each grammar is generated
+once, into `tests/generated/antlr4_compat/<Category>/<Name>/`, and
+imported under `t_<Name>`. `<Name>` is the first descriptor in the
+category to bring that grammar. A later descriptor whose grammar and
+slaves match it byte for byte runs its claims on the same module, so
+`JavaExpressions_1` through `_12` share one parser.
+
+Each file is a whole-program build, and a generated parser inlines the
+Gale runtime. So what the corpus costs to test is the number of
+distinct grammars, and a grammar two files import is compiled twice.
+Keeping every claim on a grammar in the file that imports it is what
+compiles each one once.
 
 ### Stage B — semantic compatibility (codegen + parse-tree shape)
 
@@ -318,8 +329,8 @@ Test sources covering Stage B:
    the generator at compile time via `use ... with { generator: ... }`,
    runs the resulting parser on sample input, and compares
    `to_string_tree()` against a hand-written expected tree.
-2. **Per-descriptor Stage B drivers** under
-   `tests/antlr4-compat/stage_b/<Category>/<Category>_<k>_test.wado`, emitted
+2. **Per-descriptor Stage B drivers** in the
+   [driver files](#driver-files), emitted
    by the descriptor extractor for every descriptor whose `[output]` is
    a clean parse tree (rejected by the Stage B output normalizer
    otherwise — action-body prints, token dumps, ATN traces). A tree
@@ -335,9 +346,6 @@ Test sources covering Stage B:
      to print a labelled child rather than the start rule's full tree.
      The emitted test navigates the full tree to that child before
      comparing.
-
-   Both shapes share `tests/generated/antlr4_compat_b/<C>/<N>/` for the
-   generated parser.
 
 Descriptors whose `[output]` cannot survive normalisation auto-skip;
 those become eligible for Stage B′ via the JVM oracle (next section),
@@ -359,9 +367,8 @@ ignores `[output]` entirely, a descriptor blocked only by host-side
 scaffolding in its `[output]` is still reachable — the scaffolding has
 to leave the grammar loadable, not be reproducible.
 
-Stage B and Stage B′ share the generated parser under
-`tests/generated/antlr4_compat_b/`, but not the comparator. Stage B
-compares through `normalize_tree` (`tests/support/tree_compare.wado`), which collapses whitespace runs so a
+Stage B and Stage B′ share the generated parser, but not the
+comparator. Stage B compares through `normalize_tree` (`tests/support/tree_compare.wado`), which collapses whitespace runs so a
 hand-written expected tree can be indented. Stage B′ compares verbatim:
 the oracle's tree is already one line, so collapsing can only lose
 information — and it does whenever a token's own text carries
@@ -558,16 +565,15 @@ tree shape alone.
 
 **Stage C output-compare.** For a Parser descriptor whose `[output]` is
 action-print text (`<writeln(...)>` echoes — rejected by the Stage B
-output normalizer as a non-tree), the extractor emits
-`stage_c/<Category>/<Category>_<k>_test.wado`: it parses `[input]` and
+output normalizer as a non-tree), the extractor emits a Stage C driver
+into the [driver files](#driver-files): it parses `[input]` and
 asserts the parser's action-print output equals the descriptor
 `[output]`. This is what validates the `language = Java` parser-action
 translation. A descriptor whose actions do not execute or whose prints
 diverge (actions nested in a repeat group like `Sets/CharSetLiteral`,
 non-ASCII prints, context-dependent-predicate timing) is triaged in
 `status.toml` under `[stage_c_todo]` / `[stage_c_skip]` so the gap runs
-in CI as `#[TODO]`. The generated parser is shared with Stage A
-(`antlr4_compat_a`).
+in CI as `#[TODO]`.
 
 ## Prediction & codegen design
 
@@ -923,9 +929,9 @@ relevant sites.
    stepped over, ends back at a `*` or `+` loop, which may run again or
    stop. Resuming past it would kill every config on the loop's second
    iteration. Fixture `tests/grammars/scan_optional_lookahead_restore.g4`.
-   The expansion case is pinned in `src/dump_test.wado`, the second
-   iteration in `src/codegen_test.wado` ("a prediction walks a loop
-   through more than one iteration").
+   Both are pinned in `src/codegen_test.wado`: the expansion case by the
+   dump, the second iteration by "a prediction walks a loop through more
+   than one iteration".
 7. A scan-side optional rewinds to its entry position when its body
    fails, because a failed optional means "skip". Leaving the callee's
    `-1` in the scan position both mis-scans the elements after it and
@@ -1241,20 +1247,14 @@ tests/antlr4-compat/grammars/<Category>/<Name>.g4   (extracted grammar)
 tests/antlr4-compat/<category>_test.wado            (Stage A claim (a): one
                   │                                  test per descriptor,
                   │                                  `#![generated]`)
-tests/antlr4-compat/stage_a/<Category>/<Category>_<k>_test.wado
-                  │                                 (Stage A claims (b/c/d):
-                  │                                  variant ∈ {parse,err,tokens};
-                  │                                  exactly one variant per
-                  │                                  eligible descriptor)
-tests/antlr4-compat/stage_b/<Category>/<Category>_<k>_test.wado
-                  │              │                  (Stage B: tree-shape equivalence
-                  │              │                   — full-tree or sub-tree;
-                  │              │                   one file per eligible descriptor)
-tests/antlr4-compat/stage_b_oracle/<Category>/<Category>_<k>_test.wado
-                  │              │                  (Stage B′: expected tree comes from
-                  │              │                   running scripts/antlr4_oracle.wado on
-                  │              │                   the stripped grammar at extract time,
-                  │              │                   and is compared verbatim)
+tests/antlr4-compat/drivers/<Category>/<Category>_<k>_test.wado
+                  │              │                  (every stage's drivers on up to
+                  │              │                   GRAMMARS_PER_FILE grammars:
+                  │              │                   Stage A claims (b/c/d), Stage B
+                  │              │                   full-tree or sub-tree, Stage B′
+                  │              │                   trees from scripts/antlr4_oracle.wado
+                  │              │                   on the stripped grammar, Stage C
+                  │              │                   action-print output)
                   │              └── all consult tests/antlr4-compat/status.toml
                   │                  to decorate todo / skip entries
                   ▼
@@ -1306,11 +1306,8 @@ triage state) live under `package-gale/tests/antlr4-compat/`:
 | `scripts/extract_antlr4_descriptors.wado`  | Extractor (single-file Wado script)                                                                                                           |
 | `tests/antlr4-compat/grammars/`            | Generated `.g4` files (committed)                                                                                                             |
 | `tests/antlr4-compat/<category>_test.wado` | Stage A claim-(a) per-category tests (committed; `#![generated(by=…)]`)                                                                       |
-| `tests/antlr4-compat/stage_a/`             | Stage A claims (b/c/d) drivers (committed), grouped `<Category>_<k>_test.wado` — up to `DESCRIPTORS_PER_FILE` descriptors per entry module.   |
-| `tests/antlr4-compat/stage_b/`             | Per-descriptor Stage B drivers (committed; full-tree or sub-tree per descriptor)                                                              |
-| `tests/antlr4-compat/stage_b_oracle/`      | Per-descriptor Stage B′ drivers (committed; expected parse tree derived from the ANTLR4 JVM oracle at extract time)                           |
-| `tests/generated/antlr4_compat_a/`         | Kiln-generated parsers/lexers for Stage A drivers (committed)                                                                                 |
-| `tests/generated/antlr4_compat_b/`         | Kiln-generated parsers for Stage B and Stage B′ drivers (committed; shared)                                                                   |
+| `tests/antlr4-compat/drivers/`             | Every stage's drivers (committed), in the [driver files](#driver-files)                                                                       |
+| `tests/generated/antlr4_compat/`           | Kiln-generated parsers/lexers, one per distinct grammar (committed)                                                                           |
 | `tests/antlr4-compat/status.toml`          | Manually maintained triage state                                                                                                              |
 | `scripts/antlr4_oracle.wado`               | Black-box wrapper around the published ANTLR4 jar. Caches the jar under `build/antlr4/`. Run at extract time only — CI does not need it.      |
 | `scripts/antlr4_oracle_selftest.wado`      | Behaviour checks for that wrapper: the `--super` and `--lexer` answers, and that `--probe-super` never yields pinnable output. Needs java.    |
@@ -1392,7 +1389,9 @@ The task runs `scripts/extract_antlr4_descriptors.wado` from the
 repository root, with the Java the jar needs. Generated `.g4` and
 `.wado` files go directly under `package-gale/tests/`. The Stage B′
 phase reaches `java` through `[process] read` in the user config (or
-`--process-read`); without a JDK it is skipped with a warning.
+`--process-read`). A JDK is required: a driver file holds every stage's
+claims on its grammars, so it cannot be written without the Stage B′ ones.
+Without one the task fails before writing anything.
 
 The pipeline is **manually re-run**, not a CI step. Generated
 artefacts are committed; CI just runs `wado test` on the existing

@@ -1,0 +1,49 @@
+name: Test wado-vscode
+description: >-
+  Compile the extension and run its unit and E2E tests, over the
+  wado-vscode/out/wado_lsp.wasm the caller placed.
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-node@v7.1.0
+      with:
+        node-version: 26
+        cache: npm
+        cache-dependency-path: wado-vscode/package-lock.json
+
+    # Node 26 bundles npm 11, below what `engines.npm` asks for.
+    - name: Install the npm required by package.json
+      shell: bash
+      working-directory: wado-vscode
+      run: npm install -g "npm@$(node -p "require('./package.json').engines.npm")"
+
+    - name: Install npm dependencies
+      shell: bash
+      working-directory: wado-vscode
+      run: npm ci
+
+    - name: Compile TypeScript
+      shell: bash
+      working-directory: wado-vscode
+      run: npm run compile
+
+    - name: Run unit tests
+      shell: bash
+      working-directory: wado-vscode
+      run: npm run test:unit
+
+    # VS Code E2E tests require a display; xvfb is only available on Linux.
+    - name: Run E2E tests (Linux)
+      if: runner.os == 'Linux'
+      shell: bash
+      working-directory: wado-vscode
+      run: xvfb-run -a npm test
+      env:
+        ELECTRON_DISABLE_SANDBOX: "1"
+
+    - name: Run E2E tests (macOS / Windows)
+      if: runner.os != 'Linux'
+      shell: bash
+      working-directory: wado-vscode
+      run: npm test

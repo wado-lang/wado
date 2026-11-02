@@ -29,7 +29,8 @@ pub(super) struct Ctx {
     push_char_id: FuncId,
     /// `FuncId` of `push_ascii_byte`: what [`ConstAsciiPushRule`] retargets
     /// a constant-ASCII `push` to, and the byte piece [`AppendFuseRule`]
-    /// recognises. Absent (`None`) disables both.
+    /// recognises. Absent once DCE dropped it, which disables the first and
+    /// leaves the second no byte piece to find.
     push_ascii_id: Option<FuncId>,
     /// The four `String` primitives [`AppendFuseRule`] writes a fused run in
     /// terms of. All four or none: a missing one only disables that rule.
@@ -49,11 +50,6 @@ impl Ctx {
     fn resolve(project: &NirPackage) -> Option<Self> {
         let mut push_str_ids = IndexSet::default();
         let mut push_char_id: Option<FuncId> = None;
-        let mut push_ascii_id: Option<FuncId> = None;
-        let mut len_id: Option<FuncId> = None;
-        let mut reserve_id: Option<FuncId> = None;
-        let mut set_byte_id: Option<FuncId> = None;
-        let mut write_str_id: Option<FuncId> = None;
         let type_table = project.type_table.borrow();
         let appends_a_string = |f: &NirFunction| {
             let [_receiver, text] = f.params.as_slice() else {
@@ -72,36 +68,23 @@ impl Ctx {
                 Some(CompilerItem::StringPushChar) => {
                     push_char_id = Some(f.id.expect("func_id assigned at lower"));
                 }
-                Some(CompilerItem::StringPushAscii) => {
-                    push_ascii_id = Some(f.id.expect("func_id assigned at lower"));
-                }
-                Some(CompilerItem::StringLen) => {
-                    len_id = Some(f.id.expect("func_id assigned at lower"));
-                }
-                Some(CompilerItem::StringReserveUninit) => {
-                    reserve_id = Some(f.id.expect("func_id assigned at lower"));
-                }
-                Some(CompilerItem::StringSetByteUnchecked) => {
-                    set_byte_id = Some(f.id.expect("func_id assigned at lower"));
-                }
-                Some(CompilerItem::StringWriteStrAt) => {
-                    write_str_id = Some(f.id.expect("func_id assigned at lower"));
-                }
                 Some(_) | None => {}
             }
         }
+        let targets = project.rewrite_targets();
+        let target = |item| targets.get(&item).copied();
         let fused = (|| {
             Some(FusedIds {
-                len: len_id?,
-                reserve_uninit: reserve_id?,
-                set_byte: set_byte_id?,
-                write_str_at: write_str_id?,
+                len: target(CompilerItem::StringLen)?,
+                reserve_uninit: target(CompilerItem::StringReserveUninit)?,
+                set_byte: target(CompilerItem::StringSetByteUnchecked)?,
+                write_str_at: target(CompilerItem::StringWriteStrAt)?,
             })
         })();
         Some(Self {
             push_str_ids,
             push_char_id: push_char_id?,
-            push_ascii_id,
+            push_ascii_id: target(CompilerItem::StringPushAscii),
             fused,
         })
     }
@@ -222,7 +205,7 @@ enum LenTerm {
 /// write in the same run would measure a buffer the run itself grew.
 pub(super) struct AppendFuseRule {
     push_str_ids: IndexSet<FuncId>,
-    push_ascii_id: FuncId,
+    push_ascii_id: Option<FuncId>,
     ids: FusedIds,
 }
 
@@ -231,7 +214,7 @@ impl AppendFuseRule {
     pub(super) fn new(ctx: &Ctx) -> Option<Self> {
         Some(Self {
             push_str_ids: ctx.push_str_ids.clone(),
-            push_ascii_id: ctx.push_ascii_id?,
+            push_ascii_id: ctx.push_ascii_id,
             ids: ctx.fused?,
         })
     }
@@ -249,7 +232,7 @@ impl AppendFuseRule {
         let [arg] = args else {
             return None;
         };
-        if func_id == self.push_ascii_id {
+        if Some(func_id) == self.push_ascii_id {
             let byte = u8::try_from(body.operand_const_int(arg.expr)?).ok()?;
             return Some((recv, Piece::Byte(byte)));
         }

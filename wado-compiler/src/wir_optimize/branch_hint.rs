@@ -200,7 +200,7 @@ fn select_in_instr(instr: &mut WirInstr) {
             // `if cond { br N }` (no else, no result) ⇔ `br_if N-1`. The `If`
             // introduces a label, so the inner depth shifts down by one;
             // `br 0` (targeting the `if` itself) is a no-op jump and is left
-            // alone. `Nop` / `ColdPath` markers in the arm emit nothing and
+            // alone. `Nop` / `Rare` markers in the arm emit nothing and
             // are dropped.
             if result.is_none()
                 && else_is_empty(else_body)
@@ -224,7 +224,7 @@ fn br_only_arm(body: &[WirInstr]) -> Option<u32> {
     let mut depth = None;
     for instr in body {
         match instr {
-            WirInstr::Nop | WirInstr::ColdPath => {}
+            WirInstr::Nop | WirInstr::Rare(_) => {}
             WirInstr::Br { depth: d } if depth.is_none() => depth = Some(*d),
             _ => return None,
         }
@@ -233,7 +233,7 @@ fn br_only_arm(body: &[WirInstr]) -> Option<u32> {
 }
 
 /// True when an `if` has no meaningful `else` — either no else block, or one
-/// whose only instructions are no-op markers (`Nop`, or a `ColdPath` marker
+/// whose only instructions are no-op markers (`Nop`, or a `Rare` marker
 /// that emits nothing). Mirrors `br_only_arm`'s marker tolerance so `br_if`
 /// selection is not blocked asymmetrically when a cold-path marker lands in
 /// the else arm (the `if let` / `while let` desugaring shape).
@@ -242,13 +242,14 @@ fn else_is_empty(else_body: &Option<Vec<WirInstr>>) -> bool {
         None => true,
         Some(body) => body
             .iter()
-            .all(|i| matches!(i, WirInstr::Nop | WirInstr::ColdPath)),
+            .all(|i| matches!(i, WirInstr::Nop | WirInstr::Rare(_))),
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::rarity::Mark;
     use crate::wir::WirType;
     use std::assert_matches;
 
@@ -306,7 +307,7 @@ mod tests {
         let mut body = vec![if_instr(
             local_get("c"),
             vec![
-                WirInstr::ColdPath,
+                WirInstr::Rare(Mark::ColdPath),
                 WirInstr::Seq(vec![WirInstr::Nop, WirInstr::Unreachable]),
             ],
             None,
@@ -468,7 +469,7 @@ mod tests {
                 likely: false,
                 expr: Box::new(local_get("c")),
             },
-            vec![WirInstr::ColdPath, WirInstr::Br { depth: 1 }],
+            vec![WirInstr::Rare(Mark::ColdPath), WirInstr::Br { depth: 1 }],
             None,
         );
         select_in_instr(&mut instr);
@@ -516,13 +517,13 @@ mod tests {
 
     #[test]
     fn select_allows_cold_path_marker_in_else() {
-        // A `ColdPath` marker emits nothing, so an else made only of markers is
+        // A `Rare` marker emits nothing, so an else made only of markers is
         // still empty — `br_if` selection must not be blocked asymmetrically
         // (`br_only_arm` already tolerates the same markers in the then arm).
         let mut instr = if_instr(
             local_get("c"),
             vec![WirInstr::Br { depth: 1 }],
-            Some(vec![WirInstr::ColdPath, WirInstr::Nop]),
+            Some(vec![WirInstr::Rare(Mark::ColdPath), WirInstr::Nop]),
         );
         select_in_instr(&mut instr);
         assert_matches!(instr, WirInstr::BrIf { depth: 0, .. });

@@ -53,6 +53,7 @@ fn http_path_default() -> String {
 
 /// HTTP request input for `"wasi:http/service"` tests
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 struct HttpRequestSpec {
     /// HTTP method (default: `"GET"`)
     #[serde(default = "http_method_default")]
@@ -96,6 +97,7 @@ impl Default for HttpRequestSpec {
 /// }
 /// ```
 #[derive(Debug, Deserialize, Default)]
+#[serde(deny_unknown_fields)]
 struct HttpServiceSpec {
     /// Injected HTTP request (defaults to `GET /`)
     #[serde(default)]
@@ -120,6 +122,7 @@ struct HttpServiceSpec {
 
 /// Test world spec for `"test": {}` — no sub-fields, presence signals the test world.
 #[derive(Debug, Deserialize, Default)]
+#[serde(deny_unknown_fields)]
 struct TestWorldSpec {}
 
 /// Expected test results from __DATA__ section (JSON format)
@@ -221,6 +224,13 @@ struct TestSpec {
     #[serde(flatten)]
     compile: CompileInputs,
 
+    /// The keys neither this struct nor `compile` reads. `flatten` rules out
+    /// `deny_unknown_fields`, so a misspelt or stale key lands here instead of
+    /// passing as unset. It must follow `compile`, which takes its own keys
+    /// first.
+    #[serde(flatten)]
+    unknown: indexmap::IndexMap<String, serde_json::Value>,
+
     /// Mock responses for outgoing HTTP requests (keyed by URL or path).
     /// When present, any `wasi:http/client#send` from the guest will be
     /// intercepted and matched against these entries.
@@ -281,10 +291,11 @@ struct TestSpec {
     #[serde(default)]
     remarks: indexmap::IndexMap<String, Vec<TextMatch>>,
 
-    /// Every region the fixture's `profile` marks cold, as
-    /// `"file:line:col kind"`.
+    /// Every region the fixture's `profile` marks, as
+    /// `"file:line:col kind mark"`, the mark `unlikely cold`, `unlikely` or
+    /// `cold`.
     #[serde(default)]
-    cold_regions: Option<Vec<String>>,
+    marked_regions: Option<Vec<String>>,
 
     /// Lines the emitted component's WAT must carry. A CM import's shape —
     /// which names an instance type exports, which functions are aliased out of
@@ -842,6 +853,11 @@ fn run_fixture_test_with_opt(fixture_path: &Path, source: &str, opt_level: OptLe
             ..Default::default()
         },
     };
+    assert!(
+        spec.unknown.is_empty(),
+        "[{test_id}] __DATA__ names keys the harness does not read: {:?}",
+        spec.unknown.keys().collect::<Vec<_>>()
+    );
 
     if !spec.runs_at(opt_level) {
         eprintln!(
@@ -1010,7 +1026,7 @@ fn run_with_allocator(
         warnings,
         errors,
         remarks,
-        cold_regions,
+        marked_regions,
     } = common::compile_fixture_on_worker(
         fixture_path.to_path_buf(),
         source.to_string(),
@@ -1136,12 +1152,12 @@ fn run_with_allocator(
     // Every check on the compiler's own output runs before the execution
     // dispatch: one placed after it is silently skipped by `compile_only`.
     assert_wir_expectations(wir_text.as_deref(), spec, opt_level, test_id);
-    if let Some(expected) = &spec.cold_regions {
+    if let Some(expected) = &spec.marked_regions {
         assert!(
             spec.compile.profile.is_some(),
-            "[{test_id}] `cold_regions` states what a `profile` marks"
+            "[{test_id}] `marked_regions` states what a `profile` marks"
         );
-        assert_eq!(&cold_regions, expected, "[{test_id}] cold regions");
+        assert_eq!(&marked_regions, expected, "[{test_id}] marked regions");
     }
 
     if spec.compile_only {

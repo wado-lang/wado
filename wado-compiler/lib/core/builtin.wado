@@ -576,6 +576,21 @@ internal fn swap_handles<R>(a: &R, b: &R);
 #[side_effect(hint)]
 pub fn cold_path();
 
+/// Half of what `cold_path()` says, as a profile measures it: the branch that
+/// contains the call is rarely taken, so it is hinted unlikely, but the path
+/// runs often enough in the whole program that the optimizer still prices it
+/// and keeps it in line.
+#[storage(none)]
+#[side_effect(hint)]
+internal fn unlikely_path();
+
+/// The other half of what `cold_path()` says, as a profile measures it: the
+/// path runs rarely in the whole program, so the optimizer prices and places
+/// it as cold code, but its branch is not biased enough to hint.
+#[storage(none)]
+#[side_effect(hint)]
+internal fn cold_code();
+
 // =========================================================================
 // CM canonical intrinsics (raw flat ABI signatures)
 //

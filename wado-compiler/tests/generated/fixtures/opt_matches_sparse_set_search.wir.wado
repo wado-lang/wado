@@ -108,9 +108,9 @@ type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::pre
 
 type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]" = fn(ref "core:prelude/string.wado//String", bool, i32) -> i32;  // TypeId(38)
 
-type "functype//core:prelude/primitive.wado/u64::fmt_base$sroa[self.value]$spec0$spec0$sroa[f.buf]" = fn(u64, ref "core:prelude/string.wado//String", i32, bool, ref Array<u8>, i32);  // TypeId(39)
+type "functype//core:prelude/primitive.wado/u32^core:prelude/traits.wado/LowerHex::fmt_lower_hex$sroa[self.value]$spec0$sroa[f.buf]" = fn(u32, ref "core:prelude/string.wado//String");  // TypeId(39)
 
-type "functype//core:prelude/primitive.wado/u32^core:prelude/traits.wado/LowerHex::fmt_lower_hex$sroa[self.value]$spec0$sroa[f.buf]" = fn(u32, ref "core:prelude/string.wado//String");  // TypeId(40)
+type "functype//core:prelude/primitive.wado/u64::fmt_base$sroa[self.value]$spec0$spec0$sroa[f.buf]" = fn(u64, ref "core:prelude/string.wado//String", i32, bool, ref Array<u8>, i32);  // TypeId(40)
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::format<opt_matches_sparse_set_search.wado/$tmpl$fb51c04d54491732,[i32]>$spec0$spec0$sroa[t.h0]" = fn(i32) -> ref "core:prelude/string.wado//String";  // TypeId(41)
 
@@ -140,9 +140,9 @@ import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
 global global:opt_matches_sparse_set_search.wado::EDGES: ref "core:prelude//List<i32>" = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(65, 90, 97, 122, 170, 181, 186, 192, 214, 216, 246, 248, 705, 880, 884, 902, 904, 906, 908, 910, 929, 931, 1013, 1024, 1153, 1329, 1366, 1488, 1514, 1569, 1610, 2308, 2361, 3585, 3632, 4304, 4346, 12353, 12438, 12449, 12538, 19968, 40959, 44032, 55203), used: 45 };
-global global:opt_matches_sparse_set_search.wado::$const_obj_1: ref Array<u32> = array.new_fixed<u32>(0, 1, 2, 9, 10, 20, 21, 999, 1000, 1001, 69999, 70000, 80000, 80001, 2147483646, 2147483647, -2147483648, -2147483647, -1879048192, -1879047937, -1879047936, -1073741825, -1073741824, -17, -16, -1);
-global global:opt_matches_sparse_set_search.wado::$const_obj_2: ref Array<u8> = array.new_fixed<u8>(32);
-global global:core:prelude/primitive.wado::$const_obj_5: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(48, 120), used: 2 };
+global global:opt_matches_sparse_set_search.wado::$const_obj_0: ref Array<u32> = array.new_fixed<u32>(0, 1, 2, 9, 10, 20, 21, 999, 1000, 1001, 69999, 70000, 80000, 80001, 2147483646, 2147483647, -2147483648, -2147483647, -1879048192, -1879047937, -1879047936, -1073741825, -1073741824, -17, -16, -1);
+global global:opt_matches_sparse_set_search.wado::$const_obj_1: ref Array<u8> = array.new_fixed<u8>(32);
+global global:core:prelude/primitive.wado::$const_obj_4: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(48, 120), used: 2 };
 
 fn "opt_matches_sparse_set_search.wado/run"() with Stdout {
     let $load_1: ref Array<u8>;
@@ -299,7 +299,13 @@ fn "opt_matches_sparse_set_search.wado/run"() with Stdout {
     inside = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_246(x_246 = builtin::i64_extend_i32_s(inside); select i64(x_246 < 0_i64, 0_i64 - x_246, x_246)));
     $sroa_$iter_0_index_156 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"(out_175, $sroa_$iter_0_index_156, inside);
     "core:prelude/primitive.wado/write_decimal_digits"(local.tee $load_1(out_175.repr), $sroa_$iter_0_index_156, x_246, inside);
+<<<<<<< HEAD
     $sroa_view_repr_203 = global:opt_matches_sparse_set_search.wado::$const_obj_2;
+||||||| 330330b11
+    repr_265 = global:opt_matches_sparse_set_search.wado::$const_obj_2;
+=======
+    repr_265 = global:opt_matches_sparse_set_search.wado::$const_obj_1;
+>>>>>>> origin/main
     if @unlikely(local.tee inside(out_175.used + 1) > builtin::array_len($load_1)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_175, inside);
@@ -378,7 +384,7 @@ fn "opt_matches_sparse_set_search.wado/run"() with Stdout {
     "core:rt/write_string_to_stream$dae[add_newline]"(outside, out_175.repr, out_175.used);
     "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(inside);
     inside = 0;
-    $sroa_$iter_5_repr_166 = global:opt_matches_sparse_set_search.wado::$const_obj_1;
+    $sroa_$iter_5_repr_166 = global:opt_matches_sparse_set_search.wado::$const_obj_0;
     outside = 0;
     b41: block {
         l42: loop {
@@ -830,6 +836,14 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
     return digit_count;
 }
 
+fn "core:prelude/primitive.wado/u32^core:prelude/traits.wado/LowerHex::fmt_lower_hex$sroa[self.value]$spec0$sroa[f.buf]"(self, f) {
+    let $arg_spill_1: u64;
+    $arg_spill_1 = builtin::i64_extend_i32_u(self);
+    let $mv_arg_5: ref "core:prelude/string.wado//String";
+    $mv_arg_5 = global:core:prelude/primitive.wado::$const_obj_4;
+    "core:prelude/primitive.wado/u64::fmt_base$sroa[self.value]$spec0$spec0$sroa[f.buf]"($arg_spill_1, f, 16, 0, $mv_arg_5.repr, $mv_arg_5.used);
+}
+
 fn "core:prelude/primitive.wado/u64::fmt_base$sroa[self.value]$spec0$spec0$sroa[f.buf]"(self, f, base, upper, $mv$alt_prefix$repr, $mv$alt_prefix$used) {
     let bits_per_digit: i32;
     let digit_count: i32;
@@ -842,14 +856,6 @@ fn "core:prelude/primitive.wado/u64::fmt_base$sroa[self.value]$spec0$spec0$sroa[
     digit_count = "core:prelude/primitive.wado/count_digits_u64_base"(self, bits_per_digit);
     $mv$alt_prefix$used = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec1$spec0$sroa[self.buf]$dae[is_negative]"(f, $mv$alt_prefix$repr, $mv$alt_prefix$used, digit_count);
     "core:prelude/primitive.wado/write_u64_base_digits"(f.repr, $mv$alt_prefix$used, self, digit_count, bits_per_digit, base, upper);
-}
-
-fn "core:prelude/primitive.wado/u32^core:prelude/traits.wado/LowerHex::fmt_lower_hex$sroa[self.value]$spec0$sroa[f.buf]"(self, f) {
-    let $arg_spill_1: u64;
-    $arg_spill_1 = builtin::i64_extend_i32_u(self);
-    let $mv_arg_5: ref "core:prelude/string.wado//String";
-    $mv_arg_5 = global:core:prelude/primitive.wado::$const_obj_5;
-    "core:prelude/primitive.wado/u64::fmt_base$sroa[self.value]$spec0$spec0$sroa[f.buf]"($arg_spill_1, f, 16, 0, $mv_arg_5.repr, $mv_arg_5.used);
 }
 
 fn "core:prelude/string.wado/core:prelude/string.wado/String::format<opt_matches_sparse_set_search.wado/$tmpl$fb51c04d54491732,[i32]>$spec0$spec0$sroa[t.h0]"(t) {

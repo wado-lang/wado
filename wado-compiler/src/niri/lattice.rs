@@ -659,7 +659,7 @@ impl Interpreter<'_> {
             CtfeBuiltin::ArraySet
             | CtfeBuiltin::ArrayCopy
             | CtfeBuiltin::ArrayRelease
-            | CtfeBuiltin::ColdPath => Lattice::Unevaluated,
+            | CtfeBuiltin::RarityMarker => Lattice::Unevaluated,
         }
     }
 

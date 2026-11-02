@@ -13,6 +13,7 @@ use std::rc::Rc;
 use crate::ast::cm_function_path;
 use crate::builtin_registry::BuiltinRegistry;
 use crate::codegen_flags::CodegenFlags;
+use crate::compiler_item::CompilerItem;
 use crate::component_model::{
     CmFunctionInfo, CmInterfaceInfo, CmInterfaceRegistry, ResKind, parse_resource_func,
 };
@@ -837,6 +838,29 @@ impl NirPackage {
                 .iter()
                 .zip(params)
                 .all(|(p, &t)| types.same_type(p.type_id, t))
+    }
+
+    /// The function bound to each item an optimizer rewrite calls. Only an
+    /// item [`CompilerItem::rewritten_from`] declares is here: DCE keeps no
+    /// other for a call the rewrite has yet to write. A dead one is absent: DCE
+    /// dropped it because nothing it is rewritten from is reachable, so no call
+    /// remains for the rewrite to replace.
+    pub fn rewrite_targets(&self) -> IndexMap<CompilerItem, FuncId> {
+        let mut targets = IndexMap::default();
+        for cell in &self.functions {
+            let func = cell.borrow();
+            if let Some(item) = func.compiler_item
+                && !item.rewritten_from().is_empty()
+                && !func.is_dead
+            {
+                let id = func.id.expect("func_id assigned at lower");
+                assert!(
+                    targets.insert(item, id).is_none(),
+                    "a rewrite target is bound to one live function"
+                );
+            }
+        }
+        targets
     }
 
     /// Retire function `id`, which `rename_functions` merged into another

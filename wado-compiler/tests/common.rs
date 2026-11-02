@@ -285,8 +285,9 @@ pub struct CompiledFixture {
     pub warnings: Vec<CapturedDiagnostic>,
     pub errors: Vec<CapturedDiagnostic>,
     pub remarks: Vec<String>,
-    /// [`wado_compiler::CompileResult::cold_regions`], empty on a failed compile.
-    pub cold_regions: Vec<String>,
+    /// [`wado_compiler::CompileResult::marked_regions`], empty on a failed
+    /// compile.
+    pub marked_regions: Vec<String>,
 }
 
 /// Compile a fixture on a compile worker, unparsing its WIR there when
@@ -305,7 +306,7 @@ pub fn compile_fixture_on_worker(
             errors,
             remarks,
         } = compile_capturing_diagnostics(&path, &source, options, None, stubs);
-        let (wasm, wir_text, cold_regions) = match result {
+        let (wasm, wir_text, marked_regions) = match result {
             Ok(compiled) => {
                 let wir_text = unparse_wir.then(|| {
                     wado_compiler::wir_unparse::unparse_wir(
@@ -315,7 +316,7 @@ pub fn compile_fixture_on_worker(
                             .expect("retain_wir keeps the WIR package"),
                     )
                 });
-                (Ok(compiled.wasm), wir_text, compiled.cold_regions)
+                (Ok(compiled.wasm), wir_text, compiled.marked_regions)
             }
             Err(error) => (Err(error.to_string()), None, Vec::new()),
         };
@@ -325,7 +326,7 @@ pub fn compile_fixture_on_worker(
             warnings,
             errors,
             remarks,
-            cold_regions,
+            marked_regions,
         }
     })
 }
@@ -482,6 +483,7 @@ pub fn http_engine() -> &'static Engine {
 
 /// Mock spec for a single outgoing HTTP response
 #[derive(Debug, Clone, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct OutgoingMockResponse {
     /// HTTP status code (default: 200)
     #[serde(default = "default_status_200")]
@@ -614,6 +616,7 @@ fn fixture_wasi_ctx(builder: &mut WasiCtxBuilder) -> WasiCtx {
 /// Keys in `tls_mocks` are matched against the `server_name` argument the
 /// guest passes to `Connector::connect(this, server_name)`.
 #[derive(Debug, Clone, serde::Deserialize, Default)]
+#[serde(deny_unknown_fields)]
 pub struct TlsMockResponse {
     /// Cleartext bytes the mock delivers to the guest's `Connector::receive`
     /// stream as if they were decrypted from the server. Read-side closes
