@@ -9,6 +9,9 @@ onnxruntime oracles and the benchmarks are in [tools.md](./tools.md).
 any more. A design that changes one of its decisions is written in this
 directory and names the WEP's section.
 
+The documents here sketch a design and describe what exists; they decide
+nothing. Correctness and speed come first.
+
 ## Sources
 
 - Do not read the code of an ML framework, runtime, exporter or kernel library.
