@@ -91,6 +91,6 @@ the environment above.
 | ----------------------------------- | --------------: | ----------: | ------- |
 | llama.cpp Vulkan                    | 269.12 tokens/s |   29.726 ms | 1.00x   |
 | **Loam** `WebGpuBackend`            | 246.02 tokens/s |   32.517 ms | 1.09x   |
-| **Loam** `WebGpuBackend`, `compute` |  45.50 tokens/s |  175.804 ms | 5.91x   |
+| **Loam** `WebGpuBackend`, `compute` | 156.68 tokens/s |   51.058 ms | 1.72x   |
 | onnxruntime, its own thread pool    |  35.88 tokens/s |  222.946 ms | 7.50x   |
 | **Loam** `Cpu`                      |   6.80 tokens/s | 1177.114 ms | 39.58x  |

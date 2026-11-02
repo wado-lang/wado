@@ -226,7 +226,7 @@ has none:
 So a use site that must work with both writes every field that is not an
 `Option`, a `List`, or a `TreeMap`.
 
-Loam's options hold two maps, a list of strings, and two flags.
+Loam's options hold three maps, a list of strings, and two flags.
 They are declared in `compile.wado`, which the `loam` command reads too, and
 the entry module re-exports them:
 
@@ -243,6 +243,10 @@ export struct Options {
     /// its operands computes the last alone; what reads across them, as
     /// attention does, still computes them all.
     pub last: TreeMap<String, i32> = {},
+    /// Outputs `forward` returns the index of the greatest element of, each by
+    /// the axis it ranks along, kept at extent 1: a greedy pick reads one
+    /// index rather than a vocabulary's scores. Applied after `last`.
+    pub arg_max: TreeMap<String, i32> = {},
     /// Whether operators fuse into one kernel where the plan finds they can.
     /// Off, every kernel writes its output, which is what a fused module is
     /// compared against.

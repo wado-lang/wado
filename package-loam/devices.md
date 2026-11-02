@@ -546,17 +546,18 @@ and reads back the logits. The range spans the two prompts.
 
 | Entry                                             | Time a token, onnxruntime on the CPU as 1 | Dispatches a token | Read backs a token |
 | ------------------------------------------------- | ----------------------------------------- | ------------------ | ------------------ |
-| `pass`, the kernels                               | 0.18–0.19                                 | 204                | 1                  |
-| `compute`, the compiled program at the capacities | 0.49–0.61                                 | 310–315            | 1                  |
+| `pass`, the kernels                               | 0.17–0.20                                 | 204                | 1                  |
+| `compute`, the compiled program at the capacities | 0.25–0.34                                 | 275–280            | 1                  |
 | onnxruntime on WebGPU                             | 0.34–0.75                                 |                    |                    |
 | onnxruntime on the CPU                            | 1                                         |                    |                    |
 
 onnxruntime on WebGPU reads near 0.35 on the first prompt, and near 0.35 or
 near 0.75 on the second from one run to the next. Both Loam entries rank the
 logits on the device and read back one index, `compute` through the generator's
-`arg_max` option. `compute` replays each fused kernel's dispatches as the call
-before encoded them, and encodes the attention and the gather again on every
-call, since each reads a value on the host.
+`arg_max` option, on the kernel `pass` runs. `compute` runs the products of one
+input as one, replays each fused kernel's dispatches as the call before encoded
+them, and encodes the attention and the gather again on every call, since each
+reads a value on the host.
 
 Each Loam entry is one program in `example/gemma3-270m`, which prints each
 prompt's time a token beside onnxruntime's on both:
