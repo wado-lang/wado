@@ -236,6 +236,25 @@ struct Encoded {
     used: i32,
 }
 
+/// A buffer a launch of a program makes its `at`th buffer in, which lives as
+/// long as the backend, so each call binds the one the call before bound.
+struct Owned {
+    slot: i32,
+    words: i32,
+    /// Whether a call returned what it held, which is the caller's from then
+    /// on, so a later call makes its `at`th buffer in the pass.
+    returned: bool,
+}
+
+/// The program a call is running, the launch of it running, by the
+/// program's serial and the launch's root node, and how many buffers the
+/// launch has made.
+struct Running {
+    serial: i32,
+    launch: List<i32>,
+    made: i32,
+}
+
 /// The slots a recorded launch named, and those its replay names in their
 /// place.
 struct Renamed {
@@ -246,6 +265,17 @@ struct Renamed {
 /// The slots `now` names in place of those `was` named, where each of `now` is
 /// laid out as the one of `was` at its place: at the same place in its buffer,
 /// and two in one buffer exactly where those were.
+/// Whether the bind group cached under `key`, as `group_key` spells one, binds
+/// a buffer whose `id` is among `ids`.
+fn binds_any(key: &List<i32>, ids: &HashSet<i32>) -> bool {
+    for let at of (1..<key.len()).step_by(3) {
+        if ids.contains(key[at]) {
+            return true;
+        }
+    }
+    return false;
+}
+
 fn renamed_over(was: &List<DeviceTensor>, now: &List<DeviceTensor>) -> Option<Renamed> {
     let mut slots = Renamed::new();
     for let i of 0..<now.len() {
@@ -335,6 +365,10 @@ pub affine struct WebGpuBackend {
     encoded: HashMap<List<i32>, List<Encoded>>,
     /// The programs `compiled` has made.
     programs: i32,
+    /// The buffers each launch of a program makes, by the program's serial and
+    /// the launch's root node, in the order a launch makes them.
+    owned: HashMap<List<i32>, List<Owned>>,
+    running: Option<Running>,
     /// The passes `begin` has started.
     passes: i32,
     next_id: i32,
@@ -391,10 +425,10 @@ global SUBMIT_EVERY: i32 = 32;
 /// writes, and its first step past a capacity reads one just refitted.
 global LAYOUTS: i32 = 4;
 
-/// The passes a launch's commands outlive their last use by. They hold slots,
-/// not buffers, so they cost the host alone, and a generation's first steps
-/// come round again only with the next prompt.
-global ENCODED_PASSES: i32 = 256;
+/// The passes a launch's commands, and a bind group of buffers that live,
+/// outlive their last use by. A generation's first steps come round again
+/// only with the next prompt.
+global IDLE_PASSES: i32 = 256;
 
 /// The slot of a buffer not allocated yet, which `binds` reads a view of
 /// before the buffer exists. No buffer is ever at it.
@@ -488,6 +522,8 @@ impl WebGpuBackend {
             taping: null,
             encoded: HashMap::new(),
             programs: 0,
+            owned: HashMap::new(),
+            running: null,
             passes: 0,
             next_id: 0,
             parameters: null,
@@ -583,11 +619,76 @@ impl WebGpuBackend {
             self.kept.push(self.created(count));
             return -self.kept.len();
         }
-        let slot = self.pass_buffer(count);
+        let slot = match self.owned_buffer(count) {
+            Some(s) => s,
+            None => self.pass_buffer(count),
+        };
         if let Some(commands) = &mut self.taping {
             commands.push(Command::Allocated([count, slot]));
         }
         return slot;
+    }
+
+    /// The buffer the running launch makes its next one in, made where no
+    /// call made that one yet: `None` where no program runs, or where its
+    /// calls make that one in the pass.
+    fn owned_buffer(&mut self, count: i32) -> Option<i32> with (GpuDevice, GpuBuffer) {
+        let Some(r) = &mut self.running else {
+            return null;
+        };
+        let [key, at] = [r.launch, r.made];
+        r.made += 1;
+        if !self.owned.contains_key(key) {
+            self.owned[key] = [];
+        }
+        if at == self.owned[key].len() {
+            self.kept.push(self.created(count));
+            let slot = -self.kept.len();
+            self.owned[key].push(Owned { slot, words: count, returned: false });
+            return Option::Some(slot);
+        }
+        let o = self.owned[key][at];
+        if o.returned || o.words != count {
+            return null;
+        }
+        return Option::Some(o.slot);
+    }
+
+    /// Starts a call of the program `serial`, whose launches make their
+    /// buffers in those their calls own.
+    internal fn run_program(&mut self, serial: i32) {
+        self.running = Option::Some(Running { serial, launch: [serial, -1], made: 0 });
+    }
+
+    /// Starts the running program's launch whose root is the node `root`.
+    internal fn launching(&mut self, root: i32) {
+        let Some(r) = &mut self.running else {
+            unreachable();
+        };
+        r.launch = [r.serial, root];
+        r.made = 0;
+    }
+
+    /// Ends the call `run_program` started, which returned the values at the
+    /// slots `returned`.
+    internal fn ran_program(&mut self, returned: &List<i32>) {
+        let Some(r) = self.running else {
+            unreachable();
+        };
+        self.running = null;
+        let mut launches: List<List<i32>> = [];
+        for let key of self.owned.keys() {
+            if key[0] == r.serial {
+                launches.push(*key);
+            }
+        }
+        for let key of launches {
+            for let o of &mut self.owned[key] {
+                if returned.contains(&o.slot) {
+                    o.returned = true;
+                }
+            }
+        }
     }
 
     /// A buffer of the pass of `count` 32-bit words, and its slot, which no
@@ -628,7 +729,9 @@ impl WebGpuBackend {
     /// a second copy whole on the host.
     fn written(&mut self, count: i32, word: fn(i32) -> u32, kept: bool) -> i32 with (GpuDevice, GpuQueue, GpuBuffer) {
         self.taping = null;
-        let slot = self.allocated(count, kept);
+        // A write reaches the device ahead of the commands not yet submitted,
+        // which may read a buffer a program's calls own.
+        let slot = if kept { self.allocated(count, true) } else { self.pass_buffer(count) };
         self.write(slot, 0, count, word);
         return slot;
     }
@@ -2028,13 +2131,16 @@ impl Holds for WebGpuBackend {
 
     /// Submits what the pass before recorded and releases its buffers, so a
     /// tensor of that pass is no longer one to read, but for those it
-    /// retained, which live through this pass. A spare it did not take and a
-    /// bind group it did not bind are dropped, and so is a launch's layout
-    /// that the last `ENCODED_PASSES` passes neither recorded nor replayed.
+    /// retained, which live through this pass. A spare it did not take is
+    /// dropped, and so is a bind group of a dropped buffer. A bind group, and
+    /// a launch's layout, that the last `IDLE_PASSES` passes did not use are
+    /// dropped too.
     fn begin(&mut self) with (GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBindGroup, GpuBuffer) {
         self.flush();
         self.parameters = null;
+        let mut dropped = HashSet::<i32>::new();
         while let Some(s) = self.spare.pop() {
+            dropped.insert(self.buffers.get(s.at).id);
             self.buffers.remove(s.at);
         }
         let mut carried: List<Carried> = [];
@@ -2064,14 +2170,15 @@ impl Holds for WebGpuBackend {
         self.filled = filled;
         self.carried = carried;
         self.retaining = HashSet::new();
+        let oldest = self.passes - IDLE_PASSES;
         for let at of 0..<self.groups.held.len() {
-            if let Some(g) = &self.groups.held[at] && g.used < self.passes {
+            if let Some(g) = &self.groups.held[at]
+                && (g.used < oldest || !dropped.is_empty() && binds_any(&g.key, &dropped)) {
                 self.group_at.remove(g.key);
                 self.groups.remove(at);
             }
         }
         let mut stale: List<List<i32>> = [];
-        let oldest = self.passes - ENCODED_PASSES;
         for let [key, layouts] of self.encoded.entries() {
             if layouts.into_iter().any(|e| e.used < oldest) {
                 stale.push(*key);

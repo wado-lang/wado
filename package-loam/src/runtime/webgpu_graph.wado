@@ -154,7 +154,16 @@ impl Graph for WebGpuBackend {
         for let [id, value] of program.constants.entries() {
             state.values[*id] = *value;
         }
-        return launched(self, &mut state, program, &program.plan, arguments);
+        self.run_program(program.serial);
+        let results = launched(self, &mut state, program, &program.plan, arguments);
+        let mut returned: List<i32> = [];
+        for let r of &results {
+            if let F32(Device(d)) | Bool(Device(d)) = r {
+                returned.push(d.slot);
+            }
+        }
+        self.ran_program(&returned);
+        return results;
     }
 
     fn iota<E: Element, Axes>(&mut self, extents: List<i32>, dimension: i32) -> Placed<E, Axes> {
@@ -664,6 +673,11 @@ fn launched(
 ) -> List<Any<WebGpuBackend>> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
     let recorded = &program.recorded;
     for let launch of plan.launches {
+        g.launching(match &launch {
+            Node(id) | Case([id, _, _]) => *id,
+            Kernel(k) => k.root,
+            Joined(ks) => ks[0].root,
+        });
         match launch {
             Node(id) => {
                 let value = state.computed(g, id, &recorded.nodes[id], arguments);

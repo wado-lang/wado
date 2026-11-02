@@ -91,30 +91,34 @@ export fn run() with (Stdout, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuC
     // `compute` compiles one program per shape class and replays it: 3 and 4
     // positions share a capacity, 5 takes the next. A program's second call
     // does again what its first recorded of each kernel, and so does a call
-    // after passes of another program.
+    // after passes of another program. A later call binds the buffers the
+    // first made, so it makes a bind group only for the dispatches reading the
+    // input it uploads and writing the value it returns, which the pass holds.
     let kept = gpu.kept_bytes();
     let mut on_gpu = gated::Model::new(gated::Params::embedded(&mut gpu));
     // The normalization's weight and the folded epsilon in f32, and the
     // products' three in bf16: 2 * 4 + 4 + 3 * 6 * 2 bytes.
     assert gpu.kept_bytes() - kept == 48, "a weight only products read is kept in bf16";
     let mut on_cpu = gated::Model::new(gated::Params::embedded(cpu));
-    for let [positions, programs, replays] of [
-        [3, 1, 0],
-        [4, 1, 4],
-        [5, 2, 0],
-        [5, 2, 4],
-        [3, 2, 4],
-    ] as List<[i32, i32, i32]> {
+    for let [positions, programs, replays, groups] of [
+        [3, 1, 0, 4],
+        [4, 1, 4, 2],
+        [5, 2, 0, 4],
+        [5, 2, 4, 2],
+        [3, 2, 4, 2],
+    ] as List<[i32, i32, i32, i32]> {
         let input = rows_of::<[gated::N, gated::S, gated::X2]>(positions);
-        let [before, replayed] = [
+        let [before, replayed, grouped] = [
             gpu.dispatches(),
             gpu.replays(),
+            gpu.bind_groups(),
         ];
         let on_device = gated::compute(&mut gpu, &input, &mut on_gpu);
         // The normalization, the gate's product, the value's with the gate in
         // its epilogue, and the product down.
         assert gpu.dispatches() - before == 4, "one dispatch for each kernel the plan forms";
         assert gpu.replays() - replayed == replays;
+        assert gpu.bind_groups() - grouped <= groups;
         let reference = gated::compute(cpu, &input, &mut on_cpu);
         assert on_gpu.programs.len() == programs, "one program per shape class";
         println(`compiled gated ${positions} ${deviation(&on_device.data, &reference.data)}`);
