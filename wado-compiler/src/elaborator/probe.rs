@@ -22,8 +22,8 @@ impl Reify<'_> {
     /// asks for there, then the coverage probe.
     pub(super) fn site_stmts(&mut self, site: ProbeSite, id: AstId, span: Span) -> Vec<TirStmt> {
         let marker = self
-            .cold
-            .and_then(|cold| cold.mark(site, id))
+            .marks
+            .and_then(|marks| marks.mark(site, id))
             .map(|mark| match mark {
                 Mark::ColdPath => known_cold_path_stmt(span),
                 Mark::Unlikely => unlikely_path_stmt(span),
@@ -38,7 +38,7 @@ impl Reify<'_> {
     /// Whether the profile overrides the marker the source states at node
     /// `id`, an author's `cold_path()` or a `?`'s failure path.
     pub(super) fn overridden(&self, id: AstId) -> bool {
-        self.cold.is_some_and(|cold| cold.overrides(id))
+        self.marks.is_some_and(|marks| marks.overrides(id))
     }
 
     /// The probe `site` on node `id` takes, as a statement, when the plan puts

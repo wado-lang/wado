@@ -736,7 +736,8 @@ fn else_is_empty(else_body: &Option<Vec<WirInstr>>) -> bool {
     }
 }
 
-/// Finalize `builtin::cold_path()` markers into `metadata.code.branch_hint`
+/// Finalize the markers that state an unlikely branch (`cold_path()`,
+/// `unlikely_path()`) into `metadata.code.branch_hint`
 /// entries by wrapping the enclosing condition in [`WirInstr::BranchHint`]. Two
 /// shapes: a marker inside an `if` branch hints that branch unlikely, and an
 /// else-less `if cond { <diverges> }` whose fall-through reaches a marker hints
@@ -749,7 +750,7 @@ fn apply_cold_path_hints(instrs: &mut [WirInstr]) {
 }
 
 /// Backward fall-through pass for the guard-clause idiom. `reaches_cold` says
-/// whether the path just *after* this slice reaches a `cold_path()` marker
+/// whether the path just *after* this slice reaches such a marker
 /// before any non-cold divergence; the return value says the same for the path
 /// *before* it. A guard in front of a cold path gets its taken branch hinted
 /// likely. Descends transparent `Seq`/`Block` tails, so desugarings still match.

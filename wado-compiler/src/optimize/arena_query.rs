@@ -546,7 +546,7 @@ pub(crate) enum Rarity {
 
 /// The program's marker builtins: `cold_path`, which states both halves of
 /// rarity, and the two a profile writes where it measured only one.
-#[derive(Debug, Clone, Copy, Default)]
+#[derive(Debug, Clone, Copy)]
 pub(crate) struct Markers {
     cold_path: Option<FuncId>,
     unlikely_path: Option<FuncId>,
@@ -562,13 +562,18 @@ impl Markers {
         }
     }
 
-    /// Whether a call to `func` states `rarity`.
-    pub(crate) fn states(self, func: FuncId, rarity: Rarity) -> bool {
+    /// The markers stating `rarity`, where the program names them.
+    fn stating(self, rarity: Rarity) -> [Option<FuncId>; 2] {
         let half = match rarity {
             Rarity::Cold => self.cold_code,
             Rarity::Unlikely => self.unlikely_path,
         };
-        [self.cold_path, half].contains(&Some(func))
+        [self.cold_path, half]
+    }
+
+    /// Whether a call to `func` states `rarity`.
+    pub(crate) fn states(self, func: FuncId, rarity: Rarity) -> bool {
+        self.stating(rarity).contains(&Some(func))
     }
 
     /// Whether a call to `func` is a marker, which emits nothing.
@@ -578,23 +583,8 @@ impl Markers {
 
     /// Whether the program names no marker stating `rarity`.
     fn none_states(self, rarity: Rarity) -> bool {
-        self.cold_path.is_none()
-            && match rarity {
-                Rarity::Cold => self.cold_code.is_none(),
-                Rarity::Unlikely => self.unlikely_path.is_none(),
-            }
+        self.stating(rarity).iter().all(Option::is_none)
     }
-}
-
-/// Whether `stmt` is a bare call `is_marker` accepts.
-fn is_marker_stmt(body: &Body, stmt: StmtId, is_marker: impl Fn(FuncId) -> bool) -> bool {
-    let StmtKind::Expr(op) = &body.stmts[stmt].kind else {
-        return false;
-    };
-    let Some(expr) = op.as_expr() else {
-        return false;
-    };
-    matches!(&body.exprs[expr].kind, ExprKind::Call { func_id, .. } if is_marker(*func_id))
 }
 
 /// What the markers of one body stating one [`Rarity`] make rare: per block,
@@ -657,7 +647,13 @@ impl ColdRuns {
 
     /// Whether `stmt` is a marker of either half, which emits nothing.
     pub(crate) fn is_marker(&self, body: &Body, stmt: StmtId) -> bool {
-        is_marker_stmt(body, stmt, |func| self.markers.is_marker(func))
+        let StmtKind::Expr(op) = &body.stmts[stmt].kind else {
+            return false;
+        };
+        op.as_expr().is_some_and(|e| {
+            matches!(&body.exprs[e].kind, ExprKind::Call { func_id, .. }
+                if self.markers.is_marker(*func_id))
+        })
     }
 
     /// Whether no block turns cold.
@@ -931,7 +927,7 @@ fn escapes_from<'a>(
 /// function reference), so it is an entry. `call_sites` counts each function's
 /// sites, and `edges` names what a function calls from the sites that count.
 ///
-/// Over the sites no `cold_path()` marker covers, it answers the cold
+/// Over the sites no cold marker covers, it answers the cold
 /// functions: whatever runs in one runs only once a cold path is taken.
 pub(super) fn unreached_through<'a>(
     project: &NirPackage,

@@ -969,10 +969,9 @@ struct BodyScan {
     /// Every call, with its by-value arguments keyed by position: an
     /// [`ArgSite`] before the callee's own writes rule any out.
     calls: Vec<ArgSite>,
-    /// The callees called from at least one site no `cold_path()` marker
-    /// covers.
+    /// The callees called from at least one site no cold marker covers.
     hot_callees: IndexSet<FuncId>,
-    /// The callees called from at least one site a `cold_path()` marker covers.
+    /// The callees called from at least one site a cold marker covers.
     cold_callees: IndexSet<FuncId>,
     /// The callees called from at least one site outside every loop.
     unlooped_callees: IndexSet<FuncId>,

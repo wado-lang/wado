@@ -31,7 +31,7 @@ use crate::logger::Logger;
 use crate::marker::write_out_markers;
 use crate::module_source::{ModuleSource, ModuleSourceInterner, ParseModules};
 use crate::name::resolve_import_with_entry;
-use crate::pgo::{Applied, ColdMap};
+use crate::pgo::{Applied, MarkMap};
 use crate::resolve::Resolutions;
 use crate::stdlib_snapshot::{get_or_init_snapshot, reparsed_snapshot_module, stdlib_sources};
 use crate::symbol::{Symbol, SymbolTable};
@@ -114,8 +114,8 @@ pub struct Semantics {
     /// The coverage plan reify instrumented this compile with, under
     /// `wado test --coverage` or `--pgo`.
     pub(crate) coverage: Option<CoverageMap>,
-    /// Where the profile this compile applied marked code cold.
-    pub(crate) cold: Option<ColdMap>,
+    /// Where the profile this compile applied marked code rare.
+    pub(crate) marks: Option<MarkMap>,
     /// The modules served from the stdlib snapshot, whose own build checked
     /// them: a user's code cannot change what a check finds in one.
     pub(crate) snapshot_modules: IndexSet<ModuleSource>,
@@ -235,7 +235,7 @@ impl Semantics {
     /// Each region the profile marked, as `module:line:column kind mark`.
     #[must_use]
     pub fn marked_regions(&self) -> &[String] {
-        self.cold.as_ref().map_or(&[], ColdMap::marked)
+        self.marks.as_ref().map_or(&[], MarkMap::marked)
     }
 
     /// True when every analysis phase ran to completion without bailing.
@@ -354,7 +354,7 @@ impl Semantics {
             export_mappings: ExportMappings::default(),
             published_names: IndexMap::default(),
             coverage: None,
-            cold: None,
+            marks: None,
             snapshot_modules: IndexSet::default(),
         }
     }
@@ -1678,7 +1678,7 @@ pub(crate) fn semantics_with_logger<H: CompilerHost>(
     // it onto `Semantics` for the diagnostic emitter and LSP.
     let liveness = std::mem::take(&mut state.liveness);
     let coverage = state.coverage.take();
-    let cold = state.cold.take();
+    let marks = state.marks.take();
 
     let cm_bound = lower_ok && register_user_cm_bindings(&mut state, &load_result.modules, logger);
 
@@ -1721,7 +1721,7 @@ pub(crate) fn semantics_with_logger<H: CompilerHost>(
         export_mappings,
         published_names,
         coverage,
-        cold,
+        marks,
         snapshot_modules,
     }
 }

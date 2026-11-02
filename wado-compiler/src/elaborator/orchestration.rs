@@ -24,7 +24,7 @@ use crate::component_model::CmInterfaceRegistry;
 use crate::coverage::{CoverageMap, CoverageScope};
 use crate::logger::{Bail, Logger, ModuleDiag};
 use crate::module_source::{ModuleSource, ModuleSourceInterner};
-use crate::pgo::{Applied, ColdMap};
+use crate::pgo::{Applied, MarkMap};
 use crate::symbol::SymbolTable;
 use crate::tir::{TirModule, TypeId};
 use crate::type_table::TypeTable;
@@ -479,8 +479,8 @@ pub(crate) struct AnnotateState {
     /// The coverage plan reify instruments with, planned in
     /// [`Self::build_tir_from_state`] once the bodies' callees resolve.
     pub(crate) coverage: Option<CoverageMap>,
-    /// Where the profile marks code cold, applied alongside the coverage plan.
-    pub(crate) cold: Option<ColdMap>,
+    /// Where the profile marks code rare, applied alongside the coverage plan.
+    pub(crate) marks: Option<MarkMap>,
 }
 
 impl<'a, H: CompilerHost> Elaborator<'a, H> {
@@ -1274,7 +1274,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             transpositions: Rc::default(),
             liveness: Liveness::default(),
             coverage: None,
-            cold: None,
+            marks: None,
         })
     }
 
@@ -1754,15 +1754,15 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 &unreachable_calls,
             )
         });
-        state.cold = profile.map(|profile| {
-            ColdMap::build(
-                snapshot.and_then(|s| s.cold.as_ref()),
+        state.marks = profile.map(|profile| {
+            MarkMap::build(
+                snapshot.and_then(|s| s.marks.as_ref()),
                 modules,
                 profile,
                 &unreachable_calls,
             )
         });
-        for (span, message) in state.cold.iter().flat_map(ColdMap::remarks) {
+        for (span, message) in state.marks.iter().flat_map(MarkMap::remarks) {
             logger.remark(message.clone(), DiagnosticSpan::from_span(span, None));
         }
 
@@ -1821,7 +1821,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         gate,
                     );
                     reify.coverage = state.coverage.as_ref();
-                    reify.cold = state.cold.as_ref();
+                    reify.marks = state.marks.as_ref();
                     let reified = reify.reify_module(module, module_source.clone());
                     result.insert(module_source.clone(), reified);
                 }

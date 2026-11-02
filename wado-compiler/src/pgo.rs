@@ -337,7 +337,7 @@ impl Mark {
 /// Where a profile marks a compile's code rare, the source's markers it
 /// overrides, and the remarks applying it makes.
 #[derive(Debug, Clone, Default)]
-pub(crate) struct ColdMap {
+pub(crate) struct MarkMap {
     /// The sites reify puts a marker at.
     sites: IndexMap<(ProbeSite, AstId), Mark>,
     /// The nodes of the author's `cold_path()` calls and the `?`s whose
@@ -350,12 +350,12 @@ pub(crate) struct ColdMap {
     remarks: Vec<(Span, String)>,
 }
 
-impl ColdMap {
-    /// Apply `profile` to the modules it names. The modules `seed` applied
+impl MarkMap {
+    /// Apply the profile to the modules it names. The modules `seed` applied
     /// keep what it found: they come from the stdlib snapshot with their
     /// markers already in place.
     pub(crate) fn build<'a>(
-        seed: Option<&ColdMap>,
+        seed: Option<&MarkMap>,
         modules: impl IntoIterator<Item = (&'a ModuleSource, &'a ast::Module)>,
         applied: Applied<'_>,
         rt_unreachable_calls: &IndexSet<AstId>,
@@ -446,17 +446,18 @@ impl ColdMap {
             _ => false,
         };
         // Cold, here and in everything under it: a marker covers what follows
-        // it, so one over a hot loop would make the loop cold. A parent's
-        // number is below its children's.
+        // it, so one over a hot loop would make the loop cold.
         let mut cold: Vec<bool> = counts
             .iter()
             .map(|count| count.is_some_and(|runs| reading.is_cold(runs)))
             .collect();
         for id in (0..cold.len()).rev() {
-            if let Some(parent) = parents[id]
-                && !cold[id]
-            {
-                cold[parent as usize] = false;
+            if let Some(parent) = parents[id] {
+                assert!(
+                    (parent as usize) < id,
+                    "a region is numbered after its parent"
+                );
+                cold[parent as usize] &= cold[id];
             }
         }
         // The region a marker for `id` sits under: a region in an expression
@@ -504,9 +505,13 @@ impl ColdMap {
                 continue;
             }
             self.overridden.insert(marker.node());
-            if runs == 0 || (unlikely(region) && cold[region]) {
-                continue;
-            }
+            let verdict = match Mark::of(unlikely(region), cold[region]) {
+                _ if runs == 0 => continue,
+                Some(Mark::ColdPath) => continue,
+                Some(Mark::Unlikely) => "unlikely but not cold",
+                Some(Mark::Cold) => "cold but not unlikely",
+                None => "neither unlikely nor cold",
+            };
             let subject = match marker {
                 Marker::ColdPath(_) => "`cold_path()` marks this path rare",
                 Marker::Try(_) => "`?` marks its failure path rare",
@@ -515,11 +520,6 @@ impl ColdMap {
                 Some(branch) => format!("in {runs} of {branch} runs"),
                 None if runs == 1 => "once".to_string(),
                 None => format!("{runs} times"),
-            };
-            let verdict = match (unlikely(region), cold[region]) {
-                (true, _) => "unlikely but not cold",
-                (false, true) => "cold but not unlikely",
-                (false, false) => "neither unlikely nor cold",
             };
             self.remarks.push((
                 span,

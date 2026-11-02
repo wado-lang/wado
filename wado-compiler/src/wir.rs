@@ -1765,7 +1765,7 @@ pub enum WirInstr {
 
 impl WirInstr {
     /// True when the branch `body` is cold throughout: it reaches a
-    /// `cold_path()` marker, which `wir_build` puts where each cold run starts,
+    /// [`WirInstr::ColdPath`], which `wir_build` puts where each unlikely run starts,
     /// with nothing ahead of it able to leave the branch. Descends through
     /// transparent grouping (`Block` / `Seq`), so desugarings still match.
     pub fn marks_cold_path(body: &[Self]) -> bool {

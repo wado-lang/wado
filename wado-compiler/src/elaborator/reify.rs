@@ -88,7 +88,7 @@ use crate::name::{
     display_function_name, effect_default_impl_name, for_body_label, mangle_local_item_name,
     minted_name, range_local_name, template_block_label, template_hole_local, test_function_name,
 };
-use crate::pgo::ColdMap;
+use crate::pgo::MarkMap;
 use crate::symbol::{Symbol, SymbolKind};
 use crate::synthesis::common::{
     bare_cast, bool_lit, builtin_call, cold_path_stmt, handle_bits, is_cold_marker_stmt,
@@ -532,8 +532,8 @@ pub(crate) struct Reify<'a> {
     /// The coverage plan whose probes reify puts in, under
     /// `wado test --coverage` or `--pgo`. See `probe.rs`.
     pub(crate) coverage: Option<&'a CoverageMap>,
-    /// Where the profile marks code cold. See `probe.rs`.
-    pub(crate) cold: Option<&'a ColdMap>,
+    /// Where the profile marks code rare. See `probe.rs`.
+    pub(crate) marks: Option<&'a MarkMap>,
     /// The probe ids reify has put in so far.
     pub(crate) probes_emitted: IndexSet<u32>,
     /// The probe ids of code reify emits no instance of: a tuple `for-of` body
@@ -663,7 +663,7 @@ impl<'a> Reify<'a> {
             pending_template_structs: Vec::new(),
             pending_local_newtypes: IndexMap::default(),
             coverage: None,
-            cold: None,
+            marks: None,
             probes_emitted: IndexSet::default(),
             probes_without_instance: IndexSet::default(),
             body_ownership: None,
