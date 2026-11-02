@@ -1234,8 +1234,9 @@ fn run_once(path: &Path, source: &str, spec: &Spec, options: CompilerOptions) ->
 // Calibration
 // ---------------------------------------------------------------------------
 
-/// A source that survived a stage, with the number of guards it accepted and
-/// the shapes it accepted them in.
+/// A source that survived a stage, with what it brings — the guards it
+/// accepted, or in the profile stage the functions its profiles judge — and
+/// the shapes that brought them.
 struct Eligible {
     name: String,
     sites: usize,
@@ -2342,7 +2343,6 @@ fn write_corpus(results: &Results) {
     std::fs::write(dir.join("corpus.txt"), &corpus).expect("cannot write corpus.txt");
 }
 
-/// What [`Eligible::sites`] counts in the guard stages.
 const INJECTION_SITES: &str = "injection sites";
 
 /// `unit` names what [`Eligible::sites`] counts in this stage.
