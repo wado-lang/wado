@@ -421,10 +421,9 @@ global global:core:prelude/traits.wado::$const_obj_97: ref Array<u8> = array.new
 fn "reflect_assoc_type_projection_member.wado/$test_1_a_generic_struct_with_a_projection_member_inspects"() {
     let p: ref "reflect_assoc_type_projection_member.wado//Proj<reflect_assoc_type_projection_member.wado/Ints>";
     let out_6: ref "core:prelude/string.wado//String";
-    let a: ref Array<u8>;
     let a_end: i32;
-    let b: ref Array<u8>;
     let i: i32;
+    let $licm_repr_97: ref Array<u8>;
     p = struct.new "reflect_assoc_type_projection_member.wado//Proj<reflect_assoc_type_projection_member.wado/Ints>" { inner: struct.new "reflect_assoc_type_projection_member.wado//Ints" { n: 1 }, last: 7 };
     out_6 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
     $inline_core_prelude_string_wado_String__internal_push_view_21: block {
@@ -435,29 +434,27 @@ fn "reflect_assoc_type_projection_member.wado/$test_1_a_generic_struct_with_a_pr
         break $inline_core_prelude_string_wado_String__internal_push_view_35;
     };
     if @unlikely($inline_core_prelude_array_wado_seq_eq_u8__40: block -> bool {
-        a = out_6.repr;
-        a_end = out_6.used;
-        b = global:reflect_assoc_type_projection_member.wado::$const_obj_3;
-        if a_end != 38 {
+        if local.tee a_end(out_6.used) != 38 {
             break $inline_core_prelude_array_wado_seq_eq_u8__40: 0;
         }
         i = 0;
+        $licm_repr_97 = out_6.repr;
         b2: block {
             l3: loop {
                 break_if b2 (((i >= a_end) | ((i + 1) >= a_end)) | (((i + 1) + 1) >= a_end)) | ((((i + 1) + 1) + 1) >= a_end);
-                if builtin::array_get_value<u8>(a, i) != builtin::array_get_value<u8>(b, i) {
+                if builtin::array_get_value<u8>($licm_repr_97, i) != builtin::array_get_value<u8>(global:reflect_assoc_type_projection_member.wado::$const_obj_3, i) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__40: 0;
                 }
                 i = i + 1;
-                if builtin::array_get_value<u8>(a, i) != builtin::array_get_value<u8>(b, i) {
+                if builtin::array_get_value<u8>($licm_repr_97, i) != builtin::array_get_value<u8>(global:reflect_assoc_type_projection_member.wado::$const_obj_3, i) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__40: 0;
                 }
                 i = i + 1;
-                if builtin::array_get_value<u8>(a, i) != builtin::array_get_value<u8>(b, i) {
+                if builtin::array_get_value<u8>($licm_repr_97, i) != builtin::array_get_value<u8>(global:reflect_assoc_type_projection_member.wado::$const_obj_3, i) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__40: 0;
                 }
                 i = i + 1;
-                if builtin::array_get_value<u8>(a, i) != builtin::array_get_value<u8>(b, i) {
+                if builtin::array_get_value<u8>($licm_repr_97, i) != builtin::array_get_value<u8>(global:reflect_assoc_type_projection_member.wado::$const_obj_3, i) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__40: 0;
                 }
                 i = i + 1;
@@ -467,7 +464,7 @@ fn "reflect_assoc_type_projection_member.wado/$test_1_a_generic_struct_with_a_pr
         b8: block {
             l9: loop {
                 break_if b8 i >= a_end;
-                if builtin::array_get_value<u8>(a, i) != builtin::array_get_value<u8>(b, i) {
+                if builtin::array_get_value<u8>($licm_repr_97, i) != builtin::array_get_value<u8>(global:reflect_assoc_type_projection_member.wado::$const_obj_3, i) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__40: 0;
                 }
                 i = i + 1;

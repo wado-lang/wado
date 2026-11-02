@@ -86,51 +86,48 @@ fn "pattern_match_non_exhaustive_keeps_fallback.wado/$test_0"() {
     let $load_0: ref "core:prelude/string.wado//String";
     let e_3: ref "pattern_match_non_exhaustive_keeps_fallback.wado//AppError";
     let e_34: ref null "pattern_match_non_exhaustive_keeps_fallback.wado//AppError";
-    let $local_2_35: ref null "pattern_match_non_exhaustive_keeps_fallback.wado//AppError";
-    let a_39: ref Array<u8>;
     let a_end_41: i32;
-    let b_42: ref Array<u8>;
     let i_46: i32;
-    if @unlikely((if ref.is_null(local.tee $local_2_35($inline_guarded_6: block -> ref null "pattern_match_non_exhaustive_keeps_fallback.wado//AppError" {
-        if (if ref.is_null(local.tee $local_2_35(struct.new "pattern_match_non_exhaustive_keeps_fallback.wado//AppError" { message: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(98, 111, 111, 109), used: 4 } })) == 0 -> i32 {
-            e_34 = ref.as_non_null($local_2_35);
+    let $licm_repr_103: ref Array<u8>;
+    if @unlikely((if ref.is_null(local.tee $match_scrut_0($inline_guarded_6: block -> ref null "pattern_match_non_exhaustive_keeps_fallback.wado//AppError" {
+        let $match_scrut_0: ref null "pattern_match_non_exhaustive_keeps_fallback.wado//AppError";
+        if (if ref.is_null(local.tee $match_scrut_0(struct.new "pattern_match_non_exhaustive_keeps_fallback.wado//AppError" { message: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(98, 111, 111, 109), used: 4 } })) == 0 -> i32 {
+            e_34 = ref.as_non_null($match_scrut_0);
             1;
         } else {
             0;
         }) {
             break $inline_guarded_6: ref.as_non_null(e_34);
-        } else if @likely(ref.is_null($local_2_35) == 0) {
+        } else if @likely(ref.is_null($match_scrut_0) == 0) {
             break $inline_guarded_6: struct.new "pattern_match_non_exhaustive_keeps_fallback.wado//AppError" { message: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("suppressed"), used: 10 } };
         } else {
             unreachable;
         }
         unreachable;
     })) == 0 -> bool {
-        e_3 = ref.as_non_null($local_2_35);
+        e_3 = ref.as_non_null($match_scrut_0);
         $inline_core_prelude_array_wado_seq_eq_u8__9: block -> bool {
-            a_39 = local.tee $load_0(e_3.message).repr;
-            a_end_41 = $load_0.used;
-            b_42 = global:pattern_match_non_exhaustive_keeps_fallback.wado::$const_obj_3;
-            if a_end_41 != 4 {
+            if local.tee a_end_41(local.tee $load_0(e_3.message).used) != 4 {
                 break $inline_core_prelude_array_wado_seq_eq_u8__9: 0;
             }
             i_46 = 0;
+            $licm_repr_103 = $load_0.repr;
             b6: block {
                 l7: loop {
                     break_if b6 (((i_46 >= a_end_41) | ((i_46 + 1) >= a_end_41)) | (((i_46 + 1) + 1) >= a_end_41)) | ((((i_46 + 1) + 1) + 1) >= a_end_41);
-                    if builtin::array_get_value<u8>(a_39, i_46) != builtin::array_get_value<u8>(b_42, i_46) {
+                    if builtin::array_get_value<u8>($licm_repr_103, i_46) != builtin::array_get_value<u8>(global:pattern_match_non_exhaustive_keeps_fallback.wado::$const_obj_3, i_46) {
                         break $inline_core_prelude_array_wado_seq_eq_u8__9: 0;
                     }
                     i_46 = i_46 + 1;
-                    if builtin::array_get_value<u8>(a_39, i_46) != builtin::array_get_value<u8>(b_42, i_46) {
+                    if builtin::array_get_value<u8>($licm_repr_103, i_46) != builtin::array_get_value<u8>(global:pattern_match_non_exhaustive_keeps_fallback.wado::$const_obj_3, i_46) {
                         break $inline_core_prelude_array_wado_seq_eq_u8__9: 0;
                     }
                     i_46 = i_46 + 1;
-                    if builtin::array_get_value<u8>(a_39, i_46) != builtin::array_get_value<u8>(b_42, i_46) {
+                    if builtin::array_get_value<u8>($licm_repr_103, i_46) != builtin::array_get_value<u8>(global:pattern_match_non_exhaustive_keeps_fallback.wado::$const_obj_3, i_46) {
                         break $inline_core_prelude_array_wado_seq_eq_u8__9: 0;
                     }
                     i_46 = i_46 + 1;
-                    if builtin::array_get_value<u8>(a_39, i_46) != builtin::array_get_value<u8>(b_42, i_46) {
+                    if builtin::array_get_value<u8>($licm_repr_103, i_46) != builtin::array_get_value<u8>(global:pattern_match_non_exhaustive_keeps_fallback.wado::$const_obj_3, i_46) {
                         break $inline_core_prelude_array_wado_seq_eq_u8__9: 0;
                     }
                     i_46 = i_46 + 1;
@@ -140,7 +137,7 @@ fn "pattern_match_non_exhaustive_keeps_fallback.wado/$test_0"() {
             b12: block {
                 l13: loop {
                     break_if b12 i_46 >= a_end_41;
-                    if builtin::array_get_value<u8>(a_39, i_46) != builtin::array_get_value<u8>(b_42, i_46) {
+                    if builtin::array_get_value<u8>($licm_repr_103, i_46) != builtin::array_get_value<u8>(global:pattern_match_non_exhaustive_keeps_fallback.wado::$const_obj_3, i_46) {
                         break $inline_core_prelude_array_wado_seq_eq_u8__9: 0;
                     }
                     i_46 = i_46 + 1;

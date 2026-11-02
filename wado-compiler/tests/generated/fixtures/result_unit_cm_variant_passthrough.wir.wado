@@ -689,13 +689,11 @@ fn "result_unit_cm_variant_passthrough.wado/$drop$core:prelude/list.wado/List<[w
 fn "result_unit_cm_variant_passthrough.wado/$cm_binding__wasi:filesystem/types@0.3.0#[method]descriptor.open-at"(self, path_flags, path, open_flags, flags) with Descriptor {
     let $path_packed: i64;
     let $subtask: ref null "core:prelude/types.wado//Option<core:prelude/types.wado/Subtask>";
-    let bytes: ref Array<u8>;
     let ptr_14: i32;
     let self_15: i32;
     self_15 = path.used;
-    bytes = path.repr;
     ptr_14 = "mem/realloc"(0, 0, 1, self_15);
-    "core:rt/gc_array_to_memory$spec0$dae[src_start]"(bytes, ptr_14, self_15);
+    "core:rt/gc_array_to_memory$spec0$dae[src_start]"(path.repr, ptr_14, self_15);
     $path_packed = builtin::i64_extend_i32_u(ptr_14) | (builtin::i64_extend_i32_s(self_15) << 32_i64);
     self_15 = "mem/realloc"(0, 0, 4, 20);
     builtin::store_i32(local.tee ptr_14("mem/realloc"(0, 0, 4, 20)), self.value);

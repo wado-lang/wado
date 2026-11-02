@@ -86,7 +86,7 @@ fn "const_object_globalization_ref_passthrough.wado/run"() with Stdout {
     let k: i32;
     let is_negative_104: bool;
     let x_108: i64;
-    let repr_127: ref Array<u8>;
+    let $sroa_view_repr_203: ref Array<u8>;
     buf_0 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
     sum = 0;
     k = 0;
@@ -107,14 +107,14 @@ fn "const_object_globalization_ref_passthrough.wado/run"() with Stdout {
     k = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_108(x_108 = builtin::i64_extend_i32_s(k); select i64(x_108 < 0_i64, 0_i64 - x_108, x_108)));
     is_negative_104 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"(buf_0, is_negative_104, k);
     "core:prelude/primitive.wado/write_decimal_digits"(local.tee $load_1(buf_0.repr), is_negative_104, x_108, k);
-    repr_127 = global:const_object_globalization_ref_passthrough.wado::$const_obj_1;
+    $sroa_view_repr_203 = global:const_object_globalization_ref_passthrough.wado::$const_obj_1;
     if @unlikely(local.tee k(buf_0.used + 1) > builtin::array_len($load_1)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(buf_0, k);
     }
     is_negative_104 = buf_0.used;
     buf_0.used = k;
-    builtin::array_copy<u8>(buf_0.repr, is_negative_104, repr_127, 0, 1);
+    builtin::array_copy<u8>(buf_0.repr, is_negative_104, $sroa_view_repr_203, 0, 1);
     k = sum < 0;
     sum = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_108(x_108 = builtin::i64_extend_i32_s(sum); select i64(x_108 < 0_i64, 0_i64 - x_108, x_108)));
     k = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"(buf_0, k, sum);

@@ -258,7 +258,6 @@ fn "generic_param_infers_through_future_and_stream.wado/$cm_future_write_core:pr
     let $local_5: ref "core:prelude/string.wado//String";
     let $local_6: i64;
     let $rest: ref null "core:prelude/types.wado//Result<i32,core:prelude/string.wado/String>";
-    let bytes: ref Array<u8>;
     let ptr_12: i32;
     builtin::store_u8(local.tee ptr_2("mem/realloc"(0, 0, 4, 12)), ref.test "core:prelude/types.wado//Result<i32,core:prelude/string.wado/String>::Err"(value));
     if ref.test "core:prelude/types.wado//Result<i32,core:prelude/string.wado/String>::Ok"(value) {
@@ -266,9 +265,8 @@ fn "generic_param_infers_through_future_and_stream.wado/$cm_future_write_core:pr
         builtin::store_i32(ptr_2 + 4, $local_4);
     } else {
         $local_4 = local.tee $local_5(ref.cast "core:prelude/types.wado//Result<i32,core:prelude/string.wado/String>::Err"(value).payload_0).used;
-        bytes = $local_5.repr;
         ptr_12 = "mem/realloc"(0, 0, 1, $local_4);
-        "core:rt/gc_array_to_memory$spec0$dae[src_start]"(bytes, ptr_12, $local_4);
+        "core:rt/gc_array_to_memory$spec0$dae[src_start]"($local_5.repr, ptr_12, $local_4);
         $local_6 = builtin::i64_extend_i32_u(ptr_12) | (builtin::i64_extend_i32_s($local_4) << 32_i64);
         builtin::store_i32(ptr_2 + 4, builtin::i32_wrap_i64($local_6));
         builtin::store_i32((ptr_2 + 4) + 4, builtin::i32_wrap_i64($local_6 >> 32_i64));

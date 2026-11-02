@@ -209,34 +209,34 @@ fn "inline_primitive_method.wado/run"() with Stdout {
     let bits_1: u64;
     let back: f64;
     let out_23: ref "core:prelude/string.wado//String";
-    let repr_111: ref Array<u8>;
     let new_used_127: i32;
     let start_128: i32;
-    let start_336: i32;
+    let start_333: i32;
+    let $sroa_view_repr_633: ref Array<u8>;
     back = builtin::f64_reinterpret_i64(local.tee bits_1(builtin::i64_reinterpret_f64(3.14)));
     out_23 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(50), used: 0 };
     $inline_core_prelude_string_wado_String__format_inline_primitive_method_wado__tmpl_3f4a17119c7c0a30__f64_u64_f64___spec0_spec0_0__$inline_core_prelude_string_wado_String__internal_push_view_26: block {
         break $inline_core_prelude_string_wado_String__format_inline_primitive_method_wado__tmpl_3f4a17119c7c0a30__f64_u64_f64___spec0_spec0_0__$inline_core_prelude_string_wado_String__internal_push_view_26;
     };
     "core:prelude/primitive.wado/f64::fmt_into$sroa[self.value]$spec0$sroa[f.buf]"(3.14, out_23);
-    repr_111 = global:inline_primitive_method.wado::$const_obj_8;
+    $sroa_view_repr_633 = global:inline_primitive_method.wado::$const_obj_8;
     if @unlikely(local.tee new_used_127(out_23.used + 1) > builtin::array_len(out_23.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_23, new_used_127);
     }
     start_128 = out_23.used;
     out_23.used = new_used_127;
-    builtin::array_copy<u8>(local.tee $load_3(out_23.repr), start_128, repr_111, 0, 1);
+    builtin::array_copy<u8>(local.tee $load_3(out_23.repr), start_128, $sroa_view_repr_633, 0, 1);
     new_used_127 = "core:prelude/primitive.wado/count_digits_u64"(bits_1);
     if @unlikely(local.tee start_128(out_23.used + new_used_127) > builtin::array_len($load_3)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_23, start_128);
     }
-    start_336 = out_23.used;
+    start_333 = out_23.used;
     out_23.used = start_128;
-    "core:prelude/primitive.wado/write_decimal_digits"(local.tee repr_111(out_23.repr), start_336, bits_1, new_used_127);
+    "core:prelude/primitive.wado/write_decimal_digits"(local.tee $sroa_view_repr_633(out_23.repr), start_333, bits_1, new_used_127);
     $load_3 = global:inline_primitive_method.wado::$const_obj_8;
-    if @unlikely(local.tee new_used_127(out_23.used + 1) > builtin::array_len(repr_111)) {
+    if @unlikely(local.tee new_used_127(out_23.used + 1) > builtin::array_len($sroa_view_repr_633)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_23, new_used_127);
     }

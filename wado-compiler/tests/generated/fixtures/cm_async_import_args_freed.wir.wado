@@ -651,7 +651,7 @@ fn "cm_async_import_args_freed.wado/run"() with Stdout, Preopens {
     let new_used_35: i32;
     let start_36: i32;
     let x_169: i64;
-    let repr_188: ref Array<u8>;
+    let $sroa_view_repr_203: ref Array<u8>;
     $inline__initialize_modules_0: block {
         break_if $inline__initialize_modules_0 @likely(global:cm_async_import_args_freed.wado::$modules_initialized);
         cold_path;
@@ -714,14 +714,14 @@ fn "cm_async_import_args_freed.wado/run"() with Stdout, Preopens {
     $v1_15 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_169(x_169 = builtin::i64_extend_i32_s($v1_15); select i64(x_169 < 0_i64, 0_i64 - x_169, x_169)));
     start_36 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"(path, start_36, $v1_15);
     "core:prelude/primitive.wado/write_decimal_digits"(local.tee $load_6(path.repr), start_36, x_169, $v1_15);
-    repr_188 = global:cm_async_import_args_freed.wado::$const_obj_0;
+    $sroa_view_repr_203 = global:cm_async_import_args_freed.wado::$const_obj_0;
     if @unlikely(local.tee $v1_15(path.used + 1) > builtin::array_len($load_6)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(path, $v1_15);
     }
     start_36 = path.used;
     path.used = $v1_15;
-    builtin::array_copy<u8>(path.repr, start_36, repr_188, 0, 1);
+    builtin::array_copy<u8>(path.repr, start_36, $sroa_view_repr_203, 0, 1);
     $v1_15 = new_used_35 < 0;
     new_used_35 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_169(x_169 = builtin::i64_extend_i32_s(new_used_35); select i64(x_169 < 0_i64, 0_i64 - x_169, x_169)));
     $v1_15 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"(path, $v1_15, new_used_35);
@@ -827,13 +827,11 @@ fn "cm_async_import_args_freed.wado/$cm_binding__wasi:filesystem/types@0.3.0#[me
     let $path_flat1: i32;
     let $args: i32;
     let $subtask: ref null "core:prelude/types.wado//Option<core:prelude/types.wado/Subtask>";
-    let bytes: ref Array<u8>;
     let ptr_14: i32;
     let self_15: i32;
     self_15 = path.used;
-    bytes = path.repr;
     ptr_14 = "mem/realloc"(0, 0, 1, self_15);
-    "core:rt/gc_array_to_memory$spec0$dae[src_start]"(bytes, ptr_14, self_15);
+    "core:rt/gc_array_to_memory$spec0$dae[src_start]"(path.repr, ptr_14, self_15);
     $path_packed = builtin::i64_extend_i32_u(ptr_14) | (builtin::i64_extend_i32_s(self_15) << 32_i64);
     self_15 = "mem/realloc"(0, 0, 8, 112);
     ptr_14 = builtin::i32_wrap_i64($path_packed);
@@ -853,18 +851,15 @@ fn "cm_async_import_args_freed.wado/$cm_binding__wasi:filesystem/types@0.3.0#[me
     let $new_path_packed: i64;
     let $subtask_handle: i32;
     let $subtask: ref null "core:prelude/types.wado//Option<core:prelude/types.wado/Subtask>";
-    let bytes_12: ref Array<u8>;
     let ptr_13: i32;
     let self_14: i32;
     self_14 = old_path.used;
-    bytes_12 = old_path.repr;
     ptr_13 = "mem/realloc"(0, 0, 1, self_14);
-    "core:rt/gc_array_to_memory$spec0$dae[src_start]"(bytes_12, ptr_13, self_14);
+    "core:rt/gc_array_to_memory$spec0$dae[src_start]"(old_path.repr, ptr_13, self_14);
     $old_path_packed = builtin::i64_extend_i32_u(ptr_13) | (builtin::i64_extend_i32_s(self_14) << 32_i64);
     self_14 = new_path.used;
-    bytes_12 = new_path.repr;
     ptr_13 = "mem/realloc"(0, 0, 1, self_14);
-    "core:rt/gc_array_to_memory$spec0$dae[src_start]"(bytes_12, ptr_13, self_14);
+    "core:rt/gc_array_to_memory$spec0$dae[src_start]"(new_path.repr, ptr_13, self_14);
     $new_path_packed = builtin::i64_extend_i32_u(ptr_13) | (builtin::i64_extend_i32_s(self_14) << 32_i64);
     self_14 = "mem/realloc"(0, 0, 4, 20);
     builtin::store_i32(local.tee ptr_13("mem/realloc"(0, 0, 4, 20)), self.value);

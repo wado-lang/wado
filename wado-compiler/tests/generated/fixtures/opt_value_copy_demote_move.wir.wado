@@ -257,8 +257,7 @@ fn "opt_value_copy_demote_move.wado/process"(tokens) with Stdout {
     let $load_1: i32;
     let self_21: ref "core:prelude/string.wado//String";
     let $cm_pair_7: i64;
-    let a: ref Array<u8>;
-    let b: ref Array<u8>;
+    let $licm_repr_84: ref Array<u8>;
     let $array_clone_src_1: ref "Array<core:prelude/string.wado/String>";
     $array_clone_src_1 = tokens.repr;
     $load_1 = tokens.used;
@@ -312,29 +311,27 @@ fn "opt_value_copy_demote_move.wado/process"(tokens) with Stdout {
     }
     self_21 = builtin::array_get_value<ref "core:prelude/string.wado//String">(tokens.repr, 0);
     if @unlikely($inline_core_prelude_array_wado_seq_eq_u8__17: block -> bool {
-        a = self_21.repr;
-        $load_1 = self_21.used;
-        b = global:opt_value_copy_demote_move.wado::$const_obj_3;
-        if $load_1 != 1 {
+        if local.tee $load_1(self_21.used) != 1 {
             break $inline_core_prelude_array_wado_seq_eq_u8__17: 0;
         }
         $array_clone_i_4 = 0;
+        $licm_repr_84 = self_21.repr;
         b8: block {
             l9: loop {
                 break_if b8 ((($array_clone_i_4 >= $load_1) | (($array_clone_i_4 + 1) >= $load_1)) | ((($array_clone_i_4 + 1) + 1) >= $load_1)) | (((($array_clone_i_4 + 1) + 1) + 1) >= $load_1);
-                if builtin::array_get_value<u8>(a, $array_clone_i_4) != builtin::array_get_value<u8>(b, $array_clone_i_4) {
+                if builtin::array_get_value<u8>($licm_repr_84, $array_clone_i_4) != builtin::array_get_value<u8>(global:opt_value_copy_demote_move.wado::$const_obj_3, $array_clone_i_4) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__17: 0;
                 }
                 $array_clone_i_4 = $array_clone_i_4 + 1;
-                if builtin::array_get_value<u8>(a, $array_clone_i_4) != builtin::array_get_value<u8>(b, $array_clone_i_4) {
+                if builtin::array_get_value<u8>($licm_repr_84, $array_clone_i_4) != builtin::array_get_value<u8>(global:opt_value_copy_demote_move.wado::$const_obj_3, $array_clone_i_4) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__17: 0;
                 }
                 $array_clone_i_4 = $array_clone_i_4 + 1;
-                if builtin::array_get_value<u8>(a, $array_clone_i_4) != builtin::array_get_value<u8>(b, $array_clone_i_4) {
+                if builtin::array_get_value<u8>($licm_repr_84, $array_clone_i_4) != builtin::array_get_value<u8>(global:opt_value_copy_demote_move.wado::$const_obj_3, $array_clone_i_4) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__17: 0;
                 }
                 $array_clone_i_4 = $array_clone_i_4 + 1;
-                if builtin::array_get_value<u8>(a, $array_clone_i_4) != builtin::array_get_value<u8>(b, $array_clone_i_4) {
+                if builtin::array_get_value<u8>($licm_repr_84, $array_clone_i_4) != builtin::array_get_value<u8>(global:opt_value_copy_demote_move.wado::$const_obj_3, $array_clone_i_4) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__17: 0;
                 }
                 $array_clone_i_4 = $array_clone_i_4 + 1;
@@ -344,7 +341,7 @@ fn "opt_value_copy_demote_move.wado/process"(tokens) with Stdout {
         b14: block {
             l15: loop {
                 break_if b14 $array_clone_i_4 >= $load_1;
-                if builtin::array_get_value<u8>(a, $array_clone_i_4) != builtin::array_get_value<u8>(b, $array_clone_i_4) {
+                if builtin::array_get_value<u8>($licm_repr_84, $array_clone_i_4) != builtin::array_get_value<u8>(global:opt_value_copy_demote_move.wado::$const_obj_3, $array_clone_i_4) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__17: 0;
                 }
                 $array_clone_i_4 = $array_clone_i_4 + 1;

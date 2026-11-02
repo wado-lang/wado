@@ -436,10 +436,9 @@ global global:core:prelude/traits.wado::$const_obj_40: ref Array<u8> = array.new
 
 fn "cross_module_same_name_inspect_newtype.wado/$test_0_a_blanket_derived_inspect_picks_the_receiver_s_own_declaration"() {
     let $v0_1: ref "sub/cross_module_same_name_inspect_newtype_b.wado//Span";
-    let a_91: ref Array<u8>;
     let a_end: i32;
-    let b: ref Array<u8>;
     let i: i32;
+    let $licm_repr_101: ref Array<u8>;
     if @unlikely((local.tee $v0_1(struct.new "sub/cross_module_same_name_inspect_newtype_b.wado//Span" { hours: 0_i64 }).hours == 0_i64) == 0) {
         cold_path;
         let $mv_arg_1: ref "core:prelude/string.wado//String";
@@ -459,29 +458,27 @@ condition: is_flat(&Span {})
         break $inline_core_prelude_string_wado_String__internal_push_view_37;
     };
     if @unlikely($inline_core_prelude_array_wado_seq_eq_u8__42: block -> bool {
-        a_91 = $mv_arg_1.repr;
-        a_end = $mv_arg_1.used;
-        b = global:cross_module_same_name_inspect_newtype.wado::$const_obj_3;
-        if a_end != 17 {
+        if local.tee a_end($mv_arg_1.used) != 17 {
             break $inline_core_prelude_array_wado_seq_eq_u8__42: 0;
         }
         i = 0;
+        $licm_repr_101 = $mv_arg_1.repr;
         b3: block {
             l4: loop {
                 break_if b3 (((i >= a_end) | ((i + 1) >= a_end)) | (((i + 1) + 1) >= a_end)) | ((((i + 1) + 1) + 1) >= a_end);
-                if builtin::array_get_value<u8>(a_91, i) != builtin::array_get_value<u8>(b, i) {
+                if builtin::array_get_value<u8>($licm_repr_101, i) != builtin::array_get_value<u8>(global:cross_module_same_name_inspect_newtype.wado::$const_obj_3, i) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__42: 0;
                 }
                 i = i + 1;
-                if builtin::array_get_value<u8>(a_91, i) != builtin::array_get_value<u8>(b, i) {
+                if builtin::array_get_value<u8>($licm_repr_101, i) != builtin::array_get_value<u8>(global:cross_module_same_name_inspect_newtype.wado::$const_obj_3, i) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__42: 0;
                 }
                 i = i + 1;
-                if builtin::array_get_value<u8>(a_91, i) != builtin::array_get_value<u8>(b, i) {
+                if builtin::array_get_value<u8>($licm_repr_101, i) != builtin::array_get_value<u8>(global:cross_module_same_name_inspect_newtype.wado::$const_obj_3, i) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__42: 0;
                 }
                 i = i + 1;
-                if builtin::array_get_value<u8>(a_91, i) != builtin::array_get_value<u8>(b, i) {
+                if builtin::array_get_value<u8>($licm_repr_101, i) != builtin::array_get_value<u8>(global:cross_module_same_name_inspect_newtype.wado::$const_obj_3, i) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__42: 0;
                 }
                 i = i + 1;
@@ -491,7 +488,7 @@ condition: is_flat(&Span {})
         b9: block {
             l10: loop {
                 break_if b9 i >= a_end;
-                if builtin::array_get_value<u8>(a_91, i) != builtin::array_get_value<u8>(b, i) {
+                if builtin::array_get_value<u8>($licm_repr_101, i) != builtin::array_get_value<u8>(global:cross_module_same_name_inspect_newtype.wado::$const_obj_3, i) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__42: 0;
                 }
                 i = i + 1;

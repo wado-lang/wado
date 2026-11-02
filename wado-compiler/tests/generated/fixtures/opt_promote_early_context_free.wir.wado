@@ -319,7 +319,6 @@ fn "opt_promote_early_context_free.wado/run"() with Stdout {
     let result: ref "core:prelude/string.wado//String";
     let $contract_arg_1: i32;
     let $v1_17: bool;
-    let repr_46: ref Array<u8>;
     let part: ref Array<u8>;
     let start_121: i32;
     let $cm_pair_7: i64;
@@ -335,24 +334,22 @@ fn "opt_promote_early_context_free.wado/run"() with Stdout {
                 unreachable;
             }
             if @unlikely((if local.tee $v1_17($inline_boundary_at_7: block -> bool {
-                repr_46 = global:opt_promote_early_context_free.wado::$const_obj_3;
                 if (i_2 == 0) | (i_2 == 10) {
                     break $inline_boundary_at_7: 1;
                 }
                 if 10 <u i_2 {
                     break $inline_boundary_at_7: 0;
                 }
-                break $inline_boundary_at_7: (builtin::array_get_value<u8>(repr_46, i_2) & 192) != 128;
+                break $inline_boundary_at_7: (builtin::array_get_value<u8>(global:opt_promote_early_context_free.wado::$const_obj_3, i_2) & 192) != 128;
             }) -> i32 {
                 $inline_boundary_at_11: block -> bool {
-                    repr_46 = global:opt_promote_early_context_free.wado::$const_obj_3;
                     if ($contract_arg_1 == 0) | ($contract_arg_1 == 10) {
                         break $inline_boundary_at_11: 1;
                     }
                     if 10 <u $contract_arg_1 {
                         break $inline_boundary_at_11: 0;
                     }
-                    break $inline_boundary_at_11: (builtin::array_get_value<u8>(repr_46, $contract_arg_1) & 192) != 128;
+                    break $inline_boundary_at_11: (builtin::array_get_value<u8>(global:opt_promote_early_context_free.wado::$const_obj_3, $contract_arg_1) & 192) != 128;
                 };
             } else {
                 0;
@@ -361,8 +358,7 @@ fn "opt_promote_early_context_free.wado/run"() with Stdout {
                 "core:prelude/string.wado/core:prelude/string.wado/String::substr_bytes$contract_report1"($v1_17, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("abcdefghij"), used: 10 }, $contract_arg_1, i_2, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("opt_promote_early_context_free.wado:19"), used: 38 });
                 unreachable;
             }
-            repr_46 = global:opt_promote_early_context_free.wado::$const_obj_3;
-            builtin::array_copy<u8>(local.tee part(builtin::array_new<u8>(local.tee $contract_arg_1($contract_arg_1 - i_2))), 0, repr_46, i_2, $contract_arg_1);
+            builtin::array_copy<u8>(local.tee part(builtin::array_new<u8>(local.tee $contract_arg_1($contract_arg_1 - i_2))), 0, global:opt_promote_early_context_free.wado::$const_obj_3, i_2, $contract_arg_1);
             result = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(local.tee $v1_17(out_1.used) + $contract_arg_1), used: 0 };
             $inline_core_prelude_string_wado_String__internal_push_string_28: block {
                 break_if $inline_core_prelude_string_wado_String__internal_push_string_28 $v1_17 == 0;
@@ -390,29 +386,27 @@ fn "opt_promote_early_context_free.wado/run"() with Stdout {
         };
     };
     if @unlikely($inline_core_prelude_array_wado_seq_eq_u8__38: block -> bool {
-        repr_46 = out_1.repr;
-        i_2 = out_1.used;
-        part = global:opt_promote_early_context_free.wado::$const_obj_2;
-        if i_2 != 8 {
+        if local.tee i_2(out_1.used) != 8 {
             break $inline_core_prelude_array_wado_seq_eq_u8__38: 0;
         }
         $contract_arg_1 = 0;
+        part = out_1.repr;
         b13: block {
             l14: loop {
                 break_if b13 ((($contract_arg_1 >= i_2) | (($contract_arg_1 + 1) >= i_2)) | ((($contract_arg_1 + 1) + 1) >= i_2)) | (((($contract_arg_1 + 1) + 1) + 1) >= i_2);
-                if builtin::array_get_value<u8>(repr_46, $contract_arg_1) != builtin::array_get_value<u8>(part, $contract_arg_1) {
+                if builtin::array_get_value<u8>(part, $contract_arg_1) != builtin::array_get_value<u8>(global:opt_promote_early_context_free.wado::$const_obj_2, $contract_arg_1) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__38: 0;
                 }
                 $contract_arg_1 = $contract_arg_1 + 1;
-                if builtin::array_get_value<u8>(repr_46, $contract_arg_1) != builtin::array_get_value<u8>(part, $contract_arg_1) {
+                if builtin::array_get_value<u8>(part, $contract_arg_1) != builtin::array_get_value<u8>(global:opt_promote_early_context_free.wado::$const_obj_2, $contract_arg_1) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__38: 0;
                 }
                 $contract_arg_1 = $contract_arg_1 + 1;
-                if builtin::array_get_value<u8>(repr_46, $contract_arg_1) != builtin::array_get_value<u8>(part, $contract_arg_1) {
+                if builtin::array_get_value<u8>(part, $contract_arg_1) != builtin::array_get_value<u8>(global:opt_promote_early_context_free.wado::$const_obj_2, $contract_arg_1) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__38: 0;
                 }
                 $contract_arg_1 = $contract_arg_1 + 1;
-                if builtin::array_get_value<u8>(repr_46, $contract_arg_1) != builtin::array_get_value<u8>(part, $contract_arg_1) {
+                if builtin::array_get_value<u8>(part, $contract_arg_1) != builtin::array_get_value<u8>(global:opt_promote_early_context_free.wado::$const_obj_2, $contract_arg_1) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__38: 0;
                 }
                 $contract_arg_1 = $contract_arg_1 + 1;
@@ -422,7 +416,7 @@ fn "opt_promote_early_context_free.wado/run"() with Stdout {
         b19: block {
             l20: loop {
                 break_if b19 $contract_arg_1 >= i_2;
-                if builtin::array_get_value<u8>(repr_46, $contract_arg_1) != builtin::array_get_value<u8>(part, $contract_arg_1) {
+                if builtin::array_get_value<u8>(part, $contract_arg_1) != builtin::array_get_value<u8>(global:opt_promote_early_context_free.wado::$const_obj_2, $contract_arg_1) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__38: 0;
                 }
                 $contract_arg_1 = $contract_arg_1 + 1;

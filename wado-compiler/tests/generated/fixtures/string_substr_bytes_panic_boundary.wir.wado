@@ -240,14 +240,12 @@ global global:core:prelude/primitive.wado::$const_obj_1: ref "core:prelude/strin
 
 fn "string_substr_bytes_panic_boundary.wado/$cm_export__run"() {
     let s: ref "core:prelude/string.wado//String";
-    let repr_69: ref Array<u8>;
     cold_path;
     s = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("日本語"), used: 9 };
     cold_path;
     "string_substr_bytes_panic_boundary.wado/run$cold0$dae[$contract_arg_0,$contract_arg_1,$v1]"(s);
     unreachable;
-    repr_69 = s.repr;
-    builtin::array_copy<u8>(builtin::array_new<u8>(4), 0, repr_69, 0, 4);
+    builtin::array_copy<u8>(builtin::array_new<u8>(4), 0, s.repr, 0, 4);
     "wasi/task-return"(0);
 }
 

@@ -312,8 +312,7 @@ fn "opt_sroa_variant_per_case.wado/run"() {
     let $v1_1: i32;
     let $v2_2: i32;
     let $v1_22: ref "core:prelude/string.wado//String";
-    let a_29: ref Array<u8>;
-    let b_32: ref Array<u8>;
+    let $licm_repr_47: ref Array<u8>;
     if @unlikely(local.tee $v2_2("opt_sroa_variant_per_case.wado/try_divide"(local.tee $v0_0(black_box(10)), local.tee $v1_1(black_box(2)))) != 5) {
         cold_path;
         "opt_sroa_variant_per_case.wado/run$cold5"($v0_0, $v1_1, $v2_2);
@@ -346,29 +345,27 @@ fn "opt_sroa_variant_per_case.wado/run"() {
     }
     $v1_22 = "opt_sroa_variant_per_case.wado/use_err_branch"(local.tee $v0_0(black_box(-1)));
     if @unlikely($inline_core_prelude_array_wado_seq_eq_u8__2: block -> bool {
-        a_29 = $v1_22.repr;
-        $v1_1 = $v1_22.used;
-        b_32 = global:opt_sroa_variant_per_case.wado::$const_obj_3;
-        if $v1_1 != 8 {
+        if local.tee $v1_1($v1_22.used) != 8 {
             break $inline_core_prelude_array_wado_seq_eq_u8__2: 0;
         }
         $v2_2 = 0;
+        $licm_repr_47 = $v1_22.repr;
         b13: block {
             l14: loop {
                 break_if b13 ((($v2_2 >= $v1_1) | (($v2_2 + 1) >= $v1_1)) | ((($v2_2 + 1) + 1) >= $v1_1)) | (((($v2_2 + 1) + 1) + 1) >= $v1_1);
-                if builtin::array_get_value<u8>(a_29, $v2_2) != builtin::array_get_value<u8>(b_32, $v2_2) {
+                if builtin::array_get_value<u8>($licm_repr_47, $v2_2) != builtin::array_get_value<u8>(global:opt_sroa_variant_per_case.wado::$const_obj_3, $v2_2) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__2: 0;
                 }
                 $v2_2 = $v2_2 + 1;
-                if builtin::array_get_value<u8>(a_29, $v2_2) != builtin::array_get_value<u8>(b_32, $v2_2) {
+                if builtin::array_get_value<u8>($licm_repr_47, $v2_2) != builtin::array_get_value<u8>(global:opt_sroa_variant_per_case.wado::$const_obj_3, $v2_2) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__2: 0;
                 }
                 $v2_2 = $v2_2 + 1;
-                if builtin::array_get_value<u8>(a_29, $v2_2) != builtin::array_get_value<u8>(b_32, $v2_2) {
+                if builtin::array_get_value<u8>($licm_repr_47, $v2_2) != builtin::array_get_value<u8>(global:opt_sroa_variant_per_case.wado::$const_obj_3, $v2_2) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__2: 0;
                 }
                 $v2_2 = $v2_2 + 1;
-                if builtin::array_get_value<u8>(a_29, $v2_2) != builtin::array_get_value<u8>(b_32, $v2_2) {
+                if builtin::array_get_value<u8>($licm_repr_47, $v2_2) != builtin::array_get_value<u8>(global:opt_sroa_variant_per_case.wado::$const_obj_3, $v2_2) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__2: 0;
                 }
                 $v2_2 = $v2_2 + 1;
@@ -378,7 +375,7 @@ fn "opt_sroa_variant_per_case.wado/run"() {
         b19: block {
             l20: loop {
                 break_if b19 $v2_2 >= $v1_1;
-                if builtin::array_get_value<u8>(a_29, $v2_2) != builtin::array_get_value<u8>(b_32, $v2_2) {
+                if builtin::array_get_value<u8>($licm_repr_47, $v2_2) != builtin::array_get_value<u8>(global:opt_sroa_variant_per_case.wado::$const_obj_3, $v2_2) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__2: 0;
                 }
                 $v2_2 = $v2_2 + 1;
@@ -399,29 +396,27 @@ use_err_branch(builtin::black_box(-1)): "), used: 41 }, s2: struct.new "core:pre
     }
     $v1_22 = "opt_sroa_variant_per_case.wado/use_err_branch"(local.tee $v0_0(black_box(5)));
     if @unlikely($inline_core_prelude_array_wado_seq_eq_u8__4: block -> bool {
-        a_29 = $v1_22.repr;
-        $v1_1 = $v1_22.used;
-        b_32 = global:opt_sroa_variant_per_case.wado::$const_obj_2;
-        if $v1_1 != 2 {
+        if local.tee $v1_1($v1_22.used) != 2 {
             break $inline_core_prelude_array_wado_seq_eq_u8__4: 0;
         }
         $v2_2 = 0;
+        $licm_repr_47 = $v1_22.repr;
         b24: block {
             l25: loop {
                 break_if b24 ((($v2_2 >= $v1_1) | (($v2_2 + 1) >= $v1_1)) | ((($v2_2 + 1) + 1) >= $v1_1)) | (((($v2_2 + 1) + 1) + 1) >= $v1_1);
-                if builtin::array_get_value<u8>(a_29, $v2_2) != builtin::array_get_value<u8>(b_32, $v2_2) {
+                if builtin::array_get_value<u8>($licm_repr_47, $v2_2) != builtin::array_get_value<u8>(global:opt_sroa_variant_per_case.wado::$const_obj_2, $v2_2) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__4: 0;
                 }
                 $v2_2 = $v2_2 + 1;
-                if builtin::array_get_value<u8>(a_29, $v2_2) != builtin::array_get_value<u8>(b_32, $v2_2) {
+                if builtin::array_get_value<u8>($licm_repr_47, $v2_2) != builtin::array_get_value<u8>(global:opt_sroa_variant_per_case.wado::$const_obj_2, $v2_2) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__4: 0;
                 }
                 $v2_2 = $v2_2 + 1;
-                if builtin::array_get_value<u8>(a_29, $v2_2) != builtin::array_get_value<u8>(b_32, $v2_2) {
+                if builtin::array_get_value<u8>($licm_repr_47, $v2_2) != builtin::array_get_value<u8>(global:opt_sroa_variant_per_case.wado::$const_obj_2, $v2_2) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__4: 0;
                 }
                 $v2_2 = $v2_2 + 1;
-                if builtin::array_get_value<u8>(a_29, $v2_2) != builtin::array_get_value<u8>(b_32, $v2_2) {
+                if builtin::array_get_value<u8>($licm_repr_47, $v2_2) != builtin::array_get_value<u8>(global:opt_sroa_variant_per_case.wado::$const_obj_2, $v2_2) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__4: 0;
                 }
                 $v2_2 = $v2_2 + 1;
@@ -431,7 +426,7 @@ use_err_branch(builtin::black_box(-1)): "), used: 41 }, s2: struct.new "core:pre
         b30: block {
             l31: loop {
                 break_if b30 $v2_2 >= $v1_1;
-                if builtin::array_get_value<u8>(a_29, $v2_2) != builtin::array_get_value<u8>(b_32, $v2_2) {
+                if builtin::array_get_value<u8>($licm_repr_47, $v2_2) != builtin::array_get_value<u8>(global:opt_sroa_variant_per_case.wado::$const_obj_2, $v2_2) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__4: 0;
                 }
                 $v2_2 = $v2_2 + 1;

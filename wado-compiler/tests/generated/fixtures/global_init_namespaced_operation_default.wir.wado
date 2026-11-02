@@ -125,7 +125,7 @@ fn "global_init_namespaced_operation_default.wado/run"() with Stdout {
     let $local_3: i32;
     let is_negative_94: bool;
     let x_98: i64;
-    let repr_117: ref Array<u8>;
+    let $sroa_view_repr_203: ref Array<u8>;
     $inline__initialize_modules_0: block {
         break_if $inline__initialize_modules_0 @likely(global:global_init_namespaced_operation_default.wado::$modules_initialized);
         cold_path;
@@ -158,14 +158,14 @@ fn "global_init_namespaced_operation_default.wado/run"() with Stdout {
     $hole_0_0 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_98(x_98 = builtin::i64_extend_i32_s($hole_0_0); select i64(x_98 < 0_i64, 0_i64 - x_98, x_98)));
     is_negative_94 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"($mv_arg_1, is_negative_94, $hole_0_0);
     "core:prelude/primitive.wado/write_decimal_digits"(local.tee $load_6($mv_arg_1.repr), is_negative_94, x_98, $hole_0_0);
-    repr_117 = global:global_init_namespaced_operation_default.wado::$const_obj_0;
+    $sroa_view_repr_203 = global:global_init_namespaced_operation_default.wado::$const_obj_0;
     if @unlikely(local.tee $hole_0_0($mv_arg_1.used + 1) > builtin::array_len($load_6)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($mv_arg_1, $hole_0_0);
     }
     is_negative_94 = $mv_arg_1.used;
     $mv_arg_1.used = $hole_0_0;
-    builtin::array_copy<u8>($mv_arg_1.repr, is_negative_94, repr_117, 0, 1);
+    builtin::array_copy<u8>($mv_arg_1.repr, is_negative_94, $sroa_view_repr_203, 0, 1);
     $hole_0_0 = $local_3 < 0;
     $local_3 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_98(x_98 = builtin::i64_extend_i32_s($local_3); select i64(x_98 < 0_i64, 0_i64 - x_98, x_98)));
     $hole_0_0 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"($mv_arg_1, $hole_0_0, $local_3);

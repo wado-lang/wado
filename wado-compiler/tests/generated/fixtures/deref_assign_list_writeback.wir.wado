@@ -423,36 +423,33 @@ global global:core:prelude/primitive.wado::$const_obj_10: ref "core:prelude/stri
 
 fn "deref_assign_list_writeback.wado/$test_2_deref_assign_of_a_list_with_a_reference_typed_backing_array_writes_back"() {
     let $v0_3: ref "core:prelude/string.wado//String";
-    let a_34: ref Array<u8>;
     let a_end_36: i32;
-    let b_37: ref Array<u8>;
     let i_41: i32;
-    let $sroa_xs_repr_61: ref "Array<core:prelude/string.wado/String>";
-    $v0_3 = builtin::array_get_value<ref "core:prelude/string.wado//String">(local.tee $sroa_xs_repr_61(array.new_fixed<ref "core:prelude/string.wado//String">(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(120), used: 1 }, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(121), used: 1 })), 0);
+    let $licm_repr_61: ref Array<u8>;
+    let $sroa_xs_repr_63: ref "Array<core:prelude/string.wado/String>";
+    $v0_3 = builtin::array_get_value<ref "core:prelude/string.wado//String">(local.tee $sroa_xs_repr_63(array.new_fixed<ref "core:prelude/string.wado//String">(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(120), used: 1 }, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(121), used: 1 })), 0);
     if @unlikely($inline_core_prelude_array_wado_seq_eq_u8__7: block -> bool {
-        a_34 = $v0_3.repr;
-        a_end_36 = $v0_3.used;
-        b_37 = global:deref_assign_list_writeback.wado::$const_obj_4;
-        if a_end_36 != 1 {
+        if local.tee a_end_36($v0_3.used) != 1 {
             break $inline_core_prelude_array_wado_seq_eq_u8__7: 0;
         }
         i_41 = 0;
+        $licm_repr_61 = $v0_3.repr;
         b2: block {
             l3: loop {
                 break_if b2 (((i_41 >= a_end_36) | ((i_41 + 1) >= a_end_36)) | (((i_41 + 1) + 1) >= a_end_36)) | ((((i_41 + 1) + 1) + 1) >= a_end_36);
-                if builtin::array_get_value<u8>(a_34, i_41) != builtin::array_get_value<u8>(b_37, i_41) {
+                if builtin::array_get_value<u8>($licm_repr_61, i_41) != builtin::array_get_value<u8>(global:deref_assign_list_writeback.wado::$const_obj_4, i_41) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__7: 0;
                 }
                 i_41 = i_41 + 1;
-                if builtin::array_get_value<u8>(a_34, i_41) != builtin::array_get_value<u8>(b_37, i_41) {
+                if builtin::array_get_value<u8>($licm_repr_61, i_41) != builtin::array_get_value<u8>(global:deref_assign_list_writeback.wado::$const_obj_4, i_41) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__7: 0;
                 }
                 i_41 = i_41 + 1;
-                if builtin::array_get_value<u8>(a_34, i_41) != builtin::array_get_value<u8>(b_37, i_41) {
+                if builtin::array_get_value<u8>($licm_repr_61, i_41) != builtin::array_get_value<u8>(global:deref_assign_list_writeback.wado::$const_obj_4, i_41) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__7: 0;
                 }
                 i_41 = i_41 + 1;
-                if builtin::array_get_value<u8>(a_34, i_41) != builtin::array_get_value<u8>(b_37, i_41) {
+                if builtin::array_get_value<u8>($licm_repr_61, i_41) != builtin::array_get_value<u8>(global:deref_assign_list_writeback.wado::$const_obj_4, i_41) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__7: 0;
                 }
                 i_41 = i_41 + 1;
@@ -462,7 +459,7 @@ fn "deref_assign_list_writeback.wado/$test_2_deref_assign_of_a_list_with_a_refer
         b8: block {
             l9: loop {
                 break_if b8 i_41 >= a_end_36;
-                if builtin::array_get_value<u8>(a_34, i_41) != builtin::array_get_value<u8>(b_37, i_41) {
+                if builtin::array_get_value<u8>($licm_repr_61, i_41) != builtin::array_get_value<u8>(global:deref_assign_list_writeback.wado::$const_obj_4, i_41) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__7: 0;
                 }
                 i_41 = i_41 + 1;
@@ -479,31 +476,29 @@ condition: xs[0] == \"x\"
 xs[0]: "), used: 170 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, $v0_3.used);
         unreachable;
     }
-    $v0_3 = builtin::array_get_value<ref "core:prelude/string.wado//String">($sroa_xs_repr_61, 1);
+    $v0_3 = builtin::array_get_value<ref "core:prelude/string.wado//String">($sroa_xs_repr_63, 1);
     if @unlikely($inline_core_prelude_array_wado_seq_eq_u8__11: block -> bool {
-        a_34 = $v0_3.repr;
-        a_end_36 = $v0_3.used;
-        b_37 = global:deref_assign_list_writeback.wado::$const_obj_3;
-        if a_end_36 != 1 {
+        if local.tee a_end_36($v0_3.used) != 1 {
             break $inline_core_prelude_array_wado_seq_eq_u8__11: 0;
         }
         i_41 = 0;
+        $licm_repr_61 = $v0_3.repr;
         b13: block {
             l14: loop {
                 break_if b13 (((i_41 >= a_end_36) | ((i_41 + 1) >= a_end_36)) | (((i_41 + 1) + 1) >= a_end_36)) | ((((i_41 + 1) + 1) + 1) >= a_end_36);
-                if builtin::array_get_value<u8>(a_34, i_41) != builtin::array_get_value<u8>(b_37, i_41) {
+                if builtin::array_get_value<u8>($licm_repr_61, i_41) != builtin::array_get_value<u8>(global:deref_assign_list_writeback.wado::$const_obj_3, i_41) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__11: 0;
                 }
                 i_41 = i_41 + 1;
-                if builtin::array_get_value<u8>(a_34, i_41) != builtin::array_get_value<u8>(b_37, i_41) {
+                if builtin::array_get_value<u8>($licm_repr_61, i_41) != builtin::array_get_value<u8>(global:deref_assign_list_writeback.wado::$const_obj_3, i_41) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__11: 0;
                 }
                 i_41 = i_41 + 1;
-                if builtin::array_get_value<u8>(a_34, i_41) != builtin::array_get_value<u8>(b_37, i_41) {
+                if builtin::array_get_value<u8>($licm_repr_61, i_41) != builtin::array_get_value<u8>(global:deref_assign_list_writeback.wado::$const_obj_3, i_41) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__11: 0;
                 }
                 i_41 = i_41 + 1;
-                if builtin::array_get_value<u8>(a_34, i_41) != builtin::array_get_value<u8>(b_37, i_41) {
+                if builtin::array_get_value<u8>($licm_repr_61, i_41) != builtin::array_get_value<u8>(global:deref_assign_list_writeback.wado::$const_obj_3, i_41) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__11: 0;
                 }
                 i_41 = i_41 + 1;
@@ -513,7 +508,7 @@ xs[0]: "), used: 170 }, s1: struct.new "core:prelude/string.wado//String" { repr
         b19: block {
             l20: loop {
                 break_if b19 i_41 >= a_end_36;
-                if builtin::array_get_value<u8>(a_34, i_41) != builtin::array_get_value<u8>(b_37, i_41) {
+                if builtin::array_get_value<u8>($licm_repr_61, i_41) != builtin::array_get_value<u8>(global:deref_assign_list_writeback.wado::$const_obj_3, i_41) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__11: 0;
                 }
                 i_41 = i_41 + 1;

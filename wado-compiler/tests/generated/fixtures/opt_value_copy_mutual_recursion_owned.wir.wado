@@ -214,11 +214,11 @@ global global:opt_value_copy_mutual_recursion_owned.wado::$const_obj_1: ref Arra
 
 fn "opt_value_copy_mutual_recursion_owned.wado/lower_x"(d) {
     let out_4: ref "core:prelude/string.wado//String";
-    let repr_33: ref Array<u8>;
     let is_negative: bool;
     let x: i64;
+    let $sroa_view_repr_112: ref Array<u8>;
     if d <= 0 {
-        return struct.new "opt_value_copy_mutual_recursion_owned.wado//Node::L" { discriminant: 0, payload_0: struct.new "opt_value_copy_mutual_recursion_owned.wado//Leaf" { name: out_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(17), used: 0 }; repr_33 = global:opt_value_copy_mutual_recursion_owned.wado::$const_obj_0; out_4.used = 1; builtin::array_copy<u8>(out_4.repr, 0, repr_33, 0, 1); is_negative = d < 0; d = "core:prelude/primitive.wado/count_digits_u64"(local.tee x(x = builtin::i64_extend_i32_s(d); select i64(x < 0_i64, 0_i64 - x, x))); is_negative = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"(out_4, is_negative, d); "core:prelude/primitive.wado/write_decimal_digits"(out_4.repr, is_negative, x, d); $inline_core_prelude_string_wado_String__internal_push_view_40: block {
+        return struct.new "opt_value_copy_mutual_recursion_owned.wado//Node::L" { discriminant: 0, payload_0: struct.new "opt_value_copy_mutual_recursion_owned.wado//Leaf" { name: out_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(17), used: 0 }; $sroa_view_repr_112 = global:opt_value_copy_mutual_recursion_owned.wado::$const_obj_0; out_4.used = 1; builtin::array_copy<u8>(out_4.repr, 0, $sroa_view_repr_112, 0, 1); is_negative = d < 0; d = "core:prelude/primitive.wado/count_digits_u64"(local.tee x(x = builtin::i64_extend_i32_s(d); select i64(x < 0_i64, 0_i64 - x, x))); is_negative = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"(out_4, is_negative, d); "core:prelude/primitive.wado/write_decimal_digits"(out_4.repr, is_negative, x, d); $inline_core_prelude_string_wado_String__internal_push_view_40: block {
             break $inline_core_prelude_string_wado_String__internal_push_view_40;
         }; out_4 } };
     }
@@ -245,7 +245,7 @@ fn "opt_value_copy_mutual_recursion_owned.wado/run"() with Stdout {
     let out_41: ref "core:prelude/string.wado//String";
     let is_negative_108: bool;
     let x_112: i64;
-    let repr_131: ref Array<u8>;
+    let $sroa_view_repr_203: ref Array<u8>;
     let $sroa_t_h1_263: i32;
     out_0 = struct.new "core:prelude//List<opt_value_copy_mutual_recursion_owned.wado/Node>" { repr: array.new_fixed<ref "opt_value_copy_mutual_recursion_owned.wado//Node">(), used: 0 };
     value_9 = "opt_value_copy_mutual_recursion_owned.wado/lower_x"(4);
@@ -269,14 +269,14 @@ fn "opt_value_copy_mutual_recursion_owned.wado/run"() with Stdout {
     $load_2 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_112(x_112 = builtin::i64_extend_i32_s($load_2); select i64(x_112 < 0_i64, 0_i64 - x_112, x_112)));
     is_negative_108 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"(out_41, is_negative_108, $load_2);
     "core:prelude/primitive.wado/write_decimal_digits"(local.tee $load_3(out_41.repr), is_negative_108, x_112, $load_2);
-    repr_131 = global:opt_value_copy_mutual_recursion_owned.wado::$const_obj_1;
+    $sroa_view_repr_203 = global:opt_value_copy_mutual_recursion_owned.wado::$const_obj_1;
     if @unlikely(local.tee $load_2(out_41.used + 1) > builtin::array_len($load_3)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_41, $load_2);
     }
     is_negative_108 = out_41.used;
     out_41.used = $load_2;
-    builtin::array_copy<u8>(out_41.repr, is_negative_108, repr_131, 0, 1);
+    builtin::array_copy<u8>(out_41.repr, is_negative_108, $sroa_view_repr_203, 0, 1);
     $load_2 = $sroa_t_h1_263 < 0;
     $sroa_t_h1_263 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_112(x_112 = builtin::i64_extend_i32_s($sroa_t_h1_263); select i64(x_112 < 0_i64, 0_i64 - x_112, x_112)));
     $load_2 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"(out_41, $load_2, $sroa_t_h1_263);

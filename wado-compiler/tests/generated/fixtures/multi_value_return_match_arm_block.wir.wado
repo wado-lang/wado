@@ -526,18 +526,10 @@ import fn wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode f
 global global:core:prelude/primitive.wado::$const_obj_2: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
 
 fn "multi_value_return_match_arm_block.wado/$test_0_a_u64_read_back_through_the_cbor_deserializer"() {
-    let one: ref "core:prelude//List<u8>";
-    let two: ref "core:prelude//List<u8>";
-    let four: ref "core:prelude//List<u8>";
-    let truncated: ref "core:prelude//List<u8>";
-    one = struct.new "core:prelude//List<u8>" { repr: array.new_fixed<u8>(24, 42), used: 2 };
-    two = struct.new "core:prelude//List<u8>" { repr: array.new_fixed<u8>(25, 1, 0), used: 3 };
-    four = struct.new "core:prelude//List<u8>" { repr: array.new_data<u8>("   "), used: 5 };
-    truncated = struct.new "core:prelude//List<u8>" { repr: array.new_fixed<u8>(24), used: 1 };
     let $mv$$vr_11$0: i32;
     let $mv$$vr_11$1: u64;
     let $mv$$vr_11$2: ref null "core:serde//DeserializeError";
-    multivalue_bind [$mv$$vr_11$0, $mv$$vr_11$1, $mv$$vr_11$2] = "core:cbor/core:cbor/from_bytes<u64,core:prelude/bytes.wado/ByteList>$sroa[return]$dae[strict,max_depth]"(black_box(one));
+    multivalue_bind [$mv$$vr_11$0, $mv$$vr_11$1, $mv$$vr_11$2] = "core:cbor/core:cbor/from_bytes<u64,core:prelude/bytes.wado/ByteList>$sroa[return]$dae[strict,max_depth]"(black_box(struct.new "core:prelude//List<u8>" { repr: array.new_fixed<u8>(24, 42), used: 2 }));
     if @unlikely((if ($mv$$vr_11$0 == 0) & ($mv$$vr_11$1 == 42_i64) -> bool {
         1;
     } else {
@@ -547,7 +539,7 @@ fn "multi_value_return_match_arm_block.wado/$test_0_a_u64_read_back_through_the_
         "multi_value_return_match_arm_block.wado/$test_0_a_u64_read_back_through_the_cbor_deserializer$cold3"();
         unreachable;
     }
-    multivalue_bind [$mv$$vr_11$0, $mv$$vr_11$1, $mv$$vr_11$2] = "core:cbor/core:cbor/from_bytes<u64,core:prelude/bytes.wado/ByteList>$sroa[return]$dae[strict,max_depth]"(black_box(two));
+    multivalue_bind [$mv$$vr_11$0, $mv$$vr_11$1, $mv$$vr_11$2] = "core:cbor/core:cbor/from_bytes<u64,core:prelude/bytes.wado/ByteList>$sroa[return]$dae[strict,max_depth]"(black_box(struct.new "core:prelude//List<u8>" { repr: array.new_fixed<u8>(25, 1, 0), used: 3 }));
     if @unlikely((if ($mv$$vr_11$0 == 0) & ($mv$$vr_11$1 == 256_i64) -> bool {
         1;
     } else {
@@ -557,7 +549,7 @@ fn "multi_value_return_match_arm_block.wado/$test_0_a_u64_read_back_through_the_
         "multi_value_return_match_arm_block.wado/$test_0_a_u64_read_back_through_the_cbor_deserializer$cold2"();
         unreachable;
     }
-    multivalue_bind [$mv$$vr_11$0, $mv$$vr_11$1, $mv$$vr_11$2] = "core:cbor/core:cbor/from_bytes<u64,core:prelude/bytes.wado/ByteList>$sroa[return]$dae[strict,max_depth]"(black_box(four));
+    multivalue_bind [$mv$$vr_11$0, $mv$$vr_11$1, $mv$$vr_11$2] = "core:cbor/core:cbor/from_bytes<u64,core:prelude/bytes.wado/ByteList>$sroa[return]$dae[strict,max_depth]"(black_box(struct.new "core:prelude//List<u8>" { repr: array.new_data<u8>("   "), used: 5 }));
     if @unlikely((if ($mv$$vr_11$0 == 0) & ($mv$$vr_11$1 == 65536_i64) -> bool {
         1;
     } else {
@@ -567,7 +559,7 @@ fn "multi_value_return_match_arm_block.wado/$test_0_a_u64_read_back_through_the_
         "multi_value_return_match_arm_block.wado/$test_0_a_u64_read_back_through_the_cbor_deserializer$cold1"();
         unreachable;
     }
-    multivalue_bind [$mv$$vr_11$0, $mv$$vr_11$1, $mv$$vr_11$2] = "core:cbor/core:cbor/from_bytes<u64,core:prelude/bytes.wado/ByteList>$sroa[return]$dae[strict,max_depth]"(black_box(truncated));
+    multivalue_bind [$mv$$vr_11$0, $mv$$vr_11$1, $mv$$vr_11$2] = "core:cbor/core:cbor/from_bytes<u64,core:prelude/bytes.wado/ByteList>$sroa[return]$dae[strict,max_depth]"(black_box(struct.new "core:prelude//List<u8>" { repr: array.new_fixed<u8>(24), used: 1 }));
     if @unlikely(($mv$$vr_11$0 == 1) == 0) {
         cold_path;
         "multi_value_return_match_arm_block.wado/$test_0_a_u64_read_back_through_the_cbor_deserializer$cold0"();

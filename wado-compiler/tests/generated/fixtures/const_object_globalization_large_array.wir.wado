@@ -1531,10 +1531,10 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<const_objec
     let out_3: ref "core:prelude/string.wado//String";
     let is_negative_70: bool;
     let x_74: i64;
-    let repr_83: ref Array<u8>;
     let q: u64;
     let tens: i32;
-    let start_210: i32;
+    let start_207: i32;
+    let $sroa_view_repr_582: ref Array<u8>;
     out_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 };
     $inline_core_prelude_string_wado_String__internal_push_view_22: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_22;
@@ -1607,22 +1607,22 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<const_objec
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_3, is_negative_70);
         }
-        start_210 = out_3.used;
+        start_207 = out_3.used;
         out_3.used = is_negative_70;
-        builtin::array_set_u8(out_3.repr, start_210, 45);
+        builtin::array_set_u8(out_3.repr, start_207, 45);
     } else {
     }
     if @unlikely(local.tee is_negative_70(out_3.used + $mv$t$h0) > builtin::array_len(out_3.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_3, is_negative_70);
     }
-    start_210 = out_3.used;
+    start_207 = out_3.used;
     out_3.used = is_negative_70;
     $load_6 = out_3.repr;
-    $mv$t$h0 = start_210 + $mv$t$h0;
+    $mv$t$h0 = start_207 + $mv$t$h0;
     b214: block {
         l215: loop {
-            break_if b214 ($mv$t$h0 - start_210) < 2;
+            break_if b214 ($mv$t$h0 - start_207) < 2;
             q = x_74 /u 100_i64;
             tens = local.tee is_negative_70(builtin::i32_wrap_i64(x_74 - (q * 100_i64))) / 10;
             builtin::array_set_u8($load_6, $mv$t$h0 - 1, (48 + is_negative_70) - (tens * 10));
@@ -1632,17 +1632,17 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<const_objec
             continue l215;
         };
     };
-    if $mv$t$h0 > start_210 {
-        builtin::array_set_u8($load_6, start_210, 48 + builtin::i32_wrap_i64(x_74 %u 10_i64));
+    if $mv$t$h0 > start_207 {
+        builtin::array_set_u8($load_6, start_207, 48 + builtin::i32_wrap_i64(x_74 %u 10_i64));
     }
-    repr_83 = global:core:prelude/string.wado::$const_obj_26;
+    $sroa_view_repr_582 = global:core:prelude/string.wado::$const_obj_26;
     if @unlikely(local.tee $mv$t$h0(out_3.used + 1) > builtin::array_len($load_6)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_3, $mv$t$h0);
     }
     is_negative_70 = out_3.used;
     out_3.used = $mv$t$h0;
-    builtin::array_copy<u8>(out_3.repr, is_negative_70, repr_83, 0, 1);
+    builtin::array_copy<u8>(out_3.repr, is_negative_70, $sroa_view_repr_582, 0, 1);
     "core:prelude/primitive.wado/f64::fmt_into$sroa[self.value]$spec0$sroa[f.buf]"($mv$t$h1, out_3);
     $inline_core_prelude_string_wado_String__internal_push_view_62: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_62;

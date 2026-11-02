@@ -420,35 +420,35 @@ fn "spec_modules_provider.wado/$template_segment$spec_modules_provider.wado/$tmp
 
 fn "spec_modules_provider.wado/$cm_export__$test_0"() {
     let $v0: ref "core:prelude/string.wado//String";
-    let a: ref Array<u8>;
     let a_end: i32;
     let b: ref Array<u8>;
     let i: i32;
+    let $licm_repr_12: ref Array<u8>;
     $v0 = "spec_modules_provider.wado/$cm_binding__test:hlc-dependency11730810bdafac14/hlc@0.1.0#wrap$spec0"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(120), used: 1 }, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(119, 97, 100, 111), used: 4 }).text;
     if @unlikely($inline_core_prelude_array_wado_seq_eq_u8__4: block -> bool {
-        a = $v0.repr;
         a_end = $v0.used;
         b = array.new_data<u8>("[wado:x]");
         if a_end != 8 {
             break $inline_core_prelude_array_wado_seq_eq_u8__4: 0;
         }
         i = 0;
+        $licm_repr_12 = $v0.repr;
         b6: block {
             l7: loop {
                 break_if b6 (((i >= a_end) | ((i + 1) >= a_end)) | (((i + 1) + 1) >= a_end)) | ((((i + 1) + 1) + 1) >= a_end);
-                if builtin::array_get_value<u8>(a, i) != builtin::array_get_value<u8>(b, i) {
+                if builtin::array_get_value<u8>($licm_repr_12, i) != builtin::array_get_value<u8>(b, i) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__4: 0;
                 }
                 i = i + 1;
-                if builtin::array_get_value<u8>(a, i) != builtin::array_get_value<u8>(b, i) {
+                if builtin::array_get_value<u8>($licm_repr_12, i) != builtin::array_get_value<u8>(b, i) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__4: 0;
                 }
                 i = i + 1;
-                if builtin::array_get_value<u8>(a, i) != builtin::array_get_value<u8>(b, i) {
+                if builtin::array_get_value<u8>($licm_repr_12, i) != builtin::array_get_value<u8>(b, i) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__4: 0;
                 }
                 i = i + 1;
-                if builtin::array_get_value<u8>(a, i) != builtin::array_get_value<u8>(b, i) {
+                if builtin::array_get_value<u8>($licm_repr_12, i) != builtin::array_get_value<u8>(b, i) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__4: 0;
                 }
                 i = i + 1;
@@ -458,7 +458,7 @@ fn "spec_modules_provider.wado/$cm_export__$test_0"() {
         b12: block {
             l13: loop {
                 break_if b12 i >= a_end;
-                if builtin::array_get_value<u8>(a, i) != builtin::array_get_value<u8>(b, i) {
+                if builtin::array_get_value<u8>($licm_repr_12, i) != builtin::array_get_value<u8>(b, i) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__4: 0;
                 }
                 i = i + 1;
@@ -486,15 +486,13 @@ fn "spec_modules_provider.wado/$cm_binding__test:hlc-dependency11730810bdafac14/
     let $lang_flat1: i32;
     let $outptr: i32;
     let $struct_result: ref "sub/hlc.wasm//Wrapped";
-    let bytes_19: ref Array<u8>;
     let ptr_20: i32;
-    bytes_19 = code.repr;
+    let arr_38: ref Array<u8>;
     ptr_20 = "mem/realloc"(0, 0, 1, 1);
-    "core:rt/gc_array_to_memory$spec0$dae[src_start]$spec0$dae[len]"(bytes_19, ptr_20);
+    "core:rt/gc_array_to_memory$spec0$dae[src_start]$spec0$dae[len]"(code.repr, ptr_20);
     $code_packed = builtin::i64_extend_i32_u(ptr_20) | 4294967296_i64;
-    bytes_19 = lang.repr;
     ptr_20 = "mem/realloc"(0, 0, 1, 4);
-    "core:rt/gc_array_to_memory$spec0$dae[src_start]$spec1$dae[len]"(bytes_19, ptr_20);
+    "core:rt/gc_array_to_memory$spec0$dae[src_start]$spec1$dae[len]"(lang.repr, ptr_20);
     $lang_packed = builtin::i64_extend_i32_u(ptr_20) | 17179869184_i64;
     ptr_20 = builtin::i32_wrap_i64($code_packed);
     $code_flat1 = builtin::i32_wrap_i64($code_packed >> 32_i64);
@@ -509,8 +507,8 @@ fn "spec_modules_provider.wado/$cm_binding__test:hlc-dependency11730810bdafac14/
         drop("mem/realloc"($lang_flat0, $lang_flat1, 1, 0));
     }
     ptr_20 = builtin::load_i32($outptr);
-    "core:rt/memory_into_gc_array$dae[at]"(local.tee bytes_19(builtin::array_new<u8>(local.tee $code_flat1(builtin::load_i32($outptr + 4)))), ptr_20, $code_flat1);
-    code = struct.new "core:prelude/string.wado//String" { repr: bytes_19, used: $code_flat1 };
+    "core:rt/memory_into_gc_array$dae[at]"(local.tee arr_38(builtin::array_new<u8>(local.tee $code_flat1(builtin::load_i32($outptr + 4)))), ptr_20, $code_flat1);
+    code = struct.new "core:prelude/string.wado//String" { repr: arr_38, used: $code_flat1 };
     if $code_flat1 > 0 {
         drop("mem/realloc"(ptr_20, $code_flat1, 1, 0));
     }

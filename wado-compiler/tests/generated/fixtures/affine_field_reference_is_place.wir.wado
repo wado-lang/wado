@@ -107,8 +107,8 @@ global global:core:prelude/string.wado::$const_obj_5: ref Array<u8> = array.new_
 global global:core:builtin::$unit_case$core:prelude/types.wado//Option<affine_field_reference_is_place.wado/Tok>$0: ref "core:prelude/types.wado//Option<affine_field_reference_is_place.wado/Tok>" = struct.new "core:prelude/types.wado//Option<affine_field_reference_is_place.wado/Tok>" { 0 };
 
 fn "affine_field_reference_is_place.wado/run"() with Stdout {
-    let $load_8: ref null "core:prelude/types.wado//Option<affine_field_reference_is_place.wado/Tok>";
     let h: ref null "affine_field_reference_is_place.wado//Holder";
+    let $moved_5_5: ref null "core:prelude/types.wado//Option<affine_field_reference_is_place.wado/Tok>";
     let $temp_6: ref null "affine_field_reference_is_place.wado//Tok";
     let slot: ref null "core:prelude/types.wado//Box<core:prelude/types.wado/Option<affine_field_reference_is_place.wado/Tok>>";
     let $replaced_3_16: ref null "core:prelude/types.wado//Option<affine_field_reference_is_place.wado/Tok>";
@@ -136,12 +136,10 @@ fn "affine_field_reference_is_place.wado/run"() with Stdout {
     "core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]$dae[return]"($sroa_$pattern_temp_0_1_10_44, new_repr_148);
     "wasi/stream-drop-writable"($sroa_$pattern_temp_0_1_10_44);
     "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_9_43);
-    slot = h.other;
-    $replaced_3_16 = struct.new "core:prelude/types.wado//Option<affine_field_reference_is_place.wado/Tok>::Some" { discriminant: 1, payload_0: struct.new "affine_field_reference_is_place.wado//Tok" { n: 2 } };
-    if ref.is_null(local.tee $load_8(slot.value)) == 0 {
-        if $load_8.discriminant == 0 {
+    if ref.is_null(local.tee $replaced_3_16(local.tee slot(h.other).value)) == 0 {
+        if $replaced_3_16.discriminant == 0 {
         } else {
-            message_34 = "core:prelude/string.wado/core:prelude/string.wado/String::format<affine_field_reference_is_place.wado/$tmpl$fb51c04d54491732,[i32]>$spec0$spec0$sroa[t.h0]"(ref.cast "core:prelude/types.wado//Option<affine_field_reference_is_place.wado/Tok>::Some"($load_8).payload_0.n);
+            message_34 = "core:prelude/string.wado/core:prelude/string.wado/String::format<affine_field_reference_is_place.wado/$tmpl$fb51c04d54491732,[i32]>$spec0$spec0$sroa[t.h0]"(ref.cast "core:prelude/types.wado//Option<affine_field_reference_is_place.wado/Tok>::Some"($replaced_3_16).payload_0.n);
             $sroa_$pattern_temp_0_0_9_43 = builtin::i32_wrap_i64(local.tee $cm_pair_7_41("wasi/stream-new"()));
             $sroa_$pattern_temp_0_1_10_44 = builtin::i32_wrap_i64($cm_pair_7_41 >> 32_i64);
             $sroa_$pattern_temp_0_0_9_43 = "wasi/$wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$pattern_temp_0_0_9_43);
@@ -149,14 +147,14 @@ fn "affine_field_reference_is_place.wado/run"() with Stdout {
             "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_9_43);
         }
     }
-    slot.value = $replaced_3_16;
+    slot.value = struct.new "core:prelude/types.wado//Option<affine_field_reference_is_place.wado/Tok>::Some" { discriminant: 1, payload_0: struct.new "affine_field_reference_is_place.wado//Tok" { n: 2 } };
     $replaced_3_16 = local.tee slot(h.other).value;
     slot.value = global:core:builtin::$unit_case$core:prelude/types.wado//Option<affine_field_reference_is_place.wado/Tok>$0;
     message_34 = "core:prelude/string.wado/core:prelude/string.wado/String::format<affine_field_reference_is_place.wado/$tmpl$fb51c04d54491732,[i32]>$spec0$spec1$sroa[t.h0]"(local.tee $temp_6($inline_core_prelude_types_wado_Option_affine_field_reference_is_place_wado_Tok___unwrap_6: block -> ref null "affine_field_reference_is_place.wado//Tok" {
-        $load_8 = $replaced_3_16;
+        $moved_5_5 = $replaced_3_16;
         $replaced_3_16 = global:core:builtin::$unit_case$core:prelude/types.wado//Option<affine_field_reference_is_place.wado/Tok>$0;
-        if ref.test "core:prelude/types.wado//Option<affine_field_reference_is_place.wado/Tok>::Some"($load_8) {
-            break $inline_core_prelude_types_wado_Option_affine_field_reference_is_place_wado_Tok___unwrap_6: ref.cast "core:prelude/types.wado//Option<affine_field_reference_is_place.wado/Tok>::Some"($load_8).payload_0;
+        if ref.test "core:prelude/types.wado//Option<affine_field_reference_is_place.wado/Tok>::Some"($moved_5_5) {
+            break $inline_core_prelude_types_wado_Option_affine_field_reference_is_place_wado_Tok___unwrap_6: ref.cast "core:prelude/types.wado//Option<affine_field_reference_is_place.wado/Tok>::Some"($moved_5_5).payload_0;
         } else {
         }
         cold_path;
@@ -549,16 +547,16 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, min_ca
 fn "core:prelude/string.wado/core:prelude/string.wado/String::format<affine_field_reference_is_place.wado/$tmpl$fb51c04d54491732,[i32]>$spec0$spec1$sroa[t.h0]"(t) {
     let $load_0: ref Array<u8>;
     let out_3: ref "core:prelude/string.wado//String";
-    let repr_32: ref Array<u8>;
     let is_negative_65: bool;
     let x: i64;
-    let start_129: i32;
+    let start_126: i32;
     let q: u64;
     let tens: i32;
+    let $sroa_view_repr_497: ref Array<u8>;
     out_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
-    repr_32 = global:core:prelude/string.wado::$const_obj_4;
+    $sroa_view_repr_497 = global:core:prelude/string.wado::$const_obj_4;
     out_3.used = 5;
-    builtin::array_copy<u8>(local.tee $load_0(out_3.repr), 0, repr_32, 0, 5);
+    builtin::array_copy<u8>(local.tee $load_0(out_3.repr), 0, $sroa_view_repr_497, 0, 5);
     is_negative_65 = t < 0;
     x = builtin::i64_extend_i32_s(t);
     x = select i64(x < 0_i64, 0_i64 - x, x);
@@ -627,33 +625,33 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<affine_fiel
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_3, is_negative_65);
         }
-        start_129 = out_3.used;
+        start_126 = out_3.used;
         out_3.used = is_negative_65;
-        builtin::array_set_u8(out_3.repr, start_129, 45);
+        builtin::array_set_u8(out_3.repr, start_126, 45);
     } else {
     }
     if @unlikely(local.tee is_negative_65(out_3.used + t) > builtin::array_len(out_3.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_3, is_negative_65);
     }
-    start_129 = out_3.used;
+    start_126 = out_3.used;
     out_3.used = is_negative_65;
-    repr_32 = out_3.repr;
-    t = start_129 + t;
+    $sroa_view_repr_497 = out_3.repr;
+    t = start_126 + t;
     b83: block {
         l84: loop {
-            break_if b83 (t - start_129) < 2;
+            break_if b83 (t - start_126) < 2;
             q = x /u 100_i64;
             tens = local.tee is_negative_65(builtin::i32_wrap_i64(x - (q * 100_i64))) / 10;
-            builtin::array_set_u8(repr_32, t - 1, (48 + is_negative_65) - (tens * 10));
-            builtin::array_set_u8(repr_32, t - 2, 48 + tens);
+            builtin::array_set_u8($sroa_view_repr_497, t - 1, (48 + is_negative_65) - (tens * 10));
+            builtin::array_set_u8($sroa_view_repr_497, t - 2, 48 + tens);
             t = t - 2;
             x = q;
             continue l84;
         };
     };
-    if t > start_129 {
-        builtin::array_set_u8(repr_32, start_129, 48 + builtin::i32_wrap_i64(x %u 10_i64));
+    if t > start_126 {
+        builtin::array_set_u8($sroa_view_repr_497, start_126, 48 + builtin::i32_wrap_i64(x %u 10_i64));
     }
     $inline_core_prelude_string_wado_String__internal_push_view_39: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_39;
@@ -664,16 +662,16 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<affine_fiel
 fn "core:prelude/string.wado/core:prelude/string.wado/String::format<affine_field_reference_is_place.wado/$tmpl$fb51c04d54491732,[i32]>$spec0$spec0$sroa[t.h0]"(t) {
     let $load_0: ref Array<u8>;
     let out_3: ref "core:prelude/string.wado//String";
-    let repr_32: ref Array<u8>;
     let is_negative_65: bool;
     let x: i64;
-    let start_129: i32;
+    let start_126: i32;
     let q: u64;
     let tens: i32;
+    let $sroa_view_repr_497: ref Array<u8>;
     out_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
-    repr_32 = global:core:prelude/string.wado::$const_obj_5;
+    $sroa_view_repr_497 = global:core:prelude/string.wado::$const_obj_5;
     out_3.used = 5;
-    builtin::array_copy<u8>(local.tee $load_0(out_3.repr), 0, repr_32, 0, 5);
+    builtin::array_copy<u8>(local.tee $load_0(out_3.repr), 0, $sroa_view_repr_497, 0, 5);
     is_negative_65 = t < 0;
     x = builtin::i64_extend_i32_s(t);
     x = select i64(x < 0_i64, 0_i64 - x, x);
@@ -742,33 +740,33 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<affine_fiel
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_3, is_negative_65);
         }
-        start_129 = out_3.used;
+        start_126 = out_3.used;
         out_3.used = is_negative_65;
-        builtin::array_set_u8(out_3.repr, start_129, 45);
+        builtin::array_set_u8(out_3.repr, start_126, 45);
     } else {
     }
     if @unlikely(local.tee is_negative_65(out_3.used + t) > builtin::array_len(out_3.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_3, is_negative_65);
     }
-    start_129 = out_3.used;
+    start_126 = out_3.used;
     out_3.used = is_negative_65;
-    repr_32 = out_3.repr;
-    t = start_129 + t;
+    $sroa_view_repr_497 = out_3.repr;
+    t = start_126 + t;
     b108: block {
         l109: loop {
-            break_if b108 (t - start_129) < 2;
+            break_if b108 (t - start_126) < 2;
             q = x /u 100_i64;
             tens = local.tee is_negative_65(builtin::i32_wrap_i64(x - (q * 100_i64))) / 10;
-            builtin::array_set_u8(repr_32, t - 1, (48 + is_negative_65) - (tens * 10));
-            builtin::array_set_u8(repr_32, t - 2, 48 + tens);
+            builtin::array_set_u8($sroa_view_repr_497, t - 1, (48 + is_negative_65) - (tens * 10));
+            builtin::array_set_u8($sroa_view_repr_497, t - 2, 48 + tens);
             t = t - 2;
             x = q;
             continue l109;
         };
     };
-    if t > start_129 {
-        builtin::array_set_u8(repr_32, start_129, 48 + builtin::i32_wrap_i64(x %u 10_i64));
+    if t > start_126 {
+        builtin::array_set_u8($sroa_view_repr_497, start_126, 48 + builtin::i32_wrap_i64(x %u 10_i64));
     }
     $inline_core_prelude_string_wado_String__internal_push_view_39: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_39;

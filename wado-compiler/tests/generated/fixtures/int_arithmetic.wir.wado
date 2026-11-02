@@ -659,43 +659,40 @@ fn "int_arithmetic.wado/$test_29_u64_narrows_in_a_digit_loop"() {
 }
 
 fn "int_arithmetic.wado/$test_34_f64_arithmetic"() {
-    let a_10: ref Array<u8>;
     let a_end_12: i32;
-    let b_13: ref Array<u8>;
     let i_17: i32;
-    let out_40: ref "core:prelude/string.wado//String";
-    out_40 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
+    let $licm_repr_38: ref Array<u8>;
+    let out_43: ref "core:prelude/string.wado//String";
+    out_43 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
     $inline_core_prelude_string_wado_String__format_int_arithmetic_wado__tmpl_deffd0c459369bf8__f64___spec0_spec0_dae_t__0__$inline_core_prelude_string_wado_String__internal_push_view_20: block {
         break $inline_core_prelude_string_wado_String__format_int_arithmetic_wado__tmpl_deffd0c459369bf8__f64___spec0_spec0_dae_t__0__$inline_core_prelude_string_wado_String__internal_push_view_20;
     };
-    "core:prelude/primitive.wado/f64::fmt_into$sroa[self.value]$spec0$sroa[f.buf]"(5.140000000000001, out_40);
+    "core:prelude/primitive.wado/f64::fmt_into$sroa[self.value]$spec0$sroa[f.buf]"(5.140000000000001, out_43);
     $inline_core_prelude_string_wado_String__format_int_arithmetic_wado__tmpl_deffd0c459369bf8__f64___spec0_spec0_dae_t__0__$inline_core_prelude_string_wado_String__internal_push_view_35: block {
         break $inline_core_prelude_string_wado_String__format_int_arithmetic_wado__tmpl_deffd0c459369bf8__f64___spec0_spec0_dae_t__0__$inline_core_prelude_string_wado_String__internal_push_view_35;
     };
     if @unlikely($inline_core_prelude_array_wado_seq_eq_u8__1: block -> bool {
-        a_10 = out_40.repr;
-        a_end_12 = out_40.used;
-        b_13 = global:int_arithmetic.wado::$const_obj_11;
-        if a_end_12 != 17 {
+        if local.tee a_end_12(out_43.used) != 17 {
             break $inline_core_prelude_array_wado_seq_eq_u8__1: 0;
         }
         i_17 = 0;
+        $licm_repr_38 = out_43.repr;
         b16: block {
             l17: loop {
                 break_if b16 (((i_17 >= a_end_12) | ((i_17 + 1) >= a_end_12)) | (((i_17 + 1) + 1) >= a_end_12)) | ((((i_17 + 1) + 1) + 1) >= a_end_12);
-                if builtin::array_get_value<u8>(a_10, i_17) != builtin::array_get_value<u8>(b_13, i_17) {
+                if builtin::array_get_value<u8>($licm_repr_38, i_17) != builtin::array_get_value<u8>(global:int_arithmetic.wado::$const_obj_11, i_17) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__1: 0;
                 }
                 i_17 = i_17 + 1;
-                if builtin::array_get_value<u8>(a_10, i_17) != builtin::array_get_value<u8>(b_13, i_17) {
+                if builtin::array_get_value<u8>($licm_repr_38, i_17) != builtin::array_get_value<u8>(global:int_arithmetic.wado::$const_obj_11, i_17) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__1: 0;
                 }
                 i_17 = i_17 + 1;
-                if builtin::array_get_value<u8>(a_10, i_17) != builtin::array_get_value<u8>(b_13, i_17) {
+                if builtin::array_get_value<u8>($licm_repr_38, i_17) != builtin::array_get_value<u8>(global:int_arithmetic.wado::$const_obj_11, i_17) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__1: 0;
                 }
                 i_17 = i_17 + 1;
-                if builtin::array_get_value<u8>(a_10, i_17) != builtin::array_get_value<u8>(b_13, i_17) {
+                if builtin::array_get_value<u8>($licm_repr_38, i_17) != builtin::array_get_value<u8>(global:int_arithmetic.wado::$const_obj_11, i_17) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__1: 0;
                 }
                 i_17 = i_17 + 1;
@@ -705,7 +702,7 @@ fn "int_arithmetic.wado/$test_34_f64_arithmetic"() {
         b22: block {
             l23: loop {
                 break_if b22 i_17 >= a_end_12;
-                if builtin::array_get_value<u8>(a_10, i_17) != builtin::array_get_value<u8>(b_13, i_17) {
+                if builtin::array_get_value<u8>($licm_repr_38, i_17) != builtin::array_get_value<u8>(global:int_arithmetic.wado::$const_obj_11, i_17) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__1: 0;
                 }
                 i_17 = i_17 + 1;
@@ -715,45 +712,43 @@ fn "int_arithmetic.wado/$test_34_f64_arithmetic"() {
         break $inline_core_prelude_array_wado_seq_eq_u8__1: 1;
     } == 0) {
         cold_path;
-        "core:rt/panic"(local.tee out_40("core:prelude/string.wado/core:prelude/string.wado/String::format<int_arithmetic.wado/$tmpl$d48748ffcad618c0,[core:prelude/string.wado/String]>"(struct.new "int_arithmetic.wado//$tmpl$d48748ffcad618c0" { h0: out_40, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_34_f64_arithmetic at int_arithmetic.wado:422
+        "core:rt/panic"(local.tee out_43("core:prelude/string.wado/core:prelude/string.wado/String::format<int_arithmetic.wado/$tmpl$d48748ffcad618c0,[core:prelude/string.wado/String]>"(struct.new "int_arithmetic.wado//$tmpl$d48748ffcad618c0" { h0: out_43, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_34_f64_arithmetic at int_arithmetic.wado:422
 condition: `${a + b}` == \"5.140000000000001\"
 `${a + b}`: "), used: 128 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_34_f64_arithmetic at int_arithmetic.wado:422
 condition: `${a + b}` == \"5.140000000000001\"
-`${a + b}`: "), used: 128 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, out_40.used);
+`${a + b}`: "), used: 128 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, out_43.used);
         unreachable;
     }
-    out_40 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
+    out_43 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
     $inline_core_prelude_string_wado_String__format_int_arithmetic_wado__tmpl_deffd0c459369bf8__f64___spec1_spec0_dae_t__1__$inline_core_prelude_string_wado_String__internal_push_view_20: block {
         break $inline_core_prelude_string_wado_String__format_int_arithmetic_wado__tmpl_deffd0c459369bf8__f64___spec1_spec0_dae_t__1__$inline_core_prelude_string_wado_String__internal_push_view_20;
     };
-    "core:prelude/primitive.wado/f64::fmt_into$sroa[self.value]$spec0$sroa[f.buf]"(6.28, out_40);
+    "core:prelude/primitive.wado/f64::fmt_into$sroa[self.value]$spec0$sroa[f.buf]"(6.28, out_43);
     $inline_core_prelude_string_wado_String__format_int_arithmetic_wado__tmpl_deffd0c459369bf8__f64___spec1_spec0_dae_t__1__$inline_core_prelude_string_wado_String__internal_push_view_35: block {
         break $inline_core_prelude_string_wado_String__format_int_arithmetic_wado__tmpl_deffd0c459369bf8__f64___spec1_spec0_dae_t__1__$inline_core_prelude_string_wado_String__internal_push_view_35;
     };
     if @unlikely($inline_core_prelude_array_wado_seq_eq_u8__3: block -> bool {
-        a_10 = out_40.repr;
-        a_end_12 = out_40.used;
-        b_13 = global:int_arithmetic.wado::$const_obj_10;
-        if a_end_12 != 4 {
+        if local.tee a_end_12(out_43.used) != 4 {
             break $inline_core_prelude_array_wado_seq_eq_u8__3: 0;
         }
         i_17 = 0;
+        $licm_repr_38 = out_43.repr;
         b27: block {
             l28: loop {
                 break_if b27 (((i_17 >= a_end_12) | ((i_17 + 1) >= a_end_12)) | (((i_17 + 1) + 1) >= a_end_12)) | ((((i_17 + 1) + 1) + 1) >= a_end_12);
-                if builtin::array_get_value<u8>(a_10, i_17) != builtin::array_get_value<u8>(b_13, i_17) {
+                if builtin::array_get_value<u8>($licm_repr_38, i_17) != builtin::array_get_value<u8>(global:int_arithmetic.wado::$const_obj_10, i_17) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__3: 0;
                 }
                 i_17 = i_17 + 1;
-                if builtin::array_get_value<u8>(a_10, i_17) != builtin::array_get_value<u8>(b_13, i_17) {
+                if builtin::array_get_value<u8>($licm_repr_38, i_17) != builtin::array_get_value<u8>(global:int_arithmetic.wado::$const_obj_10, i_17) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__3: 0;
                 }
                 i_17 = i_17 + 1;
-                if builtin::array_get_value<u8>(a_10, i_17) != builtin::array_get_value<u8>(b_13, i_17) {
+                if builtin::array_get_value<u8>($licm_repr_38, i_17) != builtin::array_get_value<u8>(global:int_arithmetic.wado::$const_obj_10, i_17) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__3: 0;
                 }
                 i_17 = i_17 + 1;
-                if builtin::array_get_value<u8>(a_10, i_17) != builtin::array_get_value<u8>(b_13, i_17) {
+                if builtin::array_get_value<u8>($licm_repr_38, i_17) != builtin::array_get_value<u8>(global:int_arithmetic.wado::$const_obj_10, i_17) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__3: 0;
                 }
                 i_17 = i_17 + 1;
@@ -763,7 +758,7 @@ condition: `${a + b}` == \"5.140000000000001\"
         b33: block {
             l34: loop {
                 break_if b33 i_17 >= a_end_12;
-                if builtin::array_get_value<u8>(a_10, i_17) != builtin::array_get_value<u8>(b_13, i_17) {
+                if builtin::array_get_value<u8>($licm_repr_38, i_17) != builtin::array_get_value<u8>(global:int_arithmetic.wado::$const_obj_10, i_17) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__3: 0;
                 }
                 i_17 = i_17 + 1;
@@ -773,45 +768,43 @@ condition: `${a + b}` == \"5.140000000000001\"
         break $inline_core_prelude_array_wado_seq_eq_u8__3: 1;
     } == 0) {
         cold_path;
-        "core:rt/panic"(local.tee out_40("core:prelude/string.wado/core:prelude/string.wado/String::format<int_arithmetic.wado/$tmpl$d48748ffcad618c0,[core:prelude/string.wado/String]>"(struct.new "int_arithmetic.wado//$tmpl$d48748ffcad618c0" { h0: out_40, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_34_f64_arithmetic at int_arithmetic.wado:423
+        "core:rt/panic"(local.tee out_43("core:prelude/string.wado/core:prelude/string.wado/String::format<int_arithmetic.wado/$tmpl$d48748ffcad618c0,[core:prelude/string.wado/String]>"(struct.new "int_arithmetic.wado//$tmpl$d48748ffcad618c0" { h0: out_43, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_34_f64_arithmetic at int_arithmetic.wado:423
 condition: `${a * b}` == \"6.28\"
 `${a * b}`: "), used: 115 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_34_f64_arithmetic at int_arithmetic.wado:423
 condition: `${a * b}` == \"6.28\"
-`${a * b}`: "), used: 115 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, out_40.used);
+`${a * b}`: "), used: 115 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, out_43.used);
         unreachable;
     }
-    out_40 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
+    out_43 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
     $inline_core_prelude_string_wado_String__format_int_arithmetic_wado__tmpl_deffd0c459369bf8__f64___spec2_spec0_dae_t__2__$inline_core_prelude_string_wado_String__internal_push_view_20: block {
         break $inline_core_prelude_string_wado_String__format_int_arithmetic_wado__tmpl_deffd0c459369bf8__f64___spec2_spec0_dae_t__2__$inline_core_prelude_string_wado_String__internal_push_view_20;
     };
-    "core:prelude/primitive.wado/f64::fmt_into$sroa[self.value]$spec0$sroa[f.buf]"(1.57, out_40);
+    "core:prelude/primitive.wado/f64::fmt_into$sroa[self.value]$spec0$sroa[f.buf]"(1.57, out_43);
     $inline_core_prelude_string_wado_String__format_int_arithmetic_wado__tmpl_deffd0c459369bf8__f64___spec2_spec0_dae_t__2__$inline_core_prelude_string_wado_String__internal_push_view_35: block {
         break $inline_core_prelude_string_wado_String__format_int_arithmetic_wado__tmpl_deffd0c459369bf8__f64___spec2_spec0_dae_t__2__$inline_core_prelude_string_wado_String__internal_push_view_35;
     };
     if @unlikely($inline_core_prelude_array_wado_seq_eq_u8__5: block -> bool {
-        a_10 = out_40.repr;
-        a_end_12 = out_40.used;
-        b_13 = global:int_arithmetic.wado::$const_obj_9;
-        if a_end_12 != 4 {
+        if local.tee a_end_12(out_43.used) != 4 {
             break $inline_core_prelude_array_wado_seq_eq_u8__5: 0;
         }
         i_17 = 0;
+        $licm_repr_38 = out_43.repr;
         b38: block {
             l39: loop {
                 break_if b38 (((i_17 >= a_end_12) | ((i_17 + 1) >= a_end_12)) | (((i_17 + 1) + 1) >= a_end_12)) | ((((i_17 + 1) + 1) + 1) >= a_end_12);
-                if builtin::array_get_value<u8>(a_10, i_17) != builtin::array_get_value<u8>(b_13, i_17) {
+                if builtin::array_get_value<u8>($licm_repr_38, i_17) != builtin::array_get_value<u8>(global:int_arithmetic.wado::$const_obj_9, i_17) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__5: 0;
                 }
                 i_17 = i_17 + 1;
-                if builtin::array_get_value<u8>(a_10, i_17) != builtin::array_get_value<u8>(b_13, i_17) {
+                if builtin::array_get_value<u8>($licm_repr_38, i_17) != builtin::array_get_value<u8>(global:int_arithmetic.wado::$const_obj_9, i_17) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__5: 0;
                 }
                 i_17 = i_17 + 1;
-                if builtin::array_get_value<u8>(a_10, i_17) != builtin::array_get_value<u8>(b_13, i_17) {
+                if builtin::array_get_value<u8>($licm_repr_38, i_17) != builtin::array_get_value<u8>(global:int_arithmetic.wado::$const_obj_9, i_17) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__5: 0;
                 }
                 i_17 = i_17 + 1;
-                if builtin::array_get_value<u8>(a_10, i_17) != builtin::array_get_value<u8>(b_13, i_17) {
+                if builtin::array_get_value<u8>($licm_repr_38, i_17) != builtin::array_get_value<u8>(global:int_arithmetic.wado::$const_obj_9, i_17) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__5: 0;
                 }
                 i_17 = i_17 + 1;
@@ -821,7 +814,7 @@ condition: `${a * b}` == \"6.28\"
         b44: block {
             l45: loop {
                 break_if b44 i_17 >= a_end_12;
-                if builtin::array_get_value<u8>(a_10, i_17) != builtin::array_get_value<u8>(b_13, i_17) {
+                if builtin::array_get_value<u8>($licm_repr_38, i_17) != builtin::array_get_value<u8>(global:int_arithmetic.wado::$const_obj_9, i_17) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__5: 0;
                 }
                 i_17 = i_17 + 1;
@@ -831,53 +824,50 @@ condition: `${a * b}` == \"6.28\"
         break $inline_core_prelude_array_wado_seq_eq_u8__5: 1;
     } == 0) {
         cold_path;
-        "core:rt/panic"(local.tee out_40("core:prelude/string.wado/core:prelude/string.wado/String::format<int_arithmetic.wado/$tmpl$d48748ffcad618c0,[core:prelude/string.wado/String]>"(struct.new "int_arithmetic.wado//$tmpl$d48748ffcad618c0" { h0: out_40, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_34_f64_arithmetic at int_arithmetic.wado:424
+        "core:rt/panic"(local.tee out_43("core:prelude/string.wado/core:prelude/string.wado/String::format<int_arithmetic.wado/$tmpl$d48748ffcad618c0,[core:prelude/string.wado/String]>"(struct.new "int_arithmetic.wado//$tmpl$d48748ffcad618c0" { h0: out_43, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_34_f64_arithmetic at int_arithmetic.wado:424
 condition: `${a / b}` == \"1.57\"
 `${a / b}`: "), used: 115 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_34_f64_arithmetic at int_arithmetic.wado:424
 condition: `${a / b}` == \"1.57\"
-`${a / b}`: "), used: 115 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, out_40.used);
+`${a / b}`: "), used: 115 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, out_43.used);
         unreachable;
     }
 }
 
 fn "int_arithmetic.wado/$test_35_unary_negation_on_floats"() {
-    let a_8: ref Array<u8>;
     let a_end_10: i32;
-    let b_11: ref Array<u8>;
     let i_15: i32;
-    let out_38: ref "core:prelude/string.wado//String";
-    out_38 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
+    let $licm_repr_36: ref Array<u8>;
+    let out_41: ref "core:prelude/string.wado//String";
+    out_41 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
     $inline_core_prelude_string_wado_String__format_int_arithmetic_wado__tmpl_deffd0c459369bf8__f64___spec3_spec0_dae_t__0__$inline_core_prelude_string_wado_String__internal_push_view_20: block {
         break $inline_core_prelude_string_wado_String__format_int_arithmetic_wado__tmpl_deffd0c459369bf8__f64___spec3_spec0_dae_t__0__$inline_core_prelude_string_wado_String__internal_push_view_20;
     };
-    "core:prelude/primitive.wado/f64::fmt_into$sroa[self.value]$spec0$sroa[f.buf]"(-2.5, out_38);
+    "core:prelude/primitive.wado/f64::fmt_into$sroa[self.value]$spec0$sroa[f.buf]"(-2.5, out_41);
     $inline_core_prelude_string_wado_String__format_int_arithmetic_wado__tmpl_deffd0c459369bf8__f64___spec3_spec0_dae_t__0__$inline_core_prelude_string_wado_String__internal_push_view_35: block {
         break $inline_core_prelude_string_wado_String__format_int_arithmetic_wado__tmpl_deffd0c459369bf8__f64___spec3_spec0_dae_t__0__$inline_core_prelude_string_wado_String__internal_push_view_35;
     };
     if @unlikely($inline_core_prelude_array_wado_seq_eq_u8__1: block -> bool {
-        a_8 = out_38.repr;
-        a_end_10 = out_38.used;
-        b_11 = global:int_arithmetic.wado::$const_obj_14;
-        if a_end_10 != 4 {
+        if local.tee a_end_10(out_41.used) != 4 {
             break $inline_core_prelude_array_wado_seq_eq_u8__1: 0;
         }
         i_15 = 0;
+        $licm_repr_36 = out_41.repr;
         b49: block {
             l50: loop {
                 break_if b49 (((i_15 >= a_end_10) | ((i_15 + 1) >= a_end_10)) | (((i_15 + 1) + 1) >= a_end_10)) | ((((i_15 + 1) + 1) + 1) >= a_end_10);
-                if builtin::array_get_value<u8>(a_8, i_15) != builtin::array_get_value<u8>(b_11, i_15) {
+                if builtin::array_get_value<u8>($licm_repr_36, i_15) != builtin::array_get_value<u8>(global:int_arithmetic.wado::$const_obj_14, i_15) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__1: 0;
                 }
                 i_15 = i_15 + 1;
-                if builtin::array_get_value<u8>(a_8, i_15) != builtin::array_get_value<u8>(b_11, i_15) {
+                if builtin::array_get_value<u8>($licm_repr_36, i_15) != builtin::array_get_value<u8>(global:int_arithmetic.wado::$const_obj_14, i_15) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__1: 0;
                 }
                 i_15 = i_15 + 1;
-                if builtin::array_get_value<u8>(a_8, i_15) != builtin::array_get_value<u8>(b_11, i_15) {
+                if builtin::array_get_value<u8>($licm_repr_36, i_15) != builtin::array_get_value<u8>(global:int_arithmetic.wado::$const_obj_14, i_15) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__1: 0;
                 }
                 i_15 = i_15 + 1;
-                if builtin::array_get_value<u8>(a_8, i_15) != builtin::array_get_value<u8>(b_11, i_15) {
+                if builtin::array_get_value<u8>($licm_repr_36, i_15) != builtin::array_get_value<u8>(global:int_arithmetic.wado::$const_obj_14, i_15) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__1: 0;
                 }
                 i_15 = i_15 + 1;
@@ -887,7 +877,7 @@ fn "int_arithmetic.wado/$test_35_unary_negation_on_floats"() {
         b55: block {
             l56: loop {
                 break_if b55 i_15 >= a_end_10;
-                if builtin::array_get_value<u8>(a_8, i_15) != builtin::array_get_value<u8>(b_11, i_15) {
+                if builtin::array_get_value<u8>($licm_repr_36, i_15) != builtin::array_get_value<u8>(global:int_arithmetic.wado::$const_obj_14, i_15) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__1: 0;
                 }
                 i_15 = i_15 + 1;
@@ -897,45 +887,43 @@ fn "int_arithmetic.wado/$test_35_unary_negation_on_floats"() {
         break $inline_core_prelude_array_wado_seq_eq_u8__1: 1;
     } == 0) {
         cold_path;
-        "core:rt/panic"(local.tee out_38("core:prelude/string.wado/core:prelude/string.wado/String::format<int_arithmetic.wado/$tmpl$d48748ffcad618c0,[core:prelude/string.wado/String]>"(struct.new "int_arithmetic.wado//$tmpl$d48748ffcad618c0" { h0: out_38, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_35_unary_negation_on_floats at int_arithmetic.wado:428
+        "core:rt/panic"(local.tee out_41("core:prelude/string.wado/core:prelude/string.wado/String::format<int_arithmetic.wado/$tmpl$d48748ffcad618c0,[core:prelude/string.wado/String]>"(struct.new "int_arithmetic.wado//$tmpl$d48748ffcad618c0" { h0: out_41, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_35_unary_negation_on_floats at int_arithmetic.wado:428
 condition: `${-2.5}` == \"-2.5\"
 `${-2.5}`: "), used: 123 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_35_unary_negation_on_floats at int_arithmetic.wado:428
 condition: `${-2.5}` == \"-2.5\"
-`${-2.5}`: "), used: 123 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, out_38.used);
+`${-2.5}`: "), used: 123 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, out_41.used);
         unreachable;
     }
-    out_38 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
+    out_41 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
     $inline_core_prelude_string_wado_String__format_int_arithmetic_wado__tmpl_deffd0c459369bf8__f64___spec4_spec0_dae_t__1__$inline_core_prelude_string_wado_String__internal_push_view_20: block {
         break $inline_core_prelude_string_wado_String__format_int_arithmetic_wado__tmpl_deffd0c459369bf8__f64___spec4_spec0_dae_t__1__$inline_core_prelude_string_wado_String__internal_push_view_20;
     };
-    "core:prelude/primitive.wado/f64::fmt_into$sroa[self.value]$spec0$sroa[f.buf]"(2.5, out_38);
+    "core:prelude/primitive.wado/f64::fmt_into$sroa[self.value]$spec0$sroa[f.buf]"(2.5, out_41);
     $inline_core_prelude_string_wado_String__format_int_arithmetic_wado__tmpl_deffd0c459369bf8__f64___spec4_spec0_dae_t__1__$inline_core_prelude_string_wado_String__internal_push_view_35: block {
         break $inline_core_prelude_string_wado_String__format_int_arithmetic_wado__tmpl_deffd0c459369bf8__f64___spec4_spec0_dae_t__1__$inline_core_prelude_string_wado_String__internal_push_view_35;
     };
     if @unlikely($inline_core_prelude_array_wado_seq_eq_u8__3: block -> bool {
-        a_8 = out_38.repr;
-        a_end_10 = out_38.used;
-        b_11 = global:int_arithmetic.wado::$const_obj_13;
-        if a_end_10 != 3 {
+        if local.tee a_end_10(out_41.used) != 3 {
             break $inline_core_prelude_array_wado_seq_eq_u8__3: 0;
         }
         i_15 = 0;
+        $licm_repr_36 = out_41.repr;
         b60: block {
             l61: loop {
                 break_if b60 (((i_15 >= a_end_10) | ((i_15 + 1) >= a_end_10)) | (((i_15 + 1) + 1) >= a_end_10)) | ((((i_15 + 1) + 1) + 1) >= a_end_10);
-                if builtin::array_get_value<u8>(a_8, i_15) != builtin::array_get_value<u8>(b_11, i_15) {
+                if builtin::array_get_value<u8>($licm_repr_36, i_15) != builtin::array_get_value<u8>(global:int_arithmetic.wado::$const_obj_13, i_15) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__3: 0;
                 }
                 i_15 = i_15 + 1;
-                if builtin::array_get_value<u8>(a_8, i_15) != builtin::array_get_value<u8>(b_11, i_15) {
+                if builtin::array_get_value<u8>($licm_repr_36, i_15) != builtin::array_get_value<u8>(global:int_arithmetic.wado::$const_obj_13, i_15) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__3: 0;
                 }
                 i_15 = i_15 + 1;
-                if builtin::array_get_value<u8>(a_8, i_15) != builtin::array_get_value<u8>(b_11, i_15) {
+                if builtin::array_get_value<u8>($licm_repr_36, i_15) != builtin::array_get_value<u8>(global:int_arithmetic.wado::$const_obj_13, i_15) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__3: 0;
                 }
                 i_15 = i_15 + 1;
-                if builtin::array_get_value<u8>(a_8, i_15) != builtin::array_get_value<u8>(b_11, i_15) {
+                if builtin::array_get_value<u8>($licm_repr_36, i_15) != builtin::array_get_value<u8>(global:int_arithmetic.wado::$const_obj_13, i_15) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__3: 0;
                 }
                 i_15 = i_15 + 1;
@@ -945,7 +933,7 @@ condition: `${-2.5}` == \"-2.5\"
         b66: block {
             l67: loop {
                 break_if b66 i_15 >= a_end_10;
-                if builtin::array_get_value<u8>(a_8, i_15) != builtin::array_get_value<u8>(b_11, i_15) {
+                if builtin::array_get_value<u8>($licm_repr_36, i_15) != builtin::array_get_value<u8>(global:int_arithmetic.wado::$const_obj_13, i_15) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__3: 0;
                 }
                 i_15 = i_15 + 1;
@@ -955,45 +943,43 @@ condition: `${-2.5}` == \"-2.5\"
         break $inline_core_prelude_array_wado_seq_eq_u8__3: 1;
     } == 0) {
         cold_path;
-        "core:rt/panic"(local.tee out_38("core:prelude/string.wado/core:prelude/string.wado/String::format<int_arithmetic.wado/$tmpl$d48748ffcad618c0,[core:prelude/string.wado/String]>"(struct.new "int_arithmetic.wado//$tmpl$d48748ffcad618c0" { h0: out_38, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_35_unary_negation_on_floats at int_arithmetic.wado:429
+        "core:rt/panic"(local.tee out_41("core:prelude/string.wado/core:prelude/string.wado/String::format<int_arithmetic.wado/$tmpl$d48748ffcad618c0,[core:prelude/string.wado/String]>"(struct.new "int_arithmetic.wado//$tmpl$d48748ffcad618c0" { h0: out_41, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_35_unary_negation_on_floats at int_arithmetic.wado:429
 condition: `${-1.0 + 3.5}` == \"2.5\"
 `${-1.0 + 3.5}`: "), used: 134 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_35_unary_negation_on_floats at int_arithmetic.wado:429
 condition: `${-1.0 + 3.5}` == \"2.5\"
-`${-1.0 + 3.5}`: "), used: 134 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, out_38.used);
+`${-1.0 + 3.5}`: "), used: 134 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, out_41.used);
         unreachable;
     }
-    out_38 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
+    out_41 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
     $inline_core_prelude_string_wado_String__format_int_arithmetic_wado__tmpl_deffd0c459369bf8__f64___spec5_spec0_dae_t__2__$inline_core_prelude_string_wado_String__internal_push_view_20: block {
         break $inline_core_prelude_string_wado_String__format_int_arithmetic_wado__tmpl_deffd0c459369bf8__f64___spec5_spec0_dae_t__2__$inline_core_prelude_string_wado_String__internal_push_view_20;
     };
-    "core:prelude/primitive.wado/f64::fmt_into$sroa[self.value]$spec0$sroa[f.buf]"(-6, out_38);
+    "core:prelude/primitive.wado/f64::fmt_into$sroa[self.value]$spec0$sroa[f.buf]"(-6, out_41);
     $inline_core_prelude_string_wado_String__format_int_arithmetic_wado__tmpl_deffd0c459369bf8__f64___spec5_spec0_dae_t__2__$inline_core_prelude_string_wado_String__internal_push_view_35: block {
         break $inline_core_prelude_string_wado_String__format_int_arithmetic_wado__tmpl_deffd0c459369bf8__f64___spec5_spec0_dae_t__2__$inline_core_prelude_string_wado_String__internal_push_view_35;
     };
     if @unlikely($inline_core_prelude_array_wado_seq_eq_u8__5: block -> bool {
-        a_8 = out_38.repr;
-        a_end_10 = out_38.used;
-        b_11 = global:int_arithmetic.wado::$const_obj_12;
-        if a_end_10 != 2 {
+        if local.tee a_end_10(out_41.used) != 2 {
             break $inline_core_prelude_array_wado_seq_eq_u8__5: 0;
         }
         i_15 = 0;
+        $licm_repr_36 = out_41.repr;
         b71: block {
             l72: loop {
                 break_if b71 (((i_15 >= a_end_10) | ((i_15 + 1) >= a_end_10)) | (((i_15 + 1) + 1) >= a_end_10)) | ((((i_15 + 1) + 1) + 1) >= a_end_10);
-                if builtin::array_get_value<u8>(a_8, i_15) != builtin::array_get_value<u8>(b_11, i_15) {
+                if builtin::array_get_value<u8>($licm_repr_36, i_15) != builtin::array_get_value<u8>(global:int_arithmetic.wado::$const_obj_12, i_15) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__5: 0;
                 }
                 i_15 = i_15 + 1;
-                if builtin::array_get_value<u8>(a_8, i_15) != builtin::array_get_value<u8>(b_11, i_15) {
+                if builtin::array_get_value<u8>($licm_repr_36, i_15) != builtin::array_get_value<u8>(global:int_arithmetic.wado::$const_obj_12, i_15) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__5: 0;
                 }
                 i_15 = i_15 + 1;
-                if builtin::array_get_value<u8>(a_8, i_15) != builtin::array_get_value<u8>(b_11, i_15) {
+                if builtin::array_get_value<u8>($licm_repr_36, i_15) != builtin::array_get_value<u8>(global:int_arithmetic.wado::$const_obj_12, i_15) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__5: 0;
                 }
                 i_15 = i_15 + 1;
-                if builtin::array_get_value<u8>(a_8, i_15) != builtin::array_get_value<u8>(b_11, i_15) {
+                if builtin::array_get_value<u8>($licm_repr_36, i_15) != builtin::array_get_value<u8>(global:int_arithmetic.wado::$const_obj_12, i_15) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__5: 0;
                 }
                 i_15 = i_15 + 1;
@@ -1003,7 +989,7 @@ condition: `${-1.0 + 3.5}` == \"2.5\"
         b77: block {
             l78: loop {
                 break_if b77 i_15 >= a_end_10;
-                if builtin::array_get_value<u8>(a_8, i_15) != builtin::array_get_value<u8>(b_11, i_15) {
+                if builtin::array_get_value<u8>($licm_repr_36, i_15) != builtin::array_get_value<u8>(global:int_arithmetic.wado::$const_obj_12, i_15) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__5: 0;
                 }
                 i_15 = i_15 + 1;
@@ -1013,53 +999,50 @@ condition: `${-1.0 + 3.5}` == \"2.5\"
         break $inline_core_prelude_array_wado_seq_eq_u8__5: 1;
     } == 0) {
         cold_path;
-        "core:rt/panic"(local.tee out_38("core:prelude/string.wado/core:prelude/string.wado/String::format<int_arithmetic.wado/$tmpl$d48748ffcad618c0,[core:prelude/string.wado/String]>"(struct.new "int_arithmetic.wado//$tmpl$d48748ffcad618c0" { h0: out_38, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_35_unary_negation_on_floats at int_arithmetic.wado:430
+        "core:rt/panic"(local.tee out_41("core:prelude/string.wado/core:prelude/string.wado/String::format<int_arithmetic.wado/$tmpl$d48748ffcad618c0,[core:prelude/string.wado/String]>"(struct.new "int_arithmetic.wado//$tmpl$d48748ffcad618c0" { h0: out_41, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_35_unary_negation_on_floats at int_arithmetic.wado:430
 condition: `${-(4.0 + 2.0)}` == \"-6\"
 `${-(4.0 + 2.0)}`: "), used: 137 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_35_unary_negation_on_floats at int_arithmetic.wado:430
 condition: `${-(4.0 + 2.0)}` == \"-6\"
-`${-(4.0 + 2.0)}`: "), used: 137 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, out_38.used);
+`${-(4.0 + 2.0)}`: "), used: 137 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, out_41.used);
         unreachable;
     }
 }
 
 fn "int_arithmetic.wado/$test_36_mixed_int_and_float_arithmetic"() {
-    let a: ref Array<u8>;
     let a_end: i32;
-    let b: ref Array<u8>;
     let i: i32;
-    let out_18: ref "core:prelude/string.wado//String";
-    out_18 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
+    let $licm_repr_16: ref Array<u8>;
+    let out_19: ref "core:prelude/string.wado//String";
+    out_19 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
     $inline_core_prelude_string_wado_String__format_int_arithmetic_wado__tmpl_deffd0c459369bf8__f64___spec6_spec0_dae_t__0__$inline_core_prelude_string_wado_String__internal_push_view_20: block {
         break $inline_core_prelude_string_wado_String__format_int_arithmetic_wado__tmpl_deffd0c459369bf8__f64___spec6_spec0_dae_t__0__$inline_core_prelude_string_wado_String__internal_push_view_20;
     };
-    "core:prelude/primitive.wado/f64::fmt_into$sroa[self.value]$spec0$sroa[f.buf]"(0.035, out_18);
+    "core:prelude/primitive.wado/f64::fmt_into$sroa[self.value]$spec0$sroa[f.buf]"(0.035, out_19);
     $inline_core_prelude_string_wado_String__format_int_arithmetic_wado__tmpl_deffd0c459369bf8__f64___spec6_spec0_dae_t__0__$inline_core_prelude_string_wado_String__internal_push_view_35: block {
         break $inline_core_prelude_string_wado_String__format_int_arithmetic_wado__tmpl_deffd0c459369bf8__f64___spec6_spec0_dae_t__0__$inline_core_prelude_string_wado_String__internal_push_view_35;
     };
     if @unlikely($inline_core_prelude_array_wado_seq_eq_u8__1: block -> bool {
-        a = out_18.repr;
-        a_end = out_18.used;
-        b = global:int_arithmetic.wado::$const_obj_15;
-        if a_end != 5 {
+        if local.tee a_end(out_19.used) != 5 {
             break $inline_core_prelude_array_wado_seq_eq_u8__1: 0;
         }
         i = 0;
+        $licm_repr_16 = out_19.repr;
         b82: block {
             l83: loop {
                 break_if b82 (((i >= a_end) | ((i + 1) >= a_end)) | (((i + 1) + 1) >= a_end)) | ((((i + 1) + 1) + 1) >= a_end);
-                if builtin::array_get_value<u8>(a, i) != builtin::array_get_value<u8>(b, i) {
+                if builtin::array_get_value<u8>($licm_repr_16, i) != builtin::array_get_value<u8>(global:int_arithmetic.wado::$const_obj_15, i) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__1: 0;
                 }
                 i = i + 1;
-                if builtin::array_get_value<u8>(a, i) != builtin::array_get_value<u8>(b, i) {
+                if builtin::array_get_value<u8>($licm_repr_16, i) != builtin::array_get_value<u8>(global:int_arithmetic.wado::$const_obj_15, i) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__1: 0;
                 }
                 i = i + 1;
-                if builtin::array_get_value<u8>(a, i) != builtin::array_get_value<u8>(b, i) {
+                if builtin::array_get_value<u8>($licm_repr_16, i) != builtin::array_get_value<u8>(global:int_arithmetic.wado::$const_obj_15, i) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__1: 0;
                 }
                 i = i + 1;
-                if builtin::array_get_value<u8>(a, i) != builtin::array_get_value<u8>(b, i) {
+                if builtin::array_get_value<u8>($licm_repr_16, i) != builtin::array_get_value<u8>(global:int_arithmetic.wado::$const_obj_15, i) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__1: 0;
                 }
                 i = i + 1;
@@ -1069,7 +1052,7 @@ fn "int_arithmetic.wado/$test_36_mixed_int_and_float_arithmetic"() {
         b88: block {
             l89: loop {
                 break_if b88 i >= a_end;
-                if builtin::array_get_value<u8>(a, i) != builtin::array_get_value<u8>(b, i) {
+                if builtin::array_get_value<u8>($licm_repr_16, i) != builtin::array_get_value<u8>(global:int_arithmetic.wado::$const_obj_15, i) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__1: 0;
                 }
                 i = i + 1;
@@ -1079,11 +1062,11 @@ fn "int_arithmetic.wado/$test_36_mixed_int_and_float_arithmetic"() {
         break $inline_core_prelude_array_wado_seq_eq_u8__1: 1;
     } == 0) {
         cold_path;
-        "core:rt/panic"(local.tee out_18("core:prelude/string.wado/core:prelude/string.wado/String::format<int_arithmetic.wado/$tmpl$d48748ffcad618c0,[core:prelude/string.wado/String]>"(struct.new "int_arithmetic.wado//$tmpl$d48748ffcad618c0" { h0: out_18, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_36_mixed_int_and_float_arithmetic at int_arithmetic.wado:438
+        "core:rt/panic"(local.tee out_19("core:prelude/string.wado/core:prelude/string.wado/String::format<int_arithmetic.wado/$tmpl$d48748ffcad618c0,[core:prelude/string.wado/String]>"(struct.new "int_arithmetic.wado//$tmpl$d48748ffcad618c0" { h0: out_19, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_36_mixed_int_and_float_arithmetic at int_arithmetic.wado:438
 condition: `${dx}` == \"0.035\"
 `${dx}`: "), used: 126 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_36_mixed_int_and_float_arithmetic at int_arithmetic.wado:438
 condition: `${dx}` == \"0.035\"
-`${dx}`: "), used: 126 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, out_18.used);
+`${dx}`: "), used: 126 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, out_19.used);
         unreachable;
     }
 }

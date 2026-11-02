@@ -435,10 +435,10 @@ fn "variadic_homogeneous_pack.wado/$test_0"() {
     let i_92: i32;
     let self_93: ref "core:prelude/string.wado//String";
     let other_94: ref "core:prelude/string.wado//String";
-    let a_95: ref Array<u8>;
     let a_end_97: i32;
-    let b_98: ref Array<u8>;
     let i_102: i32;
+    let $licm_repr_18: ref Array<u8>;
+    let $licm_repr_19: ref Array<u8>;
     out_51 = struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: array.new_fixed<ref "core:prelude/string.wado//String">(), used: 0 };
     if @unlikely(0 >= builtin::array_len(out_51.repr)) {
         cold_path;
@@ -459,29 +459,28 @@ fn "variadic_homogeneous_pack.wado/$test_0"() {
             l4: loop {
                 break_if b3 i_92 >= 2;
                 if self_93 = builtin::array_get_value<ref "core:prelude/string.wado//String">($load_1, i_92); other_94 = builtin::array_get_value<ref "core:prelude/string.wado//String">(global:variadic_homogeneous_pack.wado::$const_obj_4, i_92); $inline_core_prelude_array_wado_seq_eq_core_prelude_string_wado_String__0__$inline_core_prelude_array_wado_seq_eq_u8__1: block -> bool {
-                    a_95 = self_93.repr;
-                    a_end_97 = self_93.used;
-                    b_98 = other_94.repr;
-                    if a_end_97 != other_94.used {
+                    if local.tee a_end_97(self_93.used) != other_94.used {
                         break $inline_core_prelude_array_wado_seq_eq_core_prelude_string_wado_String__0__$inline_core_prelude_array_wado_seq_eq_u8__1: 0;
                     }
                     i_102 = 0;
+                    $licm_repr_18 = self_93.repr;
+                    $licm_repr_19 = other_94.repr;
                     b7: block {
                         l8: loop {
                             break_if b7 (((i_102 >= a_end_97) | ((i_102 + 1) >= a_end_97)) | (((i_102 + 1) + 1) >= a_end_97)) | ((((i_102 + 1) + 1) + 1) >= a_end_97);
-                            if builtin::array_get_value<u8>(a_95, i_102) != builtin::array_get_value<u8>(b_98, i_102) {
+                            if builtin::array_get_value<u8>($licm_repr_18, i_102) != builtin::array_get_value<u8>($licm_repr_19, i_102) {
                                 break $inline_core_prelude_array_wado_seq_eq_core_prelude_string_wado_String__0__$inline_core_prelude_array_wado_seq_eq_u8__1: 0;
                             }
                             i_102 = i_102 + 1;
-                            if builtin::array_get_value<u8>(a_95, i_102) != builtin::array_get_value<u8>(b_98, i_102) {
+                            if builtin::array_get_value<u8>($licm_repr_18, i_102) != builtin::array_get_value<u8>($licm_repr_19, i_102) {
                                 break $inline_core_prelude_array_wado_seq_eq_core_prelude_string_wado_String__0__$inline_core_prelude_array_wado_seq_eq_u8__1: 0;
                             }
                             i_102 = i_102 + 1;
-                            if builtin::array_get_value<u8>(a_95, i_102) != builtin::array_get_value<u8>(b_98, i_102) {
+                            if builtin::array_get_value<u8>($licm_repr_18, i_102) != builtin::array_get_value<u8>($licm_repr_19, i_102) {
                                 break $inline_core_prelude_array_wado_seq_eq_core_prelude_string_wado_String__0__$inline_core_prelude_array_wado_seq_eq_u8__1: 0;
                             }
                             i_102 = i_102 + 1;
-                            if builtin::array_get_value<u8>(a_95, i_102) != builtin::array_get_value<u8>(b_98, i_102) {
+                            if builtin::array_get_value<u8>($licm_repr_18, i_102) != builtin::array_get_value<u8>($licm_repr_19, i_102) {
                                 break $inline_core_prelude_array_wado_seq_eq_core_prelude_string_wado_String__0__$inline_core_prelude_array_wado_seq_eq_u8__1: 0;
                             }
                             i_102 = i_102 + 1;
@@ -491,7 +490,7 @@ fn "variadic_homogeneous_pack.wado/$test_0"() {
                     b13: block {
                         l14: loop {
                             break_if b13 i_102 >= a_end_97;
-                            if builtin::array_get_value<u8>(a_95, i_102) != builtin::array_get_value<u8>(b_98, i_102) {
+                            if builtin::array_get_value<u8>($licm_repr_18, i_102) != builtin::array_get_value<u8>($licm_repr_19, i_102) {
                                 break $inline_core_prelude_array_wado_seq_eq_core_prelude_string_wado_String__0__$inline_core_prelude_array_wado_seq_eq_u8__1: 0;
                             }
                             i_102 = i_102 + 1;
