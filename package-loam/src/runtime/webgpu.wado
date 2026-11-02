@@ -1957,9 +1957,8 @@ impl WebGpuBackend {
     }
 
     /// What the launch recorded under `key` yields, its commands done again
-    /// over `reads`, or `None` where none is recorded, or `reads` are not laid
-    /// out as the ones it was recorded over: each at the same place in its
-    /// buffer, and two in one buffer exactly where those were.
+    /// over `reads`, or `None` where none is recorded over reads laid out as
+    /// `renamed_over` says.
     internal fn replayed(
         &mut self,
         key: List<i32>,
@@ -2653,7 +2652,7 @@ impl WebGpuBackend {
     /// of a lane, then one per lane over the parts' winners, each index read
     /// back as an f32, which holds it exactly: an `i64` tensor lives on the
     /// host.
-    pub fn arg_max_kernel<Axes>(
+    internal fn arg_max_kernel<Axes>(
         &mut self,
         t: &Placed<f32, Axes>,
         axis: i32,

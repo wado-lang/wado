@@ -57,10 +57,12 @@ test "an arg max records as one node, which a run computes as the backend's kern
     let ranked = r.arg_max(&rx, 1);
     let recorded = r.finished([ranked.id]);
     assert recorded.nodes.len() == 2;
-    assert run(&mut Cpu {}, &recorded, &[host_of(&x)]) == [host_of(&Tensor::<i64, [A, B]> {
-        data: [1, 0],
-        extents: [2, 1],
-    })] as List<Any<Cpu>>;
+    assert run(&mut Cpu {}, &recorded, &[host_of(&x)]) == [
+        host_of(&Tensor::<i64, [A, B]> {
+            data: [1, 0],
+            extents: [2, 1],
+        }),
+    ] as List<Any<Cpu>>;
 }
 
 test "a recorded convolution and pooling compute the CPU's, an uploaded tensor a constant of the graph" {
