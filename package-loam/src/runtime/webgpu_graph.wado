@@ -430,6 +430,14 @@ impl Graph for WebGpuBackend {
         return Placed::Device(view);
     }
 
+    fn arg_max<Axes>(
+        &mut self,
+        x: &Placed<f32, Axes>,
+        axis: i32,
+    ) -> Placed<i64, Axes> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
+        return self.arg_max_kernel(x, axis);
+    }
+
     /// The branch the condition picks, which is read back from the device.
     fn conditional<Axes, T>(
         &mut self,

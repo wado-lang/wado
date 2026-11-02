@@ -2639,10 +2639,21 @@ impl Backend for WebGpuBackend {
         return Placed::Device(out);
     }
 
-    /// One workgroup per part of a lane, then one per lane over the parts'
-    /// winners, each index read back as an f32, which holds it exactly: an
-    /// `i64` tensor lives on the host.
     fn arg_max<Axes>(
+        &mut self,
+        t: &Placed<f32, Axes>,
+        axis: i32,
+    ) -> Placed<i64, Axes> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
+        return self.arg_max_kernel(t, axis);
+    }
+}
+
+impl WebGpuBackend {
+    /// `arg_max` as both `Backend` and `Graph` run it: one workgroup per part
+    /// of a lane, then one per lane over the parts' winners, each index read
+    /// back as an f32, which holds it exactly: an `i64` tensor lives on the
+    /// host.
+    pub fn arg_max_kernel<Axes>(
         &mut self,
         t: &Placed<f32, Axes>,
         axis: i32,

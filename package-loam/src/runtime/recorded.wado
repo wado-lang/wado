@@ -66,6 +66,8 @@ pub variant Operation {
     Convolution(Convolution),
     ReduceWindow([Binary, f32, WindowReduce]),
     Reverse(List<i32>),
+    /// `Graph::arg_max` along the axis.
+    ArgMax(i32),
     /// A `case` on its operand, the condition. Outside the node, each result
     /// of the first branch names the result of whichever branch ran.
     Case([Region, Region]),
@@ -340,6 +342,12 @@ impl Graph for Recorder {
         return self.value(Operation::Reverse(dims), [x.id], E::kind(), self.extents(x.id));
     }
 
+    fn arg_max<Axes>(&mut self, x: &Value<f32, Axes>, axis: i32) -> Value<i64, Axes> {
+        let mut extents = self.extents(x.id);
+        extents[axis] = 1;
+        return self.value(Operation::ArgMax(axis), [x.id], ElementKind::I64, extents);
+    }
+
     /// Records each branch into a region of its own, each yielding its
     /// results by `yielded`, and returns the first branch's, which name the
     /// case's outside it.
@@ -447,9 +455,9 @@ pub fn bool_host<Axes>(t: Tensor<bool, Axes>) -> Any<Cpu> {
     return Any::Bool(Tensor { data: t.data, extents: t.extents });
 }
 
-/// `t`, held on the host, as `h` keeps it.
-pub fn kept_any<affine H: Holds>(h: &mut H, t: &Any<Cpu>) -> Any<H> with _ {
-    return match t {
+/// `value`, held on the host, as `h` keeps it.
+pub fn kept_any<affine H: Holds>(h: &mut H, value: &Any<Cpu>) -> Any<H> with _ {
+    return match value {
         F32(t) => Any::F32(h.keep(t)),
         I64(t) => Any::I64(h.keep(t)),
         Bool(t) => Any::Bool(h.keep(t)),
@@ -707,6 +715,7 @@ impl<affine G: Graph> Run<G> {
                 init,
                 &window,
             )),
+            ArgMax(axis) => Any::I64(g.arg_max::<Untyped>(&f32s(&self.operand(node, 0)), axis)),
             Attention(attention) => {
                 let [attended, present_k, present_v] = self.attended(g, node, &attention);
                 self.parts[id] = [present_k, present_v];
