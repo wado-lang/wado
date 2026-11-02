@@ -322,7 +322,7 @@ fn extend_reachable_for_optimizer_passes(
         .filter_map(|(pos, func_rc)| Some((func_rc.borrow().compiler_item?, Target::Stored(pos))))
         .collect();
     // Rooted wherever what a rewrite replaces is reachable, though the rewrite
-    // may never fire: the DCE after the loop drops what no rewrite called. A
+    // may never fire: a later DCE drops what no rewrite called. A
     // rooted target may itself be what another rewrite replaces, so to a
     // fixpoint. A generic item marks one id per monomorph, so any of them counts.
     loop {
@@ -1449,14 +1449,20 @@ pub fn remove_unreachable_functions(
                 orphaned.insert(*func_id);
             }
         });
-        let method = func.method_info.as_ref().map(|m| retired_name(&m.method_name, i));
+        let method = func
+            .method_info
+            .as_ref()
+            .map(|m| retired_name(&m.method_name, i));
         retired.push((FuncId::new(i), retired_name(&func.name, i), method));
     }
     // A pass that finds a function by its name to reuse it, rather than mint
     // one, must not find a dead one: nothing would emit it. A live function
     // may then take the name.
     let merged = project.rename_functions(retired);
-    assert!(merged.is_empty(), "a retired name is unique by its position");
+    assert!(
+        merged.is_empty(),
+        "a retired name is unique by its position"
+    );
     orphaned.retain(|id| !project.functions[id.index()].borrow().is_dead);
     orphaned
 }

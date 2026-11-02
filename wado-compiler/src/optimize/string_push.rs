@@ -29,7 +29,8 @@ pub(super) struct Ctx {
     push_char_id: FuncId,
     /// `FuncId` of `push_ascii_byte`: what [`ConstAsciiPushRule`] retargets
     /// a constant-ASCII `push` to, and the byte piece [`AppendFuseRule`]
-    /// recognises. Absent (`None`) disables both.
+    /// recognises. Absent once DCE dropped it, which disables the first and
+    /// leaves the second no byte piece to find.
     push_ascii_id: Option<FuncId>,
     /// The four `String` primitives [`AppendFuseRule`] writes a fused run in
     /// terms of. All four or none: a missing one only disables that rule.
@@ -204,7 +205,6 @@ enum LenTerm {
 /// write in the same run would measure a buffer the run itself grew.
 pub(super) struct AppendFuseRule {
     push_str_ids: IndexSet<FuncId>,
-    /// `None` once DCE dropped `push_ascii_byte`, when no call names it.
     push_ascii_id: Option<FuncId>,
     ids: FusedIds,
 }
