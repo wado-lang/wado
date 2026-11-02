@@ -13,8 +13,7 @@ use std::sync::Arc;
 
 use crate::call_args::CallArgs;
 use crate::hashmap::{IndexMap, IndexSet};
-use crate::module_source::ModuleSource;
-use crate::nir::{FuncId, FuncParts, FunctionRef, NirFunction, NirStruct, NirUnaryOp};
+use crate::nir::{FuncId, FuncParts, FunctionRef, NirFunction, NirUnaryOp, StructDecls};
 use crate::nir_arena::{
     ArenaCallArg, BlockId, Body, ExprId, ExprKind, NodeRef, Operand, StmtId, StmtKind,
 };
@@ -235,9 +234,7 @@ pub fn scalarize_containers(project: &mut NirPackage, gate: &mut FunctionGate) -
         return false;
     }
 
-    // Build a struct lookup: (name, module_source) → &NirStruct. Used by
-    // `collect_candidates` to expand `List<UserStruct>` element types.
-    let struct_index = build_struct_index(&project.structs);
+    let struct_index = StructDecls::new(&project.structs, &project.type_table.borrow());
     let value_copy_ids = project.value_copy_func_ids();
     let len = project.functions.len();
     let exec = Arc::clone(gate.exec());
@@ -344,7 +341,7 @@ pub fn scalarize_containers(project: &mut NirPackage, gate: &mut FunctionGate) -
 fn holds_candidate(
     func: &NirFunction,
     type_table: &TypeTable,
-    struct_index: &StructIndex<'_>,
+    struct_index: &StructDecls<'_>,
     sig: &MethodSig,
     value_copy_ids: &IndexSet<FuncId>,
 ) -> bool {
@@ -382,17 +379,6 @@ impl Rule for ContainerSroaRule<'_> {
         }
         scalarize_at_root(engine, self)
     }
-}
-
-/// Lookup index for user-defined structs by (name, module source).
-type StructIndex<'a> = IndexMap<(String, ModuleSource), &'a NirStruct>;
-
-fn build_struct_index(structs: &[NirStruct]) -> StructIndex<'_> {
-    let mut out: StructIndex = IndexMap::default();
-    for s in structs {
-        out.insert((s.name.clone(), s.module_source.clone()), s);
-    }
-    out
 }
 
 /// Build a catalog of monomorphized `List<T>::{method}` function references in
@@ -1103,7 +1089,7 @@ impl LengthOnly<'_> {
 fn plan_body(
     body: &Body,
     type_table: &TypeTable,
-    struct_index: &StructIndex<'_>,
+    struct_index: &StructDecls<'_>,
     sig: &MethodSig,
     catalog: &MethodCatalog,
     value_copy_ids: &IndexSet<FuncId>,
@@ -1267,7 +1253,7 @@ fn field_constructor(init: &CandidateInit, elem: TypeKey, sig: &MethodSig) -> Op
 fn collect_candidates(
     body: &Body,
     type_table: &TypeTable,
-    struct_index: &StructIndex<'_>,
+    struct_index: &StructDecls<'_>,
     sig: &MethodSig,
     value_copy_ids: &IndexSet<FuncId>,
 ) -> Vec<Candidate> {
@@ -1328,7 +1314,7 @@ fn collect_candidates(
 fn element_layout_of(
     elem_ty: TypeId,
     type_table: &TypeTable,
-    struct_index: &StructIndex<'_>,
+    struct_index: &StructDecls<'_>,
 ) -> Option<(ElementLayout, Vec<TypeId>)> {
     // Tuple element (e.g., `List<[i32, i32]>`).
     if let Some(tuple_elems) = type_table.as_tuple(elem_ty) {
@@ -1336,14 +1322,7 @@ fn element_layout_of(
     }
     // User struct element (e.g., `List<Point>`). Generic struct instances
     // appear as `ResolvedType::Struct` after monomorphization.
-    if let ResolvedType::Struct { def, type_args } = type_table.get(elem_ty)
-        && let module_source = &type_table.struct_head_module(*def).clone()
-    {
-        let key = (
-            type_table.struct_mangled_name(*def, type_args),
-            module_source.clone(),
-        );
-        let tir_struct = struct_index.get(&key)?;
+    if let Some(tir_struct) = struct_index.of_type(elem_ty, type_table) {
         if tir_struct.fields.is_empty() {
             return None;
         }

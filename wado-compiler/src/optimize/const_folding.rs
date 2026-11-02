@@ -50,6 +50,7 @@ struct FoldMaps {
 fn build_fold_maps(
     project: &NirPackage,
     type_table: &TypeTable,
+    shapes: AggregateShapes,
     exec: &Executor,
     frozen: impl Fn(FuncId) -> bool + Sync + Send,
 ) -> FoldMaps {
@@ -66,7 +67,7 @@ fn build_fold_maps(
         callees,
         ctfe_builtins,
         declared_globals,
-        shapes: AggregateShapes::of(project, type_table),
+        shapes,
     }
 }
 
@@ -80,9 +81,10 @@ fn fold_pass(
     frozen: impl Fn(FuncId) -> bool + Sync + Send,
     drive: impl FnOnce(&(dyn Fn(&mut EngineBuffers, FuncId) -> bool + Sync)) -> bool,
 ) -> bool {
+    let shapes = AggregateShapes::of(project);
     let type_table = project.type_table.borrow();
     let type_table = &*type_table;
-    let maps = build_fold_maps(project, type_table, exec, frozen);
+    let maps = build_fold_maps(project, type_table, shapes, exec, frozen);
     let globals = build_global_view(project, type_table, &maps, exec);
     let functions = &project.functions;
     let changed = drive(&|buffers, fid| {

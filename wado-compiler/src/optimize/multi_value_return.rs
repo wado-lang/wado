@@ -4,7 +4,7 @@
 //! across a call, and one result is a plain Wasm return.
 
 use crate::hashmap::{IndexMap, IndexSet};
-use crate::nir::{FuncId, NirFunction, NirStruct, ReturnAbi, aggregate_field_info};
+use crate::nir::{FuncId, NirFunction, ReturnAbi, StructDecls, aggregate_field_info};
 use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, NodeRef, Operand, StmtId, StmtKind};
 use crate::nir_package::NirPackage;
 use crate::optimize::arena_query::every_return;
@@ -82,7 +82,7 @@ fn walk_call_args_for_uses(
 /// every return statement and call site permit the multi-value ABI.
 pub fn classify_multi_value_returns(project: &mut NirPackage) -> bool {
     let type_table = project.type_table.borrow();
-    let structs = &project.structs;
+    let structs = StructDecls::new(&project.structs, &type_table);
 
     // The tail-call rule couples caller and callee candidacy, so the candidate
     // set is refuted to a fix-point: optimistic (assume every aggregate-returning
@@ -98,7 +98,7 @@ pub fn classify_multi_value_returns(project: &mut NirPackage) -> bool {
         .collect();
 
     let candidates = loop {
-        let candidates = collect_candidates(project, &type_table, structs, &tail_ok);
+        let candidates = collect_candidates(project, &type_table, &structs, &tail_ok);
         if candidates.is_empty() {
             return false;
         }
@@ -149,7 +149,7 @@ pub fn classify_multi_value_returns(project: &mut NirPackage) -> bool {
 fn collect_candidates(
     project: &NirPackage,
     type_table: &TypeTable,
-    structs: &[NirStruct],
+    structs: &StructDecls<'_>,
     tail_ok: &IndexMap<FuncId, TypeId>,
 ) -> IndexMap<usize, CandidateInfo> {
     let mut out = IndexMap::default();
@@ -219,7 +219,7 @@ fn refute_candidates(
 fn candidate_info(
     func: &NirFunction,
     type_table: &TypeTable,
-    structs: &[NirStruct],
+    structs: &StructDecls<'_>,
     tail_ok: &IndexMap<FuncId, TypeId>,
 ) -> Option<CandidateInfo> {
     if !func.only_reached_by_direct_call() {

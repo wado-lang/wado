@@ -4,11 +4,12 @@
 //!
 //! [`Value`]: crate::const_eval::Value
 
+use crate::defs::DefId;
 use crate::hashmap::IndexMap;
-use crate::nir::NirField;
+use crate::nir::{NirField, StructInstance, struct_instance};
 use crate::nir_package::NirPackage;
-use crate::tir::TypeId;
-use crate::type_table::TypeTable;
+use crate::tir::{ResolvedType, TypeId};
+use crate::type_table::{TypeKey, TypeTable};
 
 /// A struct field as a literal spells it.
 pub struct FieldShape {
@@ -22,25 +23,39 @@ pub struct CaseShape {
     pub payload: TypeId,
 }
 
+/// A variant type as its declaration and argument types.
+type VariantInstance = (DefId, Vec<TypeKey>);
+
+fn variant_instance(type_id: TypeId, type_table: &TypeTable) -> Option<VariantInstance> {
+    match type_table.get(type_id) {
+        ResolvedType::Variant { def } => Some((*def, Vec::new())),
+        ResolvedType::GenericInstance { def, type_args } => {
+            Some((*def, type_table.type_keys(type_args)))
+        }
+        _ => None,
+    }
+}
+
 /// Declaration shapes by type, built once per pass. An absent entry costs the
 /// fold that would have written that type, never correctness.
 #[derive(Default)]
 pub struct AggregateShapes {
     /// Fields in `field_index` order, which is how a struct literal lowers.
-    structs: IndexMap<TypeId, Vec<FieldShape>>,
-    cases: IndexMap<TypeId, IndexMap<String, CaseShape>>,
+    structs: IndexMap<StructInstance, Vec<FieldShape>>,
+    /// Cases in declaration order, payloads at the instance's arguments.
+    cases: IndexMap<VariantInstance, Vec<(String, CaseShape)>>,
 }
 
 impl AggregateShapes {
-    /// Index `project`'s struct and variant declarations by the type each one
-    /// reifies. A declaration whose type is not interned is skipped: nothing
-    /// names it, so nothing can ask for its shape.
+    /// Index `project`'s concrete struct declarations, and every variant type
+    /// the type table interns. Substituting a generic variant's payloads
+    /// interns them, so this borrows the type table for writing.
     #[must_use]
-    pub fn of(project: &NirPackage, type_table: &TypeTable) -> Self {
+    pub fn of(project: &NirPackage) -> Self {
+        let type_table = project.type_table.borrow();
         let mut structs = IndexMap::default();
         for decl in &project.structs {
-            let Some(type_id) = type_table.find_struct_by_name(&decl.name, &decl.module_source)
-            else {
+            let Some(instance) = decl.instance(&type_table) else {
                 continue;
             };
             let mut fields: Vec<&NirField> = decl.fields.iter().collect();
@@ -49,7 +64,7 @@ impl AggregateShapes {
                 continue;
             }
             structs.insert(
-                type_id,
+                instance,
                 fields
                     .into_iter()
                     .map(|f| FieldShape {
@@ -59,47 +74,60 @@ impl AggregateShapes {
                     .collect(),
             );
         }
-        let mut cases = IndexMap::default();
-        for decl in &project.variants {
-            let Some(type_id) = type_table.find_decl_type_by_name(&decl.name, &decl.module_source)
-            else {
-                continue;
+        let mut instances: IndexMap<VariantInstance, Vec<TypeId>> = IndexMap::default();
+        for (_, ty) in type_table.all_types() {
+            let (def, type_args) = match ty {
+                ResolvedType::Variant { def } => (*def, &[][..]),
+                ResolvedType::GenericInstance { def, type_args } => (*def, type_args.as_slice()),
+                _ => continue,
             };
-            cases.insert(
-                type_id,
-                decl.cases
-                    .iter()
-                    .map(|c| {
-                        (
-                            c.name.clone(),
-                            CaseShape {
-                                index: c.index,
-                                payload: c.payload,
-                            },
-                        )
-                    })
-                    .collect(),
-            );
+            if project.find_variant(def).is_some() {
+                instances
+                    .entry((def, type_table.type_keys(type_args)))
+                    .or_insert_with(|| type_args.to_vec());
+            }
         }
+        drop(type_table);
+        let cases = instances
+            .into_iter()
+            .map(|(instance, type_args)| {
+                let def = instance.0;
+                let payloads = project
+                    .variant_cases(def, &type_args)
+                    .expect("only declared variants are collected");
+                let declared = &project.find_variant(def).expect("declared").cases;
+                let shapes = payloads
+                    .into_iter()
+                    .zip(declared)
+                    .map(|((name, payload), case)| {
+                        let index = case.index;
+                        (name, CaseShape { index, payload })
+                    })
+                    .collect();
+                (instance, shapes)
+            })
+            .collect();
         Self { structs, cases }
     }
 
     /// `type_id`'s fields in `field_index` order.
     #[must_use]
-    pub fn fields(&self, type_id: TypeId) -> Option<&[FieldShape]> {
-        self.structs.get(&type_id).map(Vec::as_slice)
-    }
-
-    /// The case `case_name` names in `type_id`.
-    #[must_use]
-    pub fn case(&self, type_id: TypeId, case_name: &str) -> Option<&CaseShape> {
-        self.cases.get(&type_id)?.get(case_name)
+    pub fn fields(&self, type_id: TypeId, type_table: &TypeTable) -> Option<&[FieldShape]> {
+        self.structs
+            .get(&struct_instance(type_id, type_table)?)
+            .map(Vec::as_slice)
     }
 
     /// The case at `case_index` in `type_id`, with the name that spells it.
     #[must_use]
-    pub fn case_at(&self, type_id: TypeId, case_index: u32) -> Option<(&str, &CaseShape)> {
-        let (name, shape) = self.cases.get(&type_id)?.get_index(case_index as usize)?;
+    pub fn case_at(
+        &self,
+        type_id: TypeId,
+        case_index: u32,
+        type_table: &TypeTable,
+    ) -> Option<(&str, &CaseShape)> {
+        let cases = self.cases.get(&variant_instance(type_id, type_table)?)?;
+        let (name, shape) = cases.get(case_index as usize)?;
         assert_eq!(
             shape.index, case_index,
             "variant case shapes are collected in declaration order"

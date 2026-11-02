@@ -626,13 +626,16 @@ impl TypeTable {
         }
     }
 
+    /// Whether `a` and `b` name one type.
+    #[must_use]
+    pub fn same_type(&self, a: TypeId, b: TypeId) -> bool {
+        self.type_key(a) == self.type_key(b)
+    }
+
     /// Whether `a` and `b` name one list of types, position by position.
     #[must_use]
     pub fn same_types(&self, a: &[TypeId], b: &[TypeId]) -> bool {
-        a.len() == b.len()
-            && a.iter()
-                .zip(b)
-                .all(|(&x, &y)| self.type_key(x) == self.type_key(y))
+        a.len() == b.len() && a.iter().zip(b).all(|(&x, &y)| self.same_type(x, y))
     }
 
     /// Whether two projections' trait arguments name one instantiation of the

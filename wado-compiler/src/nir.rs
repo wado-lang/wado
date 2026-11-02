@@ -23,7 +23,7 @@ use crate::name::{
 use crate::nir_arena::{Body, ExprBody, Tracked};
 use crate::tir::{self, DeclarationLookup, EffectRef, StructDef, TypeId};
 use crate::token::Span;
-use crate::type_table::TypeTable;
+use crate::type_table::{TypeKey, TypeTable};
 
 /// Canonical identity of a function entity. Minted in `lower` over the
 /// post-monomorphization function set and intrinsic to the entity — not its
@@ -1021,29 +1021,72 @@ pub struct NirStruct {
     pub wire_name_policy: Option<ast::NamePolicy>,
 }
 
-/// The field types and names of a tuple or non-generic struct type, in field
+/// A concrete struct type as its declaration and argument types: what tells
+/// two instances apart whichever ids spell their arguments.
+pub type StructInstance = (StructDef, Vec<TypeKey>);
+
+/// The instance `type_id` is, when it is a struct type.
+#[must_use]
+pub fn struct_instance(type_id: TypeId, type_table: &TypeTable) -> Option<StructInstance> {
+    let tir::ResolvedType::Struct { def, type_args } = type_table.get(type_id) else {
+        return None;
+    };
+    Some((*def, type_table.type_keys(type_args)))
+}
+
+impl NirStruct {
+    /// The instance this declaration reifies, when it is concrete.
+    #[must_use]
+    pub fn instance(&self, type_table: &TypeTable) -> Option<StructInstance> {
+        if !self.type_params.is_empty() {
+            return None;
+        }
+        let args = self
+            .monomorph_info
+            .as_ref()
+            .map_or(&[][..], |m| &m.impl_type_args);
+        Some((self.def, type_table.type_keys(args)))
+    }
+}
+
+/// The concrete struct declarations by the type each one reifies.
+pub struct StructDecls<'a>(IndexMap<StructInstance, &'a NirStruct>);
+
+impl<'a> StructDecls<'a> {
+    #[must_use]
+    pub fn new(structs: &'a [NirStruct], type_table: &TypeTable) -> Self {
+        let mut by_instance = IndexMap::default();
+        for decl in structs {
+            if let Some(instance) = decl.instance(type_table) {
+                let previous = by_instance.insert(instance, decl);
+                assert!(previous.is_none(), "one struct type is one declaration");
+            }
+        }
+        Self(by_instance)
+    }
+
+    /// The declaration `type_id` reifies, when it is a concrete struct type.
+    #[must_use]
+    pub fn of_type(&self, type_id: TypeId, type_table: &TypeTable) -> Option<&'a NirStruct> {
+        self.0
+            .get(&struct_instance(type_id, type_table)?)
+            .copied()
+    }
+}
+
+/// The field types and names of a tuple or concrete struct type, in field
 /// order (what a field index counts, `()` fields included), and whether it is
 /// a struct. `None` for anything else.
 pub fn aggregate_field_info(
     type_id: TypeId,
     type_table: &TypeTable,
-    structs: &[NirStruct],
+    structs: &StructDecls<'_>,
 ) -> Option<(Vec<TypeId>, Vec<String>, bool)> {
     if let Some(elems) = type_table.as_tuple(type_id) {
         let names: Vec<String> = (0..elems.len()).map(|i| i.to_string()).collect();
         return Some((elems, names, false));
     }
-    let tir::ResolvedType::Struct { def, type_args } = type_table.get(type_id) else {
-        return None;
-    };
-    let module_source = type_table.struct_head_module(*def);
-    let name = type_table.struct_mangled_name(*def, type_args);
-    let s = structs
-        .iter()
-        .find(|s| s.name == name && s.module_source == *module_source)?;
-    if !s.type_params.is_empty() {
-        return None;
-    }
+    let s = structs.of_type(type_id, type_table)?;
     let types: Vec<TypeId> = s.fields.iter().map(|f| f.type_id).collect();
     let names: Vec<String> = s.fields.iter().map(|f| f.name.clone()).collect();
     Some((types, names, true))

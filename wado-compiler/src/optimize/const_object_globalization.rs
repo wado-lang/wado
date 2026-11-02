@@ -31,7 +31,7 @@ use crate::name::{
     COLD_PATH_INTRINSIC, CONST_OBJ_GLOBAL_PREFIX, MODULE_INIT_FUNCTION, MODULES_INIT_FUNCTION,
 };
 use crate::nir::aggregate_field_info;
-use crate::nir::{FuncId, NirParam, NirStruct};
+use crate::nir::{FuncId, NirParam, StructDecls};
 use crate::nir_arena::ArenaCallArg;
 use crate::nir_value_graph::builder::is_const_value;
 use crate::nir_value_graph::{ValueId, ValueKind};
@@ -178,7 +178,7 @@ pub fn globalize_const_objects(project: &mut NirPackage, exec: &Executor) -> boo
     let type_table: &TypeTable = &types;
     let shared_escape = SharedEscape::new(project, type_table);
     let funcs = &project.functions;
-    let structs = &project.structs;
+    let structs = &StructDecls::new(&project.structs, type_table);
     let string_inline_max_bytes = project.string_inline_max_bytes;
     // Each visit memoizes its callee verdicts afresh: a memo seeds a cycle with
     // a provisional answer, so one shared across visits would answer by which
@@ -1493,7 +1493,7 @@ struct Gate<'a> {
     /// Indexed by `func_id.index()`: the position of the array the callee
     /// reaches an element of and how, or `None` when it is not an accessor.
     element_access: &'a [Option<(usize, ArrayElementAccess)>],
-    structs: &'a [NirStruct],
+    structs: &'a StructDecls<'a>,
     /// `(callee index, parameter position)` → [`Gate::callee_param_readonly`].
     /// Each verdict costs two walks of the callee body, and one helper taking a
     /// constant is typically called from many sites.
