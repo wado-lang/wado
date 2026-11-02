@@ -511,6 +511,17 @@ target/emi/findings/.\
 """
 run = "cargo test --workspace --test emi -- --ignored --nocapture mutate_corpus"
 
+[tasks.emi-profile]
+description = """\
+Compile the calibrated EMI corpus under profiles: each test-world source, and \
+its empty-guard mutants, under the profile its tests record and \
+WADO_EMI_PROFILES random ones (default 2), then report any whose output moves. \
+Reads target/emi/corpus.txt, so run emi-calibrate first. Writes \
+target/emi/profile.txt and each finding's program and reduced profile under \
+target/emi/findings/.\
+"""
+run = "cargo test --workspace --test emi -- --ignored --nocapture profile_corpus"
+
 [tasks.test-format]
 description = """\
 Run formatter invariant tests over the fixtures + stdlib corpus: idempotency, \

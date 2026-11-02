@@ -367,10 +367,10 @@ table, a compare on every dispatch, for a gain nobody has measured.
 ### A profile changes no output
 
 A profile, stale or wrong, only moves where the optimizer spends its effort. It
-never changes what a program computes. A test checks this the way
-[EMI](./optimizer.md#differential-testing-emi) checks injected dead code: the
-same program compiled with random profiles prints the same output at every
-level.
+never changes what a program computes. EMI's profile stage checks this
+([WEP: Compiler Fuzzing](./wep-2026-08-19-compiler-fuzzing.md#a-profile-is-a-third-axis)):
+the program compiled under its recorded profile and random ones prints the same
+output at every level. It is a nightly campaign, not a gate.
 
 ## Roadmap
 
@@ -398,7 +398,7 @@ level.
    `--optimize-inline-cold-callsite-threshold`, and the benchmarks, against
    `-f no-pgo`, settle their defaults and those of the summary's cutoffs and
    `--optimize-predictable-branch-threshold`.
-8. [ ] The random-profile differential test.
+8. [x] The random-profile differential test, as EMI's profile stage.
 9. [ ] The `benchmark/` pilot. Each benchmark gains a workload and a committed
    profile, `http_routing` a test to carry it first, and a table compares the
    three builds the flags give. A workload runs a smaller input than the

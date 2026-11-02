@@ -313,9 +313,9 @@ touches cold paths answers them again:
 ## Differential Testing (EMI)
 
 `wado-compiler/tests/emi.rs` injects code behind a guard that is always false at
-run time, and checks that the program's output does not change at any level.
-`mise run emi-calibrate` and `mise run emi-mutate` run it, and CI runs it
-nightly.
+run time, and compiles programs under random profiles. It checks that the
+program's output does not change at any level. `mise run emi-calibrate`,
+`emi-mutate` and `emi-profile` run it, and CI runs it nightly.
 See [WEP: Compiler Fuzzing](./wep-2026-08-19-compiler-fuzzing.md).
 
 ## Not Yet Implemented
