@@ -1122,24 +1122,27 @@ fn binding_performed_effects(
     annotations: Option<&TypeAnnotations>,
     index: &EffectIndex,
     binding: &EffectHandlerBinding,
+    rows: &Rows,
 ) -> IndexMap<DeclaredHead, Vec<EffectRef>> {
     let mut performed: IndexMap<DeclaredHead, Vec<EffectRef>> = IndexMap::default();
-    for entry in annotations
+    for facts in annotations
         .into_iter()
         .flat_map(|a| a.all(|f| &f.handler_bindings, binding.id))
-        .flat_map(|facts| &facts.effects)
     {
-        let Some(def) = entry.impl_def else {
-            continue;
-        };
-        let forwarded = index
-            .forwarding_blocks
-            .contains(&def)
-            .then(|| EffectRef::Concrete(entry.effect.clone()));
-        let effects = performed.entry(entry.effect.clone()).or_default();
-        for effect in index.block_effects[&def].iter().cloned().chain(forwarded) {
-            if !effects.contains(&effect) {
-                effects.push(effect);
+        for entry in &facts.effects {
+            let Some(def) = entry.impl_def else {
+                continue;
+            };
+            let forwarded = index
+                .forwarding_blocks
+                .contains(&def)
+                .then(|| EffectRef::Concrete(entry.effect.clone()));
+            let installed = index.installed_effects(def, facts.handler_type, rows);
+            let effects = performed.entry(entry.effect.clone()).or_default();
+            for effect in installed.into_iter().chain(forwarded) {
+                if !effects.contains(&effect) {
+                    effects.push(effect);
+                }
             }
         }
     }
@@ -2276,6 +2279,36 @@ impl EffectIndex<'_> {
         out
     }
 
+    /// What installing impl block `block` for a handler of type `handler`
+    /// performs: what its methods declare, an effect parameter of the impl
+    /// closed over the handler's type arguments as a dispatch to one of the
+    /// methods closes it.
+    fn installed_effects(&self, block: DefId, handler: TypeId, rows: &Rows) -> IndexSet<EffectRef> {
+        let declared: Vec<EffectRef> = self.block_effects[&block].iter().cloned().collect();
+        let defs = self.resolutions.defs();
+        let bounds = defs
+            .members(block)
+            .iter()
+            .find_map(|&method| self.receiver_bounds.get(&defs.ast_id(method)))
+            .map(|bounds| &**bounds)
+            .unwrap_or_default();
+        let target = self
+            .types
+            .fq_type_name_with_rows(self.types.impl_target_whole(block));
+        let args = self
+            .spellings(handler, rows)
+            .into_iter()
+            .find(|spelling| spelling.head() == target.head())
+            .map(|spelling| spelling.args().to_vec())
+            .unwrap_or_default();
+        self.close_over_args(
+            &declared,
+            bounds,
+            &spelled_target_args(self.types, block),
+            &args,
+        )
+    }
+
     /// The effects the trait method behind a dispatch declares. `None` where
     /// the dispatch names no trait, or names an `interface` or a `resource`.
     fn declared_by_trait(&self, func_ref: &FunctionRef) -> Option<&[EffectRef]> {
@@ -2720,7 +2753,7 @@ impl AstVisitor<'_> for SemEffectWalker<'_> {
                 for binding in &with_handler.handlers {
                     ast::walk_expr(self, &binding.handler);
                     for (handled, effects) in
-                        binding_performed_effects(self.annotations, self.index, binding)
+                        binding_performed_effects(self.annotations, self.index, binding, &self.rows)
                     {
                         let effects: Vec<EffectRef> = effects
                             .into_iter()
@@ -3460,7 +3493,12 @@ impl AstVisitor<'_> for PurityWalker<'_> {
                 let mut added: Vec<EffectRef> = Vec::new();
                 for binding in &with_handler.handlers {
                     for (handled, effects) in
-                        binding_performed_effects(self.annotations, self.index, binding)
+                        binding_performed_effects(
+                            self.annotations,
+                            self.index,
+                            binding,
+                            &Rows::default(),
+                        )
                     {
                         if self.unanswered(&effects) {
                             self.flag(
