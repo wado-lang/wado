@@ -346,7 +346,7 @@ impl CompilerHost for FilesystemCompilerHost {
             extent,
             integrity,
             lock_root.as_deref(),
-            &*self.run,
+            &self.run,
         ))
         .await;
         if loaded.is_err() {
