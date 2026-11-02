@@ -65,8 +65,9 @@ pub enum EffectFault {
     UndeclaredByTrait,
     /// The callee's effects are left open, and the caller forwards none.
     MissingOpen,
-    /// A `#[benign]` argument names no effect in the function's module.
-    UnknownBenign,
+    /// A `#[benign]` or `#[ambient]` argument, the attribute named here, names
+    /// no effect in the function's module.
+    UnknownAdmitted(&'static str),
     /// A function value performs an effect the `fn` type it is moved into
     /// does not declare.
     BeyondExpectedType(EffectKind),
@@ -121,10 +122,10 @@ impl From<EffectError> for Diagnostic {
                     e.callee
                 ),
             ),
-            EffectFault::UnknownBenign => (
+            EffectFault::UnknownAdmitted(attribute) => (
                 Code::UnknownType,
                 format!(
-                    "`#[benign({})]` on '{}' names no effect in scope",
+                    "`#[{attribute}({})]` on '{}' names no effect in scope",
                     e.missing_effect, e.callee
                 ),
             ),
@@ -479,7 +480,7 @@ fn run_effect_checks(
                 // What the initializer performs is the purity check's; only an
                 // unknown name is reported here, as on a function.
                 Item::Global(global) => {
-                    benign_effects(&global.name, &global.attributes, src, index, out);
+                    admitted_effects(&global.name, &global.attributes, src, index, out);
                 }
                 Item::Test(test) => {
                     check_test_effects_sem(sem, src, test, index, out, solved);
@@ -1281,8 +1282,9 @@ fn check_function_effects_sem(
     out: &mut Vec<EffectError>,
     solved: &mut EffectRows,
 ) {
-    // `#[benign(E)]` admits `E` in the body without a `with E` clause.
-    let benign = benign_effects(&func.name, &func.attrs, module, index, out);
+    // `#[benign(E)]` and `#[ambient(E)]` admit `E` in the body without a
+    // `with E` clause.
+    let admitted = admitted_effects(&func.name, &func.attrs, module, index, out);
     let Some(body) = &func.body else {
         return;
     };
@@ -1306,7 +1308,7 @@ fn check_function_effects_sem(
     if let Some(ann) = annotations {
         add_signature_resources(ann, caller_key, &scan, &mut current);
     }
-    current.extend(benign);
+    current.extend(admitted);
     current.extend(held.iter().cloned());
     let current = held_in_body(annotations, index, &scan, current, Body::Block(body));
 
@@ -1324,13 +1326,12 @@ fn check_function_effects_sem(
         current,
         param_types,
         body,
-        holds_every_effect: func.attrs.iter().any(|attr| attr.name == AMBIENT),
+        holds_every_effect: false,
     };
     walk_body_effects(sem, module, annotations, index, walk, out, solved);
 }
 
-/// A test holds every effect, as an `#[ambient]` body does, so nothing it
-/// performs is missing. A function value it moves into a `fn` type is still
+/// A test holds every effect, so nothing it performs is missing. A function value it moves into a `fn` type is still
 /// bound by that type's row: the callee holding the value performs it without
 /// holding what the test holds.
 fn check_test_effects_sem(
@@ -1705,41 +1706,61 @@ impl AstVisitor<'_> for TypePatternSites {
     }
 }
 
-/// The effects a `#[benign(E, F)]` on `owner`, a function or a global, admits,
-/// reporting each name that reaches no effect in `module`.
-fn benign_effects(
+/// The effects a `#[benign(E, F)]` or `#[ambient(E, F)]` on `owner`, a
+/// function or a global, admits, reporting each name that reaches no effect in
+/// `module`.
+fn admitted_effects(
     owner: &str,
     attrs: &[Attribute],
     module: &ModuleSource,
     index: &EffectIndex,
     out: &mut Vec<EffectError>,
 ) -> Vec<EffectRef> {
-    let mut benign = Vec::new();
-    for (name, span) in benign_effect_names(attrs) {
+    let mut admitted = Vec::new();
+    for AdmittedName {
+        attribute,
+        name,
+        span,
+    } in admitted_effect_names(attrs)
+    {
         match effect_named_in(&name, module, index) {
-            Some(effect) => benign.push(effect),
+            Some(effect) => admitted.push(effect),
             None => out.push(EffectError {
                 callee: owner.to_string(),
                 missing_effect: name,
-                fault: EffectFault::UnknownBenign,
+                fault: EffectFault::UnknownAdmitted(attribute),
                 span,
                 module: module.source_path(),
             }),
         }
     }
-    benign
+    admitted
 }
 
-/// `#[benign(E, F)]` effect names declared on an item, each with its
-/// attribute's span.
-fn benign_effect_names(attrs: &[Attribute]) -> Vec<(String, Span)> {
+/// An effect name a `#[benign(…)]` or `#[ambient(…)]` lists.
+struct AdmittedName {
+    attribute: &'static str,
+    name: String,
+    span: Span,
+}
+
+/// The effect names `#[benign(E, F)]` and `#[ambient(E, F)]` list on an item,
+/// each with its attribute's span.
+fn admitted_effect_names(attrs: &[Attribute]) -> Vec<AdmittedName> {
     attrs
         .iter()
-        .filter(|attr| attr.name == BENIGN)
-        .flat_map(|attr| {
-            attr.args
-                .iter()
-                .map(|arg| (arg.as_str().to_string(), attr.span))
+        .filter_map(|attr| {
+            [BENIGN, AMBIENT]
+                .into_iter()
+                .find(|admitting| attr.name == *admitting)
+                .map(|attribute| (attribute, attr))
+        })
+        .flat_map(|(attribute, attr)| {
+            attr.args.iter().map(move |arg| AdmittedName {
+                attribute,
+                name: arg.as_str().to_string(),
+                span: attr.span,
+            })
         })
         .collect()
 }
@@ -1921,12 +1942,12 @@ struct SemEffectWalker<'a> {
     annotations: Option<&'a TypeAnnotations>,
     index: &'a EffectIndex<'a>,
     /// Effects available at the current point: the function's declared +
-    /// signature + benign + propagated set, plus any effects granted by an
-    /// enclosing `with H => … do { … }` handler scope (pushed / popped as the
-    /// walk enters / leaves the do-block body).
+    /// signature + benign + ambient + propagated set, plus any effects granted
+    /// by an enclosing `with H => … do { … }` handler scope (pushed / popped as
+    /// the walk enters / leaves the do-block body).
     current: IndexSet<EffectRef>,
-    /// A `test` or `#[ambient]` body, which holds every effect: nothing it
-    /// performs is missing, whatever `current` lists.
+    /// A `test` body, which holds every effect: nothing it performs is
+    /// missing, whatever `current` lists.
     holds_every_effect: bool,
     /// This function's parameter name → type id, for resolving the callee of an
     /// indirect call through a function-typed parameter (which leaves no
@@ -3136,9 +3157,9 @@ fn run_purity_checks(sem: &Semantics, index: &EffectIndex, out: &mut Vec<PurityE
                 }
                 Item::Global(global) => {
                     // An unknown name is the effect check's to report.
-                    walker.granted = benign_effect_names(&global.attributes)
+                    walker.granted = admitted_effect_names(&global.attributes)
                         .into_iter()
-                        .filter_map(|(name, _)| effect_named_in(&name, src, index))
+                        .filter_map(|admitted| effect_named_in(&admitted.name, src, index))
                         .collect();
                     walker.check(PureContext::GlobalInitializer, &global.initializer);
                     walker.granted.clear();

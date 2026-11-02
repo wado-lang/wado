@@ -413,7 +413,13 @@ Apart from a narrowing, nothing a body does adds to what its function holds.
 
 ### Ambient Functions
 
-`#[ambient]` on a function exempts its body from effect checking. The body may perform any effect without declaring it, and a call demands only what the function's own `with` clause declares. A function value it hands on is still bound by the function type it is moved into, which holds none of what the body holds. It is for best-effort output that must work from any function: `log_stdout` and `log_stderr` are ambient, and so is the `core:log` facade. Whether a call whose result goes unused runs is [unspecified](./spec-overview.md#behavior-classes), so its output may never appear. In a component that imports no stdout or stderr, as a Kiln generator does not, `log_stdout` or `log_stderr` drops its message rather than trapping.
+`#[ambient(E, …)]` on a function lets its body perform the listed effects without declaring them. A call demands only what the function's own `with` clause declares. Any other effect the body performs is checked as usual. A function value the body hands on is still bound by the function type it is moved into, which holds none of what the attribute lists.
+
+An ambient effect is best-effort. It uses a capability the component already has and never adds one. A listed effect is available where the target world imports it, or where code outside an ambient body performs it. Where it is not available, the body's operations of it do not reach the host. In a component that imports no stdout or stderr, as a Kiln generator does not, `log_stdout` or `log_stderr` drops its message rather than trapping.
+
+> Not yet implemented: the compiler holds to this for `Stdout` and `Stderr` alone. An ambient body that performs another host-backed effect imports it.
+
+It is for output that must work from any function: `log_stdout` is `#[ambient(Stdout)]`, `log_stderr` is `#[ambient(Stderr)]`, and the `core:log` facade is `#[ambient(Log)]`. Whether a call whose result goes unused runs is [unspecified](./spec-overview.md#behavior-classes), so its output may never appear.
 
 <!-- {"fixture":"spec_effects_ambient.wado"} -->
 
@@ -430,7 +436,7 @@ test {
 }
 ```
 
-[`#[benign(E)]`](./spec-attributes.md#benigne-) is the narrower form: only the named effects go undeclared, and the rest of the body is checked.
+[`#[benign(E)]`](./spec-attributes.md#benigne-) admits its effects the same way, but for the opposite case. A benign effect is required: its world import stays, and the effect must not show through the function's interface. An ambient effect is optional, and what it does may show.
 
 ## Generic Effects (Effect Polymorphism)
 

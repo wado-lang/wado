@@ -7,7 +7,7 @@
 use std::sync::Arc;
 
 use crate::ast::{self, AstId, AstVisitor, GenericParam, Item, Module, Type};
-use crate::attribute::BENIGN;
+use crate::attribute::{AMBIENT, BENIGN};
 use crate::bind::expr_references_var;
 use crate::compiler_host::{Code, Diagnostic, DiagnosticSpan, Severity};
 use crate::defs::{DefId, DefKind, DefTable};
@@ -813,7 +813,7 @@ impl Resolver<'_> {
     }
 
     /// Note `name`, written where no reference site holds it, as the module's
-    /// scope answers it: a `#[benign]` argument, or a world's member, which
+    /// scope answers it: a `#[benign]` or `#[ambient]` argument, or a world's member, which
     /// the effect check and the world registry read by name.
     fn note_unsited(&mut self, name: &str) {
         if let Some(def) = self.scopes.resolve(self.module, name) {
@@ -1093,7 +1093,7 @@ impl AstVisitor<'_> for Resolver<'_> {
     fn visit_attributed(&mut self, attrs: &[ast::Attribute], body: impl FnOnce(&mut Self)) {
         for arg in attrs
             .iter()
-            .filter(|attr| attr.name == BENIGN)
+            .filter(|attr| attr.name == BENIGN || attr.name == AMBIENT)
             .flat_map(|attr| &attr.args)
         {
             self.note_unsited(arg.as_str());

@@ -319,8 +319,8 @@ pub const ATTRIBUTES: &[AttributeSchema] = &[
     AttributeSchema {
         name: AMBIENT,
         targets: FUNCTION_TARGET,
-        args: AttrArgs::None,
-        summary: "perform this declaration's effects without declaring them",
+        args: AttrArgs::Words,
+        summary: "best-effort effects, used only where the component already has them",
         stdlib_only: false,
         bodyless: None,
     },

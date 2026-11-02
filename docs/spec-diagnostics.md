@@ -326,7 +326,7 @@ written. Beyond that:
   dispatches to a method the trait declares or implements: `Doubled` for
   `doubled`, and the namespace `traits` for `tripled`. `Halved` stays unused:
   `halved` here is `Half`'s own method.
-- An effect named in `#[benign(…)]` is used there, here `Stderr`, and so is an
+- An effect named in `#[benign(…)]` or `#[ambient(…)]` is used there, here `Stderr`, and so is an
   interface a world declaration imports or exports.
 - A namespace import is used where the module spells it: naming a member
   through it, or qualifying a case, as `parts` does. `cbor` stays unused:
