@@ -49,11 +49,6 @@ impl Ctx {
     fn resolve(project: &NirPackage) -> Option<Self> {
         let mut push_str_ids = IndexSet::default();
         let mut push_char_id: Option<FuncId> = None;
-        let mut push_ascii_id: Option<FuncId> = None;
-        let mut len_id: Option<FuncId> = None;
-        let mut reserve_id: Option<FuncId> = None;
-        let mut set_byte_id: Option<FuncId> = None;
-        let mut write_str_id: Option<FuncId> = None;
         let type_table = project.type_table.borrow();
         let appends_a_string = |f: &NirFunction| {
             let [_receiver, text] = f.params.as_slice() else {
@@ -72,36 +67,23 @@ impl Ctx {
                 Some(CompilerItem::StringPushChar) => {
                     push_char_id = Some(f.id.expect("func_id assigned at lower"));
                 }
-                Some(CompilerItem::StringPushAscii) => {
-                    push_ascii_id = Some(f.id.expect("func_id assigned at lower"));
-                }
-                Some(CompilerItem::StringLen) => {
-                    len_id = Some(f.id.expect("func_id assigned at lower"));
-                }
-                Some(CompilerItem::StringReserveUninit) => {
-                    reserve_id = Some(f.id.expect("func_id assigned at lower"));
-                }
-                Some(CompilerItem::StringSetByteUnchecked) => {
-                    set_byte_id = Some(f.id.expect("func_id assigned at lower"));
-                }
-                Some(CompilerItem::StringWriteStrAt) => {
-                    write_str_id = Some(f.id.expect("func_id assigned at lower"));
-                }
                 Some(_) | None => {}
             }
         }
+        let targets = project.rewrite_targets();
+        let target = |item| targets.get(&item).copied();
         let fused = (|| {
             Some(FusedIds {
-                len: len_id?,
-                reserve_uninit: reserve_id?,
-                set_byte: set_byte_id?,
-                write_str_at: write_str_id?,
+                len: target(CompilerItem::StringLen)?,
+                reserve_uninit: target(CompilerItem::StringReserveUninit)?,
+                set_byte: target(CompilerItem::StringSetByteUnchecked)?,
+                write_str_at: target(CompilerItem::StringWriteStrAt)?,
             })
         })();
         Some(Self {
             push_str_ids,
             push_char_id: push_char_id?,
-            push_ascii_id,
+            push_ascii_id: target(CompilerItem::StringPushAscii),
             fused,
         })
     }

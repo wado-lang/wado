@@ -305,52 +305,37 @@ fn stored_positions(reachable: &Reached) -> impl Iterator<Item = usize> + '_ {
     })
 }
 
-/// Add functions the NIR optimizer's rewrites reach without a call edge:
-/// `nir/string_push`'s append primitives and `array_clone::<T>`'s helper.
+/// Add functions the NIR optimizer's rewrites reach without a call edge: the
+/// items [`CompilerItem::rewritten_from`] declares, and `array_clone::<T>`'s
+/// helper.
 fn extend_reachable_for_optimizer_passes(
     project: &NirPackage,
     graph: &AnalysisGraph,
     reachable: &mut Reached,
 ) {
-    // `push_str` is generic over `AsStrSlice`, so the item marks one id per
-    // monomorph; any of them reaching the fusion keeps the primitives alive.
-    let mut append_ids: Vec<Target> = Vec::new();
-    let mut fused: Vec<Target> = Vec::new();
-    let mut push_chars: Vec<Target> = Vec::new();
-    let mut push_asciis: Vec<Target> = Vec::new();
+    // A generic item marks one id per monomorph, so any of them counts.
+    let mut reached_items: IndexSet<CompilerItem> = IndexSet::default();
+    let mut targets: Vec<(CompilerItem, Target)> = Vec::new();
     for (pos, func_rc) in project.functions.iter().enumerate() {
-        match func_rc.borrow().compiler_item {
-            Some(CompilerItem::StringPushStr) => append_ids.push(Target::Stored(pos)),
-            Some(CompilerItem::StringPushChar) => {
-                append_ids.push(Target::Stored(pos));
-                push_chars.push(Target::Stored(pos));
-            }
-            Some(CompilerItem::StringPushAscii) => push_asciis.push(Target::Stored(pos)),
-            Some(
-                CompilerItem::StringLen
-                | CompilerItem::StringReserveUninit
-                | CompilerItem::StringSetByteUnchecked
-                | CompilerItem::StringWriteStrAt,
-            ) => {
-                fused.push(Target::Stored(pos));
-            }
-            _ => {}
+        let Some(item) = func_rc.borrow().compiler_item else {
+            continue;
+        };
+        if reachable.contains(&Target::Stored(pos)) {
+            reached_items.insert(item);
+        }
+        if !item.rewritten_from().is_empty() {
+            targets.push((item, Target::Stored(pos)));
         }
     }
-    // `nir/string_push`'s append fusion writes a run of appends in terms of the
-    // four `String` primitives above, so they must survive the pre-loop DCE
-    // wherever an append is reachable at all. Ungated beyond that: the fusion
-    // reads a run out of a block rather than a single recognisable call, and a
-    // later DCE drops the four again when no run fused.
-    if append_ids.iter().any(|id| reachable.contains(id)) {
-        reachable.extend(compute_reachable(graph, fused));
-    }
-    // `nir/string_push`'s constant-ASCII rule retargets a `push` call to
-    // `push_ascii_byte`. `push`'s own body calls it too, but only until the
-    // inliner splices it there, which leaves it unreachable while `push` is not.
-    if push_chars.iter().any(|id| reachable.contains(id)) {
-        reachable.extend(compute_reachable(graph, push_asciis));
-    }
+    // Rooted wherever what a rewrite replaces is reachable, though the rewrite
+    // may never fire: the DCE after the loop drops what no rewrite called.
+    let rooted = targets.into_iter().filter_map(|(item, target)| {
+        item.rewritten_from()
+            .iter()
+            .any(|from| reached_items.contains(from))
+            .then_some(target)
+    });
+    reachable.extend(compute_reachable(graph, rooted));
 
     // An `array_clone::<T>` site reaches its helper through the element type
     // rather than a call edge, so seed one root per value-typed site.
