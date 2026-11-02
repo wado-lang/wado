@@ -717,6 +717,28 @@ impl WebGpuBackend {
         });
     }
 
+    /// The matrix `t` as `kept_matrix` keeps it for products contracting its
+    /// axis `contracted`, under its own extents.
+    internal fn kept_contracted<Axes>(
+        &mut self,
+        t: &Tensor<f32, Axes>,
+        contracted: i32,
+    ) -> Placed<f32, Axes> with (GpuDevice, GpuQueue, GpuBuffer)
+        contract t.extents.len() == 2 && 0 <= contracted <= 1
+    {
+        let data = &t.data;
+        let [rows, columns] = [t.extents[0], t.extents[1]];
+        let kept = if contracted == 0 {
+            self.kept_matrix::<Axes, Axes>(rows, columns, data, |r, c| data[r * columns + c]);
+        } else {
+            self.kept_matrix::<Axes, Axes>(columns, rows, data, |r, c| data[c * columns + r]);
+        };
+        let Device(d) = kept else {
+            unreachable();
+        };
+        return Placed::Device(if contracted == 0 { d } else { permuted(&d, &([1, 0] as List<i32>)) });
+    }
+
     /// `t` on the device where an f32 holds its values, and on the host
     /// otherwise.
     fn stored<E: Element, Axes>(

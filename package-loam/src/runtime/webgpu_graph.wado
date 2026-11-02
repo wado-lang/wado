@@ -41,6 +41,7 @@ use {
 use {
     Attention,
     BinaryOp,
+    Cpu,
     Element,
     ElementKind,
     Epilogue,
@@ -53,7 +54,7 @@ use {
     operand,
 } from "./tensor.wado";
 use { Kernel, Plan, binary_op, compared_op, planned, splats_of, unary_of } from "./fusion.wado";
-use { Any, Recorded, Recorder, Run, Untyped, bools, constants } from "./recorded.wado";
+use { Any, Recorded, Recorder, Run, Untyped, bools, constants, kept_any } from "./recorded.wado";
 use { DeviceTensor, Placed, PlacedRead, WebGpuBackend, contiguous, permuted, sliced } from "./webgpu.wado";
 
 /// A pass recorded once per shape class and planned into kernels, which each
@@ -86,14 +87,33 @@ impl Graph for WebGpuBackend {
         let mut kept = HashMap::<i32, Any<WebGpuBackend>>::new();
         for let id of plan.reads(&recorded) {
             if let Some(value) = folded.get(id) && !kept.contains_key(id) {
-                kept[id] = match value {
-                    F32(t) => Any::F32(self.keep(&t)),
-                    I64(t) => Any::I64(self.keep(&t)),
-                    Bool(t) => Any::Bool(self.keep(&t)),
-                };
+                kept[id] = kept_any(self, &value);
             }
         }
         return Option::Some(WebGpuProgram { recorded, plan, constants: kept, serial: self.program_serial() });
+    }
+
+    /// A weight read only as products' right matrix, or as a gather's rows, is
+    /// kept as `keep_rhs` keeps one: column by column along the axis the
+    /// products contract, in bf16 where that loses nothing. Any other is kept
+    /// as `keep` keeps it.
+    fn kept_weights<Er>(
+        &mut self,
+        record: fn(&mut Recorder) -> Recorded with _,
+        first: i32,
+        count: i32,
+        load: fn(i32) -> Result<Any<Cpu>, Er> with _,
+    ) -> Result<List<Any<WebGpuBackend>>, Er> with _ {
+        let contracted = contracted_axes(&record(&mut Recorder::new()), first, count);
+        let mut kept: List<Any<WebGpuBackend>> = [];
+        for let at of 0..<count {
+            let host = load(at)?;
+            kept.push(match [contracted[at], host] {
+                [Some(axis), F32(t)] => Any::F32(self.kept_contracted(&t, axis)),
+                _ => kept_any(self, &host),
+            });
+        }
+        return Result::Ok(kept);
     }
 
     fn executed(
@@ -469,6 +489,46 @@ impl Graph for WebGpuBackend {
             options,
         );
     }
+}
+
+/// For each of the `count` weights `recorded` takes from its parameter
+/// `first` on, the axis the products reading it contract, where every node
+/// reading it is a product taking it as its right matrix or a gather taking
+/// its rows, and the pass returns none of them.
+internal fn contracted_axes(recorded: &Recorded, first: i32, count: i32) -> List<Option<i32>> {
+    let mut axes = List::<Option<i32>>::filled(count, null);
+    for let [id, node] of recorded.nodes.into_iter().enumerate() {
+        if let Parameter(p) = node.op && first <= p < first + count {
+            axes[p - first] = contracted_axis(recorded, id);
+        }
+    }
+    return axes;
+}
+
+fn contracted_axis(recorded: &Recorded, weight: i32) -> Option<i32> {
+    let extents = &recorded.nodes[weight].extents;
+    if extents.len() != 2 || !recorded.nodes[weight].kind matches { F32 } || recorded.body.results.contains(&weight) {
+        return null;
+    }
+    let mut axis: Option<i32> = null;
+    for let node of &recorded.nodes {
+        if !node.operands.contains(&weight) {
+            continue;
+        }
+        let read = match node.op {
+            DotGeneral(dims) && node.operands[0] != weight && dims.rhs_contracting.len() == 1 && dims.rhs_batch.is_empty() => dims.rhs_contracting[0],
+            Gather(dims) && node.operands[0] == weight
+                && taken_axis(extents, recorded.nodes[node.operands[1]].extents.len(), &dims) == Option::Some(0) => 1,
+            _ => {
+                return null;
+            },
+        };
+        if axis matches { Some(a) && a != read } {
+            return null;
+        }
+        axis = Option::Some(read);
+    }
+    return axis;
 }
 
 /// The extents a product of `l` by `r` computes before its result takes the

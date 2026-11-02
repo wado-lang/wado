@@ -86,7 +86,11 @@ export fn run() with (Stdout, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuC
     // `compute` compiles one program per shape class and replays it: 3 and 4
     // positions share a capacity, 5 takes the next. A program's second call
     // does again what its first recorded of each kernel.
+    let kept = gpu.kept_bytes();
     let mut on_gpu = gated::Model::new(gated::Params::embedded(&mut gpu));
+    // The normalization's weight and the folded epsilon in f32, and the
+    // products' three in bf16: 2 * 4 + 4 + 3 * 6 * 2 bytes.
+    assert gpu.kept_bytes() - kept == 48, "a weight only products read is kept in bf16";
     let mut on_cpu = gated::Model::new(gated::Params::embedded(cpu));
     for let [positions, programs, replays] of [
         [3, 1, 0],

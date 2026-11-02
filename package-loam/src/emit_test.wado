@@ -1605,11 +1605,30 @@ test "a constant with no operator to fold into is a rank-0 literal" {
 
     assert out.contains("return backend.keep(&Tensor::<f32, []> { data: [0.5 as f32], extents: [] });");
     assert out.contains(`let Y = backend.fused::<[]>([backend.read(&weights.C)], &${unary(UnaryOp::Relu)});`);
-    // `Weights::prepare`, `Weights::params`, `Prepared::embedded` and
-    // `Params::embedded` each hold it, from one copy of its data: a mask is as
-    // large as the context it covers.
+    // `Weights::prepare`, `Prepared::embedded` and `Params::held` each hold
+    // it, from one copy of its data: a mask is as large as the context it
+    // covers.
     assert out.split("data: [0.5 as f32]").count() == 2;
-    assert out.split("C: Kept::C(backend),").count() == 5;
+    assert out.split("C: Kept::C(backend),").count() == 4;
+}
+
+test "Params keeps each weight as the backend lays it out for the pass recorded at the least lengths" {
+    let source = `
+g (float[N, 2] X) => (float[N, 3] Y)
+<float[2, 3] W = {0.5, -1.0, 0.25, 1.5, 0.75, -0.5}>
+{
+    Y = MatMul(X, W)
+}
+`;
+    let out = generate(source).unwrap();
+    assert out.contains("fn least_extents() -> List<List<i32>> {");
+    assert out.contains(
+        "fn held<Er>(backend: &mut Bk, load: fn(i32) -> Result<Any<Cpu>, Er> with _) -> Result<Params<Bk>, Er> with _ {",
+    );
+    assert out.contains("let weights = backend.kept_weights(|recorder| recorded(recorder, &least_extents()), 1, 1, load)?;");
+    assert out.contains("W: f32_of::<Bk, [X1, Y1]>(backend, &weights[0]),");
+    assert out.contains("return Params::held::<!>(backend, |at| Result::Ok(match at {");
+    assert out.contains("0 => host_of(&self.W),");
 }
 
 test "a one-element constant that raises the output's rank is a tensor, not a folded scalar" {

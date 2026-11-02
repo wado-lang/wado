@@ -34,6 +34,9 @@ pub global MODEL: String = "Model";
 /// The function recording `build` for a backend to compile.
 pub global RECORDED: String = "recorded";
 
+/// The function giving the extents `recorded` takes at the least lengths.
+pub global LEAST_EXTENTS: String = "least_extents";
+
 /// The functions the constructors of `Prepared` and `Params` keep each folded
 /// literal with.
 pub global KEPT: String = "Kept";
@@ -45,13 +48,13 @@ pub global MAP: String = "HashMap";
 /// spells, whether or not one graph's code reads it.
 pub global RUNTIME_NAMES: List<String> = [
     "Any", "Attention", "Backend", "Binary", "BinaryOp", "CheckpointBytes", "Columns", "Comparison", "Concat",
-    "Convolution", "DotDims", "Epilogue", "Expected", "Expr", "GatherDims", "Graph", "Holds", "LoadError", "Merged",
-    "One", "Paired", "Programs", "Prologue", "Recorded", "Recorder", "RowOp", "Step", "Tensor", "Unary", "UnaryOp",
-    "Untyped", "Window", "WindowReduce", "arg_max", "assembled", "axis_mismatch", "bool_of", "capacity_of", "expect_len",
-    "extent_mismatch", "extents_mismatch", "f32_of", "fitted", "from_end", "from_end_indices", "full", "i64_of",
-    "input_mismatch", "joined_at", "lifted", "masked", "narrow", "payload_at", "quotient", "range_i64",
-    "read_checkpoint", "read_shards", "reduce_mean", "refuse", "resized", "softmax", "softmax_flattened",
-    "strided_gather", "to_extent", "unmet",
+    "Convolution", "Cpu", "DotDims", "Epilogue", "Expected", "Expr", "GatherDims", "Graph", "Holds", "LoadError",
+    "Merged", "One", "Paired", "Programs", "Prologue", "Recorded", "Recorder", "RowOp", "Step", "Tensor", "Unary",
+    "UnaryOp", "Untyped", "Window", "WindowReduce", "arg_max", "assembled", "axis_mismatch", "bool_of", "capacity_of",
+    "expect_len", "extent_mismatch", "extents_mismatch", "f32_of", "fitted", "from_end", "from_end_indices", "full",
+    "host_of", "i64_of", "input_mismatch", "joined_at", "lifted", "masked", "narrow", "payload_at", "quotient",
+    "range_i64", "read_checkpoint", "read_shards", "reduce_mean", "refuse", "resized", "softmax", "softmax_flattened",
+    "strided_gather", "to_extent", "unmet", "widen",
 ];
 
 /// Whether `name` already means something in the generated module.
@@ -84,6 +87,7 @@ pub fn module_idents() -> HashSet<String> {
     reserved.insert(MODEL);
     reserved.insert("model");
     reserved.insert(RECORDED);
+    reserved.insert(LEAST_EXTENTS);
     // The locals `compute` and `recorded` bind.
     reserved.insert("recorder");
     reserved.insert("extents");
@@ -96,6 +100,7 @@ pub fn module_idents() -> HashSet<String> {
     reserved.insert("prepare");
     reserved.insert("load");
     reserved.insert("embedded");
+    reserved.insert("held");
     reserved.insert("embedded_data");
     reserved.insert("backend");
     reserved.insert(BACKEND_PARAM);

@@ -19,7 +19,7 @@ use {
     stretched_strides,
     walked,
 } from "./tensor.wado";
-use { Any, Recorded, Recorder } from "./recorded.wado";
+use { Any, Recorded, Recorder, kept_any } from "./recorded.wado";
 
 /// A StableHLO elementwise operation of one operand. `Erf` is CHLO's, as
 /// StableHLO has no error function.
@@ -126,6 +126,23 @@ pub affine trait Graph: Holds with _ {
     fn executed(&mut self, program: &Self::Program, arguments: &List<Any<Self>>) -> List<Any<Self>> {
         // Only a backend whose `compiled` returns a program is given one.
         unreachable();
+    }
+    /// The `count` weights a pass reads, `load(at)` the `at`th on the host,
+    /// which the parameters `record` records take from its `first` on: each
+    /// kept as [`Holds::keep`] keeps it, or laid out for the operations the
+    /// recorded pass reads it in.
+    fn kept_weights<Er>(
+        &mut self,
+        record: fn(&mut Recorder) -> Recorded with _,
+        first: i32,
+        count: i32,
+        load: fn(i32) -> Result<Any<Cpu>, Er> with _,
+    ) -> Result<List<Any<Self>>, Er> with _ {
+        let mut kept: List<Any<Self>> = [];
+        for let at of 0..<count {
+            kept.push(kept_any(self, &load(at)?));
+        }
+        return Result::Ok(kept);
     }
 
     /// StableHLO's `iota`: each element its index along `dimension`.

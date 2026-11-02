@@ -9,6 +9,7 @@ use {
     CACHE,
     CHECKPOINT_PARAM,
     KEPT,
+    LEAST_EXTENTS,
     LENGTHS,
     MAP,
     MODEL,
@@ -219,14 +220,15 @@ pub fn emit(
     let decided = plan(graph, checked, fuse);
     let rhs = decided.rhs;
     let together = Together::of(graph, &decided);
-    emit_weights(&mut w, graph, checked, &names, &held, &kept, &rhs, &together, &placement);
+    let crossing = Crossing::of(graph, cache_pairs(graph));
+    let grown = grown_lengths(checked, &crossing);
+    emit_weights(&mut w, graph, checked, &names, &held, &kept, &rhs, &together, &placement, grown matches { Some(_) });
     let exprs = Operands {
         values: HashMap::<String, String>::new(),
         scalars,
         rhs,
         paired: together.paired,
     };
-    let crossing = Crossing::of(graph, cache_pairs(graph));
     let held_symbols = Symbols::of(&carriers, &names, |input, axis| `backend.extents_of(${*input})[${axis}]`);
     emit_forward(
         &mut w,
@@ -263,19 +265,22 @@ pub fn emit(
     } else {
         `${*input}.extents[${axis}]`;
     });
-    emit_compute(
-        &mut w,
-        graph,
-        checked,
-        &names,
-        &held,
-        &carriers,
-        host_symbols,
-        &padded,
-        &read,
-        &kept.graph,
-        &crossing,
-    )?;
+    if let Some(grown) = grown {
+        emit_compute(
+            &mut w,
+            graph,
+            checked,
+            &names,
+            &held,
+            &carriers,
+            host_symbols,
+            &padded,
+            &read,
+            &kept.graph,
+            &crossing,
+            &grown,
+        )?;
+    }
     return Result::Ok(w.to_string());
 }
 
@@ -576,6 +581,7 @@ fn emit_weights(
     rhs: &HashMap<String, bool>,
     together: &Together,
     placement: &Placement,
+    records: bool,
 ) {
     let mut weights = StructSpec::new("Weights", Vis::Pub);
     let mut prepared = StructSpec::new(PREPARED, Vis::Pub);
@@ -614,21 +620,25 @@ fn emit_weights(
             "backend",
             `&mut ${BACKEND_PARAM}`,
         ).set_return_type(holder.ty()).add_effect("_").emit_begin(w);
-        w.begin(`return ${holder.name()}`);
-        emit_prepared_fields(w, graph, checked, names, held, rhs, together, &hosts, holder);
-        emit_kept_fields(w, names, &kept.of(holder));
-        w.end_with(";");
+        if records && holder matches { Built } {
+            emit_held_call(w, graph, checked, held, &hosts, false);
+        } else {
+            w.begin(`return ${holder.name()}`);
+            emit_prepared_fields(w, graph, checked, names, held, rhs, together, &hosts, holder);
+            emit_kept_fields(w, names, &kept.of(holder));
+            w.end_with(";");
+        }
         w.end();
     }
     w.end();
     w.blank();
     w.line("/// The graph's initializers as the backend `forward` runs on computes with them.");
     prepared.emit(w);
-    emit_constructor(w, graph, checked, names, held, rhs, together, &kept.kernels, placement, Holder::Kernels);
+    emit_constructor(w, graph, checked, names, held, rhs, together, &kept.kernels, placement, Holder::Kernels, false);
     w.blank();
     w.line("/// The graph's initializers as tensors of the graph `build` adds operations to.");
     params.emit(w);
-    emit_constructor(w, graph, checked, names, held, rhs, together, &kept.graph, placement, Holder::Built);
+    emit_constructor(w, graph, checked, names, held, rhs, together, &kept.graph, placement, Holder::Built, records);
     if !kept.all().is_empty() {
         emit_kept(w, checked, names, &kept.all());
     }
@@ -869,6 +879,7 @@ fn emit_constructor(
     kept: &List<String>,
     placement: &Placement,
     holder: Holder,
+    held_for_records: bool,
 ) {
     let loads = loads_weights(graph);
     w.blank();
@@ -908,13 +919,11 @@ fn emit_constructor(
         if let Some(line) = first {
             w.line(line);
         }
-        w.begin(`return Result::Ok(${holder.name()}`);
     } else {
         w.line("/// The weights the graph carries.");
         FnSpec::new("embedded", Vis::Pub).add_param("backend", `&mut ${BACKEND_PARAM}`).set_return_type(
             holder.ty(),
         ).add_effect("_").emit_begin(w);
-        w.begin(`return ${holder.name()}`);
     }
     let mut hosts = HashMap::<String, String>::new();
     for let [at, vi] of graph.initializers.into_iter().enumerate() {
@@ -927,11 +936,38 @@ fn emit_constructor(
         };
         hosts[vi.name] = `&Tensor::<${primitive}, [${axis_list(&shape)}]> { data: ${data}, extents: ${e.extents} }`;
     }
-    emit_prepared_fields(w, graph, checked, names, held, rhs, together, &hosts, holder);
-    emit_kept_fields(w, names, kept);
-    w.end_with(if loads { ");" } else { ";" });
+    if held_for_records {
+        emit_held_call(w, graph, checked, held, &hosts, loads);
+    } else {
+        w.begin(if loads { `return Result::Ok(${holder.name()}` } else { `return ${holder.name()}` });
+        emit_prepared_fields(w, graph, checked, names, held, rhs, together, &hosts, holder);
+        emit_kept_fields(w, names, kept);
+        w.end_with(if loads { ");" } else { ";" });
+    }
     w.end();
     w.end();
+}
+
+/// The return of `Params::held` over each initializer's host tensor in
+/// `hosts`, by its place among them: its result where `fallible`, a `load`
+/// does, and the struct, which nothing fails to hold, otherwise.
+fn emit_held_call(
+    w: &mut CodeWriter,
+    graph: &Graph,
+    checked: &Checked,
+    held: &HashMap<String, String>,
+    hosts: &HashMap<String, String>,
+    fallible: bool,
+) {
+    let error = if fallible { "LoadError" } else { "!" };
+    w.begin(`return ${PARAMS}::held::<${error}>(backend, |at| Result::Ok(match at`);
+    for let [at, vi] of graph.initializers.into_iter().enumerate() {
+        let host = hosts[vi.name];
+        let widened = if converted(checked, held, &vi.name) { `&widen(${host})` } else { host };
+        w.line(`${at} => host_of(${widened}),`);
+    }
+    w.line("_ => unreachable(),");
+    w.end_with(if fallible { "));" } else { ")).unwrap();" });
 }
 
 /// The function holding the bytes of each weight the graph carries, by its
@@ -1043,6 +1079,16 @@ impl Symbols {
             symbols.idents[symbol] = names.get(&symbol_key(&symbol));
             symbols.order.push(symbol);
             symbols.requires[symbol] = rest.symbols();
+        }
+        return symbols;
+    }
+
+    /// The symbols `carriers` bind, each bound to 1.
+    fn at_one(carriers: &List<Carrier>, names: &Names) -> Symbols {
+        let mut symbols = Symbols::of(carriers, names, |_, _| "1");
+        for let c of *carriers {
+            symbols.sources[c.solved.symbol] = "1 as i64";
+            symbols.requires[c.solved.symbol] = [];
         }
         return symbols;
     }
@@ -1422,19 +1468,17 @@ fn emit_compute(
     read: &List<String>,
     kept: &List<String>,
     crossing: &Crossing,
+    owed: &List<[Grown, Poly]>,
 ) -> Result<(), EmitError> {
     let shapes = &checked.shapes;
     let returned = crossing.returned;
     let has_cache = crossing.has_cache();
     // The cache holds a past at a capacity, so its length is what the graph
     // owes it to be, given the other inputs'.
-    let grown = grown_axes(checked, crossing);
-    for let g of &grown {
-        let Some(length) = owed_value(checked, &g.symbol, &grown) else {
-            return Result::Ok(());
-        };
+    for let [g, length] of *owed {
         symbols.derive(&g.symbol, &length);
     }
+    let grown: List<Grown> = (*owed).into_iter().map(|o| o.0).collect();
     let mut compute = FnSpec::new("compute", Vis::Pub);
     compute.add_generic(GRAPH_BOUND).add_param("backend", `&mut ${BACKEND_PARAM}`);
     let mut lines: List<String> = [];
@@ -1462,19 +1506,7 @@ fn emit_compute(
         compute.add_param("cache", `&${CACHE}<${BACKEND_PARAM}>`);
     }
     lines.extend(&owed_checks(checked, &mut symbols)?);
-    // Each padded length's capacity, which stands for it in every extent. A
-    // grown past's holds the present too, which the pass writes into it.
-    let mut capacities = symbols;
-    for let symbol of *padded {
-        let reach = match grown.into_iter().find(|g| g.symbol == symbol) {
-            Some(g) => g.present,
-            None => Poly::symbol(&symbol),
-        };
-        let length = symbols.spell(&reach)?;
-        let capacity = names.get(&capacity_key(&symbol));
-        lines.push(`let ${capacity} = capacity_of(to_extent(${length})) as i64;`);
-        capacities.idents[symbol] = capacity;
-    }
+    let mut capacities = at_capacities(&mut symbols, &mut lines, padded, &grown, names)?;
     // The cache was computed before the pass this call begins.
     if has_cache {
         lines.push("cache.retain(backend);");
@@ -1515,11 +1547,12 @@ fn emit_compute(
             fields.push(`${ident}: backend.upload(&Tensor::<i64, []> { data: [${symbols.spell(
                 &Poly::symbol(&symbol),
             )?}], extents: [] })`);
-            taken_args.push(ProgramArgument { crossed: Crossed::Length, ident, element: "i64", axes: "[]" });
+            taken_args.push(ProgramArgument { crossed: Crossed::Length, tensor: symbol, ident, element: "i64", axes: "[]" });
         }
         lines.push(`let lengths = ${LENGTHS} { ${fields.join(", ")} };`);
         arguments.push("&lengths");
     }
+    let first_weight = taken_args.len();
     for let weight of weight_names(graph, kept) {
         taken_args.push(ProgramArgument::of(checked, names, &weight, Crossed::Weight));
     }
@@ -1599,7 +1632,99 @@ fn emit_compute(
     }
     w.end();
     emit_recorded(w, names, &taken_args, &returned, crossing);
+    emit_least_extents(w, checked, carriers, names, owed, padded, &taken_args)?;
+    emit_held(w, graph, checked, names, kept, first_weight);
     return Result::Ok(());
+}
+
+/// `least_extents`: the extents `recorded` takes where each length an input
+/// carries is 1, as `compute` pads them to their capacities.
+fn emit_least_extents(
+    w: &mut CodeWriter,
+    checked: &Checked,
+    carriers: &List<Carrier>,
+    names: &Names,
+    owed: &List<[Grown, Poly]>,
+    padded: &List<String>,
+    taken: &List<ProgramArgument>,
+) -> Result<(), EmitError> {
+    let mut symbols = Symbols::at_one(carriers, names);
+    for let [g, length] of *owed {
+        symbols.derive(&g.symbol, &length);
+    }
+    let grown: List<Grown> = (*owed).into_iter().map(|o| o.0).collect();
+    let mut lines: List<String> = [];
+    let mut capacities = at_capacities(&mut symbols, &mut lines, padded, &grown, names)?;
+    let mut extents: List<String> = [];
+    for let a of *taken {
+        extents.push(if a.crossed matches { Length } { "[]" } else { capacities.spell_shape(&checked.shapes[a.tensor])? });
+    }
+    for let symbol of capacities.used {
+        symbols.used.insert(symbol);
+    }
+    w.blank();
+    w.line("/// The extents `recorded` takes where each length an input carries is 1, as");
+    w.line("/// `compute` pads them to their capacities.");
+    w.begin(`fn ${LEAST_EXTENTS}() -> List<List<i32>>`);
+    for let line of symbols.bindings().into_iter().chain(lines.into_iter()) {
+        w.line(&line);
+    }
+    w.line(`return [${extents.join(", ")}];`);
+    w.end();
+    return Result::Ok(());
+}
+
+/// `Params::held`: the initializers as the backend keeps them for the pass
+/// `recorded` records at the least lengths, the weights taking its parameters
+/// from `first` on, and the folded literals `kept`.
+fn emit_held(w: &mut CodeWriter, graph: &Graph, checked: &Checked, names: &Names, kept: &List<String>, first: i32) {
+    w.blank();
+    let mut block = ImplSpec::new(`${PARAMS}<${BACKEND_PARAM}>`);
+    block.add_generic(GRAPH_BOUND);
+    block.emit_begin(w);
+    w.line("/// The initializers, `load(at)` the `at`th on the host, as `backend` keeps");
+    w.line("/// them for the pass that reads them, and the folded literals.");
+    FnSpec::new("held").add_generic("Er").add_param("backend", `&mut ${BACKEND_PARAM}`).add_param(
+        "load",
+        "fn(i32) -> Result<Any<Cpu>, Er> with _",
+    ).set_return_type(`Result<${PARAMS}<${BACKEND_PARAM}>, Er>`).add_effect("_").emit_begin(w);
+    let count = graph.initializers.len();
+    w.line(
+        `let weights = backend.kept_weights(|recorder| ${RECORDED}(recorder, &${LEAST_EXTENTS}()), ${first}, ${count}, load)?;`,
+    );
+    w.begin(`return Result::Ok(${PARAMS}`);
+    for let [at, vi] of graph.initializers.into_iter().enumerate() {
+        let axes = axis_list(&checked.shapes[vi.name]);
+        w.line(`${names.get(&vi.name)}: ${checked.primitives[vi.name]}_of::<${BACKEND_PARAM}, [${axes}]>(backend, &weights[${at}]),`);
+    }
+    emit_kept_fields(w, names, kept);
+    w.end_with(");");
+    w.end();
+    w.end();
+}
+
+/// `symbols` with each padded length's capacity standing for it in every
+/// extent, each bound by a line `lines` takes. A grown past's holds the present
+/// too, which the pass writes into it.
+fn at_capacities(
+    symbols: &mut Symbols,
+    lines: &mut List<String>,
+    padded: &List<String>,
+    grown: &List<Grown>,
+    names: &Names,
+) -> Result<Symbols, EmitError> {
+    let mut capacities = *symbols;
+    for let symbol of *padded {
+        let reach = match grown.into_iter().find(|g| g.symbol == symbol) {
+            Some(g) => g.present,
+            None => Poly::symbol(&symbol),
+        };
+        let length = symbols.spell(&reach)?;
+        let capacity = names.get(&capacity_key(&symbol));
+        lines.push(`let ${capacity} = capacity_of(to_extent(${length})) as i64;`);
+        capacities.idents[symbol] = capacity;
+    }
+    return Result::Ok(capacities);
 }
 
 /// Where an argument of the program crosses from: as `build` takes it, and
@@ -1611,10 +1736,11 @@ enum Crossed {
     Weight,
 }
 
-/// One argument of the program `compute` runs: where it crosses, its name
-/// there, and its element and axes.
+/// One argument of the program `compute` runs: where it crosses, the tensor
+/// or the length it is, its name there, and its element and axes.
 struct ProgramArgument {
     crossed: Crossed,
+    tensor: String,
     ident: String,
     element: String,
     axes: String,
@@ -1624,6 +1750,7 @@ impl ProgramArgument {
     fn of(checked: &Checked, names: &Names, tensor: &String, crossed: Crossed) -> ProgramArgument {
         return ProgramArgument {
             crossed,
+            tensor: *tensor,
             ident: names.get(tensor),
             element: checked.primitives[*tensor],
             axes: `[${axis_list(&checked.shapes[*tensor])}]`,
@@ -1773,6 +1900,17 @@ fn grown_axes(checked: &Checked, crossing: &Crossing) -> List<Grown> {
         }
     }
     return grown;
+}
+
+/// Each axis a pass grows, and the length the graph owes its past to be; `None`
+/// where it owes one none, and no `compute` runs the graph.
+fn grown_lengths(checked: &Checked, crossing: &Crossing) -> Option<List<[Grown, Poly]>> {
+    let grown = grown_axes(checked, crossing);
+    let mut owed: List<[Grown, Poly]> = [];
+    for let g of grown {
+        owed.push([g, owed_value(checked, &g.symbol, &grown)?]);
+    }
+    return Option::Some(owed);
 }
 
 /// The value the graph owes `symbol` to be, where it owes it to equal a sum

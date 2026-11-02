@@ -431,6 +431,15 @@ pub fn host_of<E: Element, Axes>(t: &Tensor<E, Axes>) -> Any<Cpu> {
     };
 }
 
+/// `t`, held on the host, as `h` keeps it.
+pub fn kept_any<affine H: Holds>(h: &mut H, t: &Any<Cpu>) -> Any<H> with _ {
+    return match t {
+        F32(t) => Any::F32(h.keep(t)),
+        I64(t) => Any::I64(h.keep(t)),
+        Bool(t) => Any::Bool(h.keep(t)),
+    };
+}
+
 /// `a`, an f32 tensor, under the axes `Axes`.
 pub fn f32_of<affine G: Graph, Axes>(g: &G, a: &Any<G>) -> G::Tensor<f32, Axes> {
     return g.relabeled::<f32, Untyped, Axes>(&f32s(a));
