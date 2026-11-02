@@ -1108,7 +1108,6 @@ fn plan_body(
     catalog: &MethodCatalog,
     value_copy_ids: &IndexSet<FuncId>,
 ) -> Option<Vec<Candidate>> {
-    // Step 1: collect candidates.
     let candidates = collect_candidates(body, type_table, struct_index, sig, value_copy_ids);
     if candidates.is_empty() {
         return None;
@@ -1127,7 +1126,7 @@ fn plan_body(
 fn scalarize_at_root(engine: &mut Engine, rule: &ContainerSroaRule) -> bool {
     let safe_candidates = rule.plan;
 
-    // Step 4: allocate parallel `List<T_k>` locals through the engine.
+    // Allocate parallel `List<T_k>` locals through the engine.
     let mut field_map: IndexMap<(u32, u32), FieldList> = IndexMap::default();
     let mut decomposed: IndexSet<u32> = IndexSet::default();
     for c in safe_candidates {
@@ -1171,7 +1170,7 @@ fn scalarize_at_root(engine: &mut Engine, rule: &ContainerSroaRule) -> bool {
         })
         .collect();
 
-    // Step 5: rewrite the body via the engine edit API.
+    // Rewrite the body via the engine edit API.
     let ctx = RewriteCtx {
         type_table: rule.type_table,
         decomposed: &decomposed,
