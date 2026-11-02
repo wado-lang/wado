@@ -5655,22 +5655,23 @@ impl<'a> Reify<'a> {
             // same shape annotate's recovery path produced.
             return TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, qm.span);
         };
-        // The early return is the desugared match's last arm.
-        if let TirExprKind::Match { arms, .. } = &mut desugared.kind
-            && let Some(exit) = arms.last_mut()
-        {
-            let placeholder = TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, qm.span);
-            let mut body = std::mem::replace(&mut exit.body, placeholder);
-            // A failure is no trap, so its rarity is a guess, which the
-            // profile overrides.
-            if !self.overridden(qm.id) {
-                let TirExprKind::Block(block) = &mut body.kind else {
-                    unreachable!("a `?`'s early return is a block");
-                };
-                block.stmts.insert(0, cold_path_stmt(qm.span));
-            }
-            exit.body = self.probe_expr(ProbeSite::TryExit, qm.id, body);
+        let TirExprKind::Match { arms, .. } = &mut desugared.kind else {
+            unreachable!("a `?` desugars to a match");
+        };
+        let [_, exit] = arms.as_mut_slice() else {
+            unreachable!("a `?`'s match has a continuing arm and an early return");
+        };
+        let placeholder = TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, qm.span);
+        let mut body = std::mem::replace(&mut exit.body, placeholder);
+        // A failure is no trap, so its rarity is a guess, which the profile
+        // overrides.
+        if !self.overridden(qm.id) {
+            let TirExprKind::Block(block) = &mut body.kind else {
+                unreachable!("a `?`'s early return is a block");
+            };
+            block.stmts.insert(0, cold_path_stmt(qm.span));
         }
+        exit.body = self.probe_expr(ProbeSite::TryExit, qm.id, body);
         desugared
     }
 

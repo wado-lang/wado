@@ -84,3 +84,31 @@ impl Mark {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_mark_states_exactly_the_answers_it_is_made_of() {
+        for unlikely in [false, true] {
+            for cold in [false, true] {
+                let states = |rarity| Mark::of(unlikely, cold).is_some_and(|m| m.states(rarity));
+                assert_eq!(states(Rarity::Unlikely), unlikely);
+                assert_eq!(states(Rarity::Cold), cold);
+            }
+        }
+    }
+
+    #[test]
+    fn each_mark_is_named_by_its_builtin() {
+        for mark in Mark::ALL {
+            assert_eq!(Mark::of_builtin(mark.builtin()), Some(mark));
+        }
+        assert_eq!(
+            Mark::of_builtin(KNOWN_COLD_PATH_INTRINSIC),
+            Some(Mark::ColdPath)
+        );
+        assert_eq!(Mark::of_builtin("unreachable"), None);
+    }
+}

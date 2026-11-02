@@ -149,9 +149,10 @@ fn find_region(
         let Some(start) = runs.start(block) else {
             continue;
         };
-        // The marker stays behind, ahead of the call, to hint the branch; a run
-        // a nested construct covers has none of its own to keep, and its
-        // markers are reached inside it.
+        // The marker stays behind, ahead of the call, so the branch keeps the
+        // hint a marker stating the unlikely half gives it; a run a nested
+        // construct covers has none of its own to keep, and its markers are
+        // reached inside it.
         let run = &body.blocks[block].stmts[start..];
         let Some(&marker) = run.iter().find(|&&s| runs.is_run_marker(body, s)) else {
             continue;

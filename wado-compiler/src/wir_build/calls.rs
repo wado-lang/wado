@@ -8,9 +8,7 @@
 use std::array;
 
 use crate::module_source::ModuleSource;
-use crate::name::{
-    COLD_CODE_INTRINSIC, COLD_PATH_INTRINSIC, MangledName, UNLIKELY_PATH_INTRINSIC, cm_import_alias,
-};
+use crate::name::{MangledName, cm_import_alias};
 use crate::rarity::Mark;
 use crate::tir::TypeId;
 use crate::type_table::TypeTable;
@@ -573,6 +571,9 @@ impl FunctionTranslator<'_, '_> {
             return Some(instr);
         }
 
+        if let Some(mark) = Mark::of_builtin(builtin_name) {
+            return Some(WirInstr::Rare(mark));
+        }
         if builtin_name == "size_of" {
             let width = self
                 .any_bits_primitive(type_args)
@@ -835,9 +836,6 @@ impl FunctionTranslator<'_, '_> {
             }
 
             "unreachable" => Some(WirInstr::Unreachable),
-            marker @ (COLD_PATH_INTRINSIC | UNLIKELY_PATH_INTRINSIC | COLD_CODE_INTRINSIC) => {
-                Mark::of_builtin(marker).map(WirInstr::Rare)
-            }
             "select" => {
                 let cond = self.translate_operand(args[0].expr);
                 let a = self.translate_operand(args[1].expr);
