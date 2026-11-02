@@ -757,12 +757,14 @@ case with a payload asks the payload, and one without is
 `Settled(Unreported)`. `Subtask` stays public, since a `WaitableSet<Subtask>`
 names it, but no value of it can be had outside `core`.
 
-Neither resource is asked of a caller. A method of `WaitableSet` names the set
-in its signature, and the set's field is the `RawWaitableSet`; a method of
-`AsyncCall` names the call, whose field is the `Subtask`. Each therefore holds
-its resource as
+A method of `WaitableSet` names the set in its signature, and the set's field
+is the `RawWaitableSet`, so each holds that resource as
 [Resources in a Signature](./spec-effects.md#resources-in-a-signature) says,
-and declares nothing.
+and declares nothing. `AsyncCall`'s drop holds the `Subtask` the same way.
+`AsyncCall::wait` and `cancel` declare `with Subtask`, since waiting is
+something a caller observes: a function that started the call, or names it in
+its signature, holds `Subtask` already, and one that reached it any other way,
+through a global say, declares it.
 
 ### Web handles
 

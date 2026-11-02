@@ -1158,7 +1158,7 @@ pub affine struct AsyncCall<affine T> {
 
 impl<affine T> AsyncCall<T> {
     /// Wait for the subtask to complete and return the lifted result.
-    pub fn wait(self) -> T {
+    pub fn wait(self) -> T with Subtask {
         let mut call = self;
         if let Some(subtask) = call.subtask.take() {
             let mut set = WaitableSet::<Subtask>::new();
@@ -1174,7 +1174,7 @@ impl<affine T> AsyncCall<T> {
 
     /// Cancel the in-flight subtask. A result it returned before the cancel
     /// is lifted and dropped, since it may own handles.
-    pub fn cancel(self) {
+    pub fn cancel(self) with Subtask {
         builtin::drop(self);
     }
 }
