@@ -27,7 +27,7 @@ use crate::manifest::package_root;
 use wado_host::sync::lock;
 
 /// The `WADO_*` environment, sorted. The compiler reads these itself
-/// (`WADO_SKIP_PASS`, `WADO_NO_PRELOWER_PRUNE`) rather than through its host,
+/// (`WADO_SKIP_PASS`, say) rather than through its host,
 /// and they change what it emits.
 fn wado_env() -> Vec<(OsString, OsString)> {
     let mut vars: Vec<_> = std::env::vars_os()

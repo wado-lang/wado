@@ -75,9 +75,9 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/String::reallo
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(27)
 
-type "functype//core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>^core:prelude/traits.wado/From<Array<T>>::from" = fn(ref "Array<core:prelude/string.wado/String>") -> ref "core:prelude//List<core:prelude/string.wado/String>";  // TypeId(28)
+type "functype//core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>::grow" = fn(ref "core:prelude//List<core:prelude/string.wado/String>");  // TypeId(28)
 
-type "functype//core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>::grow" = fn(ref "core:prelude//List<core:prelude/string.wado/String>");  // TypeId(29)
+type "functype//core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>^core:prelude/traits.wado/From<Array<T>>::from" = fn(ref "Array<core:prelude/string.wado/String>") -> ref "core:prelude//List<core:prelude/string.wado/String>";  // TypeId(29)
 
 type "functype//effect_interface_default_body_calls.wado/effect_interface_default_body_calls.wado/$Closure_0::$call" = fn(ref "effect_interface_default_body_calls.wado//$Closure_0", i32) -> i32;  // TypeId(30)
 
@@ -588,18 +588,18 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, min_ca
     "core:prelude/string.wado/core:prelude/string.wado/String::realloc_to"(self, select i32(min_capacity > 8, local.tee min_capacity(select i32(capacity > min_capacity, local.tee capacity(capacity * 2), min_capacity)), 8));
 }
 
-fn "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>^core:prelude/traits.wado/From<Array<T>>::from"(elements) {
-    let used: i32;
-    used = builtin::array_len(elements);
-    return struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: elements, used: used };
-}
-
 fn "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>::grow"(self) {
     let $load_0: ref "Array<core:prelude/string.wado/String>";
     let new_repr: ref "Array<core:prelude/string.wado/String>";
     let a: i32;
     builtin::array_copy<ref "core:prelude/string.wado//String">(local.tee new_repr(builtin::array_new<ref "core:prelude/string.wado//String">(select i32(a > 4, local.tee a(builtin::array_len(local.tee $load_0(self.repr)) * 2), 4))), 0, $load_0, 0, self.used);
     self.repr = new_repr;
+}
+
+fn "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>^core:prelude/traits.wado/From<Array<T>>::from"(elements) {
+    let used: i32;
+    used = builtin::array_len(elements);
+    return struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: elements, used: used };
 }
 
 fn "effect_interface_default_body_calls.wado/effect_interface_default_body_calls.wado/$Closure_0::$call"(self, n) {

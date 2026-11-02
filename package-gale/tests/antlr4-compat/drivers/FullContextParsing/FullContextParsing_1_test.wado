@@ -1,0 +1,120 @@
+#![generated(by = "package-gale/scripts/extract_antlr4_descriptors.wado")]
+// Do not edit by hand — re-run the generator to regenerate.
+//
+// Source category: FullContextParsing (ANTLR4 runtime-testsuite).
+// Triage data: package-gale/tests/antlr4-compat/status.toml
+
+use { normalize_tree } from "../../../support/tree_compare.wado";
+
+use t_AmbiguityNoLoop from "../../grammars/FullContextParsing/AmbiguityNoLoop.g4"
+    with {
+        generator: {
+            module: "../../../../src/generator.wado",
+            output_dir: "../../../generated/antlr4_compat/FullContextParsing/AmbiguityNoLoop",
+        },
+    };
+
+use t_ExprAmbiguity_1 from "../../grammars/FullContextParsing/ExprAmbiguity_1.g4"
+    with {
+        generator: {
+            module: "../../../../src/generator.wado",
+            output_dir: "../../../generated/antlr4_compat/FullContextParsing/ExprAmbiguity_1",
+        },
+    };
+
+use t_FullContextIF_THEN_ELSEParse_1 from "../../grammars/FullContextParsing/FullContextIF_THEN_ELSEParse_1.g4"
+    with {
+        generator: {
+            module: "../../../../src/generator.wado",
+            output_dir: "../../../generated/antlr4_compat/FullContextParsing/FullContextIF_THEN_ELSEParse_1",
+        },
+    };
+
+use t_LoopsSimulateTailRecursion from "../../grammars/FullContextParsing/LoopsSimulateTailRecursion.g4"
+    with {
+        generator: {
+            module: "../../../../src/generator.wado",
+            output_dir: "../../../generated/antlr4_compat/FullContextParsing/LoopsSimulateTailRecursion",
+        },
+    };
+
+// Source descriptor: FullContextParsing/AmbiguityNoLoop (ANTLR4 runtime-testsuite).
+// Triage data: package-gale/tests/antlr4-compat/status.toml ([stage_c_*]).
+//
+// Stage C claim: the generated parser's action-print output
+// (result.output, the p.emit buffer) equals the descriptor's [output].
+test "stage_c_output: FullContextParsing/AmbiguityNoLoop" {
+    let input = "a@";
+    let expected = "alt 1
+";
+    let result = t_AmbiguityNoLoop::parse_prog(&input);
+    let actual = result.output;
+    assert actual == expected;
+}
+
+// Source descriptor: FullContextParsing/ExprAmbiguity_1 (ANTLR4 runtime-testsuite).
+// Triage data: package-gale/tests/antlr4-compat/status.toml ([stage_b_*]).
+//
+// Stage B sub-tree: [output] is the labelled child 'expr' subtree,
+// not the start rule's full tree. Navigate via find_first_child_node.
+test "stage_b_sub: FullContextParsing/ExprAmbiguity_1" {
+    let input = "a+b";
+    let expected = "(expr a + (expr b))";
+    let result = t_ExprAmbiguity_1::parse_s(&input);
+    let actual = t_ExprAmbiguity_1::to_string_subtree(&result, "expr");
+    let norm = normalize_tree(&expected);
+    assert actual == norm;
+}
+
+// Source descriptor: FullContextParsing/ExprAmbiguity_2 (ANTLR4 runtime-testsuite).
+// Triage data: package-gale/tests/antlr4-compat/status.toml ([stage_b_*]).
+//
+// Stage B sub-tree: [output] is the labelled child 'expr' subtree,
+// not the start rule's full tree. Navigate via find_first_child_node.
+test "stage_b_sub: FullContextParsing/ExprAmbiguity_2" {
+    let input = "a+b*c";
+    let expected = "(expr a + (expr b * (expr c)))";
+    let result = t_ExprAmbiguity_1::parse_s(&input);
+    let actual = t_ExprAmbiguity_1::to_string_subtree(&result, "expr");
+    let norm = normalize_tree(&expected);
+    assert actual == norm;
+}
+
+// Source descriptor: FullContextParsing/FullContextIF_THEN_ELSEParse_1 (ANTLR4 runtime-testsuite).
+// Triage data: package-gale/tests/antlr4-compat/status.toml ([stage_a_*]).
+//
+// Stage A claim (b): the generated parser must accept the descriptor's
+// [input] without returning an error. No parse-tree shape comparison.
+test "stage_a_parse: FullContextParsing/FullContextIF_THEN_ELSEParse_1" {
+    let input = "{ if x then return }";
+    let result = t_FullContextIF_THEN_ELSEParse_1::parse_s(&input);
+    if !result.ok() {
+        let d = &result.diagnostics[0];
+        panic(`parse failed: ${d.message} at ${d.span.start}..${d.span.end}`);
+    }
+}
+
+// Source descriptor: FullContextParsing/FullContextIF_THEN_ELSEParse_1 (ANTLR4 runtime-testsuite).
+// Expected tree: antlr-4.13.2-complete.jar on the action-body-stripped grammar.
+// Triage data: package-gale/tests/antlr4-compat/status.toml ([stage_b_oracle_*]).
+test "stage_b_oracle: FullContextParsing/FullContextIF_THEN_ELSEParse_1" {
+    let input = "{ if x then return }";
+    let expected = "(s { (stat if x then (stat return)) })";
+    let result = t_FullContextIF_THEN_ELSEParse_1::parse_s(&input);
+    let actual = t_FullContextIF_THEN_ELSEParse_1::to_string_tree(&result);
+    assert actual == expected;
+}
+
+// Source descriptor: FullContextParsing/LoopsSimulateTailRecursion (ANTLR4 runtime-testsuite).
+// Triage data: package-gale/tests/antlr4-compat/status.toml ([stage_c_*]).
+//
+// Stage C claim: the generated parser's action-print output
+// (result.output, the p.emit buffer) equals the descriptor's [output].
+test "stage_c_output: FullContextParsing/LoopsSimulateTailRecursion" {
+    let input = "a(i)<-x";
+    let expected = "pass: a(i)<-x
+";
+    let result = t_LoopsSimulateTailRecursion::parse_prog(&input);
+    let actual = result.output;
+    assert actual == expected;
+}

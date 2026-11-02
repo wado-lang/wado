@@ -435,7 +435,7 @@ What casts did, the following do instead:
   used to return `0 as Stream<u8>`. A handler that traps on the operations it
   leaves out (`..trap`) traps on `new` too, so the test makes the handle
   outside its `with`. A double that told inputs apart by the handle's number
-  (`package-gale`'s `main_test.wado`) keys them by `ResourceId` instead. A
+  (`package-gale`'s `codegen_test.wado`) keys them by `ResourceId` instead. A
   double that returns a future, as
   `MockStdio::write_via_stream` does, keeps the writable end, and the test ends
   it: a handler runs only until its `resume`, a write inside it would block on

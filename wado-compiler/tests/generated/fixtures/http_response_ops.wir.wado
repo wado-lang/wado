@@ -198,14 +198,14 @@ struct http_response_ops.wado//$tmpl$adb1edf8e8d0b122 {  // TypeId(32)
     mut r1: ref "core:prelude/string.wado//String",
 }
 
-struct core:prelude/traits.wado//TemplateHole<http_response_ops.wado/$tmpl$adb1edf8e8d0b122,wasi:http/types.wado/StatusCode> {  // TypeId(33)
-    mut index: i32,
-    mut spec: ref null "core:prelude/string.wado//String",
-}
-
-struct core:prelude/types.wado//FutureWrite<core:prelude/types.wado/Result<core:prelude/types.wado/Option<wasi:http/types.wado/Trailers>,wasi:http/types.wado/ErrorCode>> {  // TypeId(34)
+struct core:prelude/types.wado//FutureWrite<core:prelude/types.wado/Result<core:prelude/types.wado/Option<wasi:http/types.wado/Trailers>,wasi:http/types.wado/ErrorCode>> {  // TypeId(33)
     mut rest: ref null "core:prelude/types.wado//Box<core:prelude/types.wado/Option<core:prelude/types.wado/Result<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>>>",
     mut result: "core:prelude/types.wado//enum:FutureWriteResult",
+}
+
+struct core:prelude/traits.wado//TemplateHole<http_response_ops.wado/$tmpl$adb1edf8e8d0b122,wasi:http/types.wado/StatusCode> {  // TypeId(34)
+    mut index: i32,
+    mut spec: ref null "core:prelude/string.wado//String",
 }
 
 variant core:prelude/types.wado//Option<u64> {  // TypeId(35)
@@ -396,11 +396,11 @@ type "functype//http_response_ops.wado/http_response_ops.wado/$tmpl$adb1edf8e8d0
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::format<http_response_ops.wado/$tmpl$adb1edf8e8d0b122,[wasi:http/types.wado/StatusCode]>" = fn(ref "http_response_ops.wado//$tmpl$adb1edf8e8d0b122") -> ref "core:prelude/string.wado//String";  // TypeId(98)
 
-type "functype//core:prelude/traits.wado/wasi:http/types.wado/StatusCode^core:prelude/traits.wado/Inspect::inspect" = fn(ref "core:prelude/types.wado//Box<u16>", ref "core:prelude/format.wado//Formatter");  // TypeId(99)
+type "functype//core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<http_response_ops.wado/$tmpl$adb1edf8e8d0b122,wasi:http/types.wado/StatusCode>::lit" = fn(ref "core:prelude/traits.wado//TemplateHole<http_response_ops.wado/$tmpl$adb1edf8e8d0b122,wasi:http/types.wado/StatusCode>", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//StrSlice";  // TypeId(99)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(100)
+type "functype//core:prelude/traits.wado/wasi:http/types.wado/StatusCode^core:prelude/traits.wado/Inspect::inspect" = fn(ref "core:prelude/types.wado//Box<u16>", ref "core:prelude/format.wado//Formatter");  // TypeId(100)
 
-type "functype//core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<http_response_ops.wado/$tmpl$adb1edf8e8d0b122,wasi:http/types.wado/StatusCode>::lit" = fn(ref "core:prelude/traits.wado//TemplateHole<http_response_ops.wado/$tmpl$adb1edf8e8d0b122,wasi:http/types.wado/StatusCode>", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//StrSlice";  // TypeId(101)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(101)
 
 type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::write_char_n$sroa[self.buf]" = fn(ref "core:prelude/string.wado//String", char, i32);  // TypeId(102)
 
@@ -1298,6 +1298,12 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<http_respon
     return out_3;
 }
 
+fn "core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<http_response_ops.wado/$tmpl$adb1edf8e8d0b122,wasi:http/types.wado/StatusCode>::lit"(self, $mv$t$s0, $mv$t$r0, $mv$t$s1, $mv$t$r1) {
+    return block -> ref "core:prelude/string.wado//StrSlice" {
+        "core:prelude/string.wado/core:prelude/string.wado/String::internal_view"(local.tee $mv$t$s0("http_response_ops.wado/$template_segment$http_response_ops.wado/$tmpl$adb1edf8e8d0b122"($mv$t$s0, $mv$t$r0, $mv$t$s1, $mv$t$r1, 2 * self.index)).repr, $mv$t$s0.used);
+    };
+}
+
 fn "core:prelude/traits.wado/wasi:http/types.wado/StatusCode^core:prelude/traits.wado/Inspect::inspect"(self, f) {
     let $load_1: ref "core:prelude/string.wado//String";
     let s_13: ref "core:prelude/string.wado//String";
@@ -1364,12 +1370,6 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
         }
         return "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(alt_prefix, digit_count);
     }
-}
-
-fn "core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<http_response_ops.wado/$tmpl$adb1edf8e8d0b122,wasi:http/types.wado/StatusCode>::lit"(self, $mv$t$s0, $mv$t$r0, $mv$t$s1, $mv$t$r1) {
-    return block -> ref "core:prelude/string.wado//StrSlice" {
-        "core:prelude/string.wado/core:prelude/string.wado/String::internal_view"(local.tee $mv$t$s0("http_response_ops.wado/$template_segment$http_response_ops.wado/$tmpl$adb1edf8e8d0b122"($mv$t$s0, $mv$t$r0, $mv$t$s1, $mv$t$r1, 2 * self.index)).repr, $mv$t$s0.used);
-    };
 }
 
 fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_char_n$sroa[self.buf]"(self, c, n) {

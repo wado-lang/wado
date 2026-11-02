@@ -1,0 +1,382 @@
+#![generated(by = "package-gale/scripts/extract_antlr4_descriptors.wado")]
+// Do not edit by hand — re-run the generator to regenerate.
+//
+// Source category: ParserExec (ANTLR4 runtime-testsuite).
+// Triage data: package-gale/tests/antlr4-compat/status.toml
+
+use t_LabelAliasingAcrossLabeledAlternatives from "../../grammars/ParserExec/LabelAliasingAcrossLabeledAlternatives.g4"
+    with {
+        generator: {
+            module: "../../../../src/generator.wado",
+            output_dir: "../../../generated/antlr4_compat/ParserExec/LabelAliasingAcrossLabeledAlternatives",
+        },
+    };
+
+use t_Labels from "../../grammars/ParserExec/Labels.g4"
+    with {
+        generator: {
+            module: "../../../../src/generator.wado",
+            output_dir: "../../../generated/antlr4_compat/ParserExec/Labels",
+        },
+    };
+
+use t_ListLabelForClosureContext from "../../grammars/ParserExec/ListLabelForClosureContext.g4"
+    with {
+        generator: {
+            module: "../../../../src/generator.wado",
+            output_dir: "../../../generated/antlr4_compat/ParserExec/ListLabelForClosureContext",
+        },
+    };
+
+use t_ListLabelsOnRuleRefStartOfAlt from "../../grammars/ParserExec/ListLabelsOnRuleRefStartOfAlt.g4"
+    with {
+        generator: {
+            module: "../../../../src/generator.wado",
+            output_dir: "../../../generated/antlr4_compat/ParserExec/ListLabelsOnRuleRefStartOfAlt",
+        },
+    };
+
+use t_ListLabelsOnSet from "../../grammars/ParserExec/ListLabelsOnSet.g4"
+    with {
+        generator: {
+            module: "../../../../src/generator.wado",
+            output_dir: "../../../generated/antlr4_compat/ParserExec/ListLabelsOnSet",
+        },
+    };
+
+use t_MultipleEOFHandling from "../../grammars/ParserExec/MultipleEOFHandling.g4"
+    with {
+        generator: {
+            module: "../../../../src/generator.wado",
+            output_dir: "../../../generated/antlr4_compat/ParserExec/MultipleEOFHandling",
+        },
+    };
+
+use t_OpenDeviceStatement_Case1 from "../../grammars/ParserExec/OpenDeviceStatement_Case1.g4"
+    with {
+        generator: {
+            module: "../../../../src/generator.wado",
+            output_dir: "../../../generated/antlr4_compat/ParserExec/OpenDeviceStatement_Case1",
+        },
+    };
+
+use t_OpenDeviceStatement_Case2 from "../../grammars/ParserExec/OpenDeviceStatement_Case2.g4"
+    with {
+        generator: {
+            module: "../../../../src/generator.wado",
+            output_dir: "../../../generated/antlr4_compat/ParserExec/OpenDeviceStatement_Case2",
+        },
+    };
+
+use t_Optional_1 from "../../grammars/ParserExec/Optional_1.g4"
+    with {
+        generator: {
+            module: "../../../../src/generator.wado",
+            output_dir: "../../../generated/antlr4_compat/ParserExec/Optional_1",
+        },
+    };
+
+use t_OrderingPredicates from "../../grammars/ParserExec/OrderingPredicates.g4"
+    with {
+        generator: {
+            module: "../../../../src/generator.wado",
+            output_dir: "../../../generated/antlr4_compat/ParserExec/OrderingPredicates",
+        },
+    };
+
+// Source descriptor: ParserExec/LabelAliasingAcrossLabeledAlternatives (ANTLR4 runtime-testsuite).
+// Triage data: package-gale/tests/antlr4-compat/status.toml ([stage_a_*]).
+//
+// Stage A claim (b): the generated parser must accept the descriptor's
+// [input] without returning an error. No parse-tree shape comparison.
+test "stage_a_parse: ParserExec/LabelAliasingAcrossLabeledAlternatives" {
+    let input = "xy";
+    let result = t_LabelAliasingAcrossLabeledAlternatives::parse_start(&input);
+    if !result.ok() {
+        let d = &result.diagnostics[0];
+        panic(`parse failed: ${d.message} at ${d.span.start}..${d.span.end}`);
+    }
+}
+
+// Source descriptor: ParserExec/LabelAliasingAcrossLabeledAlternatives (ANTLR4 runtime-testsuite).
+// Triage data: package-gale/tests/antlr4-compat/status.toml ([stage_c_*]).
+//
+// Stage C claim: the generated parser's action-print output
+// (result.output, the p.emit buffer) equals the descriptor's [output].
+test "stage_c_output: ParserExec/LabelAliasingAcrossLabeledAlternatives" {
+    let input = "xy";
+    let expected = "x
+y
+";
+    let result = t_LabelAliasingAcrossLabeledAlternatives::parse_start(&input);
+    let actual = result.output;
+    assert actual == expected;
+}
+
+// Source descriptor: ParserExec/LabelAliasingAcrossLabeledAlternatives (ANTLR4 runtime-testsuite).
+// Expected tree: antlr-4.13.2-complete.jar on the action-body-stripped grammar.
+// Triage data: package-gale/tests/antlr4-compat/status.toml ([stage_b_oracle_*]).
+test "stage_b_oracle: ParserExec/LabelAliasingAcrossLabeledAlternatives" {
+    let input = "xy";
+    let expected = "(start (a (subrule x)) (a y))";
+    let result = t_LabelAliasingAcrossLabeledAlternatives::parse_start(&input);
+    let actual = t_LabelAliasingAcrossLabeledAlternatives::to_string_tree(&result);
+    assert actual == expected;
+}
+
+// Source descriptor: ParserExec/Labels (ANTLR4 runtime-testsuite).
+// Triage data: package-gale/tests/antlr4-compat/status.toml ([stage_a_*]).
+//
+// Stage A claim (b): the generated parser must accept the descriptor's
+// [input] without returning an error. No parse-tree shape comparison.
+test "stage_a_parse: ParserExec/Labels" {
+    let input = "abc 34;";
+    let result = t_Labels::parse_a(&input);
+    if !result.ok() {
+        let d = &result.diagnostics[0];
+        panic(`parse failed: ${d.message} at ${d.span.start}..${d.span.end}`);
+    }
+}
+
+// Source descriptor: ParserExec/ListLabelForClosureContext (ANTLR4 runtime-testsuite).
+// Triage data: package-gale/tests/antlr4-compat/status.toml ([stage_a_*]).
+//
+// Stage A claim (b): the generated parser must accept the descriptor's
+// [input] without returning an error. No parse-tree shape comparison.
+test "stage_a_parse: ParserExec/ListLabelForClosureContext" {
+    let input = "a";
+    let result = t_ListLabelForClosureContext::parse_expression(&input);
+    if !result.ok() {
+        let d = &result.diagnostics[0];
+        panic(`parse failed: ${d.message} at ${d.span.start}..${d.span.end}`);
+    }
+}
+
+// Source descriptor: ParserExec/ListLabelsOnRuleRefStartOfAlt (ANTLR4 runtime-testsuite).
+// Triage data: package-gale/tests/antlr4-compat/status.toml ([stage_a_*]).
+//
+// Stage A claim (b): the generated parser must accept the descriptor's
+// [input] without returning an error. No parse-tree shape comparison.
+test "stage_a_parse: ParserExec/ListLabelsOnRuleRefStartOfAlt" {
+    let input = "a and b";
+    let result = t_ListLabelsOnRuleRefStartOfAlt::parse_expression(&input);
+    if !result.ok() {
+        let d = &result.diagnostics[0];
+        panic(`parse failed: ${d.message} at ${d.span.start}..${d.span.end}`);
+    }
+}
+
+// Source descriptor: ParserExec/ListLabelsOnSet (ANTLR4 runtime-testsuite).
+// Triage data: package-gale/tests/antlr4-compat/status.toml ([stage_a_*]).
+//
+// Stage A claim (b): the generated parser must accept the descriptor's
+// [input] without returning an error. No parse-tree shape comparison.
+test "stage_a_parse: ParserExec/ListLabelsOnSet" {
+    let input = "abc 34;";
+    let result = t_ListLabelsOnSet::parse_a(&input);
+    if !result.ok() {
+        let d = &result.diagnostics[0];
+        panic(`parse failed: ${d.message} at ${d.span.start}..${d.span.end}`);
+    }
+}
+
+// Source descriptor: ParserExec/MultipleEOFHandling (ANTLR4 runtime-testsuite).
+// Triage data: package-gale/tests/antlr4-compat/status.toml ([stage_a_*]).
+//
+// Stage A claim (b): the generated parser must accept the descriptor's
+// [input] without returning an error. No parse-tree shape comparison.
+test "stage_a_parse: ParserExec/MultipleEOFHandling" {
+    let input = "x";
+    let result = t_MultipleEOFHandling::parse_prog(&input);
+    if !result.ok() {
+        let d = &result.diagnostics[0];
+        panic(`parse failed: ${d.message} at ${d.span.start}..${d.span.end}`);
+    }
+}
+
+// Source descriptor: ParserExec/OpenDeviceStatement_Case1 (ANTLR4 runtime-testsuite).
+// Triage data: package-gale/tests/antlr4-compat/status.toml ([stage_a_*]).
+//
+// Stage A claim (b): the generated parser must accept the descriptor's
+// [input] without returning an error. No parse-tree shape comparison.
+test "stage_a_parse: ParserExec/OpenDeviceStatement_Case1" {
+    let input = "OPEN DEVICE DEVICE";
+    let result = t_OpenDeviceStatement_Case1::parse_statement(&input);
+    if !result.ok() {
+        let d = &result.diagnostics[0];
+        panic(`parse failed: ${d.message} at ${d.span.start}..${d.span.end}`);
+    }
+}
+
+// Source descriptor: ParserExec/OpenDeviceStatement_Case1 (ANTLR4 runtime-testsuite).
+// Triage data: package-gale/tests/antlr4-compat/status.toml ([stage_c_*]).
+//
+// Stage C claim: the generated parser's action-print output
+// (result.output, the p.emit buffer) equals the descriptor's [output].
+test "stage_c_output: ParserExec/OpenDeviceStatement_Case1" {
+    let input = "OPEN DEVICE DEVICE";
+    let expected = "OPEN DEVICE DEVICE
+";
+    let result = t_OpenDeviceStatement_Case1::parse_statement(&input);
+    let actual = result.output;
+    assert actual == expected;
+}
+
+// Source descriptor: ParserExec/OpenDeviceStatement_Case1 (ANTLR4 runtime-testsuite).
+// Expected tree: antlr-4.13.2-complete.jar on the action-body-stripped grammar.
+// Triage data: package-gale/tests/antlr4-compat/status.toml ([stage_b_oracle_*]).
+test "stage_b_oracle: ParserExec/OpenDeviceStatement_Case1" {
+    let input = "OPEN DEVICE DEVICE";
+    let expected = "(statement OPEN DEVICE DEVICE)";
+    let result = t_OpenDeviceStatement_Case1::parse_statement(&input);
+    let actual = t_OpenDeviceStatement_Case1::to_string_tree(&result);
+    assert actual == expected;
+}
+
+// Source descriptor: ParserExec/OpenDeviceStatement_Case2 (ANTLR4 runtime-testsuite).
+// Triage data: package-gale/tests/antlr4-compat/status.toml ([stage_a_*]).
+//
+// Stage A claim (b): the generated parser must accept the descriptor's
+// [input] without returning an error. No parse-tree shape comparison.
+test "stage_a_parse: ParserExec/OpenDeviceStatement_Case2" {
+    let input = "OPEN DEVICE DEVICE";
+    let result = t_OpenDeviceStatement_Case2::parse_statement(&input);
+    if !result.ok() {
+        let d = &result.diagnostics[0];
+        panic(`parse failed: ${d.message} at ${d.span.start}..${d.span.end}`);
+    }
+}
+
+// Source descriptor: ParserExec/OpenDeviceStatement_Case2 (ANTLR4 runtime-testsuite).
+// Triage data: package-gale/tests/antlr4-compat/status.toml ([stage_c_*]).
+//
+// Stage C claim: the generated parser's action-print output
+// (result.output, the p.emit buffer) equals the descriptor's [output].
+test "stage_c_output: ParserExec/OpenDeviceStatement_Case2" {
+    let input = "OPEN DEVICE DEVICE";
+    let expected = "OPEN DEVICE DEVICE
+";
+    let result = t_OpenDeviceStatement_Case2::parse_statement(&input);
+    let actual = result.output;
+    assert actual == expected;
+}
+
+// Source descriptor: ParserExec/OpenDeviceStatement_Case3 (ANTLR4 runtime-testsuite).
+// Triage data: package-gale/tests/antlr4-compat/status.toml ([stage_a_*]).
+//
+// Stage A claim (b): the generated parser must accept the descriptor's
+// [input] without returning an error. No parse-tree shape comparison.
+test "stage_a_parse: ParserExec/OpenDeviceStatement_Case3" {
+    let input = "OPEN DEVICE DEVICE.";
+    let result = t_OpenDeviceStatement_Case2::parse_statement(&input);
+    if !result.ok() {
+        let d = &result.diagnostics[0];
+        panic(`parse failed: ${d.message} at ${d.span.start}..${d.span.end}`);
+    }
+}
+
+// Source descriptor: ParserExec/OpenDeviceStatement_Case3 (ANTLR4 runtime-testsuite).
+// Triage data: package-gale/tests/antlr4-compat/status.toml ([stage_c_*]).
+//
+// Stage C claim: the generated parser's action-print output
+// (result.output, the p.emit buffer) equals the descriptor's [output].
+test "stage_c_output: ParserExec/OpenDeviceStatement_Case3" {
+    let input = "OPEN DEVICE DEVICE.";
+    let expected = "OPEN DEVICE DEVICE
+";
+    let result = t_OpenDeviceStatement_Case2::parse_statement(&input);
+    let actual = result.output;
+    assert actual == expected;
+}
+
+// Source descriptor: ParserExec/OpenDeviceStatement_Case2 (ANTLR4 runtime-testsuite).
+// Expected tree: antlr-4.13.2-complete.jar on the action-body-stripped grammar.
+// Triage data: package-gale/tests/antlr4-compat/status.toml ([stage_b_oracle_*]).
+test "stage_b_oracle: ParserExec/OpenDeviceStatement_Case2" {
+    let input = "OPEN DEVICE DEVICE";
+    let expected = "(statement OPEN DEVICE DEVICE)";
+    let result = t_OpenDeviceStatement_Case2::parse_statement(&input);
+    let actual = t_OpenDeviceStatement_Case2::to_string_tree(&result);
+    assert actual == expected;
+}
+
+// Source descriptor: ParserExec/OpenDeviceStatement_Case3 (ANTLR4 runtime-testsuite).
+// Expected tree: antlr-4.13.2-complete.jar on the action-body-stripped grammar.
+// Triage data: package-gale/tests/antlr4-compat/status.toml ([stage_b_oracle_*]).
+test "stage_b_oracle: ParserExec/OpenDeviceStatement_Case3" {
+    let input = "OPEN DEVICE DEVICE.";
+    let expected = "(statement OPEN DEVICE DEVICE)";
+    let result = t_OpenDeviceStatement_Case2::parse_statement(&input);
+    let actual = t_OpenDeviceStatement_Case2::to_string_tree(&result);
+    assert actual == expected;
+}
+
+// Source descriptor: ParserExec/Optional_1 (ANTLR4 runtime-testsuite).
+// Triage data: package-gale/tests/antlr4-compat/status.toml ([stage_a_*]).
+//
+// Stage A claim (b): the generated parser must accept the descriptor's
+// [input] without returning an error. No parse-tree shape comparison.
+test "stage_a_parse: ParserExec/Optional_1" {
+    let input = "x";
+    let result = t_Optional_1::parse_stat(&input);
+    if !result.ok() {
+        let d = &result.diagnostics[0];
+        panic(`parse failed: ${d.message} at ${d.span.start}..${d.span.end}`);
+    }
+}
+
+// Source descriptor: ParserExec/Optional_2 (ANTLR4 runtime-testsuite).
+// Triage data: package-gale/tests/antlr4-compat/status.toml ([stage_a_*]).
+//
+// Stage A claim (b): the generated parser must accept the descriptor's
+// [input] without returning an error. No parse-tree shape comparison.
+test "stage_a_parse: ParserExec/Optional_2" {
+    let input = "if x";
+    let result = t_Optional_1::parse_stat(&input);
+    if !result.ok() {
+        let d = &result.diagnostics[0];
+        panic(`parse failed: ${d.message} at ${d.span.start}..${d.span.end}`);
+    }
+}
+
+// Source descriptor: ParserExec/Optional_3 (ANTLR4 runtime-testsuite).
+// Triage data: package-gale/tests/antlr4-compat/status.toml ([stage_a_*]).
+//
+// Stage A claim (b): the generated parser must accept the descriptor's
+// [input] without returning an error. No parse-tree shape comparison.
+test "stage_a_parse: ParserExec/Optional_3" {
+    let input = "if x else x";
+    let result = t_Optional_1::parse_stat(&input);
+    if !result.ok() {
+        let d = &result.diagnostics[0];
+        panic(`parse failed: ${d.message} at ${d.span.start}..${d.span.end}`);
+    }
+}
+
+// Source descriptor: ParserExec/Optional_4 (ANTLR4 runtime-testsuite).
+// Triage data: package-gale/tests/antlr4-compat/status.toml ([stage_a_*]).
+//
+// Stage A claim (b): the generated parser must accept the descriptor's
+// [input] without returning an error. No parse-tree shape comparison.
+test "stage_a_parse: ParserExec/Optional_4" {
+    let input = "if if x else x";
+    let result = t_Optional_1::parse_stat(&input);
+    if !result.ok() {
+        let d = &result.diagnostics[0];
+        panic(`parse failed: ${d.message} at ${d.span.start}..${d.span.end}`);
+    }
+}
+
+// Source descriptor: ParserExec/OrderingPredicates (ANTLR4 runtime-testsuite).
+// Triage data: package-gale/tests/antlr4-compat/status.toml ([stage_a_*]).
+//
+// Stage A claim (b): the generated parser must accept the descriptor's
+// [input] without returning an error. No parse-tree shape comparison.
+test "stage_a_parse: ParserExec/OrderingPredicates" {
+    let input = "POINT AT X";
+    let result = t_OrderingPredicates::parse_expr(&input);
+    if !result.ok() {
+        let d = &result.diagnostics[0];
+        panic(`parse failed: ${d.message} at ${d.span.start}..${d.span.end}`);
+    }
+}
