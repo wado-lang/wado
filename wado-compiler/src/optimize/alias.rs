@@ -426,7 +426,7 @@ impl<'a> CallImmutability<'a> {
                 let base = *base_type;
                 self.walk(base, stack)
             }
-            ResolvedType::Struct { .. } => {
+            _ if self.type_table.struct_parts(type_id).is_some() => {
                 !is_box_or_list(type_id, self.type_table)
                     && self
                         .struct_fields
@@ -434,9 +434,8 @@ impl<'a> CallImmutability<'a> {
                         // Unknown layout (not in the registry) — conservative.
                         .is_some_and(|fields| fields.iter().all(|&f| self.walk(f, stack)))
             }
-            // `&mut T`, `Box`/`List` (as `GenericInstance`), raw arrays,
-            // resources, variants, generics, type params, and
-            // unknowns may all carry shared mutable state — conservative.
+            // `&mut T`, raw arrays, resources, variants, generics, type params,
+            // and unknowns may all carry shared mutable state — conservative.
             _ => false,
         };
         stack.pop();

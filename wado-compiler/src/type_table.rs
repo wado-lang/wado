@@ -121,7 +121,7 @@ pub struct TypeTable {
     /// The `Box<T>` a slot holds a value in, for the types
     /// [`Self::boxes_slot`] names, keyed by the type.
     slot_boxes: IndexMap<TypeKey, TypeId>,
-    /// The first type interned for each newtype declaration: its base is part
+    /// The first type interned for each non-generic newtype declaration: its base is part
     /// of the intern key, so the declaration alone is no key into `intern_map`.
     newtype_decls: IndexMap<DefId, TypeId>,
     /// Each struct declaration's instances, for [`Self::monomorphized_struct_of`].
@@ -384,7 +384,7 @@ impl TypeTable {
 
     fn index_type(&mut self, id: TypeId, ty: &ResolvedType) {
         match ty {
-            ResolvedType::Newtype { def, .. } => {
+            ResolvedType::Newtype { def, type_args, .. } if type_args.is_empty() => {
                 self.newtype_decls.entry(*def).or_insert(id);
             }
             ResolvedType::Struct {
@@ -5168,19 +5168,17 @@ impl TypeTable {
     /// The monomorphized `Struct` an instantiation of `def` became, when the run
     /// made one: [`Self::make_monomorphized_struct_from_args`] interns it.
     pub fn monomorphized_struct_of(&self, def: DefId, type_args: &[TypeId]) -> Option<TypeId> {
-        self.monomorphized_structs
-            .get(&def)?
-            .iter()
-            .copied()
-            .find(|&id| {
-                let ResolvedType::Struct {
-                    type_args: held, ..
-                } = self.get(id)
-                else {
-                    unreachable!("only a struct instance is filed here");
-                };
-                self.instance_args(held) == self.instance_args(type_args)
-            })
+        let instances = self.monomorphized_structs.get(&def)?;
+        let wanted = self.instance_args(type_args);
+        instances.iter().copied().find(|&id| {
+            let ResolvedType::Struct {
+                type_args: held, ..
+            } = self.get(id)
+            else {
+                unreachable!("only a struct instance is filed here");
+            };
+            self.instance_args(held) == wanted
+        })
     }
 
     /// `ids` as struct instance arguments.

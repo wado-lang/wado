@@ -6,7 +6,7 @@
 
 use crate::defs::DefId;
 use crate::hashmap::IndexMap;
-use crate::nir::{StructInstance, struct_instance};
+use crate::nir::{StructDecls, StructInstance, struct_instance};
 use crate::nir_package::NirPackage;
 use crate::tir::{ResolvedType, TypeId};
 use crate::type_table::{TypeKey, TypeTable};
@@ -53,22 +53,19 @@ impl AggregateShapes {
     #[must_use]
     pub fn of(project: &NirPackage) -> Self {
         let type_table = project.type_table.borrow();
-        let mut structs = IndexMap::default();
-        for decl in &project.structs {
-            let Some(instance) = decl.instance(&type_table) else {
-                continue;
-            };
-            structs.insert(
-                instance,
-                decl.fields_in_order()
+        let structs = StructDecls::new(&project.structs, &type_table)
+            .fields()
+            .map(|(instance, fields)| {
+                let shapes = fields
                     .iter()
                     .map(|f| FieldShape {
                         name: f.name.clone(),
                         type_id: f.type_id,
                     })
-                    .collect(),
-            );
-        }
+                    .collect();
+                (instance.clone(), shapes)
+            })
+            .collect();
         let mut instances: IndexMap<VariantInstance, Vec<TypeId>> = IndexMap::default();
         for (_, ty) in type_table.all_types() {
             let (def, type_args) = match ty {

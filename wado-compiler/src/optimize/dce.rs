@@ -92,7 +92,7 @@ struct FunctionAnalysis {
 }
 
 /// Combined DCE analysis: which functions / globals / types are
-/// reachable from the project's entry points, plus name-keyed views
+/// reachable from the project's entry points, plus declaration views
 /// over the reachable type set that the downstream
 /// `remove_unreachable_*` retain predicates need. Computed once up
 /// front by [`analyze_dce`], then consumed by pure mutators.
@@ -1458,7 +1458,7 @@ fn variant_decls_kept_past_use(project: &NirPackage, type_table: &TypeTable) -> 
         .collect()
 }
 
-/// Populate `analysis.types` and the name-keyed type-index views. A type is
+/// Populate `analysis.types` and the declaration views over it. A type is
 /// reachable from any reachable function's signature, locals or expressions, or
 /// any reachable global's initializer, closed transitively over struct fields
 /// and variant payloads. Reads `analysis.functions` and `analysis.globals`, so
@@ -1564,7 +1564,7 @@ fn populate_type_reachability(
 
         let type_table = project.type_table.borrow();
 
-        // Rebuild the name-keyed indexes so the struct/variant checks
+        // Rebuild the declaration indexes so the struct/variant checks
         // below are O(1) hash probes instead of O(N) `iter().any()`
         // scans. Without this the loop is O(S × N) per iteration —
         // ~2M `type_table.get`s/iter on a 900-struct / 2200-type
@@ -1590,7 +1590,7 @@ fn populate_type_reachability(
         }
 
         // Same predicate as above but for variants: the base type, any
-        // `GenericInstance` of the variant's name, or a declaration kept past
+        // `GenericInstance` of the declaration, or a declaration kept past
         // its last use keeps payloads alive. The same predicate gates the
         // `project.variants` retain in `remove_unreachable_types`.
         for variant in &project.variants {

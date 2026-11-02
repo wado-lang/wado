@@ -371,14 +371,18 @@ fn expr_returns_match(body: &Body, expr: ExprId, expected: &ExpectedShape<'_>) -
         // ABI: its results are already on the stack in our result order.
         ExprKind::Call { func_id, .. } => {
             expected.tail_call_lowerable
-                && expected.tail_ok.get(func_id) == Some(&expected.return_type)
+                && expected.tail_ok.get(func_id).is_some_and(|&ret| {
+                    expected.type_table.same_type(ret, expected.return_type)
+                })
         }
         ExprKind::StructLiteral {
             struct_type,
             fields,
             ..
         } => match expected.struct_type {
-            Some(t) => *struct_type == t && fields.len() == expected.arity,
+            Some(t) => {
+                expected.type_table.same_type(*struct_type, t) && fields.len() == expected.arity
+            }
             None => false,
         },
         ExprKind::LabeledBlock { block: b, .. } => {

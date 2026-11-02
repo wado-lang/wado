@@ -485,18 +485,15 @@ fn by_value_structs(
     struct_fields: &StructFieldTypes,
     out: &mut IndexSet<TypeKey>,
 ) {
-    match type_table.get(ty) {
-        ResolvedType::Struct { .. } => {
-            if out.insert(type_table.type_key(ty))
-                && let Some(fields) = struct_fields.of_type(ty, type_table)
-            {
-                for &field in fields {
-                    by_value_structs(field, type_table, struct_fields, out);
-                }
+    if let Some(contents) = struct_contents(ty, type_table, struct_fields) {
+        if out.insert(type_table.type_key(ty)) {
+            for &held in contents {
+                by_value_structs(held, type_table, struct_fields, out);
             }
         }
-        // `List<T>` among them: a builtin aggregate the package lists no fields
-        // for, whose arguments may still sit in it by value.
+        return;
+    }
+    match type_table.get(ty) {
         ResolvedType::GenericInstance { def, .. } if type_table.is_resource_def(*def) => {}
         ResolvedType::GenericInstance { type_args, .. } => {
             if out.insert(type_table.type_key(ty)) {
@@ -510,6 +507,19 @@ fn by_value_structs(
         }
         _ => {}
     }
+}
+
+/// What a struct type holds by value, whichever spelling names it: its declared
+/// fields, or for one the package declares no fields for (`List<T>`, a builtin
+/// aggregate), its type arguments, which may still sit in it by value. `None`
+/// for anything but a struct.
+fn struct_contents<'a>(
+    ty: TypeId,
+    type_table: &'a TypeTable,
+    struct_fields: &'a StructFieldTypes,
+) -> Option<&'a [TypeId]> {
+    let (_, type_args) = type_table.struct_parts(ty)?;
+    Some(struct_fields.of_type(ty, type_table).unwrap_or(type_args))
 }
 
 /// Whether a parameter's *own* storage can be written through: the pointee of a
@@ -546,27 +556,24 @@ fn mut_reachable_contains(
     if !visited.insert((ty, writable)) {
         return false;
     }
-    let (inner, inner_writable) = match type_table.get(ty) {
-        ResolvedType::Struct { .. } => {
-            let writable_here = writable || type_table.is_mut_box(ty);
-            if writable_here && type_table.type_key(ty) == target {
-                return true;
-            }
-            let fields = struct_fields
-                .of_type(ty, type_table)
-                .expect("every struct type is declared");
-            let fields_writable = writable_here && !is_shared_box(ty, type_table);
-            return fields.iter().any(|&ft| {
-                mut_reachable_contains(
-                    ft,
-                    fields_writable,
-                    target,
-                    type_table,
-                    struct_fields,
-                    visited,
-                )
-            });
+    if let Some(contents) = struct_contents(ty, type_table, struct_fields) {
+        let writable_here = writable || type_table.is_mut_box(ty);
+        if writable_here && type_table.type_key(ty) == target {
+            return true;
         }
+        let contents_writable = writable_here && !is_shared_box(ty, type_table);
+        return contents.iter().any(|&held| {
+            mut_reachable_contains(
+                held,
+                contents_writable,
+                target,
+                type_table,
+                struct_fields,
+                visited,
+            )
+        });
+    }
+    let (inner, inner_writable) = match type_table.get(ty) {
         ResolvedType::MutRef(inner) => (*inner, true),
         ResolvedType::Ref(inner) => (*inner, false),
         ResolvedType::BuiltinArray(inner)

@@ -789,20 +789,23 @@ impl Interpreter<'_> {
         if let Some((_, referenced)) = referenced_place_operand(body, value) {
             return Some(referenced);
         }
-        let Some(index) = named_local(body, value) else {
-            let place = self.aliased_place_of(body, value)?;
-            return self
-                .frame
-                .place_fields
-                .contains_key(&place)
-                .then_some(value);
-        };
-        if self.frame.place_aliases.contains_key(&index) {
+        let index = named_local(body, value);
+        if index.is_some_and(|index| self.frame.place_aliases.contains_key(&index)) {
             return Some(value);
         }
+        // `place_of` drops a deref, so `*h.f` names the place field `h.f` does;
+        // only the reference itself rebinds.
         let type_id = body.exprs[value.as_expr()?].type_id;
-        self.type_table
-            .is_reference_shaped(type_id)
+        if !self.type_table.is_reference_shaped(type_id) {
+            return None;
+        }
+        if index.is_some() {
+            return Some(value);
+        }
+        let place = self.aliased_place_of(body, value)?;
+        self.frame
+            .place_fields
+            .contains_key(&place)
             .then_some(value)
     }
 

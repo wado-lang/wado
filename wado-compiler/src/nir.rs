@@ -1073,7 +1073,10 @@ impl<'a> StructDecls<'a> {
             };
             // Instances whose arguments differ only by a newtype or a row are
             // declared apart and are one type.
-            let first = *by_instance.entry(instance).or_insert(decl);
+            let Some(first) = by_instance.get(&instance) else {
+                by_instance.insert(instance, decl);
+                continue;
+            };
             let field_types = |s: &NirStruct| {
                 let ids: Vec<TypeId> = s.fields.iter().map(|f| f.type_id).collect();
                 type_table.instance_args(&ids)
@@ -1092,15 +1095,20 @@ impl<'a> StructDecls<'a> {
         self.0.get(&struct_instance(type_id, type_table)?).copied()
     }
 
+    /// Each instance with its declaration's fields, in field order.
+    pub fn fields(&self) -> impl Iterator<Item = (&StructInstance, &'a [NirField])> {
+        self.0
+            .iter()
+            .map(|(instance, decl)| (instance, decl.fields_in_order()))
+    }
+
     /// Each declaration's field types, for a holder that outlives the borrow.
     #[must_use]
     pub fn field_types(&self) -> StructFieldTypes {
         StructFieldTypes(
-            self.0
-                .iter()
-                .map(|(instance, decl)| {
-                    let types = decl.fields_in_order().iter().map(|f| f.type_id).collect();
-                    (instance.clone(), types)
+            self.fields()
+                .map(|(instance, fields)| {
+                    (instance.clone(), fields.iter().map(|f| f.type_id).collect())
                 })
                 .collect(),
         )
