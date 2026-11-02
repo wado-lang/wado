@@ -292,7 +292,7 @@ markers are worth to the whole pipeline.
 
 ## Profile-Guided Optimization
 
-See
+The rules are in [the specification](./spec-pgo.md), and the design in
 [WEP: Profile-Guided Optimization](./wep-2026-10-25-profile-guided-optimization.md).
 
 A package commits a profile, `pgo/default.pgo`, that `wado test --pgo` records

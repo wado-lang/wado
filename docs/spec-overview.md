@@ -102,6 +102,7 @@ Each chapter builds on the ones before it.
 21. [Compiler Attributes](./spec-attributes.md): the `#[...]` attributes.
 22. [Diagnostics](./spec-diagnostics.md): the warnings and remarks lints report on code the compiler accepts.
 23. [Testing](./spec-testing.md): `test` blocks, their outcomes and how `wado test` finds them.
+24. [Profile-Guided Optimization](./spec-pgo.md): recording how often code runs, and compiling by it.
 
 ## Design Philosophy
 

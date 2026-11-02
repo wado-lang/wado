@@ -4,7 +4,7 @@
 //! [WEP: Profile-Guided Optimization](../../docs/wep-2026-10-25-profile-guided-optimization.md).
 //!
 //! The format is the specification's,
-//! [Profiles](../../docs/spec-testing.md#profiles). A `module` line is a
+//! [The Profile Format](../../docs/spec-pgo.md#the-profile-format). A `module` line is a
 //! [`Coverage::files`] key, which `--pgo` makes the module's name.
 
 use std::collections::BTreeMap;

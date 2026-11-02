@@ -705,6 +705,9 @@ test {
 }
 ```
 
+A build applying a profile replaces the marker with what the profile measured,
+as [Markers](./spec-pgo.md#markers) states.
+
 ## Optimization Barrier
 
 `builtin::black_box(value)` returns `value` unchanged but never as a

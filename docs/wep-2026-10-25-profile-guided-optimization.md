@@ -124,7 +124,7 @@ call, the length load, the bounds check and the load on every run.
 
 The profile is a text file, so the repository holds no binary for it. It holds
 one record per line, so a merge conflicts only where the counts moved. Its
-format is in the [specification](./spec-testing.md#profiles). A file under
+format is in the [specification](./spec-pgo.md#the-profile-format). A file under
 `build/` would not reach CI or a release build, so their output would differ
 from the author's.
 
@@ -236,13 +236,13 @@ times the code around it did, under
 `--optimize-predictable-branch-threshold`, LLVM's name and default. It is cold
 when its count is cold against the summary, under LLVM's
 `--optimize-profile-summary-cutoff-hot` and `-cold`, or zero, as GCC holds.
-[Applying a Profile](./spec-testing.md#applying-a-profile) states both rules.
-For a path past a branch, or past a statement that can leave, that ratio is the
-branch's probability. A loop's test also runs once per pass through its body,
-so for a loop's body the ratio bounds the probability from above, and a body
-it calls unlikely is. A count on both summary lines is hot, since LLVM's inliner asks hot first. A
-share stays put when a workload runs twice, so a workload need not be large,
-only like real use. The thresholds are LLVM's for now; the benchmark machine
+[Rarity](./spec-pgo.md#rarity) states both rules. For a path past a branch, or
+past a statement that can leave, that ratio is the branch's probability. A
+loop's test also runs once per pass through its body, so for a loop's body the
+ratio bounds the probability from above, and a body it calls unlikely is. A
+count on both summary lines is hot, since LLVM's inliner asks hot first. A share
+stays put when a workload runs twice, so a workload need not be large, only like
+real use. The thresholds are LLVM's for now; the benchmark machine
 settles Wado's own.
 
 ### The profile marks each region by its answers
