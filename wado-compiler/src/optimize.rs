@@ -176,9 +176,10 @@ pub fn optimize(
         inline_growth,
         iterations: opt_iterations,
         specializations,
-        // The profile's summary reads these, ahead of reify.
+        // Applying the profile reads these, ahead of reify.
         profile_summary_cutoff_hot: _,
         profile_summary_cutoff_cold: _,
+        predictable_branch_threshold: _,
     } = opt;
     let specializations = specializations.unwrap_or(param_spec::MAX_TOTAL_SPECIALIZATIONS);
     let exec = Arc::new(Executor::new(parallelism));

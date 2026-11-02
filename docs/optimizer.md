@@ -276,7 +276,8 @@ before it, back to the last statement that can leave the block first.
 
 Every pass that reads a marker reads this one rule: the inliner's prices,
 `cold_outline`'s regions, the callees only cold code calls, the remarks, and the
-branch hints.
+branch hints. The hints read the markers that say a branch is unlikely; the
+other passes read the ones that say code is cold. `cold_path()` says both.
 
 ### Hints and Flags
 
@@ -295,14 +296,17 @@ See
 [WEP: Profile-Guided Optimization](./wep-2026-10-25-profile-guided-optimization.md).
 
 A package commits a profile, `pgo/default.pgo`, that `wado test --pgo` records
-from its `#[workload]` tests. A compile marks with `cold_path()` each
-outermost region the workloads never ran in a function they entered, so every
-pass that reads a marker treats it as it treats one the author wrote. A count
-beyond zero is read against the profile's hot and cold lines, which
-`--optimize-profile-summary-cutoff-hot` and `-cold` place: a `?`'s failure path
-loses its marker where its count is not cold. The test world reads no profile
-unless `-f pgo` asks. `-f no-pgo` ignores the profile, and `-f no-cold-paths`
-ignores every marker, so three builds of one program can be compared.
+from its `#[workload]` tests. A compile splits rarity in two, as LLVM does. A
+region is unlikely when its branch takes it rarely, against
+`--optimize-predictable-branch-threshold`, and cold when its count is cold
+against the profile's summary, whose lines `--optimize-profile-summary-cutoff-hot`
+and `-cold` place. An unlikely and cold region gets `cold_path()`. An unlikely
+one alone gets `unlikely_path()`, which only the branch hints read. A cold one
+alone gets `cold_code()`, which every other pass reads and the hints do not.
+The profile overrides the author's and the `?`'s markers in a region it
+measured. The test world reads no profile unless `-f pgo` asks. `-f no-pgo`
+ignores the profile, and `-f no-cold-paths` ignores every marker, so three
+builds of one program can be compared.
 
 Two questions stay open while profiles spread, and each optimizer change that
 touches cold paths answers them again:

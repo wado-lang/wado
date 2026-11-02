@@ -281,10 +281,11 @@ struct TestSpec {
     #[serde(default)]
     remarks: indexmap::IndexMap<String, Vec<TextMatch>>,
 
-    /// Every region the fixture's `profile` marks cold, as
-    /// `"file:line:col kind"`.
+    /// Every region the fixture's `profile` marks, as
+    /// `"file:line:col kind mark"`, the mark `unlikely cold`, `unlikely` or
+    /// `cold`.
     #[serde(default)]
-    cold_regions: Option<Vec<String>>,
+    marked_regions: Option<Vec<String>>,
 
     /// Lines the emitted component's WAT must carry. A CM import's shape —
     /// which names an instance type exports, which functions are aliased out of
@@ -967,7 +968,7 @@ fn run_with_allocator(
         warnings,
         errors,
         remarks,
-        cold_regions,
+        marked_regions,
     } = common::compile_fixture_on_worker(
         fixture_path.to_path_buf(),
         source.to_string(),
@@ -1093,12 +1094,12 @@ fn run_with_allocator(
     // Every check on the compiler's own output runs before the execution
     // dispatch: one placed after it is silently skipped by `compile_only`.
     assert_wir_expectations(wir_text.as_deref(), spec, opt_level, test_id);
-    if let Some(expected) = &spec.cold_regions {
+    if let Some(expected) = &spec.marked_regions {
         assert!(
             spec.compile.profile.is_some(),
-            "[{test_id}] `cold_regions` states what a `profile` marks"
+            "[{test_id}] `marked_regions` states what a `profile` marks"
         );
-        assert_eq!(&cold_regions, expected, "[{test_id}] cold regions");
+        assert_eq!(&marked_regions, expected, "[{test_id}] marked regions");
     }
 
     if spec.compile_only {

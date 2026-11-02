@@ -15,7 +15,10 @@ use std::cell::RefCell;
 
 use crate::ast::{BinaryOp, Visibility};
 use crate::module_source::ModuleSource;
-use crate::name::{COLD_PATH_INTRINSIC, FqTypeName, KNOWN_COLD_PATH_INTRINSIC, LocalMethodName};
+use crate::name::{
+    COLD_CODE_INTRINSIC, COLD_PATH_INTRINSIC, FqTypeName, KNOWN_COLD_PATH_INTRINSIC,
+    LocalMethodName, UNLIKELY_PATH_INTRINSIC,
+};
 use crate::tir;
 use crate::tir::{
     CallArg, FunctionKind, FunctionRef, InlineHint, LetStorage, MonomorphInfo, TemplateId,
@@ -90,16 +93,35 @@ fn marker_stmt(intrinsic: &str, span: Span) -> TirStmt {
     )
 }
 
+/// `builtin::unlikely_path();`, where a profile measured the branch unlikely
+/// but the path not cold.
+pub fn unlikely_path_stmt(span: Span) -> TirStmt {
+    marker_stmt(UNLIKELY_PATH_INTRINSIC, span)
+}
+
+/// `builtin::cold_code();`, where a profile measured the path cold but the
+/// branch not unlikely.
+pub fn cold_code_stmt(span: Span) -> TirStmt {
+    marker_stmt(COLD_CODE_INTRINSIC, span)
+}
+
 /// Whether `stmt` is a cold marker, whoever placed it.
 pub fn is_cold_marker_stmt(stmt: &TirStmt) -> bool {
     matches!(&stmt.kind, TirStmtKind::Expr(expr) if is_cold_marker_expr(expr))
 }
 
-/// Whether `expr` is a call to a cold marker, whoever placed it.
+/// Whether `expr` is a call to a cold marker, whoever placed it and whichever
+/// half of rarity it states.
 pub fn is_cold_marker_expr(expr: &TirExpr) -> bool {
     matches!(&expr.kind, TirExprKind::Call { func, .. }
-        if func.is_builtin_named(COLD_PATH_INTRINSIC)
-            || func.is_builtin_named(KNOWN_COLD_PATH_INTRINSIC))
+        if [
+            COLD_PATH_INTRINSIC,
+            KNOWN_COLD_PATH_INTRINSIC,
+            UNLIKELY_PATH_INTRINSIC,
+            COLD_CODE_INTRINSIC,
+        ]
+        .iter()
+        .any(|name| func.is_builtin_named(name)))
 }
 
 /// Create a call to an internal function (e.g., `internal::cm_lower_string`).

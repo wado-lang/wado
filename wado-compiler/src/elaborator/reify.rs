@@ -2744,6 +2744,11 @@ impl<'a> Reify<'a> {
                 self.reify_method_call(method_call, ctx, recorded_type)
             }
             ast::Expr::Binary(binary) => self.reify_binary(binary, ctx, recorded_type),
+            // The profile measured the author's `cold_path()` and marks its
+            // region by what it found.
+            ast::Expr::Call(call) if self.overridden(call.id) => {
+                TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, call.span)
+            }
             ast::Expr::Call(call) => self.reify_call(call, ctx, recorded_type),
             ast::Expr::Match(match_expr) => self.reify_match_expr(
                 match_expr,
@@ -5656,7 +5661,7 @@ impl<'a> Reify<'a> {
             let mut body = std::mem::replace(&mut exit.body, placeholder);
             // A failure is no trap, so its rarity is a guess, which the
             // profile overrides.
-            if !self.cold.is_some_and(|cold| cold.is_warm_try(qm.id)) {
+            if !self.overridden(qm.id) {
                 let TirExprKind::Block(block) = &mut body.kind else {
                     unreachable!("a `?`'s early return is a block");
                 };

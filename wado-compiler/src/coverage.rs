@@ -526,13 +526,23 @@ type Sites = Vec<(ProbeSite, AstId, u32)>;
 /// The regions each `for-of` body holds, by the loop's node.
 type ForOfBodies = Vec<(AstId, Range<u32>)>;
 
-/// A cold marker the source states, which a profile can contradict.
+/// A cold marker the source states, which a profile overrides.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Marker {
-    /// The author's `builtin::cold_path()`.
-    ColdPath,
+    /// The author's `builtin::cold_path()`, by the call's node.
+    ColdPath(AstId),
     /// The one reify puts on the failure path of the `?` node.
     Try(AstId),
+}
+
+impl Marker {
+    /// The node reify finds the marker at.
+    #[must_use]
+    pub(crate) fn node(self) -> AstId {
+        match self {
+            Self::ColdPath(id) | Self::Try(id) => id,
+        }
+    }
 }
 
 /// One module planned, and where its regions lie in the source.
@@ -1093,7 +1103,8 @@ impl AstVisitor<'_> for Planner<'_> {
             }
             Expr::Call(call) if is_builtin_call(call, "cold_path") => {
                 if let Some(region) = self.region {
-                    self.markers.push((Marker::ColdPath, call.span, region));
+                    self.markers
+                        .push((Marker::ColdPath(call.id), call.span, region));
                 }
             }
             _ => walk_expr(self, expr),

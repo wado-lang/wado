@@ -397,30 +397,45 @@ by default in every world but the test world: a test checks what a program
 computes, which a profile never changes. A build that finds no profile compiles
 without one, and under `-f pgo` says so at `--log-level info`.
 
-A compile applying a profile marks cold, as
-[`builtin::cold_path()`](./spec-control-flow.md#branch-hints) does, the start
-of each region whose count is zero and whose enclosing region in the same
-function ran. A function that never ran gets no marker: workloads are tests,
-so a build's own entry, and whatever only it reaches, never runs under them. A
-function the profile has no count for is compiled as without one. Where that
-is because its hash differs, the compile says so at `--log-level info`.
+A compile applying a profile judges each region of a function the workloads
+entered on two questions:
 
-A profile never removes an author's `cold_path()`. Where the profile ran one,
-the marker stays, and the compile names it and the count at
-`--log-level info`.
+- Is it unlikely? A region is unlikely when it is one side of a branch and ran
+  at most `100 - n` percent of the times the code around it ran, where `n` is
+  `--optimize-predictable-branch-threshold`, 99 by default. A function's body
+  is no side of a branch.
+- Is it cold? A region is cold when its count is cold against the whole
+  profile, as below, or zero.
 
-A compile reads each count against the profile as a whole. With every count
-sorted from the largest down, the hot line is the smallest count still inside
-the share of all runs that `--optimize-profile-summary-cutoff-hot` names, and
-the cold line the same for `--optimize-profile-summary-cutoff-cold`. Both are in
+The profile reads its counts against itself as a whole. With every count sorted
+from the largest down, the hot line is the smallest count still inside the
+share of all runs that `--optimize-profile-summary-cutoff-hot` names, and the
+cold line the same for `--optimize-profile-summary-cutoff-cold`. Both are in
 parts per million, 990000 and 999999 by default, and a share is rounded down to
-a whole run. A count at or above the hot
-line is hot, and any other at or below the cold line is cold.
+a whole run. A count at or above the hot line is hot, and any other at or below
+the cold line is cold.
 
-The compiler marks the failure path of a `?` cold as an author would. Where the
-profile's count for that path is not cold, the marker is dropped, and the
-compile names it and the count at `--log-level info`. Where it is cold, the
-marker stays, and the compile says nothing.
+The compile marks the start of each region by its answers. An unlikely and
+cold region gets the marker
+[`builtin::cold_path()`](./spec-control-flow.md#branch-hints) writes, which
+hints its branch and has the optimizer treat its code as rarely run. An
+unlikely region that is not cold gets the hint alone, and a cold region that is
+not unlikely gets the treatment alone. A region is marked cold only when all of
+the code under it is cold: a marker covers what follows it, so one over a hot
+loop would make the loop cold. A region under one that never ran is left to
+that region's marker.
+
+A function that never ran gets no marker: workloads are tests, so a build's own
+entry, and whatever only it reaches, never runs under them. A function the
+profile has no count for is compiled as without one. Where that is because its
+hash differs, the compile says so at `--log-level info`.
+
+The profile overrides the markers the source states: an author's
+`cold_path()`, and the one the compiler puts on the failure path of a `?`.
+Where the profile has a count for the region holding such a marker, the marker
+is dropped, and the region's own marks stand. Where the profile's answers are
+not both yes, the compile names the marker, the count, and what the region was
+found to be at `--log-level info`.
 
 Rationale: [WEP: Profile-Guided Optimization](./wep-2026-10-25-profile-guided-optimization.md).
 

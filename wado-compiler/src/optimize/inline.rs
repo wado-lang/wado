@@ -21,7 +21,7 @@ use std::cell::{Cell, RefCell};
 use std::sync::Mutex;
 
 use crate::hashmap::{IndexMap, IndexSet};
-use crate::name::{COLD_PATH_INTRINSIC, inline_block_label, inline_temp_name};
+use crate::name::{inline_block_label, inline_temp_name};
 use crate::nir::{FunctionRef, InlineHint, NirFunction, NirLocal, NirUnaryOp};
 use crate::nir_arena::{
     ArenaCallArg, ArenaStructField, ArenaStructPatternField, ArmData, BlockId, BlockNode, Body,
@@ -36,7 +36,7 @@ use crate::type_table::TypeTable;
 
 use cranelift_entity::EntityRef;
 
-use super::arena_query::{self, ColdRuns, stmt_diverges, unreached_through};
+use super::arena_query::{self, ColdRuns, Markers, Rarity, stmt_diverges, unreached_through};
 use super::body_memo::BodyMemo;
 use super::gate::{FunctionGate, GatedPass};
 use crate::compiler_trace;
@@ -1027,7 +1027,7 @@ fn revisit_moved_reads(
     }
 }
 
-fn scan_body(func: &NirFunction, cold_path: Option<FuncId>) -> BodyScan {
+fn scan_body(func: &NirFunction, markers: Markers) -> BodyScan {
     // A site's arguments are keyed by position and the callee's writes by
     // local index.
     assert!(
@@ -1041,7 +1041,7 @@ fn scan_body(func: &NirFunction, cold_path: Option<FuncId>) -> BodyScan {
     let Some(body) = &func.body else {
         return scan;
     };
-    let cold = ColdRuns::of(body, cold_path).exprs(body);
+    let cold = ColdRuns::of(body, markers, Rarity::Cold).exprs(body);
     let looped = looped_exprs(body);
     body.for_each_reachable_node(|node| match node {
         NodeRef::Stmt(st) => match &body.stmts[st].kind {
@@ -2149,7 +2149,7 @@ pub fn inline_functions(
     // borrow-safe), so a call site is recognized by its stamped id rather than the
     // call node's `FunctionRef`. Indexed by `func_id.index()` (== store position).
     let descriptors = descriptor_cache.descriptors(project);
-    let cold = project.builtin_func_id(COLD_PATH_INTRINSIC);
+    let cold = Markers::of(project);
     let InlineScans { bodies, read } = scans;
     let scans = bodies.refresh(project, gate.exec(), |f| scan_body(f, cold));
     let sites = argument_sites(scans, &live);
@@ -2262,9 +2262,10 @@ pub fn inline_functions(
     let functions = &project.functions;
     let cold_runs: Vec<ColdRuns> = exec.map_indices(functions.len(), |i| {
         let func = functions[i].borrow();
-        func.body
-            .as_ref()
-            .map_or_else(ColdRuns::default, |b| ColdRuns::of(b, cold))
+        func.body.as_ref().map_or_else(
+            || ColdRuns::none(cold, Rarity::Cold),
+            |b| ColdRuns::of(b, cold, Rarity::Cold),
+        )
     });
     let spliced: Vec<usize> = exec.map_indices(functions.len(), |i| {
         let func = functions[i].borrow();

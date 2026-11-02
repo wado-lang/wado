@@ -190,6 +190,7 @@ impl Opt {
         CompileKnobOpt::OptThreads,
         CompileKnobOpt::ProfileSummaryCutoffHot,
         CompileKnobOpt::ProfileSummaryCutoffCold,
+        CompileKnobOpt::PredictableBranchThreshold,
         CompileKnobOpt::LogLevel,
         CompileKnobOpt::NoValidate,
         CompileKnobOpt::NoCache,

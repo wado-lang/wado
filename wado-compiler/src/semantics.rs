@@ -232,10 +232,10 @@ impl Semantics {
         Some(render_plan(&planned.plan))
     }
 
-    /// Each region the profile marked cold, as `module:line:column kind`.
+    /// Each region the profile marked, as `module:line:column kind mark`.
     #[must_use]
-    pub fn cold_regions(&self) -> &[String] {
-        self.cold.as_ref().map_or(&[], ColdMap::regions)
+    pub fn marked_regions(&self) -> &[String] {
+        self.cold.as_ref().map_or(&[], ColdMap::marked)
     }
 
     /// True when every analysis phase ran to completion without bailing.
@@ -1933,7 +1933,7 @@ mod tests {
             &Logger::new(&host, LogLevel::default()),
             true,
             coverage,
-            profile.map(|profile| profile.applied(pgo::Cutoffs::default())),
+            profile.map(|profile| profile.applied(pgo::Thresholds::default())),
             &LivenessScope::Compilation,
         )
     }
@@ -2023,13 +2023,15 @@ mod tests {
         assert!(probes.0.iter().any(|&id| id < u64::from(seed_end)));
     }
 
-    /// The cold markers in `block`, by who placed them.
+    /// The cold markers in `block`, by who placed them and what they state.
     struct Markers(Vec<String>);
 
     impl TirRefVisitor for Markers {
         fn visit_expr(&mut self, expr: &TirExpr) {
             if let TirExprKind::Call { func, .. } = &expr.kind
-                && let Some(name @ ("cold_path" | "$known_cold_path")) = func.intrinsic()
+                && let Some(
+                    name @ ("cold_path" | "$known_cold_path" | "unlikely_path" | "cold_code"),
+                ) = func.intrinsic()
             {
                 self.0.push(name.to_string());
             }
@@ -2086,8 +2088,11 @@ mod tests {
         .expect("it parses");
         let sem = analyzed(source, None, Some(&profile));
         assert_eq!(
-            sem.cold_regions(),
-            ["entry.wado:1:47 else", "entry.wado:1:48 rest"]
+            sem.marked_regions(),
+            [
+                "entry.wado:1:47 else unlikely cold",
+                "entry.wado:1:48 rest unlikely cold"
+            ]
         );
         let markers = markers([&sem.tir_modules[&sem.entry_module_source]]);
         assert_eq!(markers["ran"], ["$known_cold_path", "$known_cold_path"]);
@@ -2095,10 +2100,10 @@ mod tests {
         assert_eq!(markers["run"], [] as [String; 0]);
     }
 
-    /// A `?` keeps its failure path's marker where the profile's count for it
-    /// is cold, and loses it where the count is not.
+    /// A profile replaces a `?`'s guess with what it measured: unlikely
+    /// against the branch's runs, cold against the summary.
     #[test]
-    fn a_profile_drops_the_marker_of_a_warm_try() {
+    fn a_profile_overrides_the_guess_of_a_try() {
         let source = "fn half(x: i32) -> Option<i32> { if x % 2 == 0 { return Option::Some(x / 2); } return null; }
              fn rarely(x: i32) -> Option<i32> { return Option::Some(half(x)? + 1); }
              fn often(x: i32) -> Option<i32> { return Option::Some(half(x)? + 2); }
@@ -2116,22 +2121,27 @@ mod tests {
                 .expect("planned")
                 .hash
         };
-        // Region 1 of each caller is its `?`'s failure path. The hot line is
-        // 1000000 and the cold line 50.
+        // Region 1 of each caller is its `?`'s failure path, which takes 1% of
+        // its runs or less in both. The hot line is 1000000 and the cold line
+        // 50.
         let profile = pgo::parse(&format!(
             "wado-pgo 1\nmodule entry.wado\n\
              fn {:016x} 1 rarely\n0 1000000\n1 50\n\
              fn {:016x} 2 often\n0 1000000\n1 1000\n\
-             fn {:016x} 3 half\n0 2000000\n1 1998950\n2 1050\n3 1050\n",
+             fn {:016x} 3 half\n0 2000000\n1 1998950\n2 1050\n3 1050\n\
+             fn {:016x} 4 run\n0 1\n",
             hash("rarely"),
             hash("often"),
             hash("half"),
+            hash("run"),
         ))
         .expect("it parses");
         let sem = analyzed(source, None, Some(&profile));
         let markers = markers([&sem.tir_modules[&sem.entry_module_source]]);
-        assert_eq!(markers["rarely"], ["cold_path"]);
-        assert_eq!(markers["often"], [] as [String; 0]);
+        assert_eq!(markers["rarely"], ["$known_cold_path"]);
+        assert_eq!(markers["often"], ["unlikely_path"]);
+        // Entered once, below the cold line, and no side of a branch.
+        assert_eq!(markers["run"], ["cold_code"]);
     }
 
     /// The snapshot a compile applying a profile to the stdlib seeds from has
@@ -2168,7 +2178,7 @@ mod tests {
         .expect("it parses");
 
         let plain = get_or_init_snapshot(None, None).expect("not building");
-        let applied = profile.applied(pgo::Cutoffs::default());
+        let applied = profile.applied(pgo::Thresholds::default());
         let marked = get_or_init_snapshot(None, Some(applied)).expect("not building");
         let count = |snap: &Semantics| {
             markers(snap.tir_modules.values())
@@ -2182,9 +2192,9 @@ mod tests {
         assert!(std::rc::Rc::ptr_eq(&marked, &again));
 
         let sem = analyzed("export fn run() {}", None, Some(&profile));
-        let region = &marked.cold_regions()[0];
+        let region = &marked.marked_regions()[0];
         assert!(region.starts_with(&format!("{}:", plan.path)), "{region}");
-        assert_eq!(sem.cold_regions(), marked.cold_regions());
+        assert_eq!(sem.marked_regions(), marked.marked_regions());
     }
 
     /// A cold marker says after reify who placed it: the author's and `?`'s

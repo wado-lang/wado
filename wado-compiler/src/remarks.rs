@@ -16,7 +16,6 @@ use cranelift_entity::EntityRef;
 use crate::call_args::CallArgs;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::{ModuleSource, ParseModules};
-use crate::name::COLD_PATH_INTRINSIC;
 use crate::nir::{FuncId, FunctionRef, NirFunction, NirUnaryOp};
 use crate::nir_arena::{ArenaCallArg, Body, ExprId, ExprKind, NodeRef, Operand, StmtKind};
 use crate::nir_package::{NirPackage, SpecializationCapHit};
@@ -24,7 +23,7 @@ use crate::niri::{
     build_callee_map, build_ctfe_builtin_map, is_ctfe_runnable, materializing_globals,
     region_queries,
 };
-use crate::optimize::arena_query::ColdRuns;
+use crate::optimize::arena_query::{ColdRuns, Markers, Rarity};
 use crate::optimize::is_constant_arg;
 use crate::parallel::Executor;
 use crate::tir::TypeId;
@@ -495,7 +494,7 @@ pub fn collect_const_region_remarks(package: &NirPackage, entry: &EntryCode) -> 
         .iter()
         .map(|f| !f.borrow().effects.is_empty())
         .collect();
-    let cold_path = package.builtin_func_id(COLD_PATH_INTRINSIC);
+    let markers = Markers::of(package);
     let type_table_ref = package.type_table.borrow();
     let type_table: &TypeTable = &type_table_ref;
 
@@ -505,7 +504,7 @@ pub fn collect_const_region_remarks(package: &NirPackage, entry: &EntryCode) -> 
             let span = body.exprs[e].span;
             Some((entry.module_of(span, &func.module_source)?.clone(), span))
         };
-        let cold = ColdRuns::of(body, cold_path).exprs(body);
+        let cold = ColdRuns::of(body, markers, Rarity::Cold).exprs(body);
         for region in region_queries(body, &callees, &ctfe_builtins, &materializing, type_table) {
             // Reading an outer local, or performing an effect, means no
             // constant to miss; writing one means an inner block of a template,
@@ -545,7 +544,7 @@ pub fn collect_const_region_remarks(package: &NirPackage, entry: &EntryCode) -> 
                 callee_body,
                 NodeRef::Block(callee_body.root()),
                 &names,
-                &ColdRuns::of(callee_body, cold_path).exprs(callee_body),
+                &ColdRuns::of(callee_body, markers, Rarity::Cold).exprs(callee_body),
             );
             sink.push(Remark {
                 message: format!("this call computes a constant at run time: {cause}"),

@@ -3,8 +3,8 @@
 
 use lexopt::Parser;
 use wado_compiler::LogLevel;
-use wado_compiler::pgo::Cutoff;
 use wado_compiler::param_resolution::ParamInputs;
+use wado_compiler::pgo::{Cutoff, Percent};
 
 use crate::args::{self, CliExit, OptSpec};
 use crate::process_host::ProcessGrant;
@@ -85,6 +85,7 @@ pub enum CompileKnobOpt {
     OptThreads,
     ProfileSummaryCutoffHot,
     ProfileSummaryCutoffCold,
+    PredictableBranchThreshold,
     LogLevel,
     Allocator,
     Feature,
@@ -146,6 +147,12 @@ impl CompileKnobOpt {
                 short: None,
                 value: Some("<ppm>"),
                 desc: "The share of all runs, in parts per million, whose smallest count\nis the profile's cold line (default: 999999)",
+            },
+            Self::PredictableBranchThreshold => OptSpec {
+                long: Some("optimize-predictable-branch-threshold"),
+                short: None,
+                value: Some("<pct>"),
+                desc: "The share of a branch's runs, in percent, one side must take for\nthe profile to call the other side unlikely (default: 99)",
             },
             Self::LogLevel => OptSpec {
                 long: Some("log-level"),
@@ -316,6 +323,16 @@ impl CompileKnobs {
                     "--optimize-profile-summary-cutoff-cold",
                     parser,
                 )?);
+            }
+            CompileKnobOpt::PredictableBranchThreshold => {
+                let opt = "--optimize-predictable-branch-threshold";
+                let percent = args::parse_u32_arg(opt, parser)?;
+                self.opt.predictable_branch_threshold =
+                    Some(Percent::new(percent).ok_or_else(|| {
+                        CliExit::error(format!(
+                            "{opt} is a share in percent, at most 100, got {percent}"
+                        ))
+                    })?);
             }
             CompileKnobOpt::LogLevel => self.log_level = args::parse_log_level_arg(parser)?,
             CompileKnobOpt::Allocator => self.allocator = Some(args::require_string(parser)?),

@@ -17,14 +17,14 @@ use super::context::{SplitParam, WirContext};
 use crate::canonical::CanonicalIntrinsic;
 use crate::compiler_item::CompilerItem;
 use crate::name::{
-    COLD_PATH_INTRINSIC, MangledName, StructName, closure_call_wrapper_name,
-    closure_inspect_wrapper_name, multi_value_split_local,
+    MangledName, StructName, closure_call_wrapper_name, closure_inspect_wrapper_name,
+    multi_value_split_local,
 };
 use crate::nir_arena::{
     ArenaStructField, BlockId, Body, ExprId, ExprKind, NodeRef, Operand, StmtId, StmtKind,
 };
 use crate::nir_value_graph::{ValueId, ValueKind};
-use crate::optimize::arena_query::ColdRuns;
+use crate::optimize::arena_query::{ColdRuns, Markers, Rarity};
 use crate::optimize::multi_value_return::{block_tail, block_tail_call};
 use crate::optimize::sroa_variant_return::settled_locals;
 use crate::token::Span;
@@ -818,7 +818,7 @@ fn apply_cold_path_hints_instr(instr: &mut WirInstr) {
 pub fn translate_function_bodies(ctx: &mut WirContext<'_>) {
     let pending: Vec<_> = std::mem::take(&mut ctx.pending_bodies);
     let ctx_has_multi_value_returns = !ctx.multi_value_return_funcs.is_empty();
-    let cold_marker = ctx.package.builtin_func_id(COLD_PATH_INTRINSIC);
+    let markers = Markers::of(ctx.package);
 
     for pending_body in &pending {
         let tir_func = pending_body.tir_func.borrow();
@@ -908,7 +908,7 @@ pub fn translate_function_bodies(ctx: &mut WirContext<'_>) {
                     force_fixed_string_repr: false,
                     discovered_local_types: IndexMap::default(),
                     cold_heads: {
-                        let runs = ColdRuns::of(body, cold_marker);
+                        let runs = ColdRuns::of(body, markers, Rarity::Unlikely);
                         runs.heads(body)
                             .filter(|&s| !runs.is_marker(body, s))
                             .collect()
