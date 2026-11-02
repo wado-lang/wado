@@ -3975,9 +3975,10 @@ fn "core:prelude/traits.wado/reflect_variant_inspect_proof.wado/Shape^core:prelu
         start_26 = f.used;
         f.used = new_used_25;
         builtin::array_copy<u8>(f.repr, start_26, global:core:prelude/traits.wado::$const_obj_169, 0, 6);
-        "core:prelude/traits.wado/core:prelude/traits.wado/inspect_variant_payload<f64>$sroa[payload.value]$spec0$sroa[f.buf]"(if @unlikely(self.discriminant != 0) {
+        if @unlikely(self.discriminant != 0) {
             unreachable;
-        }; ref.cast "reflect_variant_inspect_proof.wado//Shape::Circle"(self).payload_0, f);
+        }
+        "core:prelude/traits.wado/core:prelude/traits.wado/inspect_variant_payload<f64>$sroa[payload.value]$spec0$sroa[f.buf]"(ref.cast "reflect_variant_inspect_proof.wado//Shape::Circle"(self).payload_0, f);
     }
     if self.discriminant == 1 {
         if @unlikely(local.tee new_used_25(f.used + 5) > builtin::array_len(f.repr)) {

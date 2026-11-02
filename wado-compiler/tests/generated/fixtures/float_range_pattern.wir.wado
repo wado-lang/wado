@@ -1659,7 +1659,6 @@ fn "float_range_pattern.wado/$test_3_a_newtype__a_payload_and_a_reference_read_t
     let $v1_7: ref "core:prelude/types.wado//Option<f64>";
     let $v1_18: ref "core:prelude/types.wado//Box<f64>";
     let $v2_27: ref "core:prelude/types.wado//Box<core:prelude/types.wado/Option<f64>>";
-    let x_45: f64;
     let o_55: ref "core:prelude/types.wado//Option<f64>";
     if @unlikely(local.tee $v1_1((local.tee $v0_0(black_box(999.5)) >= 0) & ($v0_0 < 1000)) != 1) {
         cold_path;
@@ -1747,10 +1746,12 @@ nested(builtin::black_box(null)): "), used: 35 }, r1: struct.new "core:prelude/s
 nested(builtin::black_box(null)): "), used: 35 }, s2: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r2: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, $mv_arg_1.used);
         unreachable;
     }
-    if @unlikely(local.tee $v1_1((if (local.tee x_45(local.tee $v1_18(struct.new "core:prelude/types.wado//Box<f64>" { value: local.tee $v0_0(black_box(2.5)) }).value) >= 0) & (x_45 <= 0.5) -> i32 {
+    $v1_18 = struct.new "core:prelude/types.wado//Box<f64>" { value: local.tee $v0_0(black_box(2.5)) };
+    let $match_scrut_5: f64;
+    if @unlikely(local.tee $v1_1((if (local.tee $match_scrut_5($v1_18.value) >= 0) & ($match_scrut_5 <= 0.5) -> i32 {
         1;
     } else {
-        (x_45 >= 2) & (x_45 <= 2.5);
+        ($match_scrut_5 >= 2) & ($match_scrut_5 <= 2.5);
     })) != 1) {
         cold_path;
         "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<float_range_pattern.wado/$tmpl$31c395b1df675ed0,[f64,&f64,i32]>"(struct.new "float_range_pattern.wado//$tmpl$31c395b1df675ed0" { h0: $v0_0, h1: $v1_18, h2: $v1_1, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_3_a_newtype__a_payload_and_a_reference_read_through at float_range_pattern.wado:105
@@ -1764,10 +1765,10 @@ by_ref(&builtin::black_box(2.5)): "), used: 35 }, r2: struct.new "core:prelude/s
 by_ref(&builtin::black_box(2.5)): "), used: 35 }, s3: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r3: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, $mv_arg_1.used);
         unreachable;
     }
-    if @unlikely((local.tee $v1_1((if (local.tee x_45(local.tee $v1_18(struct.new "core:prelude/types.wado//Box<f64>" { value: local.tee $v0_0(black_box(1)) }).value) >= 0) & (x_45 <= 0.5) -> i32 {
+    if @unlikely((local.tee $v1_1((if (local.tee $match_scrut_5(local.tee $v1_18(struct.new "core:prelude/types.wado//Box<f64>" { value: local.tee $v0_0(black_box(1)) }).value) >= 0) & ($match_scrut_5 <= 0.5) -> i32 {
         1;
     } else {
-        (x_45 >= 2) & (x_45 <= 2.5);
+        ($match_scrut_5 >= 2) & ($match_scrut_5 <= 2.5);
     })) == 0) == 0) {
         cold_path;
         "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<float_range_pattern.wado/$tmpl$31c395b1df675ed0,[f64,&f64,i32]>"(struct.new "float_range_pattern.wado//$tmpl$31c395b1df675ed0" { h0: $v0_0, h1: $v1_18, h2: $v1_1, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_3_a_newtype__a_payload_and_a_reference_read_through at float_range_pattern.wado:106

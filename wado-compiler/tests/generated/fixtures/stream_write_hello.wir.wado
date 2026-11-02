@@ -595,7 +595,6 @@ fn "core:prelude/types.wado/settled_copy_at$sroa[return]"(handle) {
 fn "core:prelude/types.wado/settled_copy"(handle, packed) {
     let $load_1: ref "Array<core:prelude/types.wado/CopySettlement>";
     let self_9: ref "core:prelude//List<core:prelude/types.wado/CopySettlement>";
-    let v: ref "core:prelude/types.wado//CopySettlement";
     let status: i32;
     if packed != -1 {
         return packed;
@@ -603,11 +602,18 @@ fn "core:prelude/types.wado/settled_copy"(handle, packed) {
     let $mv$$match_8$1: i32;
     multivalue_bind [packed, $mv$$match_8$1] = "core:prelude/types.wado/settled_copy_at$sroa[return]"(handle);
     if packed == 1 {
-        return self_9 = global:core:prelude/types.wado::SETTLED_COPIES; handle = global:core:prelude/types.wado::SETTLED_COPIES.used; if @unlikely($mv$$match_8$1 >=u handle) {
+        self_9 = global:core:prelude/types.wado::SETTLED_COPIES;
+        handle = global:core:prelude/types.wado::SETTLED_COPIES.used;
+        if @unlikely($mv$$match_8$1 >=u handle) {
             cold_path;
             "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/types.wado/CopySettlement>::remove$contract_report0"($mv$$match_8$1, handle, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/types.wado:809"), used: 27 });
             unreachable;
-        }; v = struct.new "core:prelude/types.wado//CopySettlement" { handle: local.tee v(builtin::array_get_value<ref "core:prelude/types.wado//CopySettlement">(local.tee $load_1(self_9.repr), $mv$$match_8$1)).handle, packed: v.packed }; builtin::array_copy<ref "core:prelude/types.wado//CopySettlement">($load_1, $mv$$match_8$1, $load_1, $mv$$match_8$1 + 1, (local.tee handle(self_9.used) - 1) - $mv$$match_8$1); self_9.used = handle - 1; builtin::array_set<ref "core:prelude/types.wado//CopySettlement">($load_1, self_9.used, ref.null none); v.packed;
+        }
+        handle = builtin::array_get_value<ref "core:prelude/types.wado//CopySettlement">(local.tee $load_1(self_9.repr), $mv$$match_8$1).packed;
+        builtin::array_copy<ref "core:prelude/types.wado//CopySettlement">($load_1, $mv$$match_8$1, $load_1, $mv$$match_8$1 + 1, (local.tee packed(self_9.used) - 1) - $mv$$match_8$1);
+        self_9.used = packed - 1;
+        builtin::array_set<ref "core:prelude/types.wado//CopySettlement">($load_1, self_9.used, ref.null none);
+        return handle;
     } else {
     }
     packed = "wasi/waitable-set-new"();
@@ -1294,11 +1300,14 @@ fn "core:prelude/types.wado/core:prelude/types.wado/WriteCopy<u8>^core:prelude/t
                     let $mv$$local_7$1: i32;
                     multivalue_bind [$load_5, $mv$$local_7$1] = "core:prelude/types.wado/settled_copy_at$sroa[return]"($load_4.handle);
                     if $load_5 == 1 -> i32 {
-                        self_19 = global:core:prelude/types.wado::SETTLED_COPIES; $load_5 = global:core:prelude/types.wado::SETTLED_COPIES.used; if @unlikely($mv$$local_7$1 >=u $load_5) {
+                        self_19 = global:core:prelude/types.wado::SETTLED_COPIES;
+                        $load_5 = global:core:prelude/types.wado::SETTLED_COPIES.used;
+                        if @unlikely($mv$$local_7$1 >=u $load_5) {
                             cold_path;
                             "core:prelude/types.wado/core:prelude/types.wado/CopyBuffer::wait_on$cold0$dae[self]"($mv$$local_7$1, $load_5);
                             unreachable;
-                        }; builtin::array_get_value<ref "core:prelude/types.wado//CopySettlement">(self_19.repr, $mv$$local_7$1).packed;
+                        }
+                        builtin::array_get_value<ref "core:prelude/types.wado//CopySettlement">(self_19.repr, $mv$$local_7$1).packed;
                     } else {
                         break $inline_core_prelude_types_wado_CopyBuffer__wait_on_sroa_return__0: $load_5 = 0;
                     }

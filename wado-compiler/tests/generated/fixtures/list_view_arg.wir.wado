@@ -1610,8 +1610,9 @@ fn "list_view_arg.wado/$test_5_a_list_of_any_plain_element_converts"() {
         "list_view_arg.wado/$test_5_a_list_of_any_plain_element_converts$cold1"(distances, $v1_2);
         unreachable;
     }
-    $mv_len_2 = let $mv_owner_10: ref "core:prelude/types.wado//Option<&core:linear/LinearArray<f16>>"; multivalue_bind [used_13, $mv_len_2, $mv_owned_bytes_3, $mv_released_4, $mv_owner_10] = "core:linear/core:prelude/list.wado/List<f16>^core:linear/ListArg<T>::lowered"(halves); local.tee $temp_8(struct.new "core:linear//ListView<f16>" { ptr: used_13, len: $mv_len_2, owned_bytes: $mv_owned_bytes_3, released: $mv_released_4, owner: $mv_owner_10 }).len;
-    if ref.is_null($temp_8) == 0 {
+    let $mv_owner_10: ref "core:prelude/types.wado//Option<&core:linear/LinearArray<f16>>";
+    multivalue_bind [used_13, $mv_len_2, $mv_owned_bytes_3, $mv_released_4, $mv_owner_10] = "core:linear/core:prelude/list.wado/List<f16>^core:linear/ListArg<T>::lowered"(halves);
+    if ref.is_null(local.tee $temp_8(struct.new "core:linear//ListView<f16>" { ptr: used_13, len: $mv_len_2, owned_bytes: $mv_owned_bytes_3, released: $mv_released_4, owner: $mv_owner_10 })) == 0 {
         $temp_8.released.value = 1;
         if $mv_owned_bytes_3 > 0 {
             drop("mem/realloc"(used_13, $mv_owned_bytes_3, 2, 0));
@@ -1636,11 +1637,14 @@ fn "list_view_arg.wado/$test_6_a_generic_view_parameter_converts_at_an_element_t
     let owner: ref "core:prelude/types.wado//Option<&core:linear/LinearArray<u8>>";
     let released: ref "core:prelude/types.wado//Box<bool>";
     floats = struct.new "core:prelude//List<f32>" { repr: array.new_fixed<f32>(1_f32, 2_f32), used: 2 };
-    $v3 = $v3 = 2147483647 / 1; if @unlikely(3 > $v3) {
+    $v3 = 2147483647 / 1;
+    if @unlikely(3 > $v3) {
         cold_path;
         "list_view_arg.wado/$test_6_a_generic_view_parameter_converts_at_an_element_the_call_names$cold1$dae[$contract_arg_0]"(1, $v3);
         unreachable;
-    }; $stored_7 = "core:linear/core:linear/LinearArray<u8>::filled$unchecked$spec1$dae[len]$spec1$dae[value]"(); if ref.is_null($v0) {
+    }
+    $stored_7 = "core:linear/core:linear/LinearArray<u8>::filled$unchecked$spec1$dae[len]$spec1$dae[value]"();
+    if ref.is_null($v0) {
         $v0 = $stored_7;
     } else {
         if ref.is_null(local.tee $load_0($v0.block)) == 0 {
@@ -1650,18 +1654,22 @@ fn "list_view_arg.wado/$test_6_a_generic_view_parameter_converts_at_an_element_t
         $v0.block = $stored_7.block;
         $v0.len = $stored_7.len;
         $stored_7.block = ref.null none;
-    }; $v3 = $v0.block.ptr; len = $v0.len; owner = struct.new "core:prelude/types.wado//Option<&core:linear/LinearArray<u8>>::Some" { discriminant: 1, payload_0: $v0 }; released = struct.new "core:prelude/types.wado//Box<bool>" { value: 0 }; local.tee $temp_10(struct.new "core:linear//ListView<u8>" { ptr: $v3, len: len, owned_bytes: 0, released: released, owner: owner }).len;
-    $temp_10.released.value = 1;
+    }
+    $v3 = $v0.block.ptr;
+    len = $v0.len;
+    owner = struct.new "core:prelude/types.wado//Option<&core:linear/LinearArray<u8>>::Some" { discriminant: 1, payload_0: $v0 };
+    released = struct.new "core:prelude/types.wado//Box<bool>" { value: 0 };
+    local.tee $temp_10(struct.new "core:linear//ListView<u8>" { ptr: $v3, len: len, owned_bytes: 0, released: released, owner: owner }).released.value = 1;
     if ref.is_null($v0) == 0 {
         if ref.is_null(local.tee $load_0($v0.block)) == 0 {
             drop("mem/realloc"($load_0.ptr, $load_0.bytes, 16, 0));
         }
         $v0.block = ref.null none;
     }
-    if @unlikely($v3 != 3) {
+    if @unlikely(len != 3) {
         cold_path;
         let $mv_arg_1: ref "core:prelude/string.wado//String";
-        "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<list_view_arg.wado/$tmpl$da41b59840dea8aa,[core:prelude/string.wado/String,&core:linear/ListView<u8>,i32]>"(struct.new "list_view_arg.wado//$tmpl$da41b59840dea8aa" { h0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("<moved>"), used: 7 }, h1: ref.as_non_null($temp_10), h2: $v3, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_6_a_generic_view_parameter_converts_at_an_element_the_call_names at list_view_arg.wado:102
+        "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<list_view_arg.wado/$tmpl$da41b59840dea8aa,[core:prelude/string.wado/String,&core:linear/ListView<u8>,i32]>"(struct.new "list_view_arg.wado//$tmpl$da41b59840dea8aa" { h0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("<moved>"), used: 7 }, h1: ref.as_non_null($temp_10), h2: len, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_6_a_generic_view_parameter_converts_at_an_element_the_call_names at list_view_arg.wado:102
 condition: count::<u8>(&LinearArray::<u8>::filled(3, 0)) == 3
 LinearArray::<u8>::filled(3, 0): "), used: 212 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_6_a_generic_view_parameter_converts_at_an_element_the_call_names at list_view_arg.wado:102
 condition: count::<u8>(&LinearArray::<u8>::filled(3, 0)) == 3

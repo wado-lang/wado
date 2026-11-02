@@ -1113,11 +1113,13 @@ fn "mut_ref_write_back_variant_field.wado/$test_7_an_argument_before_the_place_i
     let i: i32;
     let $licm_repr_28: ref Array<u8>;
     "mut_ref_write_back_variant_field.wado/reads_a_local_before_the_place"(local.tee bs(struct.new "core:prelude//List<mut_ref_write_back_variant_field.wado/Bag>" { repr: array.new_fixed<ref "mut_ref_write_back_variant_field.wado//Bag">(struct.new "mut_ref_write_back_variant_field.wado//Bag" { item: ref.null none, tick: 0 }), used: 1 }));
-    if @unlikely((if ref.is_null(local.tee $local_8($v1_6 = bs.used; if @unlikely(0 >= $v1_6) {
+    $v1_6 = bs.used;
+    if @unlikely(0 >= $v1_6) {
         cold_path;
         "mut_ref_write_back_variant_field.wado/$test_7_an_argument_before_the_place_is_read_before_the_place_is$cold1$dae[$contract_arg_0]"($v1_6);
         unreachable;
-    }; builtin::array_get_value<ref "mut_ref_write_back_variant_field.wado//Bag">(bs.repr, 0).item)) == 0 -> bool {
+    }
+    if @unlikely((if ref.is_null(local.tee $local_8(builtin::array_get_value<ref "mut_ref_write_back_variant_field.wado//Bag">(bs.repr, 0).item)) == 0 -> bool {
         t = ref.as_non_null($local_8);
         $inline_core_prelude_array_wado_seq_eq_u8__4: block -> bool {
             if local.tee $v1_6(t.used) != 1 {
@@ -1244,11 +1246,13 @@ fn "mut_ref_write_back_variant_field.wado/$test_9_an_indirect_callee_held_in_a_l
     let i: i32;
     let $licm_repr_28: ref Array<u8>;
     "mut_ref_write_back_variant_field.wado/reads_the_callee_before_the_place"(local.tee bs(struct.new "core:prelude//List<mut_ref_write_back_variant_field.wado/Bag>" { repr: array.new_fixed<ref "mut_ref_write_back_variant_field.wado//Bag">(struct.new "mut_ref_write_back_variant_field.wado//Bag" { item: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97, 98), used: 2 }, tick: 0 }), used: 1 }));
-    if @unlikely((if ref.is_null(local.tee $local_8($v1_6 = bs.used; if @unlikely(0 >= $v1_6) {
+    $v1_6 = bs.used;
+    if @unlikely(0 >= $v1_6) {
         cold_path;
         "mut_ref_write_back_variant_field.wado/$test_9_an_indirect_callee_held_in_a_local_is_read_before_the_place$cold1$dae[$contract_arg_0]"($v1_6);
         unreachable;
-    }; builtin::array_get_value<ref "mut_ref_write_back_variant_field.wado//Bag">(bs.repr, 0).item)) == 0 -> bool {
+    }
+    if @unlikely((if ref.is_null(local.tee $local_8(builtin::array_get_value<ref "mut_ref_write_back_variant_field.wado//Bag">(bs.repr, 0).item)) == 0 -> bool {
         t = ref.as_non_null($local_8);
         $inline_core_prelude_array_wado_seq_eq_u8__4: block -> bool {
             if local.tee $v1_6(t.used) != 3 {

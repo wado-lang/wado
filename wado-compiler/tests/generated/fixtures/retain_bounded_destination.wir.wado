@@ -396,20 +396,23 @@ tag_count(&seen): "), used: 19 }, s2: struct.new "core:prelude/string.wado//Stri
     }
     builtin::array_set<ref "retain_bounded_destination.wado//Bag">(local.tee $load_8(kept.repr), used_27, filler);
     kept.used = used_27 + 1;
-    if @unlikely(local.tee $v0_8(used_27 = kept.used; if @unlikely(0 >= used_27) {
+    used_27 = kept.used;
+    if @unlikely(0 >= used_27) {
         cold_path;
         "retain_bounded_destination.wado/run$cold3$dae[$contract_arg_0]"(used_27);
         unreachable;
-    }; builtin::array_get_value<ref "retain_bounded_destination.wado//Bag">($load_8, 0).tags.used) != 2) {
+    }
+    if @unlikely(local.tee $v0_8(builtin::array_get_value<ref "retain_bounded_destination.wado//Bag">($load_8, 0).tags.used) != 2) {
         cold_path;
         "retain_bounded_destination.wado/run$cold2"($v0_8);
         unreachable;
     }
-    if @unlikely(local.tee used_27(if @unlikely(1 >= used_27) {
+    if @unlikely(1 >= used_27) {
         cold_path;
         "retain_bounded_destination.wado/run$cold1$dae[$contract_arg_1]"(used_27);
         unreachable;
-    }; builtin::array_get_value<ref "retain_bounded_destination.wado//Bag">($load_8, 1).tags.used) != 1) {
+    }
+    if @unlikely(local.tee used_27(builtin::array_get_value<ref "retain_bounded_destination.wado//Bag">($load_8, 1).tags.used) != 1) {
         cold_path;
         "retain_bounded_destination.wado/run$cold0"(used_27);
         unreachable;

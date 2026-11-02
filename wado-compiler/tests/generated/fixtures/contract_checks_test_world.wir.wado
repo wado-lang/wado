@@ -1483,11 +1483,14 @@ fn "contract_checks_test_world.wado/$test_trap_21_unchecked_list_index_by_refere
     let $v1_4: i32;
     builtin::array_set<ref "core:prelude/string.wado//String">(local.tee $load_0(local.tee list(struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: builtin::array_new<ref "core:prelude/string.wado//String">(16), used: 0 }).repr), 0, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97), used: 1 });
     list.used = 1;
-    drop($contract_arg_0 = black_box(1); $v1_4 = list.used; if @unlikely($contract_arg_0 >=u $v1_4) {
+    $contract_arg_0 = black_box(1);
+    $v1_4 = list.used;
+    if @unlikely($contract_arg_0 >=u $v1_4) {
         cold_path;
         "contract_checks_test_world.wado/$test_trap_21_unchecked_list_index_by_reference_past_the_length$cold0"($contract_arg_0, $v1_4);
         unreachable;
-    }; builtin::array_get_value<ref "core:prelude/string.wado//String">($load_0, $contract_arg_0).used);
+    }
+    drop(builtin::array_get_value<ref "core:prelude/string.wado//String">($load_0, $contract_arg_0).used);
 }
 
 fn "contract_checks_test_world.wado/$template_segment$contract_checks_test_world.wado/$tmpl$7a99cb65f6ad01c7"($mv$v$s0, $mv$v$r0, $mv$v$s1, $mv$v$r1, index) {

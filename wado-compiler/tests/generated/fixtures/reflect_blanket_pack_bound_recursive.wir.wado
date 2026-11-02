@@ -3004,9 +3004,10 @@ fn "core:prelude/primitive.wado/u32::fmt_decimal$sroa[self.value]"(self, f) {
 
 fn "reflect_blanket_pack_bound_recursive.wado/reflect_blanket_pack_bound_recursive.wado/Chain^reflect_blanket_pack_bound_recursive.wado/Depth::depth$sroa[self.value]"(self) {
     if @likely(ref.is_null(self) == 0) {
-        return "reflect_blanket_pack_bound_recursive.wado/reflect_blanket_pack_bound_recursive.wado/Node^reflect_blanket_pack_bound_recursive.wado/Depth::depth$sroa[self.next]"(if @unlikely(ref.is_null(self) != 0) {
+        if @unlikely(ref.is_null(self) != 0) {
             unreachable;
-        }; self.next);
+        }
+        return "reflect_blanket_pack_bound_recursive.wado/reflect_blanket_pack_bound_recursive.wado/Node^reflect_blanket_pack_bound_recursive.wado/Depth::depth$sroa[self.next]"(self.next);
     }
     if @likely(ref.is_null(self)) {
         if @unlikely(ref.is_null(self) != 1) {

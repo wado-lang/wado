@@ -275,11 +275,13 @@ fn "value_copy_live_ref_holder_keeps_copy.wado/element_kept_through_a_closure"()
         };
     };
     builtin::array_get_value<ref "value_copy_live_ref_holder_keeps_copy.wado//P">(array.new_fixed<ref "value_copy_live_ref_holder_keeps_copy.wado//P">(struct.new "value_copy_live_ref_holder_keeps_copy.wado//P" { a: 1, b: 1 }), 0).a = 9;
-    return $sroa_$iter_0_index_50 = kept.used; if @unlikely(0 >= $sroa_$iter_0_index_50) {
+    $sroa_$iter_0_index_50 = kept.used;
+    if @unlikely(0 >= $sroa_$iter_0_index_50) {
         cold_path;
         "value_copy_live_ref_holder_keeps_copy.wado/element_kept_through_a_closure$cold0$dae[$contract_arg_1]"($sroa_$iter_0_index_50);
         unreachable;
-    }; builtin::array_get_value<ref "value_copy_live_ref_holder_keeps_copy.wado//P">(kept.repr, 0).a;
+    }
+    return builtin::array_get_value<ref "value_copy_live_ref_holder_keeps_copy.wado//P">(kept.repr, 0).a;
 }
 
 fn "value_copy_live_ref_holder_keeps_copy.wado/run"() with Stdout {

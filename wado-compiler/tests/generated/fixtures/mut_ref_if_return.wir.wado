@@ -276,11 +276,13 @@ fn "mut_ref_if_return.wado/parse_item$sroa[return]"(p) {
     let $v1_9: i32;
     let $qm_e_20: ref "core:prelude/string.wado//String";
     let tok: ref "mut_ref_if_return.wado//Token";
-    if $v1_9 = local.tee $load_0(p.tokens).used; if @unlikely(local.tee $load_2(p.pos) >=u $v1_9) {
+    $v1_9 = local.tee $load_0(p.tokens).used;
+    if @unlikely(local.tee $load_2(p.pos) >=u $v1_9) {
         cold_path;
         "mut_ref_if_return.wado/mut_ref_if_return.wado/Parser::peek_kind$cold0$sroa[self.pos]"($load_2, $v1_9);
         unreachable;
-    }; builtin::array_get_value<ref "mut_ref_if_return.wado//Token">($load_0.repr, $load_2).kind == 1 {
+    }
+    if builtin::array_get_value<ref "mut_ref_if_return.wado//Token">($load_0.repr, $load_2).kind == 1 {
         let $mv$$vr_4$1: ref null "mut_ref_if_return.wado//Token";
         let $mv$$vr_4$2: ref null "core:prelude/string.wado//String";
         multivalue_bind [$v1_9, $mv$$vr_4$1, $mv$$vr_4$2] = "mut_ref_if_return.wado/mut_ref_if_return.wado/Parser::expect$sroa[return]$dae[kind]"(p);

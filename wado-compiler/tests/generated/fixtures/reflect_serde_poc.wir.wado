@@ -6410,11 +6410,12 @@ fn "reflect_serde_poc.wado/reflect_serde_poc.wado/Payload^reflect_serde_poc.wado
         if local.tee $load_0(local.tee entries(ref.cast "reflect_serde_poc.wado//Node::Obj"(n).payload_0).used) != 1 {
             return 1, ref.null none, struct.new "reflect_serde_poc.wado//WireError" { message: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("expected a single-case object"), used: 29 } };
         }
-        other_57 = if @unlikely(0 >= $load_0) {
+        if @unlikely(0 >= $load_0) {
             cold_path;
             "reflect_serde_poc.wado/reflect_serde_poc.wado/Payload^reflect_serde_poc.wado/FromWire::from_wire$cold6$dae[n,$contract_arg_0]"($load_0);
             unreachable;
-        }; builtin::array_get_value<ref "reflect_serde_poc.wado//Entry">(local.tee $load_1(entries.repr), 0).key;
+        }
+        other_57 = builtin::array_get_value<ref "reflect_serde_poc.wado//Entry">(local.tee $load_1(entries.repr), 0).key;
         if $inline_core_prelude_array_wado_seq_eq_u8__8: block -> bool {
             if 5 != other_57.used {
                 break $inline_core_prelude_array_wado_seq_eq_u8__8: 0;
@@ -6456,11 +6457,12 @@ fn "reflect_serde_poc.wado/reflect_serde_poc.wado/Payload^reflect_serde_poc.wado
             break $inline_core_prelude_array_wado_seq_eq_u8__8: 1;
         } {
             $load_0 = (if local.tee $load_0(local.tee $vr_52($inline_i32_reflect_serde_poc_wado_FromWire__from_wire_sroa_n_value_return__9: block -> ref "tuple//[i32, i32, core:prelude/types.wado/Option<reflect_serde_poc.wado/WireError>]" {
-                if ref.test "reflect_serde_poc.wado//Node::Int"(local.tee n(if @unlikely(0 >= $load_0) {
+                if @unlikely(0 >= $load_0) {
                     cold_path;
                     "reflect_serde_poc.wado/reflect_serde_poc.wado/Payload^reflect_serde_poc.wado/FromWire::from_wire$cold5$dae[n,$contract_arg_1]"($load_0);
                     unreachable;
-                }; builtin::array_get_value<ref "reflect_serde_poc.wado//Entry">($load_1, 0).value)) {
+                }
+                if ref.test "reflect_serde_poc.wado//Node::Int"(local.tee n(builtin::array_get_value<ref "reflect_serde_poc.wado//Entry">($load_1, 0).value)) {
                     break $inline_i32_reflect_serde_poc_wado_FromWire__from_wire_sroa_n_value_return__9: struct.new "tuple//[i32, i32, core:prelude/types.wado/Option<reflect_serde_poc.wado/WireError>]" { 0: 0, 1: ref.cast "reflect_serde_poc.wado//Node::Int"(n).payload_0, 2: ref.null none };
                 } else {
                     break $inline_i32_reflect_serde_poc_wado_FromWire__from_wire_sroa_n_value_return__9: struct.new "tuple//[i32, i32, core:prelude/types.wado/Option<reflect_serde_poc.wado/WireError>]" { 0: 1, 1: 0, 2: struct.new "reflect_serde_poc.wado//WireError" { message: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("expected an int"), used: 15 } } };
@@ -6520,11 +6522,12 @@ fn "reflect_serde_poc.wado/reflect_serde_poc.wado/Payload^reflect_serde_poc.wado
             break $inline_core_prelude_array_wado_seq_eq_u8__21: 1;
         } {
             other_57 = (if local.tee $load_0(local.tee $vr_53($inline_core_prelude_string_wado_String_reflect_serde_poc_wado_FromWire__from_wire_sroa_n_value_return__22: block -> ref "tuple//[i32, core:prelude/types.wado/Option<core:prelude/string.wado/String>, core:prelude/types.wado/Option<reflect_serde_poc.wado/WireError>]" {
-                if ref.test "reflect_serde_poc.wado//Node::Text"(local.tee n(if @unlikely(0 >= $load_0) {
+                if @unlikely(0 >= $load_0) {
                     cold_path;
                     "reflect_serde_poc.wado/reflect_serde_poc.wado/Payload^reflect_serde_poc.wado/FromWire::from_wire$cold3$dae[n,$contract_arg_3]"($load_0);
                     unreachable;
-                }; builtin::array_get_value<ref "reflect_serde_poc.wado//Entry">($load_1, 0).value)) {
+                }
+                if ref.test "reflect_serde_poc.wado//Node::Text"(local.tee n(builtin::array_get_value<ref "reflect_serde_poc.wado//Entry">($load_1, 0).value)) {
                     other_57 = ref.cast "reflect_serde_poc.wado//Node::Text"(n).payload_0;
                     break $inline_core_prelude_string_wado_String_reflect_serde_poc_wado_FromWire__from_wire_sroa_n_value_return__22: struct.new "tuple//[i32, core:prelude/types.wado/Option<core:prelude/string.wado/String>, core:prelude/types.wado/Option<reflect_serde_poc.wado/WireError>]" { 0: 0, 1: $load_0 = other_57.used; struct.new "core:prelude/string.wado//String" { repr: $licm_repr_172 = other_57.repr; let $array_clone_dst_2: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>($load_0)), 0, $licm_repr_172, 0, $load_0); $array_clone_dst_2, used: $load_0 }, 2: ref.null none };
                 } else {

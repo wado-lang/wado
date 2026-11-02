@@ -192,11 +192,13 @@ fn "list_literal_no_push.wado/run"() with Stdout {
     let tens: i32;
     let start_176: i32;
     used = builtin::array_len(local.tee elements(array.new_fixed<ref "list_literal_no_push.wado//Widget">(struct.new "list_literal_no_push.wado//Widget" { id: black_box(7) })));
-    used = used = local.tee widgets(black_box(struct.new "core:prelude//List<list_literal_no_push.wado/Widget>" { repr: elements, used: used })).used; if @unlikely(0 >= used) {
+    used = local.tee widgets(black_box(struct.new "core:prelude//List<list_literal_no_push.wado/Widget>" { repr: elements, used: used })).used;
+    if @unlikely(0 >= used) {
         cold_path;
         "list_literal_no_push.wado/run$cold0$dae[$contract_arg_0]"(used);
         unreachable;
-    }; builtin::array_get_value<ref "list_literal_no_push.wado//Widget">(widgets.repr, 0).id;
+    }
+    used = builtin::array_get_value<ref "list_literal_no_push.wado//Widget">(widgets.repr, 0).id;
     out_21 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
     $inline_core_prelude_string_wado_String__internal_push_view_26: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_26;

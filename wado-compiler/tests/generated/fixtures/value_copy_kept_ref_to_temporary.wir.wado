@@ -211,11 +211,13 @@ fn "value_copy_kept_ref_to_temporary.wado/run"() with Stdout {
     let $sroa_$pattern_temp_0_1_33: i32;
     sink = struct.new "core:prelude//List<&value_copy_kept_ref_to_temporary.wado/S>" { repr: array.new_fixed<ref "value_copy_kept_ref_to_temporary.wado//S">(), used: 0 };
     drop("value_copy_kept_ref_to_temporary.wado/proj"(struct.new "value_copy_kept_ref_to_temporary.wado//S" { v: 1 }, sink));
-    message_11 = "core:prelude/string.wado/core:prelude/string.wado/String::format<value_copy_kept_ref_to_temporary.wado/$tmpl$8db8629cb9c7db93,[i32,i32]>$spec0$spec0$sroa[t.h0]"($v1_5 = sink.used; if @unlikely(0 >= $v1_5) {
+    $v1_5 = sink.used;
+    if @unlikely(0 >= $v1_5) {
         cold_path;
         "value_copy_kept_ref_to_temporary.wado/run$cold0$dae[$contract_arg_0]"($v1_5);
         unreachable;
-    }; builtin::array_get_value<ref "value_copy_kept_ref_to_temporary.wado//S">(sink.repr, 0).v);
+    }
+    message_11 = "core:prelude/string.wado/core:prelude/string.wado/String::format<value_copy_kept_ref_to_temporary.wado/$tmpl$8db8629cb9c7db93,[i32,i32]>$spec0$spec0$sroa[t.h0]"(builtin::array_get_value<ref "value_copy_kept_ref_to_temporary.wado//S">(sink.repr, 0).v);
     $v1_5 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_33 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
     $v1_5 = "value_copy_kept_ref_to_temporary.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($v1_5);

@@ -2865,11 +2865,14 @@ fn "core:prelude/types.wado/core:prelude/types.wado/CopyBuffer::wait_on$sroa[ret
                         "core:prelude/types.wado/settled_copy_at$cold0$dae[handle]"($mv$self$packed, $v1_20);
                         unreachable;
                     }; builtin::array_get_value<ref "core:prelude/types.wado//CopySettlement">(self_23.repr, $mv$self$packed).handle == $mv$self$handle {
-                        break $fused_$inline_settled_copy_at_sroa_return__0: self_23 = global:core:prelude/types.wado::SETTLED_COPIES; $mv$self$handle = global:core:prelude/types.wado::SETTLED_COPIES.used; if @unlikely($mv$self$packed >= $mv$self$handle) {
+                        self_23 = global:core:prelude/types.wado::SETTLED_COPIES;
+                        $mv$self$handle = global:core:prelude/types.wado::SETTLED_COPIES.used;
+                        if @unlikely($mv$self$packed >= $mv$self$handle) {
                             cold_path;
                             "core:prelude/types.wado/core:prelude/types.wado/CopyBuffer::wait_on$cold0$dae[self]"($mv$self$packed, $mv$self$handle);
                             unreachable;
-                        }; builtin::array_get_value<ref "core:prelude/types.wado//CopySettlement">(self_23.repr, $mv$self$packed).packed;
+                        }
+                        break $fused_$inline_settled_copy_at_sroa_return__0: builtin::array_get_value<ref "core:prelude/types.wado//CopySettlement">(self_23.repr, $mv$self$packed).packed;
                     }
                     $mv$self$packed = $mv$self$packed + 1;
                     continue l313;
