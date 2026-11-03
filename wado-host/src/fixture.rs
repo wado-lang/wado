@@ -301,7 +301,7 @@ impl CompileInputs {
         CompilerOptions {
             codegen_flags: self.codegen_flags.clone(),
             params: self.param_inputs(),
-            coverage: self.coverage_scope(),
+            coverage: self.coverage.as_ref().map(|_| CoverageScope::default()),
             profile: self.profile(fixture_dir),
             lib_world: self.lib_world.clone(),
             opt: self.opt_overrides(),
@@ -319,12 +319,6 @@ impl CompileInputs {
             inline_threshold: self.optimize_inline_threshold,
             ..OptOverrides::default()
         }
-    }
-
-    /// The coverage the compile instruments for.
-    #[must_use]
-    pub fn coverage_scope(&self) -> Option<CoverageScope> {
-        self.coverage.as_ref().map(|_| CoverageScope::default())
     }
 
     /// The profile the compile applies, read from `fixture_dir`.

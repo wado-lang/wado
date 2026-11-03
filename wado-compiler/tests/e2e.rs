@@ -1042,7 +1042,7 @@ fn run_with_allocator(
     assert!(
         spec.compile.lib_world.is_none()
             || (target_world.is_none() && (spec.compile_only || spec.compile_error.is_some())),
-        "[{test_id}] a library has no entry point to run: set `compile_only`"
+        "[{test_id}] a library has no entry point to run: set `compile_only`, and no world key"
     );
     let options = spec.compile.apply(
         CompilerOptions {
