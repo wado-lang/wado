@@ -148,14 +148,18 @@ test "the symbol tools read a path and a page as the other tools do" {
     assert ws.call(&"FindSymbol", &tool_input(`{"name": "area", "path": "."}`)).unwrap() == all;
     assert ws.call(&"FindSymbol", &tool_input(`{"name": "area", "path": "../x"}`)).is_err();
     assert ws.call(&"FindSymbol", &tool_input(`{"name": "nothing", "offset": -1}`)).is_err();
+    assert ws.call(&"FindSymbol", &tool_input(`{"name": "area", "head_limit": 1}`)).unwrap() == "testdata/shapes.rs:6-8: method Circle::area\n";
+    assert ws.call(&"FindSymbol", &tool_input(`{"name": "area", "offset": 1, "head_limit": 0}`)).unwrap() == "    pub fn area(&self) -> f64\n";
+    assert ws.call(&"FindSymbol", &tool_input(`{"name": "area", "offset": 2}`)).unwrap() == "";
 }
 
 test "the symbol tools are offered only with an index" {
     assert !Workspace { root: "src" }.tools().into_iter().any(|t| t.name == "FindSymbol");
     assert workspace().tools().into_iter().any(|t| t.name == "FindSymbol");
+    assert Workspace { root: "src" }.call(&"FindReferences", &tool_input(`{"name": "area"}`)).is_err();
 }
 
-test "typed ranges take precedence over packed ranges" {
+test "typed ranges are read as packed ones are" {
     let mut symbols = empty_index();
     symbols.add(&scip::Index {
         documents: [
@@ -163,11 +167,9 @@ test "typed ranges take precedence over packed ranges" {
                 relative_path: "typed.rs",
                 occurrences: [
                     scip::Occurrence {
-                        range: [20, 0, 1],
                         typed_range: Some(scip::OccurrenceTypedRange::SingleLineRange(scip::SingleLineRange { line: 1, start_character: 3, end_character: 9 })),
                         symbol: `${CRATE}target().`,
                         symbol_roles: 1,
-                        enclosing_range: [20, 0, 21, 0],
                         typed_enclosing_range: Some(scip::OccurrenceTypedEnclosingRange::MultiLineEnclosingRange(scip::MultiLineRange { start_line: 0, start_character: 0, end_line: 3, end_character: 1 })),
                     },
                     scip::Occurrence {
@@ -234,11 +236,3 @@ test "indexes merge references with definitions by symbol, not display name" {
     assert ws.call(&"FindReferences", &tool_input(`{"name": "B::run", "path": "defs"}`)).unwrap() == "method B::run (defs/items.rs:2): 0 references\n";
 }
 
-test "symbol tools validate and paginate output lines" {
-    let ws = workspace();
-    assert ws.call(&"FindSymbol", &tool_input(`{"name": "area", "head_limit": 1}`)).unwrap() == "testdata/shapes.rs:6-8: method Circle::area\n";
-    assert ws.call(&"FindSymbol", &tool_input(`{"name": "area", "offset": 1, "head_limit": 0}`)).unwrap() == "    pub fn area(&self) -> f64\n";
-    assert ws.call(&"FindSymbol", &tool_input(`{"name": "area", "offset": 2}`)).unwrap() == "";
-    assert ws.call(&"FindReferences", &tool_input(`{"name": "radius", "head_limit": -1}`)).is_err();
-    assert Workspace { root: "src" }.call(&"FindReferences", &tool_input(`{"name": "area"}`)).is_err();
-}

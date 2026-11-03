@@ -186,6 +186,19 @@ mod tests {
     }
 
     #[test]
+    fn member_references_from_its_declaration_include_it() {
+        futures::executor::block_on(async {
+            let refs = refs_at(MEMBERS, 0, 11, true).await;
+            assert_eq!(
+                ranges(&refs),
+                vec![(0, 11, 0, 12), (2, 39, 2, 40), (5, 23, 5, 24)]
+            );
+            let refs = refs_at(MEMBERS, 2, 8, true).await;
+            assert_eq!(ranges(&refs), vec![(2, 7, 2, 10), (5, 13, 5, 16)]);
+        });
+    }
+
+    #[test]
     fn no_match_in_a_body_off_any_name() {
         futures::executor::block_on(async {
             // cursor on the whitespace after `{` in `get`'s body
