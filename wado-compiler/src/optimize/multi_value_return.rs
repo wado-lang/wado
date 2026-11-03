@@ -60,13 +60,27 @@ pub(crate) fn block_tail(body: &Body, op: Operand, prefix: &mut Vec<StmtId>) -> 
     block_tail(body, *inner, prefix)
 }
 
-/// The calls a labeled block that `break`s to itself takes its value from:
-/// each `break` to it carries one, and so does a tail it falls off with. `None`
-/// unless every way out that yields the value is a direct call, so binding each
+/// A labeled block whose value a `let` binds split: every way out that yields
+/// the value is a direct call to a multi-value function, so binding each
 /// call's results binds the block's. This is what the inliner leaves of a
 /// callee that returned another call's aggregate.
-/// `wir_build::translate::try_emit_multi_value_let` shares this recogniser.
-pub(crate) fn block_exit_calls(body: &Body, op: Operand) -> Option<(BlockId, String, Vec<ExprId>)> {
+pub(crate) struct SplitExits {
+    pub(crate) block: BlockId,
+    pub(crate) label: String,
+    /// Each `break` to the block carries one; so does a tail it falls off with.
+    pub(crate) calls: Vec<(FuncId, ExprId)>,
+}
+
+/// [`SplitExits`] of `op`, where `results` answers each callee's result
+/// fields, `None` for one that does not return multi-value; every exit must
+/// answer the same. The candidate walk and
+/// `wir_build::translate::try_emit_multi_value_let` share this, so neither
+/// side can split what the other refuses.
+pub(crate) fn split_exits<T: PartialEq>(
+    body: &Body,
+    op: Operand,
+    results: impl Fn(FuncId) -> Option<T>,
+) -> Option<SplitExits> {
     let e = op.as_expr()?;
     let ExprKind::LabeledBlock { label, block, .. } = &body.exprs[e].kind else {
         return None;
@@ -79,12 +93,21 @@ pub(crate) fn block_exit_calls(body: &Body, op: Operand) -> Option<(BlockId, Str
     }
     let calls = exits
         .into_iter()
-        .map(|v| {
-            let call = v.as_expr()?;
-            matches!(body.exprs[call].kind, ExprKind::Call { .. }).then_some(call)
+        .map(|v| match &body.exprs[v.as_expr()?].kind {
+            ExprKind::Call { func_id, .. } => Some((*func_id, v.as_expr()?)),
+            _ => None,
         })
         .collect::<Option<Vec<_>>>()?;
-    (!calls.is_empty()).then(|| (*block, label.clone(), calls))
+    let (&(first, _), rest) = calls.split_first()?;
+    let shared = results(first)?;
+    if !rest.iter().all(|&(f, _)| results(f).is_some_and(|r| r == shared)) {
+        return None;
+    }
+    Some(SplitExits {
+        block: *block,
+        label: label.clone(),
+        calls,
+    })
 }
 
 /// Walk the argument expressions of a (Method)Call so tracked-local escapes in
@@ -94,7 +117,7 @@ fn walk_call_args_for_uses(
     expr: ExprId,
     cx: &UseCx<'_>,
     invalid: &mut IndexSet<usize>,
-    tracked: &IndexMap<u32, usize>,
+    tracked: &Tracked,
 ) {
     let args: Vec<ExprId> = match &body.exprs[expr].kind {
         ExprKind::Call { args, .. } => args.iter().filter_map(|a| a.expr.as_expr()).collect(),
@@ -517,7 +540,7 @@ fn validate_uses_in_block(
     invalid: &mut IndexSet<usize>,
     yields_value: bool,
 ) {
-    let mut tracked: IndexMap<u32, usize> = IndexMap::default();
+    let mut tracked = Tracked::default();
     let settled = settled_locals(body);
     let cx = UseCx {
         candidate_ids,
@@ -533,6 +556,11 @@ fn validate_uses_in_block(
         validate_stmt(body, stmt, &cx, invalid, &mut tracked, discarded);
     }
 }
+
+/// Per local bound split, the candidates whose results it holds: one for a
+/// call, every exit's for a block. A whole use refutes them all, since the
+/// local splits only while each of them takes the ABI.
+type Tracked = IndexMap<u32, Vec<usize>>;
 
 /// Per-body context for the call-site walk.
 #[derive(Clone, Copy)]
@@ -564,7 +592,7 @@ fn validate_stmt(
     stmt: StmtId,
     cx: &UseCx<'_>,
     invalid: &mut IndexSet<usize>,
-    tracked: &mut IndexMap<u32, usize>,
+    tracked: &mut Tracked,
     discarded: bool,
 ) {
     match &body.stmts[stmt].kind {
@@ -589,22 +617,26 @@ fn validate_stmt(
                 for &s in &prefix {
                     validate_stmt(body, s, cx, invalid, tracked, true);
                 }
-                tracked.insert(local_index, candidate_idx);
+                tracked.insert(local_index, vec![candidate_idx]);
                 walk_call_args_for_uses(body, call, cx, invalid, tracked);
                 return;
             }
             // Each exit call is walked as a call, its arguments only, so the
-            // block is ordinary code; what the local splits into is the
-            // results every exit shares.
-            let exit_candidate = cx
+            // block is ordinary code.
+            let exits = cx
                 .settled
                 .contains(&local_index)
-                .then(|| block_exit_calls(body, value))
-                .flatten()
-                .and_then(|(_, _, calls)| shared_candidate(body, &calls, cx));
+                .then(|| {
+                    split_exits(body, value, |f| {
+                        let idx = cx.candidate_ids.get(&f)?;
+                        Some(&cx.candidates[idx].field_names)
+                    })
+                })
+                .flatten();
             walk_expr_for_uses_operand(body, value, cx, invalid, tracked);
-            if let Some(candidate_idx) = exit_candidate {
-                tracked.insert(local_index, candidate_idx);
+            if let Some(exits) = exits {
+                let held = exits.calls.iter().map(|(f, _)| cx.candidate_ids[f]).collect();
+                tracked.insert(local_index, held);
             }
         }
         StmtKind::Expr(e) => {
@@ -697,19 +729,6 @@ fn validate_stmt(
     }
 }
 
-/// The candidate whose results `calls` all leave: every callee a candidate,
-/// with one field list among them.
-fn shared_candidate(body: &Body, calls: &[ExprId], cx: &UseCx<'_>) -> Option<usize> {
-    let mut idxs = calls.iter().map(|&call| match &body.exprs[call].kind {
-        ExprKind::Call { func_id, .. } => cx.candidate_ids.get(func_id).copied(),
-        _ => unreachable!("an exit is a call"),
-    });
-    let first = idxs.next()??;
-    let fields = &cx.candidates[&first].field_names;
-    idxs.all(|idx| idx.is_some_and(|idx| cx.candidates[&idx].field_names == *fields))
-        .then_some(first)
-}
-
 /// Walk a `return`ed value, sparing a pass-through call in every tail position
 /// [`expr_returns_match`] accepts — block, `If` branch, `Match` arm, `Switch`
 /// arm — and recursively, since those nest. The two halves must agree: a
@@ -721,7 +740,7 @@ fn validate_tail_return(
     ours: TypeId,
     cx: &UseCx<'_>,
     invalid: &mut IndexSet<usize>,
-    tracked: &mut IndexMap<u32, usize>,
+    tracked: &mut Tracked,
 ) {
     let Some(e) = op.as_expr() else {
         return;
@@ -784,7 +803,7 @@ fn validate_tail_block(
     ours: TypeId,
     cx: &UseCx<'_>,
     invalid: &mut IndexSet<usize>,
-    tracked: &mut IndexMap<u32, usize>,
+    tracked: &mut Tracked,
 ) {
     let stmts = body.blocks[block].stmts.clone();
     let Some((&last, lead)) = stmts.split_last() else {
@@ -807,7 +826,7 @@ fn walk_expr_for_uses_operand(
     op: Operand,
     cx: &UseCx<'_>,
     invalid: &mut IndexSet<usize>,
-    tracked: &IndexMap<u32, usize>,
+    tracked: &Tracked,
 ) {
     if let Some(e) = op.as_expr() {
         walk_expr_for_uses(body, e, cx, invalid, tracked);
@@ -819,7 +838,7 @@ fn walk_expr_for_uses(
     expr: ExprId,
     cx: &UseCx<'_>,
     invalid: &mut IndexSet<usize>,
-    tracked: &IndexMap<u32, usize>,
+    tracked: &Tracked,
 ) {
     match &body.exprs[expr].kind {
         ExprKind::FieldAccess {
@@ -831,7 +850,7 @@ fn walk_expr_for_uses(
             // A promoted `Operand::Value` source falls through to the operand walk.
             if let Some(source_e) = source.as_expr()
                 && let ExprKind::Local { index, .. } = &body.exprs[source_e].kind
-                && let Some(&candidate_idx) = tracked.get(index)
+                && let Some(&candidate_idx) = tracked.get(index).and_then(|held| held.first())
                 && let Some(info) = cx.candidates.get(&candidate_idx)
                 && info.field_name_set.contains(field_name)
             {
@@ -842,8 +861,8 @@ fn walk_expr_for_uses(
         // A struct rebuilt from the split locals is a copy, so a mutation
         // through it would not reach the next read.
         ExprKind::Local { index, .. } => {
-            if let Some(&candidate_idx) = tracked.get(index) {
-                invalid.insert(candidate_idx);
+            if let Some(held) = tracked.get(index) {
+                invalid.extend(held.iter().copied());
             }
         }
         ExprKind::Call { func_id, args, .. } => {

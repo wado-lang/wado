@@ -25,7 +25,7 @@ use crate::nir_arena::{
 };
 use crate::nir_value_graph::{ValueId, ValueKind};
 use crate::optimize::arena_query::{MarkerBuiltins, RareRuns};
-use crate::optimize::multi_value_return::{block_exit_calls, block_tail, block_tail_call};
+use crate::optimize::multi_value_return::{block_tail, block_tail_call, split_exits};
 use crate::optimize::sroa_variant_return::settled_locals;
 use crate::rarity::{Mark, Rarity};
 use crate::token::Span;
@@ -907,7 +907,6 @@ pub fn translate_function_bodies(ctx: &mut WirContext<'_>) {
                         IndexSet::default()
                     },
                     multi_value_results_taken: false,
-                    multi_value_exits: IndexMap::default(),
                     force_fixed_string_repr: false,
                     discovered_local_types: IndexMap::default(),
                     rare_heads: rare_heads(body, markers),
@@ -945,6 +944,9 @@ pub(super) struct LabelEntry {
     pub(super) is_loop_break: bool,
     /// True if this is a loop instruction (target for continue).
     pub(super) is_loop_continue: bool,
+    /// The split locals a `break` to this block binds its call's results into,
+    /// when a `let` binds the block's value split.
+    pub(super) split_into: Option<Vec<String>>,
 }
 
 impl LabelEntry {
@@ -953,6 +955,7 @@ impl LabelEntry {
         label: None,
         is_loop_break: false,
         is_loop_continue: false,
+        split_into: None,
     };
 }
 
@@ -980,9 +983,6 @@ pub(super) struct FunctionTranslator<'a, 'b> {
     /// instead of `StructGet($tmp, name)`, which would panic at codegen —
     /// `$tmp` was never assigned a struct ref.
     pub(super) multi_value_split_locals: IndexMap<u32, IndexMap<String, (String, WirType)>>,
-    /// The labels whose value a `let` binds split, each with the split locals a
-    /// `break` to it binds its call's results into.
-    multi_value_exits: IndexMap<String, Vec<String>>,
     /// Locals bound once and never assigned again.
     // Only one of those may be split: a second definition would `LocalSet` a
     // base local the split never declared.
@@ -1149,26 +1149,37 @@ impl FunctionTranslator<'_, '_> {
         fields: &[(String, TypeId)],
         names: &[String],
     ) -> (Vec<WirInstr>, Vec<(String, WirType)>) {
-        assert_eq!(
-            names.len(),
-            fields.len(),
-            "[WIR] a multi-value bind needs one local per result"
-        );
-        let mut instrs = Vec::with_capacity(fields.len() + 1);
-        let mut bound = Vec::with_capacity(fields.len());
-        for ((_, field_type), name) in fields.iter().zip(names) {
-            let ty = self.ctx.type_id_to_wir_type(self.type_table, *field_type);
-            instrs.push(WirInstr::DeclareLocal {
-                name: name.clone(),
-                ty: ty.clone(),
-            });
-            bound.push((name.clone(), ty));
-        }
+        let (mut instrs, bound) = self.declare_split_locals(fields, names);
         instrs.push(WirInstr::MultiValueLocalBind {
             instr: Box::new(call),
             locals: bound.iter().map(|(name, _)| Some(name.clone())).collect(),
         });
         (instrs, bound)
+    }
+
+    /// Declare one local per field, named by `names`.
+    fn declare_split_locals(
+        &self,
+        fields: &[(String, TypeId)],
+        names: &[String],
+    ) -> (Vec<WirInstr>, Vec<(String, WirType)>) {
+        assert_eq!(
+            names.len(),
+            fields.len(),
+            "[WIR] a multi-value bind needs one local per result"
+        );
+        fields
+            .iter()
+            .zip(names)
+            .map(|((_, field_type), name)| {
+                let ty = self.ctx.type_id_to_wir_type(self.type_table, *field_type);
+                let declare = WirInstr::DeclareLocal {
+                    name: name.clone(),
+                    ty: ty.clone(),
+                };
+                (declare, (name.clone(), ty))
+            })
+            .unzip()
     }
 
     /// Translate the arguments of a call to `func`, handing a parameter that
@@ -1406,33 +1417,23 @@ impl FunctionTranslator<'_, '_> {
             return Some(WirInstr::Seq(instrs));
         }
 
-        let (block, label, calls) = block_exit_calls(self.body, Operand::Expr(value))?;
-        let mut exit_fields = calls.iter().map(|&call| match &self.body.exprs[call].kind {
-            ExprKind::Call { func_id, .. } => self.multi_value_result_fields(*func_id),
-            _ => unreachable!("an exit is a call"),
-        });
-        let fields = exit_fields.next()??.to_vec();
-        if !exit_fields.all(|f| f.is_some()) {
-            return None;
-        }
+        let exits = split_exits(self.body, Operand::Expr(value), |f| {
+            let fields = self.multi_value_result_fields(f)?;
+            Some(fields.iter().map(|(name, _)| name.clone()).collect::<Vec<_>>())
+        })?;
+        let fields = self
+            .multi_value_result_fields(exits.calls[0].0)
+            .expect("every exit returns multi-value")
+            .to_vec();
         let names = self.multi_value_split_names(local_index, &fields);
-        let mut instrs = Vec::with_capacity(fields.len() + 1);
-        let mut bound = Vec::with_capacity(fields.len());
-        for ((_, field_type), name) in fields.iter().zip(&names) {
-            let ty = self.ctx.type_id_to_wir_type(self.type_table, *field_type);
-            instrs.push(WirInstr::DeclareLocal {
-                name: name.clone(),
-                ty: ty.clone(),
-            });
-            bound.push((name.clone(), ty));
-        }
-        self.multi_value_exits.insert(label.clone(), names.clone());
+        let (mut instrs, bound) = self.declare_split_locals(&fields, &names);
         self.label_stack.push(LabelEntry {
-            label: Some(label.clone()),
+            label: Some(exits.label.clone()),
             is_loop_break: false,
             is_loop_continue: false,
+            split_into: Some(names.clone()),
         });
-        let stmts = &self.body.blocks[block].stmts;
+        let stmts = &self.body.blocks[exits.block].stmts;
         let (&last, lead) = stmts.split_last().expect("a block with an exit has a statement");
         let mut body = self.translate_stmts(lead);
         match &self.body.stmts[last].kind {
@@ -1443,9 +1444,8 @@ impl FunctionTranslator<'_, '_> {
             _ => body.extend(self.translate_stmts(&[last])),
         }
         self.label_stack.pop();
-        self.multi_value_exits.swap_remove(&label);
         instrs.push(WirInstr::Block {
-            label: Some(label),
+            label: Some(exits.label),
             result: None,
             body,
         });
@@ -2330,11 +2330,13 @@ impl FunctionTranslator<'_, '_> {
                     label: None,
                     is_loop_break: true,
                     is_loop_continue: false,
+                    split_into: None,
                 });
                 self.label_stack.push(LabelEntry {
                     label: None,
                     is_loop_break: false,
                     is_loop_continue: true,
+                    split_into: None,
                 });
                 let mut body_instrs = self.translate_stmts(&arena.blocks[*body].stmts);
                 // Unconditional back-edge: br 0 to loop header
@@ -2352,8 +2354,8 @@ impl FunctionTranslator<'_, '_> {
             }
             StmtKind::Break { label, value } => {
                 let depth = self.compute_break_depth(label.as_deref());
-                if let Some(names) = label.as_ref().and_then(|l| self.multi_value_exits.get(l)) {
-                    let names = names.clone();
+                let target = &self.label_stack[self.label_stack.len() - 1 - depth as usize];
+                if let Some(names) = target.split_into.clone() {
                     let call = value
                         .and_then(Operand::as_expr)
                         .expect("a split block's exit is a call");
@@ -2395,6 +2397,7 @@ impl FunctionTranslator<'_, '_> {
                     label: Some(label.clone()),
                     is_loop_break: false,
                     is_loop_continue: false,
+                    split_into: None,
                 });
                 let body_instrs = self.translate_stmts(&arena.blocks[*block].stmts);
                 self.label_stack.pop();
@@ -3397,6 +3400,7 @@ impl FunctionTranslator<'_, '_> {
                         label: Some(label.clone()),
                         is_loop_break: false,
                         is_loop_continue: false,
+                        split_into: None,
                     });
                 }
                 let body = if has_result {
