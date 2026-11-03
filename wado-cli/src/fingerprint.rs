@@ -143,6 +143,11 @@ impl Input {
         }
     }
 
+    /// Whether this is a file named `name`.
+    pub(crate) fn is_file_named(&self, name: &str) -> bool {
+        matches!(self, Self::File(file) if file.path.file_name().is_some_and(|n| n == name))
+    }
+
     pub(crate) fn unchanged(&self) -> bool {
         Self::now(&self.key()).as_ref() == Some(self)
     }

@@ -52,7 +52,7 @@ use wado_compiler::kiln::{GeneratorModule, InvocationPath, OptionsDescriptor};
 use wado_compiler::remote::{Integrity, is_remote};
 use wado_compiler::{CompilerHost, CompilerOptions, Diagnostic, LogLevel, ModuleDir};
 use wado_lsp::host::discovery::{Disk, normalize_path};
-use wado_manifest::registry_url;
+use wado_manifest::{LOCK_FILENAME, registry_url};
 
 use crate::build_dep::{GENERATOR_WORLD_SEGMENT, parse_spec, resolve_generator_version};
 use crate::cache::generator_path;
@@ -522,9 +522,12 @@ impl CliGeneratorProvider {
 
         // Nothing vouches for a compile whose reads are untracked, so the next
         // run rebuilds it.
-        let Some(inputs) = inputs else {
+        let Some(mut inputs) = inputs else {
             return Ok(artifacts);
         };
+        // Each remote source is held to its own entry of the lock, so another
+        // entry moving leaves the generator be.
+        inputs.retain(|input| !input.is_file_named(LOCK_FILENAME));
         // Best-effort: the caller holds the fresh bytes, so a refusal costs
         // the next run a rebuild.
         let _ = write_atomic(&self.component_path(&combined_hash), &artifacts.wasm);
