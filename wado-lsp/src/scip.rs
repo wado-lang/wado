@@ -29,6 +29,7 @@ use crate::uri::percent_decode;
 /// `SymbolInformation.Kind` values from `scip.proto`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SymbolKind {
+    AssociatedType = 3,
     Class = 7,
     Constant = 8,
     Enum = 11,
@@ -265,6 +266,16 @@ fn escape_name(name: &str) -> String {
     }
 }
 
+/// The descriptor name of the `n`th declaration named `name` on one path. A
+/// term or type descriptor has no disambiguator, so a later one takes `+n`
+/// into its name, which no identifier spells.
+fn numbered_name(name: &str, n: u32) -> String {
+    match n {
+        0 => escape_name(name),
+        n => escape_name(&format!("{name}+{n}")),
+    }
+}
+
 /// The name a type is declared under, without its arguments: `Pair` of
 /// `Pair<T>`, as the type's own symbol names it. A type with no name (a
 /// tuple, a reference) is written out whole.
@@ -304,7 +315,7 @@ struct DeclCollector<'s> {
     /// declaration in one is local, whatever its kind.
     bodies: u32,
     locals: u32,
-    /// How many methods each owner path and name has declared.
+    /// How many declarations each path and descriptor has.
     overloads: IndexMap<String, u32>,
 }
 
@@ -327,16 +338,24 @@ impl DeclCollector<'_> {
     }
 
     /// Declare `id` under the owner path, or as a local inside a body; the
-    /// path a member of it follows either way.
+    /// path a member of it follows either way. `descriptor` spells the `n`th
+    /// declaration of one descriptor on one path: impls of one head share
+    /// its owner path, so two of them can declare a member of one name.
     fn declare(
         &mut self,
         id: AstId,
         name: &str,
-        descriptor: String,
+        descriptor: impl Fn(u32) -> String,
         kind: SymbolKind,
         name_span: Span,
         span: Span,
     ) -> String {
+        let earlier = self
+            .overloads
+            .entry(format!("{}{}", self.path(), descriptor(0)))
+            .or_insert(0);
+        let descriptor = descriptor(*earlier);
+        *earlier += 1;
         let path = format!("{}{descriptor}", self.path());
         if self.bodies > 0 {
             self.local(id, name, kind, name_span);
@@ -356,9 +375,15 @@ impl DeclCollector<'_> {
         path
     }
 
-    /// A term: a field, a case, a global.
+    /// A term: a field, a case, a global, a constant.
     fn term(&mut self, id: AstId, name: &str, kind: SymbolKind, name_span: Span, span: Span) {
-        let descriptor = format!("{}.", escape_name(name));
+        let descriptor = |n| format!("{}.", numbered_name(name, n));
+        self.declare(id, name, descriptor, kind, name_span, span);
+    }
+
+    fn associated_type(&mut self, id: AstId, name: &str, name_span: Span, span: Span) {
+        let descriptor = |n| format!("{}#", numbered_name(name, n));
+        let kind = SymbolKind::AssociatedType;
         self.declare(id, name, descriptor, kind, name_span, span);
     }
 
@@ -394,14 +419,8 @@ impl DeclCollector<'_> {
         name_span: Span,
         span: Span,
     ) {
-        let path = self.declare(
-            id,
-            name,
-            format!("{}#", escape_name(name)),
-            kind,
-            name_span,
-            span,
-        );
+        let descriptor = |n| format!("{}#", numbered_name(name, n));
+        let path = self.declare(id, name, descriptor, kind, name_span, span);
         self.owners.push(path);
         match item {
             Item::Struct(s) => {
@@ -429,7 +448,13 @@ impl DeclCollector<'_> {
                 }
             }
             Item::Newtype(n) => self.type_params(&n.type_params),
-            Item::Trait(t) => self.type_params(&t.type_params),
+            Item::Trait(t) => {
+                self.type_params(&t.type_params);
+                for assoc in &t.associated_types {
+                    self.associated_type(assoc.id, &assoc.name, assoc.name_span, assoc.span);
+                    self.type_params(&assoc.type_params);
+                }
+            }
             Item::BuiltinTypeDecl(d) => self.type_params(&d.type_params),
             Item::Resource(r) => self.type_params(&r.type_params),
             Item::Interface(_) => {}
@@ -508,6 +533,10 @@ impl AstVisitor<'_> for DeclCollector<'_> {
                 for c in &imp.constants {
                     self.term(c.id, &c.name, SymbolKind::Constant, c.name_span, c.span);
                 }
+                for assoc in &imp.associated_types {
+                    self.associated_type(assoc.id, &assoc.name, assoc.name_span, assoc.span);
+                    self.type_params(&assoc.type_params);
+                }
                 walk_item(self, item);
                 self.owners.pop();
             }
@@ -524,18 +553,11 @@ impl AstVisitor<'_> for DeclCollector<'_> {
         } else {
             SymbolKind::Method
         };
-        // Impls of one head share its owner path, so two of them can declare
-        // a method of one name: SCIP's disambiguator tells them apart.
         let name = escape_name(&func.name);
-        let earlier = self
-            .overloads
-            .entry(format!("{}{name}", self.path()))
-            .or_insert(0);
-        let descriptor = match *earlier {
+        let descriptor = |n| match n {
             0 => format!("{name}()."),
             n => format!("{name}(+{n})."),
         };
-        *earlier += 1;
         let path = self.declare(
             func.id,
             &func.name,
@@ -828,10 +850,72 @@ fn f(h: &Handle, n: i32) -> i32 {
                 vec![(0, ROLE_DEFINITION), (5, ROLE_READ)]
             );
             assert_eq!(symbol(&d, "ORIGIN").symbol, "wado . test.wado . P#ORIGIN.");
+            let target = &symbol(&d, "ORIGIN").symbol;
+            let ranges: Vec<&ScipRange> = d
+                .occurrences
+                .iter()
+                .filter(|o| &o.symbol == target)
+                .map(|o| &o.range)
+                .collect();
+            assert_eq!(ranges, [&vec![3, 10, 16], &vec![6, 24, 30], &vec![6, 45, 51]]);
+        });
+    }
+
+    #[test]
+    fn a_primitive_limit_is_a_use_in_every_pattern() {
+        futures::executor::block_on(async {
+            let d = doc("fn f(n: i32, x: f64) -> i32 {
+    let a = match n { i32::MAX => 1, 0..=i32::MAX => 2, _ => 3 };
+    return match x { f64::MAX => a, _ => 0 };
+}
+")
+            .await;
+            let limits: Vec<(&str, &ScipRange)> = d
+                .occurrences
+                .iter()
+                .filter(|o| o.symbol.ends_with("#MAX."))
+                .map(|o| (o.symbol.rsplit_once(' ').unwrap().1, &o.range))
+                .collect();
             assert_eq!(
-                uses(&d, "ORIGIN"),
-                vec![(3, ROLE_DEFINITION), (6, ROLE_READ), (6, ROLE_READ)]
+                limits,
+                [
+                    ("i32#MAX.", &vec![1, 27, 30]),
+                    ("i32#MAX.", &vec![1, 46, 49]),
+                    ("f64#MAX.", &vec![2, 26, 29]),
+                ]
             );
+        });
+    }
+
+    #[test]
+    fn associated_types_and_constants_of_one_name_get_their_own_symbols() {
+        futures::executor::block_on(async {
+            let d = doc("trait Make { type Out; }
+struct Pair<T> { a: T }
+impl Pair<i32> { const ZERO: i32 = 0; }
+impl Pair<i64> { const ZERO: i64 = 0; }
+impl Make for Pair<i32> { type Out = i32; }
+")
+            .await;
+            let named = |name: &str| -> Vec<&str> {
+                d.symbols
+                    .iter()
+                    .filter(|s| s.display_name == name)
+                    .map(|s| s.symbol.as_str())
+                    .collect()
+            };
+            assert_eq!(
+                named("ZERO"),
+                ["wado . test.wado . Pair#ZERO.", "wado . test.wado . Pair#ZERO+1."]
+            );
+            assert_eq!(
+                named("Out"),
+                [
+                    "wado . test.wado . Make#Out#",
+                    "wado . test.wado . impl#[Pair][Make]Out#"
+                ]
+            );
+            assert_eq!(symbol(&d, "Out").kind, SymbolKind::AssociatedType);
         });
     }
 

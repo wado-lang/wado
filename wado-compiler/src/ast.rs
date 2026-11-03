@@ -1502,12 +1502,9 @@ impl Item {
             Item::Interface(d) => d.name_span,
             Item::Global(d) => d.name_span,
             Item::BuiltinTypeDecl(d) => d.name_span,
-            Item::Resource(_)
-            | Item::TupleTypeDecl(_)
-            | Item::Use(_)
-            | Item::Impl(_)
-            | Item::World(_)
-            | Item::Test(_)
+            Item::Resource(d) => d.name_span,
+            Item::World(d) => d.name_span,
+            Item::TupleTypeDecl(_) | Item::Use(_) | Item::Impl(_) | Item::Test(_)
             | Item::Error(_) => self.span(),
         }
     }
@@ -2255,6 +2252,7 @@ pub struct ResourceDecl {
 pub struct WorldDecl {
     pub id: AstId,
     pub name: String,
+    pub name_span: Span,
     pub visibility: Visibility,
     pub attrs: Vec<Attribute>,
     pub imports: Vec<WorldImport>,
@@ -4983,6 +4981,7 @@ pub struct BuiltinTypeDecl {
 pub struct AssociatedTypeDecl {
     pub id: AstId,
     pub name: String,
+    pub name_span: Span,
     /// `affine type Item;`: an impl may bind an affine type.
     pub is_affine: bool,
     /// The associated type's own parameters (`E` in `type Buf<E>;`), which a
@@ -5000,6 +4999,7 @@ pub struct AssociatedTypeBinding {
     pub id: AstId,
     pub attrs: Vec<Attribute>,
     pub name: String,
+    pub name_span: Span,
     /// The parameters the trait declares the associated type with, in scope in `ty`.
     pub type_params: Vec<GenericParam>,
     pub ty: Type,

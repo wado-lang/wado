@@ -242,6 +242,12 @@ fn record_item_name_spans(index: &mut AstIndex, item: &Item) {
             for tp in &t.type_params {
                 index.name_spans.insert(tp.id, tp.name_span);
             }
+            for assoc in &t.associated_types {
+                index.name_spans.insert(assoc.id, assoc.name_span);
+                for tp in &assoc.type_params {
+                    index.name_spans.insert(tp.id, tp.name_span);
+                }
+            }
             // Methods and their params get their name_spans recorded when
             // `visit_function` dispatches them during the walk.
         }
@@ -266,7 +272,10 @@ fn record_item_name_spans(index: &mut AstIndex, item: &Item) {
             }
         }
         Item::Impl(imp) => record_impl_name_spans(index, imp),
-        Item::Use(_) | Item::World(_) | Item::Test(_) | Item::TupleTypeDecl(_) => {}
+        Item::World(w) => {
+            index.name_spans.insert(w.id, w.name_span);
+        }
+        Item::Use(_) | Item::Test(_) | Item::TupleTypeDecl(_) => {}
         // Error-recovery placeholder; its own span is the only fact to record,
         // handled by the generic item-span pass, not here.
         Item::Error(_) => {}
@@ -321,6 +330,12 @@ fn record_impl_name_spans(index: &mut AstIndex, imp: &ImplBlock) {
     }
     for c in &imp.constants {
         index.name_spans.insert(c.id, c.name_span);
+    }
+    for assoc in &imp.associated_types {
+        index.name_spans.insert(assoc.id, assoc.name_span);
+        for tp in &assoc.type_params {
+            index.name_spans.insert(tp.id, tp.name_span);
+        }
     }
     // ImplBlock itself has no own name_span (anonymous decl); methods and
     // params are recorded by `visit_function` during the walk.

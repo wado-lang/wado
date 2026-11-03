@@ -68,7 +68,7 @@ pub fn load(paths: &List<String>) -> Result<SymbolIndex, String> with Preopens {
     let mut index = empty_index();
     for let path of paths {
         let bytes = fs::read(path).map_err(|e| `${e}`)?;
-        index.add(&grog::decode::<scip::Index, ByteList>(bytes).map_err(|e| `${path}: ${e}`)?);
+        index.add(&grog::decode::<scip::Index, ByteList>(bytes).map_err(|e| `${path}: ${e}`)?)?;
     }
     return Ok(index);
 }
@@ -84,7 +84,7 @@ pub fn empty_index() -> SymbolIndex {
 }
 
 impl SymbolIndex {
-    pub fn add(&mut self, index: &scip::Index) {
+    pub fn add(&mut self, index: &scip::Index) -> Result<(), String> {
         for let doc of &index.documents {
             let file = self.files.len();
             self.files.push(doc.relative_path);
@@ -106,7 +106,7 @@ impl SymbolIndex {
                     continue;
                 }
                 let id = self.id(&o.symbol);
-                let [start, extent] = place_of(o);
+                let [start, extent] = place_of(o).map_err(|e| `${doc.relative_path}: ${e}`)?;
                 let end = match &extent {
                     Some([_, last]) => last.line,
                     None => start.line,
@@ -133,6 +133,7 @@ impl SymbolIndex {
             ids.push(i);
             self.by_name[name] = ids;
         }
+        return Ok(());
     }
 
     fn id(&mut self, symbol: &String) -> i32 {
@@ -217,21 +218,24 @@ impl SymbolIndex {
             };
             let kept = s.references.into_iter().filter(|r| is_under(&self.files[r.file], path)).collect();
             out.push(`${s.kind} ${self.qualified(id)}${at}: ${kept.len()} references`);
-            let mut last: Option<[i32, i32]> = null;
+            // A line is listed once for each declaration it holds uses in.
+            let mut last: Option<[i32, i32, Option<i32>]> = null;
             for let r of &kept {
-                let file = &self.files[r.file];
-                if last == Some([r.file, r.line]) {
+                let at = Pos { line: r.line, column: r.column };
+                let scope = self.scope_at(r.file, &at);
+                let key = [r.file, r.line, scope];
+                if last == Some(key) {
                     continue;
                 }
-                last = Some([r.file, r.line]);
+                last = Some(key);
+                let file = &self.files[r.file];
                 if !sources.contains_key(r.file) {
                     sources.try_insert(r.file, source_lines(root, file));
                 }
                 let lines = sources.get(r.file).unwrap();
                 let text = if r.line < lines.len() { lines[r.line].trim().to_string() } else { "" };
-                let at = Pos { line: r.line, column: r.column };
-                let inside = match self.scope_at(r.file, &at) {
-                    Some(scope) => ` in ${self.qualified(scope)}`,
+                let inside = match scope {
+                    Some(s) => ` in ${self.qualified(s)}`,
                     None => "",
                 };
                 out.push(`${*file}:${r.line + 1}${inside}: ${text}`);
@@ -309,18 +313,18 @@ fn is_local(symbol: &String) -> bool {
 /// Where an occurrence starts, and the extent of the declaration it defines
 /// where SCIP gives one. SCIP gives a range packed as 3 or 4 numbers, or
 /// typed.
-fn place_of(o: &scip::Occurrence) -> [Pos, Option<[Pos, Pos]>] {
+fn place_of(o: &scip::Occurrence) -> Result<[Pos, Option<[Pos, Pos]>], String> {
     let range = match &o.typed_range {
         Some(SingleLineRange(r)) => single_line(r),
         Some(MultiLineRange(r)) => multi_line(r),
-        None => packed(&o.range).expect("an occurrence has a range"),
+        None => packed(&o.range)?.ok_or("an occurrence has no range")?,
     };
     let extent: Option<[Pos, Pos]> = match &o.typed_enclosing_range {
         Some(SingleLineEnclosingRange(r)) => Some(single_line(r)),
         Some(MultiLineEnclosingRange(r)) => Some(multi_line(r)),
-        None => packed(&o.enclosing_range),
+        None => packed(&o.enclosing_range)?,
     };
-    return [range.0, extent];
+    return Ok([range.0, extent]);
 }
 
 fn single_line(r: &scip::SingleLineRange) -> [Pos, Pos] {
@@ -337,18 +341,20 @@ fn multi_line(r: &scip::MultiLineRange) -> [Pos, Pos] {
     ];
 }
 
-/// `[line, start, end]` on one line, or `[line, start, end line, end]`.
-fn packed(r: &List<i32>) -> Option<[Pos, Pos]> {
+/// `[line, start, end]` on one line, or `[line, start, end line, end]`; none
+/// where the list is empty.
+fn packed(r: &List<i32>) -> Result<Option<[Pos, Pos]>, String> {
     return match r.len() {
-        3 => Some([
+        0 => Ok(null),
+        3 => Ok(Some([
             Pos { line: r[0], column: r[1] },
             Pos { line: r[0], column: r[2] },
-        ]),
-        4 => Some([
+        ])),
+        4 => Ok(Some([
             Pos { line: r[0], column: r[1] },
             Pos { line: r[2], column: r[3] },
-        ]),
-        _ => null,
+        ])),
+        n => Err(`a range has ${n} numbers, not 3 or 4`),
     };
 }
 

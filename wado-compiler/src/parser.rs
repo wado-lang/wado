@@ -6619,6 +6619,7 @@ impl Parser {
                 let assoc_id = self.alloc_ast_id();
                 let type_span = self.peek().span;
                 self.advance();
+                let name_span = self.peek().span;
                 let assoc_name = self.consume_ident()?;
                 let type_params = self.parse_generic_params()?;
                 self.expect(&TokenKind::Eq)?;
@@ -6628,6 +6629,7 @@ impl Parser {
                     id: assoc_id,
                     attrs,
                     name: assoc_name,
+                    name_span,
                     type_params,
                     ty: assoc_ty,
                     span: type_span.merge(&end),
@@ -6842,6 +6844,7 @@ impl Parser {
                     self.advance();
                 }
                 self.advance();
+                let name_span = self.peek().span;
                 let assoc_name = self.consume_ident()?;
                 let type_params = self.parse_generic_params()?;
                 let bounds = if self.check(&TokenKind::Colon) {
@@ -6854,6 +6857,7 @@ impl Parser {
                 associated_types.push(AssociatedTypeDecl {
                     id: assoc_id,
                     name: assoc_name,
+                    name_span,
                     is_affine: assoc_is_affine,
                     type_params,
                     bounds,
@@ -7035,6 +7039,7 @@ impl Parser {
         let id = self.alloc_ast_id();
         let start_span = self.peek().span;
         self.expect(&TokenKind::World)?;
+        let name_span = self.peek().span;
         let name = self.consume_ident()?;
         self.expect(&TokenKind::LBrace)?;
 
@@ -7066,6 +7071,7 @@ impl Parser {
         Ok(WorldDecl {
             id,
             name,
+            name_span,
             visibility,
             attrs,
             imports,

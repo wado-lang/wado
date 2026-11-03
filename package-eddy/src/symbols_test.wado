@@ -64,7 +64,7 @@ fn shapes() -> scip::Index {
 
 fn workspace() -> Workspace {
     let mut symbols = empty_index();
-    symbols.add(&shapes());
+    symbols.add(&shapes()).unwrap();
     return Workspace { root: "src", symbols: Some(symbols) };
 }
 
@@ -116,7 +116,7 @@ test "FindReferences tells declarations on one line apart" {
         display_name: name,
         kind: Function,
     };
-    // fn one() -> i32 { return 1; } fn two() -> i32 { return one(); }
+    // fn one() -> i32 { return 1; } fn two() -> i32 { return one(); } fn three() -> i32 { return one(); }
     let mut symbols = empty_index();
     symbols.add(&scip::Index {
         documents: [
@@ -126,17 +126,33 @@ test "FindReferences tells declarations on one line apart" {
                     occ(3, 3, "one().", 1, [0, 0, 29]),
                     occ(33, 3, "two().", 1, [0, 30, 63]),
                     occ(55, 3, "one().", 8, []),
+                    occ(67, 5, "three().", 1, [0, 64, 99]),
+                    occ(91, 3, "one().", 8, []),
                 ],
                 symbols: [
                     info("one().", "one"),
                     info("two().", "two"),
+                    info("three().", "three"),
                 ],
             },
         ],
-    });
+    }).unwrap();
     let ws = Workspace { root: "src", symbols: Some(symbols) };
     let out = ws.call(&"FindReferences", &tool_input(`{"name": "one"}`)).unwrap();
-    assert out == "function one (oneline.rs:1): 1 references\noneline.rs:1 in two: \n";
+    assert out == "function one (oneline.rs:1): 2 references\noneline.rs:1 in two: \noneline.rs:1 in three: \n";
+}
+
+test "a malformed range is an error, not a crash" {
+    let mut symbols = empty_index();
+    let added = symbols.add(&scip::Index {
+        documents: [
+            scip::Document {
+                relative_path: "bad.rs",
+                occurrences: [scip::Occurrence { range: [0, 1], symbol: `${CRATE}f().` }],
+            },
+        ],
+    });
+    assert added == Err("bad.rs: a range has 2 numbers, not 3 or 4");
 }
 
 test "the symbol tools read a path and a page as the other tools do" {

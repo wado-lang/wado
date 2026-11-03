@@ -1279,7 +1279,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 Some(ident.id),
                 ident.span,
             );
-            self.record_reference_to_def(ident.id, assoc.decl);
+            self.record_reference_to_def(member.id, assoc.decl);
             // Not an l-value.
             self.resolve_associated_const_body(&assoc, ctx);
             if !ident.type_args_on_prefix {
