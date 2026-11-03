@@ -143,7 +143,11 @@ fn position_from_one_based(line: u32, column: u32) -> Position {
 pub async fn run_scip(dir: &str, output: &str, excludes: &[String]) -> Result<(), CliExit> {
     let root =
         fs::canonicalize(dir).map_err(|e| CliExit::error(format!("reading '{dir}': {e}")))?;
-    let root_uri = format!("{}/", wado_lsp::Uri::from_file_path(&root).as_str());
+    let mut root_uri = wado_lsp::Uri::from_file_path(&root).as_str().to_string();
+    // `/` already ends in the separator a child's URI follows the root with.
+    if !root_uri.ends_with('/') {
+        root_uri.push('/');
+    }
     let excludes = discover::ExcludeSet::compile(excludes).map_err(CliExit::error)?;
     let mut files: Vec<_> = discover::discover_tree(&root, &discover::no_filters)?
         .into_iter()

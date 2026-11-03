@@ -95,13 +95,15 @@ impl Workspace {
                     SYMBOL_SCHEMA,
                 ),
             );
-            out.push(tool(
-                "FindReferences",
-                `Finds where a symbol is used, from the compiler's index of the Rust and Wado code. ${PATHS}
+            out.push(
+                tool(
+                    "FindReferences",
+                    `Finds where a symbol is used, from the compiler's index of the Rust and Wado code. ${PATHS}
 - Each reference gives its line, the function or other declaration it sits in, and the line of source.
-- Unlike Grep, it finds the uses of this one declaration: not another of the same name, not a comment.`,
-                SYMBOL_SCHEMA,
-            ));
+- Unlike Grep, it finds uses, not comments or other text that spells the name. A bare name lists the uses of each declaration of that name apart; Owner::name keeps the members of Owner.`,
+                    SYMBOL_SCHEMA,
+                ),
+            );
         }
         return out;
     }
@@ -201,16 +203,18 @@ impl Workspace {
         let Some(symbols) = &self.symbols else {
             return Err(`no tool named ${*which}`);
         };
-        let path = unrooted(&input.path);
+        let full = self.resolve(&input.path)?;
+        let path = match full.strip_prefix(`${self.root}/`) {
+            Some(relative) => relative.to_string(),
+            None => "",
+        };
         let found = if *which == "FindSymbol" {
             symbols.find_symbol(&input.name, &path);
         } else {
             symbols.find_references(&input.name, &path, &self.root);
         };
-        if found.is_empty() {
-            return Ok("No symbols found");
-        }
-        return page(&found, input.offset, input.head_limit);
+        let text = page(&found, input.offset, input.head_limit)?;
+        return Ok(if found.is_empty() { "No symbols found" } else { text });
     }
 
     fn read(&self, input: &ReadInput) -> Result<String, String> with Preopens {

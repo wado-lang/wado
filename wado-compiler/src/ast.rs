@@ -2227,6 +2227,7 @@ impl CmImport {
 pub struct ResourceDecl {
     pub id: AstId,
     pub name: String,
+    pub name_span: Span,
     pub visibility: Visibility,
     /// Generic type parameters: `resource Future<T> { ... }`
     pub type_params: Vec<GenericParam>,
@@ -5012,6 +5013,7 @@ pub struct AssociatedConst {
     pub id: AstId,
     pub attrs: Vec<Attribute>,
     pub name: String,
+    pub name_span: Span,
     pub visibility: Visibility,
     pub ty: Type,
     pub value: Expr,

@@ -1536,6 +1536,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         Some(*name_id),
                         *span,
                     );
+                    self.record_reference_to_def(*name_id, assoc.decl);
                     self.resolve_associated_const_body(&assoc, ctx);
                     return Some(PatternConstant {
                         shown,

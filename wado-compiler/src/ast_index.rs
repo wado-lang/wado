@@ -38,10 +38,8 @@ pub struct AstIndex {
     /// `StructField::name_span`. Useful for `goto-definition` ranges that
     /// should not cover the entire item body.
     ///
-    /// Populated for every named declaration the AST exposes a
-    /// `name_span` for. Nodes without a dedicated `name_span` (e.g.
-    /// `Item::Resource`, anonymous `Item::Impl`) are absent; consumers
-    /// should fall back to [`Self::span_of`].
+    /// Populated for every named declaration. An anonymous one
+    /// (`Item::Impl`) is absent; consumers fall back to [`Self::span_of`].
     name_spans: IndexMap<AstId, Span>,
     /// `IdentExpr.id` values that appear as the direct LHS target of
     /// `=` or a compound-assign. Direct targets only — for `obj.field = v`
@@ -253,8 +251,7 @@ fn record_item_name_spans(index: &mut AstIndex, item: &Item) {
             // `visit_function` override, which every member goes through.
         }
         Item::Resource(r) => {
-            // ResourceDecl has no `name_span`; the table simply has no
-            // entry for `r.id` — consumers should fall back to span_of.
+            index.name_spans.insert(r.id, r.name_span);
             for tp in &r.type_params {
                 index.name_spans.insert(tp.id, tp.name_span);
             }
@@ -321,6 +318,9 @@ fn record_function_locations(index: &mut AstIndex, items: &[Item]) {
 fn record_impl_name_spans(index: &mut AstIndex, imp: &ImplBlock) {
     for tp in &imp.type_params {
         index.name_spans.insert(tp.id, tp.name_span);
+    }
+    for c in &imp.constants {
+        index.name_spans.insert(c.id, c.name_span);
     }
     // ImplBlock itself has no own name_span (anonymous decl); methods and
     // params are recorded by `visit_function` during the walk.

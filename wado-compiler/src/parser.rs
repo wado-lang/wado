@@ -1820,6 +1820,7 @@ impl Parser {
         let id = self.alloc_ast_id();
         let start_span = self.peek().span;
         self.expect(&TokenKind::Resource)?;
+        let name_span = self.peek().span;
         let name = self.consume_ident()?;
 
         // Parse optional generic type parameters: `resource Future<T> { ... }`
@@ -1857,6 +1858,7 @@ impl Parser {
         Ok(ResourceDecl {
             id,
             name,
+            name_span,
             visibility,
             type_params,
             parent,
@@ -6658,6 +6660,7 @@ impl Parser {
                     let const_id = self.alloc_ast_id();
                     let const_span = self.peek().span;
                     self.advance();
+                    let const_name_span = self.peek().span;
                     let const_name = self.consume_ident()?;
                     self.expect(&TokenKind::Colon)?;
                     let const_ty = self.parse_type()?;
@@ -6669,6 +6672,7 @@ impl Parser {
                         id: const_id,
                         attrs,
                         name: const_name,
+                        name_span: const_name_span,
                         visibility: member_vis,
                         ty: const_ty,
                         value: const_value,

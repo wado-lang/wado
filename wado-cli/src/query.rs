@@ -53,6 +53,14 @@ impl QueryKind {
         }
     }
 
+    /// Whether the kind asks about the symbol at `--line`/`--column`.
+    const fn reads_position(self) -> bool {
+        match self {
+            Self::References | Self::DocumentHighlight | Self::Definition | Self::Hover => true,
+            Self::Diagnostics | Self::InlayHints | Self::Scip => false,
+        }
+    }
+
     fn parse(name: &str) -> Result<Self, CliExit> {
         Self::ALL
             .iter()
@@ -274,8 +282,8 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<QueryOptions, CliExit> {
                 ),
         ),
         ("--base", base.is_some() && symbol.is_none()),
-        ("--line", line.is_some() && scip),
-        ("--column", column.is_some() && scip),
+        ("--line", line.is_some() && !kind.reads_position()),
+        ("--column", column.is_some() && !kind.reads_position()),
     ];
     if let Some((flag, _)) = unread.iter().find(|(_, set)| *set) {
         return Err(CliExit::error_with_usage(
@@ -318,13 +326,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<QueryOptions, CliExit> {
         Some(input.ok_or_else(|| CliExit::error_with_usage("missing input file", &usage))?)
     };
 
-    if matches!(
-        kind,
-        QueryKind::References
-            | QueryKind::DocumentHighlight
-            | QueryKind::Definition
-            | QueryKind::Hover
-    ) {
+    if kind.reads_position() {
         if line.is_none() {
             return Err(CliExit::error_with_usage(
                 "--line is required for this query kind",

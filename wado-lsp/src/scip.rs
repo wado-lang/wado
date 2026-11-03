@@ -11,6 +11,8 @@
 //! binding inside a body (a parameter, a `let`, a type parameter) is a
 //! document-local `local N`.
 
+use std::collections::HashMap;
+
 use indexmap::IndexMap;
 use wado_compiler::ast::{
     self, AstId, AstVisitor, Expr, Function, Item, Pattern, walk_expr, walk_function, walk_item,
@@ -220,6 +222,7 @@ impl SymbolNames<'_, '_> {
             owners: Vec::new(),
             bodies: 0,
             locals: 0,
+            overloads: HashMap::new(),
         };
         for item in &ast.items {
             collector.visit_item(item);
@@ -303,6 +306,8 @@ struct DeclCollector<'s> {
     /// declaration in one is local, whatever its kind.
     bodies: u32,
     locals: u32,
+    /// How many methods each owner path and name has declared.
+    overloads: HashMap<String, u32>,
 }
 
 impl DeclCollector<'_> {
@@ -471,11 +476,8 @@ impl AstVisitor<'_> for DeclCollector<'_> {
                 self.type_item(item, d.id, &d.name, SymbolKind::Type, d.name_span, d.span);
             }
             Item::Resource(r) => {
-                // A resource has no name span to declare; its methods still
-                // take its name.
-                self.owners.push(format!("{}#", escape_name(&r.name)));
-                walk_item(self, item);
-                self.owners.pop();
+                let kind = SymbolKind::Class;
+                self.type_item(item, r.id, &r.name, kind, r.name_span, r.span);
             }
             Item::Global(g) => {
                 let kind = if g.mutable {
@@ -494,6 +496,9 @@ impl AstVisitor<'_> for DeclCollector<'_> {
                 };
                 self.owners.push(path);
                 self.type_params(&imp.type_params);
+                for c in &imp.constants {
+                    self.term(c.id, &c.name, SymbolKind::Constant, c.name_span, c.span);
+                }
                 walk_item(self, item);
                 self.owners.pop();
             }
@@ -510,10 +515,22 @@ impl AstVisitor<'_> for DeclCollector<'_> {
         } else {
             SymbolKind::Method
         };
+        // Impls of one head share its owner path, so two of them can declare
+        // a method of one name: SCIP's disambiguator tells them apart.
+        let name = escape_name(&func.name);
+        let earlier = self
+            .overloads
+            .entry(format!("{}{name}", self.path()))
+            .or_insert(0);
+        let descriptor = match *earlier {
+            0 => format!("{name}()."),
+            n => format!("{name}(+{n})."),
+        };
+        *earlier += 1;
         let path = self.declare(
             func.id,
             &func.name,
-            format!("{}().", escape_name(&func.name)),
+            descriptor,
             kind,
             func.name_span,
             func.span,
@@ -779,6 +796,60 @@ impl<T> Pair<T> {
             assert_eq!(
                 symbol(&d, "first").enclosing_symbol,
                 "wado . test.wado . Pair#"
+            );
+        });
+    }
+
+    #[test]
+    fn a_resource_and_an_associated_constant_are_declared() {
+        futures::executor::block_on(async {
+            let d = doc("resource Handle;
+struct P { x: i32 }
+impl P {
+    const ORIGIN: i32 = 0;
+}
+fn f(h: &Handle, n: i32) -> i32 {
+    return match n { P::ORIGIN => 1, _ => P::ORIGIN };
+}
+")
+            .await;
+            assert_eq!(symbol(&d, "Handle").symbol, "wado . test.wado . Handle#");
+            assert_eq!(
+                uses(&d, "Handle"),
+                vec![(0, ROLE_DEFINITION), (5, ROLE_READ)]
+            );
+            assert_eq!(symbol(&d, "ORIGIN").symbol, "wado . test.wado . P#ORIGIN.");
+            assert_eq!(
+                uses(&d, "ORIGIN"),
+                vec![(3, ROLE_DEFINITION), (6, ROLE_READ), (6, ROLE_READ)]
+            );
+        });
+    }
+
+    #[test]
+    fn methods_of_one_name_on_one_head_get_their_own_symbols() {
+        futures::executor::block_on(async {
+            let d = doc("struct Pair<T> { a: T }
+impl Pair<i32> {
+    fn get(&self) -> i32 { return self.a; }
+}
+impl Pair<i64> {
+    fn get(&self) -> i64 { return self.a; }
+}
+")
+            .await;
+            let gets: Vec<&str> = d
+                .symbols
+                .iter()
+                .filter(|s| s.display_name == "get")
+                .map(|s| s.symbol.as_str())
+                .collect();
+            assert_eq!(
+                gets,
+                vec![
+                    "wado . test.wado . Pair#get().",
+                    "wado . test.wado . Pair#get(+1)."
+                ]
             );
         });
     }

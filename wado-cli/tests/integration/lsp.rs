@@ -2642,6 +2642,10 @@ fn query_refuses_a_flag_its_kind_does_not_read() {
         ),
         (&["query", "scip", "--line", "1", "."][..], "--line"),
         (
+            &["query", "inlay-hints", "--column", "1", "a.wado"][..],
+            "--column",
+        ),
+        (
             &["query", "diagnostics", "--symbol", "core:cli#println"][..],
             "--symbol",
         ),

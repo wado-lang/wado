@@ -104,6 +104,49 @@ test "FindReferences keeps the references under a path" {
     assert ws.call(&"FindSymbol", &tool_input(`{"name": "Circle", "path": "test"}`)).unwrap() == "No symbols found";
 }
 
+test "FindReferences tells declarations on one line apart" {
+    let occ = |col: i32, len: i32, symbol: String, roles: i32, enclosing: List<i32>| scip::Occurrence {
+        range: [0, col, col + len],
+        symbol: `${CRATE}${symbol}`,
+        symbol_roles: roles,
+        enclosing_range: enclosing,
+    };
+    let info = |symbol: String, name: String| scip::SymbolInformation {
+        symbol: `${CRATE}${symbol}`,
+        display_name: name,
+        kind: Function,
+    };
+    // fn one() -> i32 { return 1; } fn two() -> i32 { return one(); }
+    let mut symbols = empty_index();
+    symbols.add(&scip::Index {
+        documents: [
+            scip::Document {
+                relative_path: "oneline.rs",
+                occurrences: [
+                    occ(3, 3, "one().", 1, [0, 0, 29]),
+                    occ(33, 3, "two().", 1, [0, 30, 63]),
+                    occ(55, 3, "one().", 8, []),
+                ],
+                symbols: [
+                    info("one().", "one"),
+                    info("two().", "two"),
+                ],
+            },
+        ],
+    });
+    let ws = Workspace { root: "src", symbols: Some(symbols) };
+    let out = ws.call(&"FindReferences", &tool_input(`{"name": "one"}`)).unwrap();
+    assert out == "function one (oneline.rs:1): 1 references\noneline.rs:1 in two: \n";
+}
+
+test "the symbol tools read a path and a page as the other tools do" {
+    let ws = workspace();
+    let all = ws.call(&"FindSymbol", &tool_input(`{"name": "area"}`)).unwrap();
+    assert ws.call(&"FindSymbol", &tool_input(`{"name": "area", "path": "."}`)).unwrap() == all;
+    assert ws.call(&"FindSymbol", &tool_input(`{"name": "area", "path": "../x"}`)).is_err();
+    assert ws.call(&"FindSymbol", &tool_input(`{"name": "nothing", "offset": -1}`)).is_err();
+}
+
 test "the symbol tools are offered only with an index" {
     assert !Workspace { root: "src" }.tools().into_iter().any(|t| t.name == "FindSymbol");
     assert workspace().tools().into_iter().any(|t| t.name == "FindSymbol");

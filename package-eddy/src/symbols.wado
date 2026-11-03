@@ -29,14 +29,27 @@ struct Sym {
 struct Site {
     file: i32,
     line: i32,
+    column: i32,
     end: i32,
 }
 
-/// The declarations whose bodies span lines of one file, to name the one a
-/// reference sits in.
+/// A position in a file, 0-based.
+struct Pos {
+    line: i32,
+    column: i32,
+}
+
+impl Pos {
+    fn at_or_before(&self, other: &Pos) -> bool {
+        return self.line < other.line || self.line == other.line && self.column <= other.column;
+    }
+}
+
+/// The extent of a declaration in one file, to name the one a reference sits
+/// in.
 struct Scope {
-    start: i32,
-    end: i32,
+    start: Pos,
+    end: Pos,
     sym: i32,
 }
 
@@ -93,12 +106,16 @@ impl SymbolIndex {
                     continue;
                 }
                 let id = self.id(&o.symbol);
-                let [line, end] = lines_of(o);
-                let site = Site { file, line, end };
+                let [start, extent] = place_of(o);
+                let end = match &extent {
+                    Some([_, last]) => last.line,
+                    None => start.line,
+                };
+                let site = Site { file, line: start.line, column: start.column, end };
                 if o.symbol_roles & 1 != 0 {
                     self.syms[id].definitions.push(site);
-                    if end > line {
-                        self.scopes[file].push(Scope { start: line, end, sym: id });
+                    if let Some([first, last]) = extent {
+                        self.scopes[file].push(Scope { start: first, end: last, sym: id });
                     }
                 } else {
                     self.syms[id].references.push(site);
@@ -212,7 +229,8 @@ impl SymbolIndex {
                 }
                 let lines = sources.get(r.file).unwrap();
                 let text = if r.line < lines.len() { lines[r.line].trim().to_string() } else { "" };
-                let inside = match self.scope_at(r.file, r.line) {
+                let at = Pos { line: r.line, column: r.column };
+                let inside = match self.scope_at(r.file, &at) {
                     Some(scope) => ` in ${self.qualified(scope)}`,
                     None => "",
                 };
@@ -222,16 +240,18 @@ impl SymbolIndex {
         return out;
     }
 
-    /// The innermost declaration whose body holds `line` of `file`.
-    fn scope_at(&self, file: i32, line: i32) -> Option<i32> {
+    /// The innermost declaration that holds `at` in `file`. Declarations nest,
+    /// so it is the holder that starts last.
+    fn scope_at(&self, file: i32, at: &Pos) -> Option<i32> {
         let mut best: Option<Scope> = null;
         for let s of &self.scopes[file] {
-            if s.start <= line && line <= s.end {
-                if let Some(b) = &best && b.end - b.start <= s.end - s.start {
-                    continue;
-                }
-                best = Some(*s);
+            if !(s.start.at_or_before(at) && at.at_or_before(&s.end)) {
+                continue;
             }
+            if let Some(b) = &best && s.start.at_or_before(&b.start) {
+                continue;
+            }
+            best = Some(*s);
         }
         return best.map(|s| s.sym);
     }
@@ -286,25 +306,50 @@ fn is_local(symbol: &String) -> bool {
     return symbol.starts_with("local ");
 }
 
-/// The first line of an occurrence, and the last line of the declaration it
-/// defines or of itself. SCIP gives a range packed as 3 or 4 numbers, or
+/// Where an occurrence starts, and the extent of the declaration it defines
+/// where SCIP gives one. SCIP gives a range packed as 3 or 4 numbers, or
 /// typed.
-fn lines_of(o: &scip::Occurrence) -> [i32, i32] {
-    let line = match &o.typed_range {
-        Some(SingleLineRange(r)) => r.line,
-        Some(MultiLineRange(r)) => r.start_line,
-        None => o.range[0],
+fn place_of(o: &scip::Occurrence) -> [Pos, Option<[Pos, Pos]>] {
+    let range = match &o.typed_range {
+        Some(SingleLineRange(r)) => single_line(r),
+        Some(MultiLineRange(r)) => multi_line(r),
+        None => packed(&o.range).expect("an occurrence has a range"),
     };
-    let end = match &o.typed_enclosing_range {
-        Some(SingleLineEnclosingRange(r)) => r.line,
-        Some(MultiLineEnclosingRange(r)) => r.end_line,
-        None => match o.enclosing_range.len() {
-            3 => o.enclosing_range[0],
-            4 => o.enclosing_range[2],
-            _ => line,
-        },
+    let extent: Option<[Pos, Pos]> = match &o.typed_enclosing_range {
+        Some(SingleLineEnclosingRange(r)) => Some(single_line(r)),
+        Some(MultiLineEnclosingRange(r)) => Some(multi_line(r)),
+        None => packed(&o.enclosing_range),
     };
-    return [line, end];
+    return [range.0, extent];
+}
+
+fn single_line(r: &scip::SingleLineRange) -> [Pos, Pos] {
+    return [
+        Pos { line: r.line, column: r.start_character },
+        Pos { line: r.line, column: r.end_character },
+    ];
+}
+
+fn multi_line(r: &scip::MultiLineRange) -> [Pos, Pos] {
+    return [
+        Pos { line: r.start_line, column: r.start_character },
+        Pos { line: r.end_line, column: r.end_character },
+    ];
+}
+
+/// `[line, start, end]` on one line, or `[line, start, end line, end]`.
+fn packed(r: &List<i32>) -> Option<[Pos, Pos]> {
+    return match r.len() {
+        3 => Some([
+            Pos { line: r[0], column: r[1] },
+            Pos { line: r[0], column: r[2] },
+        ]),
+        4 => Some([
+            Pos { line: r[0], column: r[1] },
+            Pos { line: r[2], column: r[3] },
+        ]),
+        _ => null,
+    };
 }
 
 fn kind_name(kind: &scip::SymbolInformationKind) -> String {
