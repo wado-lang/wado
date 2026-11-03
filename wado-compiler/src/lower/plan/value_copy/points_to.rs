@@ -671,6 +671,9 @@ impl Graph {
         let mut next_class = location_count;
         let mut label: Vec<Option<u32>> = vec![None; n];
         let mut groups: IndexMap<u32, Vec<u32>> = IndexMap::default();
+        // Each node that absorbed another, whose copies then point at nodes
+        // gone.
+        let mut roots: IndexSet<u32> = IndexSet::default();
         // Each component comes after every one it reaches, so its sources'
         // labels are known when it is reached walking backwards.
         for component in strongly_connected_components(&successors).into_iter().rev() {
@@ -679,7 +682,9 @@ impl Graph {
                 .map(|&m| u32::try_from(m).expect("node count fits u32"))
                 .filter(|&m| self.find(m) == m)
                 .collect();
-            let Some(&root) = members.first() else { continue };
+            let Some(&root) = members.first() else {
+                continue;
+            };
             let class = if members.iter().any(|m| fed.contains(m)) {
                 // Fed, so alike with nothing: a class of its own.
                 next_class += 1;
@@ -700,9 +705,11 @@ impl Graph {
                             .copied()
                             .filter(|&p| p != m && !in_component.contains(&p)),
                     );
-                    values.extend(sources.iter().map(|&p| {
-                        label[p as usize].expect("a source is labelled first")
-                    }));
+                    values.extend(
+                        sources
+                            .iter()
+                            .map(|&p| label[p as usize].expect("a source is labelled first")),
+                    );
                     // A location a source already holds is in its class; only
                     // one taken here is the node's own.
                     values.extend(
@@ -729,28 +736,24 @@ impl Graph {
                 label[m as usize] = Some(class);
             }
             groups.entry(class).or_default().push(root);
+            if members.len() > 1 {
+                roots.insert(root);
+            }
             for &member in &members[1..] {
                 self.absorb_unsolved(root, member);
             }
         }
-        let mut roots: Vec<u32> = Vec::new();
         for (_, mut alike) in groups {
             let root = alike.remove(0);
+            if !alike.is_empty() {
+                roots.insert(root);
+            }
             for member in alike {
                 self.absorb_unsolved(root, member);
             }
-            roots.push(root);
         }
         for root in roots {
-            let r = root as usize;
-            let mut copy_to: IndexSet<u32> = IndexSet::default();
-            for to in std::mem::take(&mut self.copy_to[r]) {
-                let to = self.find(to);
-                if to != root && copy_to.insert(to) {
-                    self.edges.insert((root, to));
-                }
-            }
-            self.copy_to[r] = copy_to.into_iter().collect();
+            self.point_copies_at_representatives(root);
         }
     }
 
@@ -809,14 +812,7 @@ impl Graph {
         if was_idle && !self.delta[r].is_empty() {
             self.work.push(root);
         }
-        let copy_to = std::mem::take(&mut self.copy_to[m]);
-        self.copy_to[r].extend(copy_to);
-        let loads = std::mem::take(&mut self.loads[m]);
-        self.loads[r].extend(loads);
-        let stores = std::mem::take(&mut self.stores[m]);
-        self.stores[r].extend(stores);
-        let sites = std::mem::take(&mut self.sites[m]);
-        self.sites[r].extend(sites);
+        self.take_edges(root, member);
     }
 
     /// Make `root` the node of `member`, leaving `root` to [`Self::settle`].
@@ -844,6 +840,12 @@ impl Graph {
             edges: c.edges.placed_after(&held),
             ..c
         }));
+        self.take_edges(root, member);
+    }
+
+    /// Append `member`'s own edges to `root`'s.
+    fn take_edges(&mut self, root: u32, member: u32) {
+        let (r, m) = (root as usize, member as usize);
         let copy_to = std::mem::take(&mut self.copy_to[m]);
         self.copy_to[r].extend(copy_to);
         let loads = std::mem::take(&mut self.loads[m]);
@@ -854,11 +856,9 @@ impl Graph {
         self.sites[r].extend(sites);
     }
 
-    /// Point the edges `root` took from the nodes it absorbed at
-    /// representatives, and carry along each merged node's own edges what they
-    /// had not carried: the merged set's locations it lacked, and its delta.
-    /// Where it lacked any, its copies take the whole merged set.
-    fn settle(&mut self, root: u32) {
+    /// Point `root`'s copies at representatives, once each, answering the
+    /// list they replace.
+    fn point_copies_at_representatives(&mut self, root: u32) -> Vec<u32> {
         let r = root as usize;
         let merged_copy_to = std::mem::take(&mut self.copy_to[r]);
         let mut copy_to: IndexSet<u32> = IndexSet::default();
@@ -869,6 +869,16 @@ impl Graph {
             }
         }
         self.copy_to[r] = copy_to.into_iter().collect();
+        merged_copy_to
+    }
+
+    /// Point the edges `root` took from the nodes it absorbed at
+    /// representatives, and carry along each merged node's own edges what they
+    /// had not carried: the merged set's locations it lacked, and its delta.
+    /// Where it lacked any, its copies take the whole merged set.
+    fn settle(&mut self, root: u32) {
+        let r = root as usize;
+        let merged_copy_to = self.point_copies_at_representatives(root);
         let mut carried = self
             .merged
             .swap_remove(&root)
