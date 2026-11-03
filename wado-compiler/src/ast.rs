@@ -14,7 +14,7 @@ use crate::escape::escape_string;
 use crate::hashmap::IndexMap;
 use crate::lexer::WILDCARD;
 use crate::name::{UNIT_TYPE_NAME, repeated_element};
-use crate::token::Span;
+use crate::token::{Delimiter, Quote, Span};
 
 /// Identity of one `AstId` allocation space — one per parse. Each top-level
 /// [`crate::parser::Parser`] draws a fresh one from a process-global counter and
@@ -1611,8 +1611,8 @@ pub struct TestDecl {
     pub id: AstId,
     /// Attributes applied to this test (e.g., `#[expect_trap]`).
     pub attributes: Vec<Attribute>,
-    /// Optional test name (string literal). If None, identified by <file:line>.
-    pub name: Option<String>,
+    /// Optional test name. If None, identified by <file:line>.
+    pub name: Option<StrLit>,
     pub body: Block,
     pub span: Span,
 }
@@ -1700,8 +1700,9 @@ pub struct GlobalDecl {
 #[derive(Debug, Clone, Eq)]
 pub struct StrLit {
     pub value: String,
-    /// As written between the quotes, escapes unresolved.
+    /// As written between the delimiters, escapes unresolved.
     pub raw: String,
+    pub quote: Quote,
 }
 
 impl StrLit {
@@ -1711,7 +1712,11 @@ impl StrLit {
     pub fn new(value: impl Into<String>) -> Self {
         let value = value.into();
         let raw = escape_string(&value);
-        Self { value, raw }
+        Self {
+            value,
+            raw,
+            quote: Quote::Cooked,
+        }
     }
 
     #[must_use]
@@ -1722,7 +1727,7 @@ impl StrLit {
     /// The literal as written, quotes included.
     #[must_use]
     pub fn as_written(&self) -> String {
-        format!("\"{}\"", self.raw)
+        self.quote.write("", Delimiter::Quote, &self.raw)
     }
 }
 
@@ -2405,8 +2410,9 @@ pub enum UseItem {
 pub enum UseNameSpelling {
     Ident,
     /// A full interface name as a string (`"wasi:cli/stdout"`), which always
-    /// takes `as`, since a string is no identifier to bind.
-    InterfaceName(CmImport),
+    /// takes `as`, since a string is no identifier to bind. The literal is
+    /// kept for printing it back.
+    InterfaceName(CmImport, StrLit),
 }
 
 /// Simple use item (used within effect function imports)
@@ -3687,6 +3693,8 @@ impl StructLiteralExpr {
 #[derive(Debug, Clone)]
 pub struct StructLiteralField {
     pub name: String,
+    /// The string literal that spelled `name`, where one did.
+    pub quoted: Option<StrLit>,
     /// `AstId` of the field name, for cursor-based navigation (jump-to-def).
     pub name_id: AstId,
     /// Span of just the field name token.
@@ -3840,11 +3848,12 @@ pub enum Literal {
     /// Numeric literal: raw source text (e.g. `"42"`, `"0xFF"`, `"3.14"`). Its
     /// type comes from its context.
     Number(String),
-    /// String literal: raw source text between quotes (escape sequences not interpreted).
-    String(String),
-    /// Byte-string literal `b"..."`: raw source text between quotes (escape
-    /// sequences not interpreted). Lowers to a constant `List<u8>`.
-    Bytes(String),
+    /// String literal: its text as written (escape sequences not interpreted),
+    /// and how the source quoted it, which says how to read the text.
+    String(String, Quote),
+    /// Byte-string literal `b"..."`, held as a string literal is. Lowers to a
+    /// constant `List<u8>`.
+    Bytes(String, Quote),
     /// Byte literal `b'x'`: raw source between quotes. Lowers to a `u8`.
     Byte(String),
     /// Char literal: raw source text between quotes (escape sequences not interpreted).
@@ -3861,9 +3870,9 @@ pub enum Literal {
     /// Compile-time data section literal: `#data`
     DataSection,
     /// Compile-time file include as string: `#include_str("path")`
-    IncludeStr(String),
+    IncludeStr(StrLit),
     /// Compile-time file include as bytes: `#include_bytes("path")`
-    IncludeBytes(String),
+    IncludeBytes(StrLit),
 }
 
 #[derive(Debug, Clone)]
@@ -4209,6 +4218,8 @@ pub struct StructPatternField {
     /// The node's own id, whose [`AstIdSpace`] names the module that wrote it.
     pub id: AstId,
     pub field_name: String,
+    /// The string literal that spelled `field_name`, where one did.
+    pub quoted: Option<StrLit>,
     pub pattern: Pattern,
     pub span: Span,
 }
@@ -4240,7 +4251,9 @@ pub struct ClosureParam {
 #[derive(Debug, Clone)]
 pub struct TemplateStringExpr {
     pub id: AstId,
+    /// Text as written, read as `quote` says.
     pub parts: Vec<TemplatePart>,
+    pub quote: Quote,
     pub span: Span,
 }
 

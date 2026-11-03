@@ -26,11 +26,14 @@ use crate::ast::{
 use crate::attribute::{CANONICAL, CM, GENERATED, TODO};
 use crate::comment::{Comment, TriviaMap};
 use crate::compiler_host::{Code, Diagnostic, DiagnosticSpan, Severity};
-use crate::escape::{quoted, unescape_string};
-use crate::lexer::{LexResult, WILDCARD, defaults_to_float, is_decimal_integer, lex_interpolation};
+use crate::escape::{quoted, string_value};
+use crate::lexer::{
+    LexResult, MAX_NESTING, WILDCARD, defaults_to_float, is_binding_name, is_decimal_integer,
+    lex_interpolation,
+};
 use crate::name::{contract_holder_name, namespaced_name, repeat_pack_name};
 use crate::syntax::statement_keyword_name_message;
-use crate::token::{Position, Span, TemplateTokenPart, Token, TokenKind, TokenKind as T};
+use crate::token::{Position, Quote, Span, TemplateTokenPart, Token, TokenKind, TokenKind as T};
 use crate::{ast, format_spec, hashmap};
 use std::sync::Arc;
 
@@ -111,6 +114,9 @@ pub struct Parser {
     /// The packs in scope while a function's body is read. A `..X` there names
     /// one of them: only a signature mints a repeat, which a call settles.
     body_packs: Option<Vec<String>>,
+    /// How many expressions, types and patterns enclose the one being read,
+    /// a template hole's parser counting from its template's.
+    depth: u32,
 }
 
 /// Whether the parser reads function bodies.
@@ -331,7 +337,22 @@ impl Parser {
             skipped: Vec::new(),
             enclosing_packs: Vec::new(),
             body_packs: None,
+            depth: 0,
         }
+    }
+
+    /// Run `parse` one level deeper, refusing past [`MAX_NESTING`] levels.
+    fn nested<T>(&mut self, parse: fn(&mut Self) -> ParseResult<T>) -> ParseResult<T> {
+        if self.depth == MAX_NESTING {
+            return Err(self.error_at_span(
+                self.peek().span,
+                &format!("code may nest at most {MAX_NESTING} levels deep"),
+            ));
+        }
+        self.depth += 1;
+        let result = parse(self);
+        self.depth -= 1;
+        result
     }
 
     /// Skip the function bodies of a `#![generated]` module: each parses as an
@@ -560,7 +581,7 @@ impl Parser {
         }
 
         // First token must be a valid field name (identifier, keyword, or string literal)
-        let is_string_lit = matches!(after_brace, TokenKind::StringLit(_));
+        let is_string_lit = matches!(after_brace, TokenKind::StringLit { .. });
         if after_brace.as_ident_name().is_none()
             && after_brace.as_keyword_str().is_none()
             && !is_string_lit
@@ -1522,9 +1543,8 @@ impl Parser {
         self.advance();
 
         // Optional test name (string literal)
-        let name = if let TokenKind::StringLit(raw) = self.peek_kind().clone() {
-            self.advance();
-            Some(raw)
+        let name = if matches!(self.peek_kind(), TokenKind::StringLit { .. }) {
+            Some(self.take_string()?)
         } else {
             None
         };
@@ -1641,16 +1661,49 @@ impl Parser {
         })
     }
 
-    /// Consume the string literal the cursor is on, `raw` its text, with its
-    /// escapes resolved the way an expression's string literal has them resolved.
-    fn take_string(&mut self, raw: &str) -> ParseResult<StrLit> {
-        let span = self.peek().span;
-        self.advance();
-        let value = unescape_string(raw).map_err(|message| self.error_at_span(span, &message))?;
-        Ok(StrLit {
-            value,
-            raw: raw.to_string(),
-        })
+    /// Consume the string literal the cursor is on, with its escapes resolved
+    /// the way an expression's string literal has them resolved.
+    fn take_string(&mut self) -> ParseResult<StrLit> {
+        let token = self.advance().clone();
+        let TokenKind::StringLit { raw, quote } = token.kind else {
+            unreachable!("the caller matched a string literal")
+        };
+        let value = string_value(&raw, quote)
+            .map_err(|message| self.error_at_span(token.span, &message))?;
+        Ok(StrLit { value, raw, quote })
+    }
+
+    /// A field name, spelled as an identifier, a keyword, or a string literal
+    /// for JSON compatibility. A literal comes back too, for printing it back.
+    fn take_field_name(&mut self) -> ParseResult<(String, Option<StrLit>)> {
+        if matches!(self.peek_kind(), TokenKind::StringLit { .. }) {
+            let quoted = self.take_string()?;
+            Ok((quoted.value.clone(), Some(quoted)))
+        } else {
+            Ok((self.consume_field_name()?, None))
+        }
+    }
+
+    /// Check that a shorthand field, which reads or binds the variable of the
+    /// field's name, names one a variable can take. `rest` is what the
+    /// explicit form writes after the colon.
+    fn check_shorthand_name(
+        &self,
+        name: &str,
+        quoted: Option<&StrLit>,
+        span: Span,
+        rest: &str,
+    ) -> ParseResult<()> {
+        if is_binding_name(name) {
+            return Ok(());
+        }
+        let written = quoted.map_or_else(|| name.to_string(), StrLit::as_written);
+        Err(self.error_at_span(
+            span,
+            &format!(
+                "a shorthand field must name a variable, and `{name}` cannot; write `{written}: {rest}`"
+            ),
+        ))
     }
 
     /// Parse a comma-separated list of attribute arguments up to the closing
@@ -1663,7 +1716,7 @@ impl Parser {
             // `as_ident_name`, so a contextual keyword can be a key.
             let key = self.peek_kind().as_ident_name().map(str::to_string);
             let arg = match (key, self.peek_kind().clone()) {
-                (_, TokenKind::StringLit(raw)) => AttrArg::Str(self.take_string(&raw)?),
+                (_, TokenKind::StringLit { .. }) => AttrArg::Str(self.take_string()?),
                 (Some(value), _) => {
                     self.mark_keyword_name();
                     self.advance();
@@ -1671,8 +1724,8 @@ impl Parser {
                     if self.check(&TokenKind::Eq) {
                         self.advance();
                         match self.peek_kind().clone() {
-                            TokenKind::StringLit(val) => {
-                                AttrArg::KeyValue(value, self.take_string(&val)?)
+                            TokenKind::StringLit { .. } => {
+                                AttrArg::KeyValue(value, self.take_string()?)
                             }
                             TokenKind::LBracket => {
                                 self.advance();
@@ -1686,8 +1739,8 @@ impl Parser {
                                     loop {
                                         let kind = self.peek_kind().clone();
                                         match (&kind, kind.as_ident_name()) {
-                                            (TokenKind::StringLit(item), _) if !names => {
-                                                strings.push(self.take_string(item)?);
+                                            (TokenKind::StringLit { .. }, _) if !names => {
+                                                strings.push(self.take_string()?);
                                             }
                                             (_, Some(named)) if names => {
                                                 idents.push(named.to_string());
@@ -1973,7 +2026,7 @@ impl Parser {
 
         loop {
             let name_span = self.peek().span;
-            let item = if matches!(self.peek_kind(), TokenKind::StringLit(_)) {
+            let item = if matches!(self.peek_kind(), TokenKind::StringLit { .. }) {
                 self.parse_use_interface_name(name_span)?
             } else {
                 let name = self.consume_ident()?;
@@ -1995,7 +2048,8 @@ impl Parser {
 
     /// `"ns:pkg/iface@ver" as Name`: an interface imported by its full name.
     fn parse_use_interface_name(&mut self, name_span: Span) -> ParseResult<UseItem> {
-        let name = self.consume_string()?.value;
+        let written = self.consume_string()?;
+        let name = written.value.clone();
         let interface =
             CmImport::parse(&name).filter(|cm| cm.function.is_none() && !cm.interface.is_empty());
         let Some(interface) = interface else {
@@ -2018,7 +2072,7 @@ impl Parser {
         Ok(UseItem::Simple {
             id: self.alloc_ast_id(),
             name,
-            spelling: UseNameSpelling::InterfaceName(interface),
+            spelling: UseNameSpelling::InterfaceName(interface, written),
             name_span,
             alias: Some(alias),
             local_span,
@@ -2155,7 +2209,7 @@ impl Parser {
             false
         };
         match self.peek_kind().clone() {
-            TokenKind::StringLit(_) => {
+            TokenKind::StringLit { .. } => {
                 if negate {
                     return Err(ParseError {
                         message: "cannot negate a string literal".to_string(),
@@ -2222,10 +2276,7 @@ impl Parser {
 
     fn consume_string(&mut self) -> ParseResult<StrLit> {
         match self.peek_kind() {
-            TokenKind::StringLit(raw) => {
-                let raw = raw.clone();
-                self.take_string(&raw)
-            }
+            TokenKind::StringLit { .. } => self.take_string(),
             _ => Err(ParseError {
                 message: "expected string literal".to_string(),
                 span: self.peek().span,
@@ -3691,6 +3742,10 @@ impl Parser {
     }
 
     fn parse_pattern_atom(&mut self) -> ParseResult<Pattern> {
+        self.nested(Self::parse_pattern_atom_at_depth)
+    }
+
+    fn parse_pattern_atom_at_depth(&mut self) -> ParseResult<Pattern> {
         if self.check(&TokenKind::Mut) {
             let mut_span = self.peek().span;
             self.advance();
@@ -3779,10 +3834,10 @@ impl Parser {
             // Literal pattern: 42 or 3.14
             self.advance();
             Ok(Pattern::Literal(Literal::Number(repr)))
-        } else if let TokenKind::StringLit(raw) = self.peek_kind().clone() {
+        } else if let TokenKind::StringLit { raw, quote } = self.peek_kind().clone() {
             // Literal pattern: "hello"
             self.advance();
-            Ok(Pattern::Literal(Literal::String(raw)))
+            Ok(Pattern::Literal(Literal::String(raw, quote)))
         } else if let TokenKind::CharLit(raw) = self.peek_kind().clone() {
             // Literal pattern: 'a'
             self.advance();
@@ -3859,18 +3914,7 @@ impl Parser {
                     // order `visit_pattern` walks.
                     let field_id = self.alloc_ast_id();
                     let field_span = self.peek().span;
-                    let field_name = if let TokenKind::StringLit(s) = self.peek_kind().clone() {
-                        // Allow string literals as field names for JSON compatibility
-                        self.advance();
-                        s
-                    } else if let Some(name) = self.peek_kind().as_ident_name() {
-                        let name = name.to_string();
-                        self.mark_keyword_name();
-                        self.advance();
-                        name
-                    } else {
-                        return Err(self.expected_name_error("field name in struct pattern"));
-                    };
+                    let (field_name, quoted) = self.take_field_name()?;
 
                     // Check for `: pattern` (rename/nested)
                     let pattern = if self.check(&TokenKind::Colon) {
@@ -3878,6 +3922,12 @@ impl Parser {
                         self.parse_pattern()?
                     } else {
                         // Shorthand: `{ x }` means `{ x: x }`
+                        self.check_shorthand_name(
+                            &field_name,
+                            quoted.as_ref(),
+                            field_span,
+                            "name",
+                        )?;
                         Pattern::Ident {
                             id: self.alloc_ast_id(),
                             name: field_name.clone(),
@@ -3888,6 +3938,7 @@ impl Parser {
                     fields.push(StructPatternField {
                         id: field_id,
                         field_name,
+                        quoted,
                         pattern,
                         span: field_span,
                     });
@@ -4319,7 +4370,12 @@ impl Parser {
         })
     }
 
+    /// Every nested expression, a block's included, is reached through here.
     fn parse_unary_expr(&mut self) -> ParseResult<Expr> {
+        self.nested(Self::parse_unary_expr_at_depth)
+    }
+
+    fn parse_unary_expr_at_depth(&mut self) -> ParseResult<Expr> {
         let start_span = self.peek().span;
         if self.check(&TokenKind::Ampersand) {
             self.advance();
@@ -4634,7 +4690,9 @@ impl Parser {
                 // and comments never reach the token stream, so a byte gap is
                 // the adjacency test; with a gap the literal is left for the
                 // ordinary unexpected-token error.
-                TokenKind::TemplateStringLit(_) if expr.span().end == self.peek().span.start => {
+                TokenKind::TemplateStringLit { .. }
+                    if expr.span().end == self.peek().span.start =>
+                {
                     if !matches!(expr, Expr::Ident(_)) {
                         return Err(self.error_at_span(
                             self.peek().span,
@@ -4642,20 +4700,17 @@ impl Parser {
                         ));
                     }
                     let template_token = self.advance();
-                    let TokenKind::TemplateStringLit(parts) = template_token.kind.clone() else {
+                    let TokenKind::TemplateStringLit { parts, quote } = template_token.kind.clone()
+                    else {
                         unreachable!("matched a template literal token")
                     };
                     let template_span = template_token.span;
-                    let Expr::TemplateString(template) =
-                        self.parse_template_string_parts(parts, template_span)?
-                    else {
-                        unreachable!("template parts parse to a template string")
-                    };
+                    let template = self.parse_template_string_parts(parts, quote, template_span)?;
                     let span = expr.span().merge(&template_span);
                     expr = Expr::TaggedTemplate(Box::new(TaggedTemplateExpr {
                         id: self.alloc_ast_id(),
                         tag: expr,
-                        template: *template,
+                        template,
                         span,
                     }));
                 }
@@ -4966,14 +5021,17 @@ impl Parser {
             TokenKind::NumberLit(repr) => {
                 Ok(self.consume_literal(Literal::Number(repr), start_span))
             }
-            TokenKind::StringLit(raw) => Ok(self.consume_literal(Literal::String(raw), start_span)),
-            TokenKind::ByteStringLit(raw) => {
-                Ok(self.consume_literal(Literal::Bytes(raw), start_span))
+            TokenKind::StringLit { raw, quote } => {
+                Ok(self.consume_literal(Literal::String(raw, quote), start_span))
+            }
+            TokenKind::ByteStringLit { raw, quote } => {
+                Ok(self.consume_literal(Literal::Bytes(raw, quote), start_span))
             }
             TokenKind::ByteCharLit(raw) => Ok(self.consume_literal(Literal::Byte(raw), start_span)),
-            TokenKind::TemplateStringLit(parts) => {
+            TokenKind::TemplateStringLit { parts, quote } => {
                 self.advance();
-                self.parse_template_string_parts(parts, start_span)
+                let template = self.parse_template_string_parts(parts, quote, start_span)?;
+                Ok(Expr::TemplateString(Box::new(template)))
             }
             TokenKind::True => Ok(self.consume_literal(Literal::Bool(true), start_span)),
             TokenKind::False => Ok(self.consume_literal(Literal::Bool(false), start_span)),
@@ -5094,30 +5152,18 @@ impl Parser {
     fn parse_implicit_struct_literal_expr(&mut self, start_span: Span) -> ParseResult<Expr> {
         self.advance(); // consume `{`
 
-        // `{ ident :` / `{ ident ,` / `{ ident }`
-        if let TokenKind::Ident(_) = self.peek_kind()
+        // `{ name :` / `{ name ,` / `{ name }`, and a key only a field can
+        // take, a keyword or a string literal, before `:`.
+        let next = &self.peek_nth(1).kind;
+        let shorthand_or_key = self.peek_kind().as_ident_name().is_some()
             && matches!(
-                self.peek_nth(1).kind,
+                next,
                 TokenKind::Colon | TokenKind::Comma | TokenKind::RBrace
-            )
-        {
-            return self.parse_struct_literal(None, start_span);
-        }
-
-        // `{ "field" :` — string literal field name
-        if let TokenKind::StringLit(_) = self.peek_kind()
-            && matches!(self.peek_nth(1).kind, TokenKind::Colon)
-        {
-            return self.parse_struct_literal(None, start_span);
-        }
-
-        // `{ true: ... }` — keyword used as field name; route through struct
-        // literal parser to produce a clearer error.
-        if matches!(
-            self.peek_kind(),
-            TokenKind::True | TokenKind::False | TokenKind::Null
-        ) && matches!(self.peek_nth(1).kind, TokenKind::Colon)
-        {
+            );
+        let key = (self.peek_kind().as_keyword_str().is_some()
+            || matches!(self.peek_kind(), TokenKind::StringLit { .. }))
+            && matches!(next, TokenKind::Colon);
+        if shorthand_or_key || key {
             return self.parse_struct_literal(None, start_span);
         }
 
@@ -5154,11 +5200,9 @@ impl Parser {
         if name == "include_str" || name == "include_bytes" {
             let is_str = name == "include_str";
             self.expect(&TokenKind::LParen)?;
-            let (path, path_span) = match self.peek_kind() {
-                TokenKind::StringLit(s) => {
-                    let s = s.clone();
-                    (s, self.advance().span)
-                }
+            let path_span = self.peek().span;
+            let path = match self.peek_kind() {
+                TokenKind::StringLit { .. } => self.take_string()?,
                 _ => {
                     return Err(ParseError {
                         message: format!("expected string literal path argument for `#{name}`"),
@@ -5167,7 +5211,9 @@ impl Parser {
                 }
             };
             let close_span = self.expect(&TokenKind::RParen)?.span;
-            self.include_paths.entry(path.clone()).or_insert(path_span);
+            self.include_paths
+                .entry(path.value.clone())
+                .or_insert(path_span);
             let value = if is_str {
                 Literal::IncludeStr(path)
             } else {
@@ -5732,6 +5778,10 @@ impl Parser {
     }
 
     fn parse_type(&mut self) -> ParseResult<Type> {
+        self.nested(Self::parse_type_at_depth)
+    }
+
+    fn parse_type_at_depth(&mut self) -> ParseResult<Type> {
         let start_span = self.peek().span;
 
         // Never type: !
@@ -7147,8 +7197,9 @@ impl Parser {
     fn parse_template_string_parts(
         &mut self,
         token_parts: Vec<TemplateTokenPart>,
+        quote: Quote,
         span: Span,
-    ) -> ParseResult<Expr> {
+    ) -> ParseResult<TemplateStringExpr> {
         let mut parts = Vec::new();
 
         for token_part in token_parts {
@@ -7197,11 +7248,12 @@ impl Parser {
             }
         }
 
-        Ok(Expr::TemplateString(Box::new(TemplateStringExpr {
+        Ok(TemplateStringExpr {
             id: self.alloc_ast_id(),
             parts,
+            quote,
             span,
-        })))
+        })
     }
 
     /// Reject a malformed format specifier. `origin` is where the specifier
@@ -7266,6 +7318,7 @@ impl Parser {
             Vec::new(),
         );
         parser.next_ast_id = self.next_ast_id;
+        parser.depth = self.depth;
         let expr = parser.parse_expr()?;
         self.next_ast_id = parser.next_ast_id;
         self.errors.append(&mut parser.errors);
@@ -7373,13 +7426,7 @@ impl Parser {
                 }
 
                 let field_name_span = self.peek().span;
-                // Allow string literals as field names for JSON compatibility
-                let field_name = if let TokenKind::StringLit(s) = self.peek_kind().clone() {
-                    self.advance();
-                    s
-                } else {
-                    self.consume_field_name()?
-                };
+                let (field_name, quoted) = self.take_field_name()?;
                 let field_name_id = self.alloc_ast_id();
 
                 let (value, is_shorthand, field_span) = if self.check(&TokenKind::Colon) {
@@ -7389,6 +7436,12 @@ impl Parser {
                     (value, false, span)
                 } else {
                     // Shorthand: `{ x }` is equivalent to `{ x: x }`
+                    self.check_shorthand_name(
+                        &field_name,
+                        quoted.as_ref(),
+                        field_name_span,
+                        "value",
+                    )?;
                     (
                         Expr::Ident(IdentExpr {
                             id: self.alloc_ast_id(),
@@ -7405,6 +7458,7 @@ impl Parser {
 
                 fields.push(StructLiteralField {
                     name: field_name,
+                    quoted,
                     name_id: field_name_id,
                     name_span: field_name_span,
                     value,
@@ -8923,7 +8977,7 @@ mod tests {
                 // Check that message is present and is a string literal
                 assert!(assert_stmt.message.is_some());
                 if let Some(Expr::Literal(lit)) = &assert_stmt.message {
-                    assert_matches!(&lit.value, Literal::String(s) if s == "x must be positive");
+                    assert_matches!(&lit.value, Literal::String(s, _) if s == "x must be positive");
                 } else {
                     panic!("expected string literal message");
                 }
@@ -9020,7 +9074,7 @@ mod tests {
     /// qualified, and the template keeps its holes.
     #[test]
     fn test_tagged_template_parses() {
-        let module = parse("fn f() { let a = sql`x ${y} z`; let b = String::raw`q`; }").unwrap();
+        let module = parse("fn f() { let a = sql`x ${y} z`; let b = String::format`q`; }").unwrap();
         let Item::Function(func) = &module.items[0] else {
             panic!("expected a function");
         };
@@ -9041,7 +9095,7 @@ mod tests {
         let Stmt::Let(b) = &body.stmts[1] else {
             panic!("expected a let");
         };
-        assert_eq!(tag_name(&b.value), ("String::raw".to_string(), 1));
+        assert_eq!(tag_name(&b.value), ("String::format".to_string(), 1));
     }
 
     /// Whitespace or a comment between the path and the backtick is a gap:

@@ -1,0 +1,21 @@
+// A raw template, `` #`…`# ``, takes a backslash as itself: no escape is
+// processed, and none is an error. A hole still opens at `${`. More `#`s on
+// both ends let the text hold a backtick and the shorter closer.
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    let name = builtin::black_box("Ann");
+    assert #`\d+\w\b`# == "\\d+\\w\\b";
+    assert #`C:\Users\${name}`# == "C:\\Users\\Ann";
+    assert #`\n`#.len() == 2;
+    assert #`trailing \`# == "trailing \\";
+    assert ##`a`b`#c`## == "a`b`#c";
+    assert #`$ and {} and $x`# == "$ and {} and $x";
+    assert #`${name:>5}|${#`\t`#}`# == "  Ann|\\t";
+    assert #`line one
+line two`# == "line one\nline two";
+    println(#`\u{1F600} stays as written`#);
+}
+
+__DATA__
+{"stdout": "\\u{1F600} stays as written\n"}

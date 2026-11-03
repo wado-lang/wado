@@ -508,6 +508,31 @@ as any integer literal does. Its value is always in `0..=255`. Its content
 follows a byte string's rule: one ASCII character or escape, with `\xNN` for
 `0x80..=0xFF` and no `\u`. A char literal `'…'` writes a Unicode scalar.
 
+### Raw Strings
+
+A raw string is written between `#"` and `"#`. A backslash in it is itself: it
+starts no escape, so no escape is an error there. Everything else, line breaks
+included, is literal text, and `${` opens no interpolation. A raw string means
+what the string that escapes each of its backslashes and quotes means, so it
+goes wherever a string literal goes: a `use` path, an attribute argument, a
+pattern. `b#"…"#` is a raw byte string, a `ByteList` whose source characters
+must be ASCII.
+
+The opener may carry more `#`s, and the closer is a quote followed by as many.
+So the text may hold a quote, or a quote followed by fewer `#`s:
+
+<!-- {"fixture":"raw_string_literal.wado"} -->
+
+```wado
+assert #"\d+\w\b"# == "\\d+\\w\\b";
+assert #"C:\Users\${name}"# == "C:\\Users\\${name}";
+assert #"\n"#.len() == 2;
+assert #"trailing \"# == "trailing \\";
+assert ##"a"b"#c"## == "a\"b\"#c";
+```
+
+A [raw template](#raw-template-strings) is the same with holes.
+
 ### Escape Sequences
 
 Escape sequences are shared between character, string and template literals,
@@ -638,6 +663,32 @@ or a comment does not close it.
 
 Whitespace around the expression and around the specifier is ignored, so
 `${ x : 5 }` reads as `${x:5}`.
+
+### Raw Template Strings
+
+A raw template is a template between `` #` `` and `` `# ``: a
+[raw string](#raw-strings) with holes. A backslash in it is itself: it starts no
+escape, so no escape is an error there. `${` still opens an interpolation, and
+everything else, line breaks included, is literal text. A
+raw template means what the template that escapes each of its backslashes and
+backticks means, so it is a `String`, and a tag before it takes it as it takes
+any template.
+
+The opener may carry more `#`s, and the closer is a backtick followed by as
+many. So the text may hold a backtick, or a backtick followed by fewer `#`s:
+
+<!-- {"fixture":"raw_template_literal.wado"} -->
+
+```wado
+assert #`\d+\w\b`# == "\\d+\\w\\b";
+assert #`C:\Users\${name}`# == "C:\\Users\\Ann";
+assert #`\n`#.len() == 2;
+assert #`trailing \`# == "trailing \\";
+assert ##`a`b`#c`## == "a`b`#c";
+assert #`$ and {} and $x`# == "$ and {} and $x";
+```
+
+A literal `${` cannot be written in a raw template.
 
 ### Format Specifiers
 
@@ -1063,18 +1114,20 @@ with the literal text around them, instead of a rendered `String`:
 
 ```wado
 let q = sql`SELECT * FROM users WHERE id = ${id} AND name = ${user.name}`;
-let s = String::raw`${dir}\bin\run.exe`;   // backslashes kept
+let s = #`${dir}\bin\run.exe`#;   // backslashes kept
 assert q.query == "SELECT * FROM users WHERE id = ? AND name = ?";
 assert s == "C:\\bin\\run.exe";
 ```
 
 The tag is a function name or a static method path, with no whitespace before
-the backtick. The backtick is a postfix on the path and binds as a call does.
-Any other expression before a backtick, such as a call result or a
-parenthesized expression, is a syntax error. A path naming a variant case or a
-closure-typed binding is rejected as a tag. The literal is lexed exactly as an
-untagged template, so every escape must still be one the lexer knows even where
-the tag preserves it.
+the template's opening backtick or `#`. The template is a postfix on the path
+and binds as a call does. Any other expression before a backtick, such as a
+call result or a parenthesized expression, is a syntax error. A path naming a
+variant case or a closure-typed binding is rejected as a tag. The literal is
+lexed exactly as an untagged template, so every escape in a cooked template
+must still be one the lexer knows even where the tag preserves it; a text full
+of backslashes is written as a
+[raw template](#raw-template-strings) instead.
 
 A tag is an ordinary function whose first parameter takes the template by value
 and is bound by `ReflectTemplate`, the reflected kind of a template literal. The
@@ -1084,12 +1137,13 @@ parameter of any other type, `&T` included, is reported as a tag error. Nothing
 on the declaration marks a function as a tag.
 
 Each template shape has an anonymous type of its own. The shape is the
-template's holes, each a type and a specifier, so `` tag`a=${a}` `` and
-`` tag`b: ${b}` `` are one type where `a` and `b` share one, and one
-instantiation of the tag. A value of it holds each hole and the literal text the
-site wrote. The type is unnameable and reached only through the bound; a
-diagnostic and `Reflect::decl_name()` show it as its holes, each spelled by its
-type and specifier, `` `${i32:04}` ``, cut at 50 characters with `...`.
+template's delimiters and its holes, each a type and a specifier, so
+`` tag`a=${a}` `` and `` tag`b: ${b}` `` are one type where `a` and `b` share
+one, and one instantiation of the tag. A value of it holds each hole and the
+literal text the site wrote. The type is unnameable and reached only through the
+bound; a diagnostic and `Reflect::decl_name()` show it as its delimiters around
+its holes, each spelled by its type and specifier, `` `${i32:04}` `` or
+``#`${i32}`#``, cut at 50 characters with `...`.
 
 `ReflectTemplate` is
 [sealed](./spec-reflection.md#sealed-traits), as the whole family is. Its
@@ -1120,22 +1174,28 @@ test "the tag sees each hole in its own type" {
 
 A hole handle (`TemplateHole<T, V>`) answers `index()` (its position, from 0),
 `lit(&t)` / `raw(&t)` (the preceding segment of `t`, escapes processed or
-preserved), `get(&t)` (a copy of the value, `V`), `get_ref(&t)` (a reference
+preserved; a raw template processes none, so both read its text as written),
+`get(&t)` (a copy of the value, `V`), `get_ref(&t)` (a reference
 to it, `&V`), `spec()` (the specifier as written, or `None`), `has_spec()`, and
 `fmt(&t, f)` (rendering the value through the trait its specifier selects, as
 [Format Types](#format-types) states). A tag declaring `affine ..V` takes an
 affine hole, and its handles offer no `get`, since a copy of an affine value
-does not exist. `String::format` and `String::raw` declare it.
+does not exist. `String::format` declares it.
 `ReflectTemplate::<T>::tail(&t)` and `raw_tail(&t)` give the segment after the
-last hole. A segment is a `StrSlice` over the template's own text, so reading
-one copies nothing. `index()`, `spec()` and `has_spec()` are constants of the
-shape. A hole handle is minted only by `members()`.
+last hole, and `hashes()` how many `#`s delimit the template on each end: 0
+for a cooked template. A segment is a `StrSlice` over the template's own text,
+so reading one copies nothing. `index()`, `spec()`, `has_spec()` and
+`hashes()` are constants of the shape. A hole handle is minted only by
+`members()`.
 
-A template value inspects as the template it was written as: each segment raw,
-and each hole as its value inspected, followed by its specifier.
+A template value inspects as the template it was written as: its delimiters,
+each segment raw, and each hole as its value inspected, followed by its
+specifier.
 `` `${t:?}` `` on `` id`n=${n:04}\n` `` with `n = 7` renders
-`` `n=${7:04}\n` ``. `==` compares the text as well as the holes, so the form
-shows the text.
+`` `n=${7:04}\n` ``. `==` compares the text as written as well as the holes, so
+the form shows the text: `` `a${n}` `` does not equal `` `\u{61}${n}` ``. The
+delimiters are part of the shape, so `` `a${n}` `` and ``#`a${n}`#`` are two
+types, and comparing them is a type error.
 
 `members()` walks a pack, so `Holes` is bound either as one (`[..V]`) or as the
 empty tuple (`[]`, for a tag that reads only `tail(&t)`). A concrete tuple
@@ -1241,8 +1301,9 @@ Rationale: [WEP: Tuple and List Literal Syntax](./wep-2026-01-15-tuple-and-array
 
 A `{ … }` literal lists members separated by commas. A member is `key: value`,
 a shorthand `name` that stands for `name: name`, or a `..base` spread. A key is
-an identifier or a string literal, so `{ "x": 1 }` writes the key `{ x: 1 }`
-writes. Any other key is an error.
+an identifier, a keyword, or a string literal, so `{ "x": 1 }` writes the key
+`{ x: 1 }` writes. Any other key is an error. A shorthand reads the variable of
+its name, so that name must be one a variable can take: `{ true }` is an error.
 
 <!-- {"fixture":"spec_literals_objects.wado"} -->
 

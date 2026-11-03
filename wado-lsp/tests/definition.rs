@@ -764,8 +764,8 @@ fn include_str_path_definition() {
 }
 
 // The cursor on the `#include_str` macro name (not the path literal) currently
-// falls into `file_path_definition` because `Literal::IncludeStr` stores only
-// the path string and the matcher keys off the entire literal span. This test
+// falls into `file_path_definition` because `Literal::IncludeStr` carries no
+// span of the path's own and the matcher keys off the entire literal span. This test
 // pins the behaviour so narrowing the match to the path literal is a
 // deliberate change.
 #[test]

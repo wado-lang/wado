@@ -28,6 +28,11 @@ A tuple pattern names every element of the tuple, or ends in `..` after at most
 that many. Over a tuple carrying a variadic pack, only the elements ahead of the
 pack have a fixed position, so the pattern names at most those and ends in `..`.
 
+A struct pattern names a field as a struct literal does: by an identifier, a
+keyword, or a string literal (`P { true: t, "x": a }`). A shorthand field binds
+a variable of the field's name, so that name must be one a variable can take:
+`P { true }` is an error.
+
 A string-literal pattern tests the scrutinee with `==` against a `String`, so
 any type implementing `Eq<String>` matches one: a `String`, a `StrSlice`, or a
 newtype over either. A type parameter bounded by

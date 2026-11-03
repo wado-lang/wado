@@ -253,3 +253,10 @@ statement can start, and is an error wherever an expression can, so a name
 spelled `resume` could never be read. A
 variable, parameter, item, case or import may not take it. Only a field or a
 method, reached through `.`, may.
+
+## Nesting Depth
+
+An expression, a type or a pattern nests at most 256 levels deep, and deeper
+source is an error. A level is a parenthesis, a block, a prefix operator, a type
+argument, a sub-pattern, and so on. A template hole counts the levels of the
+template around it.

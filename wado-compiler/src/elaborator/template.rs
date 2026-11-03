@@ -13,7 +13,7 @@ use crate::token::Span;
 
 use super::Elaborator;
 use super::types::{FunctionContext, TypeError};
-use crate::escape::unescape_template_string;
+use crate::escape::template_segment_value;
 
 /// Each hole's resolved type and specifier, in source order.
 pub(super) struct TemplateParts {
@@ -54,7 +54,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // The gate reify relies on: it decodes these segments with no
                 // diagnostic channel of its own.
                 ast::TemplatePart::String(raw) => {
-                    if let Err(message) = unescape_template_string(raw) {
+                    if let Err(message) = template_segment_value(raw, template.quote) {
                         let _ = self.emit(TypeError::InvalidLiteral {
                             message,
                             span: template.span,

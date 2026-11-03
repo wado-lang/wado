@@ -25,7 +25,7 @@ use crate::name::{
 };
 use crate::primitive::PrimitiveType;
 use crate::symbol_notation::render;
-use crate::token::Span;
+use crate::token::{Delimiter, Quote, Span};
 
 use crate::tir::{
     AnonShape, AssocTypeSig, EffectRef, EffectRows, InferVarId, REFLECT_NEWTYPE_BASE, ResolvedType,
@@ -1290,6 +1290,7 @@ impl TypeTable {
                         ..hole
                     })
                     .collect(),
+                ..shape
             }),
         };
         if shape == self.anon_structs[id.0 as usize].shape {
@@ -1389,7 +1390,7 @@ impl TypeTable {
         shape: &TemplateShape,
         hole_type: &dyn Fn(TypeId) -> String,
     ) -> String {
-        let mut name = String::from("`");
+        let mut name = shape.quote.open(Delimiter::Backtick);
         let mut room = TEMPLATE_NAME_MAX_CHARS;
         let mut push = |text: &str| {
             for c in text.chars() {
@@ -1417,7 +1418,7 @@ impl TypeTable {
         if !complete {
             name.push_str("...");
         }
-        name.push('`');
+        name.push_str(&shape.quote.close(Delimiter::Backtick));
         name
     }
 
@@ -1468,6 +1469,12 @@ impl TypeTable {
                         }
                         None => h.update([0u8]),
                     }
+                }
+                // Only a raw shape adds its delimiters, so a cooked shape's
+                // name stays the one compiled artifacts already carry.
+                if let Quote::Raw { hashes } = shape.quote {
+                    h.update([1u8]);
+                    digest_len(&mut h, hashes);
                 }
                 template_shape_name(&h.finalize().into())
             }

@@ -1561,22 +1561,25 @@ fn generate_decl_name_fn(
     decl_name_method: &str,
     span: Span,
 ) -> TirFunction {
-    let method_info = trait_method_info(receiver, reflect_trait_name, decl_name_method);
-    let qualified_name = method_info.to_mangled_name();
+    constant_method(
+        trait_method_info(receiver, reflect_trait_name, decl_name_method),
+        TirExpr::new(
+            TirExprKind::StringLiteral(display_name.to_string()),
+            string_type,
+            span,
+        ),
+    )
+}
 
-    let literal = TirExpr::new(
-        TirExprKind::StringLiteral(display_name.to_string()),
-        string_type,
-        span,
-    );
-    let body = TirBlock::new(vec![return_stmt(literal, span)], span);
-
+/// A static method returning `value`, a constant of the type it is synthesized for.
+fn constant_method(method_info: LocalMethodName, value: TirExpr) -> TirFunction {
+    let (return_type, span) = (value.type_id, value.span);
     make_synthetic_method(
-        qualified_name,
+        method_info.to_mangled_name(),
         method_info,
         vec![],
-        string_type,
-        body,
+        return_type,
+        TirBlock::new(vec![return_stmt(value, span)], span),
         vec![],
     )
 }
@@ -1658,7 +1661,7 @@ fn generate_template_reflect_impls(
             view: method_ref(&tt, CompilerItem::StringView),
         }
     };
-    let (members_method, tail_method, raw_tail_method) = {
+    let (members_method, tail_method, raw_tail_method, hashes_method) = {
         let tt = module.type_table.borrow();
         let items = tt.compiler_items();
         (
@@ -1670,6 +1673,9 @@ fn generate_template_reflect_impls(
                 .to_string(),
             items
                 .method_name(CompilerItem::ReflectTemplateRawTail)
+                .to_string(),
+            items
+                .method_name(CompilerItem::ReflectTemplateHashes)
                 .to_string(),
         )
     };
@@ -1745,6 +1751,10 @@ fn generate_template_reflect_impls(
             members_fn,
             tail_fn(&tail_method, false),
             tail_fn(&raw_tail_method, true),
+            constant_method(
+                trait_method_info(receiver, template_trait_name, &hashes_method),
+                common::int_literal(target.shape.quote.hash_count() as i64, span),
+            ),
         ];
         // An open shape's hole bridges would group its holes by a parameter,
         // which two holes may share only once substituted, so each concrete
@@ -1782,7 +1792,6 @@ fn generate_template_tail_fn(
     method_info: LocalMethodName,
     span: Span,
 ) -> TirFunction {
-    let qualified_name = method_info.to_mangled_name();
     let segment = field_access_local(
         0,
         "t",
@@ -1808,7 +1817,7 @@ fn generate_template_tail_fn(
     }];
     let locals = locals_from_params(&params);
     make_synthetic_method(
-        qualified_name,
+        method_info.to_mangled_name(),
         method_info,
         params,
         tail_view.view_type,
