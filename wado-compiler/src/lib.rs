@@ -2017,6 +2017,7 @@ fn compile_after_load<H: CompilerHost>(
         interner,
         coverage,
         space_modules,
+        marks,
         ..
     } = sem;
 
@@ -2123,6 +2124,7 @@ fn compile_after_load<H: CompilerHost>(
     package.test_selection = options.test_selection;
     package.wasm_assets = wasm_assets;
     package.codegen_flags = codegen_flags;
+    package.hot_sites = marks.map(|marks| marks.hot_sites().clone()).unwrap_or_default();
     package.provided_import_fqs = options
         .providers
         .iter()
@@ -2636,6 +2638,11 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
     let assert_plan_text = sem.assert_plan_text();
     let coverage_plan_text = sem.coverage_plan_text();
     let export_mappings = sem.export_mappings.clone();
+    let hot_sites = sem
+        .marks
+        .as_ref()
+        .map(|marks| marks.hot_sites().clone())
+        .unwrap_or_default();
 
     // === Phase 7b+8+9+10: Build Package and run remaining phases ===
     // Create Package early so CM binding synthesis runs before monomorphize,
@@ -2684,6 +2691,7 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
             }
             package.wasm_assets.clone_from(&wasm_assets);
             package.codegen_flags = parsed_codegen_flags;
+            package.hot_sites = hot_sites;
 
             // Validate target world (test world is synthetic, not in registry)
             if !package.is_test_world()

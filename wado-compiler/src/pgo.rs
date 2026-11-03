@@ -10,8 +10,10 @@
 use std::collections::BTreeMap;
 use std::fmt::{self, Write as _};
 
-use crate::ast::{self, AstId};
-use crate::coverage::{Coverage, PlannedModule, ProbeSite, RegionKind, SourceMarker, plan_module};
+use crate::ast::{self, AstId, AstIdSpace};
+use crate::coverage::{
+    Coverage, PlannedModule, Pos, ProbeSite, RegionKind, SourceMarker, plan_module,
+};
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::rarity::Mark;
@@ -304,6 +306,50 @@ pub(crate) struct MarkMap {
     /// Each region marked, as `module:line:column kind mark`.
     marked: Vec<String>,
     remarks: Vec<(Span, String)>,
+    /// Which measured regions are hot, for the inliner.
+    hot: HotSites,
+}
+
+/// Where a profile found the code hot: per parse, each region it measured,
+/// sorted by where it starts, the outer of two regions starting together
+/// first. Regions nest, so the innermost holding a position decides.
+#[derive(Debug, Clone, Default)]
+pub struct HotSites {
+    regions: IndexMap<AstIdSpace, Vec<Temperature>>,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct Temperature {
+    start: Pos,
+    end: Pos,
+    hot: bool,
+}
+
+impl HotSites {
+    fn add(&mut self, space: AstIdSpace, measured: impl IntoIterator<Item = Temperature>) {
+        let regions = self.regions.entry(space).or_default();
+        regions.extend(measured);
+        regions.sort_by_key(|t| (t.start, std::cmp::Reverse(t.end)));
+    }
+
+    /// Whether the code at `span` is hot: the innermost measured region
+    /// holding its start is.
+    #[must_use]
+    pub fn is_hot(&self, span: Span) -> bool {
+        let Some(regions) = self.regions.get(&span.space) else {
+            return false;
+        };
+        let at = Pos {
+            line: span.line as u32,
+            column: span.column as u32,
+        };
+        let started = regions.partition_point(|t| t.start <= at);
+        regions[..started]
+            .iter()
+            .rev()
+            .find(|t| at < t.end)
+            .is_some_and(|t| t.hot)
+    }
 }
 
 impl MarkMap {
@@ -326,6 +372,7 @@ impl MarkMap {
             };
             map.apply(
                 plan_module(source, module, rt_unreachable_calls),
+                module.ast_id_space(),
                 functions,
                 applied.reading,
             );
@@ -338,7 +385,13 @@ impl MarkMap {
     /// as `reading` says. A function is matched by its name, the `n`th of a
     /// name to the `n`th recorded, and its counts apply only where its hash is
     /// the recorded one.
-    fn apply(&mut self, planned: PlannedModule, functions: &[ProfiledFunction], reading: Reading) {
+    fn apply(
+        &mut self,
+        planned: PlannedModule,
+        space: AstIdSpace,
+        functions: &[ProfiledFunction],
+        reading: Reading,
+    ) {
         let thresholds = reading.thresholds;
         let PlannedModule {
             plan,
@@ -417,11 +470,18 @@ impl MarkMap {
             }
             parent
         };
-        // Hot where neither rare answer holds, since a marker states one
-        // answer. A hot marker covers what follows it as a rare one does, so
-        // one at the outermost hot region covers the regions under it.
-        let hot = |id: usize| counts[id].is_some_and(|runs| reading.is_hot(runs));
-        let mut under_hot = vec![false; plan.regions.len()];
+        // Hot where neither rare answer holds: a hot price on the rare side of
+        // a branch would grow code that rarely runs.
+        self.hot.add(
+            space,
+            plan.regions.iter().enumerate().filter_map(|(id, region)| {
+                counts[id].map(|runs| Temperature {
+                    start: region.start,
+                    end: region.end,
+                    hot: reading.is_hot(runs) && !unlikely(id) && !cold(id),
+                })
+            }),
+        );
         for (id, region) in plan.regions.iter().enumerate() {
             if counts[id].is_none() || region.kind == RegionKind::Rhs {
                 continue;
@@ -431,15 +491,8 @@ impl MarkMap {
             if count_of(parent) == Some(0) {
                 continue;
             }
-            let covered = parent.is_some_and(|p| under_hot[p as usize]);
-            under_hot[id] = covered;
-            let mark = match Mark::of(unlikely(id), cold(id)) {
-                Some(mark) => mark,
-                None if hot(id) && !covered => {
-                    under_hot[id] = true;
-                    Mark::Hot
-                }
-                None => continue,
+            let Some(mark) = Mark::of(unlikely(id), cold(id)) else {
+                continue;
             };
             self.sites.insert(site_of[&(id as u32)], mark);
             self.marked.push(format!(
@@ -513,6 +566,11 @@ impl MarkMap {
     #[must_use]
     pub(crate) fn marked(&self) -> &[String] {
         &self.marked
+    }
+
+    #[must_use]
+    pub(crate) fn hot_sites(&self) -> &HotSites {
+        &self.hot
     }
 
     /// What applying the profile says about its counts: a function's
@@ -618,6 +676,59 @@ mod tests {
         assert!(thresholds.is_unlikely(10, 1000));
         assert!(!thresholds.is_unlikely(11, 1000));
         assert!(thresholds.is_unlikely(0, 1));
+    }
+
+    /// LLVM's default cutoff: the hot counts are the largest ones that, added
+    /// up, reach 99% of all runs.
+    #[test]
+    fn the_hot_line_is_the_smallest_count_inside_the_cutoff() {
+        let profile = parse(
+            "wado-pgo 1\n\
+             module src/a.wado\n\
+             fn 0000000000000001 1 f\n\
+             0 900\n\
+             1 90\n\
+             2 10\n",
+        )
+        .expect("it parses");
+        let line = |per_million| profile.hot_line(Cutoff::new(per_million).expect("a share"));
+        assert_eq!(line(900_000), 900);
+        assert_eq!(line(990_000), 90);
+        assert_eq!(line(1_000_000), 10);
+    }
+
+    #[test]
+    fn the_innermost_measured_region_decides_whether_code_is_hot() {
+        let space = AstIdSpace::next();
+        let pos = |line, column| Pos { line, column };
+        let mut sites = HotSites::default();
+        sites.add(
+            space,
+            [
+                Temperature {
+                    start: pos(1, 1),
+                    end: pos(9, 2),
+                    hot: true,
+                },
+                Temperature {
+                    start: pos(3, 5),
+                    end: pos(5, 6),
+                    hot: false,
+                },
+            ],
+        );
+        let at = |line, column| Span {
+            line,
+            column,
+            space,
+            ..Span::default()
+        };
+        assert!(sites.is_hot(at(2, 1)));
+        assert!(!sites.is_hot(at(3, 5)));
+        assert!(!sites.is_hot(at(5, 5)));
+        assert!(sites.is_hot(at(5, 6)));
+        assert!(!sites.is_hot(at(9, 2)));
+        assert!(!sites.is_hot(Span { space: AstIdSpace::next(), ..at(2, 1) }));
     }
 
     #[test]

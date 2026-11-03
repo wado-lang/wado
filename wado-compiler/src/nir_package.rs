@@ -13,6 +13,7 @@ use std::rc::Rc;
 use crate::ast::cm_function_path;
 use crate::builtin_registry::BuiltinRegistry;
 use crate::codegen_flags::CodegenFlags;
+use crate::pgo::HotSites;
 use crate::compiler_item::CompilerItem;
 use crate::component_model::{
     CmFunctionInfo, CmInterfaceInfo, CmInterfaceRegistry, ResKind, parse_resource_func,
@@ -225,6 +226,8 @@ pub struct NirPackage {
     /// Fine-grained codegen feature flags from the CLI's `-f <flag>` option.
     /// Consulted by the WIR emitter to select alternative lowerings.
     pub codegen_flags: CodegenFlags,
+    /// Where the applied profile found the code hot, for the inliner.
+    pub hot_sites: HotSites,
     /// Maximum UTF-8 byte length for a string literal to get a constant
     /// `array.new_fixed<u8>` repr (which lets a constant string global promote
     /// to an eager Wasm constant). Longer strings keep the compact

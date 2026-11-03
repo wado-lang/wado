@@ -173,6 +173,7 @@ pub fn link(package: Package) -> FlatPackage {
         strip_names: package.strip_names,
         coverage_section: package.coverage_section,
         codegen_flags: package.codegen_flags,
+        hot_sites: package.hot_sites,
         skip_validation: package.skip_validation,
         target_world: package.target_world,
         export_binding_names: package.export_binding_names,

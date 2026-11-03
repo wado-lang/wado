@@ -46,6 +46,7 @@ use crate::optimize::alias::{CallImmutability, call_verdicts, first_param_types}
 use crate::optimize::dce::{DescriptorCache, ReachabilityCache, reachable_function_positions};
 use crate::optimize::mod_ref::SummaryCache;
 use crate::parallel::{Executor, lock};
+use crate::pgo::HotSites;
 use crate::rarity::Rarity;
 use crate::token::Span;
 use crate::trace::filter;
@@ -1033,7 +1034,7 @@ fn revisit_moved_reads(
     }
 }
 
-fn scan_body(func: &NirFunction, markers: MarkerBuiltins) -> BodyScan {
+fn scan_body(func: &NirFunction, markers: MarkerBuiltins, hot_sites: &HotSites) -> BodyScan {
     // A site's arguments are keyed by position and the callee's writes by
     // local index.
     assert!(
@@ -1048,12 +1049,7 @@ fn scan_body(func: &NirFunction, markers: MarkerBuiltins) -> BodyScan {
         return scan;
     };
     let cold = RareRuns::of(body, markers, Rarity::Cold).exprs(body);
-    let heated = {
-        let unlikely = RareRuns::of(body, markers, Rarity::Unlikely).exprs(body);
-        let mut hot = RareRuns::of(body, markers, Rarity::Hot).exprs(body);
-        hot.retain(|e| !cold.contains(e) && !unlikely.contains(e));
-        hot
-    };
+    let unlikely = RareRuns::of(body, markers, Rarity::Unlikely).exprs(body);
     let looped = looped_exprs(body);
     body.for_each_reachable_node(|node| match node {
         NodeRef::Stmt(st) => match &body.stmts[st].kind {
@@ -1098,7 +1094,10 @@ fn scan_body(func: &NirFunction, markers: MarkerBuiltins) -> BodyScan {
                 if !looped.contains(&e) {
                     scan.unlooped_callees.insert(*func_id);
                 }
-                if heated.contains(&e) {
+                if !cold.contains(&e)
+                    && !unlikely.contains(&e)
+                    && hot_sites.is_hot(body.exprs[e].span)
+                {
                     scan.heated_callees.insert(*func_id);
                 }
             }
@@ -1511,10 +1510,11 @@ enum Site {
     /// reach: only `#[inline(always)]` and a splice no bigger than the call
     /// happen here, since anything else only bloats code that rarely runs.
     Cold,
-    /// [`Site::Plain`] in a hot run, which splices at the hot threshold.
-    HotPlain,
-    /// [`Site::Loop`] in a hot run.
-    HotLoop,
+    /// [`Site::Plain`] in an unlikely run, which the profile's hot regions do
+    /// not raise: the branch into it is predicted not taken.
+    UnlikelyPlain,
+    /// [`Site::Loop`] in an unlikely run.
+    UnlikelyLoop,
 }
 
 impl Site {
@@ -1522,50 +1522,45 @@ impl Site {
         match self {
             Site::Cold => Site::Cold,
             Site::Plain | Site::Loop => Site::Loop,
-            Site::HotPlain | Site::HotLoop => Site::HotLoop,
+            Site::UnlikelyPlain | Site::UnlikelyLoop => Site::UnlikelyLoop,
         }
     }
 
-    /// This site in a hot run, unless it is cold.
-    fn heated(self) -> Self {
+    fn entering_unlikely(self) -> Self {
         match self {
-            Site::Plain => Site::HotPlain,
-            Site::Loop => Site::HotLoop,
-            Site::Cold | Site::HotPlain | Site::HotLoop => self,
+            Site::Plain => Site::UnlikelyPlain,
+            Site::Loop => Site::UnlikelyLoop,
+            Site::Cold | Site::UnlikelyPlain | Site::UnlikelyLoop => self,
         }
     }
 
-    /// This site outside every hot run.
-    fn cooled(self) -> Self {
+    /// The site as admission reads it, whatever run it is in.
+    fn admission(self) -> Self {
         match self {
-            Site::HotPlain => Site::Plain,
-            Site::HotLoop => Site::Loop,
+            Site::UnlikelyPlain => Site::Plain,
+            Site::UnlikelyLoop => Site::Loop,
             Site::Cold | Site::Plain | Site::Loop => self,
         }
     }
 
-    fn is_hot(self) -> bool {
-        matches!(self, Site::HotPlain | Site::HotLoop)
+    /// Whether a profile's hot region raises a call here to the hot threshold.
+    fn heats(self) -> bool {
+        matches!(self, Site::Plain | Site::Loop)
     }
 }
 
-/// The runs of one caller's body that move its [`Site`]: cold, hot, and
-/// unlikely, which ends a hot run.
+/// The runs of one caller's body that move its [`Site`]: cold and unlikely.
 #[derive(Clone)]
-struct SiteRuns([RareRuns; 3]);
+struct SiteRuns([RareRuns; 2]);
 
 impl SiteRuns {
     /// `body`'s runs, its cold ones `cold`.
     fn of(cold: RareRuns, body: &Body, markers: MarkerBuiltins) -> Self {
-        Self([
-            cold,
-            RareRuns::of(body, markers, Rarity::Hot),
-            RareRuns::of(body, markers, Rarity::Unlikely),
-        ])
+        Self([cold, RareRuns::of(body, markers, Rarity::Unlikely)])
     }
 
-    /// Where `block` turns cold, hot, and unlikely.
-    fn starts(&self, block: BlockId) -> [Option<usize>; 3] {
+    /// Where `block` turns cold and unlikely.
+    fn starts(&self, block: BlockId) -> [Option<usize>; 2] {
         self.0.each_ref().map(|runs| runs.start(block))
     }
 
@@ -2137,6 +2132,7 @@ struct Candidates<'a> {
     reach: &'a IndexMap<FuncId, Reach>,
     /// Which hot sites splice each candidate.
     hot_reach: &'a IndexMap<FuncId, Reach>,
+    hot_sites: &'a HotSites,
     /// Per candidate, the call sites a splice of it brings, its own splices'
     /// included: what a loop holding a site of it holds once the round ends.
     carried: &'a IndexMap<FuncId, IndexMap<FuncId, usize>>,
@@ -2224,7 +2220,8 @@ pub fn inline_functions(
     let descriptors = descriptor_cache.descriptors(project);
     let markers = MarkerBuiltins::of(project);
     let InlineScans { bodies, read } = scans;
-    let scans = bodies.refresh(project, gate.exec(), |f| scan_body(f, markers));
+    let hot_sites = &project.hot_sites;
+    let scans = bodies.refresh(project, gate.exec(), |f| scan_body(f, markers, hot_sites));
     let sites = argument_sites(scans, &live);
     // Taken every round, unlike the prices below: a callee's only site is one
     // where its splice pays back.
@@ -2579,6 +2576,7 @@ pub fn inline_functions(
             bodies: &inline_candidates,
             reach: &reach,
             hot_reach: &hot_reach,
+            hot_sites,
             carried: &carried,
             net_price: &net_price,
             shrinking: &shrinking,
@@ -2848,7 +2846,7 @@ fn carried_calls(
 
 /// Inline function calls in a block, each statement processed in place. `site`
 /// is the context the block's calls sit in; the block's cold run is a
-/// [`Site::Cold`], its hot run a hot site until an unlikely run, and a loop
+/// [`Site::Cold`], its unlikely run one the profile does not heat, and a loop
 /// body is a [`Site::Loop`].
 fn inline_calls_in_block(
     body: &mut Body,
@@ -2869,13 +2867,10 @@ fn inline_calls_in_block(
         Loop(BlockId),
         None,
     }
-    let [cold, hot, unlikely] = runs.starts(block);
+    let [cold, unlikely] = runs.starts(block);
     for (i, stmt_id) in body.blocks[block].stmts.clone().into_iter().enumerate() {
-        if hot == Some(i) {
-            site = site.heated();
-        }
         if unlikely == Some(i) {
-            site = site.cooled();
+            site = site.entering_unlikely();
         }
         if cold == Some(i) {
             site = Site::Cold;
@@ -3296,13 +3291,15 @@ fn try_inline_call_expr(
     // The call's stamped `func_id` is the exact callee identity; look the
     // candidate up directly (no `(module, name)` resolution).
     let candidate = candidates.bodies.get(&func_id)?;
-    let reach = if site.is_hot() {
+    let reach = if site.heats() && candidates.hot_sites.is_hot(caller.exprs[call_id].span) {
         candidates.hot_reach[&func_id]
     } else {
         candidates.reach[&func_id]
     };
-    let admitted = match (site.cooled(), reach) {
-        (Site::HotPlain | Site::HotLoop, _) => unreachable!("a cooled site is not hot"),
+    let admitted = match (site.admission(), reach) {
+        (Site::UnlikelyPlain | Site::UnlikelyLoop, _) => {
+            unreachable!("admission reads no unlikely site")
+        }
         (Site::Cold, _) => {
             candidate.inline_hint == InlineHint::Always || candidates.shrinking.contains(&func_id)
         }

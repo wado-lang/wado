@@ -6,6 +6,7 @@
 
 use crate::builtin_registry::BuiltinRegistry;
 use crate::codegen_flags::CodegenFlags;
+use crate::pgo::HotSites;
 use crate::component_model::CmInterfaceRegistry;
 use crate::elaborator::trait_env::TraitEnv;
 use crate::hashmap::{IndexMap, IndexSet};
@@ -60,6 +61,8 @@ pub struct Package {
     /// Threaded unchanged through to the WIR emitter, which consults them to
     /// pick alternative lowerings (e.g. native `array.copy`).
     pub codegen_flags: CodegenFlags,
+    /// Where the applied profile found the code hot, for the inliner.
+    pub hot_sites: HotSites,
     /// When true, skip Wasm validation after code generation.
     /// Returns raw bytes even if invalid — useful for debugging codegen.
     pub skip_validation: bool,
@@ -190,6 +193,7 @@ impl Package {
             strip_names: false,
             coverage_section: None,
             codegen_flags: CodegenFlags::default(),
+            hot_sites: HotSites::default(),
             skip_validation: false,
             target_world: "wasi:cli/command".to_string(),
             lib_world_info: None,

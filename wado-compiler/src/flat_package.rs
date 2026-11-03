@@ -10,6 +10,7 @@ use std::rc::Rc;
 
 use crate::builtin_registry::BuiltinRegistry;
 use crate::codegen_flags::CodegenFlags;
+use crate::pgo::HotSites;
 use crate::component_model::CmInterfaceRegistry;
 use crate::elaborator::trait_env::TraitEnv;
 use crate::hashmap::{IndexMap, IndexSet};
@@ -83,6 +84,8 @@ pub struct FlatPackage {
     pub coverage_section: Option<Vec<u8>>,
     /// Fine-grained codegen feature flags from the CLI's `-f <flag>` option.
     pub codegen_flags: CodegenFlags,
+    /// Where the applied profile found the code hot, for the inliner.
+    pub hot_sites: HotSites,
     /// When true, skip Wasm validation after code generation.
     pub skip_validation: bool,
     /// Target world fully-qualified name (e.g., "wasi:cli/command", "wasi:http/service")
