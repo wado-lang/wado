@@ -882,6 +882,12 @@ fn f(h: &Handle, n: i32) -> i32 {
                 ranges,
                 [&vec![3, 10, 16], &vec![6, 24, 30], &vec![6, 45, 51]]
             );
+            let owner_uses: Vec<i32> = uses(&d, "P")
+                .into_iter()
+                .filter(|&(line, _)| line == 6)
+                .map(|(_, roles)| roles)
+                .collect();
+            assert_eq!(owner_uses, [ROLE_READ, ROLE_READ]);
         });
     }
 
