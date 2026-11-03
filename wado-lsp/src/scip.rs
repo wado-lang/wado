@@ -98,7 +98,7 @@ pub(crate) fn document(ctx: &QueryContext, root: &str) -> ScipDocument {
 
     let mut occurrences = Vec::new();
     let mut symbols = Vec::new();
-    for decl in names.module_decls(entry).values() {
+    for decl in names.module_decls(entry).values().filter(|d| !d.is_alias) {
         let local = decl.is_local();
         occurrences.push(Occurrence {
             range: scip_range(&decl.name_span),
@@ -176,6 +176,7 @@ fn scip_range(span: &Span) -> ScipRange {
     }
 }
 
+#[derive(Clone)]
 struct Decl {
     name: String,
     symbol: String,
@@ -186,6 +187,9 @@ struct Decl {
     /// The symbol of the declaration this one is a member of, or the body it
     /// is local to; empty at the top level.
     enclosing: String,
+    /// Another id for a declaration made elsewhere, which uses of it reach
+    /// but which defines nothing itself.
+    is_alias: bool,
 }
 
 impl Decl {
@@ -371,6 +375,7 @@ impl DeclCollector<'_> {
                 name_span,
                 span,
                 enclosing: self.enclosing(),
+                is_alias: false,
             },
         );
         path
@@ -408,6 +413,7 @@ impl DeclCollector<'_> {
                 name_span,
                 span: name_span,
                 enclosing: self.enclosing(),
+                is_alias: false,
             },
         );
     }
@@ -566,6 +572,21 @@ impl AstVisitor<'_> for DeclCollector<'_> {
         // method's name and parameters at their spans: only what its clauses
         // declare is its own.
         if func.is_contract_holder() {
+            for p in &func.params {
+                let method_param = self
+                    .decls
+                    .values()
+                    .find(|d| d.kind == SymbolKind::Parameter && d.name_span == p.name_span)
+                    .expect("the method a holder follows declares its parameters")
+                    .clone();
+                self.decls.insert(
+                    p.id,
+                    Decl {
+                        is_alias: true,
+                        ..method_param
+                    },
+                );
+            }
             self.in_body(|this| walk_function(this, func));
             return;
         }
@@ -1007,6 +1028,19 @@ trait Pick {
                 .filter(|o| o.range == [4, 7, 11])
                 .count();
             assert_eq!(at_pick, 1);
+            let param: Vec<(&ScipRange, i32)> = d
+                .occurrences
+                .iter()
+                .filter(|o| o.symbol == symbol(&d, "i").symbol)
+                .map(|o| (&o.range, o.roles))
+                .collect();
+            assert_eq!(
+                param,
+                [
+                    (&vec![4, 19, 20], ROLE_DEFINITION),
+                    (&vec![5, 17, 18], ROLE_READ)
+                ]
+            );
         });
     }
 

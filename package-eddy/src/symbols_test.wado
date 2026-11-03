@@ -177,6 +177,23 @@ test "a negative or reversed range is an error" {
     assert add([-1, 0, 3]) == Err("bad.rs: a range must not be negative or end before it starts");
     assert add([2, 5, 1, 0]) == Err("bad.rs: a range must not be negative or end before it starts");
     assert add([0, 0, 3]).is_ok();
+    let mut symbols = empty_index();
+    let reversed_extent = symbols.add(&scip::Index {
+        documents: [
+            scip::Document {
+                relative_path: "bad.rs",
+                occurrences: [
+                    scip::Occurrence {
+                        range: [0, 0, 3],
+                        symbol: `${CRATE}f().`,
+                        symbol_roles: 1,
+                        enclosing_range: [2, 5, 1, 0],
+                    },
+                ],
+            },
+        ],
+    });
+    assert reversed_extent == Err("bad.rs: a range must not be negative or end before it starts");
 }
 
 test "the symbol tools read a path and a page as the other tools do" {
