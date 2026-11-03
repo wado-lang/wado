@@ -30,7 +30,14 @@ test "smoke" {
     }
 }
 
+// The first five statuses of twitter.json: a workload trains on a smaller input
+// than the benchmark measures.
 #[workload]
+test "workload" {
+    let data = #include_bytes("../json_twitter/twitter_sample.json");
+    assert inflate_zlib(&zlib_compress(&data)).unwrap() == data;
+}
+
 test "fuel" {
     let data = #include_bytes("../json_twitter/twitter.json");
     let compressed = measure("codec/zlib/compress", || zlib_compress(&data));

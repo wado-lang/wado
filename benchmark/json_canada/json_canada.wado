@@ -27,7 +27,15 @@ test "smoke" {
     assert count_points(&back) == 2;
 }
 
+// The first eight rings of canada.json, cut from its text: a workload trains on
+// a smaller input than the benchmark measures.
 #[workload]
+test "workload" {
+    let fc = from_bytes::<FeatureCollection, _>(#include_bytes("./canada_sample.json")).unwrap();
+    let back = from_bytes::<FeatureCollection, _>(to_bytes::<FeatureCollection>(&fc).unwrap()).unwrap();
+    assert count_points(&back) == 163;
+}
+
 test "fuel" {
     let json_data = #include_bytes("./canada.json");
     let fc = from_bytes::<FeatureCollection, _>(json_data).unwrap();

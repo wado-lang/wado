@@ -27,7 +27,15 @@ test "smoke" {
     assert event_count(&back) == 0;
 }
 
+// citm_catalog.json with its first ten events and performances, cut from its
+// text: a workload trains on a smaller input than the benchmark measures.
 #[workload]
+test "workload" {
+    let catalog = from_bytes::<CitmCatalog, _>(#include_bytes("./citm_catalog_sample.json")).unwrap();
+    let back = from_bytes::<CitmCatalog, _>(to_bytes::<CitmCatalog>(&catalog).unwrap()).unwrap();
+    assert event_count(&back) == 10;
+}
+
 test "fuel" {
     let json_data = #include_bytes("./citm_catalog.json");
     let catalog = from_bytes::<CitmCatalog, _>(json_data).unwrap();
