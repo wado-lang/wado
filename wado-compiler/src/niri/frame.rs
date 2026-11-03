@@ -307,12 +307,9 @@ impl Interpreter<'_> {
         self.step_budget -= 1;
         match &body.stmts[s].kind {
             StmtKind::Let {
-                local_index,
-                is_mut,
-                value,
-                ..
+                local_index, value, ..
             } => {
-                let (index, is_mut, value) = (*local_index, *is_mut, *value);
+                let (index, value) = (*local_index, *value);
                 // A fresh binding forks the local's storage; an alias taken
                 // over the same index would keep pointing at the old one.
                 if self
@@ -324,10 +321,10 @@ impl Interpreter<'_> {
                 {
                     return Flow::Bail;
                 }
-                // What makes an immutable binding of a reference an alias is that
-                // nothing displaces it, which is equally true of a mutable
-                // local nothing reassigns.
-                if !is_mut || !self.frame.reassigned.contains(index) {
+                // What makes a binding of a reference an alias is that nothing
+                // displaces it. `mut` does not say so: scalarizing leaves an
+                // immutable `let` that is assigned later.
+                if !self.frame.reassigned.contains(index) {
                     if let Some(named) = self.aliased_operand(body, value) {
                         return match self.record_place_alias(body, index, named) {
                             Some(()) => Flow::Fallthrough(Lattice::Unevaluated),
