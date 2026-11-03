@@ -2386,8 +2386,20 @@ impl WebGpuBackend {
                 // next ones, and the attention reads none past them.
                 let slot = self.allocated(2 * n, false);
                 let held_past = [batch, kv, past, d] as List<i32>;
-                self.copy(&sliced(past_k, 2, 0, past), &DeviceTensor { slot, offset: 0, extents: held_past, strides, half: false });
-                self.copy(&sliced(past_v, 2, 0, past), &DeviceTensor { slot, offset: n, extents: held_past, strides, half: false });
+                self.copy(&sliced(past_k, 2, 0, past), &DeviceTensor {
+                    slot,
+                    offset: 0,
+                    extents: held_past,
+                    strides,
+                    half: false,
+                });
+                self.copy(&sliced(past_v, 2, 0, past), &DeviceTensor {
+                    slot,
+                    offset: n,
+                    extents: held_past,
+                    strides,
+                    half: false,
+                });
                 slot;
             },
         };
