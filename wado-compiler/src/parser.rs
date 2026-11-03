@@ -5156,7 +5156,10 @@ impl Parser {
         // take, a keyword or a string literal, before `:`.
         let next = &self.peek_nth(1).kind;
         let shorthand_or_key = self.peek_kind().as_ident_name().is_some()
-            && matches!(next, TokenKind::Colon | TokenKind::Comma | TokenKind::RBrace);
+            && matches!(
+                next,
+                TokenKind::Colon | TokenKind::Comma | TokenKind::RBrace
+            );
         let key = (self.peek_kind().as_keyword_str().is_some()
             || matches!(self.peek_kind(), TokenKind::StringLit { .. }))
             && matches!(next, TokenKind::Colon);
