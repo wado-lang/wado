@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1793690022331,
+  "lastUpdate": 1793697130943,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -73977,6 +73977,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/4028a365e7ae5412532792216fb832588bb23879"
         },
         "date": 1793690021498,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3099,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7303,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21809,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 316578,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "fd132d8d789a622b33c6cff3615e4d7e9d2397fb",
+          "message": "Merge pull request #2535 from wado-lang/ccr-52b7fd41-lzjtwq\n\nfix(pgo): stop a profile from making the code it reaches cold",
+          "timestamp": "2026-11-03T17:59:37+09:00",
+          "tree_id": "618f68954a1358037980adf2a13edd1f352c84f4",
+          "url": "https://github.com/wado-lang/wado/commit/fd132d8d789a622b33c6cff3615e4d7e9d2397fb"
+        },
+        "date": 1793697129890,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
