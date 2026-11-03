@@ -32,8 +32,6 @@ test "smoke" {
     assert back.search_metadata.count == 0;
 }
 
-// The first five statuses of twitter.json, cut from its text: a workload trains
-// on a smaller input than the benchmark measures.
 #[workload]
 test "workload" {
     let resp = json_from_bytes::<TwitterResponse, _>(#include_bytes("../json_twitter/twitter_sample.json")).unwrap();

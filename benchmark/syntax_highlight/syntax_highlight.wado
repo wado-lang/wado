@@ -26,8 +26,6 @@ test "smoke" {
     assert sqlite::highlight("SELECT 1;").len() > 0;
 }
 
-// Every eighth statement of queries.sql: a workload trains on a smaller input
-// than the benchmark measures.
 #[workload]
 test "workload" {
     assert sqlite::highlight(#include_str("../sqlite_parse/queries_sample.sql")).len() > 0;

@@ -86,9 +86,7 @@ impl Profile {
     pub fn applied(&self, thresholds: Thresholds) -> Applied<'_> {
         Applied {
             profile: self,
-            reading: Reading {
-                predictable_branch: thresholds.predictable_branch,
-            },
+            thresholds,
         }
     }
 }
@@ -107,9 +105,9 @@ impl Percent {
     }
 }
 
-/// How a compile reads a profile's counts: the share of a branch's runs past
-/// which the branch is predictable. The default is LLVM's for its option of the
-/// same name.
+/// How a compile reads a profile's counts: a region is unlikely past the share
+/// of a branch's runs that makes the branch predictable, and cold where it
+/// never ran. The default share is LLVM's for its option of the same name.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Thresholds {
     pub predictable_branch: Percent,
@@ -123,14 +121,7 @@ impl Default for Thresholds {
     }
 }
 
-/// What a profile's counts mean to a compile: a region is unlikely by its count
-/// against the code around it, and cold where it never ran.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) struct Reading {
-    predictable_branch: Percent,
-}
-
-impl Reading {
+impl Thresholds {
     /// Whether a region the profile ran `runs` times is cold. Only one that
     /// never ran is, as GCC's `probably_never_executed` holds. The optimizer
     /// takes every function only cold sites reach as cold, so a region that
@@ -151,7 +142,7 @@ impl Reading {
 #[derive(Debug, Clone, Copy)]
 pub struct Applied<'a> {
     pub(crate) profile: &'a Profile,
-    pub(crate) reading: Reading,
+    pub(crate) thresholds: Thresholds,
 }
 
 /// Why a profile's text does not parse, at its 1-based `line`.
@@ -278,7 +269,7 @@ impl MarkMap {
             map.apply(
                 plan_module(source, module, rt_unreachable_calls),
                 functions,
-                applied.reading,
+                applied.thresholds,
             );
             map.sources.insert(source.clone());
         }
@@ -286,10 +277,15 @@ impl MarkMap {
     }
 
     /// Mark each region of `planned` by what `functions` recorded of it, read
-    /// as `reading` says. A function is matched by its name, the `n`th of a
+    /// under `thresholds`. A function is matched by its name, the `n`th of a
     /// name to the `n`th recorded, and its counts apply only where its hash is
     /// the recorded one.
-    fn apply(&mut self, planned: PlannedModule, functions: &[ProfiledFunction], reading: Reading) {
+    fn apply(
+        &mut self,
+        planned: PlannedModule,
+        functions: &[ProfiledFunction],
+        thresholds: Thresholds,
+    ) {
         let PlannedModule {
             plan,
             sites,
@@ -352,10 +348,10 @@ impl MarkMap {
         // test also runs once per iteration. A function's body and a closure's
         // are entered by a call, not a branch.
         let unlikely = |id: usize| match (counts[id], count_of(parents[id])) {
-            (Some(runs), Some(around)) => reading.is_unlikely(runs, around),
+            (Some(runs), Some(around)) => thresholds.is_unlikely(runs, around),
             _ => false,
         };
-        let cold = |id: usize| counts[id].is_some_and(Reading::is_cold);
+        let cold = |id: usize| counts[id].is_some_and(Thresholds::is_cold);
         // The region a marker for `id` sits under: a region in an expression
         // has no statement position to mark.
         let markable_parent = |id: usize| {
@@ -402,7 +398,7 @@ impl MarkMap {
             self.overridden.insert(marker.node());
             // A path that never ran is unlikely and cold, which the marker
             // said; one that ran is not cold.
-            if Reading::is_cold(runs) {
+            if Thresholds::is_cold(runs) {
                 continue;
             }
             let verdict = if unlikely(region) {
@@ -552,12 +548,10 @@ mod tests {
     /// runs, so the other side is unlikely at 1% or less.
     #[test]
     fn a_side_is_unlikely_at_the_predictable_branchs_complement() {
-        let reading = Reading {
-            predictable_branch: Thresholds::default().predictable_branch,
-        };
-        assert!(reading.is_unlikely(10, 1000));
-        assert!(!reading.is_unlikely(11, 1000));
-        assert!(reading.is_unlikely(0, 1));
+        let thresholds = Thresholds::default();
+        assert!(thresholds.is_unlikely(10, 1000));
+        assert!(!thresholds.is_unlikely(11, 1000));
+        assert!(thresholds.is_unlikely(0, 1));
     }
 
     #[test]
