@@ -44,7 +44,11 @@ fn shapes() -> scip::Index {
                     def(10, 7, 5, "total().", [10, 0, 12, 1]),
                     reference(10, 23, 6, "Circle#"),
                     reference(11, 29, 4, "impl#[Circle]area()."),
-                    scip::Occurrence { range: [10, 13, 19], symbol: "local 0", symbol_roles: 1 },
+                    scip::Occurrence {
+                        range: [10, 13, 19],
+                        symbol: "local 0",
+                        symbol_roles: 1,
+                    },
                 ],
                 symbols: [
                     info("Circle#", "Circle", Struct, "pub struct Circle", ""),
@@ -97,6 +101,6 @@ test "FindReferences keeps the references under a path" {
 }
 
 test "the symbol tools are offered only with an index" {
-    assert !(Workspace { root: "src" }).tools().into_iter().any(|t| t.name == "FindSymbol");
+    assert !Workspace { root: "src" }.tools().into_iter().any(|t| t.name == "FindSymbol");
     assert workspace().tools().into_iter().any(|t| t.name == "FindSymbol");
 }

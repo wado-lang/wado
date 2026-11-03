@@ -86,13 +86,15 @@ impl Workspace {
     pub fn tools(&self) -> List<Tool> {
         let mut out = reading_tools();
         if self.symbols matches { Some(_) } {
-            out.push(tool(
-                "FindSymbol",
-                `Finds the definitions of a symbol by name, from the compiler's index of the Rust and Wado code. ${PATHS}
+            out.push(
+                tool(
+                    "FindSymbol",
+                    `Finds the definitions of a symbol by name, from the compiler's index of the Rust and Wado code. ${PATHS}
 - Each definition gives its file, its lines and its signature: a function's body spans those lines.
 - Exact names only, not patterns. Use Grep for text.`,
-                SYMBOL_SCHEMA,
-            ));
+                    SYMBOL_SCHEMA,
+                ),
+            );
             out.push(tool(
                 "FindReferences",
                 `Finds where a symbol is used, from the compiler's index of the Rust and Wado code. ${PATHS}

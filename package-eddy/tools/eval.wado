@@ -173,10 +173,10 @@ pub fn index(root: &String, wado_path: &String) -> List<String> with (Process, E
     fs::create_dir_all(&dir).unwrap();
     // A child gets a private HOME, where rustup would find no toolchain.
     let home = env("HOME").unwrap_or("");
-    let analyzer = Command::new("rust-analyzer")
-        .args(["scip", *root, "--output", rust, "--exclude-vendored-libraries"])
-        .env("RUSTUP_HOME", env("RUSTUP_HOME").unwrap_or(`${home}/.rustup`))
-        .env("CARGO_HOME", env("CARGO_HOME").unwrap_or(`${home}/.cargo`));
+    let analyzer = Command::new("rust-analyzer").args(["scip", *root, "--output", rust, "--exclude-vendored-libraries"]).env(
+        "RUSTUP_HOME",
+        env("RUSTUP_HOME").unwrap_or(`${home}/.rustup`),
+    ).env("CARGO_HOME", env("CARGO_HOME").unwrap_or(`${home}/.cargo`));
     succeed(&analyzer);
     succeed(&Command::new(*wado_path).args(["query", "scip", "--output", wado, *root]));
     return [rust, wado];

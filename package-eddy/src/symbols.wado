@@ -124,7 +124,15 @@ impl SymbolIndex {
         }
         let id = self.syms.len();
         self.ids.try_insert(*symbol, id);
-        self.syms.push(Sym { symbol: *symbol, name: "", kind: "", signature: "", enclosing: "", definitions: [], references: [] });
+        self.syms.push(Sym {
+            symbol: *symbol,
+            name: "",
+            kind: "",
+            signature: "",
+            enclosing: "",
+            definitions: [],
+            references: [],
+        });
         return id;
     }
 
@@ -138,7 +146,8 @@ impl SymbolIndex {
             if !owner.is_empty() && self.owner_name(id) != owner {
                 continue;
             }
-            if !path.is_empty() && !self.syms[id].definitions.into_iter().any(|d| self.files[d.file].starts_with(*path)) {
+            if !path.is_empty()
+                && !self.syms[id].definitions.into_iter().any(|d| self.files[d.file].starts_with(*path)) {
                 continue;
             }
             out.push(id);
@@ -184,7 +193,7 @@ impl SymbolIndex {
         let mut sources = HashMap::<i32, List<String>>::new();
         for let id of self.lookup(query, &"") {
             let s = &self.syms[id];
-            let at =if s.definitions.is_empty() {
+            let at = if s.definitions.is_empty() {
                 "";
             } else {
                 let d = &s.definitions[0];

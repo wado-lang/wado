@@ -169,7 +169,10 @@ pub async fn run_scip(dir: &str, output: &str) -> Result<(), CliExit> {
         }
     }
     documents.sort_by_key(|(order, _)| *order);
-    let documents: Vec<_> = documents.into_iter().map(|(_, document)| document).collect();
+    let documents: Vec<_> = documents
+        .into_iter()
+        .map(|(_, document)| document)
+        .collect();
     let index = wado_lsp::scip::encode_index(&root_uri, env!("CARGO_PKG_VERSION"), &documents);
     fs::write(output, index).map_err(|e| CliExit::error(format!("writing '{output}': {e}")))
 }
