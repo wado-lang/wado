@@ -35,7 +35,7 @@ use crate::manifest::package_root;
 use crate::process_host::ProcessGrant;
 use crate::rss::summary_line;
 use crate::run_cache::RunCache;
-use crate::runtime::{self, ProfileMode, Ticker, WasiState};
+use crate::runtime::{self, InsecureRandom, ProfileMode, Ticker, WasiState};
 use crate::test_cache::{self, Tally, TestCache};
 use crate::test_report::{
     CompileEvent, HeartbeatReporter, LoadEvent, PackageDoneArgs, TapReporter, TestReporter,
@@ -1785,6 +1785,11 @@ async fn run_single_test(job: &TestJob, cpu_permit: OwnedSemaphorePermit) -> Tes
             Arc::clone(&clock),
         ),
         module.process.clone(),
+        if module.coverage.is_some() || module.engine.get_consume_fuel() {
+            InsecureRandom::Fixed
+        } else {
+            InsecureRandom::Host
+        },
     ) {
         Ok(v) => v,
         Err(e) => return fail_result(job, format!("failed to set up store: {e:#}"), start, None),
