@@ -3899,7 +3899,12 @@ impl Parser {
                         self.parse_pattern()?
                     } else {
                         // Shorthand: `{ x }` means `{ x: x }`
-                        self.check_shorthand_name(&field_name, quoted.as_ref(), field_span, "name")?;
+                        self.check_shorthand_name(
+                            &field_name,
+                            quoted.as_ref(),
+                            field_span,
+                            "name",
+                        )?;
                         Pattern::Ident {
                             id: self.alloc_ast_id(),
                             name: field_name.clone(),
