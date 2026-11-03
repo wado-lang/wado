@@ -15,6 +15,16 @@ test "input highlights its embedded languages" {
     assert out.contains("<span class=\"property\">margin</span>");
 }
 
+#[workload]
+test "workload" {
+    let out = highlight(#include_str("./sample.html"));
+    assert out.contains("<span class=\"keyword\">class</span>");
+    assert out.contains("<span class=\"property\">margin</span>");
+    assert out.contains("<span class=\"string\">&quot;@context&quot;</span>");
+    assert out.contains("<span class=\"property\">display</span>");
+    assert out.contains("<span class=\"operator\">+=</span>");
+}
+
 export fn run() with (Stdout, MonotonicClock) {
     let mut b = Benchmark { name: "gale-highlight-html (Gale)", input_size: Option::Some(INPUT.len()) };
     let last_len = b.run("", || highlight(INPUT).len());
