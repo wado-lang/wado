@@ -60,6 +60,33 @@ pub(crate) fn block_tail(body: &Body, op: Operand, prefix: &mut Vec<StmtId>) -> 
     block_tail(body, *inner, prefix)
 }
 
+/// The calls a labeled block that `break`s to itself takes its value from:
+/// each `break` to it carries one, and so does a tail it falls off with. `None`
+/// unless every way out that yields the value is a direct call, so binding each
+/// call's results binds the block's. This is what the inliner leaves of a
+/// callee that returned another call's aggregate.
+/// `wir_build::translate::try_emit_multi_value_let` shares this recogniser.
+pub(crate) fn block_exit_calls(body: &Body, op: Operand) -> Option<(BlockId, String, Vec<ExprId>)> {
+    let e = op.as_expr()?;
+    let ExprKind::LabeledBlock { label, block, .. } = &body.exprs[e].kind else {
+        return None;
+    };
+    let mut exits = body.break_values_to(NodeRef::Block(*block), label)?;
+    match body.blocks[*block].stmts.last().map(|&s| &body.stmts[s].kind) {
+        Some(StmtKind::Expr(tail)) => exits.push(*tail),
+        Some(StmtKind::Break { .. } | StmtKind::Return { .. } | StmtKind::Continue) => {}
+        _ => return None,
+    }
+    let calls = exits
+        .into_iter()
+        .map(|v| {
+            let call = v.as_expr()?;
+            matches!(body.exprs[call].kind, ExprKind::Call { .. }).then_some(call)
+        })
+        .collect::<Option<Vec<_>>>()?;
+    (!calls.is_empty()).then(|| (*block, label.clone(), calls))
+}
+
 /// Walk the argument expressions of a (Method)Call so tracked-local escapes in
 /// the args invalidate the right candidate (the call's own ABI is accepted).
 fn walk_call_args_for_uses(
@@ -566,7 +593,19 @@ fn validate_stmt(
                 walk_call_args_for_uses(body, call, cx, invalid, tracked);
                 return;
             }
+            // Each exit call is walked as a call, its arguments only, so the
+            // block is ordinary code; what the local splits into is the
+            // results every exit shares.
+            let exit_candidate = cx
+                .settled
+                .contains(&local_index)
+                .then(|| block_exit_calls(body, value))
+                .flatten()
+                .and_then(|(_, _, calls)| shared_candidate(body, &calls, cx));
             walk_expr_for_uses_operand(body, value, cx, invalid, tracked);
+            if let Some(candidate_idx) = exit_candidate {
+                tracked.insert(local_index, candidate_idx);
+            }
         }
         StmtKind::Expr(e) => {
             let e = *e;
@@ -656,6 +695,19 @@ fn validate_stmt(
             walk_expr_for_uses_operand(body, *value, cx, invalid, tracked);
         }
     }
+}
+
+/// The candidate whose results `calls` all leave: every callee a candidate,
+/// with one field list among them.
+fn shared_candidate(body: &Body, calls: &[ExprId], cx: &UseCx<'_>) -> Option<usize> {
+    let mut idxs = calls.iter().map(|&call| match &body.exprs[call].kind {
+        ExprKind::Call { func_id, .. } => cx.candidate_ids.get(func_id).copied(),
+        _ => unreachable!("an exit is a call"),
+    });
+    let first = idxs.next()??;
+    let fields = &cx.candidates[&first].field_names;
+    idxs.all(|idx| idx.is_some_and(|idx| cx.candidates[&idx].field_names == *fields))
+        .then_some(first)
 }
 
 /// Walk a `return`ed value, sparing a pass-through call in every tail position
