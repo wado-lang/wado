@@ -1,0 +1,78 @@
+//! The tree a pattern parses to. Code points are `u32`, since a pattern may
+//! name a lone surrogate, which no `char` holds and no UTF-8 text contains.
+
+use { Property } from "core:icu";
+
+internal variant Node {
+    Char(u32),
+    /// `.`
+    Any,
+    /// `^`
+    Start,
+    /// `$`
+    End,
+    /// `\b`
+    WordBoundary,
+    /// `\B`
+    NotWordBoundary,
+    Set(CharSet),
+    Group(Group),
+    Modified(Modified),
+    Repeat(Repeat),
+    Concat(List<Node>),
+    Alternation(List<Node>),
+}
+
+/// `(…)`, `(?<name>…)` or `(?:…)`. A capturing group's index counts its
+/// opening parenthesis among the pattern's, from 1.
+internal struct Group {
+    internal index: Option<i32>,
+    internal name: Option<String>,
+    internal body: Node,
+}
+
+internal flags Flag {
+    IgnoreCase,
+    Multiline,
+    DotAll,
+}
+
+/// `(?ims-ims:…)`
+internal struct Modified {
+    internal add: Flag,
+    internal remove: Flag,
+    internal body: Node,
+}
+
+internal struct Repeat {
+    internal min: u32,
+    /// `None` is unbounded.
+    internal max: Option<u32>,
+    internal greedy: bool,
+    internal body: Node,
+}
+
+/// A class, `[…]` or `[^…]`, or one escape that names a set (`\d`, `\p{L}`).
+internal struct CharSet {
+    internal negated: bool,
+    internal items: List<ClassItem>,
+}
+
+internal variant ClassItem {
+    /// Inclusive; one character is a range of one.
+    Range([u32, u32]),
+    Named(NamedSet),
+}
+
+/// `\d` `\w` `\s` `\p{…}`, or with `negated` `\D` `\W` `\S` `\P{…}`.
+internal struct NamedSet {
+    internal kind: SetKind,
+    internal negated: bool,
+}
+
+internal variant SetKind {
+    Digit,
+    Word,
+    Space,
+    Property(Property),
+}
