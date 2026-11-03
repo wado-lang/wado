@@ -70,11 +70,13 @@ only on the second iteration — invaluable for iteration-dependent bugs
 whose failing test passes on the first iteration and only diverges once
 the inliner expands an additional function on a later one.
 
-Only standalone `run_pass` spans are skippable; confirm a name with
-`WADO_LIST_PASSES=1` first. Local rules folded into the peephole session
-(`ref_elim`, `elide_box_local`, `match_to_switch`, `value_copy_elide`,
-`array_literal`, …) are not individually addressable — target
-`nir/peephole` to skip the whole session.
+Passes and the optimization decisions made outside them are skippable;
+confirm a name with `WADO_LIST_PASSES=1` first. A rule of the peephole
+session is `nir/peephole/<rule>` (`nir/peephole/ref_elim`); `nir/peephole`
+skips the whole session. Lowering's value-copy elisions are
+`lower/value_copy/{move,owned,share,confined}`, and the exhaustive match's
+unchecked last arm is `wir_build/exhaustive_last_arm`. A decision is listed
+once per compile, and its `@N` counts the sites it is asked at.
 
 When a pass is the only one whose skipping makes the bug go away that
 just narrows the _participants_ in the buggy interaction — it does not

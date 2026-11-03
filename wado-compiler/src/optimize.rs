@@ -172,8 +172,8 @@ pub fn optimize(
     parallelism: usize,
     profiler: &dyn SpanEmitter,
 ) -> NirPackage {
-    let _skipped = pass_dump::SkipScope::enter(&opt.skip_passes);
     let OptOverrides {
+        // The compile entered these, decisions ahead of the optimizer included.
         skip_passes: _,
         inline_threshold,
         inline_growth,
@@ -641,7 +641,7 @@ pub mod pass_dump {
     use std::sync::{Mutex, OnceLock};
 
     use super::NirPackage;
-    use crate::hashmap::IndexMap;
+    use crate::hashmap::{IndexMap, IndexSet};
     use crate::nir_unparse::unparse_nir_package;
     use crate::trace;
     use crate::wir::WirPackage;
@@ -697,26 +697,42 @@ pub mod pass_dump {
         static SKIPPED: RefCell<Vec<String>> = const { RefCell::new(Vec::new()) };
     }
 
-    /// While it lives, the passes [`crate::OptOverrides::skip_passes`] names
-    /// are skipped on this thread. A thread is enough: the optimizer calls
-    /// every pass from the thread that entered it, whatever threads a pass
-    /// fans its work out to.
-    pub struct SkipScope;
+    /// While it lives, the passes and decisions
+    /// [`crate::OptOverrides::skip_passes`] names are skipped on this thread. A
+    /// thread is enough: a compile calls every pass and makes every decision
+    /// from the thread that entered it, whatever threads a pass fans its work
+    /// out to. A compile nested inside another (a Kiln generator's) skips its
+    /// own list, and the outer one's comes back when it ends.
+    pub struct SkipScope {
+        outer: Vec<String>,
+    }
 
     impl SkipScope {
         pub fn enter(passes: &[String]) -> Self {
-            SKIPPED.with_borrow_mut(|skipped| {
-                assert!(skipped.is_empty(), "skip scopes do not nest");
-                skipped.extend_from_slice(passes);
-            });
-            Self
+            let outer = SKIPPED.replace(passes.to_vec());
+            Self { outer }
         }
     }
 
     impl Drop for SkipScope {
         fn drop(&mut self) {
-            SKIPPED.with_borrow_mut(Vec::clear);
+            SKIPPED.set(std::mem::take(&mut self.outer));
         }
+    }
+
+    /// Whether the compile makes the optimization decision `name`: a choice
+    /// lowering or WIR building makes outside any pass, such as eliding a
+    /// value copy. Skipping one keeps the shape the decision would have
+    /// improved, so a check is measured against it as against a pass.
+    pub fn decides(name: &str) -> bool {
+        if list_passes_enabled() {
+            static LISTED: OnceLock<Mutex<IndexSet<String>>> = OnceLock::new();
+            let mut listed = LISTED.get_or_init(Mutex::default).lock().unwrap();
+            if listed.insert(name.to_string()) {
+                list_pass(name);
+            }
+        }
+        !should_skip_pass(name)
     }
 
     /// Returns true if the compile skips `name`, or if `name` matches one of the

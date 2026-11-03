@@ -102,13 +102,7 @@ fn wir_pass(
 /// exception, running before that gate: the frontend already emits `None` as
 /// `ref.null`, and this picks the matching WIR repr, so skipping it miscompiles
 /// rather than merely slowing things down.
-pub fn optimize_wir(
-    module: &mut WirPackage,
-    opt_level: OptLevel,
-    skip_passes: &[String],
-    profiler: &dyn SpanEmitter,
-) {
-    let _skipped = pass_dump::SkipScope::enter(skip_passes);
+pub fn optimize_wir(module: &mut WirPackage, opt_level: OptLevel, profiler: &dyn SpanEmitter) {
     optimize_scoped(module, opt_level, profiler, PassScope(None));
 }
 

@@ -1625,6 +1625,7 @@ fn compile_after_load<H: CompilerHost>(
     filename: Option<String>,
     is_todo_module: bool,
 ) -> Result<CompileResult, Bail> {
+    let _skipped = optimize::pass_dump::SkipScope::enter(&options.opt.skip_passes);
     let module_name = filename.unwrap_or_else(|| "module".to_string());
     // Kept for attributing optimizer remarks to the entry file; `module_name`
     // itself is moved into the `Package` before remarks are emitted.
@@ -2406,12 +2407,7 @@ fn compile_after_load<H: CompilerHost>(
     // === Phase 13: Optimize WIR ===
     {
         let _span = logger.span("wir_optimize");
-        wir_optimize::optimize_wir(
-            &mut wir_package,
-            options.opt_level,
-            &options.opt.skip_passes,
-            logger,
-        );
+        wir_optimize::optimize_wir(&mut wir_package, options.opt_level, logger);
     }
 
     // === Phase 14: Emit Wasm (WirPackage → Wasm component bytes) ===
@@ -2704,6 +2700,8 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
                 ));
             }
 
+            let _skipped = optimize::pass_dump::SkipScope::enter(&opt.skip_passes);
+
             // Select allocator (must run before synthesis, matching compile).
             select_allocator(&mut package, allocator.map(String::from), &logger)?;
 
@@ -2763,7 +2761,6 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
             let lower_text = Some(nir_unparse::unparse_nir_package(&nir));
 
             // Optimize
-            let skip_passes = opt.skip_passes.clone();
             let nir = {
                 let _span = logger.span("optimize");
                 optimize(nir, opt_level, opt, parallelism, &logger)
@@ -2774,7 +2771,7 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
             // WIR: Translate optimized NirPackage to WirPackage for inspection.
             let wir_package = Some({
                 let mut wir = wir_build::build_wir_package(&nir);
-                wir_optimize::optimize_wir(&mut wir, opt_level, &skip_passes, &logger);
+                wir_optimize::optimize_wir(&mut wir, opt_level, &logger);
                 wir
             });
 

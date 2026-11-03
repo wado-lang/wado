@@ -96,7 +96,7 @@ pub fn should_wrap(
 
 /// Avoid re-wrapping the `copy_value::<NestedT>(...)` markers
 /// `synthesize_helpers` plants inside helper bodies.
-fn is_copy_value_call(expr: &TirExpr) -> bool {
+pub fn is_copy_value_call(expr: &TirExpr) -> bool {
     matches!(
         &expr.kind,
         TirExprKind::Call { func, .. } if func.is_builtin_named("copy_value")
