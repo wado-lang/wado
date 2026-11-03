@@ -382,10 +382,18 @@ impl DeclCollector<'_> {
         self.declare(id, name, descriptor, kind, name_span, span);
     }
 
-    fn associated_type(&mut self, id: AstId, name: &str, name_span: Span, span: Span) {
+    /// A type: a named type, an associated type, a world. The path its
+    /// members follow.
+    fn ty(
+        &mut self,
+        id: AstId,
+        name: &str,
+        kind: SymbolKind,
+        name_span: Span,
+        span: Span,
+    ) -> String {
         let descriptor = |n| format!("{}#", numbered_name(name, n));
-        let kind = SymbolKind::AssociatedType;
-        self.declare(id, name, descriptor, kind, name_span, span);
+        self.declare(id, name, descriptor, kind, name_span, span)
     }
 
     fn local(&mut self, id: AstId, name: &str, kind: SymbolKind, name_span: Span) {
@@ -420,8 +428,7 @@ impl DeclCollector<'_> {
         name_span: Span,
         span: Span,
     ) {
-        let descriptor = |n| format!("{}#", numbered_name(name, n));
-        let path = self.declare(id, name, descriptor, kind, name_span, span);
+        let path = self.ty(id, name, kind, name_span, span);
         self.owners.push(path);
         match item {
             Item::Struct(s) => {
@@ -452,7 +459,8 @@ impl DeclCollector<'_> {
             Item::Trait(t) => {
                 self.type_params(&t.type_params);
                 for assoc in &t.associated_types {
-                    self.associated_type(assoc.id, &assoc.name, assoc.name_span, assoc.span);
+                    let kind = SymbolKind::AssociatedType;
+                    self.ty(assoc.id, &assoc.name, kind, assoc.name_span, assoc.span);
                     self.type_params(&assoc.type_params);
                 }
             }
@@ -535,7 +543,8 @@ impl AstVisitor<'_> for DeclCollector<'_> {
                     self.term(c.id, &c.name, SymbolKind::Constant, c.name_span, c.span);
                 }
                 for assoc in &imp.associated_types {
-                    self.associated_type(assoc.id, &assoc.name, assoc.name_span, assoc.span);
+                    let kind = SymbolKind::AssociatedType;
+                    self.ty(assoc.id, &assoc.name, kind, assoc.name_span, assoc.span);
                     self.type_params(&assoc.type_params);
                 }
                 walk_item(self, item);
@@ -543,9 +552,7 @@ impl AstVisitor<'_> for DeclCollector<'_> {
             }
             Item::Test(_) => self.in_body(|this| walk_item(this, item)),
             Item::World(w) => {
-                let descriptor = |n| format!("{}#", numbered_name(&w.name, n));
-                let kind = SymbolKind::Module;
-                self.declare(w.id, &w.name, descriptor, kind, w.name_span, w.span);
+                self.ty(w.id, &w.name, SymbolKind::Module, w.name_span, w.span);
                 walk_item(self, item);
             }
             Item::Use(_) | Item::TupleTypeDecl(_) | Item::Error(_) => {
