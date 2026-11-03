@@ -1922,7 +1922,7 @@ fn query_unknown_kind_lists_available_kinds() {
     let stderr = String::from_utf8(output).unwrap();
     assert_eq!(
         stderr,
-        "Error: unknown query kind 'signature'. Available: diagnostics, references, document-highlight, definition, hover, inlay-hints\n",
+        "Error: unknown query kind 'signature'. Available: diagnostics, references, document-highlight, definition, hover, inlay-hints, scip\n",
     );
 }
 
