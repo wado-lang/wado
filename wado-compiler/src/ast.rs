@@ -1504,7 +1504,10 @@ impl Item {
             Item::BuiltinTypeDecl(d) => d.name_span,
             Item::Resource(d) => d.name_span,
             Item::World(d) => d.name_span,
-            Item::TupleTypeDecl(_) | Item::Use(_) | Item::Impl(_) | Item::Test(_)
+            Item::TupleTypeDecl(_)
+            | Item::Use(_)
+            | Item::Impl(_)
+            | Item::Test(_)
             | Item::Error(_) => self.span(),
         }
     }

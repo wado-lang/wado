@@ -857,7 +857,10 @@ fn f(h: &Handle, n: i32) -> i32 {
                 .filter(|o| &o.symbol == target)
                 .map(|o| &o.range)
                 .collect();
-            assert_eq!(ranges, [&vec![3, 10, 16], &vec![6, 24, 30], &vec![6, 45, 51]]);
+            assert_eq!(
+                ranges,
+                [&vec![3, 10, 16], &vec![6, 24, 30], &vec![6, 45, 51]]
+            );
         });
     }
 
@@ -906,7 +909,10 @@ impl Make for Pair<i32> { type Out = i32; }
             };
             assert_eq!(
                 named("ZERO"),
-                ["wado . test.wado . Pair#ZERO.", "wado . test.wado . Pair#ZERO+1."]
+                [
+                    "wado . test.wado . Pair#ZERO.",
+                    "wado . test.wado . Pair#ZERO+1."
+                ]
             );
             assert_eq!(
                 named("Out"),
