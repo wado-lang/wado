@@ -286,7 +286,14 @@ impl CliGeneratorProvider {
             }
             validated.push((entry.path.clone(), actual));
         }
-        (combined_sources_hash(&validated) == recorded.source_hash).then(|| recorded.clone())
+        if combined_sources_hash(&validated) != recorded.source_hash {
+            return None;
+        }
+        // Whatever reuses the generator depends on what building it read.
+        if let Some(run) = &self.run {
+            run.replay(Some(&recorded.inputs));
+        }
+        Some(recorded.clone())
     }
 
     /// Record `identity` for `module_path`, merging with the project's other
@@ -1581,19 +1588,30 @@ export fn generate(req: Request<Options>) -> Result<Response, Error> {\n\
 }\n",
         )
         .unwrap();
-        let provider = CliGeneratorProvider::new(generator);
+        let provider = CliGeneratorProvider::new(generator.clone());
         let module = GeneratorModule::LocalPath(InvocationPath::normalize("./generator.wado"));
-        let resolve = || {
+        let resolve = |provider: &CliGeneratorProvider| {
             runtime()
                 .block_on(async { provider.resolve(&module).await })
                 .unwrap_or_else(|e| panic!("resolve: {e:?}"))
         };
 
-        resolve();
-        resolve();
+        resolve(&provider);
+        // A compile reusing the built generator depends on what building it
+        // read.
+        let scope = RunCache::new().scoped();
+        resolve(&provider.clone().with_run_cache(Arc::clone(&scope)));
         assert_eq!(provider.compile_count(), 1);
+        let read = Input::of(
+            helper.join("wado.toml"),
+            Some(manifest("a.wado").as_bytes()),
+        );
+        assert!(scope.reads().expect("tracked").contains(&read));
+
         std::fs::write(helper.join("wado.toml"), manifest("b.wado")).unwrap();
-        resolve();
+        resolve(&provider);
         assert_eq!(provider.compile_count(), 2);
+        let index = std::fs::read_to_string(generator.join(INDEX_FILE)).unwrap();
+        assert!(index.contains("\"path\": \"../helper/b.wado\""), "{index}");
     }
 }
