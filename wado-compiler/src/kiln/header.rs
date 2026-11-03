@@ -9,7 +9,7 @@ use std::iter::Peekable;
 
 use super::invocation::InvocationPath;
 use crate::escape::{quoted, string_value};
-use crate::lexer::lex;
+use crate::lexer::token_kinds;
 use crate::token::TokenKind;
 
 /// Metadata carried by a `#![generated(...)]` attribute.
@@ -68,8 +68,7 @@ pub fn has_generated_marker(source: &str) -> bool {
 #[must_use]
 pub fn parse_header(source: &str) -> Option<GeneratedHeader> {
     let source = source.strip_prefix('\u{feff}').unwrap_or(source);
-    let lexed = lex(source);
-    let mut tokens = lexed.tokens.iter().map(|token| &token.kind).peekable();
+    let mut tokens = token_kinds(source).peekable();
     let opener = [
         TokenKind::Hash,
         TokenKind::Not,
@@ -102,36 +101,31 @@ pub fn parse_header(source: &str) -> Option<GeneratedHeader> {
     Some(header)
 }
 
-fn eat<'t>(tokens: &mut Peekable<impl Iterator<Item = &'t TokenKind>>, kind: &TokenKind) -> bool {
-    tokens.next_if(|next| *next == kind).is_some()
+fn eat(tokens: &mut Peekable<impl Iterator<Item = TokenKind>>, kind: &TokenKind) -> bool {
+    tokens.next_if(|next| next == kind).is_some()
 }
 
-fn expect<'t>(
-    tokens: &mut Peekable<impl Iterator<Item = &'t TokenKind>>,
-    kind: &TokenKind,
-) -> Option<()> {
+fn expect(tokens: &mut Peekable<impl Iterator<Item = TokenKind>>, kind: &TokenKind) -> Option<()> {
     eat(tokens, kind).then_some(())
 }
 
 /// The comma after a list element, which only the list's `closer` may stand in for.
-fn separator<'t>(
-    tokens: &mut Peekable<impl Iterator<Item = &'t TokenKind>>,
+fn separator(
+    tokens: &mut Peekable<impl Iterator<Item = TokenKind>>,
     closer: &TokenKind,
 ) -> Option<()> {
-    (eat(tokens, &TokenKind::Comma) || tokens.peek() == Some(&closer)).then_some(())
+    (eat(tokens, &TokenKind::Comma) || tokens.peek() == Some(closer)).then_some(())
 }
 
-fn string(kind: &TokenKind) -> Option<String> {
+fn string(kind: TokenKind) -> Option<String> {
     let TokenKind::StringLit { raw, quote } = kind else {
         return None;
     };
-    string_value(raw, *quote).ok()
+    string_value(&raw, quote).ok()
 }
 
 /// `[s, …]`, a trailing comma allowed.
-fn string_list<'t>(
-    tokens: &mut Peekable<impl Iterator<Item = &'t TokenKind>>,
-) -> Option<Vec<String>> {
+fn string_list(tokens: &mut Peekable<impl Iterator<Item = TokenKind>>) -> Option<Vec<String>> {
     expect(tokens, &TokenKind::LBracket)?;
     let mut out = Vec::new();
     while !eat(tokens, &TokenKind::RBracket) {
@@ -142,7 +136,7 @@ fn string_list<'t>(
 }
 
 /// Step over an unknown key's value, up to the comma or `)` that ends it.
-fn skip_value<'t>(tokens: &mut Peekable<impl Iterator<Item = &'t TokenKind>>) -> Option<()> {
+fn skip_value(tokens: &mut Peekable<impl Iterator<Item = TokenKind>>) -> Option<()> {
     let mut depth = 0u32;
     loop {
         match tokens.peek()? {

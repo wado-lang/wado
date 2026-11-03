@@ -25,7 +25,7 @@ use crate::name::{
 };
 use crate::primitive::PrimitiveType;
 use crate::symbol_notation::render;
-use crate::token::{Delimiter, Span};
+use crate::token::{Delimiter, Quote, Span};
 
 use crate::tir::{
     AnonShape, AssocTypeSig, EffectRef, EffectRows, InferVarId, REFLECT_NEWTYPE_BASE, ResolvedType,
@@ -1457,6 +1457,12 @@ impl TypeTable {
                         }
                         None => h.update([0u8]),
                     }
+                }
+                // Only a raw shape adds its delimiters, so a cooked shape's
+                // name stays the one compiled artifacts already carry.
+                if let Quote::Raw { hashes } = shape.quote {
+                    h.update([1u8]);
+                    digest_len(&mut h, hashes);
                 }
                 template_shape_name(&h.finalize().into())
             }

@@ -5152,30 +5152,15 @@ impl Parser {
     fn parse_implicit_struct_literal_expr(&mut self, start_span: Span) -> ParseResult<Expr> {
         self.advance(); // consume `{`
 
-        // `{ ident :` / `{ ident ,` / `{ ident }`
-        if let TokenKind::Ident(_) = self.peek_kind()
-            && matches!(
-                self.peek_nth(1).kind,
-                TokenKind::Colon | TokenKind::Comma | TokenKind::RBrace
-            )
-        {
-            return self.parse_struct_literal(None, start_span);
-        }
-
-        // `{ "field" :` — string literal field name
-        if let TokenKind::StringLit { .. } = self.peek_kind()
-            && matches!(self.peek_nth(1).kind, TokenKind::Colon)
-        {
-            return self.parse_struct_literal(None, start_span);
-        }
-
-        // `{ true: ... }` — keyword used as field name; route through struct
-        // literal parser to produce a clearer error.
-        if matches!(
-            self.peek_kind(),
-            TokenKind::True | TokenKind::False | TokenKind::Null
-        ) && matches!(self.peek_nth(1).kind, TokenKind::Colon)
-        {
+        // `{ name :` / `{ name ,` / `{ name }`, and a key only a field can
+        // take, a keyword or a string literal, before `:`.
+        let next = &self.peek_nth(1).kind;
+        let shorthand_or_key = self.peek_kind().as_ident_name().is_some()
+            && matches!(next, TokenKind::Colon | TokenKind::Comma | TokenKind::RBrace);
+        let key = (self.peek_kind().as_keyword_str().is_some()
+            || matches!(self.peek_kind(), TokenKind::StringLit { .. }))
+            && matches!(next, TokenKind::Colon);
+        if shorthand_or_key || key {
             return self.parse_struct_literal(None, start_span);
         }
 

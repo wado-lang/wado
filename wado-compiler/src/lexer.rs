@@ -64,6 +64,14 @@ pub fn lex(source: &str) -> LexResult {
     lex_in(source, AstIdSpace::next())
 }
 
+/// The kinds of `source`'s tokens, lexed only as far as the caller reads, for a
+/// reader of a file's head that must not pay for the whole file.
+pub fn token_kinds(source: &str) -> impl Iterator<Item = TokenKind> + '_ {
+    let mut lexer = Lexer::new(source);
+    lexer.skip_shebang();
+    std::iter::from_fn(move || Some(lexer.next_token().kind).filter(|kind| *kind != TokenKind::Eof))
+}
+
 /// [`lex`] into an existing parse, for text that belongs to one already: a
 /// template interpolation is part of the file its template sits in.
 pub fn lex_in(source: &str, space: AstIdSpace) -> LexResult {
