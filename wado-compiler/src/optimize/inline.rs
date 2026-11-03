@@ -2607,6 +2607,7 @@ pub fn inline_functions(
             loop_calls: Vec::new(),
             original_exprs: func.body.as_ref().expect("checked above").exprs.len(),
             glue,
+            candidate: inline_candidates.contains_key(&fid),
             deferred: false,
         };
         let mut labels = InlineLabels::default();
@@ -2758,6 +2759,10 @@ struct CallerFrame<'f> {
     /// whose body `container_sroa` and `const_object_globalization` skip: a
     /// callee moved into one goes without the cleanup it gets where it stands.
     glue: bool,
+    /// The caller is itself spliced this round. A hot price inside it would
+    /// grow it past what its own sites admit, trading the outer call for the
+    /// inner one, so its hot sites wait until it has moved into its callers.
+    candidate: bool,
     /// A call was left to the compile-time engine this visit.
     deferred: bool,
 }
@@ -3291,7 +3296,10 @@ fn try_inline_call_expr(
     // The call's stamped `func_id` is the exact callee identity; look the
     // candidate up directly (no `(module, name)` resolution).
     let candidate = candidates.bodies.get(&func_id)?;
-    let reach = if site.heats() && candidates.hot_sites.is_hot(caller.exprs[call_id].span) {
+    let reach = if site.heats()
+        && !frame.candidate
+        && candidates.hot_sites.is_hot(caller.exprs[call_id].span)
+    {
         candidates.hot_reach[&func_id]
     } else {
         candidates.reach[&func_id]
