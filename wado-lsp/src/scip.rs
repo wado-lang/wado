@@ -569,8 +569,9 @@ impl AstVisitor<'_> for DeclCollector<'_> {
 
     fn visit_function(&mut self, func: &Function) {
         // The hidden holder of a trait method's `contract` clauses repeats the
-        // method's name and parameters at their spans: only what its clauses
-        // declare is its own.
+        // method's name and parameters at their spans. It declares neither:
+        // its parameters stand for the method's, so a clause's use of one
+        // reaches the method's symbol.
         if func.is_contract_holder() {
             for p in &func.params {
                 let method_param = self
