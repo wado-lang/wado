@@ -763,8 +763,7 @@ fn hoist_reloadable_field_loads(
                 watched: [(key, c.local_index)].into_iter().collect(),
             },
         };
-        let [least, most] = gain.of_block(loop_body);
-        least >= 0 && most > 0
+        gain.pays(loop_body)
     });
 
     if candidates.is_empty() {
@@ -872,6 +871,76 @@ fn hoist_reloadable_field_loads(
     insert_reloads(ctx, engine, loop_body, &specs, &clobbers);
 }
 
+/// The least and the most loads the paths of one kind save; `None` when no
+/// path is of that kind.
+type Saved = Option<[i64; 2]>;
+
+fn either(a: Saved, b: Saved) -> Saved {
+    match (a, b) {
+        (Some([al, am]), Some([bl, bm])) => Some([al.min(bl), am.max(bm)]),
+        (one, None) | (None, one) => one,
+    }
+}
+
+fn then_saves(a: Saved, b: Saved) -> Saved {
+    Some([a?[0] + b?[0], a?[1] + b?[1]])
+}
+
+/// The paths through a statement or block that iterate again: those that fall
+/// off its end, those a `continue` takes to the next iteration, and those a
+/// `break` takes to the end of an enclosing block (by label) or inner loop
+/// (`None`). A path leaving the loop runs once, so what it saves is not
+/// counted.
+#[derive(Clone, Default)]
+struct IterationPaths {
+    fall: Saved,
+    next: Saved,
+    broken: Vec<(Option<String>, [i64; 2])>,
+}
+
+impl IterationPaths {
+    fn falling(saved: i64) -> Self {
+        Self {
+            fall: Some([saved, saved]),
+            ..Self::default()
+        }
+    }
+
+    /// These paths, each preceded by one saving `prefix`.
+    fn after(self, prefix: [i64; 2]) -> Self {
+        let prefix = Some(prefix);
+        Self {
+            fall: then_saves(prefix, self.fall),
+            next: then_saves(prefix, self.next),
+            broken: self
+                .broken
+                .into_iter()
+                .filter_map(|(label, saved)| Some((label, then_saves(prefix, Some(saved))?)))
+                .collect(),
+        }
+    }
+
+    fn or(mut self, other: Self) -> Self {
+        self.fall = either(self.fall, other.fall);
+        self.next = either(self.next, other.next);
+        self.broken.extend(other.broken);
+        self
+    }
+
+    /// The paths that leave by a `break` to `label`, which land after it.
+    fn landing(&mut self, label: Option<&str>) -> Saved {
+        let mut landed = None;
+        self.broken.retain(|(l, saved)| {
+            let lands = l.as_deref() == label;
+            if lands {
+                landed = either(landed, Some(*saved));
+            }
+            !lands
+        });
+        landed
+    }
+}
+
 /// What a reloadable hoist of one field saves in one iteration: each read it
 /// serves from the local saves a load, and each reload after a clobbering
 /// statement costs one. The hoist pays when no path through the body loses and
@@ -888,18 +957,26 @@ struct ReloadGain<'a> {
 }
 
 impl ReloadGain<'_> {
-    /// The least and the most loads any path through `block` saves.
-    fn of_block(&self, block: BlockId) -> [i64; 2] {
-        self.body.blocks[block]
-            .stmts
-            .iter()
-            .fold([0, 0], |[least, most], &s| {
-                let [l, m] = self.of_stmt(s);
-                [least + l, most + m]
-            })
+    /// Whether the hoist pays over the paths of one iteration of `loop_body`.
+    /// A `break` to a label outside the loop leaves it, like a `return`.
+    fn pays(&self, loop_body: BlockId) -> bool {
+        let paths = self.of_block(loop_body, 0);
+        either(paths.fall, paths.next).is_some_and(|[least, most]| least >= 0 && most > 0)
     }
 
-    fn of_stmt(&self, s: StmtId) -> [i64; 2] {
+    /// The paths through `block`, `depth` loops inside the loop body.
+    fn of_block(&self, block: BlockId, depth: usize) -> IterationPaths {
+        let mut paths = IterationPaths::falling(0);
+        for &s in &self.body.blocks[block].stmts {
+            let Some(so_far) = paths.fall.take() else {
+                break;
+            };
+            paths = paths.or(self.of_stmt(s, depth).after(so_far));
+        }
+        paths
+    }
+
+    fn of_stmt(&self, s: StmtId, depth: usize) -> IterationPaths {
         match &self.body.stmts[s].kind {
             StmtKind::If {
                 condition,
@@ -908,21 +985,44 @@ impl ReloadGain<'_> {
             } => {
                 let own = condition.as_expr().map_or(0, |e| self.flat(NodeRef::Expr(e)))
                     - self.reloads_after(NodeRef::Stmt(s));
-                let [tl, tm] = self.of_block(*then_block);
-                let [el, em] = else_block.map_or([0, 0], |b| self.of_block(b));
-                [own + tl.min(el), own + tm.max(em)]
+                let then_paths = self.of_block(*then_block, depth);
+                let else_paths =
+                    else_block.map_or(IterationPaths::falling(0), |b| self.of_block(b, depth));
+                then_paths.or(else_paths).after([own, own])
             }
-            StmtKind::Loop { body: block } | StmtKind::LabeledBlock { block, .. } => {
-                self.of_block(*block)
+            // An inner loop's iterations, counted once, end where it does.
+            StmtKind::Loop { body: block } => {
+                let mut inner = self.of_block(*block, depth + 1);
+                let left = inner.landing(None);
+                IterationPaths {
+                    fall: either(either(inner.fall, inner.next), left),
+                    next: None,
+                    broken: inner.broken,
+                }
             }
-            StmtKind::Let { .. }
-            | StmtKind::Expr(_)
-            | StmtKind::Return { .. }
-            | StmtKind::Break { .. }
-            | StmtKind::Continue
-            | StmtKind::LetDestructure { .. } => {
-                let n = self.flat(NodeRef::Stmt(s));
-                [n, n]
+            StmtKind::LabeledBlock { label, block } => {
+                let mut paths = self.of_block(*block, depth);
+                let landed = paths.landing(Some(label));
+                paths.fall = either(paths.fall, landed);
+                paths
+            }
+            StmtKind::Continue => IterationPaths {
+                next: Some([0, 0]),
+                ..IterationPaths::default()
+            },
+            StmtKind::Return { .. } => IterationPaths::default(),
+            StmtKind::Break { label, .. } => {
+                let saved = self.flat(NodeRef::Stmt(s));
+                if label.is_none() && depth == 0 {
+                    return IterationPaths::default();
+                }
+                IterationPaths {
+                    broken: vec![(label.clone(), [saved, saved])],
+                    ..IterationPaths::default()
+                }
+            }
+            StmtKind::Let { .. } | StmtKind::Expr(_) | StmtKind::LetDestructure { .. } => {
+                IterationPaths::falling(self.flat(NodeRef::Stmt(s)))
             }
         }
     }
