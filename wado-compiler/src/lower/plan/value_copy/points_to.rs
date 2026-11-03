@@ -34,7 +34,7 @@ use super::place::could_write_through;
 use super::{EnvFrame, NEEDS_COPY_DEPTH_LIMIT, resolve_param_in_env};
 use crate::defs::DefId;
 use crate::flat_package::FlatPackage;
-use crate::graph::DisjointSets;
+use crate::graph::{DisjointSets, strongly_connected_components};
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::tir::{
@@ -642,13 +642,122 @@ impl Graph {
         }
     }
 
-    /// Merge each node that only ever copies one other's set into that one,
-    /// ahead of the solve: a temporary a value passes through holds what its
-    /// source holds, and a cycle search along the pair would find none.
+    /// Merge, ahead of the solve, the nodes that must end with one set:
+    /// hash-based value numbering (Hardekopf and Lin, SAS 2007). A node no
+    /// load, store or call feeds ends with what its copy sources end with,
+    /// plus what it holds now, so two such nodes whose sources and held
+    /// locations number alike end alike. A cycle of copies ends alike too.
     fn substitute(&mut self) {
-        // What may gain a location other than through its static copies: a
-        // location (a store writes it), what a load or a call feeds, and what
-        // a location is added to.
+        let fed = self.fed();
+        let n = self.pts.len();
+        let mut successors: Vec<Vec<usize>> = vec![Vec::new(); n];
+        let edges: Vec<(u32, u32)> = self.edges.iter().copied().collect();
+        for (from, to) in edges {
+            let (from, to) = (self.find(from), self.find(to));
+            if from != to {
+                successors[from as usize].push(to as usize);
+            }
+        }
+        let mut predecessors: Vec<Vec<u32>> = vec![Vec::new(); n];
+        for (from, tos) in successors.iter().enumerate() {
+            for &to in tos {
+                predecessors[to].push(u32::try_from(from).expect("node count fits u32"));
+            }
+        }
+        // A label numbers a value: a held location by its index, and each
+        // class of sets past the locations.
+        let location_count = u32::try_from(self.locations.len()).expect("location count fits u32");
+        let mut classes: IndexMap<Vec<u32>, u32> = IndexMap::default();
+        let mut next_class = location_count;
+        let mut label: Vec<Option<u32>> = vec![None; n];
+        let mut groups: IndexMap<u32, Vec<u32>> = IndexMap::default();
+        // Each component comes after every one it reaches, so its sources'
+        // labels are known when it is reached walking backwards.
+        for component in strongly_connected_components(&successors).into_iter().rev() {
+            let members: Vec<u32> = component
+                .iter()
+                .map(|&m| u32::try_from(m).expect("node count fits u32"))
+                .filter(|&m| self.find(m) == m)
+                .collect();
+            let Some(&root) = members.first() else { continue };
+            let class = if members.iter().any(|m| fed.contains(m)) {
+                // Fed, so alike with nothing: a class of its own.
+                next_class += 1;
+                next_class - 1
+            } else {
+                // Most components are one node, which needs no set.
+                let in_component: IndexSet<u32> = match members.as_slice() {
+                    [_] => IndexSet::default(),
+                    _ => members.iter().copied().collect(),
+                };
+                let mut values: Vec<u32> = Vec::new();
+                let mut sources: Vec<u32> = Vec::new();
+                for &m in &members {
+                    sources.clear();
+                    sources.extend(
+                        predecessors[m as usize]
+                            .iter()
+                            .copied()
+                            .filter(|&p| p != m && !in_component.contains(&p)),
+                    );
+                    values.extend(sources.iter().map(|&p| {
+                        label[p as usize].expect("a source is labelled first")
+                    }));
+                    // A location a source already holds is in its class; only
+                    // one taken here is the node's own.
+                    values.extend(
+                        self.pts[m as usize]
+                            .iter()
+                            .filter(|&loc| {
+                                !sources.iter().any(|&p| self.pts[p as usize].contains(loc))
+                            })
+                            .map(|Loc(l)| l),
+                    );
+                }
+                values.sort_unstable();
+                values.dedup();
+                match values.as_slice() {
+                    // One source and nothing held: its class.
+                    [only] if *only >= location_count => *only,
+                    _ => *classes.entry(values).or_insert_with(|| {
+                        next_class += 1;
+                        next_class - 1
+                    }),
+                }
+            };
+            for &m in &members {
+                label[m as usize] = Some(class);
+            }
+            groups.entry(class).or_default().push(root);
+            for &member in &members[1..] {
+                self.absorb_unsolved(root, member);
+            }
+        }
+        let mut roots: Vec<u32> = Vec::new();
+        for (_, mut alike) in groups {
+            let root = alike.remove(0);
+            for member in alike {
+                self.absorb_unsolved(root, member);
+            }
+            roots.push(root);
+        }
+        for root in roots {
+            let r = root as usize;
+            let mut copy_to: IndexSet<u32> = IndexSet::default();
+            for to in std::mem::take(&mut self.copy_to[r]) {
+                let to = self.find(to);
+                if to != root && copy_to.insert(to) {
+                    self.edges.insert((root, to));
+                }
+            }
+            self.copy_to[r] = copy_to.into_iter().collect();
+        }
+    }
+
+    /// What may gain a location other than through its static copies: a
+    /// location (a store writes it), what a load or a call feeds, and what an
+    /// inert node is.
+    fn fed(&self) -> IndexSet<u32> {
         let mut fed: IndexSet<u32> = self.inert.clone();
         fed.extend(self.locations.iter().copied());
         fed.extend(self.loads.iter().flatten().copied());
@@ -660,34 +769,7 @@ impl Graph {
             fed.insert(target.ret);
         }
         fed.extend(self.sites.iter().flatten().map(|site| site.result));
-        let mut sources: IndexMap<u32, Option<u32>> = IndexMap::default();
-        for &(from, to) in &self.edges {
-            sources
-                .entry(to)
-                .and_modify(|only| *only = None)
-                .or_insert(Some(from));
-        }
-        let mut roots: IndexSet<u32> = IndexSet::default();
-        for (to, only) in sources {
-            let Some(from) = only else { continue };
-            let from = self.find(from);
-            // A set holding more than its one source's took a location of its
-            // own, by an address taken.
-            if from == to
-                || fed.contains(&to)
-                || !self.pts[to as usize]
-                    .iter()
-                    .all(|loc| self.pts[from as usize].contains(loc))
-            {
-                continue;
-            }
-            self.absorb(from, to);
-            roots.insert(from);
-        }
-        let roots: IndexSet<u32> = roots.into_iter().map(|root| self.find(root)).collect();
-        for root in roots {
-            self.settle(root);
-        }
+        fed
     }
 
     /// All of `node`'s own edges.
@@ -708,6 +790,33 @@ impl Graph {
             pending: std::mem::take(&mut self.delta[node as usize]),
             edges: self.edges(node),
         }
+    }
+
+    /// Make `root` the node of `member` before the solve. Nothing has left the
+    /// worklist yet, so each delta is still its whole set and carries every
+    /// location along the edges the merge gathers: no merged node lacks one.
+    fn absorb_unsolved(&mut self, root: u32, member: u32) {
+        let (r, m) = (root as usize, member as usize);
+        assert!(
+            self.delta[r] == self.pts[r] && self.delta[m] == self.pts[m],
+            "nothing is solved yet"
+        );
+        self.rep.link(member, root);
+        let pts = std::mem::take(&mut self.pts[m]);
+        self.delta[m] = LocSet::default();
+        let was_idle = self.delta[r].is_empty();
+        self.pts[r].union_into(&pts, &mut self.delta[r]);
+        if was_idle && !self.delta[r].is_empty() {
+            self.work.push(root);
+        }
+        let copy_to = std::mem::take(&mut self.copy_to[m]);
+        self.copy_to[r].extend(copy_to);
+        let loads = std::mem::take(&mut self.loads[m]);
+        self.loads[r].extend(loads);
+        let stores = std::mem::take(&mut self.stores[m]);
+        self.stores[r].extend(stores);
+        let sites = std::mem::take(&mut self.sites[m]);
+        self.sites[r].extend(sites);
     }
 
     /// Make `root` the node of `member`, leaving `root` to [`Self::settle`].
@@ -1802,5 +1911,32 @@ mod tests {
             let node = g.find(node);
             assert_eq!(g.locations_in(node), [m]);
         }
+    }
+
+    #[test]
+    fn nodes_copying_alike_merge_unless_fed() {
+        // `x`, `y` and `z` each copy `s` and `t`; `y` also holds `l`, which
+        // `s` holds already, and `z` holds `p` of its own. `f` copies them too
+        // but a load feeds it, so it may gain more and merges with none.
+        let mut g = Graph::default();
+        let [s, t, x, y, z, f, l, k, p] = [(); 9].map(|()| g.node());
+        g.add(s, l);
+        g.add(t, k);
+        g.add(y, l);
+        g.add(z, k);
+        g.add(z, p);
+        for node in [x, y, z, f] {
+            g.copy(s, node);
+            g.copy(t, node);
+        }
+        g.load(s, f);
+        g.solve();
+        assert_eq!(g.find(x), g.find(y));
+        for node in [z, f] {
+            assert_ne!(g.find(node), g.find(x));
+        }
+        let [x, z] = [x, z].map(|node| g.find(node));
+        assert_eq!(g.locations_in(x), [l, k]);
+        assert_eq!(g.locations_in(z), [l, k, p]);
     }
 }
