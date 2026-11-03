@@ -1190,8 +1190,9 @@ A template value inspects as the template it was written as: its delimiters,
 each segment raw, and each hole as its value inspected, followed by its
 specifier.
 `` `${t:?}` `` on `` id`n=${n:04}\n` `` with `n = 7` renders
-`` `n=${7:04}\n` ``. `==` compares the text as well as the holes, so the form
-shows the text.
+`` `n=${7:04}\n` ``. `==` compares the text as written and the delimiters as
+well as the holes, so the form shows both: `` `a${n}` `` equals neither
+`` #`a${n}`# `` nor `` `\u{61}${n}` ``.
 
 `members()` walks a pack, so `Holes` is bound either as one (`[..V]`) or as the
 empty tuple (`[]`, for a tag that reads only `tail(&t)`). A concrete tuple
