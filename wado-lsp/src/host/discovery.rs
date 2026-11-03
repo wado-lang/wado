@@ -5,6 +5,7 @@
 //! out what is there happens here, inside the host a browser never runs.
 
 use std::collections::BTreeMap;
+use std::io;
 use std::path::{Component, Path, PathBuf};
 
 use wado_manifest::dependency::{
@@ -17,7 +18,38 @@ use wado_manifest::{
     registry_url,
 };
 
-use crate::host::prefetch;
+use crate::host::{is_absent, prefetch};
+
+/// What a resolution reads a package's own files through: its `wado.toml`, its
+/// `wado.lock`, and the `wado-workspace.toml` governing it. A caller keying an
+/// outcome on what it read records each file here, as the bytes the
+/// resolution then parses, and each one looked for and not found.
+pub trait PackageFiles: Sync {
+    /// The text of the file at `path`.
+    ///
+    /// # Errors
+    ///
+    /// Whatever reading the file fails with.
+    fn read(&self, path: &Path) -> io::Result<String>;
+
+    /// The text of the file at `path`, `None` where no file is. Presence is
+    /// what the read found, so it is recorded with the bytes.
+    fn find(&self, path: &Path) -> Option<io::Result<String>> {
+        match self.read(path) {
+            Err(e) if is_absent(&e) => None,
+            read => Some(read),
+        }
+    }
+}
+
+/// The files as the disk holds them, recorded nowhere.
+pub struct Disk;
+
+impl PackageFiles for Disk {
+    fn read(&self, path: &Path) -> io::Result<String> {
+        std::fs::read_to_string(path)
+    }
+}
 
 /// The nearest ancestor of `start` (inclusive) that contains a `wado.toml`,
 /// short of a `wado-workspace.toml`: a workspace is not a package, and a file
@@ -27,28 +59,13 @@ use crate::host::prefetch;
 /// Absolutized first, so **the result is always absolute** — a caller
 /// re-anchoring other paths against it must express those in the same frame.
 #[must_use]
-pub fn nearest_manifest_dir(start: &Path) -> Option<PathBuf> {
-    nearest_manifest_dir_probing(start, |_, _| {})
-}
-
-/// [`nearest_manifest_dir`], telling `probed` each file it looks for and
-/// whether one is there, for a caller recording what its answer read.
-pub fn nearest_manifest_dir_probing(
-    start: &Path,
-    mut probed: impl FnMut(&Path, bool),
-) -> Option<PathBuf> {
+pub fn nearest_manifest_dir(start: &Path, files: &dyn PackageFiles) -> Option<PathBuf> {
     let mut dir = absolutize(start);
     loop {
-        let mut probe = |name: &str| {
-            let file = dir.join(name);
-            let found = file.is_file();
-            probed(&file, found);
-            found
-        };
-        if probe(MANIFEST_FILENAME) {
+        if files.find(&dir.join(MANIFEST_FILENAME)).is_some() {
             return Some(dir);
         }
-        if probe(WORKSPACE_FILENAME) || !dir.pop() {
+        if files.find(&dir.join(WORKSPACE_FILENAME)).is_some() || !dir.pop() {
             return None;
         }
     }
@@ -126,11 +143,12 @@ fn resolve_parent_dirs(path: &Path) -> PathBuf {
 pub fn resolve_member_manifest(
     member_dir: &Path,
     member_content: &str,
+    files: &dyn PackageFiles,
 ) -> Result<Manifest, ManifestError> {
-    if member_dir.join(WORKSPACE_FILENAME).is_file() {
+    if files.find(&member_dir.join(WORKSPACE_FILENAME)).is_some() {
         return Err(ManifestError::PackageInWorkspace);
     }
-    match governing_workspace(member_dir) {
+    match governing_workspace(member_dir, files) {
         Some((_, workspace)) => wado_manifest::resolve_member(member_content, &workspace),
         None => member_content.parse(),
     }
@@ -142,12 +160,15 @@ pub fn resolve_member_manifest(
 /// governs everything under it, so the member's parse reports what is wrong
 /// with it.
 #[must_use]
-pub fn governing_workspace(member_dir: &Path) -> Option<(PathBuf, String)> {
+pub fn governing_workspace(
+    member_dir: &Path,
+    files: &dyn PackageFiles,
+) -> Option<(PathBuf, String)> {
     let member_dir = resolve_parent_dirs(member_dir);
     let mut dir = member_dir.clone();
     while dir.pop() {
         let candidate = dir.join(WORKSPACE_FILENAME);
-        let Ok(content) = std::fs::read_to_string(&candidate) else {
+        let Ok(content) = files.read(&candidate) else {
             continue;
         };
         let governs = read_workspace_members(&content)
@@ -176,8 +197,9 @@ pub enum DependencyEntry {
 pub fn resolve_all(
     manifest: &Manifest,
     manifest_dir: &Path,
+    files: &dyn PackageFiles,
 ) -> Vec<(String, Result<DependencyEntry, String>)> {
-    let lock = read_lock(manifest_dir);
+    let lock = read_lock(manifest_dir, files);
     let git = lock.as_ref().map(git_pins).unwrap_or_default();
     let registry = registry_pins(manifest, lock.as_ref());
 
@@ -187,10 +209,10 @@ pub fn resolve_all(
         .filter_map(|(name, dep)| {
             let entry = match &dep.source {
                 DependencySource::Path { path, .. } => {
-                    package_lib_entry(&manifest_dir.join(path)).map(DependencyEntry::Source)
+                    package_lib_entry(&manifest_dir.join(path), files).map(DependencyEntry::Source)
                 }
                 DependencySource::Git { url, directory, .. } => {
-                    git_dependency_entry(&git, name, url, directory.as_deref())
+                    git_dependency_entry(&git, name, url, directory.as_deref(), files)
                         .map(DependencyEntry::Source)
                 }
                 DependencySource::Registry { .. } => return None,
@@ -232,8 +254,9 @@ pub fn resolve_all(
 pub fn registry_component_needs(
     manifest: &Manifest,
     manifest_dir: &Path,
+    files: &dyn PackageFiles,
 ) -> Vec<Result<RegistryComponentNeed, (String, String)>> {
-    let locked = registry_pins(manifest, read_lock(manifest_dir).as_ref());
+    let locked = registry_pins(manifest, read_lock(manifest_dir, files).as_ref());
     registry_component_needs_locked(manifest, &locked, cache_root().as_deref())
 }
 
@@ -303,6 +326,7 @@ fn git_dependency_entry(
     name: &str,
     url: &str,
     directory: Option<&str>,
+    files: &dyn PackageFiles,
 ) -> Result<PathBuf, String> {
     let id = format!("git+{url}/{name}");
     let (version, resolved_ref) = locked
@@ -325,13 +349,14 @@ fn git_dependency_entry(
         Some(dir) => worktree_root.join(dir),
         None => worktree_root,
     };
-    package_lib_entry(&pkg_dir)
+    package_lib_entry(&pkg_dir, files)
 }
 
 /// Parse `manifest_dir`'s `wado.lock`, or `None` when it is absent or
 /// malformed (a cold checkout reads as "nothing pinned").
-fn read_lock(manifest_dir: &Path) -> Option<LockFile> {
-    std::fs::read_to_string(manifest_dir.join(LOCK_FILENAME))
+fn read_lock(manifest_dir: &Path, files: &dyn PackageFiles) -> Option<LockFile> {
+    files
+        .read(&manifest_dir.join(LOCK_FILENAME))
         .ok()?
         .parse::<LockFile>()
         .ok()
@@ -340,8 +365,11 @@ fn read_lock(manifest_dir: &Path) -> Option<LockFile> {
 /// `lock id -> (version, resolved-ref)` for every git `[[package]]`, so the CLI
 /// materializes the same worktrees the offline index resolves against.
 #[must_use]
-pub fn locked_git_packages(manifest_dir: &Path) -> BTreeMap<String, (String, String)> {
-    read_lock(manifest_dir)
+pub fn locked_git_packages(
+    manifest_dir: &Path,
+    files: &dyn PackageFiles,
+) -> BTreeMap<String, (String, String)> {
+    read_lock(manifest_dir, files)
         .as_ref()
         .map(git_pins)
         .unwrap_or_default()
@@ -372,18 +400,19 @@ pub fn home_dir() -> Option<PathBuf> {
 /// The entry module of a source dependency: the file itself for a path naming
 /// a file, otherwise the directory's `[package].lib`. Shared by the path, git,
 /// and inline-git resolution paths so all three locate an entry the same way.
-pub fn package_lib_entry(dep_path: &Path) -> Result<PathBuf, String> {
+pub fn package_lib_entry(dep_path: &Path, files: &dyn PackageFiles) -> Result<PathBuf, String> {
     let metadata = std::fs::metadata(dep_path)
         .map_err(|e| format!("cannot read {}: {e}", dep_path.display()))?;
     if metadata.is_file() {
         return Ok(dep_path.to_path_buf());
     }
-    let manifest_path = dep_path.join("wado.toml");
-    let text = std::fs::read_to_string(&manifest_path)
+    let manifest_path = dep_path.join(MANIFEST_FILENAME);
+    let text = files
+        .read(&manifest_path)
         .map_err(|e| format!("cannot read {}: {e}", manifest_path.display()))?;
     // Apply `[workspace.package]` inheritance: a dependency that is a workspace
     // member force-inherits `version` and fails a standalone parse.
-    let manifest = resolve_member_manifest(dep_path, &text)
+    let manifest = resolve_member_manifest(dep_path, &text, files)
         .map_err(|e| format!("invalid {}: {e}", manifest_path.display()))?;
     let lib = manifest.package.and_then(|p| p.lib).ok_or_else(|| {
         format!(
@@ -398,10 +427,10 @@ pub fn package_lib_entry(dep_path: &Path) -> Result<PathBuf, String> {
 /// dependency's entry module. `None` for a single-file dependency, which is a
 /// package of its own with no manifest, whatever package's tree holds it.
 #[must_use]
-pub fn lib_package(entry: &Path) -> Option<(PathBuf, Manifest)> {
-    let root = nearest_manifest_dir(entry)?;
-    let text = std::fs::read_to_string(root.join(MANIFEST_FILENAME)).ok()?;
-    let manifest = resolve_member_manifest(&root, &text).ok()?;
+pub fn lib_package(entry: &Path, files: &dyn PackageFiles) -> Option<(PathBuf, Manifest)> {
+    let root = nearest_manifest_dir(entry, files)?;
+    let text = files.read(&root.join(MANIFEST_FILENAME)).ok()?;
+    let manifest = resolve_member_manifest(&root, &text, files).ok()?;
     let lib = manifest.package.as_ref()?.lib.as_ref()?;
     let is_lib = normalize_path(&root.join(lib)) == normalize_path(&absolutize(entry));
     is_lib.then_some((root, manifest))
@@ -434,7 +463,7 @@ mod tests {
         let member_toml = "[package]\nname = \"member\"\n";
         std::fs::write(member_dir.join(MANIFEST_FILENAME), member_toml).unwrap();
 
-        let manifest = resolve_member_manifest(&member_dir, member_toml).unwrap();
+        let manifest = resolve_member_manifest(&member_dir, member_toml, &Disk).unwrap();
         assert_eq!(manifest.package.unwrap().version, "0.4.0");
     }
 
@@ -447,7 +476,7 @@ mod tests {
         std::fs::create_dir_all(member_dir.join("tests/nested")).unwrap();
 
         let via_parents = member_dir.join("tests/nested/../..");
-        let manifest = resolve_member_manifest(&via_parents, member_toml).unwrap();
+        let manifest = resolve_member_manifest(&via_parents, member_toml, &Disk).unwrap();
         assert_eq!(manifest.package.unwrap().version, "0.4.0");
     }
 
@@ -462,7 +491,7 @@ mod tests {
         let link = outside.path().join("link");
         std::os::unix::fs::symlink(member_dir.join("sub"), &link).unwrap();
 
-        let manifest = resolve_member_manifest(&link.join(".."), member_toml).unwrap();
+        let manifest = resolve_member_manifest(&link.join(".."), member_toml, &Disk).unwrap();
         assert_eq!(manifest.package.unwrap().version, "0.4.0");
         drop(tmp);
     }
@@ -488,7 +517,7 @@ mod tests {
     fn standalone_manifest_parses_without_a_workspace() {
         let tmp = tempfile::tempdir().unwrap();
         let toml = "[package]\nname = \"solo\"\nversion = \"1.0.0\"\n";
-        let manifest = resolve_member_manifest(tmp.path(), toml).unwrap();
+        let manifest = resolve_member_manifest(tmp.path(), toml, &Disk).unwrap();
         assert_eq!(manifest.package.unwrap().name, "solo");
     }
 
@@ -500,7 +529,7 @@ mod tests {
         let (tmp, _member_dir) = workspace_with_member("member");
         let outsider = tmp.path().join("outsider");
         std::fs::create_dir(&outsider).unwrap();
-        assert!(governing_workspace(&outsider).is_none());
+        assert!(governing_workspace(&outsider, &Disk).is_none());
     }
 
     #[test]
@@ -514,7 +543,7 @@ mod tests {
         )
         .unwrap();
 
-        let entry = package_lib_entry(&member_dir).expect("member resolves");
+        let entry = package_lib_entry(&member_dir, &Disk).expect("member resolves");
         assert_eq!(entry, member_dir.join("src/lib.wado"));
     }
 
@@ -523,14 +552,14 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         let solo = tmp.path().join("solo.g4");
         std::fs::write(&solo, "pub fn f() {}\n").unwrap();
-        assert_eq!(package_lib_entry(&solo).unwrap(), solo);
+        assert_eq!(package_lib_entry(&solo, &Disk).unwrap(), solo);
     }
 
     #[test]
     fn a_missing_path_is_named_itself() {
         let tmp = tempfile::tempdir().unwrap();
         let missing = tmp.path().join("solo.wado");
-        let error = package_lib_entry(&missing).unwrap_err();
+        let error = package_lib_entry(&missing, &Disk).unwrap_err();
         assert!(
             error.starts_with(&format!("cannot read {}: ", missing.display())),
             "{error}"
@@ -545,7 +574,7 @@ mod tests {
             "[package]\nname = \"nolib\"\nversion = \"1.0.0\"\n",
         )
         .unwrap();
-        let err = package_lib_entry(tmp.path()).unwrap_err();
+        let err = package_lib_entry(tmp.path(), &Disk).unwrap_err();
         assert!(err.contains("[package].lib"), "{err}");
     }
 
@@ -623,7 +652,7 @@ mod tests {
         let nested = member_dir.join("src");
         std::fs::create_dir(&nested).unwrap();
         assert_eq!(
-            nearest_manifest_dir(&nested.join("main.wado")),
+            nearest_manifest_dir(&nested.join("main.wado"), &Disk),
             Some(member_dir)
         );
     }
@@ -636,7 +665,7 @@ mod tests {
         std::fs::create_dir_all(workspace.join("tools")).unwrap();
         std::fs::write(workspace.join(WORKSPACE_FILENAME), "[workspace]\n").unwrap();
         assert_eq!(
-            nearest_manifest_dir(&workspace.join("tools/gen.wado")),
+            nearest_manifest_dir(&workspace.join("tools/gen.wado"), &Disk),
             None
         );
     }
@@ -646,7 +675,7 @@ mod tests {
         let (tmp, _member_dir) = workspace_with_member("member");
         let toml = "[package]\nname = \"root\"\nversion = \"1.0.0\"\n";
         assert_eq!(
-            resolve_member_manifest(tmp.path(), toml).unwrap_err(),
+            resolve_member_manifest(tmp.path(), toml, &Disk).unwrap_err(),
             ManifestError::PackageInWorkspace
         );
     }

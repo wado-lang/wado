@@ -11,6 +11,7 @@ use wado_compiler::doc::{
 };
 use wado_compiler::kiln::InvocationIndex;
 use wado_compiler::semantics::{Semantics, semantics_for_world};
+use wado_lsp::host::discovery::Disk;
 
 use crate::args::{self, CliExit};
 use crate::compile::{Settled, build_load, load_nearest_manifest};
@@ -279,7 +280,7 @@ async fn load_doc(input: &str, include_private: bool) -> Result<DocModule, CliEx
         .file_stem()
         .and_then(|stem| stem.to_str())
         .ok_or_else(|| CliExit::error(format!("not a file: '{}'", path.display())))?;
-    let project = load_nearest_manifest(path).map_err(CliExit::error)?;
+    let project = load_nearest_manifest(path, &Disk).map_err(CliExit::error)?;
     let dir = path.parent().unwrap_or(Path::new(""));
     let (host, invocations) = build_load(
         path,

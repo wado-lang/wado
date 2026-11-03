@@ -3,6 +3,7 @@ use std::fs;
 use std::path::Path;
 
 use lexopt::Arg::Value;
+use wado_lsp::host::discovery::Disk;
 
 use crate::args::{self, CliExit};
 use crate::compile::{Settled, build_load, entry_profile, load_nearest_manifest};
@@ -345,7 +346,7 @@ async fn run_single(opts: &DumpOptions, input: &str) -> Result<(), CliExit> {
         .parent()
         .map(std::path::Path::to_path_buf)
         .unwrap_or_default();
-    let manifest_pair = load_nearest_manifest(path).map_err(CliExit::error)?;
+    let manifest_pair = load_nearest_manifest(path, &Disk).map_err(CliExit::error)?;
     let (host, invocations) = build_load(
         path,
         &source,

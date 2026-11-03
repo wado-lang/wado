@@ -6,7 +6,7 @@
 
 use std::sync::{Arc, Mutex};
 
-use wado_lsp::host::discovery::resolve_all;
+use wado_lsp::host::discovery::{Disk, resolve_all};
 use wado_lsp::host::prefetch;
 
 #[test]
@@ -43,7 +43,7 @@ fn a_cold_pin_is_handed_to_the_prefetcher_and_still_reads_unresolved() {
 
     let manifest = std::fs::read_to_string(project.join("wado.toml")).unwrap();
     let manifest: wado_manifest::Manifest = manifest.parse().unwrap();
-    let resolved = resolve_all(&manifest, &project);
+    let resolved = resolve_all(&manifest, &project, &Disk);
 
     assert_eq!(
         *seen.lock().unwrap(),

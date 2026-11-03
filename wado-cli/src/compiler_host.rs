@@ -13,17 +13,17 @@ use wado_compiler::{
     Code, CompilerHost, DependencyIndex, Diagnostic, GeneratorRequest, GeneratorResponse,
     GeneratorRunnerError, LogLevel, ModuleDir, ProbeRequest, Severity, SourceError, SourceReader,
 };
-use wado_manifest::LOCK_FILENAME;
 
 use crate::args::DEFAULT_LOG_LEVEL;
 use crate::dep_component::Acquisition;
-use crate::manifest::{package_root, resolution_inputs};
+use crate::manifest::package_root;
 use crate::remote;
 use crate::rss::RssSample;
 use crate::run_cache::RunCache;
 use wado_host::kiln::driver::KilnSpan;
 use wado_host::kiln::runtime::{generate_for, probe_for};
 use wado_host::sync::lock;
+use wado_lsp::host::discovery::Disk;
 
 pub struct FilesystemCompilerHost {
     inner: Arc<wado_lsp::FilesystemCompilerHost>,
@@ -297,7 +297,7 @@ impl CompilerHost for FilesystemCompilerHost {
         integrity: Option<Integrity>,
     ) -> Result<Arc<dyn SourceReader>, SourceError> {
         if is_remote(path) {
-            let lock_root = package_root(self.base_path());
+            let lock_root = package_root(self.base_path(), &Disk);
             let opened = Box::pin(remote::open(path, integrity, lock_root.as_deref())).await;
             if opened.is_err() {
                 self.run.observe_untracked();
@@ -328,22 +328,29 @@ impl CompilerHost for FilesystemCompilerHost {
         loaded
     }
 
-    /// A pin settles the bytes, so a read records no file but the `wado.lock`
-    /// that pinned it, and only a failure leaves the compile untracked.
+    /// A pin settles the bytes, so a read records only the `wado.lock` that
+    /// pinned them and the package files that led to it. A `use` writing its
+    /// own pin reads neither. Only a failure leaves the compile untracked.
     async fn load_remote(
         &self,
         url: &str,
         extent: Option<u64>,
         integrity: Option<Integrity>,
     ) -> Result<Vec<u8>, SourceError> {
-        let lock_root = package_root(self.base_path());
-        let loaded = Box::pin(remote::load(url, extent, integrity, lock_root.as_deref())).await;
-        match (&loaded, &lock_root) {
-            (Err(_), _) => self.run.observe_untracked(),
-            (Ok(_), Some(root)) if integrity.is_none() => {
-                self.run.depend_on_file(&root.join(LOCK_FILENAME));
-            }
-            (Ok(_), _) => {}
+        let lock_root = integrity
+            .is_none()
+            .then(|| package_root(self.base_path(), &*self.run))
+            .flatten();
+        let loaded = Box::pin(remote::load(
+            url,
+            extent,
+            integrity,
+            lock_root.as_deref(),
+            &self.run,
+        ))
+        .await;
+        if loaded.is_err() {
+            self.run.observe_untracked();
         }
         loaded
     }
@@ -382,7 +389,7 @@ impl CompilerHost for FilesystemCompilerHost {
     fn dependency_index(&self) -> wado_compiler::DependencyIndex {
         match &self.dep_index {
             Some(index) => index.clone(),
-            None => self.inner.dependency_index(),
+            None => self.inner.dependency_index_with(&*self.run),
         }
     }
 
@@ -391,19 +398,12 @@ impl CompilerHost for FilesystemCompilerHost {
     }
 
     fn module_dir(&self, path: &str) -> ModuleDir {
-        self.inner.module_dir_probing(path, |manifest, found| {
-            if found {
-                self.run.depend_on_file(manifest);
-            } else {
-                self.run.observe_absent(manifest);
-            }
-        })
+        self.inner.module_dir_with(path, &*self.run)
     }
 
+    /// An acquired index was built through this run, which recorded what
+    /// building it read.
     fn package_index(&self, root: &str) -> DependencyIndex {
-        for file in resolution_inputs(Path::new(root)) {
-            self.run.depend_on_file(&file);
-        }
         let read = PackageRead {
             base: self.base_path().to_path_buf(),
             root: root.to_string(),
@@ -412,7 +412,7 @@ impl CompilerHost for FilesystemCompilerHost {
         if let Some(UndeclaredPackage::Acquired(index)) = undeclared.get(&read) {
             return index.clone();
         }
-        let offline = self.inner.package_index(root);
+        let offline = self.inner.package_index_with(root, &*self.run);
         if self.acquisition.is_some() {
             undeclared.insert(read, UndeclaredPackage::Offline(offline.clone()));
         }

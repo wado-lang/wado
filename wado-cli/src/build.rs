@@ -16,6 +16,7 @@ use std::sync::Arc;
 use sha2::{Digest, Sha256};
 use tokio::sync::Semaphore;
 use tokio::task::JoinSet;
+use wado_lsp::host::discovery::Disk;
 
 use crate::args::{self, CliExit};
 use crate::compile::{self, Artifact, CompileFlags, CompileOptions};
@@ -213,7 +214,7 @@ pub fn project_here(missing: &'static str) -> Result<manifest::ProjectManifest, 
 
 /// The project enclosing `dir`, its manifest warnings emitted.
 pub fn project_at(dir: &Path, missing: &'static str) -> Result<manifest::ProjectManifest, CliExit> {
-    let project = manifest::discover(openable_dir(dir))
+    let project = manifest::discover(openable_dir(dir), &Disk)
         .map_err(CliExit::error)?
         .ok_or_else(|| CliExit::error(missing))?;
     manifest::emit_manifest_warnings(&project);
@@ -359,7 +360,7 @@ pub async fn build_for_driver(
     flags: &CompileFlags,
 ) -> Result<Vec<u8>, CliExit> {
     let entry_path = Path::new(entry);
-    let project = compile::load_nearest_manifest(entry_path).map_err(CliExit::error)?;
+    let project = compile::load_nearest_manifest(entry_path, &Disk).map_err(CliExit::error)?;
     let metadata = project.as_ref().map_or_else(String::new, |project| {
         let sections = compile::package_metadata(project, EmbedOptions::default(), &flags.knobs);
         sha256_hex(format!("{sections:?}").as_bytes())

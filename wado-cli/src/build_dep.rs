@@ -14,6 +14,7 @@
 use std::path::Path;
 
 use indexmap::IndexMap;
+use wado_lsp::host::discovery::PackageFiles;
 
 use wado_manifest::dependency::registry_lock_id;
 use wado_manifest::{
@@ -164,9 +165,12 @@ pub async fn fetch_build_dependencies(resolved: &[ResolvedBuildDep]) -> Result<u
 /// project's `wado.lock`, if present. Used by the provider to resolve a
 /// `module: "ns:name"` spec deterministically without a registry version listing.
 #[must_use]
-pub fn locked_generator_versions(manifest_root: &Path) -> IndexMap<String, String> {
+pub fn locked_generator_versions(
+    manifest_root: &Path,
+    files: &dyn PackageFiles,
+) -> IndexMap<String, String> {
     let mut out = IndexMap::new();
-    let Ok(text) = std::fs::read_to_string(manifest_root.join(LOCK_FILENAME)) else {
+    let Ok(text) = files.read(&manifest_root.join(LOCK_FILENAME)) else {
         return out;
     };
     let Ok(lock) = text.parse::<LockFile>() else {
@@ -185,6 +189,7 @@ pub fn locked_generator_versions(manifest_root: &Path) -> IndexMap<String, Strin
 #[cfg(test)]
 mod tests {
     use super::*;
+    use wado_lsp::host::discovery::Disk;
 
     #[test]
     fn resolved_build_dep_locked_package_pins_integrity_and_world() {
@@ -213,7 +218,7 @@ mod tests {
              deps = []\n",
         )
         .unwrap();
-        let versions = locked_generator_versions(dir.path());
+        let versions = locked_generator_versions(dir.path(), &Disk);
         assert_eq!(
             versions.get("wado-lang:gale").map(String::as_str),
             Some("0.0.9")
