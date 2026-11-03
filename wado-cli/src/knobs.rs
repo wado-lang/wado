@@ -5,7 +5,7 @@
 use lexopt::Parser;
 use wado_compiler::LogLevel;
 use wado_compiler::param_resolution::ParamInputs;
-use wado_compiler::pgo::Percent;
+use wado_compiler::pgo::{Cutoff, Percent};
 
 use crate::args::{self, CliExit, OptSpec};
 use crate::host_memory::{FreedMemory, set_freed_memory};
@@ -81,11 +81,13 @@ pub fn parse_opt_level_arg(parser: &mut Parser) -> Result<OptLevel, CliExit> {
 pub enum CompileKnobOpt {
     OptLevel,
     InlineThreshold,
+    InlineHotCallsiteThreshold,
     InlineGrowth,
     OptIterations,
     Specializations,
     OptThreads,
     PredictableBranchThreshold,
+    ProfileSummaryCutoffHot,
     LogLevel,
     Allocator,
     Feature,
@@ -111,6 +113,12 @@ impl CompileKnobOpt {
                 short: None,
                 value: Some("<n>"),
                 desc: "Override inlining threshold (max statement count per function)",
+            },
+            Self::InlineHotCallsiteThreshold => OptSpec {
+                long: Some("optimize-inline-hot-callsite-threshold"),
+                short: None,
+                value: Some("<n>"),
+                desc: "Override the inlining threshold at a call site the profile\nmeasured hot (default: 4x the inlining threshold)",
             },
             Self::InlineGrowth => OptSpec {
                 long: Some("optimize-inline-growth"),
@@ -141,6 +149,12 @@ impl CompileKnobOpt {
                 short: None,
                 value: Some("<pct>"),
                 desc: "The share of a branch's runs, in percent, one side must take for\nthe profile to call the other side unlikely (default: 99)",
+            },
+            Self::ProfileSummaryCutoffHot => OptSpec {
+                long: Some("optimize-profile-summary-cutoff-hot"),
+                short: None,
+                value: Some("<ppm>"),
+                desc: "The share of all runs, in parts per million, whose smallest count\nis the profile's hot line (default: 990000)",
             },
             Self::LogLevel => OptSpec {
                 long: Some("log-level"),
@@ -280,6 +294,12 @@ impl CompileKnobs {
                     parser,
                 )?);
             }
+            CompileKnobOpt::InlineHotCallsiteThreshold => {
+                self.opt.inline_hot_callsite_threshold = Some(args::parse_inline_threshold_arg(
+                    "--optimize-inline-hot-callsite-threshold",
+                    parser,
+                )?);
+            }
             CompileKnobOpt::InlineGrowth => {
                 self.opt.inline_growth =
                     Some(args::parse_u32_arg("--optimize-inline-growth", parser)?);
@@ -305,6 +325,17 @@ impl CompileKnobs {
                     "--optimize-predictable-branch-threshold",
                     parser,
                 )?);
+            }
+            CompileKnobOpt::ProfileSummaryCutoffHot => {
+                let opt = "--optimize-profile-summary-cutoff-hot";
+                let n = args::parse_u32_arg(opt, parser)?;
+                self.opt.profile_summary_cutoff_hot =
+                    Some(Cutoff::new(n).ok_or_else(|| {
+                        CliExit::error(format!(
+                            "{opt} is a share in parts per million, at most {}, got {n}",
+                            Cutoff::PER_MILLION
+                        ))
+                    })?);
             }
             CompileKnobOpt::LogLevel => self.log_level = args::parse_log_level_arg(parser)?,
             CompileKnobOpt::Allocator => self.allocator = Some(args::require_string(parser)?),

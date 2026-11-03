@@ -976,6 +976,8 @@ struct BodyScan {
     cold_callees: IndexSet<FuncId>,
     /// The callees called from at least one site outside every loop.
     unlooped_callees: IndexSet<FuncId>,
+    /// The callees called from at least one hot site.
+    heated_callees: IndexSet<FuncId>,
     /// Whether the body holds a `loop`.
     loopy: bool,
 }
@@ -995,6 +997,7 @@ pub(super) struct InlineScans {
 #[derive(Clone, Copy, PartialEq, Eq)]
 struct SweepRead {
     reach: Reach,
+    hot_reach: Reach,
     shrinks: bool,
     entry: Site,
 }
@@ -1013,8 +1016,11 @@ fn revisit_moved_reads(
 ) {
     let pair = |i: usize| before.get(i).map(|b| (b, &after[i]));
     let turned = |i: usize| pair(i).is_some_and(|(b, a)| b.entry != a.entry);
-    let readmitted =
-        |i: usize| pair(i).is_some_and(|(b, a)| (b.reach, b.shrinks) != (a.reach, a.shrinks));
+    let readmitted = |i: usize| {
+        pair(i).is_some_and(|(b, a)| {
+            (b.reach, b.hot_reach, b.shrinks) != (a.reach, a.hot_reach, a.shrinks)
+        })
+    };
     for (caller, scan) in scans.iter().enumerate() {
         if turned(caller)
             || scan
@@ -1042,6 +1048,12 @@ fn scan_body(func: &NirFunction, markers: MarkerBuiltins) -> BodyScan {
         return scan;
     };
     let cold = RareRuns::of(body, markers, Rarity::Cold).exprs(body);
+    let heated = {
+        let unlikely = RareRuns::of(body, markers, Rarity::Unlikely).exprs(body);
+        let mut hot = RareRuns::of(body, markers, Rarity::Hot).exprs(body);
+        hot.retain(|e| !cold.contains(e) && !unlikely.contains(e));
+        hot
+    };
     let looped = looped_exprs(body);
     body.for_each_reachable_node(|node| match node {
         NodeRef::Stmt(st) => match &body.stmts[st].kind {
@@ -1085,6 +1097,9 @@ fn scan_body(func: &NirFunction, markers: MarkerBuiltins) -> BodyScan {
                 }
                 if !looped.contains(&e) {
                     scan.unlooped_callees.insert(*func_id);
+                }
+                if heated.contains(&e) {
+                    scan.heated_callees.insert(*func_id);
                 }
             }
             _ => {}
@@ -1496,6 +1511,10 @@ enum Site {
     /// reach: only `#[inline(always)]` and a splice no bigger than the call
     /// happen here, since anything else only bloats code that rarely runs.
     Cold,
+    /// [`Site::Plain`] in a hot run, which splices at the hot threshold.
+    HotPlain,
+    /// [`Site::Loop`] in a hot run.
+    HotLoop,
 }
 
 impl Site {
@@ -1503,6 +1522,56 @@ impl Site {
         match self {
             Site::Cold => Site::Cold,
             Site::Plain | Site::Loop => Site::Loop,
+            Site::HotPlain | Site::HotLoop => Site::HotLoop,
+        }
+    }
+
+    /// This site in a hot run, unless it is cold.
+    fn heated(self) -> Self {
+        match self {
+            Site::Plain => Site::HotPlain,
+            Site::Loop => Site::HotLoop,
+            Site::Cold | Site::HotPlain | Site::HotLoop => self,
+        }
+    }
+
+    /// This site outside every hot run.
+    fn cooled(self) -> Self {
+        match self {
+            Site::HotPlain => Site::Plain,
+            Site::HotLoop => Site::Loop,
+            Site::Cold | Site::Plain | Site::Loop => self,
+        }
+    }
+
+    fn is_hot(self) -> bool {
+        matches!(self, Site::HotPlain | Site::HotLoop)
+    }
+}
+
+/// The runs of one caller's body that move its [`Site`]: cold, hot, and
+/// unlikely, which ends a hot run.
+#[derive(Clone)]
+struct SiteRuns([RareRuns; 3]);
+
+impl SiteRuns {
+    /// `body`'s runs, its cold ones `cold`.
+    fn of(cold: RareRuns, body: &Body, markers: MarkerBuiltins) -> Self {
+        Self([
+            cold,
+            RareRuns::of(body, markers, Rarity::Hot),
+            RareRuns::of(body, markers, Rarity::Unlikely),
+        ])
+    }
+
+    /// Where `block` turns cold, hot, and unlikely.
+    fn starts(&self, block: BlockId) -> [Option<usize>; 3] {
+        self.0.each_ref().map(|runs| runs.start(block))
+    }
+
+    fn add_under(&mut self, body: &Body, e: ExprId) {
+        for runs in &mut self.0 {
+            runs.add_under(body, e);
         }
     }
 }
@@ -2066,6 +2135,8 @@ struct Candidates<'a> {
     bodies: &'a IndexMap<FuncId, NirFunction>,
     /// Which sites splice each candidate.
     reach: &'a IndexMap<FuncId, Reach>,
+    /// Which hot sites splice each candidate.
+    hot_reach: &'a IndexMap<FuncId, Reach>,
     /// Per candidate, the call sites a splice of it brings, its own splices'
     /// included: what a loop holding a site of it holds once the round ends.
     carried: &'a IndexMap<FuncId, IndexMap<FuncId, usize>>,
@@ -2120,10 +2191,12 @@ impl<'a> Candidates<'a> {
 /// Inline eligible functions at their call sites
 ///
 /// The `inline_threshold` parameter controls the maximum number of statements
-/// a function can have to be considered for inlining.
+/// a function can have to be considered for inlining, and
+/// `inline_hot_threshold` the same at a call site a profile measured hot.
 pub fn inline_functions(
     project: &mut NirPackage,
     inline_threshold: usize,
+    inline_hot_threshold: usize,
     budget: &mut InlineBudget,
     holds: &mut InlineHolds,
     gate: &mut FunctionGate,
@@ -2171,6 +2244,14 @@ pub fn inline_functions(
     // its sites pays its call edge on every iteration, as a site in a loop does.
     let looped = unreached_through(project, &call_sites, live_edges(|s| &s.unlooped_callees));
     let called_cold = called_cold(scans, &live, &cold_functions);
+    let mut called_hot = vec![false; scans.len()];
+    for (caller, scan) in scans.iter().enumerate() {
+        if live[caller] && !cold_functions[caller] {
+            for callee in &scan.heated_callees {
+                called_hot[callee.index()] = true;
+            }
+        }
+    }
     let never: Vec<bool> = {
         let type_table = project.type_table.borrow();
         project
@@ -2204,6 +2285,8 @@ pub fn inline_functions(
     // functions that happen to share a name.
     let mut inline_candidates: IndexMap<FuncId, NirFunction> = IndexMap::default();
     let mut reach: IndexMap<FuncId, Reach> = IndexMap::default();
+    // Which hot sites splice each candidate a hot site calls.
+    let mut hot_reach: IndexMap<FuncId, Reach> = IndexMap::default();
     let mut net_price: IndexMap<FuncId, usize> = IndexMap::default();
     let mut shrinking: IndexSet<FuncId> = IndexSet::default();
 
@@ -2299,35 +2382,46 @@ pub fn inline_functions(
                 foldable: &foldable,
                 loopy: &loopy,
             });
-        let verdict = classify_callee(
-            &func,
-            view.as_ref(),
-            &barred_cycle_members,
-            type_table,
-            inline_threshold,
-            runs,
-            &foldable,
-            &loopy,
-            &safepoint_calls,
-            &scans[i].written,
-            call_sites[i],
-            &spliced,
-            &hopeful_params[i],
-        );
+        let classify = |threshold: usize| {
+            classify_callee(
+                &func,
+                view.as_ref(),
+                &barred_cycle_members,
+                type_table,
+                threshold,
+                runs,
+                &foldable,
+                &loopy,
+                &safepoint_calls,
+                &scans[i].written,
+                call_sites[i],
+                &spliced,
+                &hopeful_params[i],
+            )
+        };
+        let verdict = classify(inline_threshold);
+        let heated = if called_hot[i] {
+            classify(inline_hot_threshold)
+        } else {
+            verdict
+        };
         compiler_trace!(
             "inline_verdict",
-            "{}: hot {} for {} params, {} sites -> {:?}",
+            "{}: hot {} for {} params, {} sites -> {:?} (at hot sites {:?})",
             func.name,
-            verdict.hot,
+            verdict.hot.max(heated.hot),
             func.params.len(),
             call_sites[i],
-            verdict.reach
+            verdict.reach,
+            heated.reach
         );
-        let candidate = (verdict.reach != Reach::Nowhere).then(|| {
+        let candidate = (heated.reach != Reach::Nowhere || verdict.reach != Reach::Nowhere).then(|| {
             let body = func.body.as_ref().expect("a candidate has a body");
             let hot = match func.inline_hint {
                 InlineHint::Always => inline_cost(body, type_table, runs, &spliced),
-                InlineHint::Auto | InlineHint::Hint | InlineHint::Never => verdict.hot,
+                InlineHint::Auto | InlineHint::Hint | InlineHint::Never => {
+                    verdict.hot.max(heated.hot)
+                }
             };
             let shrinks = called_cold[i] && {
                 let written = if pricing {
@@ -2339,9 +2433,9 @@ pub fn inline_functions(
             };
             (net_cost(hot, func.params.len()), shrinks, func.clone())
         });
-        (func.id, size, verdict, candidate)
+        (func.id, size, verdict, heated.reach, candidate)
     });
-    for (id, size, verdict, candidate) in classified {
+    for (id, size, verdict, heated, candidate) in classified {
         unit_size += size;
         if let Some(id) = id {
             holds.settle(id, verdict.hold, gate);
@@ -2351,6 +2445,7 @@ pub fn inline_functions(
         };
         let id = id.expect("func_id assigned at lower");
         reach.insert(id, verdict.reach);
+        hot_reach.insert(id, heated);
         let string_key = (func.module_source.clone(), func.name.clone());
         // Get the strings used by this function
         if let Some(strings) = project.function_strings.get(&string_key) {
@@ -2419,6 +2514,7 @@ pub fn inline_functions(
         inline_candidates.shift_remove(id);
         candidate_strings.shift_remove(id);
         reach.shift_remove(id);
+        hot_reach.shift_remove(id);
         net_price.shift_remove(id);
         shrinking.shift_remove(id);
     }
@@ -2455,6 +2551,7 @@ pub fn inline_functions(
             let id = FuncId::new(i);
             SweepRead {
                 reach: reach.get(&id).copied().unwrap_or(Reach::Nowhere),
+                hot_reach: hot_reach.get(&id).copied().unwrap_or(Reach::Nowhere),
                 shrinks: shrinking.contains(&id),
                 entry: if cold_functions[i] {
                     Site::Cold
@@ -2481,6 +2578,7 @@ pub fn inline_functions(
         let candidates = Candidates {
             bodies: &inline_candidates,
             reach: &reach,
+            hot_reach: &hot_reach,
             carried: &carried,
             net_price: &net_price,
             shrinking: &shrinking,
@@ -2538,7 +2636,7 @@ pub fn inline_functions(
                 frame.loop_calls.push(call_counts(body, root, &carried));
             }
             // Priced on this same body: only this visit writes it.
-            let mut runs = cold_runs[fid.index()].clone();
+            let mut runs = SiteRuns::of(cold_runs[fid.index()].clone(), body, markers);
             inline_calls_in_block(
                 body,
                 root,
@@ -2750,12 +2848,13 @@ fn carried_calls(
 
 /// Inline function calls in a block, each statement processed in place. `site`
 /// is the context the block's calls sit in; the block's cold run is a
-/// [`Site::Cold`], and a loop body is a [`Site::Loop`].
+/// [`Site::Cold`], its hot run a hot site until an unlikely run, and a loop
+/// body is a [`Site::Loop`].
 fn inline_calls_in_block(
     body: &mut Body,
     block: BlockId,
     candidates: Candidates<'_>,
-    cold: &mut RareRuns,
+    runs: &mut SiteRuns,
     frame: &mut CallerFrame<'_>,
     type_table: &TypeTable,
     inlined_funcs: &mut Vec<FuncId>,
@@ -2770,9 +2869,15 @@ fn inline_calls_in_block(
         Loop(BlockId),
         None,
     }
-    let start = cold.start(block);
+    let [cold, hot, unlikely] = runs.starts(block);
     for (i, stmt_id) in body.blocks[block].stmts.clone().into_iter().enumerate() {
-        if start == Some(i) {
+        if hot == Some(i) {
+            site = site.heated();
+        }
+        if unlikely == Some(i) {
+            site = site.cooled();
+        }
+        if cold == Some(i) {
             site = Site::Cold;
         }
         let shape = match &body.stmts[stmt_id].kind {
@@ -2797,7 +2902,7 @@ fn inline_calls_in_block(
                 body,
                 value,
                 candidates,
-                cold,
+                runs,
                 frame,
                 type_table,
                 inlined_funcs,
@@ -2811,7 +2916,7 @@ fn inline_calls_in_block(
                         body,
                         cond,
                         candidates,
-                        cold,
+                        runs,
                         frame,
                         type_table,
                         inlined_funcs,
@@ -2824,7 +2929,7 @@ fn inline_calls_in_block(
                     body,
                     tb,
                     candidates,
-                    cold,
+                    runs,
                     frame,
                     type_table,
                     inlined_funcs,
@@ -2837,7 +2942,7 @@ fn inline_calls_in_block(
                         body,
                         eb,
                         candidates,
-                        cold,
+                        runs,
                         frame,
                         type_table,
                         inlined_funcs,
@@ -2851,7 +2956,7 @@ fn inline_calls_in_block(
                 body,
                 b,
                 candidates,
-                cold,
+                runs,
                 frame,
                 type_table,
                 inlined_funcs,
@@ -2867,7 +2972,7 @@ fn inline_calls_in_block(
                     body,
                     b,
                     candidates,
-                    cold,
+                    runs,
                     frame,
                     type_table,
                     inlined_funcs,
@@ -3191,7 +3296,13 @@ fn try_inline_call_expr(
     // The call's stamped `func_id` is the exact callee identity; look the
     // candidate up directly (no `(module, name)` resolution).
     let candidate = candidates.bodies.get(&func_id)?;
-    let admitted = match (site, candidates.reach[&func_id]) {
+    let reach = if site.is_hot() {
+        candidates.hot_reach[&func_id]
+    } else {
+        candidates.reach[&func_id]
+    };
+    let admitted = match (site.cooled(), reach) {
+        (Site::HotPlain | Site::HotLoop, _) => unreachable!("a cooled site is not hot"),
         (Site::Cold, _) => {
             candidate.inline_hint == InlineHint::Always || candidates.shrinking.contains(&func_id)
         }
@@ -3221,9 +3332,8 @@ fn try_inline_call_expr(
         (Site::Loop, Reach::SoleOutsideLoops) => false,
         (Site::Loop, Reach::Loops) => !frame.glue && frame.sole_loop_site(func_id),
         (Site::Plain, Reach::Loops) => false,
-        (Site::Plain | Site::Loop, Reach::Nowhere) => {
-            unreachable!("a candidate is reached somewhere")
-        }
+        // Spliced only at the other kind of site, hot or not.
+        (Site::Plain | Site::Loop, Reach::Nowhere) => false,
     };
     if !admitted {
         return None;
@@ -3941,7 +4051,7 @@ fn inline_calls_in_expr(
     body: &mut Body,
     e: ExprId,
     candidates: Candidates<'_>,
-    cold: &mut RareRuns,
+    runs: &mut SiteRuns,
     frame: &mut CallerFrame<'_>,
     type_table: &TypeTable,
     inlined_funcs: &mut Vec<FuncId>,
@@ -3969,13 +4079,13 @@ fn inline_calls_in_expr(
         if !inlined_funcs.contains(&inlined_key) {
             inlined_funcs.push(inlined_key);
         }
-        cold.add_under(body, e);
+        runs.add_under(body, e);
         let left = Cell::new(candidates.rescan_cap);
         inline_calls_in_expr(
             body,
             e,
             candidates.rescanning(&left),
-            cold,
+            runs,
             frame,
             type_table,
             inlined_funcs,
@@ -3991,7 +4101,7 @@ fn inline_calls_in_expr(
             body,
             ex,
             candidates,
-            cold,
+            runs,
             frame,
             type_table,
             inlined_funcs,
@@ -4005,7 +4115,7 @@ fn inline_calls_in_expr(
             body,
             b,
             candidates,
-            cold,
+            runs,
             frame,
             type_table,
             inlined_funcs,

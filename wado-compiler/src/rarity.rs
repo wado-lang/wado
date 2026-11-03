@@ -5,10 +5,11 @@
 //! [WEP: Profile-Guided Optimization](../../docs/wep-2026-10-25-profile-guided-optimization.md).
 
 use crate::name::{
-    COLD_CODE_INTRINSIC, COLD_PATH_INTRINSIC, KNOWN_COLD_PATH_INTRINSIC, UNLIKELY_PATH_INTRINSIC,
+    COLD_CODE_INTRINSIC, COLD_PATH_INTRINSIC, HOT_CODE_INTRINSIC, KNOWN_COLD_PATH_INTRINSIC,
+    UNLIKELY_PATH_INTRINSIC,
 };
 
-/// The half of rarity a pass reads.
+/// The answer about a path a pass reads.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Rarity {
     /// The path runs rarely in the whole program: what pricing, inlining and
@@ -16,6 +17,9 @@ pub enum Rarity {
     Cold,
     /// The branch to the path is rarely taken: what a branch hint reads.
     Unlikely,
+    /// The path runs often in the whole program: what the inliner's hot price
+    /// reads.
+    Hot,
 }
 
 /// What a marker states.
@@ -27,10 +31,12 @@ pub enum Mark {
     Unlikely,
     /// Cold, not unlikely: `cold_code`.
     Cold,
+    /// Hot: `hot_code`.
+    Hot,
 }
 
 impl Mark {
-    pub const ALL: [Self; 3] = [Self::ColdPath, Self::Unlikely, Self::Cold];
+    pub const ALL: [Self; 4] = [Self::ColdPath, Self::Unlikely, Self::Cold, Self::Hot];
 
     /// The mark stating these answers, where either is yes.
     #[must_use]
@@ -50,6 +56,7 @@ impl Mark {
             COLD_PATH_INTRINSIC | KNOWN_COLD_PATH_INTRINSIC => Some(Self::ColdPath),
             UNLIKELY_PATH_INTRINSIC => Some(Self::Unlikely),
             COLD_CODE_INTRINSIC => Some(Self::Cold),
+            HOT_CODE_INTRINSIC => Some(Self::Hot),
             _ => None,
         }
     }
@@ -61,16 +68,21 @@ impl Mark {
             Self::ColdPath => COLD_PATH_INTRINSIC,
             Self::Unlikely => UNLIKELY_PATH_INTRINSIC,
             Self::Cold => COLD_CODE_INTRINSIC,
+            Self::Hot => HOT_CODE_INTRINSIC,
         }
     }
 
     #[must_use]
     pub fn states(self, rarity: Rarity) -> bool {
         match (self, rarity) {
-            (Self::ColdPath, _)
+            (Self::ColdPath, Rarity::Cold | Rarity::Unlikely)
             | (Self::Unlikely, Rarity::Unlikely)
-            | (Self::Cold, Rarity::Cold) => true,
-            (Self::Unlikely, Rarity::Cold) | (Self::Cold, Rarity::Unlikely) => false,
+            | (Self::Cold, Rarity::Cold)
+            | (Self::Hot, Rarity::Hot) => true,
+            (Self::ColdPath | Self::Unlikely | Self::Cold, Rarity::Hot)
+            | (Self::Unlikely, Rarity::Cold)
+            | (Self::Cold, Rarity::Unlikely)
+            | (Self::Hot, Rarity::Cold | Rarity::Unlikely) => false,
         }
     }
 
@@ -81,6 +93,7 @@ impl Mark {
             Self::ColdPath => "unlikely cold",
             Self::Unlikely => "unlikely",
             Self::Cold => "cold",
+            Self::Hot => "hot",
         }
     }
 }

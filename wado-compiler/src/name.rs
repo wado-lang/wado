@@ -169,6 +169,10 @@ pub const UNLIKELY_PATH_INTRINSIC: &str = "unlikely_path";
 /// its branch is not unlikely.
 pub const COLD_CODE_INTRINSIC: &str = "cold_code";
 
+/// The `core:builtin` intrinsic a profile writes where a path runs often in the
+/// whole program.
+pub const HOT_CODE_INTRINSIC: &str = "hot_code";
+
 /// The `core:builtin` intrinsic marking a path the program itself makes rare:
 /// ahead of a trap, or past a global's once-guard. Reify and lowering write it
 /// where an author would write `cold_path`, and `lower::translate` turns it

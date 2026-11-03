@@ -96,7 +96,7 @@ fn marker_stmt(intrinsic: &str, span: Span) -> TirStmt {
 pub fn profile_marker_stmt(mark: Mark, span: Span) -> TirStmt {
     match mark {
         Mark::ColdPath => known_cold_path_stmt(span),
-        Mark::Unlikely | Mark::Cold => marker_stmt(mark.builtin(), span),
+        Mark::Unlikely | Mark::Cold | Mark::Hot => marker_stmt(mark.builtin(), span),
     }
 }
 

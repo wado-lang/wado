@@ -69,11 +69,13 @@ impl Opt {
     const KNOBS: &[CompileKnobOpt] = &[
         CompileKnobOpt::OptLevel,
         CompileKnobOpt::InlineThreshold,
+        CompileKnobOpt::InlineHotCallsiteThreshold,
         CompileKnobOpt::InlineGrowth,
         CompileKnobOpt::OptIterations,
         CompileKnobOpt::Specializations,
         CompileKnobOpt::OptThreads,
         CompileKnobOpt::PredictableBranchThreshold,
+        CompileKnobOpt::ProfileSummaryCutoffHot,
         CompileKnobOpt::LogLevel,
         CompileKnobOpt::Allocator,
         CompileKnobOpt::NoCache,

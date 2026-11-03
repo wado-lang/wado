@@ -81,13 +81,54 @@ impl Profile {
         self.modules.is_empty()
     }
 
-    /// This profile read under `thresholds`.
+    /// This profile read under `thresholds`, against its own hot line.
     #[must_use]
     pub fn applied(&self, thresholds: Thresholds) -> Applied<'_> {
         Applied {
             profile: self,
-            thresholds,
+            reading: Reading {
+                thresholds,
+                hot_line: self.hot_line(thresholds.hot),
+            },
         }
+    }
+
+    /// The smallest count still inside `cutoff`'s share of all runs, with
+    /// every count sorted from the largest down and the share rounded down, as
+    /// LLVM's `ProfileSummaryBuilder` places its hot line.
+    fn hot_line(&self, cutoff: Cutoff) -> i64 {
+        let mut counts: Vec<i64> = self
+            .modules
+            .values()
+            .flatten()
+            .flat_map(|function| function.counts.values().copied())
+            .collect();
+        counts.sort_unstable_by(|a, b| b.cmp(a));
+        let total: u128 = counts.iter().map(|&count| count as u128).sum();
+        let share = total * u128::from(cutoff.0) / u128::from(Cutoff::PER_MILLION);
+        let (mut runs, mut line) = (0, 0);
+        for &count in &counts {
+            if runs >= share {
+                break;
+            }
+            runs += count as u128;
+            line = count;
+        }
+        line
+    }
+}
+
+/// A share of all runs, in parts per million.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Cutoff(u32);
+
+impl Cutoff {
+    pub const PER_MILLION: u32 = 1_000_000;
+
+    /// `per_million` as a share, where it is at most the whole.
+    #[must_use]
+    pub fn new(per_million: u32) -> Option<Self> {
+        (per_million <= Self::PER_MILLION).then_some(Self(per_million))
     }
 }
 
@@ -106,18 +147,35 @@ impl Percent {
 }
 
 /// How a compile reads a profile's counts: a region is unlikely past the share
-/// of a branch's runs that makes the branch predictable, and cold where it
-/// never ran. The default share is LLVM's for its option of the same name.
+/// of a branch's runs that makes the branch predictable, cold where it never
+/// ran, and hot at or above the smallest count inside the `hot` share of all
+/// runs. The defaults are LLVM's for its options of the same names.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Thresholds {
     pub predictable_branch: Percent,
+    pub hot: Cutoff,
 }
 
 impl Default for Thresholds {
     fn default() -> Self {
         Self {
             predictable_branch: Percent(99),
+            hot: Cutoff(990_000),
         }
+    }
+}
+
+/// What a profile's counts mean to a compile: the thresholds, and the hot line
+/// they place over the whole profile, wherever a part of it is applied.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct Reading {
+    thresholds: Thresholds,
+    hot_line: i64,
+}
+
+impl Reading {
+    fn is_hot(self, runs: i64) -> bool {
+        runs > 0 && runs >= self.hot_line
     }
 }
 
@@ -142,7 +200,7 @@ impl Thresholds {
 #[derive(Debug, Clone, Copy)]
 pub struct Applied<'a> {
     pub(crate) profile: &'a Profile,
-    pub(crate) thresholds: Thresholds,
+    pub(crate) reading: Reading,
 }
 
 /// Why a profile's text does not parse, at its 1-based `line`.
@@ -269,7 +327,7 @@ impl MarkMap {
             map.apply(
                 plan_module(source, module, rt_unreachable_calls),
                 functions,
-                applied.thresholds,
+                applied.reading,
             );
             map.sources.insert(source.clone());
         }
@@ -277,15 +335,11 @@ impl MarkMap {
     }
 
     /// Mark each region of `planned` by what `functions` recorded of it, read
-    /// under `thresholds`. A function is matched by its name, the `n`th of a
+    /// as `reading` says. A function is matched by its name, the `n`th of a
     /// name to the `n`th recorded, and its counts apply only where its hash is
     /// the recorded one.
-    fn apply(
-        &mut self,
-        planned: PlannedModule,
-        functions: &[ProfiledFunction],
-        thresholds: Thresholds,
-    ) {
+    fn apply(&mut self, planned: PlannedModule, functions: &[ProfiledFunction], reading: Reading) {
+        let thresholds = reading.thresholds;
         let PlannedModule {
             plan,
             sites,
@@ -363,6 +417,11 @@ impl MarkMap {
             }
             parent
         };
+        // Hot where neither rare answer holds, since a marker states one
+        // answer. A hot marker covers what follows it as a rare one does, so
+        // one at the outermost hot region covers the regions under it.
+        let hot = |id: usize| counts[id].is_some_and(|runs| reading.is_hot(runs));
+        let mut under_hot = vec![false; plan.regions.len()];
         for (id, region) in plan.regions.iter().enumerate() {
             if counts[id].is_none() || region.kind == RegionKind::Rhs {
                 continue;
@@ -372,8 +431,15 @@ impl MarkMap {
             if count_of(parent) == Some(0) {
                 continue;
             }
-            let Some(mark) = Mark::of(unlikely(id), cold(id)) else {
-                continue;
+            let covered = parent.is_some_and(|p| under_hot[p as usize]);
+            under_hot[id] = covered;
+            let mark = match Mark::of(unlikely(id), cold(id)) {
+                Some(mark) => mark,
+                None if hot(id) && !covered => {
+                    under_hot[id] = true;
+                    Mark::Hot
+                }
+                None => continue,
             };
             self.sites.insert(site_of[&(id as u32)], mark);
             self.marked.push(format!(

@@ -535,7 +535,7 @@ fn block_breaks_innermost_loop(body: &Body, block: BlockId) -> bool {
 
 /// The program's marker builtins, each with what it states.
 #[derive(Debug, Clone, Copy)]
-pub(crate) struct MarkerBuiltins([(Option<FuncId>, Mark); 3]);
+pub(crate) struct MarkerBuiltins([(Option<FuncId>, Mark); Mark::ALL.len()]);
 
 impl MarkerBuiltins {
     pub(crate) fn of(project: &NirPackage) -> Self {

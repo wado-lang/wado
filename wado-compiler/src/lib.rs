@@ -452,22 +452,28 @@ pub struct ProviderComponent {
 #[derive(Debug, Clone, Copy, Default)]
 pub struct OptOverrides {
     pub inline_threshold: Option<usize>,
+    /// The threshold at a call site a profile measured hot.
+    pub inline_hot_callsite_threshold: Option<usize>,
     pub inline_growth: Option<u32>,
     pub iterations: Option<u32>,
     /// The clones constant-argument specialization may mint over the module.
     pub specializations: Option<usize>,
     /// The share of a branch's runs past which the branch is predictable.
     pub predictable_branch_threshold: Option<pgo::Percent>,
+    /// The share of all runs that places a profile's hot line.
+    pub profile_summary_cutoff_hot: Option<pgo::Cutoff>,
 }
 
 impl OptOverrides {
     /// How a profile's counts are read.
     #[must_use]
     pub fn profile_thresholds(&self) -> pgo::Thresholds {
+        let default = pgo::Thresholds::default();
         pgo::Thresholds {
             predictable_branch: self
                 .predictable_branch_threshold
-                .unwrap_or(pgo::Thresholds::default().predictable_branch),
+                .unwrap_or(default.predictable_branch),
+            hot: self.profile_summary_cutoff_hot.unwrap_or(default.hot),
         }
     }
 }

@@ -591,6 +591,13 @@ internal fn unlikely_path();
 #[side_effect(hint)]
 internal fn cold_code();
 
+/// The opposite of `cold_code()`, as a profile measures it: the path runs
+/// often in the whole program, so the inliner may splice a larger callee at a
+/// call it holds.
+#[storage(none)]
+#[side_effect(hint)]
+internal fn hot_code();
+
 // =========================================================================
 // CM canonical intrinsics (raw flat ABI signatures)
 //
