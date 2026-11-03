@@ -7,6 +7,8 @@
 
 use crate::nir::NirUnaryOp;
 use crate::nir_arena::{Body, ExprId, ExprKind, Operand};
+use crate::tir::ResolvedType;
+use crate::type_table::TypeTable;
 
 /// One layer between a local and the storage an operand names. A cast is not a
 /// step: it converts no storage, so it names exactly its operand, which is how
@@ -141,6 +143,17 @@ pub(super) fn lvalue_root_local(body: &Body, op: Operand) -> Option<u32> {
 pub(super) fn place_of(body: &Body, op: Operand) -> Option<(u32, Vec<u32>)> {
     let place = named_place(body, op)?;
     Some((place.root?, place.field_path()?))
+}
+
+/// Whether `op` reads an array out of a place. An array is shared storage, so a
+/// local bound to one names the place's array rather than a copy of it: `licm`
+/// hoists `self.repr` into such a local and writes elements through it.
+pub(super) fn is_array_place(body: &Body, op: Operand, type_table: &TypeTable) -> bool {
+    place_of(body, op).is_some()
+        && matches!(
+            type_table.get(body.operand_type(op)),
+            ResolvedType::BuiltinArray(_)
+        )
 }
 
 /// The local a write through `op` lands in.
