@@ -15,7 +15,7 @@ use wado_compiler::token::Span;
 
 use crate::ast_search::{self, FirstMatch};
 use crate::diagnostics::{Position, Range};
-use crate::location::{module_uri, symbol_uri};
+use crate::location::{def_uri, module_uri};
 use crate::query::QueryContext;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -55,20 +55,10 @@ pub(crate) fn find_definition(ctx: &QueryContext, position: Position) -> Option<
     }
 
     let cursor = ctx.cursor_at_line_col(line, col)?;
-    let entry = ctx.entry();
     let def_key = cursor.def_key()?;
-
-    // Most defs are registered as symbols (functions, types, globals, locals).
-    // Struct fields / enum cases / variant cases / flags members / trait and
-    // impl methods are addressable by `AstId` via `name_span_of` but are not
-    // individually registered as symbols; the URI fallback handles both.
     let span = cursor.def_span()?;
-    let def_uri = match ctx.sem.symbol_at(def_key) {
-        Some(symbol) => symbol_uri(entry, symbol, ctx.uri)?,
-        None => module_uri(entry, ctx.sem.module_of_id(def_key)?, ctx.uri)?,
-    };
     Some(DefinitionResult {
-        uri: def_uri,
+        uri: def_uri(ctx.sem, def_key, ctx.uri)?,
         range: ctx.range_of(&span, def_key),
     })
 }
@@ -87,9 +77,8 @@ fn file_path_definition(ctx: &QueryContext, line: usize, col: usize) -> Option<D
         &path,
         Some(entry),
     );
-    let target_uri = module_uri(entry, &target_module, ctx.uri)?;
     Some(DefinitionResult {
-        uri: target_uri,
+        uri: module_uri(entry, &target_module, ctx.uri),
         range: Range {
             start: Position {
                 line: 0,

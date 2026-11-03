@@ -172,7 +172,7 @@ pub fn index(root: &String, wado_path: &String) -> List<String> with (Process, E
     let wado = `${dir}/wado.scip`;
     fs::create_dir_all(&dir).unwrap();
     // A child gets a private HOME, where rustup would find no toolchain.
-    let home = env("HOME").unwrap_or("");
+    let home = env("HOME").expect("rustup's default homes are under HOME");
     let analyzer = Command::new("rust-analyzer").args(["scip", *root, "--output", rust, "--exclude-vendored-libraries"]).env(
         "RUSTUP_HOME",
         env("RUSTUP_HOME").unwrap_or(`${home}/.rustup`),

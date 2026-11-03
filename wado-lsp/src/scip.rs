@@ -222,7 +222,7 @@ impl SymbolNames<'_, '_> {
 
     /// A file's path from the root, or a module's own name (`core:json`).
     fn module_name(&self, module: &ModuleSource) -> String {
-        let uri = module_uri(self.ctx.entry(), module, self.ctx.uri).unwrap_or_default();
+        let uri = module_uri(self.ctx.entry(), module, self.ctx.uri);
         match uri.strip_prefix(self.root) {
             Some(relative) => relative.to_string(),
             None => uri,
@@ -306,6 +306,12 @@ impl DeclCollector {
         path
     }
 
+    /// A term: a field, a case, a global.
+    fn term(&mut self, id: AstId, name: &str, kind: SymbolKind, name_span: Span, span: Span) {
+        let descriptor = format!("{}.", escape_name(name));
+        self.global(id, name, descriptor, kind, name_span, span);
+    }
+
     fn local(&mut self, id: AstId, name: &str, kind: SymbolKind, name_span: Span) {
         let symbol = format!("local {}", self.locals);
         self.locals += 1;
@@ -350,53 +356,26 @@ impl DeclCollector {
         match item {
             Item::Struct(s) => {
                 self.type_params(&s.type_params);
-                for field in &s.fields {
-                    self.global(
-                        field.id,
-                        &field.name,
-                        format!("{}.", escape_name(&field.name)),
-                        SymbolKind::Field,
-                        field.name_span,
-                        field.span,
-                    );
+                for f in &s.fields {
+                    self.term(f.id, &f.name, SymbolKind::Field, f.name_span, f.span);
                 }
             }
             Item::Enum(e) => {
                 self.type_params(&e.type_params);
-                for case in &e.cases {
-                    self.global(
-                        case.id,
-                        &case.name,
-                        format!("{}.", escape_name(&case.name)),
-                        SymbolKind::EnumMember,
-                        case.name_span,
-                        case.span,
-                    );
+                for c in &e.cases {
+                    self.term(c.id, &c.name, SymbolKind::EnumMember, c.name_span, c.span);
                 }
             }
             Item::Variant(v) => {
                 self.type_params(&v.type_params);
-                for case in &v.cases {
-                    self.global(
-                        case.id,
-                        &case.name,
-                        format!("{}.", escape_name(&case.name)),
-                        SymbolKind::EnumMember,
-                        case.name_span,
-                        case.span,
-                    );
+                for c in &v.cases {
+                    self.term(c.id, &c.name, SymbolKind::EnumMember, c.name_span, c.span);
                 }
             }
             Item::Flags(f) => {
                 for flag in &f.flags {
-                    self.global(
-                        flag.id,
-                        &flag.name,
-                        format!("{}.", escape_name(&flag.name)),
-                        SymbolKind::EnumMember,
-                        flag.name_span,
-                        flag.span,
-                    );
+                    let kind = SymbolKind::EnumMember;
+                    self.term(flag.id, &flag.name, kind, flag.name_span, flag.span);
                 }
             }
             _ => {}
@@ -457,14 +436,7 @@ impl AstVisitor<'_> for DeclCollector {
                 } else {
                     SymbolKind::Constant
                 };
-                self.global(
-                    g.id,
-                    &g.name,
-                    format!("{}.", escape_name(&g.name)),
-                    kind,
-                    g.name_span,
-                    g.span,
-                );
+                self.term(g.id, &g.name, kind, g.name_span, g.span);
                 walk_item(self, item);
             }
             Item::Impl(imp) => {

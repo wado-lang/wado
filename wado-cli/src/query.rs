@@ -245,25 +245,11 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<QueryOptions, CliExit> {
             &usage,
         ));
     }
-    if kind == QueryKind::Scip {
-        if symbol.is_some() || line.is_some() || column.is_some() {
-            return Err(CliExit::error_with_usage(
-                "`scip` takes a directory, not --symbol or --line/--column",
-                &usage,
-            ));
-        }
-        return Ok(QueryOptions {
-            kind,
-            input,
-            json,
-            line,
-            column,
-            include_declaration,
-            symbol,
-            base,
-            all,
-            output,
-        });
+    if kind == QueryKind::Scip && (symbol.is_some() || line.is_some() || column.is_some()) {
+        return Err(CliExit::error_with_usage(
+            "`scip` takes a directory, not --symbol or --line/--column",
+            &usage,
+        ));
     }
 
     if symbol.is_some() {
@@ -306,7 +292,11 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<QueryOptions, CliExit> {
         ));
     }
 
-    let input = Some(input.ok_or_else(|| CliExit::error_with_usage("missing input file", &usage))?);
+    let input = if kind == QueryKind::Scip {
+        input
+    } else {
+        Some(input.ok_or_else(|| CliExit::error_with_usage("missing input file", &usage))?)
+    };
 
     if matches!(
         kind,
@@ -380,18 +370,13 @@ pub async fn run(opts: QueryOptions) -> Result<(), CliExit> {
         };
     }
 
-    if opts.kind == QueryKind::Scip {
-        return query_adapter::run_scip(
-            opts.input.as_deref().unwrap_or("."),
-            opts.output.as_deref().unwrap_or("index.scip"),
-        )
-        .await;
-    }
-
-    // Position-based kinds always carry an input file (validated in parse_args).
-    let input = opts.input.as_deref().unwrap_or_default();
+    // Every kind but `scip` carries an input file (validated in parse_args);
+    // `scip` defaults to the current directory.
+    let input = opts.input.as_deref().unwrap_or(".");
     match opts.kind {
-        QueryKind::Scip => unreachable!("scip returned above"),
+        QueryKind::Scip => {
+            query_adapter::run_scip(input, opts.output.as_deref().unwrap_or("index.scip")).await
+        }
         QueryKind::Diagnostics => query_adapter::run_diagnostics(input, opts.json).await,
         QueryKind::InlayHints => query_adapter::run_inlay_hints(input, opts.json).await,
         QueryKind::References => {

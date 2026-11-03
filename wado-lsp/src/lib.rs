@@ -432,16 +432,8 @@ impl Engine {
             .await?;
         let sem = &snapshot.sem;
         let span = def.span.ok_or(SymbolQueryError::NoLocation)?;
-        let entry = &sem.entry_module_source;
-        let def_uri = match sem.symbol_at(def.ast_id) {
-            Some(symbol) => location::symbol_uri(entry, symbol, uri),
-            None => sem
-                .module_of_id(def.ast_id)
-                .and_then(|m| location::module_uri(entry, m, uri)),
-        }
-        .ok_or(SymbolQueryError::NoLocation)?;
         Ok(DefinitionResult {
-            uri: def_uri,
+            uri: location::def_uri(sem, def.ast_id, uri).ok_or(SymbolQueryError::NoLocation)?,
             range: text::span_to_range(&span, None, self.position_encoding),
         })
     }
@@ -507,8 +499,7 @@ impl Engine {
             .resolve_symbol_def(uri, notation, public_only, host)
             .await?;
         let sem = &snapshot.sem;
-        let def_uri = location::module_uri(&sem.entry_module_source, &def.module, uri)
-            .ok_or(SymbolQueryError::NoLocation)?;
+        let def_uri = location::module_uri(&sem.entry_module_source, &def.module, uri);
         let ctx = self.query_ctx_over(&snapshot, uri);
         let highlights = document_highlight::highlights_for_def(&ctx, def.ast_id, &def.module);
         Ok((def_uri, highlights))

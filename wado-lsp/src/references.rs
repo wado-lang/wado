@@ -11,7 +11,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::diagnostics::{Position, Range};
-use crate::location::{module_uri, symbol_uri};
+use crate::location::{def_uri, module_uri};
 use crate::query::QueryContext;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -74,15 +74,8 @@ pub(crate) fn declaration_location(
     def_id: wado_compiler::ast::AstId,
 ) -> Option<ReferenceLocation> {
     let span = ctx.declaration_span(def_id)?;
-    // Module-level symbols carry a symbol-table entry; methods / associated
-    // constants (reached by a `Type::m` notation) do not, so fall back to the
-    // node's own module.
-    let uri = match ctx.sem.symbol_at(def_id) {
-        Some(symbol) => symbol_uri(ctx.entry(), symbol, ctx.uri)?,
-        None => module_uri(ctx.entry(), ctx.sem.module_of_id(def_id)?, ctx.uri)?,
-    };
     Some(ReferenceLocation {
-        uri,
+        uri: def_uri(ctx.sem, def_id, ctx.uri)?,
         range: ctx.range_of(&span, def_id),
     })
 }
@@ -92,7 +85,7 @@ pub(crate) fn use_site_location(
     use_id: wado_compiler::ast::AstId,
 ) -> Option<ReferenceLocation> {
     let span = ctx.sem.span_of_id(use_id)?;
-    let uri = module_uri(ctx.entry(), ctx.sem.module_of_id(use_id)?, ctx.uri)?;
+    let uri = module_uri(ctx.entry(), ctx.sem.module_of_id(use_id)?, ctx.uri);
     Some(ReferenceLocation {
         uri,
         range: ctx.range_of(&span, use_id),
