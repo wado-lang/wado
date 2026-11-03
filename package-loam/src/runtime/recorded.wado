@@ -489,14 +489,16 @@ fn extents_of_any<affine G: Graph>(g: &G, a: &Any<G>) -> List<i32> with _ {
 }
 
 /// The programs a backend compiled, one for each shape class: the extents of
-/// the arguments that vary between calls.
+/// the arguments that vary between calls. The weights the programs take
+/// after those are one model's, the same on every call, and erased once.
 pub struct Programs<affine G: Graph> {
     held: HashMap<List<List<i32>>, G::Program>,
+    weights: Option<List<Any<G>>>,
 }
 
 impl<affine G: Graph> Programs<G> {
     pub fn new() -> Programs<G> {
-        return Programs { held: HashMap::new() };
+        return Programs { held: HashMap::new(), weights: null };
     }
 
     /// How many shape classes a program is held for.
@@ -504,30 +506,41 @@ impl<affine G: Graph> Programs<G> {
         return self.held.len();
     }
 
-    /// What the program of `class` returns over `arguments()`, compiled from
-    /// what `record` records over the arguments' extents where none is held
-    /// yet; `None` where `g` compiles nothing, and builds itself.
+    /// What the program of `class` returns over `arguments()` and the
+    /// `weights()` of the first call, compiled from what `record` records
+    /// over their extents where none is held yet; `None` where `g` compiles
+    /// nothing, and builds itself.
     pub fn run(
         &mut self,
         g: &mut G,
         class: List<List<i32>>,
         record: fn(&mut Recorder, &List<List<i32>>) -> Recorded,
         arguments: fn() -> List<Any<G>> with _,
+        weights: fn() -> List<Any<G>> with _,
     ) -> Option<List<Any<G>>> with _ {
+        if self.weights matches { None } {
+            self.weights = Option::Some(weights());
+        }
+        let Some(erased) = &self.weights else {
+            unreachable();
+        };
         if !self.held.contains_key(class) {
             let mut earlier: List<&G::Program> = [];
             for let c of self.held.keys() {
                 earlier.push(&self.held[*c]);
             }
             let Some(program) = g.compiled(|r| {
-                let given = arguments();
-                return record(r, &given.into_iter().map(|a| extents_of_any(g, &a)).collect());
+                let mut extents: List<List<i32>> = arguments().into_iter().map(|a| extents_of_any(g, &a)).collect();
+                for let w of erased {
+                    extents.push(extents_of_any(g, w));
+                }
+                return record(r, &extents);
             }, &earlier) else {
                 return null;
             };
             self.held[class] = program;
         }
-        return Option::Some(g.executed(&self.held[class], &arguments()));
+        return Option::Some(g.executed(&self.held[class], &arguments(), erased));
     }
 }
 
@@ -536,14 +549,14 @@ impl<affine G: Graph> Programs<G> {
 pub fn run<affine G: Graph>(g: &mut G, recorded: &Recorded, arguments: &List<Any<G>>) -> List<Any<G>> with _
     contract arguments.len() == recorded.parameters
 {
-    return Run::<G>::new(recorded, arguments, &HashMap::new()).region(g, recorded, &recorded.body);
+    return Run::<G>::new(recorded, arguments, &[], &HashMap::new()).region(g, recorded, &recorded.body);
 }
 
 /// The value of each node of `recorded` that reads no argument, computed on
 /// `Cpu`: what a program computes once, when it is compiled.
 pub fn constants(recorded: &Recorded) -> HashMap<i32, Any<Cpu>> {
     let mut cpu = Cpu {};
-    let mut state = Run::<Cpu>::new(recorded, &[], &HashMap::new());
+    let mut state = Run::<Cpu>::new(recorded, &[], &[], &HashMap::new());
     let mut folded = HashMap::<i32, Any<Cpu>>::new();
     for let id of 0..<recorded.nodes.len() {
         let node = &recorded.nodes[id];
@@ -569,12 +582,13 @@ internal struct Run<affine G: Graph> {
 
 /// Each node's value, by its id, where a run has computed one: a slot for
 /// every node of the recording, since a call computes most of them. A
-/// parameter reads the call's argument and a constant the program's, in
-/// place, so a call copies neither.
+/// parameter reads the call's argument or weight and a constant the
+/// program's, in place, so a call copies none of them.
 internal struct Values<affine G: Graph> {
     at: List<Option<Any<G>>>,
     recorded: &Recorded,
     arguments: &List<Any<G>>,
+    weights: &List<Any<G>>,
     constants: &HashMap<i32, Any<G>>,
 }
 
@@ -593,7 +607,8 @@ impl<affine G: Graph> IndexRef<i32> for Values<G> {
             return value;
         }
         if let Parameter(i) = &self.recorded.nodes[id].op {
-            return &self.arguments[*i];
+            let given = self.arguments.len();
+            return if *i < given { &self.arguments[*i] } else { &self.weights[*i - given] };
         }
         if !self.constants.contains_key(id) {
             panic("loam: a node is read before it is computed");
@@ -619,14 +634,20 @@ impl<affine G: Graph> IndexAssign<i32> for Values<G> {
 }
 
 impl<affine G: Graph> Run<G> {
-    /// A run of `recorded` over `arguments`, which reads the values of
-    /// `constants` as computed.
-    internal fn new(recorded: &Recorded, arguments: &List<Any<G>>, constants: &HashMap<i32, Any<G>>) -> Run<G> {
+    /// A run of `recorded` over `arguments` and then `weights`, which reads
+    /// the values of `constants` as computed.
+    internal fn new(
+        recorded: &Recorded,
+        arguments: &List<Any<G>>,
+        weights: &List<Any<G>>,
+        constants: &HashMap<i32, Any<G>>,
+    ) -> Run<G> {
         return Run {
             values: Values {
                 at: List::<Option<Any<G>>>::filled(recorded.nodes.len(), null),
                 recorded,
                 arguments,
+                weights,
                 constants,
             },
             parts: HashMap::new(),

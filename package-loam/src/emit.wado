@@ -1567,7 +1567,8 @@ fn emit_compute(
         taken_args.push(ProgramArgument::of(checked, names, &weight, Crossed::Weight));
     }
     arguments.push("&model.weights");
-    let erased: List<String> = taken_args.into_iter().map(|a| a.erased()).collect();
+    let erased: List<String> = taken_args.into_iter().take(first_weight).map(|a| a.erased()).collect();
+    let erased_weights: List<String> = taken_args.into_iter().skip(first_weight).map(|a| a.erased()).collect();
     let results = if crossing.several() {
         let mut fields: List<String> = [];
         for let [at, output] of returned.into_iter().enumerate() {
@@ -1589,7 +1590,7 @@ fn emit_compute(
         lines.push(
             `let ${pattern} = match model.programs.run(backend, [${class.join(", ")}], ${RECORDED}, || [${erased.join(
                 ", ",
-            )}]) {`,
+            )}], || [${erased_weights.join(", ")}]) {`,
         );
         lines.push(`    Some(results) => ${results},`);
         lines.push(`    None => build(${arguments.join(", ")}),`);
@@ -1814,11 +1815,12 @@ fn weight_names(graph: &Graph, kept: &List<String>) -> List<String> {
     return weights;
 }
 
-/// `Model`, the weights beside the programs a backend compiled.
+/// `Model`, the weights beside the programs a backend compiled. The weights
+/// are private, since the programs hold them as the first call erased them.
 fn emit_model(w: &mut CodeWriter) {
     let mut model = StructSpec::new(MODEL, Vis::Pub);
     model.add_generic(GRAPH_BOUND);
-    model.add_pub_field("weights", `${PARAMS}<${BACKEND_PARAM}>`);
+    model.add_field("weights", `${PARAMS}<${BACKEND_PARAM}>`);
     model.add_pub_field("programs", `Programs<${BACKEND_PARAM}>`);
     w.blank();
     w.line("/// The weights as `Bk` holds them, and the program `Bk` compiled for each");

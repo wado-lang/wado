@@ -226,8 +226,9 @@ impl Graph for WebGpuBackend {
         &mut self,
         program: &WebGpuProgram,
         arguments: &List<Any<WebGpuBackend>>,
+        weights: &List<Any<WebGpuBackend>>,
     ) -> List<Any<WebGpuBackend>> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
-        let mut state = Run::<WebGpuBackend>::new(&program.recorded, arguments, &program.constants);
+        let mut state = Run::<WebGpuBackend>::new(&program.recorded, arguments, weights, &program.constants);
         let results = launched(self, &mut state, program, &program.plan);
         let mut returned: List<i32> = [];
         for let r of &results {

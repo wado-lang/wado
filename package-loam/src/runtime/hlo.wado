@@ -128,9 +128,14 @@ pub affine trait Graph: Holds with _ {
     ) -> Option<Self::Program> with _ {
         return null;
     }
-    /// `program` over `arguments`, in the order the recorded pass took its
-    /// parameters: what it returns, in that order.
-    fn executed(&mut self, program: &Self::Program, arguments: &List<Any<Self>>) -> List<Any<Self>> {
+    /// `program` over `arguments` and then `weights`, in the order the
+    /// recorded pass took its parameters: what it returns, in that order.
+    fn executed(
+        &mut self,
+        program: &Self::Program,
+        arguments: &List<Any<Self>>,
+        weights: &List<Any<Self>>,
+    ) -> List<Any<Self>> {
         // Only a backend whose `compiled` returns a program is given one.
         unreachable();
     }
