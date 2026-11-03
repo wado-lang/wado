@@ -209,8 +209,6 @@ impl Opt {
         CompileKnobOpt::OptIterations,
         CompileKnobOpt::Specializations,
         CompileKnobOpt::OptThreads,
-        CompileKnobOpt::ProfileSummaryCutoffHot,
-        CompileKnobOpt::ProfileSummaryCutoffCold,
         CompileKnobOpt::PredictableBranchThreshold,
         CompileKnobOpt::LogLevel,
         CompileKnobOpt::Allocator,

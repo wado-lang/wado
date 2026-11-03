@@ -751,34 +751,6 @@ fn test_inline_threshold_growth_and_iterations() {
 }
 
 #[test]
-fn test_profile_summary_cutoffs_are_shares_per_million() {
-    let parser = Parser::from_args(&[
-        "--optimize-profile-summary-cutoff-hot",
-        "900000",
-        "--optimize-profile-summary-cutoff-cold",
-        "1000000",
-        "a.wado",
-    ]);
-    let opts = wado_cli::compile::parse_args(parser).unwrap();
-    let cutoff = wado_compiler::pgo::Cutoff::new;
-    assert_eq!(opts.knobs.opt.profile_summary_cutoff_hot, cutoff(900_000));
-    assert_eq!(
-        opts.knobs.opt.profile_summary_cutoff_cold,
-        cutoff(1_000_000)
-    );
-
-    let parser = Parser::from_args(&["--optimize-profile-summary-cutoff-hot", "1000001", "a.wado"]);
-    let Err(err) = wado_cli::compile::parse_args(parser) else {
-        panic!("a cutoff above a million parses");
-    };
-    assert!(
-        err.message.contains("at most 1000000, got 1000001"),
-        "{}",
-        err.message
-    );
-}
-
-#[test]
 fn test_predictable_branch_threshold_is_a_percentage() {
     let parser = Parser::from_args(&["--optimize-predictable-branch-threshold", "95", "a.wado"]);
     let opts = wado_cli::compile::parse_args(parser).unwrap();

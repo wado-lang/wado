@@ -25,14 +25,19 @@ fn gen(inputs: &List<[String, String]>) -> i32 {
 }
 
 fn gen_rust() -> i32 {
-    return gen(&[["RustLexer.g4", RUST_LEXER], ["RustParser.g4", RUST_PARSER]]);
+    return gen(&[
+        ["RustLexer.g4", RUST_LEXER],
+        ["RustParser.g4", RUST_PARSER],
+    ]);
 }
 
 // The JSON grammar: a workload trains on a smaller input than the benchmark
 // measures.
 #[workload]
 test "workload" {
-    assert gen(&[["JSON.g4", #include_str("../../package-gale/tests/grammars/JSON.g4")]]) > 0;
+    assert gen(&[
+        ["JSON.g4", #include_str("../../package-gale/tests/grammars/JSON.g4")],
+    ]) > 0;
 }
 
 test "fuel" {
