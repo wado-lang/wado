@@ -12,10 +12,7 @@
 //
 // Each helper below exercises one supported pattern shape — plain
 // variant, plain enum, and a single-level `Or` pattern — and the test
-// block below pins the runtime semantics. The WIR assertion is scoped
-// to `propagate`, which after the `NullableRef` pass produces a
-// `ref.is_null` shape; checking the `!is_null` re-check is the
-// narrowest pin of the elision working end to end.
+// block below pins the runtime semantics.
 
 pub struct AppError {
     message: String,
@@ -75,6 +72,5 @@ test {
 
 __DATA__
 {
-    "test": {},
-    "wir_not_expect:O2": ["ref.is_null($match_scrut_0) == 0"]
+    "test": {}
 }

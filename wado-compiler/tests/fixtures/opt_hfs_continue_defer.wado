@@ -42,9 +42,10 @@ export fn run() {
 __DATA__
 {
     "stdout": "",
+    "wir_pass": {"O2": ["nir/field_scalarize"]},
     "wir_expect:O2": [
         "self.pos = $hfs_pos_{};\n                break",
         "$hfs_pos_{p} = $hfs_pos_{p} + 1;\n                continue"
     ],
-    "wir_not_expect:O2": ["self.pos = $hfs_pos_{};\n                continue"]
+    "wir_guard": {"O2": {"not_expect": ["self.pos = $hfs_pos_{};\n                continue"]}}
 }

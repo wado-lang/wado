@@ -58,6 +58,8 @@ test {
 __DATA__
 {
     "test": {},
-    "wir_expect:O1": ["rotl", "rotr"],
-    "wir_expect:O2": ["rotl", "rotr", "<<"]
+    "wir_expect:O1": [" rotl ", " rotr "],
+    "wir_pass": {"O2": ["wir/run_peephole"]},
+    "wir_expect:O2": ["x32 rotl $v", "x32 rotr $v", "x64 rotl $v", "x64 rotr $v", "x32 rotl 7", "x64 rotr 40_i64"],
+    "wir_guard": {"O2": {"expect": ["(x64 << 9223372036854775807_i64) | (x64 >>u 1_i64)"]}}
 }

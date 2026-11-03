@@ -71,13 +71,7 @@ export fn run() with Stdout {
 __DATA__
 {
     "stdout": "579 222\n",
-    "wir_expect:O2": [
-        "let $hfs_v_"
-    ],
-    "wir_not_expect:O2": [
-        "/add1\"(b);\n            $hfs_v_",
-        "/add10\"(b);\n            $hfs_v_",
-        "/add10\"(b);\n            b.v = $hfs_v_",
-        "/add1\"(b);\n            b.v = $hfs_v_"
-    ]
+    "wir_pass": {"O2": ["nir/field_scalarize"]},
+    "wir_expect:O2": ["let $hfs_v_"],
+    "wir_guard": {"O2": {"not_expect": ["/add1\"(b);\n            $hfs_v_", "/add10\"(b);\n            $hfs_v_", "/add10\"(b);\n            b.v = $hfs_v_", "/add1\"(b);\n            b.v = $hfs_v_"]}}
 }

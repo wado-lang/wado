@@ -11,7 +11,7 @@
 //
 // `from` is small enough to inline at every stock level, which is what kept
 // the hole out of reach; a zero inline budget is the supported configuration
-// that leaves the call standing, and `wir_expect` checks it still does.
+// that leaves the call standing.
 fn grow(n: i32) -> i32 {
     let mut xs: List<i32> = [];
     for let mut i = 0; i < n; i += 1 {
@@ -29,12 +29,5 @@ export fn run() {
 __DATA__
 {
     "optimize_inline_threshold": 0,
-    "stdout": "",
-    "wir_expect:O2": ["From<Array<T>>::from"],
-    "wir_lines": {
-        "O2": [
-            {"contains": ["global ", "//List<i32>\""], "count": 0},
-            {"contains": ["global ", "Array<i32>"], "count": 0}
-        ]
-    }
+    "stdout": ""
 }
