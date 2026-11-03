@@ -1,0 +1,43 @@
+// A handler two blankets answer, with nothing to rank them, installs neither:
+// the tie is reported where it is installed, in either form.
+
+interface Sink {
+    fn event(message: String);
+}
+
+trait A {}
+trait B {}
+
+struct Both {}
+
+impl A for Both {}
+
+impl B for Both {}
+
+impl<T: A> Sink for T {
+    fn event(&mut self, message: String) {
+        resume ();
+    }
+}
+
+impl<T: B> Sink for T {
+    fn event(&mut self, message: String) {
+        resume ();
+    }
+}
+
+export fn run() {
+    let mut h = Both {};
+    with Sink => &mut h do {
+        Sink::event("explicit");
+    }
+    with &mut h do {
+        Sink::event("bundled");
+    }
+}
+
+__DATA__
+{
+  "compile_error": ":31:10: analysis error: ambiguous blanket impls of 'Sink' for 'Both': 'T: A' and 'T: B' apply, and nothing ranks them; write 'impl Sink for Both'",
+  "compile_error_codes": ["AMBIGUOUS_CANDIDATE"]
+}
