@@ -870,6 +870,85 @@ pub fn expr_has_break_to(label: &str, expr: &TirExpr) -> bool {
     }
 }
 
+/// Whether every path through the `!`-typed `expr` traps: none returns, breaks
+/// or continues past it, or loops forever.
+pub fn traps(expr: &TirExpr) -> bool {
+    let mut paths = Paths {
+        labels: Vec::new(),
+        loops: Vec::new(),
+        leaves: false,
+    };
+    paths.visit_expr(expr);
+    !paths.leaves
+}
+
+/// Follows the paths through one expression, closures left out.
+struct Paths {
+    /// Each label defined inside, with the number of loops open around it.
+    labels: Vec<(String, usize)>,
+    /// Whether each open loop has a `break` leaving it.
+    loops: Vec<bool>,
+    /// Whether a path ends other than by trapping.
+    leaves: bool,
+}
+
+impl Paths {
+    fn labeled(&mut self, label: &str, block: &TirBlock) {
+        self.labels.push((label.to_string(), self.loops.len()));
+        self.walk_block(block);
+        self.labels.pop();
+    }
+
+    fn looped(&mut self, body: &TirBlock, finite: bool) {
+        self.loops.push(finite);
+        self.walk_block(body);
+        let broken = self.loops.pop().unwrap();
+        self.leaves |= !broken;
+    }
+}
+
+impl TirRefVisitor for Paths {
+    fn visit_stmt(&mut self, stmt: &TirStmt) {
+        match &stmt.kind {
+            TirStmtKind::Return { .. } => self.leaves = true,
+            TirStmtKind::Continue => self.leaves |= self.loops.is_empty(),
+            TirStmtKind::Break { label, value } => {
+                if let Some(v) = value {
+                    self.visit_expr(v);
+                }
+                let crossed = match label {
+                    Some(label) => self
+                        .labels
+                        .iter()
+                        .rev()
+                        .find(|(l, _)| l == label)
+                        .map(|&(_, open)| open),
+                    None => self.loops.len().checked_sub(1),
+                };
+                match crossed {
+                    Some(open) => self.loops[open..].fill(true),
+                    None => self.leaves = true,
+                }
+            }
+            TirStmtKind::Loop { body } => self.looped(body, false),
+            TirStmtKind::VariadicForOf { iterable, body, .. } => {
+                self.visit_expr(iterable);
+                self.looped(body, true);
+            }
+            TirStmtKind::LabeledBlock { label, block } => self.labeled(label, block),
+            _ => self.walk_stmt(stmt),
+        }
+    }
+
+    fn visit_expr(&mut self, expr: &TirExpr) {
+        match &expr.kind {
+            TirExprKind::Closure { .. } => {}
+            TirExprKind::LabeledBlock { label, block, .. } => self.labeled(label, block),
+            _ => self.walk_expr(expr),
+        }
+    }
+}
+
 /// Call `f` on each value the block `expr` evaluates to: its tail, and for a
 /// labeled block each `break` naming it.
 pub fn for_each_block_result(expr: &TirExpr, f: &mut dyn FnMut(&TirExpr)) {

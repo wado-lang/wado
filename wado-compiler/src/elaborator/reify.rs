@@ -103,7 +103,7 @@ use crate::tir::{
     TirHandlerBinding, TirLiteralPattern, TirMatchArm, TirStructField, TirStructPatternField,
     deref_to_layers, hold_hole, to_layers_of, wrapped_reference,
 };
-use crate::tir_visitor::TirMutVisitor;
+use crate::tir_visitor::{TirMutVisitor, traps};
 use crate::token::Span;
 use crate::unparse::{unparse_expr_source, unparse_pattern_source};
 
@@ -2119,16 +2119,19 @@ impl<'a> Reify<'a> {
         self.mark_diverging_stmts(stmts)
     }
 
-    /// Mark a block cold ahead of its first statement that cannot return.
+    /// Mark a block cold ahead of its first statement that traps.
     ///
     /// Marking here rather than at each synthesis site is what gives a
     /// `panic(…)` written in source the same treatment as the ones this file
-    /// builds. A `return` / `break` ends a path too, but a normal exit is not a
-    /// cold one, so it is left alone.
+    /// builds. A `!` statement that returns, breaks or loops forever on some
+    /// path is not a cold one: the `match` a `let … else` desugars into is
+    /// such a statement, and marking it made the rest of its block look cold
+    /// to the inliner.
     fn mark_diverging_stmts(&self, stmts: Vec<TirStmt>) -> Vec<TirStmt> {
         let tt = self.tysys.type_table.borrow();
-        let diverges =
-            |s: &TirStmt| matches!(&s.kind, TirStmtKind::Expr(e) if tt.is_never(e.type_id));
+        let diverges = |s: &TirStmt| {
+            matches!(&s.kind, TirStmtKind::Expr(e) if tt.is_never(e.type_id) && traps(e))
+        };
         if !stmts.iter().any(diverges) {
             return stmts;
         }
