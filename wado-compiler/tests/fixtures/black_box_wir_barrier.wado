@@ -13,6 +13,18 @@ export fn run() {
     }
     assert taken == 1;
 
+    // Without the barrier, the same guard is decided and its dead arm goes.
+    let mut folded = 0;
+    if builtin::black_box(true) {
+        let zero = 0;
+        if zero == 0 {
+            folded = 1;
+        } else {
+            folded = 3;
+        }
+    }
+    assert folded == 1;
+
     // Arithmetic reading through the barrier stays a computation.
     let doubled = builtin::black_box(21) * 2;
     assert doubled == 42;
@@ -33,6 +45,7 @@ export fn run() {
 __DATA__
 {
     "stdout": "",
-    "wir_expect:O2": ["black_box(0) == 0", "taken = 2", "black_box(21) * 2", "black_box(300)", "if black_box(0) {"],
-    "wir_expect:O3": ["black_box(0) == 0", "taken = 2", "black_box(21) * 2", "black_box(300)", "if black_box(0) {"]
+    "wir_pass": {"O2": ["nir/copy_prop", "nir/const_fold", "nir/store_load_forward_post_scalarize", "nir/const_fold_post_global", "wir/run_peephole", "wir/coalesce_locals"]},
+    "wir_not_expect:O2": ["folded = 3"],
+    "wir_guard": {"O2": {"expect": ["black_box(0) == 0", "taken = 2", "black_box(21) * 2", "black_box(300)", "if black_box(0) {"]}}
 }

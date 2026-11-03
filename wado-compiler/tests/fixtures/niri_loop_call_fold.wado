@@ -60,11 +60,12 @@ export fn run() with Stdout {
 __DATA__
 {
     "stdout": "55 21 1249975000\n",
+    "wir_pass": {"O2": ["nir/peephole", "nir/const_fold", "nir/store_load_forward_post_scalarize", "nir/const_fold_post_global"]},
     "wir_not_expect:O2": [
         "dead_loop_triangular_71442",
         "dead_loop_break_71442",
         "triangular",
         "first_multiple_over"
     ],
-    "wir_expect:O2": ["runaway"]
+    "wir_guard": {"O2": {"expect": ["runaway"]}}
 }

@@ -1,6 +1,6 @@
-// The counterpart of `inline_loop_site.wado`: a callee admitted only at loop
-// sites stays a call at a site outside every loop. Two such sites, so that
-// splicing the loop's leaves neither of them the callee's only one.
+// A callee admitted only at loop sites splices into the loop in `sum_codes`
+// and stays a call at the two sites outside every loop. Two such sites, so
+// that splicing the loop's leaves neither of them the callee's only one.
 
 fn decode_at(bytes: &Array<u8>, pos: i32) -> [i32, i32] {
     let b0 = bytes[pos] as i32;
@@ -57,6 +57,8 @@ export fn run() {
 __DATA__
 {
     "stdout": "",
-    "wir_scope": "inline_loop_site_outside.wado/first_code",
-    "wir_expect:O2": ["\"inline_loop_site_outside.wado/decode_at\"("]
+    "wir_pass": {"O2": ["nir/inline"]},
+    "wir_lines": {
+        "O2": [{"contains": ["inline_loop_site_outside.wado/decode_at\"(bytes, pos)"], "not_contains": ["fn \""], "count": 2}]
+    }
 }

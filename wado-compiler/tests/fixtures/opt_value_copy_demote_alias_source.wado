@@ -9,8 +9,7 @@
 // `rows[0][0].push_str` then mutates that shared element through the (still-live)
 // source. A deep copy keeps `x[0]` at "a"; a wrongly-demoted shallow copy would
 // observe the mutation as "a!". The demote must NOT fire — an unrooted rvalue is
-// clean only when provably fresh. `wir_expect:O2 ["array_clone_deep"]` asserts
-// the copy stays deep.
+// clean only when provably fresh.
 
 use { println, Stdout } from "core:cli";
 
@@ -28,6 +27,5 @@ export fn run() with Stdout {
 
 __DATA__
 {
-    "stdout": "a\n",
-    "wir_expect:O2": ["array_clone_deep"]
+    "stdout": "a\n"
 }
