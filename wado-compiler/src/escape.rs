@@ -52,8 +52,16 @@ fn push_escaped(out: &mut String, c: char, quote: char) {
 /// The `String` a string literal's text denotes as `quote` delimits it, or why
 /// it denotes none. A raw literal's text is its value.
 pub(crate) fn string_value(text: &str, quote: Quote) -> Result<String, String> {
+    decode_text(text, quote, unescape_string)
+}
+
+fn decode_text(
+    text: &str,
+    quote: Quote,
+    unescape: fn(&str) -> Result<String, String>,
+) -> Result<String, String> {
     match quote {
-        Quote::Cooked => unescape_string(text),
+        Quote::Cooked => unescape(text),
         Quote::Raw { .. } => Ok(text.to_owned()),
     }
 }
@@ -74,10 +82,7 @@ pub(crate) fn bytes_value(text: &str, quote: Quote) -> Result<Vec<u8>, String> {
 
 /// A template segment's text as `quote` delimits it, or why it denotes none.
 pub(crate) fn template_segment_value(text: &str, quote: Quote) -> Result<String, String> {
-    match quote {
-        Quote::Cooked => unescape_template_string(text),
-        Quote::Raw { .. } => Ok(text.to_owned()),
-    }
+    decode_text(text, quote, unescape_template_string)
 }
 
 /// [`template_segment_value`] past the body walk, which is the phase that

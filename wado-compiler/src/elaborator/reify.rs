@@ -91,7 +91,7 @@ use crate::name::{
 use crate::pgo::ColdMap;
 use crate::symbol::{Symbol, SymbolKind};
 use crate::synthesis::common::{
-    bare_cast, bool_lit, builtin_call, cold_path_stmt, handle_bits, is_cold_marker_stmt,
+    bare_cast, bool_lit, builtin_call, cold_path_stmt, handle_bits, i32_const, is_cold_marker_stmt,
     known_cold_path_stmt, not_expr, ord_bool_from_cmp, rt_call,
 };
 use crate::tir::{
@@ -4857,17 +4857,11 @@ impl<'a> Reify<'a> {
             });
         }
         let (name, field_index) = shape.hashes_field();
-        let hashes = quote.hash_count();
+        let mut value = i32_const(quote.hash_count() as i32);
+        value.span = span;
         fields.push(TirStructField {
             name,
-            value: TirExpr::new(
-                TirExprKind::IntLiteral {
-                    value: hashes as u64,
-                    repr: hashes.to_string(),
-                },
-                TypeTable::I32,
-                span,
-            ),
+            value,
             field_index,
         });
 

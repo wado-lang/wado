@@ -1797,7 +1797,6 @@ fn generate_template_tail_fn(
     method_info: LocalMethodName,
     span: Span,
 ) -> TirFunction {
-    let qualified_name = method_info.to_mangled_name();
     let segment = field_access_local(
         0,
         "t",
@@ -1814,7 +1813,6 @@ fn generate_template_tail_fn(
         span,
     );
     template_reader(
-        qualified_name,
         method_info,
         ref_struct_type,
         tail_view.view_type,
@@ -1830,7 +1828,6 @@ fn generate_template_hashes_fn(
     method_info: LocalMethodName,
     span: Span,
 ) -> TirFunction {
-    let qualified_name = method_info.to_mangled_name();
     let read = field_access_local(
         0,
         "t",
@@ -1840,19 +1837,11 @@ fn generate_template_hashes_fn(
         TypeTable::I32,
         span,
     );
-    template_reader(
-        qualified_name,
-        method_info,
-        ref_struct_type,
-        TypeTable::I32,
-        read,
-        span,
-    )
+    template_reader(method_info, ref_struct_type, TypeTable::I32, read, span)
 }
 
 /// A method of one parameter, `t: &Shape`, returning `read`.
 fn template_reader(
-    qualified_name: String,
     method_info: LocalMethodName,
     ref_struct_type: TypeId,
     return_type: TypeId,
@@ -1869,7 +1858,7 @@ fn template_reader(
     }];
     let locals = locals_from_params(&params);
     make_synthetic_method(
-        qualified_name,
+        method_info.to_mangled_name(),
         method_info,
         params,
         return_type,
