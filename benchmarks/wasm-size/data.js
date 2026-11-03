@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1793656663631,
+  "lastUpdate": 1793671925157,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -73845,6 +73845,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/d0e5efa6dbbc0e76454a3971288a888862caaec8"
         },
         "date": 1793656663188,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3099,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7303,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21809,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 316578,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "c0bdae6df4e62b45b9035a7e0fd38bfaad1f9e9c",
+          "message": "Merge pull request #2531 from wado-lang/ccr-52b7fd41-lzjtwq\n\nfix(cache): key a cached compile on the package files it actually parsed",
+          "timestamp": "2026-11-03T10:58:11+09:00",
+          "tree_id": "174ac104f365976e566dc28f4540d85760ced672",
+          "url": "https://github.com/wado-lang/wado/commit/c0bdae6df4e62b45b9035a7e0fd38bfaad1f9e9c"
+        },
+        "date": 1793671923950,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
