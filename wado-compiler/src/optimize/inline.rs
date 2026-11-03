@@ -1703,9 +1703,8 @@ pub(super) fn body_callees(func: &NirFunction) -> Vec<usize> {
 /// splices. A cut kept while its member is on a cycle is what bounds the
 /// rounds: one that moved could splice what an earlier round left a call.
 ///
-/// Barring every member left the hot entry of a cycle a call wherever it was
-/// reached: `core:json`'s `deserialize_i32` re-reads a quoted number through
-/// `T::deserialize`, and every scalar it read paid that call.
+/// Barring every member instead left a cycle's hot entry a call: `core:json`'s
+/// `deserialize_i32`, which re-reads a quoted number through `T::deserialize`.
 fn cut_call_cycles(
     call_graph: &[Vec<usize>],
     cuts: &mut IndexSet<FuncId>,
@@ -1713,6 +1712,7 @@ fn cut_call_cycles(
 ) {
     let on_cycle = recursive_scc_members(call_graph);
     cuts.retain(|f| on_cycle[f.index()]);
+    let mut prices: Vec<Option<usize>> = vec![None; call_graph.len()];
     loop {
         let open: Vec<Vec<usize>> = call_graph
             .iter()
@@ -1729,7 +1729,7 @@ fn cut_call_cycles(
             let Some(component) = component else {
                 continue;
             };
-            let p = price(f);
+            let p = *prices[f].get_or_insert_with(|| price(f));
             costliest
                 .entry(component)
                 .and_modify(|best| {
@@ -2755,7 +2755,8 @@ fn add_site(
 
 /// [`Candidates::carried`]: per candidate, its body's call sites with each
 /// candidate among them expanded into the sites it carries in turn. No
-/// candidate reaches itself: every cycle passes a cut member, which is none.
+/// candidate reaches itself: every cycle passes a cut member, which is never
+/// a candidate.
 fn carried_calls(
     candidates: &IndexMap<FuncId, NirFunction>,
 ) -> IndexMap<FuncId, IndexMap<FuncId, usize>> {
