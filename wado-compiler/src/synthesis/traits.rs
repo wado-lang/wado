@@ -1759,14 +1759,7 @@ fn generate_template_reflect_impls(
             tail_fn(&raw_tail_method, true),
             constant_method(
                 trait_method_info(receiver, template_trait_name, &hashes_method),
-                TirExpr::new(
-                    TirExprKind::IntLiteral {
-                        value: target.shape.quote.hash_count() as u64,
-                        repr: target.shape.quote.hash_count().to_string(),
-                    },
-                    TypeTable::I32,
-                    span,
-                ),
+                common::int_literal(target.shape.quote.hash_count() as i64, span),
             ),
         ];
         // An open shape's hole bridges would group its holes by a parameter,
