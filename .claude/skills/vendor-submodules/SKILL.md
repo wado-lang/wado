@@ -24,10 +24,10 @@ description: Locate and sync the reference specs and runtimes vendored under ven
 - `vendor/protobuf/` - protocolbuffers/protobuf, for the `.proto` files the spec
   does not carry: `src/google/protobuf/descriptor.proto`, the well-known types,
   and the `unittest*.proto` / `test_messages_*.proto` Grog parses as a corpus
-- `vendor/ecma262/` - tc39/ecma262, the ECMAScript specification Re's pattern
-  syntax follows. `spec.html` holds it, with the chapter `RegExp (Regular
-  Expression) Objects`; the properties `\p{…}` takes are in the
-  `table-*-unicode-properties*.html` files beside it
+- `vendor/ecma262/` - tc39/ecma262, the ECMAScript specification, which Re's
+  pattern syntax follows
+  - Patterns: `vendor/ecma262/spec.html`, chapter `RegExp (Regular Expression) Objects`
+  - The properties `\p{…}` takes: `vendor/ecma262/table-*-unicode-properties*.html`
 - `vendor/test262/` - tc39/test262, ECMAScript's conformance tests. Re's corpus
   is `test/built-ins/RegExp/` and `test/language/literals/regexp/`
 
