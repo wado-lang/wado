@@ -68,7 +68,7 @@ use {
     splats_of,
     unary_of,
 } from "./fusion.wado";
-use { Any, Operation, Recorded, Recorder, Run, Untyped, bools, constants, kept_any } from "./recorded.wado";
+use { Any, Operation, Recorded, Recorder, Run, Untyped, Values, bools, constants, kept_any } from "./recorded.wado";
 use { DeviceTensor, Placed, PlacedRead, WebGpuBackend, contiguous, permuted, sliced } from "./webgpu.wado";
 
 /// A pass recorded once per shape class and planned into kernels, which each
@@ -227,7 +227,7 @@ impl Graph for WebGpuBackend {
         program: &WebGpuProgram,
         arguments: &List<Any<WebGpuBackend>>,
     ) -> List<Any<WebGpuBackend>> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
-        let mut state = Run::<WebGpuBackend>::new();
+        let mut state = Run::<WebGpuBackend>::new(&program.recorded);
         for let [id, value] of program.constants.entries() {
             state.values[*id] = *value;
         }
@@ -803,7 +803,7 @@ fn launched(
                 state.values[root] = value;
             },
             Case([id, first, second]) => {
-                let pred = bools(&state.values[recorded.nodes[*id].operands[0]]);
+                let pred = *bools(&state.values[recorded.nodes[*id].operands[0]]);
                 let yielded = g.conditional::<Untyped, List<Any<WebGpuBackend>>>(
                     &pred,
                     || launched(g, state, program, first, arguments),
@@ -937,7 +937,7 @@ fn product_dims(recorded: &Recorded, k: &Kernel) -> DotDims {
 /// out as the ones it reads are now, computed and recorded otherwise.
 fn replayed_root(
     g: &mut WebGpuBackend,
-    values: &HashMap<i32, Any<WebGpuBackend>>,
+    values: &Values<WebGpuBackend>,
     replay: &Replay,
     kind: ElementKind,
     computed: fn() -> Any<WebGpuBackend> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder),
@@ -967,7 +967,7 @@ fn left_reads(recorded: &Recorded, k: &Kernel) -> List<i32> {
 /// on its own, after their prologue once.
 fn apart(
     g: &mut WebGpuBackend,
-    values: &mut HashMap<i32, Any<WebGpuBackend>>,
+    values: &mut Values<WebGpuBackend>,
     program: &WebGpuProgram,
     ks: &List<Kernel>,
 ) -> List<Any<WebGpuBackend>> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
@@ -1012,7 +1012,7 @@ fn at_slot(value: &Any<WebGpuBackend>, slot: i32) -> Any<WebGpuBackend> {
 /// otherwise.
 fn joined_replayed(
     g: &mut WebGpuBackend,
-    values: &HashMap<i32, Any<WebGpuBackend>>,
+    values: &Values<WebGpuBackend>,
     program: &WebGpuProgram,
     ks: &List<Kernel>,
 ) -> Option<List<Any<WebGpuBackend>>> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
@@ -1088,7 +1088,7 @@ fn side_by_side(parts: &List<DeviceTensor>, along: i32) -> Option<DeviceTensor> 
 }
 
 /// The views of the nodes `ids`, or `None` where one is on the host.
-fn device_reads(values: &HashMap<i32, Any<WebGpuBackend>>, ids: &List<i32>) -> Option<List<DeviceTensor>> {
+fn device_reads(values: &Values<WebGpuBackend>, ids: &List<i32>) -> Option<List<DeviceTensor>> {
     let mut reads: List<DeviceTensor> = [];
     for let id of *ids {
         reads.push(on_device(&values[id])?);
@@ -1099,7 +1099,7 @@ fn device_reads(values: &HashMap<i32, Any<WebGpuBackend>>, ids: &List<i32>) -> O
 /// The value of `k`'s root, each operand read at the extents it names.
 fn kernel_result(
     g: &mut WebGpuBackend,
-    values: &HashMap<i32, Any<WebGpuBackend>>,
+    values: &Values<WebGpuBackend>,
     recorded: &Recorded,
     k: &Kernel,
 ) -> Any<WebGpuBackend> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
@@ -1135,7 +1135,7 @@ fn kernel_result(
 /// they lie interleaved and the device runs it so, and one by each otherwise.
 fn paired_result(
     g: &mut WebGpuBackend,
-    values: &HashMap<i32, Any<WebGpuBackend>>,
+    values: &Values<WebGpuBackend>,
     recorded: &Recorded,
     p: &Pair,
 ) -> Any<WebGpuBackend> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
@@ -1180,7 +1180,7 @@ fn paired_result(
 /// own before it otherwise.
 fn left_product(
     g: &mut WebGpuBackend,
-    values: &HashMap<i32, Any<WebGpuBackend>>,
+    values: &Values<WebGpuBackend>,
     recorded: &Recorded,
     k: &Kernel,
     r: &DeviceTensor,
@@ -1196,7 +1196,7 @@ fn left_product(
 /// `WebGpuBackend::staged_product` pairs, or `None` where it cannot run so.
 fn staged(
     g: &mut WebGpuBackend,
-    values: &HashMap<i32, Any<WebGpuBackend>>,
+    values: &Values<WebGpuBackend>,
     recorded: &Recorded,
     k: &Kernel,
     r: &DeviceTensor,
@@ -1219,7 +1219,7 @@ fn staged(
 /// one.
 fn left_matrix(
     g: &mut WebGpuBackend,
-    values: &HashMap<i32, Any<WebGpuBackend>>,
+    values: &Values<WebGpuBackend>,
     recorded: &Recorded,
     k: &Kernel,
 ) -> Placed<f32, Untyped> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
@@ -1241,7 +1241,7 @@ fn left_extents(recorded: &Recorded, k: &Kernel) -> List<i32> {
 /// The right matrix of `k`'s product as `[inner, columns]`.
 fn right_matrix(
     g: &mut WebGpuBackend,
-    values: &HashMap<i32, Any<WebGpuBackend>>,
+    values: &Values<WebGpuBackend>,
     recorded: &Recorded,
     k: &Kernel,
 ) -> DeviceTensor with (GpuDevice, GpuQueue, GpuBuffer) {
@@ -1274,7 +1274,7 @@ fn interleaved_view(a: &DeviceTensor, b: &DeviceTensor) -> Option<DeviceTensor> 
 /// the kernel's extents hold it.
 fn epilogue_reads(
     g: &mut WebGpuBackend,
-    values: &HashMap<i32, Any<WebGpuBackend>>,
+    values: &Values<WebGpuBackend>,
     recorded: &Recorded,
     product: i32,
     operands: &List<KernelOperand>,
@@ -1297,7 +1297,7 @@ fn epilogue_reads(
 /// the operand holds one per row of them.
 fn reads_over(
     g: &mut WebGpuBackend,
-    values: &HashMap<i32, Any<WebGpuBackend>>,
+    values: &Values<WebGpuBackend>,
     operands: &List<KernelOperand>,
     extents: &List<i32>,
     space: &List<i32>,
@@ -1316,7 +1316,7 @@ fn reads_over(
 /// The view of node `id`'s value on the device.
 fn view_of(
     g: &mut WebGpuBackend,
-    values: &HashMap<i32, Any<WebGpuBackend>>,
+    values: &Values<WebGpuBackend>,
     id: i32,
 ) -> DeviceTensor with (GpuDevice, GpuQueue, GpuBuffer) {
     return any_view(g, &values[id]);

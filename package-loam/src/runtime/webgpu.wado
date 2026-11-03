@@ -252,24 +252,28 @@ struct Owned {
 /// `Carved` buffer, which the dispatch binds on every call, so a call finds
 /// its bind groups made.
 struct LaunchParameters {
-    /// Each dispatch's span, the place in `pipelines` of its shader, and the
-    /// words on the device, in the order the calls first dispatched them. A
-    /// dispatch takes the span of the `n`th dispatch of its shader, so one a
-    /// call makes and another does not, such as a copy of a cache, leaves the
-    /// others where they were.
+    /// Each dispatch's span and the place in `pipelines` of its shader, in
+    /// the order the calls first dispatched them. A dispatch takes the span
+    /// of the `n`th dispatch of its shader, so one a call makes and another
+    /// does not, such as a copy of a cache, leaves the others where they were.
     spans: List<Span>,
     pipelines: List<i32>,
-    words: List<List<u32>>,
     /// The last pass a call ran the launch in.
     pass: i32,
 }
 
 /// A buffer launches' parameters are carved from, how many of its words are
 /// carved, and how many spans of it launches still hold.
-struct Carved {
+affine struct Carved {
     slot: i32,
     used: i32,
     spans: i32,
+    /// The buffer's words as the host last set them, little-endian, so the
+    /// words a call changes reach the device in one write.
+    bytes: LinearArray<u8>,
+    /// The words `from..<to` hold what the device does not yet.
+    from: i32,
+    to: i32,
 }
 
 /// The launch of a program running, by its `launch_key`, the words of each
@@ -346,6 +350,33 @@ fn renamed_over(was: &List<DeviceTensor>, now: &List<DeviceTensor>) -> Option<Re
         }
     }
     return Option::Some(slots);
+}
+
+impl Carved {
+    fn word(&self, at: i32) -> u32 {
+        let b = 4 * at;
+        return self.bytes[b] as u32
+            | self.bytes[b + 1] as u32 << 8
+            | self.bytes[b + 2] as u32 << 16
+            | self.bytes[b + 3] as u32 << 24;
+    }
+
+    fn set_word(&mut self, at: i32, word: u32) {
+        let b = 4 * at;
+        self.bytes[b] = word as u8;
+        self.bytes[b + 1] = (word >> 8) as u8;
+        self.bytes[b + 2] = (word >> 16) as u8;
+        self.bytes[b + 3] = (word >> 24) as u8;
+    }
+}
+
+/// `d`'s spans, each slot as `slots` renames it.
+fn renamed_spans(d: &Dispatch, slots: &Renamed) -> List<Span> {
+    let mut spans: List<Span> = [];
+    for let s of &d.spans {
+        spans.push(Span { ..*s, slot: slots.of(s.slot) });
+    }
+    return spans;
 }
 
 impl Renamed {
@@ -769,7 +800,7 @@ impl WebGpuBackend {
     internal fn launching(&mut self, serial: i32, root: i32) {
         let launch = launch_key(serial, root);
         if !self.launch_parameters.contains_key(launch) {
-            self.launch_parameters[launch] = LaunchParameters { spans: [], pipelines: [], words: [], pass: -1 };
+            self.launch_parameters[launch] = LaunchParameters { spans: [], pipelines: [], pass: -1 };
         }
         let parameters = &mut self.launch_parameters[launch];
         let own = parameters.pass < self.passes;
@@ -837,18 +868,35 @@ impl WebGpuBackend {
             if span.count != params.len() {
                 return self.parameter_span(params);
             }
-            if own.words[i] != *params {
-                own.words[i] = *params;
-                self.write(span.slot, span.first, span.first + span.count, |w| params[w - span.first]);
-            }
+            self.staged(&span, params);
             return span;
         }
         let span = self.carved_span(params.len());
-        self.write(span.slot, span.first, span.first + span.count, |w| params[w - span.first]);
         own.spans.push(span);
         own.pipelines.push(pipeline);
-        own.words.push(*params);
+        self.staged(&span, params);
         return span;
+    }
+
+    /// Sets the words of `span`, carved from a launch's buffer, to `params`,
+    /// for the next submit to write where they changed.
+    fn staged(&mut self, span: &Span, params: &List<u32>) {
+        for let k of 0..<self.carved.len() {
+            let c = &mut self.carved[k];
+            if c.slot != span.slot {
+                continue;
+            }
+            for let i of 0..<span.count {
+                let at = span.first + i;
+                if c.word(at) != params[i] {
+                    c.set_word(at, params[i]);
+                    c.from = i32::min(c.from, at);
+                    c.to = i32::max(c.to, at + 1);
+                }
+            }
+            return;
+        }
+        unreachable();
     }
 
     /// A span of `count` words of parameters for a launch to hold.
@@ -866,7 +914,14 @@ impl WebGpuBackend {
             }
         }
         let slot = self.held_buffer(PARAMETER_WORDS);
-        self.carved.push(Carved { slot, used: count, spans: 1 });
+        self.carved.push(Carved {
+            slot,
+            used: count,
+            spans: 1,
+            bytes: LinearArray::<u8>::filled(4 * PARAMETER_WORDS, 0),
+            from: PARAMETER_WORDS,
+            to: 0,
+        });
         return Span { slot, first: 0, count };
     }
 
@@ -1013,8 +1068,26 @@ impl WebGpuBackend {
         return Span { slot: p.slot, first: at, count: params.len() };
     }
 
-    /// Writes the parameters not yet on the device.
+    /// Writes the parameters not yet on the device: those launches changed,
+    /// one write a carved buffer, and the pass's.
     fn write_parameters(&mut self) with (GpuQueue, GpuBuffer) {
+        for let k of 0..<self.carved.len() {
+            let c = &mut self.carved[k];
+            if c.from >= c.to {
+                continue;
+            }
+            let Ok(_) = self.queue.write_buffer_with_copy(
+                self.buffer(c.slot),
+                (c.from * 4) as u64 as GpuSize64,
+                &c.bytes,
+                Option::Some((c.from * 4) as u64 as GpuSize64),
+                Option::Some(((c.to - c.from) * 4) as u64 as GpuSize64),
+            ) else {
+                panic("loam: a launch's parameters did not write to the device");
+            };
+            c.from = PARAMETER_WORDS;
+            c.to = 0;
+        }
         let Some(p) = &mut self.parameters else {
             return;
         };
@@ -1282,32 +1355,75 @@ impl WebGpuBackend {
             Some(at) => at,
             None => self.compile(&key),
         };
-        self.dispatched(found, spans, params, groups, null);
+        let mut all = spans;
+        all.push(self.parameters_for(found, &params));
+        let at = self.group_of(found, &all);
+        if let Some(commands) = &mut self.taping {
+            all.pop();
+            commands.push(Command::Dispatched(Dispatch { pipeline: found, spans: all, params, groups, group: at }));
+        }
+        self.enqueued(found, at, groups);
     }
 
-    /// Records the shader at `pipeline` in `pipelines` as `dispatch` does.
-    /// `hint` is the place in `groups` of the bind group a dispatch bound
-    /// when it was recorded, which binds these spans where they are the ones
-    /// it bound.
-    fn dispatched(
+    /// Records `d` again over the buffers `slots` names in place of those it
+    /// bound: on the bind group it bound, where that binds them.
+    fn redispatched(
         &mut self,
-        pipeline: i32,
-        spans: List<Span>,
-        params: List<u32>,
-        groups: [i32, i32, i32],
-        hint: Option<i32>,
+        d: &Dispatch,
+        slots: &Renamed,
     ) with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuComputePassEncoder) {
-        let [x, y, z] = groups;
-        self.dispatches += 1;
-        let mut all = spans;
-        all.push(self.parameters_for(pipeline, &params));
-        let at = match hint {
-            Some(at) && self.binds_at(at, pipeline, &all) => at,
-            _ => self.group_of(pipeline, &all),
+        let params = self.parameters_for(d.pipeline, &d.params);
+        let at = if self.binds_renamed(d, slots, &params) {
+            d.group;
+        } else {
+            let mut all = renamed_spans(d, slots);
+            all.push(params);
+            self.group_of(d.pipeline, &all);
         };
         if let Some(commands) = &mut self.taping {
-            commands.push(Command::Dispatched(Dispatch { pipeline, spans, params, groups, group: at }));
+            commands.push(Command::Dispatched(Dispatch { ..*d, spans: renamed_spans(d, slots), group: at }));
         }
+        self.enqueued(d.pipeline, at, d.groups);
+    }
+
+    /// Whether the bind group `d` bound binds its spans as `slots` renames
+    /// them, then `params`: the key `group_key` spells for them.
+    fn binds_renamed(&self, d: &Dispatch, slots: &Renamed, params: &Span) -> bool {
+        let Some(cached) = &self.groups.held[d.group] else {
+            return false;
+        };
+        let key = &cached.key;
+        let n = d.spans.len();
+        if key.len() != 1 + 3 * (n + 1) || key[0] != d.pipeline {
+            return false;
+        }
+        for let i of 0..<n {
+            let s = &d.spans[i];
+            if !self.keyed_at(key, i, slots.of(s.slot), s.first, s.count) {
+                return false;
+            }
+        }
+        return self.keyed_at(key, n, params.slot, params.first, params.count);
+    }
+
+    /// Whether `key`, as `group_key` spells one, binds the words
+    /// `first..<first + count` of the buffer at `slot` at its `i`th binding.
+    fn keyed_at(&self, key: &List<i32>, i: i32, slot: i32, first: i32, count: i32) -> bool {
+        let at = 1 + 3 * i;
+        return key[at] == self.slot(slot).id && key[at + 1] == first && key[at + 2] == count;
+    }
+
+    /// Records a dispatch of the shader at `pipeline` in `pipelines` on the
+    /// bind group at `at` in `groups`, in `groups` workgroups along each
+    /// dimension.
+    fn enqueued(
+        &mut self,
+        pipeline: i32,
+        at: i32,
+        groups: [i32, i32, i32],
+    ) with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroup, GpuComputePassEncoder) {
+        let [x, y, z] = groups;
+        self.dispatches += 1;
         let cached = self.groups.get_mut(at);
         cached.used = self.passes;
         if self.recording.is_empty() {
@@ -1346,12 +1462,6 @@ impl WebGpuBackend {
             Some(at) => at,
             None => self.bind_group(pipeline, spans, key),
         };
-    }
-
-    /// Whether the bind group at `at` in `groups` binds `spans` to the shader
-    /// at `pipeline`.
-    fn binds_at(&self, at: i32, pipeline: i32, spans: &List<Span>) -> bool {
-        return self.groups.held[at] matches { Some(cached) && cached.key == self.group_key(pipeline, spans) };
     }
 
     /// What a bind group is cached under: the shader's place in `pipelines`,
@@ -1501,7 +1611,7 @@ impl WebGpuBackend {
     /// Whether `bindable` binds `operands`, asked before a kernel that runs in
     /// several dispatches records the first.
     fn binds(&self, operands: &List<DeviceTensor>) -> bool {
-        return self.spans_for(operands) matches { Some(b) && b.spans.len() <= self.max_operands }
+        return self.spanned(operands) matches { Some([spans, _]) && spans.len() <= self.max_operands }
             || packed_count(operands) <= self.max_binding;
     }
 
@@ -1509,58 +1619,68 @@ impl WebGpuBackend {
     /// holds, so a buffer two distant views read is bound twice, and each view
     /// rebased to its span. `None` where one view alone outgrows a binding.
     fn spans_for(&self, operands: &List<DeviceTensor>) -> Option<Bindings> {
-        let mut spans: List<Span> = [];
-        let mut members: List<List<DeviceTensor>> = [];
-        let mut bindings: List<i32> = [];
-        for let o of *operands {
-            let mut at = -1;
-            for let b of 0..<spans.len() {
-                if spans[b].slot != o.slot {
-                    continue;
-                }
-                let mut joined = members[b];
-                joined.push(o);
-                if let Some(wider) = self.span_of(&joined) {
-                    spans[b] = wider;
-                    members[b] = joined;
-                    at = b;
-                    break;
-                }
-            }
-            if at < 0 {
-                let alone = [o] as List<DeviceTensor>;
-                spans.push(self.span_of(&alone)?);
-                members.push(alone);
-                at = spans.len() - 1;
-            }
-            bindings.push(at);
-        }
+        let [spans, bindings] = self.spanned(operands)?;
         let mut views: List<DeviceTensor> = [];
-        for let [i, o] of operands.into_iter().enumerate() {
+        for let i of 0..<operands.len() {
+            let o = &operands[i];
             views.push(DeviceTensor { ..*o, offset: rebased(o, &spans[bindings[i]]) });
         }
         return Option::Some(Bindings { spans, bindings, views });
     }
 
-    /// The span one binding of `views`' buffer takes to reach every element
-    /// they read, its start aligned as a binding's must be, or `None` where it
-    /// outgrows a binding.
-    fn span_of(&self, views: &List<DeviceTensor>) -> Option<Span> {
-        let per_word = elements_per_word(&views[0]);
-        let mut least = i32::MAX;
-        let mut most = i32::MIN;
-        for let v of *views {
-            assert v.half == views[0].half, "one buffer holds one element type";
-            let [first, last] = reach(&v);
-            least = i32::min(least, first / per_word);
-            most = i32::max(most, last / per_word);
+    /// The spans of `spans_for`, and the one each operand reads.
+    fn spanned(&self, operands: &List<DeviceTensor>) -> Option<[List<Span>, List<i32>]> {
+        let mut spans: List<Span> = [];
+        // The words each span's views read, and the first of them, whose
+        // element type the others share.
+        let mut words: List<[i32, i32]> = [];
+        let mut firsts: List<i32> = [];
+        let mut bindings: List<i32> = [];
+        for let i of 0..<operands.len() {
+            let o = &operands[i];
+            let [lo, hi] = words_read(o);
+            let mut at = -1;
+            for let b of 0..<spans.len() {
+                if spans[b].slot != o.slot {
+                    continue;
+                }
+                assert o.half == operands[firsts[b]].half, "one buffer holds one element type";
+                let [least, most] = [i32::min(words[b].0, lo), i32::max(words[b].1, hi)];
+                if let Some(wider) = self.span_over(o.slot, least, most) {
+                    spans[b] = wider;
+                    words[b] = [least, most];
+                    at = b;
+                    break;
+                }
+            }
+            if at < 0 {
+                spans.push(self.span_over(o.slot, lo, hi)?);
+                words.push([lo, hi]);
+                firsts.push(i);
+                at = spans.len() - 1;
+            }
+            bindings.push(at);
         }
+        return Option::Some([spans, bindings]);
+    }
+
+    /// The span one binding of `view`'s buffer takes to reach every element it
+    /// reads, or `None` where it outgrows a binding.
+    fn span_of(&self, view: &DeviceTensor) -> Option<Span> {
+        let [least, most] = words_read(view);
+        return self.span_over(view.slot, least, most);
+    }
+
+    /// The span reaching the words `least..=most` of the buffer at `slot`, its
+    /// start aligned as a binding's must be, or `None` where it outgrows a
+    /// binding.
+    fn span_over(&self, slot: i32, least: i32, most: i32) -> Option<Span> {
         let first = least - least % self.alignment;
         let count = most - first + 1;
         if count > self.max_binding {
             return null;
         }
-        return Option::Some(Span { slot: views[0].slot, first, count });
+        return Option::Some(Span { slot, first, count });
     }
 
     /// Copies `from`'s elements to `to`'s place, the two of one extents, a
@@ -1577,8 +1697,7 @@ impl WebGpuBackend {
         if count == 0 {
             return;
         }
-        if let Some(source) = self.span_of(&([*from] as List<DeviceTensor>))
-            && let Some(target) = self.span_of(&([*to] as List<DeviceTensor>)) {
+        if let Some(source) = self.span_of(from) && let Some(target) = self.span_of(to) {
             let [x, y] = grid(count);
             let mut params = element_params(count, x, &to.extents);
             push_view(&mut params, rebased(from, &source), &from.strides);
@@ -1944,9 +2063,8 @@ impl WebGpuBackend {
         let rb = rhs.extents.len();
         let mut chunk = lhs.extents[ra - 1];
         loop {
-            let a = [sliced(lhs, ra - 1, 0, chunk)] as List<DeviceTensor>;
-            let b = [sliced(rhs, rb - 2, 0, chunk)] as List<DeviceTensor>;
-            if self.span_of(&a) matches { Some(_) } && self.span_of(&b) matches { Some(_) } {
+            if self.span_of(&sliced(lhs, ra - 1, 0, chunk)) matches { Some(_) }
+                && self.span_of(&sliced(rhs, rb - 2, 0, chunk)) matches { Some(_) } {
                 return Option::Some(chunk);
             }
             if chunk <= TILE {
@@ -1988,7 +2106,7 @@ impl WebGpuBackend {
         flat[axis] = words.len();
         // Halving the indices ends at one row, so the gather runs on the
         // device exactly where one row of the data and of the output binds.
-        let row_binds = |view: DeviceTensor| self.span_of(&([sliced(&view, axis, 0, 1)] as List<DeviceTensor>)) matches { Some(_) };
+        let row_binds = |view: DeviceTensor| self.span_of(&sliced(&view, axis, 0, 1)) matches { Some(_) };
         if words.len() > self.max_binding || !row_binds(*data) || !row_binds(contiguous(PENDING, 0, flat)) {
             return null;
         }
@@ -2026,8 +2144,7 @@ impl WebGpuBackend {
             most = i32::max(most, words[i] as i32);
         }
         let picked = sliced(data, axis, least, most - least + 1);
-        if let Some(source) = self.span_of(&([picked] as List<DeviceTensor>))
-            && let Some(target) = self.span_of(&([part] as List<DeviceTensor>)) {
+        if let Some(source) = self.span_of(&picked) && let Some(target) = self.span_of(&part) {
             let [x, y] = grid(count);
             let mut params = element_params(count, x, &part.extents);
             let mut across = data.strides;
@@ -2331,13 +2448,7 @@ impl WebGpuBackend {
                     let fresh = slots.bound(*slot, self.allocated(*count, false));
                     assert fresh, "a buffer a launch makes is no buffer it reads";
                 },
-                Dispatched(d) => {
-                    let mut spans: List<Span> = [];
-                    for let s of &d.spans {
-                        spans.push(Span { ..*s, slot: slots.of(s.slot) });
-                    }
-                    self.dispatched(d.pipeline, spans, d.params, d.groups, Option::Some(d.group));
-                },
+                Dispatched(d) => self.redispatched(d, &slots),
             }
         }
         return Option::Some(DeviceTensor { ..e.result, slot: slots.of(e.result.slot) });
@@ -3138,6 +3249,13 @@ fn fresh(t: &DeviceTensor) -> Span
     contract t.offset == 0
 {
     return Span { slot: t.slot, first: 0, count: i32::max(element_count(&t.extents), 1) };
+}
+
+/// The first and last word of its buffer `t` reads.
+fn words_read(t: &DeviceTensor) -> [i32, i32] {
+    let per_word = elements_per_word(t);
+    let [first, last] = reach(t);
+    return [first / per_word, last / per_word];
 }
 
 /// The first and last element `t` reads: only its offset where it has no
