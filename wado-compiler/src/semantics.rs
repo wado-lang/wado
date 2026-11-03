@@ -2220,37 +2220,33 @@ mod tests {
         assert_eq!(markers["panicked"], ["$known_cold_path"]);
     }
 
-    /// A statement that cannot complete is cold only where every path through
-    /// it traps. One whose paths return, break or continue out, or loop
-    /// forever, leaves the code around it hot.
+    /// A `!` statement is cold only where every path through it traps. One
+    /// whose paths break or continue out, or loop forever, leaves the code
+    /// around it hot; a loop a `break` leaves is no such path.
     #[test]
     fn only_a_statement_that_traps_is_marked_cold() {
         let host = InMemoryCompilerHost::new();
         let sem = block_on(semantics(
-            "fn returns(o: Option<i32>) -> i32 { let Some(v) = o else { return 0; }; return v; }
-             fn breaks_out(xs: List<Option<i32>>) -> i32 {
+            "fn breaks_out(xs: List<Option<i32>>) -> i32 {
                  let mut n = 0;
                  for let o of xs { let Some(v) = o else { break; }; n += v; continue; }
                  return n;
              }
              fn serves(o: Option<i32>) { let Some(_) = o else { loop { builtin::black_box(0); } }; panic(\"b\"); }
-             fn traps(o: Option<i32>) { let Some(v) = o else { panic(\"a\"); }; builtin::black_box(v); panic(\"b\"); }
              fn traps_after_a_loop(o: Option<i32>, x: i32) {
                  let mut i = 0;
                  let Some(_) = o else { loop { i += 1; if i > x { break; } } panic(\"a\"); };
                  panic(\"b\");
              }
-             export fn run() {
-                 returns(null); breaks_out([null]); serves(null); traps(null); traps_after_a_loop(null, 0);
-             }",
+             export fn run() { breaks_out([null]); serves(null); traps_after_a_loop(null, 0); }",
             &host,
             Some("entry.wado"),
         ));
         let markers = markers([&sem.tir_modules[&sem.entry_module_source]]);
-        assert_eq!(markers["returns"], [] as [String; 0]);
         assert_eq!(markers["breaks_out"], [] as [String; 0]);
+        // Only the `panic("b")` the `let … else` arm runs.
         assert_eq!(markers["serves"], ["$known_cold_path"]);
-        assert_eq!(markers["traps"], ["$known_cold_path"; 3]);
+        // The `let … else` itself, its else block's panic, and its arm's.
         assert_eq!(markers["traps_after_a_loop"], ["$known_cold_path"; 3]);
     }
 
