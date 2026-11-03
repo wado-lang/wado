@@ -296,12 +296,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let mut seen: hashmap::IndexSet<(DefId, Vec<TypeKey>)> = hashmap::IndexSet::default();
 
         let trait_env = &self.tysys.trait_env;
-        let receiver_args = self
-            .tysys
-            .type_table
-            .borrow()
-            .generic_type_args(handler_type)
-            .unwrap_or_default();
         let written = trait_env
             .impl_index
             .get(&self.handler_impl_target(handler_type))
@@ -317,20 +311,24 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // Everything the block says about itself it says in its own frame:
             // `impl Stream<u8> for Ctx` names `Stream` and resolves `u8` where
             // the block was written, which is not where it is installed. A
-            // slot the block leaves to its own parameter takes the handler's
-            // argument: `impl<T> Stream<T> for Ctx<T>` on a `Ctx<u8>` installs
-            // `Stream<u8>`.
+            // slot the block leaves to its own parameter takes what matching
+            // its target against the handler binds: `impl<T> Stream<T> for
+            // Ctx<T>` on a `Ctx<u8>` installs `Stream<u8>`, and a blanket's
+            // parameter is the handler itself.
             let Some(trait_ref) = trait_env.impl_headers[&impl_def].trait_def() else {
                 continue;
             };
             if !defs.kind(trait_ref).is_effect() {
                 continue;
             }
+            let Some(slots) = self.handler_slots(impl_def, handler_type) else {
+                continue;
+            };
             let type_args = self
                 .tysys
                 .signatures
                 .impl_sig(impl_def)
-                .instantiate(&self.tysys.type_table, &receiver_args)
+                .instantiate_slots(&self.tysys.type_table, &slots)
                 .trait_type_args;
             // A block answers only where the order selects it for the
             // handler: a sibling written for another instance (`Ctx<u8>`
@@ -363,6 +361,21 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         (out, ties)
+    }
+
+    /// Block `impl_def`'s slots bound by its target matching `handler_type`;
+    /// `None` where the target names another instance (`Ctx<u8>` for a
+    /// `Ctx<i32>` handler).
+    fn handler_slots(
+        &self,
+        impl_def: DefId,
+        handler_type: TypeId,
+    ) -> Option<hashmap::IndexMap<u32, TypeId>> {
+        let mut tt = self.tysys.type_table.borrow_mut();
+        let target = tt.impl_target_whole(impl_def);
+        let mut slots = tt.bind_type_params(&[target], &[handler_type])?;
+        tt.project_impl_slots(impl_def, &mut slots);
+        Some(slots)
     }
 
     /// What the order selects for `effect_decl<trait_type_args>` on the
