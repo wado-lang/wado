@@ -291,7 +291,9 @@ already exist.
 An extent that varies between calls is padded to a capacity, and its length
 within the capacity is a value: a scalar input of the program. The runtime
 picks the capacity from a list the caller gives, or by default the next power
-of two. A capacity of 0 is its own class, so a prompt with no past compiles
+of two or one and a half of one (1, 2, 3, 4, 6, 8, 12, …). The half steps
+bound the padding to a third of what a pass computes, for twice the shape
+classes. A capacity of 0 is its own class, so a prompt with no past compiles
 apart from a step with one.
 
 Padding must not change any value the caller reads. The generator decides for
@@ -342,7 +344,7 @@ The generated module takes them so:
   length meets.
 - `compute` takes the inputs on the host. It checks them, and what the graph
   owes, against their own lengths. It pads each padded length to its
-  capacity, the next power of two, builds, and cuts the outputs back to their
+  capacity, `capacity_of` of it, builds, and cuts the outputs back to their
   lengths. A graph with a cache passes it to `compute` too, as the next
   section says.
 

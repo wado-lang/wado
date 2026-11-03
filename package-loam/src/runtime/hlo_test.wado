@@ -153,9 +153,10 @@ test "a strided gather takes each element its start and step reach, back to fron
     assert back.data == [10, 11, 12, 13, 0, 1, 2, 3] as List<i64>;
 }
 
-test "a capacity is the next power of two, and 0 its own" {
-    let lengths: List<i32> = [0, 1, 2, 3, 4, 5, 16, 17];
-    assert lengths.into_iter().map(|n| capacity_of(n)).collect() == [0, 1, 2, 4, 4, 8, 16, 32] as List<i32>;
+test "a capacity is the next power of two or one and a half of it, and 0 its own" {
+    let lengths: List<i32> = [0, 1, 2, 3, 4, 5, 6, 7, 9, 13, 16, 17, 25, 1 << 30];
+    assert lengths.into_iter().map(|n| capacity_of(n)).collect()
+        == [0, 1, 2, 3, 4, 6, 6, 8, 12, 16, 16, 24, 32, 1 << 30] as List<i32>;
 }
 
 test "resizing pads each axis past its extent with zeros and cuts it short of it" {

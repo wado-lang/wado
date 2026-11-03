@@ -662,12 +662,17 @@ pub fn strided_gather<affine G: Graph, E: Element, In, Out>(
     return g.gather(x, &indices, &dims);
 }
 
-/// The capacity a length pads to: the next power of two, and 0 its own.
+/// The capacity a length pads to: the next power of two or one and a half of
+/// one, and 0 its own. The half steps bound what a padded pass computes for
+/// nothing to a third of it, for twice the shape classes of powers alone.
 pub fn capacity_of(length: i32) -> i32
-    contract 0 <= length <= 1 << 30, "a capacity is a power of two an i32 holds"
+    contract 0 <= length <= 1 << 30, "a capacity is one an i32 holds"
 {
     let mut capacity = if length == 0 { 0 } else { 1 };
     while capacity < length {
+        if capacity + capacity / 2 >= length {
+            return capacity + capacity / 2;
+        }
         capacity *= 2;
     }
     return capacity;

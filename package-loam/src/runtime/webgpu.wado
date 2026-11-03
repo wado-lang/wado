@@ -348,7 +348,7 @@ fn renamed_over(was: &List<DeviceTensor>, now: &List<&DeviceTensor>) -> Option<R
     for let i of 0..<now.len() {
         let a = &was[i];
         let b = now[i];
-        let laid_out = a.offset == b.offset && a.extents == b.extents && a.strides == b.strides && a.half == b.half;
+        let laid_out = a.extents == b.extents && reads_as(b, a.offset, &a.strides) && a.half == b.half;
         if !laid_out || !slots.bound(a.slot, b.slot) {
             return null;
         }
@@ -3543,7 +3543,7 @@ fn is_contiguous(t: &DeviceTensor) -> bool {
 /// Whether `t` reads the elements a view from `offset` with `strides` reads
 /// over its extents. An axis of extent 1 steps nowhere, so its stride does
 /// not matter, and a `reshape` rewrites it freely.
-fn reads_as(t: &DeviceTensor, offset: i32, strides: &List<i32>) -> bool {
+internal fn reads_as(t: &DeviceTensor, offset: i32, strides: &List<i32>) -> bool {
     if t.offset != offset {
         return false;
     }

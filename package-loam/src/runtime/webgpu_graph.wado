@@ -69,7 +69,7 @@ use {
     unary_of,
 } from "./fusion.wado";
 use { Any, Operation, Recorded, Recorder, Run, Untyped, Values, bools, constants, kept_any } from "./recorded.wado";
-use { DeviceTensor, Placed, PlacedRead, WebGpuBackend, contiguous, permuted, sliced } from "./webgpu.wado";
+use { DeviceTensor, Placed, PlacedRead, WebGpuBackend, contiguous, permuted, reads_as, sliced } from "./webgpu.wado";
 
 /// A pass recorded once per shape class and planned into kernels, which each
 /// call launches, and the values of the nodes that read no argument, kept on
@@ -1079,11 +1079,7 @@ fn side_by_side(parts: &List<DeviceTensor>, along: i32) -> Option<DeviceTensor> 
         let mut extents = p.extents;
         extents[along] = joined.extents[along];
         let next = joined.offset + joined.extents[along] * joined.strides[along];
-        if p.slot != joined.slot
-            || p.half != joined.half
-            || p.strides != joined.strides
-            || extents != joined.extents
-            || p.offset != next {
+        if p.slot != joined.slot || p.half != joined.half || extents != joined.extents || !reads_as(&p, next, &joined.strides) {
             return null;
         }
         joined.extents[along] += p.extents[along];
@@ -1261,9 +1257,8 @@ fn interleaved_view(a: &DeviceTensor, b: &DeviceTensor) -> Option<DeviceTensor> 
     if a.slot != b.slot
         || a.half != b.half
         || a.extents != b.extents
-        || a.strides != b.strides
         || step % 2 != 0
-        || b.offset != a.offset + step / 2 {
+        || !reads_as(b, a.offset + step / 2, &a.strides) {
         return null;
     }
     return Option::Some(DeviceTensor {
