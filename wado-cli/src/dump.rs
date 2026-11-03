@@ -7,7 +7,6 @@ use lexopt::Arg::Value;
 use crate::args::{self, CliExit};
 use crate::compile::{Settled, build_load, entry_profile, load_nearest_manifest};
 use crate::compiler_host::FilesystemCompilerHost;
-use crate::host_memory::FreedMemory;
 use crate::knobs::{CompileKnobOpt, CompileKnobs, HostKnobOpt, HostKnobs};
 
 pub struct DumpOptions {
@@ -233,7 +232,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<DumpOptions, CliExit> {
     let mut target_world: Option<String> = None;
     let mut any_phase = false;
     let mut knobs = CompileKnobs::default();
-    let mut host = HostKnobs::new(FreedMemory::Retain);
+    let mut host = HostKnobs::default();
 
     while let Some(arg) = args::next_arg(&mut parser)? {
         if let Some(k) = args::match_opt(&arg, Opt::KNOBS, |k| k.spec()) {

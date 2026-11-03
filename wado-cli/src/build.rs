@@ -22,7 +22,6 @@ use crate::compile::{self, Artifact, CompileFlags, CompileOptions};
 use crate::fingerprint::Input;
 use crate::input_cache::{InputCache, Slot};
 use crate::kiln_provider::hex32;
-use crate::host_memory::FreedMemory;
 use crate::knobs::{CompileKnobOpt, CompileKnobs, EmbedOpt, EmbedOptions, HostKnobOpt, HostKnobs};
 use crate::manifest::{self, openable_dir};
 use wado_host::atomic_write::write_atomic;
@@ -128,7 +127,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<BuildOptions, CliExit> {
     let mut lib = false;
     let mut output: Option<String> = None;
     let mut knobs = CompileKnobs::default();
-    let mut host = HostKnobs::new(FreedMemory::Retain);
+    let mut host = HostKnobs::default();
     let mut embed = EmbedOptions::default();
 
     while let Some(arg) = args::next_arg(&mut parser)? {

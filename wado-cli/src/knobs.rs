@@ -549,14 +549,17 @@ pub struct HostKnobs {
     pub freed_memory: FreedMemory,
 }
 
-impl HostKnobs {
-    /// What a subcommand starts from: `retain` unless it runs long, where a
-    /// resident set held at its peak outlives the compile that grew it.
-    #[must_use]
-    pub const fn new(freed_memory: FreedMemory) -> Self {
-        Self { freed_memory }
+impl Default for HostKnobs {
+    /// Retaining: a subcommand that runs long, where a resident set held at
+    /// its peak outlives the compile that grew it, starts from returning.
+    fn default() -> Self {
+        Self {
+            freed_memory: FreedMemory::Retain,
+        }
     }
+}
 
+impl HostKnobs {
     pub fn apply(&mut self, opt: HostKnobOpt) {
         self.freed_memory = match opt {
             HostKnobOpt::RetainMemory => FreedMemory::Retain,

@@ -8,7 +8,6 @@ use std::{env, fs};
 use crate::common::project_root;
 use wado_cli::args::CliExit;
 use wado_cli::compile::{self, CompileOptions, OutputFormat};
-use wado_cli::host_memory::FreedMemory;
 use wado_cli::knobs::{CompileKnobs, EmbedOptions, HostKnobs, OptLevel};
 
 fn fixture(rel: &str) -> PathBuf {
@@ -94,7 +93,7 @@ fn hello_compile_opts(output_path: &Path, format: Option<OutputFormat>) -> Compi
         format,
         wat_to_stdout: false,
         knobs: CompileKnobs::default(),
-        host: HostKnobs::new(FreedMemory::Retain),
+        host: HostKnobs::default(),
         embed: EmbedOptions::default(),
         target_world: None,
         lib_world: None,

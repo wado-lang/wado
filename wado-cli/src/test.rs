@@ -29,7 +29,6 @@ use crate::discover;
 use crate::eval_host::{EvalHost, EvalSession, TestClock};
 use crate::fingerprint::Input;
 use crate::fuel_host::{self, FuelRegion};
-use crate::host_memory::FreedMemory;
 use crate::knobs::{
     CompileKnobOpt, CompileKnobs, HostKnobOpt, HostKnobs, RuntimeKnobOpt, RuntimeKnobs,
 };
@@ -406,7 +405,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<TestOptions, CliExit> {
     let mut include: Option<CoverageScope> = None;
     let mut baseline: Option<PathBuf> = None;
     let mut runtime_knobs = RuntimeKnobs::default();
-    let mut host = HostKnobs::new(FreedMemory::Retain);
+    let mut host = HostKnobs::default();
     // Each file's optimizer runs on one thread, since `--parallel` already
     // spreads the files across the cores.
     let mut knobs = CompileKnobs {

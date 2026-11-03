@@ -12,7 +12,6 @@ use wasmtime::{GuestProfiler, UpdateDeadline};
 use crate::args::{self, CliExit};
 use crate::build::build_for_driver;
 use crate::compile::CompileFlags;
-use crate::host_memory::FreedMemory;
 use crate::knobs::{
     CompileKnobOpt, CompileKnobs, HostKnobOpt, HostKnobs, RuntimeKnobOpt, RuntimeKnobs,
 };
@@ -147,7 +146,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<RunOptions, CliExit> {
     let mut program_args: Vec<String> = Vec::new();
     let mut runtime_knobs = RuntimeKnobs::default();
     let mut knobs = CompileKnobs::compile_and_run();
-    let mut host = HostKnobs::new(FreedMemory::Retain);
+    let mut host = HostKnobs::default();
 
     // Whether a `--` has already ended this command's options. Only the one
     // that does that job is `wado run`'s; any other belongs to the guest.

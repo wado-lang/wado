@@ -22,7 +22,6 @@ use crate::compile::{
 use crate::compiler_host::FilesystemCompilerHost;
 use crate::dep_component::Acquisition;
 use crate::discover;
-use crate::host_memory::FreedMemory;
 use crate::knobs::{CompileKnobOpt, CompileKnobs, HostKnobOpt, HostKnobs};
 use crate::manifest;
 use crate::test::test_filters;
@@ -123,7 +122,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<CheckOptions, CliExit> {
     let mut warn_only = false;
     let mut target_world: Option<String> = None;
     let mut knobs = CompileKnobs::default();
-    let mut host = HostKnobs::new(FreedMemory::Retain);
+    let mut host = HostKnobs::default();
     while let Some(arg) = args::next_arg(&mut parser)? {
         if let Some(k) = args::match_opt(&arg, Opt::KNOBS, |k| k.spec()) {
             knobs.apply(k, &mut parser)?;

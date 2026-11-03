@@ -24,7 +24,6 @@ use crate::dep_component::{
 use crate::fingerprint::Input;
 use crate::git::materialize;
 use crate::kiln_provider::{CliGeneratorProvider, RegistryContext, relative_to};
-use crate::host_memory::FreedMemory;
 use crate::knobs::{CompileKnobOpt, CompileKnobs, EmbedOpt, EmbedOptions, HostKnobOpt, HostKnobs};
 use crate::manifest;
 use crate::manifest::{DiscoveryError, absolute, manifest_in, openable_dir, resolution_inputs};
@@ -103,7 +102,7 @@ impl CompileOptions {
             format: Some(OutputFormat::Wasm),
             wat_to_stdout: false,
             knobs: CompileKnobs::default(),
-            host: HostKnobs::new(FreedMemory::Retain),
+            host: HostKnobs::default(),
             embed: EmbedOptions::default(),
             target_world,
             lib_world,
@@ -260,7 +259,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<CompileOptions, CliExit>
     let mut wat_to_stdout = false;
     let mut target_world: Option<String> = None;
     let mut knobs = CompileKnobs::default();
-    let mut host = HostKnobs::new(FreedMemory::Retain);
+    let mut host = HostKnobs::default();
     let mut embed = EmbedOptions::default();
     while let Some(arg) = args::next_arg(&mut parser)? {
         if let Some(k) = args::match_opt(&arg, Opt::KNOBS, |k| k.spec()) {

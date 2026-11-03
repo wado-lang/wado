@@ -258,7 +258,9 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<ServeOptions, CliExit> {
     let mut max_concurrency: Option<usize> = None;
     let mut profile = ProfileMode::None;
     let mut knobs = CompileKnobs::compile_and_run();
-    let mut host = HostKnobs::new(FreedMemory::Return);
+    let mut host = HostKnobs {
+        freed_memory: FreedMemory::Return,
+    };
 
     while let Some(arg) = args::next_arg(&mut parser)? {
         if let Some(k) = args::match_opt(&arg, Opt::KNOBS, |k| k.spec()) {
