@@ -1,4 +1,4 @@
-use { Captures, Regex } from "../src/lib.wado";
+use { Captures, Regex, Split } from "../src/lib.wado";
 
 fn re(pattern: String) -> Regex {
     return Regex::new(pattern).unwrap();
@@ -101,7 +101,8 @@ test "find_at keeps the text before start as context" {
 }
 
 test "an iterator steps past an empty match by one character" {
-    assert all("a*", "baa") == "0: 1:aa 3:";
+    assert all("a*", "baa") == "0: 1:aa";
+    assert all("a*", "baaac") == "0: 1:aaa 5:";
     assert all("", "é") == "0: 2:";
     assert all("\\d", "a1b22") == "1:1 3:2 4:2";
 }
@@ -139,7 +140,7 @@ test "replace reads a template as GetSubstitution does" {
     assert r.replace("a 1-22 b", "[$&|$`|$'|$$|$3|$01|$10|$]") == "a [1-22|a | b|$|$3|1|10|$] b";
     assert re("(?<y>\\d+)").replace("x 7", "<$<y>|$<z>|$<y>") == "x <7||7";
     assert re("(\\d)").replace("x 7", "<$<y>>") == "x <$<y>>";
-    assert re("a*").replace_all("baaac", "-") == "-b--c-";
+    assert re("a*").replace_all("baaac", "-") == "-b-c-";
     assert re("x").replace("abc", "-") == "abc";
 }
 
@@ -150,24 +151,55 @@ test "replace takes a view or a function" {
     assert re("\\d+").replace_all("1 22", shout) == "1! 22!";
 }
 
-fn pieces(pattern: String, text: String) -> String {
+fn show(split: Split) -> String {
     let mut parts: List<String> = [];
-    for let piece of re(pattern).split(text) {
+    for let piece of split {
         parts.push(`<${piece}>`);
     }
     return parts.join("");
 }
 
-test "split cuts as String.prototype.split does" {
+fn pieces(pattern: String, text: String) -> String {
+    return show(re(pattern).split(text));
+}
+
+test "split cuts around each match find_iter finds" {
     assert pieces(",", "a,b,,c") == "<a><b><><c>";
     assert pieces(",", ",a,") == "<><a><>";
-    assert pieces("", "abc") == "<a><b><c>";
-    assert pieces("(?:)", "é漢") == "<é><漢>";
-    assert pieces("x*", "axbxx") == "<a><b><>";
-    assert pieces("\\b", "hi there") == "<hi>< ><there>";
+    assert pieces("", "abc") == "<><a><b><c><>";
+    assert pieces("(?:)", "é漢") == "<><é><漢><>";
+    assert pieces("x*", "axbxx") == "<><a><b><>";
+    assert pieces("\\b", "hi there") == "<><hi>< ><there><>";
     assert pieces("a", "a") == "<><>";
-    assert pieces("a?", "") == "";
+    assert pieces("a?", "") == "<><>";
     assert pieces("b", "") == "<>";
+}
+
+test "the pieces and the matches spell the text again" {
+    let texts: List<String> = ["", "baaac", "a,b,,c", "é漢x"];
+    for let pattern of ["a*", ",", "", "x?", "\\b"] as List<String> {
+        let r = re(pattern);
+        for let text of &texts {
+            let mut spelled = "";
+            let mut seps = r.find_iter(text);
+            for let piece of r.split(text) {
+                spelled.push_str(piece);
+                if let Some(m) = seps.next() {
+                    spelled.push_str(m.as_str());
+                }
+            }
+            assert spelled == *text;
+            assert seps.next() matches { None };
+        }
+    }
+}
+
+test "splitn keeps the rest in its last piece" {
+    let r = re(",");
+    assert show(r.splitn("a,b,c", 0)) == "";
+    assert show(r.splitn("a,b,c", 1)) == "<a,b,c>";
+    assert show(r.splitn("a,b,c", 2)) == "<a><b,c>";
+    assert show(r.splitn("a,b,c", 5)) == "<a><b><c>";
 }
 
 test "i waits for simple case folding" {

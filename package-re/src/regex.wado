@@ -96,9 +96,11 @@ impl Regex {
     }
 
     /// Each match in `text`, left to right. After an empty match the search
-    /// resumes one character on, as `String.prototype.matchAll` does.
+    /// resumes one character on, and an empty match where the previous match
+    /// ended is skipped: `a*` finds `""`, `"aaa"` and `""` in `"baaac"`, not a
+    /// second `""` before the `c`.
     pub fn find_iter<S: AsStrSlice>(&self, text: S) -> Matches {
-        return Matches { regex: self, text: text.as_str_slice(), next: 0 };
+        return Matches { regex: self, text: text.as_str_slice(), next: 0, last_end: -1 };
     }
 
     /// The groups of each match in `text`, left to right, resuming as
@@ -133,13 +135,24 @@ impl Regex {
         return out;
     }
 
-    /// The pieces of `text` between its matches, as `String.prototype.split`
-    /// cuts them: an empty match cuts nowhere a piece just ended, nor at the
-    /// end of the text, and an empty text that matches has no pieces.
+    /// The pieces of `text` around the matches `find_iter` finds: one more
+    /// piece than there are matches, so the pieces and the matches between
+    /// them, in turn, spell `text` again.
     pub fn split<S: AsStrSlice>(&self, text: S) -> Split {
-        let view = text.as_str_slice();
-        let done = view.is_empty() && self.is_match(view);
-        return Split { regex: self, text: view, piece: 0, search: 0, done };
+        return Split { matches: self.find_iter(text), piece: 0, cuts: null, done: false };
+    }
+
+    /// The pieces `split` cuts, at most `n` of them: the last holds the rest
+    /// of `text`, matches included.
+    pub fn splitn<S: AsStrSlice>(&self, text: S, n: i32) -> Split
+        contract n >= 0
+    {
+        return Split {
+            matches: self.find_iter(text),
+            piece: 0,
+            cuts: Some(n - 1),
+            done: n == 0,
+        };
     }
 }
 
@@ -323,19 +336,28 @@ pub struct Matches {
     text: StrSlice,
     /// Where the next search starts; past the text's end once done.
     next: i32,
+    /// Where the match found last ended; -1 before the first.
+    last_end: i32,
 }
 
 impl Matches {
     fn next_slots(&mut self) -> Option<List<i32>> {
-        if self.next > self.text.len() {
-            return null;
+        loop {
+            if self.next > self.text.len() {
+                return null;
+            }
+            let Some(slots) = search(&self.regex.program, self.text, self.next) else {
+                self.next = self.text.len() + 1;
+                return null;
+            };
+            let [start, end] = [slots[0], slots[1]];
+            self.next = step_past(self.text, start, end);
+            if start == end && start == self.last_end {
+                continue;
+            }
+            self.last_end = end;
+            return Some(slots);
         }
-        let Some(slots) = search(&self.regex.program, self.text, self.next) else {
-            self.next = self.text.len() + 1;
-            return null;
-        };
-        self.next = step_past(self.text, slots[0], slots[1]);
-        return Some(slots);
     }
 }
 
@@ -368,12 +390,11 @@ impl Iterator for CaptureMatches {
 
 /// The iterator `Regex::split` returns.
 pub struct Split {
-    regex: &Regex,
-    text: StrSlice,
+    matches: Matches,
     /// Where the piece being cut starts.
     piece: i32,
-    /// Where the next search starts.
-    search: i32,
+    /// How many more matches may cut, or null for every one.
+    cuts: Option<i32>,
     done: bool,
 }
 
@@ -384,18 +405,20 @@ impl Iterator for Split {
         if self.done {
             return null;
         }
-        let len = self.text.len();
-        while self.search < len && let Some(m) = self.regex.find_at(self.text, self.search) && m.start < len {
-            if m.end == self.piece {
-                self.search = step_past(self.text, m.start, m.end);
-                continue;
+        let text = self.matches.text;
+        let may_cut = match self.cuts {
+            Some(n) => n > 0,
+            None => true,
+        };
+        if may_cut && let Some(slots) = self.matches.next_slots() {
+            let piece = text.slice(self.piece, slots[0]);
+            self.piece = slots[1];
+            if let Some(n) = self.cuts {
+                self.cuts = Some(n - 1);
             }
-            let piece = self.text.slice(self.piece, m.start);
-            self.piece = m.end;
-            self.search = m.end;
             return Some(piece);
         }
         self.done = true;
-        return Some(self.text.slice(self.piece, len));
+        return Some(text.slice(self.piece, text.len()));
     }
 }
