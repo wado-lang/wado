@@ -178,6 +178,14 @@ impl TirRefVisitor for InstalledInstantiationCollector<'_> {
     fn visit_expr(&mut self, expr: &TirExpr) {
         if let TirExprKind::WithHandler { bindings, .. } = &expr.kind {
             for binding in bindings {
+                assert!(
+                    !binding
+                        .trait_type_args
+                        .iter()
+                        .any(|&arg| self.type_table.contains_type_param(arg)),
+                    "the elaborator rejects installing an effect at an argument \
+                     monomorphization has yet to fill"
+                );
                 self.installed.insert(InstantiationKey::new(
                     binding.effect.clone(),
                     binding.trait_type_args.clone(),
