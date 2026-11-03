@@ -22,7 +22,8 @@ use crate::compile::{self, Artifact, CompileFlags, CompileOptions};
 use crate::fingerprint::Input;
 use crate::input_cache::{InputCache, Slot};
 use crate::kiln_provider::hex32;
-use crate::knobs::{CompileKnobOpt, CompileKnobs, EmbedOpt, EmbedOptions};
+use crate::host_memory::FreedMemory;
+use crate::knobs::{CompileKnobOpt, CompileKnobs, EmbedOpt, EmbedOptions, HostKnobOpt, HostKnobs};
 use crate::manifest::{self, openable_dir};
 use wado_host::atomic_write::write_atomic;
 use wado_host::sync::joined;
@@ -35,6 +36,7 @@ pub struct BuildOptions {
     /// `-o`: output path; valid only when a single world is selected.
     output: Option<String>,
     knobs: CompileKnobs,
+    pub host: HostKnobs,
     embed: EmbedOptions,
 }
 
@@ -67,8 +69,6 @@ impl Opt {
         CompileKnobOpt::NoLint,
         CompileKnobOpt::Lint,
         CompileKnobOpt::LintGenerated,
-        CompileKnobOpt::RetainMemory,
-        CompileKnobOpt::NoRetainMemory,
     ];
 
     const fn spec(self) -> args::OptSpec {
@@ -113,6 +113,7 @@ fn format_usage() -> String {
         args::OptsHelp::default()
             .add(Opt::ALL, |o| o.spec())
             .add(Opt::KNOBS, |o| o.spec())
+            .add(HostKnobOpt::ALL, |o| o.spec())
             .add(EmbedOpt::ALL, |o| o.spec())
             .add(args::ParamOpt::ALL, |o| o.spec())
             .render()
@@ -127,11 +128,14 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<BuildOptions, CliExit> {
     let mut lib = false;
     let mut output: Option<String> = None;
     let mut knobs = CompileKnobs::default();
+    let mut host = HostKnobs::new(FreedMemory::Retain);
     let mut embed = EmbedOptions::default();
 
     while let Some(arg) = args::next_arg(&mut parser)? {
         if let Some(k) = args::match_opt(&arg, Opt::KNOBS, |k| k.spec()) {
             knobs.apply(k, &mut parser)?;
+        } else if let Some(h) = args::match_opt(&arg, HostKnobOpt::ALL, |h| h.spec()) {
+            host.apply(h);
         } else if let Some(p) = args::match_opt(&arg, args::ParamOpt::ALL, |p| p.spec()) {
             args::apply_param_opt(&mut knobs.params, p, &mut parser)?;
         } else if let Some(e) = args::match_opt(&arg, EmbedOpt::ALL, |e| e.spec()) {
@@ -159,6 +163,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<BuildOptions, CliExit> {
         lib,
         output,
         knobs,
+        host,
         embed,
     })
 }

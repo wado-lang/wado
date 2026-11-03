@@ -22,7 +22,8 @@ use crate::compile::{
 use crate::compiler_host::FilesystemCompilerHost;
 use crate::dep_component::Acquisition;
 use crate::discover;
-use crate::knobs::{CompileKnobOpt, CompileKnobs};
+use crate::host_memory::FreedMemory;
+use crate::knobs::{CompileKnobOpt, CompileKnobs, HostKnobOpt, HostKnobs};
 use crate::manifest;
 use crate::test::test_filters;
 
@@ -38,6 +39,7 @@ pub struct CheckOptions {
     /// to the library world; `Some("test")` is the synthetic test world.
     pub target_world: Option<String>,
     pub knobs: CompileKnobs,
+    pub host: HostKnobs,
 }
 
 #[derive(Clone, Copy)]
@@ -56,8 +58,6 @@ impl Opt {
         CompileKnobOpt::NoLint,
         CompileKnobOpt::Lint,
         CompileKnobOpt::LintGenerated,
-        CompileKnobOpt::RetainMemory,
-        CompileKnobOpt::NoRetainMemory,
     ];
 
     const fn spec(self) -> args::OptSpec {
@@ -110,6 +110,7 @@ fn format_usage() -> String {
         args::OptsHelp::default()
             .add(Opt::ALL, |o| o.spec())
             .add(Opt::KNOBS, |o| o.spec())
+            .add(HostKnobOpt::ALL, |o| o.spec())
             .render()
     )
     .unwrap();
@@ -122,9 +123,12 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<CheckOptions, CliExit> {
     let mut warn_only = false;
     let mut target_world: Option<String> = None;
     let mut knobs = CompileKnobs::default();
+    let mut host = HostKnobs::new(FreedMemory::Retain);
     while let Some(arg) = args::next_arg(&mut parser)? {
         if let Some(k) = args::match_opt(&arg, Opt::KNOBS, |k| k.spec()) {
             knobs.apply(k, &mut parser)?;
+        } else if let Some(h) = args::match_opt(&arg, HostKnobOpt::ALL, |h| h.spec()) {
+            host.apply(h);
         } else if let Some(opt) = args::match_opt(&arg, Opt::ALL, |o| o.spec()) {
             match opt {
                 Opt::Warn => warn_only = true,
@@ -145,6 +149,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<CheckOptions, CliExit> {
         warn_only,
         target_world,
         knobs,
+        host,
     })
 }
 

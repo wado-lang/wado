@@ -1,5 +1,6 @@
 //! The knobs shared across subcommands: [`CompileKnobs`] for what the compiler
-//! is told, [`RuntimeKnobs`] for what the wasmtime engine is built with.
+//! is told, [`RuntimeKnobs`] for what the wasmtime engine is built with, and
+//! [`HostKnobs`] for how the `wado` process itself runs.
 
 use lexopt::Parser;
 use wado_compiler::LogLevel;
@@ -95,8 +96,6 @@ pub enum CompileKnobOpt {
     NoLint,
     Lint,
     LintGenerated,
-    RetainMemory,
-    NoRetainMemory,
 }
 
 impl CompileKnobOpt {
@@ -207,19 +206,6 @@ impl CompileKnobOpt {
                 short: None,
                 value: None,
                 desc: "Report lint warnings in `#![generated]` modules too",
-            },
-            // The two set one value, so the last one given wins.
-            Self::RetainMemory => OptSpec {
-                long: Some("retain-memory"),
-                short: None,
-                value: None,
-                desc: "Keep the memory wado frees for reuse instead of returning it to\nthe OS, which saves a compile rebuilding it (default: on, but\noff under serve and lsp, whose resident set would stay at its peak)",
-            },
-            Self::NoRetainMemory => OptSpec {
-                long: Some("no-retain-memory"),
-                short: None,
-                value: None,
-                desc: "Return the memory wado frees to the OS (undoes --retain-memory)",
             },
         }
     }
@@ -356,8 +342,6 @@ impl CompileKnobs {
             CompileKnobOpt::NoLint => self.lints = wado_compiler::Lints::Off,
             CompileKnobOpt::Lint => self.lints = wado_compiler::Lints::Own,
             CompileKnobOpt::LintGenerated => self.lints = wado_compiler::Lints::Generated,
-            CompileKnobOpt::RetainMemory => set_freed_memory(FreedMemory::Retain),
-            CompileKnobOpt::NoRetainMemory => set_freed_memory(FreedMemory::Return),
         }
         Ok(())
     }
@@ -524,6 +508,65 @@ impl RuntimeKnobs {
             }
         }
         Ok(())
+    }
+}
+
+/// A knob shared by the subcommands that compile, for how the `wado` process
+/// itself runs, used for both matching and help rendering.
+#[derive(Clone, Copy)]
+pub enum HostKnobOpt {
+    RetainMemory,
+    NoRetainMemory,
+}
+
+impl HostKnobOpt {
+    pub const ALL: &[Self] = &[Self::RetainMemory, Self::NoRetainMemory];
+
+    #[must_use]
+    pub const fn spec(self) -> OptSpec {
+        match self {
+            // The two set one value, so the last one given wins.
+            Self::RetainMemory => OptSpec {
+                long: Some("retain-memory"),
+                short: None,
+                value: None,
+                desc: "Keep the memory wado frees for reuse instead of returning it to\nthe OS, which saves a compile rebuilding it (default: on, but\noff under serve, whose resident set would stay at its peak)",
+            },
+            Self::NoRetainMemory => OptSpec {
+                long: Some("no-retain-memory"),
+                short: None,
+                value: None,
+                desc: "Return the memory wado frees to the OS (undoes --retain-memory)",
+            },
+        }
+    }
+}
+
+/// Every knob a compiling subcommand parses for the `wado` process itself.
+/// A subcommand without them leaves the allocator returning freed memory.
+#[derive(Clone, Copy, Debug)]
+pub struct HostKnobs {
+    pub freed_memory: FreedMemory,
+}
+
+impl HostKnobs {
+    /// What a subcommand starts from: `retain` unless it runs long, where a
+    /// resident set held at its peak outlives the compile that grew it.
+    #[must_use]
+    pub const fn new(freed_memory: FreedMemory) -> Self {
+        Self { freed_memory }
+    }
+
+    pub fn apply(&mut self, opt: HostKnobOpt) {
+        self.freed_memory = match opt {
+            HostKnobOpt::RetainMemory => FreedMemory::Retain,
+            HostKnobOpt::NoRetainMemory => FreedMemory::Return,
+        };
+    }
+
+    /// Set the process up as the knobs say, before the subcommand runs.
+    pub fn install(self) {
+        set_freed_memory(self.freed_memory);
     }
 }
 

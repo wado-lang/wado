@@ -5,7 +5,6 @@ use lexopt::Arg::{Long, Short, Value};
 use mimalloc::MiMalloc;
 use wado_cli::COMPILER_STACK_SIZE;
 use wado_cli::args::CliExit;
-use wado_cli::host_memory::{FreedMemory, set_freed_memory};
 
 // `wado serve` is allocation-heavy per request; mimalloc avoids the
 // system allocator's cross-thread contention.
@@ -327,12 +326,6 @@ fn unknown_command(name: &str) -> CliExit {
 }
 
 async fn run_cmd(cmd: Cmd, parser: lexopt::Parser) -> Result<(), CliExit> {
-    // Before parsing, so `--retain-memory` / `--no-retain-memory` override it.
-    set_freed_memory(if matches!(cmd, Cmd::Serve | Cmd::Lsp) {
-        FreedMemory::Return
-    } else {
-        FreedMemory::Retain
-    });
     match cmd {
         Cmd::Init => {
             let opts = wado_cli::init::parse_args(parser)?;
@@ -352,6 +345,7 @@ async fn run_cmd(cmd: Cmd, parser: lexopt::Parser) -> Result<(), CliExit> {
         }
         Cmd::Build => {
             let opts = wado_cli::build::parse_args(parser)?;
+            opts.host.install();
             Box::pin(wado_cli::build::run(opts)).await
         }
         // Each subcommand's future is boxed, or this state machine inlines
@@ -359,22 +353,27 @@ async fn run_cmd(cmd: Cmd, parser: lexopt::Parser) -> Result<(), CliExit> {
         // passes Rust's query-depth limit.
         Cmd::Compile => {
             let opts = wado_cli::compile::parse_args(parser)?;
+            opts.host.install();
             Box::pin(wado_cli::compile::run(opts)).await
         }
         Cmd::Check => {
             let opts = wado_cli::check::parse_args(parser)?;
+            opts.host.install();
             Box::pin(wado_cli::check::run(opts)).await
         }
         Cmd::Run => {
             let opts = wado_cli::run::parse_args(parser)?;
+            opts.host.install();
             Box::pin(wado_cli::run::run(opts)).await
         }
         Cmd::Serve => {
             let opts = wado_cli::serve::parse_args(parser)?;
+            opts.host.install();
             Box::pin(wado_cli::serve::run(opts)).await
         }
         Cmd::Test => {
             let opts = wado_cli::test::parse_args(parser)?;
+            opts.host.install();
             Box::pin(wado_cli::test::run(opts)).await
         }
         Cmd::Format => {
@@ -387,6 +386,7 @@ async fn run_cmd(cmd: Cmd, parser: lexopt::Parser) -> Result<(), CliExit> {
         }
         Cmd::Dump => {
             let opts = wado_cli::dump::parse_args(parser)?;
+            opts.host.install();
             Box::pin(wado_cli::dump::run(opts)).await
         }
         Cmd::Wit => {
