@@ -3869,12 +3869,10 @@ pub enum SynthTrait {
 #[derive(Debug, Clone)]
 pub struct TirImpl {
     pub def: DefId,
-    /// The trait this block implements; `None` for an inherent impl. Matches
-    /// `LocalMethodName::base_trait_head`, so a block and its methods agree on
-    /// which declaration they target.
+    /// The trait this block implements; `None` for an inherent impl.
     pub trait_canonical: Option<DeclaredHead>,
     /// Trait / resource type arguments at the impl site (`impl Stream<u8>` →
-    /// `[u8]`). Matches `LocalMethodName::trait_type_args`.
+    /// `[u8]`).
     pub trait_type_args: Vec<TypeId>,
     /// Whether the target is the block's own parameter, `impl<T: B> Trait for
     /// T`: an instance of its methods is named after the type it answers for.

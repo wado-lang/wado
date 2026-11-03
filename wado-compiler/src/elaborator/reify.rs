@@ -1715,11 +1715,7 @@ impl<'a> Reify<'a> {
             );
             info.is_ref_impl = facts.is_ref_impl;
             // Carry the impl's trait type args (`impl Future<i32> for …`
-            // → `[i32]`). The effect-dispatch synthesis keys its handler
-            // index on `(struct, effect_module, base_trait, trait_type_args)`;
-            // without the args a generic-effect
-            // handler is keyed `Future<>` and the `Future<i32>` binding
-            // finds no `DispatchPlan`.
+            // → `[i32]`), which the method's mangled trait spells.
             info.trait_type_args.clone_from(&facts.trait_type_args);
             info
         };

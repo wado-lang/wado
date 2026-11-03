@@ -505,9 +505,10 @@ impl Clock for NoClock {
 /// Wall-clock stamps with millisecond precision. Installing a sink over this
 /// adds a `wasi:clocks` import, so it belongs only in a world that has one.
 ///
-/// `#[ambient]` for the same reason the facade is: a sink's operations are
+/// `#[ambient(SystemClock)]` rather than `#[benign]`: a sink's operations are
 /// `Log`'s, whose signatures carry no effect, so the clock read cannot be
-/// declared on them.
+/// declared on them, and the stamp it returns is observable, which `#[benign]`
+/// forbids.
 pub struct WallClock {
 }
 
