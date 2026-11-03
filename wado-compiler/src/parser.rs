@@ -28,7 +28,8 @@ use crate::comment::{Comment, TriviaMap};
 use crate::compiler_host::{Code, Diagnostic, DiagnosticSpan, Severity};
 use crate::escape::{quoted, string_value};
 use crate::lexer::{
-    LexResult, WILDCARD, defaults_to_float, is_binding_name, is_decimal_integer, lex_interpolation,
+    LexResult, MAX_NESTING, WILDCARD, defaults_to_float, is_binding_name, is_decimal_integer,
+    lex_interpolation,
 };
 use crate::name::{contract_holder_name, namespaced_name, repeat_pack_name};
 use crate::syntax::statement_keyword_name_message;
@@ -113,6 +114,9 @@ pub struct Parser {
     /// The packs in scope while a function's body is read. A `..X` there names
     /// one of them: only a signature mints a repeat, which a call settles.
     body_packs: Option<Vec<String>>,
+    /// How many expressions, types and patterns enclose the one being read,
+    /// a template hole's parser counting from its template's.
+    depth: u32,
 }
 
 /// Whether the parser reads function bodies.
@@ -333,7 +337,22 @@ impl Parser {
             skipped: Vec::new(),
             enclosing_packs: Vec::new(),
             body_packs: None,
+            depth: 0,
         }
+    }
+
+    /// Run `parse` one level deeper, refusing past [`MAX_NESTING`] levels.
+    fn nested<T>(&mut self, parse: fn(&mut Self) -> ParseResult<T>) -> ParseResult<T> {
+        if self.depth == MAX_NESTING {
+            return Err(self.error_at_span(
+                self.peek().span,
+                &format!("code may nest at most {MAX_NESTING} levels deep"),
+            ));
+        }
+        self.depth += 1;
+        let result = parse(self);
+        self.depth -= 1;
+        result
     }
 
     /// Skip the function bodies of a `#![generated]` module: each parses as an
@@ -3723,6 +3742,10 @@ impl Parser {
     }
 
     fn parse_pattern_atom(&mut self) -> ParseResult<Pattern> {
+        self.nested(Self::parse_pattern_atom_at_depth)
+    }
+
+    fn parse_pattern_atom_at_depth(&mut self) -> ParseResult<Pattern> {
         if self.check(&TokenKind::Mut) {
             let mut_span = self.peek().span;
             self.advance();
@@ -4342,7 +4365,12 @@ impl Parser {
         })
     }
 
+    /// Every nested expression, a block's included, is reached through here.
     fn parse_unary_expr(&mut self) -> ParseResult<Expr> {
+        self.nested(Self::parse_unary_expr_at_depth)
+    }
+
+    fn parse_unary_expr_at_depth(&mut self) -> ParseResult<Expr> {
         let start_span = self.peek().span;
         if self.check(&TokenKind::Ampersand) {
             self.advance();
@@ -5757,6 +5785,10 @@ impl Parser {
     }
 
     fn parse_type(&mut self) -> ParseResult<Type> {
+        self.nested(Self::parse_type_at_depth)
+    }
+
+    fn parse_type_at_depth(&mut self) -> ParseResult<Type> {
         let start_span = self.peek().span;
 
         // Never type: !
@@ -7293,6 +7325,7 @@ impl Parser {
             Vec::new(),
         );
         parser.next_ast_id = self.next_ast_id;
+        parser.depth = self.depth;
         let expr = parser.parse_expr()?;
         self.next_ast_id = parser.next_ast_id;
         self.errors.append(&mut parser.errors);

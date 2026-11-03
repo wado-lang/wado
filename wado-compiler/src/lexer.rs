@@ -41,6 +41,11 @@ pub fn is_binding_name(s: &str) -> bool {
     is_valid_ident(s) && TokenKind::from_keyword(s).is_none_or(|kw| kw.as_ident_name().is_some())
 }
 
+/// How deep an expression, a type or a pattern may nest. Source nobody writes
+/// by hand is refused here rather than overflowing the stack of every
+/// recursive pass after the parser.
+pub const MAX_NESTING: u32 = 256;
+
 /// The wildcard's spelling.
 pub const WILDCARD: &str = "_";
 
@@ -236,6 +241,8 @@ pub(crate) struct Lexer<'a> {
     shebang: Option<String>,
     /// Recovered errors, in source order. Drained into [`LexResult::errors`].
     errors: Vec<LexError>,
+    /// How many templates enclose the hole being scanned.
+    template_depth: u32,
 }
 
 /// Structured lexer error. Pair with [`LexError::span`] for source location.
@@ -465,6 +472,7 @@ impl<'a> Lexer<'a> {
             comments: Vec::new(),
             shebang: None,
             errors: Vec::new(),
+            template_depth: 0,
         }
     }
 
@@ -1625,12 +1633,23 @@ impl<'a> Lexer<'a> {
     fn skip_nested_literal(&mut self) -> Option<&'a str> {
         let before = self.pos;
         let errors = self.errors.len();
+        let template = |lexer: &mut Self, quote| {
+            // Past the bound the rest is scanned as code and the hole may close
+            // early; the parser refuses that depth before it reads the hole.
+            if lexer.template_depth == MAX_NESTING {
+                return None;
+            }
+            lexer.template_depth += 1;
+            let kind = lexer.lex_template_string(quote);
+            lexer.template_depth -= 1;
+            Some(kind)
+        };
         match self.peek_char()? {
             '"' => self.lex_string(Quote::Cooked),
             '\'' => self.lex_char(),
-            '`' => self.lex_template_string(Quote::Cooked),
+            '`' => template(self, Quote::Cooked)?,
             '#' => match self.hash_run_then_delimiter(0)? {
-                (hashes, Delimiter::Backtick) => self.lex_template_string(Quote::Raw { hashes }),
+                (hashes, Delimiter::Backtick) => template(self, Quote::Raw { hashes })?,
                 (hashes, Delimiter::Quote) => self.lex_string(Quote::Raw { hashes }),
             },
             _ => return None,
