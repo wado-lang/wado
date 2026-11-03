@@ -15,9 +15,10 @@ use super::types::{FunctionContext, TypeError};
 use super::tysys::TypeSystem;
 use crate::defs::DefId;
 use crate::elaborator::sem::types::{HandlerBindingFacts, HandlerEffectEntry};
+use crate::elaborator::solver_bridge::{InstanceBody, InstanceImpl, InstanceOrder};
 use crate::elaborator::trait_env::ImplTargetKey;
 use crate::hashmap;
-use crate::name::{DeclName, DeclaredHead, FqTraitName};
+use crate::name::{DeclName, DeclaredHead, FqTypeName};
 
 impl<H: CompilerHost> Elaborator<'_, H> {
     /// Annotate `with E1 => h1, ... do { body }`. Walks each handler
@@ -103,10 +104,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let site = effect_ty.id();
         let effect = self.effect_named_at(site, effect_ty.span(), &interface_name);
         let effect_decl = self.tysys.resolutions.head_decl(effect_ty);
-        // An effect declares its own parameter defaults, and a `with` clause
-        // writes no argument for them.
-        let effect_trait =
-            effect_decl.map(|def| FqTraitName::declared(self.tysys.resolutions.defs(), def));
 
         // Both an effect and a resource are installable as handlers (see WEP
         // 2026-04-11); a polymorphic effect parameter is not.
@@ -136,69 +133,44 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             _ => Vec::new(),
         };
 
-        // Verify the underlying struct type has `impl <Effect> for <Type>`.
+        // The block the order selects for the handler at the clause's
+        // arguments is the one installed; anything else is diagnosed here,
+        // since dispatch synthesis has no block to route the operations to.
         if let Some(EffectRef::Concrete(head)) = &effect {
-            let interface_name = head.name();
-            // Skip the check for an unresolved handler (`Unknown` / `Error`):
-            // an earlier diagnostic already covered it. Query by `TypeId` (via
-            // `type_implements_trait`) so a generic-instance handler like
-            // `Ctx<i32>` is recognised through its `impl<T> Log for Ctx<T>`.
             let underlying = self.tysys.type_table.borrow().get(handler_type).clone();
-            let is_real_type = !matches!(underlying, ResolvedType::Unknown | ResolvedType::Error);
-            // A bare type parameter (`with E => h do` where `h: &H`, `H: E`)
-            // cannot be installed: dispatch synthesis runs before
-            // monomorphization and has no concrete impl to route the effect
-            // operations to. `type_implements_trait` would accept it (its bound
-            // names the effect), so reject it explicitly rather than let it
-            // reach synthesis, which would panic.
-            let is_type_param = matches!(
-                underlying,
-                ResolvedType::TypeParam { .. } | ResolvedType::TypePack { .. }
-            );
-            if is_real_type
-                && (is_type_param
-                    || !effect_trait.is_some_and(|trait_| {
-                        self.tysys
-                            .type_implements_trait(&self.annotate_ctx, handler_type, &trait_)
-                    }))
-            {
-                let type_name = self.tysys.type_table.borrow().name(handler_type);
-                let _ = self.emit(TypeError::HandlerEffectNotImplemented {
-                    type_name,
-                    interface_name: interface_name.to_string(),
-                    span: binding.span,
-                });
-            } else if is_real_type
-                && !trait_type_args.is_empty()
-                && effect_decl.is_some_and(|trait_| {
-                    self.effect_impl_block(handler_type, trait_, &trait_type_args)
-                        .is_none()
-                })
-            {
-                // The bound check answers by declaration alone, so a handler
-                // implementing `Stream<u8>` satisfies it for `with Stream<i32>`.
-                // Dispatch synthesis has no plan for the instantiation the
-                // clause names, so say so here rather than reach that panic.
-                let type_name = self.tysys.type_table.borrow().name(handler_type);
-                let _ = self.emit(TypeError::HandlerEffectNotImplemented {
-                    type_name,
-                    interface_name: self.get_type_name(effect_ty),
-                    span: binding.span,
-                });
+            let mut impl_def = None;
+            match underlying {
+                // Diagnosed earlier.
+                ResolvedType::Unknown | ResolvedType::Error => {}
+                // A bare type parameter (`with E => h do` where `h: &H`,
+                // `H: E`) cannot be installed: dispatch synthesis runs before
+                // monomorphization and has no concrete impl to route the
+                // effect operations to.
+                ResolvedType::TypeParam { .. } | ResolvedType::TypePack { .. } => {
+                    self.report_handler_not_implemented(handler_type, &interface_name, binding);
+                }
+                _ => match effect_decl.and_then(|trait_| {
+                    self.effect_impl_order(handler_type, trait_, &trait_type_args)
+                }) {
+                    Some(InstanceOrder::One(InstanceImpl {
+                        body: InstanceBody::Block(block),
+                        ..
+                    })) => impl_def = Some(block),
+                    Some(InstanceOrder::Tied(tied)) => {
+                        self.report_tied_impls(&tied, handler_type, binding.span);
+                    }
+                    Some(InstanceOrder::One(_) | InstanceOrder::Nothing) | None => {
+                        self.report_handler_not_implemented(handler_type, &interface_name, binding);
+                    }
+                },
             }
-        }
-
-        // Record this explicit binding so
-        // reify_with_handler reads the single-effect entry without
-        // re-resolving the effect reference.
-        if let Some(EffectRef::Concrete(head)) = &effect {
+            // Reify reads the single-effect entry without re-resolving the
+            // effect reference.
             self.record_handler_binding_facts(
                 binding.id,
                 HandlerBindingFacts {
                     effects: vec![HandlerEffectEntry {
-                        impl_def: effect_decl.and_then(|trait_| {
-                            self.effect_impl_block(handler_type, trait_, &trait_type_args)
-                        }),
+                        impl_def,
                         effect: head.clone(),
                         trait_type_args,
                     }],
@@ -207,6 +179,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 },
             );
         }
+    }
+
+    fn report_handler_not_implemented(
+        &mut self,
+        handler_type: TypeId,
+        interface_name: &str,
+        binding: &ast::EffectHandlerBinding,
+    ) {
+        let type_name = self.tysys.type_table.borrow().name(handler_type);
+        let _ = self.emit(TypeError::HandlerEffectNotImplemented {
+            type_name,
+            interface_name: interface_name.to_string(),
+            span: binding.span,
+        });
     }
 
     /// Annotate `handler_expr` — the bundled form.
@@ -255,8 +241,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         let type_name = self.tysys.handler_impl_target_name(handler_type);
-        let effects = self.collect_effect_impls_for_type(handler_type);
-
+        let (effects, ties) = self.collect_effect_impls_for_type(handler_type);
+        for tied in &ties {
+            self.report_tied_impls(tied, handler_type, binding.span);
+        }
+        if !ties.is_empty() {
+            return;
+        }
         if effects.is_empty() {
             let _ = self.emit(TypeError::BundledHandlerImplementsNoEffect {
                 type_name,
@@ -290,40 +281,75 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         );
     }
 
-    /// One entry per in-scope `impl` whose trait resolves to an effect or a
-    /// resource — both are installable, so a bundled `with h do` expands to one
-    /// binding each. Dedup by the effect's declaration and the type args' keys
-    /// keeps `Stream<u8>` and `Stream<i32>` separate, two modules' same-named
-    /// effects too.
-    fn collect_effect_impls_for_type(&self, handler_type: TypeId) -> Vec<HandlerEffectEntry> {
+    /// One entry per effect or resource the handler type implements — both
+    /// are installable, so a bundled `with h do` expands to one binding each —
+    /// and each tie the order leaves among one effect's blocks. Dedup by the
+    /// effect's declaration and the type args' keys keeps `Stream<u8>` and
+    /// `Stream<i32>` separate, two modules' same-named effects too.
+    fn collect_effect_impls_for_type(
+        &self,
+        handler_type: TypeId,
+    ) -> (Vec<HandlerEffectEntry>, Vec<Vec<Option<DefId>>>) {
         let defs = self.tysys.resolutions.defs();
         let mut out: Vec<HandlerEffectEntry> = Vec::new();
+        let mut ties: Vec<Vec<Option<DefId>>> = Vec::new();
         let mut seen: hashmap::IndexSet<(DefId, Vec<TypeKey>)> = hashmap::IndexSet::default();
 
-        let Some(entries) = self
-            .tysys
-            .trait_env
+        let trait_env = &self.tysys.trait_env;
+        let written = trait_env
             .impl_index
             .get(&self.handler_impl_target(handler_type))
-        else {
-            return out;
-        };
-        for &impl_def in entries {
+            .into_iter()
+            .flatten()
+            .copied();
+        let blankets = trait_env
+            .blanket_impls
+            .iter()
+            .filter(|(trait_, _)| defs.kind(**trait_).is_effect())
+            .flat_map(|(_, blankets)| blankets.iter().map(|blanket| blanket.def));
+        for impl_def in written.chain(blankets) {
             // Everything the block says about itself it says in its own frame:
             // `impl Stream<u8> for Ctx` names `Stream` and resolves `u8` where
-            // the block was written, which is not where it is installed.
-            let Some(trait_ref) = self.tysys.trait_env.impl_headers[&impl_def].trait_def() else {
+            // the block was written, which is not where it is installed. A
+            // slot the block leaves to its own parameter takes what matching
+            // its target against the handler binds: `impl<T> Stream<T> for
+            // Ctx<T>` on a `Ctx<u8>` installs `Stream<u8>`, and a blanket's
+            // parameter is the handler itself.
+            let Some(trait_ref) = trait_env.impl_headers[&impl_def].trait_def() else {
                 continue;
             };
-            if !self.tysys.resolutions.defs().kind(trait_ref).is_effect() {
+            if !defs.kind(trait_ref).is_effect() {
                 continue;
             }
+            let Some(slots) = self.handler_slots(impl_def, handler_type) else {
+                continue;
+            };
             let type_args = self
                 .tysys
                 .signatures
                 .impl_sig(impl_def)
-                .trait_type_args
-                .clone();
+                .instantiate_slots(&self.tysys.type_table, &slots)
+                .trait_type_args;
+            // A block answers only where the order selects it for the
+            // handler: a sibling written for another instance (`Ctx<u8>`
+            // beside `Ctx<i32>`) does not, nor a blanket a written impl
+            // outranks.
+            let selected = match self.effect_impl_order(handler_type, trait_ref, &type_args) {
+                Some(InstanceOrder::One(InstanceImpl {
+                    body: InstanceBody::Block(block),
+                    ..
+                })) => block == impl_def,
+                Some(InstanceOrder::Tied(tied)) => {
+                    if tied.contains(&Some(impl_def)) && !ties.contains(&tied) {
+                        ties.push(tied);
+                    }
+                    false
+                }
+                Some(InstanceOrder::One(_) | InstanceOrder::Nothing) | None => false,
+            };
+            if !selected {
+                continue;
+            }
             let type_keys = self.tysys.type_table.borrow().type_keys(&type_args);
             if seen.insert((trait_ref, type_keys)) {
                 out.push(HandlerEffectEntry {
@@ -334,40 +360,43 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         }
 
-        out
+        (out, ties)
     }
 
-    /// The `impl <effect> for <handler>` block a `with Effect => h do` clause
-    /// installs, picked by `trait_type_args` where one type implements several
-    /// instantiations of one generic effect.
-    fn effect_impl_block(
+    /// Block `impl_def`'s slots bound by its target matching `handler_type`;
+    /// `None` where the target names another instance (`Ctx<u8>` for a
+    /// `Ctx<i32>` handler).
+    fn handler_slots(
+        &self,
+        impl_def: DefId,
+        handler_type: TypeId,
+    ) -> Option<hashmap::IndexMap<u32, TypeId>> {
+        let mut tt = self.tysys.type_table.borrow_mut();
+        let target = tt.impl_target_whole(impl_def);
+        let mut slots = tt.bind_type_params(&[target], &[handler_type])?;
+        tt.project_impl_slots(impl_def, &mut slots);
+        Some(slots)
+    }
+
+    /// What the order selects for `effect_decl<trait_type_args>` on the
+    /// handler, as it does for a call: a block written for the handler, one
+    /// leaving a slot the arguments fill (`impl<T> Stream<T> for Ctx<T>`
+    /// installed as `with Stream<u8>`), or a blanket whose bounds the handler
+    /// meets.
+    fn effect_impl_order(
         &self,
         handler_type: TypeId,
         effect_decl: DefId,
         trait_type_args: &[TypeId],
-    ) -> Option<DefId> {
-        let keys = self
-            .tysys
-            .trait_env
-            .impl_index
-            .get(&self.handler_impl_target(handler_type))?;
-        let implements =
-            |key: &DefId| self.tysys.trait_env.impl_headers[key].trait_def() == Some(effect_decl);
-        // A block's arguments answer for the clause's when they are the same,
-        // or where the block left a slot for monomorphization to fill —
-        // `impl<T> Stream<T> for Ctx<T>` installed as `with Stream<u8>`. A
-        // block written for other arguments answers for nothing.
+    ) -> Option<InstanceOrder> {
         let tt = self.tysys.type_table.borrow();
-        let fills = |key: &DefId| {
-            let written = &self.tysys.signatures.impl_sig(*key).trait_type_args;
-            written.len() == trait_type_args.len()
-                && std::iter::zip(written, trait_type_args).all(|(&slot, &arg)| {
-                    tt.type_key(slot) == tt.type_key(arg) || self.tysys.is_open_slot(slot)
-                })
-        };
-        keys.iter()
-            .find(|key| implements(key) && fills(key))
-            .copied()
+        let args: Vec<FqTypeName> = trait_type_args
+            .iter()
+            .map(|&arg| tt.fq_type_name(arg))
+            .collect();
+        self.tysys
+            .solver()
+            .instance_order(&tt, handler_type, effect_decl, &args)
     }
 
     /// The impl-index key for a handler type: its own declaration, not what
@@ -380,15 +409,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 }
 
 impl TypeSystem {
-    /// Whether `type_id` is a slot an impl block left for monomorphization,
-    /// rather than a type it committed to.
-    fn is_open_slot(&self, type_id: TypeId) -> bool {
-        matches!(
-            self.type_table.borrow().get(type_id),
-            ResolvedType::TypeParam { .. } | ResolvedType::TypePack { .. }
-        )
-    }
-
     /// The name an `impl <effect> for <handler>` block is indexed under — the
     /// bare head, so `impl<T> Log for Ctx<T>` answers for a `Ctx<i32>` handler.
     fn handler_impl_target_name(&self, handler_type: TypeId) -> String {

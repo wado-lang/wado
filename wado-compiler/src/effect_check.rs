@@ -8,7 +8,7 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use crate::attribute::{AMBIENT, BENIGN};
+use crate::attribute::ADMITS_EFFECTS;
 use crate::hashmap::{IndexMap, IndexSet};
 
 use crate::module_source::ModuleSource;
@@ -65,8 +65,9 @@ pub enum EffectFault {
     UndeclaredByTrait,
     /// The callee's effects are left open, and the caller forwards none.
     MissingOpen,
-    /// A `#[benign]` argument names no effect in the function's module.
-    UnknownBenign,
+    /// A `#[benign]` or `#[ambient]` argument, the attribute named here, names
+    /// no effect in the function's module.
+    UnknownAdmitted(&'static str),
     /// A function value performs an effect the `fn` type it is moved into
     /// does not declare.
     BeyondExpectedType(EffectKind),
@@ -121,10 +122,10 @@ impl From<EffectError> for Diagnostic {
                     e.callee
                 ),
             ),
-            EffectFault::UnknownBenign => (
+            EffectFault::UnknownAdmitted(attribute) => (
                 Code::UnknownType,
                 format!(
-                    "`#[benign({})]` on '{}' names no effect in scope",
+                    "`#[{attribute}({})]` on '{}' names no effect in scope",
                     e.missing_effect, e.callee
                 ),
             ),
@@ -479,7 +480,7 @@ fn run_effect_checks(
                 // What the initializer performs is the purity check's; only an
                 // unknown name is reported here, as on a function.
                 Item::Global(global) => {
-                    benign_effects(&global.name, &global.attributes, src, index, out);
+                    admitted_effects(&global.name, &global.attributes, src, index, out);
                 }
                 Item::Test(test) => {
                     check_test_effects_sem(sem, src, test, index, out, solved);
@@ -1121,24 +1122,27 @@ fn binding_performed_effects(
     annotations: Option<&TypeAnnotations>,
     index: &EffectIndex,
     binding: &EffectHandlerBinding,
+    rows: &Rows,
 ) -> IndexMap<DeclaredHead, Vec<EffectRef>> {
     let mut performed: IndexMap<DeclaredHead, Vec<EffectRef>> = IndexMap::default();
-    for entry in annotations
+    for facts in annotations
         .into_iter()
         .flat_map(|a| a.all(|f| &f.handler_bindings, binding.id))
-        .flat_map(|facts| &facts.effects)
     {
-        let Some(def) = entry.impl_def else {
-            continue;
-        };
-        let forwarded = index
-            .forwarding_blocks
-            .contains(&def)
-            .then(|| EffectRef::Concrete(entry.effect.clone()));
-        let effects = performed.entry(entry.effect.clone()).or_default();
-        for effect in index.block_effects[&def].iter().cloned().chain(forwarded) {
-            if !effects.contains(&effect) {
-                effects.push(effect);
+        for entry in &facts.effects {
+            let Some(def) = entry.impl_def else {
+                continue;
+            };
+            let forwarded = index
+                .forwarding_blocks
+                .contains(&def)
+                .then(|| EffectRef::Concrete(entry.effect.clone()));
+            let installed = index.installed_effects(def, facts.handler_type, rows);
+            let effects = performed.entry(entry.effect.clone()).or_default();
+            for effect in installed.into_iter().chain(forwarded) {
+                if !effects.contains(&effect) {
+                    effects.push(effect);
+                }
             }
         }
     }
@@ -1281,8 +1285,9 @@ fn check_function_effects_sem(
     out: &mut Vec<EffectError>,
     solved: &mut EffectRows,
 ) {
-    // `#[benign(E)]` admits `E` in the body without a `with E` clause.
-    let benign = benign_effects(&func.name, &func.attrs, module, index, out);
+    // `#[benign(E)]` and `#[ambient(E)]` admit `E` in the body without a
+    // `with E` clause.
+    let admitted = admitted_effects(&func.name, &func.attrs, module, index, out);
     let Some(body) = &func.body else {
         return;
     };
@@ -1306,7 +1311,7 @@ fn check_function_effects_sem(
     if let Some(ann) = annotations {
         add_signature_resources(ann, caller_key, &scan, &mut current);
     }
-    current.extend(benign);
+    current.extend(admitted);
     current.extend(held.iter().cloned());
     let current = held_in_body(annotations, index, &scan, current, Body::Block(body));
 
@@ -1324,15 +1329,14 @@ fn check_function_effects_sem(
         current,
         param_types,
         body,
-        holds_every_effect: func.attrs.iter().any(|attr| attr.name == AMBIENT),
+        holds_every_effect: false,
     };
     walk_body_effects(sem, module, annotations, index, walk, out, solved);
 }
 
-/// A test holds every effect, as an `#[ambient]` body does, so nothing it
-/// performs is missing. A function value it moves into a `fn` type is still
-/// bound by that type's row: the callee holding the value performs it without
-/// holding what the test holds.
+/// A test holds every effect, so nothing it performs is missing. A function
+/// value it moves into a `fn` type is still bound by that type's row: the
+/// callee holding the value performs it without holding what the test holds.
 fn check_test_effects_sem(
     sem: &Semantics,
     module: &ModuleSource,
@@ -1705,41 +1709,61 @@ impl AstVisitor<'_> for TypePatternSites {
     }
 }
 
-/// The effects a `#[benign(E, F)]` on `owner`, a function or a global, admits,
-/// reporting each name that reaches no effect in `module`.
-fn benign_effects(
+/// The effects a `#[benign(E, F)]` or `#[ambient(E, F)]` on `owner`, a
+/// function or a global, admits, reporting each name that reaches no effect in
+/// `module`.
+fn admitted_effects(
     owner: &str,
     attrs: &[Attribute],
     module: &ModuleSource,
     index: &EffectIndex,
     out: &mut Vec<EffectError>,
 ) -> Vec<EffectRef> {
-    let mut benign = Vec::new();
-    for (name, span) in benign_effect_names(attrs) {
+    let mut admitted = Vec::new();
+    for AdmittedName {
+        attribute,
+        name,
+        span,
+    } in admitted_effect_names(attrs)
+    {
         match effect_named_in(&name, module, index) {
-            Some(effect) => benign.push(effect),
+            Some(effect) => admitted.push(effect),
             None => out.push(EffectError {
                 callee: owner.to_string(),
                 missing_effect: name,
-                fault: EffectFault::UnknownBenign,
+                fault: EffectFault::UnknownAdmitted(attribute),
                 span,
                 module: module.source_path(),
             }),
         }
     }
-    benign
+    admitted
 }
 
-/// `#[benign(E, F)]` effect names declared on an item, each with its
-/// attribute's span.
-fn benign_effect_names(attrs: &[Attribute]) -> Vec<(String, Span)> {
+/// An effect name a `#[benign(…)]` or `#[ambient(…)]` lists.
+struct AdmittedName {
+    attribute: &'static str,
+    name: String,
+    span: Span,
+}
+
+/// The effect names `#[benign(E, F)]` and `#[ambient(E, F)]` list on an item,
+/// each with its attribute's span.
+fn admitted_effect_names(attrs: &[Attribute]) -> Vec<AdmittedName> {
     attrs
         .iter()
-        .filter(|attr| attr.name == BENIGN)
-        .flat_map(|attr| {
-            attr.args
-                .iter()
-                .map(|arg| (arg.as_str().to_string(), attr.span))
+        .filter_map(|attr| {
+            ADMITS_EFFECTS
+                .into_iter()
+                .find(|admitting| attr.name == *admitting)
+                .map(|attribute| (attribute, attr))
+        })
+        .flat_map(|(attribute, attr)| {
+            attr.args.iter().map(move |arg| AdmittedName {
+                attribute,
+                name: arg.as_str().to_string(),
+                span: attr.span,
+            })
         })
         .collect()
 }
@@ -1921,12 +1945,12 @@ struct SemEffectWalker<'a> {
     annotations: Option<&'a TypeAnnotations>,
     index: &'a EffectIndex<'a>,
     /// Effects available at the current point: the function's declared +
-    /// signature + benign + propagated set, plus any effects granted by an
-    /// enclosing `with H => … do { … }` handler scope (pushed / popped as the
-    /// walk enters / leaves the do-block body).
+    /// signature + benign + ambient + propagated set, plus any effects granted
+    /// by an enclosing `with H => … do { … }` handler scope (pushed / popped as
+    /// the walk enters / leaves the do-block body).
     current: IndexSet<EffectRef>,
-    /// A `test` or `#[ambient]` body, which holds every effect: nothing it
-    /// performs is missing, whatever `current` lists.
+    /// A `test` body, which holds every effect: nothing it performs is
+    /// missing, whatever `current` lists.
     holds_every_effect: bool,
     /// This function's parameter name → type id, for resolving the callee of an
     /// indirect call through a function-typed parameter (which leaves no
@@ -2049,7 +2073,7 @@ impl EffectIndex<'_> {
                     .map(|b| &**b)
                     .unwrap_or_default();
                 brought.effects.extend(
-                    self.close_over_args(declared, bounds, &target_args, &receiver_args)
+                    self.close_over_args(declared, bounds, &target_args, &receiver_args, None)
                         .into_iter()
                         .filter(|e| !e.is_param()),
                 );
@@ -2060,6 +2084,7 @@ impl EffectIndex<'_> {
                         &entry.bounds,
                         &entry.target_args,
                         &receiver_args,
+                        None,
                     )),
                     None => brought.open = true,
                 }
@@ -2183,6 +2208,7 @@ impl EffectIndex<'_> {
                         &entry.bounds,
                         &entry.target_args,
                         args,
+                        None,
                     ));
                 }
                 None => match self.blanket_for(*key, arg) {
@@ -2215,13 +2241,16 @@ impl EffectIndex<'_> {
     /// where the impl's `target_args` write the parameter in a function type's
     /// row, which is how an adapter's impl reaches the closure it holds. A
     /// variable in that row is solved where the effects are read. An argument
-    /// that is neither leaves the parameter.
+    /// that is neither leaves the parameter. A blanket impl's receiver, the
+    /// type itself, answers the bound on the impl's target where `receiver`
+    /// spells it; a call leaves that to `blanket_for`.
     fn close_over_args(
         &self,
         declared: &[EffectRef],
         bounds: &[ReceiverBound],
         target_args: &[FqTypeName],
         args: &[FqTypeName],
+        receiver: Option<&[TypeArg<'_>]>,
     ) -> IndexSet<EffectRef> {
         let mut out: IndexSet<EffectRef> = IndexSet::default();
         for effect in declared {
@@ -2235,15 +2264,18 @@ impl EffectIndex<'_> {
             }
             let mut brought = Brought::default();
             for bound in bounds {
-                // The empty path is a blanket impl's receiver, the type
-                // itself, which `blanket_for` answers.
-                if let Some(arg) = bound
-                    .path
-                    .as_deref()
-                    .filter(|path| !path.is_empty())
-                    .and_then(|path| type_arg_at(args, path))
-                {
-                    self.bring(&bound.traits, &[type_arg(arg)], &mut brought);
+                match bound.path.as_deref() {
+                    None => {}
+                    Some([]) => {
+                        if let Some(receiver) = receiver {
+                            self.bring(&bound.traits, receiver, &mut brought);
+                        }
+                    }
+                    Some(path) => {
+                        if let Some(arg) = type_arg_at(args, path) {
+                            self.bring(&bound.traits, &[type_arg(arg)], &mut brought);
+                        }
+                    }
                 }
             }
             out.extend(brought.effects);
@@ -2253,6 +2285,40 @@ impl EffectIndex<'_> {
             }
         }
         out
+    }
+
+    /// What installing impl block `block` for a handler of type `handler`
+    /// performs: what its methods declare, an effect parameter of the impl
+    /// closed over the handler's type arguments as a dispatch to one of the
+    /// methods closes it.
+    fn installed_effects(&self, block: DefId, handler: TypeId, rows: &Rows) -> IndexSet<EffectRef> {
+        let declared: Vec<EffectRef> = self.block_effects[&block].iter().cloned().collect();
+        let defs = self.resolutions.defs();
+        let bounds = defs
+            .members(block)
+            .iter()
+            .find_map(|&method| self.receiver_bounds.get(&defs.ast_id(method)))
+            .map(|bounds| &**bounds)
+            .unwrap_or_default();
+        let target = self
+            .types
+            .fq_type_name_with_rows(self.types.impl_target_whole(block));
+        let spellings = self.spellings(handler, rows);
+        // A blanket impl's target is its own parameter, which no spelling of
+        // the handler names and which has no arguments to fill.
+        let args = spellings
+            .iter()
+            .find(|spelling| spelling.head() == target.head())
+            .map(|spelling| spelling.args().to_vec())
+            .unwrap_or_default();
+        let receiver: Vec<TypeArg<'_>> = spellings.iter().map(type_arg).collect();
+        self.close_over_args(
+            &declared,
+            bounds,
+            &spelled_target_args(self.types, block),
+            &args,
+            Some(&receiver),
+        )
     }
 
     /// The effects the trait method behind a dispatch declares. `None` where
@@ -2699,7 +2765,7 @@ impl AstVisitor<'_> for SemEffectWalker<'_> {
                 for binding in &with_handler.handlers {
                     ast::walk_expr(self, &binding.handler);
                     for (handled, effects) in
-                        binding_performed_effects(self.annotations, self.index, binding)
+                        binding_performed_effects(self.annotations, self.index, binding, &self.rows)
                     {
                         let effects: Vec<EffectRef> = effects
                             .into_iter()
@@ -3136,9 +3202,9 @@ fn run_purity_checks(sem: &Semantics, index: &EffectIndex, out: &mut Vec<PurityE
                 }
                 Item::Global(global) => {
                     // An unknown name is the effect check's to report.
-                    walker.granted = benign_effect_names(&global.attributes)
+                    walker.granted = admitted_effect_names(&global.attributes)
                         .into_iter()
-                        .filter_map(|(name, _)| effect_named_in(&name, src, index))
+                        .filter_map(|admitted| effect_named_in(&admitted.name, src, index))
                         .collect();
                     walker.check(PureContext::GlobalInitializer, &global.initializer);
                     walker.granted.clear();
@@ -3438,9 +3504,12 @@ impl AstVisitor<'_> for PurityWalker<'_> {
                 }
                 let mut added: Vec<EffectRef> = Vec::new();
                 for binding in &with_handler.handlers {
-                    for (handled, effects) in
-                        binding_performed_effects(self.annotations, self.index, binding)
-                    {
+                    for (handled, effects) in binding_performed_effects(
+                        self.annotations,
+                        self.index,
+                        binding,
+                        &Rows::default(),
+                    ) {
                         if self.unanswered(&effects) {
                             self.flag(
                                 Impurity::Install(handled.name().to_string()),

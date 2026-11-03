@@ -74,7 +74,9 @@ effect a global access demands, are not decided, so they are a known gap of
 
 ### `#[ambient]` stays
 
-`#[ambient]` exempts a body from effect checking. The optimizer may remove a
+`#[ambient(E, …)]` lets a body perform the effects it lists without declaring
+them, where the component already has them
+([Ambient Functions](./spec-effects.md#ambient-functions)). The optimizer may remove a
 call to an ambient function whose result is unused. Ambient output such as
 `log_stderr` is therefore best-effort: it may not appear.
 

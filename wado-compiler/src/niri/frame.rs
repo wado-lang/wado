@@ -647,7 +647,7 @@ impl Interpreter<'_> {
         match builtin {
             CtfeBuiltin::ArraySet => Some(self.exec_element_write(body, &args)),
             CtfeBuiltin::ArrayCopy => Some(self.exec_run_write(body, &args)),
-            CtfeBuiltin::ColdPath | CtfeBuiltin::ArrayRelease => {
+            CtfeBuiltin::RarityMarker | CtfeBuiltin::ArrayRelease => {
                 Some(Flow::Fallthrough(Lattice::Unevaluated))
             }
             CtfeBuiltin::ArrayGet

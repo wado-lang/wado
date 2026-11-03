@@ -53,6 +53,7 @@ fn http_path_default() -> String {
 
 /// HTTP request input for `"wasi:http/service"` tests
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 struct HttpRequestSpec {
     /// HTTP method (default: `"GET"`)
     #[serde(default = "http_method_default")]
@@ -96,6 +97,7 @@ impl Default for HttpRequestSpec {
 /// }
 /// ```
 #[derive(Debug, Deserialize, Default)]
+#[serde(deny_unknown_fields)]
 struct HttpServiceSpec {
     /// Injected HTTP request (defaults to `GET /`)
     #[serde(default)]
@@ -120,6 +122,7 @@ struct HttpServiceSpec {
 
 /// Test world spec for `"test": {}` — no sub-fields, presence signals the test world.
 #[derive(Debug, Deserialize, Default)]
+#[serde(deny_unknown_fields)]
 struct TestWorldSpec {}
 
 /// Expected test results from __DATA__ section (JSON format)
@@ -221,6 +224,13 @@ struct TestSpec {
     #[serde(flatten)]
     compile: CompileInputs,
 
+    /// The keys neither this struct nor `compile` reads. `flatten` rules out
+    /// `deny_unknown_fields`, so a misspelt or stale key lands here instead of
+    /// passing as unset. It must follow `compile`, which takes its own keys
+    /// first.
+    #[serde(flatten)]
+    unknown: indexmap::IndexMap<String, serde_json::Value>,
+
     /// Mock responses for outgoing HTTP requests (keyed by URL or path).
     /// When present, any `wasi:http/client#send` from the guest will be
     /// intercepted and matched against these entries.
@@ -281,10 +291,11 @@ struct TestSpec {
     #[serde(default)]
     remarks: indexmap::IndexMap<String, Vec<TextMatch>>,
 
-    /// Every region the fixture's `profile` marks cold, as
-    /// `"file:line:col kind"`.
+    /// Every region the fixture's `profile` marks, as
+    /// `"file:line:col kind mark"`, the mark `unlikely cold`, `unlikely` or
+    /// `cold`.
     #[serde(default)]
-    cold_regions: Option<Vec<String>>,
+    marked_regions: Option<Vec<String>>,
 
     /// Lines the emitted component's WAT must carry. A CM import's shape —
     /// which names an instance type exports, which functions are aliased out of
@@ -460,15 +471,41 @@ fn wir_patterns_match_serials_by_hole() {
     assert!(!wir_contains("x_ = 1", "x_{} = 1"));
 }
 
-/// The body of the first function in `wir` whose name contains `scope`, from
-/// its `fn` line to the `}` closing it, or `None` when no name matches.
+#[test]
+fn wir_scope_names_one_function_whatever_the_order() {
+    let wir = "fn \"m/ascending.wado/$cm_export__run\"() {\n    a;\n}\n\
+               fn \"m/ascending.wado/ascending\"(xs) {\n    b;\n}\n\
+               fn \"m/ascending.wado/run\"() {\n    c;\n}\n";
+    let body = |scope| scope_to_function(wir, scope).map(|b| b.lines().nth(1).unwrap().trim());
+    assert_eq!(body("ascending"), Some("b;"));
+    assert_eq!(body(".wado/run\""), Some("c;"));
+    assert_eq!(body("export"), Some("a;"));
+    assert_eq!(body("missing"), None);
+    assert_eq!(body("fn"), None);
+}
+
+/// The body of the function in `wir` that `scope` names, from its `fn` line to
+/// the `}` closing it, or `None` when no name matches. A name ending in `scope`
+/// names it, else one merely containing it; either must be the only such name,
+/// since the order functions are emitted in is not the fixture's to rely on.
 fn scope_to_function<'a>(wir: &'a str, scope: &str) -> Option<&'a str> {
+    let mut bodies: Vec<(&str, &str)> = Vec::new();
     let mut start = None;
     let mut offset = 0;
     for line in wir.split_inclusive('\n') {
         match start {
-            Some(s) if line.starts_with('}') => return Some(&wir[s..offset + line.len()]),
-            None if line.starts_with("fn \"") && line.contains(scope) => start = Some(offset),
+            Some((s, name)) if line.starts_with('}') => {
+                bodies.push((name, &wir[s..offset + line.len()]));
+                start = None;
+            }
+            None => {
+                if let Some(rest) = line.strip_prefix("fn \"")
+                    && let Some(end) = rest.find('"')
+                {
+                    // Quoted, as a scope may spell it.
+                    start = Some((offset, &line[3..=4 + end]));
+                }
+            }
             _ => {}
         }
         offset += line.len();
@@ -479,7 +516,24 @@ fn scope_to_function<'a>(wir: &'a str, scope: &str) -> Option<&'a str> {
         start.is_none(),
         "WIR function matching {scope:?} is never closed"
     );
-    None
+    let suffix = scope.trim_end_matches('"');
+    let named = |test: &dyn Fn(&str) -> bool| -> Vec<&str> {
+        bodies
+            .iter()
+            .filter(|(name, _)| test(name))
+            .map(|(_, body)| *body)
+            .collect()
+    };
+    let mut candidates = named(&|name| name.trim_end_matches('"').ends_with(suffix));
+    if candidates.is_empty() {
+        candidates = named(&|name| name.contains(scope));
+    }
+    assert!(
+        candidates.len() <= 1,
+        "wir_scope {scope:?} names {} functions; qualify it",
+        candidates.len()
+    );
+    candidates.first().copied()
 }
 
 // ---------------------------------------------------------------------------
@@ -799,6 +853,11 @@ fn run_fixture_test_with_opt(fixture_path: &Path, source: &str, opt_level: OptLe
             ..Default::default()
         },
     };
+    assert!(
+        spec.unknown.is_empty(),
+        "[{test_id}] __DATA__ names keys the harness does not read: {:?}",
+        spec.unknown.keys().collect::<Vec<_>>()
+    );
 
     if !spec.runs_at(opt_level) {
         eprintln!(
@@ -967,7 +1026,7 @@ fn run_with_allocator(
         warnings,
         errors,
         remarks,
-        cold_regions,
+        marked_regions,
     } = common::compile_fixture_on_worker(
         fixture_path.to_path_buf(),
         source.to_string(),
@@ -1093,12 +1152,12 @@ fn run_with_allocator(
     // Every check on the compiler's own output runs before the execution
     // dispatch: one placed after it is silently skipped by `compile_only`.
     assert_wir_expectations(wir_text.as_deref(), spec, opt_level, test_id);
-    if let Some(expected) = &spec.cold_regions {
+    if let Some(expected) = &spec.marked_regions {
         assert!(
             spec.compile.profile.is_some(),
-            "[{test_id}] `cold_regions` states what a `profile` marks"
+            "[{test_id}] `marked_regions` states what a `profile` marks"
         );
-        assert_eq!(&cold_regions, expected, "[{test_id}] cold regions");
+        assert_eq!(&marked_regions, expected, "[{test_id}] marked regions");
     }
 
     if spec.compile_only {
@@ -1497,18 +1556,11 @@ test "passes unexpectedly" {
     assert true;
 }
 "#;
-    let options = CompilerOptions {
-        opt_level: OptLevel::O0,
-        target_world: Some("test".to_string()),
-        ..Default::default()
-    };
-    let path = std::path::Path::new("synthetic_todo_resolved.wado");
-    let compile_result = common::compile_source_with_compiler_options(path, source, options)
-        .expect("compilation should succeed");
+    let wasm = compile_synthetic(source, Some("test"));
 
     let payload = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         common::run_test_world(
-            &compile_result.wasm,
+            &wasm,
             "synthetic-todo-resolved",
             indexmap::IndexMap::new(),
             indexmap::IndexMap::new(),
@@ -1529,4 +1581,52 @@ test "passes unexpectedly" {
         "message should mention the offending test name: {}",
         resolved.0,
     );
+}
+
+fn compile_synthetic(source: &str, target_world: Option<&str>) -> Vec<u8> {
+    let options = CompilerOptions {
+        opt_level: OptLevel::O0,
+        target_world: target_world.map(str::to_string),
+        ..Default::default()
+    };
+    let path = std::path::Path::new("synthetic.wado");
+    common::compile_source_with_compiler_options(path, source, options)
+        .expect("compilation should succeed")
+        .wasm
+}
+
+/// A run that never ends spends its budget rather than trapping, so it cannot
+/// satisfy a test that expects a trap.
+#[test]
+fn an_exhausted_budget_is_not_an_expected_trap() {
+    let wasm = compile_synthetic(
+        r#"#[expect_trap]
+#[timeout_ms(100)]
+test "never ends" {
+    while builtin::black_box(true) {}
+}
+"#,
+        Some("test"),
+    );
+    let error = common::run_test_world(
+        &wasm,
+        "synthetic-budget",
+        indexmap::IndexMap::new(),
+        indexmap::IndexMap::new(),
+    )
+    .expect_err("an exhausted budget must fail the test");
+    assert!(error.is::<common::BudgetExhausted>(), "{error:#}");
+}
+
+#[test]
+fn an_exhausted_budget_is_not_a_cli_trap() {
+    let wasm = compile_synthetic(
+        r#"export fn run() {
+    while builtin::black_box(true) {}
+}
+"#,
+        None,
+    );
+    let error = common::run_wasm(wasm).expect_err("an exhausted budget must not read as a trap");
+    assert!(error.is::<common::BudgetExhausted>(), "{error:#}");
 }

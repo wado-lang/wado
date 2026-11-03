@@ -6,8 +6,13 @@
 
 Unicode character properties, locale-aware collation and case mapping, and
 grapheme segmentation, from the ICU4X component bundled with the toolchain.
-A property name it does not answer is `null`, never an approximate set:
-`Block`, `Decomposition_Type` and the contributory `Other_*` are withheld.
+
+A property value is an enum case of its property (`Script::Latin`), and a
+program carries the data of the properties it names and no others, except
+that naming one binary property carries all of them. A name
+read at run time parses through `FromStr` or `LenientFromStr`, and one this
+build does not answer is refused, never approximated: `Block`,
+`Decomposition_Type` and the contributory `Other_*` are withheld.
 
 Every locale-aware operation takes its `Locale` explicitly; none falls back
 to an implicit one.
@@ -15,8 +20,10 @@ to an implicit one.
 ## Synopsis
 
 ```wado
-assert has(Properties::BinaryProperty::Uppercase, 'À');
-assert value_contains("sc", "Hiragana", 'あ') == Option::Some(true);
+assert contains(BinaryProperty::Uppercase, 'À');
+assert contains(Script::Hiragana, 'あ');
+assert ranges(GeneralCategoryGroup::Letter)[0] == [65, 90];
+assert Property::from_str_lenient("sc=hiragana") == Result::Ok(Property::Script(Script::Hiragana));
 
 let tr = Locale::from("tr");
 assert tr.uppercase("istanbul") == "İSTANBUL";
@@ -31,33 +38,15 @@ assert grapheme_count("🇯🇵") == 1;
 
 ## Functions
 
-### `pub fn has(property: Properties::BinaryProperty, ch: char) -> bool`
+### `pub fn ranges<P: CodePointSet>(property: P) -> List<[u32, u32]>`
 
-Whether `ch` has the property. Total, and the name costs nothing at run
-time: an enum case is a number, and ICU4X bakes each property as a static.
+The inclusive code point ranges of a property or property value, lowest
+first: `ranges(BinaryProperty::WhiteSpace)`,
+`ranges(GeneralCategoryGroup::Letter)`.
 
-### `pub fn set(property: Properties::BinaryProperty) -> List<[u32, u32]>`
+### `pub fn contains<P: CodePointSet>(property: P, ch: char) -> bool`
 
-The property's inclusive code point ranges, lowest first.
-
-### `pub fn ranges(property: String) -> Option<List<[u32, u32]>>`
-
-Inclusive code point ranges of a binary property named at run time, lowest
-first. Prefer [`set`] for a name written into the source.
-
-### `pub fn value_ranges(property: String, value: String) -> Option<List<[u32, u32]>>`
-
-Inclusive code point ranges of an enumerated property's value, lowest
-first. A `gc` value may name a group (`L`) as well as a category (`Lu`).
-
-### `pub fn contains(property: String, ch: char) -> Option<bool>`
-
-Whether `ch` has the binary property named at run time. Prefer [`has`] for a
-name written into the source.
-
-### `pub fn value_contains(property: String, value: String, ch: char) -> Option<bool>`
-
-Whether `ch` has that enumerated property value, without building the
+Whether `ch` has the property or property value, without building the
 ranges.
 
 ### `pub fn graphemes(text: String) -> Graphemes`
@@ -69,25 +58,19 @@ counts as one character each.
 
 How many extended grapheme clusters `text` holds.
 
-## Effects
+## Traits
 
-### `pub interface Properties`
+### `pub trait CodePointSet with ()`
 
-#### `fn has(property: Properties::BinaryProperty, ch: char) -> bool`
+A property, or a value of one: the set of code points that have it.
 
-`#[cm]` `#[cm_params("property", "ch")]`
+#### `fn ranges(&self) -> List<[u32, u32]>`
 
-#### `fn set(property: Properties::BinaryProperty) -> List<[u32, u32]>`
+The inclusive code point ranges of the set, lowest first.
 
-`#[cm]` `#[cm_params("property")]`
+#### `fn contains(&self, ch: char) -> bool`
 
-#### `fn ranges(property: String, value: Option<String>) -> Option<List<[u32, u32]>>`
-
-`#[cm]` `#[cm_params("property", "value")]`
-
-#### `fn contains(property: String, value: Option<String>, ch: char) -> Option<bool>`
-
-`#[cm]` `#[cm_params("property", "value", "ch")]`
+Whether `ch` is in the set, without building the ranges.
 
 ## Structs
 
@@ -173,9 +156,66 @@ _Fields are private._
 
 ##### `fn next(&mut self) -> Option<StrSlice>`
 
+### `pub struct PropertyNameError`
+
+Why a name was refused: it names nothing this build answers. That is never
+answered with an approximate set instead, since a caller complementing one
+would admit real members of the property rather than miss some.
+
+_Fields are private._
+
+#### `impl Display for PropertyNameError`
+
+##### `fn fmt(&self, f: &mut Formatter)`
+
+## Variants
+
+### `pub variant Property`
+
+A property, or a value of one, named at run time: what a `\p{...}` in a
+grammar names. It parses from a binary property's name (`White_Space`) or
+from `property=value` (`sc=Latin`), as `FromStr` or `LenientFromStr` match
+names.
+
+#### `BinaryProperty(BinaryProperty)`
+
+#### `GeneralCategoryGroup(GeneralCategoryGroup)`
+
+#### `BidiClass(BidiClass)`
+
+#### `CanonicalCombiningClass(CanonicalCombiningClass)`
+
+#### `EastAsianWidth(EastAsianWidth)`
+
+#### `GraphemeClusterBreak(GraphemeClusterBreak)`
+
+#### `HangulSyllableType(HangulSyllableType)`
+
+#### `IndicConjunctBreak(IndicConjunctBreak)`
+
+#### `IndicSyllabicCategory(IndicSyllabicCategory)`
+
+#### `JoiningGroup(JoiningGroup)`
+
+#### `JoiningType(JoiningType)`
+
+#### `LineBreak(LineBreak)`
+
+#### `NumericType(NumericType)`
+
+#### `Script(Script)`
+
+#### `SentenceBreak(SentenceBreak)`
+
+#### `VerticalOrientation(VerticalOrientation)`
+
+#### `WordBreak(WordBreak)`
+
 ## Enums
 
-### `pub enum Properties::BinaryProperty`
+### `pub enum BinaryProperty`
+
+The binary properties, each the set of code points that have it.
 
 #### `Alnum`
 
@@ -302,3 +342,1288 @@ _Fields are private._
 #### `XidContinue`
 
 #### `XidStart`
+
+### `pub enum GeneralCategoryGroup`
+
+The values of General_Category (`gc`): the categories, and the groups UAX #44 names
+over them (`Letter` is `L`).
+
+#### `Unassigned`
+
+#### `UppercaseLetter`
+
+#### `LowercaseLetter`
+
+#### `TitlecaseLetter`
+
+#### `ModifierLetter`
+
+#### `OtherLetter`
+
+#### `NonspacingMark`
+
+#### `EnclosingMark`
+
+#### `SpacingMark`
+
+#### `DecimalNumber`
+
+#### `LetterNumber`
+
+#### `OtherNumber`
+
+#### `SpaceSeparator`
+
+#### `LineSeparator`
+
+#### `ParagraphSeparator`
+
+#### `Control`
+
+#### `Format`
+
+#### `PrivateUse`
+
+#### `Surrogate`
+
+#### `DashPunctuation`
+
+#### `OpenPunctuation`
+
+#### `ClosePunctuation`
+
+#### `ConnectorPunctuation`
+
+#### `OtherPunctuation`
+
+#### `MathSymbol`
+
+#### `CurrencySymbol`
+
+#### `ModifierSymbol`
+
+#### `OtherSymbol`
+
+#### `InitialPunctuation`
+
+#### `FinalPunctuation`
+
+#### `CasedLetter`
+
+#### `Letter`
+
+#### `Mark`
+
+#### `Number`
+
+#### `Punctuation`
+
+#### `Symbol`
+
+#### `Separator`
+
+#### `Other`
+
+### `pub enum BidiClass`
+
+The values of Bidi_Class (`bc`).
+
+#### `LeftToRight`
+
+#### `RightToLeft`
+
+#### `EuropeanNumber`
+
+#### `EuropeanSeparator`
+
+#### `EuropeanTerminator`
+
+#### `ArabicNumber`
+
+#### `CommonSeparator`
+
+#### `ParagraphSeparator`
+
+#### `SegmentSeparator`
+
+#### `WhiteSpace`
+
+#### `OtherNeutral`
+
+#### `LeftToRightEmbedding`
+
+#### `LeftToRightOverride`
+
+#### `ArabicLetter`
+
+#### `RightToLeftEmbedding`
+
+#### `RightToLeftOverride`
+
+#### `PopDirectionalFormat`
+
+#### `NonspacingMark`
+
+#### `BoundaryNeutral`
+
+#### `FirstStrongIsolate`
+
+#### `LeftToRightIsolate`
+
+#### `RightToLeftIsolate`
+
+#### `PopDirectionalIsolate`
+
+### `pub enum CanonicalCombiningClass`
+
+The values of Canonical_Combining_Class (`ccc`).
+
+#### `NotReordered`
+
+#### `Overlay`
+
+#### `HanReading`
+
+#### `Nukta`
+
+#### `KanaVoicing`
+
+#### `Virama`
+
+#### `Ccc10`
+
+#### `Ccc11`
+
+#### `Ccc12`
+
+#### `Ccc13`
+
+#### `Ccc14`
+
+#### `Ccc15`
+
+#### `Ccc16`
+
+#### `Ccc17`
+
+#### `Ccc18`
+
+#### `Ccc19`
+
+#### `Ccc20`
+
+#### `Ccc21`
+
+#### `Ccc22`
+
+#### `Ccc23`
+
+#### `Ccc24`
+
+#### `Ccc25`
+
+#### `Ccc26`
+
+#### `Ccc27`
+
+#### `Ccc28`
+
+#### `Ccc29`
+
+#### `Ccc30`
+
+#### `Ccc31`
+
+#### `Ccc32`
+
+#### `Ccc33`
+
+#### `Ccc34`
+
+#### `Ccc35`
+
+#### `Ccc36`
+
+#### `Ccc84`
+
+#### `Ccc91`
+
+#### `Ccc103`
+
+#### `Ccc107`
+
+#### `Ccc118`
+
+#### `Ccc122`
+
+#### `Ccc129`
+
+#### `Ccc130`
+
+#### `Ccc132`
+
+#### `Ccc133`
+
+#### `AttachedBelowLeft`
+
+#### `AttachedBelow`
+
+#### `AttachedAbove`
+
+#### `AttachedAboveRight`
+
+#### `BelowLeft`
+
+#### `Below`
+
+#### `BelowRight`
+
+#### `Left`
+
+#### `Right`
+
+#### `AboveLeft`
+
+#### `Above`
+
+#### `AboveRight`
+
+#### `DoubleBelow`
+
+#### `DoubleAbove`
+
+#### `IotaSubscript`
+
+### `pub enum EastAsianWidth`
+
+The values of East_Asian_Width (`ea`).
+
+#### `Neutral`
+
+#### `Ambiguous`
+
+#### `Halfwidth`
+
+#### `Fullwidth`
+
+#### `Narrow`
+
+#### `Wide`
+
+### `pub enum GraphemeClusterBreak`
+
+The values of Grapheme_Cluster_Break (`GCB`).
+
+#### `Other`
+
+#### `Control`
+
+#### `Cr`
+
+#### `Extend`
+
+#### `L`
+
+#### `Lf`
+
+#### `Lv`
+
+#### `Lvt`
+
+#### `T`
+
+#### `V`
+
+#### `SpacingMark`
+
+#### `Prepend`
+
+#### `RegionalIndicator`
+
+#### `EBase`
+
+#### `EBaseGaz`
+
+#### `EModifier`
+
+#### `GlueAfterZwj`
+
+#### `Zwj`
+
+### `pub enum HangulSyllableType`
+
+The values of Hangul_Syllable_Type (`hst`).
+
+#### `NotApplicable`
+
+#### `LeadingJamo`
+
+#### `VowelJamo`
+
+#### `TrailingJamo`
+
+#### `LvSyllable`
+
+#### `LvtSyllable`
+
+### `pub enum IndicConjunctBreak`
+
+The values of Indic_Conjunct_Break (`InCB`).
+
+#### `None`
+
+#### `Consonant`
+
+#### `Extend`
+
+#### `Linker`
+
+### `pub enum IndicSyllabicCategory`
+
+The values of Indic_Syllabic_Category (`InSC`).
+
+#### `Other`
+
+#### `Avagraha`
+
+#### `Bindu`
+
+#### `BrahmiJoiningNumber`
+
+#### `CantillationMark`
+
+#### `Consonant`
+
+#### `ConsonantDead`
+
+#### `ConsonantFinal`
+
+#### `ConsonantHeadLetter`
+
+#### `ConsonantInitialPostfixed`
+
+#### `ConsonantKiller`
+
+#### `ConsonantMedial`
+
+#### `ConsonantPlaceholder`
+
+#### `ConsonantPrecedingRepha`
+
+#### `ConsonantPrefixed`
+
+#### `ConsonantSubjoined`
+
+#### `ConsonantSucceedingRepha`
+
+#### `ConsonantWithStacker`
+
+#### `GeminationMark`
+
+#### `InvisibleStacker`
+
+#### `Joiner`
+
+#### `ModifyingLetter`
+
+#### `NonJoiner`
+
+#### `Nukta`
+
+#### `Number`
+
+#### `NumberJoiner`
+
+#### `PureKiller`
+
+#### `RegisterShifter`
+
+#### `SyllableModifier`
+
+#### `ToneLetter`
+
+#### `ToneMark`
+
+#### `Virama`
+
+#### `Visarga`
+
+#### `Vowel`
+
+#### `VowelDependent`
+
+#### `VowelIndependent`
+
+#### `ReorderingKiller`
+
+### `pub enum JoiningGroup`
+
+The values of Joining_Group (`jg`).
+
+#### `NoJoiningGroup`
+
+#### `Ain`
+
+#### `Alaph`
+
+#### `Alef`
+
+#### `Beh`
+
+#### `Beth`
+
+#### `Dal`
+
+#### `DalathRish`
+
+#### `E`
+
+#### `Feh`
+
+#### `FinalSemkath`
+
+#### `Gaf`
+
+#### `Gamal`
+
+#### `Hah`
+
+#### `TehMarbutaGoal`
+
+#### `He`
+
+#### `Heh`
+
+#### `HehGoal`
+
+#### `Heth`
+
+#### `Kaf`
+
+#### `Kaph`
+
+#### `KnottedHeh`
+
+#### `Lam`
+
+#### `Lamadh`
+
+#### `Meem`
+
+#### `Mim`
+
+#### `Noon`
+
+#### `Nun`
+
+#### `Pe`
+
+#### `Qaf`
+
+#### `Qaph`
+
+#### `Reh`
+
+#### `ReversedPe`
+
+#### `Sad`
+
+#### `Sadhe`
+
+#### `Seen`
+
+#### `Semkath`
+
+#### `Shin`
+
+#### `SwashKaf`
+
+#### `SyriacWaw`
+
+#### `Tah`
+
+#### `Taw`
+
+#### `TehMarbuta`
+
+#### `Teth`
+
+#### `Waw`
+
+#### `Yeh`
+
+#### `YehBarree`
+
+#### `YehWithTail`
+
+#### `Yudh`
+
+#### `YudhHe`
+
+#### `Zain`
+
+#### `Fe`
+
+#### `Khaph`
+
+#### `Zhain`
+
+#### `BurushaskiYehBarree`
+
+#### `FarsiYeh`
+
+#### `Nya`
+
+#### `RohingyaYeh`
+
+#### `ManichaeanAleph`
+
+#### `ManichaeanAyin`
+
+#### `ManichaeanBeth`
+
+#### `ManichaeanDaleth`
+
+#### `ManichaeanDhamedh`
+
+#### `ManichaeanFive`
+
+#### `ManichaeanGimel`
+
+#### `ManichaeanHeth`
+
+#### `ManichaeanHundred`
+
+#### `ManichaeanKaph`
+
+#### `ManichaeanLamedh`
+
+#### `ManichaeanMem`
+
+#### `ManichaeanNun`
+
+#### `ManichaeanOne`
+
+#### `ManichaeanPe`
+
+#### `ManichaeanQoph`
+
+#### `ManichaeanResh`
+
+#### `ManichaeanSadhe`
+
+#### `ManichaeanSamekh`
+
+#### `ManichaeanTaw`
+
+#### `ManichaeanTen`
+
+#### `ManichaeanTeth`
+
+#### `ManichaeanThamedh`
+
+#### `ManichaeanTwenty`
+
+#### `ManichaeanWaw`
+
+#### `ManichaeanYodh`
+
+#### `ManichaeanZayin`
+
+#### `StraightWaw`
+
+#### `AfricanFeh`
+
+#### `AfricanNoon`
+
+#### `AfricanQaf`
+
+#### `MalayalamBha`
+
+#### `MalayalamJa`
+
+#### `MalayalamLla`
+
+#### `MalayalamLlla`
+
+#### `MalayalamNga`
+
+#### `MalayalamNna`
+
+#### `MalayalamNnna`
+
+#### `MalayalamNya`
+
+#### `MalayalamRa`
+
+#### `MalayalamSsa`
+
+#### `MalayalamTta`
+
+#### `HanifiRohingyaKinnaYa`
+
+#### `HanifiRohingyaPa`
+
+#### `ThinYeh`
+
+#### `VerticalTail`
+
+#### `KashmiriYeh`
+
+#### `ThinNoon`
+
+### `pub enum JoiningType`
+
+The values of Joining_Type (`jt`).
+
+#### `NonJoining`
+
+#### `JoinCausing`
+
+#### `DualJoining`
+
+#### `LeftJoining`
+
+#### `RightJoining`
+
+#### `Transparent`
+
+### `pub enum LineBreak`
+
+The values of Line_Break (`lb`).
+
+#### `Unknown`
+
+#### `Ambiguous`
+
+#### `Alphabetic`
+
+#### `BreakBoth`
+
+#### `BreakAfter`
+
+#### `BreakBefore`
+
+#### `MandatoryBreak`
+
+#### `ContingentBreak`
+
+#### `ClosePunctuation`
+
+#### `CombiningMark`
+
+#### `CarriageReturn`
+
+#### `Exclamation`
+
+#### `Glue`
+
+#### `Hyphen`
+
+#### `Ideographic`
+
+#### `Inseparable`
+
+#### `InfixNumeric`
+
+#### `LineFeed`
+
+#### `Nonstarter`
+
+#### `Numeric`
+
+#### `OpenPunctuation`
+
+#### `PostfixNumeric`
+
+#### `PrefixNumeric`
+
+#### `Quotation`
+
+#### `ComplexContext`
+
+#### `Surrogate`
+
+#### `Space`
+
+#### `BreakSymbols`
+
+#### `ZwSpace`
+
+#### `NextLine`
+
+#### `WordJoiner`
+
+#### `H2`
+
+#### `H3`
+
+#### `Jl`
+
+#### `Jt`
+
+#### `Jv`
+
+#### `CloseParenthesis`
+
+#### `ConditionalJapaneseStarter`
+
+#### `HebrewLetter`
+
+#### `RegionalIndicator`
+
+#### `EBase`
+
+#### `EModifier`
+
+#### `Zwj`
+
+#### `Aksara`
+
+#### `AksaraPrebase`
+
+#### `AksaraStart`
+
+#### `ViramaFinal`
+
+#### `Virama`
+
+#### `UnambiguousHyphen`
+
+### `pub enum NumericType`
+
+The values of Numeric_Type (`nt`).
+
+#### `None`
+
+#### `Decimal`
+
+#### `Digit`
+
+#### `Numeric`
+
+### `pub enum Script`
+
+The values of Script (`sc`).
+
+#### `Common`
+
+#### `Inherited`
+
+#### `Arabic`
+
+#### `Armenian`
+
+#### `Bengali`
+
+#### `Bopomofo`
+
+#### `Cherokee`
+
+#### `Coptic`
+
+#### `Cyrillic`
+
+#### `Deseret`
+
+#### `Devanagari`
+
+#### `Ethiopic`
+
+#### `Georgian`
+
+#### `Gothic`
+
+#### `Greek`
+
+#### `Gujarati`
+
+#### `Gurmukhi`
+
+#### `Han`
+
+#### `Hangul`
+
+#### `Hebrew`
+
+#### `Hiragana`
+
+#### `Kannada`
+
+#### `Katakana`
+
+#### `Khmer`
+
+#### `Lao`
+
+#### `Latin`
+
+#### `Malayalam`
+
+#### `Mongolian`
+
+#### `Myanmar`
+
+#### `Ogham`
+
+#### `OldItalic`
+
+#### `Oriya`
+
+#### `Runic`
+
+#### `Sinhala`
+
+#### `Syriac`
+
+#### `Tamil`
+
+#### `Telugu`
+
+#### `Thaana`
+
+#### `Thai`
+
+#### `Tibetan`
+
+#### `CanadianAboriginal`
+
+#### `Yi`
+
+#### `Tagalog`
+
+#### `Hanunoo`
+
+#### `Buhid`
+
+#### `Tagbanwa`
+
+#### `Braille`
+
+#### `Cypriot`
+
+#### `Limbu`
+
+#### `LinearB`
+
+#### `Osmanya`
+
+#### `Shavian`
+
+#### `TaiLe`
+
+#### `Ugaritic`
+
+#### `KatakanaOrHiragana`
+
+#### `Buginese`
+
+#### `Glagolitic`
+
+#### `Kharoshthi`
+
+#### `SylotiNagri`
+
+#### `NewTaiLue`
+
+#### `Tifinagh`
+
+#### `OldPersian`
+
+#### `Balinese`
+
+#### `Batak`
+
+#### `Blis`
+
+#### `Brahmi`
+
+#### `Cham`
+
+#### `Cirt`
+
+#### `Cyrs`
+
+#### `Egyd`
+
+#### `Egyh`
+
+#### `EgyptianHieroglyphs`
+
+#### `Geok`
+
+#### `Hans`
+
+#### `Hant`
+
+#### `PahawhHmong`
+
+#### `OldHungarian`
+
+#### `Inds`
+
+#### `Javanese`
+
+#### `KayahLi`
+
+#### `Latf`
+
+#### `Latg`
+
+#### `Lepcha`
+
+#### `LinearA`
+
+#### `Mandaic`
+
+#### `Maya`
+
+#### `MeroiticHieroglyphs`
+
+#### `Nko`
+
+#### `OldTurkic`
+
+#### `OldPermic`
+
+#### `PhagsPa`
+
+#### `Phoenician`
+
+#### `Miao`
+
+#### `Roro`
+
+#### `Sara`
+
+#### `Syre`
+
+#### `Syrj`
+
+#### `Syrn`
+
+#### `Teng`
+
+#### `Vai`
+
+#### `Visp`
+
+#### `Cuneiform`
+
+#### `Zxxx`
+
+#### `Unknown`
+
+#### `Carian`
+
+#### `Jpan`
+
+#### `TaiTham`
+
+#### `Lycian`
+
+#### `Lydian`
+
+#### `OlChiki`
+
+#### `Rejang`
+
+#### `Saurashtra`
+
+#### `SignWriting`
+
+#### `Sundanese`
+
+#### `Moon`
+
+#### `MeeteiMayek`
+
+#### `ImperialAramaic`
+
+#### `Avestan`
+
+#### `Chakma`
+
+#### `Kore`
+
+#### `Kaithi`
+
+#### `Manichaean`
+
+#### `InscriptionalPahlavi`
+
+#### `PsalterPahlavi`
+
+#### `Phlv`
+
+#### `InscriptionalParthian`
+
+#### `Samaritan`
+
+#### `TaiViet`
+
+#### `Zmth`
+
+#### `Zsym`
+
+#### `Bamum`
+
+#### `Lisu`
+
+#### `Nkgb`
+
+#### `OldSouthArabian`
+
+#### `BassaVah`
+
+#### `Duployan`
+
+#### `Elbasan`
+
+#### `Grantha`
+
+#### `Kpel`
+
+#### `Loma`
+
+#### `MendeKikakui`
+
+#### `MeroiticCursive`
+
+#### `OldNorthArabian`
+
+#### `Nabataean`
+
+#### `Palmyrene`
+
+#### `Khudawadi`
+
+#### `WarangCiti`
+
+#### `Afak`
+
+#### `Jurc`
+
+#### `Mro`
+
+#### `Nushu`
+
+#### `Sharada`
+
+#### `SoraSompeng`
+
+#### `Takri`
+
+#### `Tangut`
+
+#### `Wole`
+
+#### `AnatolianHieroglyphs`
+
+#### `Khojki`
+
+#### `Tirhuta`
+
+#### `CaucasianAlbanian`
+
+#### `Mahajani`
+
+#### `Ahom`
+
+#### `Hatran`
+
+#### `Modi`
+
+#### `Multani`
+
+#### `PauCinHau`
+
+#### `Siddham`
+
+#### `Adlam`
+
+#### `Bhaiksuki`
+
+#### `Marchen`
+
+#### `Newa`
+
+#### `Osage`
+
+#### `Hanb`
+
+#### `Jamo`
+
+#### `Zsye`
+
+#### `MasaramGondi`
+
+#### `Soyombo`
+
+#### `ZanabazarSquare`
+
+#### `Dogra`
+
+#### `GunjalaGondi`
+
+#### `Makasar`
+
+#### `Medefaidrin`
+
+#### `HanifiRohingya`
+
+#### `Sogdian`
+
+#### `OldSogdian`
+
+#### `Elymaic`
+
+#### `NyiakengPuachueHmong`
+
+#### `Nandinagari`
+
+#### `Wancho`
+
+#### `Chorasmian`
+
+#### `DivesAkuru`
+
+#### `KhitanSmallScript`
+
+#### `Yezidi`
+
+#### `CyproMinoan`
+
+#### `OldUyghur`
+
+#### `Tangsa`
+
+#### `Toto`
+
+#### `Vithkuqi`
+
+#### `Kawi`
+
+#### `NagMundari`
+
+#### `Aran`
+
+#### `Garay`
+
+#### `GurungKhema`
+
+#### `KiratRai`
+
+#### `OlOnal`
+
+#### `Sunuwar`
+
+#### `Todhri`
+
+#### `TuluTigalari`
+
+#### `BeriaErfe`
+
+#### `Sidetic`
+
+#### `TaiYo`
+
+#### `TolongSiki`
+
+#### `Hntl`
+
+### `pub enum SentenceBreak`
+
+The values of Sentence_Break (`SB`).
+
+#### `Other`
+
+#### `ATerm`
+
+#### `Close`
+
+#### `Format`
+
+#### `Lower`
+
+#### `Numeric`
+
+#### `OLetter`
+
+#### `Sep`
+
+#### `Sp`
+
+#### `STerm`
+
+#### `Upper`
+
+#### `Cr`
+
+#### `Extend`
+
+#### `Lf`
+
+#### `SContinue`
+
+### `pub enum VerticalOrientation`
+
+The values of Vertical_Orientation (`vo`).
+
+#### `Rotated`
+
+#### `TransformedRotated`
+
+#### `TransformedUpright`
+
+#### `Upright`
+
+### `pub enum WordBreak`
+
+The values of Word_Break (`WB`).
+
+#### `Other`
+
+#### `ALetter`
+
+#### `Format`
+
+#### `Katakana`
+
+#### `MidLetter`
+
+#### `MidNum`
+
+#### `Numeric`
+
+#### `ExtendNumLet`
+
+#### `Cr`
+
+#### `Extend`
+
+#### `Lf`
+
+#### `MidNumLet`
+
+#### `Newline`
+
+#### `RegionalIndicator`
+
+#### `HebrewLetter`
+
+#### `SingleQuote`
+
+#### `DoubleQuote`
+
+#### `EBase`
+
+#### `EBaseGaz`
+
+#### `EModifier`
+
+#### `GlueAfterZwj`
+
+#### `Zwj`
+
+#### `WSegSpace`

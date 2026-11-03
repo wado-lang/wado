@@ -125,6 +125,8 @@ fn recap_section<T: RecapEntry>(header: &str, section: &Mutex<Vec<T>>) -> Vec<St
 /// per-file/per-test detail.
 pub(crate) struct PackageDoneArgs<'a> {
     pub(crate) pkg_run: &'a PackageRun,
+    /// Whether the run tests more than one package, so a batch names its own.
+    pub(crate) show_banner: bool,
     pub(crate) totals: &'a PackageTotals,
     pub(crate) test_results: &'a [TestResult],
     pub(crate) todo_compile_errors: &'a [TodoCompileError],
@@ -135,9 +137,9 @@ pub(crate) struct PackageDoneArgs<'a> {
 
 /// Sink for the pipeline's progress events. One instance is constructed
 /// per `wado test` invocation and shared (via `Arc`) across every package
-/// run and every pipeline worker task.
+/// run and every pipeline worker task. The packages run at once, so the
+/// events of one interleave with another's until it is done.
 pub(crate) trait TestReporter: Send + Sync {
-    fn on_package_start(&self, pkg_run: &PackageRun, show_banner: bool);
     fn on_compile(&self, path: &str, event: CompileEvent, duration: Duration);
     fn on_load(&self, path: &str, event: LoadEvent, duration: Duration);
     fn on_test_result(&self, result: &TestResult);
@@ -173,13 +175,6 @@ impl VerboseReporter {
 }
 
 impl TestReporter for VerboseReporter {
-    fn on_package_start(&self, pkg_run: &PackageRun, show_banner: bool) {
-        if show_banner {
-            println!();
-            println!("=== package: {} ===", pkg_run.label);
-        }
-    }
-
     fn on_compile(&self, path: &str, event: CompileEvent, duration: Duration) {
         let elapsed = self.elapsed();
         let dur = test::format_duration(duration);
@@ -223,6 +218,10 @@ impl TestReporter for VerboseReporter {
     }
 
     fn on_package_done(&self, args: PackageDoneArgs) {
+        if args.show_banner {
+            println!();
+            println!("=== package: {} ===", args.pkg_run.label);
+        }
         if args.no_run {
             let todo_entries: Vec<test::TodoEntry> = args
                 .todo_compile_errors
@@ -407,12 +406,6 @@ impl HeartbeatReporter {
 }
 
 impl TestReporter for HeartbeatReporter {
-    fn on_package_start(&self, _pkg_run: &PackageRun, _show_banner: bool) {
-        // Heartbeat treats the whole invocation as one continuous run — no
-        // per-package banners, consistent with the single running total
-        // it reports.
-    }
-
     fn on_compile(&self, path: &str, event: CompileEvent, _duration: Duration) {
         match event {
             CompileEvent::Ok => {}
@@ -736,12 +729,6 @@ impl TapReporter {
 }
 
 impl TestReporter for TapReporter {
-    fn on_package_start(&self, pkg_run: &PackageRun, show_banner: bool) {
-        if show_banner {
-            self.comment(&format!("package: {}", pkg_run.label));
-        }
-    }
-
     fn on_compile(&self, path: &str, event: CompileEvent, duration: Duration) {
         let dur = test::format_duration(duration);
         let rss = live_suffix().unwrap_or_default();

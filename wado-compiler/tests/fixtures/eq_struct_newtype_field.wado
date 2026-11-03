@@ -42,6 +42,42 @@ test "a generic struct at a newtype argument compares as its base" {
     assert a < b;
 }
 
+// The base's impls are derived here, not written, so the field's call is named
+// by the base the derived body is synthesized for.
+enum Hue {
+    Red,
+    Blue,
+}
+
+struct Point {
+    x: i32,
+}
+
+type Tint = Hue;
+type Spot = Point;
+
+struct Paint {
+    tint: Tint,
+    spot: Spot,
+}
+
+variant Mark {
+    Tinted(Tint),
+    Placed(Spot),
+}
+
+test "a newtype field over a derived base compares as its base" {
+    let a = Paint { tint: Tint::Red, spot: Point { x: 1 } as Spot };
+    let b = Paint { tint: Tint::Red, spot: Point { x: 1 } as Spot };
+    let c = Paint { tint: Tint::Blue, spot: Point { x: 1 } as Spot };
+    assert a == b;
+    assert a != c;
+    assert a < c;
+    assert Mark::Tinted(Tint::Red) == Mark::Tinted(Tint::Red);
+    assert Mark::Placed(Point { x: 1 } as Spot) != Mark::Placed(Point { x: 2 } as Spot);
+    assert Mark::Tinted(Tint::Blue) > Mark::Tinted(Tint::Red);
+}
+
 test "a body-local struct over a newtype field compares as its base" {
     type Local = i32;
     struct Pair {

@@ -13,6 +13,7 @@ mod cli;
 mod cli_parse;
 mod coverage;
 mod dependency_resolution;
+mod dump_checks;
 mod dump_kiln;
 mod eval_dependency;
 // Installs `wado-<name>` shell scripts on a temporary `PATH`.

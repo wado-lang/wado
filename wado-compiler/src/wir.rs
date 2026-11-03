@@ -13,6 +13,7 @@ use crate::hashmap::{IndexMap, IndexSet};
 
 use crate::compiler_item::CompilerItem;
 use crate::module_source::ModuleSource;
+use crate::rarity::{Mark, Rarity};
 use crate::tir::EffectRef;
 use crate::token::Span;
 use crate::world_registry::WorldSurface;
@@ -1585,8 +1586,8 @@ pub enum WirInstr {
         then_body: Vec<WirInstr>,
         else_body: Option<Vec<WirInstr>>,
     },
-    /// Branch hint annotation, synthesized from `builtin::cold_path()` by
-    /// `apply_cold_path_hints` during WIR finalization or inferred from
+    /// Branch hint annotation, synthesized from the unlikely markers by
+    /// `apply_unlikely_hints` during WIR finalization or inferred from
     /// trapping control flow by `wir_optimize::branch_hint`. Wraps a condition
     /// expression; consumed by the emitter when it appears as the condition of
     /// an `If` or `BrIf` instruction, which records a
@@ -1618,12 +1619,12 @@ pub enum WirInstr {
     Unreachable,
     /// No operation (for structure).
     Nop,
-    /// Cold-path marker emitted for `builtin::cold_path()`. Produces no Wasm.
-    /// `apply_cold_path_hints` consumes it during WIR finalization, wrapping
-    /// the enclosing conditional's condition in a `BranchHint` so the side
-    /// reaching the marker is hinted cold (see that pass for the recognized
-    /// shapes).
-    ColdPath,
+    /// A marker that the path it starts is rare, in the halves `Mark` states.
+    /// Produces no Wasm. `apply_unlikely_hints` reads the unlikely half during
+    /// WIR finalization, wrapping the enclosing conditional's condition in a
+    /// `BranchHint` so the side reaching the marker is hinted unlikely (see
+    /// that pass for the recognized shapes).
+    Rare(Mark),
     /// Optimization barrier for `builtin::black_box(value)`: every WIR pass
     /// reads it as an unknown value, and codegen emits the operand in its place.
     /// Opaque to what the operand *is*, transparent to what it *emits* — see
@@ -1764,15 +1765,16 @@ pub enum WirInstr {
 }
 
 impl WirInstr {
-    /// True when the branch `body` is cold throughout: it reaches a
-    /// `cold_path()` marker, which `wir_build` puts where each cold run starts,
-    /// with nothing ahead of it able to leave the branch. Descends through
-    /// transparent grouping (`Block` / `Seq`), so desugarings still match.
-    pub fn marks_cold_path(body: &[Self]) -> bool {
+    /// True when the branch `body` is rare in `rarity` throughout: it reaches a
+    /// [`WirInstr::Rare`] stating it, which `wir_build` puts where each rare
+    /// run starts, with nothing ahead of it able to leave the branch. Descends
+    /// through transparent grouping (`Block` / `Seq`), so desugarings still
+    /// match.
+    pub fn is_rare(body: &[Self], rarity: Rarity) -> bool {
         for instr in body {
             let grouped = matches!(instr, Self::Block { body, .. } | Self::Seq(body)
-                if Self::marks_cold_path(body));
-            if matches!(instr, Self::ColdPath) || grouped {
+                if Self::is_rare(body, rarity));
+            if matches!(instr, Self::Rare(mark) if mark.states(rarity)) || grouped {
                 return true;
             }
             if instr.leaves(0) {
@@ -1939,7 +1941,7 @@ impl WirInstr {
             | Self::BrTable { .. }
             | Self::DeclareLocal { .. }
             | Self::Nop
-            | Self::ColdPath => false,
+            | Self::Rare(_) => false,
             _ => true,
         }
     }
@@ -2057,7 +2059,7 @@ impl WirInstr {
             | Self::GlobalGet { .. }
             | Self::RefNull { .. }
             | Self::Nop
-            | Self::ColdPath
+            | Self::Rare(_)
             | Self::Unreachable
             | Self::MemorySize
             | Self::Br { .. }
@@ -2668,7 +2670,7 @@ impl WirInstr {
             | Self::GlobalGet { .. }
             | Self::RefNull { .. }
             | Self::Nop
-            | Self::ColdPath
+            | Self::Rare(_)
             | Self::Unreachable
             | Self::MemorySize
             | Self::Br { .. }

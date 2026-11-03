@@ -435,7 +435,7 @@ What casts did, the following do instead:
   used to return `0 as Stream<u8>`. A handler that traps on the operations it
   leaves out (`..trap`) traps on `new` too, so the test makes the handle
   outside its `with`. A double that told inputs apart by the handle's number
-  (`package-gale`'s `main_test.wado`) keys them by `ResourceId` instead. A
+  (`package-gale`'s `codegen_test.wado`) keys them by `ResourceId` instead. A
   double that returns a future, as
   `MockStdio::write_via_stream` does, keeps the writable end, and the test ends
   it: a handler runs only until its `resume`, a write inside it would block on
@@ -482,7 +482,8 @@ pub affine trait Drop with () {
   declares none. A resource's drop is benign in its own effect, and a type
   whose `drop` performs another names it with
   [`#[benign(E)]`](./spec-attributes.md#benigne-), which any function may
-  carry already. `AsyncCall`'s drop is `#[benign(Subtask)]`. A flush is output
+  carry already. `AsyncCall`'s drop needs none: its signature names
+  `AsyncCall`, whose field holds the `Subtask`. A flush is output
   a caller observes, so a writer that buffers ahead of a stream flushes by an
   explicit call, not in its drop.
 
@@ -753,14 +754,21 @@ it has none. The standard library implements the trait on the values that own
 a waitable handle, and nothing else may. A loop's variant derives it with the
 marker `impl Waitable for V;`, which the compiler writes out case by case: a
 case with a payload asks the payload, and one without is
-`Settled(Unreported)`. `Subtask` stays public, since a function waiting on a call it was neither
-handed nor started names it as an effect, but no value of it can be had
-outside `core`.
+`Settled(Unreported)`. `Subtask` stays public, since a `WaitableSet<Subtask>`
+names it, but no value of it can be had outside `core`.
 
-Since that resource is internal, no caller can install a handler for it, and a
-caller asked for it as an effect could only pass it on. The set's methods
-therefore declare its operations `#[benign(RawWaitableSet)]`, the way a drop's
-effects are benign, and `AsyncCall::wait` performs only `Subtask`.
+A method of `WaitableSet` names the set in its signature, and the set's field
+is the `RawWaitableSet`, so each holds that resource as
+[Resources in a Signature](./spec-effects.md#resources-in-a-signature) says,
+and declares nothing. `AsyncCall`'s drop holds the `Subtask` the same way.
+`AsyncCall::wait` and `cancel` declare `with Subtask`, since waiting is
+something a caller observes. That costs a caller nothing where it already holds
+the call's effect. An interface whose operation returns an `AsyncCall`
+mentions `Subtask` in that signature, so holding the interface holds `Subtask`
+([Implied Resources](./spec-effects.md#implied-resources)): a function that
+started the call declared the interface to start it. A function that names the
+call in its signature holds `Subtask` the same way. Only one that reached the
+call otherwise, through a global say, declares it.
 
 ### Web handles
 

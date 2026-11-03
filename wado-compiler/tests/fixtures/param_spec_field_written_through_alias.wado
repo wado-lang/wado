@@ -1,0 +1,37 @@
+// LICM hoists `self.cur` into a local that aliases the struct object, and the
+// loop writes through it. A clone specialized on the caller's initial `Cursor`
+// would restart on every call and never end.
+
+struct Cursor { at: i32, end: i32 }
+
+struct Stepper { cur: Cursor, skip: i32 }
+
+impl Stepper {
+    fn next(&mut self) -> i32 {
+        loop {
+            if self.cur.at >= self.cur.end { return -1; }
+            let at = self.cur.at;
+            self.cur.at = at + 1;
+            if at % self.skip == 0 { return at; }
+        }
+    }
+}
+
+fn count(s: &mut Stepper) -> i32 {
+    let mut n = 0;
+    while s.next() >= 0 { n += 1; }
+    return n;
+}
+
+test {
+    let mut s = Stepper { cur: Cursor { at: 0, end: 10 }, skip: 2 };
+    assert count(&mut s) == 5;
+}
+
+test "a range filter collects through the library iterator" {
+    let evens = (0..<10).filter(|x: i32| x % 2 == 0).collect();
+    assert evens.len() == 5;
+}
+
+__DATA__
+{"test": {}}

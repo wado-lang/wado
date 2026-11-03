@@ -10,7 +10,7 @@ use wado_compiler::codegen_flags::Pgo;
 use wado_compiler::pgo::{self, Profile};
 use wado_compiler::world_registry::TEST_WORLD;
 use wado_compiler::{CodegenFlags, CompilerHost as _, Diagnostic, Logger, Severity, wit_bundle};
-use wado_lsp::host::discovery::normalize_path;
+use wado_lsp::host::discovery::{Disk, PackageFiles, normalize_path};
 use wado_lsp::host::{PackageWalk, dependency_key};
 
 use crate::args::{self, CliExit};
@@ -24,9 +24,9 @@ use crate::dep_component::{
 use crate::fingerprint::Input;
 use crate::git::materialize;
 use crate::kiln_provider::{CliGeneratorProvider, RegistryContext, relative_to};
-use crate::knobs::{CompileKnobOpt, CompileKnobs, EmbedOpt, EmbedOptions};
+use crate::knobs::{CompileKnobOpt, CompileKnobs, EmbedOpt, EmbedOptions, HostKnobOpt, HostKnobs};
 use crate::manifest;
-use crate::manifest::{DiscoveryError, absolute, manifest_in, openable_dir, resolution_inputs};
+use crate::manifest::{DiscoveryError, absolute, manifest_in, openable_dir};
 use crate::metadata_embed::{clean_git_revision, embed_metadata_sections};
 use crate::run_cache::RunCache;
 use crate::wit::default_interface_name;
@@ -66,6 +66,7 @@ pub struct CompileOptions {
     pub wat_to_stdout: bool,
     /// The build knobs, shared with every other compiling subcommand.
     pub knobs: CompileKnobs,
+    pub host: HostKnobs,
     /// Whether the WIT and `[package]` metadata sections are embedded. The
     /// embedded WIT section is always the self-contained full closure (a
     /// `local`, registry-referencing section is not encodable; see WEP
@@ -101,6 +102,7 @@ impl CompileOptions {
             format: Some(OutputFormat::Wasm),
             wat_to_stdout: false,
             knobs: CompileKnobs::default(),
+            host: HostKnobs::default(),
             embed: EmbedOptions::default(),
             target_world,
             lib_world,
@@ -188,6 +190,7 @@ impl Opt {
         CompileKnobOpt::OptIterations,
         CompileKnobOpt::Specializations,
         CompileKnobOpt::OptThreads,
+        CompileKnobOpt::PredictableBranchThreshold,
         CompileKnobOpt::LogLevel,
         CompileKnobOpt::NoValidate,
         CompileKnobOpt::NoCache,
@@ -237,6 +240,7 @@ fn format_usage() -> String {
         args::OptsHelp::default()
             .add(Opt::ALL, |o| o.spec())
             .add(Opt::KNOBS, |o| o.spec())
+            .add(HostKnobOpt::ALL, |o| o.spec())
             .add(EmbedOpt::WIT_ONLY, |o| o.spec())
             .add(args::ParamOpt::ALL, |o| o.spec())
             .render()
@@ -253,10 +257,13 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<CompileOptions, CliExit>
     let mut wat_to_stdout = false;
     let mut target_world: Option<String> = None;
     let mut knobs = CompileKnobs::default();
+    let mut host = HostKnobs::default();
     let mut embed = EmbedOptions::default();
     while let Some(arg) = args::next_arg(&mut parser)? {
         if let Some(k) = args::match_opt(&arg, Opt::KNOBS, |k| k.spec()) {
             knobs.apply(k, &mut parser)?;
+        } else if let Some(h) = args::match_opt(&arg, HostKnobOpt::ALL, |h| h.spec()) {
+            host.apply(h);
         } else if let Some(p) = args::match_opt(&arg, args::ParamOpt::ALL, |p| p.spec()) {
             args::apply_param_opt(&mut knobs.params, p, &mut parser)?;
         } else if let Some(e) = args::match_opt(&arg, EmbedOpt::WIT_ONLY, |e| e.spec()) {
@@ -306,6 +313,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<CompileOptions, CliExit>
         format,
         wat_to_stdout,
         knobs,
+        host,
         embed,
         target_world,
         lib_world: None,
@@ -358,10 +366,6 @@ pub async fn try_compile_with_run_cache(
     })?;
 
     let base_path = path.parent().map(Path::to_path_buf).unwrap_or_default();
-    // Load the nearest manifest once: it seeds both the host's `[dependencies]`
-    // index and the Kiln pipeline's `[build-dependencies]` resolution.
-    let manifest_pair =
-        load_nearest_manifest(path).map_err(|e| TryCompileError::reported(e.to_string()))?;
     let base_host =
         FilesystemCompilerHost::with_log_level(base_path.clone(), flags.knobs.log_level);
     let base_host = match run_cache {
@@ -371,11 +375,10 @@ pub async fn try_compile_with_run_cache(
     // The entry file never goes through `load_source`, so the watch would
     // otherwise miss the one file the caller named.
     base_host.run_cache().observe(path, None, source.as_bytes());
-    if let Some(project) = &manifest_pair {
-        for file in resolution_inputs(&project.root) {
-            base_host.run_cache().depend_on_file(&file);
-        }
-    }
+    // Load the nearest manifest once: it seeds both the host's `[dependencies]`
+    // index and the Kiln pipeline's `[build-dependencies]` resolution.
+    let manifest_pair = load_nearest_manifest(path, &*base_host.run_cache())
+        .map_err(|e| TryCompileError::reported(e.to_string()))?;
     let host = attach_manifest_and_component_deps(
         base_host,
         manifest_pair.as_ref(),
@@ -393,8 +396,14 @@ pub async fn try_compile_with_run_cache(
         .map_err(|e| TryCompileError::reported(e.to_string()))?;
 
     let knobs = &flags.knobs;
-    let profile = entry_profile(path, knobs, flags.target_world.as_deref(), &host)
-        .map_err(TryCompileError::reported)?;
+    // A run recording the profile reads none: it would depend on the file it
+    // rewrites, and no count depends on the markers a profile places.
+    let profile = if flags.test_selection.workloads_only {
+        None
+    } else {
+        entry_profile(path, knobs, flags.target_world.as_deref(), &host)
+            .map_err(TryCompileError::reported)?
+    };
     let options = wado_compiler::CompilerOptions {
         opt_level: knobs.opt_level.to_compiler(),
         skip_validation: knobs.skip_validation,
@@ -449,10 +458,10 @@ pub(crate) fn entry_profile(
     let Some(file) = profile_file(path) else {
         return Ok(None);
     };
-    host.run_cache().depend_on_file(&file);
     let text = match fs::read_to_string(&file) {
         Ok(text) => text,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+            host.run_cache().observe_absent(&file);
             if pgo == Pgo::Requested {
                 Logger::new(host, knobs.log_level).info(format!(
                     "-f pgo: no profile at {}, so none is applied",
@@ -463,6 +472,8 @@ pub(crate) fn entry_profile(
         }
         Err(e) => return Err(format!("Error reading '{}': {e}", file.display())),
     };
+    // The bytes compiled, so an edit mid-run is reported as a source's is.
+    host.run_cache().observe(&file, None, text.as_bytes());
     pgo::parse(&text)
         .map(|profile| Some(Arc::new(profile)))
         .map_err(|e| format!("{}: {e}", file.display()))
@@ -514,11 +525,15 @@ pub(crate) fn attach_manifest_deps(
     base_path: &Path,
 ) -> FilesystemCompilerHost {
     match project {
-        Some(project) => host.with_dependency_index(wado_lsp::host::dependency_index_from(
-            &project.manifest,
-            &project.root,
-            base_path,
-        )),
+        Some(project) => {
+            let index = wado_lsp::host::dependency_index_from(
+                &project.manifest,
+                &project.root,
+                base_path,
+                &*host.run_cache(),
+            );
+            host.with_dependency_index(index)
+        }
         None => host,
     }
 }
@@ -541,7 +556,8 @@ pub(crate) async fn attach_manifest_and_component_deps(
     sources: &[&str],
     tier: Acquisition,
 ) -> Result<FilesystemCompilerHost, String> {
-    let index = manifest_and_component_index(project, base_path, sources, tier).await?;
+    let run = base_host.run_cache();
+    let index = manifest_and_component_index(project, base_path, sources, tier, &*run).await?;
     Ok(base_host.with_dependency_index(index).acquiring(tier))
 }
 
@@ -554,12 +570,15 @@ async fn manifest_and_component_index(
     base_path: &Path,
     sources: &[&str],
     tier: Acquisition,
+    files: &dyn PackageFiles,
 ) -> Result<wado_compiler::DependencyIndex, String> {
     // Acquire for every package of the build, the consumer's and each source
     // dependency's at any depth, inline ones included, before indexing it, so
     // the offline pass finds their git worktrees warm.
     let mut index = match project {
-        Some(project) => acquired_index(&project.manifest, &project.root, base_path, tier).await?,
+        Some(project) => {
+            acquired_index(&project.manifest, &project.root, base_path, tier, files).await?
+        }
         None => wado_compiler::DependencyIndex::default(),
     };
 
@@ -579,7 +598,7 @@ async fn manifest_and_component_index(
             index.unresolved.swap_remove(&name);
             let entry = PathBuf::from(path);
             bind_once(&mut index.resolved, name, dependency_key(&entry, base_path))?;
-            acquire_and_index(&mut index, vec![entry], base_path, tier).await?;
+            acquire_and_index(&mut index, vec![entry], base_path, tier, files).await?;
         }
         for (name, reason) in inline_git.unresolved {
             index.unresolved.insert(name, reason);
@@ -596,11 +615,12 @@ async fn acquired_index(
     root: &Path,
     base_path: &Path,
     tier: Acquisition,
+    files: &dyn PackageFiles,
 ) -> Result<wado_compiler::DependencyIndex, String> {
-    let own = acquire_package(manifest, root, tier).await?;
-    let (mut index, entries) = wado_lsp::host::package_index(manifest, root, base_path);
+    let own = acquire_package(manifest, root, tier, files).await?;
+    let (mut index, entries) = wado_lsp::host::package_index(manifest, root, base_path, files);
     adopt_components(&mut index, own);
-    acquire_and_index(&mut index, entries, base_path, tier).await?;
+    acquire_and_index(&mut index, entries, base_path, tier, files).await?;
     Ok(index)
 }
 
@@ -612,13 +632,14 @@ async fn acquire_undeclared_packages(host: &FilesystemCompilerHost) -> Result<bo
     let Some((tier, unacquired)) = host.unacquired_packages() else {
         return Ok(false);
     };
+    let run = host.run_cache();
     let mut resolved_more = false;
     for (read, offline) in unacquired {
         let root = Path::new(&read.root);
         // A manifest that cannot be read names nothing to acquire, and its
         // offline index already says why.
-        let acquired = if let Ok(Some(manifest)) = manifest_in(root) {
-            acquired_index(&manifest, root, &read.base, tier).await?
+        let acquired = if let Ok(Some(manifest)) = manifest_in(root, &*run) {
+            acquired_index(&manifest, root, &read.base, tier, &*run).await?
         } else {
             host.adopt_acquired(read, offline);
             continue;
@@ -654,10 +675,11 @@ async fn acquire_and_index(
     entries: Vec<PathBuf>,
     base_path: &Path,
     tier: Acquisition,
+    files: &dyn PackageFiles,
 ) -> Result<(), String> {
-    let mut walk = PackageWalk::new(entries, base_path);
+    let mut walk = PackageWalk::new(entries, base_path, files);
     while let Some(package) = walk.next(index) {
-        let fetched = acquire_package(&package.manifest, &package.root, tier).await?;
+        let fetched = acquire_package(&package.manifest, &package.root, tier, files).await?;
         adopt_components(walk.index(index, package), fetched);
     }
     Ok(())
@@ -672,8 +694,9 @@ async fn acquire_package(
     manifest: &wado_manifest::Manifest,
     root: &Path,
     tier: Acquisition,
+    files: &dyn PackageFiles,
 ) -> Result<Resolution, String> {
-    let materialized = materialize_git_dependencies(manifest, root).await;
+    let materialized = materialize_git_dependencies(manifest, root, files).await;
     if tier == Acquisition::Build {
         materialized?;
     }
@@ -684,7 +707,7 @@ async fn acquire_package(
     if !has_registry_dep {
         return Ok(Resolution::default());
     }
-    fetch_component_dependencies(manifest, root, tier).await
+    fetch_component_dependencies(manifest, root, tier, files).await
 }
 
 /// Upgrade the registry dependencies the offline pass left cold in `index`
@@ -729,8 +752,9 @@ fn bind_once(
 async fn materialize_git_dependencies(
     manifest: &wado_manifest::Manifest,
     manifest_root: &Path,
+    files: &dyn PackageFiles,
 ) -> Result<(), String> {
-    let locked = wado_lsp::host::discovery::locked_git_packages(manifest_root);
+    let locked = wado_lsp::host::discovery::locked_git_packages(manifest_root, files);
     for (name, dep) in &manifest.dependencies {
         let DependencySource::Git { url, .. } = &dep.source else {
             continue;
@@ -859,14 +883,16 @@ pub(crate) async fn prepare_kiln(
     let (theirs, mut ours): (Vec<_>, Vec<_>) = invocations
         .into_iter()
         .partition(|inv| packages.contains_key(&inv.decl_site().module));
-    rewrite_build_dep_modules(&mut ours, &manifest, &manifest_root).map_err(manifest_error)?;
+    let files = host.run_cache();
+    rewrite_build_dep_modules(&mut ours, &manifest, &manifest_root, &*files)
+        .map_err(manifest_error)?;
     let mut package_manifests = wado_compiler::hashmap::IndexMap::default();
     for mut invocation in theirs {
         let path = packages[&invocation.decl_site().module].as_deref();
         if !package_manifests.contains_key(&path) {
             let root = path.and_then(|path| Path::new(path).parent());
             let manifest = match root {
-                Some(root) => manifest_in(root)
+                Some(root) => manifest_in(root, &*files)
                     .map_err(manifest_error)?
                     .map(|m| (root.to_path_buf(), m)),
                 None => None,
@@ -875,11 +901,11 @@ pub(crate) async fn prepare_kiln(
         }
         let package = package_manifests[&path].as_ref();
         let package = package.map(|(root, m)| (root.as_path(), m));
-        adopt_dependency_invocation(&mut invocation, package, &manifest_root)?;
+        adopt_dependency_invocation(&mut invocation, package, &manifest_root, &*files)?;
         ours.push(invocation);
     }
     let mut invocations = ours;
-    rewrite_local_dir_modules(&mut invocations, &manifest_root).map_err(manifest_error)?;
+    rewrite_local_dir_modules(&mut invocations, &manifest_root, &*files).map_err(manifest_error)?;
     let invocations = merge_across_packages(invocations).map_err(|disagreements| {
         PipelineError::InlineClause(emit_counting_errors(host, disagreements))
     })?;
@@ -900,7 +926,7 @@ pub(crate) async fn prepare_kiln(
         .with_registry_context(RegistryContext {
             build_dependencies: manifest.build_dependencies,
             registries: manifest.registries,
-            locked_versions: locked_generator_versions(&manifest_root),
+            locked_versions: locked_generator_versions(&manifest_root, &*files),
         });
     let kiln_host = host.rebased(manifest_root.clone());
     Ok(Some(KilnSetup {
@@ -1043,7 +1069,7 @@ pub(crate) async fn run_nested_pipeline(
     // A generator shipped as a package names its dependencies in its own
     // manifest, so that is the project. The rest is the outer run's.
     let run = &KilnRun {
-        project: load_nearest_manifest(entry_file).map_err(manifest_error)?,
+        project: load_nearest_manifest(entry_file, &*host.run_cache()).map_err(manifest_error)?,
         ..outer.clone()
     };
     // Its own root, so nothing the outer walk settled.
@@ -1070,6 +1096,7 @@ pub(crate) fn rewrite_build_dep_modules(
     inline: &mut [wado_compiler::kiln::Invocation],
     manifest: &wado_manifest::Manifest,
     manifest_root: &Path,
+    files: &dyn PackageFiles,
 ) -> Result<(), DiscoveryError> {
     use wado_compiler::kiln::GeneratorModule;
     for inv in inline.iter_mut() {
@@ -1078,7 +1105,7 @@ pub(crate) fn rewrite_build_dep_modules(
         };
         let key = spec_key(&spec.spec);
         if let Some(local) =
-            build_dep_generator_local_path(key, manifest, manifest_root, manifest_root)?
+            build_dep_generator_local_path(key, manifest, manifest_root, manifest_root, files)?
         {
             inv.module = GeneratorModule::LocalPath(local);
         }
@@ -1094,6 +1121,7 @@ fn adopt_dependency_invocation(
     invocation: &mut wado_compiler::kiln::Invocation,
     package: Option<(&Path, &wado_manifest::Manifest)>,
     manifest_root: &Path,
+    files: &dyn PackageFiles,
 ) -> Result<(), PipelineError> {
     use wado_compiler::kiln::{DeclSite, GeneratorModule, GeneratorSpec};
     let DeclSite {
@@ -1128,7 +1156,7 @@ fn adopt_dependency_invocation(
     invocation.module = match &dep.source {
         DependencySource::Path { .. } => {
             let Some(local) =
-                build_dep_generator_local_path(key, manifest, package_root, manifest_root)
+                build_dep_generator_local_path(key, manifest, package_root, manifest_root, files)
                     .map_err(manifest_error)?
             else {
                 return Err(unsupported(format!(
@@ -1178,6 +1206,7 @@ fn adopt_dependency_invocation(
 pub(crate) fn rewrite_local_dir_modules(
     inline: &mut [wado_compiler::kiln::Invocation],
     manifest_root: &Path,
+    files: &dyn PackageFiles,
 ) -> Result<(), DiscoveryError> {
     use wado_compiler::kiln::{GeneratorModule, InvocationPath};
     for inv in inline.iter_mut() {
@@ -1188,7 +1217,7 @@ pub(crate) fn rewrite_local_dir_modules(
         if !abs.is_dir() {
             continue;
         }
-        if let Some(entry) = package_generator_entry(&abs)? {
+        if let Some(entry) = package_generator_entry(&abs, files)? {
             inv.module = GeneratorModule::LocalPath(InvocationPath::normalize(&format!(
                 "{}/{entry}",
                 path.as_str()
@@ -1208,6 +1237,7 @@ fn build_dep_generator_local_path(
     manifest: &wado_manifest::Manifest,
     package_root: &Path,
     manifest_root: &Path,
+    files: &dyn PackageFiles,
 ) -> Result<Option<wado_compiler::kiln::InvocationPath>, DiscoveryError> {
     let Some(dep) = manifest.build_dependencies.get(key) else {
         return Ok(None);
@@ -1216,7 +1246,7 @@ fn build_dep_generator_local_path(
         return Ok(None);
     };
     let package_dir = absolute(package_root).join(path);
-    let Some(entry) = package_generator_entry(&package_dir)? else {
+    let Some(entry) = package_generator_entry(&package_dir, files)? else {
         return Ok(None);
     };
     let entry = normalize_path(&package_dir.join(entry));
@@ -1233,8 +1263,11 @@ fn build_dep_generator_local_path(
 /// single source of truth for mapping a package to its generator entry, shared
 /// by the `[build-dependencies]`-name and directory-`module:` resolution paths
 /// so both spellings land on the same entry file.
-fn package_generator_entry(pkg_dir: &Path) -> Result<Option<String>, DiscoveryError> {
-    let Some(manifest) = manifest_in(pkg_dir)? else {
+fn package_generator_entry(
+    pkg_dir: &Path,
+    files: &dyn PackageFiles,
+) -> Result<Option<String>, DiscoveryError> {
+    let Some(manifest) = manifest_in(pkg_dir, files)? else {
         return Ok(None);
     };
     Ok(manifest
@@ -1314,9 +1347,10 @@ fn remap_and_report_conflicts(
 /// there is none, an error when the one found cannot be read or parsed.
 pub fn load_nearest_manifest(
     entry_file: &Path,
+    files: &dyn PackageFiles,
 ) -> Result<Option<manifest::ProjectManifest>, DiscoveryError> {
     let dir = entry_file.parent().unwrap_or(Path::new("."));
-    manifest::discover(openable_dir(dir))
+    manifest::discover(openable_dir(dir), files)
 }
 
 fn wasm_to_wat(wasm: &[u8]) -> Result<String, CliExit> {
@@ -1470,7 +1504,7 @@ pub async fn compile_to_artifact(opts: CompileOptions) -> Result<Artifact, CliEx
 
     // Up front, since the WIT contract names its interface after the package
     // before the compile; the output path and metadata embedding reuse it.
-    let nearest = load_nearest_manifest(Path::new(&opts.input)).map_err(CliExit::error)?;
+    let nearest = load_nearest_manifest(Path::new(&opts.input), &Disk).map_err(CliExit::error)?;
 
     let mut flags = opts.flags();
     flags.retain_wir = embed.is_some();
@@ -1707,16 +1741,19 @@ mod kiln_dir_module_tests {
         let _ = std::fs::remove_dir_all(&root);
         let pkg = write_pkg(&root, "gen-pkg", Some("src/generator.wado"));
         assert_eq!(
-            package_generator_entry(&pkg).unwrap().as_deref(),
+            package_generator_entry(&pkg, &Disk).unwrap().as_deref(),
             Some("src/generator.wado")
         );
         let plain = write_pkg(&root, "plain-pkg", None);
-        assert_eq!(package_generator_entry(&plain).unwrap(), None);
-        assert_eq!(package_generator_entry(&root.join("absent")).unwrap(), None);
+        assert_eq!(package_generator_entry(&plain, &Disk).unwrap(), None);
+        assert_eq!(
+            package_generator_entry(&root.join("absent"), &Disk).unwrap(),
+            None
+        );
         // An invalid manifest is reported, not read as one declaring no entry.
         let broken = write_pkg(&root, "broken-pkg", None);
         std::fs::write(broken.join("wado.toml"), "[package\n").unwrap();
-        assert!(package_generator_entry(&broken).is_err());
+        assert!(package_generator_entry(&broken, &Disk).is_err());
         let _ = std::fs::remove_dir_all(&root);
     }
 
@@ -1729,7 +1766,7 @@ mod kiln_dir_module_tests {
         // A directory module is rewritten to its package generator entry,
         // landing on the same path identity as a direct entry-file module.
         let mut inline = vec![local_invocation("./gen-pkg")];
-        rewrite_local_dir_modules(&mut inline, &root).unwrap();
+        rewrite_local_dir_modules(&mut inline, &root, &Disk).unwrap();
         match &inline[0].module {
             GeneratorModule::LocalPath(p) => {
                 assert_eq!(p.as_str(), "gen-pkg/src/generator.wado");
@@ -1756,14 +1793,14 @@ mod kiln_dir_module_tests {
                 ),
             )
             .unwrap();
-            let manifest = manifest_in(&app).unwrap().unwrap();
+            let manifest = manifest_in(&app, &Disk).unwrap().unwrap();
             let mut inline = vec![local_invocation("./unused.wado")];
             inline[0].module = GeneratorModule::Spec(wado_compiler::kiln::GeneratorSpec {
                 spec: "lib:gen".to_string(),
                 version: None,
                 registry: None,
             });
-            rewrite_build_dep_modules(&mut inline, &manifest, &app).unwrap();
+            rewrite_build_dep_modules(&mut inline, &manifest, &app, &Disk).unwrap();
             match &inline[0].module {
                 GeneratorModule::LocalPath(p) => {
                     assert_eq!(p.as_str(), "../gen-pkg/src/generator.wado", "path {path}");
@@ -1788,7 +1825,7 @@ mod kiln_dir_module_tests {
             local_invocation("./plain-pkg"),
             local_invocation("./gen.wado"),
         ];
-        rewrite_local_dir_modules(&mut inline, &root).unwrap();
+        rewrite_local_dir_modules(&mut inline, &root, &Disk).unwrap();
         match &inline[0].module {
             GeneratorModule::LocalPath(p) => assert_eq!(p.as_str(), "plain-pkg"),
             other => panic!("expected untouched LocalPath, got {other:?}"),

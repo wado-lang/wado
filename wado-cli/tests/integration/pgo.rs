@@ -79,6 +79,36 @@ fn only_the_workloads_are_recorded_into_the_package_profile() {
     );
 }
 
+/// `HashMap::new` hashes under `wasi:random/insecure-seed`, and the seed
+/// decides how far its probes go, so a recording run fixes it.
+#[test]
+fn a_hash_map_records_the_same_profile_every_run() {
+    let tmp = tempfile::tempdir().unwrap();
+    fs::write(
+        tmp.path().join("prog.wado"),
+        "use { HashMap } from \"core:collections\";\n\n\
+         #[workload]\ntest {\n    let mut map = HashMap::<String, i32>::new();\n    \
+         for let i of 0..<2000 {\n        map[`key-${i}`] = i;\n    }\n    \
+         assert map.len() == 2000;\n}\n",
+    )
+    .unwrap();
+    let record = || {
+        wado_in(tmp.path())
+            .args(["test", "--pgo", "prog.wado"])
+            .assert()
+            .success();
+        fs::read_to_string(tmp.path().join("pgo/prog.pgo")).unwrap()
+    };
+    let first = record();
+    assert!(
+        first.contains("\nmodule core:collections/hashmap.wado\n"),
+        "{first}"
+    );
+    for _ in 0..3 {
+        assert_eq!(record(), first);
+    }
+}
+
 #[test]
 fn a_program_in_no_package_keeps_a_profile_of_its_own() {
     let tmp = tempfile::tempdir().unwrap();
@@ -212,7 +242,7 @@ fn a_package_left_with_no_workload_loses_its_profile() {
 }
 
 /// A build applies the profile `--pgo` recorded unless `-f no-pgo` says not
-/// to. The conflict remark on the `cold_path()` the workload ran shows it was
+/// to. The remark overriding the `cold_path()` the workload ran shows it was
 /// applied.
 #[test]
 fn a_build_applies_the_entry_profile_under_pgo() {
@@ -225,7 +255,7 @@ fn a_build_applies_the_entry_profile_under_pgo() {
          export fn run() with Stdout {\n    println(`${pick(1)}`);\n}\n",
     )
     .unwrap();
-    let remark = "`cold_path()` marks a path the profile ran once";
+    let remark = "`cold_path()` marks this path rare, but the profile ran it once";
     let missing = "-f pgo: no profile at";
     let run = || {
         wado_in(tmp.path())
@@ -255,6 +285,46 @@ fn a_build_applies_the_entry_profile_under_pgo() {
     fs::remove_file(tmp.path().join("pgo/prog.pgo")).unwrap();
     compile(&["-f", "pgo"]).stderr(predicate::str::contains(missing));
     compile(&[]).stderr(predicate::str::contains(missing).not());
+}
+
+/// The test world applies the profile, so a cached pass depends on it: its
+/// arrival and each edit run the tests again.
+#[test]
+fn a_cached_test_pass_follows_the_profile() {
+    let tmp = tempfile::tempdir().unwrap();
+    fs::write(
+        tmp.path().join("prog.wado"),
+        format!("{PICK}\n#[workload]\ntest {{\n    assert pick(1) == 2;\n}}\n"),
+    )
+    .unwrap();
+    let test = |cached: bool| {
+        let hit = predicate::str::contains("cached:  1 files");
+        let assert = wado_in(tmp.path())
+            .args(["test", "prog.wado"])
+            .assert()
+            .success();
+        if cached {
+            assert.stdout(hit);
+        } else {
+            assert.stdout(hit.not());
+        }
+    };
+
+    test(false);
+    test(true);
+    wado_in(tmp.path())
+        .args(["test", "--pgo", "prog.wado"])
+        .assert()
+        .success();
+    test(false);
+    test(true);
+
+    let profile = tmp.path().join("pgo/prog.pgo");
+    let recorded = fs::read_to_string(&profile).unwrap();
+    let edited = recorded.replace("\n0 1\n", "\n0 7\n");
+    assert_ne!(edited, recorded, "`pick` ran once\n{recorded}");
+    fs::write(&profile, edited).unwrap();
+    test(false);
 }
 
 #[test]

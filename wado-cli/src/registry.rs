@@ -5,6 +5,7 @@
 use std::future::{Future, ready};
 use std::path::PathBuf;
 
+use wado_lsp::host::discovery::Disk;
 use wado_manifest::{
     DependencyProvider, GitTagInfo, Manifest, ProviderError, RegistryPackageInfo, Version,
 };
@@ -59,7 +60,7 @@ impl FilesystemProvider {
         // workspace member: it force-inherits `version` and would otherwise fail
         // a standalone parse. Falls back to a standalone parse when it is not.
         let member_dir = toml_path.parent().unwrap_or(self.root.as_path());
-        resolve_manifest(member_dir, &text).map_err(|e| ProviderError::InvalidManifest {
+        resolve_manifest(member_dir, &text, &Disk).map_err(|e| ProviderError::InvalidManifest {
             source: toml_path.display().to_string(),
             message: e.to_string(),
         })
@@ -262,6 +263,7 @@ name = "app"
         let manifest = resolve_manifest(
             &app_dir,
             &std::fs::read_to_string(app_dir.join("wado.toml")).unwrap(),
+            &Disk,
         )
         .unwrap();
         let provider = FilesystemProvider::new(app_dir);

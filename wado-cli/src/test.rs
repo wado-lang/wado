@@ -16,6 +16,7 @@ use wado_compiler::TestSelection;
 use wado_compiler::ast::TodoMark;
 use wado_compiler::coverage::{CoverageScope, read_from_component};
 use wado_compiler::hashmap::{IndexMap, IndexSet};
+use wado_lsp::host::discovery::Disk;
 use wasmtime::component::{Component, Linker};
 use wasmtime::{Engine, GuestProfiler, Trap, UpdateDeadline};
 
@@ -29,12 +30,14 @@ use crate::discover;
 use crate::eval_host::{EvalHost, EvalSession, TestClock};
 use crate::fingerprint::Input;
 use crate::fuel_host::{self, FuelRegion};
-use crate::knobs::{CompileKnobOpt, CompileKnobs, RuntimeKnobOpt, RuntimeKnobs};
+use crate::knobs::{
+    CompileKnobOpt, CompileKnobs, HostKnobOpt, HostKnobs, RuntimeKnobOpt, RuntimeKnobs,
+};
 use crate::manifest::package_root;
 use crate::process_host::ProcessGrant;
 use crate::rss::summary_line;
 use crate::run_cache::RunCache;
-use crate::runtime::{self, ProfileMode, Ticker, WasiState};
+use crate::runtime::{self, InsecureRandom, ProfileMode, Ticker, WasiState};
 use crate::test_cache::{self, Tally, TestCache};
 use crate::test_report::{
     CompileEvent, HeartbeatReporter, LoadEvent, PackageDoneArgs, TapReporter, TestReporter,
@@ -64,6 +67,7 @@ pub struct TestOptions {
     /// `knobs.allocator` stays `None` so the compiler auto-selects the debug
     /// allocator for the `test` world; `--allocator` overrides.
     pub knobs: CompileKnobs,
+    pub host: HostKnobs,
     pub runtime: RuntimeKnobs,
     pub grants: TestGrants,
     /// `--no-run`: compile every file (which still refreshes
@@ -103,7 +107,7 @@ impl TestGrants {
                 let root = lock(roots)
                     .entry(dir.to_path_buf())
                     .or_insert_with(|| {
-                        package_root(dir)
+                        package_root(dir, &Disk)
                             .unwrap_or_else(|| PathBuf::from("."))
                             .display()
                             .to_string()
@@ -151,6 +155,7 @@ impl TestOptions {
             test_selection: TestSelection {
                 names: self.test_name_filters.clone(),
                 workloads_only: matches!(self.measurement, Some(Measurement::Pgo { .. })),
+                ..TestSelection::default()
             },
             coverage: self.measurement.as_ref().map(Measurement::scope),
             ..CompileFlags::default()
@@ -207,6 +212,7 @@ impl Opt {
         CompileKnobOpt::OptIterations,
         CompileKnobOpt::Specializations,
         CompileKnobOpt::OptThreads,
+        CompileKnobOpt::PredictableBranchThreshold,
         CompileKnobOpt::LogLevel,
         CompileKnobOpt::Allocator,
         CompileKnobOpt::NoCache,
@@ -323,6 +329,7 @@ fn format_usage() -> String {
             .add(Opt::ALL, |o| o.spec())
             .add(Opt::KNOBS, |o| o.spec())
             .add(RuntimeKnobOpt::ALL, |o| o.spec())
+            .add(HostKnobOpt::ALL, |o| o.spec())
             .add(args::ParamOpt::ALL, |o| o.spec())
             .render()
     )
@@ -397,6 +404,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<TestOptions, CliExit> {
     let mut include: Option<CoverageScope> = None;
     let mut baseline: Option<PathBuf> = None;
     let mut runtime_knobs = RuntimeKnobs::default();
+    let mut host = HostKnobs::default();
     // Each file's optimizer runs on one thread, since `--parallel` already
     // spreads the files across the cores.
     let mut knobs = CompileKnobs {
@@ -414,6 +422,8 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<TestOptions, CliExit> {
             knobs.apply(k, &mut parser)?;
         } else if let Some(r) = args::match_opt(&arg, RuntimeKnobOpt::ALL, |r| r.spec()) {
             runtime_knobs.apply(r, &mut parser)?;
+        } else if let Some(h) = args::match_opt(&arg, HostKnobOpt::ALL, |h| h.spec()) {
+            host.apply(h);
         } else if let Some(p) = args::match_opt(&arg, args::ParamOpt::ALL, |p| p.spec()) {
             args::apply_param_opt(&mut knobs.params, p, &mut parser)?;
         } else if let Some(opt) = args::match_opt(&arg, Opt::ALL, |o| o.spec()) {
@@ -607,6 +617,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<TestOptions, CliExit> {
         package_runs,
         jobs,
         knobs,
+        host,
         runtime: runtime_knobs,
         grants: dirs.given().map_or_else(
             || TestGrants::PackageRoot(Mutex::default()),
@@ -634,7 +645,7 @@ fn pgo_profiles(runs: &[PackageRun]) -> Result<BTreeSet<PathBuf>, CliExit> {
     }
     let roots: BTreeSet<PathBuf> = files
         .iter()
-        .filter_map(|file| package_root(file.parent().expect("a test file has a directory")))
+        .filter_map(|file| package_root(file.parent().expect("a test file has a directory"), &Disk))
         .collect();
     for root in roots {
         for file in discover::package_files(&root, &|pkg| test_filters(pkg, &[]))? {
@@ -702,12 +713,13 @@ pub(crate) struct LoadFailure {
     pub(crate) path: String,
 }
 
-/// Pipeline-wide resource caps.
+/// The run's resource caps, shared by every package's pipeline, since the
+/// packages run at once.
 ///
 /// `cpu` caps total CPU-bound tasks across all three stages — every worker
 /// acquires one permit. This makes `--parallel N` a truthful global cap
-/// that per-stage buffer sizes can't multiply. It is the whole run's
-/// budget, shared with `core:eval`, whose compiles can outlive a package.
+/// that per-stage buffer sizes and the number of packages can't multiply.
+/// `core:eval`, whose compiles can outlive a package, shares it too.
 ///
 /// `modules` caps live wasmtime `Component`s independently of channel
 /// buffering, bounding peak memory. The permit is held via
@@ -1548,8 +1560,8 @@ struct PipelineOutcome {
 
 /// Increments the wasmtime epoch on every registered engine. The registry
 /// holds `Weak<Engine>`, so an engine is freed once the last `LoadedModule`
-/// for it drops, and the next tick prunes its entry: a package run loading
-/// many modules does not accumulate engines.
+/// for it drops, and the next tick prunes its entry: a run loading many
+/// modules does not accumulate engines.
 struct EpochTicker {
     engines: Arc<Mutex<Vec<Weak<Engine>>>>,
     _ticker: Ticker,
@@ -1601,19 +1613,20 @@ impl EpochTicker {
 /// therefore small (just enough to keep the pipeline non-bursty), with
 /// the real limits enforced at the per-task-acquire points.
 ///
-/// Under `--no-run`, the load and execute stages are replaced with
-/// "drain to /dev/null" tasks so the compile stage producers don't
-/// block on a full channel — all the work after stage 1 disappears.
+/// Under `--no-run`, where the run has no `epoch_ticker`, the load and
+/// execute stages are replaced with "drain to /dev/null" tasks so the
+/// compile stage producers don't block on a full channel — all the work
+/// after stage 1 disappears.
 async fn run_pipeline(
     paths: &[String],
     flags: Arc<CompileFlags>,
-    cpu: Arc<Semaphore>,
+    budget: Arc<PipelineBudget>,
     compile_jobs: usize,
     load_jobs: usize,
     execute_jobs: usize,
     grants: Arc<TestGrants>,
     eval_host: Arc<EvalHost>,
-    no_run: bool,
+    epoch_ticker: Option<Arc<EpochTicker>>,
     profile: ProfileMode,
     runtime_knobs: RuntimeKnobs,
     profiler_slot: Option<GuestProfilerSlot>,
@@ -1622,7 +1635,6 @@ async fn run_pipeline(
     coverage_run: Option<Arc<CoverageRun>>,
 ) -> PipelineOutcome {
     let opt_level = flags.knobs.opt_level.to_wasmtime();
-    let budget = Arc::new(PipelineBudget::new(cpu, compile_jobs, execute_jobs));
 
     // Inter-stage channel capacities: small. The `modules` semaphore
     // and per-stage `buffer_unordered` caps are what actually limit
@@ -1644,14 +1656,6 @@ async fn run_pipeline(
     let compile_observer = Arc::new(StageObserver::new());
     let load_observer = Arc::new(StageObserver::new());
     let execute_observer = Arc::new(StageObserver::new());
-
-    // Epoch ticker lives only when execute will run; in `--no-run` mode
-    // no engines are loaded and there's nothing to tick.
-    let tick = match &profile {
-        ProfileMode::Guest { interval_ms, .. } => Duration::from_millis(*interval_ms),
-        _ => Duration::from_millis(EPOCH_INTERVAL_MS),
-    };
-    let epoch_ticker = (!no_run).then(|| Arc::new(EpochTicker::start(tick)));
 
     let paths_owned: Vec<String> = paths.to_vec();
     let compile_future = run_compile_stage(
@@ -1731,8 +1735,6 @@ async fn run_pipeline(
         tokio::spawn(collect_into_vec(result_rx)),
     ));
 
-    drop(epoch_ticker); // Stops the tick thread.
-
     PipelineOutcome {
         compiled_count,
         load,
@@ -1789,6 +1791,11 @@ async fn run_single_test(job: &TestJob, cpu_permit: OwnedSemaphorePermit) -> Tes
             Arc::clone(&clock),
         ),
         module.process.clone(),
+        if module.coverage.is_some() || module.engine.get_consume_fuel() {
+            InsecureRandom::Fixed
+        } else {
+            InsecureRandom::Host
+        },
     ) {
         Ok(v) => v,
         Err(e) => return fail_result(job, format!("failed to set up store: {e:#}"), start, None),
@@ -2296,17 +2303,19 @@ fn tally_test_results(results: &[TestResult]) -> (u32, u32, u32, u32) {
     (passed, failed, todo_pending, todo_resolved)
 }
 
+/// Runs one package's files, and answers its totals and, under
+/// `--report-fuel`, its test results.
 async fn run_one_package(
     pkg_run: &PackageRun,
     flags: Arc<CompileFlags>,
-    cpu: Arc<Semaphore>,
+    budget: Arc<PipelineBudget>,
     compile_jobs: usize,
     load_jobs: usize,
     execute_jobs: usize,
     grants: Arc<TestGrants>,
     eval_host: Arc<EvalHost>,
     show_banner: bool,
-    no_run: bool,
+    epoch_ticker: Option<Arc<EpochTicker>>,
     profile: ProfileMode,
     runtime_knobs: RuntimeKnobs,
     profiler_slot: Option<GuestProfilerSlot>,
@@ -2315,10 +2324,9 @@ async fn run_one_package(
     coverage_run: Option<Arc<CoverageRun>>,
     test_cache: Option<&TestCache>,
     cached: &[(String, Tally)],
-    metered: Option<&mut Vec<TestResult>>,
-) -> PackageTotals {
-    reporter.on_package_start(pkg_run, show_banner);
-
+) -> (PackageTotals, Option<Vec<TestResult>>) {
+    let no_run = epoch_ticker.is_none();
+    let report_fuel = runtime_knobs.report_fuel;
     let mut cached_tests = Tally::default();
     for (path, tally) in cached {
         reporter.on_cached(path, *tally);
@@ -2329,13 +2337,13 @@ async fn run_one_package(
     let outcome = run_pipeline(
         &pkg_run.paths,
         flags,
-        cpu,
+        budget,
         compile_jobs,
         load_jobs,
         execute_jobs,
         grants,
         eval_host,
-        no_run,
+        epoch_ticker,
         profile,
         runtime_knobs,
         profiler_slot,
@@ -2403,6 +2411,7 @@ async fn run_one_package(
 
     reporter.on_package_done(PackageDoneArgs {
         pkg_run,
+        show_banner,
         totals: &totals,
         test_results: &test_results,
         todo_compile_errors: &todo_compile_errors,
@@ -2411,10 +2420,7 @@ async fn run_one_package(
         no_run,
     });
 
-    if let Some(metered) = metered {
-        metered.extend(test_results);
-    }
-    totals
+    (totals, report_fuel.then_some(test_results))
 }
 
 /// Cache each file in `cacheable` whose every test passed, or trapped as a
@@ -2541,8 +2547,8 @@ pub async fn run(opts: TestOptions) -> Result<(), CliExit> {
     // `jobs` (= `--parallel N`, default `cpus`) is the **true** cap
     // on peak in-flight CPU work, enforced by the run's shared `cpu`
     // semaphore: every per-fixture worker — compile, load, execute —
-    // and every `eval` compile acquires one CPU permit before doing
-    // its work. Per-stage `*_jobs` caps below only
+    // of every package, and every `eval` compile, acquires one CPU permit
+    // before doing its work. Per-stage `*_jobs` caps below only
     // shape queueing depth and how upstream backpressure is
     // distributed; they cannot exceed `jobs` in actual concurrency.
     //
@@ -2551,10 +2557,14 @@ pub async fn run(opts: TestOptions) -> Result<(), CliExit> {
     // load workers on top of internal Cranelift threading thrashes
     // more than it helps. The shared cpu semaphore enforces the
     // cross-stage total either way.
-    let cpu = Arc::new(Semaphore::new(jobs));
     let compile_jobs = jobs;
     let load_jobs = (jobs / 2).max(1);
     let execute_jobs = jobs;
+    let budget = Arc::new(PipelineBudget::new(
+        Arc::new(Semaphore::new(jobs)),
+        compile_jobs,
+        execute_jobs,
+    ));
 
     // A cached file reports its tally and nothing else, so a run measuring the
     // tests (a profile, coverage, fuel) runs them all, and `--no-run` has no
@@ -2587,25 +2597,31 @@ pub async fn run(opts: TestOptions) -> Result<(), CliExit> {
 
     // One view of the source tree for the whole run, across packages.
     let run_cache = Arc::new(RunCache::new());
-    let eval_host = Arc::new(EvalHost::new(&flags.knobs, Arc::clone(&cpu), jobs));
+    let eval_host = Arc::new(EvalHost::new(&flags.knobs, Arc::clone(&budget.cpu), jobs));
     // `parse_args` admits one file under `--profile`, so this one slot holds
     // the run's only profiler and the write below happens once.
     let profiler_slot = matches!(profile, ProfileMode::Guest { .. })
         .then(|| Arc::new(Mutex::new(None)) as GuestProfilerSlot);
-    let mut grand = PackageTotals::default();
-    let mut metered = runtime_knobs.report_fuel.then(Vec::new);
-    for (pkg_run, cached) in package_runs.iter().zip(&cached) {
-        let totals = run_one_package(
+    // One ticker for every package, since they run at once; `--no-run` loads
+    // no engine to tick.
+    let tick = match &profile {
+        ProfileMode::Guest { interval_ms, .. } => Duration::from_millis(*interval_ms),
+        _ => Duration::from_millis(EPOCH_INTERVAL_MS),
+    };
+    let epoch_ticker = (!no_run).then(|| Arc::new(EpochTicker::start(tick)));
+    // One package alone leaves cores idle while its last files finish.
+    let packages = package_runs.iter().zip(&cached).map(|(pkg_run, cached)| {
+        run_one_package(
             pkg_run,
             Arc::clone(&flags),
-            Arc::clone(&cpu),
+            Arc::clone(&budget),
             compile_jobs,
             load_jobs,
             execute_jobs,
             Arc::clone(&grants),
             Arc::clone(&eval_host),
             multi_pkg,
-            no_run,
+            epoch_ticker.clone(),
             profile.clone(),
             runtime_knobs.clone(),
             profiler_slot.clone(),
@@ -2614,11 +2630,17 @@ pub async fn run(opts: TestOptions) -> Result<(), CliExit> {
             coverage_run.clone(),
             test_cache.as_ref(),
             cached,
-            metered.as_mut(),
         )
-        .await;
+    });
+    let mut grand = PackageTotals::default();
+    let mut metered = runtime_knobs.report_fuel.then(Vec::new);
+    for (totals, results) in futures::future::join_all(packages).await {
         grand.merge(&totals);
+        if let (Some(metered), Some(results)) = (metered.as_mut(), results) {
+            metered.extend(results);
+        }
     }
+    drop(epoch_ticker); // Stops the tick thread.
 
     reporter.on_run_done(&grand, multi_pkg, overall_start.elapsed());
 

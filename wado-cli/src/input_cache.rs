@@ -17,7 +17,7 @@ use serde::Serialize;
 use serde::de::DeserializeOwned;
 use sha2::{Digest, Sha256};
 use wado_compiler::hashmap::IndexMap;
-use wado_lsp::host::discovery::{absolutize, normalize_path};
+use wado_lsp::host::discovery::{Disk, absolutize, normalize_path};
 
 use crate::cache::derived_dir;
 use crate::compile::CompileFlags;
@@ -27,7 +27,7 @@ use crate::manifest::package_root;
 use wado_host::sync::lock;
 
 /// The `WADO_*` environment, sorted. The compiler reads these itself
-/// (`WADO_SKIP_PASS`, `WADO_NO_PRELOWER_PRUNE`) rather than through its host,
+/// (`WADO_SKIP_PASS`, say) rather than through its host,
 /// and they change what it emits.
 fn wado_env() -> Vec<(OsString, OsString)> {
     let mut vars: Vec<_> = std::env::vars_os()
@@ -82,7 +82,7 @@ impl InputCache {
         hasher.update(self.options);
         hash_field(&mut hasher, file.as_os_str().as_encoded_bytes());
         let key: [u8; 32] = hasher.finalize().into();
-        let stem = derived_dir(package_root(dir).as_deref(), self.kind)?.join(hex32(&key));
+        let stem = derived_dir(package_root(dir, &Disk).as_deref(), self.kind)?.join(hex32(&key));
         Some(Slot { cache: self, stem })
     }
 

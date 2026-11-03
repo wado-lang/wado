@@ -20,6 +20,7 @@
 
 use wado_compiler::path::is_cwd_relative;
 use wado_compiler::remote::is_remote;
+use wado_lsp::host::discovery::PackageFiles;
 use wado_manifest::Manifest;
 
 use crate::cache::component_path;
@@ -64,8 +65,9 @@ pub async fn fetch_component_dependencies(
     manifest: &Manifest,
     manifest_dir: &std::path::Path,
     tier: Acquisition,
+    files: &dyn PackageFiles,
 ) -> Result<Resolution, String> {
-    let needs = wado_lsp::host::discovery::registry_component_needs(manifest, manifest_dir);
+    let needs = wado_lsp::host::discovery::registry_component_needs(manifest, manifest_dir, files);
     if !needs.iter().all(Result::is_ok) && tier == Acquisition::Build {
         return Ok(Resolution {
             resolved: fetch_via_resolve(manifest, manifest_dir).await?,

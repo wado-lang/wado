@@ -632,25 +632,31 @@ pub(crate) fn trait_method_template(
     receiver: TypeId,
     tt: &TypeTable,
 ) -> Option<TemplateId> {
-    answering_link(trait_env, trait_name, method, receiver, tt).map(|(_, template)| template)
+    let (_, body) = answering_instance(trait_env, trait_name, receiver, tt)?;
+    instance_template(trait_env, body, trait_name.called_decl(), method)
 }
 
-/// [`trait_method_template`] with the link of `receiver`'s newtype chain whose
-/// answer it is: the receiver, or the base it inherits the answer from. A call
-/// names that link, as the elaborator's does.
+/// The link of `receiver`'s newtype chain whose answer to `trait_name` a call
+/// names, as the elaborator's does: the receiver, or the base it inherits the
+/// answer from, whether a template or a derived body supplies it. A newtype
+/// field over an enum compares by the enum's derived `eq`, named by the enum.
 pub(crate) fn answering_link(
     trait_env: &TraitEnv,
     trait_name: &FqTraitName,
-    method: &str,
     receiver: TypeId,
     tt: &TypeTable,
-) -> Option<(TypeId, TemplateId)> {
-    let trait_ = trait_name.called_decl();
+) -> Option<TypeId> {
+    answering_instance(trait_env, trait_name, receiver, tt).map(|(link, _)| link)
+}
+
+fn answering_instance(
+    trait_env: &TraitEnv,
+    trait_name: &FqTraitName,
+    receiver: TypeId,
+    tt: &TypeTable,
+) -> Option<(TypeId, InstanceBody)> {
     match instance_order(trait_env, trait_name, receiver, tt)? {
-        InstanceOrder::One(chosen) => Some((
-            chain_link(receiver, chosen.depth, tt),
-            instance_template(trait_env, chosen.body, trait_, method)?,
-        )),
+        InstanceOrder::One(chosen) => Some((chain_link(receiver, chosen.depth, tt), chosen.body)),
         InstanceOrder::Nothing => None,
         InstanceOrder::Tied(blocks) => unreachable!(
             "the elaborator accepted `{}: {trait_name}`, which {blocks:?} tie on",

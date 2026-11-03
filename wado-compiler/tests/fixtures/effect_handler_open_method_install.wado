@@ -1,0 +1,66 @@
+// A handler method may leave its effects open, as a method under a `with _`
+// trait head does. Installing the handler then demands what those effects are
+// for the handler's own type: nothing for `Text<Quiet>`, `Stdout` for
+// `Text<Loud>`.
+
+use { println, Stdout } from "core:cli";
+
+interface Sink {
+    fn event(message: String);
+}
+
+trait Stamp with _ {
+    fn stamp() -> String;
+}
+
+struct Quiet {}
+
+impl Stamp for Quiet {
+    fn stamp() -> String {
+        return "";
+    }
+}
+
+struct Loud {}
+
+impl Stamp for Loud {
+    fn stamp() -> String with Stdout {
+        println("stamping");
+        return "! ";
+    }
+}
+
+struct Text<S: Stamp> {
+    lines: List<String> = [],
+}
+
+impl<S: Stamp> Sink for Text<S> {
+    fn event(&mut self, message: String) with _ {
+        self.lines.push(`${S::stamp()}${message}`);
+        resume ();
+    }
+}
+
+fn quiet() -> List<String> {
+    let mut sink = Text::<Quiet> {};
+    with Sink => &mut sink do {
+        Sink::event("a");
+    }
+    return sink.lines;
+}
+
+fn loud() -> List<String> with Stdout {
+    let mut sink = Text::<Loud> {};
+    with Sink => &mut sink do {
+        Sink::event("b");
+    }
+    return sink.lines;
+}
+
+export fn run() with Stdout {
+    println(`${quiet():?}`);
+    println(`${loud():?}`);
+}
+
+__DATA__
+{"stdout": "[\"a\"]\nstamping\n[\"! b\"]\n"}

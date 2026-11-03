@@ -17,7 +17,7 @@ path = "src/main.rs"
 default = ["mimalloc"]
 # The global allocator. A heap profiler (valgrind DHAT, heaptrack) sees only
 # the system allocator, so profiling builds with `--no-default-features`.
-mimalloc = ["dep:mimalloc"]
+mimalloc = ["dep:mimalloc", "dep:libmimalloc-sys"]
 
 [dependencies]
 wado-compiler = { path = "../wado-compiler" }
@@ -38,6 +38,7 @@ hyper-util = { workspace = true }
 rustls = { workspace = true }
 tokio-rustls = { workspace = true }
 oci-client = { workspace = true }
+regex-automata = { workspace = true }
 reqwest = { workspace = true }
 docker_credential = { workspace = true }
 lexopt = { workspace = true }
@@ -59,10 +60,10 @@ wasmtime-wasi-http = { workspace = true }
 wasmtime-wasi-tls = { workspace = true }
 libc = { workspace = true }
 mimalloc = { workspace = true, optional = true }
+libmimalloc-sys = { workspace = true, optional = true }
 
 [dev-dependencies]
 assert_cmd = { workspace = true }
-jsonschema = { workspace = true }
 predicates = { workspace = true }
 serde = { workspace = true }
 wasmparser = { workspace = true }

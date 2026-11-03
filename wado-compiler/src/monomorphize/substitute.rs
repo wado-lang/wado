@@ -4,6 +4,8 @@
 //! `rewrite_type_id` (rewriting `GenericInstance` to concrete struct types),
 //! and `rewrite_types_in_module` (applying rewrites across a module).
 
+use std::rc::Rc;
+
 use crate::defs::DefId;
 use crate::hashmap::IndexMap;
 use crate::tir::{
@@ -13,14 +15,17 @@ use crate::tir::{
 use crate::tir_visitor::TirMutVisitor;
 use crate::type_table::TypeTable;
 
+use super::Unrewritten;
 use super::state::Monomorphizer;
 
 impl Monomorphizer {
-    /// Rewrite all `GenericInstance` `type_ids` in expressions to use monomorphized struct types
-    pub fn rewrite_types_in_module(&self, module: &mut TirModule) {
+    /// Rewrite the `GenericInstance` `type_ids` in the struct fields and in
+    /// what is `unrewritten` to monomorphized struct types.
+    pub(super) fn rewrite_types_in_module(&self, module: &mut TirModule, unrewritten: Unrewritten) {
+        let type_table = Rc::clone(&module.type_table);
         let mut rewriter = TypeRewriter {
             mono: self,
-            type_table: &mut module.type_table.borrow_mut(),
+            type_table: &mut type_table.borrow_mut(),
         };
 
         // Rewrite struct field types
@@ -31,13 +36,13 @@ impl Monomorphizer {
         }
 
         // Rewrite function signatures and bodies
-        for func_rc in &module.functions {
+        for func_rc in unrewritten.functions(module) {
             let mut func = func_rc.borrow_mut();
             Self::rewrite_types_in_function_inner(&mut rewriter, &mut func);
         }
 
         // Rewrite global variable initializers
-        for global in &mut module.globals {
+        for global in unrewritten.globals_mut(module) {
             global.ty = rewriter.rewrite_type_id(global.ty);
             rewriter.visit_expr(global.init.slot_expr_mut());
         }
@@ -131,56 +136,60 @@ impl Monomorphizer {
         }
     }
 
-    /// Queue every concrete `GenericInstance` of a struct in `generic_structs`.
-    pub fn collect_instantiation_sites(
+    /// Queue each concrete `GenericInstance` of a struct in `generic_structs`
+    /// that the pool holds, and return the held instances of generic variants,
+    /// whose payloads the drain lays out.
+    pub(super) fn collect_instantiation_sites(
         &mut self,
         type_table: &TypeTable,
         generic_structs: &IndexMap<DefId, TirStruct>,
-    ) {
+    ) -> Vec<TypeId> {
         let tested = &mut self.structs.sites_tested;
         let untested = generic_structs
             .keys()
             .filter(|def| tested.insert(**def))
             .count();
-        let from = if untested == 0 {
-            self.structs.sites_scanned
+        // A site naming no generic struct yet may name one a later run adds.
+        let mut ids = if untested == 0 {
+            Vec::new()
         } else {
-            TypeId(0)
+            std::mem::take(&mut self.structs.unmatched)
         };
-        let (ids, end) = type_table.type_ids_since(from);
-        self.structs.sites_scanned = end;
+        ids.append(&mut self.pool.instances);
+        let mut variants = Vec::new();
         for id in ids {
-            if let ResolvedType::GenericInstance { def, type_args } = type_table.get(id) {
-                if type_args.is_empty()
-                    || type_table.is_list(id)
-                    || !generic_structs.contains_key(def)
-                {
-                    continue;
-                }
-                let name = &type_table.decl_name(*def).to_string();
-                let module_source = &type_table.def_module(*def).clone();
-
-                // Only process if all type args are concrete (no TypeParams)
-                let all_concrete = type_args
-                    .iter()
-                    .all(|&arg| !type_table.contains_type_param(arg));
-
-                if all_concrete {
-                    let key = InstantiationKey {
-                        def: Some(*def),
-                        name: name.clone(),
-                        module_source: module_source.clone(),
-                        impl_type_args: type_args.clone(),
-                        method_type_args: vec![],
-                        method_info: None, // Struct instantiation,
-                        template: None,
-                    };
-
-                    let mangled = self.instantiation_name(&key, type_table);
-                    self.try_queue_struct(key, mangled);
-                }
+            let ResolvedType::GenericInstance { def, type_args } = type_table.get(id) else {
+                unreachable!("the pool keeps only a `GenericInstance` for the drain");
+            };
+            if self.pool.generic_variants.contains_key(def) {
+                variants.push(id);
+                continue;
+            }
+            if type_args.is_empty() || type_table.is_list(id) {
+                continue;
+            }
+            if !generic_structs.contains_key(def) {
+                self.structs.unmatched.push(id);
+                continue;
+            }
+            let all_concrete = type_args
+                .iter()
+                .all(|&arg| !type_table.contains_type_param(arg));
+            if all_concrete {
+                let key = InstantiationKey {
+                    def: Some(*def),
+                    name: type_table.decl_name(*def).to_string(),
+                    module_source: type_table.def_module(*def).clone(),
+                    impl_type_args: type_args.clone(),
+                    method_type_args: vec![],
+                    method_info: None,
+                    template: None,
+                };
+                let mangled = self.instantiation_name(&key, type_table);
+                self.try_queue_struct(key, mangled);
             }
         }
+        variants
     }
 
     /// Substitute type parameters in a type with concrete types, delegating the

@@ -22,6 +22,7 @@ use crate::oci;
 use crate::registry::FilesystemProvider;
 use wado_host::atomic_write::write_atomic;
 use wado_host::sync::joined;
+use wado_lsp::host::discovery::Disk;
 
 #[derive(Debug)]
 pub struct FetchOptions {}
@@ -51,7 +52,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<FetchOptions, CliExit> {
 pub async fn run(_opts: FetchOptions) -> Result<(), CliExit> {
     let cwd = std::env::current_dir()
         .map_err(|e| CliExit::error(format!("cannot get current directory: {e}")))?;
-    let project = discover(&cwd)
+    let project = discover(&cwd, &Disk)
         .map_err(CliExit::error)?
         .ok_or_else(|| CliExit::error("no wado.toml found"))?;
     emit_manifest_warnings(&project);
@@ -111,7 +112,7 @@ pub async fn run(_opts: FetchOptions) -> Result<(), CliExit> {
     // cannot be pre-fetched here (offline, missing registry) is a warning, not a
     // hard failure that would leave the just-fetched `[dependencies]` orphaned.
     // The `wado.lock` pin is preferred over a live version listing.
-    let locked = locked_generator_versions(&project.root);
+    let locked = locked_generator_versions(&project.root, &Disk);
     let generators = match fetch_generators(&project, &locked).await {
         Ok(n) => n,
         Err(e) => {

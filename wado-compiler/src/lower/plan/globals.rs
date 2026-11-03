@@ -73,7 +73,6 @@ pub fn extract(flat: &mut FlatPackage, errors: &dyn ErrorSink) -> Result<(), Bai
         }
     }
 
-    // In declaration order, which the sort keeps wherever no dependency decides.
     let mut inits: Vec<LazyInit> = Vec::new();
     flat.functions.retain(|func_rc| {
         let mut func = func_rc.borrow_mut();
@@ -88,6 +87,16 @@ pub fn extract(flat: &mut FlatPackage, errors: &dyn ErrorSink) -> Result<(), Bai
         });
         false
     });
+    // In declaration order, which the topological sort keeps wherever no
+    // dependency decides. The functions follow the order monomorphization
+    // reached them in.
+    let declared: IndexMap<(&ModuleSource, &str), usize> = flat
+        .globals
+        .iter()
+        .enumerate()
+        .map(|(i, global)| ((&global.module_source, global.name.as_str()), i))
+        .collect();
+    inits.sort_by_key(|init| declared[&(&init.module_source, init.global.as_str())]);
     let refs = global_refs_by_function(&flat.functions);
     for (module_source, global) in refs.values().flatten() {
         assert!(

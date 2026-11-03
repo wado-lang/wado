@@ -1,0 +1,89 @@
+// A profile marks a region unlikely where its branch takes it 1% of its runs
+// or less, and cold where it never ran. The source's own markers give way to
+// what the profile measured.
+use { println, Stdout } from "core:cli";
+
+fn digit(c: char) -> Result<i32, String> {
+    if c < '0' || c > '9' {
+        return Err("not a digit");
+    }
+    return Ok(c as i32 - '0' as i32);
+}
+
+fn rarely(c: char) -> Result<i32, String> {
+    return Ok(digit(c)? * 2);
+}
+
+fn often(c: char) -> Result<i32, String> {
+    return Ok(digit(c)? + 1);
+}
+
+fn seldom(x: i32) -> i32 {
+    if x % 2 == 0 {
+        builtin::cold_path();
+        return x / 2;
+    }
+    return x * 3 + 1;
+}
+
+// A loop's body may run more often than the code around it.
+fn looped(n: i32) -> i32 {
+    let mut i = 0;
+    let mut s = 0;
+    while i < n {
+        builtin::cold_path();
+        s += i;
+        i += 1;
+    }
+    return s;
+}
+
+// The profile's `unlikely_path()` states one half, so the trap still marks
+// its path cold.
+fn guarded(x: i32) -> i32 {
+    if x > 1000 {
+        panic("too big");
+    }
+    return x + 1;
+}
+
+export fn run() with Stdout {
+    let [c, x] = [builtin::black_box('4'), builtin::black_box(6)];
+    println(`${rarely(c).unwrap()} ${often(c).is_ok()} ${seldom(x)} ${looped(x)} ${guarded(x)}`);
+}
+
+__DATA__
+{
+  "profile": "testdata/pgo_rarity.pgo",
+  "marked_regions": [
+    "pgo_rarity.wado:7:27 then unlikely",
+    "pgo_rarity.wado:14:15 try unlikely cold",
+    "pgo_rarity.wado:18:15 try unlikely",
+    "pgo_rarity.wado:44:17 then unlikely"
+  ],
+  "remarks": {
+    "O2": [
+      {
+        "contains": [
+          "pgo_rarity.wado:18:15 remark: `?` marks its failure path rare, but the profile ran it 1000 times where the code around it ran 1000000 times, so it is unlikely but not cold; the profile overrides the marker"
+        ],
+        "count": 1
+      },
+      {
+        "contains": [
+          "pgo_rarity.wado:23:9 remark: `cold_path()` marks this path rare, but the profile ran it 50 times where the code around it ran 100 times, so it is neither unlikely nor cold; the profile overrides the marker"
+        ],
+        "count": 1
+      },
+      {
+        "contains": [
+          "pgo_rarity.wado:34:9 remark: `cold_path()` marks this path rare, but the profile ran it 5000 times where the code around it ran 100 times, so it is neither unlikely nor cold; the profile overrides the marker"
+        ],
+        "count": 1
+      },
+      {"contains": [":14:15 remark:"], "count": 0}
+    ]
+  },
+  "stdout": "8 true 3 15 7\n"
+
+}

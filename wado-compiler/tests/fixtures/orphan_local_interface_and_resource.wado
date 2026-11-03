@@ -1,0 +1,34 @@
+// The orphan rule owns a declaration by its package, whatever its kind: a
+// local `interface` takes a blanket impl as a local `trait` does, and a local
+// `resource` takes a foreign trait as a local `struct` does.
+
+use { println, Stdout } from "core:cli";
+
+interface Sink {
+    fn event(message: String);
+}
+
+trait Quiet {}
+
+impl<S: Quiet> Sink for S {
+    fn event(&mut self, message: String) {
+        resume ();
+    }
+}
+
+resource Counter {
+    fn get(&self) -> i32;
+}
+
+impl Display for Counter {
+    fn fmt(&self, f: &mut Formatter) {
+        f.write_str("counter");
+    }
+}
+
+export fn run() with Stdout {
+    println("ok");
+}
+
+__DATA__
+{"stdout": "ok\n"}

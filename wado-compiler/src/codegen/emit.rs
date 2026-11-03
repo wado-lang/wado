@@ -1681,7 +1681,7 @@ impl<'a> WirEmitter<'a> {
                 f.instruction(&Instruction::Nop);
             }
             // Pure marker consumed during WIR finalization; emits no code.
-            WirInstr::ColdPath => {}
+            WirInstr::Rare(_) => {}
             // The barrier ends here; what the engine folds downstream is its own.
             WirInstr::BlackBox(o) => self.emit_instr(f, o),
             WirInstr::Drop(o) => {

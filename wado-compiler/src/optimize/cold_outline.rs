@@ -33,23 +33,21 @@ use crate::nir_visitor::reachable_exprs;
 use crate::tir::{ResolvedType, TypeId};
 use crate::type_table::TypeTable;
 
-use super::arena_query::{ColdRuns, control_escapes};
+use super::arena_query::{MarkerBuiltins, RareRuns, control_escapes};
 use super::inline::{InlineCtx, splice_stmt};
 use crate::ast::Visibility;
 use crate::compiler_trace;
-use crate::name::{COLD_PATH_INTRINSIC, cold_region_helper_name};
+use crate::name::cold_region_helper_name;
 use crate::optimize::inline::{call_site_size, region_size};
+use crate::rarity::Rarity;
 
 /// Split every cold region the preconditions admit, in every function —
 /// including the ones this pass itself creates, so a region nested inside a
 /// region is reached on a later round.
 pub fn outline_cold_regions(project: &mut NirPackage) -> bool {
-    // The marker's own id, so recognising one is an integer compare rather than
-    // a descriptor lookup per call node. A program that never names it has no
-    // region to find at all.
-    let Some(cold) = project.builtin_func_id(COLD_PATH_INTRINSIC) else {
-        return false;
-    };
+    // The markers' own ids, so recognising one is an integer compare rather
+    // than a descriptor lookup per call node.
+    let markers = MarkerBuiltins::of(project);
     // Interned once: the table is borrowed immutably while a region is being
     // classified, and both are what a helper can return.
     let exits = {
@@ -66,7 +64,7 @@ pub fn outline_cold_regions(project: &mut NirPackage) -> bool {
         // A helper this pass made has the one site that replaced its region.
         let root_copied = sites.get(fi).is_some_and(|&n| n > 1);
         let mut ordinal = 0;
-        while let Some(region) = find_region(project, fi, cold, exits, root_copied) {
+        while let Some(region) = find_region(project, fi, markers, exits, root_copied) {
             outline(project, fi, region, ordinal);
             ordinal += 1;
             changed = true;
@@ -131,7 +129,7 @@ fn call_site_counts(project: &NirPackage) -> Vec<usize> {
 fn find_region(
     project: &NirPackage,
     fi: usize,
-    cold: FuncId,
+    markers: MarkerBuiltins,
     exits: Exits,
     root_copied: bool,
 ) -> Option<Region> {
@@ -140,7 +138,7 @@ fn find_region(
         return None;
     }
     let body = func.body.as_ref()?;
-    let runs = ColdRuns::of(body, Some(cold));
+    let runs = RareRuns::of(body, markers, Rarity::Cold);
     if runs.is_empty() {
         return None;
     }
@@ -151,11 +149,12 @@ fn find_region(
         let Some(start) = runs.start(block) else {
             continue;
         };
-        // The marker stays behind, ahead of the call, to hint the branch; a run
-        // a nested construct covers has none of its own to keep, and its
-        // markers are reached inside it.
+        // The marker stays behind, ahead of the call, so the branch keeps the
+        // hint a marker stating the unlikely half gives it; a run a nested
+        // construct covers has none of its own to keep, and its markers are
+        // reached inside it.
         let run = &body.blocks[block].stmts[start..];
-        let Some(&marker) = run.iter().find(|&&s| runs.is_marker(body, s)) else {
+        let Some(&marker) = run.iter().find(|&&s| runs.is_run_marker(body, s)) else {
             continue;
         };
         let region: Vec<StmtId> = run.iter().copied().filter(|&s| s != marker).collect();
@@ -246,7 +245,7 @@ fn valueless_blocks(body: &Body, type_table: &TypeTable) -> Vec<(BlockId, bool)>
 fn buys_nothing(
     body: &Body,
     type_table: &TypeTable,
-    runs: &ColdRuns,
+    runs: &RareRuns,
     region: &[StmtId],
     param_count: usize,
 ) -> bool {

@@ -8,6 +8,7 @@
 
 use { read } from "lib:loam/src/onnx_proto.wado";
 use { assert_close, generated, program_over, ran } from "./oracle.wado";
+use { EvalHost } from "core:eval";
 
 /// One tensor a case's text spells, each part as written: `f32` or `i64`, the
 /// extents as a list literal, and the elements, a float by its bits.
@@ -70,7 +71,7 @@ impl Case {
 /// spells it, once through the kernels' `forward` and once through the graph
 /// `build` adds to on `Cpu`, or why it computes nothing: the build's refusal,
 /// or how the run stopped.
-fn computed(model: ByteList, case: &Case) -> String {
+fn computed(model: ByteList, case: &Case) -> String with EvalHost {
     let graph = read(model).unwrap();
     let source = match generated(&graph) {
         Ok(source) => source,
@@ -109,7 +110,7 @@ fn printed<Axes>(got: &Tensor<${element}, Axes>) with Stdout {
 /// Loam computes from `model` what onnxruntime did, which `oracle` states,
 /// through `forward` and through `build` alike: the same elements, a float
 /// within `TOLERANCE` of onnxruntime's.
-fn assert_agrees(model: ByteList, oracle: String) {
+fn assert_agrees(model: ByteList, oracle: String) with EvalHost {
     let case = Case::of(&oracle);
     let want = case.output;
     let got = computed(model, &case);

@@ -692,10 +692,8 @@ pub struct NirFunction {
     /// of this function's body during lowering.
     pub is_cm_export: bool,
 
-    /// Whether this function is marked `#[ambient]`. Ambient functions are implicitly
-    /// available to callers without requiring matching `with` clauses — they still carry
-    /// interface declarations for documentation / implementation purposes, but the effect
-    /// checker does not propagate those requirements to callers.
+    /// Whether this function is marked `#[ambient(…)]`, whose listed effects a
+    /// call does not demand.
     pub is_ambient: bool,
 
     /// Inline hint from `#[inline]`, `#[inline(always)]`, or `#[inline(never)]` attributes.

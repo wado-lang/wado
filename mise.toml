@@ -72,6 +72,7 @@ run = """
 #!/usr/bin/env bash
 set -xe -o pipefail
 mise run check-deps
+mise run check-unit-graph
 mise run check-rust-paths
 mise run check-spec-examples
 mise run check-wadopoet-vocabulary
@@ -92,15 +93,46 @@ run = "scripts/dev-bin.sh wado-dev-tools highlight-vocab"
 
 # A corpus is listed by the task rather than by its tool: a `git` the tool ran
 # would be confined to the current directory, which a worktree's git directory
-# is not.
-[tasks.rust-corpus]
-hide = true
-run = "mkdir -p target && git ls-files '*.rs' > target/rust-paths.txt"
-
+# is not. Each run lists it under target/, where `wado run` can read it, in a
+# file `mktemp` names, so two runs in one worktree never read each other's.
 [tasks.check-rust-paths]
 description = "Fail if a Rust file gained a `crate::` / `super::` path outside a module-level `use` item"
-depends = ["rust-corpus"]
-run = "scripts/dev-bin.sh wado run package-gale/tools/rust_inline_paths.wado -- --check --paths-from target/rust-paths.txt"
+run = """
+#!/usr/bin/env bash
+set -euo pipefail
+mkdir -p target
+dir="$(mktemp -d target/rust-paths.XXXXXX)"
+trap 'rm -rf "${dir}"' EXIT
+git ls-files '*.rs' > "${dir}/all"
+# A `wado run` parses on one core, so the corpus goes to one run per core,
+# dealt in turn so the large files of one directory spread across them. The
+# check is per file, so a shard needs no other's paths. Each run holds about
+# 2.5 GB, so a host's core count alone could exhaust its memory.
+max_shards=4
+shards="$(getconf _NPROCESSORS_ONLN)"
+shards=$((shards < max_shards ? shards : max_shards))
+i=0
+while IFS= read -r path; do
+    echo "${path}" >> "${dir}/shard-$((i % shards))"
+    i=$((i + 1))
+done < "${dir}/all"
+wado="$(scripts/dev-bin.sh --path wado)"
+tool=package-gale/tools/rust_inline_paths.wado
+# Compiles the tool into the build cache once, rather than once per shard.
+head -n 1 "${dir}/all" > "${dir}/warm"
+"${wado}" run "${tool}" -- --check --paths-from "${dir}/warm" > /dev/null
+pids=()
+for shard in "${dir}"/shard-*; do
+    "${wado}" run "${tool}" -- --check --paths-from "${shard}" > "${shard}.log" 2>&1 &
+    pids+=("$!")
+done
+status=0
+for pid in "${pids[@]}"; do
+    wait "${pid}" || status=1
+done
+cat "${dir}"/shard-*.log
+exit "${status}"
+"""
 
 [tasks.list-rust-paths]
 description = "List the inline `crate::` / `super::` paths the named Rust files carry"
@@ -108,7 +140,15 @@ run = "scripts/dev-bin.sh wado run package-gale/tools/rust_inline_paths.wado --"
 
 [tasks.check-spec-examples]
 description = "Fail if a `wado` block in the specification does not quote an e2e fixture or a source file"
-run = "mkdir -p target && git ls-files 'docs/spec-*.md' > target/spec-files.txt && scripts/dev-bin.sh wado run package-gale-highlight-wado/tools/spec_examples.wado -- --paths-from target/spec-files.txt"
+run = """
+#!/usr/bin/env bash
+set -euo pipefail
+mkdir -p target
+list="$(mktemp target/spec-files.XXXXXX)"
+trap 'rm -f "${list}"' EXIT
+git ls-files 'docs/spec-*.md' > "${list}"
+scripts/dev-bin.sh wado run package-gale-highlight-wado/tools/spec_examples.wado -- --paths-from "${list}"
+"""
 
 [tasks.check-review-filters]
 description = "Fail if a generated or vendored path is not filtered out of code review"
@@ -120,8 +160,10 @@ run = """
 #!/usr/bin/env bash
 set -xe -o pipefail
 mkdir -p package-wadopoet/build
-scripts/dev-bin.sh wado syntax --format json -o package-wadopoet/build/syntax.json
-scripts/dev-bin.sh wado run package-wadopoet/scripts/gen_vocabulary.wado -- package-wadopoet/build/syntax.json > package-wadopoet/src/vocabulary.wado
+syntax="$(mktemp package-wadopoet/build/syntax.XXXXXX)"
+trap 'rm -f "${syntax}"' EXIT
+scripts/dev-bin.sh wado syntax --format json -o "${syntax}"
+scripts/dev-bin.sh wado run package-wadopoet/scripts/gen_vocabulary.wado -- "${syntax}" > package-wadopoet/src/vocabulary.wado
 """
 
 [tasks.check-wadopoet-vocabulary]
@@ -135,8 +177,15 @@ git diff --exit-code -- package-wadopoet/src/vocabulary.wado
 
 [tasks.update-rust-paths-baseline]
 description = "Record the inline paths each Rust file still carries, ratcheting the baseline down"
-depends = ["rust-corpus"]
-run = "scripts/dev-bin.sh wado run package-gale/tools/rust_inline_paths.wado -- --update --paths-from target/rust-paths.txt"
+run = """
+#!/usr/bin/env bash
+set -euo pipefail
+mkdir -p target
+list="$(mktemp target/rust-paths.XXXXXX)"
+trap 'rm -f "${list}"' EXIT
+git ls-files '*.rs' > "${list}"
+scripts/dev-bin.sh wado run package-gale/tools/rust_inline_paths.wado -- --update --paths-from "${list}"
+"""
 
 [tasks.check-deps]
 description = "Fail if wasm-tools crates drift off wasmtime's generation (duplicate 0.x trees)"
@@ -169,6 +218,10 @@ if [ -n "${offenders}" ]; then
 fi
 echo "ok: wasm-tools crates are deduped on wasmtime's generation"
 """
+
+[tasks.check-unit-graph]
+description = "Fail if a build that starts from another's target/ would recompile a unit of it: CI's handoffs, and a session's `cargo build` over the shared cache"
+run = "node scripts/prebuilt.ts check"
 
 [tasks.release-build]
 description = "Build the wado CLI with the release profile (LTO, fully optimized)"
@@ -253,7 +306,7 @@ run = """
 set -xe -o pipefail
 touch wado-compiler/tests/e2e.rs
 n=$(nproc); threads=$(( n > 1 ? n - 1 : 1 ))
-./scripts/exclusive.sh test cargo test -p wado-compiler-tests --test e2e -- --test-threads="$threads"
+./scripts/exclusive.sh test cargo test --workspace --test e2e -- --test-threads="$threads"
 """
 
 [tasks.test-e2e-level]
@@ -274,7 +327,7 @@ case "${level}" in
 esac
 touch wado-compiler/tests/e2e.rs
 n=$(nproc); threads=$(( n > 1 ? n - 1 : 1 ))
-./scripts/exclusive.sh test cargo test -p wado-compiler-tests --test e2e -- \
+./scripts/exclusive.sh test cargo test --workspace --test e2e -- \
     --include-ignored "fixture_test_${level,,}" --test-threads="$threads"
 """
 
@@ -437,13 +490,14 @@ run = "cargo llvm-cov --all-features --workspace --html"
 description = """\
 Calibrate the EMI corpus: inject an empty `builtin::black_box(false)` guard, \
 as a branch and as a loop, at every statement boundary of every e2e fixture, \
-stdlib test module and example, and keep the ones whose output is unmoved. \
-Writes target/emi/{corpus,calibration}.txt. \
+stdlib test module, example, and package and benchmark test, and keep the \
+ones whose output is unmoved. Writes target/emi/{corpus,calibration}.txt. \
 Knobs: WADO_EMI_JOBS, WADO_EMI_FILTER, \
-WADO_EMI_ROOTS (fixtures,stdlib,example), WADO_EMI_LEVELS (O0,O1,O2,Os,O3), \
+WADO_EMI_ROOTS (fixtures,stdlib,example,package-cm-catalog,package-jade,\
+package-marl,benchmark), WADO_EMI_LEVELS (O0,O1,O2,Os,O3), \
 WADO_EMI_SHARD (k/n), WADO_EMI_LIMIT, WADO_EMI_OUT.\
 """
-run = "cargo test -p wado-compiler-tests --test emi -- --ignored --nocapture calibrate_corpus"
+run = "cargo test --workspace --test emi -- --ignored --nocapture calibrate_corpus"
 
 [tasks.emi-mutate]
 description = """\
@@ -455,7 +509,18 @@ Reads target/emi/corpus.txt, so run emi-calibrate \
 first. Writes target/emi/mutation.txt and the reduced mutants under \
 target/emi/findings/.\
 """
-run = "cargo test -p wado-compiler-tests --test emi -- --ignored --nocapture mutate_corpus"
+run = "cargo test --workspace --test emi -- --ignored --nocapture mutate_corpus"
+
+[tasks.emi-profile]
+description = """\
+Compile the calibrated EMI corpus under profiles: each test-world source, and \
+its empty-guard mutants, under the profile its tests record and \
+WADO_EMI_PROFILES random ones (default 2), then report any whose output moves. \
+Reads target/emi/corpus.txt, so run emi-calibrate first. Writes \
+target/emi/profile.txt and each finding's program and reduced profile under \
+target/emi/findings/.\
+"""
+run = "cargo test --workspace --test emi -- --ignored --nocapture profile_corpus"
 
 [tasks.test-format]
 description = """\
@@ -463,7 +528,7 @@ Run formatter invariant tests over the fixtures + stdlib corpus: idempotency, \
 AST round-trip, and no comment drop. The corpus is not reformatted in place \
 (fixtures double as parser tests), but it is the richest edge-case input.\
 """
-run = "cargo test -p wado-compiler-tests --test format"
+run = "cargo test --workspace --test format"
 
 # Disjoint file sets, so the three run concurrently — except that the other two
 # build the workspace `cargo fmt` is rewriting, so they wait for it. `wait_for`
@@ -630,19 +695,6 @@ scripts/dev-bin.sh wado syntax --format tmLanguage -o wado-vscode/syntaxes/wado.
 scripts/dev-bin.sh wado syntax --format language-config -o wado-vscode/language-configuration.json
 """
 
-[tasks.update-json-schema-files]
-description = "Download TextMate grammar and language-configuration JSON schemas"
-run = """
-#!/usr/bin/env bash
-set -xe -o pipefail
-mkdir -p wado-cli/schemas
-curl -sL "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json" \
-    | sed 's|"$schema": "http://json-schema.org/schema#"|"$schema": "http://json-schema.org/draft-07/schema#"|g; s|"id":|"$id":|g' \
-    > wado-cli/schemas/tmlanguage.schema.json
-curl -sL "https://raw.githubusercontent.com/SchemaStore/schemastore/master/src/schemas/json/language-configuration.json" \
-    > wado-cli/schemas/language-configuration.schema.json
-"""
-
 [tasks.sync-vendor]
 description = "Sync vendor submodules (wasmtime pinned to Cargo.lock, others to latest)"
 run = "scripts/sync-vendor.sh"
@@ -753,6 +805,10 @@ description = "Rebuild the bundled ICU component"
 run = """
 #!/usr/bin/env bash
 set -xe -o pipefail
+# The `properties` interface and the facade over it, from ICU4X's own names. A
+# host tool, so the target is named over the crate's wasm32 default.
+(cd wado-bundled-icu && cargo run -p icu-gen-properties --target "$(rustc -vV | grep host: | cut -d' ' -f2)" -- "$PWD/..")
+scripts/dev-bin.sh wado format -w wado-compiler/lib/core/icu/properties.wado
 # --emit-relocs keeps the `linking` and `reloc.*` sections the data-reference
 # map is resolved from; STRIP=none keeps the `name` section it is keyed by.
 # A subshell, as in `update-bundled`.

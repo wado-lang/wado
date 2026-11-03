@@ -15,6 +15,7 @@ use wado_compiler::pgo;
 #[cfg(debug_assertions)]
 use wado_compiler::stdlib::DEV_STDLIB_ROOT;
 use wado_compiler::stdlib::core_module_file;
+use wado_lsp::host::discovery::Disk;
 use wasmtime::component::{HasSelf, Linker};
 
 use crate::args::CliExit;
@@ -368,7 +369,7 @@ fn write_profiles(
 pub fn profile_file(entry: &Path) -> Option<PathBuf> {
     let entry = entry.canonicalize().ok()?;
     let dir = entry.parent().expect("an entry is a file");
-    if let Some(root) = package_root(dir) {
+    if let Some(root) = package_root(dir, &Disk) {
         return Some(root.join("pgo").join("default.pgo"));
     }
     // Several programs in no package may share a directory, so each keeps a

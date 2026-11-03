@@ -1,11 +1,14 @@
 //! The knobs shared across subcommands: [`CompileKnobs`] for what the compiler
-//! is told, [`RuntimeKnobs`] for what the wasmtime engine is built with.
+//! is told, [`RuntimeKnobs`] for what the wasmtime engine is built with, and
+//! [`HostKnobs`] for how the `wado` process itself runs.
 
 use lexopt::Parser;
 use wado_compiler::LogLevel;
 use wado_compiler::param_resolution::ParamInputs;
+use wado_compiler::pgo::Percent;
 
 use crate::args::{self, CliExit, OptSpec};
+use crate::host_memory::{FreedMemory, set_freed_memory};
 use crate::process_host::ProcessGrant;
 use crate::runtime::{parse_collector, parse_gc_heap_size};
 use wado_host::engine::{DEFAULT_COLLECTOR, DEFAULT_GC_HEAP_INITIAL_SIZE};
@@ -82,6 +85,7 @@ pub enum CompileKnobOpt {
     OptIterations,
     Specializations,
     OptThreads,
+    PredictableBranchThreshold,
     LogLevel,
     Allocator,
     Feature,
@@ -132,6 +136,12 @@ impl CompileKnobOpt {
                 value: Some("<n>"),
                 desc: "Threads the optimizer runs on; the output does not depend on it\n(default: the available cores, shared among the files compiled\nat once: 1 each under `wado test`)",
             },
+            Self::PredictableBranchThreshold => OptSpec {
+                long: Some("optimize-predictable-branch-threshold"),
+                short: None,
+                value: Some("<pct>"),
+                desc: "The share of a branch's runs, in percent, one side must take for\nthe profile to call the other side unlikely (default: 99)",
+            },
             Self::LogLevel => OptSpec {
                 long: Some("log-level"),
                 short: None,
@@ -150,7 +160,7 @@ impl CompileKnobOpt {
                 long: None,
                 short: Some('f'),
                 value: Some("<flag>"),
-                desc: "Toggle a codegen feature flag (repeatable; prefix no- to disable):\nbranch-hinting   emit metadata.code.branch_hint entries (default: on)\ncold-paths       keep the cold_path() markers, the compiler's included (default: on)\nbare-asserts     assertion failures trap without a message (default: on at -Os)\nwide-arithmetic  native i64.mul_wide/add128/sub128 (default: on)\ncontract-checks  check the contract of a call marked unchecked (default: on in the test world, at -O0 and -O1)\npgo              apply the entry's profile, pgo/default.pgo or pgo/<stem>.pgo (default: on outside the test world)",
+                desc: "Toggle a codegen feature flag (repeatable; prefix no- to disable):\nbranch-hinting   emit metadata.code.branch_hint entries (default: on)\ncold-paths       keep the cold_path() markers, the compiler's included (default: on)\nbare-asserts     assertion failures trap without a message (default: on at -Os)\nwide-arithmetic  native i64.mul_wide/add128/sub128 (default: on)\ncontract-checks  check the contract of a call marked unchecked (default: on in the test world, at -O0 and -O1)\npgo              apply the entry's profile, pgo/default.pgo or pgo/<stem>.pgo (default: on; off under wado test --pgo)",
             },
             Self::NoCache => OptSpec {
                 long: Some("no-cache"),
@@ -290,6 +300,12 @@ impl CompileKnobs {
                 }
                 self.opt_threads = Some(threads as usize);
             }
+            CompileKnobOpt::PredictableBranchThreshold => {
+                self.opt.predictable_branch_threshold = Some(parse_percent_arg(
+                    "--optimize-predictable-branch-threshold",
+                    parser,
+                )?);
+            }
             CompileKnobOpt::LogLevel => self.log_level = args::parse_log_level_arg(parser)?,
             CompileKnobOpt::Allocator => self.allocator = Some(args::require_string(parser)?),
             CompileKnobOpt::Feature => self.codegen_flags.push(args::require_string(parser)?),
@@ -301,6 +317,16 @@ impl CompileKnobs {
         }
         Ok(())
     }
+}
+
+fn parse_percent_arg(opt: &str, parser: &mut Parser) -> Result<Percent, CliExit> {
+    let n = args::parse_u32_arg(opt, parser)?;
+    Percent::new(n).ok_or_else(|| {
+        CliExit::error(format!(
+            "{opt} is a share in percent, at most {}, got {n}",
+            Percent::WHOLE
+        ))
+    })
 }
 
 /// A knob shared by the subcommands that host a guest (`run` / `serve` /
@@ -439,6 +465,68 @@ impl RuntimeKnobs {
             }
         }
         Ok(())
+    }
+}
+
+/// A knob shared by the subcommands that compile, for how the `wado` process
+/// itself runs, used for both matching and help rendering.
+#[derive(Clone, Copy)]
+pub enum HostKnobOpt {
+    RetainMemory,
+    NoRetainMemory,
+}
+
+impl HostKnobOpt {
+    pub const ALL: &[Self] = &[Self::RetainMemory, Self::NoRetainMemory];
+
+    #[must_use]
+    pub const fn spec(self) -> OptSpec {
+        match self {
+            // The two set one value, so the last one given wins.
+            Self::RetainMemory => OptSpec {
+                long: Some("retain-memory"),
+                short: None,
+                value: None,
+                desc: "Keep the memory wado frees for reuse instead of returning it to\nthe OS, which saves a compile rebuilding it (default: on, but\noff under serve, whose resident set would stay at its peak).\nA build without the mimalloc feature ignores it",
+            },
+            Self::NoRetainMemory => OptSpec {
+                long: Some("no-retain-memory"),
+                short: None,
+                value: None,
+                desc: "Return the memory wado frees to the OS (undoes --retain-memory)",
+            },
+        }
+    }
+}
+
+/// Every knob a compiling subcommand parses for the `wado` process itself.
+/// A subcommand without them leaves the allocator returning freed memory.
+#[derive(Clone, Copy, Debug)]
+pub struct HostKnobs {
+    pub freed_memory: FreedMemory,
+}
+
+impl Default for HostKnobs {
+    /// Retaining: a subcommand that runs long, where a resident set held at
+    /// its peak outlives the compile that grew it, starts from returning.
+    fn default() -> Self {
+        Self {
+            freed_memory: FreedMemory::Retain,
+        }
+    }
+}
+
+impl HostKnobs {
+    pub fn apply(&mut self, opt: HostKnobOpt) {
+        self.freed_memory = match opt {
+            HostKnobOpt::RetainMemory => FreedMemory::Retain,
+            HostKnobOpt::NoRetainMemory => FreedMemory::Return,
+        };
+    }
+
+    /// Set the process up as the knobs say, before the subcommand runs.
+    pub fn install(self) {
+        set_freed_memory(self.freed_memory);
     }
 }
 

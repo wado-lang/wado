@@ -128,6 +128,11 @@ Lints skip `#![generated]` modules; `--lint-generated` reports there too, and
 `--no-lint` reports none and skips the passes only lints need. Every compiling
 subcommand takes them, and the last one given wins.
 
+`build`, `check`, `compile`, `dump`, `run` and `test` keep the memory they free
+instead of returning it to the OS, which spares a compile rebuilding it.
+`--no-retain-memory` returns it, and `--retain-memory` has `serve` keep it too.
+Every other subcommand, the long-running `lsp` included, returns it.
+
 ## Run
 
 ```sh

@@ -157,8 +157,17 @@ pub const CONTRACT_CLAUSE_INTRINSIC: &str = "$contract_clause";
 /// clause's own where a call reaches the function through a value.
 pub const CONTRACT_SITE_INTRINSIC: &str = "$contract_site";
 
-/// The `core:builtin` intrinsic marking a path rare, the one marker NIR has.
+/// The `core:builtin` intrinsic marking a path rare: its branch is unlikely,
+/// and it is cold code.
 pub const COLD_PATH_INTRINSIC: &str = "cold_path";
+
+/// The `core:builtin` intrinsic a profile writes where a branch is unlikely but
+/// its path is not cold code.
+pub const UNLIKELY_PATH_INTRINSIC: &str = "unlikely_path";
+
+/// The `core:builtin` intrinsic a profile writes where a path is cold code but
+/// its branch is not unlikely.
+pub const COLD_CODE_INTRINSIC: &str = "cold_code";
 
 /// The `core:builtin` intrinsic marking a path the program itself makes rare:
 /// ahead of a trap, or past a global's once-guard. Reify and lowering write it
@@ -2861,15 +2870,7 @@ pub fn dispatch_global_name(label: &str) -> String {
 /// - `dispatch_wrapper_name("./c.wado/Counter", "next")` →
 ///   `"$effect_dispatch__./c.wado/Counter__next"`
 pub fn dispatch_wrapper_name(label: &str, op_name: &str) -> String {
-    format!("{DISPATCH_WRAPPER_PREFIX}{label}__{op_name}")
-}
-
-const DISPATCH_WRAPPER_PREFIX: &str = "$effect_dispatch__";
-
-/// Whether `name` is a [`dispatch_wrapper_name`].
-#[must_use]
-pub fn is_dispatch_wrapper(name: &str) -> bool {
-    name.starts_with(DISPATCH_WRAPPER_PREFIX)
+    format!("$effect_dispatch__{label}__{op_name}")
 }
 
 /// Build the dispatch struct's per-operation field name.

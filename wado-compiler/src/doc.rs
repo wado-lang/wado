@@ -10,8 +10,7 @@ use crate::ast::{
 use crate::attribute::SYNOPSIS;
 use crate::comment::{Comment, CommentKind, TriviaMap};
 use crate::lexer::is_ident_continue;
-use crate::loader::resolve_wasm_asset_path;
-use crate::module_source::{ModuleSource, ModuleSourceInterner, WasmAssetKind};
+use crate::module_source::ModuleSource;
 use crate::primitive::PrimitiveType;
 use crate::semantics::Semantics;
 use crate::token::Span;
@@ -21,9 +20,7 @@ use crate::unparse::{
     unparse_struct_signature, unparse_trait_header, unparse_type_into,
 };
 use crate::use_declaration;
-use crate::wit_consume::build_bindings;
 use crate::{ParseResult, ast, parse, stdlib};
-use wit_component::DecodedWasm;
 
 #[derive(Debug, Clone, Serialize)]
 pub struct DocModule {
@@ -941,25 +938,20 @@ pub fn extract_stdlib_doc_with(
     if !reexport_sources.is_empty() {
         let exported_names = collect_pub_use_names(&parsed.ast);
         for reexport_source in &reexport_sources {
-            if let Some(sub_doc) = component_reexport_doc(module_name, reexport_source) {
-                merge_reexported_items(&mut doc, &sub_doc, &exported_names);
-                continue;
-            }
-            if let Some(sub_source) = stdlib::get_stdlib_module(reexport_source) {
-                let sub_parsed = parse_stdlib_for_doc(reexport_source, sub_source);
-                // Admit `internal` items so a `pub use` re-export can publish
-                // them, but keep `include_private = false` to hide their fields.
-                let sub_doc = extract_doc_filtered(
-                    &sub_parsed.ast,
-                    &sub_parsed.trivia,
-                    sub_source,
-                    reexport_source,
-                    false,
-                    true,
-                    Some(&scope.at(reexport_source)),
-                );
-                merge_reexported_items(&mut doc, &sub_doc, &exported_names);
-            }
+            let sub_source = reexported_stdlib_module(module_name, reexport_source);
+            let sub_parsed = parse_stdlib_for_doc(reexport_source, sub_source);
+            // Admit `internal` items so a `pub use` re-export can publish
+            // them, but keep `include_private = false` to hide their fields.
+            let sub_doc = extract_doc_filtered(
+                &sub_parsed.ast,
+                &sub_parsed.trivia,
+                sub_source,
+                reexport_source,
+                false,
+                true,
+                Some(&scope.at(reexport_source)),
+            );
+            merge_reexported_items(&mut doc, &sub_doc, &exported_names);
         }
     }
 
@@ -980,64 +972,46 @@ pub fn extract_stdlib_doc_with(
 
     // Also collect from any pub use re-export sources that may have primitive impls
     for reexport_source in &reexport_sources {
-        if let Some(sub_source) = stdlib::get_stdlib_module(reexport_source) {
-            let sub_parsed = parse_stdlib_for_doc(reexport_source, sub_source);
-            let sub_scope = scope.at(reexport_source);
-            // Recursively follow side-effect imports from re-exported sub-modules
-            let sub_se_sources = collect_side_effect_import_sources(&sub_parsed.ast);
-            for sub_se in &sub_se_sources {
-                if let Some(se_source) = stdlib::get_stdlib_module(sub_se) {
-                    let se_parsed = parse_stdlib_for_doc(sub_se, se_source);
-                    let prim_types = collect_primitive_types_from_module(
-                        &se_parsed.ast,
-                        &se_parsed.trivia,
-                        include_private,
-                        &sub_scope.at(sub_se),
-                    );
-                    merge_primitive_types(&mut doc.primitive_types, prim_types);
-                }
+        let sub_source = reexported_stdlib_module(module_name, reexport_source);
+        let sub_parsed = parse_stdlib_for_doc(reexport_source, sub_source);
+        let sub_scope = scope.at(reexport_source);
+        // Recursively follow side-effect imports from re-exported sub-modules
+        let sub_se_sources = collect_side_effect_import_sources(&sub_parsed.ast);
+        for sub_se in &sub_se_sources {
+            if let Some(se_source) = stdlib::get_stdlib_module(sub_se) {
+                let se_parsed = parse_stdlib_for_doc(sub_se, se_source);
+                let prim_types = collect_primitive_types_from_module(
+                    &se_parsed.ast,
+                    &se_parsed.trivia,
+                    include_private,
+                    &sub_scope.at(sub_se),
+                );
+                merge_primitive_types(&mut doc.primitive_types, prim_types);
             }
-            // Also check the re-exported module itself
-            let prim_types = collect_primitive_types_from_module(
-                &sub_parsed.ast,
-                &sub_parsed.trivia,
-                include_private,
-                &sub_scope,
-            );
-            merge_primitive_types(&mut doc.primitive_types, prim_types);
         }
+        // Also check the re-exported module itself
+        let prim_types = collect_primitive_types_from_module(
+            &sub_parsed.ast,
+            &sub_parsed.trivia,
+            include_private,
+            &sub_scope,
+        );
+        merge_primitive_types(&mut doc.primitive_types, prim_types);
     }
 
     Some(doc)
 }
 
-/// Collect source paths from `pub use { ... } from "source"` declarations.
-/// Items a stdlib module re-exports from a bundled component asset
-/// (`pub use { X } from "./icu.wat"`). The types come from the component's WIT
-/// rather than from Wado source, so they carry no doc comments.
-fn component_reexport_doc(module_name: &str, reexport_source: &str) -> Option<DocModule> {
-    let mut interner = ModuleSourceInterner::new();
-    let from = interner.core(module_name.strip_prefix("core:")?);
-    let path = resolve_wasm_asset_path(&from, reexport_source, "").ok()?;
-    let bytes = stdlib::get_stdlib_wasm_asset(&path)?;
-    let binary = wat::parse_bytes(bytes).ok()?;
-    let decoded = wit_component::decode(&binary).ok()?;
-    let DecodedWasm::Component(resolve, world) = decoded else {
-        return None;
-    };
-    let component = interner.wasm(&path, WasmAssetKind::Wat);
-    let bindings = build_bindings(&resolve, world, &component).ok()?;
-    Some(extract_doc_filtered(
-        &bindings.module,
-        &TriviaMap::default(),
-        "",
-        &path,
-        false,
-        true,
-        None,
-    ))
+/// The source of a module a stdlib module re-exports. The page follows only
+/// Wado source, so a re-export from anything else, such as a component asset,
+/// would publish nothing for the names it re-exports.
+fn reexported_stdlib_module(module_name: &str, reexport_source: &str) -> &'static str {
+    stdlib::get_stdlib_module(reexport_source).unwrap_or_else(|| {
+        panic!("{module_name} re-exports `{reexport_source}`, which is not a stdlib module")
+    })
 }
 
+/// Collect source paths from `pub use { ... } from "source"` declarations.
 fn collect_pub_use_sources(module: &Module) -> Vec<String> {
     let mut sources = IndexSet::default();
     for item in &module.items {

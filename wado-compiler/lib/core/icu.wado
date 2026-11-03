@@ -1,19 +1,46 @@
 #![stdlib("core:icu")]
 //! Unicode character properties, locale-aware collation and case mapping, and
 //! grapheme segmentation, from the ICU4X component bundled with the toolchain.
-//! A property name it does not answer is `null`, never an approximate set:
-//! `Block`, `Decomposition_Type` and the contributory `Other_*` are withheld.
+//!
+//! A property value is an enum case of its property (`Script::Latin`), and a
+//! program carries the data of the properties it names and no others, except
+//! that naming one binary property carries all of them. A name
+//! read at run time parses through `FromStr` or `LenientFromStr`, and one this
+//! build does not answer is refused, never approximated: `Block`,
+//! `Decomposition_Type` and the contributory `Other_*` are withheld.
 //!
 //! Every locale-aware operation takes its `Locale` explicitly; none falls back
 //! to an implicit one.
 
-pub use { Properties } from "./icu.wat" with { type: "wat" };
 use { Casemap, Collation, Segmenter } from "./icu.wat" with { type: "wat" };
+pub use { CodePointSet, PropertyNameError } from "core:icu/code_point_set.wado";
+pub use {
+    BidiClass,
+    BinaryProperty,
+    CanonicalCombiningClass,
+    EastAsianWidth,
+    GeneralCategoryGroup,
+    GraphemeClusterBreak,
+    HangulSyllableType,
+    IndicConjunctBreak,
+    IndicSyllabicCategory,
+    JoiningGroup,
+    JoiningType,
+    LineBreak,
+    NumericType,
+    Property,
+    Script,
+    SentenceBreak,
+    VerticalOrientation,
+    WordBreak,
+} from "core:icu/properties.wado";
 
 #[synopsis]
 test {
-    assert has(Properties::BinaryProperty::Uppercase, 'À');
-    assert value_contains("sc", "Hiragana", 'あ') == Option::Some(true);
+    assert contains(BinaryProperty::Uppercase, 'À');
+    assert contains(Script::Hiragana, 'あ');
+    assert ranges(GeneralCategoryGroup::Letter)[0] == [65, 90];
+    assert Property::from_str_lenient("sc=hiragana") == Result::Ok(Property::Script(Script::Hiragana));
 
     let tr = Locale::from("tr");
     assert tr.uppercase("istanbul") == "İSTANBUL";
@@ -328,39 +355,17 @@ impl Collator {
     }
 }
 
-/// Whether `ch` has the property. Total, and the name costs nothing at run
-/// time: an enum case is a number, and ICU4X bakes each property as a static.
-pub fn has(property: Properties::BinaryProperty, ch: char) -> bool {
-    return Properties::has(property, ch);
+/// The inclusive code point ranges of a property or property value, lowest
+/// first: `ranges(BinaryProperty::WhiteSpace)`,
+/// `ranges(GeneralCategoryGroup::Letter)`.
+pub fn ranges<P: CodePointSet>(property: P) -> List<[u32, u32]> {
+    return property.ranges();
 }
 
-/// The property's inclusive code point ranges, lowest first.
-pub fn set(property: Properties::BinaryProperty) -> List<[u32, u32]> {
-    return Properties::set(property);
-}
-
-/// Inclusive code point ranges of a binary property named at run time, lowest
-/// first. Prefer [`set`] for a name written into the source.
-pub fn ranges(property: String) -> Option<List<[u32, u32]>> {
-    return Properties::ranges(property, null);
-}
-
-/// Inclusive code point ranges of an enumerated property's value, lowest
-/// first. A `gc` value may name a group (`L`) as well as a category (`Lu`).
-pub fn value_ranges(property: String, value: String) -> Option<List<[u32, u32]>> {
-    return Properties::ranges(property, Option::Some(value));
-}
-
-/// Whether `ch` has the binary property named at run time. Prefer [`has`] for a
-/// name written into the source.
-pub fn contains(property: String, ch: char) -> Option<bool> {
-    return Properties::contains(property, null, ch);
-}
-
-/// Whether `ch` has that enumerated property value, without building the
+/// Whether `ch` has the property or property value, without building the
 /// ranges.
-pub fn value_contains(property: String, value: String, ch: char) -> Option<bool> {
-    return Properties::contains(property, Option::Some(value), ch);
+pub fn contains<P: CodePointSet>(property: P, ch: char) -> bool {
+    return property.contains(ch);
 }
 
 /// The extended grapheme clusters of `text` (UAX #29), in order: what a reader

@@ -55,9 +55,9 @@ type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32
 
 type "functype//core:rt/panic$cold0" = fn(ref Array<u8>, i32);  // TypeId(24)
 
-type "functype//opt_multi_value_param_block_tail_argument.wado/opt_multi_value_param_block_tail_argument.wado/Table::find$sroa[self.width]" = fn(i32, i32, i32) -> i32;  // TypeId(25)
+type "functype//opt_multi_value_param_block_tail_argument.wado/opt_multi_value_param_block_tail_argument.wado/Table::lookup<&core:prelude/string.wado/String>$sroa[self.width,return]" = fn(i32, ref Array<u8>, i32) -> [i32, i32];  // TypeId(25)
 
-type "functype//opt_multi_value_param_block_tail_argument.wado/opt_multi_value_param_block_tail_argument.wado/Table::lookup<&core:prelude/string.wado/String>$sroa[self.width,return]" = fn(i32, ref Array<u8>, i32) -> [i32, i32];  // TypeId(26)
+type "functype//opt_multi_value_param_block_tail_argument.wado/opt_multi_value_param_block_tail_argument.wado/Table::find$sroa[self.width]" = fn(i32, i32, i32) -> i32;  // TypeId(26)
 
 type "functype//opt_multi_value_param_block_tail_argument.wado/opt_multi_value_param_block_tail_argument.wado/Table::lookup<&core:prelude/string.wado/String>$sroa[self.width,return]$spec0" = fn(i32, ref "core:prelude/string.wado//String") -> [i32, i32];  // TypeId(27)
 
@@ -292,10 +292,6 @@ fn "core:rt/panic$cold0"($mv$message$repr, $mv$message$used) {
     unreachable;
 }
 
-fn "opt_multi_value_param_block_tail_argument.wado/opt_multi_value_param_block_tail_argument.wado/Table::find$sroa[self.width]"(self, $mv$key$start, $mv$key$end) {
-    return select i32(($mv$key$end - $mv$key$start) == self, 1, -1);
-}
-
 fn "opt_multi_value_param_block_tail_argument.wado/opt_multi_value_param_block_tail_argument.wado/Table::lookup<&core:prelude/string.wado/String>$sroa[self.width,return]"(self, $mv$key$repr, $mv$key$used) {
     if local.tee self(block -> i32 {
         "opt_multi_value_param_block_tail_argument.wado/opt_multi_value_param_block_tail_argument.wado/Table::find$sroa[self.width]"(self, 0, $mv$key$used);
@@ -303,6 +299,10 @@ fn "opt_multi_value_param_block_tail_argument.wado/opt_multi_value_param_block_t
         return 0, 0;
     }
     return 1, self;
+}
+
+fn "opt_multi_value_param_block_tail_argument.wado/opt_multi_value_param_block_tail_argument.wado/Table::find$sroa[self.width]"(self, $mv$key$start, $mv$key$end) {
+    return select i32(($mv$key$end - $mv$key$start) == self, 1, -1);
 }
 
 fn "opt_multi_value_param_block_tail_argument.wado/opt_multi_value_param_block_tail_argument.wado/Table::lookup<&core:prelude/string.wado/String>$sroa[self.width,return]$spec0"(self, key) {

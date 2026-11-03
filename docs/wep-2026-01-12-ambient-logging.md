@@ -129,6 +129,28 @@ Note: `effect_wait()` is encapsulated inside `log_error()` rather than in `panic
 
 5. **Consistency**: Both stdout (`log`) and stderr (`log_error`) have ambient variants.
 
+### `#[ambient(E, …)]` names its effects
+
+The attribute first exempted a whole body from effect checking. Every function
+that carried it performed a few effects it could name: `Stdout` or `Stderr`,
+`Log` in the `core:log` facade, `KilnHost` in a Kiln generator's report. The
+exemption hid every other effect too, so a facade that called `println` by
+mistake drew no diagnostic. The attribute now lists its effects, as `#[benign]`
+does, and the rest of the body is checked.
+
+An ambient effect uses a capability the component already has, and never adds
+one. It is available where the target world imports it, or where code outside
+an ambient body performs it. Where it is not, the body's operations of it do not
+reach the host. That is what made `log_stdout` and `log_stderr` ambient in the
+first place, and it is now the attribute's meaning for every effect it lists.
+
+This is what separates it from `#[benign(E)]`
+([WEP: Effect System and Randomness in Collections](./wep-2026-01-20-effect-system-randomness.md)).
+A benign effect is required and unobservable: the world import stays, and the
+effect must not show through the interface. An ambient effect is optional and
+may show: what it writes is visible, and a component without the capability
+runs without it.
+
 ## Consequences
 
 ### Positive
@@ -222,6 +244,16 @@ Keep strict effect requirements for all I/O, including panic.
 Create an ambient `Debug` effect available everywhere.
 
 **Rejected**: Adds complexity to the effect system. Simple functions are clearer.
+
+## Known gaps
+
+- Availability is decided for `Stdout` and `Stderr` alone, through
+  `builtin::ambient_std{out,err}_available`. An ambient body that performs
+  another host-backed effect imports it: `core:log`'s `WallClock::now`,
+  `#[ambient(SystemClock)]`, adds the `wasi:clocks` import.
+- What an operation of an unavailable effect evaluates to is not decided. A
+  stdio write returns nothing, so dropping it is enough; `SystemClock::now`
+  returns a value.
 
 ## References
 

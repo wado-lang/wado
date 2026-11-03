@@ -1,0 +1,40 @@
+// A handler type with impls written for two instances installs the one the
+// order selects for the handler's own instance, in either form: `Ctx<i32>`
+// runs `impl Log for Ctx<i32>`, never its `Ctx<u8>` sibling.
+
+use { println, Stdout } from "core:cli";
+
+interface Log {
+    fn info(message: String);
+}
+
+struct Ctx<T> {
+    value: T,
+}
+
+impl Log for Ctx<u8> {
+    fn info(&mut self, message: String) with Stdout {
+        println(`u8 ${message}`);
+        resume ();
+    }
+}
+
+impl Log for Ctx<i32> {
+    fn info(&mut self, message: String) with Stdout {
+        println(`i32 ${message}`);
+        resume ();
+    }
+}
+
+export fn run() with Stdout {
+    let mut h: Ctx<i32> = Ctx { value: 1 };
+    with &mut h do {
+        Log::info("bundled");
+    }
+    with Log => &mut h do {
+        Log::info("explicit");
+    }
+}
+
+__DATA__
+{"stdout": "i32 bundled\ni32 explicit\n"}

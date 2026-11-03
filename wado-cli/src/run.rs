@@ -12,7 +12,9 @@ use wasmtime::{GuestProfiler, UpdateDeadline};
 use crate::args::{self, CliExit};
 use crate::build::build_for_driver;
 use crate::compile::CompileFlags;
-use crate::knobs::{CompileKnobOpt, CompileKnobs, RuntimeKnobOpt, RuntimeKnobs};
+use crate::knobs::{
+    CompileKnobOpt, CompileKnobs, HostKnobOpt, HostKnobs, RuntimeKnobOpt, RuntimeKnobs,
+};
 use crate::manifest;
 use crate::runtime::{self, ProfileMode, Ticker};
 use wado_host::sync::lock;
@@ -20,6 +22,7 @@ use wado_host::sync::lock;
 pub struct RunOptions {
     pub input: String,
     pub knobs: CompileKnobs,
+    pub host: HostKnobs,
     pub profile: ProfileMode,
     /// `(host_path, guest_path)` pairs from `--dir host[::guest]`.
     pub preopened_dirs: Vec<(String, String)>,
@@ -47,6 +50,7 @@ impl Opt {
         CompileKnobOpt::OptIterations,
         CompileKnobOpt::Specializations,
         CompileKnobOpt::OptThreads,
+        CompileKnobOpt::PredictableBranchThreshold,
         CompileKnobOpt::LogLevel,
         CompileKnobOpt::Allocator,
         CompileKnobOpt::Feature,
@@ -95,6 +99,7 @@ fn format_usage() -> String {
             .add(Opt::ALL, |o| o.spec())
             .add(Opt::KNOBS, |o| o.spec())
             .add(RuntimeKnobOpt::ALL, |o| o.spec())
+            .add(HostKnobOpt::ALL, |o| o.spec())
             .add(args::ParamOpt::ALL, |o| o.spec())
             .render()
     )
@@ -139,6 +144,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<RunOptions, CliExit> {
     let mut program_args: Vec<String> = Vec::new();
     let mut runtime_knobs = RuntimeKnobs::default();
     let mut knobs = CompileKnobs::compile_and_run();
+    let mut host = HostKnobs::default();
 
     // Whether a `--` has already ended this command's options. Only the one
     // that does that job is `wado run`'s; any other belongs to the guest.
@@ -154,6 +160,8 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<RunOptions, CliExit> {
             knobs.apply(k, &mut parser)?;
         } else if let Some(r) = args::match_opt(&arg, RuntimeKnobOpt::ALL, |r| r.spec()) {
             runtime_knobs.apply(r, &mut parser)?;
+        } else if let Some(h) = args::match_opt(&arg, HostKnobOpt::ALL, |h| h.spec()) {
+            host.apply(h);
         } else if let Some(p) = args::match_opt(&arg, args::ParamOpt::ALL, |p| p.spec()) {
             args::apply_param_opt(&mut knobs.params, p, &mut parser)?;
         } else if let Some(opt) = args::match_opt(&arg, Opt::ALL, |o| o.spec()) {
@@ -187,6 +195,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<RunOptions, CliExit> {
     Ok(RunOptions {
         input: manifest::resolve_input(input, manifest::EntryPointKind::Command, &usage)?,
         knobs,
+        host,
         profile,
         preopened_dirs: dirs.finish(),
         program_args,

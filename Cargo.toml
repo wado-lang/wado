@@ -32,7 +32,7 @@ rustc-hash = { version = "2" }
 # The version wasmtime already pulls in, so the optimizer's pool adds no crate.
 rayon = { version = "1.12" }
 libm = { version = "0.2" }
-cranelift-entity = { version = "0.137.0" }
+cranelift-entity = { version = "0.137.1" }
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1" }
 tokio = { version = "1", features = ["rt", "rt-multi-thread", "sync"] }
@@ -63,7 +63,7 @@ docker_credential = { version = "1.4" }
 # Default features minus `cache` (wasmtime's disk cache is unused — Kiln is
 # wado's cache — and it drags in zstd-sys), `coredump`, `debug-builtins`, and
 # `debug` (guest DWARF debugging; wado never sets `Config::debug_info`).
-wasmtime = { version = "=50.0.0", default-features = false, features = [
+wasmtime = { version = "=50.0.1", default-features = false, features = [
     "anyhow",
     "async",
     "backtrace",
@@ -87,11 +87,11 @@ wasmtime = { version = "=50.0.0", default-features = false, features = [
     "compile-time-builtins",
     "wit-parser",
 ] }
-wasmtime-wasi = { version = "=50.0.0", features = ["p3"] }
+wasmtime-wasi = { version = "=50.0.1", features = ["p3"] }
 # The version wasmtime-wasi already pulls in, whose `Rng` its random host takes.
 rand = { version = "0.10", default-features = false, features = ["chacha"] }
-wasmtime-wasi-http = { version = "=50.0.0" }
-wasmtime-wasi-tls = { version = "=50.0.0", default-features = false, features = ["p3", "rustls"] }
+wasmtime-wasi-http = { version = "=50.0.1" }
+wasmtime-wasi-tls = { version = "=50.0.1", default-features = false, features = ["p3", "rustls"] }
 bytes = { version = "1" }
 futures = { version = "0.3" }
 http = { version = "1" }
@@ -107,13 +107,17 @@ assert_cmd = { version = "2" }
 heck = { version = "0.5" }
 lexopt = { version = "0.3.2" }
 predicates = { version = "3" }
-regex = { version = "1" }
+# Unused by name: `dfa-search` is what `assert_cmd`, a dev-dependency, enables
+# through bstr. Naming it for the build too keeps a build of `wado` on the
+# feature resolution of a build of the tests, so the two share every compiled
+# unit; `mise run check-unit-graph` holds them to it.
+regex-automata = { version = "0.4", default-features = false, features = ["dfa-search"] }
 tempfile = { version = "3" }
-jsonschema = { version = "0.60" }
 zlib-rs = { version = "0.6" }
 toml = { version = "1", default-features = false, features = ["parse", "display", "serde", "preserve_order"] }
 libc = { version = "0.2" }
 mimalloc = { version = "0.1" }
+libmimalloc-sys = { version = "0.1", features = ["extended"] }
 iana-time-zone = { version = "0.1" }
 sha2 = { version = "0.11", default-features = false }
 unicode-normalization = { version = "0.1.25" }

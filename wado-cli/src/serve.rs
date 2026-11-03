@@ -35,7 +35,10 @@ use wasmtime_wasi_http::p3::bindings::{Service, ServicePre};
 use crate::args::{self, CliExit};
 use crate::build::build_for_driver;
 use crate::compile::CompileFlags;
-use crate::knobs::{CompileKnobOpt, CompileKnobs, RuntimeKnobOpt, RuntimeKnobs};
+use crate::host_memory::FreedMemory;
+use crate::knobs::{
+    CompileKnobOpt, CompileKnobs, HostKnobOpt, HostKnobs, RuntimeKnobOpt, RuntimeKnobs,
+};
 use crate::manifest;
 use crate::runtime::{self, Preopens, ProfileMode, Ticker, WasiState};
 use wado_host::sync::{joined, lock, next_joined};
@@ -62,6 +65,7 @@ const DEFAULT_MAX_CONCURRENCY_PER_WORKER: usize = 32;
 pub struct ServeOptions {
     pub input: String,
     pub knobs: CompileKnobs,
+    pub host: HostKnobs,
     pub addr: String,
     pub runtime: RuntimeKnobs,
     /// Empty by default: unlike `wado run`, services don't preopen cwd
@@ -144,6 +148,7 @@ impl Opt {
         CompileKnobOpt::OptIterations,
         CompileKnobOpt::Specializations,
         CompileKnobOpt::OptThreads,
+        CompileKnobOpt::PredictableBranchThreshold,
         CompileKnobOpt::LogLevel,
         CompileKnobOpt::Allocator,
         CompileKnobOpt::NoCache,
@@ -206,6 +211,7 @@ fn format_usage() -> String {
             .add(Opt::ALL, |o| o.spec())
             .add(Opt::KNOBS, |o| o.spec())
             .add(RuntimeKnobOpt::ALL, |o| o.spec())
+            .add(HostKnobOpt::ALL, |o| o.spec())
             .add(args::ParamOpt::ALL, |o| o.spec())
             .render()
     )
@@ -250,12 +256,17 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<ServeOptions, CliExit> {
     let mut max_concurrency: Option<usize> = None;
     let mut profile = ProfileMode::None;
     let mut knobs = CompileKnobs::compile_and_run();
+    let mut host = HostKnobs {
+        freed_memory: FreedMemory::Return,
+    };
 
     while let Some(arg) = args::next_arg(&mut parser)? {
         if let Some(k) = args::match_opt(&arg, Opt::KNOBS, |k| k.spec()) {
             knobs.apply(k, &mut parser)?;
         } else if let Some(r) = args::match_opt(&arg, RuntimeKnobOpt::ALL, |r| r.spec()) {
             runtime_knobs.apply(r, &mut parser)?;
+        } else if let Some(h) = args::match_opt(&arg, HostKnobOpt::ALL, |h| h.spec()) {
+            host.apply(h);
         } else if let Some(p) = args::match_opt(&arg, args::ParamOpt::ALL, |p| p.spec()) {
             args::apply_param_opt(&mut knobs.params, p, &mut parser)?;
         } else if let Some(opt) = args::match_opt(&arg, Opt::ALL, |o| o.spec()) {
@@ -306,6 +317,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<ServeOptions, CliExit> {
     Ok(ServeOptions {
         input: manifest::resolve_input(input, manifest::EntryPointKind::Service, &usage)?,
         knobs,
+        host,
         addr,
         runtime: runtime_knobs,
         preopened_dirs,

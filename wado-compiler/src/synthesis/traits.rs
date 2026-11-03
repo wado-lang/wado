@@ -5158,8 +5158,7 @@ pub(super) fn trait_call_on_type(
     // A newtype inheriting its base's answer is called by the base's name.
     let named = match blanket {
         None if !is_type_param => {
-            answering_link(trait_env, trait_name, method_name, value_type, tt)
-                .map_or(value_type, |(link, _)| link)
+            answering_link(trait_env, trait_name, value_type, tt).unwrap_or(value_type)
         }
         _ => value_type,
     };

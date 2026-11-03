@@ -17,9 +17,9 @@
 //! and the dependency files it read. See WEP 2026-09-26 (Eval).
 
 use { Error as CoreError } from "core:prelude/traits.wado";
-use { EvalHost, Outcome } from "core:eval/eval_host.wado";
+use { Outcome } from "core:eval/eval_host.wado";
 
-pub use { Status, TrapKind, CompileFailure } from "core:eval/eval_host.wado";
+pub use { EvalHost, Status, TrapKind, CompileFailure } from "core:eval/eval_host.wado";
 
 #[synopsis]
 test {
@@ -56,8 +56,7 @@ pub variant EvalError {
 /// `Err` means the program never ran. `Ok` means it ran, however it stopped;
 /// `Output.status` says how. stdout and stderr are decoded as UTF-8, with
 /// U+FFFD where the bytes are not.
-#[benign(EvalHost)]
-pub fn eval(source: String, fuel: u64 = DEFAULT_FUEL) -> Result<Output, EvalError> {
+pub fn eval(source: String, fuel: u64 = DEFAULT_FUEL) -> Result<Output, EvalError> with EvalHost {
     return match EvalHost::run(source, fuel) {
         Ran(ran) => Result::Ok(Output {
             stdout: String::from_utf8_lossy(ran.stdout),

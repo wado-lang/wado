@@ -372,6 +372,63 @@ fn stripping_drops_every_custom_section() {
     assert!(sections.is_empty(), "{sections:?}");
 }
 
+/// A component's own names describe items the collection leaves alone, so they
+/// stay true; stripping drops them all the same, as it does a module's.
+#[test]
+fn stripping_a_component_drops_its_own_custom_sections_too() {
+    let component = wat::parse_str(
+        r#"
+        (component
+          (@custom "component-name" "stale")
+          (core module $m
+            (@custom "producers" "\00")
+            (func (export "f") (result i32) (i32.const 1)))
+          (@custom "producers" "\00"))
+        "#,
+    )
+    .expect("fixture must parse");
+    let collect = |strip| {
+        let out = wado_wasm_embed::embed_component(
+            &component,
+            &Embed {
+                memory_import: None,
+                keep_export: &|_| true,
+                stub_export: &|_| false,
+                strip_custom_sections: strip,
+            },
+        )
+        .expect("embed_component");
+        wasmparser::Validator::new_with_features(wasmparser::WasmFeatures::all())
+            .validate_all(&out)
+            .unwrap_or_else(|e| panic!("the collected component must validate: {e}"));
+        custom_sections(&out)
+    };
+    assert!(collect(true).is_empty(), "{:?}", collect(true));
+    let kept = collect(false);
+    assert!(kept.contains(&"component-name".to_string()), "{kept:?}");
+}
+
+/// Stripping a custom section consumes bytes, as embedding a module does, but
+/// leaves a component with nothing to collect.
+#[test]
+fn a_component_with_only_a_custom_section_has_no_core_module() {
+    let component =
+        wat::parse_str(r#"(component (@custom "producers" "\00"))"#).expect("fixture must parse");
+    let result = wado_wasm_embed::embed_component(
+        &component,
+        &Embed {
+            memory_import: None,
+            keep_export: &|_| true,
+            stub_export: &|_| false,
+            strip_custom_sections: true,
+        },
+    );
+    assert!(
+        matches!(result, Err(wado_wasm_embed::Error::Unsupported(_))),
+        "{result:?}"
+    );
+}
+
 /// `ref.func` needs its target declared, and an export is a declaration. When
 /// the prune drops that export the function is still live, so the declaration
 /// has to be put back or the module no longer validates.
@@ -855,13 +912,14 @@ fn the_map_normalises_to_one_form_whatever_order_it_arrives_in() {
 }
 
 /// The bundled ICU component: one core module inside a component whose lifts
-/// name its exports. A program importing only `has` traps every other lift, as
-/// the compiler stubs every function a program leaves unused.
+/// name its exports. A program asking one binary property traps every other
+/// lift, as the compiler stubs every function a program leaves unused.
 #[test]
 fn a_component_asset_is_collected_through_its_core_module() {
     let wat = include_str!("../../wado-compiler/lib/core/icu.wat");
     let component = wat::parse_str(wat).expect("the bundled asset must parse");
-    let used = "wado:icu/properties@0.1.0#has";
+    let used = "wado:icu/properties@0.1.0#binary-property-contains";
+    assert!(wat.contains(used), "the asset must export `{used}`");
     let out = wado_wasm_embed::embed_component(
         &component,
         &Embed {
