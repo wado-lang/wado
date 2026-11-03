@@ -2203,7 +2203,11 @@ pub fn inline_functions(
     // call node's `FunctionRef`. Indexed by `func_id.index()` (== store position).
     let descriptors = descriptor_cache.descriptors(project);
     let markers = MarkerBuiltins::of(project);
-    let InlineScans { bodies, read, cycle_cuts } = scans;
+    let InlineScans {
+        bodies,
+        read,
+        cycle_cuts,
+    } = scans;
     let scans = bodies.refresh(project, gate.exec(), |f| scan_body(f, markers));
     let sites = argument_sites(scans, &live);
     // Taken every round, unlike the prices below: a callee's only site is one

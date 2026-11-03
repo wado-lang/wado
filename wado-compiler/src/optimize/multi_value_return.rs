@@ -86,7 +86,11 @@ pub(crate) fn split_exits<T: PartialEq>(
         return None;
     };
     let mut exits = body.break_values_to(NodeRef::Block(*block), label)?;
-    match body.blocks[*block].stmts.last().map(|&s| &body.stmts[s].kind) {
+    match body.blocks[*block]
+        .stmts
+        .last()
+        .map(|&s| &body.stmts[s].kind)
+    {
         Some(StmtKind::Expr(tail)) => exits.push(*tail),
         Some(StmtKind::Break { .. } | StmtKind::Return { .. } | StmtKind::Continue) => {}
         _ => return None,
@@ -100,7 +104,10 @@ pub(crate) fn split_exits<T: PartialEq>(
         .collect::<Option<Vec<_>>>()?;
     let (&(first, _), rest) = calls.split_first()?;
     let shared = results(first)?;
-    if !rest.iter().all(|&(f, _)| results(f).is_some_and(|r| r == shared)) {
+    if !rest
+        .iter()
+        .all(|&(f, _)| results(f).is_some_and(|r| r == shared))
+    {
         return None;
     }
     Some(SplitExits {
@@ -635,7 +642,11 @@ fn validate_stmt(
                 .flatten();
             walk_expr_for_uses_operand(body, value, cx, invalid, tracked);
             if let Some(exits) = exits {
-                let held = exits.calls.iter().map(|(f, _)| cx.candidate_ids[f]).collect();
+                let held = exits
+                    .calls
+                    .iter()
+                    .map(|(f, _)| cx.candidate_ids[f])
+                    .collect();
                 tracked.insert(local_index, held);
             }
         }

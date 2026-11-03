@@ -1419,7 +1419,12 @@ impl FunctionTranslator<'_, '_> {
 
         let exits = split_exits(self.body, Operand::Expr(value), |f| {
             let fields = self.multi_value_result_fields(f)?;
-            Some(fields.iter().map(|(name, _)| name.clone()).collect::<Vec<_>>())
+            Some(
+                fields
+                    .iter()
+                    .map(|(name, _)| name.clone())
+                    .collect::<Vec<_>>(),
+            )
         })?;
         let fields = self
             .multi_value_result_fields(exits.calls[0].0)
@@ -1434,7 +1439,9 @@ impl FunctionTranslator<'_, '_> {
             split_into: Some(names.clone()),
         });
         let stmts = &self.body.blocks[exits.block].stmts;
-        let (&last, lead) = stmts.split_last().expect("a block with an exit has a statement");
+        let (&last, lead) = stmts
+            .split_last()
+            .expect("a block with an exit has a statement");
         let mut body = self.translate_stmts(lead);
         match &self.body.stmts[last].kind {
             StmtKind::Expr(tail) => {
@@ -1454,7 +1461,11 @@ impl FunctionTranslator<'_, '_> {
     }
 
     /// The split locals a `let` of `local_index` binds the N results into.
-    fn multi_value_split_names(&self, local_index: u32, fields: &[(String, TypeId)]) -> Vec<String> {
+    fn multi_value_split_names(
+        &self,
+        local_index: u32,
+        fields: &[(String, TypeId)],
+    ) -> Vec<String> {
         let base = self.local_name(local_index);
         fields
             .iter()
