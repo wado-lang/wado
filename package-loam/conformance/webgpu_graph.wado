@@ -35,6 +35,11 @@ use projected from "./projected.onnxtext"
         type: "onnxtext",
         generator: { module: "lib:loam" },
     };
+use attended from "./attended.onnxtext"
+    with {
+        type: "onnxtext",
+        generator: { module: "lib:loam" },
+    };
 use shared from "./shared.onnxtext"
     with {
         type: "onnxtext",
@@ -132,9 +137,10 @@ export fn run() with (Stdout, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuC
         assert on_gpu.programs.len() == programs, "one program per shape class";
         println(`compiled gated ${positions} ${deviation(&on_device.data, &reference.data)}`);
     }
-    // Launches idle for 256 passes free the buffers and parameters they own,
-    // and a value a call returned is the caller's, freed when it drops. What
-    // stays is the weights and each program's constants.
+    // Launches idle for 256 passes free the buffers and parameters they own at
+    // the next sweep, at most 32 passes on, and a value a call returned is the
+    // caller's, freed when it drops. What stays is the weights and each
+    // program's constants.
     let busy = gpu.kept_bytes();
     idle(&mut gpu);
     let idle_bytes = gpu.kept_bytes();
@@ -177,11 +183,48 @@ export fn run() with (Stdout, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuC
         &on_device.Q.data,
         &reference.Q.data,
     )} ${deviation(&on_device.R.data, &reference.R.data)} ${deviation(&on_device.T.data, &reference.T.data)}`);
+
+    let mut attended_gpu = attended::Model::new(attended::Params::embedded(&mut gpu));
+    let mut attended_cpu = attended::Model::new(attended::Params::embedded(cpu));
+    let mut cache_gpu = attended::Cache::empty(&mut gpu);
+    let mut cache_cpu = attended::Cache::empty(cpu);
+    // A decode step's attention appends to the cache in place and replays
+    // what the step before at its capacity recorded: the third step on, until
+    // the cache outgrows its capacity. The other replay slices the key and the
+    // value.
+    let mut total = 0;
+    for let [positions, replays] of [
+        [3, 0],
+        [1, 0],
+        [1, 1],
+        [1, 1],
+        [1, 2],
+        [1, 2],
+        [1, 1],
+    ] as List<[i32, i32]> {
+        total += positions;
+        let mut data: List<f32> = [];
+        for let i of 0..<positions * 32 {
+            data.push(((i + total) % 11) as f32 * 0.125 - 0.625);
+        }
+        let fresh = Tensor::<f32, [attended::X0, attended::S, attended::X2]> { data, extents: [1, positions, 32] };
+        let mask = Tensor::<i64, [attended::AttentionMask0, attended::T]> {
+            data: List::<i64>::filled(total, 1),
+            extents: [1, total],
+        };
+        let replayed_before = gpu.replays();
+        let stepped = attended::compute(&mut gpu, &fresh, &mask, &cache_gpu, &mut attended_gpu);
+        assert gpu.replays() - replayed_before == replays;
+        let wanted = attended::compute(cpu, &fresh, &mask, &cache_cpu, &mut attended_cpu);
+        println(`compiled attended ${total} ${deviation(&stepped.Y.data, &wanted.Y.data)}`);
+        cache_gpu = stepped.cache;
+        cache_cpu = wanted.cache;
+    }
 }
 
 /// Passes enough that every launch is idle.
 fn idle(gpu: &mut WebGpuBackend) with (GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBindGroup, GpuBuffer) {
-    for let _ of 0..<258 {
+    for let _ of 0..<256 + 32 + 2 {
         gpu.begin();
     }
 }

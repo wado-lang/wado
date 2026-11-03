@@ -767,20 +767,15 @@ fn launched(
         };
         g.launching(program.serial, root);
         match launch {
-            Node(id) => {
-                let value = state.computed(g, *id, &recorded.nodes[*id], arguments);
-                state.values[*id] = value;
-            },
-            Kernel(k) => {
-                let value = replayed_root(
-                    g,
-                    &state.values,
-                    &program.replays[root],
-                    recorded.nodes[root].kind,
-                    || kernel_result(g, &state.values, recorded, k),
-                );
-                state.values[root] = value;
-            },
+            Node(id) => state.ran(g, *id, &recorded.nodes[*id], arguments),
+            Kernel(k) => rooted(
+                g,
+                &mut state.values,
+                root,
+                &program.replays[root],
+                recorded.nodes[root].kind,
+                || kernel_result(g, &state.values, recorded, k),
+            ),
             Joined(ks) => {
                 let values = match joined_replayed(g, &state.values, program, ks) {
                     Some(vs) => vs,
@@ -792,16 +787,14 @@ fn launched(
                     at += 1;
                 }
             },
-            Paired(p) => {
-                let value = replayed_root(
-                    g,
-                    &state.values,
-                    &program.replays[root],
-                    recorded.nodes[root].kind,
-                    || paired_result(g, &state.values, recorded, p),
-                );
-                state.values[root] = value;
-            },
+            Paired(p) => rooted(
+                g,
+                &mut state.values,
+                root,
+                &program.replays[root],
+                recorded.nodes[root].kind,
+                || paired_result(g, &state.values, recorded, p),
+            ),
             Case([id, first, second]) => {
                 let pred = *bools(&state.values[recorded.nodes[*id].operands[0]]);
                 let yielded = g.conditional::<Untyped, List<Any<WebGpuBackend>>>(
@@ -932,26 +925,32 @@ fn product_dims(recorded: &Recorded, k: &Kernel) -> DotDims {
     return dims;
 }
 
-/// What `computed` yields, a node of `kind`: the commands the backend
+/// Gives `root`, a node of `kind`, its value: the commands the backend
 /// recorded as `replay` says replayed where they were recorded over views laid
-/// out as the ones it reads are now, computed and recorded otherwise.
-fn replayed_root(
+/// out as the ones it reads are now, what `computed` yields otherwise,
+/// recorded. A replay's value is fresh, so it moves into `values` without a
+/// copy.
+fn rooted(
     g: &mut WebGpuBackend,
-    values: &Values<WebGpuBackend>,
+    values: &mut Values<WebGpuBackend>,
+    root: i32,
     replay: &Replay,
     kind: ElementKind,
     computed: fn() -> Any<WebGpuBackend> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder),
-) -> Any<WebGpuBackend> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
+) with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
     let Some(views) = device_reads(values, &replay.reads) else {
-        return computed();
+        let value = computed();
+        values[root] = value;
+        return;
     };
     if let Some(out) = g.replayed(replay.key, &views) {
-        return of_kind(g, kind, Placed::Device(out));
+        values[root] = of_kind(g, kind, Placed::Device(out));
+        return;
     }
     g.tape();
     let value = computed();
-    g.taped(replay.key, views, on_device(&value));
-    return value;
+    g.taped(replay.key, &views, on_device(&value), []);
+    values[root] = value;
 }
 
 /// The nodes a product kernel `k` reads for its left matrix: its prologue's,
@@ -972,27 +971,29 @@ fn apart(
     ks: &List<Kernel>,
 ) -> List<Any<WebGpuBackend>> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
     let recorded = &program.recorded;
-    let alone = |k: &Kernel| replayed_root(
+    let alone = |k: &Kernel| rooted(
         g,
         values,
+        k.root,
         &kernel_replay(g, recorded, program.serial, k),
         recorded.nodes[k.root].kind,
         || kernel_result(g, values, recorded, k),
     );
     if let Some(p) = ks[0].prologue {
-        values[p.root] = alone(&p);
+        alone(&p);
     }
     let mut out: List<Any<WebGpuBackend>> = [];
     for let k of ks {
-        out.push(alone(&Kernel { ..*k, prologue: null }));
+        alone(&Kernel { ..*k, prologue: null });
+        out.push(values[k.root]);
     }
     return out;
 }
 
 /// The view `value` is, where it is on the device.
-fn on_device(value: &Any<WebGpuBackend>) -> Option<DeviceTensor> {
+fn on_device(value: &Any<WebGpuBackend>) -> Option<&DeviceTensor> {
     return match value {
-        F32(Device(d)) | Bool(Device(d)) => Option::Some(*d),
+        F32(Device(d)) | Bool(Device(d)) => Option::Some(d),
         _ => null,
     };
 }
@@ -1024,7 +1025,7 @@ fn joined_replayed(
     let mut rights: List<DeviceTensor> = [];
     for let k of ks {
         if let Some(d) = on_device(&values[recorded.nodes[k.product.unwrap()].operands[1]]) {
-            rights.push(d);
+            rights.push(*d);
         }
     }
     let joined = if rights.len() == ks.len() { side_by_side(&rights, free) } else { null };
@@ -1033,7 +1034,7 @@ fn joined_replayed(
         return null;
     };
     let mut views = left;
-    views.push(r);
+    views.push(&r);
     let extents = dot_extents(&recorded.nodes[first.operands[0]].extents, &r.extents, &dims);
     let key = replay.key;
     let product = match g.replayed(key, &views) {
@@ -1044,13 +1045,13 @@ fn joined_replayed(
                 let matrix = permuted(&r, &([dims.rhs_contracting[0], free] as List<i32>));
                 g.reshape::<f32, Untyped, Untyped>(&left_product(g, values, recorded, head, &matrix, &null), extents);
             } else {
-                dotted(g, &left[0], &r, &dims, &null);
+                dotted(g, left[0], &r, &dims, &null);
             };
-            g.taped(key, views, if let Device(d) = computed {
+            g.taped(key, &views, if let Device(d) = &computed {
                 Option::Some(d);
             } else {
                 null;
-            });
+            }, []);
             computed;
         },
     };
@@ -1088,8 +1089,8 @@ fn side_by_side(parts: &List<DeviceTensor>, along: i32) -> Option<DeviceTensor> 
 }
 
 /// The views of the nodes `ids`, or `None` where one is on the host.
-fn device_reads(values: &Values<WebGpuBackend>, ids: &List<i32>) -> Option<List<DeviceTensor>> {
-    let mut reads: List<DeviceTensor> = [];
+fn device_reads(values: &Values<WebGpuBackend>, ids: &List<i32>) -> Option<List<&DeviceTensor>> {
+    let mut reads: List<&DeviceTensor> = [];
     for let id of *ids {
         reads.push(on_device(&values[id])?);
     }

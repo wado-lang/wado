@@ -552,7 +552,7 @@ pub fn constants(recorded: &Recorded) -> HashMap<i32, Any<Cpu>> {
             _ => node.operands.into_iter().all(|o| state.values.holds(o)),
         };
         if reads_none {
-            let value = state.computed(&mut cpu, id, node, &[]);
+            let value = state.computed(&mut cpu, id, node);
             folded[id] = value;
             state.values[id] = value;
         }
@@ -640,10 +640,26 @@ impl<affine G: Graph> Run<G> {
                 }
                 continue;
             }
-            let value = self.computed(g, id, node, arguments);
-            self.values[id] = value;
+            self.ran(g, id, node, arguments);
         }
         return region.results.into_iter().map(|r| self.values[r]).collect();
+    }
+
+    /// Gives node `id` its value: a parameter's and a part's are read, every
+    /// other node's computed.
+    internal fn ran(&mut self, g: &mut G, id: i32, node: &RecordedNode, arguments: &List<Any<G>>) with _ {
+        match &node.op {
+            Parameter(i) => {
+                self.values[id] = arguments[*i];
+            },
+            Part(k) => {
+                self.values[id] = self.parts[node.operands[0]][*k - 1];
+            },
+            _ => {
+                let value = self.computed(g, id, node);
+                self.values[id] = value;
+            },
+        }
     }
 
     fn operand(&self, node: &RecordedNode, i: i32) -> &Any<G> {
@@ -656,9 +672,8 @@ impl<affine G: Graph> Run<G> {
         return g.relabeled::<f32, Untyped, Axes>(f32s(self.operand(node, i)));
     }
 
-    internal fn computed(&mut self, g: &mut G, id: i32, node: &RecordedNode, arguments: &List<Any<G>>) -> Any<G> with _ {
+    fn computed(&mut self, g: &mut G, id: i32, node: &RecordedNode) -> Any<G> with _ {
         return match &node.op {
-            Parameter(i) => arguments[*i],
             Constant(data) => match data {
                 F32(v) => Any::F32(g.upload(&Tensor::<f32, Untyped> { data: *v, extents: node.extents })),
                 I64(v) => Any::I64(g.upload(&Tensor::<i64, Untyped> { data: *v, extents: node.extents })),
@@ -772,8 +787,7 @@ impl<affine G: Graph> Run<G> {
                 self.parts[id] = [present_k, present_v];
                 attended;
             },
-            Part(k) => self.parts[node.operands[0]][*k - 1],
-            Case(_) => unreachable(),
+            Parameter(_) | Part(_) | Case(_) => unreachable(),
         };
     }
 

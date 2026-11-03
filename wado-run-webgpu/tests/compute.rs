@@ -208,7 +208,7 @@ fn loams_webgpu_attention_computes_what_its_cpu_attention_does() {
 /// input joined into one.
 #[test]
 fn loams_webgpu_graph_computes_what_its_cpu_graph_does() {
-    assert_loam_conformance("webgpu_graph.wado", 21);
+    assert_loam_conformance("webgpu_graph.wado", 28);
 }
 
 /// A whole model's pass stays on the device: each sequence length reads back

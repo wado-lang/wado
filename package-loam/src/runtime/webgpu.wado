@@ -232,6 +232,9 @@ struct Encoded {
     reads: List<DeviceTensor>,
     commands: List<Command>,
     result: DeviceTensor,
+    /// How many leading parameters of each dispatch a replay sets anew: none,
+    /// or one count for each dispatch.
+    heads: List<i32>,
     /// The last pass that recorded or replayed it.
     used: i32,
 }
@@ -338,12 +341,13 @@ fn occurrence(seen: &mut List<i32>, value: i32) -> i32 {
 /// The slots `now` names in place of those `was` named, where each of `now` is
 /// laid out as the one of `was` at its place: at the same place in its buffer,
 /// and two in one buffer exactly where those were.
-fn renamed_over(was: &List<DeviceTensor>, now: &List<DeviceTensor>) -> Option<Renamed>
+fn renamed_over(was: &List<DeviceTensor>, now: &List<&DeviceTensor>) -> Option<Renamed>
     contract was.len() == now.len(), "a launch reads as many views on every call"
 {
     let mut slots = Renamed::new();
     for let i of 0..<now.len() {
-        let [a, b] = [&was[i], &now[i]];
+        let a = &was[i];
+        let b = now[i];
         let laid_out = a.offset == b.offset && a.extents == b.extents && a.strides == b.strides && a.half == b.half;
         if !laid_out || !slots.bound(a.slot, b.slot) {
             return null;
@@ -368,6 +372,17 @@ impl Carved {
         self.bytes[b + 2] = (word >> 16) as u8;
         self.bytes[b + 3] = (word >> 24) as u8;
     }
+}
+
+/// How many of `commands` are dispatches.
+fn dispatches_in(commands: &List<Command>) -> i32 {
+    let mut n = 0;
+    for let c of commands {
+        if c matches { Dispatched(_) } {
+            n += 1;
+        }
+    }
+    return n;
 }
 
 /// `d`'s spans, each slot as `slots` renames it.
@@ -533,6 +548,10 @@ global LAYOUTS: i32 = 4;
 /// of buffers that live, outlive their last use by. A generation's first
 /// steps come round again only with the next prompt.
 global IDLE_PASSES: i32 = 256;
+
+/// The passes between two walks of every launch for the idle ones, which
+/// `IDLE_PASSES` then outlive by up to this many more.
+global SWEEP_PASSES: i32 = 32;
 
 /// The slot of a buffer not allocated yet, which `binds` reads a view of
 /// before the buffer exists. No buffer is ever at it.
@@ -805,6 +824,13 @@ impl WebGpuBackend {
         let parameters = &mut self.launch_parameters[launch];
         let own = parameters.pass < self.passes;
         parameters.pass = self.passes;
+        if let Some(r) = &mut self.running {
+            r.launch = launch;
+            r.made.clear();
+            r.dispatched.clear();
+            r.own = own;
+            return;
+        }
         self.running = Option::Some(Running { launch, made: [], dispatched: [], own });
     }
 
@@ -1365,25 +1391,34 @@ impl WebGpuBackend {
         self.enqueued(found, at, groups);
     }
 
-    /// Records `d` again over the buffers `slots` names in place of those it
-    /// bound: on the bind group it bound, where that binds them.
+    /// Records `d` again with `params` in `groups` workgroups, over the
+    /// buffers `slots` names in place of those it bound: on the bind group it
+    /// bound, where that binds them.
     fn redispatched(
         &mut self,
         d: &Dispatch,
         slots: &Renamed,
+        params: &List<u32>,
+        groups: [i32, i32, i32],
     ) with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuComputePassEncoder) {
-        let params = self.parameters_for(d.pipeline, &d.params);
-        let at = if self.binds_renamed(d, slots, &params) {
+        let span = self.parameters_for(d.pipeline, params);
+        let at = if self.binds_renamed(d, slots, &span) {
             d.group;
         } else {
             let mut all = renamed_spans(d, slots);
-            all.push(params);
+            all.push(span);
             self.group_of(d.pipeline, &all);
         };
         if let Some(commands) = &mut self.taping {
-            commands.push(Command::Dispatched(Dispatch { ..*d, spans: renamed_spans(d, slots), group: at }));
+            commands.push(Command::Dispatched(Dispatch {
+                pipeline: d.pipeline,
+                spans: renamed_spans(d, slots),
+                params: *params,
+                groups,
+                group: at,
+            }));
         }
-        self.enqueued(d.pipeline, at, d.groups);
+        self.enqueued(d.pipeline, at, groups);
     }
 
     /// Whether the bind group `d` bound binds its spans as `slots` renames
@@ -2230,6 +2265,52 @@ impl WebGpuBackend {
         };
         let held = [batch, kv, capacity, d] as List<i32>;
         let strides = row_major(&held);
+        if let Some(b) = bias {
+            assert b.extents[3] >= total, "a bias holds every position attended";
+        }
+        // What the positions set: each dispatch's leading parameters, and the
+        // attention's workgroups.
+        let appended = batch * kv * s * d;
+        let [x, y] = grid(2 * appended);
+        let [gx, gy] = spread(groups);
+        let [rx, ry] = spread(rows);
+        let mut append_head = element_params(2 * appended, x, &([batch, kv, s, d] as List<i32>));
+        push_all(&mut append_head, &([past, half] as List<i32>));
+        push_view(&mut append_head, 0, &strides);
+        append_head.push(n as u32);
+        let mut attend_head: List<u32> = [];
+        push_all(&mut attend_head, &([groups, gx, batch, s, heads, d, total, past, heads / kv, half] as List<i32>));
+        attend_head.push(options.scale.to_bits());
+        attend_head.push(options.softcap.to_bits());
+        push_signed(&mut attend_head, options.window);
+        attend_head.push(if options.causal { 1 } else { 0 });
+        let join_head: List<u32> = [rows as u32, rx as u32, total.div_ceil(part) as u32, d as u32];
+        let heads_of: List<List<u32>> = [append_head, attend_head, join_head];
+        let grids: List<[i32, i32, i32]> = [[x, y, 1], [gx, gy, 1], [rx, ry, 1]];
+        let mut reads: List<&DeviceTensor> = [q, k, v, past_k, past_v];
+        if let Some([c, sn]) = rotary {
+            reads.push(c);
+            reads.push(sn);
+        }
+        if let Some(b) = bias {
+            reads.push(b);
+        }
+        let present = |cache: i32| [
+            DeviceTensor { slot: cache, offset: 0, extents: [batch, kv, total, d], strides, half: false },
+            DeviceTensor { slot: cache, offset: n, extents: [batch, kv, total, d], strides, half: false },
+        ];
+        let appending = self.appendable(past_k, past_v, capacity, n, &strides, past);
+        // Recorded where a later call can do it again: over the cache it
+        // appends to in place, in a launch, outside another recording.
+        let key = if appending matches { Some(_) } && self.taping matches { None } { self.attention_key() } else { null };
+        if let Some(cache) = appending
+            && let Some(k) = key
+            && let Some(result) = self.replayed_as(k, &reads, &heads_of, &grids) {
+            self.filled[cache] = Filled { positions: total, capacity };
+            let [present_k, present_v] = present(cache);
+            return Option::Some([result, present_k, present_v]);
+        }
+
         let mut tables: List<DeviceTensor> = [];
         if let Some([c, sn]) = rotary {
             tables = [*c, *sn];
@@ -2248,7 +2329,6 @@ impl WebGpuBackend {
         if let Some(b) = bias {
             // Bound over every position it holds, as the cache is, so its
             // binding too stays the step before's. The kernel reads `total`.
-            assert b.extents[3] >= total, "a bias holds every position attended";
             let over = [batch, heads, s, b.extents[3]] as List<i32>;
             attend_operands.push(DeviceTensor { ..*b, strides: stretched(b, &over), extents: over });
         }
@@ -2256,7 +2336,7 @@ impl WebGpuBackend {
             return null;
         }
 
-        let cache = match self.appendable(past_k, past_v, capacity, n, &strides, past) {
+        let cache = match appending {
             Some(slot) => slot,
             None => {
                 let slot = self.allocated(2 * n, false);
@@ -2266,45 +2346,44 @@ impl WebGpuBackend {
             },
         };
         self.filled[cache] = Filled { positions: total, capacity };
-        let appended = batch * kv * s * d;
-        let [x, y] = grid(2 * appended);
-        let mut append_head = element_params(2 * appended, x, &([batch, kv, s, d] as List<i32>));
-        push_all(&mut append_head, &([past, half] as List<i32>));
-        push_view(&mut append_head, 0, &strides);
-        append_head.push(n as u32);
-        self.dispatch_bound(&append_operands, cache, 2 * n, append_head, |bindings| ShaderKey::Append([
+        if key matches { Some(_) } {
+            self.tape();
+        }
+        self.dispatch_bound(&append_operands, cache, 2 * n, heads_of[0], |bindings| ShaderKey::Append([
             bindings, half > 0,
-        ]), [x, y, 1]);
+        ]), grids[0]);
 
-        let present_k = DeviceTensor {
-            slot: cache,
-            offset: 0,
-            extents: [batch, kv, total, d],
-            strides,
-            half: false,
-        };
-        let present_v = DeviceTensor { ..present_k, offset: n };
+        let [present_k, present_v] = present(cache);
         attend_operands[1] = DeviceTensor { ..present_k, extents: held };
         attend_operands[2] = DeviceTensor { ..present_v, extents: held };
         let parts = self.allocated(attended, false);
-        let [gx, gy] = spread(groups);
-        let mut attend_head: List<u32> = [];
-        push_all(&mut attend_head, &([groups, gx, batch, s, heads, d, total, past, heads / kv, half] as List<i32>));
-        attend_head.push(options.scale.to_bits());
-        attend_head.push(options.softcap.to_bits());
-        push_signed(&mut attend_head, options.window);
-        attend_head.push(if options.causal { 1 } else { 0 });
         let biased = bias matches { Some(_) };
-        self.dispatch_bound(&attend_operands, parts, attended, attend_head, |bindings| ShaderKey::Attend([
+        self.dispatch_bound(&attend_operands, parts, attended, heads_of[1], |bindings| ShaderKey::Attend([
             bindings, d, half > 0, biased, part,
-        ]), [gx, gy, 1]);
+        ]), grids[1]);
 
         let out = self.allocated(rows * d, false);
-        let [rx, ry] = spread(rows);
         let joined = [contiguous(parts, 0, [attended])] as List<DeviceTensor>;
-        let join_head: List<u32> = [rows as u32, rx as u32, total.div_ceil(part) as u32, d as u32];
-        self.dispatch_bound(&joined, out, rows * d, join_head, |bindings| ShaderKey::AttendJoin(bindings), [rx, ry, 1]);
-        return Option::Some([contiguous(out, 0, [batch, s, heads * d]), present_k, present_v]);
+        self.dispatch_bound(&joined, out, rows * d, heads_of[2], |bindings| ShaderKey::AttendJoin(bindings), grids[2]);
+        let result = contiguous(out, 0, [batch, s, heads * d]);
+        if let Some(k) = key {
+            let mut lengths: List<i32> = [];
+            for let h of &heads_of {
+                lengths.push(h.len());
+            }
+            self.taped(k, &reads, Option::Some(&result), lengths);
+        }
+        return Option::Some([result, present_k, present_v]);
+    }
+
+    /// The replay key of the attention of the running launch, where one runs.
+    fn attention_key(&mut self) -> Option<i32> {
+        let Some(r) = &self.running else {
+            return null;
+        };
+        // A kernel's key starts with its program's serial, which is never
+        // negative.
+        return Option::Some(self.replay_key([-1, (r.launch >> 32) as i32, r.launch as i32]));
     }
 
     /// The positions an attention cache holds once it holds `total`: a power
@@ -2396,25 +2475,40 @@ impl WebGpuBackend {
     }
 
     /// Ends the recording `tape` started, keeping it under `key` as the
-    /// commands of a launch over `reads` that yields `result` on the device,
-    /// where it wrote no host value and read none back.
-    internal fn taped(&mut self, key: i32, reads: List<DeviceTensor>, result: Option<DeviceTensor>) {
+    /// commands of a launch over `views` that yields `result` on the device,
+    /// where it wrote no host value and read none back. A replay sets the
+    /// leading `heads[k]` parameters of its `k`th dispatch anew, where `heads`
+    /// counts any.
+    internal fn taped(&mut self, key: i32, views: &List<&DeviceTensor>, result: Option<&DeviceTensor>, heads: List<i32>) {
         let taping = self.taping;
         self.taping = null;
-        if let Some(commands) = taping && let Some(r) = result {
-            let mut layouts = self.encoded.get(key).unwrap_or([]);
-            if layouts.len() >= LAYOUTS {
-                let mut oldest = 0;
-                for let i of 1..<layouts.len() {
-                    if layouts[i].used < layouts[oldest].used {
-                        oldest = i;
-                    }
-                }
-                layouts.remove(oldest);
-            }
-            layouts.push(Encoded { reads, commands, result: r, used: self.passes });
-            self.encoded[key] = layouts;
+        let Some(commands) = taping else {
+            return;
+        };
+        let Some(r) = result else {
+            return;
+        };
+        // Operands packed to bind add dispatches of their own, which no
+        // count names.
+        if !heads.is_empty() && dispatches_in(&commands) != heads.len() {
+            return;
         }
+        let mut reads: List<DeviceTensor> = [];
+        for let v of views {
+            reads.push(**v);
+        }
+        let mut layouts = self.encoded.get(key).unwrap_or([]);
+        if layouts.len() >= LAYOUTS {
+            let mut oldest = 0;
+            for let i of 1..<layouts.len() {
+                if layouts[i].used < layouts[oldest].used {
+                    oldest = i;
+                }
+            }
+            layouts.remove(oldest);
+        }
+        layouts.push(Encoded { reads, commands, result: *r, heads, used: self.passes });
+        self.encoded[key] = layouts;
     }
 
     /// What the launch recorded under `key` yields, its commands done again
@@ -2423,7 +2517,20 @@ impl WebGpuBackend {
     internal fn replayed(
         &mut self,
         key: i32,
-        reads: &List<DeviceTensor>,
+        reads: &List<&DeviceTensor>,
+    ) -> Option<DeviceTensor> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuComputePassEncoder) {
+        return self.replayed_as(key, reads, &[], &[]);
+    }
+
+    /// What `replayed` yields, the `k`th dispatch done with `heads[k]` in
+    /// place of the leading parameters its recording counts, in `grids[k]`
+    /// workgroups, where `heads` holds any.
+    fn replayed_as(
+        &mut self,
+        key: i32,
+        reads: &List<&DeviceTensor>,
+        heads: &List<List<u32>>,
+        grids: &List<[i32, i32, i32]>,
     ) -> Option<DeviceTensor> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuComputePassEncoder) {
         if !self.encoded.contains_key(key) {
             return null;
@@ -2440,15 +2547,28 @@ impl WebGpuBackend {
             return null;
         };
         let e = &mut layouts[at];
+        assert e.heads.len() == heads.len(), "a launch replays with the parameters it recorded it would set";
         e.used = self.passes;
         self.replays += 1;
+        let mut k = 0;
         for let c of &e.commands {
             match c {
                 Allocated([count, slot]) => {
                     let fresh = slots.bound(*slot, self.allocated(*count, false));
                     assert fresh, "a buffer a launch makes is no buffer it reads";
                 },
-                Dispatched(d) => self.redispatched(d, &slots),
+                Dispatched(d) => {
+                    if heads.is_empty() {
+                        self.redispatched(d, &slots, &d.params, d.groups);
+                    } else {
+                        let mut params = heads[k];
+                        for let i of e.heads[k]..<d.params.len() {
+                            params.push(d.params[i]);
+                        }
+                        self.redispatched(d, &slots, &params, grids[k]);
+                    }
+                    k += 1;
+                },
             }
         }
         return Option::Some(DeviceTensor { ..e.result, slot: slots.of(e.result.slot) });
@@ -2484,9 +2604,10 @@ impl Holds for WebGpuBackend {
     /// Submits what the pass before recorded and releases its buffers, so a
     /// tensor of that pass is no longer one to read, but for those it
     /// retained, which live through this pass. A spare it did not take is
-    /// dropped, and so is a bind group of a dropped buffer. A bind group, a
-    /// launch's layout, and what a launch owns, that the last `IDLE_PASSES`
-    /// passes did not use are dropped too.
+    /// dropped, and so is a bind group of a dropped buffer. A bind group that
+    /// the last `IDLE_PASSES` passes did not use is dropped too, and so are a
+    /// launch's layouts and what a launch owns, every `SWEEP_PASSES`th pass,
+    /// since finding those walks every launch.
     fn begin(&mut self) with (GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBindGroup, GpuBuffer) {
         self.flush();
         self.parameters = null;
@@ -2522,7 +2643,10 @@ impl Holds for WebGpuBackend {
         self.carried = carried;
         self.retaining = HashSet::new();
         let oldest = self.passes - IDLE_PASSES;
-        self.dropped_idle_launches(oldest, &mut dropped);
+        if self.passes % SWEEP_PASSES == 0 {
+            self.dropped_idle_launches(oldest, &mut dropped);
+            self.dropped_idle_layouts(oldest);
+        }
         for let at of 0..<self.groups.held.len() {
             if let Some(g) = &self.groups.held[at]
                 && (g.used < oldest || !dropped.is_empty() && binds_any(&g.key, &dropped)) {
@@ -2530,6 +2654,11 @@ impl Holds for WebGpuBackend {
                 self.groups.remove(at);
             }
         }
+        self.passes += 1;
+    }
+
+    /// Drops each launch's layout the passes since `oldest` did not use.
+    fn dropped_idle_layouts(&mut self, oldest: i32) {
         let mut stale: List<i32> = [];
         for let [key, layouts] of self.encoded.entries() {
             for let e of layouts {
@@ -2547,7 +2676,6 @@ impl Holds for WebGpuBackend {
                 self.encoded[key] = kept;
             }
         }
-        self.passes += 1;
     }
 
     fn retain<E: Element, Axes>(&mut self, t: &Placed<E, Axes>) {
