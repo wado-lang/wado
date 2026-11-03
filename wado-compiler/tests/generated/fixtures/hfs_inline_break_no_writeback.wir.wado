@@ -78,25 +78,25 @@ fn "hfs_inline_break_no_writeback.wado/run"() with Stdout {
     let arr: ref Array<u8>;
     let q: u64;
     let tens: i32;
-    let $hfs_pos_568: i32;
+    let $hfs_pos_569: i32;
     s = struct.new "hfs_inline_break_no_writeback.wado//Scanner" { data: ref.as_non_null(black_box(global:hfs_inline_break_no_writeback.wado::$const_obj_0)), pos: 0 };
     count = 0;
-    $hfs_pos_568 = 0;
+    $hfs_pos_569 = 0;
     b0: block {
         l1: loop {
-            break_if b0 $hfs_pos_568 >= local.tee $load_1(local.tee $load_0(s.data).used);
+            break_if b0 $hfs_pos_569 >= local.tee $load_1(local.tee $load_0(s.data).used);
             "hfs_inline_break_no_writeback.wado/hfs_inline_break_no_writeback.wado/Scanner::skip_spaces"(s);
             if $inline_hfs_inline_break_no_writeback_wado_Scanner__peek_2: block -> i32 {
-                if local.tee $hfs_pos_568(s.pos) >= $load_1 {
+                if local.tee $hfs_pos_569(s.pos) >= $load_1 {
                     break $inline_hfs_inline_break_no_writeback_wado_Scanner__peek_2: -1;
                 }
-                break $inline_hfs_inline_break_no_writeback_wado_Scanner__peek_2: builtin::array_get_value<u8>($load_0.repr, $hfs_pos_568);
+                break $inline_hfs_inline_break_no_writeback_wado_Scanner__peek_2: builtin::array_get_value<u8>($load_0.repr, $hfs_pos_569);
             } >= 0 {
                 count = count + 1;
-                $hfs_pos_568 = $hfs_pos_568 + 1;
+                $hfs_pos_569 = $hfs_pos_569 + 1;
             } else {
             }
-            s.pos = $hfs_pos_568;
+            s.pos = $hfs_pos_569;
             continue l1;
         };
     };
@@ -104,7 +104,7 @@ fn "hfs_inline_break_no_writeback.wado/run"() with Stdout {
     $inline_core_prelude_string_wado_String__internal_push_view_28: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_28;
     };
-    $hfs_pos_568 = count < 0;
+    $hfs_pos_569 = count < 0;
     x = builtin::i64_extend_i32_s(count);
     x = select i64(x < 0_i64, 0_i64 - x, x);
     count = $inline_count_digits_u64_1: block -> i32 {
@@ -167,30 +167,30 @@ fn "hfs_inline_break_no_writeback.wado/run"() with Stdout {
         }
         break $inline_count_digits_u64_1: 20;
     };
-    if $hfs_pos_568 {
-        if @unlikely(local.tee $hfs_pos_568(0 + 1) > builtin::array_len($load_0.repr)) {
+    if $hfs_pos_569 {
+        if @unlikely(local.tee $hfs_pos_569(0 + 1) > builtin::array_len($load_0.repr)) {
             cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/String::grow"($load_0, $hfs_pos_568);
+            "core:prelude/string.wado/core:prelude/string.wado/String::grow"($load_0, $hfs_pos_569);
         }
         $load_1 = $load_0.used;
-        $load_0.used = $hfs_pos_568;
+        $load_0.used = $hfs_pos_569;
         builtin::array_set_u8($load_0.repr, $load_1, 45);
     } else {
     }
-    if @unlikely(local.tee $hfs_pos_568($load_0.used + count) > builtin::array_len($load_0.repr)) {
+    if @unlikely(local.tee $hfs_pos_569($load_0.used + count) > builtin::array_len($load_0.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($load_0, $hfs_pos_568);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($load_0, $hfs_pos_569);
     }
     $load_1 = $load_0.used;
-    $load_0.used = $hfs_pos_568;
+    $load_0.used = $hfs_pos_569;
     arr = $load_0.repr;
     count = $load_1 + count;
     b26: block {
         l27: loop {
             break_if b26 (count - $load_1) < 2;
             q = x /u 100_i64;
-            tens = local.tee $hfs_pos_568(builtin::i32_wrap_i64(x - (q * 100_i64))) / 10;
-            builtin::array_set_u8(arr, count - 1, (48 + $hfs_pos_568) - (tens * 10));
+            tens = local.tee $hfs_pos_569(builtin::i32_wrap_i64(x - (q * 100_i64))) / 10;
+            builtin::array_set_u8(arr, count - 1, (48 + $hfs_pos_569) - (tens * 10));
             builtin::array_set_u8(arr, count - 2, 48 + tens);
             count = count - 2;
             x = q;
@@ -204,15 +204,15 @@ fn "hfs_inline_break_no_writeback.wado/run"() with Stdout {
         break $inline_core_prelude_string_wado_String__internal_push_view_47;
     };
     count = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
-    $hfs_pos_568 = builtin::i32_wrap_i64(x >> 32_i64);
+    $hfs_pos_569 = builtin::i32_wrap_i64(x >> 32_i64);
     count = "hfs_inline_break_no_writeback.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(count);
     builtin::array_copy<u8>(local.tee arr(builtin::array_new<u8>(local.tee $load_1($load_0.used) + 1)), 0, $load_0.repr, 0, $load_1);
     builtin::array_set_u8(arr, $load_1, 10);
     drop(block -> "core:prelude/types.wado//enum:CopyResult" {
         $load_1 = $load_1 + 1;
-        "core:rt/cm_stream_write_raw_all_u8"($hfs_pos_568, arr, 0, $load_1);
+        "core:rt/cm_stream_write_raw_all_u8"($hfs_pos_569, arr, 0, $load_1);
     });
-    "wasi/stream-drop-writable"($hfs_pos_568);
+    "wasi/stream-drop-writable"($hfs_pos_569);
     "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(count);
 }
 

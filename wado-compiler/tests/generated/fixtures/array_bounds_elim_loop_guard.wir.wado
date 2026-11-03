@@ -37,6 +37,7 @@ struct array_bounds_elim_loop_guard.wado//$tmpl$ebaa20f4a908b504 {  // TypeId(6)
     mut r0: ref "core:prelude/string.wado//String",
     mut s1: ref "core:prelude/string.wado//String",
     mut r1: ref "core:prelude/string.wado//String",
+    mut q: i32,
 }
 
 array Array<i32> (mut i32);  // TypeId(7)
@@ -133,7 +134,7 @@ fn "array_bounds_elim_loop_guard.wado/run"() with Stdout {
     let arr_135: ref Array<u8>;
     let q: u64;
     let tens: i32;
-    let start_183: i32;
+    let start_184: i32;
     sum = 0;
     i_2 = 0;
     b0: block {
@@ -235,22 +236,22 @@ fn "array_bounds_elim_loop_guard.wado/run"() with Stdout {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_30, i_2);
         }
-        start_183 = out_30.used;
+        start_184 = out_30.used;
         out_30.used = i_2;
-        builtin::array_set_u8(out_30.repr, start_183, 45);
+        builtin::array_set_u8(out_30.repr, start_184, 45);
     } else {
     }
     if @unlikely(local.tee i_2(out_30.used + sum) > builtin::array_len(out_30.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_30, i_2);
     }
-    start_183 = out_30.used;
+    start_184 = out_30.used;
     out_30.used = i_2;
     arr_135 = out_30.repr;
-    sum = start_183 + sum;
+    sum = start_184 + sum;
     b27: block {
         l28: loop {
-            break_if b27 (sum - start_183) < 2;
+            break_if b27 (sum - start_184) < 2;
             q = x /u 100_i64;
             tens = local.tee i_2(builtin::i32_wrap_i64(x - (q * 100_i64))) / 10;
             builtin::array_set_u8(arr_135, sum - 1, (48 + i_2) - (tens * 10));
@@ -260,8 +261,8 @@ fn "array_bounds_elim_loop_guard.wado/run"() with Stdout {
             continue l28;
         };
     };
-    if sum > start_183 {
-        builtin::array_set_u8(arr_135, start_183, 48 + builtin::i32_wrap_i64(x %u 10_i64));
+    if sum > start_184 {
+        builtin::array_set_u8(arr_135, start_184, 48 + builtin::i32_wrap_i64(x %u 10_i64));
     }
     $inline_core_prelude_string_wado_String__internal_push_view_46: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_46;
@@ -302,7 +303,7 @@ fn "array_bounds_elim_loop_guard.wado/run$cold0"(sum) with Stdout {
 condition: sum == 150
 sum: "), used: 91 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in run at array_bounds_elim_loop_guard.wado:12
 condition: sum == 150
-sum: "), used: 91 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, $mv_arg_1.used);
+sum: "), used: 91 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, q: 0 })).repr, $mv_arg_1.used);
     unreachable;
 }
 

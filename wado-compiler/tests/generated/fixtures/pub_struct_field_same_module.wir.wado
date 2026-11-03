@@ -69,16 +69,16 @@ fn "pub_struct_field_same_module.wado/run"() with Stdout {
     let $cm_pair_7_127: i64;
     let $sroa_$pattern_temp_0_0_13_133: i32;
     let $sroa_$pattern_temp_0_1_14_134: i32;
-    let new_repr_565: ref Array<u8>;
+    let new_repr_566: ref Array<u8>;
     let q: u64;
     let pair: i32;
     let tens: i32;
     $sroa_$pattern_temp_0_0_13_133 = builtin::i32_wrap_i64(local.tee $cm_pair_7_127("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_14_134 = builtin::i32_wrap_i64($cm_pair_7_127 >> 32_i64);
     $sroa_$pattern_temp_0_0_13_133 = "pub_struct_field_same_module.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$pattern_temp_0_0_13_133);
-    builtin::array_copy<u8>(local.tee new_repr_565(builtin::array_new<u8>(11)), 0, global:pub_struct_field_same_module.wado::$const_obj_1, 0, 10);
-    builtin::array_set_u8(new_repr_565, 10, 10);
-    "core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]$dae[return]"($sroa_$pattern_temp_0_1_14_134, new_repr_565);
+    builtin::array_copy<u8>(local.tee new_repr_566(builtin::array_new<u8>(11)), 0, global:pub_struct_field_same_module.wado::$const_obj_1, 0, 10);
+    builtin::array_set_u8(new_repr_566, 10, 10);
+    "core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]$dae[return]"($sroa_$pattern_temp_0_1_14_134, new_repr_566);
     "wasi/stream-drop-writable"($sroa_$pattern_temp_0_1_14_134);
     "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_13_133);
     out_20 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
@@ -91,7 +91,7 @@ fn "pub_struct_field_same_module.wado/run"() with Stdout {
     }
     $sroa_$pattern_temp_0_1_14_134 = out_20.used;
     out_20.used = $sroa_$pattern_temp_0_0_13_133;
-    new_repr_565 = out_20.repr;
+    new_repr_566 = out_20.repr;
     $sroa_$pattern_temp_0_0_13_133 = $sroa_$pattern_temp_0_1_14_134 + 2;
     $cm_pair_7_127 = 10_i64;
     b1: block {
@@ -99,15 +99,15 @@ fn "pub_struct_field_same_module.wado/run"() with Stdout {
             break_if b1 ($sroa_$pattern_temp_0_0_13_133 - $sroa_$pattern_temp_0_1_14_134) < 2;
             q = $cm_pair_7_127 /u 100_i64;
             tens = local.tee pair(builtin::i32_wrap_i64($cm_pair_7_127 - (q * 100_i64))) / 10;
-            builtin::array_set_u8(new_repr_565, $sroa_$pattern_temp_0_0_13_133 - 1, (48 + pair) - (tens * 10));
-            builtin::array_set_u8(new_repr_565, $sroa_$pattern_temp_0_0_13_133 - 2, 48 + tens);
+            builtin::array_set_u8(new_repr_566, $sroa_$pattern_temp_0_0_13_133 - 1, (48 + pair) - (tens * 10));
+            builtin::array_set_u8(new_repr_566, $sroa_$pattern_temp_0_0_13_133 - 2, 48 + tens);
             $sroa_$pattern_temp_0_0_13_133 = $sroa_$pattern_temp_0_0_13_133 - 2;
             $cm_pair_7_127 = q;
             continue l2;
         };
     };
     if $sroa_$pattern_temp_0_0_13_133 > $sroa_$pattern_temp_0_1_14_134 {
-        builtin::array_set_u8(new_repr_565, $sroa_$pattern_temp_0_1_14_134, 48 + builtin::i32_wrap_i64($cm_pair_7_127 %u 10_i64));
+        builtin::array_set_u8(new_repr_566, $sroa_$pattern_temp_0_1_14_134, 48 + builtin::i32_wrap_i64($cm_pair_7_127 %u 10_i64));
     }
     $inline_core_prelude_string_wado_String__internal_push_view_44: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_44;
@@ -115,11 +115,11 @@ fn "pub_struct_field_same_module.wado/run"() with Stdout {
     $sroa_$pattern_temp_0_0_13_133 = builtin::i32_wrap_i64(local.tee $cm_pair_7_127("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_14_134 = builtin::i32_wrap_i64($cm_pair_7_127 >> 32_i64);
     $sroa_$pattern_temp_0_0_13_133 = "pub_struct_field_same_module.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$pattern_temp_0_0_13_133);
-    builtin::array_copy<u8>(local.tee new_repr_565(builtin::array_new<u8>(local.tee pair(out_20.used) + 1)), 0, out_20.repr, 0, pair);
-    builtin::array_set_u8(new_repr_565, pair, 10);
+    builtin::array_copy<u8>(local.tee new_repr_566(builtin::array_new<u8>(local.tee pair(out_20.used) + 1)), 0, out_20.repr, 0, pair);
+    builtin::array_set_u8(new_repr_566, pair, 10);
     drop(block -> "core:prelude/types.wado//enum:CopyResult" {
         pair = pair + 1;
-        "core:rt/cm_stream_write_raw_all_u8"($sroa_$pattern_temp_0_1_14_134, new_repr_565, 0, pair);
+        "core:rt/cm_stream_write_raw_all_u8"($sroa_$pattern_temp_0_1_14_134, new_repr_566, 0, pair);
     });
     "wasi/stream-drop-writable"($sroa_$pattern_temp_0_1_14_134);
     "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_13_133);

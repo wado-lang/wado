@@ -49,6 +49,7 @@ struct allocator_freelist_reclaim.wado//$tmpl$59e16269228f9c88 {  // TypeId(7)
     mut r2: ref "core:prelude/string.wado//String",
     mut s3: ref "core:prelude/string.wado//String",
     mut r3: ref "core:prelude/string.wado//String",
+    mut q: i32,
 }
 
 struct allocator_freelist_reclaim.wado//$tmpl$8db8629cb9c7db93 {  // TypeId(8)
@@ -60,6 +61,7 @@ struct allocator_freelist_reclaim.wado//$tmpl$8db8629cb9c7db93 {  // TypeId(8)
     mut r1: ref "core:prelude/string.wado//String",
     mut s2: ref "core:prelude/string.wado//String",
     mut r2: ref "core:prelude/string.wado//String",
+    mut q: i32,
 }
 
 struct allocator_freelist_reclaim.wado//$tmpl$ebaa20f4a908b504 {  // TypeId(9)
@@ -68,6 +70,7 @@ struct allocator_freelist_reclaim.wado//$tmpl$ebaa20f4a908b504 {  // TypeId(9)
     mut r0: ref "core:prelude/string.wado//String",
     mut s1: ref "core:prelude/string.wado//String",
     mut r1: ref "core:prelude/string.wado//String",
+    mut q: i32,
 }
 
 type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(10)
@@ -308,25 +311,25 @@ fn "allocator_freelist_reclaim.wado/$cm_export__run"() {
 
 fn "allocator_freelist_reclaim.wado/run$cold0"(ptr1, i, p) with Stdout {
     let $mv_arg_1: ref "core:prelude/string.wado//String";
-    "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<allocator_freelist_reclaim.wado/$tmpl$59e16269228f9c88,[core:prelude/string.wado/String,i32,i32]>"(struct.new "allocator_freelist_reclaim.wado//$tmpl$59e16269228f9c88" { h0: "core:prelude/string.wado/core:prelude/string.wado/String::format<allocator_freelist_reclaim.wado/$tmpl$8db8629cb9c7db93,[i32,i32]>"(struct.new "allocator_freelist_reclaim.wado//$tmpl$8db8629cb9c7db93" { h0: i, h1: p, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("loop iteration "), used: 15 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("loop iteration "), used: 15 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>(": expected recycled address, got "), used: 33 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>(": expected recycled address, got "), used: 33 }, s2: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, r2: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 } }), h1: p, h2: ptr1, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in run at allocator_freelist_reclaim.wado:19: "), used: 63 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in run at allocator_freelist_reclaim.wado:19: "), used: 63 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
+    "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<allocator_freelist_reclaim.wado/$tmpl$59e16269228f9c88,[core:prelude/string.wado/String,i32,i32]>"(struct.new "allocator_freelist_reclaim.wado//$tmpl$59e16269228f9c88" { h0: "core:prelude/string.wado/core:prelude/string.wado/String::format<allocator_freelist_reclaim.wado/$tmpl$8db8629cb9c7db93,[i32,i32]>"(struct.new "allocator_freelist_reclaim.wado//$tmpl$8db8629cb9c7db93" { h0: i, h1: p, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("loop iteration "), used: 15 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("loop iteration "), used: 15 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>(": expected recycled address, got "), used: 33 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>(": expected recycled address, got "), used: 33 }, s2: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, r2: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, q: 0 }), h1: p, h2: ptr1, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in run at allocator_freelist_reclaim.wado:19: "), used: 63 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in run at allocator_freelist_reclaim.wado:19: "), used: 63 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: p == ptr1
 p: "), used: 25 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: p == ptr1
 p: "), used: 25 }, s2: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 ptr1: "), used: 7 }, r2: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
-ptr1: "), used: 7 }, s3: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r3: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, $mv_arg_1.used);
+ptr1: "), used: 7 }, s3: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r3: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, q: 0 })).repr, $mv_arg_1.used);
     unreachable;
 }
 
 fn "allocator_freelist_reclaim.wado/run$cold1"(ptr1, ptr2) with Stdout {
     let $mv_arg_1: ref "core:prelude/string.wado//String";
-    "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<allocator_freelist_reclaim.wado/$tmpl$59e16269228f9c88,[core:prelude/string.wado/String,i32,i32]>"(struct.new "allocator_freelist_reclaim.wado//$tmpl$59e16269228f9c88" { h0: "core:prelude/string.wado/core:prelude/string.wado/String::format<allocator_freelist_reclaim.wado/$tmpl$8db8629cb9c7db93,[i32,i32]>"(struct.new "allocator_freelist_reclaim.wado//$tmpl$8db8629cb9c7db93" { h0: ptr1, h1: ptr2, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("expected recycled address: ptr1="), used: 32 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("expected recycled address: ptr1="), used: 32 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>(", ptr2="), used: 7 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>(", ptr2="), used: 7 }, s2: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, r2: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 } }), h1: ptr2, h2: ptr1, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in run at allocator_freelist_reclaim.wado:12: "), used: 63 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in run at allocator_freelist_reclaim.wado:12: "), used: 63 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
+    "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<allocator_freelist_reclaim.wado/$tmpl$59e16269228f9c88,[core:prelude/string.wado/String,i32,i32]>"(struct.new "allocator_freelist_reclaim.wado//$tmpl$59e16269228f9c88" { h0: "core:prelude/string.wado/core:prelude/string.wado/String::format<allocator_freelist_reclaim.wado/$tmpl$8db8629cb9c7db93,[i32,i32]>"(struct.new "allocator_freelist_reclaim.wado//$tmpl$8db8629cb9c7db93" { h0: ptr1, h1: ptr2, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("expected recycled address: ptr1="), used: 32 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("expected recycled address: ptr1="), used: 32 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>(", ptr2="), used: 7 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>(", ptr2="), used: 7 }, s2: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, r2: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, q: 0 }), h1: ptr2, h2: ptr1, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in run at allocator_freelist_reclaim.wado:12: "), used: 63 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in run at allocator_freelist_reclaim.wado:12: "), used: 63 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: ptr2 == ptr1
 ptr2: "), used: 31 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: ptr2 == ptr1
 ptr2: "), used: 31 }, s2: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 ptr1: "), used: 7 }, r2: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
-ptr1: "), used: 7 }, s3: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r3: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, $mv_arg_1.used);
+ptr1: "), used: 7 }, s3: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r3: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, q: 0 })).repr, $mv_arg_1.used);
     unreachable;
 }
 
@@ -336,7 +339,7 @@ fn "allocator_freelist_reclaim.wado/run$cold2"(ptr1) with Stdout {
 condition: ptr1 > 0
 ptr1: "), used: 87 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in run at allocator_freelist_reclaim.wado:9
 condition: ptr1 > 0
-ptr1: "), used: 87 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, $mv_arg_1.used);
+ptr1: "), used: 87 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, q: 0 })).repr, $mv_arg_1.used);
     unreachable;
 }
 

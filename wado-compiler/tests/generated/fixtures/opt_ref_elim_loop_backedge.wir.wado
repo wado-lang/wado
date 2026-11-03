@@ -37,6 +37,7 @@ struct opt_ref_elim_loop_backedge.wado//$tmpl$ebaa20f4a908b504 {  // TypeId(6)
     mut r0: ref "core:prelude/string.wado//String",
     mut s1: ref "core:prelude/string.wado//String",
     mut r1: ref "core:prelude/string.wado//String",
+    mut q: i32,
 }
 
 type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(7)
@@ -128,7 +129,7 @@ fn "opt_ref_elim_loop_backedge.wado/run"() with Stdout {
     let q: u64;
     let tens: i32;
     let $sroa_$sroa_b_xs_115_v_134: i32;
-    let start_174: i32;
+    let start_175: i32;
     $sroa_$sroa_b_xs_115_v_134 = 1;
     i_3 = 0;
     total = 0;
@@ -213,22 +214,22 @@ fn "opt_ref_elim_loop_backedge.wado/run"() with Stdout {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_20, $sroa_$sroa_b_xs_115_v_134);
         }
-        start_174 = out_20.used;
+        start_175 = out_20.used;
         out_20.used = $sroa_$sroa_b_xs_115_v_134;
-        builtin::array_set_u8(out_20.repr, start_174, 45);
+        builtin::array_set_u8(out_20.repr, start_175, 45);
     } else {
     }
     if @unlikely(local.tee $sroa_$sroa_b_xs_115_v_134(out_20.used + i_3) > builtin::array_len(out_20.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_20, $sroa_$sroa_b_xs_115_v_134);
     }
-    start_174 = out_20.used;
+    start_175 = out_20.used;
     out_20.used = $sroa_$sroa_b_xs_115_v_134;
     arr = out_20.repr;
-    $sroa_$sroa_b_xs_115_v_134 = start_174 + i_3;
+    $sroa_$sroa_b_xs_115_v_134 = start_175 + i_3;
     b24: block {
         l25: loop {
-            break_if b24 ($sroa_$sroa_b_xs_115_v_134 - start_174) < 2;
+            break_if b24 ($sroa_$sroa_b_xs_115_v_134 - start_175) < 2;
             q = x /u 100_i64;
             tens = local.tee i_3(builtin::i32_wrap_i64(x - (q * 100_i64))) / 10;
             builtin::array_set_u8(arr, $sroa_$sroa_b_xs_115_v_134 - 1, (48 + i_3) - (tens * 10));
@@ -238,8 +239,8 @@ fn "opt_ref_elim_loop_backedge.wado/run"() with Stdout {
             continue l25;
         };
     };
-    if $sroa_$sroa_b_xs_115_v_134 > start_174 {
-        builtin::array_set_u8(arr, start_174, 48 + builtin::i32_wrap_i64(x %u 10_i64));
+    if $sroa_$sroa_b_xs_115_v_134 > start_175 {
+        builtin::array_set_u8(arr, start_175, 48 + builtin::i32_wrap_i64(x %u 10_i64));
     }
     $inline_core_prelude_string_wado_String__internal_push_view_42: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_42;
@@ -285,7 +286,7 @@ fn "opt_ref_elim_loop_backedge.wado/run$cold0"(total) with Stdout {
 condition: total == 1000
 total: "), used: 94 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in run at opt_ref_elim_loop_backedge.wado:34
 condition: total == 1000
-total: "), used: 94 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, $mv_arg_1.used);
+total: "), used: 94 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, q: 0 })).repr, $mv_arg_1.used);
     unreachable;
 }
 

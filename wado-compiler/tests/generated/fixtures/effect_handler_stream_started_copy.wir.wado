@@ -100,6 +100,7 @@ struct core:prelude/types.wado//$tmpl$ac8fec2d6428d13b {  // TypeId(20)
     mut r1: ref "core:prelude/string.wado//String",
     mut s2: ref "core:prelude/string.wado//String",
     mut r2: ref "core:prelude/string.wado//String",
+    mut q: i32,
 }
 
 struct core:prelude/types.wado//$tmpl$b7f89f2160c441f4 {  // TypeId(21)
@@ -111,6 +112,7 @@ struct core:prelude/types.wado//$tmpl$b7f89f2160c441f4 {  // TypeId(21)
     mut r1: ref "core:prelude/string.wado//String",
     mut s2: ref "core:prelude/string.wado//String",
     mut r2: ref "core:prelude/string.wado//String",
+    mut q: i32,
 }
 
 struct core:prelude/primitive.wado//$tmpl$59e16269228f9c88 {  // TypeId(22)
@@ -125,6 +127,7 @@ struct core:prelude/primitive.wado//$tmpl$59e16269228f9c88 {  // TypeId(22)
     mut r2: ref "core:prelude/string.wado//String",
     mut s3: ref "core:prelude/string.wado//String",
     mut r3: ref "core:prelude/string.wado//String",
+    mut q: i32,
 }
 
 struct core:prelude/list.wado//$tmpl$59e16269228f9c88 {  // TypeId(23)
@@ -139,6 +142,7 @@ struct core:prelude/list.wado//$tmpl$59e16269228f9c88 {  // TypeId(23)
     mut r2: ref "core:prelude/string.wado//String",
     mut s3: ref "core:prelude/string.wado//String",
     mut r3: ref "core:prelude/string.wado//String",
+    mut q: i32,
 }
 
 struct core:prelude/format.wado//Formatter {  // TypeId(24)
@@ -813,7 +817,7 @@ fn "effect_handler_stream_started_copy.wado/$effect_dispatch__core:prelude/types
 condition: *lending
 lending: "), used: 30 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: *lending
-lending: "), used: 30 }, s2: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r2: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, $mv_arg_3.used);
+lending: "), used: 30 }, s2: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r2: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, q: 0 })).repr, $mv_arg_3.used);
                     unreachable;
                 }
                 $sroa_slot_30 = into.ptr;
@@ -1033,8 +1037,8 @@ fn "effect_handler_stream_started_copy.wado/$cm_export__run"() {
         if ref.is_null(local.tee $local_2(global:effect_handler_stream_started_copy.wado::$effect_core:prelude/types.wado/StreamWritable<u8>)) == 0 {
             global:effect_handler_stream_started_copy.wado::$effect_core:prelude/types.wado/StreamWritable<u8> = local.tee $local_3(ref.as_non_null($local_2)).outer;
             $local_4 = block -> ref null "core:prelude/types.wado//StartedWrite<u8>" {
-                let $indirect_call_31: ref "canonical//CanonicalClosure_4";
-                call_ref "functype/$canonical_closure_fn_4"($indirect_call_31.func, local.tee $indirect_call_31(ref.cast "canonical//CanonicalClosure_4"($local_3.op_begin_write)).env, tx_2, $mv_field_13);
+                let $indirect_call_33: ref "canonical//CanonicalClosure_4";
+                call_ref "functype/$canonical_closure_fn_4"($indirect_call_33.func, local.tee $indirect_call_33(ref.cast "canonical//CanonicalClosure_4"($local_3.op_begin_write)).env, tx_2, $mv_field_13);
             };
             global:effect_handler_stream_started_copy.wado::$effect_core:prelude/types.wado/StreamWritable<u8> = $local_2;
             break $inline_run_0__$inline__effect_dispatch__core_prelude_types_wado_StreamWritable_u8___begin_write_32: $local_4;
@@ -1042,7 +1046,7 @@ fn "effect_handler_stream_started_copy.wado/$cm_export__run"() {
             used_27 = tx_2.value;
             new_used_95 = builtin::i32_wrap_i64(new_used_95 = "mem/realloc"(0, 0, 1, 1); "core:rt/gc_array_to_memory$spec0$dae[src_start]"($mv_field_13.repr, new_used_95, 1); builtin::i64_extend_i32_u(new_used_95) | 4294967296_i64);
             packed = "wasi/stream-write"(used_27, new_used_95, 1);
-            break $inline_run_0__$inline__effect_dispatch__core_prelude_types_wado_StreamWritable_u8___begin_write_32: struct.new "core:prelude/types.wado//StartedWrite<u8>" { buffer: struct.new "core:prelude/types.wado//CopyBuffer" { handle: used_27, packed: packed, ptr: new_used_95, size: 1, align: 1 }, data: struct.new "core:prelude//List<u8>" { repr: let $array_clone_src_28: ref Array<u8>; $array_clone_src_28 = $mv_field_13.repr; used_27 = $mv_field_13.used; let $array_clone_dst_29: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_29(builtin::array_new<u8>(used_27)), 0, $array_clone_src_28, 0, used_27); $array_clone_dst_29, used: used_27 } };
+            break $inline_run_0__$inline__effect_dispatch__core_prelude_types_wado_StreamWritable_u8___begin_write_32: struct.new "core:prelude/types.wado//StartedWrite<u8>" { buffer: struct.new "core:prelude/types.wado//CopyBuffer" { handle: used_27, packed: packed, ptr: new_used_95, size: 1, align: 1 }, data: struct.new "core:prelude//List<u8>" { repr: let $array_clone_src_30: ref Array<u8>; $array_clone_src_30 = $mv_field_13.repr; used_27 = $mv_field_13.used; let $array_clone_dst_31: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_31(builtin::array_new<u8>(used_27)), 0, $array_clone_src_30, 0, used_27); $array_clone_dst_31, used: used_27 } };
         }
         unreachable;
     };
@@ -1052,18 +1056,18 @@ fn "effect_handler_stream_started_copy.wado/$cm_export__run"() {
         "core:prelude/types.wado/core:prelude/types.wado/WriteCopy<u8>^core:prelude/traits.wado/Drop::drop"($moved_4_101);
     }
     used_27 = $sroa_$drop_spill_7_1_326.result;
-    $array_clone_src_28 = array.new_data<u8>("written ");
+    $array_clone_src_30 = array.new_data<u8>("written ");
     local.tee $mv_field_15(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(24), used: 0 }).used = 8;
-    builtin::array_copy<u8>($mv_field_15.repr, 0, $array_clone_src_28, 0, 8);
+    builtin::array_copy<u8>($mv_field_15.repr, 0, $array_clone_src_30, 0, 8);
     "core:prelude/traits.wado/core:prelude/types.wado/CopyResult^core:prelude/traits.wado/Inspect::inspect$sroa[self.value,f.buf]"(used_27, $mv_field_15);
     $inline_run_0__$inline_core_prelude_string_wado_String__internal_push_view_82: block {
         break $inline_run_0__$inline_core_prelude_string_wado_String__internal_push_view_82;
     };
     "core:cli/println"($mv_field_15.repr, $mv_field_15.used);
     used_27 = "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_all"(rx, struct.new "core:prelude//List<u8>" { repr: array.new_fixed<u8>(10, 11), used: 2 });
-    $array_clone_src_28 = array.new_data<u8>("write_all ");
+    $array_clone_src_30 = array.new_data<u8>("write_all ");
     local.tee $mv_field_15(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(26), used: 0 }).used = 10;
-    builtin::array_copy<u8>($mv_field_15.repr, 0, $array_clone_src_28, 0, 10);
+    builtin::array_copy<u8>($mv_field_15.repr, 0, $array_clone_src_30, 0, 10);
     "core:prelude/types.wado/core:prelude/types.wado/CopyResult^core:prelude/traits.wado/Display::fmt$sroa[self.value,f.buf]"(used_27, $mv_field_15);
     $inline_run_0__$inline_core_prelude_string_wado_String__internal_push_view_122: block {
         break $inline_run_0__$inline_core_prelude_string_wado_String__internal_push_view_122;
@@ -1168,7 +1172,7 @@ fn "effect_handler_stream_started_copy.wado/$effect_dispatch__core:prelude/types
 condition: *lending
 lending: "), used: 30 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: *lending
-lending: "), used: 30 }, s2: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r2: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, $mv_arg_1.used);
+lending: "), used: 30 }, s2: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r2: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, q: 0 })).repr, $mv_arg_1.used);
                     unreachable;
                 }
                 $sroa_slot_30 = into.ptr;
@@ -1752,7 +1756,7 @@ low: "), used: 29 }, r1: struct.new "core:prelude/string.wado//String" { repr: a
 condition: low <= high
 low: "), used: 29 }, s2: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 high: "), used: 7 }, r2: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
-high: "), used: 7 }, s3: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r3: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, $site.used);
+high: "), used: 7 }, s3: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r3: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, q: 0 })).repr, $site.used);
     unreachable;
 }
 
@@ -1763,7 +1767,7 @@ index: "), used: 43 }, r1: struct.new "core:prelude/string.wado//String" { repr:
 condition: 0 <= index < self.len()
 index: "), used: 43 }, s2: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 self.len(): "), used: 13 }, r2: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
-self.len(): "), used: 13 }, s3: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r3: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, $site.used);
+self.len(): "), used: 13 }, s3: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r3: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, q: 0 })).repr, $site.used);
     unreachable;
 }
 
@@ -1774,7 +1778,7 @@ index: "), used: 43 }, r1: struct.new "core:prelude/string.wado//String" { repr:
 condition: 0 <= index < self.len()
 index: "), used: 43 }, s2: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 self.len(): "), used: 13 }, r2: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
-self.len(): "), used: 13 }, s3: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r3: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, $site.used);
+self.len(): "), used: 13 }, s3: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r3: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, q: 0 })).repr, $site.used);
     unreachable;
 }
 
@@ -1785,7 +1789,7 @@ index: "), used: 43 }, r1: struct.new "core:prelude/string.wado//String" { repr:
 condition: 0 <= index < self.len()
 index: "), used: 43 }, s2: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 self.len(): "), used: 13 }, r2: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
-self.len(): "), used: 13 }, s3: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r3: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, $site.used);
+self.len(): "), used: 13 }, s3: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r3: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, q: 0 })).repr, $site.used);
     unreachable;
 }
 
@@ -1796,7 +1800,7 @@ at: "), used: 38 }, r1: struct.new "core:prelude/string.wado//String" { repr: ar
 condition: 0 <= at <= self.len()
 at: "), used: 38 }, s2: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 self.len(): "), used: 13 }, r2: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
-self.len(): "), used: 13 }, s3: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r3: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, $site.used);
+self.len(): "), used: 13 }, s3: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r3: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, q: 0 })).repr, $site.used);
     unreachable;
 }
 
@@ -1807,7 +1811,7 @@ index: "), used: 43 }, r1: struct.new "core:prelude/string.wado//String" { repr:
 condition: 0 <= index < self.len()
 index: "), used: 43 }, s2: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 self.len(): "), used: 13 }, r2: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
-self.len(): "), used: 13 }, s3: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r3: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, $site.used);
+self.len(): "), used: 13 }, s3: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r3: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, q: 0 })).repr, $site.used);
     unreachable;
 }
 
@@ -1842,7 +1846,7 @@ fn "core:prelude/types.wado/core:prelude/types.wado/WaitableSet<core:prelude/typ
 condition: !self.is_empty()
 self.is_empty(): "), used: 46 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: !self.is_empty()
-self.is_empty(): "), used: 46 }, s2: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r2: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, $mv_arg_1.used);
+self.is_empty(): "), used: 46 }, s2: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r2: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, q: 0 })).repr, $mv_arg_1.used);
     unreachable;
 }
 

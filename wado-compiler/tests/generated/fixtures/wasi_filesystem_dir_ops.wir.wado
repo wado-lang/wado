@@ -177,6 +177,7 @@ struct core:prelude/types.wado//$tmpl$ac8fec2d6428d13b {  // TypeId(27)
     mut r1: ref "core:prelude/string.wado//String",
     mut s2: ref "core:prelude/string.wado//String",
     mut r2: ref "core:prelude/string.wado//String",
+    mut q: i32,
 }
 
 struct core:prelude/list.wado//$tmpl$59e16269228f9c88 {  // TypeId(28)
@@ -191,6 +192,7 @@ struct core:prelude/list.wado//$tmpl$59e16269228f9c88 {  // TypeId(28)
     mut r2: ref "core:prelude/string.wado//String",
     mut s3: ref "core:prelude/string.wado//String",
     mut r3: ref "core:prelude/string.wado//String",
+    mut q: i32,
 }
 
 struct core:prelude/format.wado//Formatter {  // TypeId(29)
@@ -824,7 +826,7 @@ fn "wasi_filesystem_dir_ops.wado/run"() with Stdout, Stderr, Preopens {
     let q: u64;
     let $sroa_$iter_0_repr_588: ref "Array<wasi:filesystem/types.wado/DirectoryEntry>";
     let $sroa_$iter_0_index_589: i32;
-    let new_repr_607: ref Array<u8>;
+    let new_repr_608: ref Array<u8>;
     $inline__initialize_modules_0: block {
         break_if $inline__initialize_modules_0 @likely(global:wasi_filesystem_dir_ops.wado::$modules_initialized);
         cold_path;
@@ -834,9 +836,9 @@ fn "wasi_filesystem_dir_ops.wado/run"() with Stdout, Stderr, Preopens {
         $load_0 = builtin::i32_wrap_i64(local.tee $cm_pair_7_225("wasi/stream-new"()));
         $sroa_$pattern_temp_0_1_14_232 = builtin::i32_wrap_i64($cm_pair_7_225 >> 32_i64);
         $load_0 = "wasi_filesystem_dir_ops.wado/$cm_binding__wasi:cli/stderr@0.3.0#write-via-stream"($load_0);
-        builtin::array_copy<u8>(local.tee new_repr_607(builtin::array_new<u8>(35)), 0, global:wasi_filesystem_dir_ops.wado::$const_obj_32, 0, 34);
-        builtin::array_set_u8(new_repr_607, 34, 10);
-        "core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]$dae[return]"($sroa_$pattern_temp_0_1_14_232, new_repr_607);
+        builtin::array_copy<u8>(local.tee new_repr_608(builtin::array_new<u8>(35)), 0, global:wasi_filesystem_dir_ops.wado::$const_obj_32, 0, 34);
+        builtin::array_set_u8(new_repr_608, 34, 10);
+        "core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]$dae[return]"($sroa_$pattern_temp_0_1_14_232, new_repr_608);
         "wasi/stream-drop-writable"($sroa_$pattern_temp_0_1_14_232);
         "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($load_0);
         if ref.is_null(dirs) == 0 {
@@ -888,9 +890,9 @@ fn "wasi_filesystem_dir_ops.wado/run"() with Stdout, Stderr, Preopens {
         $load_0 = builtin::i32_wrap_i64(local.tee $cm_pair_7_225("wasi/stream-new"()));
         $sroa_$pattern_temp_0_1_14_232 = builtin::i32_wrap_i64($cm_pair_7_225 >> 32_i64);
         $load_0 = "wasi_filesystem_dir_ops.wado/$cm_binding__wasi:cli/stderr@0.3.0#write-via-stream"($load_0);
-        builtin::array_copy<u8>(local.tee new_repr_607(builtin::array_new<u8>(34)), 0, global:wasi_filesystem_dir_ops.wado::$const_obj_30, 0, 33);
-        builtin::array_set_u8(new_repr_607, 33, 10);
-        drop("core:rt/cm_stream_write_raw_all_u8$spec12$sroa[data.repr]"($sroa_$pattern_temp_0_1_14_232, new_repr_607));
+        builtin::array_copy<u8>(local.tee new_repr_608(builtin::array_new<u8>(34)), 0, global:wasi_filesystem_dir_ops.wado::$const_obj_30, 0, 33);
+        builtin::array_set_u8(new_repr_608, 33, 10);
+        drop("core:rt/cm_stream_write_raw_all_u8$spec12$sroa[data.repr]"($sroa_$pattern_temp_0_1_14_232, new_repr_608));
         "wasi/stream-drop-writable"($sroa_$pattern_temp_0_1_14_232);
         "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($load_0);
         if ref.is_null($moved_19) == 0 {
@@ -912,9 +914,9 @@ fn "wasi_filesystem_dir_ops.wado/run"() with Stdout, Stderr, Preopens {
         $load_0 = builtin::i32_wrap_i64(local.tee $cm_pair_7_225("wasi/stream-new"()));
         $sroa_$pattern_temp_0_1_14_232 = builtin::i32_wrap_i64($cm_pair_7_225 >> 32_i64);
         $load_0 = "wasi_filesystem_dir_ops.wado/$cm_binding__wasi:cli/stderr@0.3.0#write-via-stream"($load_0);
-        builtin::array_copy<u8>(local.tee new_repr_607(builtin::array_new<u8>(31)), 0, global:wasi_filesystem_dir_ops.wado::$const_obj_28, 0, 30);
-        builtin::array_set_u8(new_repr_607, 30, 10);
-        drop("core:rt/cm_stream_write_raw_all_u8$spec13$sroa[data.repr]"($sroa_$pattern_temp_0_1_14_232, new_repr_607));
+        builtin::array_copy<u8>(local.tee new_repr_608(builtin::array_new<u8>(31)), 0, global:wasi_filesystem_dir_ops.wado::$const_obj_28, 0, 30);
+        builtin::array_set_u8(new_repr_608, 30, 10);
+        drop("core:rt/cm_stream_write_raw_all_u8$spec13$sroa[data.repr]"($sroa_$pattern_temp_0_1_14_232, new_repr_608));
         "wasi/stream-drop-writable"($sroa_$pattern_temp_0_1_14_232);
         "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($load_0);
         if ref.is_null($block_v_6) == 0 {
@@ -944,18 +946,18 @@ fn "wasi_filesystem_dir_ops.wado/run"() with Stdout, Stderr, Preopens {
         $load_0 = builtin::i32_wrap_i64(local.tee $cm_pair_7_225("wasi/stream-new"()));
         $sroa_$pattern_temp_0_1_14_232 = builtin::i32_wrap_i64($cm_pair_7_225 >> 32_i64);
         $load_0 = "wasi_filesystem_dir_ops.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($load_0);
-        builtin::array_copy<u8>(local.tee new_repr_607(builtin::array_new<u8>(31)), 0, global:wasi_filesystem_dir_ops.wado::$const_obj_26, 0, 30);
-        builtin::array_set_u8(new_repr_607, 30, 10);
-        drop("core:rt/cm_stream_write_raw_all_u8$spec13$sroa[data.repr]"($sroa_$pattern_temp_0_1_14_232, new_repr_607));
+        builtin::array_copy<u8>(local.tee new_repr_608(builtin::array_new<u8>(31)), 0, global:wasi_filesystem_dir_ops.wado::$const_obj_26, 0, 30);
+        builtin::array_set_u8(new_repr_608, 30, 10);
+        drop("core:rt/cm_stream_write_raw_all_u8$spec13$sroa[data.repr]"($sroa_$pattern_temp_0_1_14_232, new_repr_608));
         "wasi/stream-drop-writable"($sroa_$pattern_temp_0_1_14_232);
         "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($load_0);
     } else {
         $load_0 = builtin::i32_wrap_i64(local.tee $cm_pair_7_225("wasi/stream-new"()));
         $sroa_$pattern_temp_0_1_14_232 = builtin::i32_wrap_i64($cm_pair_7_225 >> 32_i64);
         $load_0 = "wasi_filesystem_dir_ops.wado/$cm_binding__wasi:cli/stderr@0.3.0#write-via-stream"($load_0);
-        builtin::array_copy<u8>(local.tee new_repr_607(builtin::array_new<u8>(28)), 0, global:wasi_filesystem_dir_ops.wado::$const_obj_25, 0, 27);
-        builtin::array_set_u8(new_repr_607, 27, 10);
-        drop("core:rt/cm_stream_write_raw_all_u8$spec10$sroa[data.repr]"($sroa_$pattern_temp_0_1_14_232, new_repr_607));
+        builtin::array_copy<u8>(local.tee new_repr_608(builtin::array_new<u8>(28)), 0, global:wasi_filesystem_dir_ops.wado::$const_obj_25, 0, 27);
+        builtin::array_set_u8(new_repr_608, 27, 10);
+        drop("core:rt/cm_stream_write_raw_all_u8$spec10$sroa[data.repr]"($sroa_$pattern_temp_0_1_14_232, new_repr_608));
         "wasi/stream-drop-writable"($sroa_$pattern_temp_0_1_14_232);
         "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($load_0);
         if ref.is_null($block_v_6) == 0 {
@@ -985,18 +987,18 @@ fn "wasi_filesystem_dir_ops.wado/run"() with Stdout, Stderr, Preopens {
             $load_0 = builtin::i32_wrap_i64(local.tee $cm_pair_7_225("wasi/stream-new"()));
             $sroa_$pattern_temp_0_1_14_232 = builtin::i32_wrap_i64($cm_pair_7_225 >> 32_i64);
             $load_0 = "wasi_filesystem_dir_ops.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($load_0);
-            builtin::array_copy<u8>(local.tee new_repr_607(builtin::array_new<u8>(55)), 0, global:wasi_filesystem_dir_ops.wado::$const_obj_23, 0, 54);
-            builtin::array_set_u8(new_repr_607, 54, 10);
-            drop("core:rt/cm_stream_write_raw_all_u8$spec1$sroa[data.repr]"($sroa_$pattern_temp_0_1_14_232, new_repr_607));
+            builtin::array_copy<u8>(local.tee new_repr_608(builtin::array_new<u8>(55)), 0, global:wasi_filesystem_dir_ops.wado::$const_obj_23, 0, 54);
+            builtin::array_set_u8(new_repr_608, 54, 10);
+            drop("core:rt/cm_stream_write_raw_all_u8$spec1$sroa[data.repr]"($sroa_$pattern_temp_0_1_14_232, new_repr_608));
             "wasi/stream-drop-writable"($sroa_$pattern_temp_0_1_14_232);
             "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($load_0);
         } else {
             $load_0 = builtin::i32_wrap_i64(local.tee $cm_pair_7_225("wasi/stream-new"()));
             $sroa_$pattern_temp_0_1_14_232 = builtin::i32_wrap_i64($cm_pair_7_225 >> 32_i64);
             $load_0 = "wasi_filesystem_dir_ops.wado/$cm_binding__wasi:cli/stderr@0.3.0#write-via-stream"($load_0);
-            builtin::array_copy<u8>(local.tee new_repr_607(builtin::array_new<u8>(52)), 0, global:wasi_filesystem_dir_ops.wado::$const_obj_22, 0, 51);
-            builtin::array_set_u8(new_repr_607, 51, 10);
-            drop("core:rt/cm_stream_write_raw_all_u8$spec2$sroa[data.repr]"($sroa_$pattern_temp_0_1_14_232, new_repr_607));
+            builtin::array_copy<u8>(local.tee new_repr_608(builtin::array_new<u8>(52)), 0, global:wasi_filesystem_dir_ops.wado::$const_obj_22, 0, 51);
+            builtin::array_set_u8(new_repr_608, 51, 10);
+            drop("core:rt/cm_stream_write_raw_all_u8$spec2$sroa[data.repr]"($sroa_$pattern_temp_0_1_14_232, new_repr_608));
             "wasi/stream-drop-writable"($sroa_$pattern_temp_0_1_14_232);
             "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($load_0);
         }
@@ -1004,9 +1006,9 @@ fn "wasi_filesystem_dir_ops.wado/run"() with Stdout, Stderr, Preopens {
         $load_0 = builtin::i32_wrap_i64(local.tee $cm_pair_7_225("wasi/stream-new"()));
         $sroa_$pattern_temp_0_1_14_232 = builtin::i32_wrap_i64($cm_pair_7_225 >> 32_i64);
         $load_0 = "wasi_filesystem_dir_ops.wado/$cm_binding__wasi:cli/stderr@0.3.0#write-via-stream"($load_0);
-        builtin::array_copy<u8>(local.tee new_repr_607(builtin::array_new<u8>(43)), 0, global:wasi_filesystem_dir_ops.wado::$const_obj_21, 0, 42);
-        builtin::array_set_u8(new_repr_607, 42, 10);
-        drop("core:rt/cm_stream_write_raw_all_u8$spec3$sroa[data.repr]"($sroa_$pattern_temp_0_1_14_232, new_repr_607));
+        builtin::array_copy<u8>(local.tee new_repr_608(builtin::array_new<u8>(43)), 0, global:wasi_filesystem_dir_ops.wado::$const_obj_21, 0, 42);
+        builtin::array_set_u8(new_repr_608, 42, 10);
+        drop("core:rt/cm_stream_write_raw_all_u8$spec3$sroa[data.repr]"($sroa_$pattern_temp_0_1_14_232, new_repr_608));
         "wasi/stream-drop-writable"($sroa_$pattern_temp_0_1_14_232);
         "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($load_0);
     }
@@ -1041,15 +1043,15 @@ fn "wasi_filesystem_dir_ops.wado/run"() with Stdout, Stderr, Preopens {
                 struct.new "wasi:filesystem/types.wado//DescriptorType::Other" { discriminant: 7, payload_0: (if ref.is_null($vc_payload_7) -> ref null "core:prelude/string.wado//String" {
                     $vc_payload_7;
                 } else {
-                    struct.new "core:prelude/string.wado//String" { repr: new_repr_607 = local.tee $vc_payload_1_78(ref.as_non_null($vc_payload_7)).repr; $load_38 = $vc_payload_1_78.used; let $array_clone_dst_14: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_14(builtin::array_new<u8>($load_38)), 0, new_repr_607, 0, $load_38); $array_clone_dst_14, used: $load_38 };
+                    struct.new "core:prelude/string.wado//String" { repr: new_repr_608 = local.tee $vc_payload_1_78(ref.as_non_null($vc_payload_7)).repr; $load_38 = $vc_payload_1_78.used; let $array_clone_dst_14: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_14(builtin::array_new<u8>($load_38)), 0, new_repr_608, 0, $load_38); $array_clone_dst_14, used: $load_38 };
                 }) };
             });
-            new_repr_607 = local.tee $vc_payload_1_78(v_74.name).repr;
-            builtin::array_copy<u8>(local.tee $array_clone_dst_14(builtin::array_new<u8>(local.tee $load_38($vc_payload_1_78.used))), 0, new_repr_607, 0, $load_38);
+            new_repr_608 = local.tee $vc_payload_1_78(v_74.name).repr;
+            builtin::array_copy<u8>(local.tee $array_clone_dst_14(builtin::array_new<u8>(local.tee $load_38($vc_payload_1_78.used))), 0, new_repr_608, 0, $load_38);
             $sroa_$iter_0_index_589 = $sroa_$iter_0_index_589 + 1;
             entry_count = entry_count + 1;
             if $inline_core_prelude_array_wado_seq_eq_u8__26: block -> bool {
-                new_repr_607 = global:wasi_filesystem_dir_ops.wado::$const_obj_20;
+                new_repr_608 = global:wasi_filesystem_dir_ops.wado::$const_obj_20;
                 if $load_38 != 9 {
                     break $inline_core_prelude_array_wado_seq_eq_u8__26: 0;
                 }
@@ -1057,19 +1059,19 @@ fn "wasi_filesystem_dir_ops.wado/run"() with Stdout, Stderr, Preopens {
                 b41: block {
                     l42: loop {
                         break_if b41 (((i_90 >= $load_38) | ((i_90 + 1) >= $load_38)) | (((i_90 + 1) + 1) >= $load_38)) | ((((i_90 + 1) + 1) + 1) >= $load_38);
-                        if builtin::array_get_value<u8>($array_clone_dst_14, i_90) != builtin::array_get_value<u8>(new_repr_607, i_90) {
+                        if builtin::array_get_value<u8>($array_clone_dst_14, i_90) != builtin::array_get_value<u8>(new_repr_608, i_90) {
                             break $inline_core_prelude_array_wado_seq_eq_u8__26: 0;
                         }
                         i_90 = i_90 + 1;
-                        if builtin::array_get_value<u8>($array_clone_dst_14, i_90) != builtin::array_get_value<u8>(new_repr_607, i_90) {
+                        if builtin::array_get_value<u8>($array_clone_dst_14, i_90) != builtin::array_get_value<u8>(new_repr_608, i_90) {
                             break $inline_core_prelude_array_wado_seq_eq_u8__26: 0;
                         }
                         i_90 = i_90 + 1;
-                        if builtin::array_get_value<u8>($array_clone_dst_14, i_90) != builtin::array_get_value<u8>(new_repr_607, i_90) {
+                        if builtin::array_get_value<u8>($array_clone_dst_14, i_90) != builtin::array_get_value<u8>(new_repr_608, i_90) {
                             break $inline_core_prelude_array_wado_seq_eq_u8__26: 0;
                         }
                         i_90 = i_90 + 1;
-                        if builtin::array_get_value<u8>($array_clone_dst_14, i_90) != builtin::array_get_value<u8>(new_repr_607, i_90) {
+                        if builtin::array_get_value<u8>($array_clone_dst_14, i_90) != builtin::array_get_value<u8>(new_repr_608, i_90) {
                             break $inline_core_prelude_array_wado_seq_eq_u8__26: 0;
                         }
                         i_90 = i_90 + 1;
@@ -1079,7 +1081,7 @@ fn "wasi_filesystem_dir_ops.wado/run"() with Stdout, Stderr, Preopens {
                 b47: block {
                     l48: loop {
                         break_if b47 i_90 >= $load_38;
-                        if builtin::array_get_value<u8>($array_clone_dst_14, i_90) != builtin::array_get_value<u8>(new_repr_607, i_90) {
+                        if builtin::array_get_value<u8>($array_clone_dst_14, i_90) != builtin::array_get_value<u8>(new_repr_608, i_90) {
                             break $inline_core_prelude_array_wado_seq_eq_u8__26: 0;
                         }
                         i_90 = i_90 + 1;
@@ -1093,15 +1095,15 @@ fn "wasi_filesystem_dir_ops.wado/run"() with Stdout, Stderr, Preopens {
                     i_90 = builtin::i32_wrap_i64(local.tee $cm_pair_7_225("wasi/stream-new"()));
                     $sroa_$pattern_temp_0_1_14_352 = builtin::i32_wrap_i64($cm_pair_7_225 >> 32_i64);
                     i_90 = "wasi_filesystem_dir_ops.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(i_90);
-                    builtin::array_copy<u8>(local.tee new_repr_607(builtin::array_new<u8>(51)), 0, global:wasi_filesystem_dir_ops.wado::$const_obj_19, 0, 50);
-                    builtin::array_set_u8(new_repr_607, 50, 10);
-                    "core:rt/cm_stream_write_raw_all_u8$spec11$sroa[data.repr]$dae[return]"($sroa_$pattern_temp_0_1_14_352, new_repr_607);
+                    builtin::array_copy<u8>(local.tee new_repr_608(builtin::array_new<u8>(51)), 0, global:wasi_filesystem_dir_ops.wado::$const_obj_19, 0, 50);
+                    builtin::array_set_u8(new_repr_608, 50, 10);
+                    "core:rt/cm_stream_write_raw_all_u8$spec11$sroa[data.repr]$dae[return]"($sroa_$pattern_temp_0_1_14_352, new_repr_608);
                     "wasi/stream-drop-writable"($sroa_$pattern_temp_0_1_14_352);
                     "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(i_90);
                 }
             }
             if $inline_core_prelude_array_wado_seq_eq_u8__28: block -> bool {
-                new_repr_607 = global:wasi_filesystem_dir_ops.wado::$const_obj_18;
+                new_repr_608 = global:wasi_filesystem_dir_ops.wado::$const_obj_18;
                 if $load_38 != 6 {
                     break $inline_core_prelude_array_wado_seq_eq_u8__28: 0;
                 }
@@ -1109,19 +1111,19 @@ fn "wasi_filesystem_dir_ops.wado/run"() with Stdout, Stderr, Preopens {
                 b53: block {
                     l54: loop {
                         break_if b53 (((i_90 >= $load_38) | ((i_90 + 1) >= $load_38)) | (((i_90 + 1) + 1) >= $load_38)) | ((((i_90 + 1) + 1) + 1) >= $load_38);
-                        if builtin::array_get_value<u8>($array_clone_dst_14, i_90) != builtin::array_get_value<u8>(new_repr_607, i_90) {
+                        if builtin::array_get_value<u8>($array_clone_dst_14, i_90) != builtin::array_get_value<u8>(new_repr_608, i_90) {
                             break $inline_core_prelude_array_wado_seq_eq_u8__28: 0;
                         }
                         i_90 = i_90 + 1;
-                        if builtin::array_get_value<u8>($array_clone_dst_14, i_90) != builtin::array_get_value<u8>(new_repr_607, i_90) {
+                        if builtin::array_get_value<u8>($array_clone_dst_14, i_90) != builtin::array_get_value<u8>(new_repr_608, i_90) {
                             break $inline_core_prelude_array_wado_seq_eq_u8__28: 0;
                         }
                         i_90 = i_90 + 1;
-                        if builtin::array_get_value<u8>($array_clone_dst_14, i_90) != builtin::array_get_value<u8>(new_repr_607, i_90) {
+                        if builtin::array_get_value<u8>($array_clone_dst_14, i_90) != builtin::array_get_value<u8>(new_repr_608, i_90) {
                             break $inline_core_prelude_array_wado_seq_eq_u8__28: 0;
                         }
                         i_90 = i_90 + 1;
-                        if builtin::array_get_value<u8>($array_clone_dst_14, i_90) != builtin::array_get_value<u8>(new_repr_607, i_90) {
+                        if builtin::array_get_value<u8>($array_clone_dst_14, i_90) != builtin::array_get_value<u8>(new_repr_608, i_90) {
                             break $inline_core_prelude_array_wado_seq_eq_u8__28: 0;
                         }
                         i_90 = i_90 + 1;
@@ -1131,7 +1133,7 @@ fn "wasi_filesystem_dir_ops.wado/run"() with Stdout, Stderr, Preopens {
                 b59: block {
                     l60: loop {
                         break_if b59 i_90 >= $load_38;
-                        if builtin::array_get_value<u8>($array_clone_dst_14, i_90) != builtin::array_get_value<u8>(new_repr_607, i_90) {
+                        if builtin::array_get_value<u8>($array_clone_dst_14, i_90) != builtin::array_get_value<u8>(new_repr_608, i_90) {
                             break $inline_core_prelude_array_wado_seq_eq_u8__28: 0;
                         }
                         i_90 = i_90 + 1;
@@ -1145,15 +1147,15 @@ fn "wasi_filesystem_dir_ops.wado/run"() with Stdout, Stderr, Preopens {
                     i_90 = builtin::i32_wrap_i64(local.tee $cm_pair_7_225("wasi/stream-new"()));
                     $sroa_$pattern_temp_0_1_14_352 = builtin::i32_wrap_i64($cm_pair_7_225 >> 32_i64);
                     i_90 = "wasi_filesystem_dir_ops.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(i_90);
-                    builtin::array_copy<u8>(local.tee new_repr_607(builtin::array_new<u8>(46)), 0, global:wasi_filesystem_dir_ops.wado::$const_obj_17, 0, 45);
-                    builtin::array_set_u8(new_repr_607, 45, 10);
-                    "core:rt/cm_stream_write_raw_all_u8$spec14$sroa[data.repr]$dae[return]"($sroa_$pattern_temp_0_1_14_352, new_repr_607);
+                    builtin::array_copy<u8>(local.tee new_repr_608(builtin::array_new<u8>(46)), 0, global:wasi_filesystem_dir_ops.wado::$const_obj_17, 0, 45);
+                    builtin::array_set_u8(new_repr_608, 45, 10);
+                    "core:rt/cm_stream_write_raw_all_u8$spec14$sroa[data.repr]$dae[return]"($sroa_$pattern_temp_0_1_14_352, new_repr_608);
                     "wasi/stream-drop-writable"($sroa_$pattern_temp_0_1_14_352);
                     "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(i_90);
                 }
             }
             if $inline_core_prelude_array_wado_seq_eq_u8__30: block -> bool {
-                new_repr_607 = global:wasi_filesystem_dir_ops.wado::$const_obj_16;
+                new_repr_608 = global:wasi_filesystem_dir_ops.wado::$const_obj_16;
                 if $load_38 != 11 {
                     break $inline_core_prelude_array_wado_seq_eq_u8__30: 0;
                 }
@@ -1161,19 +1163,19 @@ fn "wasi_filesystem_dir_ops.wado/run"() with Stdout, Stderr, Preopens {
                 b65: block {
                     l66: loop {
                         break_if b65 (((i_90 >= $load_38) | ((i_90 + 1) >= $load_38)) | (((i_90 + 1) + 1) >= $load_38)) | ((((i_90 + 1) + 1) + 1) >= $load_38);
-                        if builtin::array_get_value<u8>($array_clone_dst_14, i_90) != builtin::array_get_value<u8>(new_repr_607, i_90) {
+                        if builtin::array_get_value<u8>($array_clone_dst_14, i_90) != builtin::array_get_value<u8>(new_repr_608, i_90) {
                             break $inline_core_prelude_array_wado_seq_eq_u8__30: 0;
                         }
                         i_90 = i_90 + 1;
-                        if builtin::array_get_value<u8>($array_clone_dst_14, i_90) != builtin::array_get_value<u8>(new_repr_607, i_90) {
+                        if builtin::array_get_value<u8>($array_clone_dst_14, i_90) != builtin::array_get_value<u8>(new_repr_608, i_90) {
                             break $inline_core_prelude_array_wado_seq_eq_u8__30: 0;
                         }
                         i_90 = i_90 + 1;
-                        if builtin::array_get_value<u8>($array_clone_dst_14, i_90) != builtin::array_get_value<u8>(new_repr_607, i_90) {
+                        if builtin::array_get_value<u8>($array_clone_dst_14, i_90) != builtin::array_get_value<u8>(new_repr_608, i_90) {
                             break $inline_core_prelude_array_wado_seq_eq_u8__30: 0;
                         }
                         i_90 = i_90 + 1;
-                        if builtin::array_get_value<u8>($array_clone_dst_14, i_90) != builtin::array_get_value<u8>(new_repr_607, i_90) {
+                        if builtin::array_get_value<u8>($array_clone_dst_14, i_90) != builtin::array_get_value<u8>(new_repr_608, i_90) {
                             break $inline_core_prelude_array_wado_seq_eq_u8__30: 0;
                         }
                         i_90 = i_90 + 1;
@@ -1183,7 +1185,7 @@ fn "wasi_filesystem_dir_ops.wado/run"() with Stdout, Stderr, Preopens {
                 b71: block {
                     l72: loop {
                         break_if b71 i_90 >= $load_38;
-                        if builtin::array_get_value<u8>($array_clone_dst_14, i_90) != builtin::array_get_value<u8>(new_repr_607, i_90) {
+                        if builtin::array_get_value<u8>($array_clone_dst_14, i_90) != builtin::array_get_value<u8>(new_repr_608, i_90) {
                             break $inline_core_prelude_array_wado_seq_eq_u8__30: 0;
                         }
                         i_90 = i_90 + 1;
@@ -1197,9 +1199,9 @@ fn "wasi_filesystem_dir_ops.wado/run"() with Stdout, Stderr, Preopens {
                     $load_38 = builtin::i32_wrap_i64(local.tee $cm_pair_7_225("wasi/stream-new"()));
                     i_90 = builtin::i32_wrap_i64($cm_pair_7_225 >> 32_i64);
                     $load_38 = "wasi_filesystem_dir_ops.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($load_38);
-                    builtin::array_copy<u8>(local.tee new_repr_607(builtin::array_new<u8>(51)), 0, global:wasi_filesystem_dir_ops.wado::$const_obj_15, 0, 50);
-                    builtin::array_set_u8(new_repr_607, 50, 10);
-                    "core:rt/cm_stream_write_raw_all_u8$spec11$sroa[data.repr]$dae[return]"(i_90, new_repr_607);
+                    builtin::array_copy<u8>(local.tee new_repr_608(builtin::array_new<u8>(51)), 0, global:wasi_filesystem_dir_ops.wado::$const_obj_15, 0, 50);
+                    builtin::array_set_u8(new_repr_608, 50, 10);
+                    "core:rt/cm_stream_write_raw_all_u8$spec11$sroa[data.repr]$dae[return]"(i_90, new_repr_608);
                     "wasi/stream-drop-writable"(i_90);
                     "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($load_38);
                 }
@@ -1213,18 +1215,18 @@ fn "wasi_filesystem_dir_ops.wado/run"() with Stdout, Stderr, Preopens {
         $load_0 = builtin::i32_wrap_i64(local.tee $cm_pair_7_225("wasi/stream-new"()));
         end_71 = builtin::i32_wrap_i64($cm_pair_7_225 >> 32_i64);
         $load_0 = "wasi_filesystem_dir_ops.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($load_0);
-        builtin::array_copy<u8>(local.tee new_repr_607(builtin::array_new<u8>(32)), 0, global:wasi_filesystem_dir_ops.wado::$const_obj_14, 0, 31);
-        builtin::array_set_u8(new_repr_607, 31, 10);
-        "core:rt/cm_stream_write_raw_all_u8$spec4$sroa[data.repr]$dae[return]"(end_71, new_repr_607);
+        builtin::array_copy<u8>(local.tee new_repr_608(builtin::array_new<u8>(32)), 0, global:wasi_filesystem_dir_ops.wado::$const_obj_14, 0, 31);
+        builtin::array_set_u8(new_repr_608, 31, 10);
+        "core:rt/cm_stream_write_raw_all_u8$spec4$sroa[data.repr]$dae[return]"(end_71, new_repr_608);
         "wasi/stream-drop-writable"(end_71);
         "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($load_0);
     } else {
         $load_0 = builtin::i32_wrap_i64(local.tee $cm_pair_7_225("wasi/stream-new"()));
         end_71 = builtin::i32_wrap_i64($cm_pair_7_225 >> 32_i64);
         $load_0 = "wasi_filesystem_dir_ops.wado/$cm_binding__wasi:cli/stderr@0.3.0#write-via-stream"($load_0);
-        builtin::array_copy<u8>(local.tee new_repr_607(builtin::array_new<u8>(34)), 0, global:wasi_filesystem_dir_ops.wado::$const_obj_13, 0, 33);
-        builtin::array_set_u8(new_repr_607, 33, 10);
-        drop("core:rt/cm_stream_write_raw_all_u8$spec12$sroa[data.repr]"(end_71, new_repr_607));
+        builtin::array_copy<u8>(local.tee new_repr_608(builtin::array_new<u8>(34)), 0, global:wasi_filesystem_dir_ops.wado::$const_obj_13, 0, 33);
+        builtin::array_set_u8(new_repr_608, 33, 10);
+        drop("core:rt/cm_stream_write_raw_all_u8$spec12$sroa[data.repr]"(end_71, new_repr_608));
         "wasi/stream-drop-writable"(end_71);
         "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($load_0);
     }
@@ -1232,18 +1234,18 @@ fn "wasi_filesystem_dir_ops.wado/run"() with Stdout, Stderr, Preopens {
         $load_0 = builtin::i32_wrap_i64(local.tee $cm_pair_7_225("wasi/stream-new"()));
         $sroa_$pattern_temp_0_1_14_232 = builtin::i32_wrap_i64($cm_pair_7_225 >> 32_i64);
         $load_0 = "wasi_filesystem_dir_ops.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($load_0);
-        builtin::array_copy<u8>(local.tee new_repr_607(builtin::array_new<u8>(29)), 0, global:wasi_filesystem_dir_ops.wado::$const_obj_12, 0, 28);
-        builtin::array_set_u8(new_repr_607, 28, 10);
-        "core:rt/cm_stream_write_raw_all_u8$spec5$sroa[data.repr]$dae[return]"($sroa_$pattern_temp_0_1_14_232, new_repr_607);
+        builtin::array_copy<u8>(local.tee new_repr_608(builtin::array_new<u8>(29)), 0, global:wasi_filesystem_dir_ops.wado::$const_obj_12, 0, 28);
+        builtin::array_set_u8(new_repr_608, 28, 10);
+        "core:rt/cm_stream_write_raw_all_u8$spec5$sroa[data.repr]$dae[return]"($sroa_$pattern_temp_0_1_14_232, new_repr_608);
         "wasi/stream-drop-writable"($sroa_$pattern_temp_0_1_14_232);
         "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($load_0);
     } else {
         $load_0 = builtin::i32_wrap_i64(local.tee $cm_pair_7_225("wasi/stream-new"()));
         $sroa_$pattern_temp_0_1_14_232 = builtin::i32_wrap_i64($cm_pair_7_225 >> 32_i64);
         $load_0 = "wasi_filesystem_dir_ops.wado/$cm_binding__wasi:cli/stderr@0.3.0#write-via-stream"($load_0);
-        builtin::array_copy<u8>(local.tee new_repr_607(builtin::array_new<u8>(31)), 0, global:wasi_filesystem_dir_ops.wado::$const_obj_11, 0, 30);
-        builtin::array_set_u8(new_repr_607, 30, 10);
-        drop("core:rt/cm_stream_write_raw_all_u8$spec13$sroa[data.repr]"($sroa_$pattern_temp_0_1_14_232, new_repr_607));
+        builtin::array_copy<u8>(local.tee new_repr_608(builtin::array_new<u8>(31)), 0, global:wasi_filesystem_dir_ops.wado::$const_obj_11, 0, 30);
+        builtin::array_set_u8(new_repr_608, 30, 10);
+        drop("core:rt/cm_stream_write_raw_all_u8$spec13$sroa[data.repr]"($sroa_$pattern_temp_0_1_14_232, new_repr_608));
         "wasi/stream-drop-writable"($sroa_$pattern_temp_0_1_14_232);
         "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($load_0);
     }
@@ -1251,18 +1253,18 @@ fn "wasi_filesystem_dir_ops.wado/run"() with Stdout, Stderr, Preopens {
         $load_0 = builtin::i32_wrap_i64(local.tee $cm_pair_7_225("wasi/stream-new"()));
         $sroa_$pattern_temp_0_1_14_232 = builtin::i32_wrap_i64($cm_pair_7_225 >> 32_i64);
         $load_0 = "wasi_filesystem_dir_ops.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($load_0);
-        builtin::array_copy<u8>(local.tee new_repr_607(builtin::array_new<u8>(34)), 0, global:wasi_filesystem_dir_ops.wado::$const_obj_10, 0, 33);
-        builtin::array_set_u8(new_repr_607, 33, 10);
-        drop("core:rt/cm_stream_write_raw_all_u8$spec12$sroa[data.repr]"($sroa_$pattern_temp_0_1_14_232, new_repr_607));
+        builtin::array_copy<u8>(local.tee new_repr_608(builtin::array_new<u8>(34)), 0, global:wasi_filesystem_dir_ops.wado::$const_obj_10, 0, 33);
+        builtin::array_set_u8(new_repr_608, 33, 10);
+        drop("core:rt/cm_stream_write_raw_all_u8$spec12$sroa[data.repr]"($sroa_$pattern_temp_0_1_14_232, new_repr_608));
         "wasi/stream-drop-writable"($sroa_$pattern_temp_0_1_14_232);
         "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($load_0);
     } else {
         $load_0 = builtin::i32_wrap_i64(local.tee $cm_pair_7_225("wasi/stream-new"()));
         $sroa_$pattern_temp_0_1_14_232 = builtin::i32_wrap_i64($cm_pair_7_225 >> 32_i64);
         $load_0 = "wasi_filesystem_dir_ops.wado/$cm_binding__wasi:cli/stderr@0.3.0#write-via-stream"($load_0);
-        builtin::array_copy<u8>(local.tee new_repr_607(builtin::array_new<u8>(36)), 0, global:wasi_filesystem_dir_ops.wado::$const_obj_9, 0, 35);
-        builtin::array_set_u8(new_repr_607, 35, 10);
-        "core:rt/cm_stream_write_raw_all_u8$spec6$sroa[data.repr]$dae[return]"($sroa_$pattern_temp_0_1_14_232, new_repr_607);
+        builtin::array_copy<u8>(local.tee new_repr_608(builtin::array_new<u8>(36)), 0, global:wasi_filesystem_dir_ops.wado::$const_obj_9, 0, 35);
+        builtin::array_set_u8(new_repr_608, 35, 10);
+        "core:rt/cm_stream_write_raw_all_u8$spec6$sroa[data.repr]$dae[return]"($sroa_$pattern_temp_0_1_14_232, new_repr_608);
         "wasi/stream-drop-writable"($sroa_$pattern_temp_0_1_14_232);
         "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($load_0);
     }
@@ -1270,16 +1272,16 @@ fn "wasi_filesystem_dir_ops.wado/run"() with Stdout, Stderr, Preopens {
         $load_0 = builtin::i32_wrap_i64(local.tee $cm_pair_7_225("wasi/stream-new"()));
         $sroa_$pattern_temp_0_1_14_232 = builtin::i32_wrap_i64($cm_pair_7_225 >> 32_i64);
         $load_0 = "wasi_filesystem_dir_ops.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($load_0);
-        builtin::array_copy<u8>(local.tee new_repr_607(builtin::array_new<u8>(51)), 0, global:wasi_filesystem_dir_ops.wado::$const_obj_8, 0, 50);
-        builtin::array_set_u8(new_repr_607, 50, 10);
-        "core:rt/cm_stream_write_raw_all_u8$spec11$sroa[data.repr]$dae[return]"($sroa_$pattern_temp_0_1_14_232, new_repr_607);
+        builtin::array_copy<u8>(local.tee new_repr_608(builtin::array_new<u8>(51)), 0, global:wasi_filesystem_dir_ops.wado::$const_obj_8, 0, 50);
+        builtin::array_set_u8(new_repr_608, 50, 10);
+        "core:rt/cm_stream_write_raw_all_u8$spec11$sroa[data.repr]$dae[return]"($sroa_$pattern_temp_0_1_14_232, new_repr_608);
         "wasi/stream-drop-writable"($sroa_$pattern_temp_0_1_14_232);
         "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($load_0);
     } else {
         $vc_payload_1_78 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(57), used: 0 };
-        new_repr_607 = global:wasi_filesystem_dir_ops.wado::$const_obj_7;
+        new_repr_608 = global:wasi_filesystem_dir_ops.wado::$const_obj_7;
         $vc_payload_1_78.used = 41;
-        builtin::array_copy<u8>(local.tee $array_clone_dst_14($vc_payload_1_78.repr), 0, new_repr_607, 0, 41);
+        builtin::array_copy<u8>(local.tee $array_clone_dst_14($vc_payload_1_78.repr), 0, new_repr_608, 0, 41);
         $load_0 = entry_count < 0;
         $cm_pair_7_225 = builtin::i64_extend_i32_s(entry_count);
         $cm_pair_7_225 = select i64($cm_pair_7_225 < 0_i64, 0_i64 - $cm_pair_7_225, $cm_pair_7_225);
@@ -1359,22 +1361,22 @@ fn "wasi_filesystem_dir_ops.wado/run"() with Stdout, Stderr, Preopens {
         }
         found_newdir = $vc_payload_1_78.used;
         $vc_payload_1_78.used = $load_0;
-        new_repr_607 = $vc_payload_1_78.repr;
+        new_repr_608 = $vc_payload_1_78.repr;
         $load_0 = found_newdir + $sroa_$pattern_temp_0_1_14_232;
         b101: block {
             l102: loop {
                 break_if b101 ($load_0 - found_newdir) < 2;
                 q = $cm_pair_7_225 /u 100_i64;
                 entry_count = local.tee $sroa_$pattern_temp_0_1_14_232(builtin::i32_wrap_i64($cm_pair_7_225 - (q * 100_i64))) / 10;
-                builtin::array_set_u8(new_repr_607, $load_0 - 1, (48 + $sroa_$pattern_temp_0_1_14_232) - (entry_count * 10));
-                builtin::array_set_u8(new_repr_607, $load_0 - 2, 48 + entry_count);
+                builtin::array_set_u8(new_repr_608, $load_0 - 1, (48 + $sroa_$pattern_temp_0_1_14_232) - (entry_count * 10));
+                builtin::array_set_u8(new_repr_608, $load_0 - 2, 48 + entry_count);
                 $load_0 = $load_0 - 2;
                 $cm_pair_7_225 = q;
                 continue l102;
             };
         };
         if $load_0 > found_newdir {
-            builtin::array_set_u8(new_repr_607, found_newdir, 48 + builtin::i32_wrap_i64($cm_pair_7_225 %u 10_i64));
+            builtin::array_set_u8(new_repr_608, found_newdir, 48 + builtin::i32_wrap_i64($cm_pair_7_225 %u 10_i64));
         }
         $inline_core_prelude_string_wado_String__internal_push_view_71: block {
             break $inline_core_prelude_string_wado_String__internal_push_view_71;
@@ -1393,18 +1395,18 @@ fn "wasi_filesystem_dir_ops.wado/run"() with Stdout, Stderr, Preopens {
         $load_0 = builtin::i32_wrap_i64(local.tee $cm_pair_7_225("wasi/stream-new"()));
         $sroa_$pattern_temp_0_1_14_232 = builtin::i32_wrap_i64($cm_pair_7_225 >> 32_i64);
         $load_0 = "wasi_filesystem_dir_ops.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($load_0);
-        builtin::array_copy<u8>(local.tee new_repr_607(builtin::array_new<u8>(31)), 0, global:wasi_filesystem_dir_ops.wado::$const_obj_5, 0, 30);
-        builtin::array_set_u8(new_repr_607, 30, 10);
-        drop("core:rt/cm_stream_write_raw_all_u8$spec13$sroa[data.repr]"($sroa_$pattern_temp_0_1_14_232, new_repr_607));
+        builtin::array_copy<u8>(local.tee new_repr_608(builtin::array_new<u8>(31)), 0, global:wasi_filesystem_dir_ops.wado::$const_obj_5, 0, 30);
+        builtin::array_set_u8(new_repr_608, 30, 10);
+        drop("core:rt/cm_stream_write_raw_all_u8$spec13$sroa[data.repr]"($sroa_$pattern_temp_0_1_14_232, new_repr_608));
         "wasi/stream-drop-writable"($sroa_$pattern_temp_0_1_14_232);
         "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($load_0);
     } else {
         $load_0 = builtin::i32_wrap_i64(local.tee $cm_pair_7_225("wasi/stream-new"()));
         $sroa_$pattern_temp_0_1_14_232 = builtin::i32_wrap_i64($cm_pair_7_225 >> 32_i64);
         $load_0 = "wasi_filesystem_dir_ops.wado/$cm_binding__wasi:cli/stderr@0.3.0#write-via-stream"($load_0);
-        builtin::array_copy<u8>(local.tee new_repr_607(builtin::array_new<u8>(28)), 0, global:wasi_filesystem_dir_ops.wado::$const_obj_4, 0, 27);
-        builtin::array_set_u8(new_repr_607, 27, 10);
-        drop("core:rt/cm_stream_write_raw_all_u8$spec10$sroa[data.repr]"($sroa_$pattern_temp_0_1_14_232, new_repr_607));
+        builtin::array_copy<u8>(local.tee new_repr_608(builtin::array_new<u8>(28)), 0, global:wasi_filesystem_dir_ops.wado::$const_obj_4, 0, 27);
+        builtin::array_set_u8(new_repr_608, 27, 10);
+        drop("core:rt/cm_stream_write_raw_all_u8$spec10$sroa[data.repr]"($sroa_$pattern_temp_0_1_14_232, new_repr_608));
         "wasi/stream-drop-writable"($sroa_$pattern_temp_0_1_14_232);
         "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($load_0);
     }
@@ -1416,27 +1418,27 @@ fn "wasi_filesystem_dir_ops.wado/run"() with Stdout, Stderr, Preopens {
         $load_0 = builtin::i32_wrap_i64(local.tee $cm_pair_7_225("wasi/stream-new"()));
         $sroa_$pattern_temp_0_1_14_232 = builtin::i32_wrap_i64($cm_pair_7_225 >> 32_i64);
         $load_0 = "wasi_filesystem_dir_ops.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($load_0);
-        builtin::array_copy<u8>(local.tee new_repr_607(builtin::array_new<u8>(47)), 0, global:wasi_filesystem_dir_ops.wado::$const_obj_2, 0, 46);
-        builtin::array_set_u8(new_repr_607, 46, 10);
-        drop("core:rt/cm_stream_write_raw_all_u8$spec7$sroa[data.repr]"($sroa_$pattern_temp_0_1_14_232, new_repr_607));
+        builtin::array_copy<u8>(local.tee new_repr_608(builtin::array_new<u8>(47)), 0, global:wasi_filesystem_dir_ops.wado::$const_obj_2, 0, 46);
+        builtin::array_set_u8(new_repr_608, 46, 10);
+        drop("core:rt/cm_stream_write_raw_all_u8$spec7$sroa[data.repr]"($sroa_$pattern_temp_0_1_14_232, new_repr_608));
         "wasi/stream-drop-writable"($sroa_$pattern_temp_0_1_14_232);
         "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($load_0);
     } else {
         $load_0 = builtin::i32_wrap_i64(local.tee $cm_pair_7_225("wasi/stream-new"()));
         $sroa_$pattern_temp_0_1_14_232 = builtin::i32_wrap_i64($cm_pair_7_225 >> 32_i64);
         $load_0 = "wasi_filesystem_dir_ops.wado/$cm_binding__wasi:cli/stderr@0.3.0#write-via-stream"($load_0);
-        builtin::array_copy<u8>(local.tee new_repr_607(builtin::array_new<u8>(40)), 0, global:wasi_filesystem_dir_ops.wado::$const_obj_1, 0, 39);
-        builtin::array_set_u8(new_repr_607, 39, 10);
-        drop("core:rt/cm_stream_write_raw_all_u8$spec8$sroa[data.repr]"($sroa_$pattern_temp_0_1_14_232, new_repr_607));
+        builtin::array_copy<u8>(local.tee new_repr_608(builtin::array_new<u8>(40)), 0, global:wasi_filesystem_dir_ops.wado::$const_obj_1, 0, 39);
+        builtin::array_set_u8(new_repr_608, 39, 10);
+        drop("core:rt/cm_stream_write_raw_all_u8$spec8$sroa[data.repr]"($sroa_$pattern_temp_0_1_14_232, new_repr_608));
         "wasi/stream-drop-writable"($sroa_$pattern_temp_0_1_14_232);
         "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($load_0);
     }
     $load_0 = builtin::i32_wrap_i64(local.tee $cm_pair_7_225("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_14_232 = builtin::i32_wrap_i64($cm_pair_7_225 >> 32_i64);
     $load_0 = "wasi_filesystem_dir_ops.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($load_0);
-    builtin::array_copy<u8>(local.tee new_repr_607(builtin::array_new<u8>(25)), 0, global:wasi_filesystem_dir_ops.wado::$const_obj_0, 0, 24);
-    builtin::array_set_u8(new_repr_607, 24, 10);
-    "core:rt/cm_stream_write_raw_all_u8$spec9$sroa[data.repr]$dae[return]"($sroa_$pattern_temp_0_1_14_232, new_repr_607);
+    builtin::array_copy<u8>(local.tee new_repr_608(builtin::array_new<u8>(25)), 0, global:wasi_filesystem_dir_ops.wado::$const_obj_0, 0, 24);
+    builtin::array_set_u8(new_repr_608, 24, 10);
+    "core:rt/cm_stream_write_raw_all_u8$spec9$sroa[data.repr]$dae[return]"($sroa_$pattern_temp_0_1_14_232, new_repr_608);
     "wasi/stream-drop-writable"($sroa_$pattern_temp_0_1_14_232);
     "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($load_0);
     if ref.is_null($block_v_6) == 0 {
@@ -2596,7 +2598,7 @@ index: "), used: 43 }, r1: struct.new "core:prelude/string.wado//String" { repr:
 condition: 0 <= index < self.len()
 index: "), used: 43 }, s2: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 self.len(): "), used: 13 }, r2: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
-self.len(): "), used: 13 }, s3: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r3: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, $site.used);
+self.len(): "), used: 13 }, s3: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r3: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, q: 0 })).repr, $site.used);
     unreachable;
 }
 
@@ -2607,7 +2609,7 @@ index: "), used: 43 }, r1: struct.new "core:prelude/string.wado//String" { repr:
 condition: 0 <= index < self.len()
 index: "), used: 43 }, s2: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 self.len(): "), used: 13 }, r2: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
-self.len(): "), used: 13 }, s3: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r3: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, $site.used);
+self.len(): "), used: 13 }, s3: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r3: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, q: 0 })).repr, $site.used);
     unreachable;
 }
 
@@ -2618,7 +2620,7 @@ index: "), used: 43 }, r1: struct.new "core:prelude/string.wado//String" { repr:
 condition: 0 <= index < self.len()
 index: "), used: 43 }, s2: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 self.len(): "), used: 13 }, r2: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
-self.len(): "), used: 13 }, s3: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r3: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, $site.used);
+self.len(): "), used: 13 }, s3: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r3: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, q: 0 })).repr, $site.used);
     unreachable;
 }
 
@@ -2629,7 +2631,7 @@ index: "), used: 43 }, r1: struct.new "core:prelude/string.wado//String" { repr:
 condition: 0 <= index < self.len()
 index: "), used: 43 }, s2: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 self.len(): "), used: 13 }, r2: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
-self.len(): "), used: 13 }, s3: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r3: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, $site.used);
+self.len(): "), used: 13 }, s3: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r3: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, q: 0 })).repr, $site.used);
     unreachable;
 }
 
@@ -2640,7 +2642,7 @@ index: "), used: 43 }, r1: struct.new "core:prelude/string.wado//String" { repr:
 condition: 0 <= index < self.len()
 index: "), used: 43 }, s2: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 self.len(): "), used: 13 }, r2: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
-self.len(): "), used: 13 }, s3: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r3: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, $site.used);
+self.len(): "), used: 13 }, s3: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r3: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, q: 0 })).repr, $site.used);
     unreachable;
 }
 
@@ -2651,7 +2653,7 @@ index: "), used: 43 }, r1: struct.new "core:prelude/string.wado//String" { repr:
 condition: 0 <= index < self.len()
 index: "), used: 43 }, s2: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 self.len(): "), used: 13 }, r2: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
-self.len(): "), used: 13 }, s3: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r3: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, $site.used);
+self.len(): "), used: 13 }, s3: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r3: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, q: 0 })).repr, $site.used);
     unreachable;
 }
 
@@ -2662,7 +2664,7 @@ index: "), used: 43 }, r1: struct.new "core:prelude/string.wado//String" { repr:
 condition: 0 <= index < self.len()
 index: "), used: 43 }, s2: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 self.len(): "), used: 13 }, r2: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
-self.len(): "), used: 13 }, s3: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r3: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, $site.used);
+self.len(): "), used: 13 }, s3: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r3: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, q: 0 })).repr, $site.used);
     unreachable;
 }
 
@@ -2702,7 +2704,7 @@ fn "core:prelude/types.wado/core:prelude/types.wado/WaitableSet<core:prelude/typ
 condition: !self.is_empty()
 self.is_empty(): "), used: 46 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: !self.is_empty()
-self.is_empty(): "), used: 46 }, s2: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r2: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, $mv_arg_1.used);
+self.is_empty(): "), used: 46 }, s2: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r2: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, q: 0 })).repr, $mv_arg_1.used);
     unreachable;
 }
 

@@ -49,6 +49,7 @@ struct core:linear//$tmpl$59e16269228f9c88 {  // TypeId(7)
     mut r2: ref "core:prelude/string.wado//String",
     mut s3: ref "core:prelude/string.wado//String",
     mut r3: ref "core:prelude/string.wado//String",
+    mut q: i32,
 }
 
 struct core:linear//$tmpl$b06047956fb36b6f {  // TypeId(8)
@@ -69,6 +70,7 @@ struct core:linear//$tmpl$b06047956fb36b6f {  // TypeId(8)
     mut r4: ref "core:prelude/string.wado//String",
     mut s5: ref "core:prelude/string.wado//String",
     mut r5: ref "core:prelude/string.wado//String",
+    mut q: i32,
 }
 
 struct core:linear//Block {  // TypeId(9)
@@ -85,6 +87,7 @@ struct linear_array_drop_frees.wado//$tmpl$4432d2d1cbeba55c {  // TypeId(10)
     mut r1: ref "core:prelude/string.wado//String",
     mut s2: ref "core:prelude/string.wado//String",
     mut r2: ref "core:prelude/string.wado//String",
+    mut q: i32,
 }
 
 struct core:linear//LinearArray<u64> {  // TypeId(11)
@@ -282,7 +285,7 @@ fn "linear_array_drop_frees.wado/run"() with Stdout {
     let current: i32;
     let out_26: ref "core:prelude/string.wado//String";
     let $sroa_$iter_0_start_122: i32;
-    let array_547: ref null "core:linear//LinearArray<u64>";
+    let array_548: ref null "core:linear//LinearArray<u64>";
     let $drop_spill_2: u64;
     let $v3: i32;
     $v3 = 2147483647 / 8;
@@ -291,18 +294,18 @@ fn "linear_array_drop_frees.wado/run"() with Stdout {
         "linear_array_drop_frees.wado/round_trip$cold1$dae[round,$contract_arg_0]"(8, $v3);
         unreachable;
     }
-    $v3 = local.tee array_547("core:linear/core:linear/LinearArray<u64>::filled$unchecked$dae[len]$spec0$dae[value]"()).len;
+    $v3 = local.tee array_548("core:linear/core:linear/LinearArray<u64>::filled$unchecked$dae[len]$spec0$dae[value]"()).len;
     if @unlikely(0 >= $v3) {
         cold_path;
         "linear_array_drop_frees.wado/round_trip$cold0"(0, $v3);
         unreachable;
     }
-    $drop_spill_2 = builtin::load_i64(local.tee $load_1(array_547.block).ptr + (0 * 8));
-    if ref.is_null(array_547) == 0 {
+    $drop_spill_2 = builtin::load_i64(local.tee $load_1(array_548.block).ptr + (0 * 8));
+    if ref.is_null(array_548) == 0 {
         if ref.is_null($load_1) == 0 {
             drop("mem/realloc"($load_1.ptr, $load_1.bytes, 16, 0));
         }
-        array_547.block = ref.null none;
+        array_548.block = ref.null none;
     }
     $v3 = builtin::memory_size();
     $sroa_$iter_0_start_122 = 1;
@@ -368,7 +371,7 @@ builtin::memory_size(): "), used: 126 }, r0: struct.new "core:prelude/string.wad
 condition: builtin::memory_size() == pages
 builtin::memory_size(): "), used: 126 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 pages: "), used: 8 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
-pages: "), used: 8 }, s2: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r2: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, $mv_arg_1.used);
+pages: "), used: 8 }, s2: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r2: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, q: 0 })).repr, $mv_arg_1.used);
     unreachable;
 }
 
@@ -744,7 +747,7 @@ index: "), used: 43 }, r1: struct.new "core:prelude/string.wado//String" { repr:
 condition: 0 <= index < self.len()
 index: "), used: 43 }, s2: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 self.len(): "), used: 13 }, r2: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
-self.len(): "), used: 13 }, s3: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r3: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, $site.used);
+self.len(): "), used: 13 }, s3: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r3: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, q: 0 })).repr, $site.used);
     unreachable;
 }
 
@@ -759,7 +762,7 @@ i32::MAX: "), used: 11 }, s3: struct.new "core:prelude/string.wado//String" { re
 builtin::size_of::<T>(): "), used: 26 }, r3: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 builtin::size_of::<T>(): "), used: 26 }, s4: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 i32::MAX / builtin::size_of::<T>(): "), used: 37 }, r4: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
-i32::MAX / builtin::size_of::<T>(): "), used: 37 }, s5: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r5: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, $site.used);
+i32::MAX / builtin::size_of::<T>(): "), used: 37 }, s5: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r5: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, q: 0 })).repr, $site.used);
     unreachable;
 }
 

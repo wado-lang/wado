@@ -37,6 +37,7 @@ struct core:prelude/list.wado//$tmpl$59e16269228f9c88 {  // TypeId(6)
     mut r2: ref "core:prelude/string.wado//String",
     mut s3: ref "core:prelude/string.wado//String",
     mut r3: ref "core:prelude/string.wado//String",
+    mut q: i32,
 }
 
 struct core:prelude/format.wado//Formatter {  // TypeId(7)
@@ -63,6 +64,7 @@ struct opt_bce_typed_alias_reaching_call.wado//$tmpl$59e16269228f9c88 {  // Type
     mut r2: ref "core:prelude/string.wado//String",
     mut s3: ref "core:prelude/string.wado//String",
     mut r3: ref "core:prelude/string.wado//String",
+    mut q: i32,
 }
 
 struct opt_bce_typed_alias_reaching_call.wado//Buf {  // TypeId(9)
@@ -250,7 +252,7 @@ fn "opt_bce_typed_alias_reaching_call.wado/run"() with Stdout {
     let q: u64;
     let tens: i32;
     let $sroa_t_h0_128: i32;
-    let start_167: i32;
+    let start_168: i32;
     h_1 = struct.new "opt_bce_typed_alias_reaching_call.wado//Holder" { buf: local.tee x_0(struct.new "opt_bce_typed_alias_reaching_call.wado//Buf" { data: struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(1, 2, 3), used: 3 }, len: black_box(3) }) };
     $sroa_t_h0_128 = "opt_bce_typed_alias_reaching_call.wado/read_after_clear"(x_0, h_1, black_box(1));
     out_16 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
@@ -325,22 +327,22 @@ fn "opt_bce_typed_alias_reaching_call.wado/run"() with Stdout {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_16, is_negative_78);
         }
-        start_167 = out_16.used;
+        start_168 = out_16.used;
         out_16.used = is_negative_78;
-        builtin::array_set_u8(out_16.repr, start_167, 45);
+        builtin::array_set_u8(out_16.repr, start_168, 45);
     } else {
     }
     if @unlikely(local.tee is_negative_78(out_16.used + $sroa_t_h0_128) > builtin::array_len(out_16.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_16, is_negative_78);
     }
-    start_167 = out_16.used;
+    start_168 = out_16.used;
     out_16.used = is_negative_78;
     arr = out_16.repr;
-    $sroa_t_h0_128 = start_167 + $sroa_t_h0_128;
+    $sroa_t_h0_128 = start_168 + $sroa_t_h0_128;
     b25: block {
         l26: loop {
-            break_if b25 ($sroa_t_h0_128 - start_167) < 2;
+            break_if b25 ($sroa_t_h0_128 - start_168) < 2;
             q = x_82 /u 100_i64;
             tens = local.tee is_negative_78(builtin::i32_wrap_i64(x_82 - (q * 100_i64))) / 10;
             builtin::array_set_u8(arr, $sroa_t_h0_128 - 1, (48 + is_negative_78) - (tens * 10));
@@ -350,8 +352,8 @@ fn "opt_bce_typed_alias_reaching_call.wado/run"() with Stdout {
             continue l26;
         };
     };
-    if $sroa_t_h0_128 > start_167 {
-        builtin::array_set_u8(arr, start_167, 48 + builtin::i32_wrap_i64(x_82 %u 10_i64));
+    if $sroa_t_h0_128 > start_168 {
+        builtin::array_set_u8(arr, start_168, 48 + builtin::i32_wrap_i64(x_82 %u 10_i64));
     }
     $inline_core_prelude_string_wado_String__internal_push_view_43: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_43;
@@ -401,7 +403,7 @@ index: "), used: 41 }, r1: struct.new "core:prelude/string.wado//String" { repr:
 condition: 0 <= index < self.len
 index: "), used: 41 }, s2: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 self.len: "), used: 11 }, r2: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
-self.len: "), used: 11 }, s3: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r3: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, $site.used);
+self.len: "), used: 11 }, s3: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r3: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, q: 0 })).repr, $site.used);
     unreachable;
 }
 
@@ -638,7 +640,7 @@ index: "), used: 43 }, r1: struct.new "core:prelude/string.wado//String" { repr:
 condition: 0 <= index < self.len()
 index: "), used: 43 }, s2: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 self.len(): "), used: 13 }, r2: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
-self.len(): "), used: 13 }, s3: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r3: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, $site.used);
+self.len(): "), used: 13 }, s3: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r3: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, q: 0 })).repr, $site.used);
     unreachable;
 }
 

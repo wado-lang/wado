@@ -37,6 +37,7 @@ struct opt_inline_always_recursive.wado//$tmpl$ebaa20f4a908b504 {  // TypeId(6)
     mut r0: ref "core:prelude/string.wado//String",
     mut s1: ref "core:prelude/string.wado//String",
     mut r1: ref "core:prelude/string.wado//String",
+    mut q: i32,
 }
 
 type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(7)
@@ -137,7 +138,7 @@ fn "opt_inline_always_recursive.wado/run"() with Stdout {
     let arr: ref Array<u8>;
     let q: u64;
     let tens: i32;
-    let start_181: i32;
+    let start_182: i32;
     acc = 0;
     $sroa_$iter_0_start_123 = 1;
     b1: block {
@@ -220,22 +221,22 @@ fn "opt_inline_always_recursive.wado/run"() with Stdout {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_24, $sroa_$iter_0_start_123);
         }
-        start_181 = out_24.used;
+        start_182 = out_24.used;
         out_24.used = $sroa_$iter_0_start_123;
-        builtin::array_set_u8(out_24.repr, start_181, 45);
+        builtin::array_set_u8(out_24.repr, start_182, 45);
     } else {
     }
     if @unlikely(local.tee $sroa_$iter_0_start_123(out_24.used + current) > builtin::array_len(out_24.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_24, $sroa_$iter_0_start_123);
     }
-    start_181 = out_24.used;
+    start_182 = out_24.used;
     out_24.used = $sroa_$iter_0_start_123;
     arr = out_24.repr;
-    $sroa_$iter_0_start_123 = start_181 + current;
+    $sroa_$iter_0_start_123 = start_182 + current;
     b25: block {
         l26: loop {
-            break_if b25 ($sroa_$iter_0_start_123 - start_181) < 2;
+            break_if b25 ($sroa_$iter_0_start_123 - start_182) < 2;
             q = x /u 100_i64;
             tens = local.tee current(builtin::i32_wrap_i64(x - (q * 100_i64))) / 10;
             builtin::array_set_u8(arr, $sroa_$iter_0_start_123 - 1, (48 + current) - (tens * 10));
@@ -245,8 +246,8 @@ fn "opt_inline_always_recursive.wado/run"() with Stdout {
             continue l26;
         };
     };
-    if $sroa_$iter_0_start_123 > start_181 {
-        builtin::array_set_u8(arr, start_181, 48 + builtin::i32_wrap_i64(x %u 10_i64));
+    if $sroa_$iter_0_start_123 > start_182 {
+        builtin::array_set_u8(arr, start_182, 48 + builtin::i32_wrap_i64(x %u 10_i64));
     }
     $inline_core_prelude_string_wado_String__internal_push_view_46: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_46;
@@ -292,7 +293,7 @@ fn "opt_inline_always_recursive.wado/run$cold0"(acc) with Stdout {
 condition: acc == 153
 acc: "), used: 90 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in run at opt_inline_always_recursive.wado:23
 condition: acc == 153
-acc: "), used: 90 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, $mv_arg_1.used);
+acc: "), used: 90 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, q: 0 })).repr, $mv_arg_1.used);
     unreachable;
 }
 

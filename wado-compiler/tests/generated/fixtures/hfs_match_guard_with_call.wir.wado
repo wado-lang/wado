@@ -80,23 +80,23 @@ fn "hfs_match_guard_with_call.wado/run"() with Stdout {
     let arr: ref Array<u8>;
     let q: u64;
     let tens: i32;
-    let $hfs_v_558: i32;
-    let $hfs_call_559: bool;
+    let $hfs_v_559: i32;
+    let $hfs_call_560: bool;
     b = struct.new "hfs_match_guard_with_call.wado//Buf" { v: 0, pad: 0 };
     i_1 = 0;
-    $hfs_v_558 = 0;
+    $hfs_v_559 = 0;
     b0: block {
         l1: loop {
             break_if b0 i_1 >= 4;
-            b.v = $hfs_v_558;
-            $hfs_call_559 = "hfs_match_guard_with_call.wado/probe"(b) > 0;
-            $hfs_v_558 = b.v;
-            if $hfs_call_559 {
-                $hfs_v_558 = $hfs_v_558 + 1;
+            b.v = $hfs_v_559;
+            $hfs_call_560 = "hfs_match_guard_with_call.wado/probe"(b) > 0;
+            $hfs_v_559 = b.v;
+            if $hfs_call_560 {
+                $hfs_v_559 = $hfs_v_559 + 1;
             } else {
             }
             i_1 = i_1 + 1;
-            b.v = $hfs_v_558;
+            b.v = $hfs_v_559;
             continue l1;
         };
     };
@@ -105,7 +105,7 @@ fn "hfs_match_guard_with_call.wado/run"() with Stdout {
     $inline_core_prelude_string_wado_String__internal_push_view_23: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_23;
     };
-    $hfs_v_558 = i_1 < 0;
+    $hfs_v_559 = i_1 < 0;
     x_81 = builtin::i64_extend_i32_s(i_1);
     x_81 = select i64(x_81 < 0_i64, 0_i64 - x_81, x_81);
     i_1 = $inline_count_digits_u64_1: block -> i32 {
@@ -168,52 +168,52 @@ fn "hfs_match_guard_with_call.wado/run"() with Stdout {
         }
         break $inline_count_digits_u64_1: 20;
     };
-    if $hfs_v_558 {
-        if @unlikely(local.tee $hfs_v_558(0 + 1) > builtin::array_len(out_15.repr)) {
+    if $hfs_v_559 {
+        if @unlikely(local.tee $hfs_v_559(0 + 1) > builtin::array_len(out_15.repr)) {
             cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_15, $hfs_v_558);
+            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_15, $hfs_v_559);
         }
-        $hfs_call_559 = out_15.used;
-        out_15.used = $hfs_v_558;
-        builtin::array_set_u8(out_15.repr, $hfs_call_559, 45);
+        $hfs_call_560 = out_15.used;
+        out_15.used = $hfs_v_559;
+        builtin::array_set_u8(out_15.repr, $hfs_call_560, 45);
     } else {
     }
-    if @unlikely(local.tee $hfs_v_558(out_15.used + i_1) > builtin::array_len(out_15.repr)) {
+    if @unlikely(local.tee $hfs_v_559(out_15.used + i_1) > builtin::array_len(out_15.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_15, $hfs_v_558);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_15, $hfs_v_559);
     }
-    $hfs_call_559 = out_15.used;
-    out_15.used = $hfs_v_558;
+    $hfs_call_560 = out_15.used;
+    out_15.used = $hfs_v_559;
     arr = out_15.repr;
-    i_1 = $hfs_call_559 + i_1;
+    i_1 = $hfs_call_560 + i_1;
     b25: block {
         l26: loop {
-            break_if b25 (i_1 - $hfs_call_559) < 2;
+            break_if b25 (i_1 - $hfs_call_560) < 2;
             q = x_81 /u 100_i64;
-            tens = local.tee $hfs_v_558(builtin::i32_wrap_i64(x_81 - (q * 100_i64))) / 10;
-            builtin::array_set_u8(arr, i_1 - 1, (48 + $hfs_v_558) - (tens * 10));
+            tens = local.tee $hfs_v_559(builtin::i32_wrap_i64(x_81 - (q * 100_i64))) / 10;
+            builtin::array_set_u8(arr, i_1 - 1, (48 + $hfs_v_559) - (tens * 10));
             builtin::array_set_u8(arr, i_1 - 2, 48 + tens);
             i_1 = i_1 - 2;
             x_81 = q;
             continue l26;
         };
     };
-    if i_1 > $hfs_call_559 {
-        builtin::array_set_u8(arr, $hfs_call_559, 48 + builtin::i32_wrap_i64(x_81 %u 10_i64));
+    if i_1 > $hfs_call_560 {
+        builtin::array_set_u8(arr, $hfs_call_560, 48 + builtin::i32_wrap_i64(x_81 %u 10_i64));
     }
     $inline_core_prelude_string_wado_String__internal_push_view_42: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_42;
     };
     i_1 = builtin::i32_wrap_i64(local.tee x_81("wasi/stream-new"()));
-    $hfs_v_558 = builtin::i32_wrap_i64(x_81 >> 32_i64);
+    $hfs_v_559 = builtin::i32_wrap_i64(x_81 >> 32_i64);
     i_1 = "hfs_match_guard_with_call.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(i_1);
-    builtin::array_copy<u8>(local.tee arr(builtin::array_new<u8>(local.tee $hfs_call_559(out_15.used) + 1)), 0, out_15.repr, 0, $hfs_call_559);
-    builtin::array_set_u8(arr, $hfs_call_559, 10);
+    builtin::array_copy<u8>(local.tee arr(builtin::array_new<u8>(local.tee $hfs_call_560(out_15.used) + 1)), 0, out_15.repr, 0, $hfs_call_560);
+    builtin::array_set_u8(arr, $hfs_call_560, 10);
     drop(block -> "core:prelude/types.wado//enum:CopyResult" {
-        $hfs_call_559 = $hfs_call_559 + 1;
-        "core:rt/cm_stream_write_raw_all_u8"($hfs_v_558, arr, 0, $hfs_call_559);
+        $hfs_call_560 = $hfs_call_560 + 1;
+        "core:rt/cm_stream_write_raw_all_u8"($hfs_v_559, arr, 0, $hfs_call_560);
     });
-    "wasi/stream-drop-writable"($hfs_v_558);
+    "wasi/stream-drop-writable"($hfs_v_559);
     "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(i_1);
 }
 

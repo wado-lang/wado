@@ -66,7 +66,7 @@ fn "wasm_name_conflict_method.wado/run"() with Stdout {
     let out_9: ref "core:prelude/string.wado//String";
     let repr_38: ref Array<u8>;
     let pos: i32;
-    let t_559: u64;
+    let t_560: u64;
     let q: u64;
     let pair: i32;
     let tens: i32;
@@ -76,27 +76,27 @@ fn "wasm_name_conflict_method.wado/run"() with Stdout {
     builtin::array_copy<u8>(local.tee $load_0(out_9.repr), 0, repr_38, 0, 3);
     out_9.used = 5;
     pos = 5;
-    t_559 = 42_i64;
+    t_560 = 42_i64;
     b0: block {
         l1: loop {
             break_if b0 (pos - 3) < 2;
-            q = t_559 /u 100_i64;
-            tens = local.tee pair(builtin::i32_wrap_i64(t_559 - (q * 100_i64))) / 10;
+            q = t_560 /u 100_i64;
+            tens = local.tee pair(builtin::i32_wrap_i64(t_560 - (q * 100_i64))) / 10;
             builtin::array_set_u8($load_0, pos - 1, (48 + pair) - (tens * 10));
             builtin::array_set_u8($load_0, pos - 2, 48 + tens);
             pos = pos - 2;
-            t_559 = q;
+            t_560 = q;
             continue l1;
         };
     };
     if pos > 3 {
-        builtin::array_set_u8($load_0, 3, 48 + builtin::i32_wrap_i64(t_559 %u 10_i64));
+        builtin::array_set_u8($load_0, 3, 48 + builtin::i32_wrap_i64(t_560 %u 10_i64));
     }
     $inline_core_prelude_string_wado_String__internal_push_view_43: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_43;
     };
-    pos = builtin::i32_wrap_i64(local.tee t_559("wasi/stream-new"()));
-    pair = builtin::i32_wrap_i64(t_559 >> 32_i64);
+    pos = builtin::i32_wrap_i64(local.tee t_560("wasi/stream-new"()));
+    pair = builtin::i32_wrap_i64(t_560 >> 32_i64);
     pos = "wasm_name_conflict_method.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(pos);
     builtin::array_copy<u8>(local.tee repr_38(builtin::array_new<u8>(local.tee tens(out_9.used) + 1)), 0, out_9.repr, 0, tens);
     builtin::array_set_u8(repr_38, tens, 10);
@@ -106,8 +106,8 @@ fn "wasm_name_conflict_method.wado/run"() with Stdout {
     });
     "wasi/stream-drop-writable"(pair);
     "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(pos);
-    pos = builtin::i32_wrap_i64(local.tee t_559("wasi/stream-new"()));
-    pair = builtin::i32_wrap_i64(t_559 >> 32_i64);
+    pos = builtin::i32_wrap_i64(local.tee t_560("wasi/stream-new"()));
+    pair = builtin::i32_wrap_i64(t_560 >> 32_i64);
     pos = "wasm_name_conflict_method.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(pos);
     builtin::array_copy<u8>(local.tee repr_38(builtin::array_new<u8>(11)), 0, global:wasm_name_conflict_method.wado::$const_obj_0, 0, 10);
     builtin::array_set_u8(repr_38, 10, 10);

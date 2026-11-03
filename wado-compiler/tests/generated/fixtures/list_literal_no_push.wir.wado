@@ -37,6 +37,7 @@ struct core:prelude/list.wado//$tmpl$59e16269228f9c88 {  // TypeId(6)
     mut r2: ref "core:prelude/string.wado//String",
     mut s3: ref "core:prelude/string.wado//String",
     mut r3: ref "core:prelude/string.wado//String",
+    mut q: i32,
 }
 
 struct core:prelude/format.wado//Formatter {  // TypeId(7)
@@ -190,7 +191,7 @@ fn "list_literal_no_push.wado/run"() with Stdout {
     let arr: ref Array<u8>;
     let q: u64;
     let tens: i32;
-    let start_179: i32;
+    let start_180: i32;
     used = builtin::array_len(local.tee elements(array.new_fixed<ref "list_literal_no_push.wado//Widget">(struct.new "list_literal_no_push.wado//Widget" { id: black_box(7) })));
     used = used = local.tee widgets(black_box(struct.new "core:prelude//List<list_literal_no_push.wado/Widget>" { repr: elements, used: used })).used; if @unlikely(0 >= used) {
         cold_path;
@@ -269,22 +270,22 @@ fn "list_literal_no_push.wado/run"() with Stdout {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_21, is_negative_90);
         }
-        start_179 = out_21.used;
+        start_180 = out_21.used;
         out_21.used = is_negative_90;
-        builtin::array_set_u8(out_21.repr, start_179, 45);
+        builtin::array_set_u8(out_21.repr, start_180, 45);
     } else {
     }
     if @unlikely(local.tee is_negative_90(out_21.used + used) > builtin::array_len(out_21.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_21, is_negative_90);
     }
-    start_179 = out_21.used;
+    start_180 = out_21.used;
     out_21.used = is_negative_90;
     arr = out_21.repr;
-    used = start_179 + used;
+    used = start_180 + used;
     b23: block {
         l24: loop {
-            break_if b23 (used - start_179) < 2;
+            break_if b23 (used - start_180) < 2;
             q = x /u 100_i64;
             tens = local.tee is_negative_90(builtin::i32_wrap_i64(x - (q * 100_i64))) / 10;
             builtin::array_set_u8(arr, used - 1, (48 + is_negative_90) - (tens * 10));
@@ -294,8 +295,8 @@ fn "list_literal_no_push.wado/run"() with Stdout {
             continue l24;
         };
     };
-    if used > start_179 {
-        builtin::array_set_u8(arr, start_179, 48 + builtin::i32_wrap_i64(x %u 10_i64));
+    if used > start_180 {
+        builtin::array_set_u8(arr, start_180, 48 + builtin::i32_wrap_i64(x %u 10_i64));
     }
     $inline_core_prelude_string_wado_String__internal_push_view_45: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_45;
@@ -555,7 +556,7 @@ index: "), used: 43 }, r1: struct.new "core:prelude/string.wado//String" { repr:
 condition: 0 <= index < self.len()
 index: "), used: 43 }, s2: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 self.len(): "), used: 13 }, r2: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
-self.len(): "), used: 13 }, s3: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r3: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, $site.used);
+self.len(): "), used: 13 }, s3: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r3: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, q: 0 })).repr, $site.used);
     unreachable;
 }
 
