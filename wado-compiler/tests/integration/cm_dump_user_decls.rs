@@ -32,6 +32,7 @@ fn dump_registers_a_user_modules_cm_declarations() {
         &wado_compiler::param_resolution::ParamInputs::default(),
         wado_compiler::kiln::InvocationIndex::default(),
         1,
+        None,
     ))
     .expect("dumping a user CM binding succeeds");
 

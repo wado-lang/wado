@@ -34,6 +34,7 @@ mod effect_check_sem;
 mod empty_tuple_boundary;
 mod fn_dispatch_stubs;
 mod guest_effect_import;
+mod inline_decisions;
 mod int128_literal_coercion;
 mod kiln_generator_world;
 mod kiln_loader_redirect;

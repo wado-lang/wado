@@ -548,6 +548,7 @@ async fn render_phases(
             // More than one, so a golden that depends on the thread count
             // drifts from the one committed.
             2,
+            None,
         )
         .await;
 
