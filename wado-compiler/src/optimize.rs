@@ -323,42 +323,40 @@ pub fn optimize(
     // the body into WIR-shaped forms the value-graph build would misread. The
     // two soundness gates (scalar-field + receiver-availability) and the WIR
     // const-local propagation keep it default-safe.
-        run_pass("nir/promote_fields", &mut project, profiler, |p| {
-            extract::freeze_pure_arith(
-                p,
-                &exec,
-                /* include_fields */ true,
-                FreezePhase::Terminal,
-            )
-        });
-        // Re-run the structural BCE matcher now that `promote_fields` froze
-        // invariant bounds (`arr.used`) into constant operands the in-loop
-        // cond-impl could not see; pair with `const_branch_prune` so the
-        // now-`false` checks' panic blocks are removed. Must precede
-        // `select_lowering`, which reshapes conditions out of matcher form.
-        run_bounded_fixpoint(
-            "nir/cond_impl_post_promote",
-            &mut project,
-            profiler,
+    run_pass("nir/promote_fields", &mut project, profiler, |p| {
+        extract::freeze_pure_arith(
+            p,
             &exec,
-            |p, g| {
-                condition_implication::eliminate_post_promote(p, g) | prune_constant_branches(p, g)
-            },
-        );
-        // Loop-versioned BCE: a check whose bound is loop-invariant but not
-        // statically related to the loop guard (the relation lives at the
-        // call site) is deleted in a fast clone guarded by the runtime
-        // residual `H < B`; the original loop is kept as the slow arm. Runs
-        // after `cond_impl_post_promote` so only statically-unprovable
-        // checks are versioned, and before `select_lowering`, which
-        // reshapes conditions out of matcher form.
-        run_pass("nir/loop_version_bce", &mut project, profiler, |p| {
-            loop_version_bce::version_loops(p, &mut descriptors, &exec)
-        });
-        // After every bounds-check eliminator, which read the signed halves.
-        run_pass("nir/unsigned_range_check", &mut project, profiler, |p| {
-            unsigned_range_check::fuse_unsigned_range_checks(p)
-        });
+            /* include_fields */ true,
+            FreezePhase::Terminal,
+        )
+    });
+    // Re-run the structural BCE matcher now that `promote_fields` froze
+    // invariant bounds (`arr.used`) into constant operands the in-loop
+    // cond-impl could not see; pair with `const_branch_prune` so the
+    // now-`false` checks' panic blocks are removed. Must precede
+    // `select_lowering`, which reshapes conditions out of matcher form.
+    run_bounded_fixpoint(
+        "nir/cond_impl_post_promote",
+        &mut project,
+        profiler,
+        &exec,
+        |p, g| condition_implication::eliminate_post_promote(p, g) | prune_constant_branches(p, g),
+    );
+    // Loop-versioned BCE: a check whose bound is loop-invariant but not
+    // statically related to the loop guard (the relation lives at the
+    // call site) is deleted in a fast clone guarded by the runtime
+    // residual `H < B`; the original loop is kept as the slow arm. Runs
+    // after `cond_impl_post_promote` so only statically-unprovable
+    // checks are versioned, and before `select_lowering`, which
+    // reshapes conditions out of matcher form.
+    run_pass("nir/loop_version_bce", &mut project, profiler, |p| {
+        loop_version_bce::version_loops(p, &mut descriptors, &exec)
+    });
+    // After every bounds-check eliminator, which read the signed halves.
+    run_pass("nir/unsigned_range_check", &mut project, profiler, |p| {
+        unsigned_range_check::fuse_unsigned_range_checks(p)
+    });
 
     // Post-optimization rewrites: select lowering for branchless Wasm
     run_pass("nir/select_lowering", &mut project, profiler, |p| {
