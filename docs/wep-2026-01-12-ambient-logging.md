@@ -138,20 +138,28 @@ exemption hid every other effect too, so a facade that called `println` by
 mistake drew no diagnostic. The attribute now lists its effects, as `#[benign]`
 does, and the rest of the body is checked.
 
-An ambient effect uses a capability the component already has, and never adds
-one. It is available where the target world imports it, or where code outside
-an ambient body performs it. That is what made `log_stdout` and `log_stderr`
-ambient in the first place, and it is now the attribute's meaning for every
-effect it lists.
+An ambient effect uses a capability the target world offers, and adds none it
+does not. It is available where the target world imports it, under `wado test`,
+and in a `--lib` build, whose synthesized world imports whatever the library
+uses. That is what made `log_stdout` and `log_stderr` ambient in the first
+place, and it is now the attribute's meaning for every effect it lists.
+
+The world decides, not what the rest of the program calls. Asking the program
+needs whole-program reachability after monomorphization, iterated so that two
+ambient bodies cannot keep each other's import alive, for one case only: a
+library whose own code also writes the stream. A library keeps its messages
+either way, by the rule above, at the cost of importing `wasi:cli/stderr`
+wherever it can panic.
 
 Where a listed effect is not available, the function skips its body and returns
 `Default::default()`, or nothing when it returns `()`. "Do nothing" cannot be
 derived from an arbitrary body, but a value the type itself supplies can: a
 stdio write answers nothing, and `core:log`'s `WallClock::now` answers `null`,
-an unstamped line. Reify guards each such body with
-`builtin::ambient_available("<interface>")`, and the optimizer settles every
-guard before the first DCE, at the least set of interfaces that explains
-itself, so two ambient bodies cannot keep each other's import alive.
+so the line leaves its stamp out. Reify guards each such body with
+`builtin::ambient_available("<interface>")`, naming the interface because the
+standard library's bodies are reified once into the snapshot every
+compilation shares. Lowering settles each guard against the target world
+before anything plans imports or strings from the body.
 
 Hiding an effect from every caller is the standard library's business, for now:
 a program writing `#[ambient]` or `#[benign]` is warned under

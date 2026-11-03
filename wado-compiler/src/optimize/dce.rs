@@ -182,25 +182,6 @@ pub(super) fn analyze_dce(
     analysis
 }
 
-/// The CM functions, by `CmFunctionInfo::cm_identifier`, that the functions
-/// reachable from the entries call.
-pub(super) fn reachable_cm_calls(
-    project: &NirPackage,
-    cache: &mut DescriptorCache,
-    exec: &Executor,
-) -> IndexSet<String> {
-    let descriptors = cache.descriptors(project);
-    let mut graph = build_analysis_graph(project, descriptors, exec);
-    let reachable = compute_function_reachability(project, &mut graph, &[]);
-    reachable_effect_calls(&graph, &reachable)
-}
-
-fn reachable_effect_calls(graph: &AnalysisGraph, reachable: &Reached) -> IndexSet<String> {
-    stored_positions(reachable)
-        .flat_map(|pos| graph.analyses[pos].effect_calls.iter().cloned())
-        .collect()
-}
-
 /// The functions reachable from the entries and from `cached`, the clones a
 /// later call may be pointed at.
 pub(super) fn reachable_function_positions(
@@ -443,7 +424,9 @@ fn compute_reachable_from_entries(
 /// Resolve WASI imports and populate `project.imports` and `project.used_wasi_functions`
 /// from the set of reachable functions and their effect usage.
 fn resolve_imports(project: &mut NirPackage, graph: &AnalysisGraph, reachable: &Reached) {
-    let mut used_wasi_functions = reachable_effect_calls(graph, reachable);
+    let mut used_wasi_functions: IndexSet<String> = stored_positions(reachable)
+        .flat_map(|pos| graph.analyses[pos].effect_calls.iter().cloned())
+        .collect();
 
     // Asked of the declaration, so a monomorphized builtin answers by the name
     // it was declared under.

@@ -6,7 +6,6 @@
 
 mod aggregate_forward;
 mod alias;
-mod ambient;
 pub(crate) mod arena_query;
 mod assign_to_let;
 mod body_memo;
@@ -194,9 +193,6 @@ pub fn optimize(
     // says nothing about its body, so clearing bodies leaves every entry current
     // and only an appended function needs a new one.
     let mut descriptors = dce::DescriptorCache::default();
-    run_pass("nir/ambient", &mut project, profiler, |p| {
-        ambient::settle_ambient_guards(p, &mut descriptors, &exec)
-    });
     match opt_level {
         OptLevel::O0 => {
             // No optimizations, but still run DCE to reduce codegen work

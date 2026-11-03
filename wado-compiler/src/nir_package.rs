@@ -877,13 +877,6 @@ impl NirPackage {
             .is_some_and(|w| w.imports_interface(interface_name))
     }
 
-    /// Whether the active world imports the interface whose CM FQ is `fq`.
-    pub fn world_imports_cm_interface(&self, fq: &str) -> bool {
-        self.world_registry
-            .get(&self.target_world)
-            .is_some_and(|w| w.imports_cm_interface(fq))
-    }
-
     /// Whether the target world is a kiln generator world (imports
     /// [`crate::world_registry::GENERATOR_HOST_INTERFACE`]).
     pub fn is_generator_world(&self) -> bool {
