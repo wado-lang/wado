@@ -93,7 +93,7 @@ use crate::pgo::MarkMap;
 use crate::rarity::Mark;
 use crate::symbol::{Symbol, SymbolKind};
 use crate::synthesis::common::{
-    bare_cast, bool_lit, builtin_call, cold_path_stmt, compiler_item_call, handle_bits, i32_const,
+    bare_cast, bool_lit, builtin_call, cold_path_stmt, compiler_item_call, handle_bits,
     known_cold_path_stmt, marker_stmt_mark, not_expr, ord_bool_from_cmp, rt_call,
 };
 use crate::tir::{
@@ -1424,15 +1424,21 @@ impl<'a> Reify<'a> {
     /// what an `#[ambient]` function answers without them: `Default::default()`,
     /// or nothing for one returning `()`. The optimizer decides each guard once
     /// for the whole component.
-    fn guard_ambient_body(&self, body: TirBlock, hosts: &[usize], return_type: TypeId) -> TirBlock {
+    fn guard_ambient_body(
+        &self,
+        body: TirBlock,
+        hosts: &[String],
+        return_type: TypeId,
+    ) -> TirBlock {
         let span = body.span;
-        let guarded = hosts.iter().rev().fold(body, |inner, &host| {
-            let host = i32::try_from(host).expect("a program declares fewer than 2^31 interfaces");
-            let condition = builtin_call(
-                AMBIENT_GUARD_INTRINSIC,
-                vec![i32_const(host)],
-                TypeTable::BOOL,
-            );
+        let string_type = self
+            .tysys
+            .type_table
+            .borrow_mut()
+            .make_compiler_struct(CompilerItem::String);
+        let guarded = hosts.iter().rev().fold(body, |inner, fq| {
+            let fq = TirExpr::new(TirExprKind::StringLiteral(fq.clone()), string_type, span);
+            let condition = builtin_call(AMBIENT_GUARD_INTRINSIC, vec![fq], TypeTable::BOOL);
             let guard = TirStmtKind::If {
                 condition,
                 then_block: inner,

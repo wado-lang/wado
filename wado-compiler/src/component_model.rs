@@ -1045,10 +1045,8 @@ pub struct CmInterfaceRegistry {
     /// interface of one component shares the same set (v1 component-level union).
     component_host_leaf_imports: IndexMap<String, Vec<String>>,
 
-    /// The host interfaces some `#[cm]` interface declaration performs, and the
-    /// position among them of each such declaration's.
-    host_interfaces: IndexSet<String>,
-    host_effects: IndexMap<DefId, usize>,
+    /// The host interface each `#[cm]` interface declaration performs.
+    host_effects: IndexMap<DefId, String>,
 
     /// World-level function imports (Phase 9), by the bodyless function
     /// declaring each -> its key in `functions`.
@@ -3208,25 +3206,16 @@ impl CmInterfaceRegistry {
             let Some(cm) = cm_import_of(&decl.attrs) else {
                 continue;
             };
-            let (host, _) = self.host_interfaces.insert_full(cm.interface_path());
-            self.host_effects.insert(defs.def_at(item.id()), host);
+            self.host_effects
+                .insert(defs.def_at(item.id()), cm.interface_path());
         }
     }
 
-    /// The position in [`Self::host_interface`] of the host interface the
-    /// effect `def` performs, or `None` for an effect a handler or a component
-    /// dependency answers.
+    /// The host interface the effect `def` performs, or `None` for an effect a
+    /// handler or a component dependency answers.
     #[must_use]
-    pub fn host_effect(&self, def: DefId) -> Option<usize> {
-        self.host_effects.get(&def).copied()
-    }
-
-    /// The host interface at `position`, as [`Self::host_effect`] numbers them.
-    #[must_use]
-    pub fn host_interface(&self, position: usize) -> &str {
-        self.host_interfaces
-            .get_index(position)
-            .expect("a position `host_effect` answered")
+    pub fn host_effect(&self, def: DefId) -> Option<&str> {
+        self.host_effects.get(&def).map(String::as_str)
     }
 
     /// The interface declaring `decl`, and the CM name it exports `decl` under.

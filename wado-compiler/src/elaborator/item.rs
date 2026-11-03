@@ -1339,7 +1339,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// reify guards its body with. Where one is absent the function answers
     /// `Default::default()`, so a value-returning one needs a `Default`.
     fn record_ambient_hosts(&mut self, func: &Function, return_type: TypeId) {
-        let hosts: Vec<usize> = func
+        let hosts: Vec<String> = func
             .attrs
             .iter()
             .filter(|attr| attr.name == attribute::AMBIENT)
@@ -1350,6 +1350,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     .resolve_in(&self.current_module_source, arg.as_str())
             })
             .filter_map(|def| self.tysys.cm_interface_registry.host_effect(def))
+            .map(str::to_string)
             .collect();
         if hosts.is_empty() {
             return;

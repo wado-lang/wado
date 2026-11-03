@@ -8,6 +8,7 @@
 use cranelift_entity::EntityRef;
 
 use super::dce::{DescriptorCache, reachable_cm_calls};
+use crate::compiler_trace;
 use crate::name::AMBIENT_GUARD_INTRINSIC;
 use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, Operand, StmtId, StmtKind};
 use crate::nir_package::NirPackage;
@@ -68,6 +69,17 @@ pub(super) fn settle_ambient_guards(
     }
     for guard in &guards {
         let mut func = project.functions[guard.func].borrow_mut();
+        compiler_trace!(
+            "ambient",
+            "{}: `{}` {}",
+            func.name,
+            guard.interface,
+            if guard.withheld.is_none() {
+                "holds"
+            } else {
+                "withheld"
+            }
+        );
         let body = guarded_body(&mut func.body);
         let holds = body
             .values
@@ -116,16 +128,12 @@ fn find_guards(project: &NirPackage) -> Vec<Guard> {
             let (None, [arg]) = args.split() else {
                 unreachable!("the guard takes one argument");
             };
-            let host = host_position(body, arg.expr);
             guards.push(Guard {
                 func: pos,
                 stmt,
                 call: *call,
                 then_block: *then_block,
-                interface: project
-                    .cm_interface_registry
-                    .host_interface(host)
-                    .to_string(),
+                interface: literal_text(body, arg.expr),
                 withheld: None,
             });
         }
@@ -133,14 +141,26 @@ fn find_guards(project: &NirPackage) -> Vec<Guard> {
     guards
 }
 
-/// The host position reify passes a guard, an `i32` literal: the intrinsic is
-/// `internal` to the standard library, so no other caller reaches it.
-fn host_position(body: &Body, literal: Operand) -> usize {
-    let Operand::Value(value) = literal else {
-        unreachable!("a guard's host position is a literal");
+/// The interface reify names a guard by, a string literal: the intrinsic is
+/// `internal` to the standard library, so no other caller reaches it. A name
+/// rather than a number, because the standard library's bodies are reified
+/// once into the snapshot every compilation shares.
+fn literal_text(body: &Body, literal: Operand) -> String {
+    let Operand::Expr(literal) = literal else {
+        unreachable!("a guard's interface is a string literal");
     };
-    let ValueKind::Int(host, _) = *body.values.kind(value) else {
-        unreachable!("a guard's host position is an integer");
+    let ExprKind::StructLiteral { fields, .. } = &body.exprs[literal].kind else {
+        unreachable!("a string literal lowers to its struct");
     };
-    usize::try_from(host).expect("a host position is not negative")
+    let backing = fields
+        .iter()
+        .find_map(|field| match field.value {
+            Operand::Expr(e) => match &body.exprs[e].kind {
+                ExprKind::PackedArray(data) => data.as_bytes(),
+                _ => None,
+            },
+            Operand::Value(_) => None,
+        })
+        .expect("a string literal holds its bytes");
+    String::from_utf8(backing.to_vec()).expect("an interface name is UTF-8")
 }
