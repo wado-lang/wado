@@ -18,7 +18,7 @@
 use { println, eprintln, args, exit, Stdout, Stderr, Environment, Exit } from "core:cli";
 use fs from "core:fs";
 use { Preopens } from "core:fs";
-use { CaptureSink, Level, Log, TextSink } from "core:log";
+use { CaptureSink, Level, Log, NoClock, TextSink } from "core:log";
 use { GenerateOptions } from "../src/codegen.wado";
 use { gen_source } from "../src/gen_source.wado";
 
@@ -49,7 +49,8 @@ fn job(base: String, names: &List<String>) -> Option<[String, List<String>]> {
 
 /// What `gale gen` writes to stdout and to stderr for `grammars`.
 fn gen(grammars: List<String>) -> [String, String] with Preopens {
-    // `gale gen` logs at `warn` and above, through a `TextSink`.
+    // `gale gen` logs at `warn` and above, through a `TextSink`, rendered here
+    // without its stamp so the golden stays the same between runs.
     let mut captured = CaptureSink { min: Level::Warn };
     let mut source = "";
     let mut err = "";
@@ -59,7 +60,7 @@ fn gen(grammars: List<String>) -> [String, String] with Preopens {
             Err(report) => err = `${report}\n`,
         }
     };
-    let mut text = TextSink {};
+    let mut text = TextSink::<NoClock> {};
     let mut lines = "";
     for let e of &captured.events {
         lines.push_str(`${text.render(e)}\n`);

@@ -148,7 +148,7 @@ Where a listed effect is not available, the function skips its body and returns
 `Default::default()`, or nothing when it returns `()`. "Do nothing" cannot be
 derived from an arbitrary body, but a value the type itself supplies can: a
 stdio write answers nothing, and `core:log`'s `WallClock::now` answers `null`,
-an unstamped line. Reify guards each such body with
+so the line leaves its stamp out. Reify guards each such body with
 `builtin::ambient_available("<interface>")`, and the optimizer settles every
 guard before the first DCE, at the least set of interfaces that explains
 itself, so two ambient bodies cannot keep each other's import alive.

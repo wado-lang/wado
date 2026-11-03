@@ -254,13 +254,8 @@ this is only for a span the caller opened without it.
 
 ### `pub struct NoClock {}`
 
-No timestamp, and no `wasi:clocks` import. The default sink's clock, so a
-program that installs nothing logs in any world, `core:kiln/generator`
-included — its linker offers no WASI at all.
-
-This is the conservative end of the trade, not a verdict on what a default
-line should carry. Stamping the worlds that do have a clock is a compatible
-change, and may replace this once a mechanism keeps the guarantee.
+No timestamp, and no `wasi:clocks` import, in any world. For output that
+must not vary between runs, such as a golden file or a trace a test reads.
 
 #### `impl Clock for NoClock`
 
@@ -268,8 +263,11 @@ change, and may replace this once a mechanism keeps the guarantee.
 
 ### `pub struct WallClock {}`
 
-Wall-clock stamps with millisecond precision. Installing a sink over this
-adds a `wasi:clocks` import, so it belongs only in a world that has one.
+Wall-clock stamps with millisecond precision, and the sinks' default clock.
+Where the component has a clock, the sinks read it; where it has none, `now`
+answers `null`, the sinks leave the stamp out, and no `wasi:clocks` import
+is added. So a program that installs nothing logs in any world,
+`core:kiln/generator` included — its linker offers no WASI at all.
 
 `#[ambient(SystemClock)]` rather than `#[benign]`: a sink's operations are
 `Log`'s, whose signatures carry no effect, so the clock read cannot be
@@ -282,7 +280,7 @@ forbids.
 
 `#[ambient(SystemClock)]`
 
-### `pub struct TextSink<C: Clock = NoClock>`
+### `pub struct TextSink<C: Clock = WallClock>`
 
 One human-readable line per event on stderr:
 
@@ -293,7 +291,8 @@ One human-readable line per event on stderr:
 Each part its configuration turns off is omitted; `location` appends
 ` at file:line`. Writes through the ambient `log_stderr`, so the sink needs
 no `Stderr` in its signature and installs in any world. `C` selects the
-timestamp: `TextSink<WallClock>` stamps, the default `TextSink` does not.
+timestamp: the default `TextSink` stamps where a clock is available, and
+`TextSink<NoClock>` never does.
 
 #### `seq: bool`
 
@@ -325,7 +324,7 @@ a sequence number, so one call is one line.
 
 ##### `fn event(&mut self, event: Event)`
 
-### `pub struct JsonSink<C: Clock = NoClock>`
+### `pub struct JsonSink<C: Clock = WallClock>`
 
 One JSON object per line (JSONL) on stderr, through `json::to_string`:
 
@@ -333,9 +332,8 @@ One JSON object per line (JSONL) on stderr, through `json::to_string`:
 {"seq":42,"level":"info","target":"handle_request","message":"user logged in","span":3,"fields":{"user_id":7}}
 ```
 
-Keys a switch turns off are absent rather than null. `C` selects the `ts`
-key the way it does for [`TextSink`], so the default over `NoClock` writes
-no `ts` and `JsonSink<WallClock>` leads with one.
+Keys a switch turns off are absent rather than null, and so is `ts` where
+`C` gives no stamp. `C` selects it the way it does for [`TextSink`].
 
 #### `seq: bool`
 

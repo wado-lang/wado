@@ -204,16 +204,15 @@ effects, so a sink cannot declare the clock read on them either, and it goes
 through an `#[ambient]` helper.
 
 A sink is generic over a `Clock`, so whether it reads one is part of its type:
-`TextSink<WallClock>` stamps, and the default `TextSink` over `NoClock` does not.
-Monomorphization drops the instantiation nobody asks for, so a program over
-`NoClock` carries no `wasi:clocks` import. A runtime `timestamp: false` cannot
-promise that. The call stays reachable, the import lands, and at `-O0` nothing
-folds it away.
+the default `TextSink` is over `WallClock` and stamps, and `TextSink<NoClock>`
+never does. Monomorphization drops the instantiation nobody asks for, so a
+program over `NoClock` carries no `wasi:clocks` import. A runtime
+`timestamp: false` cannot promise that. The call stays reachable, the import
+lands, and at `-O0` nothing folds it away.
 
-The import is what makes this worth a type parameter, because a world decides
-which imports a program may have. `WallClock::now` is `#[ambient]`, so it never
-adds a clock the world lacks: `core:kiln/generator` imports none, and there it
-answers `null` and a stamped sink logs without stamps.
+`WallClock::now` is `#[ambient]`, so it never adds a clock the world lacks:
+`core:kiln/generator` imports none, and there it answers `null` and the line
+carries no stamp, the text prefix and the JSON `ts` key both left out.
 
 ### Runtime filter directives
 
@@ -242,11 +241,11 @@ record ingestion time, drift under buffering, and not every target has a
 collector. A sink that stamps is a sink over `WallClock`, which is why the choice
 is a type parameter rather than a field — see [Output formats](#output-formats).
 
-The default is `NoClock`, so a program that installs nothing logs in every world,
-`core:kiln/generator` included. That is the conservative end of the trade rather
-than a claim about what a default line should carry. A monotonic `seq` counter
-(default on) preserves intra-process order without a clock, and stamping the
-default in worlds that have one is a compatible change, left as open work.
+The default is `WallClock`: a line carries the time wherever the component has
+a clock, and a program that installs nothing still logs in every world,
+`core:kiln/generator` included. `NoClock` is for output that must not vary
+between runs, such as a golden file. A monotonic `seq` counter (default on)
+preserves intra-process order with or without a clock.
 
 ### Default sink and scoped overrides
 
@@ -391,9 +390,6 @@ only.
 
 - [ ] Seeding the default threshold from `WADO_LOG` — see
   [Default sink and scoped overrides](#default-sink-and-scoped-overrides).
-- [ ] Stamping the default sink in worlds that have a clock, without costing a
-  clock-free world its guarantee — see
-  [Timestamp and sequence](#timestamp-and-sequence).
 - [ ] Forwarding a local bound to a constant global read.
 - [ ] Sinking pure definitions into the branch that uses them.
 - [ ] Optional: native `with <span> do { … }` sugar.

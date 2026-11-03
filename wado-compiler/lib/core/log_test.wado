@@ -17,10 +17,10 @@ use {
     Level,
     Log,
     Metadata,
+    NoClock,
     NopSink,
     SpanId,
     TextSink,
-    WallClock,
     current,
     debug,
     enabled,
@@ -340,17 +340,17 @@ test "a directive list is also buildable by hand" {
 // === Sinks ===
 
 test "text sink renders one line per event" {
-    let mut sink = TextSink {};
+    let mut sink = TextSink::<NoClock> {};
     let line = sink.render(&text_event(Level::Info, "user logged in", Value::Null));
     assert line == "INFO 1 app: user logged in";
     // The sequence number advances per rendered line.
     assert sink.render(&text_event(Level::Warn, "again", Value::Null)) == "WARN 2 app: again";
 }
 
-test "a sink over WallClock stamps the line it renders" {
+test "the default text sink stamps the line it renders" {
     // The stamp is the time, so what is asserted is its shape and its position:
-    // an ISO instant ahead of everything the `NoClock` default renders.
-    let mut stamped: TextSink<WallClock> = TextSink { seq: false };
+    // an ISO instant ahead of everything a sink over `NoClock` renders.
+    let mut stamped = TextSink { seq: false };
     let line = stamped.render(&text_event(Level::Info, "hi", Value::Null));
     let Some([stamp, rest]) = line.split_once(" ") else {
         panic("a stamped line carries the stamp ahead of the level");
@@ -359,12 +359,12 @@ test "a sink over WallClock stamps the line it renders" {
     assert stamp.ends_with("Z");
     assert rest == "INFO app: hi";
 
-    let mut plain = TextSink { seq: false };
+    let mut plain = TextSink::<NoClock> { seq: false };
     assert plain.render(&text_event(Level::Info, "hi", Value::Null)) == "INFO app: hi";
 }
 
 test "text sink appends fields as key=value, unquoted" {
-    let mut sink = TextSink { seq: false };
+    let mut sink = TextSink::<NoClock> { seq: false };
     let mut fields: TreeMap<String, Value> = TreeMap::new();
     fields["user_id"] = Value::Int(7);
     fields["ip"] = Value::String("127.0.0.1");
@@ -373,20 +373,20 @@ test "text sink appends fields as key=value, unquoted" {
 }
 
 test "text sink location is opt-in" {
-    let mut sink = TextSink { seq: false, location: true };
+    let mut sink = TextSink::<NoClock> { seq: false, location: true };
     let line = sink.render(&text_event(Level::Error, "boom", Value::Null));
     assert line == "ERROR app: boom at app.wado:7";
 }
 
 test "text sink names the parent span" {
-    let mut sink = TextSink { seq: false };
+    let mut sink = TextSink::<NoClock> { seq: false };
     let mut e = text_event(Level::Info, "inside", Value::Null);
     e.parent = Option::<SpanId>::Some(3);
     assert sink.render(&e) == "INFO span=3 app: inside";
 }
 
 test "json sink writes one object per event" {
-    let mut sink = JsonSink {};
+    let mut sink = JsonSink::<NoClock> {};
     let mut fields: TreeMap<String, Value> = TreeMap::new();
     fields["user_id"] = Value::Int(7);
     let line = sink.render(&text_event(Level::Info, "user logged in", Value::Object(fields)));
@@ -394,7 +394,7 @@ test "json sink writes one object per event" {
 }
 
 test "json sink omits the keys its switches turn off" {
-    let mut sink = JsonSink { seq: false };
+    let mut sink = JsonSink::<NoClock> { seq: false };
     let line = sink.render(&text_event(Level::Warn, "plain", Value::Null));
     assert line == "{\"level\":\"warn\",\"target\":\"app\",\"message\":\"plain\",\"fields\":null}";
 }
@@ -618,8 +618,8 @@ test "the default subscriber answers every operation" {
     Log::event(text_event(Level::Debug, "quiet", Value::Null));
 }
 
-test "json sink over WallClock leads with a stamp" {
-    let mut sink: JsonSink<WallClock> = JsonSink { seq: false };
+test "the default json sink leads with a stamp" {
+    let mut sink = JsonSink { seq: false };
     assert sink.render(&text_event(Level::Info, "hi", Value::Null)).starts_with("{\"ts\":\"20");
 }
 
@@ -630,7 +630,7 @@ test "json sink renders an event it cannot encode as the reason" {
 }
 
 test "text sink renders every kind of field value" {
-    let mut sink = TextSink { seq: false };
+    let mut sink = TextSink::<NoClock> { seq: false };
     let mut fields: TreeMap<String, Value> = TreeMap::new();
     fields["n"] = Value::Null;
     fields["b"] = Value::Bool(true);

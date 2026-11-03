@@ -1175,7 +1175,7 @@ pub fn gen_trace_helpers(w: &mut CodeWriter) {
     w.blank();
     w.line("pub fn trace_to_stderr<T, effect E>(mut body: fn mut() -> T with E) -> T with E {");
     w.indent();
-    w.line("let mut sink = TextSink { seq: false };");
+    w.line("let mut sink = TextSink::<NoClock> { seq: false };");
     w.line("let prev = log_level();");
     w.line("set_log_level(Level::Trace);");
     w.line("let out = with Log => &mut sink do { body() };");
