@@ -313,7 +313,7 @@ fn is_local(symbol: &String) -> bool {
 /// where SCIP gives one. SCIP gives a range packed as 3 or 4 numbers, or
 /// typed.
 fn place_of(o: &scip::Occurrence) -> [Pos, Option<[Pos, Pos]>]
-    contract o.typed_range.is_some() || !o.range.is_empty(), "an occurrence has a range"
+    contract o.typed_range matches { Some(_) } || !o.range.is_empty(), "an occurrence has a range"
 {
     let range = match &o.typed_range {
         Some(SingleLineRange(r)) => single_line(r),
