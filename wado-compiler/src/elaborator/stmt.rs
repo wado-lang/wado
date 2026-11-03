@@ -2498,7 +2498,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         match qualifier {
             Some(Type::Named(t)) => self.record_type_name_reference(t.id, &t.name),
             Some(Type::Generic(t)) => self.record_type_name_reference(t.id, &t.name),
-            // A namespaced or primitive owner names no declaration of its own here.
             Some(_) | None => {}
         }
         self.record_reference_to_def(name_id, decl);
