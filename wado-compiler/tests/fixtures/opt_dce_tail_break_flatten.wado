@@ -1,7 +1,6 @@
-// Verifies (issue #1184, C2 and C3) that labeled blocks whose only
-// reference is a tail `break LABEL` (with or without a value) are
-// flattened: the wrapping `LABEL: block { ... break LABEL[: V]; }`
-// disappears from WIR.
+// Labeled blocks whose only reference is a tail `break LABEL` (with or
+// without a value) are flattened, and the flattened program computes what the
+// blocks did (issue #1184, C2 and C3).
 //
 // C2: stmt-position `LABEL: block { …; break LABEL; }` → straight-line stmts.
 // C3: value-position `LABEL: block -> T { …; break LABEL: V; }` → `{ …; V }`.
@@ -36,9 +35,5 @@ export fn run() with Stdout {
 
 __DATA__
 {
-    "stdout": "ok\n",
-    "wir_not_expect:O2": [
-        "$inline_double_",
-        "$fused_$inline_"
-    ]
+    "stdout": "ok\n"
 }

@@ -44,11 +44,10 @@ export fn run() with Stdout {
 __DATA__
 {
     "stdout": "963\n",
+    "wir_pass": {"O2": ["nir/const_object_globalization"]},
     "wir_expect:O2": [
         "if ref.is_null(global:const_object_globalization_pure_call.wado::$const_obj_{})",
         "global:const_object_globalization_pure_call.wado::$const_obj_{} = \"const_object_globalization_pure_call.wado/encode_key$spec0\"(struct.new \"core:prelude/string.wado//String\" { repr: array.new_fixed<u8>(97, 98), used: 2 });"
     ],
-    "wir_not_expect:O2": [
-        "$const_obj_{}__init"
-    ]
+    "wir_guard": {"O2": {"not_expect": ["$const_obj_{}__init"]}}
 }

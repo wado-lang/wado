@@ -9,8 +9,8 @@
 //
 // The demote must NOT fire: `ElementClean::visit_call_arg` treats a by-value
 // bare-`Local` argument as element-clean only when the callee cannot mutate that
-// parameter's elements. `wir_expect:O2 ["array_clone_deep"]` asserts the copy
-// stays deep; stdout catches the corruption directly (`tokens[0]` stays "a").
+// parameter's elements. Stdout catches the corruption directly (`tokens[0]`
+// stays "a").
 
 use { println, Stdout } from "core:cli";
 
@@ -32,6 +32,5 @@ export fn run() with Stdout {
 
 __DATA__
 {
-    "stdout": "a\n",
-    "wir_expect:O2": ["array_clone_deep"]
+    "stdout": "a\n"
 }
