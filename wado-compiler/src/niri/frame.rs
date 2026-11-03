@@ -17,7 +17,8 @@ use crate::type_table::TypeTable;
 
 use super::callee::{CallSite, CalleeKey};
 use super::place::{
-    named_local, place_aliased_by_another, place_of, referenced_place_operand, write_root_local,
+    named_local, place_aliased_by_another, place_of, places_overlap, referenced_place_operand,
+    write_root_local,
 };
 use super::region::{block_shape, region_needs, region_shape, value_block_shape};
 use super::rewrite::is_discardable_operand;
@@ -835,15 +836,15 @@ impl Interpreter<'_> {
         write_targets_under(body, NodeRef::Block(body.root()))
             .into_iter()
             .any(|target| {
-                if write_root_local(body, target) == Some(index) {
+                let target_root = write_root_local(body, target);
+                if target_root == Some(index) {
                     return true;
                 }
                 match (self.frame_place_of(body, target), &source) {
                     (Some((root, path)), Some((source_root, source_path))) => {
-                        root == *source_root
-                            && (path.starts_with(source_path) || source_path.starts_with(&path))
+                        places_overlap((root, &path), (*source_root, source_path))
                     }
-                    _ => write_root_local(body, target) == Some(source_root),
+                    _ => target_root == Some(source_root),
                 }
             })
     }
