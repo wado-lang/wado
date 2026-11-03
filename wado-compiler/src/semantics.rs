@@ -2108,7 +2108,7 @@ mod tests {
     }
 
     /// A profile replaces a `?`'s guess with what it measured: unlikely
-    /// against the branch's runs, cold against the summary.
+    /// against the branch's runs, cold where it never ran.
     #[test]
     fn a_profile_overrides_the_guess_of_a_try() {
         let source = "fn half(x: i32) -> Option<i32> { if x % 2 == 0 { return Option::Some(x / 2); } return null; }
@@ -2128,14 +2128,13 @@ mod tests {
                 .expect("planned")
                 .hash
         };
-        // Region 1 of each caller is its `?`'s failure path, which takes 1% of
-        // its runs or less in both. The hot line is 1000000 and the cold line
-        // 50.
+        // Region 1 of each caller is its `?`'s failure path, which never ran
+        // in `rarely` and took 0.1% of its runs in `often`.
         let profile = pgo::parse(&format!(
             "wado-pgo 1\nmodule entry.wado\n\
-             fn {:016x} 1 rarely\n0 1000000\n1 50\n\
+             fn {:016x} 1 rarely\n0 1000000\n\
              fn {:016x} 2 often\n0 1000000\n1 1000\n\
-             fn {:016x} 3 half\n0 2000000\n1 1998950\n2 1050\n3 1050\n\
+             fn {:016x} 3 half\n0 2000000\n1 1999000\n2 1000\n3 1000\n\
              fn {:016x} 4 run\n0 1\n",
             hash("rarely"),
             hash("often"),
@@ -2147,8 +2146,9 @@ mod tests {
         let markers = markers([&sem.tir_modules[&sem.entry_module_source]]);
         assert_eq!(markers["rarely"], ["$known_cold_path"]);
         assert_eq!(markers["often"], ["unlikely_path"]);
-        // Entered once, below the cold line, and no side of a branch.
-        assert_eq!(markers["run"], ["cold_code"]);
+        // Entered once, so not cold: its calls may reach what ran a million
+        // times.
+        assert_eq!(markers["run"], [] as [String; 0]);
     }
 
     /// The snapshot a compile applying a profile to the stdlib seeds from has

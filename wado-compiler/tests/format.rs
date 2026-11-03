@@ -9,10 +9,22 @@
 use std::fs;
 use std::path::Path;
 
+/// The index just past the Debug-printed string whose opening quote is at
+/// `start`, stepping over its `\`-escapes.
+fn after_debug_string(bytes: &[u8], start: usize) -> usize {
+    assert_eq!(bytes[start], b'"');
+    let mut i = start + 1;
+    while bytes[i] != b'"' {
+        i += if bytes[i] == b'\\' { 2 } else { 1 };
+    }
+    i + 1
+}
+
 /// Strip semantically-irrelevant fields from Debug output so we can compare
 /// ASTs structurally. This normalizes:
 /// - `span: Span { ... }` → `span: SPAN` (source positions differ after format)
 /// - `has_trailing_comma: ...` → removed (formatting hint, not semantic)
+/// - `quoted: ...`, `contextual_keywords: [...]` → removed (a field name's spelling, not semantic)
 /// - `type_params: [...]` → `type_params: NORM` (formatter normalizes `impl<T> Foo<T>` to `impl Foo<T>`)
 ///
 /// The goal is to catch **semantic** changes (dropped expressions, changed precedence)
@@ -24,12 +36,24 @@ fn normalize_ast_debug(debug: &str) -> String {
     let mut i = 0;
 
     while i < bytes.len() {
+        // A string's contents are data: copied whole, never matched below.
+        if bytes[i] == b'"' {
+            let end = after_debug_string(bytes, i);
+            result.extend_from_slice(&bytes[i..end]);
+            i = end;
+            continue;
+        }
+
         // Normalize any "Span {" occurrence (span:, op_span:, or bare Span in enums)
         if bytes[i..].starts_with(b"Span {") {
             result.extend_from_slice(b"SPAN");
             i += b"Span ".len();
             let mut depth = 0i32;
             while i < bytes.len() {
+                if bytes[i] == b'"' {
+                    i = after_debug_string(bytes, i);
+                    continue;
+                }
                 if bytes[i] == b'{' {
                     depth += 1;
                 } else if bytes[i] == b'}' {
@@ -47,6 +71,30 @@ fn normalize_ast_debug(debug: &str) -> String {
         // Strip "has_trailing_comma: ..." lines
         if bytes[i..].starts_with(b"has_trailing_comma:") {
             while i < bytes.len() && bytes[i] != b'\n' {
+                i += 1;
+            }
+            if i < bytes.len() {
+                i += 1;
+            }
+            continue;
+        }
+
+        // Strip a field name's spelling: its `quoted: ...`, and the module's
+        // `contextual_keywords: [...]`, which gains the keyword a dropped
+        // pair of quotes leaves bare. Each spans lines, so consume through
+        // the line that closes it.
+        if bytes[i..].starts_with(b"quoted:") || bytes[i..].starts_with(b"contextual_keywords:") {
+            let mut depth = 0i32;
+            while i < bytes.len() && !(bytes[i] == b'\n' && depth == 0) {
+                if bytes[i] == b'"' {
+                    i = after_debug_string(bytes, i);
+                    continue;
+                }
+                match bytes[i] {
+                    b'(' | b'{' | b'[' => depth += 1,
+                    b')' | b'}' | b']' => depth -= 1,
+                    _ => {}
+                }
                 i += 1;
             }
             if i < bytes.len() {
@@ -3790,12 +3838,108 @@ fn test_format_attribute_numeric_arg_preserved() {
 
 #[test]
 fn test_format_tagged_template_keeps_tag_adjacent() {
-    let source =
-        "fn foo() {\n    let s = sql`id = ${id:>4} \\n`;\n    let r = String::raw`a\\nb`;\n}\n";
+    let source = "fn foo() {\n    let s = sql`id = ${id:>4} \\n`;\n    let r = String::format`a\\nb`;\n    let p = re#`\\d+`#;\n}\n";
     let formatted = wado_compiler::format(source).expect("format failed");
     assert_eq!(
         formatted, source,
         "a tag prints directly before the backtick"
+    );
+    let formatted2 = wado_compiler::format(&formatted).expect("format failed");
+    assert_eq!(formatted, formatted2, "format should be idempotent");
+}
+
+#[test]
+fn test_format_raw_string_kept_as_written() {
+    let source = r###"use { x } from #"./a.wado"#;
+use { #"wasi:cli/stdout"# as Out } from "wasi:cli";
+
+#[unavailable(#"use \`y`"#)]
+fn z();
+
+fn foo() {
+    let a = #"\d+"#;
+    let b = ##"a"#b"##;
+    let c = b#"\x00"#;
+    match a {
+        #"\d"# => 1,
+        _ => 0,
+    }
+}
+"###;
+    let formatted = wado_compiler::format(source).expect("format failed");
+    assert_eq!(
+        formatted, source,
+        "a raw string keeps its delimiters and backslashes"
+    );
+}
+
+/// A bracket inside a quoted name is text, so stripping the spelling stops at
+/// the spelling and still compares the value after it.
+#[test]
+fn test_normalize_ast_debug_reads_brackets_in_strings_as_text() {
+    let ast = |source: &str| {
+        let ast = wado_compiler::parse(source)
+            .into_fail_fast()
+            .expect("parse failed")
+            .ast;
+        normalize_ast_debug(&format!("{ast:#?}"))
+    };
+    assert_ne!(
+        ast(r#"fn f() { let p = { "a{(": g(x) }; }"#),
+        ast(r#"fn f() { let p = { "a{(": g(y) }; }"#),
+    );
+}
+
+#[test]
+fn test_format_string_names_keep_their_value() {
+    let source = r###"test "a\\b" {
+    let s = #include_str(#"./x\y"#);
+    let p = { "k\\": 1, "q\"": 2, #"r\"#: 3 };
+    let Quoted { #"a\"#: a } = p;
+}
+
+test #"c\d"# {
+}
+"###;
+    let formatted = wado_compiler::format(source).expect("format failed");
+    assert_eq!(
+        formatted, source,
+        "a name spelled as a string keeps its spelling"
+    );
+}
+
+/// A quoted field name a keyword spells loses its quotes in a pattern, a named
+/// literal and an implicit one, and the output parses back.
+#[test]
+fn test_format_keyword_field_name_unquotes() {
+    let source = "fn f(p: P) {\n    let P { \"true\": t } = p;\n    let q = P { \"true\": 1 };\n    let r = { \"if\": 1 };\n}\n";
+    let formatted = wado_compiler::format(source).expect("format failed");
+    assert_eq!(
+        formatted,
+        "fn f(p: P) {\n    let P { true: t } = p;\n    let q = P { true: 1 };\n    let r = { if: 1 };\n}\n"
+    );
+    assert_eq!(
+        wado_compiler::format(&formatted).expect("the output must parse"),
+        formatted
+    );
+}
+
+#[test]
+fn test_format_raw_template_kept_as_written() {
+    let source = r"fn foo() {
+    let a = #`\d+\${ n }\`#;
+    let b = ##`a`#b ${#`\`#}`##;
+}
+";
+    let expected = r"fn foo() {
+    let a = #`\d+\${n}\`#;
+    let b = ##`a`#b ${#`\`#}`##;
+}
+";
+    let formatted = wado_compiler::format(source).expect("format failed");
+    assert_eq!(
+        formatted, expected,
+        "a raw template keeps its delimiters and backslashes"
     );
     let formatted2 = wado_compiler::format(&formatted).expect("format failed");
     assert_eq!(formatted, formatted2, "format should be idempotent");
@@ -3984,7 +4128,7 @@ fn token_starts(source: &str) -> Vec<(usize, usize, usize)> {
     fn collect(tokens: &[Token], out: &mut Vec<(usize, usize, usize)>) {
         for token in tokens {
             out.push((token.span.start, token.span.line, token.span.column));
-            let TokenKind::TemplateStringLit(parts) = &token.kind else {
+            let TokenKind::TemplateStringLit { parts, .. } = &token.kind else {
                 continue;
             };
             for part in parts {

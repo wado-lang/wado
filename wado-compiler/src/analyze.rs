@@ -1452,7 +1452,7 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
         if let Some(member) = self.symbols.use_item_member(module_source, name, spelling) {
             return Ok(Some(member));
         }
-        let UseNameSpelling::InterfaceName(wanted) = spelling else {
+        let UseNameSpelling::InterfaceName(wanted, _) = spelling else {
             unreachable!("an identifier names its own member");
         };
         let found = self.symbols.interfaces_named(module_source, wanted);

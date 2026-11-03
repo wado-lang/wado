@@ -222,10 +222,7 @@ fn fixup_adapter_return_from_call_site(
             call_site_type
         }
     };
-    let same_type = |a, b| {
-        let tt = type_table.borrow();
-        tt.type_key(a) == tt.type_key(b)
-    };
+    let same_type = |a, b| type_table.borrow().same_type(a, b);
     if let Some(prev) =
         record_applied_return(applied_returns, adapter_key, call_site_type, same_type)
     {

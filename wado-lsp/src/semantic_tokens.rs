@@ -202,7 +202,7 @@ fn classify_into(
     out: &mut Vec<ClassifiedToken>,
 ) {
     let token = &tokens[index];
-    if let TokenKind::TemplateStringLit(parts) = &token.kind {
+    if let TokenKind::TemplateStringLit { parts, .. } = &token.kind {
         expand_template(token, parts, ast_spans, sem_classes, out);
         return;
     }
@@ -602,9 +602,9 @@ fn classify_token(
 
             // Literals
             TokenKind::NumberLit(_) => (token_type::NUMBER, 0),
-            TokenKind::StringLit(_)
-            | TokenKind::ByteStringLit(_)
-            | TokenKind::TemplateStringLit(_)
+            TokenKind::StringLit { .. }
+            | TokenKind::ByteStringLit { .. }
+            | TokenKind::TemplateStringLit { .. }
             | TokenKind::ByteCharLit(_)
             | TokenKind::CharLit(_) => (token_type::STRING, 0),
 
@@ -813,7 +813,8 @@ fn calls(tokens: &[Token], index: usize) -> bool {
         return true;
     }
     if tokens.get(index + 1).is_some_and(|t| {
-        matches!(t.kind, TokenKind::TemplateStringLit(_)) && t.span.start == tokens[index].span.end
+        matches!(t.kind, TokenKind::TemplateStringLit { .. })
+            && t.span.start == tokens[index].span.end
     }) {
         return true;
     }

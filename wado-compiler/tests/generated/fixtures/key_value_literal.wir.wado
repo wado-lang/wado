@@ -546,14 +546,13 @@ fn "key_value_literal.wado/$test_0_one_from_impl_is_enough_for_an_immutable_targ
 fn "key_value_literal.wado/$test_1_a_type_accepting_both_literal_forms_picks_by_element_shape"() {
     let $v0_1: i32;
     let self_62: ref "core:prelude/string.wado//String";
-    let a: ref Array<u8>;
     let a_end: i32;
-    let b: ref Array<u8>;
     let i_78: i32;
     let $licm_used_39: i32;
     let $licm_repr_40: ref "Array<core:prelude/string.wado/String>";
     let $licm_used_41: i32;
     let $licm_repr_42: ref Array<i32>;
+    let $licm_repr_43: ref Array<u8>;
     if ref.is_null(global:key_value_literal.wado::$const_obj_6) {
         let $mv_keys_1: ref "core:prelude//List<core:prelude/string.wado/String>";
         let $mv_values_2: ref "core:prelude//List<i32>";
@@ -583,29 +582,27 @@ fn "key_value_literal.wado/$test_1_a_type_accepting_both_literal_forms_picks_by_
                 break_if b13 $v0_1 >= $licm_used_39;
                 self_62 = builtin::array_get_value<ref "core:prelude/string.wado//String">($licm_repr_40, $v0_1);
                 if $inline_key_value_literal_wado_EitherBag_i32___get_by_key_sroa_return__spec0_sroa_key_repr__0__$inline_core_prelude_array_wado_seq_eq_u8__4: block -> bool {
-                    a = self_62.repr;
-                    a_end = self_62.used;
-                    b = global:key_value_literal.wado::$const_obj_2;
-                    if a_end != 1 {
+                    if local.tee a_end(self_62.used) != 1 {
                         break $inline_key_value_literal_wado_EitherBag_i32___get_by_key_sroa_return__spec0_sroa_key_repr__0__$inline_core_prelude_array_wado_seq_eq_u8__4: 0;
                     }
                     i_78 = 0;
+                    $licm_repr_43 = self_62.repr;
                     b17: block {
                         l18: loop {
                             break_if b17 (((i_78 >= a_end) | ((i_78 + 1) >= a_end)) | (((i_78 + 1) + 1) >= a_end)) | ((((i_78 + 1) + 1) + 1) >= a_end);
-                            if builtin::array_get_value<u8>(a, i_78) != builtin::array_get_value<u8>(b, i_78) {
+                            if builtin::array_get_value<u8>($licm_repr_43, i_78) != builtin::array_get_value<u8>(global:key_value_literal.wado::$const_obj_2, i_78) {
                                 break $inline_key_value_literal_wado_EitherBag_i32___get_by_key_sroa_return__spec0_sroa_key_repr__0__$inline_core_prelude_array_wado_seq_eq_u8__4: 0;
                             }
                             i_78 = i_78 + 1;
-                            if builtin::array_get_value<u8>(a, i_78) != builtin::array_get_value<u8>(b, i_78) {
+                            if builtin::array_get_value<u8>($licm_repr_43, i_78) != builtin::array_get_value<u8>(global:key_value_literal.wado::$const_obj_2, i_78) {
                                 break $inline_key_value_literal_wado_EitherBag_i32___get_by_key_sroa_return__spec0_sroa_key_repr__0__$inline_core_prelude_array_wado_seq_eq_u8__4: 0;
                             }
                             i_78 = i_78 + 1;
-                            if builtin::array_get_value<u8>(a, i_78) != builtin::array_get_value<u8>(b, i_78) {
+                            if builtin::array_get_value<u8>($licm_repr_43, i_78) != builtin::array_get_value<u8>(global:key_value_literal.wado::$const_obj_2, i_78) {
                                 break $inline_key_value_literal_wado_EitherBag_i32___get_by_key_sroa_return__spec0_sroa_key_repr__0__$inline_core_prelude_array_wado_seq_eq_u8__4: 0;
                             }
                             i_78 = i_78 + 1;
-                            if builtin::array_get_value<u8>(a, i_78) != builtin::array_get_value<u8>(b, i_78) {
+                            if builtin::array_get_value<u8>($licm_repr_43, i_78) != builtin::array_get_value<u8>(global:key_value_literal.wado::$const_obj_2, i_78) {
                                 break $inline_key_value_literal_wado_EitherBag_i32___get_by_key_sroa_return__spec0_sroa_key_repr__0__$inline_core_prelude_array_wado_seq_eq_u8__4: 0;
                             }
                             i_78 = i_78 + 1;
@@ -615,7 +612,7 @@ fn "key_value_literal.wado/$test_1_a_type_accepting_both_literal_forms_picks_by_
                     b23: block {
                         l24: loop {
                             break_if b23 i_78 >= a_end;
-                            if builtin::array_get_value<u8>(a, i_78) != builtin::array_get_value<u8>(b, i_78) {
+                            if builtin::array_get_value<u8>($licm_repr_43, i_78) != builtin::array_get_value<u8>(global:key_value_literal.wado::$const_obj_2, i_78) {
                                 break $inline_key_value_literal_wado_EitherBag_i32___get_by_key_sroa_return__spec0_sroa_key_repr__0__$inline_core_prelude_array_wado_seq_eq_u8__4: 0;
                             }
                             i_78 = i_78 + 1;
@@ -1841,7 +1838,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::internal_set_byte_
     self_15 = self.used;
     if @unlikely(index >=u self_15) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_at$contract_report0"(index, self_15, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/string.wado:571"), used: 28 });
+        "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_at$contract_report0"(index, self_15, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/string.wado:558"), used: 28 });
         unreachable;
     }
     builtin::array_set_u8(self.repr, index, value);
@@ -1938,7 +1935,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/StrSlice^core:prelude/stri
         $v1 = self.end - local.tee $load_1(self.start);
         if @unlikely(((0 <= index) & (index < $v1)) == 0) {
             cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/StrSlice::byte_at$contract_report0"(index, $v1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/string.wado:1770"), used: 29 });
+            "core:prelude/string.wado/core:prelude/string.wado/StrSlice::byte_at$contract_report0"(index, $v1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/string.wado:1757"), used: 29 });
             unreachable;
         }
         "core:prelude/string.wado/core:prelude/string.wado/StrSlice::byte_at$unchecked"(self.repr, $load_1, index);
@@ -2719,13 +2716,13 @@ fn "core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<core:prelude/
 fn "key_value_literal.wado/key_value_literal.wado/FrozenMap<i32>::get$sroa[return]$spec0$sroa[key.repr]"($mv$self$keys, $mv$self$values, key) {
     let i_2: i32;
     let self_12: ref "core:prelude/string.wado//String";
-    let a: ref Array<u8>;
     let a_end: i32;
     let i_28: i32;
     let $licm_used_39: i32;
     let $licm_repr_40: ref "Array<core:prelude/string.wado/String>";
     let $licm_used_41: i32;
     let $licm_repr_42: ref Array<i32>;
+    let $licm_repr_43: ref Array<u8>;
     i_2 = 0;
     $licm_used_39 = $mv$self$keys.used;
     $licm_repr_40 = $mv$self$keys.repr;
@@ -2736,27 +2733,27 @@ fn "key_value_literal.wado/key_value_literal.wado/FrozenMap<i32>::get$sroa[retur
             break_if b319 i_2 >= $licm_used_39;
             self_12 = builtin::array_get_value<ref "core:prelude/string.wado//String">($licm_repr_40, i_2);
             if $inline_core_prelude_array_wado_seq_eq_u8__4: block -> bool {
-                a = self_12.repr;
                 if local.tee a_end(self_12.used) != 1 {
                     break $inline_core_prelude_array_wado_seq_eq_u8__4: 0;
                 }
                 i_28 = 0;
+                $licm_repr_43 = self_12.repr;
                 b323: block {
                     l324: loop {
                         break_if b323 (((i_28 >= a_end) | ((i_28 + 1) >= a_end)) | (((i_28 + 1) + 1) >= a_end)) | ((((i_28 + 1) + 1) + 1) >= a_end);
-                        if builtin::array_get_value<u8>(a, i_28) != builtin::array_get_value<u8>(key, i_28) {
+                        if builtin::array_get_value<u8>($licm_repr_43, i_28) != builtin::array_get_value<u8>(key, i_28) {
                             break $inline_core_prelude_array_wado_seq_eq_u8__4: 0;
                         }
                         i_28 = i_28 + 1;
-                        if builtin::array_get_value<u8>(a, i_28) != builtin::array_get_value<u8>(key, i_28) {
+                        if builtin::array_get_value<u8>($licm_repr_43, i_28) != builtin::array_get_value<u8>(key, i_28) {
                             break $inline_core_prelude_array_wado_seq_eq_u8__4: 0;
                         }
                         i_28 = i_28 + 1;
-                        if builtin::array_get_value<u8>(a, i_28) != builtin::array_get_value<u8>(key, i_28) {
+                        if builtin::array_get_value<u8>($licm_repr_43, i_28) != builtin::array_get_value<u8>(key, i_28) {
                             break $inline_core_prelude_array_wado_seq_eq_u8__4: 0;
                         }
                         i_28 = i_28 + 1;
-                        if builtin::array_get_value<u8>(a, i_28) != builtin::array_get_value<u8>(key, i_28) {
+                        if builtin::array_get_value<u8>($licm_repr_43, i_28) != builtin::array_get_value<u8>(key, i_28) {
                             break $inline_core_prelude_array_wado_seq_eq_u8__4: 0;
                         }
                         i_28 = i_28 + 1;
@@ -2766,7 +2763,7 @@ fn "key_value_literal.wado/key_value_literal.wado/FrozenMap<i32>::get$sroa[retur
                 b329: block {
                     l330: loop {
                         break_if b329 i_28 >= a_end;
-                        if builtin::array_get_value<u8>(a, i_28) != builtin::array_get_value<u8>(key, i_28) {
+                        if builtin::array_get_value<u8>($licm_repr_43, i_28) != builtin::array_get_value<u8>(key, i_28) {
                             break $inline_core_prelude_array_wado_seq_eq_u8__4: 0;
                         }
                         i_28 = i_28 + 1;

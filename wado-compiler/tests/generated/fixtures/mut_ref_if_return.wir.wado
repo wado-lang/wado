@@ -274,11 +274,13 @@ fn "mut_ref_if_return.wado/parse_item$sroa[return]"(p) {
     let $v1_9: i32;
     let $qm_e_20: ref "core:prelude/string.wado//String";
     let tok: ref "mut_ref_if_return.wado//Token";
-    if $v1_9 = local.tee $load_0(p.tokens).used; if @unlikely(local.tee $load_2(p.pos) >=u $v1_9) {
+    $v1_9 = local.tee $load_0(p.tokens).used;
+    if @unlikely(local.tee $load_2(p.pos) >=u $v1_9) {
         cold_path;
         "mut_ref_if_return.wado/mut_ref_if_return.wado/Parser::peek_kind$cold0$sroa[self.pos]"($load_2, $v1_9);
         unreachable;
-    }; builtin::array_get_value<ref "mut_ref_if_return.wado//Token">($load_0.repr, $load_2).kind == 1 {
+    }
+    if builtin::array_get_value<ref "mut_ref_if_return.wado//Token">($load_0.repr, $load_2).kind == 1 {
         let $mv$$vr_4$1: ref null "mut_ref_if_return.wado//Token";
         let $mv$$vr_4$2: ref null "core:prelude/string.wado//String";
         multivalue_bind [$v1_9, $mv$$vr_4$1, $mv$$vr_4$2] = "mut_ref_if_return.wado/mut_ref_if_return.wado/Parser::expect$sroa[return]$dae[kind]"(p);
@@ -1547,10 +1549,10 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<mut_ref_if_
     let out_3: ref "core:prelude/string.wado//String";
     let is_negative: bool;
     let x: i64;
-    let $sroa_$bound_117_repr_118: ref Array<u8>;
-    $sroa_$bound_117_repr_118 = array.new_data<u8>("expected pos=1, got pos=");
+    let $sroa_$bound_114_repr_115: ref Array<u8>;
+    $sroa_$bound_114_repr_115 = array.new_data<u8>("expected pos=1, got pos=");
     local.tee out_3(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(40), used: 0 }).used = 24;
-    builtin::array_copy<u8>(out_3.repr, 0, $sroa_$bound_117_repr_118, 0, 24);
+    builtin::array_copy<u8>(out_3.repr, 0, $sroa_$bound_114_repr_115, 0, 24);
     is_negative = t < 0;
     t = "core:prelude/primitive.wado/count_digits_u64"(local.tee x(x = builtin::i64_extend_i32_s(t); select i64(x < 0_i64, 0_i64 - x, x)));
     is_negative = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"(out_3, is_negative, t);

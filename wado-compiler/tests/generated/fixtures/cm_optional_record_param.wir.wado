@@ -50,7 +50,6 @@ fn "cm_optional_record_param.wado/$cm_binding__wasi:demo/gfx@0.1.0#[method]devic
     let $local_9: ref null "core:prelude/string.wado//String";
     let $local_13: ref "core:prelude/string.wado//String";
     let $local_14: i64;
-    let bytes: ref Array<u8>;
     $options_disc = ref.is_null(options) == 0;
     $options_inner0 = 0;
     $options_inner1 = 0;
@@ -61,9 +60,8 @@ fn "cm_optional_record_param.wado/$cm_binding__wasi:demo/gfx@0.1.0#[method]devic
         $options_inner2 = 0;
         if ref.is_null($local_9) == 0 {
             $options_inner1 = local.tee $local_13(ref.as_non_null($local_9)).used;
-            bytes = $local_13.repr;
             $options_inner2 = "mem/realloc"(0, 0, 1, $options_inner1);
-            "core:rt/gc_array_to_memory$dae[src_start]"(bytes, $options_inner2, $options_inner1);
+            "core:rt/gc_array_to_memory$dae[src_start]"($local_13.repr, $options_inner2, $options_inner1);
             $options_inner1 = builtin::i32_wrap_i64(local.tee $local_14(builtin::i64_extend_i32_u($options_inner2) | (builtin::i64_extend_i32_s($options_inner1) << 32_i64)));
             $options_inner2 = builtin::i32_wrap_i64($local_14 >> 32_i64);
         } else {

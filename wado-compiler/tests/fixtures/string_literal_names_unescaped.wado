@@ -1,0 +1,25 @@
+// A string literal that names something means its value, escapes processed,
+// as it does anywhere else: a key of an object literal or a struct pattern,
+// and an `#include_str` / `#include_bytes` path. A raw string names the same.
+use { println, Stdout } from "core:cli";
+use { TreeMap } from "core:collections";
+
+struct Quoted { a: i32 }
+
+export fn run() with Stdout {
+    let m = { "k\\": 1, "q\"": 2, #"r\"#: 3 } as TreeMap<String, i32>;
+    assert m.contains_key(#"k\"#);
+    assert m.contains_key("q\"");
+    assert m.contains_key("r\\");
+
+    let q = Quoted { "\u{61}": 7 };
+    let Quoted { "a": a } = q;
+    assert a == 7;
+
+    assert #include_str("./testdata/hello\u{2E}txt") == #include_str(#"./testdata/hello.txt"#);
+    assert #include_bytes("./testdata/hello\u{2E}txt").len() > 0;
+    println("ok");
+}
+
+__DATA__
+{"stdout": "ok\n"}

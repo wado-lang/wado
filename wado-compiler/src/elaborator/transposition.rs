@@ -8,6 +8,7 @@ use crate::ast::{
     AssignExpr, AssignTarget, AstId, AstVisitor, BinaryOp, Expr, FieldAccessExpr, Function,
     IdentExpr, Item, Literal, Module, Pattern, UnaryOp, walk_expr, walk_function, walk_pattern,
 };
+use crate::escape::string_value;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::token::Span;
@@ -281,8 +282,10 @@ fn same(a: &Expr, b: &Expr) -> bool {
 
 fn same_literal(a: &Literal, b: &Literal) -> bool {
     match (a, b) {
+        (Literal::String(a, a_quote), Literal::String(b, b_quote)) => {
+            string_value(a, *a_quote) == string_value(b, *b_quote)
+        }
         (Literal::Number(a), Literal::Number(b))
-        | (Literal::String(a), Literal::String(b))
         | (Literal::Byte(a), Literal::Byte(b))
         | (Literal::Char(a), Literal::Char(b)) => a == b,
         (Literal::Bool(a), Literal::Bool(b)) => a == b,
@@ -342,7 +345,7 @@ fn is_index_operand(expr: &Expr) -> bool {
         Expr::Literal(literal) => matches!(
             literal.value,
             Literal::Number(_)
-                | Literal::String(_)
+                | Literal::String(..)
                 | Literal::Byte(_)
                 | Literal::Char(_)
                 | Literal::Bool(_)

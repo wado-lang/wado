@@ -3,6 +3,12 @@
 
 grammar Wado;
 
+options { language = Wado; }
+
+@lexer::members {
+    raw_hashes: List<i32> = []
+}
+
 sourceFile
     : innerAttribute* item* EOF
     ;
@@ -722,6 +728,7 @@ literal
 
 templateString
     : BACKTICK templatePart* BACKTICK
+    | RAW_OPEN templatePart* RAW_CLOSE
     ;
 
 templatePart
@@ -769,6 +776,17 @@ STRING_LITERAL
     : 'b'? '"' ('\\' . | ~["\\])* '"'
     ;
 
+// A raw string is one STRING_LITERAL, as a cooked one is: `more` carries the
+// opener and the text into the closer, which types the whole run. Its `#`s
+// share the raw template's stack.
+RAW_STRING_OPEN
+    : '#'+ '"' { lx.raw_hashes.push(pos - start - 1) } -> more, pushMode(RAW_STRING)
+    ;
+
+RAW_BYTES_OPEN
+    : 'b' '#'+ '"' { lx.raw_hashes.push(pos - start - 2) } -> more, pushMode(RAW_STRING)
+    ;
+
 LBRACE
     : '{' -> pushMode(DEFAULT_MODE)
     ;
@@ -779,6 +797,12 @@ RBRACE
 
 BACKTICK
     : '`' -> pushMode(TEMPLATE)
+    ;
+
+// A raw template's closer repeats its opener's `#`s. The count is a stack,
+// since a hole may hold a raw template of its own.
+RAW_OPEN
+    : '#'+ '`' { lx.raw_hashes.push(pos - start - 1) } -> pushMode(RAW_TEMPLATE)
     ;
 
 CHAR_LITERAL
@@ -843,4 +867,43 @@ DOLLAR_TEXT
 
 TEMPLATE_END
     : '`' -> type(BACKTICK), popMode
+    ;
+
+// A backslash is text. The longest match takes `${` over `$`, and the closer
+// over a lone backtick. The closer takes no more `#`s than the opener had, so
+// one `#` past them is text.
+mode RAW_TEMPLATE;
+
+RAW_CLOSE
+    : '`' ({ pos - start <= lx.raw_hashes.last().unwrap() }? '#')+
+      { pos - start == lx.raw_hashes.last().unwrap() + 1 }?
+      { lx.raw_hashes.pop() } -> popMode
+    ;
+
+RAW_INTERP_OPEN
+    : '${' -> type(INTERP_OPEN), pushMode(DEFAULT_MODE)
+    ;
+
+RAW_TEXT
+    : ~[`$]+ -> type(TEMPLATE_TEXT)
+    ;
+
+RAW_LONE
+    : [`$] -> type(TEMPLATE_TEXT)
+    ;
+
+mode RAW_STRING;
+
+RAW_STRING_CLOSE
+    : '"' ({ pos - start <= lx.raw_hashes.last().unwrap() }? '#')+
+      { pos - start == lx.raw_hashes.last().unwrap() + 1 }?
+      { lx.raw_hashes.pop() } -> type(STRING_LITERAL), popMode
+    ;
+
+RAW_STRING_TEXT
+    : ~'"'+ -> more
+    ;
+
+RAW_STRING_QUOTE
+    : '"' -> more
     ;

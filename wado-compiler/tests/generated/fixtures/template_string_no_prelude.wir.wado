@@ -67,17 +67,17 @@ global global:template_string_no_prelude.wado::$const_obj_0: ref Array<u8> = arr
 fn "template_string_no_prelude.wado/run"() with Stdout {
     let n_0: i32;
     let out_13: ref "core:prelude/string.wado//String";
-    let repr_42: ref Array<u8>;
     let is_negative: bool;
     let x: i64;
     let q: u64;
     let pair: i32;
     let tens: i32;
+    let $sroa_view_repr_171: ref Array<u8>;
     n_0 = black_box(7);
     out_13 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(18), used: 0 };
-    repr_42 = global:template_string_no_prelude.wado::$const_obj_0;
+    $sroa_view_repr_171 = global:template_string_no_prelude.wado::$const_obj_0;
     out_13.used = 2;
-    builtin::array_copy<u8>(out_13.repr, 0, repr_42, 0, 2);
+    builtin::array_copy<u8>(out_13.repr, 0, $sroa_view_repr_171, 0, 2);
     is_negative = n_0 < 0;
     x = builtin::i64_extend_i32_s(n_0);
     x = select i64(x < 0_i64, 0_i64 - x, x);
@@ -142,22 +142,22 @@ fn "template_string_no_prelude.wado/run"() with Stdout {
         break $inline_count_digits_u64_1: 20;
     };
     is_negative = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec1$sroa[self.buf]$dae[alt_prefix]"(out_13, is_negative, n_0);
-    repr_42 = out_13.repr;
+    $sroa_view_repr_171 = out_13.repr;
     n_0 = is_negative + n_0;
     b19: block {
         l20: loop {
             break_if b19 (n_0 - is_negative) < 2;
             q = x /u 100_i64;
             tens = local.tee pair(builtin::i32_wrap_i64(x - (q * 100_i64))) / 10;
-            builtin::array_set_u8(repr_42, n_0 - 1, (48 + pair) - (tens * 10));
-            builtin::array_set_u8(repr_42, n_0 - 2, 48 + tens);
+            builtin::array_set_u8($sroa_view_repr_171, n_0 - 1, (48 + pair) - (tens * 10));
+            builtin::array_set_u8($sroa_view_repr_171, n_0 - 2, 48 + tens);
             n_0 = n_0 - 2;
             x = q;
             continue l20;
         };
     };
     if n_0 > is_negative {
-        builtin::array_set_u8(repr_42, is_negative, 48 + builtin::i32_wrap_i64(x %u 10_i64));
+        builtin::array_set_u8($sroa_view_repr_171, is_negative, 48 + builtin::i32_wrap_i64(x %u 10_i64));
     }
     $inline_core_prelude_string_wado_String__internal_push_view_42: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_42;
@@ -165,11 +165,11 @@ fn "template_string_no_prelude.wado/run"() with Stdout {
     n_0 = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
     is_negative = builtin::i32_wrap_i64(x >> 32_i64);
     n_0 = "template_string_no_prelude.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(n_0);
-    builtin::array_copy<u8>(local.tee repr_42(builtin::array_new<u8>(local.tee pair(out_13.used) + 1)), 0, out_13.repr, 0, pair);
-    builtin::array_set_u8(repr_42, pair, 10);
+    builtin::array_copy<u8>(local.tee $sroa_view_repr_171(builtin::array_new<u8>(local.tee pair(out_13.used) + 1)), 0, out_13.repr, 0, pair);
+    builtin::array_set_u8($sroa_view_repr_171, pair, 10);
     drop(block -> "core:prelude/types.wado//enum:CopyResult" {
         pair = pair + 1;
-        "core:rt/cm_stream_write_raw_all_u8"(is_negative, repr_42, 0, pair);
+        "core:rt/cm_stream_write_raw_all_u8"(is_negative, $sroa_view_repr_171, 0, pair);
     });
     "wasi/stream-drop-writable"(is_negative);
     "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(n_0);

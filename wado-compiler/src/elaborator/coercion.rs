@@ -18,7 +18,7 @@ use crate::elaborator::sem::types::{
 };
 use crate::elaborator::typecheck::{TypeCheckResult, check_assignable};
 use crate::elaborator::types::FromArrayInfo;
-use crate::escape::{unescape_byte, unescape_bytes};
+use crate::escape::{bytes_value, unescape_byte};
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::lexer::{defaults_to_float, has_decimal_point};
 use crate::module_source::ModuleSource;
@@ -1199,7 +1199,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // A string, template, `bool` or `char` literal → a newtype over its type.
         let literal_type = match expr {
             Expr::Literal(lit) => match &lit.value {
-                Literal::String(_) => Some(self.get_string_struct_type()),
+                Literal::String(..) => Some(self.get_string_struct_type()),
                 Literal::Bool(_) => Some(TypeTable::BOOL),
                 Literal::Char(_) => Some(TypeTable::CHAR),
                 _ => None,
@@ -1228,7 +1228,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let is_bytes_literal = matches!(
             expr,
             Expr::Literal(lit)
-                if matches!(&lit.value, Literal::Bytes(_) | Literal::IncludeBytes(_))
+                if matches!(&lit.value, Literal::Bytes(..) | Literal::IncludeBytes(_))
         );
         if is_bytes_literal {
             let (is_byte_list, settles_param) = {
@@ -1247,8 +1247,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             };
             if let Some(target_type) = bytes_type {
                 if let Expr::Literal(lit) = expr
-                    && let Literal::Bytes(raw) = &lit.value
-                    && let Err(message) = unescape_bytes(raw)
+                    && let Literal::Bytes(raw, quote) = &lit.value
+                    && let Err(message) = bytes_value(raw, *quote)
                 {
                     let _ = self.emit(TypeError::InvalidLiteral {
                         message,

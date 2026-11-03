@@ -1,0 +1,25 @@
+// Test: a `let` of an array taken from a place shares that array.
+//
+// `licm` hoists `buf.repr` out of `push_be`'s loop into
+// `let $licm_repr: Array<u8>`, and the loop writes through it. An array is
+// one shared object, so the bytes land in `buf`. The compile-time engine bound
+// the `let` as a copy, so its writes missed `buf`, and the asserted encoding
+// folded to "190000".
+
+use { println, Stdout } from "core:cli";
+use { to_bytes } from "core:cbor";
+use { Serialize } from "core:serde";
+
+fn enc<T: Serialize>(v: &T) -> String {
+    return to_bytes::<T>(v).unwrap().to_hex();
+}
+
+export fn run() with Stdout {
+    assert enc::<i32>(&1000) == "1903e8";
+    println("ok");
+}
+
+__DATA__
+{
+    "stdout": "ok\n"
+}

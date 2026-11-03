@@ -142,7 +142,7 @@ impl AstVisitor<'_> for IncludePathFinder {
         {
             match &lit.value {
                 Literal::IncludeStr(path) | Literal::IncludeBytes(path) => {
-                    self.result = Some(path.clone());
+                    self.result = Some(path.value.clone());
                     return;
                 }
                 _ => {}

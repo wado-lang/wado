@@ -174,7 +174,7 @@ fn "global_init_handler.wado/run"() with Stdout {
     let out_20: ref "core:prelude/string.wado//String";
     let is_negative_87: bool;
     let x_91: i64;
-    let repr_110: ref Array<u8>;
+    let $sroa_view_repr_203: ref Array<u8>;
     let $sroa_t_h0_241: i32;
     let $sroa_t_h1_242: i32;
     $inline__initialize_modules_0: block {
@@ -202,14 +202,14 @@ fn "global_init_handler.wado/run"() with Stdout {
     $sroa_t_h0_241 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_91(x_91 = builtin::i64_extend_i32_s($sroa_t_h0_241); select i64(x_91 < 0_i64, 0_i64 - x_91, x_91)));
     is_negative_87 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"(out_20, is_negative_87, $sroa_t_h0_241);
     "core:prelude/primitive.wado/write_decimal_digits"(local.tee $load_0(out_20.repr), is_negative_87, x_91, $sroa_t_h0_241);
-    repr_110 = global:global_init_handler.wado::$const_obj_0;
+    $sroa_view_repr_203 = global:global_init_handler.wado::$const_obj_0;
     if @unlikely(local.tee $sroa_t_h0_241(out_20.used + 1) > builtin::array_len($load_0)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_20, $sroa_t_h0_241);
     }
     is_negative_87 = out_20.used;
     out_20.used = $sroa_t_h0_241;
-    builtin::array_copy<u8>(out_20.repr, is_negative_87, repr_110, 0, 1);
+    builtin::array_copy<u8>(out_20.repr, is_negative_87, $sroa_view_repr_203, 0, 1);
     $sroa_t_h0_241 = $sroa_t_h1_242 < 0;
     $sroa_t_h1_242 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_91(x_91 = builtin::i64_extend_i32_s($sroa_t_h1_242); select i64(x_91 < 0_i64, 0_i64 - x_91, x_91)));
     $sroa_t_h0_241 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"(out_20, $sroa_t_h0_241, $sroa_t_h1_242);

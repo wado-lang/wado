@@ -1120,9 +1120,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let abstract_at = |id: TypeId| {
             matches!(tt.get(id), ResolvedType::TypeParam { .. }) || tt.contains_undecided(id)
         };
-        abstract_at(resolved)
-            || abstract_at(scrutinee)
-            || tt.type_key(resolved) == tt.type_key(scrutinee)
+        abstract_at(resolved) || abstract_at(scrutinee) || tt.same_type(resolved, scrutinee)
     }
 
     /// The declaration a written qualifier means, the resolve pass answering
@@ -2368,7 +2366,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         span: Span,
         site: Span,
     ) {
-        if let Literal::String(_) = lit {
+        if let Literal::String(..) = lit {
             if self.string_pattern_mismatch(scrutinee_type) {
                 self.emit_pattern_literal_error(
                     util::PatternLiteralError::Mismatch("String".to_string()),

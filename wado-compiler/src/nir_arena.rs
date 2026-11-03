@@ -1833,6 +1833,14 @@ impl Body {
         !self.walk_breaks_to(node, label, &mut |_| false)
     }
 
+    /// The value of every `break label: v` in `node`'s subtree, or `None` where
+    /// one breaks to `label` without a value.
+    pub fn break_values_to(&self, node: NodeRef, label: &str) -> Option<Vec<Operand>> {
+        let mut values = Vec::new();
+        self.walk_breaks_to(node, label, &mut |v| v.map(|v| values.push(v)).is_some())
+            .then_some(values)
+    }
+
     /// `e` as a block whose value is its tail statement — the shape a pass may
     /// look through. A `break LABEL: v` produces the block's value too, from a
     /// point the tail never reaches, so a block one names is not one of these.

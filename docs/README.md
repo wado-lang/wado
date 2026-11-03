@@ -215,6 +215,7 @@
 - [Profile-Guided Optimization](./wep-2026-10-25-profile-guided-optimization.md)
 - [Refined Types — Types That Carry a Contract](./wep-2026-10-25-refined-types.md)
 - [Linear Arrays — Arrays Outside the GC Heap](./wep-2026-10-26-linear-arrays.md)
+- [Re — Linear-Time Regular Expressions for Wado](./wep-2026-11-02-re.md)
 
 ## Standard Library
 

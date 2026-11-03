@@ -223,7 +223,8 @@ fn "contract_unchecked_index.wado/run"() with Stdout {
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_14_69, message_55.repr, message_55.used);
     "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(index_23);
     index_23 = black_box(1);
-    self_43 = struct.new "core:prelude/string.wado//StrCharIter" { repr: local.tee message_55(builtin::array_get_value<ref "core:prelude/string.wado//String">(global:contract_unchecked_index.wado::$const_obj_0, index_23)).repr, used: message_55.used, byte_index: 0 };
+    index_23 = local.tee message_55(builtin::array_get_value<ref "core:prelude/string.wado//String">(global:contract_unchecked_index.wado::$const_obj_0, index_23)).used;
+    self_43 = struct.new "core:prelude/string.wado//StrCharIter" { repr: message_55.repr, used: index_23, byte_index: 0 };
     f = struct.new "contract_unchecked_index.wado//$Closure_0" {};
     message_55 = "core:prelude/string.wado/core:prelude/string.wado/String::from_iter<core:prelude/traits.wado/IterMap<core:prelude/string.wado/StrCharIter,fn mut(char)->char>>"(struct.new "core:prelude/traits.wado//IterMap<core:prelude/string.wado/StrCharIter,fn mut(char)->char>" { inner: self_43, f: struct.new "canonical//CanonicalClosure_0" { env: f, func: ref.func "closure/contract_unchecked_index.wado/$closure_wrapper_0" } });
     index_23 = builtin::i32_wrap_i64(local.tee $cm_pair_7_62("wasi/stream-new"()));
@@ -1214,7 +1215,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<contract_un
     let out_3: ref "core:prelude/string.wado//String";
     let is_negative_65: bool;
     let x: i64;
-    let start_129: i32;
+    let start_126: i32;
     let arr: ref Array<u8>;
     let q: u64;
     let tens: i32;
@@ -1290,22 +1291,22 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<contract_un
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_3, is_negative_65);
         }
-        start_129 = out_3.used;
+        start_126 = out_3.used;
         out_3.used = is_negative_65;
-        builtin::array_set_u8(out_3.repr, start_129, 45);
+        builtin::array_set_u8(out_3.repr, start_126, 45);
     } else {
     }
     if @unlikely(local.tee is_negative_65(out_3.used + t) > builtin::array_len(out_3.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_3, is_negative_65);
     }
-    start_129 = out_3.used;
+    start_126 = out_3.used;
     out_3.used = is_negative_65;
     arr = out_3.repr;
-    t = start_129 + t;
+    t = start_126 + t;
     b167: block {
         l168: loop {
-            break_if b167 (t - start_129) < 2;
+            break_if b167 (t - start_126) < 2;
             q = x /u 100_i64;
             tens = local.tee is_negative_65(builtin::i32_wrap_i64(x - (q * 100_i64))) / 10;
             builtin::array_set_u8(arr, t - 1, (48 + is_negative_65) - (tens * 10));
@@ -1315,8 +1316,8 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<contract_un
             continue l168;
         };
     };
-    if t > start_129 {
-        builtin::array_set_u8(arr, start_129, 48 + builtin::i32_wrap_i64(x %u 10_i64));
+    if t > start_126 {
+        builtin::array_set_u8(arr, start_126, 48 + builtin::i32_wrap_i64(x %u 10_i64));
     }
     $inline_core_prelude_string_wado_String__internal_push_view_39: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_39;

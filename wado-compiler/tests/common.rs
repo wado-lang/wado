@@ -224,7 +224,7 @@ fn take_compile_worker() -> CompileWorker {
 
 /// Run `f` on a compile worker and hand back what it returned, re-raising a
 /// panic on the calling thread so libtest still attributes it to the test.
-fn on_compile_worker<R: Send + 'static>(f: impl FnOnce() -> R + Send + 'static) -> R {
+pub fn on_compile_worker<R: Send + 'static>(f: impl FnOnce() -> R + Send + 'static) -> R {
     let worker = take_compile_worker();
     let returning = worker.clone();
     let (sender, receiver) = std::sync::mpsc::channel();

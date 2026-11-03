@@ -365,17 +365,15 @@ type "functype//core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<c
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec0" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(128)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0$sroa[self.buf]" = fn(ref "core:prelude/string.wado//String", ref Array<u8>, i32);  // TypeId(129)
+type "functype//wasi/task-return" = fn(i32);  // TypeId(129)
 
-type "functype//wasi/task-return" = fn(i32);  // TypeId(130)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(130)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(131)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(131)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(132)
+type "functype//wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode" = fn(i32);  // TypeId(132)
 
-type "functype//wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode" = fn(i32);  // TypeId(133)
-
-type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(134)
+type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(133)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -408,9 +406,9 @@ fn "effect_handler_method_without_receiver.wado/$test_0_a_concrete_handler_metho
     let $local_1: ref null "effect_handler_method_without_receiver.wado//$Dispatch_effect_handler_method_without_receiver.wado/Greeting";
     let $local_2: ref "effect_handler_method_without_receiver.wado//$Dispatch_effect_handler_method_without_receiver.wado/Greeting";
     let i: i32;
-    let $av_22: i32;
+    let $av_23: i32;
     global:effect_handler_method_without_receiver.wado::$effect_effect_handler_method_without_receiver.wado/Greeting = struct.new "effect_handler_method_without_receiver.wado//$Dispatch_effect_handler_method_without_receiver.wado/Greeting" { outer: local.tee $save_effect_handler_method_without_receiver.wado/Greeting(global:effect_handler_method_without_receiver.wado::$effect_effect_handler_method_without_receiver.wado/Greeting), op_hello: struct.new "canonical//CanonicalClosure_0" { env: struct.new "effect_handler_method_without_receiver.wado//$Closure_0" {}, func: ref.func "closure/effect_handler_method_without_receiver.wado/$closure_wrapper_0" } };
-    $av_22 = local.tee name($inline__effect_dispatch__effect_handler_method_without_receiver_wado_Greeting__hello_1: block -> ref "core:prelude/string.wado//String" {
+    $av_23 = local.tee name($inline__effect_dispatch__effect_handler_method_without_receiver_wado_Greeting__hello_1: block -> ref "core:prelude/string.wado//String" {
         name = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(120), used: 1 };
         if @likely(ref.is_null(local.tee $local_1(global:effect_handler_method_without_receiver.wado::$effect_effect_handler_method_without_receiver.wado/Greeting)) == 0) {
             global:effect_handler_method_without_receiver.wado::$effect_effect_handler_method_without_receiver.wado/Greeting = local.tee $local_2(ref.as_non_null($local_1)).outer;
@@ -426,33 +424,31 @@ fn "effect_handler_method_without_receiver.wado/$test_0_a_concrete_handler_metho
         }
         unreachable;
     }).used;
-    $with_result_6 = struct.new "core:prelude/string.wado//String" { repr: let $array_clone_src_3: ref Array<u8>; $array_clone_src_3 = name.repr; let $array_clone_dst_4: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_4(builtin::array_new<u8>($av_22)), 0, $array_clone_src_3, 0, $av_22); $array_clone_dst_4, used: $av_22 };
+    $with_result_6 = struct.new "core:prelude/string.wado//String" { repr: let $array_clone_src_3: ref Array<u8>; $array_clone_src_3 = name.repr; let $array_clone_dst_4: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_4(builtin::array_new<u8>($av_23)), 0, $array_clone_src_3, 0, $av_23); $array_clone_dst_4, used: $av_23 };
     global:effect_handler_method_without_receiver.wado::$effect_effect_handler_method_without_receiver.wado/Greeting = $save_effect_handler_method_without_receiver.wado/Greeting;
     name = ref.as_non_null($with_result_6);
     if @unlikely($inline_core_prelude_array_wado_seq_eq_u8__3: block -> bool {
-        $array_clone_src_3 = name.repr;
-        $av_22 = name.used;
-        $array_clone_dst_4 = global:effect_handler_method_without_receiver.wado::$const_obj_0;
-        if $av_22 != 11 {
+        if local.tee $av_23(name.used) != 11 {
             break $inline_core_prelude_array_wado_seq_eq_u8__3: 0;
         }
         i = 0;
+        $array_clone_src_3 = name.repr;
         b4: block {
             l5: loop {
-                break_if b4 (((i >= $av_22) | ((i + 1) >= $av_22)) | (((i + 1) + 1) >= $av_22)) | ((((i + 1) + 1) + 1) >= $av_22);
-                if builtin::array_get_value<u8>($array_clone_src_3, i) != builtin::array_get_value<u8>($array_clone_dst_4, i) {
+                break_if b4 (((i >= $av_23) | ((i + 1) >= $av_23)) | (((i + 1) + 1) >= $av_23)) | ((((i + 1) + 1) + 1) >= $av_23);
+                if builtin::array_get_value<u8>($array_clone_src_3, i) != builtin::array_get_value<u8>(global:effect_handler_method_without_receiver.wado::$const_obj_0, i) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__3: 0;
                 }
                 i = i + 1;
-                if builtin::array_get_value<u8>($array_clone_src_3, i) != builtin::array_get_value<u8>($array_clone_dst_4, i) {
+                if builtin::array_get_value<u8>($array_clone_src_3, i) != builtin::array_get_value<u8>(global:effect_handler_method_without_receiver.wado::$const_obj_0, i) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__3: 0;
                 }
                 i = i + 1;
-                if builtin::array_get_value<u8>($array_clone_src_3, i) != builtin::array_get_value<u8>($array_clone_dst_4, i) {
+                if builtin::array_get_value<u8>($array_clone_src_3, i) != builtin::array_get_value<u8>(global:effect_handler_method_without_receiver.wado::$const_obj_0, i) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__3: 0;
                 }
                 i = i + 1;
-                if builtin::array_get_value<u8>($array_clone_src_3, i) != builtin::array_get_value<u8>($array_clone_dst_4, i) {
+                if builtin::array_get_value<u8>($array_clone_src_3, i) != builtin::array_get_value<u8>(global:effect_handler_method_without_receiver.wado::$const_obj_0, i) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__3: 0;
                 }
                 i = i + 1;
@@ -461,8 +457,8 @@ fn "effect_handler_method_without_receiver.wado/$test_0_a_concrete_handler_metho
         };
         b10: block {
             l11: loop {
-                break_if b10 i >= $av_22;
-                if builtin::array_get_value<u8>($array_clone_src_3, i) != builtin::array_get_value<u8>($array_clone_dst_4, i) {
+                break_if b10 i >= $av_23;
+                if builtin::array_get_value<u8>($array_clone_src_3, i) != builtin::array_get_value<u8>(global:effect_handler_method_without_receiver.wado::$const_obj_0, i) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__3: 0;
                 }
                 i = i + 1;
@@ -488,9 +484,9 @@ fn "effect_handler_method_without_receiver.wado/$test_1_a_generic_handler_method
     let $local_1: ref null "effect_handler_method_without_receiver.wado//$Dispatch_effect_handler_method_without_receiver.wado/Greeting";
     let $local_2: ref "effect_handler_method_without_receiver.wado//$Dispatch_effect_handler_method_without_receiver.wado/Greeting";
     let i: i32;
-    let $av_22: i32;
+    let $av_23: i32;
     global:effect_handler_method_without_receiver.wado::$effect_effect_handler_method_without_receiver.wado/Greeting = struct.new "effect_handler_method_without_receiver.wado//$Dispatch_effect_handler_method_without_receiver.wado/Greeting" { outer: local.tee $save_effect_handler_method_without_receiver.wado/Greeting(global:effect_handler_method_without_receiver.wado::$effect_effect_handler_method_without_receiver.wado/Greeting), op_hello: struct.new "canonical//CanonicalClosure_0" { env: struct.new "effect_handler_method_without_receiver.wado//$Closure_1" {}, func: ref.func "closure/effect_handler_method_without_receiver.wado/$closure_wrapper_1" } };
-    $av_22 = local.tee name($inline__effect_dispatch__effect_handler_method_without_receiver_wado_Greeting__hello_1: block -> ref "core:prelude/string.wado//String" {
+    $av_23 = local.tee name($inline__effect_dispatch__effect_handler_method_without_receiver_wado_Greeting__hello_1: block -> ref "core:prelude/string.wado//String" {
         name = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(121), used: 1 };
         if @likely(ref.is_null(local.tee $local_1(global:effect_handler_method_without_receiver.wado::$effect_effect_handler_method_without_receiver.wado/Greeting)) == 0) {
             global:effect_handler_method_without_receiver.wado::$effect_effect_handler_method_without_receiver.wado/Greeting = local.tee $local_2(ref.as_non_null($local_1)).outer;
@@ -506,33 +502,31 @@ fn "effect_handler_method_without_receiver.wado/$test_1_a_generic_handler_method
         }
         unreachable;
     }).used;
-    $with_result_6 = struct.new "core:prelude/string.wado//String" { repr: let $array_clone_src_3: ref Array<u8>; $array_clone_src_3 = name.repr; let $array_clone_dst_4: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_4(builtin::array_new<u8>($av_22)), 0, $array_clone_src_3, 0, $av_22); $array_clone_dst_4, used: $av_22 };
+    $with_result_6 = struct.new "core:prelude/string.wado//String" { repr: let $array_clone_src_3: ref Array<u8>; $array_clone_src_3 = name.repr; let $array_clone_dst_4: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_4(builtin::array_new<u8>($av_23)), 0, $array_clone_src_3, 0, $av_23); $array_clone_dst_4, used: $av_23 };
     global:effect_handler_method_without_receiver.wado::$effect_effect_handler_method_without_receiver.wado/Greeting = $save_effect_handler_method_without_receiver.wado/Greeting;
     name = ref.as_non_null($with_result_6);
     if @unlikely($inline_core_prelude_array_wado_seq_eq_u8__3: block -> bool {
-        $array_clone_src_3 = name.repr;
-        $av_22 = name.used;
-        $array_clone_dst_4 = global:effect_handler_method_without_receiver.wado::$const_obj_2;
-        if $av_22 != 4 {
+        if local.tee $av_23(name.used) != 4 {
             break $inline_core_prelude_array_wado_seq_eq_u8__3: 0;
         }
         i = 0;
+        $array_clone_src_3 = name.repr;
         b17: block {
             l18: loop {
-                break_if b17 (((i >= $av_22) | ((i + 1) >= $av_22)) | (((i + 1) + 1) >= $av_22)) | ((((i + 1) + 1) + 1) >= $av_22);
-                if builtin::array_get_value<u8>($array_clone_src_3, i) != builtin::array_get_value<u8>($array_clone_dst_4, i) {
+                break_if b17 (((i >= $av_23) | ((i + 1) >= $av_23)) | (((i + 1) + 1) >= $av_23)) | ((((i + 1) + 1) + 1) >= $av_23);
+                if builtin::array_get_value<u8>($array_clone_src_3, i) != builtin::array_get_value<u8>(global:effect_handler_method_without_receiver.wado::$const_obj_2, i) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__3: 0;
                 }
                 i = i + 1;
-                if builtin::array_get_value<u8>($array_clone_src_3, i) != builtin::array_get_value<u8>($array_clone_dst_4, i) {
+                if builtin::array_get_value<u8>($array_clone_src_3, i) != builtin::array_get_value<u8>(global:effect_handler_method_without_receiver.wado::$const_obj_2, i) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__3: 0;
                 }
                 i = i + 1;
-                if builtin::array_get_value<u8>($array_clone_src_3, i) != builtin::array_get_value<u8>($array_clone_dst_4, i) {
+                if builtin::array_get_value<u8>($array_clone_src_3, i) != builtin::array_get_value<u8>(global:effect_handler_method_without_receiver.wado::$const_obj_2, i) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__3: 0;
                 }
                 i = i + 1;
-                if builtin::array_get_value<u8>($array_clone_src_3, i) != builtin::array_get_value<u8>($array_clone_dst_4, i) {
+                if builtin::array_get_value<u8>($array_clone_src_3, i) != builtin::array_get_value<u8>(global:effect_handler_method_without_receiver.wado::$const_obj_2, i) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__3: 0;
                 }
                 i = i + 1;
@@ -541,8 +535,8 @@ fn "effect_handler_method_without_receiver.wado/$test_1_a_generic_handler_method
         };
         b23: block {
             l24: loop {
-                break_if b23 i >= $av_22;
-                if builtin::array_get_value<u8>($array_clone_src_3, i) != builtin::array_get_value<u8>($array_clone_dst_4, i) {
+                break_if b23 i >= $av_23;
+                if builtin::array_get_value<u8>($array_clone_src_3, i) != builtin::array_get_value<u8>(global:effect_handler_method_without_receiver.wado::$const_obj_2, i) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__3: 0;
                 }
                 i = i + 1;
@@ -1536,7 +1530,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::internal_set_byte_
     self_15 = self.used;
     if @unlikely(index >=u self_15) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_at$contract_report0"(index, self_15, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/string.wado:571"), used: 28 });
+        "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_at$contract_report0"(index, self_15, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/string.wado:558"), used: 28 });
         unreachable;
     }
     builtin::array_set_u8(self.repr, index, value);
@@ -1583,7 +1577,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::push"(self, c) {
         new_used = self.used;
         if @unlikely(start_9 >=u new_used) {
             cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_at$contract_report0"(start_9, new_used, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/string.wado:571"), used: 28 });
+            "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_at$contract_report0"(start_9, new_used, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/string.wado:558"), used: 28 });
             unreachable;
         }
         builtin::array_set_u8(self.repr, start_9, c);
@@ -1630,7 +1624,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_byte"(s
     new_used = self.used;
     if @unlikely(start_6 >=u new_used) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_at$contract_report0"(start_6, new_used, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/string.wado:571"), used: 28 });
+        "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_at$contract_report0"(start_6, new_used, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/string.wado:558"), used: 28 });
         unreachable;
     }
     builtin::array_set_u8(self.repr, start_6, byte);
@@ -1916,7 +1910,7 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelud
             $av_289 = $av_289 - $av_290;
             if @unlikely(0 >= $av_289) {
                 cold_path;
-                "core:prelude/string.wado/core:prelude/string.wado/StrSlice::byte_at$contract_report0"(0, $av_289, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/string.wado:1770"), used: 29 });
+                "core:prelude/string.wado/core:prelude/string.wado/StrSlice::byte_at$contract_report0"(0, $av_289, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/string.wado:1757"), used: 29 });
                 unreachable;
             }
             if (local.tee $av_289(builtin::array_get_value<u8>(content.repr, $av_290)) == 45) | ($av_289 == 43) {
@@ -2487,9 +2481,24 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<core:prelud
 
 fn "effect_handler_method_without_receiver.wado/effect_handler_method_without_receiver.wado/$Closure_0::$call$dae[self]"(name) {
     let out_5: ref "core:prelude/string.wado//String";
-    let repr_34: ref Array<u8>;
-    return out_5 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(26), used: 0 }, repr_34 = global:effect_handler_method_without_receiver.wado::$const_obj_6, out_5.used = 10, builtin::array_copy<u8>(out_5.repr, 0, repr_34, 0, 10), $inline_core_prelude_string_wado_String__format_effect_handler_method_without_receiver_wado__tmpl_5d09a9f8d325483d__core_prelude_string_wado_String___spec0_spec0_sroa_t_h0__0__$inline_core_prelude_format_wado_pad_text_core_prelude_string_wado_String__spec0_sroa_f_buf__0: block {
-        "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0$sroa[self.buf]"(out_5, name.repr, name.used);
+    let n_205: i32;
+    let new_used_209: i32;
+    let start_210: i32;
+    let $sroa_view_repr_462: ref Array<u8>;
+    return out_5 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(26), used: 0 }, $sroa_view_repr_462 = global:effect_handler_method_without_receiver.wado::$const_obj_6, out_5.used = 10, builtin::array_copy<u8>(out_5.repr, 0, $sroa_view_repr_462, 0, 10), $inline_core_prelude_string_wado_String__format_effect_handler_method_without_receiver_wado__tmpl_5d09a9f8d325483d__core_prelude_string_wado_String___spec0_spec0_sroa_t_h0__0__$inline_core_prelude_format_wado_pad_text_core_prelude_string_wado_String__spec0_sroa_f_buf__0: block {
+        $inline_core_prelude_string_wado_String__format_effect_handler_method_without_receiver_wado__tmpl_5d09a9f8d325483d__core_prelude_string_wado_String___spec0_spec0_sroa_t_h0__0__$inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__1: block {
+            $inline_core_prelude_string_wado_String__format_effect_handler_method_without_receiver_wado__tmpl_5d09a9f8d325483d__core_prelude_string_wado_String___spec0_spec0_sroa_t_h0__0__$inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__1__$inline_core_prelude_string_wado_String__internal_push_string_2: block {
+                break_if $inline_core_prelude_string_wado_String__format_effect_handler_method_without_receiver_wado__tmpl_5d09a9f8d325483d__core_prelude_string_wado_String___spec0_spec0_sroa_t_h0__0__$inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__1__$inline_core_prelude_string_wado_String__internal_push_string_2 local.tee n_205(name.used) == 0;
+                if @unlikely(local.tee new_used_209(10 + n_205) > 26) {
+                    cold_path;
+                    "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_5, new_used_209);
+                }
+                start_210 = out_5.used;
+                out_5.used = new_used_209;
+                builtin::array_copy<u8>(out_5.repr, start_210, name.repr, 0, n_205);
+            };
+            break $inline_core_prelude_string_wado_String__format_effect_handler_method_without_receiver_wado__tmpl_5d09a9f8d325483d__core_prelude_string_wado_String___spec0_spec0_sroa_t_h0__0__$inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__1;
+        };
         break $inline_core_prelude_string_wado_String__format_effect_handler_method_without_receiver_wado__tmpl_5d09a9f8d325483d__core_prelude_string_wado_String___spec0_spec0_sroa_t_h0__0__$inline_core_prelude_format_wado_pad_text_core_prelude_string_wado_String__spec0_sroa_f_buf__0;
     }, $inline_core_prelude_string_wado_String__format_effect_handler_method_without_receiver_wado__tmpl_5d09a9f8d325483d__core_prelude_string_wado_String___spec0_spec0_sroa_t_h0__0__$inline_core_prelude_string_wado_String__internal_push_view_35: block {
         break $inline_core_prelude_string_wado_String__format_effect_handler_method_without_receiver_wado__tmpl_5d09a9f8d325483d__core_prelude_string_wado_String___spec0_spec0_sroa_t_h0__0__$inline_core_prelude_string_wado_String__internal_push_view_35;
@@ -2498,9 +2507,24 @@ fn "effect_handler_method_without_receiver.wado/effect_handler_method_without_re
 
 fn "effect_handler_method_without_receiver.wado/effect_handler_method_without_receiver.wado/$Closure_1::$call$dae[self]"(name) {
     let out_5: ref "core:prelude/string.wado//String";
-    let repr_34: ref Array<u8>;
-    return out_5 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(19), used: 0 }, repr_34 = global:effect_handler_method_without_receiver.wado::$const_obj_7, out_5.used = 3, builtin::array_copy<u8>(out_5.repr, 0, repr_34, 0, 3), $inline_core_prelude_string_wado_String__format_effect_handler_method_without_receiver_wado__tmpl_5d09a9f8d325483d__core_prelude_string_wado_String___spec0_spec1_sroa_t_h0__0__$inline_core_prelude_format_wado_pad_text_core_prelude_string_wado_String__spec0_sroa_f_buf__0: block {
-        "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0$sroa[self.buf]"(out_5, name.repr, name.used);
+    let n_205: i32;
+    let new_used_209: i32;
+    let start_210: i32;
+    let $sroa_view_repr_462: ref Array<u8>;
+    return out_5 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(19), used: 0 }, $sroa_view_repr_462 = global:effect_handler_method_without_receiver.wado::$const_obj_7, out_5.used = 3, builtin::array_copy<u8>(out_5.repr, 0, $sroa_view_repr_462, 0, 3), $inline_core_prelude_string_wado_String__format_effect_handler_method_without_receiver_wado__tmpl_5d09a9f8d325483d__core_prelude_string_wado_String___spec0_spec1_sroa_t_h0__0__$inline_core_prelude_format_wado_pad_text_core_prelude_string_wado_String__spec0_sroa_f_buf__0: block {
+        $inline_core_prelude_string_wado_String__format_effect_handler_method_without_receiver_wado__tmpl_5d09a9f8d325483d__core_prelude_string_wado_String___spec0_spec1_sroa_t_h0__0__$inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__1: block {
+            $inline_core_prelude_string_wado_String__format_effect_handler_method_without_receiver_wado__tmpl_5d09a9f8d325483d__core_prelude_string_wado_String___spec0_spec1_sroa_t_h0__0__$inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__1__$inline_core_prelude_string_wado_String__internal_push_string_2: block {
+                break_if $inline_core_prelude_string_wado_String__format_effect_handler_method_without_receiver_wado__tmpl_5d09a9f8d325483d__core_prelude_string_wado_String___spec0_spec1_sroa_t_h0__0__$inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__1__$inline_core_prelude_string_wado_String__internal_push_string_2 local.tee n_205(name.used) == 0;
+                if @unlikely(local.tee new_used_209(3 + n_205) > 19) {
+                    cold_path;
+                    "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_5, new_used_209);
+                }
+                start_210 = out_5.used;
+                out_5.used = new_used_209;
+                builtin::array_copy<u8>(out_5.repr, start_210, name.repr, 0, n_205);
+            };
+            break $inline_core_prelude_string_wado_String__format_effect_handler_method_without_receiver_wado__tmpl_5d09a9f8d325483d__core_prelude_string_wado_String___spec0_spec1_sroa_t_h0__0__$inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__1;
+        };
         break $inline_core_prelude_string_wado_String__format_effect_handler_method_without_receiver_wado__tmpl_5d09a9f8d325483d__core_prelude_string_wado_String___spec0_spec1_sroa_t_h0__0__$inline_core_prelude_format_wado_pad_text_core_prelude_string_wado_String__spec0_sroa_f_buf__0;
     }, $inline_core_prelude_string_wado_String__format_effect_handler_method_without_receiver_wado__tmpl_5d09a9f8d325483d__core_prelude_string_wado_String___spec0_spec1_sroa_t_h0__0__$inline_core_prelude_string_wado_String__internal_push_view_35: block {
         break $inline_core_prelude_string_wado_String__format_effect_handler_method_without_receiver_wado__tmpl_5d09a9f8d325483d__core_prelude_string_wado_String___spec0_spec1_sroa_t_h0__0__$inline_core_prelude_string_wado_String__internal_push_view_35;
@@ -2510,12 +2534,12 @@ fn "effect_handler_method_without_receiver.wado/effect_handler_method_without_re
 fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_char_n$sroa[self.buf]"(self, c, n) {
     let i: i32;
     i = 0;
-    b330: block {
-        l331: loop {
-            break_if b330 i >= n;
+    b332: block {
+        l333: loop {
+            break_if b332 i >= n;
             "core:prelude/string.wado/core:prelude/string.wado/String::push"(self, c);
             i = i + 1;
-            continue l331;
+            continue l333;
         };
     };
 }
@@ -2660,22 +2684,6 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string
     start_9 = out.used;
     out.used = new_used;
     builtin::array_copy<u8>(out.repr, start_9, self.repr, 0, 3);
-}
-
-fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0$sroa[self.buf]"(self, $mv$content$repr, $mv$content$used) {
-    let new_used_48: i32;
-    let start_49: i32;
-    $inline_core_prelude_string_wado_String__internal_push_string_2: block {
-        break_if $inline_core_prelude_string_wado_String__internal_push_string_2 $mv$content$used == 0;
-        if @unlikely(local.tee new_used_48(self.used + $mv$content$used) > builtin::array_len(self.repr)) {
-            cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, new_used_48);
-        }
-        start_49 = self.used;
-        self.used = new_used_48;
-        builtin::array_copy<u8>(self.repr, start_49, $mv$content$repr, 0, $mv$content$used);
-    };
-    return;
 }
 
 fn "closure/effect_handler_method_without_receiver.wado/$closure_wrapper_0"($env, $p0) {

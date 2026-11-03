@@ -782,13 +782,11 @@ fn "cm_async_wrap_same_named_interfaces.wado/$cm_binding__example:a/fetch#get"(u
     let $url_flat1: i32;
     let $args: i32;
     let $subtask: ref null "core:prelude/types.wado//Option<core:prelude/types.wado/Subtask>";
-    let bytes: ref Array<u8>;
     let ptr_12: i32;
     let self_13: i32;
     self_13 = url.used;
-    bytes = url.repr;
     ptr_12 = "mem/realloc"(0, 0, 1, self_13);
-    "core:rt/gc_array_to_memory$spec0$dae[src_start]"(bytes, ptr_12, self_13);
+    "core:rt/gc_array_to_memory$spec0$dae[src_start]"(url.repr, ptr_12, self_13);
     $url_packed = builtin::i64_extend_i32_u(ptr_12) | (builtin::i64_extend_i32_s(self_13) << 32_i64);
     self_13 = "mem/realloc"(0, 0, 4, 4);
     ptr_12 = builtin::i32_wrap_i64($url_packed);
@@ -808,13 +806,11 @@ fn "cm_async_wrap_same_named_interfaces.wado/$cm_binding__example:b/fetch#get"(u
     let $url_flat1: i32;
     let $args: i32;
     let $subtask: ref null "core:prelude/types.wado//Option<core:prelude/types.wado/Subtask>";
-    let bytes: ref Array<u8>;
     let ptr_12: i32;
     let self_13: i32;
     self_13 = url.used;
-    bytes = url.repr;
     ptr_12 = "mem/realloc"(0, 0, 1, self_13);
-    "core:rt/gc_array_to_memory$spec0$dae[src_start]"(bytes, ptr_12, self_13);
+    "core:rt/gc_array_to_memory$spec0$dae[src_start]"(url.repr, ptr_12, self_13);
     $url_packed = builtin::i64_extend_i32_u(ptr_12) | (builtin::i64_extend_i32_s(self_13) << 32_i64);
     self_13 = "mem/realloc"(0, 0, 4, 4);
     ptr_12 = builtin::i32_wrap_i64($url_packed);
@@ -2064,7 +2060,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::internal_set_byte_
     self_15 = self.used;
     if @unlikely(index >=u self_15) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_at$contract_report0"(index, self_15, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/string.wado:571"), used: 28 });
+        "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_at$contract_report0"(index, self_15, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/string.wado:558"), used: 28 });
         unreachable;
     }
     builtin::array_set_u8(self.repr, index, value);
@@ -2161,7 +2157,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/StrSlice^core:prelude/stri
         $v1 = self.end - local.tee $load_1(self.start);
         if @unlikely(((0 <= index) & (index < $v1)) == 0) {
             cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/StrSlice::byte_at$contract_report0"(index, $v1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/string.wado:1770"), used: 29 });
+            "core:prelude/string.wado/core:prelude/string.wado/StrSlice::byte_at$contract_report0"(index, $v1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/string.wado:1757"), used: 29 });
             unreachable;
         }
         "core:prelude/string.wado/core:prelude/string.wado/StrSlice::byte_at$unchecked"(self.repr, $load_1, index);

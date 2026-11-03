@@ -1,0 +1,20 @@
+// A block whose value a field access projects is evaluated first, so its
+// leading statements hoist to the binding like a bare block's do.
+// `sroa_param` narrows `read` to the field `&&x` boxes, and the call it
+// rewrites passes `{ $v0 = Box { value: x }; $v0 }.value`: left wrapped, the
+// assert's operands never folded and its failure message stayed in the module.
+
+fn read(r: &&i32) -> i32 {
+    return **r;
+}
+
+test "a field of a block-valued reference folds" {
+    let x = 1;
+    assert read(&&x) == 1;
+}
+
+__DATA__
+{
+    "test": {},
+    "wir_not_expect:O2": ["String::format"]
+}
