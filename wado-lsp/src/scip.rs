@@ -17,12 +17,14 @@ use wado_compiler::ast::{
     walk_pattern,
 };
 use wado_compiler::module_source::ModuleSource;
+use wado_compiler::semantics::Semantics;
 use wado_compiler::token::Span;
 use wado_compiler::unparse::unparse_type_into;
 
 use crate::hover::find_hover_opts;
 use crate::location::module_uri;
 use crate::query::QueryContext;
+use crate::uri::percent_decode;
 
 /// `SymbolInformation.Kind` values from `scip.proto`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -91,22 +93,27 @@ pub(crate) fn document(ctx: &QueryContext, root: &str) -> ScipDocument {
         root,
         modules: IndexMap::new(),
     };
-    let own = names.declarations(entry);
 
     let mut occurrences = Vec::new();
     let mut symbols = Vec::new();
-    for decl in own.values() {
+    for decl in names.module_decls(entry).values() {
+        let local = decl.is_local();
         occurrences.push(Occurrence {
             range: scip_range(&decl.name_span),
             symbol: decl.symbol.clone(),
             roles: ROLE_DEFINITION,
-            enclosing_range: (!decl.is_local()).then(|| scip_range(&decl.span)),
+            enclosing_range: (!local).then(|| scip_range(&decl.span)),
         });
         symbols.push(SymbolInformation {
             symbol: decl.symbol.clone(),
             kind: decl.kind,
             display_name: decl.name.clone(),
-            signature: signature(ctx, &decl.name_span),
+            // No other document names a local, so its signature finds no reader.
+            signature: if local {
+                None
+            } else {
+                signature(ctx, &decl.name_span)
+            },
             enclosing_symbol: decl.enclosing.clone(),
         });
     }
@@ -193,14 +200,25 @@ struct SymbolNames<'a, 'c> {
 }
 
 impl SymbolNames<'_, '_> {
-    fn declarations(&mut self, module: &ModuleSource) -> IndexMap<AstId, Decl> {
+    /// `module`'s declarations, collected on the first ask.
+    fn module_decls(&mut self, module: &ModuleSource) -> &IndexMap<AstId, Decl> {
+        if !self.modules.contains_key(module) {
+            let decls = self.collect(module);
+            self.modules.insert(module.clone(), decls);
+        }
+        &self.modules[module]
+    }
+
+    fn collect(&self, module: &ModuleSource) -> IndexMap<AstId, Decl> {
         let Some(ast) = self.ctx.sem.modules.get(module) else {
             return IndexMap::new();
         };
         let mut collector = DeclCollector {
+            sem: self.ctx.sem,
             module: format!("wado . {} . ", escape_package(&self.module_name(module))),
             decls: IndexMap::new(),
             owners: Vec::new(),
+            bodies: 0,
             locals: 0,
         };
         for item in &ast.items {
@@ -211,20 +229,18 @@ impl SymbolNames<'_, '_> {
 
     fn symbol_of(&mut self, def: AstId) -> Option<String> {
         let module = self.ctx.sem.module_of_id(def)?.clone();
-        if !self.modules.contains_key(&module) {
-            let decls = self.declarations(&module);
-            self.modules.insert(module.clone(), decls);
-        }
-        let decl = self.modules[&module].get(&def)?;
+        let is_entry = module == *self.ctx.entry();
+        let decl = self.module_decls(&module).get(&def)?;
         // A local's number counts within its own document only.
-        (module == *self.ctx.entry() || !decl.is_local()).then(|| decl.symbol.clone())
+        (is_entry || !decl.is_local()).then(|| decl.symbol.clone())
     }
 
-    /// A file's path from the root, or a module's own name (`core:json`).
+    /// A file's path from the root, as the filesystem spells it, or a module's
+    /// own name (`core:json`).
     fn module_name(&self, module: &ModuleSource) -> String {
         let uri = module_uri(self.ctx.entry(), module, self.ctx.uri);
         match uri.strip_prefix(self.root) {
-            Some(relative) => relative.to_string(),
+            Some(relative) => percent_decode(relative),
             None => uri,
         }
     }
@@ -248,31 +264,56 @@ fn escape_name(name: &str) -> String {
     }
 }
 
-fn type_text(ty: &ast::Type) -> String {
-    let mut out = String::new();
-    unparse_type_into(ty, &mut out);
-    out
+/// The name a type is declared under, without its arguments: `Pair` of
+/// `Pair<T>`, as the type's own symbol names it. A type with no name (a
+/// tuple, a reference) is written out whole.
+fn head_name(ty: &ast::Type) -> String {
+    match ty {
+        ast::Type::Named(ast::NamedType { name, .. })
+        | ast::Type::Generic(ast::GenericType { name, .. }) => name
+            .rsplit("::")
+            .next()
+            .expect("rsplit yields at least one part")
+            .to_string(),
+        ast::Type::NamespacedGeneric(t) => t.name.clone(),
+        ast::Type::Function(_)
+        | ast::Type::Tuple(_)
+        | ast::Type::Reference(_)
+        | ast::Type::MutReference(_)
+        | ast::Type::TypePackSpread(..)
+        | ast::Type::Infer(_)
+        | ast::Type::Error(_) => {
+            let mut out = String::new();
+            unparse_type_into(ty, &mut out);
+            out
+        }
+    }
 }
 
 /// Names each declaration of one module as an AST walk reaches it.
-struct DeclCollector {
+struct DeclCollector<'s> {
+    sem: &'s Semantics,
     /// The symbol prefix: scheme and package.
     module: String,
     decls: IndexMap<AstId, Decl>,
     /// The declarations the walk is inside, innermost last, with the
     /// descriptor path a member's own descriptor follows.
     owners: Vec<String>,
+    /// How many bodies (a function's, a test's) the walk is inside. A
+    /// declaration in one is local, whatever its kind.
+    bodies: u32,
     locals: u32,
 }
 
-impl DeclCollector {
+impl DeclCollector<'_> {
     fn path(&self) -> &str {
         self.owners.last().map_or("", String::as_str)
     }
 
-    /// Whether the walk is inside a body, where a binding is local.
-    fn in_body(&self) -> bool {
-        self.owners.iter().any(|path| path.ends_with(")."))
+    fn in_body(&mut self, walk: impl FnOnce(&mut Self)) {
+        self.bodies += 1;
+        walk(self);
+        self.bodies -= 1;
     }
 
     fn enclosing(&self) -> String {
@@ -282,7 +323,9 @@ impl DeclCollector {
         }
     }
 
-    fn global(
+    /// Declare `id` under the owner path, or as a local inside a body; the
+    /// path a member of it follows either way.
+    fn declare(
         &mut self,
         id: AstId,
         name: &str,
@@ -292,6 +335,10 @@ impl DeclCollector {
         span: Span,
     ) -> String {
         let path = format!("{}{descriptor}", self.path());
+        if self.bodies > 0 {
+            self.local(id, name, kind, name_span);
+            return path;
+        }
         self.decls.insert(
             id,
             Decl {
@@ -309,7 +356,7 @@ impl DeclCollector {
     /// A term: a field, a case, a global.
     fn term(&mut self, id: AstId, name: &str, kind: SymbolKind, name_span: Span, span: Span) {
         let descriptor = format!("{}.", escape_name(name));
-        self.global(id, name, descriptor, kind, name_span, span);
+        self.declare(id, name, descriptor, kind, name_span, span);
     }
 
     fn local(&mut self, id: AstId, name: &str, kind: SymbolKind, name_span: Span) {
@@ -344,7 +391,7 @@ impl DeclCollector {
         name_span: Span,
         span: Span,
     ) {
-        let path = self.global(
+        let path = self.declare(
             id,
             name,
             format!("{}#", escape_name(name)),
@@ -385,7 +432,7 @@ impl DeclCollector {
     }
 }
 
-impl AstVisitor<'_> for DeclCollector {
+impl AstVisitor<'_> for DeclCollector<'_> {
     fn visit_item(&mut self, item: &Item) {
         match item {
             Item::Function(_) => walk_item(self, item),
@@ -440,61 +487,52 @@ impl AstVisitor<'_> for DeclCollector {
                 walk_item(self, item);
             }
             Item::Impl(imp) => {
-                let ty = type_text(&imp.ty);
+                let ty = escape_name(&head_name(&imp.ty));
                 let path = match &imp.trait_type {
-                    None => format!("{}#", escape_name(&ty)),
-                    Some(tr) => format!(
-                        "impl#[{}][{}]",
-                        escape_name(&ty),
-                        escape_name(&type_text(tr))
-                    ),
+                    None => format!("{ty}#"),
+                    Some(tr) => format!("impl#[{ty}][{}]", escape_name(&head_name(tr))),
                 };
                 self.owners.push(path);
                 self.type_params(&imp.type_params);
                 walk_item(self, item);
                 self.owners.pop();
             }
-            Item::Use(_)
-            | Item::World(_)
-            | Item::Test(_)
-            | Item::TupleTypeDecl(_)
-            | Item::Error(_) => {
+            Item::Test(_) => self.in_body(|this| walk_item(this, item)),
+            Item::Use(_) | Item::World(_) | Item::TupleTypeDecl(_) | Item::Error(_) => {
                 walk_item(self, item);
             }
         }
     }
 
     fn visit_function(&mut self, func: &Function) {
-        let path = if self.in_body() {
-            self.local(func.id, &func.name, SymbolKind::Function, func.name_span);
-            None
+        let kind = if self.owners.is_empty() {
+            SymbolKind::Function
         } else {
-            let kind = if self.owners.is_empty() {
-                SymbolKind::Function
-            } else {
-                SymbolKind::Method
-            };
-            Some(self.global(
-                func.id,
-                &func.name,
-                format!("{}().", escape_name(&func.name)),
-                kind,
-                func.name_span,
-                func.span,
-            ))
+            SymbolKind::Method
         };
-        let path = path.unwrap_or_else(|| format!("{}().", self.path()));
+        let path = self.declare(
+            func.id,
+            &func.name,
+            format!("{}().", escape_name(&func.name)),
+            kind,
+            func.name_span,
+            func.span,
+        );
         self.owners.push(path);
         self.type_params(&func.type_params);
         for p in &func.params {
             self.local(p.id, &p.name, SymbolKind::Parameter, p.name_span);
         }
-        walk_function(self, func);
+        self.in_body(|this| walk_function(this, func));
         self.owners.pop();
     }
 
+    /// A bare name in a pattern binds only where it names no case or constant,
+    /// which resolution alone knows.
     fn visit_pattern(&mut self, pat: &Pattern) {
-        if let Pattern::Ident { id, name, span } | Pattern::MutIdent { id, name, span } = pat {
+        if let Pattern::Ident { id, name, span } | Pattern::MutIdent { id, name, span } = pat
+            && self.sem.symbol_at(*id).is_some()
+        {
             self.local(*id, name, SymbolKind::Variable, *span);
         }
         walk_pattern(self, pat);
@@ -696,6 +734,72 @@ fn f(p: P) -> i32 {
                 .expect("definition of get");
             assert_eq!(def.range, vec![2, 7, 10]);
             assert_eq!(def.enclosing_range, Some(vec![2, 4, 43]));
+        });
+    }
+
+    #[test]
+    fn a_pattern_naming_a_case_or_a_constant_declares_nothing() {
+        futures::executor::block_on(async {
+            let d = doc("enum Color { Red, Blue }
+global LIMIT: i32 = 3;
+fn f(c: Color, n: i32) -> i32 {
+    let a = match c { Red => 1, Blue => 2 };
+    return match n { LIMIT => a, m => m };
+}
+")
+            .await;
+            let names: Vec<&str> = d.symbols.iter().map(|s| s.display_name.as_str()).collect();
+            assert_eq!(
+                names.iter().filter(|n| **n == "Red").count(),
+                1,
+                "{names:?}"
+            );
+            assert_eq!(
+                names.iter().filter(|n| **n == "LIMIT").count(),
+                1,
+                "{names:?}"
+            );
+            assert!(names.contains(&"m"), "{names:?}");
+        });
+    }
+
+    #[test]
+    fn a_generic_type_owns_its_methods_by_name() {
+        futures::executor::block_on(async {
+            let d = doc("struct Pair<T> { a: T }
+impl<T> Pair<T> {
+    fn first(&self) -> T { return self.a; }
+}
+")
+            .await;
+            assert_eq!(
+                symbol(&d, "first").symbol,
+                "wado . test.wado . Pair#first()."
+            );
+            assert_eq!(
+                symbol(&d, "first").enclosing_symbol,
+                "wado . test.wado . Pair#"
+            );
+        });
+    }
+
+    #[test]
+    fn a_declaration_inside_a_body_is_local() {
+        futures::executor::block_on(async {
+            let d = doc("fn f() -> i32 {
+    struct Size { w: i32 }
+    let s = Size { w: 1 };
+    return s.w;
+}
+test {
+    struct Probe { v: i32 }
+    assert (Probe { v: 1 }).v == 1;
+}
+")
+            .await;
+            for name in ["Size", "w", "Probe", "v"] {
+                assert!(symbol(&d, name).symbol.starts_with("local "), "{name}");
+            }
         });
     }
 

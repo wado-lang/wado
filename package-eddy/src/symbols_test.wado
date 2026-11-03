@@ -96,8 +96,12 @@ test "FindReferences lists a line once" {
 
 test "FindReferences keeps the references under a path" {
     let ws = workspace();
-    let out = ws.call(&"FindReferences", &tool_input(`{"name": "Circle", "path": "other"}`)).unwrap();
-    assert out == "struct Circle (testdata/shapes.rs:1): 2 references\n";
+    let refs = |path: String| ws.call(&"FindReferences", &tool_input(`{"name": "Circle", "path": "${path}"}`)).unwrap();
+    assert refs("other") == "struct Circle (testdata/shapes.rs:1): 0 references\n";
+    // A path is a directory, not a prefix of the name.
+    assert refs("test") == "struct Circle (testdata/shapes.rs:1): 0 references\n";
+    assert refs("testdata/").starts_with("struct Circle (testdata/shapes.rs:1): 2 references\n");
+    assert ws.call(&"FindSymbol", &tool_input(`{"name": "Circle", "path": "test"}`)).unwrap() == "No symbols found";
 }
 
 test "the symbol tools are offered only with an index" {

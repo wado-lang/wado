@@ -2619,6 +2619,64 @@ fn query_scip_indexes_a_file_nothing_imports() {
 }
 
 #[test]
+fn query_refuses_a_flag_its_kind_does_not_read() {
+    for (args, flag) in [
+        (&["query", "scip", "--json", "."][..], "--json"),
+        (
+            &[
+                "query",
+                "hover",
+                "--include-declaration",
+                "--line",
+                "1",
+                "--column",
+                "1",
+                "a.wado",
+            ][..],
+            "--include-declaration",
+        ),
+        (&["query", "diagnostics", "--all", "a.wado"][..], "--all"),
+        (
+            &["query", "hover", "--exclude", "x", "a.wado"][..],
+            "--exclude",
+        ),
+    ] {
+        let stderr = wado()
+            .args(args)
+            .assert()
+            .failure()
+            .get_output()
+            .stderr
+            .clone();
+        let stderr = String::from_utf8(stderr).unwrap();
+        assert!(
+            stderr.contains(&format!("{flag} does not apply to")),
+            "{args:?}: {stderr}"
+        );
+    }
+}
+
+#[test]
+fn query_scip_paths_are_spelled_as_the_filesystem_does() {
+    let tmp = tempfile::tempdir().unwrap();
+    std::fs::write(
+        tmp.path().join("my file.wado"),
+        "fn f() -> i32 {\n    return 1;\n}\n",
+    )
+    .unwrap();
+
+    wado_in(tmp.path())
+        .args(["query", "scip", "."])
+        .assert()
+        .success();
+
+    let index = std::fs::read(tmp.path().join("index.scip")).unwrap();
+    let has = |needle: &str| index.windows(needle.len()).any(|w| w == needle.as_bytes());
+    assert!(has("my file.wado"));
+    assert!(!has("my%20file.wado"));
+}
+
+#[test]
 fn query_scip_leaves_out_what_an_exclude_matches() {
     let tmp = tempfile::tempdir().unwrap();
     std::fs::write(

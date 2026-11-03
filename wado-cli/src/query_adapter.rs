@@ -37,9 +37,15 @@ struct PreparedQuery {
 }
 
 async fn prepare_query(filename: &str) -> Result<PreparedQuery, CliExit> {
+    load_query(filename).await.map_err(CliExit::error)
+}
+
+/// What [`prepare_query`] does, failing with the bare reason, for a caller
+/// that words the failure itself.
+async fn load_query(filename: &str) -> Result<PreparedQuery, String> {
     let path = Path::new(filename);
-    let source = fs::read_to_string(path)
-        .map_err(|e| CliExit::error(format!("reading '{}': {e}", path.display())))?;
+    let source =
+        fs::read_to_string(path).map_err(|e| format!("reading '{}': {e}", path.display()))?;
 
     // Derive every entry-relative fact — host base, manifest root, the kiln
     // pipeline's entry, and the loader's `decl_file` (via `Uri::to_filename`
@@ -52,7 +58,7 @@ async fn prepare_query(filename: &str) -> Result<PreparedQuery, CliExit> {
         .parent()
         .map(std::path::Path::to_path_buf)
         .unwrap_or_default();
-    let manifest_pair = load_nearest_manifest(&canonical).map_err(CliExit::error)?;
+    let manifest_pair = load_nearest_manifest(&canonical).map_err(|e| e.to_string())?;
     let host = attach_manifest_and_component_deps(
         FilesystemCompilerHost::silent(base.clone()),
         manifest_pair.as_ref(),
@@ -60,8 +66,7 @@ async fn prepare_query(filename: &str) -> Result<PreparedQuery, CliExit> {
         &[&source],
         Acquisition::Analysis,
     )
-    .await
-    .map_err(CliExit::error)?;
+    .await?;
     let uri = wado_lsp::Uri::from_file_path(&canonical)
         .as_str()
         .to_string();
@@ -189,10 +194,10 @@ pub async fn run_scip(dir: &str, output: &str, excludes: &[String]) -> Result<()
 /// One file that cannot load (a malformed manifest, say) costs its own
 /// document, not the index.
 async fn scip_document_of(file: &Path, root_uri: &str) -> Option<wado_lsp::scip::ScipDocument> {
-    let prepared = match prepare_query(&file.to_string_lossy()).await {
+    let prepared = match load_query(&file.to_string_lossy()).await {
         Ok(prepared) => prepared,
-        Err(e) => {
-            eprint!("warning: skipping '{}': {}", file.display(), e.message);
+        Err(reason) => {
+            eprintln!("warning: skipping '{}': {reason}", file.display());
             return None;
         }
     };

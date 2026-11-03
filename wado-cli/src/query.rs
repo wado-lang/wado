@@ -254,9 +254,21 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<QueryOptions, CliExit> {
 
     let kind = kind.ok_or_else(|| CliExit::error_with_usage("missing query kind", &usage))?;
 
-    if (output.is_some() || !excludes.is_empty()) && kind != QueryKind::Scip {
+    // A flag no reader of this kind consults is refused, not dropped.
+    let scip = kind == QueryKind::Scip;
+    let unread = [
+        ("--output", output.is_some() && !scip),
+        ("--exclude", !excludes.is_empty() && !scip),
+        ("--json", json && scip),
+        (
+            "--include-declaration",
+            include_declaration && kind != QueryKind::References,
+        ),
+        ("--all", all && symbol.is_none() && kind != QueryKind::Hover),
+    ];
+    if let Some((flag, _)) = unread.iter().find(|(_, set)| *set) {
         return Err(CliExit::error_with_usage(
-            "--output and --exclude are only valid for the `scip` kind",
+            format!("{flag} does not apply to `{}`", kind.name()),
             &usage,
         ));
     }

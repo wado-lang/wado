@@ -146,8 +146,7 @@ impl SymbolIndex {
             if !owner.is_empty() && self.owner_name(id) != owner {
                 continue;
             }
-            if !path.is_empty()
-                && !self.syms[id].definitions.into_iter().any(|d| self.files[d.file].starts_with(*path)) {
+            if !self.syms[id].definitions.into_iter().any(|d| is_under(&self.files[d.file], path)) {
                 continue;
             }
             out.push(id);
@@ -199,11 +198,12 @@ impl SymbolIndex {
                 let d = &s.definitions[0];
                 ` (${self.files[d.file]}:${d.line + 1})`;
             };
-            out.push(`${s.kind} ${self.qualified(id)}${at}: ${s.references.len()} references`);
+            let kept = s.references.into_iter().filter(|r| is_under(&self.files[r.file], path)).collect();
+            out.push(`${s.kind} ${self.qualified(id)}${at}: ${kept.len()} references`);
             let mut last: Option<[i32, i32]> = null;
-            for let r of &s.references {
+            for let r of &kept {
                 let file = &self.files[r.file];
-                if !path.is_empty() && !file.starts_with(*path) || last == Some([r.file, r.line]) {
+                if last == Some([r.file, r.line]) {
                     continue;
                 }
                 last = Some([r.file, r.line]);
@@ -235,6 +235,15 @@ impl SymbolIndex {
         }
         return best.map(|s| s.sym);
     }
+}
+
+/// Whether `file` is `path` or inside it; everything is under an empty path.
+fn is_under(file: &String, path: &String) -> bool {
+    let dir = match path.strip_suffix("/") {
+        Some(d) => d.to_string(),
+        None => *path,
+    };
+    return dir.is_empty() || *file == dir || file.starts_with(`${dir}/`);
 }
 
 fn source_lines(root: &String, file: &String) -> List<String> with Preopens {
