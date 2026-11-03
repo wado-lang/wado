@@ -213,8 +213,7 @@ pub enum Code {
     ShadowedName,
     /// A trait head says nothing about the effects its impls may declare.
     UndecidedEffects,
-    /// A program hides an effect from its callers with `#[benign]` or
-    /// `#[ambient]`.
+    /// A program hides an effect from its callers with `#[ambient]`.
     UndeclaredEffects,
     /// A comparison of an expression with itself, which has one answer: `x == x`.
     SelfComparison,

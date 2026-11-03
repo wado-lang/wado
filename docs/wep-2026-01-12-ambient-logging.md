@@ -135,43 +135,37 @@ The attribute first exempted a whole body from effect checking. Every function
 that carried it performed a few effects it could name: `Stdout` or `Stderr`,
 `Log` in the `core:log` facade, `KilnHost` in a Kiln generator's report. The
 exemption hid every other effect too, so a facade that called `println` by
-mistake drew no diagnostic. The attribute now lists its effects, as `#[benign]`
-does, and the rest of the body is checked.
+mistake drew no diagnostic. The attribute now lists its effects, and the rest of
+the body is checked.
 
-An ambient effect uses a capability the target world offers, and adds none it
-does not. It is available where the target world imports it, under `wado test`,
-and in a `--lib` build, whose synthesized world imports whatever the library
-uses. That is what made `log_stdout` and `log_stderr` ambient in the first
-place, and it is now the attribute's meaning for every effect it lists.
+### `#[benign]` merges into `#[ambient]`, and the import always lands
 
-The world decides, not what the rest of the program calls. Asking the program
-needs whole-program reachability after monomorphization, iterated so that two
-ambient bodies cannot keep each other's import alive, for one case only: a
-library whose own code also writes the stream. A library keeps its messages
-either way, by the rule above, at the cost of importing `wasi:cli/stderr`
-wherever it can panic.
+Ambient effects were optional: where the target world lacked a listed effect,
+the body was skipped and the function returned `Default::default()`. `#[benign]`
+([WEP: Effect System and Randomness in Collections](./wep-2026-01-20-effect-system-randomness.md))
+waived the same declaration but kept the import. The two differed only in
+whether the import could be dropped, and dropping it buys nothing a host cannot
+give more simply. A sandbox stays a sandbox when it links a stdout that writes
+nowhere, and a Kiln generator's host routes its stdout and stderr to the build
+log. Dropping the import cost the machinery that decided it per world, a
+`Default` bound on every ambient return type, and a body that silently did
+nothing where its author expected it to run.
 
-Where a listed effect is not available, the function skips its body and returns
-`Default::default()`, or nothing when it returns `()`. "Do nothing" cannot be
-derived from an arbitrary body, but a value the type itself supplies can: a
-stdio write answers nothing, and `core:log`'s `WallClock::now` answers `null`,
-so the line leaves its stamp out. Reify guards each such body with
-`builtin::ambient_available("<interface>")`, naming the interface because the
-standard library's bodies are reified once into the snapshot every
-compilation shares. Lowering settles each guard against the target world
-before anything plans imports or strings from the body.
+So one attribute remains, `#[ambient(E)]`, on a function or a global, and it
+waives the declaration only. Each listed effect is imported wherever a call
+reaches the body, and a host that does not offer it refuses the component. The
+"unobservable" requirement `#[benign]` stated was never checked, and it goes
+with the name: the attribute is the standard library's to write, which is
+where its uses are audited.
+
+A deterministic host refuses a clock rather than answering one. A Kiln
+generator, or a program `core:eval` runs, that logs through
+`TextSink<WallClock>` is refused, and the default sink, `TextSink<NoClock>`,
+asks for none.
 
 Hiding an effect from every caller is the standard library's business, for now:
-a program writing `#[ambient]` or `#[benign]` is warned under
-`undeclared_effects`. The rule is provisional, to be revisited as use cases
-appear.
-
-This is what separates it from `#[benign(E)]`
-([WEP: Effect System and Randomness in Collections](./wep-2026-01-20-effect-system-randomness.md)).
-A benign effect is required and unobservable: the world import stays, and the
-effect must not show through the interface. An ambient effect is optional and
-may show: what it writes is visible, and a component without the capability
-runs without it.
+a program writing `#[ambient]` is warned under `undeclared_effects`. The rule is
+provisional, to be revisited as use cases appear.
 
 ## Consequences
 
@@ -224,15 +218,6 @@ if !condition {
 ```
 
 Since `panic()` uses `log_error()`, no effect declaration is needed.
-
-## Known gaps
-
-- An ambient effect is available wherever the target world imports it, so the
-  component imports it whenever an ambient body reaches it. A host narrower than
-  the world then refuses the component, though the body would have degraded
-  without the import. `core:eval` compiles a `wasi:cli/command` and links no
-  `wasi:clocks`, so a program it runs that logs through `TextSink<WallClock>`
-  stops as `EvalError::Unavailable` rather than logging unstamped.
 
 ## Alternatives Considered
 

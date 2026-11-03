@@ -349,9 +349,9 @@ beside it, and a consuming build uses that output without running the generator
 
 ### The Generator World
 
-A generator targets the `core:kiln/generator` world. It imports `KilnHost` and
-two of the `wasi:random` interfaces, `Insecure` and `InsecureSeed`, and nothing
-else ([The Sandbox](#the-sandbox)):
+A generator targets the `core:kiln/generator` world. It imports `KilnHost`, two
+of the `wasi:random` interfaces, `Insecure` and `InsecureSeed`, and `wasi:cli`'s
+`Stdout` and `Stderr`, and nothing else ([The Sandbox](#the-sandbox)):
 
 <!-- {"source": "wado-compiler/lib/core/kiln/worlds.wado"} -->
 
@@ -361,6 +361,8 @@ pub world Generator {
     import KilnHost;
     import Insecure;
     import InsecureSeed;
+    import Stdout;
+    import Stderr;
 }
 ```
 
@@ -733,8 +735,13 @@ environment, filesystem, or secure randomness. It is a function of what the
 invocation hands it: the input files, the name it was invoked under, and the
 options.
 
-- The host provides `KilnHost`, `wasi:random/insecure`, and
-  `wasi:random/insecure-seed`, and nothing else.
+- The host provides `KilnHost`, `wasi:random/insecure`,
+  `wasi:random/insecure-seed`, `wasi:cli/stdout` and `wasi:cli/stderr`, and
+  nothing else.
+- Each line a generator writes to stdout becomes an info diagnostic, and each
+  line it writes to stderr, a panic's message included, a warning.
+- A generator that logs through `core:log`'s `TextSink<WallClock>` imports a
+  clock, so it is refused as below.
 - Both random interfaces behave as `wasi:random/insecure-seed` specifies: what
   they return may be fixed.
 - `wasi:random/random` is not provided, because WASI requires a deterministic

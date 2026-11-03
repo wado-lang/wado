@@ -1,0 +1,17 @@
+// A generator's world imports stderr, and the host turns each line written to
+// it into a warning, so a panic message reaches the build's output.
+
+use { written } from "./sub/kiln/value.schema"
+    with {
+        generator: { module: "./sub/kiln/stderr_generator.wado" },
+    };
+
+test {
+    assert written();
+}
+
+__DATA__
+{
+    "test": {},
+    "warnings_contains": ["reading sub/kiln/value.schema"]
+}

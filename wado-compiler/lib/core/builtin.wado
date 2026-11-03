@@ -795,13 +795,6 @@ pub fn call_indirect_stdout_write_via_stream<T>(rx: Stream<u8>) -> Future<T>;
 #[side_effect(opaque, suspend)]
 pub fn call_indirect_stderr_write_via_stream<T>(rx: Stream<u8>) -> Future<T>;
 
-/// Whether the target world offers the host interface `fq`, which an
-/// `#[ambient]` body performs. The compiler guards each such body with it, and
-/// decides it when it lowers the program.
-#[storage(none)]
-#[side_effect(none)]
-internal fn ambient_available(fq: String) -> bool;
-
 /// Absolute value of f32
 /// Maps to Wasm f32.abs instruction
 #[storage(none)]

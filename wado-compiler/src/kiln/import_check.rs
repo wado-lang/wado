@@ -143,8 +143,9 @@ fn provided_wasi_interfaces(world: &WorldInfo) -> Vec<ProvidedInterface<'_>> {
 /// `options`, and the body opens with `let req: Request<T> = Request { primary,
 /// … };`, which same-scope shadowing keeps looking like the author's `req`. A
 /// `NoOptions` generator omits `options`, an empty record having no CM form.
-/// The author's body then runs under `core:kiln`'s `KilnLogSink`, since a
-/// generator has no stderr for `core:log`'s default sink. What the rewrite
+/// The author's body then runs under `core:kiln`'s `KilnLogSink`, which keeps
+/// an event's level as a diagnostic's, where `core:log`'s default sink would
+/// write every event to stderr, each line a warning. What the rewrite
 /// names of `core:kiln` it reaches through [`KILN_ADAPTER_NAMESPACE`].
 pub fn inject_kiln_request_adapter(
     target_world: Option<&str>,

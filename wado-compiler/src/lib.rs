@@ -951,8 +951,8 @@ fn undecided_effect_diagnostics(sem: &semantics::Semantics, lints: Lints) -> Vec
     out
 }
 
-/// Source-level `UndeclaredEffects` warnings: every `#[benign]` and `#[ambient]`
-/// a program writes. Hiding an effect from callers is provisionally the standard
+/// Source-level `UndeclaredEffects` warnings: every `#[ambient]` a program
+/// writes. Hiding an effect from callers is provisionally the standard
 /// library's alone, and a lint never reports there.
 fn undeclared_effect_diagnostics(sem: &semantics::Semantics, lints: Lints) -> Vec<Diagnostic> {
     let mut out = Vec::new();
@@ -967,19 +967,15 @@ fn undeclared_effect_diagnostics(sem: &semantics::Semantics, lints: Lints) -> Ve
                 {
                     return;
                 }
-                for attr in attrs
-                    .iter()
-                    .filter(|attr| attribute::ADMITS_EFFECTS.contains(&attr.name.as_str()))
-                {
+                for attr in attrs.iter().filter(|attr| attr.name == attribute::AMBIENT) {
                     let effects: Vec<&str> = attr.args.iter().map(ast::AttrArg::name).collect();
                     out.push(Diagnostic {
                         severity: Severity::Warning,
                         code: Code::UndeclaredEffects,
                         message: format!(
-                            "`#[{}]` hides `{}` from the {whose} of `{name}`, which only the \
+                            "`#[ambient]` hides `{}` from the {whose} of `{name}`, which only the \
                          standard library is meant to do for now; declare it with `with`, \
                          or mark it `#[allow(undeclared_effects)]` if that is deliberate",
-                            attr.name,
                             effects.join("`, `"),
                         ),
                         span: Some(DiagnosticSpan::from_span(

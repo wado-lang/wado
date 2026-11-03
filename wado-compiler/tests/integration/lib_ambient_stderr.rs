@@ -1,6 +1,6 @@
-//! A `--lib` build's world is synthesized from its exports and imports what the
-//! library uses, so an `#[ambient]` body runs there: a library whose only
-//! stderr write is an assertion's message still imports `wasi:cli/stderr`.
+//! An `#[ambient]` effect is imported wherever a call reaches its body, and a
+//! `--lib` build's synthesized world is no exception: a library whose only
+//! stderr write is an assertion's message imports `wasi:cli/stderr`.
 
 use std::path::Path;
 

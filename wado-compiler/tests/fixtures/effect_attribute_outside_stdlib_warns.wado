@@ -1,6 +1,6 @@
-// `#[benign]` and `#[ambient]` hide an effect from every caller, which only the
-// standard library is meant to do: a program writing either is warned, wherever
-// it is written, unless `#[allow(undeclared_effects)]` keeps it.
+// `#[ambient]` hides an effect from every caller, which only the standard
+// library is meant to do: a program writing it is warned, on a function or a
+// global, unless `#[allow(undeclared_effects)]` keeps it.
 
 use { println, Stdout } from "core:cli";
 use { InsecureSeed } from "wasi:random";
@@ -10,37 +10,30 @@ fn draw() -> i32 with InsecureSeed {
     return 1;
 }
 
-#[benign(InsecureSeed)]
+#[ambient(InsecureSeed)]
 fn seeded() -> i32 {
     return draw() + 6;
 }
 
-#[ambient(Stdout)]
-fn note() {
-    println("note");
-}
-
-#[benign(InsecureSeed)]
+#[ambient(InsecureSeed)]
 global SEED: i32 = draw();
 
 #[allow(undeclared_effects)]
-#[benign(InsecureSeed)]
+#[ambient(InsecureSeed)]
 fn kept() -> i32 {
     return draw() + 1;
 }
 
 export fn run() with Stdout {
-    note();
     println(`${seeded() + SEED + kept()}`);
 }
 
 __DATA__
 {
-    "stdout": "note\n10\n",
+    "stdout": "10\n",
     "warnings_contains": [
-        "`#[benign]` hides `InsecureSeed` from the callers of `seeded`",
-        "`#[ambient]` hides `Stdout` from the callers of `note`",
-        "`#[benign]` hides `InsecureSeed` from the readers of `SEED`"
+        "`#[ambient]` hides `InsecureSeed` from the callers of `seeded`",
+        "`#[ambient]` hides `InsecureSeed` from the readers of `SEED`"
     ],
     "warnings_not_contains": ["`kept`"]
 }

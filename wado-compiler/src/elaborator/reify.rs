@@ -10,7 +10,7 @@ use crate::ast::{
     self, AstId, AstVisitor, CompoundAssignOp, Expr, Item, Module, UnaryOp, walk_expr,
 };
 use crate::attribute::{
-    ALLOC, AMBIENT, EXPORT_NAME, INLINE, SECRET, WIRE, wire_name_override, wire_name_policy,
+    ALLOC, EXPORT_NAME, INLINE, SECRET, WIRE, wire_name_override, wire_name_policy,
     wire_value,
 };
 use crate::call_args::CallArgs;
@@ -22,9 +22,8 @@ use crate::lower::plan::value_copy::place::{is_source_place, source_place_subscr
 use crate::lower::wide_int_literal::{create_literal, method_ref};
 use crate::module_source::ModuleSource;
 use crate::name::{
-    AMBIENT_GUARD_INTRINSIC, CONTRACT_CLAUSE_INTRINSIC, CONTRACT_SITE_INTRINSIC, FqTypeName,
-    Receiver, TypeHead, contract_owner_name, global_init_function, global_name,
-    unchecked_twin_name,
+    CONTRACT_CLAUSE_INTRINSIC, CONTRACT_SITE_INTRINSIC, FqTypeName, Receiver, TypeHead,
+    contract_owner_name, global_init_function, global_name, unchecked_twin_name,
 };
 use crate::ownership::{self, BodyFacts as _, Modes};
 use crate::symbol::SymbolTable;
@@ -93,8 +92,8 @@ use crate::pgo::MarkMap;
 use crate::rarity::Mark;
 use crate::symbol::{Symbol, SymbolKind};
 use crate::synthesis::common::{
-    bare_cast, bool_lit, builtin_call, cold_path_stmt, compiler_item_call, handle_bits,
-    known_cold_path_stmt, marker_stmt_mark, not_expr, ord_bool_from_cmp, rt_call,
+    bare_cast, bool_lit, builtin_call, cold_path_stmt, handle_bits, known_cold_path_stmt,
+    marker_stmt_mark, not_expr, ord_bool_from_cmp, rt_call,
 };
 use crate::tir::{
     EffectRef, ExitScope, StructDef, TemplateId, TirEffectOp, TirField, TirImpl, TirParam,
@@ -1420,52 +1419,6 @@ impl<'a> Reify<'a> {
         })
     }
 
-    /// `body` run only where the target world offers each of `hosts`, and
-    /// otherwise what an `#[ambient]` function answers without them:
-    /// `Default::default()`, or nothing for one returning `()`. Lowering
-    /// decides each guard, once the target world is known.
-    fn guard_ambient_body(
-        &self,
-        body: TirBlock,
-        hosts: &[String],
-        return_type: TypeId,
-    ) -> TirBlock {
-        let span = body.span;
-        let string_type = self
-            .tysys
-            .type_table
-            .borrow_mut()
-            .make_compiler_struct(CompilerItem::String);
-        let guarded = hosts.iter().rev().fold(body, |inner, fq| {
-            let fq = TirExpr::new(TirExprKind::StringLiteral(fq.clone()), string_type, span);
-            let condition = builtin_call(AMBIENT_GUARD_INTRINSIC, vec![fq], TypeTable::BOOL);
-            let guard = TirStmtKind::If {
-                condition,
-                then_block: inner,
-                else_block: None,
-            };
-            TirBlock::new(vec![TirStmt::new(guard, span)], span)
-        });
-        let mut stmts = guarded.stmts;
-        if return_type != TypeTable::UNIT {
-            let fallback = compiler_item_call(
-                &self.tysys.type_table.borrow(),
-                CompilerItem::AmbientDefault,
-                vec![return_type],
-                vec![],
-                return_type,
-                span,
-            );
-            stmts.push(TirStmt::new(
-                TirStmtKind::Return {
-                    value: Some(fallback),
-                },
-                span,
-            ));
-        }
-        TirBlock::new(stmts, span)
-    }
-
     /// Reify a free function.
     fn reify_function(&mut self, func: &ast::Function) -> TirFunction {
         self.reify_callable(func, func.name.clone())
@@ -1521,10 +1474,6 @@ impl<'a> Reify<'a> {
                 .expect("a walked body records its affine parameters");
             self.with_body_ownership(b, affine_params, |this| this.reify_block(b, &mut ctx, None))
         });
-        let body = match self.types.ambient_hosts.get(&func.id) {
-            Some(hosts) => body.map(|b| self.guard_ambient_body(b, hosts, return_type)),
-            None => body,
-        };
 
         // Projected while the type-param scope was alive, so defaults are
         // resolved; after it is torn down they cannot be.
@@ -1567,7 +1516,6 @@ impl<'a> Reify<'a> {
             is_cm_binding: false,
             is_dispatch_wrapper: false,
             is_cm_export: false,
-            is_ambient: extract_is_ambient_attr(&func.attrs),
             inline_hint: extract_inline_hint_attr(&func.attrs),
             compiler_item,
             export_name: extract_export_name_attr(&func.attrs),
@@ -1847,7 +1795,6 @@ impl<'a> Reify<'a> {
             is_cm_binding: false,
             is_dispatch_wrapper: false,
             is_cm_export: false,
-            is_ambient: false,
             inline_hint: InlineHint::Auto,
             compiler_item: None,
             export_name: None,
@@ -9907,10 +9854,6 @@ impl TypeSystem {
 /// Attribute extractors, reify's own. An attribute is uniquely determined by
 /// the AST alone, which is what the completeness rule lets reify re-derive, so
 /// these need no recorded fact and no elaborator to run.
-fn extract_is_ambient_attr(attrs: &[Attribute]) -> bool {
-    attrs.iter().any(|a| a.name == AMBIENT)
-}
-
 fn extract_inline_hint_attr(attrs: &[Attribute]) -> tir::InlineHint {
     let Some(attr) = attrs.iter().find(|a| a.name == INLINE) else {
         return tir::InlineHint::Auto;

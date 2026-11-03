@@ -124,7 +124,6 @@ pub(super) fn make_binding_function(
         is_cm_binding: true,
         is_dispatch_wrapper: false,
         is_cm_export: false,
-        is_ambient: false,
         inline_hint: InlineHint::Auto,
         compiler_item: None,
         export_name: None,

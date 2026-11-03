@@ -771,7 +771,6 @@ impl Translator<'_> {
             is_cm_binding: func.is_cm_binding,
             is_dispatch_wrapper: func.is_dispatch_wrapper,
             is_cm_export: func.is_cm_export,
-            is_ambient: func.is_ambient,
             inline_hint: convert_inline_hint(func.inline_hint),
             compiler_item: func.compiler_item,
             export_name: func.export_name.clone(),

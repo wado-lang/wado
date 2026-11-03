@@ -196,7 +196,6 @@ fn generate_copy_function(
         is_cm_binding: false,
         is_dispatch_wrapper: false,
         is_cm_export: false,
-        is_ambient: false,
         inline_hint: InlineHint::Auto,
         compiler_item: None,
         export_name: None,

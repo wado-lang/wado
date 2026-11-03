@@ -291,9 +291,9 @@ pub affine trait Drop with () {
   [`..base`](./spec-literals.md#base-spread) takes an affine part of it.
 - `builtin::drop(value)` drops any value where it is called.
 
-A drop's effects are benign: a function declares no effect for a drop it
+A drop's effects are ambient: a function declares no effect for a drop it
 performs, written or implicit. A `drop` that performs an effect other than its
-own resource's names it with [`#[benign(E)]`](./spec-attributes.md#benigne-).
+own resource's names it with [`#[ambient(E)]`](./spec-effects.md#ambient-functions).
 
 ## References into Affine Values
 

@@ -1512,14 +1512,6 @@ pub enum TypeError {
         span: Span,
     },
 
-    /// An `#[ambient]` function listing a host interface returns a type with
-    /// no `Default`, which is what it answers where the interface is absent.
-    AmbientWithoutDefault {
-        function: String,
-        return_type: String,
-        span: Span,
-    },
-
     /// `export(World::name)` where `World` names no world.
     ExportTargetNotWorld {
         world: String,
@@ -3108,19 +3100,6 @@ impl TypeError {
                 Code::CmBoundaryType,
                 format!(
                     "default value for parameter '{param}' in export fn '{function}' is not allowed; the Component Model ABI requires every parameter at the boundary"
-                ),
-                *span,
-            ),
-            TypeError::AmbientWithoutDefault {
-                function,
-                return_type,
-                span,
-            } => (
-                Code::TraitBoundNotSatisfied,
-                format!(
-                    "`#[ambient]` function '{function}' returns '{return_type}', which does not \
-                     implement `Default`; where an effect it lists is absent, it returns \
-                     `Default::default()`"
                 ),
                 *span,
             ),

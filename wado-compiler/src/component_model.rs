@@ -1045,9 +1045,6 @@ pub struct CmInterfaceRegistry {
     /// interface of one component shares the same set (v1 component-level union).
     component_host_leaf_imports: IndexMap<String, Vec<String>>,
 
-    /// The host interface each `#[cm]` interface declaration performs.
-    host_effects: IndexMap<DefId, String>,
-
     /// World-level function imports (Phase 9), by the bodyless function
     /// declaring each -> its key in `functions`.
     world_imports: IndexMap<AstId, String>,
@@ -3184,38 +3181,6 @@ impl CmInterfaceRegistry {
         CmTypeKind::ALL
             .into_iter()
             .any(|kind| self.declares_kind(kind, interface_fq, name))
-    }
-
-    /// Record the host interface each `#[cm]` interface declaration among
-    /// `modules` performs. A component dependency's bindings declare none: the
-    /// interfaces it exports are served by that component, and those it imports
-    /// are guest effects its consumer handles.
-    pub fn register_host_effects<'m>(
-        &mut self,
-        modules: impl IntoIterator<Item = (&'m ModuleSource, &'m ast::Module)>,
-        defs: &DefTable,
-    ) {
-        let items = modules
-            .into_iter()
-            .filter(|(source, _)| !matches!(source, ModuleSource::Wasm { .. }))
-            .flat_map(|(_, module)| &module.items);
-        for item in items {
-            let Item::Interface(decl) = item else {
-                continue;
-            };
-            let Some(cm) = cm_import_of(&decl.attrs) else {
-                continue;
-            };
-            self.host_effects
-                .insert(defs.def_at(item.id()), cm.interface_path());
-        }
-    }
-
-    /// The host interface the effect `def` performs, or `None` for an effect a
-    /// handler or a component dependency answers.
-    #[must_use]
-    pub fn host_effect(&self, def: DefId) -> Option<&str> {
-        self.host_effects.get(&def).map(String::as_str)
     }
 
     /// The interface declaring `decl`, and the CM name it exports `decl` under.

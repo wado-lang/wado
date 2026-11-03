@@ -371,9 +371,6 @@ pub(crate) struct TypeAnnotations {
     /// The name-keyed `function_return_types` cannot serve: a later
     /// registration of the same name overwrites it.
     pub(crate) function_task_returns: IndexMap<AstId, TypeId>,
-    /// The host interfaces an `#[ambient]` function lists, per function /
-    /// method declaration that lists any. Reify guards the body with them.
-    pub(crate) ambient_hosts: IndexMap<AstId, Vec<String>>,
     /// Impl-level type parameters as `Elaborator::resolve_method` (the
     /// battle-tested original path) computed them, keyed per impl-method
     /// `AstId`. Reify reads this instead of recomputing the
@@ -677,7 +674,6 @@ impl TypeAnnotations {
             + self.impl_facts.len()
             + self.function_effects.len()
             + self.function_task_returns.len()
-            + self.ambient_hosts.len()
             + self.method_impl_type_params.len()
             + self.fn_param_types.len()
             + self.fn_affine_params.len()

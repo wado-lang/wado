@@ -161,9 +161,6 @@ pub const CONTRACT_SITE_INTRINSIC: &str = "$contract_site";
 /// and it is cold code.
 pub const COLD_PATH_INTRINSIC: &str = "cold_path";
 
-/// The `core:builtin` intrinsic reify guards an `#[ambient]` body with.
-pub const AMBIENT_GUARD_INTRINSIC: &str = "ambient_available";
-
 /// The `core:builtin` intrinsic a profile writes where a branch is unlikely but
 /// its path is not cold code.
 pub const UNLIKELY_PATH_INTRINSIC: &str = "unlikely_path";

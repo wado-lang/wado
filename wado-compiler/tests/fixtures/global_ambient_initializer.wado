@@ -1,4 +1,4 @@
-// `#[benign(E)]` on a global admits `E` in its initializer. The initializer
+// `#[ambient(E)]` on a global admits `E` in its initializer. The initializer
 // asks the host for a seed, which the global's value does not show, and has
 // run before the test reads the global.
 
@@ -9,7 +9,7 @@ fn seeded() -> i32 with InsecureSeed {
     return 7;
 }
 
-#[benign(InsecureSeed)]
+#[ambient(InsecureSeed)]
 global SEVEN: i32 = seeded();
 
 test {

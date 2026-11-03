@@ -1,10 +1,11 @@
 //! Native wasmtime runtime for Kiln generators.
 //!
-//! Instantiates a compiled generator component, linking `emit-diagnostic` and
-//! `wasi:random`'s `insecure` and `insecure-seed`, both from a fixed seed.
-//! Everything else — `random`, clocks, filesystem, http — is unlinked; a
-//! generator that imports any of those fails at link time, which is the
-//! determinism guarantee.
+//! Instantiates a compiled generator component, linking `emit-diagnostic`,
+//! `wasi:random`'s `insecure` and `insecure-seed`, both from a fixed seed, and
+//! `wasi:cli`'s `stdout` and `stderr`, whose lines become the generator's
+//! diagnostics. Everything else — `random`, clocks, filesystem, http — is
+//! unlinked; a generator that imports any of those fails at link time, which is
+//! the determinism guarantee.
 //!
 //! Revision 3: each generator has its own synthesized world (the `options` shape is
 //! per-generator), so `generate` is invoked dynamically as typed `Val`s rather
@@ -21,12 +22,14 @@ use std::task::{Context, Poll};
 use anyhow::Result;
 use wasmtime::component::types::{ComponentItem, Type};
 use wasmtime::component::{
-    Component, Destination, Func, HasSelf, Instance, Linker, StreamProducer, StreamReader,
-    StreamResult, Val,
+    Component, Destination, Func, HasSelf, Instance, Linker, ResourceTable, StreamProducer,
+    StreamReader, StreamResult, Val,
 };
 use wasmtime::{AsContextMut, Engine, Store, StoreContextMut};
-use wasmtime_wasi::WasiCtx;
-use wasmtime_wasi::random::{WasiRandomCtx, WasiRandomView};
+use wasmtime_wasi::cli::{WasiCli, WasiCliView};
+use wasmtime_wasi::p2::pipe::MemoryOutputPipe;
+use wasmtime_wasi::p3::bindings::cli::{stderr, stdout};
+use wasmtime_wasi::{WasiCtx, WasiCtxView, WasiView};
 
 use wado_compiler::kiln::{CanonicalOptions, CanonicalValue};
 use wado_compiler::name::to_cm_name;
@@ -45,7 +48,10 @@ wasmtime::component::bindgen!({
     world: "generator",
     imports: { default: async },
     exports: { default: async },
-    with: { "wasi:random": wasmtime_wasi::p3::bindings::random },
+    with: {
+        "wasi:random": wasmtime_wasi::p3::bindings::random,
+        "wasi:cli": wasmtime_wasi::p3::bindings::cli,
+    },
 });
 
 use self::core::kiln::kiln_host;
@@ -62,15 +68,59 @@ pub struct KilnRunPolicy {
     pub fuel: u64,
 }
 
+/// The most a generator's stdout, or its stderr, holds for one call. A write
+/// past it fails, which the ambient writes of a panic or a log line ignore.
+const CAPTURED_STDIO_CAPACITY: usize = 1024 * 1024;
+
 struct KilnHostState {
     diagnostics: Arc<Mutex<Vec<GeneratorDiagnostic>>>,
-    /// Holds only the insecure random context; nothing else of WASI is linked.
+    /// The insecure random context and the captured stdio; nothing else of
+    /// WASI is linked.
     wasi: WasiCtx,
+    table: ResourceTable,
 }
 
-impl WasiRandomView for KilnHostState {
-    fn random(&mut self) -> &mut WasiRandomCtx {
-        self.wasi.random()
+impl WasiView for KilnHostState {
+    fn ctx(&mut self) -> WasiCtxView<'_> {
+        WasiCtxView {
+            ctx: &mut self.wasi,
+            table: &mut self.table,
+        }
+    }
+}
+
+/// What a generator writes to stdout and stderr across the instances of one
+/// call. Each line becomes a diagnostic, stdout's an `Info` and stderr's a
+/// `Warning`, as a `core:log` event at those levels does.
+#[derive(Clone)]
+struct CapturedStdio {
+    stdout: MemoryOutputPipe,
+    stderr: MemoryOutputPipe,
+}
+
+impl CapturedStdio {
+    fn new() -> Self {
+        Self {
+            stdout: MemoryOutputPipe::new(CAPTURED_STDIO_CAPACITY),
+            stderr: MemoryOutputPipe::new(CAPTURED_STDIO_CAPACITY),
+        }
+    }
+
+    fn into_diagnostics(self) -> impl Iterator<Item = GeneratorDiagnostic> {
+        let lines = |pipe: MemoryOutputPipe, level: GeneratorDiagnosticLevel| {
+            String::from_utf8_lossy(&pipe.contents())
+                .lines()
+                .filter(|line| !line.is_empty())
+                .map(|line| GeneratorDiagnostic {
+                    level,
+                    span: None,
+                    message: line.to_string(),
+                })
+                .collect::<Vec<_>>()
+        };
+        lines(self.stdout, GeneratorDiagnosticLevel::Info)
+            .into_iter()
+            .chain(lines(self.stderr, GeneratorDiagnosticLevel::Warning))
     }
 }
 
@@ -138,25 +188,32 @@ fn exports(component: &Component, engine: &Engine, export: &str) -> bool {
 
 /// A fresh store and instance for one generator call. The kiln determinism
 /// guarantee (WEP 2026-04-12 §"Design principles" #1) is what keeps the linker
-/// to `core:kiln/kiln-host` and a fixed-seed insecure `wasi:random`: the
-/// compiler elides the panic-path stderr at codegen time, so the component
-/// imports no other WASI to begin with.
+/// to `core:kiln/kiln-host`, a fixed-seed insecure `wasi:random`, and the
+/// captured stdio.
 async fn instantiate(
     engine: &Engine,
     component: &Component,
     policy: KilnRunPolicy,
     diagnostics: Arc<Mutex<Vec<GeneratorDiagnostic>>>,
+    stdio: &CapturedStdio,
 ) -> Result<(Store<KilnHostState>, Instance), GeneratorRunnerError> {
     let mut linker: Linker<KilnHostState> = Linker::new(engine);
     kiln_host::add_to_linker::<_, HasSelf<_>>(&mut linker, |s| s)
         .and_then(|()| random::add_to_linker(&mut linker))
+        .and_then(|()| stdout::add_to_linker::<_, WasiCli>(&mut linker, KilnHostState::cli))
+        .and_then(|()| stderr::add_to_linker::<_, WasiCli>(&mut linker, KilnHostState::cli))
         .map_err(|e| GeneratorRunnerError::Host(format!("linker setup: {e:#}")))?;
 
+    let mut builder = WasiCtx::builder();
+    random::fixed_seed(&mut builder);
+    builder.stdout(stdio.stdout.clone());
+    builder.stderr(stdio.stderr.clone());
     let mut store = Store::new(
         engine,
         KilnHostState {
             diagnostics,
-            wasi: random::fixed_seed(&mut WasiCtx::builder()).build(),
+            wasi: builder.build(),
+            table: ResourceTable::new(),
         },
     );
     let fuel = if policy.fuel == 0 {
@@ -541,9 +598,11 @@ pub async fn run_generator(
     // failing generator cannot swallow the ones explaining why. Printing them
     // is the caller's job — see `FilesystemCompilerHost::run_generator`.
     let diagnostics_inner = diagnostics.clone();
+    let stdio = CapturedStdio::new();
+    let stdio_inner = stdio.clone();
     let outcome: Result<GeneratorResponse, GeneratorRunnerError> = async move {
         let (mut store, instance) =
-            instantiate(engine, component, policy, diagnostics_inner).await?;
+            instantiate(engine, component, policy, diagnostics_inner, &stdio_inner).await?;
 
         let generate = find_export(component, engine, &instance, &mut store, "generate")
             .ok_or_else(|| {
@@ -598,8 +657,18 @@ pub async fn run_generator(
     }
     .await;
 
-    let emitted: Vec<GeneratorDiagnostic> = lock(&diagnostics).drain(..).collect();
-    (outcome, emitted)
+    (outcome, drain_diagnostics(&diagnostics, stdio))
+}
+
+/// The diagnostics a call emitted, then the lines it wrote to stdio.
+fn drain_diagnostics(
+    diagnostics: &Mutex<Vec<GeneratorDiagnostic>>,
+    stdio: CapturedStdio,
+) -> Vec<GeneratorDiagnostic> {
+    lock(diagnostics)
+        .drain(..)
+        .chain(stdio.into_diagnostics())
+        .collect()
 }
 
 /// Call the generator's `probe` once per input file of `request`, reading each
@@ -620,12 +689,20 @@ async fn run_probe(
 ) {
     let diagnostics = Arc::new(Mutex::new(Vec::<GeneratorDiagnostic>::new()));
     let diagnostics_inner = diagnostics.clone();
+    let stdio = CapturedStdio::new();
+    let stdio_inner = stdio.clone();
 
     let outcome: Result<Vec<Option<u64>>, GeneratorRunnerError> = async move {
         let mut extents = Vec::with_capacity(request.files.len());
         for (file, source) in request.files.iter().zip(files) {
-            let (mut store, instance) =
-                instantiate(engine, component, policy, diagnostics_inner.clone()).await?;
+            let (mut store, instance) = instantiate(
+                engine,
+                component,
+                policy,
+                diagnostics_inner.clone(),
+                &stdio_inner,
+            )
+            .await?;
 
             let Some(probe) = find_export(component, engine, &instance, &mut store, "probe") else {
                 unreachable!("the component type carries a `probe` export");
@@ -682,8 +759,7 @@ async fn run_probe(
     }
     .await;
 
-    let emitted: Vec<GeneratorDiagnostic> = lock(&diagnostics).drain(..).collect();
-    (outcome, emitted)
+    (outcome, drain_diagnostics(&diagnostics, stdio))
 }
 
 /// [`run_generator`] under the default policy, for a host's

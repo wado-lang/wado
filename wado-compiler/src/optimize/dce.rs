@@ -440,8 +440,6 @@ fn resolve_imports(project: &mut NirPackage, graph: &AnalysisGraph, reachable: &
         .collect();
     let reaches_intrinsic = |name: &str| reached_intrinsics.iter().any(|reached| reached == name);
 
-    // A stream write is reached only past an ambient guard that held, so the
-    // component has the stream.
     for stream in AmbientStream::ALL {
         if reaches_intrinsic(stream.write_builtin()) {
             used_wasi_functions.insert(stream.write_operation(&project.cm_interface_registry));

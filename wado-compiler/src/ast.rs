@@ -1904,7 +1904,7 @@ pub mod lint {
     pub const UNUSED_VARIABLES: &str = "unused_variables";
     /// A trait head that says nothing about what its impls may do.
     pub const UNDECIDED_EFFECTS: &str = "undecided_effects";
-    /// A `#[benign]` or `#[ambient]` outside the standard library.
+    /// An `#[ambient]` outside the standard library.
     pub const UNDECLARED_EFFECTS: &str = "undeclared_effects";
     /// A comparison of an expression with itself: `x == x`.
     pub const SELF_COMPARISON: &str = "self_comparison";

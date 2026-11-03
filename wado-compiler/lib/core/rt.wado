@@ -121,13 +121,6 @@ internal fn write_string_to_stream(tx: StreamWritable<u8>, message: String, add_
     tx.drop();
 }
 
-/// What an `#[ambient]` function returns where an effect it lists is not
-/// available.
-#[compiler_item("ambient_default")]
-internal fn ambient_default<T: Default>() -> T {
-    return T::default();
-}
-
 use { ErrorCode as CliErrorCode } from "wasi:cli/types.wado";
 use { Stdout } from "wasi:cli/stdout.wado";
 use { Stderr } from "wasi:cli/stderr.wado";
@@ -135,7 +128,6 @@ use { Stderr } from "wasi:cli/stderr.wado";
 /// Logs a message with newline to stdout (ambient, no effect required).
 /// Uses builtin::call_indirect_* to bypass the effect system — this is
 /// intentional for logging/debugging which must work without effects.
-/// A component with no stdout drops the message: logging is best-effort.
 #[ambient(Stdout)]
 pub fn log_stdout(message: String) {
     let [rx, tx] = Stream::<u8>::new();
@@ -148,7 +140,6 @@ pub fn log_stdout(message: String) {
 /// Logs a message with newline to stderr (ambient, no effect required).
 /// Uses builtin::call_indirect_* to bypass the effect system — this is
 /// intentional for logging/debugging which must work without effects.
-/// A component with no stderr drops the message: logging is best-effort.
 #[ambient(Stderr)]
 pub fn log_stderr(message: String) {
     let [rx, tx] = Stream::<u8>::new();
@@ -228,7 +219,7 @@ global mut COVERAGE_COUNTS: Array<i64> = builtin::array_new::<i64>(0);
 // spends a fraction of the compile.
 #[compiler_item("coverage_probe")]
 #[coverage(off)]
-#[benign(CoverageHost)]
+#[ambient(CoverageHost)]
 #[inline(never)]
 internal fn coverage_probe(id: i32) {
     let len = builtin::array_len(&COVERAGE_COUNTS);
@@ -256,7 +247,7 @@ internal fn coverage_probe(id: i32) {
 // run after its region's count was read.
 #[compiler_item("coverage_report")]
 #[coverage(off)]
-#[benign(CoverageHost)]
+#[ambient(CoverageHost)]
 internal fn coverage_report() {
     let len = builtin::array_len(&COVERAGE_COUNTS);
     for let mut id = 0; id < len; id += 1 {

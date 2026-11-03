@@ -1,0 +1,15 @@
+// A Kiln generator writing a line to stderr, as a panic message does.
+
+use { Request, Response, OutputFile, Error } from "core:kiln";
+use { log_stderr } from "core:cli";
+
+export fn generate(req: Request) -> Result<Response, Error> {
+    log_stderr(`reading ${req.primary.path}`);
+    return Result::Ok(Response {
+        files: [OutputFile {
+            path: "out.wado",
+            content: "pub fn written() -> bool { return true; }",
+            is_entry: true,
+        }],
+    });
+}

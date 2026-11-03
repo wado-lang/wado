@@ -233,7 +233,7 @@ fn example() {
 An initializer cannot perform effects: calling a function that declares one, or
 dispatching an operation, is a compile error. It may install its own handler,
 whose body may then dispatch that handler's operations, and
-`#[benign(E, …)]` on the global admits the effects it lists. Whether an
+`#[ambient(E, …)]` on the global admits the effects it lists. Whether an
 initializer runs at all is unspecified; it runs at most once, before the first
 read.
 

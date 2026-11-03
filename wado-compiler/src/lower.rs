@@ -4,7 +4,6 @@
 //! materialization, string-literal collection — and hands the translator a
 //! [`plan::LowerPlan`]. [`translate::translate`] is then a single fold.
 
-mod ambient;
 pub mod bare_asserts;
 pub(crate) mod cast;
 mod cold_paths;
@@ -25,8 +24,6 @@ pub fn lower(
     errors: &dyn ErrorSink,
     profiler: &dyn SpanEmitter,
 ) -> Result<NirPackage, Bail> {
-    // Ahead of everything that plans imports or strings from a body.
-    ambient::lower(&flat);
     // Ahead of the plan, which binds the locals a copied clause brings.
     contract_checks::lower(&mut flat);
     let plan = in_span(profiler, "lower/plan", || {

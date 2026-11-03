@@ -8,7 +8,7 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use crate::attribute::ADMITS_EFFECTS;
+use crate::attribute::AMBIENT;
 use crate::hashmap::{IndexMap, IndexSet};
 
 use crate::module_source::ModuleSource;
@@ -65,9 +65,8 @@ pub enum EffectFault {
     UndeclaredByTrait,
     /// The callee's effects are left open, and the caller forwards none.
     MissingOpen,
-    /// A `#[benign]` or `#[ambient]` argument, the attribute named here, names
-    /// no effect in the function's module.
-    UnknownAdmitted(&'static str),
+    /// An `#[ambient]` argument names no effect in the function's module.
+    UnknownAmbient,
     /// A function value performs an effect the `fn` type it is moved into
     /// does not declare.
     BeyondExpectedType(EffectKind),
@@ -122,10 +121,10 @@ impl From<EffectError> for Diagnostic {
                     e.callee
                 ),
             ),
-            EffectFault::UnknownAdmitted(attribute) => (
+            EffectFault::UnknownAmbient => (
                 Code::UnknownType,
                 format!(
-                    "`#[{attribute}({})]` on '{}' names no effect in scope",
+                    "`#[ambient({})]` on '{}' names no effect in scope",
                     e.missing_effect, e.callee
                 ),
             ),
@@ -372,7 +371,7 @@ fn resource_chain_effects<'a>(
 /// Effect checking over [`Semantics`], run after `annotate_bodies` so it sees
 /// every function, dead or live. Covers free-function, method, and static
 /// dispatch with resource injection, the effect / resource propagation closure,
-/// signature-resource inference, effect-parameter resolution, `#[benign]`,
+/// signature-resource inference, effect-parameter resolution, `#[ambient]`,
 /// handler-scope grants, and closure calls, over user-authored modules.
 #[must_use]
 pub fn check_effects_semantic(sem: &Semantics) -> Vec<EffectError> {
@@ -1285,8 +1284,7 @@ fn check_function_effects_sem(
     out: &mut Vec<EffectError>,
     solved: &mut EffectRows,
 ) {
-    // `#[benign(E)]` and `#[ambient(E)]` admit `E` in the body without a
-    // `with E` clause.
+    // `#[ambient(E)]` admits `E` in the body without a `with E` clause.
     let admitted = admitted_effects(&func.name, &func.attrs, module, index, out);
     let Some(body) = &func.body else {
         return;
@@ -1709,9 +1707,8 @@ impl AstVisitor<'_> for TypePatternSites {
     }
 }
 
-/// The effects a `#[benign(E, F)]` or `#[ambient(E, F)]` on `owner`, a
-/// function or a global, admits, reporting each name that reaches no effect in
-/// `module`.
+/// The effects an `#[ambient(E, F)]` on `owner`, a function or a global,
+/// admits, reporting each name that reaches no effect in `module`.
 fn admitted_effects(
     owner: &str,
     attrs: &[Attribute],
@@ -1720,18 +1717,13 @@ fn admitted_effects(
     out: &mut Vec<EffectError>,
 ) -> Vec<EffectRef> {
     let mut admitted = Vec::new();
-    for AdmittedName {
-        attribute,
-        name,
-        span,
-    } in admitted_effect_names(attrs)
-    {
-        match effect_named_in(&name, module, index) {
+    for (name, span) in ambient_effect_names(attrs) {
+        match effect_named_in(name, module, index) {
             Some(effect) => admitted.push(effect),
             None => out.push(EffectError {
                 callee: owner.to_string(),
-                missing_effect: name,
-                fault: EffectFault::UnknownAdmitted(attribute),
+                missing_effect: name.to_string(),
+                fault: EffectFault::UnknownAmbient,
                 span,
                 module: module.source_path(),
             }),
@@ -1740,32 +1732,13 @@ fn admitted_effects(
     admitted
 }
 
-/// An effect name a `#[benign(…)]` or `#[ambient(…)]` lists.
-struct AdmittedName {
-    attribute: &'static str,
-    name: String,
-    span: Span,
-}
-
-/// The effect names `#[benign(E, F)]` and `#[ambient(E, F)]` list on an item,
-/// each with its attribute's span.
-fn admitted_effect_names(attrs: &[Attribute]) -> Vec<AdmittedName> {
+/// The effect names `#[ambient(E, F)]` lists on an item, each with the
+/// attribute's span.
+fn ambient_effect_names(attrs: &[Attribute]) -> impl Iterator<Item = (&str, Span)> {
     attrs
         .iter()
-        .filter_map(|attr| {
-            ADMITS_EFFECTS
-                .into_iter()
-                .find(|admitting| attr.name == *admitting)
-                .map(|attribute| (attribute, attr))
-        })
-        .flat_map(|(attribute, attr)| {
-            attr.args.iter().map(move |arg| AdmittedName {
-                attribute,
-                name: arg.as_str().to_string(),
-                span: attr.span,
-            })
-        })
-        .collect()
+        .filter(|attr| attr.name == AMBIENT)
+        .flat_map(|attr| attr.args.iter().map(|arg| (arg.as_str(), attr.span)))
 }
 
 /// Best-effort display name for a call's callee, for the diagnostic message.
@@ -1945,7 +1918,7 @@ struct SemEffectWalker<'a> {
     annotations: Option<&'a TypeAnnotations>,
     index: &'a EffectIndex<'a>,
     /// Effects available at the current point: the function's declared +
-    /// signature + benign + ambient + propagated set, plus any effects granted
+    /// signature + ambient + propagated set, plus any effects granted
     /// by an enclosing `with H => … do { … }` handler scope (pushed / popped as
     /// the walk enters / leaves the do-block body).
     current: IndexSet<EffectRef>,
@@ -3202,9 +3175,8 @@ fn run_purity_checks(sem: &Semantics, index: &EffectIndex, out: &mut Vec<PurityE
                 }
                 Item::Global(global) => {
                     // An unknown name is the effect check's to report.
-                    walker.granted = admitted_effect_names(&global.attributes)
-                        .into_iter()
-                        .filter_map(|admitted| effect_named_in(&admitted.name, src, index))
+                    walker.granted = ambient_effect_names(&global.attributes)
+                        .filter_map(|(name, _)| effect_named_in(name, src, index))
                         .collect();
                     walker.check(PureContext::GlobalInitializer, &global.initializer);
                     walker.granted.clear();

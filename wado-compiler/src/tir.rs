@@ -2643,10 +2643,6 @@ pub struct TirFunction {
     /// of this function's body during lowering.
     pub is_cm_export: bool,
 
-    /// Whether this function is marked `#[ambient(…)]`, whose listed effects a
-    /// call does not demand.
-    pub is_ambient: bool,
-
     /// Inline hint from `#[inline]`, `#[inline(always)]`, or `#[inline(never)]` attributes.
     pub inline_hint: InlineHint,
 
@@ -3351,7 +3347,6 @@ impl TirFunction {
             is_cm_binding: false,
             is_dispatch_wrapper: false,
             is_cm_export: false,
-            is_ambient: false,
             inline_hint: InlineHint::Auto,
             compiler_item: None,
             export_name: None,

@@ -197,8 +197,7 @@ appends `at file:line` to a text line and `file` / `line` keys to a JSON object.
 A key a switch turns off is absent rather than null.
 
 Both write through the ambient `log_stderr`, so a sink needs no `Stderr` in its
-signature and installs in any world — a world without stderr degrades to a no-op
-instead of a trap, matching the never-fail rule. The timestamp is the one part
+signature and installs in any function. The timestamp is the one part
 needing a capability, and reaches it the same way: `Log`'s operations declare no
 effects, so a sink cannot declare the clock read on them either, and it goes
 through an `#[ambient]` helper.
@@ -210,10 +209,9 @@ Monomorphization drops the instantiation nobody asks for, so a program over
 promise that. The call stays reachable, the import lands, and at `-O0` nothing
 folds it away.
 
-The import is what makes this worth a type parameter, because a world decides
-which imports a program may have. `WallClock::now` is `#[ambient]`, so it never
-adds a clock the world lacks: `core:kiln/generator` imports none, and there it
-answers `null` and a stamped sink logs without stamps.
+The import is what makes this worth a type parameter, because a host decides
+which imports a program may have. `core:kiln/generator` offers no clock, so a
+generator over `TextSink<WallClock>` is refused.
 
 ### Runtime filter directives
 
@@ -261,11 +259,8 @@ clock.
 `Log` is an ordinary effect, so an inner `with Log => &sink do` overrides the
 outermost handler for a scope. Performing `Log` through the facade adds no
 `with Log` to callers, so logging is callable anywhere without infecting
-signatures. The functions that emit or record return nothing, and what they
-log is outside what the program computes, so they are `#[benign(Log)]`.
-`enabled`, `span`, `current` and `in_span` hand a value back that a caller can
-branch on, so they are `#[ambient(Log)]`. `in_span` returns what its body
-computed inside the span it entered, which `current` can read. `Filter` and
+signatures: every function of it is `#[ambient(Log)]`. `in_span` returns what
+its body computed inside the span it entered, which `current` can read. `Filter` and
 `Context` pass events on to the next handler out, so the function installing one declares `with Log`, as
 [WEP: A Function Without `with` Performs No Effects](./wep-2026-09-30-effect-free-functions.md)
 requires of every delegating handler.
@@ -300,7 +295,8 @@ avoid.
 
 TODO: seed the default threshold from `WADO_LOG` on first use, so a deployment
 retunes it without a recompile (`parse_directives` already reads the syntax).
-Reading the environment ambiently degrades where a world has none.
+Reading the environment ambiently imports `wasi:cli/environment` into every
+program that logs.
 
 ### Error handling and reentrancy
 

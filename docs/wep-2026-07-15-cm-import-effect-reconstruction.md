@@ -37,7 +37,8 @@ Two observations sharpen it:
 
 ### Rejected: generalize `#[benign]`
 
-Silencing an imported interface's effect with `#[benign]` asserts a purity the
+Silencing an imported interface's effect with `#[benign]` (now `#[ambient]`)
+asserts a purity the
 compiler cannot check — the `unsafe` pattern reborn, admitting unnoticed
 non-determinism. The point is to _derive_ purity, not _trust_ it.
 
