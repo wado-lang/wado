@@ -2640,6 +2640,15 @@ fn query_refuses_a_flag_its_kind_does_not_read() {
             &["query", "hover", "--exclude", "x", "a.wado"][..],
             "--exclude",
         ),
+        (&["query", "scip", "--line", "1", "."][..], "--line"),
+        (
+            &["query", "diagnostics", "--symbol", "core:cli#println"][..],
+            "--symbol",
+        ),
+        (
+            &["query", "diagnostics", "--base", "x", "a.wado"][..],
+            "--base",
+        ),
     ] {
         let stderr = wado()
             .args(args)

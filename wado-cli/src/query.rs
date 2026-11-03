@@ -265,16 +265,21 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<QueryOptions, CliExit> {
             include_declaration && kind != QueryKind::References,
         ),
         ("--all", all && symbol.is_none() && kind != QueryKind::Hover),
+        (
+            "--symbol",
+            symbol.is_some()
+                && matches!(
+                    kind,
+                    QueryKind::Diagnostics | QueryKind::InlayHints | QueryKind::Scip
+                ),
+        ),
+        ("--base", base.is_some() && symbol.is_none()),
+        ("--line", line.is_some() && scip),
+        ("--column", column.is_some() && scip),
     ];
     if let Some((flag, _)) = unread.iter().find(|(_, set)| *set) {
         return Err(CliExit::error_with_usage(
             format!("{flag} does not apply to `{}`", kind.name()),
-            &usage,
-        ));
-    }
-    if kind == QueryKind::Scip && (symbol.is_some() || line.is_some() || column.is_some()) {
-        return Err(CliExit::error_with_usage(
-            "`scip` takes a directory, not --symbol or --line/--column",
             &usage,
         ));
     }
@@ -292,12 +297,6 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<QueryOptions, CliExit> {
                 &usage,
             ));
         }
-        if matches!(kind, QueryKind::Diagnostics | QueryKind::InlayHints) {
-            return Err(CliExit::error_with_usage(
-                "--symbol is not supported for the `diagnostics` / `inlay-hints` kinds",
-                &usage,
-            ));
-        }
         return Ok(QueryOptions {
             kind,
             input,
@@ -311,13 +310,6 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<QueryOptions, CliExit> {
             output,
             excludes,
         });
-    }
-
-    if base.is_some() {
-        return Err(CliExit::error_with_usage(
-            "--base is only valid together with --symbol",
-            &usage,
-        ));
     }
 
     let input = if kind == QueryKind::Scip {
