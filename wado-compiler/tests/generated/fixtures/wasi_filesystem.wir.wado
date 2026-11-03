@@ -41,7 +41,6 @@ struct core:prelude/list.wado//$tmpl$59e16269228f9c88 {  // TypeId(7)
     mut r2: ref "core:prelude/string.wado//String",
     mut s3: ref "core:prelude/string.wado//String",
     mut r3: ref "core:prelude/string.wado//String",
-    mut q: i32,
 }
 
 struct core:prelude/format.wado//Formatter {  // TypeId(8)
@@ -226,7 +225,7 @@ fn "wasi_filesystem.wado/run"() with Stdout, Preopens {
     let x: i64;
     let q: u64;
     let tens: i32;
-    let start_241: i32;
+    let start_240: i32;
     dir_count = local.tee dirs("wasi_filesystem.wado/$cm_binding__wasi:filesystem/preopens@0.3.0#get-directories"()).used;
     out_12 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(52), used: 0 };
     repr_41 = global:wasi_filesystem.wado::$const_obj_5;
@@ -300,22 +299,22 @@ fn "wasi_filesystem.wado/run"() with Stdout, Preopens {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_12, is_negative_74);
         }
-        start_241 = out_12.used;
+        start_240 = out_12.used;
         out_12.used = is_negative_74;
-        builtin::array_set_u8(out_12.repr, start_241, 45);
+        builtin::array_set_u8(out_12.repr, start_240, 45);
     } else {
     }
     if @unlikely(local.tee is_negative_74(out_12.used + digit_count_76) > builtin::array_len(out_12.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_12, is_negative_74);
     }
-    start_241 = out_12.used;
+    start_240 = out_12.used;
     out_12.used = is_negative_74;
     repr_41 = out_12.repr;
-    is_negative_74 = start_241 + digit_count_76;
+    is_negative_74 = start_240 + digit_count_76;
     b22: block {
         l23: loop {
-            break_if b22 (is_negative_74 - start_241) < 2;
+            break_if b22 (is_negative_74 - start_240) < 2;
             q = x /u 100_i64;
             tens = local.tee digit_count_76(builtin::i32_wrap_i64(x - (q * 100_i64))) / 10;
             builtin::array_set_u8(repr_41, is_negative_74 - 1, (48 + digit_count_76) - (tens * 10));
@@ -325,8 +324,8 @@ fn "wasi_filesystem.wado/run"() with Stdout, Preopens {
             continue l23;
         };
     };
-    if is_negative_74 > start_241 {
-        builtin::array_set_u8(repr_41, start_241, 48 + builtin::i32_wrap_i64(x %u 10_i64));
+    if is_negative_74 > start_240 {
+        builtin::array_set_u8(repr_41, start_240, 48 + builtin::i32_wrap_i64(x %u 10_i64));
     }
     $load_1 = global:wasi_filesystem.wado::$const_obj_4;
     if @unlikely(local.tee is_negative_74(out_12.used + 12) > builtin::array_len(repr_41)) {
@@ -749,7 +748,7 @@ index: "), used: 43 }, r1: struct.new "core:prelude/string.wado//String" { repr:
 condition: 0 <= index < self.len()
 index: "), used: 43 }, s2: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 self.len(): "), used: 13 }, r2: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
-self.len(): "), used: 13 }, s3: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r3: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, q: 0 })).repr, $site.used);
+self.len(): "), used: 13 }, s3: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r3: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, $site.used);
     unreachable;
 }
 

@@ -37,7 +37,6 @@ struct wir_issue6_circular_struct_variant.wado//$tmpl$ebaa20f4a908b504 {  // Typ
     mut r0: ref "core:prelude/string.wado//String",
     mut s1: ref "core:prelude/string.wado//String",
     mut r1: ref "core:prelude/string.wado//String",
-    mut q: i32,
 }
 
 struct wir_issue6_circular_struct_variant.wado//Node {  // TypeId(7)
@@ -152,7 +151,7 @@ fn "wir_issue6_circular_struct_variant.wado/run"() with Stdout {
     let arr: ref Array<u8>;
     let q: u64;
     let tens: i32;
-    let start_171: i32;
+    let start_170: i32;
     if @unlikely(local.tee total("wir_issue6_circular_struct_variant.wado/sum_tree$sroa[t.value]"(global:wir_issue6_circular_struct_variant.wado::$const_obj_0)) != 6) {
         cold_path;
         "wir_issue6_circular_struct_variant.wado/run$cold0"(total);
@@ -230,22 +229,22 @@ fn "wir_issue6_circular_struct_variant.wado/run"() with Stdout {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_18, is_negative_80);
         }
-        start_171 = out_18.used;
+        start_170 = out_18.used;
         out_18.used = is_negative_80;
-        builtin::array_set_u8(out_18.repr, start_171, 45);
+        builtin::array_set_u8(out_18.repr, start_170, 45);
     } else {
     }
     if @unlikely(local.tee is_negative_80(out_18.used + total) > builtin::array_len(out_18.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_18, is_negative_80);
     }
-    start_171 = out_18.used;
+    start_170 = out_18.used;
     out_18.used = is_negative_80;
     arr = out_18.repr;
-    total = start_171 + total;
+    total = start_170 + total;
     b23: block {
         l24: loop {
-            break_if b23 (total - start_171) < 2;
+            break_if b23 (total - start_170) < 2;
             q = x /u 100_i64;
             tens = local.tee is_negative_80(builtin::i32_wrap_i64(x - (q * 100_i64))) / 10;
             builtin::array_set_u8(arr, total - 1, (48 + is_negative_80) - (tens * 10));
@@ -255,8 +254,8 @@ fn "wir_issue6_circular_struct_variant.wado/run"() with Stdout {
             continue l24;
         };
     };
-    if total > start_171 {
-        builtin::array_set_u8(arr, start_171, 48 + builtin::i32_wrap_i64(x %u 10_i64));
+    if total > start_170 {
+        builtin::array_set_u8(arr, start_170, 48 + builtin::i32_wrap_i64(x %u 10_i64));
     }
     $inline_core_prelude_string_wado_String__internal_push_view_42: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_42;
@@ -297,7 +296,7 @@ fn "wir_issue6_circular_struct_variant.wado/run$cold0"(total) with Stdout {
 condition: total == 6
 total: "), used: 99 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in run at wir_issue6_circular_struct_variant.wado:36
 condition: total == 6
-total: "), used: 99 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, q: 0 })).repr, $mv_arg_1.used);
+total: "), used: 99 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, $mv_arg_1.used);
     unreachable;
 }
 

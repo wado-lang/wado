@@ -72,7 +72,7 @@ fn "sroa_param_boxed_reference_retained.wado/run"() with Stdout {
     let x: i64;
     let q: u64;
     let tens: i32;
-    let start_182: i32;
+    let start_181: i32;
     t_0 = struct.new "sroa_param_boxed_reference_retained.wado//Text" { s: ref.as_non_null(black_box(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello"), used: 5 })) };
     let $mv_repr_1: ref Array<u8>;
     let $mv_start_2: i32;
@@ -151,22 +151,22 @@ fn "sroa_param_boxed_reference_retained.wado/run"() with Stdout {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_13, $mv_end_3);
         }
-        start_182 = out_13.used;
+        start_181 = out_13.used;
         out_13.used = $mv_end_3;
-        builtin::array_set_u8(out_13.repr, start_182, 45);
+        builtin::array_set_u8(out_13.repr, start_181, 45);
     } else {
     }
     if @unlikely(local.tee $mv_end_3(out_13.used + $mv_start_2) > builtin::array_len(out_13.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_13, $mv_end_3);
     }
-    start_182 = out_13.used;
+    start_181 = out_13.used;
     out_13.used = $mv_end_3;
     $mv_repr_1 = out_13.repr;
-    $mv_start_2 = start_182 + $mv_start_2;
+    $mv_start_2 = start_181 + $mv_start_2;
     b22: block {
         l23: loop {
-            break_if b22 ($mv_start_2 - start_182) < 2;
+            break_if b22 ($mv_start_2 - start_181) < 2;
             q = x /u 100_i64;
             tens = local.tee $mv_end_3(builtin::i32_wrap_i64(x - (q * 100_i64))) / 10;
             builtin::array_set_u8($mv_repr_1, $mv_start_2 - 1, (48 + $mv_end_3) - (tens * 10));
@@ -176,8 +176,8 @@ fn "sroa_param_boxed_reference_retained.wado/run"() with Stdout {
             continue l23;
         };
     };
-    if $mv_start_2 > start_182 {
-        builtin::array_set_u8($mv_repr_1, start_182, 48 + builtin::i32_wrap_i64(x %u 10_i64));
+    if $mv_start_2 > start_181 {
+        builtin::array_set_u8($mv_repr_1, start_181, 48 + builtin::i32_wrap_i64(x %u 10_i64));
     }
     $inline_core_prelude_string_wado_String__internal_push_view_44: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_44;
@@ -185,11 +185,11 @@ fn "sroa_param_boxed_reference_retained.wado/run"() with Stdout {
     $mv_start_2 = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
     $mv_end_3 = builtin::i32_wrap_i64(x >> 32_i64);
     $mv_start_2 = "sroa_param_boxed_reference_retained.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($mv_start_2);
-    builtin::array_copy<u8>(local.tee $mv_repr_1(builtin::array_new<u8>(local.tee start_182(out_13.used) + 1)), 0, out_13.repr, 0, start_182);
-    builtin::array_set_u8($mv_repr_1, start_182, 10);
+    builtin::array_copy<u8>(local.tee $mv_repr_1(builtin::array_new<u8>(local.tee start_181(out_13.used) + 1)), 0, out_13.repr, 0, start_181);
+    builtin::array_set_u8($mv_repr_1, start_181, 10);
     drop(block -> "core:prelude/types.wado//enum:CopyResult" {
-        start_182 = start_182 + 1;
-        "core:rt/cm_stream_write_raw_all_u8"($mv_end_3, $mv_repr_1, 0, start_182);
+        start_181 = start_181 + 1;
+        "core:rt/cm_stream_write_raw_all_u8"($mv_end_3, $mv_repr_1, 0, start_181);
     });
     "wasi/stream-drop-writable"($mv_end_3);
     "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($mv_start_2);

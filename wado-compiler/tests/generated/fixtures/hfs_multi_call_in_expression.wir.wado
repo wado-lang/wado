@@ -99,19 +99,19 @@ fn "hfs_multi_call_in_expression.wado/run"() with Stdout {
     let out_36: ref "core:prelude/string.wado//String";
     let x_107: i64;
     let repr_126: ref Array<u8>;
-    let $hfs_v_266: i32;
+    let $hfs_v_265: i32;
     b = struct.new "hfs_multi_call_in_expression.wado//Buf" { v: 0, pad: 0 };
     sum = 0;
     i = 0;
-    $hfs_v_266 = 0;
+    $hfs_v_265 = 0;
     b0: block {
         l1: loop {
             break_if b0 i >= 2;
-            b.v = $hfs_v_266;
+            b.v = $hfs_v_265;
             sum = (sum + "hfs_multi_call_in_expression.wado/f_inc100"(b)) + "hfs_multi_call_in_expression.wado/g_inc1"(b);
-            $hfs_v_266 = b.v;
+            $hfs_v_265 = b.v;
             i = i + 1;
-            b.v = $hfs_v_266;
+            b.v = $hfs_v_265;
             continue l1;
         };
     };
@@ -120,18 +120,18 @@ fn "hfs_multi_call_in_expression.wado/run"() with Stdout {
     $inline_core_prelude_string_wado_String__format_hfs_multi_call_in_expression_wado__tmpl_8db8629cb9c7db93__i32_i32___spec0_spec0_0__$inline_core_prelude_string_wado_String__internal_push_view_22: block {
         break $inline_core_prelude_string_wado_String__format_hfs_multi_call_in_expression_wado__tmpl_8db8629cb9c7db93__i32_i32___spec0_spec0_0__$inline_core_prelude_string_wado_String__internal_push_view_22;
     };
-    $hfs_v_266 = sum < 0;
+    $hfs_v_265 = sum < 0;
     sum = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_107(x_107 = builtin::i64_extend_i32_s(sum); select i64(x_107 < 0_i64, 0_i64 - x_107, x_107)));
-    $hfs_v_266 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"(out_36, $hfs_v_266, sum);
-    "core:prelude/primitive.wado/write_decimal_digits"(local.tee $load_2(out_36.repr), $hfs_v_266, x_107, sum);
+    $hfs_v_265 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"(out_36, $hfs_v_265, sum);
+    "core:prelude/primitive.wado/write_decimal_digits"(local.tee $load_2(out_36.repr), $hfs_v_265, x_107, sum);
     repr_126 = global:hfs_multi_call_in_expression.wado::$const_obj_0;
     if @unlikely(local.tee sum(out_36.used + 1) > builtin::array_len($load_2)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_36, sum);
     }
-    $hfs_v_266 = out_36.used;
+    $hfs_v_265 = out_36.used;
     out_36.used = sum;
-    builtin::array_copy<u8>(out_36.repr, $hfs_v_266, repr_126, 0, 1);
+    builtin::array_copy<u8>(out_36.repr, $hfs_v_265, repr_126, 0, 1);
     sum = i < 0;
     i = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_107(x_107 = builtin::i64_extend_i32_s(i); select i64(x_107 < 0_i64, 0_i64 - x_107, x_107)));
     sum = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"(out_36, sum, i);
@@ -142,11 +142,11 @@ fn "hfs_multi_call_in_expression.wado/run"() with Stdout {
     sum = builtin::i32_wrap_i64(local.tee x_107("wasi/stream-new"()));
     i = builtin::i32_wrap_i64(x_107 >> 32_i64);
     sum = "hfs_multi_call_in_expression.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(sum);
-    builtin::array_copy<u8>(local.tee $load_2(builtin::array_new<u8>(local.tee $hfs_v_266(out_36.used) + 1)), 0, out_36.repr, 0, $hfs_v_266);
-    builtin::array_set_u8($load_2, $hfs_v_266, 10);
+    builtin::array_copy<u8>(local.tee $load_2(builtin::array_new<u8>(local.tee $hfs_v_265(out_36.used) + 1)), 0, out_36.repr, 0, $hfs_v_265);
+    builtin::array_set_u8($load_2, $hfs_v_265, 10);
     drop(block -> "core:prelude/types.wado//enum:CopyResult" {
-        $hfs_v_266 = $hfs_v_266 + 1;
-        "core:rt/cm_stream_write_raw_all_u8"(i, $load_2, 0, $hfs_v_266);
+        $hfs_v_265 = $hfs_v_265 + 1;
+        "core:rt/cm_stream_write_raw_all_u8"(i, $load_2, 0, $hfs_v_265);
     });
     "wasi/stream-drop-writable"(i);
     "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(sum);

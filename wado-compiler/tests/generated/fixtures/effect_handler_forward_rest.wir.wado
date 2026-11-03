@@ -31,7 +31,6 @@ struct core:prelude/list.wado//$tmpl$59e16269228f9c88 {  // TypeId(5)
     mut r2: ref "core:prelude/string.wado//String",
     mut s3: ref "core:prelude/string.wado//String",
     mut r3: ref "core:prelude/string.wado//String",
-    mut q: i32,
 }
 
 struct core:prelude/format.wado//Formatter {  // TypeId(6)
@@ -228,7 +227,7 @@ fn "effect_handler_forward_rest.wado/run"() with Stdout {
     let arr: ref Array<u8>;
     let q: u64;
     let tens: i32;
-    let start_221: i32;
+    let start_220: i32;
     base = struct.new "effect_handler_forward_rest.wado//Base" { lines: struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: array.new_fixed<ref "core:prelude/string.wado//String">(), used: 0 } };
     global:effect_handler_forward_rest.wado::$effect_effect_handler_forward_rest.wado/Log = struct.new "effect_handler_forward_rest.wado//$Dispatch_effect_handler_forward_rest.wado/Log" { outer: local.tee $save_effect_handler_forward_rest.wado/Log_10(global:effect_handler_forward_rest.wado::$effect_effect_handler_forward_rest.wado/Log), op_enabled: struct.new "canonical//CanonicalClosure_0" { env: struct.new "effect_handler_forward_rest.wado//$Closure_0" { $capture_0: base }, func: ref.func "closure/effect_handler_forward_rest.wado/$closure_wrapper_0" }, op_emit: struct.new "canonical//CanonicalClosure_1" { env: struct.new "effect_handler_forward_rest.wado//$Closure_1" { $capture_0: base }, func: ref.func "closure/effect_handler_forward_rest.wado/$closure_wrapper_1" } };
     global:effect_handler_forward_rest.wado::$effect_effect_handler_forward_rest.wado/Log = struct.new "effect_handler_forward_rest.wado//$Dispatch_effect_handler_forward_rest.wado/Log" { outer: local.tee $save_effect_handler_forward_rest.wado/Log_7(global:effect_handler_forward_rest.wado::$effect_effect_handler_forward_rest.wado/Log), op_enabled: struct.new "canonical//CanonicalClosure_0" { env: struct.new "effect_handler_forward_rest.wado//$Closure_2" {}, func: ref.func "closure/effect_handler_forward_rest.wado/$closure_wrapper_2" }, op_emit: struct.new "canonical//CanonicalClosure_1" { env: struct.new "effect_handler_forward_rest.wado//$Closure_3" {}, func: ref.func "closure/effect_handler_forward_rest.wado/$closure_wrapper_3" } };
@@ -365,22 +364,22 @@ fn "effect_handler_forward_rest.wado/run"() with Stdout {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"($mv_arg_1, is_negative_99);
         }
-        start_221 = $mv_arg_1.used;
+        start_220 = $mv_arg_1.used;
         $mv_arg_1.used = is_negative_99;
-        builtin::array_set_u8($mv_arg_1.repr, start_221, 45);
+        builtin::array_set_u8($mv_arg_1.repr, start_220, 45);
     } else {
     }
     if @unlikely(local.tee is_negative_99($mv_arg_1.used + $local_3_22) > builtin::array_len($mv_arg_1.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($mv_arg_1, is_negative_99);
     }
-    start_221 = $mv_arg_1.used;
+    start_220 = $mv_arg_1.used;
     $mv_arg_1.used = is_negative_99;
     arr = $mv_arg_1.repr;
-    $local_3_22 = start_221 + $local_3_22;
+    $local_3_22 = start_220 + $local_3_22;
     b30: block {
         l31: loop {
-            break_if b30 ($local_3_22 - start_221) < 2;
+            break_if b30 ($local_3_22 - start_220) < 2;
             q = x /u 100_i64;
             tens = local.tee is_negative_99(builtin::i32_wrap_i64(x - (q * 100_i64))) / 10;
             builtin::array_set_u8(arr, $local_3_22 - 1, (48 + is_negative_99) - (tens * 10));
@@ -390,8 +389,8 @@ fn "effect_handler_forward_rest.wado/run"() with Stdout {
             continue l31;
         };
     };
-    if $local_3_22 > start_221 {
-        builtin::array_set_u8(arr, start_221, 48 + builtin::i32_wrap_i64(x %u 10_i64));
+    if $local_3_22 > start_220 {
+        builtin::array_set_u8(arr, start_220, 48 + builtin::i32_wrap_i64(x %u 10_i64));
     }
     $inline_core_prelude_string_wado_String__internal_push_view_47: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_47;
@@ -410,9 +409,9 @@ fn "effect_handler_forward_rest.wado/run"() with Stdout {
     $local_3_22 = local.tee $mv_arg_1(builtin::array_get_value<ref "core:prelude/string.wado//String">($load_35.repr, 0)).used;
     $mv_arg_1 = struct.new "core:prelude/string.wado//String" { repr: arr = $mv_arg_1.repr; let $array_clone_dst_10: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_10(builtin::array_new<u8>($local_3_22)), 0, arr, 0, $local_3_22); $array_clone_dst_10, used: $local_3_22 };
     is_negative_99 = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
-    start_221 = builtin::i32_wrap_i64(x >> 32_i64);
+    start_220 = builtin::i32_wrap_i64(x >> 32_i64);
     is_negative_99 = "effect_handler_forward_rest.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(is_negative_99);
-    "core:rt/write_string_to_stream$dae[add_newline]"(start_221, $mv_arg_1.repr, $local_3_22);
+    "core:rt/write_string_to_stream$dae[add_newline]"(start_220, $mv_arg_1.repr, $local_3_22);
     "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(is_negative_99);
 }
 
@@ -621,7 +620,7 @@ index: "), used: 43 }, r1: struct.new "core:prelude/string.wado//String" { repr:
 condition: 0 <= index < self.len()
 index: "), used: 43 }, s2: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 self.len(): "), used: 13 }, r2: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
-self.len(): "), used: 13 }, s3: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r3: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, q: 0 })).repr, $site.used);
+self.len(): "), used: 13 }, s3: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r3: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, $site.used);
     unreachable;
 }
 
@@ -1267,8 +1266,8 @@ fn "effect_handler_forward_rest.wado/effect_handler_forward_rest.wado/$Closure_5
         };
         if @likely(ref.is_null(local.tee $local_1(global:effect_handler_forward_rest.wado::$effect_effect_handler_forward_rest.wado/Log)) == 0) {
             global:effect_handler_forward_rest.wado::$effect_effect_handler_forward_rest.wado/Log = local.tee $local_2(ref.as_non_null($local_1)).outer;
-            let $indirect_call_11: ref "canonical//CanonicalClosure_1";
-            call_ref "functype/$canonical_closure_fn_1"($indirect_call_11.func, local.tee $indirect_call_11(ref.cast "canonical//CanonicalClosure_1"($local_2.op_emit)).env, message);
+            let $indirect_call_10: ref "canonical//CanonicalClosure_1";
+            call_ref "functype/$canonical_closure_fn_1"($indirect_call_10.func, local.tee $indirect_call_10(ref.cast "canonical//CanonicalClosure_1"($local_2.op_emit)).env, message);
             break $inline__effect_dispatch__effect_handler_forward_rest_wado_Log__emit_1: global:effect_handler_forward_rest.wado::$effect_effect_handler_forward_rest.wado/Log = $local_1;
         } else {
             "core:rt/panic"(local.tee message(global:effect_handler_forward_rest.wado::$const_obj_1).repr, message.used);
