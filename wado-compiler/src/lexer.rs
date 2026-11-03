@@ -1420,8 +1420,7 @@ impl<'a> Lexer<'a> {
 
     /// Whether the `hashes` characters after the cursor are all `#`.
     fn at_hashes(&self, hashes: usize) -> bool {
-        self.input[self.pos..]
-            .as_bytes()
+        self.input.as_bytes()[self.pos..]
             .get(..hashes)
             .is_some_and(|run| run.iter().all(|&b| b == b'#'))
     }
