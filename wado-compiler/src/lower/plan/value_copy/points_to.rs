@@ -1943,4 +1943,15 @@ mod tests {
         assert_eq!(g.locations_in(x), [l, k]);
         assert_eq!(g.locations_in(z), [l, k, p]);
     }
+
+    #[test]
+    fn a_node_copying_one_source_and_holding_nothing_of_its_own_merges_into_it() {
+        // `n` holds `l` only because `s` does, so its label is `s`'s.
+        let mut g = Graph::default();
+        let [s, n, l] = [(); 3].map(|()| g.node());
+        g.add(s, l);
+        g.copy(s, n);
+        g.solve();
+        assert_eq!(g.find(n), g.find(s));
+    }
 }
