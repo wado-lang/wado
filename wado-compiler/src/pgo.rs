@@ -494,10 +494,15 @@ impl MarkMap {
             parent
         };
         // A hot price on the rare side of a branch would grow code that rarely
-        // runs, so an unlikely region pays the plain one.
+        // runs, so an unlikely region pays the plain one. A `?`'s region spans
+        // its operand, whose calls run before the failure path the region
+        // counts, so it prices none of them.
         self.heat.add(
             space,
             plan.regions.iter().enumerate().filter_map(|(id, region)| {
+                if region.kind == RegionKind::Try {
+                    return None;
+                }
                 counts[id].map(|runs| MeasuredRegion {
                     start: region.start,
                     end: region.end,

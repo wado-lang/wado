@@ -1,0 +1,47 @@
+// A call the profile measured hot splices a callee up to the hot threshold,
+// and a `?` on it keeps the call in the hot region: the failure path the `?`
+// opens starts once the call returns, and never ran.
+use { println, Stdout } from "core:cli";
+
+fn mix(x: i32) -> Result<i32, String> {
+    if x < 0 {
+        return Err("negative");
+    }
+    let mut h = x;
+    h = h * 31 + builtin::black_box(7);
+    h = h ^ (h >> 3);
+    h = h * 17 + builtin::black_box(5);
+    h = h ^ (h >> 5);
+    h = h * 13 + builtin::black_box(3);
+    h = h ^ (h >> 7);
+    h = h * 11 + builtin::black_box(2);
+    h = h ^ (h >> 11);
+    h = h * 7 + builtin::black_box(1);
+    h = h ^ (h >> 13);
+    h = h * 5 + builtin::black_box(9);
+    h = h ^ (h >> 2);
+    return Ok(h);
+}
+
+#[inline("never")]
+fn hot(x: i32) -> Result<i32, String> {
+    return Ok(mix(x)? + 1);
+}
+
+#[inline("never")]
+fn plain(x: i32) -> Result<i32, String> {
+    return Ok(mix(x)? + 2);
+}
+
+export fn run() with Stdout {
+    let x = builtin::black_box(3);
+    println(`${hot(x).unwrap() - plain(x).unwrap()}`);
+}
+
+__DATA__
+{
+  "profile": "testdata/pgo_hot_try_call.pgo",
+  "wir_scope": "pgo_hot_try_call.wado/hot",
+  "wir_not_expect:O2": ["= \"pgo_hot_try_call.wado/mix"],
+  "stdout": "-1\n"
+}
