@@ -35,6 +35,12 @@ pub fn is_valid_ident(s: &str) -> bool {
     s != WILDCARD && chars.next().is_some_and(is_ident_start) && chars.all(is_ident_continue)
 }
 
+/// Whether `s` can name a variable: an identifier that lexes as one, or as a
+/// keyword only some positions reserve.
+pub fn is_binding_name(s: &str) -> bool {
+    is_valid_ident(s) && TokenKind::from_keyword(s).is_none_or(|kw| kw.as_ident_name().is_some())
+}
+
 /// The wildcard's spelling.
 pub const WILDCARD: &str = "_";
 

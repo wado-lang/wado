@@ -3907,6 +3907,22 @@ test #"c\d"# {
     );
 }
 
+/// A quoted field name a keyword spells loses its quotes in a pattern as in a
+/// literal, and the output parses back.
+#[test]
+fn test_format_keyword_field_name_unquotes_in_a_pattern() {
+    let source = "fn f(p: P) {\n    let P { \"true\": t } = p;\n    let q = P { \"true\": 1 };\n}\n";
+    let formatted = wado_compiler::format(source).expect("format failed");
+    assert_eq!(
+        formatted,
+        "fn f(p: P) {\n    let P { true: t } = p;\n    let q = P { true: 1 };\n}\n"
+    );
+    assert_eq!(
+        wado_compiler::format(&formatted).expect("the output must parse"),
+        formatted
+    );
+}
+
 #[test]
 fn test_format_raw_template_kept_as_written() {
     let source = r"fn foo() {

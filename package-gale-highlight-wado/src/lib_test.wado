@@ -83,7 +83,7 @@ test "highlight tagged template" {
     let src = "fn f() { let n = 1; let a = String::format`a ${n}`; let b = sql`b`; }\n";
     assert parse(&src).ok(), "parse failed";
     let html = highlight(src);
-    assert html.contains("<span class=\"function\">raw</span>"), "qualified tag -> function";
+    assert html.contains("<span class=\"function\">format</span>"), "qualified tag -> function";
     assert html.contains("<span class=\"function\">sql</span>"), "bare tag -> function";
     assert !html.contains(">String</span>"), "a tag's owner carries no span";
     assert !html.contains(">n</span>"), "a hole reads as it does in an untagged template";

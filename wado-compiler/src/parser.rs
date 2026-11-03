@@ -27,7 +27,9 @@ use crate::attribute::{CANONICAL, CM, GENERATED, TODO};
 use crate::comment::{Comment, TriviaMap};
 use crate::compiler_host::{Code, Diagnostic, DiagnosticSpan, Severity};
 use crate::escape::{quoted, string_value};
-use crate::lexer::{LexResult, WILDCARD, defaults_to_float, is_decimal_integer, lex_interpolation};
+use crate::lexer::{
+    LexResult, WILDCARD, defaults_to_float, is_binding_name, is_decimal_integer, lex_interpolation,
+};
 use crate::name::{contract_holder_name, namespaced_name, repeat_pack_name};
 use crate::syntax::statement_keyword_name_message;
 use crate::token::{Position, Quote, Span, TemplateTokenPart, Token, TokenKind, TokenKind as T};
@@ -1652,11 +1654,37 @@ impl Parser {
         Ok(StrLit { value, raw, quote })
     }
 
-    /// A field name a string literal spells, for JSON compatibility: its value,
-    /// and the literal for printing it back.
-    fn take_quoted_field_name(&mut self) -> ParseResult<(String, Option<StrLit>)> {
-        let quoted = self.take_string()?;
-        Ok((quoted.value.clone(), Some(quoted)))
+    /// A field name, spelled as an identifier, a keyword, or a string literal
+    /// for JSON compatibility. A literal comes back too, for printing it back.
+    fn take_field_name(&mut self) -> ParseResult<(String, Option<StrLit>)> {
+        if matches!(self.peek_kind(), TokenKind::StringLit { .. }) {
+            let quoted = self.take_string()?;
+            Ok((quoted.value.clone(), Some(quoted)))
+        } else {
+            Ok((self.consume_field_name()?, None))
+        }
+    }
+
+    /// Check that a shorthand field, which reads or binds the variable of the
+    /// field's name, names one a variable can take. `rest` is what the
+    /// explicit form writes after the colon.
+    fn check_shorthand_name(
+        &self,
+        name: &str,
+        quoted: Option<&StrLit>,
+        span: Span,
+        rest: &str,
+    ) -> ParseResult<()> {
+        if is_binding_name(name) {
+            return Ok(());
+        }
+        let written = quoted.map_or_else(|| name.to_string(), StrLit::as_written);
+        Err(self.error_at_span(
+            span,
+            &format!(
+                "a shorthand field must name a variable, and `{name}` cannot; write `{written}: {rest}`"
+            ),
+        ))
     }
 
     /// Parse a comma-separated list of attribute arguments up to the closing
@@ -3863,18 +3891,7 @@ impl Parser {
                     // order `visit_pattern` walks.
                     let field_id = self.alloc_ast_id();
                     let field_span = self.peek().span;
-                    // A string literal names a field for JSON compatibility.
-                    let (field_name, quoted) =
-                        if matches!(self.peek_kind(), TokenKind::StringLit { .. }) {
-                            self.take_quoted_field_name()?
-                        } else if let Some(name) = self.peek_kind().as_ident_name() {
-                            let name = name.to_string();
-                            self.mark_keyword_name();
-                            self.advance();
-                            (name, None)
-                        } else {
-                            return Err(self.expected_name_error("field name in struct pattern"));
-                        };
+                    let (field_name, quoted) = self.take_field_name()?;
 
                     // Check for `: pattern` (rename/nested)
                     let pattern = if self.check(&TokenKind::Colon) {
@@ -3882,6 +3899,7 @@ impl Parser {
                         self.parse_pattern()?
                     } else {
                         // Shorthand: `{ x }` means `{ x: x }`
+                        self.check_shorthand_name(&field_name, quoted.as_ref(), field_span, "name")?;
                         Pattern::Ident {
                             id: self.alloc_ast_id(),
                             name: field_name.clone(),
@@ -7382,13 +7400,7 @@ impl Parser {
                 }
 
                 let field_name_span = self.peek().span;
-                // A string literal names a field for JSON compatibility.
-                let (field_name, quoted) =
-                    if matches!(self.peek_kind(), TokenKind::StringLit { .. }) {
-                        self.take_quoted_field_name()?
-                    } else {
-                        (self.consume_field_name()?, None)
-                    };
+                let (field_name, quoted) = self.take_field_name()?;
                 let field_name_id = self.alloc_ast_id();
 
                 let (value, is_shorthand, field_span) = if self.check(&TokenKind::Colon) {
@@ -7398,6 +7410,12 @@ impl Parser {
                     (value, false, span)
                 } else {
                     // Shorthand: `{ x }` is equivalent to `{ x: x }`
+                    self.check_shorthand_name(
+                        &field_name,
+                        quoted.as_ref(),
+                        field_name_span,
+                        "value",
+                    )?;
                     (
                         Expr::Ident(IdentExpr {
                             id: self.alloc_ast_id(),

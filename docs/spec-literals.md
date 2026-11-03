@@ -1301,8 +1301,9 @@ Rationale: [WEP: Tuple and List Literal Syntax](./wep-2026-01-15-tuple-and-array
 
 A `{ … }` literal lists members separated by commas. A member is `key: value`,
 a shorthand `name` that stands for `name: name`, or a `..base` spread. A key is
-an identifier or a string literal, so `{ "x": 1 }` writes the key `{ x: 1 }`
-writes. Any other key is an error.
+an identifier, a keyword, or a string literal, so `{ "x": 1 }` writes the key
+`{ x: 1 }` writes. Any other key is an error. A shorthand reads the variable of
+its name, so that name must be one a variable can take: `{ true }` is an error.
 
 <!-- {"fixture":"spec_literals_objects.wado"} -->
 
