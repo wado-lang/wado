@@ -2092,10 +2092,12 @@ impl<'a> Unparser<'a> {
             Literal::LocationFunction => self.output.push_str("#function"),
             Literal::DataSection => self.output.push_str("#data"),
             Literal::IncludeStr(path) => {
-                self.output.push_str(&format!("#include_str({})", path.as_written()));
+                self.output
+                    .push_str(&format!("#include_str({})", path.as_written()));
             }
             Literal::IncludeBytes(path) => {
-                self.output.push_str(&format!("#include_bytes({})", path.as_written()));
+                self.output
+                    .push_str(&format!("#include_bytes({})", path.as_written()));
             }
         }
     }

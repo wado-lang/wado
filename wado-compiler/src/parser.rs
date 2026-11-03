@@ -30,9 +30,7 @@ use crate::escape::{quoted, unescape_string};
 use crate::lexer::{LexResult, WILDCARD, defaults_to_float, is_decimal_integer, lex_interpolation};
 use crate::name::{contract_holder_name, namespaced_name, repeat_pack_name};
 use crate::syntax::statement_keyword_name_message;
-use crate::token::{
-    Position, Quote, Span, TemplateTokenPart, Token, TokenKind, TokenKind as T,
-};
+use crate::token::{Position, Quote, Span, TemplateTokenPart, Token, TokenKind, TokenKind as T};
 use crate::{ast, format_spec, hashmap};
 use std::sync::Arc;
 
@@ -5164,7 +5162,9 @@ impl Parser {
                 }
             };
             let close_span = self.expect(&TokenKind::RParen)?.span;
-            self.include_paths.entry(path.value.clone()).or_insert(path_span);
+            self.include_paths
+                .entry(path.value.clone())
+                .or_insert(path_span);
             let value = if is_str {
                 Literal::IncludeStr(path)
             } else {

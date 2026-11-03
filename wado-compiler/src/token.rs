@@ -52,7 +52,10 @@ impl Quote {
     #[must_use]
     pub fn write(self, prefix: &str, delimiter: char, cooked: &str) -> String {
         let hashes = "#".repeat(self.hash_count());
-        format!("{prefix}{hashes}{delimiter}{}{delimiter}{hashes}", self.spell(cooked))
+        format!(
+            "{prefix}{hashes}{delimiter}{}{delimiter}{hashes}",
+            self.spell(cooked)
+        )
     }
 
     /// Text as this quoting writes it, from the cooked spelling the lexer gave

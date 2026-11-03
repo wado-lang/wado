@@ -1235,9 +1235,7 @@ impl<'a> Lexer<'a> {
         self.advance_n(prefix + quote.hash_count() + 1); // through the opening quote
         match quote {
             Quote::Cooked => self.scan_quoted_raw(start, start_line, start_column),
-            Quote::Raw { hashes } => {
-                self.scan_raw_quoted(hashes, start, start_line, start_column)
-            }
+            Quote::Raw { hashes } => self.scan_raw_quoted(hashes, start, start_line, start_column),
         }
     }
 
