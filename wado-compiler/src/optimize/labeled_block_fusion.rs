@@ -61,7 +61,14 @@ struct BindingSlots<'a> {
     type_table: &'a TypeTable,
 }
 
-impl BindingSlots<'_> {
+impl<'a> BindingSlots<'a> {
+    fn of(engine: &'a Engine, type_table: &'a TypeTable) -> Self {
+        Self {
+            locals: engine.locals(),
+            type_table,
+        }
+    }
+
     fn holds(self, binding: u32, type_id: TypeId) -> bool {
         self.locals
             .get(binding as usize)
@@ -69,18 +76,10 @@ impl BindingSlots<'_> {
     }
 }
 
-impl LabeledBlockFusionRule<'_> {
-    fn slots<'a>(&'a self, engine: &'a Engine) -> BindingSlots<'a> {
-        BindingSlots {
-            locals: engine.locals(),
-            type_table: self.type_table,
-        }
-    }
-}
-
 impl Rule for LabeledBlockFusionRule<'_> {
     fn apply_expr(&self, engine: &mut Engine, id: ExprId) -> bool {
-        let Some(plan) = plan_threading(engine.body, id, self.slots(engine)) else {
+        let slots = BindingSlots::of(engine, self.type_table);
+        let Some(plan) = plan_threading(engine.body, id, slots) else {
             return false;
         };
         perform_threading(engine, id, plan);
@@ -94,8 +93,8 @@ impl Rule for LabeledBlockFusionRule<'_> {
         }
         let yields = block_yields_value(engine, block);
         for i in 0..stmts.len() - 1 {
-            let Some(info) =
-                check_fusion_preconditions(engine.body, stmts[i], stmts[i + 1], self.slots(engine))
+            let slots = BindingSlots::of(engine, self.type_table);
+            let Some(info) = check_fusion_preconditions(engine.body, stmts[i], stmts[i + 1], slots)
             else {
                 continue;
             };
@@ -163,10 +162,7 @@ fn thread_bound_block(
     if !is_local(engine.body, scrut, temp) || body_uses(engine, temp) != 1 {
         return false;
     }
-    let slots = BindingSlots {
-        locals: engine.locals(),
-        type_table,
-    };
+    let slots = BindingSlots::of(engine, type_table);
     let Some(plan) = plan_threading_of(engine.body, match_id, lb, slots) else {
         return false;
     };
