@@ -1,0 +1,12 @@
+use { args, println, Stdout, Environment } from "core:cli";
+use { Preopens } from "core:fs";
+use { load } from "./src/symbols.wado";
+
+export fn run() with (Stdout, Preopens, Environment) {
+    let a = args();
+    let index = load(&[a[0]]).unwrap();
+    println("loaded");
+    for let line of index.find_symbol(&a[1], &"") { println(line); }
+    let refs = index.find_references(&a[1], &"", &a[2]);
+    for let i of 0..<i32::min(15, refs.len()) { println(refs[i]); }
+}

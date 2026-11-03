@@ -1,0 +1,102 @@
+use { from_string } from "core:json";
+use { Value } from "core:value";
+use scip from "./scip.proto"
+    with {
+        generator: { module: "lib:grog" },
+    };
+use { empty_index } from "./symbols.wado";
+use { Workspace } from "./tools.wado";
+
+global CRATE: String = "rust-analyzer cargo shapes 0.1.0 ";
+
+/// `testdata/shapes.rs` as rust-analyzer indexes it: a definition carries the
+/// declaration's range, legacy-packed.
+fn shapes() -> scip::Index {
+    let def = |line: i32, col: i32, len: i32, symbol: String, enclosing: List<i32>| scip::Occurrence {
+        range: [line, col, col + len],
+        symbol: `${CRATE}${symbol}`,
+        symbol_roles: 1,
+        enclosing_range: enclosing,
+    };
+    let reference = |line: i32, col: i32, len: i32, symbol: String| scip::Occurrence {
+        range: [line, col, col + len],
+        symbol: `${CRATE}${symbol}`,
+        symbol_roles: 8,
+    };
+    let info = |symbol: String, name: String, kind: scip::SymbolInformationKind, signature: String, enclosing: String| scip::SymbolInformation {
+        symbol: `${CRATE}${symbol}`,
+        display_name: name,
+        kind,
+        signature_documentation: Some(scip::Signature { language: "rust", text: signature }),
+        enclosing_symbol: if enclosing.is_empty() { "" } else { `${CRATE}${enclosing}` },
+    };
+    return scip::Index {
+        documents: [
+            scip::Document {
+                relative_path: "testdata/shapes.rs",
+                occurrences: [
+                    def(0, 11, 6, "Circle#", [0, 0, 2, 1]),
+                    def(1, 8, 6, "Circle#radius.", [1, 4, 1, 15]),
+                    reference(4, 5, 6, "Circle#"),
+                    def(5, 11, 4, "impl#[Circle]area().", [5, 4, 7, 5]),
+                    reference(6, 20, 6, "Circle#radius."),
+                    reference(6, 34, 6, "Circle#radius."),
+                    def(10, 7, 5, "total().", [10, 0, 12, 1]),
+                    reference(10, 23, 6, "Circle#"),
+                    reference(11, 29, 4, "impl#[Circle]area()."),
+                    scip::Occurrence { range: [10, 13, 19], symbol: "local 0", symbol_roles: 1 },
+                ],
+                symbols: [
+                    info("Circle#", "Circle", Struct, "pub struct Circle", ""),
+                    info("Circle#radius.", "radius", Field, "pub radius: f64", "Circle#"),
+                    info("impl#[Circle]area().", "area", Method, "pub fn area(&self) -> f64", ""),
+                    info("total().", "total", Function, "pub fn total(shapes: &[Circle]) -> f64", ""),
+                    scip::SymbolInformation { symbol: "local 0", display_name: "shapes" },
+                ],
+            },
+        ],
+    };
+}
+
+fn workspace() -> Workspace {
+    let mut symbols = empty_index();
+    symbols.add(&shapes());
+    return Workspace { root: "src", symbols: Some(symbols) };
+}
+
+fn tool_input(json: String) -> Value {
+    return from_string::<Value, String>(json).unwrap();
+}
+
+test "FindSymbol gives each definition its range and signature" {
+    let ws = workspace();
+    let out = ws.call(&"FindSymbol", &tool_input(`{"name": "area"}`)).unwrap();
+    assert out == "testdata/shapes.rs:6-8: method Circle::area\n    pub fn area(&self) -> f64\n";
+    assert ws.call(&"FindSymbol", &tool_input(`{"name": "Circle::area"}`)).unwrap() == out;
+    assert ws.call(&"FindSymbol", &tool_input(`{"name": "Circle.area"}`)).unwrap() == out;
+    assert ws.call(&"FindSymbol", &tool_input(`{"name": "Square::area"}`)).unwrap() == "No symbols found";
+    assert ws.call(&"FindSymbol", &tool_input(`{"name": "shapes"}`)).unwrap() == "No symbols found";
+}
+
+test "FindReferences names the declaration each reference sits in" {
+    let ws = workspace();
+    let out = ws.call(&"FindReferences", &tool_input(`{"name": "area"}`)).unwrap();
+    assert out == "method Circle::area (testdata/shapes.rs:6): 1 references\ntestdata/shapes.rs:12 in total: shapes.iter().map(|c| c.area()).sum()\n";
+}
+
+test "FindReferences lists a line once" {
+    let ws = workspace();
+    let out = ws.call(&"FindReferences", &tool_input(`{"name": "radius"}`)).unwrap();
+    assert out == "field Circle::radius (testdata/shapes.rs:2): 2 references\ntestdata/shapes.rs:7 in Circle::area: 3.14 * self.radius * self.radius\n";
+}
+
+test "FindReferences keeps the references under a path" {
+    let ws = workspace();
+    let out = ws.call(&"FindReferences", &tool_input(`{"name": "Circle", "path": "other"}`)).unwrap();
+    assert out == "struct Circle (testdata/shapes.rs:1): 2 references\n";
+}
+
+test "the symbol tools are offered only with an index" {
+    assert !(Workspace { root: "src" }).tools().into_iter().any(|t| t.name == "FindSymbol");
+    assert workspace().tools().into_iter().any(|t| t.name == "FindSymbol");
+}

@@ -1,0 +1,314 @@
+//! FindSymbol and FindReferences: grep with the compiler's answers. They read
+//! SCIP indexes of one tree, the format rust-analyzer (`rust-analyzer scip`)
+//! and `wado query scip` both write, so one reader serves Rust and Wado.
+
+use fs from "core:fs";
+use { Preopens } from "core:fs";
+use { HashMap } from "core:collections";
+use grog from "lib:grog";
+use scip from "./scip.proto"
+    with {
+        generator: { module: "lib:grog" },
+    };
+
+/// A declaration's own lines and where it is used.
+struct Sym {
+    symbol: String,
+    name: String,
+    kind: String,
+    signature: String,
+    /// The symbol of the declaration this one is a member of; empty at the
+    /// top level.
+    enclosing: String,
+    definitions: List<Site>,
+    references: List<Site>,
+}
+
+/// A place in a file, 0-based. `end` is the last line of the declaration a
+/// definition names; a reference's is its own line.
+struct Site {
+    file: i32,
+    line: i32,
+    end: i32,
+}
+
+/// The declarations whose bodies span lines of one file, to name the one a
+/// reference sits in.
+struct Scope {
+    start: i32,
+    end: i32,
+    sym: i32,
+}
+
+/// The symbols of a tree, by name.
+pub struct SymbolIndex {
+    files: List<String>,
+    scopes: List<List<Scope>>,
+    syms: List<Sym>,
+    ids: HashMap<String, i32>,
+    by_name: HashMap<String, List<i32>>,
+}
+
+/// The index of the SCIP files at `paths`, whose paths are relative to one
+/// root.
+pub fn load(paths: &List<String>) -> Result<SymbolIndex, String> with Preopens {
+    let mut index = empty_index();
+    for let path of paths {
+        let bytes = fs::read(path).map_err(|e| `${e}`)?;
+        index.add(&grog::decode::<scip::Index, ByteList>(bytes).map_err(|e| `${path}: ${e}`)?);
+    }
+    return Ok(index);
+}
+
+pub fn empty_index() -> SymbolIndex {
+    return SymbolIndex {
+        files: [],
+        scopes: [],
+        syms: [],
+        ids: HashMap::<String, i32>::new(),
+        by_name: HashMap::<String, List<i32>>::new(),
+    };
+}
+
+impl SymbolIndex {
+    pub fn add(&mut self, index: &scip::Index) {
+        for let doc of &index.documents {
+            let file = self.files.len();
+            self.files.push(doc.relative_path);
+            self.scopes.push([]);
+            for let info of &doc.symbols {
+                if is_local(&info.symbol) {
+                    continue;
+                }
+                let id = self.id(&info.symbol);
+                self.syms[id].name = info.display_name;
+                self.syms[id].kind = kind_name(&info.kind);
+                self.syms[id].enclosing = info.enclosing_symbol;
+                if let Some(s) = &info.signature_documentation {
+                    self.syms[id].signature = s.text;
+                }
+            }
+            for let o of &doc.occurrences {
+                if is_local(&o.symbol) {
+                    continue;
+                }
+                let id = self.id(&o.symbol);
+                let [line, end] = lines_of(o);
+                let site = Site { file, line, end };
+                if o.symbol_roles & 1 != 0 {
+                    self.syms[id].definitions.push(site);
+                    if end > line {
+                        self.scopes[file].push(Scope { start: line, end, sym: id });
+                    }
+                } else {
+                    self.syms[id].references.push(site);
+                }
+            }
+        }
+        // Names are read once every document has given its symbols theirs.
+        self.by_name = HashMap::<String, List<i32>>::new();
+        for let i of 0..<self.syms.len() {
+            let name = self.syms[i].name;
+            if name.is_empty() {
+                continue;
+            }
+            let mut ids = self.by_name.get(name).unwrap_or([]);
+            ids.push(i);
+            self.by_name[name] = ids;
+        }
+    }
+
+    fn id(&mut self, symbol: &String) -> i32 {
+        if let Some(id) = self.ids.get(*symbol) {
+            return id;
+        }
+        let id = self.syms.len();
+        self.ids.try_insert(*symbol, id);
+        self.syms.push(Sym { symbol: *symbol, name: "", kind: "", signature: "", enclosing: "", definitions: [], references: [] });
+        return id;
+    }
+
+    /// The symbols `query` names: `name`, or `Owner::name` (`.` also
+    /// separates) for a member of `Owner`. Only those defined under `path`
+    /// when it is not empty.
+    fn lookup(&self, query: &String, path: &String) -> List<i32> {
+        let [owner, name] = split_query(query);
+        let mut out: List<i32> = [];
+        for let id of self.by_name.get(name).unwrap_or([]) {
+            if !owner.is_empty() && self.owner_name(id) != owner {
+                continue;
+            }
+            if !path.is_empty() && !self.syms[id].definitions.into_iter().any(|d| self.files[d.file].starts_with(*path)) {
+                continue;
+            }
+            out.push(id);
+        }
+        return out;
+    }
+
+    fn owner_name(&self, id: i32) -> String {
+        let s = &self.syms[id];
+        return match self.ids.get(s.enclosing) {
+            Some(owner) => self.syms[owner].name,
+            None => owner_in_symbol(&s.symbol, &s.name),
+        };
+    }
+
+    /// `Owner::name`, or `name` at the top level.
+    fn qualified(&self, id: i32) -> String {
+        let owner = self.owner_name(id);
+        let name = self.syms[id].name;
+        return if owner.is_empty() { name } else { `${owner}::${name}` };
+    }
+
+    /// Each definition of the symbols `query` names, with its signature.
+    pub fn find_symbol(&self, query: &String, path: &String) -> List<String> {
+        let mut out: List<String> = [];
+        for let id of self.lookup(query, path) {
+            let s = &self.syms[id];
+            for let d of &s.definitions {
+                out.push(`${self.files[d.file]}:${d.line + 1}-${d.end + 1}: ${s.kind} ${self.qualified(id)}`);
+                for let line of s.signature.lines() {
+                    out.push(`    ${line}`);
+                }
+            }
+        }
+        return out;
+    }
+
+    /// Each reference to the symbols `query` names, with the declaration it
+    /// sits in and its line of source, read from the tree at `root`. Only
+    /// those under `path` when it is not empty.
+    pub fn find_references(&self, query: &String, path: &String, root: &String) -> List<String> with Preopens {
+        let mut out: List<String> = [];
+        let mut sources = HashMap::<i32, List<String>>::new();
+        for let id of self.lookup(query, &"") {
+            let s = &self.syms[id];
+            let at =if s.definitions.is_empty() {
+                "";
+            } else {
+                let d = &s.definitions[0];
+                ` (${self.files[d.file]}:${d.line + 1})`;
+            };
+            out.push(`${s.kind} ${self.qualified(id)}${at}: ${s.references.len()} references`);
+            let mut last: Option<[i32, i32]> = null;
+            for let r of &s.references {
+                let file = &self.files[r.file];
+                if !path.is_empty() && !file.starts_with(*path) || last == Some([r.file, r.line]) {
+                    continue;
+                }
+                last = Some([r.file, r.line]);
+                if !sources.contains_key(r.file) {
+                    sources.try_insert(r.file, source_lines(root, file));
+                }
+                let lines = sources.get(r.file).unwrap();
+                let text = if r.line < lines.len() { lines[r.line].trim().to_string() } else { "" };
+                let inside = match self.scope_at(r.file, r.line) {
+                    Some(scope) => ` in ${self.qualified(scope)}`,
+                    None => "",
+                };
+                out.push(`${*file}:${r.line + 1}${inside}: ${text}`);
+            }
+        }
+        return out;
+    }
+
+    /// The innermost declaration whose body holds `line` of `file`.
+    fn scope_at(&self, file: i32, line: i32) -> Option<i32> {
+        let mut best: Option<Scope> = null;
+        for let s of &self.scopes[file] {
+            if s.start <= line && line <= s.end {
+                if let Some(b) = &best && b.end - b.start <= s.end - s.start {
+                    continue;
+                }
+                best = Some(*s);
+            }
+        }
+        return best.map(|s| s.sym);
+    }
+}
+
+fn source_lines(root: &String, file: &String) -> List<String> with Preopens {
+    let Ok(bytes) = fs::read(fs::join(*root, *file)) else {
+        return [];
+    };
+    let mut out: List<String> = [];
+    for let line of String::from_utf8_lossy(bytes).lines() {
+        out.push(line.to_string());
+    }
+    return out;
+}
+
+/// The type a member's own symbol names it under, where its information
+/// names none: `Type#name().`, or rust-analyzer's `impl#[Type][Trait]name().`.
+fn owner_in_symbol(symbol: &String, name: &String) -> String {
+    let Some([before, _]) = symbol.rsplit_once(name.as_str_slice()) else {
+        return "";
+    };
+    if let Some([_, imp]) = before.rsplit_once("impl#[") {
+        return match imp.split_once("]") {
+            Some([ty, _]) => ty.to_string(),
+            None => "",
+        };
+    }
+    let Some(head) = before.strip_suffix("#") else {
+        return "";
+    };
+    let mut start = 0;
+    for let [i, c] of head.char_indices() {
+        if c == ' ' || c == '/' || c == '#' || c == '.' {
+            start = i + 1;
+        }
+    }
+    return head.slice(start, head.len()).to_string();
+}
+
+/// A document-local symbol, which no other document can name.
+fn is_local(symbol: &String) -> bool {
+    return symbol.starts_with("local ");
+}
+
+/// The first line of an occurrence, and the last line of the declaration it
+/// defines or of itself. SCIP gives a range packed as 3 or 4 numbers, or
+/// typed.
+fn lines_of(o: &scip::Occurrence) -> [i32, i32] {
+    let line = match &o.typed_range {
+        Some(SingleLineRange(r)) => r.line,
+        Some(MultiLineRange(r)) => r.start_line,
+        None => o.range[0],
+    };
+    let end = match &o.typed_enclosing_range {
+        Some(SingleLineEnclosingRange(r)) => r.line,
+        Some(MultiLineEnclosingRange(r)) => r.end_line,
+        None => match o.enclosing_range.len() {
+            3 => o.enclosing_range[0],
+            4 => o.enclosing_range[2],
+            _ => line,
+        },
+    };
+    return [line, end];
+}
+
+fn kind_name(kind: &scip::SymbolInformationKind) -> String {
+    let full = `${*kind:?}`;
+    let short = match full.split_once("::") {
+        Some([_, rest]) => rest.to_string(),
+        None => full,
+    };
+    return short.to_ascii_lowercase();
+}
+
+/// `[owner, name]` of `Owner::name` or `Owner.name`; the owner is empty for a
+/// bare name.
+fn split_query(query: &String) -> [String, String] {
+    for let sep of ["::", "."] {
+        if let Some([owner, name]) = query.rsplit_once(sep) {
+            let short = match owner.rsplit_once(sep) {
+                Some([_, last]) => last.to_string(),
+                None => owner.to_string(),
+            };
+            return [short, name.to_string()];
+        }
+    }
+    return ["", *query];
+}

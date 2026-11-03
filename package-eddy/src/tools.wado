@@ -1,5 +1,6 @@
 //! The tools a reviewer reads a repository with: Read, Grep and Glob, shaped
 //! as Claude Code's, over one checked-out tree. Grep and Glob run ripgrep.
+//! With a SCIP index of the tree, FindSymbol and FindReferences as well.
 
 use fs from "core:fs";
 use { Preopens } from "core:fs";
@@ -8,6 +9,7 @@ use { from_string } from "core:json";
 use { Deserialize } from "core:serde";
 use { Value, from_value } from "core:value";
 use { Tool } from "./anthropic.wado";
+use { SymbolIndex } from "./symbols.wado";
 
 /// The most a tool returns, in bytes. A model asking for more gets the head
 /// and is told to narrow the request.
@@ -24,6 +26,7 @@ global PATHS: String = "Paths are relative to the repository root; a leading `/`
 /// tool takes resolves inside it.
 pub struct Workspace {
     pub root: String,
+    pub symbols: Option<SymbolIndex> = null,
 }
 
 struct ReadInput {
@@ -59,8 +62,50 @@ struct GlobInput {
     path: String = "",
 }
 
-/// The tools, declared for the API.
-pub fn tools() -> List<Tool> {
+struct SymbolInput {
+    name: String,
+    path: String = "",
+    head_limit: i32 = 250,
+    offset: i32 = 0,
+}
+
+global SYMBOL_SCHEMA: String = `{
+  "type": "object",
+  "properties": {
+    "name": {"type": "string", "description": "The symbol's name, or Owner::name for a member of Owner (a method, a field, a case)"},
+    "path": {"type": "string", "description": "Only results in files under this path. Defaults to the repository root."},
+    "head_limit": {"type": "integer", "minimum": 0, "description": "Limit output to first N lines. Defaults to 250. Pass 0 for unlimited."},
+    "offset": {"type": "integer", "minimum": 0, "description": "Skip first N lines before applying head_limit. Defaults to 0."}
+  },
+  "required": ["name"],
+  "additionalProperties": false
+}`;
+
+impl Workspace {
+    /// The tools this workspace answers, declared for the API.
+    pub fn tools(&self) -> List<Tool> {
+        let mut out = reading_tools();
+        if self.symbols matches { Some(_) } {
+            out.push(tool(
+                "FindSymbol",
+                `Finds the definitions of a symbol by name, from the compiler's index of the Rust and Wado code. ${PATHS}
+- Each definition gives its file, its lines and its signature: a function's body spans those lines.
+- Exact names only, not patterns. Use Grep for text.`,
+                SYMBOL_SCHEMA,
+            ));
+            out.push(tool(
+                "FindReferences",
+                `Finds where a symbol is used, from the compiler's index of the Rust and Wado code. ${PATHS}
+- Each reference gives its line, the function or other declaration it sits in, and the line of source.
+- Unlike Grep, it finds the uses of this one declaration: not another of the same name, not a comment.`,
+                SYMBOL_SCHEMA,
+            ));
+        }
+        return out;
+    }
+}
+
+fn reading_tools() -> List<Tool> {
     return [
         tool(
             "Read",
@@ -143,10 +188,27 @@ impl Workspace {
             "Read" => self.read(&input_of::<ReadInput>(input)?)?,
             "Grep" => self.grep(&input_of::<GrepInput>(input)?)?,
             "Glob" => self.glob(&input_of::<GlobInput>(input)?)?,
+            "FindSymbol" | "FindReferences" => self.find(name, &input_of::<SymbolInput>(input)?)?,
             _ => {
                 return Err(`no tool named ${*name}`);
             },
         });
+    }
+
+    fn find(&self, which: &String, input: &SymbolInput) -> Result<String, String> with Preopens {
+        let Some(symbols) = &self.symbols else {
+            return Err(`no tool named ${*which}`);
+        };
+        let path = unrooted(&input.path);
+        let found = if *which == "FindSymbol" {
+            symbols.find_symbol(&input.name, &path);
+        } else {
+            symbols.find_references(&input.name, &path, &self.root);
+        };
+        if found.is_empty() {
+            return Ok("No symbols found");
+        }
+        return page(&found, input.offset, input.head_limit);
     }
 
     fn read(&self, input: &ReadInput) -> Result<String, String> with Preopens {
