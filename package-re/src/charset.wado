@@ -1,0 +1,117 @@
+//! Sets of code points, each a list of sorted, disjoint, non-adjacent
+//! inclusive ranges.
+
+use { GeneralCategoryGroup, ranges } from "core:icu";
+use { CharSet, NamedSet } from "./ast.wado";
+
+internal global MAX_CODE_POINT: u32 = 0x10FFFF;
+
+/// `ranges` sorted and merged.
+internal fn normalize(mut ranges: List<[u32, u32]>) -> List<[u32, u32]> {
+    ranges.sort_by(|a, b| a.0.cmp(&b.0));
+    let mut out: List<[u32, u32]> = [];
+    for let r of &ranges {
+        let [lo, hi] = *r;
+        let last = out.len() - 1;
+        if last >= 0 && lo <= out[last].1 + 1 {
+            if hi > out[last].1 {
+                out[last] = [out[last].0, hi];
+            }
+        } else {
+            out.push([lo, hi]);
+        }
+    }
+    return out;
+}
+
+/// Every code point the normalized `set` leaves out.
+internal fn complement(set: &List<[u32, u32]>) -> List<[u32, u32]> {
+    let mut out: List<[u32, u32]> = [];
+    let mut next: u32 = 0;
+    for let r of set {
+        let [lo, hi] = *r;
+        if lo > next {
+            out.push([next, lo - 1]);
+        }
+        next = hi + 1;
+    }
+    if next <= MAX_CODE_POINT {
+        out.push([next, MAX_CODE_POINT]);
+    }
+    return out;
+}
+
+/// LineTerminator: LF, CR, LS, PS.
+internal fn line_terminators() -> List<[u32, u32]> {
+    return [
+        [0x0A, 0x0A],
+        [0x0D, 0x0D],
+        [0x2028, 0x2029],
+    ];
+}
+
+/// WordCharacters without `i`: `[A-Za-z0-9_]`.
+fn word() -> List<[u32, u32]> {
+    return [
+        [0x30, 0x39],
+        [0x41, 0x5A],
+        [0x5F, 0x5F],
+        [0x61, 0x7A],
+    ];
+}
+
+/// CharacterClassEscape `s`: WhiteSpace and LineTerminator. WhiteSpace is TAB,
+/// VT, FF, ZWNBSP and the Space_Separator characters.
+fn space() -> List<[u32, u32]> {
+    let mut out: List<[u32, u32]> = [
+        [0x09, 0x0D],
+        [0x20, 0x20],
+        [0x2028, 0x2029],
+        [0xFEFF, 0xFEFF],
+    ];
+    for let r of ranges(GeneralCategoryGroup::SpaceSeparator) {
+        out.push(r);
+    }
+    return normalize(out);
+}
+
+fn named(set: &NamedSet) -> List<[u32, u32]> {
+    let positive: List<[u32, u32]> = match set.kind {
+        Digit => [
+            [0x30, 0x39],
+        ],
+        Word => word(),
+        Space => space(),
+        Property(p) => normalize(ranges(p)),
+    };
+    if set.negated {
+        return complement(&positive);
+    }
+    return positive;
+}
+
+/// The code points `set` matches.
+internal fn resolve(set: &CharSet) -> List<[u32, u32]> {
+    let mut out: List<[u32, u32]> = [];
+    for let item of &set.items {
+        match *item {
+            Range(r) => out.push(r),
+            Named(n) => {
+                for let r of named(&n) {
+                    out.push(r);
+                }
+            },
+        }
+    }
+    let merged = normalize(out);
+    if set.negated {
+        return complement(&merged);
+    }
+    return merged;
+}
+
+/// Whether `b` encodes one of WordCharacters without `i`. Each is ASCII, so no
+/// byte of a longer sequence is one.
+internal fn is_word_byte(b: u8) -> bool {
+    return b >= 0x30 && b <= 0x39 || b >= 0x41 && b <= 0x5A || b == 0x5F || b >= 0x61 && b <= 0x7A;
+}

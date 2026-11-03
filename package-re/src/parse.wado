@@ -105,7 +105,7 @@ impl Parser {
 
     fn looking_at(&self, text: String) -> bool {
         let end = self.pos + text.len();
-        return end <= self.src.len() && self.src.slice(self.pos, end) == text;
+        return end <= self.src.len() && self.src.is_char_boundary(end) && self.src.slice(self.pos, end) == text;
     }
 
     fn bump(&mut self) -> char {

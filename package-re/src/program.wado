@@ -1,0 +1,265 @@
+//! The program a tree compiles to: a Pike VM's instructions over UTF-8 bytes.
+
+use { Flag, Node } from "./ast.wado";
+use { MAX_CODE_POINT, complement, line_terminators, resolve } from "./charset.wado";
+use { PatternError } from "./parse.wado";
+use { sequences } from "./utf8.wado";
+
+/// How many instructions a program may hold, so that a pattern read at run
+/// time cannot spend unbounded memory on its expanded counts (`a{1000}{1000}`).
+internal global MAX_PROGRAM: i32 = 1_000_000;
+
+internal enum Look {
+    StartText,
+    EndText,
+    StartLine,
+    EndLine,
+    WordBoundary,
+    NotWordBoundary,
+}
+
+internal variant Inst {
+    /// One byte in the inclusive range, then the next instruction.
+    Byte([u8, u8]),
+    /// Both targets, the first preferred.
+    Split([i32, i32]),
+    Jump(i32),
+    Save(i32),
+    /// Unset the capture slots `[from, to)`, as each iteration of a quantified
+    /// atom does (RepeatMatcher, step 4).
+    Clear([i32, i32]),
+    Assert(Look),
+    /// What an empty set compiles to: no thread passes.
+    Fail,
+    Match,
+}
+
+internal struct Program {
+    internal insts: List<Inst>,
+    /// Two per group, group 0 being the whole match.
+    internal slots: i32,
+}
+
+/// The program matching `node`, whose capturing groups number `groups`.
+internal fn compile(node: &Node, groups: i32) -> Result<Program, PatternError> {
+    let mut c = Compiler { insts: [], flags: Flag::none() };
+    c.push(Inst::Save(0))?;
+    c.node(node)?;
+    c.push(Inst::Save(1))?;
+    c.push(Inst::Match)?;
+    return Ok(Program { insts: c.insts, slots: 2 * (groups + 1) });
+}
+
+struct Compiler {
+    insts: List<Inst>,
+    flags: Flag,
+}
+
+/// The lowest and highest capturing group `node` holds.
+fn group_span(node: &Node) -> Option<[i32, i32]> {
+    let mut span: Option<[i32, i32]> = null;
+    let mut widen = |inner: Option<[i32, i32]>| {
+        if let Some([lo, hi]) = inner {
+            span = match span {
+                Some([a, b]) => Some([
+                    i32::min(a, lo),
+                    i32::max(b, hi),
+                ]),
+                None => Some([lo, hi]),
+            };
+        }
+    };
+    match *node {
+        Group(g) => {
+            if let Some(i) = g.index {
+                widen(Some([i, i]));
+            }
+            widen(group_span(&g.body));
+        },
+        Modified(m) => widen(group_span(&m.body)),
+        Repeat(r) => widen(group_span(&r.body)),
+        Concat(nodes) | Alternation(nodes) => {
+            for let n of &nodes {
+                widen(group_span(n));
+            }
+        },
+        _ => {
+        },
+    }
+    return span;
+}
+
+impl Compiler {
+    fn pc(&self) -> i32 {
+        return self.insts.len();
+    }
+
+    fn push(&mut self, inst: Inst) -> Result<i32, PatternError> {
+        if self.insts.len() >= MAX_PROGRAM {
+            return Err(PatternError {
+                offset: 0,
+                message: `the pattern compiles to more than ${MAX_PROGRAM} instructions`,
+            });
+        }
+        self.insts.push(inst);
+        return Ok(self.insts.len() - 1);
+    }
+
+    fn patch(&mut self, at: i32, inst: Inst) {
+        self.insts[at] = inst;
+    }
+
+    fn node(&mut self, node: &Node) -> Result<(), PatternError> {
+        match *node {
+            Char(c) => self.ranges(&[
+                [c, c],
+            ])?,
+            Any => {
+                if self.flags & Flag::DotAll != Flag::none() {
+                    self.ranges(&[
+                        [0, MAX_CODE_POINT],
+                    ])?;
+                } else {
+                    self.ranges(&complement(&line_terminators()))?;
+                }
+            },
+            Start => {
+                let look = if self.multiline() { Look::StartLine } else { Look::StartText };
+                self.push(Inst::Assert(look))?;
+            },
+            End => {
+                let look = if self.multiline() { Look::EndLine } else { Look::EndText };
+                self.push(Inst::Assert(look))?;
+            },
+            WordBoundary => {
+                self.push(Inst::Assert(Look::WordBoundary))?;
+            },
+            NotWordBoundary => {
+                self.push(Inst::Assert(Look::NotWordBoundary))?;
+            },
+            Set(set) => self.ranges(&resolve(&set))?,
+            Group(g) => {
+                if let Some(i) = g.index {
+                    self.push(Inst::Save(2 * i))?;
+                    self.node(&g.body)?;
+                    self.push(Inst::Save(2 * i + 1))?;
+                } else {
+                    self.node(&g.body)?;
+                }
+            },
+            Modified(m) => {
+                if m.add & Flag::IgnoreCase != Flag::none() {
+                    return Err(PatternError {
+                        offset: 0,
+                        message: "the `i` modifier needs simple case folding, which core:icu does not offer yet",
+                    });
+                }
+                let outer = self.flags;
+                self.flags = (self.flags | m.add) & ~m.remove;
+                self.node(&m.body)?;
+                self.flags = outer;
+            },
+            Repeat(r) => self.repeat(&r.body, r.min, r.max, r.greedy)?,
+            Concat(nodes) => {
+                for let n of &nodes {
+                    self.node(n)?;
+                }
+            },
+            Alternation(nodes) => self.alternation(&nodes)?,
+        }
+        return Ok(());
+    }
+
+    fn multiline(&self) -> bool {
+        return self.flags & Flag::Multiline != Flag::none();
+    }
+
+    /// `a|b|c`: each split prefers the alternative before it.
+    fn alternation(&mut self, nodes: &List<Node>) -> Result<(), PatternError> {
+        let mut jumps: List<i32> = [];
+        for let i of 0..<nodes.len() {
+            if i + 1 < nodes.len() {
+                let split = self.push(Inst::Split([0, 0]))?;
+                self.node(&nodes[i])?;
+                jumps.push(self.push(Inst::Jump(0))?);
+                let next = self.pc();
+                self.patch(split, Inst::Split([split + 1, next]));
+            } else {
+                self.node(&nodes[i])?;
+            }
+        }
+        let end = self.pc();
+        for let j of jumps {
+            self.patch(j, Inst::Jump(end));
+        }
+        return Ok(());
+    }
+
+    /// One iteration of a quantified atom: its groups start unset.
+    fn iteration(&mut self, body: &Node) -> Result<(), PatternError> {
+        if let Some([lo, hi]) = group_span(body) {
+            self.push(Inst::Clear([2 * lo, 2 * hi + 2]))?;
+        }
+        return self.node(body);
+    }
+
+    fn split_toward(&mut self, at: i32, body: i32, skip: i32, greedy: bool) {
+        self.patch(at, if greedy { Inst::Split([body, skip]) } else { Inst::Split([skip, body]) });
+    }
+
+    fn repeat(&mut self, body: &Node, min: u32, max: Option<u32>, greedy: bool) -> Result<(), PatternError> {
+        for let _i of 0..<min {
+            self.iteration(body)?;
+        }
+        let Some(max) = max else {
+            // body*: L: split(body, end); body; jump L
+            let top = self.push(Inst::Split([0, 0]))?;
+            self.iteration(body)?;
+            self.push(Inst::Jump(top))?;
+            let end = self.pc();
+            self.split_toward(top, top + 1, end, greedy);
+            return Ok(());
+        };
+        // Each optional iteration may stop, and stopping skips the rest.
+        let mut splits: List<i32> = [];
+        for let _i of min..<max {
+            splits.push(self.push(Inst::Split([0, 0]))?);
+            self.iteration(body)?;
+        }
+        let end = self.pc();
+        for let s of splits {
+            self.split_toward(s, s + 1, end, greedy);
+        }
+        return Ok(());
+    }
+
+    /// A choice among `set`'s UTF-8 sequences, lowest first.
+    fn ranges(&mut self, set: &List<[u32, u32]>) -> Result<(), PatternError> {
+        let mut seqs: List<List<[u8, u8]>> = [];
+        for let r of set {
+            sequences(r.0, r.1, &mut seqs);
+        }
+        if seqs.is_empty() {
+            self.push(Inst::Fail)?;
+            return Ok(());
+        }
+        let mut jumps: List<i32> = [];
+        for let i of 0..<seqs.len() {
+            let last = i + 1 == seqs.len();
+            let split = if last { -1 } else { self.push(Inst::Split([0, 0]))? };
+            for let b of &seqs[i] {
+                self.push(Inst::Byte(*b))?;
+            }
+            if !last {
+                jumps.push(self.push(Inst::Jump(0))?);
+                let next = self.pc();
+                self.patch(split, Inst::Split([split + 1, next]));
+            }
+        }
+        let end = self.pc();
+        for let j of jumps {
+            self.patch(j, Inst::Jump(end));
+        }
+        return Ok(());
+    }
+}
