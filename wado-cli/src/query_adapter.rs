@@ -59,13 +59,7 @@ async fn load_query(filename: &str) -> Result<PreparedQuery, String> {
         .parent()
         .map(std::path::Path::to_path_buf)
         .unwrap_or_default();
-<<<<<<< HEAD
-    let manifest_pair = load_nearest_manifest(&canonical).map_err(|e| e.to_string())?;
-||||||| d0e5efa6dbb
-    let manifest_pair = load_nearest_manifest(&canonical).map_err(CliExit::error)?;
-=======
-    let manifest_pair = load_nearest_manifest(&canonical, &Disk).map_err(CliExit::error)?;
->>>>>>> origin/main
+    let manifest_pair = load_nearest_manifest(&canonical, &Disk).map_err(|e| e.to_string())?;
     let host = attach_manifest_and_component_deps(
         FilesystemCompilerHost::silent(base.clone()),
         manifest_pair.as_ref(),
