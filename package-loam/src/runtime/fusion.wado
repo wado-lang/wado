@@ -4,7 +4,7 @@
 //! that reads no argument is computed once, when the pass is compiled. See
 //! `package-loam/webgpu.md`.
 
-use { HashMap } from "core:collections";
+use { HashMap, HashSet } from "core:collections";
 use { Binary, Comparison, Unary } from "./hlo.wado";
 use { Any, Operation, Recorded, RecordedNode, Region } from "./recorded.wado";
 use { BinaryOp, Cpu, Expr, RowOp, UnaryOp, constant, operand } from "./tensor.wado";
@@ -23,6 +23,9 @@ pub variant Launch {
     /// product alone, which a device runs as one where their right matrices
     /// lie side by side.
     Joined(List<Kernel>),
+    /// Two product kernels a device runs as one, by their right matrices
+    /// interleaved column by column, where they lie so.
+    Paired(Pair),
     /// A `Case` node, each branch planned on its own.
     Case([i32, Plan, Plan]),
 }
@@ -40,6 +43,24 @@ pub struct Kernel {
     /// Whether it writes one value per row of `extents`.
     pub reduced: bool,
     pub product: Option<i32>,
+    /// The kernel computing the product's left matrix, which nothing else
+    /// reads, so a device may compute it row by row as the product reads it.
+    /// It iterates the matrix's own extents, the last of them contracted, and
+    /// the product's right matrix is a matrix.
+    pub prologue: Option<Kernel>,
+}
+
+/// Product kernels of one left matrix, each by a parameter matrix of one
+/// shape, contracting alike: `first` writes its product alone, and only
+/// `second`'s epilogue reads it, where `second` reads it whole.
+pub struct Pair {
+    pub first: Kernel,
+    pub second: Kernel,
+    /// `second`'s epilogue over both products: `operand(0)` is `first`'s,
+    /// `operand(1)` `second`'s, and `operand(i + 2)` the `i`th of `operands`.
+    pub op: Expr,
+    /// `second`'s operands but `first`'s product.
+    pub operands: List<KernelOperand>,
 }
 
 /// A node a kernel reads, under the extents it reads it at: the kernel's, or
@@ -63,6 +84,10 @@ impl Plan {
                         reads.extend(&k.reads(recorded));
                     }
                 },
+                Paired(p) => {
+                    reads.extend(&p.first.reads(recorded));
+                    reads.extend(&p.second.reads(recorded));
+                },
                 Case([id, first, second]) => {
                     reads.push(recorded.nodes[id].operands[0]);
                     reads.extend(&first.reads(recorded));
@@ -73,30 +98,34 @@ impl Plan {
         return reads;
     }
 
-    /// The kernels of each `Joined` launch of it, or of a branch within it.
-    pub fn joined(&self) -> List<List<Kernel>> {
-        let mut runs: List<List<Kernel>> = [];
+    /// Its launches, and those of each branch within it.
+    pub fn flattened(&self) -> List<Launch> {
+        let mut all: List<Launch> = [];
         for let launch of self.launches {
-            match launch {
-                Joined(ks) => runs.push(ks),
-                Case([_, first, second]) => {
-                    runs.extend(&first.joined());
-                    runs.extend(&second.joined());
-                },
-                _ => {
-                },
+            if let Case([_, first, second]) = launch {
+                all.extend(&first.flattened());
+                all.extend(&second.flattened());
             }
+            all.push(launch);
         }
-        return runs;
+        return all;
     }
 }
 
 impl Kernel {
-    /// The nodes it reads: its operands, then its product's.
+    /// The nodes it reads: its operands, then its product's, its left matrix
+    /// by the nodes its prologue reads.
     pub fn reads(&self, recorded: &Recorded) -> List<i32> {
         let mut reads: List<i32> = self.operands.into_iter().map(|o| o.node).collect();
         if let Some(p) = self.product {
-            reads.extend(&recorded.nodes[p].operands);
+            let factors = &recorded.nodes[p].operands;
+            match self.prologue {
+                Some(left) => {
+                    reads.extend(&left.reads(recorded));
+                    reads.push(factors[1]);
+                },
+                None => reads.extend(factors),
+            }
         }
         return reads;
     }
@@ -196,18 +225,16 @@ fn same_splats(a: &HashMap<i32, Option<f32>>, b: &HashMap<i32, Option<f32>>) -> 
 }
 
 fn mapped_plan(plan: &Plan, to: &HashMap<i32, i32>) -> Plan {
-    let mapped = |e: &List<i32>| -> List<i32> {
-        (*e).into_iter().map(|x| to[x]).collect();
-    };
-    let kernel = |k: &Kernel| Kernel {
-        ..*k,
-        operands: k.operands.into_iter().map(|o| KernelOperand { node: o.node, extents: mapped(&o.extents) }).collect(),
-        extents: mapped(&k.extents),
-    };
     let launches: List<Launch> = plan.launches.into_iter().map(|launch| match launch {
         Node(id) => Launch::Node(id),
-        Kernel(k) => Launch::Kernel(kernel(&k)),
-        Joined(ks) => Launch::Joined(ks.into_iter().map(|k| kernel(&k)).collect()),
+        Kernel(k) => Launch::Kernel(mapped_kernel(&k, to)),
+        Joined(ks) => Launch::Joined(ks.into_iter().map(|k| mapped_kernel(&k, to)).collect()),
+        Paired(p) => Launch::Paired(Pair {
+            first: mapped_kernel(&p.first, to),
+            second: mapped_kernel(&p.second, to),
+            op: p.op,
+            operands: mapped_operands(&p.operands, to),
+        }),
         Case([id, first, second]) => Launch::Case([
             id,
             mapped_plan(&first, to),
@@ -215,6 +242,23 @@ fn mapped_plan(plan: &Plan, to: &HashMap<i32, i32>) -> Plan {
         ]),
     }).collect();
     return Plan { launches, results: plan.results };
+}
+
+fn mapped_kernel(k: &Kernel, to: &HashMap<i32, i32>) -> Kernel {
+    return Kernel {
+        ..*k,
+        operands: mapped_operands(&k.operands, to),
+        extents: mapped_extents(&k.extents, to),
+        prologue: k.prologue.map(|p| mapped_kernel(&p, to)),
+    };
+}
+
+fn mapped_operands(operands: &List<KernelOperand>, to: &HashMap<i32, i32>) -> List<KernelOperand> {
+    return (*operands).into_iter().map(|o| KernelOperand { node: o.node, extents: mapped_extents(&o.extents, to) }).collect();
+}
+
+fn mapped_extents(extents: &List<i32>, to: &HashMap<i32, i32>) -> List<i32> {
+    return (*extents).into_iter().map(|x| to[x]).collect();
 }
 
 /// The nodes a kernel computes, the last of them `root`.
@@ -303,7 +347,162 @@ fn planned_region(recorded: &Recorded, region: &Region, splats: &HashMap<i32, Op
             launches.push(Launch::Node(id));
         }
     }
-    return Plan { launches: joined_products(recorded, launches), results: region.results };
+    let products = joined_products(recorded, paired_products(recorded, &readers, &group_of, launches));
+    return Plan { launches: staged(recorded, &readers, products), results: region.results };
+}
+
+/// `launches` with each product kernel `by_weight` finds whose epilogue reads
+/// the product of a kernel `joinable` finds of its left matrix, which nothing
+/// else reads, as one `Paired` launch where the reader was.
+fn paired_products(
+    recorded: &Recorded,
+    readers: &HashMap<i32, List<i32>>,
+    group_of: &HashMap<i32, i32>,
+    launches: List<Launch>,
+) -> List<Launch> {
+    let mut alone = HashMap::<i32, i32>::new();
+    for let [i, launch] of launches.into_iter().enumerate() {
+        if let Kernel(k) = launch && joinable(recorded, &k) matches { Some(_) } {
+            alone[k.root] = i;
+        }
+    }
+    let mut taken = HashSet::<i32>::new();
+    let mut out = launches;
+    for let [i, launch] of launches.into_iter().enumerate() {
+        let Kernel(second) = launch else {
+            continue;
+        };
+        let Some(lhs) = by_weight(recorded, &second) else {
+            continue;
+        };
+        let group = group_of[second.root];
+        for let o of second.operands {
+            let Some(at) = alone.get(o.node) else {
+                continue;
+            };
+            let Kernel(first) = launches[at] else {
+                unreachable();
+            };
+            if o.extents == second.extents
+                && !taken.contains(at)
+                && joinable(recorded, &first) == Option::Some(lhs)
+                && pairs_with(recorded, &first, &second)
+                && readers[o.node].into_iter().all(|r| group_of.get(r) == Option::Some(group)) {
+                out[i] = Launch::Paired(pair_of(&first, &second));
+                taken.insert(at);
+                break;
+            }
+        }
+    }
+    let mut kept: List<Launch> = [];
+    for let [i, launch] of out.into_iter().enumerate() {
+        if !taken.contains(i) {
+            kept.push(launch);
+        }
+    }
+    return kept;
+}
+
+/// Whether the products of `a` and `b` contract alike, as `rows_by_matrix`
+/// says, by right matrices of one shape.
+fn pairs_with(recorded: &Recorded, a: &Kernel, b: &Kernel) -> bool {
+    let [p, q] = [a.product.unwrap(), b.product.unwrap()];
+    let [pn, qn] = [&recorded.nodes[p], &recorded.nodes[q]];
+    return rows_by_matrix(recorded, p)
+        && pn.op == qn.op
+        && recorded.nodes[pn.operands[1]].extents == recorded.nodes[qn.operands[1]].extents;
+}
+
+/// `first` and `second` as a `Pair`.
+fn pair_of(first: &Kernel, second: &Kernel) -> Pair {
+    let mut to = [1] as List<i32>;
+    let mut operands: List<KernelOperand> = [];
+    for let o of second.operands {
+        if o.node == first.root {
+            to.push(0);
+        } else {
+            to.push(operands.len() + 2);
+            operands.push(o);
+        }
+    }
+    return Pair { first: *first, second: *second, op: second.op.renumbered(&to), operands };
+}
+
+/// `launches` with each kernel computing the left matrix of the products of
+/// one launch, which nothing else reads, as their `prologue`.
+fn staged(recorded: &Recorded, readers: &HashMap<i32, List<i32>>, launches: List<Launch>) -> List<Launch> {
+    let mut left_at = HashMap::<i32, i32>::new();
+    for let [i, launch] of launches.into_iter().enumerate() {
+        if let Kernel(k) = launch
+            && k.product matches { None }
+            && !k.reduced
+            && k.extents.len() >= 2
+            && k.extents == recorded.nodes[k.root].extents {
+            left_at[k.root] = i;
+        }
+    }
+    let mut prologue_of = HashMap::<i32, i32>::new();
+    let mut taken = HashSet::<i32>::new();
+    for let [i, launch] of launches.into_iter().enumerate() {
+        let products: List<i32> = products_of(&launch).into_iter().map(|k| k.product.unwrap()).collect();
+        if products.is_empty() {
+            continue;
+        }
+        let lhs = recorded.nodes[products[0]].operands[0];
+        let Some(at) = left_at.get(lhs) else {
+            continue;
+        };
+        let only = readers[lhs].into_iter().all(|r| products.contains(&r) && recorded.nodes[r].operands[1] != lhs);
+        if only && products.into_iter().all(|p| rows_by_matrix(recorded, p)) {
+            prologue_of[i] = at;
+            taken.insert(at);
+        }
+    }
+    let mut out: List<Launch> = [];
+    for let [i, launch] of launches.into_iter().enumerate() {
+        if taken.contains(i) {
+            continue;
+        }
+        let Some(at) = prologue_of.get(i) else {
+            out.push(launch);
+            continue;
+        };
+        let Kernel(left) = launches[at] else {
+            unreachable();
+        };
+        let from = |k: &Kernel| Kernel { ..*k, prologue: Option::Some(left) };
+        out.push(match launch {
+            Kernel(k) => Launch::Kernel(from(&k)),
+            Joined(ks) => Launch::Joined(ks.into_iter().map(|k| from(&k)).collect()),
+            Paired(p) => Launch::Paired(Pair { ..p, first: from(&p.first), second: from(&p.second) }),
+            _ => unreachable(),
+        });
+    }
+    return out;
+}
+
+/// The product kernels of `launch`.
+fn products_of(launch: &Launch) -> List<Kernel> {
+    return match launch {
+        Kernel(k) && k.product matches { Some(_) } => [*k],
+        Joined(ks) => *ks,
+        Paired(p) => [p.first, p.second],
+        _ => [],
+    };
+}
+
+/// Whether `product` contracts its left operand's last axis, and one axis of
+/// a matrix: a product of the left operand's rows by that matrix.
+fn rows_by_matrix(recorded: &Recorded, product: i32) -> bool {
+    let node = &recorded.nodes[product];
+    let DotGeneral(dims) = node.op else {
+        unreachable();
+    };
+    let rank = recorded.nodes[node.operands[0]].extents.len();
+    return dims.lhs_batch.is_empty()
+        && dims.lhs_contracting == [rank - 1] as List<i32>
+        && recorded.nodes[node.operands[1]].extents.len() == 2
+        && dims.rhs_contracting.len() == 1;
 }
 
 /// `launches` with the product kernels `joinable` finds of one left matrix,
@@ -333,9 +532,18 @@ fn joined_products(recorded: &Recorded, launches: List<Launch>) -> List<Launch> 
     return out;
 }
 
-/// The left matrix of `k`'s product, where `k` writes the product alone and
-/// its right matrix is a parameter, a matrix with one axis contracted.
+/// The left matrix of `k`'s product, where `by_weight` finds one and `k`
+/// writes the product alone.
 fn joinable(recorded: &Recorded, k: &Kernel) -> Option<i32> {
+    if !k.operands.is_empty() || k.op != operand(0) {
+        return null;
+    }
+    return by_weight(recorded, k);
+}
+
+/// The left matrix of `k`'s product, where its right matrix is a parameter, a
+/// matrix with one axis contracted, and `k` writes a value per element.
+fn by_weight(recorded: &Recorded, k: &Kernel) -> Option<i32> {
     let Some(p) = k.product else {
         return null;
     };
@@ -344,9 +552,7 @@ fn joinable(recorded: &Recorded, k: &Kernel) -> Option<i32> {
         unreachable();
     };
     let rhs = &recorded.nodes[node.operands[1]];
-    if !k.operands.is_empty()
-        || k.reduced
-        || k.op != operand(0)
+    if k.reduced
         || !rhs.op matches { Parameter(_) }
         || rhs.extents.len() != 2
         || !dims.rhs_batch.is_empty()
@@ -603,6 +809,7 @@ fn kernel_of(recorded: &Recorded, group: &Group, splats: &HashMap<i32, Option<f3
         extents: group.space,
         reduced: !same_space(root, &group.space),
         product: group.product,
+        prologue: null,
     };
 }
 

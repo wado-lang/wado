@@ -1830,6 +1830,16 @@ impl Expr {
         return value;
     }
 
+    /// This with each `operand(k)` reading `to[k]` instead.
+    pub fn renumbered(&self, to: &List<i32>) -> Expr {
+        return Expr {
+            steps: self.steps.into_iter().map(|step| match step {
+                Operand(k) => Step::Operand(to[k]),
+                other => other,
+            }).collect(),
+        };
+    }
+
     /// Whether a step folds along a row, so only a row kernel runs this.
     pub fn folds_rows(&self) -> bool {
         return self.fold_count() > 0;

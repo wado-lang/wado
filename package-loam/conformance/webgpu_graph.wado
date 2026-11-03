@@ -35,6 +35,11 @@ use projected from "./projected.onnxtext"
         type: "onnxtext",
         generator: { module: "lib:loam" },
     };
+use shared from "./shared.onnxtext"
+    with {
+        type: "onnxtext",
+        generator: { module: "lib:loam" },
+    };
 
 export fn run() with (Stdout, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder, GpuSupportedLimits, RecordOptionGpuSize64) {
     let Some(mut gpu) = WebGpuBackend::new() else {
@@ -101,11 +106,12 @@ export fn run() with (Stdout, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuC
     assert gpu.kept_bytes() - kept == 48, "a weight only products read is kept in bf16";
     let mut on_cpu = gated::Model::new(gated::Params::embedded(cpu));
     for let [positions, programs, replays, groups] of [
-        [3, 1, 0, 4],
-        [4, 1, 4, 2],
-        [5, 2, 0, 4],
-        [5, 2, 4, 2],
-        [3, 2, 4, 2],
+        [3, 1, 0, 2],
+        [4, 1, 2, 2],
+        [5, 2, 0, 2],
+        [5, 2, 2, 2],
+        [3, 2, 2, 2],
+        [9, 3, 0, 4],
     ] as List<[i32, i32, i32, i32]> {
         let input = rows_of::<[gated::N, gated::S, gated::X2]>(positions);
         let [before, replayed, grouped] = [
@@ -114,9 +120,12 @@ export fn run() with (Stdout, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuC
             gpu.bind_groups(),
         ];
         let on_device = gated::compute(&mut gpu, &input, &mut on_gpu);
-        // The normalization, the gate's product, the value's with the gate in
-        // its epilogue, and the product down.
-        assert gpu.dispatches() - before == 4, "one dispatch for each kernel the plan forms";
+        // The gate's and the value's products of the normalization, as one by
+        // their weights interleaved, computing the normalization row by row as
+        // they read it, and the product down. Over more rows than one dispatch
+        // stages, the normalization, then each product.
+        let launched = if positions > 8 { 4 } else { 2 };
+        assert gpu.dispatches() - before == launched, "one dispatch for each launch the plan forms";
         assert gpu.replays() - replayed == replays;
         assert gpu.bind_groups() - grouped <= groups;
         let reference = gated::compute(cpu, &input, &mut on_cpu);
@@ -138,21 +147,36 @@ export fn run() with (Stdout, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuC
     // kept side by side.
     let mut projected_gpu = projected::Model::new(projected::Params::embedded(&mut gpu));
     let mut projected_cpu = projected::Model::new(projected::Params::embedded(cpu));
-    for let positions of [1, 3] as List<i32> {
+    for let positions of [1, 3, 9] as List<i32> {
         let input = rows_of::<[projected::N, projected::S, projected::X2]>(positions);
         let before = gpu.dispatches();
         let on_device = projected::compute(&mut gpu, &input, &mut projected_gpu);
-        // The normalization, the products, the softmax and the mean, and over
-        // more than one row a copy of `K`, a slice of the products' columns,
-        // to return it.
+        // The products, computing the normalization as they read it, the
+        // softmax and the mean, and over more than one row a copy of `K`, a
+        // slice of the products' columns, to return it. Over more rows than
+        // one dispatch stages, the normalization first.
         let copied = if positions > 1 { 1 } else { 0 };
-        assert gpu.dispatches() - before == 4 + copied, "products of one input are one dispatch";
+        let normalized = if positions > 8 { 1 } else { 0 };
+        assert gpu.dispatches() - before == 3 + copied + normalized, "products of one input are one dispatch";
         let reference = projected::compute(cpu, &input, &mut projected_cpu);
         println(`compiled projected ${positions} ${deviation(&on_device.Y.data, &reference.Y.data)} ${deviation(
             &on_device.K.data,
             &reference.K.data,
         )} ${deviation(&on_device.Z.data, &reference.Z.data)}`);
     }
+
+    // The second normalization's products launch one by one, after it.
+    let mut shared_gpu = shared::Model::new(shared::Params::embedded(&mut gpu));
+    let mut shared_cpu = shared::Model::new(shared::Params::embedded(cpu));
+    let input = rows_of::<[shared::N, shared::S, shared::X2]>(1);
+    let before = gpu.dispatches();
+    let on_device = shared::compute(&mut gpu, &input, &mut shared_gpu);
+    assert gpu.dispatches() - before == 4, "products whose weights lie apart launch apart";
+    let reference = shared::compute(cpu, &input, &mut shared_cpu);
+    println(`compiled shared ${deviation(&on_device.P.data, &reference.P.data)} ${deviation(
+        &on_device.Q.data,
+        &reference.Q.data,
+    )} ${deviation(&on_device.R.data, &reference.R.data)} ${deviation(&on_device.T.data, &reference.T.data)}`);
 }
 
 /// Passes enough that every launch is idle.

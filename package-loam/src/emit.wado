@@ -4187,7 +4187,7 @@ impl Term {
             }
         }
         let epilogue = `Epilogue { operands: [${reads.join(", ")}], op: ${expr_source(
-            &operands_renumbered(&self.expr, &renumbered),
+            &self.expr.renumbered(&renumbered),
         )} }`;
         if heads.len() == 2 {
             let product = first.rhs.unwrap();
@@ -4235,19 +4235,7 @@ fn merged_into(lanes: &mut List<Lane>, term: &Term) -> Expr {
         }
         renumbered.push(at);
     }
-    return operands_renumbered(&term.expr, &renumbered);
-}
-
-/// `e` with each `operand(k)` reading `to[k]` instead.
-fn operands_renumbered(e: &Expr, to: &List<i32>) -> Expr {
-    let mut steps: List<Step> = [];
-    for let step of e.steps {
-        steps.push(match step {
-            Operand(k) => Step::Operand(to[k]),
-            other => other,
-        });
-    }
-    return Expr { steps };
+    return term.expr.renumbered(&renumbered);
 }
 
 /// The source of `e` as its steps, so a step several read is spelled once.

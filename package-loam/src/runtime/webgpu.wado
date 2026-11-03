@@ -661,6 +661,12 @@ impl WebGpuBackend {
         return self.replays;
     }
 
+    /// How many shaders have been compiled: one for each kernel that differs
+    /// in more than the views it reads and its parameters.
+    pub fn shaders(&self) -> i32 {
+        return self.pipelines.len();
+    }
+
     /// The buffer at `slot`: a held one where it is negative, one of the pass
     /// otherwise.
     fn buffer(&self, slot: i32) -> &GpuBuffer {
@@ -1690,7 +1696,7 @@ impl WebGpuBackend {
     /// [`Backend::matmul_rhs_paired`] joins them. A paired product runs as
     /// one narrow dispatch reading `b` along its inner axis, or not at all:
     /// `None` where it cannot.
-    fn product_kernel<A, B, Out>(
+    internal fn product_kernel<A, B, Out>(
         &mut self,
         a: &Placed<f32, A>,
         b: &Placed<f32, B>,
@@ -1827,7 +1833,7 @@ impl WebGpuBackend {
     /// `a` block by block into workgroup memory. `None` where it cannot run
     /// so: too many rows, an inner axis a binding or that memory cannot hold
     /// whole, or a paired product not across `b`.
-    fn staged_product<A, B, Out>(
+    internal fn staged_product<A, B, Out>(
         &mut self,
         a: &Prologue<PlacedRead<A>>,
         b: &Placed<f32, B>,
