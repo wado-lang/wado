@@ -430,7 +430,19 @@ impl DeclCollector<'_> {
                     self.term(flag.id, &flag.name, kind, flag.name_span, flag.span);
                 }
             }
-            _ => {}
+            Item::Newtype(n) => self.type_params(&n.type_params),
+            Item::Trait(t) => self.type_params(&t.type_params),
+            Item::BuiltinTypeDecl(d) => self.type_params(&d.type_params),
+            Item::Resource(r) => self.type_params(&r.type_params),
+            Item::Interface(_) => {}
+            Item::Function(_)
+            | Item::Global(_)
+            | Item::Impl(_)
+            | Item::Test(_)
+            | Item::Use(_)
+            | Item::World(_)
+            | Item::TupleTypeDecl(_)
+            | Item::Error(_) => unreachable!("`visit_item` declares only types through here"),
         }
         walk_item(self, item);
         self.owners.pop();
@@ -476,8 +488,7 @@ impl AstVisitor<'_> for DeclCollector<'_> {
                 self.type_item(item, d.id, &d.name, SymbolKind::Type, d.name_span, d.span);
             }
             Item::Resource(r) => {
-                let kind = SymbolKind::Class;
-                self.type_item(item, r.id, &r.name, kind, r.name_span, r.span);
+                self.type_item(item, r.id, &r.name, SymbolKind::Class, r.name_span, r.span);
             }
             Item::Global(g) => {
                 let kind = if g.mutable {
@@ -851,6 +862,19 @@ impl Pair<i64> {
                     "wado . test.wado . Pair#get(+1)."
                 ]
             );
+        });
+    }
+
+    #[test]
+    fn every_generic_type_declares_its_parameters() {
+        futures::executor::block_on(async {
+            let d = doc("type Wrap<A> = List<A>;
+trait Tag<B> { fn tag(&self, b: B); }
+")
+            .await;
+            for name in ["A", "B"] {
+                assert_eq!(symbol(&d, name).kind, SymbolKind::TypeParameter, "{name}");
+            }
         });
     }
 
