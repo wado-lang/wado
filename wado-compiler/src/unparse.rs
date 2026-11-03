@@ -2073,10 +2073,12 @@ impl<'a> Unparser<'a> {
         match lit {
             Literal::Number(repr) => self.output.push_str(repr),
             Literal::String(raw, quote) => {
-                self.output.push_str(&quote.write("", Delimiter::Quote, raw));
+                self.output
+                    .push_str(&quote.write("", Delimiter::Quote, raw));
             }
             Literal::Bytes(raw, quote) => {
-                self.output.push_str(&quote.write("b", Delimiter::Quote, raw));
+                self.output
+                    .push_str(&quote.write("b", Delimiter::Quote, raw));
             }
             Literal::Byte(raw) => {
                 self.output.push_str("b'");

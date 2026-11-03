@@ -1273,7 +1273,12 @@ impl<'a> Lexer<'a> {
     /// (`delimiter` and `hashes` `#`s), appending text as a cooked literal
     /// spells it. A backslash reaching here is text, as in a raw literal; a
     /// cooked one is scanned as an escape before. Returns whether it closed.
-    fn respell_text_char(&mut self, delimiter: Delimiter, hashes: usize, text: &mut String) -> bool {
+    fn respell_text_char(
+        &mut self,
+        delimiter: Delimiter,
+        hashes: usize,
+        text: &mut String,
+    ) -> bool {
         match self.peek() {
             Some((_, ch)) if ch == delimiter.char() => {
                 self.advance();

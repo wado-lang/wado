@@ -2472,8 +2472,11 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
             let module_path = resolve_path
                 .get(ms_str)
                 .map_or(ms_str.as_str(), String::as_str);
-            let resolved =
-                resolve_include_path_impl(entry_module_source.as_deref(), module_path, include_path);
+            let resolved = resolve_include_path_impl(
+                entry_module_source.as_deref(),
+                module_path,
+                include_path,
+            );
             let bytes = self
                 .host
                 .load_file(&resolved, None, None)
