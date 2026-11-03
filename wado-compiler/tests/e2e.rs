@@ -1302,6 +1302,84 @@ fn run_with_allocator(
             continue;
         }
         let key = wir_key(level);
+        if let Ok(candidates) = std::env::var("WADO_E2E_FIND_WIR_PASS") {
+            let candidates: Vec<String> = candidates.split(',').map(str::to_string).collect();
+            let skipped_wir = |skip: &[String]| {
+                let options = skip_base.clone();
+                common::compile_fixture_on_worker(
+                    fixture_path.to_path_buf(),
+                    source.to_string(),
+                    CompilerOptions {
+                        opt: OptOverrides {
+                            skip_passes: skip.to_vec(),
+                            ..options.opt.clone()
+                        },
+                        retain_wir: true,
+                        ..options
+                    },
+                    spec.compile.host_stubs(),
+                )
+                .wir_text
+            };
+            let held = |skip: &[String]| -> Option<Vec<String>> {
+                let wir = skipped_wir(skip)?;
+                let wir = match spec.wir_scope.as_deref() {
+                    None => wir.as_str(),
+                    Some(scope) => match scope_to_function(&wir, scope) {
+                        Some(body) => body,
+                        None => return Some(vec![]),
+                    },
+                };
+                Some(
+                    spec.wir_checks(level)
+                        .iter()
+                        .filter(|c| c.holds(wir))
+                        .map(|c| c.describe(key))
+                        .collect(),
+                )
+            };
+            let ok = |skip: &[String]| held(skip).is_some_and(|h| h.is_empty());
+            match held(&candidates) {
+                None => panic!("FINDPASS {test_id} {key} COMPILE_FAIL"),
+                Some(h) if !h.is_empty() => {
+                    panic!("FINDPASS {test_id} {key} UNRESOLVED {}", serde_json::to_string(&h).unwrap())
+                }
+                Some(_) => {}
+            }
+            let mut set = candidates.clone();
+            let mut n = 2;
+            while set.len() >= 2 {
+                let chunk = set.len().div_ceil(n);
+                let chunks: Vec<Vec<String>> = set.chunks(chunk).map(<[String]>::to_vec).collect();
+                let mut progressed = false;
+                for c in &chunks {
+                    if ok(c) {
+                        set = c.clone();
+                        n = 2;
+                        progressed = true;
+                        break;
+                    }
+                }
+                if !progressed && chunks.len() > 2 {
+                    for c in &chunks {
+                        let rest: Vec<String> = set.iter().filter(|p| !c.contains(p)).cloned().collect();
+                        if ok(&rest) {
+                            set = rest;
+                            n = (n - 1).max(2);
+                            progressed = true;
+                            break;
+                        }
+                    }
+                }
+                if !progressed {
+                    if n >= set.len() {
+                        break;
+                    }
+                    n = (2 * n).min(set.len());
+                }
+            }
+            panic!("FINDPASS {test_id} {key} FOUND {}", serde_json::to_string(&set).unwrap());
+        }
         let passes = spec.wir_pass.get(key).unwrap_or_else(|| {
             panic!(
                 "[{test_id}] the WIR expectations under `{key}` name no `wir_pass`: \
