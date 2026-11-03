@@ -296,6 +296,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let mut seen: hashmap::IndexSet<(DefId, Vec<TypeKey>)> = hashmap::IndexSet::default();
 
         let trait_env = &self.tysys.trait_env;
+        let receiver_args = self
+            .tysys
+            .type_table
+            .borrow()
+            .generic_type_args(handler_type)
+            .unwrap_or_default();
         let written = trait_env
             .impl_index
             .get(&self.handler_impl_target(handler_type))
@@ -310,7 +316,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         for impl_def in written.chain(blankets) {
             // Everything the block says about itself it says in its own frame:
             // `impl Stream<u8> for Ctx` names `Stream` and resolves `u8` where
-            // the block was written, which is not where it is installed.
+            // the block was written, which is not where it is installed. A
+            // slot the block leaves to its own parameter takes the handler's
+            // argument: `impl<T> Stream<T> for Ctx<T>` on a `Ctx<u8>` installs
+            // `Stream<u8>`.
             let Some(trait_ref) = trait_env.impl_headers[&impl_def].trait_def() else {
                 continue;
             };
@@ -321,8 +330,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .tysys
                 .signatures
                 .impl_sig(impl_def)
-                .trait_type_args
-                .clone();
+                .instantiate(&self.tysys.type_table, &receiver_args)
+                .trait_type_args;
             // A block answers only where the order selects it for the
             // handler: a sibling written for another instance (`Ctx<u8>`
             // beside `Ctx<i32>`) does not, nor a blanket a written impl

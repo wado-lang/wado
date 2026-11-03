@@ -141,16 +141,52 @@ fn build_effect_index(project: &Package) -> IndexMap<EffectKey, EffectMeta> {
     out
 }
 
-/// Identify which instantiations need dispatch infrastructure: one is active iff
-/// the package holds at least one user-written impl block for it, and
-/// `impl Stream<u8>` and `impl Stream<i32>` are separate entries.
+/// Identify which instantiations need dispatch infrastructure: each one an impl
+/// block names, `impl Stream<u8>` and `impl Stream<i32>` apart, and each one a
+/// `with` installs. A block leaving a slot to its own parameter
+/// (`impl<T> Stream<T> for Ctx<T>`) names none: the installs supply its
+/// instantiations.
 fn identify_active_effects(
+    project: &Package,
     impl_index: &IndexMap<HandlerImplKey, HandlerImplInfo>,
 ) -> IndexSet<InstantiationKey> {
-    impl_index
+    let mut active: IndexSet<InstantiationKey> = impl_index
         .values()
+        .filter(|info| !info.names_open_instantiation)
         .map(|info| info.instantiation.clone())
-        .collect()
+        .collect();
+    for module in project.tir_modules.values() {
+        let mut collector = InstalledInstantiationCollector {
+            type_table: &module.type_table.borrow(),
+            installed: &mut active,
+        };
+        for func_rc in &module.functions {
+            if let Some(body) = &func_rc.borrow().body {
+                collector.visit_block(body);
+            }
+        }
+    }
+    active
+}
+
+struct InstalledInstantiationCollector<'a> {
+    type_table: &'a TypeTable,
+    installed: &'a mut IndexSet<InstantiationKey>,
+}
+
+impl TirRefVisitor for InstalledInstantiationCollector<'_> {
+    fn visit_expr(&mut self, expr: &TirExpr) {
+        if let TirExprKind::WithHandler { bindings, .. } = &expr.kind {
+            for binding in bindings {
+                self.installed.insert(InstantiationKey::new(
+                    binding.effect.clone(),
+                    binding.trait_type_args.clone(),
+                    self.type_table,
+                ));
+            }
+        }
+        self.walk_expr(expr);
+    }
 }
 
 /// Effects whose call sites nothing else in the pipeline would lower.
@@ -2978,7 +3014,7 @@ fn rewrite_call_children(expr: &mut TirExpr, ctx: &RewriteCtx<'_>) {
 pub fn synthesize_pre_cm_binding(mut project: Package) -> Result<Package, String> {
     let effect_index = build_effect_index(&project);
     let impl_index = build_handler_impl_index(&project, &effect_index);
-    let mut active_effects = identify_active_effects(&impl_index);
+    let mut active_effects = identify_active_effects(&project, &impl_index);
     active_effects.extend(identify_uncovered_effects(
         &project,
         &effect_index,
@@ -3094,6 +3130,9 @@ struct HandlerImplInfo {
     /// `impl Stream<u8> for MockCM` and `impl Stream<i32> for MockCM` apart,
     /// so each gets its own dispatch infrastructure.
     instantiation: InstantiationKey,
+    /// Whether `instantiation` mentions the block's own parameter, which no
+    /// dispatch infrastructure can be built for.
+    names_open_instantiation: bool,
     /// Module that owns the impl block — used to build the
     /// `FunctionRef::module_source` of the generated call.
     impl_module: ModuleSource,
@@ -3137,14 +3176,19 @@ fn build_handler_impl_index(
             if !effect_index.contains_key(effect) {
                 continue;
             }
+            let type_table = module.type_table.borrow();
             out.insert(
                 tir_impl.def,
                 HandlerImplInfo {
                     instantiation: InstantiationKey::new(
                         effect.clone(),
                         tir_impl.trait_type_args.clone(),
-                        &module.type_table.borrow(),
+                        &type_table,
                     ),
+                    names_open_instantiation: tir_impl
+                        .trait_type_args
+                        .iter()
+                        .any(|&arg| type_table.contains_type_param(arg)),
                     impl_module: module_source.clone(),
                     is_blanket: tir_impl.is_blanket,
                     methods: IndexMap::default(),

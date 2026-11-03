@@ -1,0 +1,28 @@
+// `eval` and `measure` reach the `wado test` host through effects they
+// declare, so an ordinary function calling either declares the effect too.
+// Only a `test` body holds every effect.
+use { eval } from "core:eval";
+use { measure } from "core:fuel";
+
+fn compile_one() {
+    let _ = eval("export fn run() {}");
+}
+
+fn count_one() {
+    let _ = measure("one", || 1);
+}
+
+test {
+    compile_one();
+    count_one();
+}
+
+__DATA__
+{
+  "test": {},
+  "compile_errors_contains": [
+    ":8:13: analysis error: missing effect 'EvalHost' required by 'eval'",
+    ":12:13: analysis error: missing effect 'FuelHost' required by 'measure'"
+  ],
+  "compile_error_codes": ["MISSING_EFFECT"]
+}
