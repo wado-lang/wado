@@ -324,7 +324,15 @@ fn place_of(o: &scip::Occurrence) -> Result<[Pos, Option<[Pos, Pos]>], String> {
         Some(MultiLineEnclosingRange(r)) => Some(multi_line(r)),
         None => packed(&o.enclosing_range)?,
     };
+    if !is_ordered(&range) || extent matches { Some(e) && !is_ordered(&e) } {
+        return Err("a range must not be negative or end before it starts");
+    }
     return Ok([range.0, extent]);
+}
+
+fn is_ordered(range: &[Pos, Pos]) -> bool {
+    let [start, end] = *range;
+    return start.line >= 0 && start.column >= 0 && end.column >= 0 && start.at_or_before(&end);
 }
 
 fn single_line(r: &scip::SingleLineRange) -> [Pos, Pos] {

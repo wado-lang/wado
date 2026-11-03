@@ -160,6 +160,23 @@ test "a malformed range is an error, not a crash" {
     assert added == Err("bad.rs: a range has 2 numbers, not 3 or 4");
 }
 
+test "a negative or reversed range is an error" {
+    let add = |range: List<i32>| {
+        let mut symbols = empty_index();
+        return symbols.add(&scip::Index {
+            documents: [
+                scip::Document {
+                    relative_path: "bad.rs",
+                    occurrences: [scip::Occurrence { range, symbol: `${CRATE}f().` }],
+                },
+            ],
+        });
+    };
+    assert add([-1, 0, 3]) == Err("bad.rs: a range must not be negative or end before it starts");
+    assert add([2, 5, 1, 0]) == Err("bad.rs: a range must not be negative or end before it starts");
+    assert add([0, 0, 3]).is_ok();
+}
+
 test "the symbol tools read a path and a page as the other tools do" {
     let ws = workspace();
     let all = ws.call(&"FindSymbol", &tool_input(`{"name": "area"}`)).unwrap();

@@ -38,6 +38,7 @@ pub enum SymbolKind {
     Function = 17,
     Interface = 21,
     Method = 26,
+    Module = 29,
     Parameter = 37,
     Struct = 49,
     Trait = 53,
@@ -541,13 +542,26 @@ impl AstVisitor<'_> for DeclCollector<'_> {
                 self.owners.pop();
             }
             Item::Test(_) => self.in_body(|this| walk_item(this, item)),
-            Item::Use(_) | Item::World(_) | Item::TupleTypeDecl(_) | Item::Error(_) => {
+            Item::World(w) => {
+                let descriptor = |n| format!("{}#", numbered_name(&w.name, n));
+                let kind = SymbolKind::Module;
+                self.declare(w.id, &w.name, descriptor, kind, w.name_span, w.span);
+                walk_item(self, item);
+            }
+            Item::Use(_) | Item::TupleTypeDecl(_) | Item::Error(_) => {
                 walk_item(self, item);
             }
         }
     }
 
     fn visit_function(&mut self, func: &Function) {
+        // The hidden holder of a trait method's `contract` clauses repeats the
+        // method's name and parameters at their spans: only what its clauses
+        // declare is its own.
+        if func.is_contract_holder() {
+            self.in_body(|this| walk_function(this, func));
+            return;
+        }
         let kind = if self.owners.is_empty() {
             SymbolKind::Function
         } else {
@@ -950,6 +964,36 @@ impl Pair<i64> {
                     "wado . test.wado . Pair#get(+1)."
                 ]
             );
+        });
+    }
+
+    #[test]
+    fn a_world_is_declared_and_a_contract_holder_is_not() {
+        futures::executor::block_on(async {
+            let d = doc("world Tool {
+    export fn run();
+}
+trait Pick {
+    fn pick(&self, i: i32) -> i32
+        contract i >= 0;
+}
+")
+            .await;
+            assert_eq!(symbol(&d, "Tool").symbol, "wado . test.wado . Tool#");
+            assert_eq!(symbol(&d, "Tool").kind, SymbolKind::Module);
+            let picks: Vec<&str> = d
+                .symbols
+                .iter()
+                .filter(|s| s.display_name.contains("pick"))
+                .map(|s| s.symbol.as_str())
+                .collect();
+            assert_eq!(picks, ["wado . test.wado . Pick#pick()."]);
+            let at_pick = d
+                .occurrences
+                .iter()
+                .filter(|o| o.range == [4, 7, 11])
+                .count();
+            assert_eq!(at_pick, 1);
         });
     }
 
