@@ -36,6 +36,8 @@ Lets a function perform the listed effects without declaring `with E`, and stops
 
 An argument names an effect the way a `with` clause does, by the name the function's module gives it, an import alias included. A name that reaches no effect there is an error. An effect of the same name declared in another module is a different effect, and stays required.
 
+Outside the standard library, it warns under [`undeclared_effects`](./spec-diagnostics.md#the-undeclared_effects-lint), a provisional rule.
+
 <!-- {"fixture":"spec_attributes_user.wado","assert":false} -->
 
 ```wado
@@ -80,7 +82,7 @@ Rationale: [WEP: Effect System and Randomness in Collections](./wep-2026-01-20-e
 
 ### `#[ambient(E, ...)]`
 
-Lets a function perform the listed effects without declaring them, where the component already has them, and nowhere else. It names its effects the way `#[benign]` does. [Ambient Functions](./spec-effects.md#ambient-functions) states the rule.
+Lets a function perform the listed effects without declaring them, where the component already has them, and nowhere else. It names its effects the way `#[benign]` does, and warns outside the standard library as it does. [Ambient Functions](./spec-effects.md#ambient-functions) states the rule.
 
 ### `#[secret]`
 

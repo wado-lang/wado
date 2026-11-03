@@ -864,6 +864,7 @@ pub fn lint_diagnostics(
     }
     let mut out = shadowing_diagnostics(sem, lints);
     out.extend(undecided_effect_diagnostics(sem, lints));
+    out.extend(undeclared_effect_diagnostics(sem, lints));
     out.extend(self_comparison_diagnostics(sem, lints));
     out.extend(constant_arithmetic_diagnostics(sem, lints));
     out.extend(hex_suffix_lookalike_diagnostics(sem, lints));
@@ -945,6 +946,80 @@ fn undecided_effect_diagnostics(sem: &semantics::Semantics, lints: Lints) -> Vec
                     Some(src.source_path().as_str()),
                 )),
             });
+        }
+    }
+    out
+}
+
+/// Source-level `UndeclaredEffects` warnings: every `#[benign]` and `#[ambient]`
+/// a program writes. Hiding an effect from callers is provisionally the standard
+/// library's alone, and a lint never reports there.
+fn undeclared_effect_diagnostics(sem: &semantics::Semantics, lints: Lints) -> Vec<Diagnostic> {
+    let mut out = Vec::new();
+    for (src, module) in lints.modules(&sem.modules) {
+        if inner_attrs_allow(&module.inner_attributes, lint::UNDECLARED_EFFECTS) {
+            continue;
+        }
+        let mut report = |enclosing: &[ast::Attribute],
+                          attrs: &[ast::Attribute],
+                          name: &str,
+                          whose: &str| {
+            if attrs_allow(enclosing, lint::UNDECLARED_EFFECTS)
+                || attrs_allow(attrs, lint::UNDECLARED_EFFECTS)
+            {
+                return;
+            }
+            for attr in attrs
+                .iter()
+                .filter(|attr| attribute::ADMITS_EFFECTS.contains(&attr.name.as_str()))
+            {
+                let effects: Vec<&str> = attr.args.iter().map(ast::AttrArg::name).collect();
+                out.push(Diagnostic {
+                    severity: Severity::Warning,
+                    code: Code::UndeclaredEffects,
+                    message: format!(
+                        "`#[{}]` hides `{}` from the {whose} of `{name}`, which only the \
+                         standard library is meant to do for now; declare it with `with`, \
+                         or mark it `#[allow(undeclared_effects)]` if that is deliberate",
+                        attr.name,
+                        effects.join("`, `"),
+                    ),
+                    span: Some(DiagnosticSpan::from_span(
+                        &attr.span,
+                        Some(src.source_path().as_str()),
+                    )),
+                });
+            }
+        };
+        for item in &module.items {
+            let (enclosing, methods): (&[ast::Attribute], &[ast::Function]) = match item {
+                Item::Function(func) => {
+                    report(&[], &func.attrs, &func.name, "callers");
+                    continue;
+                }
+                Item::Global(global) => {
+                    report(&[], &global.attributes, &global.name, "readers");
+                    continue;
+                }
+                Item::Impl(block) => (&block.attrs, &block.methods),
+                Item::Trait(decl) => (&decl.attrs, &decl.methods),
+                Item::Interface(decl) => (&decl.attrs, &decl.methods),
+                Item::Resource(decl) => (&decl.attrs, &decl.methods),
+                Item::Use(_)
+                | Item::Struct(_)
+                | Item::Enum(_)
+                | Item::Variant(_)
+                | Item::Flags(_)
+                | Item::Newtype(_)
+                | Item::TupleTypeDecl(_)
+                | Item::BuiltinTypeDecl(_)
+                | Item::World(_)
+                | Item::Test(_)
+                | Item::Error(_) => continue,
+            };
+            for method in methods {
+                report(enclosing, &method.attrs, &method.name, "callers");
+            }
         }
     }
     out

@@ -438,6 +438,8 @@ test {
 
 [`#[benign(E)]`](./spec-attributes.md#benigne-) admits its effects the same way, but for the opposite case. A benign effect is required: its world import stays, and the effect must not show through the function's interface. An ambient effect is optional, and what it does may show.
 
+Both attributes are for the standard library. A program writing either is warned under [`undeclared_effects`](./spec-diagnostics.md#the-undeclared_effects-lint), a provisional rule.
+
 ## Generic Effects (Effect Polymorphism)
 
 `<effect E>` declares an effect parameter. `E` stands for zero or more concrete effects, inferred at each call site from the function-typed arguments.

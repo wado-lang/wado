@@ -32,6 +32,7 @@ The lints are:
 | [`unconditional_trap`](#the-unconditional_trap-lint)       | an integer division or remainder that always traps                              |
 | [`hex_suffix_lookalike`](#the-hex_suffix_lookalike-lint)   | a hex literal ending in `_f16`, `_bf16`, `_f32` or `_f64`                       |
 | [`undecided_effects`](#the-undecided_effects-lint)         | a trait head that writes no `with` clause                                       |
+| [`undeclared_effects`](#the-undeclared_effects-lint)       | a `#[benign]` or `#[ambient]` in a program                                      |
 | [`dead_code`](#the-dead_code-lint)                         | an unused or test-only free function or global                                  |
 | [`unused_imports`](#the-unused_imports-lint)               | a `use` bringing in a name its module never refers to                           |
 | [`unused_variables`](#the-unused_variables-lint)           | a variable or parameter nothing reads                                           |
@@ -227,6 +228,28 @@ pub trait Settled with () {
 
 `Undecided` warns, `Private` remarks, and `Deciding` and `Settled` report
 nothing.
+
+## The `undeclared_effects` Lint
+
+The `undeclared_effects` lint warns about each
+[`#[benign]`](./spec-attributes.md#benigne-) and
+[`#[ambient]`](./spec-attributes.md#ambiente-) a program writes, on a function,
+a method or a global. Either attribute hides an effect from every caller, which
+the effect system otherwise never allows, so only the standard library is meant
+to write one. A lint never reports in the standard library.
+
+<!-- {"fixture":"effect_attribute_outside_stdlib_warns.wado", "assert": false} -->
+
+```wado
+#[ambient(Stdout)]
+fn note() {
+    println("note");
+}
+```
+
+> Provisional: the rule stands until use cases show where these attributes
+> belong outside the standard library. It may become an error, or admit some
+> uses without a warning.
 
 ## The `dead_code` Lint
 
