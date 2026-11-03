@@ -48,7 +48,7 @@ what makes a tagged template cost what the untagged one costs.
 
 ```wado
 let q = sql`SELECT * FROM users WHERE id = ${id} AND name = ${user.name}`;
-let s = String::raw`${dir}\bin\run.exe`;
+let s = String::format`${dir}/bin/run`;
 ```
 
 A tag is a path expression — a function name or a static method path — written
@@ -183,13 +183,15 @@ rejects specifiers reads `has_spec()`.
 The literal segments are the same string in two spellings, both fields of the
 value, and the one a tag never reads is a field nothing passes. That is the
 whole cooked-versus-raw mechanism: no mode, no marker type, and no inspection
-of the tag's signature. `String::raw` is a tag that reads `raw(t)` and
-`raw_tail(t)`. A raw segment is
-still a template segment, so it spells only the escapes the language has:
-`` String::raw`a\nb` `` is `a\nb` as written, and `\p` is the error it is in
-any cooked template. A text full of backslashes, such as a regular expression,
-is a raw template, ``#`…`#``, which takes every backslash as itself, so both
-of its spellings are the text as written ([WEP: Re](./wep-2026-11-02-re.md)).
+of the tag's signature. A raw segment of a cooked template is still a template
+segment, so it spells only the escapes the language has, and `\p` is an error.
+A text full of backslashes, such as a regular expression, is a raw template,
+``#`…`#``, which takes every backslash as itself, so both of its spellings are
+the text as written ([WEP: Re](./wep-2026-11-02-re.md)).
+
+The prelude has no counterpart of JavaScript's `String.raw` tag. A raw
+template already renders its text as written with no tag, and a tag over a
+cooked template could only keep the escapes the lexer accepts.
 The `#` count is part of the shape, which `hashes()` answers as a constant. A
 runtime field on every template value was the alternative: it keeps a cooked and
 a raw template of the same holes one type, at the cost of a field in every
@@ -323,8 +325,7 @@ that cannot name the bound passes its tag a concrete value instead.
 An untagged template is sugar for a call of the `String::format` tag, which a
 program may also call by name. It names the prelude's `String` wherever it
 stands, even where an import takes the name or the module has no prelude.
-The tag is a static method rather than a prelude function, as `String::raw` is,
-so it leaves the name `format` free for a program's own items:
+The tag is a static method rather than a prelude function, so it leaves the name `format` free for a program's own items:
 
 ```wado
 impl String {
@@ -503,8 +504,7 @@ introduces a mechanism; each item names the existing one it extends.
   re-exports it with the other member handles.
 - `compiler_item.rs` gains `ReflectTemplate`, `ReflectTemplateHole` and the
   three method items, in `ALL`, `attr_name`, `expected_kind`, `is_required`.
-- `String::format` and `String::raw` in the string module, written as the tags
-  above.
+- `String::format` in the string module, written as the tag above.
 
 ### Parser and AST
 
@@ -650,7 +650,6 @@ things the optimizer gains here.
   default, filled at the site.
 - `tagged_template_format_equiv.wado`: `String::format` against the untagged form over
   the specifier matrix.
-- `tagged_template_string_raw.wado`: `String::raw` keeps escapes verbatim.
 - `tagged_template_decl_name.wado`: the reader's name, specifiers and the cut
   included.
 - `tagged_template_inspect.wado`: a value inspects as the template it was

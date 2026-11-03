@@ -9030,7 +9030,7 @@ mod tests {
     /// qualified, and the template keeps its holes.
     #[test]
     fn test_tagged_template_parses() {
-        let module = parse("fn f() { let a = sql`x ${y} z`; let b = String::raw`q`; }").unwrap();
+        let module = parse("fn f() { let a = sql`x ${y} z`; let b = String::format`q`; }").unwrap();
         let Item::Function(func) = &module.items[0] else {
             panic!("expected a function");
         };
@@ -9051,7 +9051,7 @@ mod tests {
         let Stmt::Let(b) = &body.stmts[1] else {
             panic!("expected a let");
         };
-        assert_eq!(tag_name(&b.value), ("String::raw".to_string(), 1));
+        assert_eq!(tag_name(&b.value), ("String::format".to_string(), 1));
     }
 
     /// Whitespace or a comment between the path and the backtick is a gap:

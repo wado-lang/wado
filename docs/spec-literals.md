@@ -1114,7 +1114,7 @@ with the literal text around them, instead of a rendered `String`:
 
 ```wado
 let q = sql`SELECT * FROM users WHERE id = ${id} AND name = ${user.name}`;
-let s = String::raw`${dir}\bin\run.exe`;   // backslashes kept
+let s = #`${dir}\bin\run.exe`#;   // backslashes kept
 assert q.query == "SELECT * FROM users WHERE id = ? AND name = ?";
 assert s == "C:\\bin\\run.exe";
 ```
@@ -1180,7 +1180,7 @@ to it, `&V`), `spec()` (the specifier as written, or `None`), `has_spec()`, and
 `fmt(&t, f)` (rendering the value through the trait its specifier selects, as
 [Format Types](#format-types) states). A tag declaring `affine ..V` takes an
 affine hole, and its handles offer no `get`, since a copy of an affine value
-does not exist. `String::format` and `String::raw` declare it.
+does not exist. `String::format` declares it.
 `ReflectTemplate::<T>::tail(&t)` and `raw_tail(&t)` give the segment after the
 last hole, and `hashes()` how many `#`s delimit the template on each end: 0
 for a cooked template. A segment is a `StrSlice` over the template's own text,

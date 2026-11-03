@@ -80,7 +80,7 @@ test "highlight tagged template" {
     // A tag is the function the template calls. A qualified tag's owner is a
     // `::` head like any other, so it stays uncoloured; the template itself
     // reads exactly as an untagged one.
-    let src = "fn f() { let n = 1; let a = String::raw`a ${n}`; let b = sql`b`; }\n";
+    let src = "fn f() { let n = 1; let a = String::format`a ${n}`; let b = sql`b`; }\n";
     assert parse(&src).ok(), "parse failed";
     let html = highlight(src);
     assert html.contains("<span class=\"function\">raw</span>"), "qualified tag -> function";

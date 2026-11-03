@@ -3837,7 +3837,7 @@ fn test_format_attribute_numeric_arg_preserved() {
 
 #[test]
 fn test_format_tagged_template_keeps_tag_adjacent() {
-    let source = "fn foo() {\n    let s = sql`id = ${id:>4} \\n`;\n    let r = String::raw`a\\nb`;\n    let p = re#`\\d+`#;\n}\n";
+    let source = "fn foo() {\n    let s = sql`id = ${id:>4} \\n`;\n    let r = String::format`a\\nb`;\n    let p = re#`\\d+`#;\n}\n";
     let formatted = wado_compiler::format(source).expect("format failed");
     assert_eq!(
         formatted, source,

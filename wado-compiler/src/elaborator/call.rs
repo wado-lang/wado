@@ -3457,7 +3457,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// [`Self::infer_type_args_from_assoc_bounds`] over a declared parameter
-    /// list, for a static method (`String::raw<T: ReflectTemplate<Holes =
+    /// list, for a static method (`String::format<T: ReflectTemplate<Holes =
     /// [..V]>, ..V>`), whose params come from its impl rather than a callee.
     pub(super) fn project_assoc_bound_args(
         &mut self,
