@@ -12,6 +12,7 @@ use crate::nir_arena::{
     StmtNode,
 };
 use crate::nir_visitor::NirRefVisitor;
+use crate::tir::ResolvedType;
 use crate::type_table::TypeTable;
 
 use super::callee::{CallSite, CalleeKey};
@@ -318,6 +319,16 @@ impl Interpreter<'_> {
                     .values()
                     .chain(self.frame.place_fields.values())
                     .any(|(root, _)| *root == index)
+                {
+                    return Flow::Bail;
+                }
+                // An array is one object every handle to it shares, and the
+                // frame holds arrays by value: a copy would miss every write
+                // made through the other handle.
+                if matches!(
+                    self.type_table.get(body.operand_type(value)),
+                    ResolvedType::BuiltinArray(_)
+                ) && write_root_local(body, value).is_some()
                 {
                     return Flow::Bail;
                 }
