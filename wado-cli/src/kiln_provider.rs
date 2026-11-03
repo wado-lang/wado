@@ -58,7 +58,7 @@ use crate::build_dep::{GENERATOR_WORLD_SEGMENT, parse_spec, resolve_generator_ve
 use crate::cache::generator_path;
 use crate::compile::{KilnRun, run_nested_pipeline};
 use crate::compiler_host::FilesystemCompilerHost;
-use crate::fingerprint::compiler_digest;
+use crate::fingerprint::{Input, compiler_digest};
 use crate::kiln_wit::options_descriptor_from_component;
 use crate::manifest::package_root;
 use crate::oci;
@@ -268,7 +268,7 @@ impl CliGeneratorProvider {
     fn indexed_identity(&self, module_path: &str, base: &Path) -> Option<IndexedGenerator> {
         let index = GeneratorIndex::load(&self.index_path())?;
         let recorded = index.generators.get(module_path)?;
-        if recorded.compiler != compiler_id() {
+        if recorded.compiler != compiler_id() || !recorded.inputs.iter().all(Input::unchanged) {
             return None;
         }
         let mut validated: Vec<(String, [u8; 32])> = Vec::with_capacity(recorded.sources.len());
@@ -444,7 +444,11 @@ impl CliGeneratorProvider {
         let loaded = Arc::new(Mutex::new(Vec::<(String, [u8; 32])>::new()));
         let loaded_for_task = loaded.clone();
         let log_level = self.log_level;
-        let shared_cache = self.run.clone();
+        let reads = self
+            .run
+            .as_ref()
+            .map_or_else(|| RunCache::new().scoped(), |run| run.scoped());
+        let reads_for_task = Arc::clone(&reads);
 
         // `compile_with_options` captures a `Logger<H>` whose internal
         // `Cell<usize>` makes the returned future `!Send`. Run the whole
@@ -453,12 +457,8 @@ impl CliGeneratorProvider {
         // able `spawn_blocking` future.
         let artifacts: Result<CompileArtifacts, ProviderError> = joined(
             tokio::task::spawn_blocking(move || {
-                let mut inner = FilesystemCompilerHost::with_log_level(base_path, log_level);
-                // The resolution's view, so the package files the generator's
-                // imports resolve through are kept with the generator.
-                if let Some(cache) = shared_cache {
-                    inner = inner.with_shared_run_cache(cache);
-                }
+                let inner = FilesystemCompilerHost::with_log_level(base_path, log_level)
+                    .with_shared_run_cache(reads_for_task);
                 let host = SilentHost {
                     inner,
                     loaded: loaded_for_task,
@@ -503,6 +503,10 @@ impl CliGeneratorProvider {
         );
 
         let mut artifacts = artifacts?;
+        let inputs = reads.reads();
+        if let Some(run) = &self.run {
+            run.replay(inputs.as_deref());
+        }
 
         // Drain the recorded sources, dedup paths (the compiler can request
         // the same module more than once). The combined hash is what the kiln
@@ -516,6 +520,11 @@ impl CliGeneratorProvider {
         let combined_hash = combined_sources_hash(&sources);
         artifacts.source_hash.clone_from(&combined_hash);
 
+        // Nothing vouches for a compile whose reads are untracked, so the next
+        // run rebuilds it.
+        let Some(inputs) = inputs else {
+            return Ok(artifacts);
+        };
         // Best-effort: the caller holds the fresh bytes, so a refusal costs
         // the next run a rebuild.
         let _ = write_atomic(&self.component_path(&combined_hash), &artifacts.wasm);
@@ -531,6 +540,7 @@ impl CliGeneratorProvider {
                         hash: hex32(hash),
                     })
                     .collect(),
+                inputs,
                 compiler: compiler_id().to_string(),
             },
         );
@@ -809,6 +819,10 @@ struct IndexedGenerator {
     /// invalidates the entry. A remote module the lock pins is listed by its
     /// URL and held to the lock's entry for it.
     sources: Vec<SourceEntry>,
+    /// Everything the compile read, held to it as a cached test pass is: the
+    /// package files that bound its imports, the environment variables it
+    /// read, and the files it looked for and did not find.
+    inputs: Vec<Input>,
     /// The `compiler_id` of the `wado` that built the component. Another
     /// compiler builds other bytes from the same sources, and a fix to a
     /// miscompile would otherwise never reach the generator.
@@ -1525,5 +1539,58 @@ export fn generate(req: Request<Options>) -> Result<Response, Error> {\n\
         );
 
         let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    /// Which file a dependency's module names is the dependency's manifest's
+    /// to say, so a manifest edit moves the generator though no source did.
+    #[test]
+    fn resolve_after_a_dependency_manifest_edit_recompiles() {
+        let tmp = tempfile::tempdir().unwrap();
+        let helper = tmp.path().join("helper");
+        std::fs::create_dir(&helper).unwrap();
+        let manifest = |lib: &str| {
+            format!("[package]\nname = \"helper\"\nversion = \"0.1.0\"\nlib = \"{lib}\"\n")
+        };
+        std::fs::write(helper.join("wado.toml"), manifest("a.wado")).unwrap();
+        std::fs::write(helper.join("a.wado"), "pub fn n() -> i32 { return 1; }\n").unwrap();
+        std::fs::write(helper.join("b.wado"), "pub fn n() -> i32 { return 2; }\n").unwrap();
+        let generator = tmp.path().join("gen");
+        std::fs::create_dir(&generator).unwrap();
+        std::fs::write(
+            generator.join("wado.toml"),
+            "[package]\nname = \"gen\"\nversion = \"0.1.0\"\n\n[dependencies]\nhelper = { path = \"../helper\" }\n",
+        )
+        .unwrap();
+        std::fs::write(
+            generator.join("generator.wado"),
+            "\
+use { Request, Response, Error } from \"core:kiln\";\n\
+use { n } from \"helper\";\n\
+\n\
+export struct Options {\n\
+    pub verbose: bool,\n\
+}\n\
+\n\
+export fn generate(req: Request<Options>) -> Result<Response, Error> {\n\
+    let _ = req.options.verbose;\n\
+    let _ = n();\n\
+    return Result::Ok(Response { files: [] });\n\
+}\n",
+        )
+        .unwrap();
+        let provider = CliGeneratorProvider::new(generator);
+        let module = GeneratorModule::LocalPath(InvocationPath::normalize("./generator.wado"));
+        let resolve = || {
+            runtime()
+                .block_on(async { provider.resolve(&module).await })
+                .unwrap_or_else(|e| panic!("resolve: {e:?}"))
+        };
+
+        resolve();
+        resolve();
+        assert_eq!(provider.compile_count(), 1);
+        std::fs::write(helper.join("wado.toml"), manifest("b.wado")).unwrap();
+        resolve();
+        assert_eq!(provider.compile_count(), 2);
     }
 }

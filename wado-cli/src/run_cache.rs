@@ -19,7 +19,7 @@ use std::{fs, io};
 use indexmap::map::Entry;
 use sha2::{Digest, Sha256};
 use wado_compiler::hashmap::IndexMap;
-use wado_lsp::host::discovery::{PackageFiles, absolutize, normalize_path};
+use wado_lsp::host::discovery::{PackageFiles, absolutize};
 use wado_lsp::host::{is_absent, read_prefix};
 
 use crate::fingerprint::{Input, InputKey};
@@ -140,11 +140,7 @@ impl RunCache {
 
     fn record(&self, path: &Path, prefix: Option<u64>, hash: Option<[u8; 32]>) {
         if self.reads.is_some() {
-            self.record_input(Input::hashed(
-                normalize_path(&absolutize(path)),
-                prefix,
-                hash,
-            ));
+            self.record_input(Input::hashed(read_key(path), prefix, hash));
         }
     }
 
@@ -162,7 +158,7 @@ impl RunCache {
     }
 
     /// Record `reads`, which another view made, as read through this one.
-    fn replay(&self, reads: Option<&[Input]>) {
+    pub(crate) fn replay(&self, reads: Option<&[Input]>) {
         if self.reads.is_none() {
             return;
         }
@@ -248,7 +244,13 @@ impl ReadLog {
 
 /// `path` holding `bytes`, or no file, keyed as every read of it is.
 fn file_input(path: &Path, bytes: Option<&[u8]>) -> Input {
-    Input::of(normalize_path(&absolutize(path)), bytes)
+    Input::of(read_key(path), bytes)
+}
+
+/// `path` as a later check reads it again. `..` stays: the filesystem resolves
+/// it after any symlink before it, which folding it out of the text would not.
+fn read_key(path: &Path) -> PathBuf {
+    absolutize(path).components().collect()
 }
 
 /// Generators resolved by this run, keyed by manifest root + module. The first
@@ -664,6 +666,22 @@ mod tests {
             log.reads().expect("tracked"),
             [Input::of(file, Some(&[0xff]))]
         );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_read_through_a_symlink_and_dot_dot_is_checked_where_it_landed() {
+        let dir = tempfile::tempdir().unwrap();
+        let sub = dir.path().join("real/sub");
+        std::fs::create_dir_all(&sub).unwrap();
+        std::os::unix::fs::symlink(&sub, dir.path().join("link")).unwrap();
+        write(&dir.path().join("real/wado.toml"), "read");
+        let log = ReadLog::default();
+        assert_eq!(
+            log.read(&dir.path().join("link/../wado.toml")).unwrap(),
+            "read"
+        );
+        assert!(log.reads().expect("tracked").iter().all(Input::unchanged));
     }
 
     #[test]
