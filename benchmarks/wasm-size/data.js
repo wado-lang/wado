@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1793671925157,
+  "lastUpdate": 1793684801342,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -73889,6 +73889,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/c0bdae6df4e62b45b9035a7e0fd38bfaad1f9e9c"
         },
         "date": 1793671923950,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3099,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7303,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21809,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 316578,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "d9d9d143065c1def29755e3ced1389e356258dd2",
+          "message": "Merge pull request #2532 from wado-lang/ccr-2dfcf54c-ylqcdp\n\nfeat(effects): #[ambient] names its effects, and handlers install through the trait order",
+          "timestamp": "2026-11-03T14:35:46+09:00",
+          "tree_id": "72c65f3ddd2487622609ec47720484e187598e07",
+          "url": "https://github.com/wado-lang/wado/commit/d9d9d143065c1def29755e3ced1389e356258dd2"
+        },
+        "date": 1793684800539,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
