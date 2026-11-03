@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1793697130943,
+  "lastUpdate": 1793716837524,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -74021,6 +74021,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/fd132d8d789a622b33c6cff3615e4d7e9d2397fb"
         },
         "date": 1793697129890,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3099,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7303,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21809,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 316578,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "8b02954c973d69e030939dd19c803f2a6d50e44c",
+          "message": "Merge pull request #2538 from wado-lang/claude/happy-gates-iszpmu\n\nfeat: raw strings, raw templates, and raw byte strings",
+          "timestamp": "2026-11-03T23:28:29+09:00",
+          "tree_id": "0972a981d2531cbe51592b7bde94c98cf49e57b4",
+          "url": "https://github.com/wado-lang/wado/commit/8b02954c973d69e030939dd19c803f2a6d50e44c"
+        },
+        "date": 1793716837162,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
