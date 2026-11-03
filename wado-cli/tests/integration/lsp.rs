@@ -2809,3 +2809,39 @@ fn lsp_references_at_member_declarations_respect_include_declaration() {
     }
     assert_eq!(session.shutdown_and_exit(), 0);
 }
+
+#[test]
+fn lsp_references_at_enum_case_declaration_exclude_other_cases() {
+    let mut session = LspSession::start();
+    session.initialize();
+    let uri = "file:///tmp/lsp_case_refs.wado";
+    session.open_doc(
+        uri,
+        "enum Color { Red, Blue }\nfn value(c: Color) -> i32 {\n    return match c {\n        Red => 1,\n        Blue => 2,\n    };\n}\n",
+    );
+
+    for include in [false, true] {
+        let id = session.send_request(
+            "textDocument/references",
+            json!({
+                "textDocument": { "uri": uri },
+                "position": { "line": 0, "character": 14 },
+                "context": { "includeDeclaration": include }
+            }),
+        );
+        let response = session.read_message();
+        assert_eq!(response["id"], id);
+        let mut expected = vec![json!({
+            "uri": uri,
+            "range": { "start": { "line": 3, "character": 8 }, "end": { "line": 3, "character": 11 } }
+        })];
+        if include {
+            expected.insert(0, json!({
+                "uri": uri,
+                "range": { "start": { "line": 0, "character": 13 }, "end": { "line": 0, "character": 16 } }
+            }));
+        }
+        assert_eq!(response["result"], json!(expected));
+    }
+    assert_eq!(session.shutdown_and_exit(), 0);
+}

@@ -242,3 +242,82 @@ test "symbol tools validate and paginate output lines" {
     assert ws.call(&"FindReferences", &tool_input(`{"name": "radius", "head_limit": -1}`)).is_err();
     assert Workspace { root: "src" }.call(&"FindReferences", &tool_input(`{"name": "area"}`)).is_err();
 }
+
+test "references use the innermost enclosing declaration" {
+    let mut symbols = empty_index();
+    symbols.add(&scip::Index {
+        documents: [
+            scip::Document {
+                relative_path: "nested.rs",
+                occurrences: [
+                    scip::Occurrence { range: [0, 3, 9], symbol: `${CRATE}target().`, symbol_roles: 1 },
+                    scip::Occurrence { range: [1, 3, 8], symbol: `${CRATE}outer().`, symbol_roles: 1, enclosing_range: [1, 0, 5, 1] },
+                    scip::Occurrence { range: [2, 4, 10], symbol: `${CRATE}target().`, symbol_roles: 8 },
+                    scip::Occurrence { range: [3, 7, 12], symbol: `${CRATE}inner().`, symbol_roles: 1, enclosing_range: [3, 4, 35] },
+                    scip::Occurrence { range: [3, 20, 26], symbol: `${CRATE}target().`, symbol_roles: 8 },
+                    scip::Occurrence { range: [4, 4, 10], symbol: `${CRATE}target().`, symbol_roles: 8 },
+                    scip::Occurrence { range: [6, 0, 6], symbol: `${CRATE}target().`, symbol_roles: 8 },
+                ],
+                symbols: [
+                    scip::SymbolInformation { symbol: `${CRATE}target().`, display_name: "target", kind: Function },
+                    scip::SymbolInformation { symbol: `${CRATE}outer().`, display_name: "outer", kind: Function },
+                    scip::SymbolInformation { symbol: `${CRATE}inner().`, display_name: "inner", kind: Function },
+                ],
+            },
+        ],
+    });
+    let ws = Workspace { root: "src", symbols: Some(symbols) };
+    assert ws.call(&"FindReferences", &tool_input(`{"name": "target"}`)).unwrap() == "function target (nested.rs:1): 4 references\nnested.rs:3 in outer: \nnested.rs:4 in inner: \nnested.rs:5 in outer: \nnested.rs:7: \n";
+}
+
+test "owner metadata and definition paths disambiguate names" {
+    let mut symbols = empty_index();
+    symbols.add(&scip::Index {
+        documents: [
+            scip::Document {
+                relative_path: "pkg/item.rs",
+                occurrences: [
+                    scip::Occurrence { range: [0, 0, 5], symbol: `${CRATE}Owner#`, symbol_roles: 1 },
+                    scip::Occurrence { range: [1, 0, 3], symbol: `${CRATE}opaque().`, symbol_roles: 9 },
+                ],
+                symbols: [
+                    scip::SymbolInformation { symbol: `${CRATE}Owner#`, display_name: "Owner", kind: Struct },
+                    scip::SymbolInformation {
+                        symbol: `${CRATE}opaque().`,
+                        display_name: "run",
+                        kind: Method,
+                        enclosing_symbol: `${CRATE}Owner#`,
+                        signature_documentation: Some(scip::Signature { language: "rust", text: "fn run(\n    x: i32,\n)" }),
+                    },
+                ],
+            },
+            scip::Document {
+                relative_path: "pkg-extra/item.rs",
+                occurrences: [
+                    scip::Occurrence { range: [0, 0, 3], symbol: `${CRATE}Other#run().`, symbol_roles: 1 },
+                    scip::Occurrence { range: [1, 0, 3], symbol: `${CRATE}opaque().`, symbol_roles: 8 },
+                ],
+                symbols: [
+                    scip::SymbolInformation { symbol: `${CRATE}Other#run().`, display_name: "run", kind: Method },
+                ],
+            },
+        ],
+    });
+    let ws = Workspace { root: "src", symbols: Some(symbols) };
+    assert ws.call(&"FindSymbol", &tool_input(`{"name": "Owner.run", "path": "pkg"}`)).unwrap() == "pkg/item.rs:2-2: method Owner::run\n    fn run(\n        x: i32,\n    )\n";
+    assert ws.call(&"FindSymbol", &tool_input(`{"name": "run", "path": "pkg"}`)).unwrap().starts_with("pkg/item.rs:2-2: method Owner::run\n");
+    assert ws.call(&"FindReferences", &tool_input(`{"name": "Owner::run", "path": "pkg"}`)).unwrap() == "method Owner::run (pkg/item.rs:2): 0 references\n";
+    assert ws.call(&"FindReferences", &tool_input(`{"name": "Owner::run", "path": "pkg-extra"}`)).unwrap() == "method Owner::run (pkg/item.rs:2): 1 references\npkg-extra/item.rs:2: \n";
+}
+
+test "symbol tools reject invalid inputs and page reference results" {
+    let ws = workspace();
+    for let name of ["FindSymbol", "FindReferences"] {
+        assert ws.call(&name, &tool_input(`{}`)).is_err();
+        assert ws.call(&name, &tool_input(`{"name": 12}`)).is_err();
+        assert ws.call(&name, &tool_input(`{"name": "area", "path": "../outside"}`)).is_err();
+        assert ws.call(&name, &tool_input(`{"name": "area", "offset": -1}`)).is_err();
+    }
+    assert ws.call(&"FindReferences", &tool_input(`{"name": "area", "offset": 1, "head_limit": 1}`)).unwrap() == "testdata/shapes.rs:12 in total: shapes.iter().map(|c| c.area()).sum()\n";
+    assert ws.call(&"FindReferences", &tool_input(`{"name": "absent"}`)).unwrap() == "No symbols found";
+}
