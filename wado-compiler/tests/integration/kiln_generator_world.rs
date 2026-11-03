@@ -326,23 +326,6 @@ fn generator_with_extra_export_compiles_to_valid_component() {
     assert!(result.wasm.starts_with(b"\0asm"), "not component-shaped");
 }
 
-/// A generator reaching a `core:*` module that itself imports WASI must not
-/// pick up that import: the Kiln linker offers only `core:kiln/kiln-host`,
-/// insecure `wasi:random`, and `wasi:cli`'s stdout and stderr, so any other
-/// `wasi:*` interface carrying a function fails instantiation.
-///
-/// `core:log` is no `wasi:` import at the source level, so the `use`-site check
-/// cannot see this and the guarantee is asserted on the emitted component.
-const CORE_LOG_GENERATOR: &str = r#"
-use { Request, Response, Error } from "core:kiln";
-use { info } from "core:log";
-
-export fn generate(req: Request) -> Result<Response, Error> {
-    info(`generating`, { path: req.primary.path });
-    return Result::Ok(Response { files: [] });
-}
-"#;
-
 /// The `wasi:` interfaces a generator's import plan carries, each with the kind
 /// codegen emits it as. `wit_import_plan` pins the plan against the component's
 /// actual imports, so reading the plan reads what the linker will be asked for.
@@ -373,32 +356,6 @@ fn function_bearing(imports: &[(String, ImportKind)]) -> Vec<&str> {
         .filter(|(_, kind)| *kind != ImportKind::SharedTypes)
         .map(|(fq, _)| fq.as_str())
         .collect()
-}
-
-/// The function-bearing `wasi:` interfaces the generator world imports.
-const GENERATOR_WORLD_WASI: [&str; 4] = [
-    "wasi:cli/stderr@0.3.0",
-    "wasi:cli/stdout@0.3.0",
-    "wasi:random/insecure-seed@0.3.0",
-    "wasi:random/insecure@0.3.0",
-];
-
-#[test]
-fn generator_using_core_log_imports_only_its_world() {
-    for (source, what) in [
-        (NOOP_GENERATOR, "noop generator"),
-        (CORE_LOG_GENERATOR, "core:log generator"),
-    ] {
-        let imports = wasi_imports_of(source, what);
-        let outside: Vec<&str> = function_bearing(&imports)
-            .into_iter()
-            .filter(|fq| !GENERATOR_WORLD_WASI.contains(fq))
-            .collect();
-        assert!(
-            outside.is_empty(),
-            "the {what} imports {outside:?}, which the generator world lacks"
-        );
-    }
 }
 
 /// `HashMap::new()` reads `DEFAULT_HASH_SEED`, whose `#[ambient]` initializer

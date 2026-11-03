@@ -57,9 +57,9 @@ response.
 
 ### `pub struct KilnLogSink {}`
 
-The `core:log` handler a generator runs under. A generator has no stderr
-for the default sink to write to, so the compiler installs this one around
-`generate`'s body.
+The `core:log` handler a generator runs under. Its host turns each stderr
+line into a warning, so the compiler installs this one around `generate`'s
+body, which reports each event at its own level.
 
 #### `impl Log for KilnLogSink`
 

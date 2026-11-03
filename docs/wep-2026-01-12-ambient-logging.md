@@ -140,16 +140,17 @@ the body is checked.
 
 ### `#[benign]` merges into `#[ambient]`, and the import always lands
 
-Ambient effects were optional: where the target world lacked a listed effect,
-the body was skipped and the function returned `Default::default()`. `#[benign]`
+Ambient effects were optional: where the target world lacked stdout or stderr,
+`log_stdout` or `log_stderr` dropped its message, and the component imported no
+stream. Extending that to every listed effect would have meant skipping any
+ambient body, and returning a value its type supplies in its place. `#[benign]`
 ([WEP: Effect System and Randomness in Collections](./wep-2026-01-20-effect-system-randomness.md))
 waived the same declaration but kept the import. The two differed only in
 whether the import could be dropped, and dropping it buys nothing a host cannot
 give more simply. A sandbox stays a sandbox when it links a stdout that writes
 nowhere, and a Kiln generator's host routes its stdout and stderr to the build
-log. Dropping the import cost the machinery that decided it per world, a
-`Default` bound on every ambient return type, and a body that silently did
-nothing where its author expected it to run.
+log. Dropping the import cost machinery that decided it per world, and a write
+that silently did nothing where its author expected it to run.
 
 So one attribute remains, `#[ambient(E)]`, on a function or a global, and it
 waives the declaration only. Each listed effect is imported wherever a call

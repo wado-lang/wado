@@ -640,6 +640,8 @@ record source-span {
 - A span names one of the files the generator received, by the path that file
   carried, and a byte range in it.
 - Every diagnostic is reported, whether the run then succeeds or fails.
+- Each line a generator writes to stdout becomes an info diagnostic, and each
+  line it writes to stderr, a panic's message included, a warning.
 
 Gale relays the diagnostics of its own analysis, and collects its errors to
 fail the run with:
@@ -737,9 +739,8 @@ options.
 
 - The host provides `KilnHost`, `wasi:random/insecure`,
   `wasi:random/insecure-seed`, `wasi:cli/stdout` and `wasi:cli/stderr`, and
-  nothing else.
-- Each line a generator writes to stdout becomes an info diagnostic, and each
-  line it writes to stderr, a panic's message included, a warning.
+  nothing else. Stdout and stderr reach the build as
+  [diagnostics](#diagnostics).
 - A generator that logs through `core:log`'s `TextSink<WallClock>` imports a
   clock, so it is refused as below.
 - Both random interfaces behave as `wasi:random/insecure-seed` specifies: what

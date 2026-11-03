@@ -10,8 +10,7 @@ use crate::ast::{
     self, AstId, AstVisitor, CompoundAssignOp, Expr, Item, Module, UnaryOp, walk_expr,
 };
 use crate::attribute::{
-    ALLOC, EXPORT_NAME, INLINE, SECRET, WIRE, wire_name_override, wire_name_policy,
-    wire_value,
+    ALLOC, EXPORT_NAME, INLINE, SECRET, WIRE, wire_name_override, wire_name_policy, wire_value,
 };
 use crate::call_args::CallArgs;
 use crate::const_eval::{format_float_repr, truncate_int};
