@@ -730,7 +730,7 @@ fn hoist_reloadable_field_loads(
     );
 
     // Keep only candidates whose sole obstacle is a call that may write the
-    // object, and that the loop still reads other than through a reload.
+    // object, and whose hoist saves loads.
     candidates.retain(|c| {
         let root_ty = candidate_root_ty(engine, c.local_index, c.type_id);
         if modified_vars.field_written(ctx, engine.body, c.local_index, root_ty, c.field_index)
@@ -744,13 +744,27 @@ fn hoist_reloadable_field_loads(
         {
             return false;
         }
-        count_genuine_field_reads(
-            engine.body,
-            NodeRef::Block(loop_body),
-            c.local_index,
-            c.field_index,
-            &ctx.hoist_locals,
-        ) > 0
+        let Some(key) = ctx.type_table.heap_object_key(root_ty) else {
+            return false;
+        };
+        let mut readers = vec![c.local_index];
+        readers.extend(
+            ref_bindings
+                .iter()
+                .filter(|(_, binding)| binding.source_index == c.local_index)
+                .map(|(&local, _)| local),
+        );
+        let gain = ReloadGain {
+            ctx,
+            body: engine.body,
+            readers: &readers,
+            field_index: c.field_index,
+            clobbers: &Clobbers {
+                watched: [(key, c.local_index)].into_iter().collect(),
+            },
+        };
+        let [least, most] = gain.of_block(loop_body);
+        least >= 0 && most > 0
     });
 
     if candidates.is_empty() {
@@ -856,6 +870,91 @@ fn hoist_reloadable_field_loads(
         .collect();
     replace_hoisted(engine, NodeRef::Block(loop_body), &hoisted, &ref_bindings);
     insert_reloads(ctx, engine, loop_body, &specs, &clobbers);
+}
+
+/// What a reloadable hoist of one field saves in one iteration: each read it
+/// serves from the local saves a load, and each reload after a clobbering
+/// statement costs one. The hoist pays when no path through the body loses and
+/// some path gains; a clobber run as often as the read only moves the load.
+struct ReloadGain<'a> {
+    ctx: &'a LicmCtx<'a>,
+    body: &'a Body,
+    /// The source local and every immutable ref binding of it, whose reads of
+    /// the field the hoist also serves.
+    readers: &'a [u32],
+    field_index: u32,
+    /// The candidate's object alone.
+    clobbers: &'a Clobbers,
+}
+
+impl ReloadGain<'_> {
+    /// The least and the most loads any path through `block` saves.
+    fn of_block(&self, block: BlockId) -> [i64; 2] {
+        self.body.blocks[block]
+            .stmts
+            .iter()
+            .fold([0, 0], |[least, most], &s| {
+                let [l, m] = self.of_stmt(s);
+                [least + l, most + m]
+            })
+    }
+
+    fn of_stmt(&self, s: StmtId) -> [i64; 2] {
+        match &self.body.stmts[s].kind {
+            StmtKind::If {
+                condition,
+                then_block,
+                else_block,
+            } => {
+                let own = condition.as_expr().map_or(0, |e| self.flat(NodeRef::Expr(e)))
+                    - self.reloads_after(NodeRef::Stmt(s));
+                let [tl, tm] = self.of_block(*then_block);
+                let [el, em] = else_block.map_or([0, 0], |b| self.of_block(b));
+                [own + tl.min(el), own + tm.max(em)]
+            }
+            StmtKind::Loop { body: block } | StmtKind::LabeledBlock { block, .. } => {
+                self.of_block(*block)
+            }
+            StmtKind::Let { .. }
+            | StmtKind::Expr(_)
+            | StmtKind::Return { .. }
+            | StmtKind::Break { .. }
+            | StmtKind::Continue
+            | StmtKind::LetDestructure { .. } => {
+                let n = self.flat(NodeRef::Stmt(s));
+                [n, n]
+            }
+        }
+    }
+
+    /// Reads minus reloads under `node`, every branch inside it counted.
+    fn flat(&self, node: NodeRef) -> i64 {
+        let reads: usize = self
+            .readers
+            .iter()
+            .map(|&r| count_genuine_field_reads(self.body, node, r, self.field_index, &self.ctx.hoist_locals))
+            .sum();
+        let mut reloads = 0;
+        self.count_reload_sites(node, &mut reloads);
+        reads as i64 - reloads
+    }
+
+    fn reloads_after(&self, stmt: NodeRef) -> i64 {
+        i64::from(!node_clobbered(self.ctx, self.body, stmt, self.clobbers).is_empty())
+    }
+
+    /// The statements under `node`, itself included, that [`insert_reloads`]
+    /// would reload after.
+    fn count_reload_sites(&self, node: NodeRef, n: &mut i64) {
+        if let NodeRef::Stmt(_) = node {
+            *n += self.reloads_after(node);
+        }
+        self.body.for_each_child(node, |c| {
+            if !matches!(c, NodeRef::Pat(_)) {
+                self.count_reload_sites(c, n);
+            }
+        });
+    }
 }
 
 /// The objects whose writes the reload path watches for, each an object key

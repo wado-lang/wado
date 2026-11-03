@@ -1,0 +1,61 @@
+// LICM hoists a field a call may write, reloading it after each such call,
+// only where that saves loads. `sampled` reads `m.level` every iteration and
+// calls `drain` on one in eight, so the hoist serves seven reads from a local.
+// `stepped` calls `bump` before its one read every iteration: a reload would
+// replace that read load for load, so the read stays where it is.
+
+use { println, Stdout } from "core:cli";
+
+struct Meter {
+    level: i32,
+}
+
+struct Counter {
+    value: i32,
+}
+
+#[inline(never)]
+fn drain(m: &mut Meter) {
+    m.level -= 1;
+}
+
+#[inline(never)]
+fn bump(c: &mut Counter) {
+    c.value += 1;
+}
+
+#[inline(never)]
+fn sampled(m: &mut Meter, n: i32) -> i32 {
+    let mut sum = 0;
+    for let mut i = 0; i < n; i += 1 {
+        sum += m.level * i;
+        if i % 8 == 7 {
+            drain(m);
+        }
+    }
+    return sum;
+}
+
+#[inline(never)]
+fn stepped(c: &mut Counter, n: i32) -> i32 {
+    let mut sum = 0;
+    for let mut i = 0; i < n; i += 1 {
+        bump(c);
+        sum += c.value;
+    }
+    return sum;
+}
+
+export fn run() with Stdout {
+    let mut m = Meter { level: builtin::black_box(10) };
+    let mut c = Counter { value: builtin::black_box(0) };
+    println(`${sampled(&mut m, builtin::black_box(16))} ${stepped(&mut c, builtin::black_box(4))}`);
+}
+
+__DATA__
+{
+    "stdout": "1108 10\n",
+    "wir_pass": {"O2": ["nir/licm"]},
+    "wir_expect:O2": ["$licm_level"],
+    "wir_guard": {"O2": {"not_expect": ["$licm_value"]}}
+}
