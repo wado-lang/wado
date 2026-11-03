@@ -1015,9 +1015,10 @@ fn compute_layout(project: &NirPackage, variant_type: TypeId) -> Option<Layout> 
                 (option_type, Pad::NoneOf(option_type), true)
             }
         };
-        // Shared layout: a slot already carrying this exact type is reused, so
+        // Shared layout: a slot already carrying this type is reused, so
         // `Option<char>` stays `[i32, char]` instead of growing a second slot.
-        let index = if let Some(i) = slot_types.iter().position(|t| *t == slot_type) {
+        let same_type = |t: &TypeId| project.type_table.borrow().same_type(*t, slot_type);
+        let index = if let Some(i) = slot_types.iter().position(same_type) {
             i
         } else {
             slot_types.push(slot_type);

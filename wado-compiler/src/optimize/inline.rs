@@ -2778,35 +2778,41 @@ fn add_site(
 fn carried_calls(
     candidates: &IndexMap<FuncId, NirFunction>,
 ) -> IndexMap<FuncId, IndexMap<FuncId, usize>> {
-    fn visit(
-        id: FuncId,
-        candidates: &IndexMap<FuncId, NirFunction>,
-        out: &mut IndexMap<FuncId, IndexMap<FuncId, usize>>,
-    ) {
-        if out.contains_key(&id) {
-            return;
-        }
+    let call_sites = |id: FuncId| {
         let body = candidates[&id]
             .body
             .as_ref()
             .expect("a candidate has a body");
         let mut callees = Vec::new();
         for_each_call_site(body, NodeRef::Block(body.root()), |g| callees.push(g));
-        for &g in &callees {
-            assert_ne!(g, id, "a candidate is never recursive");
-            if candidates.contains_key(&g) {
-                visit(g, candidates, out);
+        assert!(!callees.contains(&id), "a candidate is never recursive");
+        callees
+    };
+    let mut out: IndexMap<FuncId, IndexMap<FuncId, usize>> = IndexMap::default();
+    // An explicit stack: a chain of candidates is as long as the program makes
+    // it. Each entry is a candidate, its call sites, and the next site to
+    // visit; it is finished once every candidate among them is.
+    let mut stack: Vec<(FuncId, Vec<FuncId>, usize)> = Vec::new();
+    for &root in candidates.keys() {
+        if out.contains_key(&root) {
+            continue;
+        }
+        stack.push((root, call_sites(root), 0));
+        while let Some((_, callees, next)) = stack.last_mut() {
+            if let Some(&g) = callees.get(*next) {
+                *next += 1;
+                if candidates.contains_key(&g) && !out.contains_key(&g) {
+                    stack.push((g, call_sites(g), 0));
+                }
+                continue;
             }
+            let (id, callees, _) = stack.pop().expect("the loop holds an entry");
+            let mut sites = IndexMap::default();
+            for g in callees {
+                add_site(&mut sites, g, &out);
+            }
+            out.insert(id, sites);
         }
-        let mut sites = IndexMap::default();
-        for g in callees {
-            add_site(&mut sites, g, out);
-        }
-        out.insert(id, sites);
-    }
-    let mut out = IndexMap::default();
-    for &id in candidates.keys() {
-        visit(id, candidates, &mut out);
     }
     out
 }
