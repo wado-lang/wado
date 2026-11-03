@@ -24,7 +24,7 @@ fn after_debug_string(bytes: &[u8], start: usize) -> usize {
 /// ASTs structurally. This normalizes:
 /// - `span: Span { ... }` → `span: SPAN` (source positions differ after format)
 /// - `has_trailing_comma: ...` → removed (formatting hint, not semantic)
-/// - `quoted: ...` → removed (a field name's spelling, not semantic)
+/// - `quoted: ...`, `contextual_keywords: [...]` → removed (a field name's spelling, not semantic)
 /// - `type_params: [...]` → `type_params: NORM` (formatter normalizes `impl<T> Foo<T>` to `impl Foo<T>`)
 ///
 /// The goal is to catch **semantic** changes (dropped expressions, changed precedence)
@@ -79,10 +79,11 @@ fn normalize_ast_debug(debug: &str) -> String {
             continue;
         }
 
-        // Strip a field name's `quoted: ...` spelling, the formatter dropping
-        // the quotes of one an identifier can spell. It spans lines, so
-        // consume through the line that closes it.
-        if bytes[i..].starts_with(b"quoted:") {
+        // Strip a field name's spelling: its `quoted: ...`, and the module's
+        // `contextual_keywords: [...]`, which gains the keyword a dropped
+        // pair of quotes leaves bare. Each spans lines, so consume through
+        // the line that closes it.
+        if bytes[i..].starts_with(b"quoted:") || bytes[i..].starts_with(b"contextual_keywords:") {
             let mut depth = 0i32;
             while i < bytes.len() && !(bytes[i] == b'\n' && depth == 0) {
                 if bytes[i] == b'"' {
