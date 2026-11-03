@@ -76,14 +76,6 @@ impl AmbientStream {
         cm_function_path(&interface, "write-via-stream")
     }
 
-    /// `core:builtin`'s `ambient_std{out,err}_available`.
-    pub fn availability_builtin(self) -> &'static str {
-        match self {
-            Self::Stdout => "ambient_stdout_available",
-            Self::Stderr => "ambient_stderr_available",
-        }
-    }
-
     /// `core:builtin`'s `call_indirect_std{out,err}_write_via_stream`.
     pub fn write_builtin(self) -> &'static str {
         match self {
@@ -92,35 +84,10 @@ impl AmbientStream {
         }
     }
 
-    pub fn of_availability_builtin(name: &str) -> Option<Self> {
-        Self::ALL
-            .into_iter()
-            .find(|stream| stream.availability_builtin() == name)
-    }
-
     pub fn of_write_builtin(name: &str) -> Option<Self> {
         Self::ALL
             .into_iter()
             .find(|stream| stream.write_builtin() == name)
-    }
-}
-
-/// The stdio streams the ambient `log_std{out,err}` path writes: those the
-/// world provides, and in a sink-less world those the program imports anyway.
-/// Decided once, so the fold of `ambient_std{out,err}_available` and the import
-/// keep agreeing whatever optimization removes afterwards.
-#[derive(Debug, Clone, Copy)]
-pub struct AmbientStdio {
-    pub stdout: bool,
-    pub stderr: bool,
-}
-
-impl AmbientStdio {
-    pub fn writes(self, stream: AmbientStream) -> bool {
-        match stream {
-            AmbientStream::Stdout => self.stdout,
-            AmbientStream::Stderr => self.stderr,
-        }
     }
 }
 
@@ -215,8 +182,6 @@ pub struct NirPackage {
 
     /// The CM functions called, by `CmFunctionInfo::cm_identifier`.
     pub used_wasi_functions: IndexSet<String>,
-    /// Set by the first DCE; read it through [`Self::ambient_stdio`].
-    pub ambient_stdio: Option<AmbientStdio>,
     /// When true, strip debug name sections for smaller binary size (-Os)
     pub strip_names: bool,
     /// The `org.wado-lang.coverage` section payload, under `wado test --coverage`
@@ -873,21 +838,6 @@ impl NirPackage {
     /// Check if the project targets the synthetic test world.
     pub fn is_test_world(&self) -> bool {
         self.target_world == world_registry::TEST_WORLD
-    }
-
-    /// Whether the target world provides an ambient sink for `stream`, which
-    /// the `log_*` (panic / assert-diagnostic) path writes. True for the test
-    /// world and any world importing the stream's interface; false for `--lib`
-    /// and kiln, where the ambient path writes only a stream the program
-    /// imports anyway ([`AmbientStdio`]). Each stream is gated on its own
-    /// interface so a world importing only one is not mis-gated by the other.
-    pub fn provides_ambient_stdio_sink(&self, stream: AmbientStream) -> bool {
-        self.is_test_world() || self.world_imports_interface(stream.interface_name())
-    }
-
-    pub fn ambient_stdio(&self) -> AmbientStdio {
-        self.ambient_stdio
-            .expect("the first DCE decides the ambient streams")
     }
 
     /// Build the lookup of synthesized value-copy helpers, keyed by

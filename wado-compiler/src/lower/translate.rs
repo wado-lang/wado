@@ -210,7 +210,6 @@ pub fn translate(flat: FlatPackage, plan: LowerPlan, profiler: &dyn SpanEmitter)
         cm_interface_registry,
         world_registry,
         used_wasi_functions,
-        ambient_stdio: None,
         strip_names,
         coverage_section,
         codegen_flags,

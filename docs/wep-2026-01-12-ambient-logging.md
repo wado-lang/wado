@@ -259,12 +259,6 @@ Create an ambient `Debug` effect available everywhere.
 
 **Rejected**: Adds complexity to the effect system. Simple functions are clearer.
 
-## Known gaps
-
-- `log_stdout` and `log_stderr` still decide their own streams through
-  `builtin::ambient_std{out,err}_available`, beside the guard every ambient
-  body now carries.
-
 ## References
 
 - [Koka Effect System](https://koka-lang.github.io/koka/doc/book.html)

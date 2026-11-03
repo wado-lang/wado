@@ -138,9 +138,6 @@ use { Stderr } from "wasi:cli/stderr.wado";
 /// A component with no stdout drops the message: logging is best-effort.
 #[ambient(Stdout)]
 pub fn log_stdout(message: String) {
-    if !builtin::ambient_stdout_available() {
-        return;
-    }
     let [rx, tx] = Stream::<u8>::new();
 
     let written = builtin::call_indirect_stdout_write_via_stream::<Result<(), CliErrorCode>>(rx);
@@ -154,9 +151,6 @@ pub fn log_stdout(message: String) {
 /// A component with no stderr drops the message: logging is best-effort.
 #[ambient(Stderr)]
 pub fn log_stderr(message: String) {
-    if !builtin::ambient_stderr_available() {
-        return;
-    }
     let [rx, tx] = Stream::<u8>::new();
 
     let written = builtin::call_indirect_stderr_write_via_stream::<Result<(), CliErrorCode>>(rx);

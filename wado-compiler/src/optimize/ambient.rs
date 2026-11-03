@@ -8,7 +8,6 @@
 use cranelift_entity::EntityRef;
 
 use super::dce::{DescriptorCache, reachable_cm_calls};
-use crate::hashmap::IndexSet;
 use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, Operand, StmtId, StmtKind};
 use crate::nir_package::NirPackage;
 use crate::nir_value_graph::ValueKind;
@@ -40,20 +39,24 @@ pub(super) fn settle_ambient_guards(
     if guards.is_empty() {
         return false;
     }
-    // Every guarded body starts withheld, and a guard regains its body once its
-    // interface proves available: the least set of interfaces that explains
-    // itself, so two ambient bodies cannot keep each other's import alive.
+    // A body behind an interface the world lacks starts withheld, and regains
+    // itself once its interface proves available: the least set of interfaces
+    // that explains itself, so two ambient bodies cannot keep each other's
+    // import alive.
     for guard in &mut guards {
+        if world_provides(project, &guard.interface) {
+            continue;
+        }
         let mut func = project.functions[guard.func].borrow_mut();
         let body = guarded_body(&mut func.body);
         guard.withheld = Some(std::mem::take(&mut body.blocks[guard.then_block].stmts));
     }
-    loop {
+    while guards.iter().any(|guard| guard.withheld.is_some()) {
         let calls = reachable_cm_calls(project, descriptors, exec);
         let mut regained = false;
         for guard in &mut guards {
-            if guard.withheld.is_some() && interface_available(project, &calls, &guard.interface)
-            {
+            let prefix = format!("{}#", guard.interface);
+            if guard.withheld.is_some() && calls.iter().any(|call| call.starts_with(&prefix)) {
                 let mut func = project.functions[guard.func].borrow_mut();
                 let body = guarded_body(&mut func.body);
                 body.blocks[guard.then_block].stmts =
@@ -85,13 +88,8 @@ fn guarded_body(body: &mut Option<Body>) -> &mut Body {
     body.as_mut().expect("a guard sits in a body")
 }
 
-/// Whether the component has `interface`, given the CM functions its reachable
-/// code calls.
-fn interface_available(project: &NirPackage, calls: &IndexSet<String>, interface: &str) -> bool {
-    let prefix = format!("{interface}#");
-    project.is_test_world()
-        || project.world_imports_cm_interface(interface)
-        || calls.iter().any(|call| call.starts_with(&prefix))
+fn world_provides(project: &NirPackage, interface: &str) -> bool {
+    project.is_test_world() || project.world_imports_cm_interface(interface)
 }
 
 fn find_guards(project: &NirPackage) -> Vec<Guard> {
