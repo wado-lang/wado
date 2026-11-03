@@ -297,20 +297,21 @@ struct TestSpec {
     #[serde(default)]
     wir_lines: indexmap::IndexMap<String, Vec<TextMatch>>,
 
-    /// The passes whose work the WIR expectations under each level (`"O2"`)
-    /// are, named as `WADO_LIST_PASSES` lists them. The run compiles
-    /// again with them skipped, where each of those expectations must fail with
-    /// all of them skipped or with one alone: one that holds anyway measures
-    /// nothing they do.
+    /// The passes and decisions whose work the WIR expectations under each
+    /// level (`"O2"`) are, named as `WADO_LIST_PASSES` lists them. The run
+    /// compiles again with them skipped, where each of those expectations must
+    /// fail with all of them skipped or with one alone, unless a twin under
+    /// `wir_contrast` fails it: one that holds anyway measures nothing.
     #[serde(default)]
     wir_pass: indexmap::IndexMap<String, Vec<String>>,
 
-    /// What those passes must leave standing where they act, by the same keys.
-    /// A guard holds with the passes skipped too, so it stands beside an
-    /// expectation under its key that fails without them: that one shows the
-    /// passes reached this code.
+    /// Twins of the fixture by the same keys, each a set of source edits from
+    /// a text the program holds once to its replacement. Every twin fails some
+    /// WIR expectation under its key. One saying what a pass must leave
+    /// standing is measured by the twin that makes the pass do it, which shows
+    /// the pattern can see the shape it rules out.
     #[serde(default)]
-    wir_guard: indexmap::IndexMap<String, WirGuard>,
+    wir_contrast: indexmap::IndexMap<String, Vec<indexmap::IndexMap<String, String>>>,
 
     /// Optimizer remarks, by the optimization level that emits them (`"O2"`).
     /// Each remark reads `"file:line:col remark: …"`, so `":6:5 remark: a copy"`
@@ -388,15 +389,6 @@ impl TextMatch {
     }
 }
 
-#[derive(Debug, Default, serde::Deserialize)]
-#[serde(deny_unknown_fields)]
-struct WirGuard {
-    #[serde(default)]
-    expect: Vec<String>,
-    #[serde(default)]
-    not_expect: Vec<String>,
-}
-
 /// One WIR expectation a fixture states.
 enum WirCheck<'a> {
     Expect(&'a str),
@@ -465,19 +457,6 @@ impl TestSpec {
             .map(|p| WirCheck::Expect(p))
             .chain(not_expect.iter().map(|p| WirCheck::NotExpect(p)))
             .chain(lines.map(WirCheck::Line))
-            .collect()
-    }
-
-    /// The `wir_guard` expectations under `level`.
-    fn wir_guard_checks(&self, level: OptLevel) -> Vec<WirCheck<'_>> {
-        let Some(guard) = self.wir_guard.get(common::opt_level_name(level)) else {
-            return vec![];
-        };
-        guard
-            .expect
-            .iter()
-            .map(|p| WirCheck::Expect(p))
-            .chain(guard.not_expect.iter().map(|p| WirCheck::NotExpect(p)))
             .collect()
     }
 
@@ -607,19 +586,32 @@ fn text_match_not_contains_leaves_out_the_texts_holding_one() {
     assert!(none.is_err());
 }
 
+fn with_passes(mut spec: TestSpec, passes: &[&str]) -> TestSpec {
+    spec.wir_pass
+        .insert("O2".to_string(), passes.iter().map(|p| p.to_string()).collect());
+    spec
+}
+
+fn no_twin(_: &indexmap::IndexMap<String, String>) -> Option<String> {
+    unreachable!("the spec states no twin")
+}
+
 #[test]
 fn an_expectation_holding_with_its_passes_skipped_is_reported() {
-    let spec = TestSpec {
-        wir_expect_o2: vec!["folded".to_string()],
-        wir_not_expect_o2: vec!["copy".to_string()],
-        ..Default::default()
-    };
-    let key = OptLevel::O2;
-    let one = ["p".to_string()];
+    let spec = with_passes(
+        TestSpec {
+            wir_expect_o2: vec!["folded".to_string()],
+            wir_not_expect_o2: vec!["copy".to_string()],
+            ..Default::default()
+        },
+        &["p"],
+    );
     let measured = |wir: &'static str| {
         let compile = move |_: &[String]| Some(wir.to_string());
-        std::panic::catch_unwind(|| assert_wir_passes_measured(&compile, &one, &spec, key, "unit"))
-            .is_ok()
+        std::panic::catch_unwind(|| {
+            assert_wir_checks_measured(&compile, &no_twin, &spec, OptLevel::O2, "unit");
+        })
+        .is_ok()
     };
     assert!(measured("a copy"));
     assert!(!measured("a copy, already folded"));
@@ -630,24 +622,62 @@ fn an_expectation_holding_with_its_passes_skipped_is_reported() {
 fn an_expectation_one_listed_pass_measures_alone_is_measured() {
     // Skipping `inline` too leaves no `$cold` to look for, so only skipping
     // `copy_prop` alone shows that `copy_prop` is what removed it.
-    let spec = TestSpec {
-        wir_expect_o2: vec!["inlined".to_string()],
-        wir_not_expect_o2: vec!["$cold".to_string()],
-        ..Default::default()
-    };
+    let spec = with_passes(
+        TestSpec {
+            wir_expect_o2: vec!["inlined".to_string()],
+            wir_not_expect_o2: vec!["$cold".to_string()],
+            ..Default::default()
+        },
+        &["copy_prop", "inline"],
+    );
     let compile = |skip: &[String]| {
         Some(match skip {
             [one] if one == "copy_prop" => "inlined $cold".to_string(),
             _ => "call".to_string(),
         })
     };
-    let passes = ["copy_prop".to_string(), "inline".to_string()];
-    assert_wir_passes_measured(&compile, &passes, &spec, OptLevel::O2, "unit");
+    assert_wir_checks_measured(&compile, &no_twin, &spec, OptLevel::O2, "unit");
     let neither = |_: &[String]| Some("inlined".to_string());
     let held = std::panic::catch_unwind(|| {
-        assert_wir_passes_measured(&neither, &passes, &spec, OptLevel::O2, "unit");
+        assert_wir_checks_measured(&neither, &no_twin, &spec, OptLevel::O2, "unit");
     });
     assert!(held.is_err());
+}
+
+#[test]
+fn an_expectation_its_twin_fails_is_measured() {
+    // A pass must not hoist `level`: no skip can show the pattern sees a hoist,
+    // the twin that makes the pass hoist does.
+    let mut spec = with_passes(
+        TestSpec {
+            wir_expect_o2: vec!["$licm_level".to_string()],
+            wir_not_expect_o2: vec!["$licm_value".to_string()],
+            ..Default::default()
+        },
+        &["licm"],
+    );
+    let twin: indexmap::IndexMap<String, String> =
+        [("bump(c);".to_string(), String::new())].into_iter().collect();
+    spec.wir_contrast.insert("O2".to_string(), vec![twin]);
+    let compile = |_: &[String]| Some("level value".to_string());
+    let hoisting = |_: &indexmap::IndexMap<String, String>| Some("$licm_level $licm_value".to_string());
+    assert_wir_checks_measured(&compile, &hoisting, &spec, OptLevel::O2, "unit");
+    let unchanged = |_: &indexmap::IndexMap<String, String>| Some("$licm_level value".to_string());
+    let held = std::panic::catch_unwind(|| {
+        assert_wir_checks_measured(&compile, &unchanged, &spec, OptLevel::O2, "unit");
+    });
+    assert!(held.is_err());
+}
+
+#[test]
+fn a_twin_edit_names_text_the_program_holds_once() {
+    let source = "a(); b();\n__DATA__\n{\"wir_contrast\": {\"O2\": [{\"a();\": \"c();\"}]}}";
+    let edit = |from: &str| -> indexmap::IndexMap<String, String> {
+        [(from.to_string(), "c();".to_string())].into_iter().collect()
+    };
+    assert!(twin_source(source, &edit("a();"), "unit").starts_with("c(); b();\n__DATA__"));
+    let twice = std::panic::catch_unwind(|| twin_source(source, &edit("();"), "unit"));
+    assert!(twice.is_err());
 }
 
 #[test]
@@ -1252,25 +1282,18 @@ fn run_with_allocator(
     for name in spec.wir_lines.keys() {
         parse_key("wir_lines", name);
     }
-    for (field, name) in (spec.wir_pass.keys().map(|k| ("wir_pass", k)))
-        .chain(spec.wir_guard.keys().map(|k| ("wir_guard", k)))
-    {
-        assert!(
-            parse_key(field, name) != OptLevel::O0,
-            "[{test_id}] `-O0` runs no pass to skip: its WIR expectations state what lowering emits"
-        );
-    }
     for (key, passes) in &spec.wir_pass {
         assert!(
             !passes.is_empty() && !spec.wir_checks(parse_key("wir_pass", key)).is_empty(),
             "[{test_id}] `wir_pass.{key}` names the passes of the WIR expectations under `{key}`"
         );
     }
-    for key in spec.wir_guard.keys() {
+    for (key, twins) in &spec.wir_contrast {
         assert!(
-            !spec.wir_checks(parse_key("wir_guard", key)).is_empty(),
-            "[{test_id}] a `wir_guard.{key}` stands beside a WIR expectation under `{key}` \
-             that fails without its passes, showing they reached this code"
+            !twins.iter().any(indexmap::IndexMap::is_empty)
+                && !spec.wir_checks(parse_key("wir_contrast", key)).is_empty(),
+            "[{test_id}] `wir_contrast.{key}` holds twins, each editing the source, that the \
+             WIR expectations under `{key}` fail on"
         );
     }
     if let Some(expected) = spec.remarks.get(common::opt_level_name(opt_level)) {
@@ -1357,11 +1380,11 @@ fn run_with_allocator(
     // Every check on the compiler's own output runs before the execution
     // dispatch: one placed after it is silently skipped by `compile_only`.
     assert_wir_expectations(wir_text.as_deref(), spec, opt_level, test_id);
-    let compile_skipping = |skip: &[String]| {
+    let compile_variant = |source: String, skip: &[String]| {
         let options = skip_base.clone();
         common::compile_fixture_on_worker(
             fixture_path.to_path_buf(),
-            source.to_string(),
+            source,
             CompilerOptions {
                 opt: OptOverrides {
                     skip_passes: skip.to_vec(),
@@ -1374,7 +1397,8 @@ fn run_with_allocator(
         )
         .wir_text
     };
-    if opt_level != OptLevel::O0 && spec.has_wir_expectations(opt_level) {
+    let compile_skipping = |skip: &[String]| compile_variant(source.to_string(), skip);
+    if spec.has_wir_expectations(opt_level) {
         if let Ok(out) = std::env::var("WADO_E2E_WIR_PASS_SEARCH") {
             let normal_wir = wir_text.as_deref().unwrap();
             search_wir_passes(
@@ -1387,14 +1411,10 @@ fn run_with_allocator(
             );
             return;
         }
-        let name = common::opt_level_name(opt_level);
-        let passes = spec.wir_pass.get(name).unwrap_or_else(|| {
-            panic!(
-                "[{test_id}] the WIR expectations under `{name}` name no `wir_pass`: \
-                 list the passes whose work they are, which the run skips to see each fail"
-            )
-        });
-        assert_wir_passes_measured(&compile_skipping, passes, spec, opt_level, test_id);
+        let compile_twin = |edits: &indexmap::IndexMap<String, String>| {
+            compile_variant(twin_source(source, edits, test_id), &[])
+        };
+        assert_wir_checks_measured(&compile_skipping, &compile_twin, spec, opt_level, test_id);
     }
     if std::env::var_os("WADO_E2E_WIR_PASS_SEARCH").is_some() {
         return;
@@ -1565,14 +1585,7 @@ fn assert_wir_expectations(
         }),
     };
     let name = common::opt_level_name(opt_level);
-    let guards = spec.wir_guard_checks(opt_level);
-    let guards = guards.iter().map(|g| (format!("wir_guard.{name} "), g));
-    for (label, check) in spec
-        .wir_checks(opt_level)
-        .iter()
-        .map(|c| (String::new(), c))
-        .chain(guards)
-    {
+    for check in &spec.wir_checks(opt_level) {
         if let WirCheck::Line(wanted) = check {
             wanted.assert_in(
                 &wir_lines(wir_text),
@@ -1584,32 +1597,42 @@ fn assert_wir_expectations(
         }
         assert!(
             check.holds(wir_text),
-            "[{test_id}] {label}{} failed\nWIR output:\n{wir_text}",
+            "[{test_id}] {} failed\nWIR output:\n{wir_text}",
             check.describe(name)
         );
     }
 }
 
-/// Check that every WIR expectation under `level` fails with that level's
-/// `wir_pass` skipped: all of them at once, or, for an expectation the joint
-/// skip leaves standing, one of them alone. Skipping one pass can remove the
-/// shape another pass's expectation looks for, so the joint skip alone would
-/// reject a set whose every member measures its own expectation. Every one
-/// that holds anyway is reported at once.
-fn assert_wir_passes_measured(
+/// Check that every WIR expectation under `level` is measured: it fails with
+/// that level's `wir_pass` skipped, or on one of its `wir_contrast` twins. A
+/// skip is tried with all the passes at once, then, for an expectation the
+/// joint skip leaves standing, one of them alone: skipping one pass can remove
+/// the shape another pass's expectation looks for. A twin no expectation fails
+/// on contrasts nothing, and is reported as one. Every expectation that holds
+/// anyway is reported at once.
+fn assert_wir_checks_measured(
     compile: &dyn Fn(&[String]) -> Option<String>,
-    passes: &[String],
+    compile_twin: &dyn Fn(&indexmap::IndexMap<String, String>) -> Option<String>,
     spec: &TestSpec,
     level: OptLevel,
     test_id: &str,
 ) {
+    let name = common::opt_level_name(level);
+    let passes = spec.wir_pass.get(name).map_or(&[][..], Vec::as_slice);
+    let twins = spec.wir_contrast.get(name).map_or(&[][..], Vec::as_slice);
+    assert!(
+        !passes.is_empty() || !twins.is_empty(),
+        "[{test_id}] the WIR expectations under `{name}` name no `wir_pass` and no \
+         `wir_contrast`: list the passes whose work they are, which the run skips to see \
+         each fail, or twins of the source each fails on"
+    );
     let checks = spec.wir_checks(level);
-    let holding = |skip: &[String]| -> Option<(String, Vec<usize>)> {
-        let wir = compile(skip)
-            .unwrap_or_else(|| panic!("[{test_id}] the compile skipping {skip:?} failed"));
+    // `None` where the WIR holds no function `wir_scope` names: what the
+    // variant changed is the whole function, so no expectation holds.
+    let holding = |wir: Option<String>, what: &str| -> Option<(String, Vec<usize>)> {
+        let wir = wir.unwrap_or_else(|| panic!("[{test_id}] the compile {what} failed"));
         let body = match spec.wir_scope.as_deref() {
             None => wir.as_str(),
-            // The function is the passes' own work, and so is all it holds.
             Some(scope) => scope_to_function(&wir, scope)?,
         };
         let held = (0..checks.len())
@@ -1617,29 +1640,69 @@ fn assert_wir_passes_measured(
             .collect();
         Some((body.to_string(), held))
     };
-    let Some((joint_wir, mut held)) = holding(passes) else {
-        return;
-    };
-    if passes.len() > 1 {
-        for pass in passes {
-            if held.is_empty() {
-                break;
+    let mut held: Vec<usize> = (0..checks.len()).collect();
+    let mut last_wir = String::new();
+    if !passes.is_empty() {
+        let skipping = |skip: &[String]| holding(compile(skip), &format!("skipping {skip:?}"));
+        match skipping(passes) {
+            Some((wir, still)) => {
+                held = still;
+                last_wir = wir;
             }
-            match holding(std::slice::from_ref(pass)) {
-                Some((_, still)) => held.retain(|i| still.contains(i)),
-                None => held.clear(),
+            None => held.clear(),
+        }
+        if passes.len() > 1 {
+            for pass in passes {
+                if held.is_empty() {
+                    break;
+                }
+                match skipping(std::slice::from_ref(pass)) {
+                    Some((_, still)) => held.retain(|i| still.contains(i)),
+                    None => held.clear(),
+                }
             }
         }
     }
-    let name = common::opt_level_name(level);
+    for edits in twins {
+        let what = format!("of the twin {edits:?}");
+        let Some((wir, still)) = holding(compile_twin(edits), &what) else {
+            held.clear();
+            continue;
+        };
+        assert!(
+            still.len() < checks.len(),
+            "[{test_id}] every WIR expectation under `{name}` holds on the twin {edits:?}, \
+             so it contrasts nothing\nWIR of the twin:\n{wir}"
+        );
+        held.retain(|i| still.contains(i));
+        last_wir = wir;
+    }
     let held: Vec<String> = held.iter().map(|&i| checks[i].describe(name)).collect();
     assert!(
         held.is_empty(),
-        "[{test_id}] these hold with {passes:?} skipped, jointly and one at a time, so they \
-         measure nothing those passes do; one they must leave standing goes under `wir_guard`:\n  {}\n\
-         WIR with the passes skipped:\n{joint_wir}",
+        "[{test_id}] these hold with {passes:?} skipped, jointly and one at a time, and on \
+         every twin, so they measure nothing; one that says what the passes must leave \
+         standing takes a twin under `wir_contrast` that makes them do it:\n  {}\n\
+         WIR of the last variant:\n{last_wir}",
         held.join("\n  ")
     );
+}
+
+/// The fixture's source with `edits` applied, each `from` text occurring once
+/// in the program (the `__DATA__` section, which states the edits, excluded).
+fn twin_source(source: &str, edits: &indexmap::IndexMap<String, String>, test_id: &str) -> String {
+    let split = source.find("\n__DATA__").unwrap_or(source.len());
+    let (program, data) = source.split_at(split);
+    let mut program = program.to_string();
+    for (from, to) in edits {
+        assert_eq!(
+            program.matches(from.as_str()).count(),
+            1,
+            "[{test_id}] a `wir_contrast` edit names text the program holds once: {from:?}"
+        );
+        program = program.replacen(from.as_str(), to, 1);
+    }
+    program + data
 }
 
 /// Search mode: which expectations under `level` fail with each candidate pass

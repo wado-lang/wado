@@ -56,6 +56,9 @@ __DATA__
 {
     "stdout": "1108 10\n",
     "wir_pass": {"O2": ["nir/licm"]},
+    "wir_contrast": {"O2": [
+        {"        bump(c);\n        sum += c.value;": "        sum += c.value;\n        if i % 8 == 7 {\n            bump(c);\n        }"}
+    ]},
     "wir_expect:O2": ["$licm_level"],
-    "wir_guard": {"O2": {"not_expect": ["$licm_value"]}}
+    "wir_not_expect:O2": ["$licm_value"]
 }

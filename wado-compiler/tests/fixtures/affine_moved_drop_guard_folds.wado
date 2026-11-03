@@ -16,5 +16,9 @@ __DATA__
     "wir_scope": "/$cm_export__run\"",
     "wir_pass": {"O2": ["nir/inline"]},
     "wir_expect:O2": ["\"wasi/stream-new\"()"],
-    "wir_guard": {"O2": {"not_expect": ["ref.is_null(", "\"core:cli/println\"(", "struct.new \"core:prelude//$Resource\""]}}
+    "wir_not_expect:O2": ["== 0) == 0 {", "struct.new \"core:prelude//$Resource\""],
+    "wir_contrast": {"O2": [
+        {"export fn run() with Stdout {\n    println(\"hi\");": "#[inline(always)]\nfn body() with Stdout {\n    println(\"hi\");\n    let [rx, tx] = Stream::<u8>::new();\n    builtin::drop(rx);\n    if builtin::black_box(true) {\n        builtin::drop(tx);\n    }\n}\n\nexport fn run() with Stdout {\n    body();"},
+        {"export fn run() with Stdout {\n    println(\"hi\");": "affine struct Holder {\n    rx: Stream<u8>,\n}\n\n#[inline(always)]\nfn body() with Stdout {\n    let [rx, tx] = Stream::<u8>::new();\n    builtin::drop(tx);\n    let held = builtin::black_box(Holder { rx });\n    println(`${held.rx.read_to_end().len()}`);\n}\n\nexport fn run() with Stdout {\n    body();"}
+    ]}
 }

@@ -46,6 +46,15 @@ __DATA__
 {
     "stdout": "",
     "wir_pass": {"O2": ["nir/copy_prop", "nir/const_fold", "nir/store_load_forward_post_scalarize", "nir/const_fold_post_global", "wir/run_peephole", "wir/coalesce_locals"]},
+    "wir_contrast": {"O2": [
+        {"if builtin::black_box(0) == 0 {": "if 0 == 0 {", "builtin::black_box(21) * 2": "21 * 2", "builtin::black_box(300) << 24": "300 << 24", "if builtin::black_box(false) {": "if false {"}
+    ]},
     "wir_not_expect:O2": ["folded = 3"],
-    "wir_guard": {"O2": {"expect": ["black_box(0) == 0", "taken = 2", "black_box(21) * 2", "black_box(300)", "if black_box(0) {"]}}
+    "wir_expect:O2": [
+        "black_box(0) == 0",
+        "taken = 2",
+        "black_box(21) * 2",
+        "black_box(300)",
+        "if black_box(0) {"
+    ]
 }

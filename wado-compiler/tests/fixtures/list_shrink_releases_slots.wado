@@ -33,6 +33,9 @@ __DATA__
     "stdout": "[\"a\", \"f\"] [1, 6]\nOption::Some(\"z\") x [\"y\", \"w\"]\n[\"v\"] true\n",
     "wir_scope": "wado/run",
     "wir_pass": {"O2": ["nir/inline"]},
+    "wir_contrast": {"O2": [
+        {"    stack.clear();": "    println(`${Array::<i32>::filled(builtin::black_box(2), 7)[0]}`);\n    stack.clear();"}
+    ]},
     "wir_expect:O2": ["ref.null none"],
-    "wir_guard": {"O2": {"not_expect": ["builtin::array_fill<i32>"]}}
+    "wir_not_expect:O2": ["builtin::array_fill<i32>"]
 }

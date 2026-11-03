@@ -213,9 +213,13 @@ __DATA__
 {
     "stdout": "102\n102\n1102\n6\n10\n102\n102\n102\n101 100\n101 101 101\n",
     "wir_pass": {"O2": ["nir/promote_fields", "nir/sroa_param"]},
+    "wir_contrast": {"O2": [
+        {"        s = r.x * 100;\n    }\n    if wait {\n        builtin::waitable_set_wait(builtin::waitable_set_new(), 0);\n    }": "        s = r.x * 100;\n    }\n    if wait {\n        builtin::waitable_set_drop(builtin::waitable_set_new());\n    }", "fn suspend_inside(wait: bool) {\n    if wait {\n        builtin::waitable_set_wait(builtin::waitable_set_new(), 0);": "fn suspend_inside(wait: bool) {\n    if wait {\n        builtin::waitable_set_drop(builtin::waitable_set_new());"}
+    ]},
     "wir_expect:O2": [
         "r.y = s;\n    return s + $av_",
-        "\"wasi/waitable-set-drop\"(\"wasi/waitable-set-new\"());\n    return s + r;"
-    ],
-    "wir_guard": {"O2": {"expect": ["drop(\"wasi/waitable-set-wait\"(\"wasi/waitable-set-new\"(), 0));\n    }\n    return s + r.x;", "\"opt_call_writes_ref_pointee.wado/suspend_inside\"(wait);\n    return s + r.x;"]}}
+        "\"wasi/waitable-set-drop\"(\"wasi/waitable-set-new\"());\n    return s + r;",
+        "drop(\"wasi/waitable-set-wait\"(\"wasi/waitable-set-new\"(), 0));\n    }\n    return s + r.x;",
+        "\"opt_call_writes_ref_pointee.wado/suspend_inside\"(wait);\n    return s + r.x;"
+    ]
 }
