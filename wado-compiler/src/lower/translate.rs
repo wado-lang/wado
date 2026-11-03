@@ -123,7 +123,7 @@ pub fn translate(flat: FlatPackage, plan: LowerPlan, profiler: &dyn SpanEmitter)
         strip_names,
         coverage_section,
         codegen_flags,
-        hot_sites,
+        heat_map,
         skip_validation,
         target_world,
         export_binding_names,
@@ -215,7 +215,7 @@ pub fn translate(flat: FlatPackage, plan: LowerPlan, profiler: &dyn SpanEmitter)
         strip_names,
         coverage_section,
         codegen_flags,
-        hot_sites,
+        heat_map,
         // Conservative default; `optimize` overrides per opt level.
         string_inline_max_bytes: NirPackage::DEFAULT_STRING_INLINE_MAX_BYTES,
         specialization_cap: None,

@@ -295,7 +295,24 @@ stays at its site and reaches no callee. A hot site may inline a callee of up to
 `--optimize-inline-threshold`. They mirror LLVM's `hot-callsite-threshold`
 (3000) and `inline-cold-callsite-threshold` (45) beside its `inline-threshold`
 (225), but count statements as Wado's inliner does, so the benchmarks settle
-their defaults.
+their defaults: 8 times the level's threshold at a hot site and a quarter of it
+at a cold one. LLVM's ratios are about 13 and a fifth.
+
+The hot ratio was measured at 4, 8 and 16 on the fuel benchmarks against
+`-f no-pgo`. 16 bought 0.2 points more of the geometric mean than 8, for nearly
+twice 8's growth of `gale_gen`.
+
+The heat of each measured region is kept in a table beside the IR, keyed by
+the region's source span, and the inliner looks a call up by its span. A spliced
+body keeps its spans, so a site keeps its heat in whatever caller it lands in.
+A marker statement would also have carried the heat, but a statement in a hot
+loop is in the way of the passes that match the loop's shape.
+
+A site inside a function the same round may splice is priced plain, not hot.
+Splicing a large callee there grows a small helper past what its own callers
+splice, and the hot loop then calls the helper instead of its callee.
+`json/catalog/ser` cost 32% more fuel that way, with `write_json_i64` grown
+fifteenfold.
 
 ### The profile overrides the source's markers
 

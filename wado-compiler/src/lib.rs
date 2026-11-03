@@ -454,6 +454,8 @@ pub struct OptOverrides {
     pub inline_threshold: Option<usize>,
     /// The threshold at a call site a profile measured hot.
     pub inline_hot_callsite_threshold: Option<usize>,
+    /// The threshold at a call site a profile measured cold.
+    pub inline_cold_callsite_threshold: Option<usize>,
     pub inline_growth: Option<u32>,
     pub iterations: Option<u32>,
     /// The clones constant-argument specialization may mint over the module.
@@ -462,6 +464,8 @@ pub struct OptOverrides {
     pub predictable_branch_threshold: Option<pgo::Percent>,
     /// The share of all runs that places a profile's hot line.
     pub profile_summary_cutoff_hot: Option<pgo::Cutoff>,
+    /// The share of all runs that places a profile's cold line.
+    pub profile_summary_cutoff_cold: Option<pgo::Cutoff>,
 }
 
 impl OptOverrides {
@@ -474,6 +478,7 @@ impl OptOverrides {
                 .predictable_branch_threshold
                 .unwrap_or(default.predictable_branch),
             hot: self.profile_summary_cutoff_hot.unwrap_or(default.hot),
+            cold: self.profile_summary_cutoff_cold.unwrap_or(default.cold),
         }
     }
 }
@@ -2124,7 +2129,9 @@ fn compile_after_load<H: CompilerHost>(
     package.test_selection = options.test_selection;
     package.wasm_assets = wasm_assets;
     package.codegen_flags = codegen_flags;
-    package.hot_sites = marks.map(|marks| marks.hot_sites().clone()).unwrap_or_default();
+    package.heat_map = marks
+        .map(|marks| marks.heat_map().clone())
+        .unwrap_or_default();
     package.provided_import_fqs = options
         .providers
         .iter()
@@ -2638,10 +2645,10 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
     let assert_plan_text = sem.assert_plan_text();
     let coverage_plan_text = sem.coverage_plan_text();
     let export_mappings = sem.export_mappings.clone();
-    let hot_sites = sem
+    let heat_map = sem
         .marks
         .as_ref()
-        .map(|marks| marks.hot_sites().clone())
+        .map(|marks| marks.heat_map().clone())
         .unwrap_or_default();
 
     // === Phase 7b+8+9+10: Build Package and run remaining phases ===
@@ -2691,7 +2698,7 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
             }
             package.wasm_assets.clone_from(&wasm_assets);
             package.codegen_flags = parsed_codegen_flags;
-            package.hot_sites = hot_sites;
+            package.heat_map = heat_map;
 
             // Validate target world (test world is synthetic, not in registry)
             if !package.is_test_world()

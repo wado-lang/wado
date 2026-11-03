@@ -114,10 +114,9 @@ use crate::{OptOverrides, compiler_trace};
 struct OptConfig {
     /// Number of fixed-point iterations
     iterations: u32,
-    /// What one copy of a callee may cost to run, for it to be worth splicing.
-    inline_threshold: usize,
-    /// What one copy may cost at a call site a profile measured hot.
-    inline_hot_threshold: usize,
+    /// What one copy of a callee may cost to run, for it to be worth splicing,
+    /// at each [`Heat`] of call site.
+    inline_thresholds: inline::Thresholds,
     /// Percent the inliner may grow the whole unit by, however many copies the
     /// threshold would otherwise admit, or `None` to leave it unbounded. See
     /// [`inline::InlineBudget`].
@@ -176,14 +175,27 @@ pub fn optimize(
     let OptOverrides {
         inline_threshold,
         inline_hot_callsite_threshold,
+        inline_cold_callsite_threshold,
         inline_growth,
         iterations: opt_iterations,
         specializations,
         // Applying the profile reads these, ahead of reify.
         predictable_branch_threshold: _,
         profile_summary_cutoff_hot: _,
+        profile_summary_cutoff_cold: _,
     } = opt;
-    let hot = |threshold: usize| inline_hot_callsite_threshold.unwrap_or(threshold * 4);
+    // A hot site at 8x the level's threshold, against 4x and 16x on the fuel
+    // benchmarks: 16x bought 0.2 points more of the geometric mean for nearly
+    // twice 8x's code growth on gale_gen. LLVM's ratio is 3000 to 225, about
+    // 13x.
+    let thresholds = |level: usize| {
+        let plain = inline_threshold.unwrap_or(level);
+        inline::Thresholds {
+            cold: inline_cold_callsite_threshold.unwrap_or(plain / 4),
+            plain,
+            hot: inline_hot_callsite_threshold.unwrap_or(plain * 8),
+        }
+    };
     let specializations = specializations.unwrap_or(param_spec::MAX_TOTAL_SPECIALIZATIONS);
     let exec = Arc::new(Executor::new(parallelism));
     // Decide the short-string inline threshold once, from the opt level. Read
@@ -223,8 +235,7 @@ pub fn optimize(
         OptLevel::O1 => {
             let config = OptConfig {
                 iterations: opt_iterations.unwrap_or(2),
-                inline_threshold: inline_threshold.unwrap_or(4),
-                inline_hot_threshold: hot(inline_threshold.unwrap_or(4)),
+                inline_thresholds: thresholds(4),
                 inline_growth,
                 specializations,
                 cap_is_defect: false,
@@ -267,8 +278,7 @@ pub fn optimize(
                 // buys json-catalog ser 11.9% on release, where a uniform 20
                 // cost that row 8.2%. 16 is inherited from the sweep, not
                 // re-derived under it.
-                inline_threshold: inline_threshold.unwrap_or(16),
-                inline_hot_threshold: hot(inline_threshold.unwrap_or(16)),
+                inline_thresholds: thresholds(16),
                 inline_growth,
                 specializations,
                 cap_is_defect: opt_iterations.is_none(),
@@ -303,8 +313,7 @@ pub fn optimize(
             // compile CPU 4.6%), so the cost is felt compiling one heavy file.
             let config = OptConfig {
                 iterations: opt_iterations.unwrap_or(20),
-                inline_threshold: inline_threshold.unwrap_or(26),
-                inline_hot_threshold: hot(inline_threshold.unwrap_or(26)),
+                inline_thresholds: thresholds(26),
                 inline_growth,
                 specializations,
                 cap_is_defect: opt_iterations.is_none(),
@@ -936,8 +945,7 @@ fn run_optimization_passes(
             // re-examine just those (and their neighbours).
             gated!("nir/inline", GatedPass::Inline, |p, g| inline_functions(
                 p,
-                config.inline_threshold,
-                config.inline_hot_threshold,
+                config.inline_thresholds,
                 &mut inline_budget,
                 &mut inline_holds,
                 g,
