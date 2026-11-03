@@ -402,9 +402,9 @@ output at every level. It is a nightly campaign, not a gate.
    `cold_path()`, `unlikely_path()` or `cold_code()` by the answers, and
    overrides the author's and the `?`'s markers, with the remark. An e2e
    fixture states each mark and each remark.
-7. [ ] Hot and cold call sites. The inliner prices a site by the summary,
-   placed under `--optimize-profile-summary-cutoff-hot` and `-cold`, under
-   `--optimize-inline-hot-callsite-threshold` and
+7. [ ] Hot and cold call sites. The summary places its hot and cold lines
+   under `--optimize-profile-summary-cutoff-hot` and `-cold`. The inliner
+   prices a site by it under `--optimize-inline-hot-callsite-threshold` and
    `--optimize-inline-cold-callsite-threshold`, and the benchmarks, against
    `-f no-pgo`, settle their defaults and that of
    `--optimize-predictable-branch-threshold`.
@@ -418,12 +418,13 @@ output at every level. It is a nightly campaign, not a gate.
     measured on the pilot's table, then adopted, or recorded as a known gap
     with what it lost to. These are options, not the decision.
     - The counts reach the optimizer. Three markers carry two bits per region,
-      so nothing weighs one side against the other. LLVM keeps branch weights (`!prof`) and
-      function entry counts on the IR, and its inliner raises the threshold at
-      a hot call site.
+      so nothing weighs one side against the other. LLVM keeps branch weights
+      (`!prof`) and function entry counts on the IR, and its inliner raises the
+      threshold at a hot call site.
     - Counts per calling context. One function holds one set of counts, so a
-      function cold overall but hot from one caller is cold everywhere, and a
-      cold call inside a hot region has nowhere to be marked. LLVM's CSPGO
+      function that runs rarely overall but often from one caller reads the
+      same from every caller, and a rare call inside a hot region has nowhere
+      to be marked. LLVM's CSPGO
       records again after inlining, and Go's PGO keys its counts by call edge.
     - Code the workloads never entered. It is compiled as unprofiled, so a
       library's paths no workload takes are never cold. GCC's
@@ -432,8 +433,9 @@ output at every level. It is a nightly campaign, not a gate.
       counts that drift through a caller's change go unsaid. Clang warns at
       `-Wprofile-instr-out-of-date` with the share of functions that no longer
       match.
-    - The stdlib snapshot. Each thread holds one profiled snapshot, so under `wado test` every worker builds its own for
-      each package whose profile names a `core:` module.
+    - The stdlib snapshot. Each thread holds one profiled snapshot, so under
+      `wado test` every worker builds its own for each package whose profile
+      names a `core:` module.
     - The inliner's `branch_weight` guard reads the cold half, while the layout
       it protects follows the unlikely hint. The table settles which half it
       should read.
@@ -457,9 +459,9 @@ output at every level. It is a nightly campaign, not a gate.
   first arm's guard runs on every path through the `match`, so a marker under
   it covers the `match` but is not read that way.
 - [ ] On the `benchmark/` pilot the profile buys nothing: against `-f no-pgo`,
-  every fuel region moves within a few percent, and the wall clock within its
-  noise. `gale/generate` and `codec/zlib/decompress` cost more fuel under the
-  profile, and why is not known. The tables are in
+  every fuel region moves within a few percent, and all but two wall-clock rows
+  within their noise. `gale/generate` and `codec/zlib/decompress` cost more
+  fuel under the profile, and why is not known. The tables are in
   [the benchmark README](../benchmark/README.md#profile-guided-optimization).
   `http_routing` records a profile but is in neither table: its `oha` run was
   not repeated under the three builds.
