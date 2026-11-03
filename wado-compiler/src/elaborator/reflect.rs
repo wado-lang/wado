@@ -173,6 +173,7 @@ struct TemplateMethods {
     members: String,
     tail: String,
     raw_tail: String,
+    hashes: String,
 }
 
 impl TemplateMethods {
@@ -188,13 +189,26 @@ impl TemplateMethods {
             raw_tail: items
                 .method_name(CompilerItem::ReflectTemplateRawTail)
                 .to_string(),
+            hashes: items
+                .method_name(CompilerItem::ReflectTemplateHashes)
+                .to_string(),
         }
     }
 
     fn declares(&self, method: &str) -> bool {
-        [&self.members, &self.tail, &self.raw_tail]
+        [&self.members, &self.tail, &self.raw_tail, &self.hashes]
             .into_iter()
             .any(|name| name == method)
+    }
+
+    /// What a method reading a template value answers: the `#` count, or a
+    /// segment's text.
+    fn read_type(&self, method: &str, tt: &mut TypeTable) -> TypeId {
+        if method == self.hashes {
+            TypeTable::I32
+        } else {
+            tt.make_compiler_struct(CompilerItem::StrSlice)
+        }
     }
 }
 
@@ -966,7 +980,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             )
         };
 
-        // `tail` and `raw_tail` read the segment out of a template value.
+        // `tail`, `raw_tail` and `hashes` read a template value.
         let params = if method == methods.members {
             Vec::new()
         } else {
@@ -997,10 +1011,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 };
                 members_ty
             } else {
-                self.tysys
-                    .type_table
-                    .borrow_mut()
-                    .make_compiler_struct(CompilerItem::StrSlice)
+                methods.read_type(&method, &mut self.tysys.type_table.borrow_mut())
             };
             let param_is_mut = arg_param_is_mut(method != methods.members);
             self.record_type_param_reflect_dispatch(
@@ -1025,10 +1036,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let return_type = if method == methods.members {
             self.payload_members_ty(CompilerItem::ReflectTemplateHole, self_ty, &holes)
         } else {
-            self.tysys
-                .type_table
-                .borrow_mut()
-                .make_compiler_struct(CompilerItem::StrSlice)
+            methods.read_type(&method, &mut self.tysys.type_table.borrow_mut())
         };
 
         let (base_name, module_source) = self

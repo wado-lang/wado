@@ -18,7 +18,7 @@ use crate::elaborator::sem::types::{
 };
 use crate::elaborator::typecheck::{TypeCheckResult, check_assignable};
 use crate::elaborator::types::FromArrayInfo;
-use crate::escape::{unescape_byte, unescape_bytes};
+use crate::escape::{bytes_value, unescape_byte};
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::lexer::{defaults_to_float, has_decimal_point};
 use crate::module_source::ModuleSource;
@@ -1247,8 +1247,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             };
             if let Some(target_type) = bytes_type {
                 if let Expr::Literal(lit) = expr
-                    && let Literal::Bytes(raw, _) = &lit.value
-                    && let Err(message) = unescape_bytes(raw)
+                    && let Literal::Bytes(raw, quote) = &lit.value
+                    && let Err(message) = bytes_value(raw, *quote)
                 {
                     let _ = self.emit(TypeError::InvalidLiteral {
                         message,

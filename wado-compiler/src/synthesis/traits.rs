@@ -1664,7 +1664,7 @@ fn generate_template_reflect_impls(
             view: method_ref(&tt, CompilerItem::StringView),
         }
     };
-    let (members_method, tail_method, raw_tail_method) = {
+    let (members_method, tail_method, raw_tail_method, hashes_method) = {
         let tt = module.type_table.borrow();
         let items = tt.compiler_items();
         (
@@ -1676,6 +1676,9 @@ fn generate_template_reflect_impls(
                 .to_string(),
             items
                 .method_name(CompilerItem::ReflectTemplateRawTail)
+                .to_string(),
+            items
+                .method_name(CompilerItem::ReflectTemplateHashes)
                 .to_string(),
         )
     };
@@ -1751,6 +1754,12 @@ fn generate_template_reflect_impls(
             members_fn,
             tail_fn(&tail_method, false),
             tail_fn(&raw_tail_method, true),
+            generate_template_hashes_fn(
+                &target.shape.hashes_field(),
+                ref_struct_type,
+                trait_method_info(receiver, template_trait_name, &hashes_method),
+                span,
+            ),
         ];
         // An open shape's hole bridges would group its holes by a parameter,
         // which two holes may share only once substituted, so each concrete
@@ -1804,6 +1813,52 @@ fn generate_template_tail_fn(
         tail_view.view_type,
         span,
     );
+    template_reader(
+        qualified_name,
+        method_info,
+        ref_struct_type,
+        tail_view.view_type,
+        read,
+        span,
+    )
+}
+
+/// Build `Shape^ReflectTemplate::hashes(t: &Shape)`: the `#` count `field` holds.
+fn generate_template_hashes_fn(
+    (field_name, field_index): &(String, u32),
+    ref_struct_type: TypeId,
+    method_info: LocalMethodName,
+    span: Span,
+) -> TirFunction {
+    let qualified_name = method_info.to_mangled_name();
+    let read = field_access_local(
+        0,
+        "t",
+        ref_struct_type,
+        *field_index,
+        field_name,
+        TypeTable::I32,
+        span,
+    );
+    template_reader(
+        qualified_name,
+        method_info,
+        ref_struct_type,
+        TypeTable::I32,
+        read,
+        span,
+    )
+}
+
+/// A method of one parameter, `t: &Shape`, returning `read`.
+fn template_reader(
+    qualified_name: String,
+    method_info: LocalMethodName,
+    ref_struct_type: TypeId,
+    return_type: TypeId,
+    read: TirExpr,
+    span: Span,
+) -> TirFunction {
     let params = vec![TirParam {
         name: "t".to_string(),
         type_id: ref_struct_type,
@@ -1817,7 +1872,7 @@ fn generate_template_tail_fn(
         qualified_name,
         method_info,
         params,
-        tail_view.view_type,
+        return_type,
         TirBlock::new(vec![return_stmt(read, span)], span),
         locals,
     )

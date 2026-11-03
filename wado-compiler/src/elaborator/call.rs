@@ -43,7 +43,7 @@ use crate::elaborator::expr::MemberOwner;
 use crate::elaborator::sem::types::DesugarKind;
 use crate::elaborator::trait_env::ImplMethodEntry;
 use crate::elaborator::types::{ImplMemberKind, RealTypeParams, VariantCaseData, VariantInfo};
-use crate::escape::unescape_bytes;
+use crate::escape::bytes_value;
 use crate::marker::WRAP_IN_CASE;
 use crate::primitive::PrimitiveType;
 use crate::{Span, token};
@@ -1391,7 +1391,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return ByteLiteral::Not;
         };
         let len = match &lit.value {
-            ast::Literal::Bytes(raw, _) => unescape_bytes(raw).ok().map(|b| b.len()),
+            ast::Literal::Bytes(raw, quote) => bytes_value(raw, *quote).ok().map(|b| b.len()),
             ast::Literal::IncludeBytes(path) => {
                 let key = [self.home_module(lit.id).to_string(), path.value.clone()];
                 self.tysys.included_files.get(&key).map(Vec::len)

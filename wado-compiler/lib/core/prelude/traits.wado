@@ -327,9 +327,14 @@ pub trait ReflectTemplate: Reflect with () {
     #[compiler_item("reflect_template_tail")]
     fn tail(t: &Self) -> StrSlice;
 
-    /// `tail(t)` with escapes preserved.
+    /// `tail(t)` as written: a cooked template's escapes preserved, a raw
+    /// template's text itself.
     #[compiler_item("reflect_template_raw_tail")]
     fn raw_tail(t: &Self) -> StrSlice;
+
+    /// How many `#`s delimit `t` on each end: 0 for `` `…` ``, 1 for `` #`…`# ``.
+    #[compiler_item("reflect_template_hashes")]
+    fn hashes(t: &Self) -> i32;
 }
 
 /// A case handle minted by `ReflectVariant::members()`: the payload type `P`
@@ -1129,6 +1134,10 @@ impl<affine N: ReflectNewtype<Base = B>, affine B: Inspect> Inspect for N {
 /// its specifier. `==` compares the text, so the form shows it.
 impl<T: ReflectTemplate<Holes = [..V]>, affine ..V: Inspect> Inspect for T {
     fn inspect(&self, f: &mut Formatter) {
+        let hashes = ReflectTemplate::<T>::hashes(self);
+        for let _ of 0..<hashes {
+            f.write_char('#');
+        }
         f.write_char('`');
         for let h of ReflectTemplate::<T>::members() {
             f.write_str(h.raw(self));
@@ -1142,6 +1151,9 @@ impl<T: ReflectTemplate<Holes = [..V]>, affine ..V: Inspect> Inspect for T {
         }
         f.write_str(ReflectTemplate::<T>::raw_tail(self));
         f.write_char('`');
+        for let _ of 0..<hashes {
+            f.write_char('#');
+        }
     }
 }
 

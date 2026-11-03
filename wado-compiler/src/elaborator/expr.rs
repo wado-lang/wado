@@ -1071,9 +1071,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }
                 TypeTable::CHAR
             }
-            Literal::String(raw, _) => {
+            Literal::String(raw, quote) => {
                 let string_type = self.get_string_struct_type();
-                if let Err(message) = escape::unescape_string(raw) {
+                if let Err(message) = escape::string_value(raw, *quote) {
                     let _ = self.emit(TypeError::InvalidLiteral {
                         message,
                         span: lit.span,
@@ -1081,9 +1081,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }
                 string_type
             }
-            Literal::Bytes(raw, _) => {
+            Literal::Bytes(raw, quote) => {
                 let byte_list_type = self.tysys.type_table.borrow_mut().make_byte_list();
-                if let Err(message) = escape::unescape_bytes(raw) {
+                if let Err(message) = escape::bytes_value(raw, *quote) {
                     let _ = self.emit(TypeError::InvalidLiteral {
                         message,
                         span: lit.span,

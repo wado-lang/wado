@@ -1700,7 +1700,7 @@ pub struct GlobalDecl {
 #[derive(Debug, Clone, Eq)]
 pub struct StrLit {
     pub value: String,
-    /// As a cooked literal spells it, escapes unresolved.
+    /// As written between the delimiters, escapes unresolved.
     pub raw: String,
     pub quote: Quote,
 }
@@ -3848,8 +3848,8 @@ pub enum Literal {
     /// Numeric literal: raw source text (e.g. `"42"`, `"0xFF"`, `"3.14"`). Its
     /// type comes from its context.
     Number(String),
-    /// String literal: its text as a cooked literal spells it (escape
-    /// sequences not interpreted), and how the source quoted it.
+    /// String literal: its text as written (escape sequences not interpreted),
+    /// and how the source quoted it, which says how to read the text.
     String(String, Quote),
     /// Byte-string literal `b"..."`, held as a string literal is. Lowers to a
     /// constant `List<u8>`.
@@ -4251,9 +4251,8 @@ pub struct ClosureParam {
 #[derive(Debug, Clone)]
 pub struct TemplateStringExpr {
     pub id: AstId,
-    /// Spelled as a cooked template, whatever the `quote`.
+    /// Text as written, read as `quote` says.
     pub parts: Vec<TemplatePart>,
-    /// What the source wrote, which only printing the source back reads.
     pub quote: Quote,
     pub span: Span,
 }

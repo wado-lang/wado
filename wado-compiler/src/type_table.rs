@@ -1158,7 +1158,8 @@ impl TypeTable {
                 let segments = shape
                     .segment_keys()
                     .map(|key| (shape.segment_field(key).0, string_type));
-                holes.chain(segments).collect()
+                let hashes = (shape.hashes_field().0, Self::I32);
+                holes.chain(segments).chain([hashes]).collect()
             }
             AnonShape::Synthetic(name) => {
                 unreachable!("synthetic shape `{name}` carries its fields itself")

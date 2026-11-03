@@ -26,7 +26,7 @@ use crate::ast::{
 use crate::attribute::{CANONICAL, CM, GENERATED, TODO};
 use crate::comment::{Comment, TriviaMap};
 use crate::compiler_host::{Code, Diagnostic, DiagnosticSpan, Severity};
-use crate::escape::{quoted, unescape_string};
+use crate::escape::{quoted, string_value};
 use crate::lexer::{LexResult, WILDCARD, defaults_to_float, is_decimal_integer, lex_interpolation};
 use crate::name::{contract_holder_name, namespaced_name, repeat_pack_name};
 use crate::syntax::statement_keyword_name_message;
@@ -1647,8 +1647,8 @@ impl Parser {
         let TokenKind::StringLit { raw, quote } = token.kind else {
             unreachable!("the caller matched a string literal")
         };
-        let value =
-            unescape_string(&raw).map_err(|message| self.error_at_span(token.span, &message))?;
+        let value = string_value(&raw, quote)
+            .map_err(|message| self.error_at_span(token.span, &message))?;
         Ok(StrLit { value, raw, quote })
     }
 

@@ -5,10 +5,9 @@ use std::fmt;
 use crate::ast::AstIdSpace;
 #[derive(Debug, Clone, PartialEq)]
 pub enum TemplateTokenPart {
-    /// Literal text as a cooked template spells it, escapes unresolved: the
-    /// elaborator's unescaper decodes it. A raw template's text arrives
-    /// respelled that way. Only `${` opens an interpolation, so bare `{` / `}`
-    /// stay literal.
+    /// Literal text as written, escapes unresolved: the elaborator decodes it
+    /// as the template's `Quote` says. Only `${` opens an interpolation, so
+    /// bare `{` / `}` stay literal.
     Literal(String),
     /// An interpolation. The lexer splits the content at the top-level `:`, so
     /// `expr` is the raw expression source (without enclosing braces) and
@@ -64,14 +63,13 @@ impl Quote {
         }
     }
 
-    /// The literal as written, from the cooked spelling the lexer gave its
-    /// text: `prefix` (`b` or nothing), then the opener, text and closer.
+    /// The literal around `text`: `prefix` (`b` or nothing), then the opener,
+    /// the text and the closer.
     #[must_use]
-    pub fn write(self, prefix: &str, delimiter: Delimiter, cooked: &str) -> String {
+    pub fn write(self, prefix: &str, delimiter: Delimiter, text: &str) -> String {
         format!(
-            "{prefix}{}{}{}",
+            "{prefix}{}{text}{}",
             self.open(delimiter),
-            self.spell(cooked),
             self.close(delimiter)
         )
     }
@@ -84,28 +82,6 @@ impl Quote {
     #[must_use]
     pub fn close(self, delimiter: Delimiter) -> String {
         format!("{}{}", delimiter.char(), "#".repeat(self.hash_count()))
-    }
-
-    /// Text as this quoting writes it, from the cooked spelling the lexer gave
-    /// it. In a raw literal every backslash there is one the lexer added,
-    /// before a `\` or the delimiter.
-    #[must_use]
-    pub fn spell(self, cooked: &str) -> String {
-        match self {
-            Self::Cooked => cooked.to_string(),
-            Self::Raw { .. } => {
-                let mut text = String::with_capacity(cooked.len());
-                let mut chars = cooked.chars();
-                while let Some(c) = chars.next() {
-                    text.push(if c == '\\' {
-                        chars.next().expect("the lexer escapes a character")
-                    } else {
-                        c
-                    });
-                }
-                text
-            }
-        }
     }
 }
 
@@ -229,9 +205,8 @@ pub enum TokenKind {
 
     // Literals
     Ident(String),
-    /// String literal. `raw` is its text as a cooked literal spells it, escape
-    /// sequences not interpreted; a raw literal's text arrives respelled that
-    /// way.
+    /// String literal. `raw` is its text as written between the delimiters,
+    /// escape sequences not interpreted.
     StringLit {
         raw: String,
         quote: Quote,

@@ -78,7 +78,7 @@ use crate::elaborator::util::{
     settles_literal_patterns,
 };
 use crate::escape::{
-    unescape_byte, unescape_bytes, unescape_char, unescape_string, unescape_template_segment,
+    bytes_value, checked_template_segment, string_value, unescape_byte, unescape_char,
 };
 use crate::format_spec::FormatKind;
 use crate::hashmap;
@@ -104,15 +104,16 @@ use crate::tir::{
     deref_to_layers, hold_hole, to_layers_of, wrapped_reference,
 };
 use crate::tir_visitor::TirMutVisitor;
-use crate::token::Span;
+use crate::token::{Quote, Span};
 use crate::unparse::{unparse_expr_source, unparse_pattern_source};
 
 /// A template's text and holes as reify assembles it: one segment more than
-/// holes, each segment cooked and raw, and each hole with its specifier as
-/// written.
+/// holes, each segment cooked and raw, each hole with its specifier as
+/// written, and how the raw text is delimited.
 struct TemplatePieces {
     segments: Vec<[String; 2]>,
     holes: Vec<(TirExpr, Option<String>)>,
+    quote: Quote,
 }
 
 impl Default for TemplatePieces {
@@ -120,6 +121,7 @@ impl Default for TemplatePieces {
         Self {
             segments: vec![Default::default()],
             holes: Vec::new(),
+            quote: Quote::Cooked,
         }
     }
 }
@@ -4568,12 +4570,15 @@ impl<'a> Reify<'a> {
         template: &ast::TemplateStringExpr,
         ctx: &mut FunctionContext,
     ) -> TirExpr {
-        let mut pieces = TemplatePieces::default();
+        let mut pieces = TemplatePieces {
+            quote: template.quote,
+            ..TemplatePieces::default()
+        };
         for part in &template.parts {
             match part {
                 // Annotate validated every segment's escapes.
                 ast::TemplatePart::String(raw) => {
-                    pieces.text(&unescape_template_segment(raw), raw);
+                    pieces.text(&checked_template_segment(raw, template.quote), raw);
                 }
                 ast::TemplatePart::Interpolation { expr, format, .. } => {
                     let value = self.reify_expr(expr, ctx, None);
@@ -4597,6 +4602,7 @@ impl<'a> Reify<'a> {
         let TemplatePieces {
             mut segments,
             mut holes,
+            quote,
         } = pieces;
         let string_type = self
             .tysys
@@ -4631,7 +4637,7 @@ impl<'a> Reify<'a> {
         let shape = TemplateShape { holes };
         let template_ty = self.reify_template_type(shape, span);
         let (literal, holes) =
-            self.reify_template_literal(template_ty, values, &segments, span, ctx);
+            self.reify_template_literal(template_ty, values, &segments, quote, span, ctx);
         let (func, type_args) = {
             let mut tt = self.tysys.type_table.borrow_mut();
             let mut func = method_ref(&tt, CompilerItem::StringFormat);
@@ -4709,10 +4715,16 @@ impl<'a> Reify<'a> {
             .template
             .raw_segments()
             .into_iter()
-            .map(|raw| [unescape_template_segment(&raw), raw])
+            .map(|raw| [checked_template_segment(&raw, tagged.template.quote), raw])
             .collect();
-        let (literal, holes) =
-            self.reify_template_literal(template_ty, values, &segments, span, ctx);
+        let (literal, holes) = self.reify_template_literal(
+            template_ty,
+            values,
+            &segments,
+            tagged.template.quote,
+            span,
+            ctx,
+        );
 
         // The template is the tag's one written argument; a trailing parameter
         // with a default is filled here, as it is for a spelled call.
@@ -4738,14 +4750,16 @@ impl<'a> Reify<'a> {
         Self::bind_holes_around(call, holes, recorded_type, span)
     }
 
-    /// The literal of `template_ty` over the reified holes and each segment's
-    /// cooked and raw text, and the statements binding the holes it cannot
-    /// read where it stands: a place that a later computed hole may write.
+    /// The literal of `template_ty` over the reified holes, each segment's
+    /// cooked and raw text and the `quote` delimiting it, and the statements
+    /// binding the holes it cannot read where it stands: a place that a later
+    /// computed hole may write.
     fn reify_template_literal(
         &mut self,
         template_ty: TypeId,
         values: Vec<TirExpr>,
         segments: &[[String; 2]],
+        quote: Quote,
         span: Span,
         ctx: &mut FunctionContext,
     ) -> (TirExpr, HoleBindings) {
@@ -4842,6 +4856,20 @@ impl<'a> Reify<'a> {
                 field_index,
             });
         }
+        let (name, field_index) = shape.hashes_field();
+        let hashes = quote.hash_count();
+        fields.push(TirStructField {
+            name,
+            value: TirExpr::new(
+                TirExprKind::IntLiteral {
+                    value: hashes as u64,
+                    repr: hashes.to_string(),
+                },
+                TypeTable::I32,
+                span,
+            ),
+            field_index,
+        });
 
         let literal = TirExpr::new(
             TirExprKind::StructLiteral {
@@ -8573,19 +8601,19 @@ impl<'a> Reify<'a> {
                 };
                 return self.reify_numeric_literal(&byte.to_string(), byte_type, lit.span);
             }
-            ast::Literal::String(s, _) => {
+            ast::Literal::String(s, quote) => {
                 // Decode escape sequences (`\"`, `\n`, `\\`, …) the same
                 // way the elaborator does — the AST holds
-                // the raw source text. Without this a literal like
+                // the source text. Without this a literal like
                 // `"{\""` reaches codegen with the backslash intact and
                 // serializes as `{\"` instead of `{"`.
-                let value = unescape_string(s).unwrap_or_default();
+                let value = string_value(s, *quote).unwrap_or_default();
                 TirExprKind::StringLiteral(value)
             }
-            ast::Literal::Bytes(raw, _) => {
-                // Decode the raw source to bytes and reuse the `#include_bytes`
+            ast::Literal::Bytes(raw, quote) => {
+                // Decode the source to bytes and reuse the `#include_bytes`
                 // lowering (`BytesLiteral` -> byte-buffer data segment).
-                let bytes = unescape_bytes(raw).unwrap_or_default();
+                let bytes = bytes_value(raw, *quote).unwrap_or_default();
                 let byte_list_type = if recorded_type == TypeTable::UNKNOWN {
                     self.tysys.type_table.borrow_mut().make_byte_list()
                 } else {
@@ -9197,8 +9225,8 @@ impl<'a> Reify<'a> {
                 // string literals decode their escapes, and `null` on a
                 // variant scrutinee with a `None` case lowers to that case.
                 let tir_lit = match lit {
-                    ast::Literal::String(raw, _) => {
-                        TirLiteralPattern::String(unescape_string(raw).unwrap_or_default())
+                    ast::Literal::String(raw, quote) => {
+                        TirLiteralPattern::String(string_value(raw, *quote).unwrap_or_default())
                     }
                     ast::Literal::Null => {
                         if self.scrutinee_has_variant_case(scrutinee_type, "None") {

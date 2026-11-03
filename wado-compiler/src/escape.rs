@@ -3,6 +3,8 @@
 //! One decoder for every phase that reads a literal's raw text: the parser
 //! reads an attribute's arguments, the elaborator reads an expression's.
 
+use crate::token::Quote;
+
 /// The source text a string literal needs between its quotes to denote `s`.
 /// The inverse of [`unescape_string`].
 pub(crate) fn escape_string(s: &str) -> String {
@@ -45,6 +47,43 @@ fn push_escaped(out: &mut String, c: char, quote: char) {
         c if c.is_control() => out.push_str(&format!("\\u{{{:04X}}}", c as u32)),
         c => out.push(c),
     }
+}
+
+/// The `String` a string literal's text denotes as `quote` delimits it, or why
+/// it denotes none. A raw literal's text is its value.
+pub(crate) fn string_value(text: &str, quote: Quote) -> Result<String, String> {
+    match quote {
+        Quote::Cooked => unescape_string(text),
+        Quote::Raw { .. } => Ok(text.to_owned()),
+    }
+}
+
+/// The bytes a byte string's text denotes as `quote` delimits it, or why it
+/// denotes none. Either way the text is ASCII; only a cooked one escapes.
+pub(crate) fn bytes_value(text: &str, quote: Quote) -> Result<Vec<u8>, String> {
+    match quote {
+        Quote::Cooked => unescape_bytes(text),
+        Quote::Raw { .. } => match text.chars().find(|ch| !ch.is_ascii()) {
+            Some(ch) => Err(format!(
+                "non-ASCII character in raw byte string: '{ch}' (a cooked one takes `\\xNN`)"
+            )),
+            None => Ok(text.as_bytes().to_vec()),
+        },
+    }
+}
+
+/// A template segment's text as `quote` delimits it, or why it denotes none.
+pub(crate) fn template_segment_value(text: &str, quote: Quote) -> Result<String, String> {
+    match quote {
+        Quote::Cooked => unescape_template_string(text),
+        Quote::Raw { .. } => Ok(text.to_owned()),
+    }
+}
+
+/// [`template_segment_value`] past the body walk, which is the phase that
+/// rejects a malformed escape; no later one has a diagnostic channel for it.
+pub(crate) fn checked_template_segment(text: &str, quote: Quote) -> String {
+    template_segment_value(text, quote).expect("the body walk rejects a malformed template escape")
 }
 
 /// The `String` the raw content of a string literal denotes, or why it denotes
@@ -117,12 +156,6 @@ pub(crate) fn unescape_char(raw: &str) -> Result<char, String> {
         (None, _) => Err("empty char literal".to_string()),
         (Some(_), Some(_)) => Err("character literal must contain a single character".to_string()),
     }
-}
-
-/// [`unescape_template_string`] past the body walk, which is the phase that
-/// rejects a malformed escape; no later one has a diagnostic channel for it.
-pub(crate) fn unescape_template_segment(raw: &str) -> String {
-    unescape_template_string(raw).expect("the body walk rejects a malformed template escape")
 }
 
 /// [`unescape_string`] for a template's raw text, which also escapes the

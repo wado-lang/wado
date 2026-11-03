@@ -1241,8 +1241,7 @@ impl<'a> Lexer<'a> {
         }
     }
 
-    /// The text of a raw string up to and including its closer, spelled as a
-    /// cooked string spells it.
+    /// The text of a raw string as written, its closer consumed.
     fn scan_raw_quoted(
         &mut self,
         hashes: usize,
@@ -1261,7 +1260,7 @@ impl<'a> Lexer<'a> {
                     return text;
                 }
                 Some(_) => {
-                    if self.respell_text_char(Delimiter::Quote, hashes, &mut text) {
+                    if self.scan_text_char(Delimiter::Quote, hashes, &mut text) {
                         return text;
                     }
                 }
@@ -1270,15 +1269,10 @@ impl<'a> Lexer<'a> {
     }
 
     /// Consume the character at the cursor, a literal's text or its closer
-    /// (`delimiter` and `hashes` `#`s), appending text as a cooked literal
-    /// spells it. A backslash reaching here is text, as in a raw literal; a
-    /// cooked one is scanned as an escape before. Returns whether it closed.
-    fn respell_text_char(
-        &mut self,
-        delimiter: Delimiter,
-        hashes: usize,
-        text: &mut String,
-    ) -> bool {
+    /// (`delimiter` and `hashes` `#`s), appending text as written but for its
+    /// line breaks. A cooked literal's escapes are scanned before this.
+    /// Returns whether it closed.
+    fn scan_text_char(&mut self, delimiter: Delimiter, hashes: usize, text: &mut String) -> bool {
         match self.peek() {
             Some((_, ch)) if ch == delimiter.char() => {
                 self.advance();
@@ -1286,12 +1280,7 @@ impl<'a> Lexer<'a> {
                     self.advance_n(hashes);
                     return true;
                 }
-                text.push('\\');
                 text.push(ch);
-            }
-            Some((_, '\\')) => {
-                self.advance();
-                text.push_str(r"\\");
             }
             Some((_, '\r')) => {
                 if self.advance_literal_cr() {
@@ -1443,8 +1432,6 @@ impl<'a> Lexer<'a> {
         }
     }
 
-    /// A raw template's text reaches the parser spelled as a cooked template
-    /// would spell it, so every phase after this one reads one form.
     fn lex_template_string(&mut self, quote: Quote) -> TokenKind {
         let start = self.pos;
         let start_line = self.line;
@@ -1513,7 +1500,7 @@ impl<'a> Lexer<'a> {
                     }
                 }
                 Some(_) => {
-                    if self.respell_text_char(Delimiter::Backtick, hashes, &mut current_literal) {
+                    if self.scan_text_char(Delimiter::Backtick, hashes, &mut current_literal) {
                         break;
                     }
                 }
@@ -1825,21 +1812,21 @@ mod tests {
         assert_matches!(&tokens[0].kind, TokenKind::StringLit { raw, quote: Quote::Cooked } if raw == "Hello, world!");
     }
 
-    /// A raw string reaches the parser as the cooked string spelling the same
-    /// text, and closes only at a quote followed by as many `#`s as opened it.
+    /// A raw string's text reaches the parser as written, and closes only at a
+    /// quote followed by as many `#`s as opened it.
     #[test]
-    fn test_raw_string_respelled_cooked() {
+    fn test_raw_string_kept_as_written() {
         let t = tokens(r###"##"a\d"#b"## + 1"###);
         assert_matches!(
             &t[0].kind,
-            TokenKind::StringLit { raw, quote: Quote::Raw { hashes: 2 } } if raw == r##"a\\d\"#b"##
+            TokenKind::StringLit { raw, quote: Quote::Raw { hashes: 2 } } if raw == r##"a\d"#b"##
         );
         assert_matches!(t[1].kind, TokenKind::Plus);
 
         let b = tokens(r##"b#"\x00"#"##);
         assert_matches!(
             &b[0].kind,
-            TokenKind::ByteStringLit { raw, quote: Quote::Raw { hashes: 1 } } if raw == r"\\x00"
+            TokenKind::ByteStringLit { raw, quote: Quote::Raw { hashes: 1 } } if raw == r"\x00"
         );
     }
 
@@ -2296,15 +2283,15 @@ test data";
         );
     }
 
-    /// A raw template's backslashes and inner backticks reach the parser
-    /// escaped, as a cooked template spells the same text.
+    /// A raw template's text reaches the parser as written, backslashes and
+    /// inner backticks included.
     #[test]
-    fn test_raw_template_respelled_cooked() {
+    fn test_raw_template_kept_as_written() {
         let t = tokens(r"##`a\d`#b`## + 1");
         assert_matches!(
             &t[0].kind,
             TokenKind::TemplateStringLit { parts, quote: Quote::Raw { hashes: 2 } }
-                if parts.as_slice() == [TemplateTokenPart::Literal(r"a\\d\`#b".to_string())]
+                if parts.as_slice() == [TemplateTokenPart::Literal(r"a\d`#b".to_string())]
         );
         assert_matches!(t[1].kind, TokenKind::Plus);
     }

@@ -124,6 +124,9 @@ pub trait ReflectTemplate: Reflect {
 
     /// `tail(t)` with escapes preserved.
     fn raw_tail(t: &Self) -> StrSlice;
+
+    /// How many `#`s delimit `t` on each end: 0 for `` `…` ``.
+    fn hashes(t: &Self) -> i32;
 }
 ```
 
@@ -185,11 +188,12 @@ of the tag's signature. `String::raw` is a tag that reads `raw(t)` and
 still a template segment, so it spells only the escapes the language has:
 `` String::raw`a\nb` `` is `a\nb` as written, and `\p` is the error it is in
 any cooked template. A text full of backslashes, such as a regular expression,
-is a raw template, ``#`…`#``, which takes every backslash as itself and
-reaches a tag as the cooked template equal to it
-([WEP: Re](./wep-2026-11-02-re.md)).
+is a raw template, ``#`…`#``, which takes every backslash as itself, so both
+of its spellings are the text as written ([WEP: Re](./wep-2026-11-02-re.md)).
+The value also carries its `#` count, which `hashes(t)` reads.
 
-A template value inspects as the template it was written as: the raw segments,
+A template value inspects as the template it was written as: its delimiters,
+the raw segments,
 and each hole's value inspected and followed by its specifier. The form is a
 blanket `impl Inspect` over `ReflectTemplate` in the prelude, as every other
 kind's is, reading the holes through `get_ref` so that an affine hole renders

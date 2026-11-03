@@ -486,6 +486,16 @@ impl TemplateShape {
         0..Self::segment_key(self.holes.len() + 1, false)
     }
 
+    /// The field holding how many `#`s delimit the template, after the
+    /// segments: what tells a raw template's text from a cooked one's.
+    #[must_use]
+    pub fn hashes_field(&self) -> (String, u32) {
+        (
+            "q".to_string(),
+            self.holes.len() as u32 + self.segment_keys().end,
+        )
+    }
+
     #[must_use]
     pub fn hole_types(&self) -> Vec<TypeId> {
         self.holes.iter().map(|hole| hole.ty).collect()

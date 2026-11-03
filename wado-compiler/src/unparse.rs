@@ -2687,7 +2687,7 @@ impl<'a> Unparser<'a> {
         self.output.push_str(&t.quote.open(Delimiter::Backtick));
         for part in &t.parts {
             match part {
-                TemplatePart::String(s) => self.output.push_str(&t.quote.spell(s)),
+                TemplatePart::String(s) => self.output.push_str(s),
                 TemplatePart::Interpolation { expr, format, open } => {
                     self.output.push_str("${");
                     // A comment inside these braces keeps its place, a line
