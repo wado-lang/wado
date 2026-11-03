@@ -308,6 +308,13 @@ struct TestSpec {
     #[serde(default)]
     wir_pass: indexmap::IndexMap<String, Vec<String>>,
 
+    /// What those passes must leave standing where they act, by the same keys.
+    /// A guard holds with the passes skipped too, so it stands beside an
+    /// expectation under its key that fails without them: that one shows the
+    /// passes reached this code.
+    #[serde(default)]
+    wir_guard: indexmap::IndexMap<String, WirGuard>,
+
     /// Optimizer remarks, by the optimization level that emits them (`"O2"`).
     /// Each remark reads `"file:line:col remark: …"`, so `":6:5 remark: a copy"`
     /// pins the position in the fixture.
@@ -384,6 +391,15 @@ impl TextMatch {
     }
 }
 
+#[derive(Debug, Default, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct WirGuard {
+    #[serde(default)]
+    expect: Vec<String>,
+    #[serde(default)]
+    not_expect: Vec<String>,
+}
+
 /// One WIR expectation a fixture states.
 enum WirCheck<'a> {
     Expect(&'a str),
@@ -413,10 +429,39 @@ fn wir_lines(wir_text: &str) -> Vec<&str> {
     wir_text.lines().map(str::trim).collect()
 }
 
-/// The key a WIR expectation sits under: a level's name, or `*` for every
-/// level.
-fn wir_key(level: Option<OptLevel>) -> &'static str {
-    level.map_or("*", common::opt_level_name)
+/// The key a WIR expectation sits under.
+#[derive(Clone, Copy, PartialEq)]
+enum WirKey {
+    Level(OptLevel),
+    /// `*`
+    Every,
+}
+
+impl WirKey {
+    const ALL: [Self; 6] = [
+        Self::Every,
+        Self::Level(OptLevel::O0),
+        Self::Level(OptLevel::O1),
+        Self::Level(OptLevel::O2),
+        Self::Level(OptLevel::O3),
+        Self::Level(OptLevel::Os),
+    ];
+
+    /// The keys a run at `level` checks.
+    fn at(level: OptLevel) -> [Self; 2] {
+        [Self::Level(level), Self::Every]
+    }
+
+    fn parse(name: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|key| key.name() == name)
+    }
+
+    fn name(self) -> &'static str {
+        match self {
+            Self::Level(level) => common::opt_level_name(level),
+            Self::Every => "*",
+        }
+    }
 }
 
 impl TestSpec {
@@ -432,13 +477,13 @@ impl TestSpec {
         }
     }
 
-    /// The WIR expectations under `level`, or under `*` for `None`.
-    fn wir_checks(&self, level: Option<OptLevel>) -> Vec<WirCheck<'_>> {
-        let (expect, not_expect) = match level {
-            Some(level) => self.wir_expectations(level),
-            None => (&self.wir_expect_all[..], &self.wir_not_expect_all[..]),
+    /// The WIR expectations under `key`.
+    fn wir_checks(&self, key: WirKey) -> Vec<WirCheck<'_>> {
+        let (expect, not_expect) = match key {
+            WirKey::Level(level) => self.wir_expectations(level),
+            WirKey::Every => (&self.wir_expect_all[..], &self.wir_not_expect_all[..]),
         };
-        let lines = self.wir_lines.get(wir_key(level)).into_iter().flatten();
+        let lines = self.wir_lines.get(key.name()).into_iter().flatten();
         expect
             .iter()
             .map(|p| WirCheck::Expect(p))
@@ -447,11 +492,24 @@ impl TestSpec {
             .collect()
     }
 
+    /// The `wir_guard` expectations under `key`.
+    fn wir_guard_checks(&self, key: WirKey) -> Vec<WirCheck<'_>> {
+        let Some(guard) = self.wir_guard.get(key.name()) else {
+            return vec![];
+        };
+        guard
+            .expect
+            .iter()
+            .map(|p| WirCheck::Expect(p))
+            .chain(guard.not_expect.iter().map(|p| WirCheck::NotExpect(p)))
+            .collect()
+    }
+
     /// Whether this test reads the WIR it compiles at `opt_level`.
     fn has_wir_expectations(&self, opt_level: OptLevel) -> bool {
-        [Some(opt_level), None]
+        WirKey::at(opt_level)
             .into_iter()
-            .any(|level| !self.wir_checks(level).is_empty())
+            .any(|key| !self.wir_checks(key).is_empty())
     }
 
     /// Whether `opt_level` runs this fixture. The runner skips on it, and the
@@ -582,10 +640,11 @@ fn an_expectation_holding_with_its_passes_skipped_is_reported() {
         wir_not_expect_o2: vec!["copy".to_string()],
         ..Default::default()
     };
-    assert_wir_passes_measured("a copy", &spec, Some(OptLevel::O2), "unit");
+    let key = WirKey::Level(OptLevel::O2);
+    assert_wir_passes_measured("a copy", &spec, key, "unit");
     for skipped_wir in ["a copy, already folded", "nothing"] {
         let held = std::panic::catch_unwind(|| {
-            assert_wir_passes_measured(skipped_wir, &spec, Some(OptLevel::O2), "unit");
+            assert_wir_passes_measured(skipped_wir, &spec, key, "unit");
         });
         assert!(held.is_err(), "{skipped_wir:?}");
     }
@@ -1179,38 +1238,31 @@ fn run_with_allocator(
         );
     }
 
-    const LEVELS: [OptLevel; 5] = [
-        OptLevel::O0,
-        OptLevel::O1,
-        OptLevel::O2,
-        OptLevel::O3,
-        OptLevel::Os,
-    ];
-    let level_names = LEVELS.map(common::opt_level_name);
-    for level in spec.remarks.keys() {
+    for name in spec.remarks.keys() {
         assert!(
-            level_names.contains(&level.as_str()),
-            "[{test_id}] `remarks` is keyed by an optimization level, not {level:?}"
+            WirKey::parse(name).is_some_and(|key| key != WirKey::Every),
+            "[{test_id}] `remarks` is keyed by an optimization level, not {name:?}"
         );
     }
-    for level in spec.wir_lines.keys() {
-        assert!(
-            level == "*" || level_names.contains(&level.as_str()),
-            "[{test_id}] `wir_lines` is keyed by an optimization level or `*`, not {level:?}"
-        );
+    let parse_key = |field: &str, name: &str| {
+        WirKey::parse(name).unwrap_or_else(|| {
+            panic!("[{test_id}] `{field}` is keyed by an optimization level or `*`, not {name:?}")
+        })
+    };
+    for name in spec.wir_lines.keys() {
+        parse_key("wir_lines", name);
     }
     for (key, passes) in &spec.wir_pass {
-        let level = level_names
-            .iter()
-            .position(|name| name == key)
-            .map(|i| LEVELS[i]);
         assert!(
-            key == "*" || level.is_some(),
-            "[{test_id}] `wir_pass` is keyed by an optimization level or `*`, not {key:?}"
-        );
-        assert!(
-            !passes.is_empty() && !spec.wir_checks(level).is_empty(),
+            !passes.is_empty() && !spec.wir_checks(parse_key("wir_pass", key)).is_empty(),
             "[{test_id}] `wir_pass.{key}` names the passes of the WIR expectations under `{key}`"
+        );
+    }
+    for key in spec.wir_guard.keys() {
+        assert!(
+            !spec.wir_checks(parse_key("wir_guard", key)).is_empty(),
+            "[{test_id}] a `wir_guard.{key}` stands beside a WIR expectation under `{key}` \
+             that fails without its passes, showing they reached this code"
         );
     }
     if let Some(expected) = spec.remarks.get(common::opt_level_name(opt_level)) {
@@ -1297,45 +1349,14 @@ fn run_with_allocator(
     // Every check on the compiler's own output runs before the execution
     // dispatch: one placed after it is silently skipped by `compile_only`.
     assert_wir_expectations(wir_text.as_deref(), spec, opt_level, test_id);
-    for level in [Some(opt_level), None] {
-        if spec.wir_checks(level).is_empty() {
-            continue;
-        }
-        let key = wir_key(level);
-        if let Ok(out) = std::env::var("WADO_E2E_WIR_PASS_SEARCH") {
-            let compile = |skip: &[String]| {
-                let options = skip_base.clone();
-                common::compile_fixture_on_worker(
-                    fixture_path.to_path_buf(),
-                    source.to_string(),
-                    CompilerOptions {
-                        opt: OptOverrides {
-                            skip_passes: skip.to_vec(),
-                            ..options.opt.clone()
-                        },
-                        retain_wir: true,
-                        ..options
-                    },
-                    spec.compile.host_stubs(),
-                )
-                .wir_text
-            };
-            search_wir_passes(&out, &compile, wir_text.as_deref().unwrap(), spec, level, test_id);
-            continue;
-        }
-        let passes = spec.wir_pass.get(key).unwrap_or_else(|| {
-            panic!(
-                "[{test_id}] the WIR expectations under `{key}` name no `wir_pass`: \
-                 list the passes whose work they are, which the run skips to see each fail"
-            )
-        });
+    let compile_skipping = |skip: &[String]| {
         let options = skip_base.clone();
-        let skipped_wir = common::compile_fixture_on_worker(
+        common::compile_fixture_on_worker(
             fixture_path.to_path_buf(),
             source.to_string(),
             CompilerOptions {
                 opt: OptOverrides {
-                    skip_passes: passes.clone(),
+                    skip_passes: skip.to_vec(),
                     ..options.opt.clone()
                 },
                 retain_wir: true,
@@ -1344,8 +1365,26 @@ fn run_with_allocator(
             spec.compile.host_stubs(),
         )
         .wir_text
-        .unwrap_or_else(|| panic!("[{test_id}] the compile skipping {passes:?} failed"));
-        assert_wir_passes_measured(&skipped_wir, spec, level, test_id);
+    };
+    for key in WirKey::at(opt_level) {
+        if spec.wir_checks(key).is_empty() {
+            continue;
+        }
+        if let Ok(out) = std::env::var("WADO_E2E_WIR_PASS_SEARCH") {
+            let normal_wir = wir_text.as_deref().unwrap();
+            search_wir_passes(&out, &compile_skipping, normal_wir, spec, key, test_id);
+            continue;
+        }
+        let name = key.name();
+        let passes = spec.wir_pass.get(name).unwrap_or_else(|| {
+            panic!(
+                "[{test_id}] the WIR expectations under `{name}` name no `wir_pass`: \
+                 list the passes whose work they are, which the run skips to see each fail"
+            )
+        });
+        let skipped_wir = compile_skipping(passes)
+            .unwrap_or_else(|| panic!("[{test_id}] the compile skipping {passes:?} failed"));
+        assert_wir_passes_measured(&skipped_wir, spec, key, test_id);
     }
     if std::env::var_os("WADO_E2E_WIR_PASS_SEARCH").is_some() {
         return;
@@ -1515,9 +1554,11 @@ fn assert_wir_expectations(
             )
         }),
     };
-    for level in [Some(opt_level), None] {
-        let key = wir_key(level);
-        for check in spec.wir_checks(level) {
+    for key in WirKey::at(opt_level) {
+        let name = key.name();
+        let guards = spec.wir_guard_checks(key);
+        let guards = guards.iter().map(|g| (format!("wir_guard.{name} "), g));
+        for (label, check) in spec.wir_checks(key).iter().map(|c| (String::new(), c)).chain(guards) {
             if let WirCheck::Line(wanted) = check {
                 wanted.assert_in(
                     &wir_lines(wir_text),
@@ -1529,22 +1570,17 @@ fn assert_wir_expectations(
             }
             assert!(
                 check.holds(wir_text),
-                "[{test_id}] {} failed\nWIR output:\n{wir_text}",
-                check.describe(key)
+                "[{test_id}] {label}{} failed\nWIR output:\n{wir_text}",
+                check.describe(name)
             );
         }
     }
 }
 
-/// Check that every WIR expectation under `level` (`None` for `*`) fails on
-/// `skipped_wir`, compiled with that key's `wir_pass` skipped. Every one that
-/// holds anyway is reported at once.
-fn assert_wir_passes_measured(
-    skipped_wir: &str,
-    spec: &TestSpec,
-    level: Option<OptLevel>,
-    test_id: &str,
-) {
+/// Check that every WIR expectation under `key` fails on `skipped_wir`,
+/// compiled with that key's `wir_pass` skipped. Every one that holds anyway is
+/// reported at once.
+fn assert_wir_passes_measured(skipped_wir: &str, spec: &TestSpec, key: WirKey, test_id: &str) {
     let skipped_wir = match spec.wir_scope.as_deref() {
         None => skipped_wir,
         // The function is the passes' own work, and so is all it holds.
@@ -1553,23 +1589,24 @@ fn assert_wir_passes_measured(
             None => return,
         },
     };
-    let key = wir_key(level);
+    let name = key.name();
     let held: Vec<String> = spec
-        .wir_checks(level)
+        .wir_checks(key)
         .iter()
         .filter(|check| check.holds(skipped_wir))
-        .map(|check| check.describe(key))
+        .map(|check| check.describe(name))
         .collect();
     assert!(
         held.is_empty(),
-        "[{test_id}] these hold with {:?} skipped too, so they measure nothing those passes do:\n  {}\n\
+        "[{test_id}] these hold with {:?} skipped too, so they measure nothing those passes do; \
+         one they must leave standing goes under `wir_guard`:\n  {}\n\
          WIR with the passes skipped:\n{skipped_wir}",
-        spec.wir_pass.get(key),
+        spec.wir_pass.get(name),
         held.join("\n  ")
     );
 }
 
-/// Search mode: which expectations under `level` fail with each candidate pass
+/// Search mode: which expectations under `key` fail with each candidate pass
 /// skipped alone, and how many WIR lines that skip changes; then, for each
 /// expectation no single skip fails, a minimal set that does. Each result is a
 /// JSON line appended to `out`.
@@ -1578,7 +1615,7 @@ fn search_wir_passes(
     compile: &dyn Fn(&[String]) -> Option<String>,
     normal_wir: &str,
     spec: &TestSpec,
-    level: Option<OptLevel>,
+    key: WirKey,
     test_id: &str,
 ) {
     use std::io::Write as _;
@@ -1587,8 +1624,8 @@ fn search_wir_passes(
         .split(',')
         .map(str::to_string)
         .collect();
-    let key = wir_key(level);
-    let checks = spec.wir_checks(level);
+    let checks = spec.wir_checks(key);
+    let key = key.name();
     let failing = |wir: &str| -> Vec<usize> {
         let scoped = match spec.wir_scope.as_deref() {
             None => Some(Some(wir)),
