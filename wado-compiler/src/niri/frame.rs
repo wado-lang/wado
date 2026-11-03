@@ -808,20 +808,15 @@ impl Interpreter<'_> {
     }
 
     /// The operand a `let` binds as a place rather than a value: a reference names
-    /// the place it was taken over, an array read from a place and a place field
-    /// (`fmt.buf`) each name that place, and a bare local already naming one
-    /// rebinds the same place. Any other projection out of an alias reads
-    /// *through* it. Boxing rewrites `&x` into a bare read, so the type test
+    /// the place it was taken over, an array read from a place names that place,
+    /// and a bare local already naming one rebinds the same place. Any other
+    /// projection out of an alias reads *through* it. Boxing rewrites `&x` into a bare read, so the type test
     /// accepts any reference shape.
     fn aliased_operand(&self, body: &Body, value: Operand) -> Option<Operand> {
         if let Some((_, referenced)) = referenced_place_operand(body, value) {
             return Some(referenced);
         }
-        if is_array_place(body, value, self.type_table)
-            || self
-                .aliased_place_of(body, value)
-                .is_some_and(|place| self.frame.place_fields.contains_key(&place))
-        {
+        if is_array_place(body, value, self.type_table) {
             return Some(value);
         }
         let index = named_local(body, value)?;

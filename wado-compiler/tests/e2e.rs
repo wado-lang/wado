@@ -1612,7 +1612,9 @@ fn assert_wir_passes_measured(
             // The function is the passes' own work, and so is all it holds.
             Some(scope) => scope_to_function(&wir, scope)?,
         };
-        let held = (0..checks.len()).filter(|&i| checks[i].holds(body)).collect();
+        let held = (0..checks.len())
+            .filter(|&i| checks[i].holds(body))
+            .collect();
         Some((body.to_string(), held))
     };
     let Some((joint_wir, mut held)) = holding(passes) else {

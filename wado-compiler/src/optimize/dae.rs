@@ -391,25 +391,27 @@ fn evaluate_ahead(
     let ExprNode { span, type_id, .. } = body.exprs[id];
     let moved = body.take_expr(id);
     let call = body.exprs.push(moved);
+    let ExprKind::Call { args, .. } = &body.exprs[call].kind else {
+        unreachable!("the moved node is the call");
+    };
+    let ahead: Vec<ArenaCallArg> = args.iter().take(last + 1).cloned().collect();
     let mut stmts = Vec::with_capacity(last + 2);
-    for (i, &dead_at_i) in dead.iter().enumerate().take(last + 1) {
-        let ExprKind::Call { args, .. } = &body.exprs[call].kind else {
-            unreachable!("the moved node is the call");
-        };
-        let arg = args[i].expr;
-        if dead_at_i {
-            if !arena_query::is_pure_nontrapping_operand_typed(body, arg, Some(type_table)) {
+    let mut reads = Vec::new();
+    for (i, arg) in ahead.into_iter().enumerate() {
+        if dead[i] {
+            if !arena_query::is_pure_nontrapping_operand_typed(body, arg.expr, Some(type_table)) {
                 stmts.push(body.stmts.push(StmtNode {
-                    kind: StmtKind::Expr(arg),
+                    kind: StmtKind::Expr(arg.expr),
                     span,
                 }));
             }
             continue;
         }
         assert!(
-            !args[i].is_mut,
+            !arg.is_mut,
             "[NIR] dae: a place argument ahead of an effect is rejected at validation"
         );
+        let arg = arg.expr;
         let arg_type = body.operand_type(arg);
         let local_index = NirLocal::push_minted(locals, "dae_arg", arg_type, false);
         let name = locals[local_index as usize].name.clone();
@@ -432,9 +434,12 @@ fn evaluate_ahead(
             type_id: arg_type,
             span,
         });
-        let ExprKind::Call { args, .. } = &mut body.exprs[call].kind else {
-            unreachable!("the moved node is the call");
-        };
+        reads.push((i, read));
+    }
+    let ExprKind::Call { args, .. } = &mut body.exprs[call].kind else {
+        unreachable!("the moved node is the call");
+    };
+    for (i, read) in reads {
         args[i].expr = Operand::Expr(read);
     }
     stmts.push(body.stmts.push(StmtNode {

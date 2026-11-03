@@ -1566,8 +1566,8 @@ fn collect_modified_vars_in_expr(
         ExprKind::Cast { expr: inner, .. } => {
             collect_modified_vars_in_operand(body, *inner, modified, type_table);
         }
-        // What a direct call writes through an argument it is asked field by
-        // field (`call_writes_field`), so the argument is not fully modified.
+        // A call's writes through an argument are asked field by field
+        // (`call_writes_field`), so the call leaves the argument unmarked here.
         ExprKind::Call { args, .. } => {
             modified.call_sites.push(e);
             let arg_ids: Vec<ExprId> = args.iter().filter_map(|a| a.expr.as_expr()).collect();
