@@ -536,14 +536,14 @@ impl<affine G: Graph> Programs<G> {
 pub fn run<affine G: Graph>(g: &mut G, recorded: &Recorded, arguments: &List<Any<G>>) -> List<Any<G>> with _
     contract arguments.len() == recorded.parameters
 {
-    return Run::<G>::new(recorded).region(g, recorded, &recorded.body, arguments);
+    return Run::<G>::new(recorded, arguments, &HashMap::new()).region(g, recorded, &recorded.body);
 }
 
 /// The value of each node of `recorded` that reads no argument, computed on
 /// `Cpu`: what a program computes once, when it is compiled.
 pub fn constants(recorded: &Recorded) -> HashMap<i32, Any<Cpu>> {
     let mut cpu = Cpu {};
-    let mut state = Run::<Cpu>::new(recorded);
+    let mut state = Run::<Cpu>::new(recorded, &[], &HashMap::new());
     let mut folded = HashMap::<i32, Any<Cpu>>::new();
     for let id of 0..<recorded.nodes.len() {
         let node = &recorded.nodes[id];
@@ -568,15 +568,20 @@ internal struct Run<affine G: Graph> {
 }
 
 /// Each node's value, by its id, where a run has computed one: a slot for
-/// every node of the recording, since a call computes most of them.
+/// every node of the recording, since a call computes most of them. A
+/// parameter reads the call's argument and a constant the program's, in
+/// place, so a call copies neither.
 internal struct Values<affine G: Graph> {
     at: List<Option<Any<G>>>,
+    recorded: &Recorded,
+    arguments: &List<Any<G>>,
+    constants: &HashMap<i32, Any<G>>,
 }
 
 impl<affine G: Graph> Values<G> {
-    /// Whether node `id` has a value.
+    /// Whether node `id` has a value that reads no argument.
     internal fn holds(&self, id: i32) -> bool {
-        return self.at[id] matches { Some(_) };
+        return self.at[id] matches { Some(_) } || self.constants.contains_key(id);
     }
 }
 
@@ -584,10 +589,16 @@ impl<affine G: Graph> IndexRef<i32> for Values<G> {
     type Output = Any<G>;
 
     fn index_ref(&self, id: i32) -> &Any<G> {
-        let Some(value) = &self.at[id] else {
+        if let Some(value) = &self.at[id] {
+            return value;
+        }
+        if let Parameter(i) = self.recorded.nodes[id].op {
+            return &self.arguments[i];
+        }
+        if !self.constants.contains_key(id) {
             panic("loam: a node is read before it is computed");
-        };
-        return value;
+        }
+        return &self.constants[id];
     }
 }
 
@@ -595,10 +606,7 @@ impl<affine G: Graph> IndexValue<i32> for Values<G> {
     type Output = Any<G>;
 
     fn index_value(&self, id: i32) -> Any<G> {
-        let Some(value) = self.at[id] else {
-            panic("loam: a node is read before it is computed");
-        };
-        return value;
+        return *self.index_ref(id);
     }
 }
 
@@ -611,47 +619,47 @@ impl<affine G: Graph> IndexAssign<i32> for Values<G> {
 }
 
 impl<affine G: Graph> Run<G> {
-    internal fn new(recorded: &Recorded) -> Run<G> {
+    /// A run of `recorded` over `arguments`, which reads the values of
+    /// `constants` as computed.
+    internal fn new(recorded: &Recorded, arguments: &List<Any<G>>, constants: &HashMap<i32, Any<G>>) -> Run<G> {
         return Run {
-            values: Values { at: List::<Option<Any<G>>>::filled(recorded.nodes.len(), null) },
+            values: Values {
+                at: List::<Option<Any<G>>>::filled(recorded.nodes.len(), null),
+                recorded,
+                arguments,
+                constants,
+            },
             parts: HashMap::new(),
         };
     }
 
     /// Runs `region`'s nodes, and returns what it yields.
-    fn region(
-        &mut self,
-        g: &mut G,
-        recorded: &Recorded,
-        region: &Region,
-        arguments: &List<Any<G>>,
-    ) -> List<Any<G>> with _ {
+    fn region(&mut self, g: &mut G, recorded: &Recorded, region: &Region) -> List<Any<G>> with _ {
         for let id of region.nodes {
             let node = &recorded.nodes[id];
             if let Case([first, second]) = &node.op {
                 let pred = *bools(&self.values[node.operands[0]]);
                 let yielded = g.conditional::<Untyped, List<Any<G>>>(
                     &pred,
-                    || self.region(g, recorded, first, arguments),
-                    || self.region(g, recorded, second, arguments),
+                    || self.region(g, recorded, first),
+                    || self.region(g, recorded, second),
                 );
                 for let [k, result] of first.results.into_iter().enumerate() {
                     self.values[result] = yielded[k];
                 }
                 continue;
             }
-            self.ran(g, id, node, arguments);
+            self.ran(g, id, node);
         }
         return region.results.into_iter().map(|r| self.values[r]).collect();
     }
 
-    /// Gives node `id` its value: a parameter's, a part's and a yielded one's
-    /// are read, every other node's computed.
-    internal fn ran(&mut self, g: &mut G, id: i32, node: &RecordedNode, arguments: &List<Any<G>>) with _ {
+    /// Gives node `id` its value: a parameter's is the argument `values`
+    /// reads, a part's and a yielded one's are read, every other node's
+    /// computed.
+    internal fn ran(&mut self, g: &mut G, id: i32, node: &RecordedNode) with _ {
         match &node.op {
-            Parameter(i) => {
-                self.values[id] = arguments[*i];
-            },
+            Parameter(_) => {},
             Part(k) => {
                 self.values[id] = self.parts[node.operands[0]][*k - 1];
             },

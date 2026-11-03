@@ -227,11 +227,8 @@ impl Graph for WebGpuBackend {
         program: &WebGpuProgram,
         arguments: &List<Any<WebGpuBackend>>,
     ) -> List<Any<WebGpuBackend>> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
-        let mut state = Run::<WebGpuBackend>::new(&program.recorded);
-        for let [id, value] of program.constants.entries() {
-            state.values[*id] = *value;
-        }
-        let results = launched(self, &mut state, program, &program.plan, arguments);
+        let mut state = Run::<WebGpuBackend>::new(&program.recorded, arguments, &program.constants);
+        let results = launched(self, &mut state, program, &program.plan);
         let mut returned: List<i32> = [];
         for let r of &results {
             if let Some(d) = on_device(r) {
@@ -761,7 +758,6 @@ fn launched(
     state: &mut Run<WebGpuBackend>,
     program: &WebGpuProgram,
     plan: &Plan,
-    arguments: &List<Any<WebGpuBackend>>,
 ) -> List<Any<WebGpuBackend>> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
     let recorded = &program.recorded;
     for let launch of &plan.launches {
@@ -773,7 +769,7 @@ fn launched(
         };
         g.launching(program.serial, root);
         match launch {
-            Node(id) => state.ran(g, *id, &recorded.nodes[*id], arguments),
+            Node(id) => state.ran(g, *id, &recorded.nodes[*id]),
             Kernel(k) => rooted(
                 g,
                 &mut state.values,
@@ -805,8 +801,8 @@ fn launched(
                 let pred = *bools(&state.values[recorded.nodes[*id].operands[0]]);
                 let yielded = g.conditional::<Untyped, List<Any<WebGpuBackend>>>(
                     &pred,
-                    || launched(g, state, program, first, arguments),
-                    || launched(g, state, program, second, arguments),
+                    || launched(g, state, program, first),
+                    || launched(g, state, program, second),
                 );
                 for let [k, result] of first.results.into_iter().enumerate() {
                     state.values[result] = yielded[k];
