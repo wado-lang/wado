@@ -369,7 +369,7 @@ async fn run_single(opts: &DumpOptions, input: &str) -> Result<(), CliExit> {
         knobs.opt_level.to_compiler(),
         opts.target_world.as_deref(),
         knobs.allocator.as_deref(),
-        knobs.opt,
+        knobs.opt.clone(),
         &knobs.codegen_flags,
         profile.as_deref(),
         &knobs.params,

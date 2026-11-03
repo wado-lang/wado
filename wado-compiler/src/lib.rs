@@ -449,8 +449,11 @@ pub struct ProviderComponent {
 
 /// What a caller may override in the optimizer, each `None` meaning "whatever
 /// the level decides".
-#[derive(Debug, Clone, Copy, Default)]
+#[derive(Debug, Clone, Default)]
 pub struct OptOverrides {
+    /// Passes to skip, named as `WADO_LIST_PASSES` lists them. A test names the
+    /// pass whose work it checks, and shows that the check fails without it.
+    pub skip_passes: Vec<String>,
     pub inline_threshold: Option<usize>,
     pub inline_growth: Option<u32>,
     pub iterations: Option<u32>,
@@ -1460,7 +1463,7 @@ async fn resolve_inline_providers<H: CompilerHost>(
             lib_world: Some(fq.clone()),
             is_provider: true,
             opt_level: parent.opt_level,
-            opt: parent.opt,
+            opt: parent.opt.clone(),
             log_level: parent.log_level,
             codegen_flags: parent.codegen_flags.clone(),
             params: parent.params.clone(),
@@ -2282,7 +2285,7 @@ fn compile_after_load<H: CompilerHost>(
         optimize(
             nir,
             options.opt_level,
-            options.opt,
+            options.opt.clone(),
             options.parallelism,
             logger,
         )
@@ -2403,7 +2406,12 @@ fn compile_after_load<H: CompilerHost>(
     // === Phase 13: Optimize WIR ===
     {
         let _span = logger.span("wir_optimize");
-        wir_optimize::optimize_wir(&mut wir_package, options.opt_level, logger);
+        wir_optimize::optimize_wir(
+            &mut wir_package,
+            options.opt_level,
+            &options.opt.skip_passes,
+            logger,
+        );
     }
 
     // === Phase 14: Emit Wasm (WirPackage → Wasm component bytes) ===
@@ -2755,6 +2763,7 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
             let lower_text = Some(nir_unparse::unparse_nir_package(&nir));
 
             // Optimize
+            let skip_passes = opt.skip_passes.clone();
             let nir = {
                 let _span = logger.span("optimize");
                 optimize(nir, opt_level, opt, parallelism, &logger)
@@ -2765,7 +2774,7 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
             // WIR: Translate optimized NirPackage to WirPackage for inspection.
             let wir_package = Some({
                 let mut wir = wir_build::build_wir_package(&nir);
-                wir_optimize::optimize_wir(&mut wir, opt_level, &logger);
+                wir_optimize::optimize_wir(&mut wir, opt_level, &skip_passes, &logger);
                 wir
             });
 

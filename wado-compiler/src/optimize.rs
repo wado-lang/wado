@@ -171,7 +171,9 @@ pub fn optimize(
     parallelism: usize,
     profiler: &dyn SpanEmitter,
 ) -> NirPackage {
+    let _skipped = pass_dump::SkipScope::enter(&opt.skip_passes);
     let OptOverrides {
+        skip_passes: _,
         inline_threshold,
         inline_growth,
         iterations: opt_iterations,
@@ -646,6 +648,7 @@ fn audit_promoted_reads(project: &NirPackage, pass: &str) {
 }
 
 pub mod pass_dump {
+    use std::cell::RefCell;
     use std::sync::{Mutex, OnceLock};
 
     use super::NirPackage;
@@ -701,12 +704,41 @@ pub mod pass_dump {
         LIST.get_or_init(|| trace::parse_env_list(std::env::var("WADO_SKIP_PASS").ok().as_deref()))
     }
 
-    /// Returns true if `name` matches one of the comma-separated entries in
-    /// the `WADO_SKIP_PASS` env var. Each entry is matched against the bare
-    /// pass name (e.g., `nir/ref_elim`) and against `<pass>@<n>` where `<n>`
-    /// is the 1-based occurrence number — letting bisection target a
-    /// specific iteration (e.g., `nir/ref_elim@2`).
+    thread_local! {
+        static SKIPPED: RefCell<Vec<String>> = const { RefCell::new(Vec::new()) };
+    }
+
+    /// While it lives, the passes [`crate::OptOverrides::skip_passes`] names
+    /// are skipped on this thread. A thread is enough: the optimizer calls
+    /// every pass from the thread that entered it, whatever threads a pass
+    /// fans its work out to.
+    pub struct SkipScope;
+
+    impl SkipScope {
+        pub fn enter(passes: &[String]) -> Self {
+            SKIPPED.with_borrow_mut(|skipped| {
+                assert!(skipped.is_empty(), "skip scopes do not nest");
+                skipped.extend_from_slice(passes);
+            });
+            Self
+        }
+    }
+
+    impl Drop for SkipScope {
+        fn drop(&mut self) {
+            SKIPPED.with_borrow_mut(Vec::clear);
+        }
+    }
+
+    /// Returns true if the compile skips `name`, or if `name` matches one of the
+    /// comma-separated entries in the `WADO_SKIP_PASS` env var. Each entry is
+    /// matched against the bare pass name (e.g., `nir/ref_elim`) and against
+    /// `<pass>@<n>` where `<n>` is the 1-based occurrence number — letting
+    /// bisection target a specific iteration (e.g., `nir/ref_elim@2`).
     pub fn should_skip_pass(name: &str) -> bool {
+        if SKIPPED.with_borrow(|skipped| skipped.iter().any(|s| s == name)) {
+            return true;
+        }
         static COUNTS: OnceLock<Mutex<IndexMap<String, u32>>> = OnceLock::new();
         let list = skip_list();
         if list.is_empty() {

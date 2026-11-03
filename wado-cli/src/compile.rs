@@ -402,7 +402,7 @@ pub async fn try_compile_with_run_cache(
     let options = wado_compiler::CompilerOptions {
         opt_level: knobs.opt_level.to_compiler(),
         skip_validation: knobs.skip_validation,
-        opt: knobs.opt,
+        opt: knobs.opt.clone(),
         parallelism: knobs.optimize_threads(),
         log_level: Some(knobs.log_level),
         allocator: knobs.allocator.clone(),
