@@ -142,11 +142,13 @@ foo(100);                      // integer literal coerced to i64
 `{"key": ${v}}` // Braces are literal → {"key": <v>}
 #`C:\Users\${name}`#  // Raw template: a backslash is itself, holes still open
 ##`a`#b`##       // More #s on both ends let the text hold a backtick
+#"\d+$"#         // Raw string: no escapes and no holes; goes wherever "…" does
 "Hello,
 world!"         // Multi-line string
 
 // Byte strings (b-prefix) → ByteList, ASCII + \xNN escapes (no \u)
 b"\x89PNG\r\n"                 // ByteList [137, 80, 78, 71, 13, 10]
+b#"\x"#                        // raw: ByteList [92, 120]
 let raw: List<u8> = b"abc";    // newtype literal coercion to the base type
 
 // Byte literal (b-prefix on a char) → u8, ASCII + \xNN escapes (no \u)

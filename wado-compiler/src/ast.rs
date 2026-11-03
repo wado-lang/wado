@@ -14,7 +14,7 @@ use crate::escape::escape_string;
 use crate::hashmap::IndexMap;
 use crate::lexer::WILDCARD;
 use crate::name::{UNIT_TYPE_NAME, repeated_element};
-use crate::token::{Span, TemplateQuote};
+use crate::token::{Quote, Span};
 
 /// Identity of one `AstId` allocation space — one per parse. Each top-level
 /// [`crate::parser::Parser`] draws a fresh one from a process-global counter and
@@ -1611,8 +1611,8 @@ pub struct TestDecl {
     pub id: AstId,
     /// Attributes applied to this test (e.g., `#[expect_trap]`).
     pub attributes: Vec<Attribute>,
-    /// Optional test name (string literal). If None, identified by <file:line>.
-    pub name: Option<String>,
+    /// Optional test name. If None, identified by <file:line>.
+    pub name: Option<StrLit>,
     pub body: Block,
     pub span: Span,
 }
@@ -1656,6 +1656,10 @@ pub struct TestMetadata {
 }
 
 impl TestDecl {
+    pub fn name(&self) -> Option<&str> {
+        self.name.as_ref().map(|name| name.value.as_str())
+    }
+
     /// Resolve this test's `#[expect_trap]` / `#[TODO]` / `#[timeout_ms(..)]` /
     /// `#[synopsis]` / `#[workload]` attributes. `module_is_todo` folds in a
     /// module-level `#[TODO]`.
@@ -1700,8 +1704,9 @@ pub struct GlobalDecl {
 #[derive(Debug, Clone, Eq)]
 pub struct StrLit {
     pub value: String,
-    /// As written between the quotes, escapes unresolved.
+    /// As a cooked literal spells it, escapes unresolved.
     pub raw: String,
+    pub quote: Quote,
 }
 
 impl StrLit {
@@ -1711,7 +1716,11 @@ impl StrLit {
     pub fn new(value: impl Into<String>) -> Self {
         let value = value.into();
         let raw = escape_string(&value);
-        Self { value, raw }
+        Self {
+            value,
+            raw,
+            quote: Quote::Cooked,
+        }
     }
 
     #[must_use]
@@ -1722,7 +1731,7 @@ impl StrLit {
     /// The literal as written, quotes included.
     #[must_use]
     pub fn as_written(&self) -> String {
-        format!("\"{}\"", self.raw)
+        self.quote.write("", '"', &self.raw)
     }
 }
 
@@ -3840,11 +3849,12 @@ pub enum Literal {
     /// Numeric literal: raw source text (e.g. `"42"`, `"0xFF"`, `"3.14"`). Its
     /// type comes from its context.
     Number(String),
-    /// String literal: raw source text between quotes (escape sequences not interpreted).
-    String(String),
-    /// Byte-string literal `b"..."`: raw source text between quotes (escape
-    /// sequences not interpreted). Lowers to a constant `List<u8>`.
-    Bytes(String),
+    /// String literal: its text as a cooked literal spells it (escape
+    /// sequences not interpreted), and how the source quoted it.
+    String(String, Quote),
+    /// Byte-string literal `b"..."`, held as a string literal is. Lowers to a
+    /// constant `List<u8>`.
+    Bytes(String, Quote),
     /// Byte literal `b'x'`: raw source between quotes. Lowers to a `u8`.
     Byte(String),
     /// Char literal: raw source text between quotes (escape sequences not interpreted).
@@ -3861,9 +3871,9 @@ pub enum Literal {
     /// Compile-time data section literal: `#data`
     DataSection,
     /// Compile-time file include as string: `#include_str("path")`
-    IncludeStr(String),
+    IncludeStr(StrLit),
     /// Compile-time file include as bytes: `#include_bytes("path")`
-    IncludeBytes(String),
+    IncludeBytes(StrLit),
 }
 
 #[derive(Debug, Clone)]
@@ -4243,7 +4253,7 @@ pub struct TemplateStringExpr {
     /// Spelled as a cooked template, whatever the `quote`.
     pub parts: Vec<TemplatePart>,
     /// What the source wrote, which only printing the source back reads.
-    pub quote: TemplateQuote,
+    pub quote: Quote,
     pub span: Span,
 }
 

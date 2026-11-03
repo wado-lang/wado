@@ -508,6 +508,31 @@ as any integer literal does. Its value is always in `0..=255`. Its content
 follows a byte string's rule: one ASCII character or escape, with `\xNN` for
 `0x80..=0xFF` and no `\u`. A char literal `'…'` writes a Unicode scalar.
 
+### Raw Strings
+
+A raw string is written between `#"` and `"#`. A backslash in it is itself: it
+starts no escape, so no escape is an error there. Everything else, line breaks
+included, is literal text, and `${` opens no interpolation. A raw string means
+what the string that escapes each of its backslashes and quotes means, so it
+goes wherever a string literal goes: a `use` path, an attribute argument, a
+pattern. `b#"…"#` is a raw byte string, a `ByteList` whose source characters
+must be ASCII.
+
+The opener may carry more `#`s, and the closer is a quote followed by as many.
+So the text may hold a quote, or a quote followed by fewer `#`s:
+
+<!-- {"fixture":"raw_string_literal.wado"} -->
+
+```wado
+assert #"\d+\w\b"# == "\\d+\\w\\b";
+assert #"C:\Users\${name}"# == "C:\\Users\\${name}";
+assert #"\n"#.len() == 2;
+assert #"trailing \"# == "trailing \\";
+assert ##"a"b"#c"## == "a\"b\"#c";
+```
+
+A [raw template](#raw-template-strings) is the same with holes.
+
 ### Escape Sequences
 
 Escape sequences are shared between character, string and template literals,
@@ -641,9 +666,10 @@ Whitespace around the expression and around the specifier is ignored, so
 
 ### Raw Template Strings
 
-A raw template is a template between `` #` `` and `` `# ``. A backslash in it is
-itself: it starts no escape, so no escape is an error there. `${` still opens an
-interpolation, and everything else, line breaks included, is literal text. A
+A raw template is a template between `` #` `` and `` `# ``: a
+[raw string](#raw-strings) with holes. A backslash in it is itself: it starts no
+escape, so no escape is an error there. `${` still opens an interpolation, and
+everything else, line breaks included, is literal text. A
 raw template means what the template that escapes each of its backslashes and
 backticks means, so it is a `String`, and a tag before it takes it as it takes
 any template.

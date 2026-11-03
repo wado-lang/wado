@@ -602,8 +602,8 @@ fn classify_token(
 
             // Literals
             TokenKind::NumberLit(_) => (token_type::NUMBER, 0),
-            TokenKind::StringLit(_)
-            | TokenKind::ByteStringLit(_)
+            TokenKind::StringLit { .. }
+            | TokenKind::ByteStringLit { .. }
             | TokenKind::TemplateStringLit { .. }
             | TokenKind::ByteCharLit(_)
             | TokenKind::CharLit(_) => (token_type::STRING, 0),

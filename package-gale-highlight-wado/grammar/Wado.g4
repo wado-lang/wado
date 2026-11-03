@@ -776,6 +776,17 @@ STRING_LITERAL
     : 'b'? '"' ('\\' . | ~["\\])* '"'
     ;
 
+// A raw string is one STRING_LITERAL, as a cooked one is: `more` carries the
+// opener and the text into the closer, which types the whole run. Its `#`s
+// share the raw template's stack.
+RAW_STRING_OPEN
+    : '#'+ '"' { lx.raw_hashes.push(pos - start - 1) } -> more, pushMode(RAW_STRING)
+    ;
+
+RAW_BYTES_OPEN
+    : 'b' '#'+ '"' { lx.raw_hashes.push(pos - start - 2) } -> more, pushMode(RAW_STRING)
+    ;
+
 LBRACE
     : '{' -> pushMode(DEFAULT_MODE)
     ;
@@ -879,4 +890,20 @@ RAW_TEXT
 
 RAW_LONE
     : [`$] -> type(TEMPLATE_TEXT)
+    ;
+
+mode RAW_STRING;
+
+RAW_STRING_CLOSE
+    : '"' ({ pos - start <= lx.raw_hashes.last().unwrap() }? '#')+
+      { pos - start == lx.raw_hashes.last().unwrap() + 1 }?
+      { lx.raw_hashes.pop() } -> type(STRING_LITERAL), popMode
+    ;
+
+RAW_STRING_TEXT
+    : ~'"'+ -> more
+    ;
+
+RAW_STRING_QUOTE
+    : '"' -> more
     ;

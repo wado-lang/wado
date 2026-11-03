@@ -3801,6 +3801,55 @@ fn test_format_tagged_template_keeps_tag_adjacent() {
 }
 
 #[test]
+fn test_format_raw_string_kept_as_written() {
+    let source = r###"use { x } from #"./a.wado"#;
+
+#[unavailable(#"use \`y`"#)]
+fn z();
+
+fn foo() {
+    let a = #"\d+"#;
+    let b = ##"a"#b"##;
+    let c = b#"\x00"#;
+    match a {
+        #"\d"# => 1,
+        _ => 0,
+    }
+}
+"###;
+    let formatted = wado_compiler::format(source).expect("format failed");
+    assert_eq!(
+        formatted, source,
+        "a raw string keeps its delimiters and backslashes"
+    );
+}
+
+#[test]
+fn test_format_string_names_keep_their_value() {
+    let source = r###"test "a\\b" {
+    let s = #include_str(#"./x\y"#);
+    let p = { "k\\": 1, "q\"": 2, #"r\"#: 3 };
+}
+
+test #"c\d"# {
+}
+"###;
+    let expected = r###"test "a\\b" {
+    let s = #include_str(#"./x\y"#);
+    let p = { "k\\": 1, "q\"": 2, "r\\": 3 };
+}
+
+test #"c\d"# {
+}
+"###;
+    let formatted = wado_compiler::format(source).expect("format failed");
+    assert_eq!(
+        formatted, expected,
+        "a name spelled as a string keeps its value"
+    );
+}
+
+#[test]
 fn test_format_raw_template_kept_as_written() {
     let source = r"fn foo() {
     let a = #`\d+\${ n }\`#;

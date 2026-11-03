@@ -1539,9 +1539,8 @@ impl<'a> Unparser<'a> {
         self.emit_outer_attrs(t.id, &t.attributes);
         self.output.push_str("test");
         if let Some(name) = &t.name {
-            self.output.push_str(" \"");
-            self.output.push_str(name);
-            self.output.push('"');
+            self.output.push(' ');
+            self.output.push_str(&name.as_written());
         }
         self.braced_block(t.span.start, &t.body);
         self.output.push('\n');
@@ -2073,16 +2072,8 @@ impl<'a> Unparser<'a> {
     fn unparse_literal(&mut self, lit: &Literal) {
         match lit {
             Literal::Number(repr) => self.output.push_str(repr),
-            Literal::String(raw) => {
-                self.output.push('"');
-                self.output.push_str(raw);
-                self.output.push('"');
-            }
-            Literal::Bytes(raw) => {
-                self.output.push_str("b\"");
-                self.output.push_str(raw);
-                self.output.push('"');
-            }
+            Literal::String(raw, quote) => self.output.push_str(&quote.write("", '"', raw)),
+            Literal::Bytes(raw, quote) => self.output.push_str(&quote.write("b", '"', raw)),
             Literal::Byte(raw) => {
                 self.output.push_str("b'");
                 self.output.push_str(raw);
@@ -2101,14 +2092,10 @@ impl<'a> Unparser<'a> {
             Literal::LocationFunction => self.output.push_str("#function"),
             Literal::DataSection => self.output.push_str("#data"),
             Literal::IncludeStr(path) => {
-                self.output.push_str("#include_str(\"");
-                self.output.push_str(path);
-                self.output.push_str("\")");
+                self.output.push_str(&format!("#include_str({})", path.as_written()));
             }
             Literal::IncludeBytes(path) => {
-                self.output.push_str("#include_bytes(\"");
-                self.output.push_str(path);
-                self.output.push_str("\")");
+                self.output.push_str(&format!("#include_bytes({})", path.as_written()));
             }
         }
     }

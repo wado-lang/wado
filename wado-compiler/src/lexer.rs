@@ -16,7 +16,7 @@ use crate::compiler_host::{Code, Diagnostic, DiagnosticSpan, Severity};
 use crate::elaborator::float_literal::FloatFormat;
 use crate::primitive::PrimitiveType;
 use crate::token;
-use crate::token::{Position, Span, TemplateQuote, TemplateTokenPart, Token, TokenKind};
+use crate::token::{Position, Quote, Span, TemplateTokenPart, Token, TokenKind};
 
 /// Whether `c` may open an identifier: `[a-zA-Z_]`.
 pub fn is_ident_start(c: char) -> bool {
@@ -215,8 +215,10 @@ enum Scan {
     /// A nested `` `…` `` literal. Backticks strictly alternate open and close,
     /// so a flag counts the same characters a depth would.
     Template,
-    /// A nested `` #`…`# `` literal, closed by a backtick and `hashes` `#`s.
-    RawTemplate {
+    /// A nested raw literal, `#"…"#` or `` #`…`# ``, closed by its `delimiter`
+    /// and `hashes` `#`s.
+    Raw {
+        delimiter: char,
         hashes: usize,
     },
     LineComment,
@@ -231,7 +233,7 @@ impl Scan {
             Self::Char => '\'',
             Self::Template => '`',
             Self::LineComment => '\n',
-            Self::Code | Self::BlockComment | Self::RawTemplate { .. } => {
+            Self::Code | Self::BlockComment | Self::Raw { .. } => {
                 unreachable!("no single-character terminator")
             }
         }
@@ -553,7 +555,10 @@ impl<'a> Lexer<'a> {
 
         let kind = match ch {
             // `b"..."` / `b'x'` — before the identifier rule so `b` is not an ident.
-            'b' if self.peek_second() == Some('"') => self.lex_byte_string(),
+            'b' if self.peek_second() == Some('"') => self.lex_byte_string(Quote::Cooked),
+            'b' if let Some((hashes, '"')) = self.hash_run_then_delimiter(1) => {
+                self.lex_byte_string(Quote::Raw { hashes })
+            }
             'b' if self.peek_second() == Some('\'') => self.lex_byte_char(),
 
             // Identifiers and keywords
@@ -563,13 +568,13 @@ impl<'a> Lexer<'a> {
             '0'..='9' => self.lex_number(),
 
             // Strings
-            '"' => self.lex_string(),
+            '"' => self.lex_string(Quote::Cooked),
 
             // Character literals
             '\'' => self.lex_char(),
 
             // Template strings
-            '`' => self.lex_template_string(TemplateQuote::Cooked),
+            '`' => self.lex_template_string(Quote::Cooked),
 
             // Punctuation and operators
             '(' => {
@@ -792,9 +797,10 @@ impl<'a> Lexer<'a> {
                     _ => TokenKind::Ampersand,
                 }
             }
-            '#' => match self.hash_run_then_backtick() {
-                Some(hashes) => self.lex_template_string(TemplateQuote::Raw { hashes }),
-                None => {
+            '#' => match self.hash_run_then_delimiter(0) {
+                Some((hashes, '`')) => self.lex_template_string(Quote::Raw { hashes }),
+                Some((hashes, '"')) => self.lex_string(Quote::Raw { hashes }),
+                _ => {
                     self.advance();
                     TokenKind::Hash
                 }
@@ -1206,26 +1212,77 @@ impl<'a> Lexer<'a> {
         self.finish_number(start, start_line, start_column, Some(radix), error)
     }
 
-    fn lex_string(&mut self) -> TokenKind {
-        let start = self.pos;
-        let start_line = self.line;
-        let start_column = self.column;
-        self.advance(); // consume opening "
-        let raw = self.scan_quoted_raw(start, start_line, start_column);
-        TokenKind::StringLit(raw)
+    fn lex_string(&mut self, quote: Quote) -> TokenKind {
+        let raw = self.scan_string_body(quote);
+        TokenKind::StringLit { raw, quote }
     }
 
     /// Lex a byte-string literal `b"..."`. The leading `b` is still pending
-    /// (dispatched here because the next char is `"`, so it cannot be an
-    /// identifier). Same raw scan as a string; lowers to `List<u8>`.
-    fn lex_byte_string(&mut self) -> TokenKind {
+    /// (dispatched here because a quote or a raw opener follows, so it cannot
+    /// be an identifier). Same scan as a string; lowers to `List<u8>`.
+    fn lex_byte_string(&mut self, quote: Quote) -> TokenKind {
+        let raw = self.scan_string_body(quote);
+        TokenKind::ByteStringLit { raw, quote }
+    }
+
+    /// The text of a `"`-delimited literal from its first character, prefix
+    /// included, through its closer.
+    fn scan_string_body(&mut self, quote: Quote) -> String {
         let start = self.pos;
         let start_line = self.line;
         let start_column = self.column;
-        self.advance(); // consume `b`
-        self.advance(); // consume opening "
-        let raw = self.scan_quoted_raw(start, start_line, start_column);
-        TokenKind::ByteStringLit(raw)
+        let prefix = usize::from(self.peek_char() == Some('b'));
+        self.advance_n(prefix + quote.hash_count() + 1); // through the opening quote
+        match quote {
+            Quote::Cooked => self.scan_quoted_raw(start, start_line, start_column),
+            Quote::Raw { hashes } => {
+                self.scan_raw_quoted(hashes, start, start_line, start_column)
+            }
+        }
+    }
+
+    /// The text of a raw string up to and including its closer, spelled as a
+    /// cooked string spells it.
+    fn scan_raw_quoted(
+        &mut self,
+        hashes: usize,
+        start: usize,
+        start_line: usize,
+        start_column: usize,
+    ) -> String {
+        let mut text = String::new();
+        loop {
+            match self.peek() {
+                None => {
+                    self.errors.push(LexError {
+                        kind: LexErrorKind::UnterminatedString,
+                        span: self.span_from(start, start_line, start_column),
+                    });
+                    return text;
+                }
+                Some((_, '"')) => {
+                    self.advance();
+                    if self.at_hashes(hashes) {
+                        self.advance_n(hashes);
+                        return text;
+                    }
+                    text.push_str("\\\"");
+                }
+                Some((_, '\\')) => {
+                    self.advance();
+                    text.push_str(r"\\");
+                }
+                Some((_, '\r')) => {
+                    if self.advance_literal_cr() {
+                        text.push('\n');
+                    }
+                }
+                Some((_, ch)) => {
+                    self.advance();
+                    text.push(ch);
+                }
+            }
+        }
     }
 
     /// Scan the raw content of a `"`-quoted literal up to and including the
@@ -1338,11 +1395,16 @@ impl<'a> Lexer<'a> {
         }
     }
 
-    /// The number of `#`s from the cursor, when a backtick follows them.
-    fn hash_run_then_backtick(&self) -> Option<usize> {
-        let rest = self.input[self.pos..].as_bytes();
+    /// The run of `#`s `skip` bytes past the cursor, with the raw literal's
+    /// delimiter that follows it. `None` where no delimiter follows.
+    fn hash_run_then_delimiter(&self, skip: usize) -> Option<(usize, char)> {
+        let rest = &self.input.as_bytes()[self.pos + skip..];
         let hashes = rest.iter().take_while(|&&b| b == b'#').count();
-        (rest.get(hashes) == Some(&b'`')).then_some(hashes)
+        match rest.get(hashes) {
+            Some(b'`') => Some((hashes, '`')),
+            Some(b'"') => Some((hashes, '"')),
+            _ => None,
+        }
     }
 
     /// Whether the `hashes` characters after the cursor are all `#`.
@@ -1361,7 +1423,7 @@ impl<'a> Lexer<'a> {
 
     /// A raw template's text reaches the parser spelled as a cooked template
     /// would spell it, so every phase after this one reads one form.
-    fn lex_template_string(&mut self, quote: TemplateQuote) -> TokenKind {
+    fn lex_template_string(&mut self, quote: Quote) -> TokenKind {
         let start = self.pos;
         let start_line = self.line;
         let start_column = self.column;
@@ -1384,7 +1446,7 @@ impl<'a> Lexer<'a> {
                     }
                     return TokenKind::TemplateStringLit { parts, quote };
                 }
-                Some((_, '\\')) if matches!(quote, TemplateQuote::Raw { .. }) => {
+                Some((_, '\\')) if matches!(quote, Quote::Raw { .. }) => {
                     self.advance();
                     current_literal.push_str(r"\\");
                 }
@@ -1527,8 +1589,8 @@ impl<'a> Lexer<'a> {
                     }
                     continue;
                 }
-                Scan::RawTemplate { hashes } => {
-                    if ch == '`' && self.at_hashes(hashes) {
+                Scan::Raw { delimiter, hashes } => {
+                    if ch == delimiter && self.at_hashes(hashes) {
                         for _ in 0..hashes {
                             self.advance();
                             push(&mut expr, &mut format, '#');
@@ -1560,13 +1622,16 @@ impl<'a> Lexer<'a> {
                 '\'' => scan = Scan::Char,
                 '`' => scan = Scan::Template,
                 '#' => {
-                    if let Some(more) = self.hash_run_then_backtick() {
-                        // The rest of the opener: further `#`s, then the backtick.
+                    if let Some((more, delimiter)) = self.hash_run_then_delimiter(0) {
+                        // The rest of the opener: further `#`s, then the delimiter.
                         for _ in 0..=more {
                             let opener = self.advance().expect("the opener was scanned");
                             push(&mut expr, &mut format, opener);
                         }
-                        scan = Scan::RawTemplate { hashes: more + 1 };
+                        scan = Scan::Raw {
+                            delimiter,
+                            hashes: more + 1,
+                        };
                     }
                 }
                 '/' => match self.peek_char() {
@@ -1743,7 +1808,7 @@ mod tests {
         assert_matches!(&tokens[2].kind, TokenKind::Ident(s) if s == "println");
         assert_matches!(tokens[3].kind, TokenKind::RBrace);
         assert_matches!(tokens[4].kind, TokenKind::From);
-        assert_matches!(&tokens[5].kind, TokenKind::StringLit(raw) if raw == "core:cli");
+        assert_matches!(&tokens[5].kind, TokenKind::StringLit { raw, .. } if raw == "core:cli");
         assert_matches!(tokens[6].kind, TokenKind::Semicolon);
     }
 
@@ -1751,14 +1816,32 @@ mod tests {
     fn test_string_literal() {
         let tokens = tokens(r#""Hello, world!""#);
 
-        assert_matches!(&tokens[0].kind, TokenKind::StringLit(raw) if raw == "Hello, world!");
+        assert_matches!(&tokens[0].kind, TokenKind::StringLit { raw, quote: Quote::Cooked } if raw == "Hello, world!");
+    }
+
+    /// A raw string reaches the parser as the cooked string spelling the same
+    /// text, and closes only at a quote followed by as many `#`s as opened it.
+    #[test]
+    fn test_raw_string_respelled_cooked() {
+        let t = tokens(r###"##"a\d"#b"## + 1"###);
+        assert_matches!(
+            &t[0].kind,
+            TokenKind::StringLit { raw, quote: Quote::Raw { hashes: 2 } } if raw == r##"a\\d\"#b"##
+        );
+        assert_matches!(t[1].kind, TokenKind::Plus);
+
+        let b = tokens(r##"b#"\x00"#"##);
+        assert_matches!(
+            &b[0].kind,
+            TokenKind::ByteStringLit { raw, quote: Quote::Raw { hashes: 1 } } if raw == r"\\x00"
+        );
     }
 
     #[test]
     fn test_byte_string_literal() {
         // `b"..."` is a byte string; raw content is kept (escapes uninterpreted).
         let bs = tokens(r#"b"a\x00b""#);
-        assert_matches!(&bs[0].kind, TokenKind::ByteStringLit(raw) if raw == r"a\x00b");
+        assert_matches!(&bs[0].kind, TokenKind::ByteStringLit { raw, .. } if raw == r"a\x00b");
 
         // A bare `b` not followed by `"` is still an identifier.
         let ident = tokens("b + 1");
@@ -1767,7 +1850,7 @@ mod tests {
         // An identifier ending in `b` is not mistaken for a byte string.
         let suffixed = tokens(r#"ab"x""#);
         assert_matches!(&suffixed[0].kind, TokenKind::Ident(s) if s == "ab");
-        assert_matches!(&suffixed[1].kind, TokenKind::StringLit(raw) if raw == "x");
+        assert_matches!(&suffixed[1].kind, TokenKind::StringLit { raw, .. } if raw == "x");
     }
 
     #[test]
@@ -2094,7 +2177,7 @@ test data";
 
         // A plain string behaves the same way.
         let plain = tokens(r#""\u{12" + 1"#);
-        assert_matches!(&plain[0].kind, TokenKind::StringLit(raw) if raw == r"\u{12");
+        assert_matches!(&plain[0].kind, TokenKind::StringLit { raw, .. } if raw == r"\u{12");
         assert_matches!(plain[1].kind, TokenKind::Plus);
     }
 
@@ -2202,7 +2285,7 @@ test data";
         let t = tokens(r"`a\`b\{c\$d\u{1F600}eAf`");
         assert_matches!(
             &t[0].kind,
-            TokenKind::TemplateStringLit { parts, quote: TemplateQuote::Cooked }
+            TokenKind::TemplateStringLit { parts, quote: Quote::Cooked }
                 if parts.as_slice() == [TemplateTokenPart::Literal( r"a\`b\{c\$d\u{1F600}eAf".to_string() )]
         );
     }
@@ -2214,7 +2297,7 @@ test data";
         let t = tokens(r"##`a\d`#b`## + 1");
         assert_matches!(
             &t[0].kind,
-            TokenKind::TemplateStringLit { parts, quote: TemplateQuote::Raw { hashes: 2 } }
+            TokenKind::TemplateStringLit { parts, quote: Quote::Raw { hashes: 2 } }
                 if parts.as_slice() == [TemplateTokenPart::Literal(r"a\\d\`#b".to_string())]
         );
         assert_matches!(t[1].kind, TokenKind::Plus);

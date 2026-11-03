@@ -128,6 +128,16 @@ test "a raw template closes at as many hashes as opened it" {
     assert html.contains("<span class=\"string\">w</span>"), "the outer count survives the nested one";
 }
 
+test "a raw string is one string token wherever a string goes" {
+    let src = "use { x } from #\"./a.wado\"#;\nfn f() -> i32 { let b = b#\"\\x\"#; return match ##\"a\"#b\"## { #\"\\d\"# => 1, _ => 0 }; }\n";
+    assert parse(&src).ok(), "parse failed";
+    let html = highlight(src);
+    assert html.contains("<span class=\"string\">#&quot;./a.wado&quot;#</span>"), "a use path";
+    assert html.contains("<span class=\"string\">b#&quot;\\x&quot;#</span>"), "a raw byte string";
+    assert html.contains("<span class=\"string\">##&quot;a&quot;#b&quot;##</span>"), "a shorter closer is text";
+    assert html.contains("<span class=\"string\">#&quot;\\d&quot;#</span>"), "a pattern";
+}
+
 test "highlight fragment: unterminated fn body keeps interpolation context" {
     let src = "fn f() { let x = 1.5; let s = `v = ${x:0.2}`;\n";
     assert !parse(&src).ok(), "fragment should not parse cleanly";

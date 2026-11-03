@@ -1777,7 +1777,7 @@ impl<'a> Reify<'a> {
             is_synopsis,
             is_workload,
         } = meta;
-        let function_name = test_function_name(&meta, test_index, test_decl.name.as_deref());
+        let function_name = test_function_name(&meta, test_index, test_decl.name());
 
         let return_type = TypeTable::UNIT;
         let mut ctx = FunctionContext::new(return_type, function_name.clone());
@@ -1821,7 +1821,7 @@ impl<'a> Reify<'a> {
         };
 
         let tir_test = TirTest {
-            name: test_decl.name.clone(),
+            name: test_decl.name().map(str::to_owned),
             function_name,
             line: test_decl.span.line,
             span: test_decl.span,
@@ -8573,7 +8573,7 @@ impl<'a> Reify<'a> {
                 };
                 return self.reify_numeric_literal(&byte.to_string(), byte_type, lit.span);
             }
-            ast::Literal::String(s) => {
+            ast::Literal::String(s, _) => {
                 // Decode escape sequences (`\"`, `\n`, `\\`, …) the same
                 // way the elaborator does — the AST holds
                 // the raw source text. Without this a literal like
@@ -8582,7 +8582,7 @@ impl<'a> Reify<'a> {
                 let value = unescape_string(s).unwrap_or_default();
                 TirExprKind::StringLiteral(value)
             }
-            ast::Literal::Bytes(raw) => {
+            ast::Literal::Bytes(raw, _) => {
                 // Decode the raw source to bytes and reuse the `#include_bytes`
                 // lowering (`BytesLiteral` -> byte-buffer data segment).
                 let bytes = unescape_bytes(raw).unwrap_or_default();
@@ -8664,13 +8664,13 @@ impl<'a> Reify<'a> {
                     .unwrap_or_default();
                 return TirExpr::new(TirExprKind::StringLiteral(data), string_type, lit.span);
             }
-            ast::Literal::IncludeStr(raw_path) => {
+            ast::Literal::IncludeStr(path) => {
                 let string_type = self
                     .tysys
                     .type_table
                     .borrow_mut()
                     .make_compiler_struct(CompilerItem::String);
-                let key = [self.current_module_source.to_string(), raw_path.clone()];
+                let key = [self.current_module_source.to_string(), path.value.clone()];
                 let value = self
                     .tysys
                     .included_files
@@ -8680,13 +8680,13 @@ impl<'a> Reify<'a> {
                     .unwrap_or_default();
                 return TirExpr::new(TirExprKind::StringLiteral(value), string_type, lit.span);
             }
-            ast::Literal::IncludeBytes(raw_path) => {
+            ast::Literal::IncludeBytes(path) => {
                 let array_u8_type = if recorded_type == TypeTable::UNKNOWN {
                     self.tysys.type_table.borrow_mut().make_byte_list()
                 } else {
                     recorded_type
                 };
-                let key = [self.current_module_source.to_string(), raw_path.clone()];
+                let key = [self.current_module_source.to_string(), path.value.clone()];
                 let bytes = self
                     .tysys
                     .included_files
@@ -9197,7 +9197,7 @@ impl<'a> Reify<'a> {
                 // string literals decode their escapes, and `null` on a
                 // variant scrutinee with a `None` case lowers to that case.
                 let tir_lit = match lit {
-                    ast::Literal::String(raw) => {
+                    ast::Literal::String(raw, _) => {
                         TirLiteralPattern::String(unescape_string(raw).unwrap_or_default())
                     }
                     ast::Literal::Null => {
@@ -9209,7 +9209,7 @@ impl<'a> Reify<'a> {
                     // Not pattern literals in the surface grammar; the parser
                     // rejects them, so reaching here is an invariant violation.
                     ast::Literal::Unit
-                    | ast::Literal::Bytes(_)
+                    | ast::Literal::Bytes(..)
                     | ast::Literal::LocationFile
                     | ast::Literal::LocationLine
                     | ast::Literal::LocationFunction

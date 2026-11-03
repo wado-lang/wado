@@ -31,7 +31,7 @@ use crate::lexer::{LexResult, WILDCARD, defaults_to_float, is_decimal_integer, l
 use crate::name::{contract_holder_name, namespaced_name, repeat_pack_name};
 use crate::syntax::statement_keyword_name_message;
 use crate::token::{
-    Position, Span, TemplateQuote, TemplateTokenPart, Token, TokenKind, TokenKind as T,
+    Position, Quote, Span, TemplateTokenPart, Token, TokenKind, TokenKind as T,
 };
 use crate::{ast, format_spec, hashmap};
 use std::sync::Arc;
@@ -562,7 +562,7 @@ impl Parser {
         }
 
         // First token must be a valid field name (identifier, keyword, or string literal)
-        let is_string_lit = matches!(after_brace, TokenKind::StringLit(_));
+        let is_string_lit = matches!(after_brace, TokenKind::StringLit { .. });
         if after_brace.as_ident_name().is_none()
             && after_brace.as_keyword_str().is_none()
             && !is_string_lit
@@ -1524,9 +1524,8 @@ impl Parser {
         self.advance();
 
         // Optional test name (string literal)
-        let name = if let TokenKind::StringLit(raw) = self.peek_kind().clone() {
-            self.advance();
-            Some(raw)
+        let name = if matches!(self.peek_kind(), TokenKind::StringLit { .. }) {
+            Some(self.take_string()?)
         } else {
             None
         };
@@ -1643,16 +1642,16 @@ impl Parser {
         })
     }
 
-    /// Consume the string literal the cursor is on, `raw` its text, with its
-    /// escapes resolved the way an expression's string literal has them resolved.
-    fn take_string(&mut self, raw: &str) -> ParseResult<StrLit> {
-        let span = self.peek().span;
-        self.advance();
-        let value = unescape_string(raw).map_err(|message| self.error_at_span(span, &message))?;
-        Ok(StrLit {
-            value,
-            raw: raw.to_string(),
-        })
+    /// Consume the string literal the cursor is on, with its escapes resolved
+    /// the way an expression's string literal has them resolved.
+    fn take_string(&mut self) -> ParseResult<StrLit> {
+        let token = self.advance().clone();
+        let TokenKind::StringLit { raw, quote } = token.kind else {
+            unreachable!("the caller matched a string literal")
+        };
+        let value =
+            unescape_string(&raw).map_err(|message| self.error_at_span(token.span, &message))?;
+        Ok(StrLit { value, raw, quote })
     }
 
     /// Parse a comma-separated list of attribute arguments up to the closing
@@ -1665,7 +1664,7 @@ impl Parser {
             // `as_ident_name`, so a contextual keyword can be a key.
             let key = self.peek_kind().as_ident_name().map(str::to_string);
             let arg = match (key, self.peek_kind().clone()) {
-                (_, TokenKind::StringLit(raw)) => AttrArg::Str(self.take_string(&raw)?),
+                (_, TokenKind::StringLit { .. }) => AttrArg::Str(self.take_string()?),
                 (Some(value), _) => {
                     self.mark_keyword_name();
                     self.advance();
@@ -1673,8 +1672,8 @@ impl Parser {
                     if self.check(&TokenKind::Eq) {
                         self.advance();
                         match self.peek_kind().clone() {
-                            TokenKind::StringLit(val) => {
-                                AttrArg::KeyValue(value, self.take_string(&val)?)
+                            TokenKind::StringLit { .. } => {
+                                AttrArg::KeyValue(value, self.take_string()?)
                             }
                             TokenKind::LBracket => {
                                 self.advance();
@@ -1688,8 +1687,8 @@ impl Parser {
                                     loop {
                                         let kind = self.peek_kind().clone();
                                         match (&kind, kind.as_ident_name()) {
-                                            (TokenKind::StringLit(item), _) if !names => {
-                                                strings.push(self.take_string(item)?);
+                                            (TokenKind::StringLit { .. }, _) if !names => {
+                                                strings.push(self.take_string()?);
                                             }
                                             (_, Some(named)) if names => {
                                                 idents.push(named.to_string());
@@ -1975,7 +1974,7 @@ impl Parser {
 
         loop {
             let name_span = self.peek().span;
-            let item = if matches!(self.peek_kind(), TokenKind::StringLit(_)) {
+            let item = if matches!(self.peek_kind(), TokenKind::StringLit { .. }) {
                 self.parse_use_interface_name(name_span)?
             } else {
                 let name = self.consume_ident()?;
@@ -2157,7 +2156,7 @@ impl Parser {
             false
         };
         match self.peek_kind().clone() {
-            TokenKind::StringLit(_) => {
+            TokenKind::StringLit { .. } => {
                 if negate {
                     return Err(ParseError {
                         message: "cannot negate a string literal".to_string(),
@@ -2224,10 +2223,7 @@ impl Parser {
 
     fn consume_string(&mut self) -> ParseResult<StrLit> {
         match self.peek_kind() {
-            TokenKind::StringLit(raw) => {
-                let raw = raw.clone();
-                self.take_string(&raw)
-            }
+            TokenKind::StringLit { .. } => self.take_string(),
             _ => Err(ParseError {
                 message: "expected string literal".to_string(),
                 span: self.peek().span,
@@ -3781,10 +3777,10 @@ impl Parser {
             // Literal pattern: 42 or 3.14
             self.advance();
             Ok(Pattern::Literal(Literal::Number(repr)))
-        } else if let TokenKind::StringLit(raw) = self.peek_kind().clone() {
+        } else if let TokenKind::StringLit { raw, quote } = self.peek_kind().clone() {
             // Literal pattern: "hello"
             self.advance();
-            Ok(Pattern::Literal(Literal::String(raw)))
+            Ok(Pattern::Literal(Literal::String(raw, quote)))
         } else if let TokenKind::CharLit(raw) = self.peek_kind().clone() {
             // Literal pattern: 'a'
             self.advance();
@@ -3861,10 +3857,9 @@ impl Parser {
                     // order `visit_pattern` walks.
                     let field_id = self.alloc_ast_id();
                     let field_span = self.peek().span;
-                    let field_name = if let TokenKind::StringLit(s) = self.peek_kind().clone() {
-                        // Allow string literals as field names for JSON compatibility
-                        self.advance();
-                        s
+                    // A string literal names a field for JSON compatibility.
+                    let field_name = if matches!(self.peek_kind(), TokenKind::StringLit { .. }) {
+                        self.take_string()?.value
                     } else if let Some(name) = self.peek_kind().as_ident_name() {
                         let name = name.to_string();
                         self.mark_keyword_name();
@@ -4967,9 +4962,11 @@ impl Parser {
             TokenKind::NumberLit(repr) => {
                 Ok(self.consume_literal(Literal::Number(repr), start_span))
             }
-            TokenKind::StringLit(raw) => Ok(self.consume_literal(Literal::String(raw), start_span)),
-            TokenKind::ByteStringLit(raw) => {
-                Ok(self.consume_literal(Literal::Bytes(raw), start_span))
+            TokenKind::StringLit { raw, quote } => {
+                Ok(self.consume_literal(Literal::String(raw, quote), start_span))
+            }
+            TokenKind::ByteStringLit { raw, quote } => {
+                Ok(self.consume_literal(Literal::Bytes(raw, quote), start_span))
             }
             TokenKind::ByteCharLit(raw) => Ok(self.consume_literal(Literal::Byte(raw), start_span)),
             TokenKind::TemplateStringLit { parts, quote } => {
@@ -5107,7 +5104,7 @@ impl Parser {
         }
 
         // `{ "field" :` — string literal field name
-        if let TokenKind::StringLit(_) = self.peek_kind()
+        if let TokenKind::StringLit { .. } = self.peek_kind()
             && matches!(self.peek_nth(1).kind, TokenKind::Colon)
         {
             return self.parse_struct_literal(None, start_span);
@@ -5156,11 +5153,9 @@ impl Parser {
         if name == "include_str" || name == "include_bytes" {
             let is_str = name == "include_str";
             self.expect(&TokenKind::LParen)?;
-            let (path, path_span) = match self.peek_kind() {
-                TokenKind::StringLit(s) => {
-                    let s = s.clone();
-                    (s, self.advance().span)
-                }
+            let path_span = self.peek().span;
+            let path = match self.peek_kind() {
+                TokenKind::StringLit { .. } => self.take_string()?,
                 _ => {
                     return Err(ParseError {
                         message: format!("expected string literal path argument for `#{name}`"),
@@ -5169,7 +5164,7 @@ impl Parser {
                 }
             };
             let close_span = self.expect(&TokenKind::RParen)?.span;
-            self.include_paths.entry(path.clone()).or_insert(path_span);
+            self.include_paths.entry(path.value.clone()).or_insert(path_span);
             let value = if is_str {
                 Literal::IncludeStr(path)
             } else {
@@ -7149,7 +7144,7 @@ impl Parser {
     fn parse_template_string_parts(
         &mut self,
         token_parts: Vec<TemplateTokenPart>,
-        quote: TemplateQuote,
+        quote: Quote,
         span: Span,
     ) -> ParseResult<TemplateStringExpr> {
         let mut parts = Vec::new();
@@ -7377,10 +7372,9 @@ impl Parser {
                 }
 
                 let field_name_span = self.peek().span;
-                // Allow string literals as field names for JSON compatibility
-                let field_name = if let TokenKind::StringLit(s) = self.peek_kind().clone() {
-                    self.advance();
-                    s
+                // A string literal names a field for JSON compatibility.
+                let field_name = if matches!(self.peek_kind(), TokenKind::StringLit { .. }) {
+                    self.take_string()?.value
                 } else {
                     self.consume_field_name()?
                 };
@@ -8927,7 +8921,7 @@ mod tests {
                 // Check that message is present and is a string literal
                 assert!(assert_stmt.message.is_some());
                 if let Some(Expr::Literal(lit)) = &assert_stmt.message {
-                    assert_matches!(&lit.value, Literal::String(s) if s == "x must be positive");
+                    assert_matches!(&lit.value, Literal::String(s, _) if s == "x must be positive");
                 } else {
                     panic!("expected string literal message");
                 }

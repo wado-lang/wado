@@ -2366,7 +2366,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         span: Span,
         site: Span,
     ) {
-        if let Literal::String(_) = lit {
+        if let Literal::String(..) = lit {
             if self.string_pattern_mismatch(scrutinee_type) {
                 self.emit_pattern_literal_error(
                     util::PatternLiteralError::Mismatch("String".to_string()),

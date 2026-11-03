@@ -26,17 +26,18 @@ pub enum TemplateTokenPart {
     },
 }
 
-/// How a template literal is delimited, which decides what a backslash in it
-/// means.
+/// How a string, byte string or template literal is delimited, which decides
+/// what a backslash in it means.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum TemplateQuote {
-    /// `` `…` ``: a backslash starts an escape.
+pub enum Quote {
+    /// `"…"`, `` `…` ``: a backslash starts an escape.
     Cooked,
-    /// `` #`…`# ``, with `hashes` `#`s on each end: a backslash is itself.
+    /// `#"…"#`, `` #`…`# ``, with `hashes` `#`s on each end: a backslash is
+    /// itself.
     Raw { hashes: usize },
 }
 
-impl TemplateQuote {
+impl Quote {
     /// How many `#`s stand on each end.
     #[must_use]
     pub fn hash_count(self) -> usize {
@@ -46,9 +47,17 @@ impl TemplateQuote {
         }
     }
 
-    /// A segment as this quoting writes it, from the cooked spelling the lexer
-    /// gave it. In a raw template every backslash there is one the lexer added,
-    /// before a `\` or a backtick.
+    /// The literal as written, from the cooked spelling the lexer gave its
+    /// text: `prefix` (`b` or nothing), the `#`s, and `delimiter` on each end.
+    #[must_use]
+    pub fn write(self, prefix: &str, delimiter: char, cooked: &str) -> String {
+        let hashes = "#".repeat(self.hash_count());
+        format!("{prefix}{hashes}{delimiter}{}{delimiter}{hashes}", self.spell(cooked))
+    }
+
+    /// Text as this quoting writes it, from the cooked spelling the lexer gave
+    /// it. In a raw literal every backslash there is one the lexer added,
+    /// before a `\` or the delimiter.
     #[must_use]
     pub fn spell(self, cooked: &str) -> String {
         match self {
@@ -189,16 +198,24 @@ pub enum TokenKind {
 
     // Literals
     Ident(String),
-    /// String literal: raw source text between the quotes (escape sequences not interpreted).
-    StringLit(String),
-    /// Byte-string literal `b"..."`: raw source text between the quotes (escape
-    /// sequences not interpreted). Lowers to a constant `List<u8>`.
-    ByteStringLit(String),
+    /// String literal. `raw` is its text as a cooked literal spells it, escape
+    /// sequences not interpreted; a raw literal's text arrives respelled that
+    /// way.
+    StringLit {
+        raw: String,
+        quote: Quote,
+    },
+    /// Byte-string literal `b"..."`, its text held as a string literal's is.
+    /// Lowers to a constant `List<u8>`.
+    ByteStringLit {
+        raw: String,
+        quote: Quote,
+    },
     /// Byte literal `b'x'`: raw source between the quotes. Lowers to a `u8`.
     ByteCharLit(String),
     TemplateStringLit {
         parts: Vec<TemplateTokenPart>,
-        quote: TemplateQuote,
+        quote: Quote,
     },
     /// Char literal: raw source text between the quotes (escape sequences not interpreted).
     CharLit(String),
@@ -309,8 +326,8 @@ impl fmt::Display for TokenKind {
             Self::Ident(name) => return write!(f, "identifier `{name}`"),
             Self::NumberLit(text) => return write!(f, "number `{text}`"),
             Self::Error(text) => return write!(f, "`{text}`"),
-            Self::StringLit(_) => return f.write_str("a string literal"),
-            Self::ByteStringLit(_) => return f.write_str("a byte string literal"),
+            Self::StringLit { .. } => return f.write_str("a string literal"),
+            Self::ByteStringLit { .. } => return f.write_str("a byte string literal"),
             Self::ByteCharLit(_) => return f.write_str("a byte literal"),
             Self::CharLit(_) => return f.write_str("a character literal"),
             Self::TemplateStringLit { .. } => return f.write_str("a template literal"),

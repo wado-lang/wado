@@ -1391,9 +1391,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return ByteLiteral::Not;
         };
         let len = match &lit.value {
-            ast::Literal::Bytes(raw) => unescape_bytes(raw).ok().map(|b| b.len()),
-            ast::Literal::IncludeBytes(raw_path) => {
-                let key = [self.home_module(lit.id).to_string(), raw_path.clone()];
+            ast::Literal::Bytes(raw, _) => unescape_bytes(raw).ok().map(|b| b.len()),
+            ast::Literal::IncludeBytes(path) => {
+                let key = [self.home_module(lit.id).to_string(), path.value.clone()];
                 self.tysys.included_files.get(&key).map(Vec::len)
             }
             _ => return ByteLiteral::Not,
