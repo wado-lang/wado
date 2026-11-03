@@ -12,6 +12,7 @@ pub mod kiln;
 mod location;
 mod query;
 mod references;
+pub mod scip;
 pub mod semantic_tokens;
 pub mod server;
 #[doc(hidden)]
@@ -551,6 +552,19 @@ impl Engine {
             references::find_references(ctx, position, include_declaration)
         })
         .await
+    }
+
+    /// The document's declarations and the references its code makes, as a
+    /// SCIP document with paths relative to `root` (a directory URI ending in
+    /// `/`).
+    pub async fn scip_document<H: CompilerHost>(
+        &self,
+        uri: &str,
+        root: &str,
+        host: &H,
+    ) -> Option<scip::ScipDocument> {
+        self.with_query_ctx(uri, host, None, |ctx| Some(scip::document(ctx, root)))
+            .await
     }
 
     /// Find every occurrence of the symbol named at the given position
