@@ -57,11 +57,12 @@ fn is_syntax_char(c: char) -> bool {
     };
 }
 
-fn concat(mut nodes: List<Node>) -> Node {
+/// The one node, or `wrap` around several.
+fn collapse(mut nodes: List<Node>, wrap: fn(List<Node>) -> Node) -> Node {
     if nodes.len() == 1 {
         return nodes.pop().unwrap();
     }
-    return Node::Concat(nodes);
+    return wrap(nodes);
 }
 
 fn single(set: NamedSet) -> Node {
@@ -121,14 +122,6 @@ impl Parser {
         return false;
     }
 
-    fn eat_str(&mut self, text: String) -> bool {
-        if self.looking_at(text) {
-            self.pos += text.len();
-            return true;
-        }
-        return false;
-    }
-
     fn expect(&mut self, c: char, what: String) -> Result<(), PatternError> {
         if self.eat(c) {
             return Ok(());
@@ -168,10 +161,7 @@ impl Parser {
         while self.eat('|') {
             alternatives.push(self.alternative()?);
         }
-        if alternatives.len() == 1 {
-            return Ok(alternatives.pop().unwrap());
-        }
-        return Ok(Node::Alternation(alternatives));
+        return Ok(collapse(alternatives, |nodes| Node::Alternation(nodes)));
     }
 
     // Alternative :: Term*
@@ -180,7 +170,7 @@ impl Parser {
         loop {
             self.skip_trivia();
             if self.at_end() || self.peek_is('|') || self.peek_is(')') {
-                return Ok(concat(terms));
+                return Ok(collapse(terms, |nodes| Node::Concat(nodes)));
             }
             terms.push(self.term()?);
         }
