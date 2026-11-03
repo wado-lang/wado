@@ -285,6 +285,12 @@ struct TestSpec {
     #[serde(rename = "wir_scope", default)]
     wir_scope: Option<String>,
 
+    /// WIR lines, by the optimization level that emits them (`"O2"`), within
+    /// `wir_scope`. Where a pattern says only whether a shape is there, a line
+    /// counts how many times, and says what else that line holds.
+    #[serde(default)]
+    wir_lines: indexmap::IndexMap<String, Vec<TextMatch>>,
+
     /// Optimizer remarks, by the optimization level that emits them (`"O2"`).
     /// Each remark reads `"file:line:col remark: …"`, so `":6:5 remark: a copy"`
     /// pins the position in the fixture.
@@ -317,6 +323,11 @@ struct TextMatch {
     /// Substrings that must all appear in one text.
     contains: Vec<String>,
 
+    /// Substrings none of which may appear in it. With `count: 0`, this says
+    /// every text holding `contains` holds one of these too.
+    #[serde(default)]
+    not_contains: Vec<String>,
+
     /// How many texts must match. Omitted means at least one.
     #[serde(default)]
     count: Option<usize>,
@@ -329,7 +340,10 @@ impl TextMatch {
         let matched: Vec<&str> = texts
             .iter()
             .copied()
-            .filter(|text| self.contains.iter().all(|needle| text.contains(needle)))
+            .filter(|text| {
+                self.contains.iter().all(|needle| text.contains(needle))
+                    && !self.not_contains.iter().any(|needle| text.contains(needle))
+            })
             .collect();
         let (ok, wanted) = match self.count {
             Some(exact) => (matched.len() == exact, exact.to_string()),
@@ -337,8 +351,9 @@ impl TextMatch {
         };
         assert!(
             ok,
-            "[{test_id}] expected {wanted} {what}(s) holding {:?}, found {}:\n{matched:#?}\n\n{context}",
+            "[{test_id}] expected {wanted} {what}(s) holding {:?} and none of {:?}, found {}:\n{matched:#?}\n\n{context}",
             self.contains,
+            self.not_contains,
             matched.len(),
         );
     }
@@ -357,10 +372,17 @@ impl TestSpec {
         }
     }
 
+    /// The `wir_lines` entries for `opt_level`.
+    fn wir_lines_at(&self, opt_level: OptLevel) -> &[TextMatch] {
+        self.wir_lines
+            .get(common::opt_level_name(opt_level))
+            .map_or(&[], Vec::as_slice)
+    }
+
     /// Whether this test has any WIR expectations for the given optimization level.
     fn has_wir_expectations(&self, opt_level: OptLevel) -> bool {
         let (expect, not_expect) = self.wir_expectations(opt_level);
-        !expect.is_empty() || !not_expect.is_empty()
+        !expect.is_empty() || !not_expect.is_empty() || !self.wir_lines_at(opt_level).is_empty()
     }
 
     /// Whether `opt_level` runs this fixture. The runner skips on it, and the
@@ -469,6 +491,19 @@ fn wir_patterns_match_serials_by_hole() {
     assert!(wir_contains("f(i, n - i)", "f(i_{i}, n - i_{i})"));
     assert!(!wir_contains("f(i, n - i_2)", "f(i_{i}, n - i_{i})"));
     assert!(!wir_contains("x_ = 1", "x_{} = 1"));
+}
+
+#[test]
+fn text_match_not_contains_leaves_out_the_texts_holding_one() {
+    let texts = ["canon stream.read $t async", "canon stream.read $u"];
+    let sync_reads = |count| TextMatch {
+        contains: vec!["canon stream.read ".to_string()],
+        not_contains: vec![" async".to_string()],
+        count: Some(count),
+    };
+    sync_reads(1).assert_in(&texts, "WAT line", "unit", "");
+    let none = std::panic::catch_unwind(|| sync_reads(0).assert_in(&texts, "WAT line", "unit", ""));
+    assert!(none.is_err());
 }
 
 #[test]
@@ -1004,21 +1039,25 @@ fn run_with_allocator(
         None
     };
 
-    let options = CompilerOptions {
-        opt_level,
-        target_world,
-        skip_validation: false,
-        retain_wir: golden || spec.has_wir_expectations(opt_level),
-        allocator: Some(allocator.to_string()),
-        codegen_flags: spec.compile.codegen_flags.clone(),
-        params: spec.compile.param_inputs(),
-        coverage: spec.compile.coverage_scope(),
-        profile: spec.compile.profile(fixture_path.parent().unwrap()),
-        // More than one, so every fixture runs the optimizer's parallel path
-        // against expectations no thread count may change.
-        parallelism: 2,
-        ..Default::default()
-    };
+    assert!(
+        spec.compile.lib_world.is_none()
+            || (target_world.is_none() && (spec.compile_only || spec.compile_error.is_some())),
+        "[{test_id}] a library has no entry point to run: set `compile_only`"
+    );
+    let options = spec.compile.apply(
+        CompilerOptions {
+            opt_level,
+            target_world,
+            skip_validation: false,
+            retain_wir: golden || spec.has_wir_expectations(opt_level),
+            allocator: Some(allocator.to_string()),
+            // More than one, so every fixture runs the optimizer's parallel path
+            // against expectations no thread count may change.
+            parallelism: 2,
+            ..Default::default()
+        },
+        fixture_path.parent().unwrap(),
+    );
 
     let common::CompiledFixture {
         wasm,
@@ -1054,19 +1093,21 @@ fn run_with_allocator(
         );
     }
 
-    for level in spec.remarks.keys() {
-        assert!(
-            [
-                OptLevel::O0,
-                OptLevel::O1,
-                OptLevel::O2,
-                OptLevel::O3,
-                OptLevel::Os
-            ]
-            .map(common::opt_level_name)
-            .contains(&level.as_str()),
-            "[{test_id}] `remarks` is keyed by an optimization level, not {level:?}"
-        );
+    for (key, levels) in [("remarks", &spec.remarks), ("wir_lines", &spec.wir_lines)] {
+        for level in levels.keys() {
+            assert!(
+                [
+                    OptLevel::O0,
+                    OptLevel::O1,
+                    OptLevel::O2,
+                    OptLevel::O3,
+                    OptLevel::Os
+                ]
+                .map(common::opt_level_name)
+                .contains(&level.as_str()),
+                "[{test_id}] `{key}` is keyed by an optimization level, not {level:?}"
+            );
+        }
     }
     if let Some(expected) = spec.remarks.get(common::opt_level_name(opt_level)) {
         let texts: Vec<&str> = remarks.iter().map(String::as_str).collect();
@@ -1335,6 +1376,16 @@ fn assert_wir_expectations(
             "[{test_id}] wir_not_expect:{opt_name} failed: pattern unexpectedly found in WIR\n\
              pattern: {pattern}\n\
              WIR output:\n{wir_text}"
+        );
+    }
+
+    let lines: Vec<&str> = wir_text.lines().map(str::trim).collect();
+    for wanted in spec.wir_lines_at(opt_level) {
+        wanted.assert_in(
+            &lines,
+            "WIR line",
+            test_id,
+            &format!("WIR output:\n{wir_text}"),
         );
     }
 }

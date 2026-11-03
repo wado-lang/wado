@@ -515,7 +515,6 @@ async fn render_phases(
         world: target_world,
         inputs,
     } = read_fixture_compile(source, default_world).unwrap_or_else(|e| panic!("{input_path}: {e}"));
-    let params = inputs.param_inputs();
     // The e2e harness's first run, whose `-O2` compile writes the WIR golden.
     let allocator = inputs.allocators()[0].to_string();
 
@@ -530,8 +529,8 @@ async fn render_phases(
         return out;
     };
 
-    let profile = inputs.profile(&base_path);
     if needs_dump {
+        let profile = inputs.profile(&base_path);
         let host = StubHost::new(base_path.clone()).with_stubs(inputs.host_stubs());
         let dumped = wado_compiler::dump_with_host_and_world(
             source,
@@ -540,10 +539,10 @@ async fn render_phases(
             opt_level,
             target_world.as_deref(),
             Some(&allocator),
-            wado_compiler::OptOverrides::default(),
+            inputs.opt_overrides(),
             &inputs.codegen_flags,
             profile.as_deref(),
-            &params,
+            &inputs.param_inputs(),
             invocations.clone(),
             // More than one, so a golden that depends on the thread count
             // drifts from the one committed.
@@ -605,21 +604,20 @@ async fn render_phases(
     }
 
     if needs_compile {
+        let options = inputs.apply(
+            wado_compiler::CompilerOptions {
+                opt_level,
+                target_world: target_world.clone(),
+                log_level: Some(wado_compiler::LogLevel::Off),
+                retain_wir: needs_wir,
+                allocator: Some(allocator),
+                invocations,
+                parallelism: 2,
+                ..wado_compiler::CompilerOptions::default()
+            },
+            &base_path,
+        );
         let host = StubHost::new(base_path).with_stubs(inputs.host_stubs());
-        let options = wado_compiler::CompilerOptions {
-            opt_level,
-            target_world: target_world.clone(),
-            log_level: Some(wado_compiler::LogLevel::Off),
-            retain_wir: needs_wir,
-            allocator: Some(allocator),
-            codegen_flags: inputs.codegen_flags.clone(),
-            params,
-            coverage: inputs.coverage_scope(),
-            profile,
-            invocations,
-            parallelism: 2,
-            ..wado_compiler::CompilerOptions::default()
-        };
         match wado_compiler::compile_with_options(source, &host, Some(input_path), options).await {
             Err(_) => {
                 let e = diagnostics_summary(&host, "compilation failed");

@@ -9,10 +9,10 @@ use std::sync::Arc;
 use indexmap::IndexMap;
 use serde::de::Error as _;
 use serde::{Deserialize, Deserializer};
-use wado_compiler::OptLevel;
 use wado_compiler::coverage::CoverageScope;
 use wado_compiler::param_resolution::{ParamInputs, ParamPolicy, ParamPolicyLevel};
 use wado_compiler::pgo::{self, Profile};
+use wado_compiler::{CompilerOptions, OptLevel, OptOverrides};
 
 use crate::HostStubs;
 
@@ -170,6 +170,17 @@ pub struct CompileInputs {
     /// fixture by its file name, and `core:` modules by import path.
     #[serde(default)]
     pub profile: Option<String>,
+    /// Compile as a library exporting this world, as `wado compile --lib` does
+    /// for a package naming it. A library has no entry point to run.
+    #[serde(default)]
+    pub lib_world: Option<String>,
+    /// `--optimize-inline-threshold`: the size past which nothing inlines, `0`
+    /// to inline nothing.
+    #[serde(default)]
+    pub optimize_inline_threshold: Option<usize>,
+    /// Whether the dead-code lints run. Unset leaves the compiler's default.
+    #[serde(default)]
+    pub unused_diagnostics: Option<bool>,
 }
 
 /// What a fixture's tests leave unrun in the fixture itself. Each list is the
@@ -280,6 +291,34 @@ impl CompileInputs {
     pub fn compiles_at(&self, level: OptLevel) -> bool {
         let name = opt_level_name(level);
         self.only_opt.is_empty() || self.only_opt.iter().any(|only| only == name)
+    }
+
+    /// The fields of `options` these inputs set, the rest kept. The e2e
+    /// harness and the golden dumps both compile through it, so neither drops
+    /// an input the other honours.
+    #[must_use]
+    pub fn apply(&self, options: CompilerOptions, fixture_dir: &Path) -> CompilerOptions {
+        CompilerOptions {
+            codegen_flags: self.codegen_flags.clone(),
+            params: self.param_inputs(),
+            coverage: self.coverage_scope(),
+            profile: self.profile(fixture_dir),
+            lib_world: self.lib_world.clone(),
+            opt: self.opt_overrides(),
+            unused_diagnostics: self
+                .unused_diagnostics
+                .unwrap_or(options.unused_diagnostics),
+            ..options
+        }
+    }
+
+    /// The optimizer overrides these inputs set.
+    #[must_use]
+    pub fn opt_overrides(&self) -> OptOverrides {
+        OptOverrides {
+            inline_threshold: self.optimize_inline_threshold,
+            ..OptOverrides::default()
+        }
     }
 
     /// The coverage the compile instruments for.

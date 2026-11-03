@@ -1,0 +1,44 @@
+// `nir/cold_outline` moves what a `cold_path()` marker opens into a function
+// of its own, so the inline cost model's cold discount describes the callee
+// rather than promising a split nobody made.
+//
+// The archetype: a hot append whose growth arm carries several calls and a
+// power-assert. The arm's only free variable is the `&mut` receiver, and the
+// assert's capture slots are function locals nothing outside the arm reads.
+// What the split has to preserve is the reason the region was written: the
+// assertion still fires, with its operands, from the function it moved to.
+struct Cols { a: List<i32>, b: List<i32>, c: List<i32> }
+
+impl Cols {
+    fn push_row(&mut self, x: i32) {
+        if self.a.len() >= self.a.capacity() {
+            builtin::cold_path();
+            self.a.reserve(8);
+            self.b.reserve(8);
+            self.c.reserve(8);
+            assert self.b.capacity() == self.a.capacity()
+                && self.c.capacity() == self.a.capacity(), "columns grow in lockstep";
+        }
+        self.a.push(x);
+        self.b.push(x);
+        self.c.push(x);
+    }
+}
+
+export fn run() {
+    let mut cols = Cols { a: [], b: [], c: [] };
+    let mut i = 0;
+    while i < 50 { cols.push_row(i); i = i + 1 }
+    assert cols.a.len() == 50 && cols.c.len() == 50;
+}
+
+__DATA__
+{
+    "stdout": "",
+    "wir_lines": {
+        "O2": [
+            {"contains": ["fn \"", "push_row$cold0"]},
+            {"contains": ["push_row$cold0"], "not_contains": ["fn \"", "type \""]}
+        ]
+    }
+}

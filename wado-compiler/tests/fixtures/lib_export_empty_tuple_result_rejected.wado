@@ -1,0 +1,12 @@
+// `[]` is a type of its own, not unit: the parser keeps them apart, and the
+// Component Model has no `tuple<>` to carry it. An export naming one is
+// rejected where its other unrepresentable types are.
+export fn f() -> [] {
+    return [];
+}
+
+__DATA__
+{
+    "lib_world": "test:empty/empty@0.1.0",
+    "compile_error": "the empty tuple `[]` has no Component Model representation"
+}

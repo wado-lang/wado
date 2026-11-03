@@ -1,0 +1,56 @@
+// Each primitive literal form and the value it denotes: integers in every
+// radix and with separators, floats in decimal and scientific notation, the
+// string and char escapes, unit, and null.
+
+test "integer literals" {
+    let big: i64 = 9223372036854775807;
+    assert big == i64::MAX;
+    assert 42 == 40 + 2;
+    assert 1_000_000 == 1000 * 1000;
+    assert 0xFF == 255;
+    assert 0b1010 == 10;
+    assert 0o755 == 493;
+}
+
+test "float literals" {
+    assert 3.25 == 13.0 / 4.0;
+    assert 0.0 == 1.0 - 1.0;
+    assert 0.5 + 0.5 == 1.0;
+    assert `${1.23456789012345}` == "1.23456789012345";
+    assert 6.022e23 == 602200000000000000000000.0;
+    assert 1_000_000.5 == 1000000.0 + 0.5;
+}
+
+fn bytes_of(s: String) -> ByteList {
+    return s.bytes().collect();
+}
+
+test "string literals and their escapes" {
+    assert "".len() == 0;
+    assert "hello world".len() == 11;
+    assert bytes_of("a\nb") == [97, 10, 98] as ByteList;
+    assert bytes_of("a\tb") == [97, 9, 98] as ByteList;
+    assert bytes_of("a\rb") == [97, 13, 98] as ByteList;
+    assert bytes_of("a\\b") == [97, 92, 98] as ByteList;
+    assert bytes_of("a\"b") == [97, 34, 98] as ByteList;
+    assert bytes_of("a\/b") == [97, 47, 98] as ByteList;
+    assert bytes_of("a\bb") == [97, 8, 98] as ByteList;
+    assert bytes_of("a\fb") == [97, 12, 98] as ByteList;
+    assert "line1\nline2\ttab".len() == 15;
+    assert "A" == "A";
+    assert "\u{1F600}" == "😀";
+    assert "😀" == "😀";
+}
+
+test "char literals" {
+    assert 'A' as i32 == 65;
+    assert '\n' as i32 == 10;
+    assert 'A' == 'A';
+}
+
+test "unit and null" {
+    let u = ();
+    assert `${u:?}` == "()";
+    let n: Option<i32> = null;
+    assert n matches { None };
+}

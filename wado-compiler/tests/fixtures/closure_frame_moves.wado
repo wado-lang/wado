@@ -1,12 +1,9 @@
-//! A closure costs its captures their move, not the whole frame's.
-//!
-//! The move analysis used to abandon any function that built one, so a single
-//! `map(|x| …)` left every other local in that body copying.
-
-use crate::common::{assert_pushes_by_move, wir_function_body};
-use std::path::Path;
-
-const SOURCE: &str = r#"
+// A closure costs its captures their move, not the whole frame's.
+//
+// The move analysis used to abandon any function that built one, so a single
+// `map(|x| …)` left every other local in that body copying. The element the
+// iterator already copied moves into `next`; the one copy left is the
+// iterator's own, which value semantics requires.
 struct Cfg { alt: i32, elems: List<i32>, pos: i32 }
 
 #[inline(never)]
@@ -39,15 +36,15 @@ export fn run() {
     let closed: List<Cfg> = [Cfg { alt: 0, elems: [1], pos: 1 }];
     assert build(&closed, &[1]).len() == 1;
 }
-"#;
 
-#[test]
-fn a_closure_leaves_the_rest_of_the_frame_moving() {
-    let body = wir_function_body(
-        Path::new("closure_frame_moves_test.wado"),
-        SOURCE,
-        wado_compiler::OptLevel::O2,
-        "fn \"closure_frame_moves_test.wado/build\"",
-    );
-    assert_pushes_by_move(&body, "next");
+__DATA__
+{
+    "stdout": "",
+    "wir_scope": "build",
+    "wir_lines": {
+        "O2": [
+            {"contains": ["array_set", "next.repr"], "not_contains": ["struct.new", "array_copy"], "count": 1},
+            {"contains": ["array_copy"], "count": 1}
+        ]
+    }
 }

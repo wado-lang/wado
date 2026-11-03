@@ -1,0 +1,29 @@
+// `match *r` reads the referent in place, as `match r` does.
+//
+// The temp pattern lowering minted for a non-`Local` scrutinee is one the fold
+// defends, so `match *rule` deep-copied the whole variant to read one field.
+struct Simple { name: String, ids: List<i32> }
+struct Multi { name: String, alts: List<String> }
+variant Rule { S(Simple), M(Multi) }
+
+#[inline(never)]
+fn walk(rule: &Rule) -> i32 {
+    match *rule {
+        Rule::S(s) => { return s.ids.len(); },
+        Rule::M(m) => { return m.alts.len(); },
+    }
+}
+
+export fn run() {
+    let rules: List<Rule> = [Rule::S(Simple { name: "a", ids: [1, 2] })];
+    let mut n = 0;
+    for let r of &rules { n += walk(r); }
+    assert n == 2;
+}
+
+__DATA__
+{
+    "stdout": "",
+    "wir_scope": "walk",
+    "wir_not_expect:O2": ["array_copy", "array_new", "struct.new"]
+}
