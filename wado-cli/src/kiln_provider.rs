@@ -238,7 +238,7 @@ impl CliGeneratorProvider {
         }
     }
 
-    /// Walk the recorded closure for its side effect on the watch: the index is
+    /// Walk the recorded closure for its side effects on the run: the index is
     /// the only place that closure is enumerated, and a freshly compiled
     /// generator has just written it.
     fn observe_closure(&self, module_path: &str, base: &Path) {
