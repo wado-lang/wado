@@ -827,12 +827,13 @@ fn keyed(g: &mut WebGpuBackend, recorded: &Recorded, serial: i32, plan: &Plan, r
                 replays[k.root] = kernel_replay(g, recorded, serial, k);
             },
             Joined(ks) => {
-                replays[ks[0].root] = Replay { key: signed(g, recorded, serial, ks), reads: left_reads(recorded, &ks[0]) };
+                let all: List<&Kernel> = ks.into_iter().collect();
+                replays[ks[0].root] = Replay { key: signed(g, recorded, serial, &all), reads: left_reads(recorded, &ks[0]) };
             },
             Paired(p) => {
-                let both = [p.first, p.second] as List<Kernel>;
+                let both = [&p.first, &p.second] as List<&Kernel>;
                 let mut reads = left_reads(recorded, &p.first);
-                for let k of &both {
+                for let k of both {
                     reads.push(recorded.nodes[k.product.unwrap()].operands[1]);
                 }
                 for let o of &p.operands {
@@ -850,13 +851,13 @@ fn keyed(g: &mut WebGpuBackend, recorded: &Recorded, serial: i32, plan: &Plan, r
 
 /// How `k` alone replays, in the program `serial`.
 fn kernel_replay(g: &mut WebGpuBackend, recorded: &Recorded, serial: i32, k: &Kernel) -> Replay {
-    return Replay { key: signed(g, recorded, serial, &([*k] as List<Kernel>)), reads: k.reads(recorded) };
+    return Replay { key: signed(g, recorded, serial, &([k] as List<&Kernel>)), reads: k.reads(recorded) };
 }
 
 /// The `replay_key` of the kernels `ks` of the program `serial`.
-fn signed(g: &mut WebGpuBackend, recorded: &Recorded, serial: i32, ks: &List<Kernel>) -> i32 {
+fn signed(g: &mut WebGpuBackend, recorded: &Recorded, serial: i32, ks: &List<&Kernel>) -> i32 {
     let mut key = [serial] as List<i32>;
-    for let k of ks {
+    for let k of *ks {
         key.push(k.root);
         key.push(g.signature(kernel_signature(recorded, k)));
     }
@@ -864,19 +865,38 @@ fn signed(g: &mut WebGpuBackend, recorded: &Recorded, serial: i32, ks: &List<Ker
 }
 
 /// What `kernel_result` reads of `k` and `recorded` beside the views of the
-/// nodes it reads.
-fn kernel_signature(recorded: &Recorded, k: &Kernel) -> String {
-    let operands: List<List<i32>> = k.operands.into_iter().map(|o| o.extents).collect();
-    let product = match k.product {
-        Some(_) => `${product_dims(recorded, k):?}`,
-        None => "",
+/// nodes it reads, each list after its length.
+fn kernel_signature(recorded: &Recorded, k: &Kernel) -> List<i32> {
+    let mut s = [k.op.steps.len()] as List<i32>;
+    for let step of &k.op.steps {
+        let [a, b, c, d] = step.key();
+        s.extend(&([a, b, c, d] as List<i32>));
+    }
+    let list = |s: &mut List<i32>, l: &List<i32>| {
+        s.push(l.len());
+        s.extend(l);
     };
-    let from = match k.prologue {
-        Some(p) => ` from ${kernel_signature(recorded, &p)}`,
-        None => "",
-    };
+    s.push(k.operands.len());
+    for let o of &k.operands {
+        list(&mut s, &o.extents);
+    }
+    list(&mut s, &k.extents);
+    s.push(if k.reduced { 1 } else { 0 });
     let root = &recorded.nodes[k.root];
-    return `${k.op:?} ${operands:?} ${k.extents:?} ${k.reduced} ${product} ${root.extents:?} ${root.kind:?}${from}`;
+    list(&mut s, &root.extents);
+    s.push(ReflectEnum::<ElementKind>::discriminant(&root.kind));
+    if k.product matches { Some(_) } {
+        let dims = product_dims(recorded, k);
+        s.push(1);
+        for let axes of [dims.lhs_batch, dims.rhs_batch, dims.lhs_contracting, dims.rhs_contracting] as List<List<i32>> {
+            list(&mut s, &axes);
+        }
+    }
+    if let Some(p) = &k.prologue {
+        s.push(2);
+        s.extend(&kernel_signature(recorded, p));
+    }
+    return s;
 }
 
 /// How the product `k` computes contracts.

@@ -7,7 +7,7 @@
 use { HashMap, HashSet } from "core:collections";
 use { Binary, Comparison, Unary } from "./hlo.wado";
 use { Any, Operation, Recorded, RecordedNode, Region } from "./recorded.wado";
-use { BinaryOp, Cpu, Expr, RowOp, UnaryOp, constant, operand } from "./tensor.wado";
+use { BinaryOp, Cpu, Expr, RowOp, Step, UnaryOp, constant, operand } from "./tensor.wado";
 
 /// What a program runs for one region, in order, and the nodes it yields.
 pub struct Plan {
@@ -75,9 +75,9 @@ impl Plan {
     /// within it, reads.
     pub fn reads(&self, recorded: &Recorded) -> List<i32> {
         let mut reads = self.results;
-        for let launch of self.launches {
+        for let launch of &self.launches {
             match launch {
-                Node(id) => reads.extend(&recorded.nodes[id].operands),
+                Node(id) => reads.extend(&recorded.nodes[*id].operands),
                 Kernel(k) => reads.extend(&k.reads(recorded)),
                 Joined(ks) => {
                     for let k of ks {
@@ -89,7 +89,7 @@ impl Plan {
                     reads.extend(&p.second.reads(recorded));
                 },
                 Case([id, first, second]) => {
-                    reads.push(recorded.nodes[id].operands[0]);
+                    reads.push(recorded.nodes[*id].operands[0]);
                     reads.extend(&first.reads(recorded));
                     reads.extend(&second.reads(recorded));
                 },
@@ -116,10 +116,13 @@ impl Kernel {
     /// The nodes it reads: its operands, then its product's, its left matrix
     /// by the nodes its prologue reads.
     pub fn reads(&self, recorded: &Recorded) -> List<i32> {
-        let mut reads: List<i32> = self.operands.into_iter().map(|o| o.node).collect();
+        let mut reads: List<i32> = [];
+        for let o of &self.operands {
+            reads.push(o.node);
+        }
         if let Some(p) = self.product {
             let factors = &recorded.nodes[p].operands;
-            match self.prologue {
+            match &self.prologue {
                 Some(left) => {
                     reads.extend(&left.reads(recorded));
                     reads.push(factors[1]);
@@ -283,11 +286,11 @@ fn planned_region(recorded: &Recorded, region: &Region, splats: &HashMap<i32, Op
     let mut readers = HashMap::<i32, List<i32>>::new();
     for let id of region.nodes {
         let node = &recorded.nodes[id];
-        for let o of node.operands {
-            read_by(&mut readers, o, id);
+        for let o of &node.operands {
+            read_by(&mut readers, *o, id);
         }
-        if let Case([first, second]) = node.op {
-            for let o of branch_reads(recorded, &first).into_iter().chain(branch_reads(recorded, &second).into_iter()) {
+        if let Case([first, second]) = &node.op {
+            for let o of branch_reads(recorded, first).into_iter().chain(branch_reads(recorded, second).into_iter()) {
                 read_by(&mut readers, o, OUTSIDE);
             }
         }
@@ -305,8 +308,18 @@ fn planned_region(recorded: &Recorded, region: &Region, splats: &HashMap<i32, Op
         }
         if let Some(g) = shared_group(&readers, &group_of, id)
             && !groups[g].product matches { Some(p) && readers[id].contains(&p) }
-            && let Some(joined) = joined(recorded, &groups[g], id, splats) {
-            groups[g] = joined;
+            && let Some(join) = joining(recorded, &groups[g], id, splats) {
+            let group = &mut groups[g];
+            group.members.push(id);
+            match join {
+                Step => {
+                },
+                Fold(rows) => {
+                    group.space = rows;
+                    group.folds = true;
+                },
+                Product => group.product = Option::Some(id),
+            }
             group_of[id] = g;
             continue;
         }
@@ -320,7 +333,7 @@ fn planned_region(recorded: &Recorded, region: &Region, splats: &HashMap<i32, Op
             product: null,
             members: [id],
         };
-        let group = match node.op {
+        let group = match &node.op {
             Reduce(_) => Group { ..alone, space: recorded.nodes[node.operands[0]].extents, folds: true },
             DotGeneral(_) => Group { ..alone, product: Option::Some(id) },
             _ => alone,
@@ -333,11 +346,11 @@ fn planned_region(recorded: &Recorded, region: &Region, splats: &HashMap<i32, Op
         if splats.contains_key(id) {
             continue;
         }
-        if let Case([first, second]) = recorded.nodes[id].op {
+        if let Case([first, second]) = &recorded.nodes[id].op {
             launches.push(Launch::Case([
                 id,
-                planned_region(recorded, &first, splats),
-                planned_region(recorded, &second, splats),
+                planned_region(recorded, first, splats),
+                planned_region(recorded, second, splats),
             ]));
         } else if let Some(g) = group_of.get(id) {
             if groups[g].root == id {
@@ -361,46 +374,50 @@ fn paired_products(
     launches: List<Launch>,
 ) -> List<Launch> {
     let mut alone = HashMap::<i32, i32>::new();
-    for let [i, launch] of launches.into_iter().enumerate() {
-        if let Kernel(k) = launch && joinable(recorded, &k) matches { Some(_) } {
+    for let i of 0..<launches.len() {
+        if let Kernel(k) = &launches[i] && joinable(recorded, k) matches { Some(_) } {
             alone[k.root] = i;
         }
     }
+    let mut pairs = HashMap::<i32, Pair>::new();
     let mut taken = HashSet::<i32>::new();
-    let mut out = launches;
-    for let [i, launch] of launches.into_iter().enumerate() {
-        let Kernel(second) = launch else {
+    for let i of 0..<launches.len() {
+        let Kernel(second) = &launches[i] else {
             continue;
         };
-        let Some(lhs) = by_weight(recorded, &second) else {
+        let Some(lhs) = by_weight(recorded, second) else {
             continue;
         };
         let group = group_of[second.root];
-        for let o of second.operands {
+        for let o of &second.operands {
             let Some(at) = alone.get(o.node) else {
                 continue;
             };
-            let Kernel(first) = launches[at] else {
+            let Kernel(first) = &launches[at] else {
                 unreachable();
             };
             if o.extents == second.extents
                 && !taken.contains(at)
-                && joinable(recorded, &first) == Option::Some(lhs)
-                && pairs_with(recorded, &first, &second)
+                && joinable(recorded, first) == Option::Some(lhs)
+                && pairs_with(recorded, first, second)
                 && readers[o.node].into_iter().all(|r| group_of.get(r) == Option::Some(group)) {
-                out[i] = Launch::Paired(pair_of(&first, &second));
+                pairs[i] = pair_of(first, second);
                 taken.insert(at);
                 break;
             }
         }
     }
-    let mut kept: List<Launch> = [];
-    for let [i, launch] of out.into_iter().enumerate() {
-        if !taken.contains(i) {
-            kept.push(launch);
+    let mut out: List<Launch> = [];
+    for let i of 0..<launches.len() {
+        if taken.contains(i) {
+            continue;
         }
+        out.push(match pairs.get(i) {
+            Some(p) => Launch::Paired(p),
+            None => launches[i],
+        });
     }
-    return kept;
+    return out;
 }
 
 /// Whether the products of `a` and `b` contract alike, as `rows_by_matrix`
@@ -432,8 +449,8 @@ fn pair_of(first: &Kernel, second: &Kernel) -> Pair {
 /// one launch, which nothing else reads, as their `prologue`.
 fn staged(recorded: &Recorded, readers: &HashMap<i32, List<i32>>, launches: List<Launch>) -> List<Launch> {
     let mut left_at = HashMap::<i32, i32>::new();
-    for let [i, launch] of launches.into_iter().enumerate() {
-        if let Kernel(k) = launch
+    for let i of 0..<launches.len() {
+        if let Kernel(k) = &launches[i]
             && k.product matches { None }
             && !k.reduced
             && k.extents.len() >= 2
@@ -443,8 +460,8 @@ fn staged(recorded: &Recorded, readers: &HashMap<i32, List<i32>>, launches: List
     }
     let mut prologue_of = HashMap::<i32, i32>::new();
     let mut taken = HashSet::<i32>::new();
-    for let [i, launch] of launches.into_iter().enumerate() {
-        let products: List<i32> = products_of(&launch).into_iter().map(|k| k.product.unwrap()).collect();
+    for let i of 0..<launches.len() {
+        let products = products_of(&launches[i]);
         if products.is_empty() {
             continue;
         }
@@ -459,34 +476,37 @@ fn staged(recorded: &Recorded, readers: &HashMap<i32, List<i32>>, launches: List
         }
     }
     let mut out: List<Launch> = [];
-    for let [i, launch] of launches.into_iter().enumerate() {
+    for let i of 0..<launches.len() {
         if taken.contains(i) {
             continue;
         }
         let Some(at) = prologue_of.get(i) else {
-            out.push(launch);
+            out.push(launches[i]);
             continue;
         };
-        let Kernel(left) = launches[at] else {
+        let Kernel(left) = &launches[at] else {
             unreachable();
         };
-        let from = |k: &Kernel| Kernel { ..*k, prologue: Option::Some(left) };
-        out.push(match launch {
-            Kernel(k) => Launch::Kernel(from(&k)),
-            Joined(ks) => Launch::Joined(ks.into_iter().map(|k| from(&k)).collect()),
-            Paired(p) => Launch::Paired(Pair { ..p, first: from(&p.first), second: from(&p.second) }),
+        let from = |k: &Kernel| Kernel { ..*k, prologue: Option::Some(*left) };
+        out.push(match &launches[i] {
+            Kernel(k) => Launch::Kernel(from(k)),
+            Joined(ks) => Launch::Joined(ks.into_iter().map(|k| from(k)).collect()),
+            Paired(p) => Launch::Paired(Pair { ..*p, first: from(&p.first), second: from(&p.second) }),
             _ => unreachable(),
         });
     }
     return out;
 }
 
-/// The product kernels of `launch`.
-fn products_of(launch: &Launch) -> List<Kernel> {
+/// The products the kernels of `launch` compute.
+fn products_of(launch: &Launch) -> List<i32> {
     return match launch {
-        Kernel(k) && k.product matches { Some(_) } => [*k],
-        Joined(ks) => *ks,
-        Paired(p) => [p.first, p.second],
+        Kernel(k) => match k.product {
+            Some(p) => [p],
+            None => [],
+        },
+        Joined(ks) => ks.into_iter().map(|k| k.product.unwrap()).collect(),
+        Paired(p) => [p.first.product.unwrap(), p.second.product.unwrap()],
         _ => [],
     };
 }
@@ -512,13 +532,13 @@ fn joined_products(recorded: &Recorded, launches: List<Launch>) -> List<Launch> 
     let mut first_of = HashMap::<i32, i32>::new();
     let mut out: List<Launch> = [];
     for let launch of launches {
-        if let Kernel(k) = launch && let Some(lhs) = joinable(recorded, &k) {
-            if let Some(at) = first_of.get(lhs) && same_dims(recorded, &out[at], &k) {
-                out[at] = match out[at] {
-                    Kernel(first) => Launch::Joined([first, k]),
+        if let Kernel(k) = &launch && let Some(lhs) = joinable(recorded, k) {
+            if let Some(at) = first_of.get(lhs) && same_dims(recorded, &out[at], k) {
+                out[at] = match &out[at] {
+                    Kernel(first) => Launch::Joined([*first, *k]),
                     Joined(ks) => {
-                        let mut more = ks;
-                        more.push(k);
+                        let mut more = *ks;
+                        more.push(*k);
                         Launch::Joined(more);
                     },
                     _ => unreachable(),
@@ -589,9 +609,9 @@ fn branch_reads(recorded: &Recorded, region: &Region) -> List<i32> {
     for let id of region.nodes {
         let node = &recorded.nodes[id];
         reads.extend(&node.operands);
-        if let Case([first, second]) = node.op {
-            reads.extend(&branch_reads(recorded, &first));
-            reads.extend(&branch_reads(recorded, &second));
+        if let Case([first, second]) = &node.op {
+            reads.extend(&branch_reads(recorded, first));
+            reads.extend(&branch_reads(recorded, second));
         }
     }
     return reads;
@@ -623,16 +643,16 @@ fn fusable(recorded: &Recorded, node: &RecordedNode) -> bool {
     if node.kind matches { I64 } || !node.operands.into_iter().all(|o| held(o)) {
         return false;
     }
-    return match node.op {
+    return match &node.op {
         Unary(_) | Binary(_) | Compare(_) | Select | Convert | Reshape | BroadcastInDim(_) => true,
         Reduce([op, init, dims]) => {
             let x = &recorded.nodes[node.operands[0]].extents;
             let last = x.len() - 1;
-            dims == [last] as List<i32>
+            *dims == [last] as List<i32>
                 && x[last] != 1
                 && match op {
                     Add => init.to_bits() == 0,
-                    Maximum => init == f32::NEG_INFINITY,
+                    Maximum => *init == f32::NEG_INFINITY,
                     _ => false,
                 };
         },
@@ -653,7 +673,7 @@ fn fusable(recorded: &Recorded, node: &RecordedNode) -> bool {
 /// Whether `node` computes nothing on a device, so it starts no kernel of its
 /// own: a view, or a conversion from a bool or to its own element.
 fn moves_nothing(recorded: &Recorded, node: &RecordedNode) -> bool {
-    return match node.op {
+    return match &node.op {
         Reshape | BroadcastInDim(_) => true,
         Convert => {
             let from = recorded.nodes[node.operands[0]].kind;
@@ -663,48 +683,45 @@ fn moves_nothing(recorded: &Recorded, node: &RecordedNode) -> bool {
     };
 }
 
-/// `group` with `id` in it, or `None` where the kernel cannot compute it: each
-/// element it holds must be one the kernel computes at an element, or at a
-/// row, of the space it iterates.
-fn joined(recorded: &Recorded, group: &Group, id: i32, splats: &HashMap<i32, Option<f32>>) -> Option<Group> {
+/// How a node changes the group it joins.
+variant Join {
+    /// It computes a step at an element, or at a row.
+    Step,
+    /// It folds the rows of these extents, which the kernel then iterates.
+    Fold(List<i32>),
+    /// It is the group's product.
+    Product,
+}
+
+/// How `group` changes with `id` in it, or `None` where the kernel cannot
+/// compute it: each element it holds must be one the kernel computes at an
+/// element, or at a row, of the space it iterates.
+fn joining(recorded: &Recorded, group: &Group, id: i32, splats: &HashMap<i32, Option<f32>>) -> Option<Join> {
     let node = &recorded.nodes[id];
     let e = &node.extents;
-    let mut members = group.members;
-    members.push(id);
-    let added = Group { ..*group, members };
-    return match node.op {
+    let step = |fits: bool| if fits { Option::Some(Join::Step) } else { null };
+    return match &node.op {
         Reduce(_) => {
             let rows = &recorded.nodes[node.operands[0]].extents;
             let whole = same_space(rows, &group.space) && rows[rows.len() - 1] == group.space[group.space.len() - 1];
             let fits = group.product matches { None } && (whole || !group.folds && per_row(&group.space, rows));
             if fits && reads_fit(recorded, &group.members, rows, splats) {
-                Option::Some(Group { ..added, space: *rows, folds: true });
+                Option::Some(Join::Fold(*rows));
             } else {
                 null;
             }
         },
-        Reshape => {
-            let x = &recorded.nodes[node.operands[0]].extents;
-            if fits_in(e, &group.space) && squeezed(x) == squeezed(e) {
-                Option::Some(added);
-            } else {
-                null;
-            }
-        },
+        Reshape => step(fits_in(e, &group.space) && same_space(&recorded.nodes[node.operands[0]].extents, e)),
         BroadcastInDim(dims) => {
             let x = &recorded.nodes[node.operands[0]].extents;
-            if fits_in(e, &group.space) && (adds_unit_axes(x, e, &dims) || spreads_rows(x, e, &dims, &group.space)) {
-                Option::Some(added);
-            } else {
-                null;
-            }
+            step(fits_in(e, &group.space) && (adds_unit_axes(x, e, dims) || spreads_rows(x, e, dims, &group.space)));
         },
         DotGeneral(_) => if group.product matches { None } && !group.folds && same_space(e, &group.space) {
-            Option::Some(Group { ..added, product: Option::Some(id) });
+            Option::Some(Join::Product);
         } else {
             null;
         },
-        _ => if fits_in(e, &group.space) { Option::Some(added) } else { null },
+        _ => step(fits_in(e, &group.space)),
     };
 }
 
@@ -729,7 +746,7 @@ fn reads_fit(recorded: &Recorded, members: &List<i32>, space: &List<i32>, splats
 /// Whether a broadcast of `x` to `e` along `dims` only adds axes of 1, so it
 /// keeps every element where it is.
 fn adds_unit_axes(x: &List<i32>, e: &List<i32>, dims: &List<i32>) -> bool {
-    return squeezed(x) == squeezed(e) && increasing(dims);
+    return same_space(x, e) && increasing(dims);
 }
 
 /// Whether a broadcast of `x`, one value per row of `space`, to `e`, the
@@ -763,21 +780,39 @@ fn increasing(dims: &List<i32>) -> bool {
     return true;
 }
 
-/// `extents` without its axes of 1, which order no element.
-fn squeezed(extents: &List<i32>) -> List<i32> {
-    return (*extents).into_iter().filter(|e| e != 1).collect();
-}
-
 /// Whether `a` and `b` hold their elements in one order: a reshape between
-/// them moves none.
+/// them moves none. Axes of 1 order no element.
 fn same_space(a: &List<i32>, b: &List<i32>) -> bool {
-    return squeezed(a) == squeezed(b);
+    return alike_upto(a, a.len(), b, b.len());
 }
 
 /// Whether `a` holds one value per row of `space`, a row being its last axis.
 fn per_row(a: &List<i32>, space: &List<i32>) -> bool {
     let last = space.len() - 1;
-    return space.len() > 0 && space[last] != 1 && squeezed(a) == squeezed(&space[0..<last].to_list());
+    return space.len() > 0 && space[last] != 1 && alike_upto(a, a.len(), space, last);
+}
+
+/// Whether the first `an` extents of `a` and the first `bn` of `b` are one
+/// list once their axes of 1 are left out.
+fn alike_upto(a: &List<i32>, an: i32, b: &List<i32>, bn: i32) -> bool {
+    let mut i = 0;
+    let mut j = 0;
+    loop {
+        while i < an && a[i] == 1 {
+            i += 1;
+        }
+        while j < bn && b[j] == 1 {
+            j += 1;
+        }
+        if i == an || j == bn {
+            return i == an && j == bn;
+        }
+        if a[i] != b[j] {
+            return false;
+        }
+        i += 1;
+        j += 1;
+    }
 }
 
 /// Whether a kernel iterating `space` computes a value of extents `e`: at
@@ -799,72 +834,83 @@ fn read_at(e: &List<i32>, space: &List<i32>) -> List<i32> {
 
 /// The kernel computing `group`.
 fn kernel_of(recorded: &Recorded, group: &Group, splats: &HashMap<i32, Option<f32>>) -> Kernel {
-    let mut built = Built { recorded, group, splats, operands: [], exprs: HashMap::new() };
-    let op = built.expr(group.root);
-    let root = &recorded.nodes[group.root].extents;
+    let mut built = Built { recorded, group, splats, operands: [], op: Expr { steps: [] }, at: HashMap::new() };
+    let root = built.step_of(group.root);
+    built.op.ending(root);
     return Kernel {
-        op,
+        op: built.op,
         operands: built.operands,
         root: group.root,
         extents: group.space,
-        reduced: !same_space(root, &group.space),
+        reduced: !same_space(&recorded.nodes[group.root].extents, &group.space),
         product: group.product,
         prologue: null,
     };
 }
 
-/// A kernel's `Expr` as it is built from its root down.
+/// A kernel's `Expr` as it is built from its root down, and the step
+/// computing each node it has reached.
 struct Built {
     recorded: &Recorded,
     group: &Group,
     splats: &HashMap<i32, Option<f32>>,
     operands: List<KernelOperand>,
-    exprs: HashMap<i32, Expr>,
+    op: Expr,
+    at: HashMap<i32, i32>,
 }
 
 impl Built {
-    /// What the kernel computes for node `id`: a step of its own where the
-    /// group holds it, and otherwise an operand or the constant it folds in.
-    fn expr(&mut self, id: i32) -> Expr {
-        if let Some(e) = self.exprs.get(id) {
-            return e;
+    /// The step computing node `id`: one of its own where the group holds it,
+    /// and otherwise an operand or the constant it folds in.
+    fn step_of(&mut self, id: i32) -> i32 {
+        if let Some(at) = self.at.get(id) {
+            return at;
         }
-        let e = if self.group.members.contains(&id) {
-            self.step(id);
+        let at = if self.group.members.contains(&id) {
+            self.computed(id);
         } else if let Some(Some(v)) = self.splats.get(id) {
-            constant(v);
+            self.op.shared(Step::Constant(v));
         } else {
             self.read(id);
         };
-        self.exprs[id] = e;
-        return e;
+        self.at[id] = at;
+        return at;
     }
 
-    fn step(&mut self, id: i32) -> Expr {
+    fn computed(&mut self, id: i32) -> i32 {
         let node = &self.recorded.nodes[id];
         // The product kernel computes the product itself from its operands.
         if node.op matches { DotGeneral(_) } {
-            return operand(0);
+            return self.op.shared(Step::Operand(0));
         }
-        let x = self.expr(node.operands[0]);
-        return match node.op {
-            Unary(op) => unary_of(&x, op),
-            Binary(op) => x.binary(binary_op(op), &self.expr(node.operands[1])),
-            Compare(direction) => x.binary(compared_op(direction), &self.expr(node.operands[1])),
-            Select => x.select(&self.expr(node.operands[1]), &self.expr(node.operands[2])),
-            Convert => if node.kind matches { Bool } && self.recorded.nodes[node.operands[0]].kind matches { F32 } {
-                x.binary(BinaryOp::Ne, &constant(0.0));
-            } else {
-                x;
+        let x = self.step_of(node.operands[0]);
+        let step = match &node.op {
+            Unary(op) => match unary_step(*op) {
+                Some(u) => Step::Unary([u, x]),
+                None => {
+                    let root = self.op.shared(Step::Unary([UnaryOp::Sqrt, x]));
+                    Step::Binary([BinaryOp::Div, self.op.shared(Step::Constant(1.0)), root]);
+                },
             },
-            Reshape | BroadcastInDim(_) => x,
-            Reduce([Add, _, _]) => x.row(RowOp::Sum),
-            Reduce(_) => x.row(RowOp::Max),
+            Binary(op) => Step::Binary([binary_op(*op), x, self.step_of(node.operands[1])]),
+            Compare(direction) => Step::Binary([compared_op(*direction), x, self.step_of(node.operands[1])]),
+            Select => Step::Select([x, self.step_of(node.operands[1]), self.step_of(node.operands[2])]),
+            Convert => if node.kind matches { Bool } && self.recorded.nodes[node.operands[0]].kind matches { F32 } {
+                Step::Binary([BinaryOp::Ne, x, self.op.shared(Step::Constant(0.0))]);
+            } else {
+                return x;
+            },
+            Reshape | BroadcastInDim(_) => {
+                return x;
+            },
+            Reduce([Add, _, _]) => Step::Fold([RowOp::Sum, x]),
+            Reduce(_) => Step::Fold([RowOp::Max, x]),
             _ => unreachable(),
         };
+        return self.op.shared(step);
     }
 
-    fn read(&mut self, id: i32) -> Expr {
+    fn read(&mut self, id: i32) -> i32 {
         let at = match self.operands.position(|o| o.node == id) {
             Some(k) => k,
             None => {
@@ -873,22 +919,31 @@ impl Built {
                 self.operands.len() - 1;
             },
         };
-        return operand(if self.group.product matches { Some(_) } { at + 1 } else { at });
+        return self.op.shared(Step::Operand(if self.group.product matches { Some(_) } { at + 1 } else { at }));
     }
 }
 
 /// `op` applied to `x`.
 pub fn unary_of(x: &Expr, op: Unary) -> Expr {
+    return match unary_step(op) {
+        Some(u) => x.unary(u),
+        None => constant(1.0).binary(BinaryOp::Div, &x.unary(UnaryOp::Sqrt)),
+    };
+}
+
+/// The step computing `op`, where one does: all but `Rsqrt`, which divides 1
+/// by a square root.
+fn unary_step(op: Unary) -> Option<UnaryOp> {
     return match op {
-        Abs => x.unary(UnaryOp::Abs),
-        Erf => x.unary(UnaryOp::Erf),
-        Exponential => x.unary(UnaryOp::Exp),
-        Log => x.unary(UnaryOp::Log),
-        Logistic => x.unary(UnaryOp::Sigmoid),
-        Negate => x.unary(UnaryOp::Neg),
-        Rsqrt => constant(1.0).binary(BinaryOp::Div, &x.unary(UnaryOp::Sqrt)),
-        Sqrt => x.unary(UnaryOp::Sqrt),
-        Tanh => x.unary(UnaryOp::Tanh),
+        Abs => Option::Some(UnaryOp::Abs),
+        Erf => Option::Some(UnaryOp::Erf),
+        Exponential => Option::Some(UnaryOp::Exp),
+        Log => Option::Some(UnaryOp::Log),
+        Logistic => Option::Some(UnaryOp::Sigmoid),
+        Negate => Option::Some(UnaryOp::Neg),
+        Rsqrt => null,
+        Sqrt => Option::Some(UnaryOp::Sqrt),
+        Tanh => Option::Some(UnaryOp::Tanh),
     };
 }
 

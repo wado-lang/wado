@@ -1714,7 +1714,7 @@ impl Ord for Step {
 
 impl Step {
     /// The case, then its payload, each as a number.
-    fn key(&self) -> [i32, i32, i32, i32] {
+    pub fn key(&self) -> [i32, i32, i32, i32] {
         return match *self {
             Operand(n) => [0, n, 0, 0],
             Constant(c) => [1, c.to_bits() as i32, 0, 0],
@@ -1870,9 +1870,17 @@ impl Expr {
         return at[at.len() - 1];
     }
 
+    /// The step at `at` as the output: computed again last where it is not
+    /// the last.
+    pub fn ending(&mut self, at: i32) {
+        if at != self.last() {
+            self.steps.push(self.steps[at]);
+        }
+    }
+
     /// Where `step` is computed: an equal step already here, or `step` added
     /// last.
-    fn shared(&mut self, step: Step) -> i32 {
+    pub fn shared(&mut self, step: Step) -> i32 {
         if let Some(at) = self.steps.position(|s| s == step) {
             return at;
         }

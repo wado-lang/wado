@@ -544,13 +544,14 @@ pub fn run<affine G: Graph>(g: &mut G, recorded: &Recorded, arguments: &List<Any
 pub fn constants(recorded: &Recorded) -> HashMap<i32, Any<Cpu>> {
     let mut cpu = Cpu {};
     let mut state = Run::<Cpu>::new();
-    for let [id, node] of recorded.nodes.into_iter().enumerate() {
-        let reads_none = match node.op {
+    for let id of 0..<recorded.nodes.len() {
+        let node = &recorded.nodes[id];
+        let reads_none = match &node.op {
             Parameter(_) | Case(_) | Yield | Attention(_) | Part(_) => false,
             _ => node.operands.into_iter().all(|o| state.values.contains_key(o)),
         };
         if reads_none {
-            state.values[id] = state.computed(&mut cpu, id, &node, &[]);
+            state.values[id] = state.computed(&mut cpu, id, node, &[]);
         }
     }
     return state.values;
@@ -580,20 +581,20 @@ impl<affine G: Graph> Run<G> {
         arguments: &List<Any<G>>,
     ) -> List<Any<G>> with _ {
         for let id of region.nodes {
-            let node = recorded.nodes[id];
-            if let Case([first, second]) = node.op {
+            let node = &recorded.nodes[id];
+            if let Case([first, second]) = &node.op {
                 let pred = bools(&self.values[node.operands[0]]);
                 let yielded = g.conditional::<Untyped, List<Any<G>>>(
                     &pred,
-                    || self.region(g, recorded, &first, arguments),
-                    || self.region(g, recorded, &second, arguments),
+                    || self.region(g, recorded, first, arguments),
+                    || self.region(g, recorded, second, arguments),
                 );
                 for let [k, result] of first.results.into_iter().enumerate() {
                     self.values[result] = yielded[k];
                 }
                 continue;
             }
-            let value = self.computed(g, id, &node, arguments);
+            let value = self.computed(g, id, node, arguments);
             self.values[id] = value;
         }
         return region.results.into_iter().map(|r| self.values[r]).collect();
@@ -611,39 +612,39 @@ impl<affine G: Graph> Run<G> {
 
     internal fn computed(&mut self, g: &mut G, id: i32, node: &RecordedNode, arguments: &List<Any<G>>) -> Any<G> with _ {
         let extents = node.extents;
-        return match node.op {
-            Parameter(i) => arguments[i],
+        return match &node.op {
+            Parameter(i) => arguments[*i],
             Constant(data) => match data {
-                F32(v) => Any::F32(g.upload(&Tensor::<f32, Untyped> { data: v, extents })),
-                I64(v) => Any::I64(g.upload(&Tensor::<i64, Untyped> { data: v, extents })),
-                Bool(v) => Any::Bool(g.upload(&Tensor::<bool, Untyped> { data: v, extents })),
+                F32(v) => Any::F32(g.upload(&Tensor::<f32, Untyped> { data: *v, extents })),
+                I64(v) => Any::I64(g.upload(&Tensor::<i64, Untyped> { data: *v, extents })),
+                Bool(v) => Any::Bool(g.upload(&Tensor::<bool, Untyped> { data: *v, extents })),
             },
             Iota(dimension) => match node.kind {
-                F32 => Any::F32(g.iota::<f32, Untyped>(extents, dimension)),
-                I64 => Any::I64(g.iota::<i64, Untyped>(extents, dimension)),
-                Bool => Any::Bool(g.iota::<bool, Untyped>(extents, dimension)),
+                F32 => Any::F32(g.iota::<f32, Untyped>(extents, *dimension)),
+                I64 => Any::I64(g.iota::<i64, Untyped>(extents, *dimension)),
+                Bool => Any::Bool(g.iota::<bool, Untyped>(extents, *dimension)),
             },
             Convert => match self.operand(node, 0) {
                 F32(t) => converted::<G, f32>(g, &t, node.kind),
                 I64(t) => converted::<G, i64>(g, &t, node.kind),
                 Bool(t) => converted::<G, bool>(g, &t, node.kind),
             },
-            Unary(op) => Any::F32(g.unary::<Untyped>(op, &f32s(&self.operand(node, 0)))),
+            Unary(op) => Any::F32(g.unary::<Untyped>(*op, &f32s(&self.operand(node, 0)))),
             Binary(op) => match [
                 self.operand(node, 0),
                 self.operand(node, 1),
             ] {
-                [F32(a), F32(b)] => Any::F32(g.binary::<f32, Untyped>(op, &a, &b)),
-                [I64(a), I64(b)] => Any::I64(g.binary::<i64, Untyped>(op, &a, &b)),
+                [F32(a), F32(b)] => Any::F32(g.binary::<f32, Untyped>(*op, &a, &b)),
+                [I64(a), I64(b)] => Any::I64(g.binary::<i64, Untyped>(*op, &a, &b)),
                 _ => unreachable(),
             },
             Compare(direction) => match [
                 self.operand(node, 0),
                 self.operand(node, 1),
             ] {
-                [F32(a), F32(b)] => Any::Bool(g.compare::<f32, Untyped>(direction, &a, &b)),
-                [I64(a), I64(b)] => Any::Bool(g.compare::<i64, Untyped>(direction, &a, &b)),
-                [Bool(a), Bool(b)] => Any::Bool(g.compare::<bool, Untyped>(direction, &a, &b)),
+                [F32(a), F32(b)] => Any::Bool(g.compare::<f32, Untyped>(*direction, &a, &b)),
+                [I64(a), I64(b)] => Any::Bool(g.compare::<i64, Untyped>(*direction, &a, &b)),
+                [Bool(a), Bool(b)] => Any::Bool(g.compare::<bool, Untyped>(*direction, &a, &b)),
                 _ => unreachable(),
             },
             Select => {
@@ -667,28 +668,28 @@ impl<affine G: Graph> Run<G> {
                 self.operand(node, 0),
                 self.operand(node, 1),
             ] {
-                [F32(a), F32(b)] => Any::F32(g.concatenate::<f32, Untyped, Untyped, Untyped>(&a, &b, dimension)),
-                [I64(a), I64(b)] => Any::I64(g.concatenate::<i64, Untyped, Untyped, Untyped>(&a, &b, dimension)),
-                [Bool(a), Bool(b)] => Any::Bool(g.concatenate::<bool, Untyped, Untyped, Untyped>(&a, &b, dimension)),
+                [F32(a), F32(b)] => Any::F32(g.concatenate::<f32, Untyped, Untyped, Untyped>(&a, &b, *dimension)),
+                [I64(a), I64(b)] => Any::I64(g.concatenate::<i64, Untyped, Untyped, Untyped>(&a, &b, *dimension)),
+                [Bool(a), Bool(b)] => Any::Bool(g.concatenate::<bool, Untyped, Untyped, Untyped>(&a, &b, *dimension)),
                 _ => unreachable(),
             },
             Reduce([op, init, dims]) => Any::F32(g.reduce::<Untyped, Untyped>(
                 &f32s(&self.operand(node, 0)),
-                op,
-                init,
-                dims,
+                *op,
+                *init,
+                *dims,
             )),
             DotGeneral(dims) => Any::F32(g.dot_general::<Untyped, Untyped, Untyped>(
                 &f32s(&self.operand(node, 0)),
                 &f32s(&self.operand(node, 1)),
-                &dims,
+                dims,
             )),
             Gather(dims) => {
                 let indices = i64s(&self.operand(node, 1));
                 match self.operand(node, 0) {
-                    F32(t) => Any::F32(g.gather::<f32, Untyped, Untyped, Untyped>(&t, &indices, &dims)),
-                    I64(t) => Any::I64(g.gather::<i64, Untyped, Untyped, Untyped>(&t, &indices, &dims)),
-                    Bool(t) => Any::Bool(g.gather::<bool, Untyped, Untyped, Untyped>(&t, &indices, &dims)),
+                    F32(t) => Any::F32(g.gather::<f32, Untyped, Untyped, Untyped>(&t, &indices, dims)),
+                    I64(t) => Any::I64(g.gather::<i64, Untyped, Untyped, Untyped>(&t, &indices, dims)),
+                    Bool(t) => Any::Bool(g.gather::<bool, Untyped, Untyped, Untyped>(&t, &indices, dims)),
                 }
             },
             Scatter(dims) => {
@@ -697,13 +698,13 @@ impl<affine G: Graph> Run<G> {
                     self.operand(node, 0),
                     self.operand(node, 2),
                 ] {
-                    [F32(a), F32(u)] => Any::F32(g.scatter::<f32, Untyped, Untyped, Untyped>(&a, &indices, &u, &dims)),
-                    [I64(a), I64(u)] => Any::I64(g.scatter::<i64, Untyped, Untyped, Untyped>(&a, &indices, &u, &dims)),
+                    [F32(a), F32(u)] => Any::F32(g.scatter::<f32, Untyped, Untyped, Untyped>(&a, &indices, &u, dims)),
+                    [I64(a), I64(u)] => Any::I64(g.scatter::<i64, Untyped, Untyped, Untyped>(&a, &indices, &u, dims)),
                     [Bool(a), Bool(u)] => Any::Bool(g.scatter::<bool, Untyped, Untyped, Untyped>(
                         &a,
                         &indices,
                         &u,
-                        &dims,
+                        dims,
                     )),
                     _ => unreachable(),
                 }
@@ -711,21 +712,21 @@ impl<affine G: Graph> Run<G> {
             Convolution(conv) => Any::F32(g.convolution::<Untyped, Untyped, Untyped>(
                 &f32s(&self.operand(node, 0)),
                 &f32s(&self.operand(node, 1)),
-                &conv,
+                conv,
             )),
             ReduceWindow([op, init, window]) => Any::F32(g.reduce_window::<Untyped, Untyped>(
                 &f32s(&self.operand(node, 0)),
-                op,
-                init,
-                &window,
+                *op,
+                *init,
+                window,
             )),
-            ArgMax(axis) => Any::I64(g.index_of_max::<Untyped>(&f32s(&self.operand(node, 0)), axis)),
+            ArgMax(axis) => Any::I64(g.index_of_max::<Untyped>(&f32s(&self.operand(node, 0)), *axis)),
             Attention(attention) => {
-                let [attended, present_k, present_v] = self.attended(g, node, &attention);
+                let [attended, present_k, present_v] = self.attended(g, node, attention);
                 self.parts[id] = [present_k, present_v];
                 attended;
             },
-            Part(k) => self.parts[node.operands[0]][k - 1],
+            Part(k) => self.parts[node.operands[0]][*k - 1],
             Case(_) => unreachable(),
         };
     }

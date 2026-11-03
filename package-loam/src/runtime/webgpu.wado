@@ -432,7 +432,7 @@ pub affine struct WebGpuBackend {
     /// The serial of the programs of each structure `compiled` met.
     programs: HashMap<List<i32>, i32>,
     /// The number of each launch signature `compiled` met.
-    signatures: HashMap<String, i32>,
+    signatures: HashMap<List<i32>, i32>,
     /// The buffers each launch of a program makes, by its `launch_key`, in
     /// the order a launch makes them.
     owned: HashMap<i64, List<Owned>>,
@@ -2261,9 +2261,10 @@ impl WebGpuBackend {
         return numbered(&mut self.programs, structure);
     }
 
-    /// A number for the signature `text`, the one it had where one had it.
-    internal fn signature(&mut self, text: String) -> i32 {
-        return numbered(&mut self.signatures, text);
+    /// A number for the kernel signature `s`, the one it had where one had
+    /// it.
+    internal fn signature(&mut self, s: List<i32>) -> i32 {
+        return numbered(&mut self.signatures, s);
     }
 
     /// Starts recording the commands of a launch.
