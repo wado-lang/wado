@@ -562,9 +562,10 @@ onnxruntime on WebGPU reads near 0.35 on the first prompt, and near 0.35 or
 near 0.75 on the second from one run to the next. Both Loam entries rank the
 logits on the device and read back one index, `compute` through the generator's
 `arg_max` option, on the kernel `pass` runs. `compute` runs the products of one
-input as one, replays each fused kernel's dispatches as the call before encoded
-them, and encodes the attention and the gather again on every call, since each
-reads a value on the host.
+input as one, and replays each fused kernel's dispatches as the call before encoded
+them. It replays the attention too, with the positions' parameters set anew,
+where a decode step appends to the cache in place. It encodes the gather again
+on every call, since it reads a value on the host.
 
 Each Loam entry is one program in `example/gemma3-270m`, which prints each
 prompt's time a token beside onnxruntime's on both:

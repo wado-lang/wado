@@ -359,10 +359,7 @@ fn renamed_over(was: &List<DeviceTensor>, now: &List<&DeviceTensor>) -> Option<R
 impl Carved {
     fn word(&self, at: i32) -> u32 {
         let b = 4 * at;
-        return self.bytes[b] as u32
-            | self.bytes[b + 1] as u32 << 8
-            | self.bytes[b + 2] as u32 << 16
-            | self.bytes[b + 3] as u32 << 24;
+        return self.bytes[b] as u32 | self.bytes[b + 1] as u32 << 8 | self.bytes[b + 2] as u32 << 16 | self.bytes[b + 3] as u32 << 24;
     }
 
     fn set_word(&mut self, at: i32, word: u32) {
@@ -1680,7 +1677,10 @@ impl WebGpuBackend {
                     continue;
                 }
                 assert o.half == operands[firsts[b]].half, "one buffer holds one element type";
-                let [least, most] = [i32::min(words[b].0, lo), i32::max(words[b].1, hi)];
+                let [least, most] = [
+                    i32::min(words[b].0, lo),
+                    i32::max(words[b].1, hi),
+                ];
                 if let Some(wider) = self.span_over(o.slot, least, most) {
                     spans[b] = wider;
                     words[b] = [least, most];
@@ -2286,7 +2286,11 @@ impl WebGpuBackend {
         attend_head.push(if options.causal { 1 } else { 0 });
         let join_head: List<u32> = [rows as u32, rx as u32, total.div_ceil(part) as u32, d as u32];
         let heads_of: List<List<u32>> = [append_head, attend_head, join_head];
-        let grids: List<[i32, i32, i32]> = [[x, y, 1], [gx, gy, 1], [rx, ry, 1]];
+        let grids: List<[i32, i32, i32]> = [
+            [x, y, 1],
+            [gx, gy, 1],
+            [rx, ry, 1],
+        ];
         let mut reads: List<&DeviceTensor> = [q, k, v, past_k, past_v];
         if let Some([c, sn]) = rotary {
             reads.push(c);
@@ -2296,13 +2300,29 @@ impl WebGpuBackend {
             reads.push(b);
         }
         let present = |cache: i32| [
-            DeviceTensor { slot: cache, offset: 0, extents: [batch, kv, total, d], strides, half: false },
-            DeviceTensor { slot: cache, offset: n, extents: [batch, kv, total, d], strides, half: false },
+            DeviceTensor {
+                slot: cache,
+                offset: 0,
+                extents: [batch, kv, total, d],
+                strides,
+                half: false,
+            },
+            DeviceTensor {
+                slot: cache,
+                offset: n,
+                extents: [batch, kv, total, d],
+                strides,
+                half: false,
+            },
         ];
         let appending = self.appendable(past_k, past_v, capacity, n, &strides, past);
         // Recorded where a later call can do it again: over the cache it
         // appends to in place, in a launch, outside another recording.
-        let key = if appending matches { Some(_) } && self.taping matches { None } { self.attention_key() } else { null };
+        let key = if appending matches { Some(_) } && self.taping matches { None } {
+            self.attention_key();
+        } else {
+            null;
+        };
         if let Some(cache) = appending
             && let Some(k) = key
             && let Some(result) = self.replayed_as(k, &reads, &heads_of, &grids) {

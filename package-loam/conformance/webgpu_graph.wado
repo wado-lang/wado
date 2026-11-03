@@ -188,10 +188,10 @@ export fn run() with (Stdout, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuC
     let mut attended_cpu = attended::Model::new(attended::Params::embedded(cpu));
     let mut cache_gpu = attended::Cache::empty(&mut gpu);
     let mut cache_cpu = attended::Cache::empty(cpu);
-    // A decode step's attention appends to the cache in place and replays
-    // what the step before at its capacity recorded: the third step on, until
-    // the cache outgrows its capacity. The other replay slices the key and the
-    // value.
+    // A decode step appending to the cache in place replays the attention the
+    // step before recorded at that capacity: the steps to 7 and 8 positions.
+    // The steps to 5 and 9 outgrow the capacity, and the step to 6 is the first
+    // at its own. The other replay slices the key and the value.
     let mut total = 0;
     for let [positions, replays] of [
         [3, 0],
@@ -207,7 +207,10 @@ export fn run() with (Stdout, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuC
         for let i of 0..<positions * 32 {
             data.push(((i + total) % 11) as f32 * 0.125 - 0.625);
         }
-        let fresh = Tensor::<f32, [attended::X0, attended::S, attended::X2]> { data, extents: [1, positions, 32] };
+        let fresh = Tensor::<f32, [attended::X0, attended::S, attended::X2]> {
+            data,
+            extents: [1, positions, 32],
+        };
         let mask = Tensor::<i64, [attended::AttentionMask0, attended::T]> {
             data: List::<i64>::filled(total, 1),
             extents: [1, total],
