@@ -20,7 +20,6 @@ use crate::nir_arena::{
 use crate::nir_engine::Engine;
 use crate::nir_package::NirPackage;
 use crate::nir_value_graph::{ValueId, ValueKind};
-use crate::nir_visitor::NirRefVisitor;
 use crate::optimize::mod_ref;
 use crate::optimize::value_copy::mutation::MutationOracle;
 use crate::rarity::{Mark, Rarity};
@@ -503,34 +502,12 @@ pub(super) fn stmt_diverges(body: &Body, stmt: StmtId, type_table: &TypeTable) -
         StmtKind::Expr(e) => e
             .as_expr()
             .is_some_and(|e| type_table.is_never(body.exprs[e].type_id)),
-        StmtKind::Loop { body: b } => !block_breaks_innermost_loop(body, *b),
+        StmtKind::Loop { .. } => body.loops_forever(stmt),
         StmtKind::Let { .. }
         | StmtKind::LetDestructure { .. }
         | StmtKind::If { .. }
         | StmtKind::LabeledBlock { .. } => false,
     }
-}
-
-/// Whether an unlabeled `break` binds to the loop whose body is `block`. A
-/// nested loop captures its own, so its subtree is skipped.
-fn block_breaks_innermost_loop(body: &Body, block: BlockId) -> bool {
-    struct Search(bool);
-    impl NirRefVisitor for Search {
-        fn visit_node(&mut self, body: &Body, node: NodeRef) {
-            if let NodeRef::Stmt(s) = node {
-                if matches!(body.stmts[s].kind, StmtKind::Loop { .. }) {
-                    return;
-                }
-                if matches!(body.stmts[s].kind, StmtKind::Break { label: None, .. }) {
-                    self.0 = true;
-                }
-            }
-            self.walk_node(body, node);
-        }
-    }
-    let mut search = Search(false);
-    search.visit_node(body, NodeRef::Block(block));
-    search.0
 }
 
 /// The program's marker builtins, each with what it states.

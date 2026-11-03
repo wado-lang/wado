@@ -122,29 +122,29 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 fn "opt_fusion_loop_capture.wado/run"() with Stdout {
     let hits: i32;
     let current_10: i32;
-    let current_22: i32;
     let out_38: ref "core:prelude/string.wado//String";
     let x_104: i64;
-    let $sroa_$iter_0_start_141: i32;
+    let current_156: i32;
+    let $sroa_$iter_0_start_165: i32;
     let arr: ref Array<u8>;
     let q: u64;
     let tens: i32;
     hits = 0;
-    $sroa_$iter_0_start_141 = 0;
+    $sroa_$iter_0_start_165 = 0;
     b0: block {
         l1: loop {
-            break_if b0 $sroa_$iter_0_start_141 >= 3;
-            $sroa_$iter_0_start_141 = local.tee current_10($sroa_$iter_0_start_141) + 1;
+            break_if b0 $sroa_$iter_0_start_165 >= 3;
+            $sroa_$iter_0_start_165 = local.tee current_10($sroa_$iter_0_start_165) + 1;
             $inline_f_sroa_return__5: block {
-                if local.tee current_22((if current_10 < 5 -> i32 {
+                if local.tee current_156((if current_10 < 5 -> i32 {
                     current_10 = 0;
                     b4: block {
                         l5: loop {
                             break_if b4 current_10 >= 5;
-                            current_10 = local.tee current_22(current_10) + 1;
-                            if current_22 == 2 {
+                            current_10 = local.tee current_156(current_10) + 1;
+                            if current_156 == 2 {
                                 current_10 = 1;
-                                current_22 = 100;
+                                current_156 = 100;
                                 break _i2;
                             }
                             continue l5;
@@ -155,15 +155,15 @@ fn "opt_fusion_loop_capture.wado/run"() with Stdout {
                     1;
                 })) > 100 {
                     current_10 = 0;
-                    current_22 = 0;
+                    current_156 = 0;
                     break $inline_f_sroa_return__5;
                 }
                 current_10 = 1;
-                current_22 = current_22 + 7;
+                current_156 = current_156 + 7;
                 break $inline_f_sroa_return__5;
             };
             if current_10 == 1 {
-                break b0: hits = hits + current_22;
+                break b0: hits = hits + current_156;
             } else {
             }
             hits = hits + 1000;
@@ -174,7 +174,7 @@ fn "opt_fusion_loop_capture.wado/run"() with Stdout {
     $inline_core_prelude_string_wado_String__internal_push_view_32: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_32;
     };
-    $sroa_$iter_0_start_141 = hits < 0;
+    $sroa_$iter_0_start_165 = hits < 0;
     x_104 = builtin::i64_extend_i32_s(hits);
     x_104 = select i64(x_104 < 0_i64, 0_i64 - x_104, x_104);
     current_10 = $inline_count_digits_u64_1: block -> i32 {
@@ -237,47 +237,47 @@ fn "opt_fusion_loop_capture.wado/run"() with Stdout {
         }
         break $inline_count_digits_u64_1: 20;
     };
-    if $sroa_$iter_0_start_141 {
-        if @unlikely(local.tee $sroa_$iter_0_start_141(0 + 1) > builtin::array_len(out_38.repr)) {
+    if $sroa_$iter_0_start_165 {
+        if @unlikely(local.tee $sroa_$iter_0_start_165(0 + 1) > builtin::array_len(out_38.repr)) {
             cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_38, $sroa_$iter_0_start_141);
+            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_38, $sroa_$iter_0_start_165);
         }
-        current_22 = out_38.used;
-        out_38.used = $sroa_$iter_0_start_141;
-        builtin::array_set_u8(out_38.repr, current_22, 45);
+        current_156 = out_38.used;
+        out_38.used = $sroa_$iter_0_start_165;
+        builtin::array_set_u8(out_38.repr, current_156, 45);
     } else {
     }
-    if @unlikely(local.tee $sroa_$iter_0_start_141(out_38.used + current_10) > builtin::array_len(out_38.repr)) {
+    if @unlikely(local.tee $sroa_$iter_0_start_165(out_38.used + current_10) > builtin::array_len(out_38.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_38, $sroa_$iter_0_start_141);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_38, $sroa_$iter_0_start_165);
     }
-    current_22 = out_38.used;
-    out_38.used = $sroa_$iter_0_start_141;
+    current_156 = out_38.used;
+    out_38.used = $sroa_$iter_0_start_165;
     arr = out_38.repr;
-    $sroa_$iter_0_start_141 = current_22 + current_10;
+    $sroa_$iter_0_start_165 = current_156 + current_10;
     b30: block {
         l31: loop {
-            break_if b30 ($sroa_$iter_0_start_141 - current_22) < 2;
+            break_if b30 ($sroa_$iter_0_start_165 - current_156) < 2;
             q = x_104 /u 100_i64;
             tens = local.tee current_10(builtin::i32_wrap_i64(x_104 - (q * 100_i64))) / 10;
-            builtin::array_set_u8(arr, $sroa_$iter_0_start_141 - 1, (48 + current_10) - (tens * 10));
-            builtin::array_set_u8(arr, $sroa_$iter_0_start_141 - 2, 48 + tens);
-            $sroa_$iter_0_start_141 = $sroa_$iter_0_start_141 - 2;
+            builtin::array_set_u8(arr, $sroa_$iter_0_start_165 - 1, (48 + current_10) - (tens * 10));
+            builtin::array_set_u8(arr, $sroa_$iter_0_start_165 - 2, 48 + tens);
+            $sroa_$iter_0_start_165 = $sroa_$iter_0_start_165 - 2;
             x_104 = q;
             continue l31;
         };
     };
-    if $sroa_$iter_0_start_141 > current_22 {
-        builtin::array_set_u8(arr, current_22, 48 + builtin::i32_wrap_i64(x_104 %u 10_i64));
+    if $sroa_$iter_0_start_165 > current_156 {
+        builtin::array_set_u8(arr, current_156, 48 + builtin::i32_wrap_i64(x_104 %u 10_i64));
     }
     $inline_core_prelude_string_wado_String__internal_push_view_51: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_51;
     };
-    $sroa_$iter_0_start_141 = builtin::i32_wrap_i64(local.tee x_104("wasi/stream-new"()));
+    $sroa_$iter_0_start_165 = builtin::i32_wrap_i64(local.tee x_104("wasi/stream-new"()));
     current_10 = builtin::i32_wrap_i64(x_104 >> 32_i64);
-    $sroa_$iter_0_start_141 = "opt_fusion_loop_capture.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$iter_0_start_141);
+    $sroa_$iter_0_start_165 = "opt_fusion_loop_capture.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$iter_0_start_165);
     "core:rt/write_string_to_stream$dae[add_newline]"(current_10, out_38.repr, out_38.used);
-    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_$iter_0_start_141);
+    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_$iter_0_start_165);
     if @unlikely(hits != 100) {
         cold_path;
         "opt_fusion_loop_capture.wado/run$cold0"(hits);

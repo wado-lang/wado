@@ -1203,7 +1203,10 @@ struct Fusion<'a> {
     /// leaves the fused block with the value of the arm it selects.
     yields: bool,
     span: Span,
+    /// The locals each exit binds afresh: [`BoundValue::locals`], and per arm
+    /// what [`renamable_locals`] finds in it.
     value: BoundValue,
+    renamable: Vec<Vec<u32>>,
 }
 
 impl Fusion<'_> {
@@ -1229,10 +1232,98 @@ enum BoundValue {
     },
 }
 
+#[derive(Clone, Copy)]
 struct BoundSlot {
     field_index: u32,
     local_index: u32,
     type_id: TypeId,
+}
+
+impl BoundValue {
+    /// The locals an exit binds for the arm it selects to read.
+    fn locals(&self) -> Vec<u32> {
+        match self {
+            Self::Variant { payload_local, .. } => vec![*payload_local],
+            Self::Slots { slots, .. } => slots.iter().map(|s| s.local_index).collect(),
+        }
+    }
+
+    /// This value with its locals as one exit binds them.
+    fn renamed(&self, renames: &IndexMap<u32, u32>) -> Self {
+        let rename = |local: u32| renames.get(&local).copied().unwrap_or(local);
+        match self {
+            Self::Variant {
+                case_index,
+                payload_local,
+                payload_type,
+            } => Self::Variant {
+                case_index: *case_index,
+                payload_local: rename(*payload_local),
+                payload_type: *payload_type,
+            },
+            Self::Slots {
+                tags,
+                arm_reads,
+                slots,
+            } => Self::Slots {
+                tags: tags.clone(),
+                arm_reads: arm_reads.clone(),
+                slots: slots
+                    .iter()
+                    .map(|s| BoundSlot {
+                        local_index: rename(s.local_index),
+                        ..*s
+                    })
+                    .collect(),
+            },
+        }
+    }
+}
+
+/// The locals `arm` binds, and `binding` where it is the arm's pattern binding,
+/// that a copy of the arm may bind afresh: every read of one lies in the arm,
+/// in the skeleton, which a copy renames, and no `let` outside binds it.
+fn renamable_locals(engine: &Engine, arm: BlockId, binding: Option<u32>) -> Vec<u32> {
+    let mut bound: IndexMap<u32, u32> = IndexMap::default();
+    engine
+        .body
+        .for_each_node_under(NodeRef::Block(arm), |node| match node {
+            NodeRef::Stmt(s) => {
+                if let StmtKind::Let { local_index, .. } = engine.body.stmts[s].kind {
+                    *bound.entry(local_index).or_default() += 1;
+                }
+            }
+            NodeRef::Pat(p) => {
+                if let PatKind::Binding { local_index, .. } = engine.body.pats[p].kind {
+                    bound.entry(local_index).or_default();
+                }
+            }
+            NodeRef::Expr(_) | NodeRef::Block(_) => {}
+        });
+    if let Some(binding) = binding {
+        bound.entry(binding).or_default();
+    }
+    let under_arm = |mut node: NodeRef| loop {
+        if node == NodeRef::Block(arm) {
+            return true;
+        }
+        let Some(parent) = engine.parent_of(node) else {
+            return false;
+        };
+        node = parent;
+    };
+    bound
+        .into_iter()
+        .filter(|&(local, lets)| {
+            engine.local_bindings(local) == lets
+                && engine.promoted_read_count(local) == 0
+                && engine
+                    .local_reads(local)
+                    .iter()
+                    .all(|&read| under_arm(NodeRef::Expr(read)))
+        })
+        .map(|(local, _)| local)
+        .collect()
 }
 
 fn perform_fusion(
@@ -1295,7 +1386,34 @@ fn perform_fusion(
         (arms, result_type)
     };
 
+    let pattern_binding = match &info.value {
+        FusedValue::Variant {
+            pattern_payload_binding,
+            ..
+        } => *pattern_payload_binding,
+        FusedValue::Slots { .. } => None,
+    };
     let value = bind_value(engine, info.value);
+    let minted: Vec<u32> = value
+        .locals()
+        .into_iter()
+        .filter(|&local| Some(local) != pattern_binding)
+        .collect();
+    let renamable = arms
+        .iter()
+        .enumerate()
+        .map(|(i, arm)| {
+            let mut locals = minted.clone();
+            if let Some(arm) = arm {
+                locals.extend(renamable_locals(
+                    engine,
+                    *arm,
+                    pattern_binding.filter(|_| i == 0),
+                ));
+            }
+            locals
+        })
+        .collect();
     // The fused block encloses the labeled block's body and the arms cloned into it.
     let mut enclosed = vec![NodeRef::Block(lb_block)];
     enclosed.extend(arms.iter().flatten().map(|b| NodeRef::Block(*b)));
@@ -1308,6 +1426,7 @@ fn perform_fusion(
         yields,
         span,
         value,
+        renamable,
     };
     replace_exits(engine, &info.exits, |engine, s| {
         fuse_exit(engine, s, &fusion)
@@ -1456,12 +1575,18 @@ fn let_stmt(
     )
 }
 
-fn emit_variant_payload_let(engine: &mut Engine, vc: ExprId, f: &Fusion, out: &mut Vec<StmtId>) {
+fn emit_variant_payload_let(
+    engine: &mut Engine,
+    vc: ExprId,
+    f: &Fusion,
+    bound: &BoundValue,
+    out: &mut Vec<StmtId>,
+) {
     let BoundValue::Variant {
         payload_local,
         payload_type,
         ..
-    } = f.value
+    } = *bound
     else {
         unreachable!("variant break under a slot fusion")
     };
@@ -1508,11 +1633,12 @@ fn emit_slot_lets(
     elements: &[Operand],
     arm: usize,
     f: &Fusion,
+    bound: &BoundValue,
     out: &mut Vec<StmtId>,
 ) {
     let BoundValue::Slots {
         slots, arm_reads, ..
-    } = &f.value
+    } = bound
     else {
         unreachable!("slot break under a variant fusion")
     };
@@ -1540,10 +1666,15 @@ fn fuse_exit(engine: &mut Engine, s: StmtId, f: &Fusion) -> Vec<StmtId> {
         .selector()
         .select(engine.body, value)
         .expect("guarded by the fusion preconditions");
+    let renames: IndexMap<u32, u32> = f.renamable[arm]
+        .iter()
+        .map(|&local| (local, engine.alloc_local_like(local)))
+        .collect();
+    let bound = f.value.renamed(&renames);
     let mut out = Vec::new();
-    match (&f.value, value.and_then(Operand::as_expr)) {
+    match (&bound, value.and_then(Operand::as_expr)) {
         (BoundValue::Variant { .. }, Some(vc)) if arm == 0 => {
-            emit_variant_payload_let(engine, vc, f, &mut out);
+            emit_variant_payload_let(engine, vc, f, &bound, &mut out);
         }
         (BoundValue::Variant { .. }, _) => emit_untaken_payload(engine, value, f.span, &mut out),
         (BoundValue::Slots { .. }, Some(tuple)) => {
@@ -1551,15 +1682,19 @@ fn fuse_exit(engine: &mut Engine, s: StmtId, f: &Fusion) -> Vec<StmtId> {
                 unreachable!("guarded by check_lb_breaks_are_tagged_tuples")
             };
             let elements = elements.clone();
-            emit_slot_lets(engine, &elements, arm, f, &mut out);
+            emit_slot_lets(engine, &elements, arm, f, &bound, &mut out);
         }
         (BoundValue::Slots { .. }, None) => unreachable!("guarded by the slot preconditions"),
     }
 
     let mut tail = None;
     if let Some(block) = f.arms[arm] {
-        let cloned = engine.clone_block(block);
-        subst_temp_reads_in_block(engine, cloned, f);
+        let cloned = engine.clone_block_renaming(block, renames);
+        let reads = TempReads {
+            temp_local: f.temp_local,
+            value: &bound,
+        };
+        subst_temp_reads_in_block(engine, cloned, &reads);
         let mut stmts = take_stmts(engine, cloned);
         if f.yields {
             let Some(StmtKind::Expr(value)) = stmts.pop().map(|s| &engine.body.stmts[s].kind)
@@ -1616,13 +1751,19 @@ fn split_tail(engine: &mut Engine, mut value: Operand, stmts: &mut Vec<StmtId>) 
 /// so each rewrite updates the use index (the new `Local` mention is
 /// registered, the replaced node's children are orphaned but never queried
 /// again).
-fn subst_temp_reads_in_block(engine: &mut Engine, block: BlockId, f: &Fusion) {
+fn subst_temp_reads_in_block(engine: &mut Engine, block: BlockId, f: &TempReads) {
     for s in engine.body.blocks[block].stmts.clone() {
         subst_temp_reads_in_stmt(engine, s, f);
     }
 }
 
-fn subst_temp_reads_in_stmt(engine: &mut Engine, s: StmtId, f: &Fusion) {
+/// The fused temp, and the locals one exit bound in its place.
+struct TempReads<'v> {
+    temp_local: u32,
+    value: &'v BoundValue,
+}
+
+fn subst_temp_reads_in_stmt(engine: &mut Engine, s: StmtId, f: &TempReads) {
     enum Shape {
         Expr(ExprId),
         ExprAndBlocks(Option<ExprId>, Vec<BlockId>),
@@ -1676,9 +1817,9 @@ fn subst_temp_reads_in_stmt(engine: &mut Engine, s: StmtId, f: &Fusion) {
 
 /// The `Local` that replaces `e`, when `e` is one of the consumer's reads of
 /// the fused temp.
-fn replacement_for(engine: &Engine, e: ExprId, f: &Fusion) -> Option<ExprKind> {
+fn replacement_for(engine: &Engine, e: ExprId, f: &TempReads) -> Option<ExprKind> {
     let body = &*engine.body;
-    match &f.value {
+    match f.value {
         BoundValue::Variant {
             case_index,
             payload_local,
@@ -1720,7 +1861,7 @@ fn replacement_for(engine: &Engine, e: ExprId, f: &Fusion) -> Option<ExprKind> {
     }
 }
 
-fn subst_temp_reads_in_expr(engine: &mut Engine, e: ExprId, f: &Fusion) {
+fn subst_temp_reads_in_expr(engine: &mut Engine, e: ExprId, f: &TempReads) {
     if let Some(kind) = replacement_for(engine, e, f) {
         engine.replace_expr_kind(e, kind);
         return;

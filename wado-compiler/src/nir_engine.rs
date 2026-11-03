@@ -12,6 +12,7 @@ use cranelift_entity::EntityRef;
 use crate::compiler_trace;
 use crate::const_eval::Value;
 use crate::hashmap::{IndexMap, IndexSet};
+use crate::name::serial_suffixed;
 use crate::nir::{FuncId, NirLocal, NirParam};
 use crate::nir_arena::{
     ArenaCallArg, ArenaStructField, ArenaStructPatternField, ArmData, BlockId, BlockNode, Body,
@@ -341,6 +342,9 @@ pub struct Engine<'a> {
     /// so passes consuming [`Engine::loop_entry_value`] must call
     /// [`Engine::seed_params`] first.
     seeds_params: bool,
+    /// The locals a clone under way binds afresh: see
+    /// [`Engine::clone_block_renaming`].
+    clone_renames: IndexMap<u32, u32>,
     /// Calls that mutate no caller local; the build skips their per-call
     /// `mut_escaped` bump. Empty is conservative.
     pure_calls: IndexSet<ExprId>,
@@ -401,6 +405,7 @@ impl<'a> Engine<'a> {
             alias: AliasSets::default(),
             params: params.iter().map(|p| p.local_index).collect(),
             seeds_params: false,
+            clone_renames: IndexMap::default(),
             pure_calls: IndexSet::default(),
             receiver_immutable_calls: IndexSet::default(),
             call_writes: IndexMap::default(),
@@ -896,7 +901,7 @@ impl<'a> Engine<'a> {
     }
 
     /// How many `Let` statements bind `local`.
-    fn local_bindings(&self, local: u32) -> u32 {
+    pub fn local_bindings(&self, local: u32) -> u32 {
         self.buf.uses.get(local as usize).map_or(0, |u| u.defs)
     }
 
@@ -1454,6 +1459,44 @@ impl<'a> Engine<'a> {
         self.alloc_block(stmts, node.span)
     }
 
+    /// [`Engine::clone_block`], each local `renames` names bound and read in
+    /// the copy as its fresh counterpart. Two copies that bind one local leave
+    /// it with two versions, which every single-version rewrite declines.
+    pub fn clone_block_renaming(&mut self, id: BlockId, renames: IndexMap<u32, u32>) -> BlockId {
+        assert!(
+            self.clone_renames.is_empty(),
+            "clones do not nest a renaming"
+        );
+        self.clone_renames = renames;
+        let block = self.clone_block(id);
+        self.clone_renames.clear();
+        block
+    }
+
+    /// A fresh local typed as `of`, for a copy of what binds it.
+    pub fn alloc_local_like(&mut self, of: u32) -> u32 {
+        let index = u32::try_from(self.locals.len()).expect("local index overflow");
+        let NirLocal {
+            name,
+            type_id,
+            is_mut,
+        } = self.locals[of as usize].clone();
+        self.locals.push(NirLocal {
+            name: serial_suffixed(&name, index),
+            type_id,
+            is_mut,
+        });
+        index
+    }
+
+    /// `local` and its name as the clone under way spells them.
+    fn renamed(&self, local: u32, name: String) -> (u32, String) {
+        match self.clone_renames.get(&local) {
+            Some(&fresh) => (fresh, self.local_name(fresh)),
+            None => (local, name),
+        }
+    }
+
     fn clone_stmt(&mut self, id: StmtId) -> StmtId {
         let node = self.body.stmts[id].clone();
         let kind = self.clone_stmt_kind(node.kind);
@@ -1641,6 +1684,10 @@ impl<'a> Engine<'a> {
                 arms: arms.into_iter().map(|a| self.clone_block(a)).collect(),
                 default: self.clone_block(default),
             },
+            ExprKind::Local { index, name } => {
+                let (index, name) = self.renamed(index, name);
+                ExprKind::Local { index, name }
+            }
             // Leaves carry no id children.
             leaf => leaf,
         }
@@ -1655,14 +1702,17 @@ impl<'a> Engine<'a> {
                 type_id,
                 value,
                 skip_value_copy,
-            } => StmtKind::Let {
-                name,
-                local_index,
-                is_mut,
-                type_id,
-                value: self.clone_operand(value),
-                skip_value_copy,
-            },
+            } => {
+                let (local_index, name) = self.renamed(local_index, name);
+                StmtKind::Let {
+                    name,
+                    local_index,
+                    is_mut,
+                    type_id,
+                    value: self.clone_operand(value),
+                    skip_value_copy,
+                }
+            }
             StmtKind::Expr(e) => StmtKind::Expr(self.clone_operand(e)),
             StmtKind::Return { value } => StmtKind::Return {
                 value: value.map(|e| self.clone_operand(e)),
@@ -1733,6 +1783,18 @@ impl<'a> Engine<'a> {
             PatKind::ConstantValue { expr } => PatKind::ConstantValue {
                 expr: self.clone_operand(expr),
             },
+            PatKind::Binding {
+                name,
+                local_index,
+                type_id,
+            } => {
+                let (local_index, name) = self.renamed(local_index, name);
+                PatKind::Binding {
+                    name,
+                    local_index,
+                    type_id,
+                }
+            }
             // Leaves carry no id children.
             leaf => leaf,
         }

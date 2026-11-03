@@ -24,7 +24,9 @@ pub(super) struct AggregateForwardRule;
 fn is_aggregate_literal(body: &Body, expr: ExprId) -> bool {
     matches!(
         body.exprs[expr].kind,
-        ExprKind::StructLiteral { .. } | ExprKind::TupleLiteral { .. }
+        ExprKind::StructLiteral { .. }
+            | ExprKind::TupleLiteral { .. }
+            | ExprKind::VariantConstruct { .. }
     )
 }
 
@@ -68,7 +70,13 @@ fn binding(body: &Body, stmt: StmtId) -> Option<(u32, ExprId)> {
 /// of the case `source` constructs. Returns the node to overwrite and the
 /// operand that should replace it.
 fn consumer(body: &Body, stmt: StmtId, local: u32, source: ExprId) -> Option<(ExprId, Operand)> {
-    let (_, read) = binding(body, stmt)?;
+    let read = match &body.stmts[stmt].kind {
+        // `break L: b` — the value an inlined callee's exit hands its block.
+        StmtKind::Break {
+            value: Some(value), ..
+        } => value.as_expr()?,
+        _ => binding(body, stmt)?.1,
+    };
     match &body.exprs[read].kind {
         // `let b = a` — a copy, kept alive only because `b` is later written.
         ExprKind::Local { index, .. } if *index == local && is_aggregate_literal(body, source) => {
