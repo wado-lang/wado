@@ -104,13 +104,7 @@ use crate::tir::{
     TirHandlerBinding, TirLiteralPattern, TirMatchArm, TirStructField, TirStructPatternField,
     deref_to_layers, hold_hole, to_layers_of, wrapped_reference,
 };
-<<<<<<< HEAD
-use crate::tir_visitor::{TirMutVisitor, traps};
-||||||| 84c115a8b6e
-use crate::tir_visitor::TirMutVisitor;
-=======
 use crate::tir_visitor::{TirMutVisitor, TirRefVisitor};
->>>>>>> origin/main
 use crate::token::Span;
 use crate::unparse::{unparse_expr_source, unparse_pattern_source};
 
@@ -2114,30 +2108,15 @@ impl<'a> Reify<'a> {
     ///
     /// Marking here rather than at each synthesis site is what gives a
     /// `panic(…)` written in source the same treatment as the ones this file
-<<<<<<< HEAD
-    /// builds. A `!` statement that returns, breaks or loops forever on some
-    /// path is not a cold one: the `match` a `let … else` desugars into is
-    /// such a statement, and marking it made the rest of its block look cold
-    /// to the inliner.
-||||||| 84c115a8b6e
-    /// builds. A `return` / `break` ends a path too, but a normal exit is not a
-    /// cold one, so it is left alone.
-=======
-    /// builds. A `return` / `break` ends a path too, but a normal exit is not a
-    /// cold one, so it is left alone, and so is a `!` statement that takes one
-    /// on some path: a `let … else` desugars to such a `match`.
->>>>>>> origin/main
+    /// builds. A `return` / `break` ends a path too, and a loop no `break`
+    /// leaves never ends one, but neither is a cold path. So a `!` statement
+    /// that takes one on some path is left alone: a `let … else` desugars to
+    /// such a `match`, and marking it made the rest of its block cold to the
+    /// inliner.
     fn mark_diverging_stmts(&self, stmts: Vec<TirStmt>) -> Vec<TirStmt> {
         let tt = self.tysys.type_table.borrow();
         let diverges = |s: &TirStmt| {
-<<<<<<< HEAD
-            matches!(&s.kind, TirStmtKind::Expr(e) if tt.is_never(e.type_id) && traps(e))
-||||||| 84c115a8b6e
-        let diverges =
-            |s: &TirStmt| matches!(&s.kind, TirStmtKind::Expr(e) if tt.is_never(e.type_id));
-=======
-            matches!(&s.kind, TirStmtKind::Expr(e) if tt.is_never(e.type_id)) && !exits_normally(s)
->>>>>>> origin/main
+            matches!(&s.kind, TirStmtKind::Expr(e) if tt.is_never(e.type_id)) && traps(s)
         };
         if !stmts.iter().any(diverges) {
             return stmts;
@@ -10534,19 +10513,35 @@ fn half_literal(bits: u64, ty: TypeId, span: Span) -> TirExpr {
     )
 }
 
-/// Whether `stmt` holds a `return`, or a `break` / `continue` leaving `stmt`.
-fn exits_normally(stmt: &TirStmt) -> bool {
+/// Whether every path through the `!` statement `stmt` traps: none holds a
+/// `return`, a `break` / `continue` leaving `stmt`, or a loop no `break`
+/// leaves.
+fn traps(stmt: &TirStmt) -> bool {
     let mut finder = ExitFinder {
         scope: ExitScope::default(),
         found: false,
+        breaks_only: false,
     };
     finder.visit_stmt(stmt);
+    !finder.found
+}
+
+/// Whether a `break` in the loop body `body` leaves the loop.
+fn breaks_out(body: &TirBlock) -> bool {
+    let mut finder = ExitFinder {
+        scope: ExitScope::default(),
+        found: false,
+        breaks_only: true,
+    };
+    finder.visit_block(body);
     finder.found
 }
 
 struct ExitFinder {
     scope: ExitScope,
     found: bool,
+    /// Whether only a `break` leaving the region counts.
+    breaks_only: bool,
 }
 
 impl ExitFinder {
@@ -10559,8 +10554,12 @@ impl ExitFinder {
 
 impl TirRefVisitor for ExitFinder {
     fn visit_stmt(&mut self, stmt: &TirStmt) {
-        self.found |= self.scope.exits(&stmt.kind);
+        self.found |= self.scope.exits(&stmt.kind)
+            && (!self.breaks_only || matches!(stmt.kind, TirStmtKind::Break { .. }));
         match &stmt.kind {
+            TirStmtKind::Loop { body } if !self.breaks_only && !breaks_out(body) => {
+                self.found = true;
+            }
             TirStmtKind::Loop { .. } | TirStmtKind::VariadicForOf { .. } => {
                 self.scope.enter_loop();
                 self.walk_stmt(stmt);
