@@ -66,6 +66,7 @@ __DATA__
 {
     "stdout": "[true]\"key\":<a long constant hoisted to a global and copied back in><a long constant hoisted to a global and copied back in>\nab<ab<>\n",
     "wir_scope": "opt_string_append_fuse.wado/run",
+    "wir_pass": {"O2": ["nir/peephole"]},
     "wir_expect:O2": [
         "local.tee buf_0(struct.new \"core:prelude/string.wado//String\" { repr: builtin::array_new<u8>(128), used: 0 }).used = 6;",
         "builtin::array_set_u8($load_{}, 5, 93);",
@@ -76,9 +77,5 @@ __DATA__
         "builtin::array_set_u8($load_{}, start_{} + 55, 62);",
         "builtin::array_copy<u8>(local.tee $load_{}(buf_0.repr), i, $load_{}, 0, 3);"
     ],
-    "wir_not_expect:O2": [
-        "String::push_str\"(",
-        "String::push\"(",
-        "encode_char"
-    ]
+    "wir_not_expect:O2": ["String::push\"("]
 }

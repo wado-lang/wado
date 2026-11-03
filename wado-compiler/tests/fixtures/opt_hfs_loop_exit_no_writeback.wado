@@ -44,9 +44,10 @@ export fn run() {
 __DATA__
 {
     "stdout": "",
+    "wir_pass": {"O2": ["nir/field_scalarize"]},
     "wir_expect:O2": [
         "$hfs_counter_{} = state.counter",
         "state.counter = $hfs_counter_{};\n                break b{}"
     ],
-    "wir_not_expect:O2": ["state.counter = $hfs_counter_{};\n            continue l{}"]
+    "wir_guard": {"O2": {"not_expect": ["state.counter = $hfs_counter_{};\n            continue l{}"]}}
 }

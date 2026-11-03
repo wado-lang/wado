@@ -47,12 +47,11 @@ export fn run() with Stdout {
 __DATA__
 {
     "stdout": "3\n",
+    "wir_pass": {"O2": ["nir/field_scalarize", "nir/inline"]},
     "wir_expect:O2": [
         "if builtin::array_get_value<u8>($licm_repr_",
         "self.pos = $hfs_pos_{};\n                break"
     ],
-    "wir_not_expect:O2": [
-        "self.pos = $hfs_pos_{};\n            continue",
-        "String::byte_at$unchecked\""
-    ]
+    "wir_not_expect:O2": ["String::byte_at$unchecked\""],
+    "wir_guard": {"O2": {"not_expect": ["self.pos = $hfs_pos_{};\n            continue"]}}
 }

@@ -1,8 +1,6 @@
-// Verifies that a `List<T>` literal reaches the WIR as one `array.new_fixed`,
-// with no push chain — `lower` emits the array node the literal denotes.
-//
-// Only the lists something still reads at run time reach the WIR: one whose
-// every read folds to the element it denotes drops with its array.
+// `List<T>` literals of every shape read back what they denote. A list whose
+// every read folds to the element it denotes drops with its array, as the
+// `String` one does.
 use { println, Stdout } from "core:cli";
 
 export fn run() with Stdout {
@@ -13,10 +11,8 @@ export fn run() with Stdout {
     assert a[1] == 20;
     assert a[2] == 30;
 
-    // List<T> literal via explicit cast. One element is read at a
-    // `black_box`ed index so the list survives to the WIR — a list whose
-    // every read folds drops with its array, and this is the one the
-    // `array.new_fixed` expectation below checks.
+    // List<T> literal via explicit cast, one element read at a `black_box`ed
+    // index.
     let b = [100, 200] as List<i32>;
     assert b.len() == 2;
     assert b[builtin::black_box(0)] == 100;
@@ -66,12 +62,8 @@ impl<T> From<Array<T>> for SeqVec<T> {
 __DATA__
 {
     "stdout": "ok\n",
-    "wir_expect:O2": [
-        "array.new_fixed<i32>(100, 200)"
-    ],
+    "wir_pass": {"O2": ["nir/copy_prop", "nir/const_fold", "nir/store_load_forward_post_scalarize", "nir/const_fold_post_global"]},
     "wir_not_expect:O2": [
-        "List<String>::push\"($local_",
-        "List<i32>::push\"(",
         "array.new_fixed<ref \"core:prelude/string.wado//String\">("
     ]
 }

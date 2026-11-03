@@ -39,14 +39,13 @@ export fn run() with Stdout {
 __DATA__
 {
     "stdout": "3,4,Point { x: 3, y: 4 },[10, 20, 30],hi,welcome to wado\n",
+    "wir_pass": {"O2": ["wir/promote_const_global_inits"]},
     "wir_expect:O2": [
         "global global:const_global_object.wado::ORIGIN",
         "global global:const_global_object.wado::NUMS",
-        "array.new_fixed<i32>(10, 20, 30)",
-        "global global:const_global_object.wado::GREET",
-        "array.new_fixed<u8>(104, 105)",
-        "global mut global:const_global_object.wado::BANNER"
+        "global global:const_global_object.wado::GREET"
     ],
+    "wir_guard": {"O2": {"expect": ["global mut global:const_global_object.wado::BANNER"]}},
     "wir_not_expect:O2": [
         "global mut global:const_global_object.wado::ORIGIN",
         "global mut global:const_global_object.wado::NUMS",

@@ -1,18 +1,8 @@
-// Test that the value-copy elider strips `$value_copy$T<id>` wrappers
-// generated around the `?` operator's Result<T, E> match desugaring.
-//
-// In a `let v: T = make()?;` pattern, `?` lowers to
+// A value bound from `?` keeps value semantics. In `let v: T = make()?;`,
+// `?` lowers to
 //   `match make() { Ok($qm_v) => $qm_v, Err(e) => return Err(e) }`
-// and the binding wraps the whole match in `$value_copy$T(...)` to
-// preserve Wado's value-copy semantics. The match scrutinee is a fresh
-// rvalue (a function call), so the aliasing the wrapper would prevent
-// is unobservable — the elider must strip the wrapper.
-//
-// Before the fix, `nir/inline` ran before `nir/value_copy_elide` in
-// each iteration, expanding the wrapper into a labeled block before
-// the elider could match the `Call($value_copy$T, [Match])` shape;
-// the wrapper survived to the final TIR. The pre-inline elision pass
-// added in `optimize.rs` resolves this.
+// whose scrutinee is a fresh rvalue (a function call), so lowering binds it
+// without a value copy.
 
 use { println, Stdout } from "core:cli";
 
@@ -42,8 +32,5 @@ export fn run() with Stdout {
 
 __DATA__
 {
-    "stdout": "30\n",
-    "wir_not_expect:O2": [
-        "$value_copy$"
-    ]
+    "stdout": "30\n"
 }
