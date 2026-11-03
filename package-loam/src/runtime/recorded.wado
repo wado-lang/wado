@@ -592,8 +592,8 @@ impl<affine G: Graph> IndexRef<i32> for Values<G> {
         if let Some(value) = &self.at[id] {
             return value;
         }
-        if let Parameter(i) = self.recorded.nodes[id].op {
-            return &self.arguments[i];
+        if let Parameter(i) = &self.recorded.nodes[id].op {
+            return &self.arguments[*i];
         }
         if !self.constants.contains_key(id) {
             panic("loam: a node is read before it is computed");
