@@ -299,8 +299,9 @@ struct TestSpec {
 
     /// The passes whose work the WIR expectations under each level (`"O2"`)
     /// are, named as `WADO_LIST_PASSES` lists them. The run compiles
-    /// again with them skipped, where each of those expectations must fail: one
-    /// that holds anyway measures nothing they do.
+    /// again with them skipped, where each of those expectations must fail with
+    /// all of them skipped or with one alone: one that holds anyway measures
+    /// nothing they do.
     #[serde(default)]
     wir_pass: indexmap::IndexMap<String, Vec<String>>,
 
@@ -614,13 +615,39 @@ fn an_expectation_holding_with_its_passes_skipped_is_reported() {
         ..Default::default()
     };
     let key = OptLevel::O2;
-    assert_wir_passes_measured("a copy", &spec, key, "unit");
-    for skipped_wir in ["a copy, already folded", "nothing"] {
-        let held = std::panic::catch_unwind(|| {
-            assert_wir_passes_measured(skipped_wir, &spec, key, "unit");
-        });
-        assert!(held.is_err(), "{skipped_wir:?}");
-    }
+    let one = ["p".to_string()];
+    let measured = |wir: &'static str| {
+        let compile = move |_: &[String]| Some(wir.to_string());
+        std::panic::catch_unwind(|| assert_wir_passes_measured(&compile, &one, &spec, key, "unit"))
+            .is_ok()
+    };
+    assert!(measured("a copy"));
+    assert!(!measured("a copy, already folded"));
+    assert!(!measured("nothing"));
+}
+
+#[test]
+fn an_expectation_one_listed_pass_measures_alone_is_measured() {
+    // Skipping `inline` too leaves no `$cold` to look for, so only skipping
+    // `copy_prop` alone shows that `copy_prop` is what removed it.
+    let spec = TestSpec {
+        wir_expect_o2: vec!["inlined".to_string()],
+        wir_not_expect_o2: vec!["$cold".to_string()],
+        ..Default::default()
+    };
+    let compile = |skip: &[String]| {
+        Some(match skip {
+            [one] if one == "copy_prop" => "inlined $cold".to_string(),
+            _ => "call".to_string(),
+        })
+    };
+    let passes = ["copy_prop".to_string(), "inline".to_string()];
+    assert_wir_passes_measured(&compile, &passes, &spec, OptLevel::O2, "unit");
+    let neither = |_: &[String]| Some("inlined".to_string());
+    let held = std::panic::catch_unwind(|| {
+        assert_wir_passes_measured(&neither, &passes, &spec, OptLevel::O2, "unit");
+    });
+    assert!(held.is_err());
 }
 
 #[test]
@@ -1367,9 +1394,7 @@ fn run_with_allocator(
                  list the passes whose work they are, which the run skips to see each fail"
             )
         });
-        let skipped_wir = compile_skipping(passes)
-            .unwrap_or_else(|| panic!("[{test_id}] the compile skipping {passes:?} failed"));
-        assert_wir_passes_measured(&skipped_wir, spec, opt_level, test_id);
+        assert_wir_passes_measured(&compile_skipping, passes, spec, opt_level, test_id);
     }
     if std::env::var_os("WADO_E2E_WIR_PASS_SEARCH").is_some() {
         return;
@@ -1565,31 +1590,52 @@ fn assert_wir_expectations(
     }
 }
 
-/// Check that every WIR expectation under `level` fails on `skipped_wir`,
-/// compiled with that level's `wir_pass` skipped. Every one that holds anyway
-/// is reported at once.
-fn assert_wir_passes_measured(skipped_wir: &str, spec: &TestSpec, level: OptLevel, test_id: &str) {
-    let skipped_wir = match spec.wir_scope.as_deref() {
-        None => skipped_wir,
-        // The function is the passes' own work, and so is all it holds.
-        Some(scope) => match scope_to_function(skipped_wir, scope) {
-            Some(body) => body,
-            None => return,
-        },
+/// Check that every WIR expectation under `level` fails with that level's
+/// `wir_pass` skipped: all of them at once, or, for an expectation the joint
+/// skip leaves standing, one of them alone. Skipping one pass can remove the
+/// shape another pass's expectation looks for, so the joint skip alone would
+/// reject a set whose every member measures its own expectation. Every one
+/// that holds anyway is reported at once.
+fn assert_wir_passes_measured(
+    compile: &dyn Fn(&[String]) -> Option<String>,
+    passes: &[String],
+    spec: &TestSpec,
+    level: OptLevel,
+    test_id: &str,
+) {
+    let checks = spec.wir_checks(level);
+    let holding = |skip: &[String]| -> Option<(String, Vec<usize>)> {
+        let wir = compile(skip)
+            .unwrap_or_else(|| panic!("[{test_id}] the compile skipping {skip:?} failed"));
+        let body = match spec.wir_scope.as_deref() {
+            None => wir.as_str(),
+            // The function is the passes' own work, and so is all it holds.
+            Some(scope) => scope_to_function(&wir, scope)?,
+        };
+        let held = (0..checks.len()).filter(|&i| checks[i].holds(body)).collect();
+        Some((body.to_string(), held))
     };
+    let Some((joint_wir, mut held)) = holding(passes) else {
+        return;
+    };
+    if passes.len() > 1 {
+        for pass in passes {
+            if held.is_empty() {
+                break;
+            }
+            match holding(std::slice::from_ref(pass)) {
+                Some((_, still)) => held.retain(|i| still.contains(i)),
+                None => held.clear(),
+            }
+        }
+    }
     let name = common::opt_level_name(level);
-    let held: Vec<String> = spec
-        .wir_checks(level)
-        .iter()
-        .filter(|check| check.holds(skipped_wir))
-        .map(|check| check.describe(name))
-        .collect();
+    let held: Vec<String> = held.iter().map(|&i| checks[i].describe(name)).collect();
     assert!(
         held.is_empty(),
-        "[{test_id}] these hold with {:?} skipped too, so they measure nothing those passes do; \
-         one they must leave standing goes under `wir_guard`:\n  {}\n\
-         WIR with the passes skipped:\n{skipped_wir}",
-        spec.wir_pass.get(name),
+        "[{test_id}] these hold with {passes:?} skipped, jointly and one at a time, so they \
+         measure nothing those passes do; one they must leave standing goes under `wir_guard`:\n  {}\n\
+         WIR with the passes skipped:\n{joint_wir}",
         held.join("\n  ")
     );
 }
