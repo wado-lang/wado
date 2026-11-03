@@ -178,10 +178,12 @@ pub fn index(root: &String, wado_path: &String) -> List<String> with (Process, E
         env("RUSTUP_HOME").unwrap_or(`${home}/.rustup`),
     ).env("CARGO_HOME", env("CARGO_HOME").unwrap_or(`${home}/.cargo`));
     succeed(&analyzer);
-    // The e2e fixtures are most of the tree's Wado and use the stdlib
-    // thousands of times over, which would bury a reference a reviewer wants.
+    // The generated and fixture tests are most of the tree's Wado and use the
+    // stdlib thousands of times over, which would bury a reference a reviewer
+    // wants.
     succeed(&Command::new(*wado_path).args([
-        "query", "scip", "--output", wado, "--exclude", "wado-compiler/tests/**", *root,
+        "query", "scip", "--output", wado, "--exclude", "wado-compiler/tests/**", "--exclude",
+        "package-gale/tests/generated/**", *root,
     ]));
     return [rust, wado];
 }

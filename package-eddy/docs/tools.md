@@ -40,8 +40,9 @@ They are in `src/symbols.wado`. They take a name, as Grep does, but find one
 item's uses where Grep finds every match of the text. They read SCIP indexes of
 the tree, which `rust-analyzer scip` writes for the Rust code and
 `wado query scip` for the Wado code, and one reader serves both. The Wado index
-leaves out the e2e fixtures (`wado-compiler/tests/**`). They are most of the
-tree's Wado, and their stdlib uses would bury the ones a reviewer asks about.
+leaves out the e2e fixtures (`wado-compiler/tests/**`) and Gale's generated
+tests (`package-gale/tests/generated/**`). They are most of the tree's Wado,
+and their stdlib uses would bury the ones a reviewer asks about.
 
 - [x] FindSymbol: each definition of `name` or `Owner::name`, with its lines
   and its signature.
