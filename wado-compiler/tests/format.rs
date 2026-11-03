@@ -13,6 +13,7 @@ use std::path::Path;
 /// ASTs structurally. This normalizes:
 /// - `span: Span { ... }` → `span: SPAN` (source positions differ after format)
 /// - `has_trailing_comma: ...` → removed (formatting hint, not semantic)
+/// - `quoted: ...` → removed (a field name's spelling, not semantic)
 /// - `type_params: [...]` → `type_params: NORM` (formatter normalizes `impl<T> Foo<T>` to `impl Foo<T>`)
 ///
 /// The goal is to catch **semantic** changes (dropped expressions, changed precedence)
@@ -47,6 +48,25 @@ fn normalize_ast_debug(debug: &str) -> String {
         // Strip "has_trailing_comma: ..." lines
         if bytes[i..].starts_with(b"has_trailing_comma:") {
             while i < bytes.len() && bytes[i] != b'\n' {
+                i += 1;
+            }
+            if i < bytes.len() {
+                i += 1;
+            }
+            continue;
+        }
+
+        // Strip a field name's `quoted: ...` spelling, the formatter dropping
+        // the quotes of one an identifier can spell. It spans lines, so
+        // consume through the line that closes it.
+        if bytes[i..].starts_with(b"quoted:") {
+            let mut depth = 0i32;
+            while i < bytes.len() && !(bytes[i] == b'\n' && depth == 0) {
+                match bytes[i] {
+                    b'(' | b'{' | b'[' => depth += 1,
+                    b')' | b'}' | b']' => depth -= 1,
+                    _ => {}
+                }
                 i += 1;
             }
             if i < bytes.len() {
@@ -3829,14 +3849,7 @@ fn test_format_string_names_keep_their_value() {
     let source = r###"test "a\\b" {
     let s = #include_str(#"./x\y"#);
     let p = { "k\\": 1, "q\"": 2, #"r\"#: 3 };
-}
-
-test #"c\d"# {
-}
-"###;
-    let expected = r###"test "a\\b" {
-    let s = #include_str(#"./x\y"#);
-    let p = { "k\\": 1, "q\"": 2, "r\\": 3 };
+    let Quoted { #"a\"#: a } = p;
 }
 
 test #"c\d"# {
@@ -3844,8 +3857,8 @@ test #"c\d"# {
 "###;
     let formatted = wado_compiler::format(source).expect("format failed");
     assert_eq!(
-        formatted, expected,
-        "a name spelled as a string keeps its value"
+        formatted, source,
+        "a name spelled as a string keeps its spelling"
     );
 }
 

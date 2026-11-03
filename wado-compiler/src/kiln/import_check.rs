@@ -249,6 +249,7 @@ pub fn inject_kiln_request_adapter(
     // `NoOptions {}` for a no-options generator).
     let ident_field = |module: &mut Module, name: &str| StructLiteralField {
         name: name.to_string(),
+        quoted: None,
         name_id: module.alloc_ast_id(),
         name_span: span,
         value: Expr::Ident(IdentExpr {
@@ -270,6 +271,7 @@ pub fn inject_kiln_request_adapter(
     } else {
         StructLiteralField {
             name: "options".to_string(),
+            quoted: None,
             name_id: module.alloc_ast_id(),
             name_span: span,
             value: empty_struct_literal(module, "NoOptions", span),

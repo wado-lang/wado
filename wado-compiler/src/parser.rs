@@ -1652,6 +1652,13 @@ impl Parser {
         Ok(StrLit { value, raw, quote })
     }
 
+    /// A field name a string literal spells, for JSON compatibility: its value,
+    /// and the literal for printing it back.
+    fn take_quoted_field_name(&mut self) -> ParseResult<(String, Option<StrLit>)> {
+        let quoted = self.take_string()?;
+        Ok((quoted.value.clone(), Some(quoted)))
+    }
+
     /// Parse a comma-separated list of attribute arguments up to the closing
     /// delimiter. Shared between inner attributes (`#![...]`) and outer
     /// attributes (`#[...]`). Does not consume the closing `)`. An array holds
@@ -3856,16 +3863,17 @@ impl Parser {
                     let field_id = self.alloc_ast_id();
                     let field_span = self.peek().span;
                     // A string literal names a field for JSON compatibility.
-                    let field_name = if matches!(self.peek_kind(), TokenKind::StringLit { .. }) {
-                        self.take_string()?.value
-                    } else if let Some(name) = self.peek_kind().as_ident_name() {
-                        let name = name.to_string();
-                        self.mark_keyword_name();
-                        self.advance();
-                        name
-                    } else {
-                        return Err(self.expected_name_error("field name in struct pattern"));
-                    };
+                    let (field_name, quoted) =
+                        if matches!(self.peek_kind(), TokenKind::StringLit { .. }) {
+                            self.take_quoted_field_name()?
+                        } else if let Some(name) = self.peek_kind().as_ident_name() {
+                            let name = name.to_string();
+                            self.mark_keyword_name();
+                            self.advance();
+                            (name, None)
+                        } else {
+                            return Err(self.expected_name_error("field name in struct pattern"));
+                        };
 
                     // Check for `: pattern` (rename/nested)
                     let pattern = if self.check(&TokenKind::Colon) {
@@ -3883,6 +3891,7 @@ impl Parser {
                     fields.push(StructPatternField {
                         id: field_id,
                         field_name,
+                        quoted,
                         pattern,
                         span: field_span,
                     });
@@ -7373,11 +7382,12 @@ impl Parser {
 
                 let field_name_span = self.peek().span;
                 // A string literal names a field for JSON compatibility.
-                let field_name = if matches!(self.peek_kind(), TokenKind::StringLit { .. }) {
-                    self.take_string()?.value
-                } else {
-                    self.consume_field_name()?
-                };
+                let (field_name, quoted) =
+                    if matches!(self.peek_kind(), TokenKind::StringLit { .. }) {
+                        self.take_quoted_field_name()?
+                    } else {
+                        (self.consume_field_name()?, None)
+                    };
                 let field_name_id = self.alloc_ast_id();
 
                 let (value, is_shorthand, field_span) = if self.check(&TokenKind::Colon) {
@@ -7403,6 +7413,7 @@ impl Parser {
 
                 fields.push(StructLiteralField {
                     name: field_name,
+                    quoted,
                     name_id: field_name_id,
                     name_span: field_name_span,
                     value,

@@ -2630,7 +2630,7 @@ impl<'a> Unparser<'a> {
                         return;
                     };
                     let bare_name = is_valid_ident(&field.field_name);
-                    s.output.push_str(&format_field_name(&field.field_name));
+                    s.output.push_str(&format_field_name(&field.field_name, field.quoted.as_ref()));
                     let is_shorthand = bare_name
                         && matches!(&field.pattern, Pattern::Ident { name: n, .. } if n == &field.field_name);
                     if !is_shorthand {
@@ -2784,7 +2784,8 @@ impl<'a> Unparser<'a> {
     }
 
     fn emit_struct_literal_field(&mut self, field: &StructLiteralField) {
-        self.output.push_str(&format_field_name(&field.name));
+        self.output
+            .push_str(&format_field_name(&field.name, field.quoted.as_ref()));
         if !field.is_shorthand {
             self.output.push_str(": ");
             self.unparse_expr(&field.value);
@@ -3540,10 +3541,12 @@ fn needs_parens(expr: &Expr, parent_op: BinaryOp, is_left: bool) -> bool {
 
 /// Emit a struct-literal / struct-pattern field name. A name spelled as an
 /// identifier, a keyword included, stays bare; any other is quoted, as JSON
-/// compatibility allows.
-fn format_field_name(name: &str) -> String {
+/// compatibility allows, by the literal the source wrote where it wrote one.
+fn format_field_name(name: &str, written: Option<&StrLit>) -> String {
     if is_valid_ident(name) {
         name.to_string()
+    } else if let Some(written) = written {
+        written.as_written()
     } else {
         quoted(name)
     }

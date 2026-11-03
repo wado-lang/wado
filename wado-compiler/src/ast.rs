@@ -3696,6 +3696,8 @@ impl StructLiteralExpr {
 #[derive(Debug, Clone)]
 pub struct StructLiteralField {
     pub name: String,
+    /// The string literal that spelled `name`, where one did.
+    pub quoted: Option<StrLit>,
     /// `AstId` of the field name, for cursor-based navigation (jump-to-def).
     pub name_id: AstId,
     /// Span of just the field name token.
@@ -4219,6 +4221,8 @@ pub struct StructPatternField {
     /// The node's own id, whose [`AstIdSpace`] names the module that wrote it.
     pub id: AstId,
     pub field_name: String,
+    /// The string literal that spelled `field_name`, where one did.
+    pub quoted: Option<StrLit>,
     pub pattern: Pattern,
     pub span: Span,
 }
