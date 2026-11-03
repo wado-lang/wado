@@ -19,8 +19,9 @@ to build.
 
 The facade performs `Log` without a `with Log` in a caller's signature. The
 functions that emit or record are `#[benign(Log)]`: what they log is
-outside what the program computes. `enabled`, `span` and `current` hand a
-value back, so they are `#[ambient(Log)]`. Every operation carries a
+outside what the program computes. `enabled`, `span`, `current` and
+`in_span` hand a value back, so they are `#[ambient(Log)]`: `in_span`
+returns what its body computed inside the span it entered. Every operation carries a
 default implementation, so
 a program that installs nothing still logs — `Info` and above, one text line
 per event on stderr. Installing a sink replaces that for its scope; `NopSink`
@@ -119,7 +120,7 @@ The innermost entered span, or `null` outside any.
 
 ### `pub fn in_span<T, effect E>(s: &Span, mut body: fn mut() -> T with E) -> T with E`
 
-`#[benign(Log)]`
+`#[ambient(Log)]`
 
 Run `body` inside `s`. A closure can't skip the exit/close calls, so they
 run on every body exit path, an early `return` included.

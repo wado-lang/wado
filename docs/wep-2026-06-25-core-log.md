@@ -255,8 +255,9 @@ outermost handler for a scope. Performing `Log` through the facade adds no
 `with Log` to callers, so logging is callable anywhere without infecting
 signatures. The functions that emit or record return nothing, and what they
 log is outside what the program computes, so they are `#[benign(Log)]`.
-`enabled`, `span` and `current` hand a value back that a caller can branch on,
-so they are `#[ambient(Log)]`. `Filter` and `Context` pass events on to the next
+`enabled`, `span`, `current` and `in_span` hand a value back that a caller can
+branch on, so they are `#[ambient(Log)]`. `in_span` returns what its body
+computed inside the span it entered, which `current` can read. `Filter` and `Context` pass events on to the next
 handler out, so the function installing one declares `with Log`, as
 [WEP: A Function Without `with` Performs No Effects](./wep-2026-09-30-effect-free-functions.md)
 requires of every delegating handler.
