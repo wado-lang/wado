@@ -297,7 +297,15 @@ it has none — with escapes processed.
 
 `#[compiler_item("reflect_template_raw_tail")]`
 
-`tail(t)` with escapes preserved.
+`tail(t)` as written: a cooked template's escapes preserved, a raw
+template's text itself.
+
+#### `fn hashes() -> i32`
+
+`#[compiler_item("reflect_template_hashes")]`
+
+How many `#`s delimit the template on each end: 0 for `` `…` ``, 1 for
+``#`…`#``.
 
 ### `pub trait Ref with ()`
 
