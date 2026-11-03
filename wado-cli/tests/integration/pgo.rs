@@ -100,6 +100,10 @@ fn a_hash_map_records_the_same_profile_every_run() {
         fs::read_to_string(tmp.path().join("pgo/prog.pgo")).unwrap()
     };
     let first = record();
+    assert!(
+        first.contains("\nmodule core:collections/hashmap.wado\n"),
+        "{first}"
+    );
     for _ in 0..3 {
         assert_eq!(record(), first);
     }

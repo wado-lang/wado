@@ -34,6 +34,7 @@ test "workload" {
     let catalog = from_bytes::<CitmCatalog, _>(#include_bytes("./citm_catalog_sample.json")).unwrap();
     let back = from_bytes::<CitmCatalog, _>(to_bytes::<CitmCatalog>(&catalog).unwrap()).unwrap();
     assert event_count(&back) == 10;
+    assert performance_count(&back) == 10;
 }
 
 test "fuel" {

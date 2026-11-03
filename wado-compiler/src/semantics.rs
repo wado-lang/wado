@@ -2123,7 +2123,7 @@ mod tests {
                 .hash
         };
         // Region 1 of each caller is its `?`'s failure path, which never ran
-        // in `rarely` and took 1% of its runs in `often`.
+        // in `rarely` and took 0.1% of its runs in `often`.
         let profile = pgo::parse(&format!(
             "wado-pgo 1\nmodule entry.wado\n\
              fn {:016x} 1 rarely\n0 1000000\n\
