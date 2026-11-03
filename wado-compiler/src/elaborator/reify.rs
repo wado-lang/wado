@@ -104,16 +104,8 @@ use crate::tir::{
     TirHandlerBinding, TirLiteralPattern, TirMatchArm, TirStructField, TirStructPatternField,
     deref_to_layers, hold_hole, to_layers_of, wrapped_reference,
 };
-<<<<<<< HEAD
-use crate::tir_visitor::TirMutVisitor;
-use crate::token::{Quote, Span};
-||||||| 713ad085190
-use crate::tir_visitor::TirMutVisitor;
-use crate::token::Span;
-=======
 use crate::tir_visitor::{TirMutVisitor, TirRefVisitor};
-use crate::token::Span;
->>>>>>> origin/main
+use crate::token::{Quote, Span};
 use crate::unparse::{unparse_expr_source, unparse_pattern_source};
 
 /// A template's text and holes as reify assembles it: one segment more than
