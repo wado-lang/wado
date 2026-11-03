@@ -33,6 +33,7 @@ use {
     free_axes,
     gathered_extents,
     kept_axes,
+    padded_with_zeros,
     picked,
     reduced_extents,
     sliced_extents,
@@ -391,6 +392,20 @@ impl Graph for WebGpuBackend {
         return Placed::Device(self.joined(&self.device_view(a), &self.device_view(b), dimension));
     }
 
+    /// A view over more of an attention cache's positions where it has room
+    /// for them, and zeros joined on otherwise.
+    fn grown<E: Element, Axes>(
+        &mut self,
+        x: &Placed<E, Axes>,
+        axis: i32,
+        extent: i32,
+    ) -> Placed<E, Axes> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
+        if let Device(d) = x && let Some(widened) = self.widened_cache(d, axis, extent) {
+            return Placed::Device(widened);
+        }
+        return padded_with_zeros::<WebGpuBackend, E, Axes>(self, x, axis, extent);
+    }
+
     /// The row kernel where `init` is the fold's identity, so the fold from it
     /// is the fold of the elements alone.
     fn reduce<In, Out>(
@@ -578,6 +593,7 @@ impl Graph for WebGpuBackend {
                 &held_k,
                 &held_v,
                 valid,
+                shared,
                 &rotary,
                 &biased,
                 options,

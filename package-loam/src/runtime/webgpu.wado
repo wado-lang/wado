@@ -2159,6 +2159,24 @@ impl WebGpuBackend {
             assert 0 <= at < along as i64, "loam: a gather index is past its axis";
             words.push(at as u32);
         }
+        let mut extents = data.extents[0..<axis].to_list();
+        extents.extend(&indices.extents);
+        extents.extend(&data.extents[axis + 1..<data.extents.len()].to_list());
+        if consecutive(&words) && !data.half {
+            // A view of the rows, the index axes split out of `axis`. Half
+            // rows are widened by the kernel.
+            let mut strides = data.strides[0..<axis].to_list();
+            for let s of row_major(&indices.extents) {
+                strides.push(s * data.strides[axis]);
+            }
+            strides.extend(&data.strides[axis + 1..<data.strides.len()].to_list());
+            return Option::Some(DeviceTensor {
+                ..*data,
+                offset: data.offset + words[0] as i32 * data.strides[axis],
+                extents,
+                strides,
+            });
+        }
         // The output, its index axes as one, row by row of `words`.
         let mut flat = data.extents;
         flat[axis] = words.len();
@@ -2171,9 +2189,6 @@ impl WebGpuBackend {
         let index_slot = self.written(words.len(), |i| words[i], false);
         let out = contiguous(self.allocated(element_count(&flat), false), 0, flat);
         self.gathered_part(data, &words, index_slot, axis, &out, 0, words.len());
-        let mut extents = data.extents[0..<axis].to_list();
-        extents.extend(&indices.extents);
-        extents.extend(&data.extents[axis + 1..<data.extents.len()].to_list());
         return Option::Some(contiguous(out.slot, 0, extents));
     }
 
@@ -2245,7 +2260,8 @@ impl WebGpuBackend {
     /// query row over each part of its positions in a workgroup of its own,
     /// and one joins each row's parts. `rotary` is the cosine and sine
     /// tables. The past is the first `past` positions `past_k` and `past_v`
-    /// hold, and the cache holds every position they do. `None` where the
+    /// hold, and the cache holds every position they do: their buffer where
+    /// they are `shared`, onnxruntime's shared buffer. `None` where the
     /// operands outgrow what a dispatch binds.
     internal fn attended(
         &mut self,
@@ -2255,6 +2271,7 @@ impl WebGpuBackend {
         past_k: &DeviceTensor,
         past_v: &DeviceTensor,
         past: i32,
+        shared: bool,
         rotary: &Option<[DeviceTensor, DeviceTensor]>,
         bias: &Option<DeviceTensor>,
         options: &Attention,
@@ -2338,7 +2355,7 @@ impl WebGpuBackend {
                 half: false,
             },
         ];
-        let appending = self.appendable(past_k, past_v, capacity, n, &strides, past);
+        let appending = self.appendable(past_k, past_v, capacity, n, &strides, past, shared);
         // Recorded where a later call can do it again: over the cache it
         // appends to in place, in a launch, outside another recording.
         let key = if appending matches { Some(_) } && self.taping matches { None } {
@@ -2462,7 +2479,8 @@ impl WebGpuBackend {
     /// The cache `past_k` and `past_v` are in where a step appends to it in
     /// place: one of `capacity` positions, their keys at its start and their
     /// values `values` after, laid out by `strides`, and nothing written past
-    /// their `past` positions.
+    /// their `past` positions. A `shared` past is the present's buffer, so
+    /// what it holds past `past` is the step's to overwrite.
     fn appendable(
         &self,
         past_k: &DeviceTensor,
@@ -2471,16 +2489,39 @@ impl WebGpuBackend {
         values: i32,
         strides: &List<i32>,
         past: i32,
+        shared: bool,
     ) -> Option<i32> {
         let slot = past_k.slot;
         let Some(cache) = self.filled.get(slot) else {
             return null;
         };
         let laid_out = past_v.slot == slot && reads_as(past_k, 0, strides) && reads_as(past_v, values, strides);
-        if laid_out && cache.positions == past && cache.capacity == capacity {
+        let overwrites_nothing_held = cache.positions == past || shared && cache.positions > past;
+        if laid_out && overwrites_nothing_held && cache.capacity == capacity {
             return Option::Some(slot);
         }
         return null;
+    }
+
+    /// `t`, the keys or the values of an attention cache, over `extent` of
+    /// its positions, where the cache has room for them: what it holds past
+    /// the ones `t` reads is the attention's own, which it reads none of.
+    internal fn widened_cache(&self, t: &DeviceTensor, axis: i32, extent: i32) -> Option<DeviceTensor> {
+        let Some(cache) = self.filled.get(t.slot) else {
+            return null;
+        };
+        if axis != 2 || extent > cache.capacity {
+            return null;
+        }
+        let mut extents = t.extents;
+        extents[axis] = cache.capacity;
+        let strides = row_major(&extents);
+        let values = element_count(&extents);
+        if !reads_as(t, 0, &strides) && !reads_as(t, values, &strides) {
+            return null;
+        }
+        extents[axis] = extent;
+        return Option::Some(DeviceTensor { ..*t, extents, strides });
     }
 
     /// Records the shader `shader` makes of the bindings `operands` take, as
@@ -3112,6 +3153,7 @@ impl Backend for WebGpuBackend {
             &self.device_view(past_k),
             &self.device_view(past_v),
             self.extents_of(past_k)[2],
+            false,
             &rotary,
             &bias_view,
             options,
@@ -3450,6 +3492,16 @@ fn reach(t: &DeviceTensor) -> [i32, i32] {
         last += i32::max(step, 0);
     }
     return [first, last];
+}
+
+/// Whether `words` is a run of one or more consecutive rows, ascending.
+fn consecutive(words: &List<u32>) -> bool {
+    for let i of 1..<words.len() {
+        if words[i] != words[0] + i as u32 {
+            return false;
+        }
+    }
+    return !words.is_empty();
 }
 
 /// `t` along `axis` from `start`, `length` of it.

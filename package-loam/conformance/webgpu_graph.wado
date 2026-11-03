@@ -22,7 +22,7 @@ use {
     GpuSupportedLimits,
     RecordOptionGpuSize64,
 } from "wasi:webgpu";
-use { Cpu, Element, Graph, Holds, Placed, Tensor, WebGpuBackend } from "lib:loam";
+use { Cpu, Element, full, Graph, Holds, Placed, strided_gather, Tensor, WebGpuBackend } from "lib:loam";
 use cases from "lib:loam/src/runtime/graph_cases.wado";
 use { deviation } from "lib:loam/example/webgpu/compare.wado";
 use gated from "./gated.onnxtext"
@@ -62,6 +62,17 @@ export fn run() with (Stdout, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuC
     println(`mixed compared ${apart(&mut gpu, &got.3, &want.3)}`);
     println(`mixed i64 ${apart(&mut gpu, &got.4, &want.4)}`);
 
+    // A gather of consecutive rows is a view of them, and dispatches nothing.
+    let rows = rows_of::<[Rows, Run, Pair]>(5);
+    let from_one = full::<Cpu, i64, []>(cpu, 1, []);
+    let wanted = strided_gather::<Cpu, f32, [Rows, Run, Pair], [Rows, Run, Pair]>(cpu, &rows, 1, &from_one, 3, 1);
+    let gathering = gpu.dispatches();
+    let run = gpu.upload(&rows);
+    let start = full::<WebGpuBackend, i64, []>(&mut gpu, 1, []);
+    let taken = strided_gather::<WebGpuBackend, f32, [Rows, Run, Pair], [Rows, Run, Pair]>(&mut gpu, &run, 1, &start, 3, 1);
+    assert gpu.dispatches() == gathering;
+    println(`consecutive rows ${apart(&mut gpu, &taken, &wanted)}`);
+
     let w = cases::windowed_input();
     println(`windowed ${apart(&mut gpu, &cases::windowed(&mut gpu, &gpu.upload(&w)), &cases::windowed(cpu, &w))}`);
 
@@ -95,8 +106,12 @@ export fn run() with (Stdout, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuC
     // append, attend and join; the decomposition takes dozens.
     assert gpu.dispatches() - dispatched == 5, "a causal attention over a shared cache runs in its kernels";
     println(`attending out ${apart(&mut gpu, &attended.0, &expected.0)}`);
-    println(`attending present_k ${apart(&mut gpu, &attended.1, &expected.1)}`);
-    println(`attending present_v ${apart(&mut gpu, &attended.2, &expected.2)}`);
+    // What a shared present holds past the valid positions is unspecified.
+    let valid = case.past.2.data[0] as i32 + case.inputs.0.extents[1];
+    for let [name, got, want] of [["present_k", attended.1, expected.1], ["present_v", attended.2, expected.2]] {
+        let read = gpu.download(&got);
+        println(`attending ${name} ${deviation(&leading(cpu, &read, valid).data, &leading(cpu, &want, valid).data)}`);
+    }
 
     // `compute` compiles one program per shape class and replays it: 3 and 4
     // positions share a capacity, 5 takes the next. A program's second call
@@ -192,7 +207,10 @@ export fn run() with (Stdout, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuC
     // step before recorded at that capacity: the steps to 7 and 8 positions.
     // The steps to 5 and 9 outgrow the capacity, and the step to 6 is the first
     // at its own. The other replay slices the key and the value.
+    // Every decode step appends in place, so each dispatches as many kernels:
+    // past the prompt's padding, and across a capacity it outgrows too.
     let mut total = 0;
+    let mut step_dispatches: Option<i32> = null;
     for let [positions, replays] of [
         [3, 0],
         [1, 0],
@@ -215,9 +233,14 @@ export fn run() with (Stdout, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuC
             data: List::<i64>::filled(total, 1),
             extents: [1, total],
         };
-        let replayed_before = gpu.replays();
+        let [replayed_before, dispatched_before] = [gpu.replays(), gpu.dispatches()];
         let stepped = attended::compute(&mut gpu, &fresh, &mask, &cache_gpu, &mut attended_gpu);
         assert gpu.replays() - replayed_before == replays;
+        let dispatched = gpu.dispatches() - dispatched_before;
+        if total > positions {
+            assert step_dispatches.unwrap_or(dispatched) == dispatched;
+            step_dispatches = Option::Some(dispatched);
+        }
         let wanted = attended::compute(cpu, &fresh, &mask, &cache_cpu, &mut attended_cpu);
         println(`compiled attended ${total} ${deviation(&stepped.Y.data, &wanted.Y.data)}`);
         cache_gpu = stepped.cache;
@@ -230,6 +253,21 @@ fn idle(gpu: &mut WebGpuBackend) with (GpuQueue, GpuCommandEncoder, GpuCommandBu
     for let _ of 0..<256 + 32 + 2 {
         gpu.begin();
     }
+}
+
+/// The first `positions` positions of a cache.
+fn leading<Axes>(cpu: &mut Cpu, t: &Tensor<f32, Axes>, positions: i32) -> Tensor<f32, Axes> {
+    let mut limit = t.extents;
+    limit[2] = positions;
+    return cpu.slice::<f32, Axes, Axes>(t, [0, 0, 0, 0], limit, [1, 1, 1, 1]);
+}
+
+/// The axes of the rows a gather takes a run of.
+struct Rows {
+}
+struct Run {
+}
+struct Pair {
 }
 
 /// `positions` rows of two features, each a distinct value.

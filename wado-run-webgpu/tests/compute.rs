@@ -202,13 +202,13 @@ fn loams_webgpu_attention_computes_what_its_cpu_attention_does() {
 }
 
 /// Graphs built through `Graph` compute on the device what they compute on the
-/// CPU: every operation, a branch either way, attention through a shared
-/// cache, and a model's `compute` through the program compiled for each shape
-/// class, a second call replaying what the first recorded, products of one
-/// input joined into one.
+/// CPU: every operation, a gather of consecutive rows as a view, a branch
+/// either way, attention through a shared cache, and a model's `compute`
+/// through the program compiled for each shape class, a second call replaying
+/// what the first recorded, products of one input joined into one.
 #[test]
 fn loams_webgpu_graph_computes_what_its_cpu_graph_does() {
-    assert_loam_conformance("webgpu_graph.wado", 28);
+    assert_loam_conformance("webgpu_graph.wado", 29);
 }
 
 /// A whole model's pass stays on the device: each sequence length reads back

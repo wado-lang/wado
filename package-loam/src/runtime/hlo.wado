@@ -260,6 +260,12 @@ pub affine trait Graph: Holds with _ {
     fn yielded<E: Element, Axes>(&mut self, x: &Self::Tensor<E, Axes>) -> Self::Tensor<E, Axes> {
         return *x;
     }
+    /// `x` with `axis` grown to `extent`, what it holds past its own extent
+    /// unspecified: a cache moved to a larger capacity, whose attention reads
+    /// none of those positions. Zeros, where the graph keeps no room there.
+    fn grown<E: Element, Axes>(&mut self, x: &Self::Tensor<E, Axes>, axis: i32, extent: i32) -> Self::Tensor<E, Axes> with _ {
+        return padded_with_zeros::<Self, E, Axes>(self, x, axis, extent);
+    }
 
     /// onnxruntime's `GroupQueryAttention` (its `docs/ContribOperators.md`),
     /// as `group_query_attention` in the kernels computes it, decomposed into
@@ -268,7 +274,8 @@ pub affine trait Graph: Holds with _ {
     /// `past_length` is given, the past is a buffer of fixed capacity holding
     /// that many positions, and the present is the same buffer, the new
     /// positions written from there: onnxruntime's shared buffer. The buffer
-    /// must hold them, `past_length` + S ≤ P; a position past P is dropped. A
+    /// must hold them, `past_length` + S ≤ P; a position past P is dropped,
+    /// and what the present holds past `past_length` + S is unspecified. A
     /// new position may be padding, which a causal mask keeps every valid
     /// query from reading.
     fn group_query_attention<B, S, Q, K, H, P, T, D, Pos, Half, BB, BH>(
@@ -661,15 +668,28 @@ pub fn capacity_of(length: i32) -> i32
     return capacity;
 }
 
-/// `x` with `axis` cut to `extent` or padded past its own with zeros, where
-/// the graph holds it: a cache moved to the capacity a pass takes it at.
-pub fn fitted<affine G: Graph, E: Element, Axes>(
+/// `x` with `axis` grown to `extent`, zeros past its own extent.
+internal fn padded_with_zeros<affine G: Graph, E: Element, Axes>(
     g: &mut G,
     x: &G::Tensor<E, Axes>,
     axis: i32,
     extent: i32,
 ) -> G::Tensor<E, Axes> with _ {
     let mut extents = g.extents_of(x);
+    extents[axis] = extent - extents[axis];
+    let zeros = full::<G, E, Axes>(g, E::from_i64(0), extents);
+    return g.concatenate(x, &zeros, axis);
+}
+
+/// `x` with `axis` cut to `extent` or `Graph::grown` to it, where the graph
+/// holds it: a cache moved to the capacity a pass takes it at.
+pub fn fitted<affine G: Graph, E: Element, Axes>(
+    g: &mut G,
+    x: &G::Tensor<E, Axes>,
+    axis: i32,
+    extent: i32,
+) -> G::Tensor<E, Axes> with _ {
+    let extents = g.extents_of(x);
     let own = extents[axis];
     if extent == own {
         return *x;
@@ -680,9 +700,7 @@ pub fn fitted<affine G: Graph, E: Element, Axes>(
         let rank = extents.len();
         return g.slice(x, List::<i32>::filled(rank, 0), limits, List::<i32>::filled(rank, 1));
     }
-    extents[axis] = extent - own;
-    let zeros = full::<G, E, Axes>(g, E::from_i64(0), extents);
-    return g.concatenate(x, &zeros, axis);
+    return g.grown(x, axis, extent);
 }
 
 /// `t` under `extents`, each axis cut to its extent or padded past it with
