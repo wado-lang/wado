@@ -1718,6 +1718,29 @@ impl WebGpuBackend {
         return Option::Some(Span { slot, first, count });
     }
 
+    /// `a` and `b` joined along `axis`: one of them where the other is empty
+    /// along it, a copy of both otherwise.
+    internal fn joined(
+        &mut self,
+        a: &DeviceTensor,
+        b: &DeviceTensor,
+        axis: i32,
+    ) -> DeviceTensor with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
+        if a.extents[axis] == 0 {
+            return *b;
+        }
+        if b.extents[axis] == 0 {
+            return *a;
+        }
+        let mut extents = a.extents;
+        extents[axis] += b.extents[axis];
+        let out = contiguous(self.allocated(element_count(&extents), false), 0, extents);
+        self.copy(a, &DeviceTensor { ..out, extents: a.extents });
+        let at = out.offset + a.extents[axis] * out.strides[axis];
+        self.copy(b, &DeviceTensor { ..out, offset: at, extents: b.extents });
+        return out;
+    }
+
     /// Copies `from`'s elements to `to`'s place, the two of one extents, a
     /// half `from` widened: in one dispatch, or in halves along an axis where
     /// one outgrows a binding.
@@ -2359,9 +2382,12 @@ impl WebGpuBackend {
         let cache = match appending {
             Some(slot) => slot,
             None => {
+                // Only the positions the past holds: the append writes the
+                // next ones, and the attention reads none past them.
                 let slot = self.allocated(2 * n, false);
-                self.copy(past_k, &DeviceTensor { slot, offset: 0, extents: past_k.extents, strides, half: false });
-                self.copy(past_v, &DeviceTensor { slot, offset: n, extents: past_v.extents, strides, half: false });
+                let held_past = [batch, kv, past, d] as List<i32>;
+                self.copy(&sliced(past_k, 2, 0, past), &DeviceTensor { slot, offset: 0, extents: held_past, strides, half: false });
+                self.copy(&sliced(past_v, 2, 0, past), &DeviceTensor { slot, offset: n, extents: held_past, strides, half: false });
                 slot;
             },
         };
@@ -2982,15 +3008,7 @@ impl Backend for WebGpuBackend {
         if !E::is_f32() {
             return Placed::Host(self.cpu.concat::<E, [..Pre], A, B, Out, [..Post]>(&self.host(a), &self.host(b), axis));
         }
-        let av = self.device_view(a);
-        let bv = self.device_view(b);
-        let mut extents = av.extents;
-        extents[axis] += bv.extents[axis];
-        let out = contiguous(self.allocated(element_count(&extents), false), 0, extents);
-        self.copy(&av, &DeviceTensor { ..out, extents: av.extents });
-        let at = out.offset + av.extents[axis] * out.strides[axis];
-        self.copy(&bv, &DeviceTensor { ..out, offset: at, extents: bv.extents });
-        return Placed::Device(out);
+        return Placed::Device(self.joined(&self.device_view(a), &self.device_view(b), axis));
     }
 
     fn lift<E: Element, In, Out>(&mut self, t: &Placed<E, In>, rank: i32) -> Placed<E, Out> {

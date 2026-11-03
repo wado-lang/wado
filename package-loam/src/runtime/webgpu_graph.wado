@@ -32,7 +32,6 @@ use {
     elementwise_extents,
     free_axes,
     gathered_extents,
-    joined_extents,
     kept_axes,
     picked,
     reduced_extents,
@@ -389,16 +388,7 @@ impl Graph for WebGpuBackend {
         if !E::exact_in_f32() {
             return Placed::Host(self.cpu.concatenate(&self.host(a), &self.host(b), dimension));
         }
-        let [first, second] = [
-            self.device_view(a),
-            self.device_view(b),
-        ];
-        let extents = joined_extents(&first.extents, &second.extents, dimension);
-        let out = contiguous(self.allocated(element_count(&extents), false), 0, extents);
-        self.copy(&first, &DeviceTensor { ..out, extents: first.extents });
-        let at = out.offset + first.extents[dimension] * out.strides[dimension];
-        self.copy(&second, &DeviceTensor { ..out, offset: at, extents: second.extents });
-        return Placed::Device(out);
+        return Placed::Device(self.joined(&self.device_view(a), &self.device_view(b), dimension));
     }
 
     /// The row kernel where `init` is the fold's identity, so the fold from it

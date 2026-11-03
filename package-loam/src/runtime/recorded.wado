@@ -645,8 +645,8 @@ impl<affine G: Graph> Run<G> {
         return region.results.into_iter().map(|r| self.values[r]).collect();
     }
 
-    /// Gives node `id` its value: a parameter's and a part's are read, every
-    /// other node's computed.
+    /// Gives node `id` its value: a parameter's, a part's and a yielded one's
+    /// are read, every other node's computed.
     internal fn ran(&mut self, g: &mut G, id: i32, node: &RecordedNode, arguments: &List<Any<G>>) with _ {
         match &node.op {
             Parameter(i) => {
@@ -654,6 +654,9 @@ impl<affine G: Graph> Run<G> {
             },
             Part(k) => {
                 self.values[id] = self.parts[node.operands[0]][*k - 1];
+            },
+            Yield => {
+                self.values[id] = self.values[node.operands[0]];
             },
             _ => {
                 let value = self.computed(g, id, node);
@@ -721,7 +724,7 @@ impl<affine G: Graph> Run<G> {
                     _ => unreachable(),
                 }
             },
-            BroadcastInDim(_) | Reshape | Transpose(_) | Slice(_) | Reverse(_) | Yield => match self.operand(node, 0) {
+            BroadcastInDim(_) | Reshape | Transpose(_) | Slice(_) | Reverse(_) => match self.operand(node, 0) {
                 F32(t) => Any::F32(regrouped::<G, f32>(g, node, t)),
                 I64(t) => Any::I64(regrouped::<G, i64>(g, node, t)),
                 Bool(t) => Any::Bool(regrouped::<G, bool>(g, node, t)),
@@ -787,7 +790,7 @@ impl<affine G: Graph> Run<G> {
                 self.parts[id] = [present_k, present_v];
                 attended;
             },
-            Parameter(_) | Part(_) | Case(_) => unreachable(),
+            Parameter(_) | Part(_) | Yield | Case(_) => unreachable(),
         };
     }
 
@@ -865,7 +868,7 @@ fn converted<affine G: Graph, A: Element>(g: &mut G, t: &G::Tensor<A, Untyped>, 
     };
 }
 
-/// A node that moves its one operand's elements, or yields it, over `t`.
+/// A node that moves its one operand's elements, over `t`.
 fn regrouped<affine G: Graph, E: Element>(
     g: &mut G,
     node: &RecordedNode,
@@ -877,7 +880,6 @@ fn regrouped<affine G: Graph, E: Element>(
         Transpose(perm) => g.transpose::<E, Untyped, Untyped>(t, perm),
         Slice([start, limit, strides]) => g.slice::<E, Untyped, Untyped>(t, start, limit, strides),
         Reverse(dims) => g.reverse::<E, Untyped>(t, dims),
-        Yield => *t,
         _ => unreachable(),
     };
 }
