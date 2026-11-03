@@ -172,6 +172,35 @@ mod tests {
         });
     }
 
+    const MEMBERS: &str = "struct P { x: i32 }\nimpl P {\n    fn get(&self) -> i32 { return self.x; }\n}\nfn f(p: P) -> i32 {\n    return p.get() + p.x;\n}\n";
+
+    #[test]
+    fn method_references_from_its_declaration() {
+        futures::executor::block_on(async {
+            // cursor on `get` in `fn get(&self)`
+            let refs = refs_at(MEMBERS, 2, 8, false).await;
+            assert_eq!(ranges(&refs), vec![(5, 13, 5, 16)]);
+        });
+    }
+
+    #[test]
+    fn field_references_from_its_declaration() {
+        futures::executor::block_on(async {
+            // cursor on `x` in `struct P { x: i32 }`
+            let refs = refs_at(MEMBERS, 0, 11, false).await;
+            assert_eq!(ranges(&refs), vec![(2, 39, 2, 40), (5, 23, 5, 24)]);
+        });
+    }
+
+    #[test]
+    fn no_match_in_a_body_off_any_name() {
+        futures::executor::block_on(async {
+            // cursor on the whitespace after `{` in `get`'s body
+            let refs = refs_at(MEMBERS, 2, 26, false).await;
+            assert!(refs.is_empty(), "got: {refs:?}");
+        });
+    }
+
     #[test]
     fn param_references() {
         futures::executor::block_on(async {

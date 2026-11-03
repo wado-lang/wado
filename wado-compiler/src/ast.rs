@@ -357,40 +357,6 @@ impl Module {
         finder.result
     }
 
-    /// Find the [`AstId`] of the smallest id-bearing AST node whose span
-    /// contains the given 1-based `(line, column)` position. Returns `None`
-    /// if no id-bearing node contains the position.
-    pub fn ast_id_at(&self, line: usize, column: usize) -> Option<AstId> {
-        struct Finder {
-            line: usize,
-            column: usize,
-            best: Option<(AstId, Span)>,
-        }
-        impl AstVisitor<'_> for Finder {
-            fn visit_id(&mut self, id: AstId, span: Span) {
-                if !span_contains(span, self.line, self.column) {
-                    return;
-                }
-                match self.best {
-                    None => self.best = Some((id, span)),
-                    Some((_, current)) if span_byte_len(span) <= span_byte_len(current) => {
-                        self.best = Some((id, span));
-                    }
-                    _ => {}
-                }
-            }
-        }
-        let mut finder = Finder {
-            line,
-            column,
-            best: None,
-        };
-        for item in &self.items {
-            finder.visit_item(item);
-        }
-        finder.best.map(|(id, _)| id)
-    }
-
     /// Find the top-level [`Item`] whose own `AstId` (i.e. [`Item::id`])
     /// equals `id`.
     ///
@@ -402,24 +368,6 @@ impl Module {
     pub fn item_by_id(&self, id: AstId) -> Option<&Item> {
         self.items.iter().find(|item| item.id() == id)
     }
-}
-
-/// Returns true if `(line, column)` lies in `[span.line:column, span.end_line:end_column)`.
-fn span_contains(span: Span, line: usize, column: usize) -> bool {
-    if line < span.line || line > span.end_line {
-        return false;
-    }
-    if line == span.line && column < span.column {
-        return false;
-    }
-    if line == span.end_line && column >= span.end_column {
-        return false;
-    }
-    true
-}
-
-fn span_byte_len(span: Span) -> usize {
-    span.end.saturating_sub(span.start)
 }
 
 /// Structural AST visitor, for id-based queries (LSP position lookup, density
@@ -5238,6 +5186,7 @@ mod visibility_tests {
 #[cfg(test)]
 mod ast_id_tests {
     use super::*;
+    use crate::ast_index::AstIndex;
     use crate::hashmap::IndexSet;
     use crate::lexer::lex;
     use crate::parser::Parser;
@@ -5442,18 +5391,19 @@ test "addition" {
         assert_eq!(field_ids.len(), 2);
 
         // Position inside the `x: i32` field span returns the field id, not the struct.
-        let at_field = m.ast_id_at(2, 5);
+        let index = AstIndex::build(&m);
+        let at_field = index.ast_id_at(2, 5);
         assert_eq!(at_field, Some(field_ids[0]));
 
         // Position inside the struct but outside any field (e.g. the struct name).
-        let at_struct_name = m.ast_id_at(1, 9);
+        let at_struct_name = index.ast_id_at(1, 9);
         assert_eq!(at_struct_name, struct_id);
     }
 
     #[test]
     fn ast_id_at_outside_returns_none() {
         let m = parse("fn add(a: i32, b: i32) -> i32 { return a + b; }\n");
-        assert_eq!(m.ast_id_at(42, 1), None);
+        assert_eq!(AstIndex::build(&m).ast_id_at(42, 1), None);
     }
 
     const SAMPLE_WITH_BODIES: &str = r"
@@ -5525,7 +5475,7 @@ struct Point { x: i32, y: i32 }
                 _ => None,
             })
             .expect("let x pattern id");
-        let at_pat = m.ast_id_at(2, 9);
+        let at_pat = AstIndex::build(&m).ast_id_at(2, 9);
         assert_eq!(at_pat, Some(pat_id));
     }
 }

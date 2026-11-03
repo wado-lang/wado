@@ -108,12 +108,12 @@ impl AstIndex {
     pub fn ast_id_at(&self, line: usize, column: usize) -> Option<AstId> {
         let mut best: Option<(AstId, Span)> = None;
         for (&id, &span) in &self.spans {
-            if !span_contains(span, line, column) {
+            if !span.contains(line, column) {
                 continue;
             }
             match best {
                 None => best = Some((id, span)),
-                Some((_, current)) if span_byte_len(span) <= span_byte_len(current) => {
+                Some((_, current)) if span.byte_len() <= current.byte_len() => {
                     best = Some((id, span));
                 }
                 _ => {}
@@ -121,27 +121,6 @@ impl AstIndex {
         }
         best.map(|(id, _)| id)
     }
-}
-
-/// Returns true if `(line, column)` lies in
-/// `[span.line:column, span.end_line:end_column)`. Mirrors the helper
-/// in `ast.rs` (kept module-private there); duplicated here to keep the
-/// position-lookup logic colocated with the data.
-fn span_contains(span: Span, line: usize, column: usize) -> bool {
-    if line < span.line || line > span.end_line {
-        return false;
-    }
-    if line == span.line && column < span.column {
-        return false;
-    }
-    if line == span.end_line && column >= span.end_column {
-        return false;
-    }
-    true
-}
-
-fn span_byte_len(span: Span) -> usize {
-    span.end.saturating_sub(span.start)
 }
 
 struct IndexBuilder {
