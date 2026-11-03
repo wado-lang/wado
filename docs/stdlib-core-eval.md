@@ -39,15 +39,28 @@ budget. Running out stops it with [`Status::OutOfFuel`].
 
 ## Functions
 
-### `pub fn eval(source: String, fuel: u64 = DEFAULT_FUEL) -> Result<Output, EvalError>`
-
-`#[benign(EvalHost)]`
+### `pub fn eval(source: String, fuel: u64 = DEFAULT_FUEL) -> Result<Output, EvalError> with EvalHost`
 
 Compiles `source` as a `wasi:cli/command` program and runs it under `fuel`.
 
 `Err` means the program never ran. `Ok` means it ran, however it stopped;
 `Output.status` says how. stdout and stderr are decoded as UTF-8, with
 U+FFFD where the bytes are not.
+
+## Effects
+
+### `pub interface EvalHost`
+
+Host interface behind `core:eval`. It compiles and runs one Wado source
+and returns the outcome as raw data; `core:eval` decodes it. Only
+`wado test` supplies it. See WEP 2026-09-26 (Eval).
+
+#### `fn run(source: String, fuel: u64) -> Outcome`
+
+`#[cm("core:eval/eval-host@0.1.0#run")]` `#[cm_params("source", "fuel")]`
+
+Compile `source` as a single-module `wasi:cli/command` program and run
+it under `fuel`.
 
 ## Structs
 

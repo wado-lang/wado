@@ -1,0 +1,74 @@
+// A blanket impl installs as a handler as a written one does, explicitly or
+// bundled, its operations taking `self` or not. A method leaving its effects
+// open demands, at the install, what they are for the handler's own type:
+// nothing for `Quiet`, `Stdout` for `Loud`.
+
+use { println, Stdout } from "core:cli";
+
+interface Sink {
+    fn event(message: String);
+    fn tag() -> String;
+}
+
+trait Stamp with _ {
+    fn stamp() -> String;
+}
+
+struct Quiet {}
+
+impl Stamp for Quiet {
+    fn stamp() -> String {
+        return "quiet";
+    }
+}
+
+struct Loud {}
+
+impl Stamp for Loud {
+    fn stamp() -> String with Stdout {
+        println("stamping");
+        return "loud";
+    }
+}
+
+impl<S: Stamp> Sink for S {
+    fn event(&mut self, message: String) with _ {
+        let _ = `${S::stamp()}${message}`;
+        resume ();
+    }
+
+    fn tag() -> String with _ {
+        resume S::stamp();
+    }
+}
+
+fn quiet() -> String {
+    let mut sink = Quiet {};
+    with Sink => &mut sink do {
+        Sink::event("a");
+        return Sink::tag();
+    }
+}
+
+fn bundled() -> String {
+    let mut sink = Quiet {};
+    with &mut sink do {
+        return Sink::tag();
+    }
+}
+
+fn loud() with Stdout {
+    let mut sink = Loud {};
+    with Sink => &mut sink do {
+        Sink::event("b");
+    }
+}
+
+export fn run() with Stdout {
+    println(quiet());
+    println(bundled());
+    loud();
+}
+
+__DATA__
+{"stdout": "quiet\nquiet\nstamping\n"}

@@ -12,11 +12,15 @@
 //! `enabled(level)` exposes the same ladder for guarding fields too expensive
 //! to build.
 //!
-//! The facade is `#[ambient]`, so performing `Log` adds no `with Log` to a
-//! caller's signature, and every operation carries a default implementation, so
-//! a program that installs nothing still logs — `Info` and above, one text line
-//! per event on stderr. Installing a sink replaces that for its scope; `NopSink`
-//! is how a program asks for silence.
+//! The facade performs `Log` without a `with Log` in a caller's signature. The
+//! functions that emit or record are `#[benign(Log)]`: what they log is
+//! outside what the program computes. `enabled`, `span`, `current` and
+//! `in_span` hand a value back, so they are `#[ambient(Log)]`: `in_span`
+//! returns what its body computed inside the span it entered. Every operation
+//! carries a default implementation, so a program that installs nothing still
+//! logs — `Info` and above, one text line per event on stderr. Installing a
+//! sink replaces that for its scope; `NopSink` is how a program asks for
+//! silence.
 
 use { Serialize, SerializeError } from "core:serde";
 use { Value, to_value } from "core:value";
@@ -25,6 +29,7 @@ use { to_string } from "core:json";
 use { log_stderr } from "core:rt";
 use { LenientFromStr, LenientParseError } from "core:prelude/traits.wado";
 use { Instant } from "core:temporal";
+use { SystemClock } from "wasi:clocks";
 
 #[synopsis]
 test {
@@ -255,7 +260,7 @@ global mut DEFAULT_SINK: TextSink = TextSink {};
 ///     debug(`state`, { snapshot: expensive_snapshot() });
 /// }
 /// ```
-#[ambient]
+#[ambient(Log)]
 pub fn enabled(level: Level) -> bool {
     if level < LOG_STATIC_LEVEL {
         return false;
@@ -270,7 +275,7 @@ pub fn enabled(level: Level) -> bool {
 /// apply here too; only tier 1 comes out weaker, since a level that is not a
 /// literal is not a comparison the optimizer can fold. Location defaults
 /// resolve at the call site.
-#[ambient]
+#[benign(Log)]
 pub fn event<T: Serialize = NoFields>(
     level: Level,
     message: String,
@@ -288,7 +293,7 @@ pub fn event<T: Serialize = NoFields>(
 /// Build the event and hand it to the subscriber, gates already passed. The
 /// level wrappers call this rather than [`event`] so an emitted event runs the
 /// tier-3 dispatch once, not twice.
-#[ambient]
+#[benign(Log)]
 fn emit<T: Serialize = NoFields>(level: Level, message: String, fields: T, target: String, file: String, line: i32) {
     if DEPTH >= MAX_DEPTH {
         return;
@@ -306,7 +311,7 @@ fn emit<T: Serialize = NoFields>(level: Level, message: String, fields: T, targe
 // One wrapper per level: each knows its level as a literal, which is what lets
 // tier 1 fold the comparison away once a parameter reaches it.
 
-#[ambient]
+#[benign(Log)]
 pub fn trace<T: Serialize = NoFields>(
     message: String,
     fields: T = NoFields {},
@@ -320,7 +325,7 @@ pub fn trace<T: Serialize = NoFields>(
     emit(Level::Trace, message, fields, target, file, line);
 }
 
-#[ambient]
+#[benign(Log)]
 pub fn debug<T: Serialize = NoFields>(
     message: String,
     fields: T = NoFields {},
@@ -334,7 +339,7 @@ pub fn debug<T: Serialize = NoFields>(
     emit(Level::Debug, message, fields, target, file, line);
 }
 
-#[ambient]
+#[benign(Log)]
 pub fn info<T: Serialize = NoFields>(
     message: String,
     fields: T = NoFields {},
@@ -348,7 +353,7 @@ pub fn info<T: Serialize = NoFields>(
     emit(Level::Info, message, fields, target, file, line);
 }
 
-#[ambient]
+#[benign(Log)]
 pub fn warn<T: Serialize = NoFields>(
     message: String,
     fields: T = NoFields {},
@@ -362,7 +367,7 @@ pub fn warn<T: Serialize = NoFields>(
     emit(Level::Warn, message, fields, target, file, line);
 }
 
-#[ambient]
+#[benign(Log)]
 pub fn error<T: Serialize = NoFields>(
     message: String,
     fields: T = NoFields {},
@@ -387,26 +392,26 @@ impl Span {
     }
 
     /// Add fields to an open span.
-    #[ambient]
+    #[benign(Log)]
     pub fn record<T: Serialize>(&self, fields: T) {
         Log::record_fields(self.id, box_fields(fields));
     }
 
     /// Record a non-parent causal link: this span follows from `cause`.
-    #[ambient]
+    #[benign(Log)]
     pub fn follows_from(&self, cause: &Span) {
         Log::follows_from(self.id, cause.id);
     }
 
     /// Close a span entered by hand. [`in_span`] closes on every exit path, so
     /// this is only for a span the caller opened without it.
-    #[ambient]
+    #[benign(Log)]
     pub fn close(&self) {
         Log::close(self.id);
     }
 }
 
-#[ambient]
+#[ambient(Log)]
 pub fn span<T: Serialize = NoFields>(
     level: Level,
     name: String,
@@ -423,7 +428,7 @@ pub fn span<T: Serialize = NoFields>(
 }
 
 /// The innermost entered span, or `null` outside any.
-#[ambient]
+#[ambient(Log)]
 pub fn current() -> Option<Span> {
     return match Log::current_span() {
         Some(id) => Option::<Span>::Some(Span { id }),
@@ -433,7 +438,7 @@ pub fn current() -> Option<Span> {
 
 /// Run `body` inside `s`. A closure can't skip the exit/close calls, so they
 /// run on every body exit path, an early `return` included.
-#[ambient]
+#[ambient(Log)]
 pub fn in_span<T, effect E>(s: &Span, mut body: fn mut() -> T with E) -> T with E {
     Log::enter(s.id());
     let r = body();
@@ -501,14 +506,15 @@ impl Clock for NoClock {
 /// Wall-clock stamps with millisecond precision. Installing a sink over this
 /// adds a `wasi:clocks` import, so it belongs only in a world that has one.
 ///
-/// `#[ambient]` for the same reason the facade is: a sink's operations are
+/// `#[ambient(SystemClock)]` rather than `#[benign]`: a sink's operations are
 /// `Log`'s, whose signatures carry no effect, so the clock read cannot be
-/// declared on them.
+/// declared on them, and the stamp it returns is observable, which `#[benign]`
+/// forbids.
 pub struct WallClock {
 }
 
 impl Clock for WallClock {
-    #[ambient]
+    #[ambient(SystemClock)]
     fn now() -> Option<String> {
         return Option::Some(`${Instant::now():.3}`);
     }

@@ -30,7 +30,9 @@ use crate::discover;
 use crate::eval_host::{EvalHost, EvalSession, TestClock};
 use crate::fingerprint::Input;
 use crate::fuel_host::{self, FuelRegion};
-use crate::knobs::{CompileKnobOpt, CompileKnobs, RuntimeKnobOpt, RuntimeKnobs};
+use crate::knobs::{
+    CompileKnobOpt, CompileKnobs, HostKnobOpt, HostKnobs, RuntimeKnobOpt, RuntimeKnobs,
+};
 use crate::manifest::package_root;
 use crate::process_host::ProcessGrant;
 use crate::rss::summary_line;
@@ -65,6 +67,7 @@ pub struct TestOptions {
     /// `knobs.allocator` stays `None` so the compiler auto-selects the debug
     /// allocator for the `test` world; `--allocator` overrides.
     pub knobs: CompileKnobs,
+    pub host: HostKnobs,
     pub runtime: RuntimeKnobs,
     pub grants: TestGrants,
     /// `--no-run`: compile every file (which still refreshes
@@ -328,6 +331,7 @@ fn format_usage() -> String {
             .add(Opt::ALL, |o| o.spec())
             .add(Opt::KNOBS, |o| o.spec())
             .add(RuntimeKnobOpt::ALL, |o| o.spec())
+            .add(HostKnobOpt::ALL, |o| o.spec())
             .add(args::ParamOpt::ALL, |o| o.spec())
             .render()
     )
@@ -402,6 +406,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<TestOptions, CliExit> {
     let mut include: Option<CoverageScope> = None;
     let mut baseline: Option<PathBuf> = None;
     let mut runtime_knobs = RuntimeKnobs::default();
+    let mut host = HostKnobs::default();
     // Each file's optimizer runs on one thread, since `--parallel` already
     // spreads the files across the cores.
     let mut knobs = CompileKnobs {
@@ -419,6 +424,8 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<TestOptions, CliExit> {
             knobs.apply(k, &mut parser)?;
         } else if let Some(r) = args::match_opt(&arg, RuntimeKnobOpt::ALL, |r| r.spec()) {
             runtime_knobs.apply(r, &mut parser)?;
+        } else if let Some(h) = args::match_opt(&arg, HostKnobOpt::ALL, |h| h.spec()) {
+            host.apply(h);
         } else if let Some(p) = args::match_opt(&arg, args::ParamOpt::ALL, |p| p.spec()) {
             args::apply_param_opt(&mut knobs.params, p, &mut parser)?;
         } else if let Some(opt) = args::match_opt(&arg, Opt::ALL, |o| o.spec()) {
@@ -612,6 +619,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<TestOptions, CliExit> {
         package_runs,
         jobs,
         knobs,
+        host,
         runtime: runtime_knobs,
         grants: dirs.given().map_or_else(
             || TestGrants::PackageRoot(Mutex::default()),

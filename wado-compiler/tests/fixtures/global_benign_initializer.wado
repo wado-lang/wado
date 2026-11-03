@@ -1,15 +1,16 @@
 // `#[benign(E)]` on a global admits `E` in its initializer. The initializer
-// performs `Stdout` and has run before the test reads the global.
+// asks the host for a seed, which the global's value does not show, and has
+// run before the test reads the global.
 
-use { println, Stdout } from "core:cli";
+use { InsecureSeed } from "wasi:random";
 
-fn announce() -> i32 with Stdout {
-    println("initialized");
+fn seeded() -> i32 with InsecureSeed {
+    let [_, _] = InsecureSeed::get_insecure_seed();
     return 7;
 }
 
-#[benign(Stdout)]
-global SEVEN: i32 = announce();
+#[benign(InsecureSeed)]
+global SEVEN: i32 = seeded();
 
 test {
     assert SEVEN == 7;

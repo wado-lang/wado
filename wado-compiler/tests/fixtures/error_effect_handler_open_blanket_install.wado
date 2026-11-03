@@ -1,0 +1,43 @@
+// Installing a blanket impl's handler whose method leaves its effects open
+// demands what they are for the handler's own type: `Loud` stamps through
+// `Stdout`, which the installing function does not declare.
+
+use { println, Stdout } from "core:cli";
+
+interface Sink {
+    fn event(message: String);
+}
+
+trait Stamp with _ {
+    fn stamp() -> String;
+}
+
+struct Loud {}
+
+impl Stamp for Loud {
+    fn stamp() -> String with Stdout {
+        println("stamping");
+        return "! ";
+    }
+}
+
+impl<S: Stamp> Sink for S {
+    fn event(&mut self, message: String) with _ {
+        let _ = `${S::stamp()}${message}`;
+        resume ();
+    }
+}
+
+fn loud() {
+    let mut sink = Loud {};
+    with Sink => &mut sink do {
+        Sink::event("b");
+    }
+}
+
+export fn run() with Stdout {
+    loud();
+}
+
+__DATA__
+{"compile_error": ":33:18: analysis error: missing effect 'Stdout' required by the handler installed for 'Sink'"}

@@ -24,7 +24,7 @@ use crate::dep_component::{
 use crate::fingerprint::Input;
 use crate::git::materialize;
 use crate::kiln_provider::{CliGeneratorProvider, RegistryContext, relative_to};
-use crate::knobs::{CompileKnobOpt, CompileKnobs, EmbedOpt, EmbedOptions};
+use crate::knobs::{CompileKnobOpt, CompileKnobs, EmbedOpt, EmbedOptions, HostKnobOpt, HostKnobs};
 use crate::manifest;
 use crate::manifest::{DiscoveryError, absolute, manifest_in, openable_dir};
 use crate::metadata_embed::{clean_git_revision, embed_metadata_sections};
@@ -66,6 +66,7 @@ pub struct CompileOptions {
     pub wat_to_stdout: bool,
     /// The build knobs, shared with every other compiling subcommand.
     pub knobs: CompileKnobs,
+    pub host: HostKnobs,
     /// Whether the WIT and `[package]` metadata sections are embedded. The
     /// embedded WIT section is always the self-contained full closure (a
     /// `local`, registry-referencing section is not encodable; see WEP
@@ -101,6 +102,7 @@ impl CompileOptions {
             format: Some(OutputFormat::Wasm),
             wat_to_stdout: false,
             knobs: CompileKnobs::default(),
+            host: HostKnobs::default(),
             embed: EmbedOptions::default(),
             target_world,
             lib_world,
@@ -240,6 +242,7 @@ fn format_usage() -> String {
         args::OptsHelp::default()
             .add(Opt::ALL, |o| o.spec())
             .add(Opt::KNOBS, |o| o.spec())
+            .add(HostKnobOpt::ALL, |o| o.spec())
             .add(EmbedOpt::WIT_ONLY, |o| o.spec())
             .add(args::ParamOpt::ALL, |o| o.spec())
             .render()
@@ -256,10 +259,13 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<CompileOptions, CliExit>
     let mut wat_to_stdout = false;
     let mut target_world: Option<String> = None;
     let mut knobs = CompileKnobs::default();
+    let mut host = HostKnobs::default();
     let mut embed = EmbedOptions::default();
     while let Some(arg) = args::next_arg(&mut parser)? {
         if let Some(k) = args::match_opt(&arg, Opt::KNOBS, |k| k.spec()) {
             knobs.apply(k, &mut parser)?;
+        } else if let Some(h) = args::match_opt(&arg, HostKnobOpt::ALL, |h| h.spec()) {
+            host.apply(h);
         } else if let Some(p) = args::match_opt(&arg, args::ParamOpt::ALL, |p| p.spec()) {
             args::apply_param_opt(&mut knobs.params, p, &mut parser)?;
         } else if let Some(e) = args::match_opt(&arg, EmbedOpt::WIT_ONLY, |e| e.spec()) {
@@ -309,6 +315,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<CompileOptions, CliExit>
         format,
         wat_to_stdout,
         knobs,
+        host,
         embed,
         target_world,
         lib_world: None,

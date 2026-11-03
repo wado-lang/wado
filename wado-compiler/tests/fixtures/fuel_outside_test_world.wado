@@ -1,8 +1,8 @@
 // `core:fuel` is linked only by the `wado test` host, so a command that
 // reaches it is rejected at compile time rather than failing to instantiate.
-use { measure } from "core:fuel";
+use { measure, FuelHost } from "core:fuel";
 
-export fn run() {
+export fn run() with FuelHost {
     let _ = measure("one", || 1);
 }
 
