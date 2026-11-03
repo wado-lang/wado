@@ -4,7 +4,8 @@
 //! mimalloc purges a freed page after a short delay, and a compile frees and
 //! reallocates enough that building those pages again cost Gale's
 //! `codegen_test` a sixteenth of its wall time and a quarter of its kernel time.
-//! A long-running `serve` purges, so its resident set falls after a compile.
+//! A long-running `serve` or `lsp` purges, so its resident set falls after a
+//! compile.
 //!
 //! The setting is process-wide. A page freed while memory is retained is never
 //! queued for a purge: it stays resident until it is reused.

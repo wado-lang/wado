@@ -128,9 +128,9 @@ Lints skip `#![generated]` modules; `--lint-generated` reports there too, and
 `--no-lint` reports none and skips the passes only lints need. Every compiling
 subcommand takes them, and the last one given wins.
 
-Every subcommand but `serve` keeps the memory it frees instead of returning it
-to the OS, which spares a compile rebuilding it. `--no-retain-memory` returns
-it, and `--retain-memory` has `serve` keep it too.
+Every subcommand but the long-running `serve` and `lsp` keeps the memory it
+frees instead of returning it to the OS, which spares a compile rebuilding it.
+`--no-retain-memory` returns it, and `--retain-memory` has `serve` keep it too.
 
 ## Run
 

@@ -327,7 +327,7 @@ fn unknown_command(name: &str) -> CliExit {
 
 async fn run_cmd(cmd: Cmd, parser: lexopt::Parser) -> Result<(), CliExit> {
     // Before parsing, so `--retain-memory` / `--no-retain-memory` override it.
-    wado_cli::host_memory::retain_freed(!matches!(cmd, Cmd::Serve));
+    wado_cli::host_memory::retain_freed(!matches!(cmd, Cmd::Serve | Cmd::Lsp));
     match cmd {
         Cmd::Init => {
             let opts = wado_cli::init::parse_args(parser)?;

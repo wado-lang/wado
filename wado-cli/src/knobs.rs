@@ -212,7 +212,7 @@ impl CompileKnobOpt {
                 long: Some("retain-memory"),
                 short: None,
                 value: None,
-                desc: "Keep the memory wado frees for reuse instead of returning it to\nthe OS, which saves a compile rebuilding it (default: on, but\noff under serve, whose resident set would stay at its peak)",
+                desc: "Keep the memory wado frees for reuse instead of returning it to\nthe OS, which saves a compile rebuilding it (default: on, but\noff under serve and lsp, whose resident set would stay at its peak)",
             },
             Self::NoRetainMemory => OptSpec {
                 long: Some("no-retain-memory"),
