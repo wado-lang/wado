@@ -11,8 +11,6 @@
 //! binding inside a body (a parameter, a `let`, a type parameter) is a
 //! document-local `local N`.
 
-use std::collections::HashMap;
-
 use indexmap::IndexMap;
 use wado_compiler::ast::{
     self, AstId, AstVisitor, Expr, Function, Item, Pattern, walk_expr, walk_function, walk_item,
@@ -222,7 +220,7 @@ impl SymbolNames<'_, '_> {
             owners: Vec::new(),
             bodies: 0,
             locals: 0,
-            overloads: HashMap::new(),
+            overloads: IndexMap::new(),
         };
         for item in &ast.items {
             collector.visit_item(item);
@@ -307,7 +305,7 @@ struct DeclCollector<'s> {
     bodies: u32,
     locals: u32,
     /// How many methods each owner path and name has declared.
-    overloads: HashMap<String, u32>,
+    overloads: IndexMap<String, u32>,
 }
 
 impl DeclCollector<'_> {
