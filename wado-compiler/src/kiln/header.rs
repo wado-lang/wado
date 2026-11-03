@@ -1,10 +1,16 @@
 //! `#![generated(by = …, sources = […])]` header emission and parsing. Every
 //! file a Kiln generator produces is stamped with it, so tools can show a banner
 //! and the pipeline's stale-output GC can delete a stamped file the current run
-//! did not produce, leaving hand-authored neighbours alone. Parsing is
-//! deliberately tolerant of whitespace and trailing commas; emission is canonical.
+//! did not produce, leaving hand-authored neighbours alone. Parsing reads the
+//! header as the lexer does, so any spelling of it is accepted; emission is
+//! canonical.
+
+use std::iter::Peekable;
 
 use super::invocation::InvocationPath;
+use crate::escape::{quoted, string_value};
+use crate::lexer::lex;
+use crate::token::TokenKind;
 
 /// Metadata carried by a `#![generated(...)]` attribute.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -27,19 +33,12 @@ impl GeneratedHeader {
     /// body before writing to disk.
     #[must_use]
     pub fn emit(&self) -> String {
-        let mut out = String::from("#![generated(by = \"");
-        push_escaped(&mut out, &self.by);
-        out.push_str("\", sources = [");
-        for (i, src) in self.sources.iter().enumerate() {
-            if i > 0 {
-                out.push_str(", ");
-            }
-            out.push('"');
-            push_escaped(&mut out, src);
-            out.push('"');
-        }
-        out.push_str("])]\n");
-        out
+        let sources: Vec<String> = self.sources.iter().map(|s| quoted(s)).collect();
+        format!(
+            "#![generated(by = {}, sources = [{}])]\n",
+            quoted(&self.by),
+            sources.join(", ")
+        )
     }
 
     /// Emit with extra paths; convenience for callers that hold
@@ -54,11 +53,8 @@ impl GeneratedHeader {
     }
 }
 
-/// Detect whether `source` begins with a `#![generated]` attribute.
-///
-/// Skips a leading UTF-8 BOM, `//!`/`//` line comments, and blank lines
-/// before checking the attribute line — matching how
-/// [`crate::parser`] tolerates leading trivia.
+/// Detect whether `source` begins with a `#![generated]` attribute, after a
+/// UTF-8 BOM and comments.
 #[must_use]
 pub fn has_generated_marker(source: &str) -> bool {
     parse_header(source).is_some()
@@ -71,116 +67,81 @@ pub fn has_generated_marker(source: &str) -> bool {
 /// can be added without invalidating existing files.
 #[must_use]
 pub fn parse_header(source: &str) -> Option<GeneratedHeader> {
-    let mut src = source.strip_prefix('\u{feff}').unwrap_or(source);
-    loop {
-        src = src.trim_start_matches([' ', '\t']);
-        if let Some(rest) = src.strip_prefix("\r\n").or_else(|| src.strip_prefix('\n')) {
-            src = rest;
-            continue;
-        }
-        if src.starts_with("//") {
-            let end = src.find('\n').unwrap_or(src.len());
-            src = &src[end..];
-            continue;
-        }
-        break;
+    let source = source.strip_prefix('\u{feff}').unwrap_or(source);
+    let lexed = lex(source);
+    let mut tokens = lexed.tokens.iter().map(|token| &token.kind).peekable();
+    let mut next_is = |kind: &TokenKind| tokens.next_if_eq(&kind).is_some();
+    if !(next_is(&TokenKind::Hash) && next_is(&TokenKind::Not) && next_is(&TokenKind::LBracket)) {
+        return None;
+    }
+    if tokens.next()? != &TokenKind::Ident("generated".to_string()) {
+        return None;
     }
 
-    let rest = src.strip_prefix("#![generated")?;
-    if rest.starts_with(']') {
-        return Some(GeneratedHeader {
-            by: "unknown".to_string(),
-            sources: Vec::new(),
-        });
-    }
-    let rest = rest.strip_prefix('(')?;
-    let close = rest.find(")]")?;
-    let body = &rest[..close];
-
-    let mut by = "unknown".to_string();
-    let mut sources: Vec<String> = Vec::new();
-    for part in split_top_level_commas(body) {
-        let part = part.trim();
-        if let Some(val) = part.strip_prefix("by = ") {
-            by = parse_quoted_string(val.trim())?;
-        } else if let Some(val) = part.strip_prefix("sources = ") {
-            sources = parse_string_array(val.trim())?;
+    let mut header = GeneratedHeader {
+        by: "unknown".to_string(),
+        sources: Vec::new(),
+    };
+    if tokens.next_if_eq(&&TokenKind::LParen).is_some() {
+        while tokens.next_if_eq(&&TokenKind::RParen).is_none() {
+            let TokenKind::Ident(key) = tokens.next()? else {
+                return None;
+            };
+            if tokens.next()? != &TokenKind::Eq {
+                return None;
+            }
+            match key.as_str() {
+                "by" => header.by = string(tokens.next()?)?,
+                "sources" => header.sources = string_list(&mut tokens)?,
+                _ => skip_value(&mut tokens)?,
+            }
+            if tokens.next_if_eq(&&TokenKind::Comma).is_none()
+                && tokens.peek() != Some(&&TokenKind::RParen)
+            {
+                return None;
+            }
         }
     }
-    Some(GeneratedHeader { by, sources })
+    (tokens.next()? == &TokenKind::RBracket).then_some(header)
 }
 
-/// Split `s` on top-level commas, respecting brackets and quotes.
-fn split_top_level_commas(s: &str) -> Vec<&str> {
+fn string(kind: &TokenKind) -> Option<String> {
+    let TokenKind::StringLit { raw, quote } = kind else {
+        return None;
+    };
+    string_value(raw, *quote).ok()
+}
+
+/// `[s, …]`, a trailing comma allowed.
+fn string_list<'t>(
+    tokens: &mut Peekable<impl Iterator<Item = &'t TokenKind>>,
+) -> Option<Vec<String>> {
+    if tokens.next()? != &TokenKind::LBracket {
+        return None;
+    }
     let mut out = Vec::new();
-    let mut depth: i32 = 0;
-    let mut in_string = false;
-    let mut escape = false;
-    let mut start = 0;
-    for (i, ch) in s.char_indices() {
-        if escape {
-            escape = false;
-            continue;
+    while tokens.next_if_eq(&&TokenKind::RBracket).is_none() {
+        out.push(string(tokens.next()?)?);
+        if tokens.next_if_eq(&&TokenKind::Comma).is_none()
+            && tokens.peek() != Some(&&TokenKind::RBracket)
+        {
+            return None;
         }
-        match ch {
-            '\\' if in_string => escape = true,
-            '"' => in_string = !in_string,
-            '[' | '(' if !in_string => depth += 1,
-            ']' | ')' if !in_string => depth -= 1,
-            ',' if depth == 0 && !in_string => {
-                out.push(&s[start..i]);
-                start = i + 1;
-            }
+    }
+    Some(out)
+}
+
+/// Step over an unknown key's value, up to the comma or `)` that ends it.
+fn skip_value<'t>(tokens: &mut Peekable<impl Iterator<Item = &'t TokenKind>>) -> Option<()> {
+    let mut depth = 0u32;
+    loop {
+        match tokens.peek()? {
+            TokenKind::Comma | TokenKind::RParen if depth == 0 => return Some(()),
+            TokenKind::LParen | TokenKind::LBracket => depth += 1,
+            TokenKind::RParen | TokenKind::RBracket => depth = depth.checked_sub(1)?,
             _ => {}
         }
-    }
-    if start <= s.len() {
-        out.push(&s[start..]);
-    }
-    out
-}
-
-fn parse_quoted_string(s: &str) -> Option<String> {
-    let inner = s.strip_circumfix('"', '"')?;
-    let mut out = String::with_capacity(inner.len());
-    let mut chars = inner.chars();
-    while let Some(c) = chars.next() {
-        if c == '\\' {
-            match chars.next()? {
-                '"' => out.push('"'),
-                '\\' => out.push('\\'),
-                other => {
-                    out.push('\\');
-                    out.push(other);
-                }
-            }
-        } else {
-            out.push(c);
-        }
-    }
-    Some(out)
-}
-
-fn parse_string_array(s: &str) -> Option<Vec<String>> {
-    let inner = s.strip_circumfix('[', ']')?;
-    let mut out = Vec::new();
-    for part in split_top_level_commas(inner) {
-        let part = part.trim();
-        if part.is_empty() {
-            continue;
-        }
-        out.push(parse_quoted_string(part)?);
-    }
-    Some(out)
-}
-
-fn push_escaped(out: &mut String, s: &str) {
-    for c in s.chars() {
-        match c {
-            '"' => out.push_str("\\\""),
-            '\\' => out.push_str("\\\\"),
-            _ => out.push(c),
-        }
+        tokens.next();
     }
 }
 
@@ -247,6 +208,15 @@ mod tests {
         let h = parse_header(src).unwrap();
         assert_eq!(h.by, "x");
         assert_eq!(h.sources, vec!["s".to_string()]);
+    }
+
+    /// A header is Wado source, so any string literal spells a value in it.
+    #[test]
+    fn parse_reads_every_string_literal_form() {
+        let src = r##"#![generated(by = #"x\y"#, sources = ["a\u{62}", #"./c\d"#,])]"##;
+        let h = parse_header(src).unwrap();
+        assert_eq!(h.by, r"x\y");
+        assert_eq!(h.sources, vec!["ab".to_string(), r"./c\d".to_string()]);
     }
 
     #[test]

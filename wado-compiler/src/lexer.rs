@@ -205,39 +205,13 @@ impl LexResult {
 }
 
 /// What [`Lexer::collect_interpolation_source`] is currently inside of. Only
-/// [`Scan::Code`] has structural characters; everywhere else a `}` or a `:` is
+/// [`Scan::Code`] has structural characters; in a comment a `}` or a `:` is
 /// just text.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum Scan {
     Code,
-    String,
-    Char,
-    /// A nested `` `…` `` literal. Backticks strictly alternate open and close,
-    /// so a flag counts the same characters a depth would.
-    Template,
-    /// A nested raw literal, `#"…"#` or `` #`…`# ``, closed by its `delimiter`
-    /// and `hashes` `#`s.
-    Raw {
-        delimiter: Delimiter,
-        hashes: usize,
-    },
     LineComment,
     BlockComment,
-}
-
-impl Scan {
-    /// The character that returns the scan to [`Scan::Code`].
-    fn terminator(self) -> char {
-        match self {
-            Self::String => '"',
-            Self::Char => '\'',
-            Self::Template => '`',
-            Self::LineComment => '\n',
-            Self::Code | Self::BlockComment | Self::Raw { .. } => {
-                unreachable!("no single-character terminator")
-            }
-        }
-    }
 }
 
 pub(crate) struct Lexer<'a> {
@@ -1522,7 +1496,8 @@ impl<'a> Lexer<'a> {
     /// ends and where its specifier starts, and hands the text between verbatim
     /// to [`Parser::parse_interpolation_expr`], which lexes it properly. What it
     /// must get right is which characters are *structural* — a `}` inside a
-    /// string, a char, a nested template or a comment is not the closing one.
+    /// literal or a comment is not the closing one. A literal is skipped by
+    /// the scanner that lexes it, so a nested template's holes nest too.
     fn collect_interpolation_source(
         &mut self,
         start: usize,
@@ -1552,10 +1527,9 @@ impl<'a> Lexer<'a> {
         let mut paren_depth = 0u32;
         let mut bracket_depth = 0u32;
         let mut scan = Scan::Code;
-        let mut escape_next = false;
 
         loop {
-            let Some((_, ch)) = self.peek() else {
+            if self.peek().is_none() {
                 // EOF anywhere in here — a line comment's own end included —
                 // means the interpolation, and so the template, never closed.
                 self.errors.push(LexError {
@@ -1563,34 +1537,19 @@ impl<'a> Lexer<'a> {
                     span: self.span_from(start, start_line, start_column),
                 });
                 return (expr, format, true);
-            };
-            self.advance();
-            push(&mut expr, &mut format, ch);
-
-            if escape_next {
-                escape_next = false;
+            }
+            if scan == Scan::Code
+                && let Some(literal) = self.skip_nested_literal()
+            {
+                for ch in literal.chars() {
+                    push(&mut expr, &mut format, ch);
+                }
                 continue;
             }
+            let ch = self.advance().expect("the cursor is on a character");
+            push(&mut expr, &mut format, ch);
 
             match scan {
-                Scan::String | Scan::Char | Scan::Template => {
-                    if ch == '\\' {
-                        escape_next = true;
-                    } else if ch == scan.terminator() {
-                        scan = Scan::Code;
-                    }
-                    continue;
-                }
-                Scan::Raw { delimiter, hashes } => {
-                    if ch == delimiter.char() && self.at_hashes(hashes) {
-                        for _ in 0..hashes {
-                            self.advance();
-                            push(&mut expr, &mut format, '#');
-                        }
-                        scan = Scan::Code;
-                    }
-                    continue;
-                }
                 Scan::LineComment => {
                     if ch == '\n' {
                         scan = Scan::Code;
@@ -1609,23 +1568,6 @@ impl<'a> Lexer<'a> {
             }
 
             match ch {
-                '"' => scan = Scan::String,
-                // Wado has no lifetimes, so `'` always delimits a char literal.
-                '\'' => scan = Scan::Char,
-                '`' => scan = Scan::Template,
-                '#' => {
-                    if let Some((more, delimiter)) = self.hash_run_then_delimiter(0) {
-                        // The rest of the opener: further `#`s, then the delimiter.
-                        for _ in 0..=more {
-                            let opener = self.advance().expect("the opener was scanned");
-                            push(&mut expr, &mut format, opener);
-                        }
-                        scan = Scan::Raw {
-                            delimiter,
-                            hashes: more + 1,
-                        };
-                    }
-                }
                 '/' => match self.peek_char() {
                     Some('/') => {
                         self.advance();
@@ -1670,6 +1612,26 @@ impl<'a> Lexer<'a> {
                 _ => {}
             }
         }
+    }
+
+    /// Consume the literal starting at the cursor, if one does, returning its
+    /// source. Wado has no lifetimes, so `'` always opens a char literal.
+    fn skip_nested_literal(&mut self) -> Option<&'a str> {
+        let before = self.pos;
+        let errors = self.errors.len();
+        match self.peek_char()? {
+            '"' => self.lex_string(Quote::Cooked),
+            '\'' => self.lex_char(),
+            '`' => self.lex_template_string(Quote::Cooked),
+            '#' => match self.hash_run_then_delimiter(0)? {
+                (hashes, Delimiter::Backtick) => self.lex_template_string(Quote::Raw { hashes }),
+                (hashes, Delimiter::Quote) => self.lex_string(Quote::Raw { hashes }),
+            },
+            _ => return None,
+        };
+        // The parser lexes the hole's source again, and reports its errors then.
+        self.errors.truncate(errors);
+        Some(&self.input[before..self.pos])
     }
 
     fn lex_char(&mut self) -> TokenKind {

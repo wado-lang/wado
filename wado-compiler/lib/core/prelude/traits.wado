@@ -1130,14 +1130,13 @@ impl<affine N: ReflectNewtype<Base = B>, affine B: Inspect> Inspect for N {
 }
 
 /// Template debug formatting derived over `ReflectTemplate` (WEP 2026-01-10):
-/// the template as written, its text raw and each hole's value inspected with
-/// its specifier. `==` compares the text, so the form shows it.
+/// the template as written, its delimiters and text raw and each hole's value
+/// inspected with its specifier. `==` compares the delimiters and the text, so
+/// the form shows them.
 impl<T: ReflectTemplate<Holes = [..V]>, affine ..V: Inspect> Inspect for T {
     fn inspect(&self, f: &mut Formatter) {
         let hashes = ReflectTemplate::<T>::hashes(self);
-        for let _ of 0..<hashes {
-            f.write_char('#');
-        }
+        f.write_char_n('#', hashes);
         f.write_char('`');
         for let h of ReflectTemplate::<T>::members() {
             f.write_str(h.raw(self));
@@ -1151,9 +1150,7 @@ impl<T: ReflectTemplate<Holes = [..V]>, affine ..V: Inspect> Inspect for T {
         }
         f.write_str(ReflectTemplate::<T>::raw_tail(self));
         f.write_char('`');
-        for let _ of 0..<hashes {
-            f.write_char('#');
-        }
+        f.write_char_n('#', hashes);
     }
 }
 
