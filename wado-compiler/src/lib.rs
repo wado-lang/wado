@@ -960,37 +960,35 @@ fn undeclared_effect_diagnostics(sem: &semantics::Semantics, lints: Lints) -> Ve
         if inner_attrs_allow(&module.inner_attributes, lint::UNDECLARED_EFFECTS) {
             continue;
         }
-        let mut report = |enclosing: &[ast::Attribute],
-                          attrs: &[ast::Attribute],
-                          name: &str,
-                          whose: &str| {
-            if attrs_allow(enclosing, lint::UNDECLARED_EFFECTS)
-                || attrs_allow(attrs, lint::UNDECLARED_EFFECTS)
-            {
-                return;
-            }
-            for attr in attrs
-                .iter()
-                .filter(|attr| attribute::ADMITS_EFFECTS.contains(&attr.name.as_str()))
-            {
-                let effects: Vec<&str> = attr.args.iter().map(ast::AttrArg::name).collect();
-                out.push(Diagnostic {
-                    severity: Severity::Warning,
-                    code: Code::UndeclaredEffects,
-                    message: format!(
-                        "`#[{}]` hides `{}` from the {whose} of `{name}`, which only the \
+        let mut report =
+            |enclosing: &[ast::Attribute], attrs: &[ast::Attribute], name: &str, whose: &str| {
+                if attrs_allow(enclosing, lint::UNDECLARED_EFFECTS)
+                    || attrs_allow(attrs, lint::UNDECLARED_EFFECTS)
+                {
+                    return;
+                }
+                for attr in attrs
+                    .iter()
+                    .filter(|attr| attribute::ADMITS_EFFECTS.contains(&attr.name.as_str()))
+                {
+                    let effects: Vec<&str> = attr.args.iter().map(ast::AttrArg::name).collect();
+                    out.push(Diagnostic {
+                        severity: Severity::Warning,
+                        code: Code::UndeclaredEffects,
+                        message: format!(
+                            "`#[{}]` hides `{}` from the {whose} of `{name}`, which only the \
                          standard library is meant to do for now; declare it with `with`, \
                          or mark it `#[allow(undeclared_effects)]` if that is deliberate",
-                        attr.name,
-                        effects.join("`, `"),
-                    ),
-                    span: Some(DiagnosticSpan::from_span(
-                        &attr.span,
-                        Some(src.source_path().as_str()),
-                    )),
-                });
-            }
-        };
+                            attr.name,
+                            effects.join("`, `"),
+                        ),
+                        span: Some(DiagnosticSpan::from_span(
+                            &attr.span,
+                            Some(src.source_path().as_str()),
+                        )),
+                    });
+                }
+            };
         for item in &module.items {
             let (enclosing, methods): (&[ast::Attribute], &[ast::Function]) = match item {
                 Item::Function(func) => {

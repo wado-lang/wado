@@ -71,10 +71,9 @@ pub(super) fn settle_ambient_guards(
     for guard in &guards {
         let mut func = project.functions[guard.func].borrow_mut();
         let body = guarded_body(&mut func.body);
-        let holds = body.values.alloc_unshared(
-            ValueKind::Bool(guard.withheld.is_none()),
-            TypeTable::BOOL,
-        );
+        let holds = body
+            .values
+            .alloc_unshared(ValueKind::Bool(guard.withheld.is_none()), TypeTable::BOOL);
         let StmtKind::If { condition, .. } = &mut body.stmts[guard.stmt].kind else {
             unreachable!("a guard is an `if` statement");
         };

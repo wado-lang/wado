@@ -1423,7 +1423,12 @@ impl<'a> Reify<'a> {
     /// what an `#[ambient]` function answers without them: `Default::default()`,
     /// or nothing for one returning `()`. The optimizer decides each guard once
     /// for the whole component.
-    fn guard_ambient_body(&self, body: TirBlock, hosts: &[String], return_type: TypeId) -> TirBlock {
+    fn guard_ambient_body(
+        &self,
+        body: TirBlock,
+        hosts: &[String],
+        return_type: TypeId,
+    ) -> TirBlock {
         let span = body.span;
         let string_type = self
             .tysys
@@ -1456,14 +1461,8 @@ impl<'a> Reify<'a> {
                     .require_function(CompilerItem::AmbientDefault);
                 (module.clone(), name.to_string())
             };
-            let fallback = self.stdlib_call(
-                &module,
-                &name,
-                vec![return_type],
-                vec![],
-                return_type,
-                span,
-            );
+            let fallback =
+                self.stdlib_call(&module, &name, vec![return_type], vec![], return_type, span);
             stmts.push(TirStmt::new(
                 TirStmtKind::Return {
                     value: Some(fallback),

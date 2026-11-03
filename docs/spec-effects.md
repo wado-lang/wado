@@ -417,7 +417,7 @@ Apart from a narrowing, nothing a body does adds to what its function holds.
 
 An ambient effect is best-effort. It uses a capability the component already has and never adds one. A listed effect the host provides is available where the target world imports it, or where code outside an ambient body performs it. One a handler answers, such as `core:log`'s `Log`, is always available. Where a listed effect is not available, the function does not run its body: it returns `Default::default()`, or nothing when it returns `()`. A function returning another type that does not implement `Default` is an error, if any effect it lists is one the host provides. In a component that imports no stdout or stderr, as a Kiln generator does not, `log_stdout` or `log_stderr` drops its message rather than trapping, and `core:log`'s `WallClock::now` answers `null` in one with no clock.
 
-It is for output that must work from any function: `log_stdout` is `#[ambient(Stdout)]`, and `log_stderr` is `#[ambient(Stderr)]`. Whether a call whose result goes unused runs is [unspecified](./spec-overview.md#behavior-classes), so its output may never appear.
+It is for what must work from any function, output above all: `log_stdout` is `#[ambient(Stdout)]`, and `log_stderr` is `#[ambient(Stderr)]`. Whether a call whose result goes unused runs is [unspecified](./spec-overview.md#behavior-classes), so its output may never appear.
 
 <!-- {"fixture":"spec_effects_ambient.wado"} -->
 
