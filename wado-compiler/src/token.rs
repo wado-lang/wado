@@ -37,6 +37,23 @@ pub enum Quote {
     Raw { hashes: usize },
 }
 
+/// What opens and closes a string literal (`"`) or a template (`` ` ``).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Delimiter {
+    Quote,
+    Backtick,
+}
+
+impl Delimiter {
+    #[must_use]
+    pub fn char(self) -> char {
+        match self {
+            Self::Quote => '"',
+            Self::Backtick => '`',
+        }
+    }
+}
+
 impl Quote {
     /// How many `#`s stand on each end.
     #[must_use]
@@ -48,14 +65,25 @@ impl Quote {
     }
 
     /// The literal as written, from the cooked spelling the lexer gave its
-    /// text: `prefix` (`b` or nothing), the `#`s, and `delimiter` on each end.
+    /// text: `prefix` (`b` or nothing), then the opener, text and closer.
     #[must_use]
-    pub fn write(self, prefix: &str, delimiter: char, cooked: &str) -> String {
-        let hashes = "#".repeat(self.hash_count());
+    pub fn write(self, prefix: &str, delimiter: Delimiter, cooked: &str) -> String {
         format!(
-            "{prefix}{hashes}{delimiter}{}{delimiter}{hashes}",
-            self.spell(cooked)
+            "{prefix}{}{}{}",
+            self.open(delimiter),
+            self.spell(cooked),
+            self.close(delimiter)
         )
+    }
+
+    #[must_use]
+    pub fn open(self, delimiter: Delimiter) -> String {
+        format!("{}{}", "#".repeat(self.hash_count()), delimiter.char())
+    }
+
+    #[must_use]
+    pub fn close(self, delimiter: Delimiter) -> String {
+        format!("{}{}", delimiter.char(), "#".repeat(self.hash_count()))
     }
 
     /// Text as this quoting writes it, from the cooked spelling the lexer gave

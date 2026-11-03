@@ -26,7 +26,7 @@ use crate::hashmap::{IndexMap, IndexSet};
 use crate::semantics::member_visible;
 use crate::tir;
 use crate::tir::{EffectRef, ResolvedType, TirCapture};
-use crate::token::Span;
+use crate::token::{Delimiter, Span};
 
 const MAX_LINE_WIDTH: usize = 120;
 
@@ -837,9 +837,9 @@ impl<'a> Unparser<'a> {
             } => {
                 match spelling {
                     UseNameSpelling::Ident => self.output.push_str(name),
-                    UseNameSpelling::InterfaceName(_) => {
-                        self.output
-                            .push_str(&StrLit::new(name.as_str()).as_written());
+                    UseNameSpelling::InterfaceName(_, written) => {
+                        assert_eq!(written.value, *name, "the literal spells the name");
+                        self.output.push_str(&written.as_written());
                     }
                 }
                 if let Some(alias) = alias {
@@ -2072,8 +2072,12 @@ impl<'a> Unparser<'a> {
     fn unparse_literal(&mut self, lit: &Literal) {
         match lit {
             Literal::Number(repr) => self.output.push_str(repr),
-            Literal::String(raw, quote) => self.output.push_str(&quote.write("", '"', raw)),
-            Literal::Bytes(raw, quote) => self.output.push_str(&quote.write("b", '"', raw)),
+            Literal::String(raw, quote) => {
+                self.output.push_str(&quote.write("", Delimiter::Quote, raw));
+            }
+            Literal::Bytes(raw, quote) => {
+                self.output.push_str(&quote.write("b", Delimiter::Quote, raw));
+            }
             Literal::Byte(raw) => {
                 self.output.push_str("b'");
                 self.output.push_str(raw);
@@ -2678,9 +2682,7 @@ impl<'a> Unparser<'a> {
     }
 
     fn unparse_template_string(&mut self, t: &TemplateStringExpr) {
-        let hashes = "#".repeat(t.quote.hash_count());
-        self.output.push_str(&hashes);
-        self.output.push('`');
+        self.output.push_str(&t.quote.open(Delimiter::Backtick));
         for part in &t.parts {
             match part {
                 TemplatePart::String(s) => self.output.push_str(&t.quote.spell(s)),
@@ -2702,8 +2704,7 @@ impl<'a> Unparser<'a> {
                 }
             }
         }
-        self.output.push('`');
-        self.output.push_str(&hashes);
+        self.output.push_str(&t.quote.close(Delimiter::Backtick));
     }
 
     fn unparse_cast(&mut self, c: &CastExpr) {
@@ -3546,6 +3547,7 @@ fn format_field_name(name: &str, written: Option<&StrLit>) -> String {
     if is_valid_ident(name) {
         name.to_string()
     } else if let Some(written) = written {
+        assert_eq!(written.value, name, "the literal spells the name");
         written.as_written()
     } else {
         quoted(name)

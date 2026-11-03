@@ -14,7 +14,7 @@ use crate::escape::escape_string;
 use crate::hashmap::IndexMap;
 use crate::lexer::WILDCARD;
 use crate::name::{UNIT_TYPE_NAME, repeated_element};
-use crate::token::{Quote, Span};
+use crate::token::{Delimiter, Quote, Span};
 
 /// Identity of one `AstId` allocation space — one per parse. Each top-level
 /// [`crate::parser::Parser`] draws a fresh one from a process-global counter and
@@ -1656,10 +1656,6 @@ pub struct TestMetadata {
 }
 
 impl TestDecl {
-    pub fn name(&self) -> Option<&str> {
-        self.name.as_ref().map(|name| name.value.as_str())
-    }
-
     /// Resolve this test's `#[expect_trap]` / `#[TODO]` / `#[timeout_ms(..)]` /
     /// `#[synopsis]` / `#[workload]` attributes. `module_is_todo` folds in a
     /// module-level `#[TODO]`.
@@ -1731,7 +1727,7 @@ impl StrLit {
     /// The literal as written, quotes included.
     #[must_use]
     pub fn as_written(&self) -> String {
-        self.quote.write("", '"', &self.raw)
+        self.quote.write("", Delimiter::Quote, &self.raw)
     }
 }
 
@@ -2414,8 +2410,9 @@ pub enum UseItem {
 pub enum UseNameSpelling {
     Ident,
     /// A full interface name as a string (`"wasi:cli/stdout"`), which always
-    /// takes `as`, since a string is no identifier to bind.
-    InterfaceName(CmImport),
+    /// takes `as`, since a string is no identifier to bind. The literal is
+    /// kept for printing it back.
+    InterfaceName(CmImport, StrLit),
 }
 
 /// Simple use item (used within effect function imports)

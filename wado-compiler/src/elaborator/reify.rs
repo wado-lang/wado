@@ -1777,7 +1777,7 @@ impl<'a> Reify<'a> {
             is_synopsis,
             is_workload,
         } = meta;
-        let function_name = test_function_name(&meta, test_index, test_decl.name());
+        let function_name = test_function_name(&meta, test_index, test_decl.name.as_deref());
 
         let return_type = TypeTable::UNIT;
         let mut ctx = FunctionContext::new(return_type, function_name.clone());
@@ -1821,7 +1821,7 @@ impl<'a> Reify<'a> {
         };
 
         let tir_test = TirTest {
-            name: test_decl.name().map(str::to_owned),
+            name: test_decl.name.as_deref().map(str::to_owned),
             function_name,
             line: test_decl.span.line,
             span: test_decl.span,

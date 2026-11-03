@@ -16,7 +16,7 @@ use crate::compiler_host::{Code, Diagnostic, DiagnosticSpan, Severity};
 use crate::elaborator::float_literal::FloatFormat;
 use crate::primitive::PrimitiveType;
 use crate::token;
-use crate::token::{Position, Quote, Span, TemplateTokenPart, Token, TokenKind};
+use crate::token::{Delimiter, Position, Quote, Span, TemplateTokenPart, Token, TokenKind};
 
 /// Whether `c` may open an identifier: `[a-zA-Z_]`.
 pub fn is_ident_start(c: char) -> bool {
@@ -218,7 +218,7 @@ enum Scan {
     /// A nested raw literal, `#"…"#` or `` #`…`# ``, closed by its `delimiter`
     /// and `hashes` `#`s.
     Raw {
-        delimiter: char,
+        delimiter: Delimiter,
         hashes: usize,
     },
     LineComment,
@@ -556,7 +556,7 @@ impl<'a> Lexer<'a> {
         let kind = match ch {
             // `b"..."` / `b'x'` — before the identifier rule so `b` is not an ident.
             'b' if self.peek_second() == Some('"') => self.lex_byte_string(Quote::Cooked),
-            'b' if let Some((hashes, '"')) = self.hash_run_then_delimiter(1) => {
+            'b' if let Some((hashes, Delimiter::Quote)) = self.hash_run_then_delimiter(1) => {
                 self.lex_byte_string(Quote::Raw { hashes })
             }
             'b' if self.peek_second() == Some('\'') => self.lex_byte_char(),
@@ -798,9 +798,11 @@ impl<'a> Lexer<'a> {
                 }
             }
             '#' => match self.hash_run_then_delimiter(0) {
-                Some((hashes, '`')) => self.lex_template_string(Quote::Raw { hashes }),
-                Some((hashes, '"')) => self.lex_string(Quote::Raw { hashes }),
-                _ => {
+                Some((hashes, Delimiter::Backtick)) => {
+                    self.lex_template_string(Quote::Raw { hashes })
+                }
+                Some((hashes, Delimiter::Quote)) => self.lex_string(Quote::Raw { hashes }),
+                None => {
                     self.advance();
                     TokenKind::Hash
                 }
@@ -1258,29 +1260,46 @@ impl<'a> Lexer<'a> {
                     });
                     return text;
                 }
-                Some((_, '"')) => {
-                    self.advance();
-                    if self.at_hashes(hashes) {
-                        self.advance_n(hashes);
+                Some(_) => {
+                    if self.respell_text_char(Delimiter::Quote, hashes, &mut text) {
                         return text;
                     }
-                    text.push_str("\\\"");
-                }
-                Some((_, '\\')) => {
-                    self.advance();
-                    text.push_str(r"\\");
-                }
-                Some((_, '\r')) => {
-                    if self.advance_literal_cr() {
-                        text.push('\n');
-                    }
-                }
-                Some((_, ch)) => {
-                    self.advance();
-                    text.push(ch);
                 }
             }
         }
+    }
+
+    /// Consume the character at the cursor, a literal's text or its closer
+    /// (`delimiter` and `hashes` `#`s), appending text as a cooked literal
+    /// spells it. A backslash reaching here is text, as in a raw literal; a
+    /// cooked one is scanned as an escape before. Returns whether it closed.
+    fn respell_text_char(&mut self, delimiter: Delimiter, hashes: usize, text: &mut String) -> bool {
+        match self.peek() {
+            Some((_, ch)) if ch == delimiter.char() => {
+                self.advance();
+                if self.at_hashes(hashes) {
+                    self.advance_n(hashes);
+                    return true;
+                }
+                text.push('\\');
+                text.push(ch);
+            }
+            Some((_, '\\')) => {
+                self.advance();
+                text.push_str(r"\\");
+            }
+            Some((_, '\r')) => {
+                if self.advance_literal_cr() {
+                    text.push('\n');
+                }
+            }
+            Some((_, ch)) => {
+                self.advance();
+                text.push(ch);
+            }
+            None => unreachable!("the caller handles the end of input"),
+        }
+        false
     }
 
     /// Scan the raw content of a `"`-quoted literal up to and including the
@@ -1395,12 +1414,12 @@ impl<'a> Lexer<'a> {
 
     /// The run of `#`s `skip` bytes past the cursor, with the raw literal's
     /// delimiter that follows it. `None` where no delimiter follows.
-    fn hash_run_then_delimiter(&self, skip: usize) -> Option<(usize, char)> {
+    fn hash_run_then_delimiter(&self, skip: usize) -> Option<(usize, Delimiter)> {
         let rest = &self.input.as_bytes()[self.pos + skip..];
         let hashes = rest.iter().take_while(|&&b| b == b'#').count();
         match rest.get(hashes) {
-            Some(b'`') => Some((hashes, '`')),
-            Some(b'"') => Some((hashes, '"')),
+            Some(b'`') => Some((hashes, Delimiter::Backtick)),
+            Some(b'"') => Some((hashes, Delimiter::Quote)),
             _ => None,
         }
     }
@@ -1444,11 +1463,7 @@ impl<'a> Lexer<'a> {
                     }
                     return TokenKind::TemplateStringLit { parts, quote };
                 }
-                Some((_, '\\')) if matches!(quote, Quote::Raw { .. }) => {
-                    self.advance();
-                    current_literal.push_str(r"\\");
-                }
-                Some((_, '\\')) => {
+                Some((_, '\\')) if quote == Quote::Cooked => {
                     // Scanned by the shared rules, copied verbatim: the
                     // segment stays raw for the elaborator's unescaper.
                     let escape_start = self.pos;
@@ -1492,22 +1507,10 @@ impl<'a> Lexer<'a> {
                         return TokenKind::TemplateStringLit { parts, quote };
                     }
                 }
-                Some((_, '`')) => {
-                    self.advance();
-                    if self.at_hashes(hashes) {
-                        self.advance_n(hashes);
+                Some(_) => {
+                    if self.respell_text_char(Delimiter::Backtick, hashes, &mut current_literal) {
                         break;
                     }
-                    current_literal.push_str(r"\`");
-                }
-                Some((_, '\r')) => {
-                    if self.advance_literal_cr() {
-                        current_literal.push('\n');
-                    }
-                }
-                Some((_, ch)) => {
-                    self.advance();
-                    current_literal.push(ch);
                 }
             }
         }
@@ -1588,7 +1591,7 @@ impl<'a> Lexer<'a> {
                     continue;
                 }
                 Scan::Raw { delimiter, hashes } => {
-                    if ch == delimiter && self.at_hashes(hashes) {
+                    if ch == delimiter.char() && self.at_hashes(hashes) {
                         for _ in 0..hashes {
                             self.advance();
                             push(&mut expr, &mut format, '#');

@@ -2769,7 +2769,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         module_is_todo: bool,
     ) {
         let meta = test_decl.metadata(module_is_todo);
-        let function_name = test_function_name(&meta, test_index, test_decl.name());
+        let function_name = test_function_name(&meta, test_index, test_decl.name.as_deref());
 
         // Named as reify names it, so `#function` literals match.
         let mut ctx = FunctionContext::new(TypeTable::UNIT, function_name);

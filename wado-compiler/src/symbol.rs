@@ -453,7 +453,7 @@ impl SymbolTable {
     ) -> Option<String> {
         match spelling {
             UseNameSpelling::Ident => Some(name.to_owned()),
-            UseNameSpelling::InterfaceName(interface) => {
+            UseNameSpelling::InterfaceName(interface, _) => {
                 match self.interfaces_named(target, interface).as_slice() {
                     [(member, _)] => Some(member.clone()),
                     _ => None,

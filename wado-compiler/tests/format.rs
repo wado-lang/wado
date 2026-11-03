@@ -9,6 +9,17 @@
 use std::fs;
 use std::path::Path;
 
+/// The index just past the Debug-printed string whose opening quote is at
+/// `start`, stepping over its `\`-escapes.
+fn after_debug_string(bytes: &[u8], start: usize) -> usize {
+    assert_eq!(bytes[start], b'"');
+    let mut i = start + 1;
+    while bytes[i] != b'"' {
+        i += if bytes[i] == b'\\' { 2 } else { 1 };
+    }
+    i + 1
+}
+
 /// Strip semantically-irrelevant fields from Debug output so we can compare
 /// ASTs structurally. This normalizes:
 /// - `span: Span { ... }` → `span: SPAN` (source positions differ after format)
@@ -25,12 +36,24 @@ fn normalize_ast_debug(debug: &str) -> String {
     let mut i = 0;
 
     while i < bytes.len() {
+        // A string's contents are data: copied whole, never matched below.
+        if bytes[i] == b'"' {
+            let end = after_debug_string(bytes, i);
+            result.extend_from_slice(&bytes[i..end]);
+            i = end;
+            continue;
+        }
+
         // Normalize any "Span {" occurrence (span:, op_span:, or bare Span in enums)
         if bytes[i..].starts_with(b"Span {") {
             result.extend_from_slice(b"SPAN");
             i += b"Span ".len();
             let mut depth = 0i32;
             while i < bytes.len() {
+                if bytes[i] == b'"' {
+                    i = after_debug_string(bytes, i);
+                    continue;
+                }
                 if bytes[i] == b'{' {
                     depth += 1;
                 } else if bytes[i] == b'}' {
@@ -62,6 +85,10 @@ fn normalize_ast_debug(debug: &str) -> String {
         if bytes[i..].starts_with(b"quoted:") {
             let mut depth = 0i32;
             while i < bytes.len() && !(bytes[i] == b'\n' && depth == 0) {
+                if bytes[i] == b'"' {
+                    i = after_debug_string(bytes, i);
+                    continue;
+                }
                 match bytes[i] {
                     b'(' | b'{' | b'[' => depth += 1,
                     b')' | b'}' | b']' => depth -= 1,
@@ -3823,6 +3850,7 @@ fn test_format_tagged_template_keeps_tag_adjacent() {
 #[test]
 fn test_format_raw_string_kept_as_written() {
     let source = r###"use { x } from #"./a.wado"#;
+use { #"wasi:cli/stdout"# as Out } from "wasi:cli";
 
 #[unavailable(#"use \`y`"#)]
 fn z();
@@ -3841,6 +3869,23 @@ fn foo() {
     assert_eq!(
         formatted, source,
         "a raw string keeps its delimiters and backslashes"
+    );
+}
+
+/// A bracket inside a quoted name is text, so stripping the spelling stops at
+/// the spelling and still compares the value after it.
+#[test]
+fn test_normalize_ast_debug_reads_brackets_in_strings_as_text() {
+    let ast = |source: &str| {
+        let ast = wado_compiler::parse(source)
+            .into_fail_fast()
+            .expect("parse failed")
+            .ast;
+        normalize_ast_debug(&format!("{ast:#?}"))
+    };
+    assert_ne!(
+        ast(r#"fn f() { let p = { "a{(": g(x) }; }"#),
+        ast(r#"fn f() { let p = { "a{(": g(y) }; }"#),
     );
 }
 
