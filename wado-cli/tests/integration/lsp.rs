@@ -2617,3 +2617,36 @@ fn query_scip_indexes_a_file_nothing_imports() {
     // Those two in a.wado's document, and the import and both calls in b.wado's.
     assert_eq!(count("wado . a.wado . greet()."), 5);
 }
+
+#[test]
+fn query_scip_leaves_out_what_an_exclude_matches() {
+    let tmp = tempfile::tempdir().unwrap();
+    std::fs::write(
+        tmp.path().join("a.wado"),
+        "pub fn greet() -> i32 {\n    return 1;\n}\n",
+    )
+    .unwrap();
+    let fixtures = tmp.path().join("pkg/tests");
+    std::fs::create_dir_all(&fixtures).unwrap();
+    // A package of its own: the glob still reaches it from the root.
+    std::fs::write(
+        tmp.path().join("pkg/wado.toml"),
+        "[package]\nname = \"pkg\"\n",
+    )
+    .unwrap();
+    std::fs::write(
+        fixtures.join("f.wado"),
+        "use { greet } from \"../../a.wado\";\nfn f() -> i32 {\n    return greet();\n}\n",
+    )
+    .unwrap();
+
+    wado_in(tmp.path())
+        .args(["query", "scip", "--exclude", "pkg/tests/**", "."])
+        .assert()
+        .success();
+
+    let index = std::fs::read(tmp.path().join("index.scip")).unwrap();
+    let has = |needle: &str| index.windows(needle.len()).any(|w| w == needle.as_bytes());
+    assert!(has("wado . a.wado . greet()."));
+    assert!(!has("pkg/tests/f.wado"));
+}

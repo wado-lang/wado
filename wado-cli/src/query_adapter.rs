@@ -131,14 +131,23 @@ fn position_from_one_based(line: u32, column: u32) -> Position {
 /// Write a SCIP index of every `.wado` file under `dir` to `output`. Each file
 /// is analyzed as an entry of its own, so the references a file makes are
 /// found whether or not anything imports it. Unfiltered by `[test]` /
-/// `[format]`, as `references` is.
-pub async fn run_scip(dir: &str, output: &str) -> Result<(), CliExit> {
+/// `[format]`, as `references` is: only `excludes`, globs relative to `dir`,
+/// leave a file out. They match after the walk, so one glob reaches across
+/// the packages under `dir`.
+pub async fn run_scip(dir: &str, output: &str, excludes: &[String]) -> Result<(), CliExit> {
     let root =
         fs::canonicalize(dir).map_err(|e| CliExit::error(format!("reading '{dir}': {e}")))?;
     let root_uri = format!("{}/", wado_lsp::Uri::from_file_path(&root).as_str());
+    let excludes = discover::ExcludeSet::compile(excludes).map_err(CliExit::error)?;
     let mut files: Vec<_> = discover::discover_tree(&root, &discover::no_filters)?
         .into_iter()
         .flat_map(|pkg| pkg.files)
+        .filter(|file| {
+            !excludes.matches(
+                file.strip_prefix(&root)
+                    .expect("discovery stays under its root"),
+            )
+        })
         .collect();
     files.sort();
     let cores = std::thread::available_parallelism().map_or(1, NonZero::get);

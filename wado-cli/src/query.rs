@@ -79,6 +79,7 @@ pub struct QueryOptions {
     base: Option<String>,
     all: bool,
     output: Option<String>,
+    excludes: Vec<String>,
 }
 
 #[derive(Clone, Copy)]
@@ -91,6 +92,7 @@ enum Opt {
     Base,
     All,
     Output,
+    Exclude,
     Help,
 }
 
@@ -104,6 +106,7 @@ impl Opt {
         Self::Base,
         Self::All,
         Self::Output,
+        Self::Exclude,
         Self::Help,
     ];
 
@@ -157,6 +160,12 @@ impl Opt {
                 value: Some("<path>"),
                 desc: "Where `scip` writes the index (default: index.scip)",
             },
+            Self::Exclude => args::OptSpec {
+                long: Some("exclude"),
+                short: None,
+                value: Some("<glob>"),
+                desc: "Leave out of `scip` the files matching a glob, relative to its directory (repeatable)",
+            },
             Self::Help => args::HELP_SPEC,
         }
     }
@@ -165,7 +174,11 @@ impl Opt {
 fn format_usage() -> String {
     let mut buf = String::new();
     writeln!(buf, "Usage: wado query <kind> [options] <file.wado>").unwrap();
-    writeln!(buf, "       wado query scip [--output <path>] [dir]").unwrap();
+    writeln!(
+        buf,
+        "       wado query scip [--output <path>] [--exclude <glob>]... [dir]"
+    )
+    .unwrap();
     writeln!(
         buf,
         "       wado query definition --symbol <notation> [--base <dir>]"
@@ -204,6 +217,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<QueryOptions, CliExit> {
     let mut base: Option<String> = None;
     let mut all = false;
     let mut output: Option<String> = None;
+    let mut excludes: Vec<String> = Vec::new();
 
     while let Some(arg) = args::next_arg(&mut parser)? {
         if let Some(opt) = args::match_opt(&arg, Opt::ALL, |o| o.spec()) {
@@ -222,6 +236,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<QueryOptions, CliExit> {
                 Opt::Base => base = Some(args::require_string(&mut parser)?),
                 Opt::All => all = true,
                 Opt::Output => output = Some(args::require_string(&mut parser)?),
+                Opt::Exclude => excludes.push(args::require_string(&mut parser)?),
                 Opt::Help => return Err(CliExit::help(usage)),
             }
         } else if let Value(val) = arg {
@@ -239,9 +254,9 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<QueryOptions, CliExit> {
 
     let kind = kind.ok_or_else(|| CliExit::error_with_usage("missing query kind", &usage))?;
 
-    if output.is_some() && kind != QueryKind::Scip {
+    if (output.is_some() || !excludes.is_empty()) && kind != QueryKind::Scip {
         return Err(CliExit::error_with_usage(
-            "--output is only valid for the `scip` kind",
+            "--output and --exclude are only valid for the `scip` kind",
             &usage,
         ));
     }
@@ -282,6 +297,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<QueryOptions, CliExit> {
             base,
             all,
             output,
+            excludes,
         });
     }
 
@@ -330,6 +346,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<QueryOptions, CliExit> {
         base,
         all,
         output,
+        excludes,
     })
 }
 
@@ -375,7 +392,8 @@ pub async fn run(opts: QueryOptions) -> Result<(), CliExit> {
     let input = opts.input.as_deref().unwrap_or(".");
     match opts.kind {
         QueryKind::Scip => {
-            query_adapter::run_scip(input, opts.output.as_deref().unwrap_or("index.scip")).await
+            let output = opts.output.as_deref().unwrap_or("index.scip");
+            query_adapter::run_scip(input, output, &opts.excludes).await
         }
         QueryKind::Diagnostics => query_adapter::run_diagnostics(input, opts.json).await,
         QueryKind::InlayHints => query_adapter::run_inlay_hints(input, opts.json).await,

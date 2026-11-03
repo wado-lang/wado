@@ -258,6 +258,16 @@ hint with the labels spliced in at the anchors an editor would render them at
 against `example/`, say — without reading positions off a list. `--json` prints
 the raw hints instead, positioned in the LSP's default UTF-16 encoding.
 
+`scip` takes a directory (default `.`) and writes a
+[SCIP](https://github.com/scip-code/scip) index of every `.wado` file under it,
+each analyzed as its own entry, to `--output` (default `index.scip`).
+`--exclude <glob>`, repeatable and relative to that directory, leaves files
+out:
+
+```sh
+wado query scip --output wado.scip --exclude 'wado-compiler/tests/**' .
+```
+
 Common options:
 
 - `--symbol <notation>` — locate by name instead of `--line`/`--column`.
