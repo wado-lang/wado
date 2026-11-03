@@ -44,6 +44,15 @@ internal fn build(pattern: StrSlice, syntax: Syntax) -> Result<Regex, PatternErr
 }
 
 impl Regex {
+    fn has_names(&self) -> bool {
+        for let n of &self.names {
+            if *n matches { Some(_) } {
+                return true;
+            }
+        }
+        return false;
+    }
+
     /// The regular expression `pattern` spells, or why it spells none.
     pub fn new<S: AsStrSlice>(pattern: S) -> Result<Regex, PatternError> {
         return build(pattern.as_str_slice(), Syntax::Plain);
@@ -97,6 +106,141 @@ impl Regex {
     /// `find_iter` does.
     pub fn captures_iter<S: AsStrSlice>(&self, text: S) -> CaptureMatches {
         return CaptureMatches { matches: self.find_iter(text) };
+    }
+
+    /// `text` with its leftmost match replaced by what `replacer` writes.
+    pub fn replace<S: AsStrSlice, R: Replacer>(&self, text: S, replacer: R) -> String {
+        return self.replace_matches(text.as_str_slice(), &replacer, false);
+    }
+
+    /// `text` with each match, as `captures_iter` finds them, replaced by what
+    /// `replacer` writes.
+    pub fn replace_all<S: AsStrSlice, R: Replacer>(&self, text: S, replacer: R) -> String {
+        return self.replace_matches(text.as_str_slice(), &replacer, true);
+    }
+
+    fn replace_matches<R: Replacer>(&self, text: StrSlice, replacer: &R, all: bool) -> String {
+        let mut out = "";
+        let mut copied = 0;
+        for let caps of self.captures_iter(text) {
+            out.push_str(text.slice(copied, caps.slots[0]));
+            replacer.append(&caps, &mut out);
+            copied = caps.slots[1];
+            if !all {
+                break;
+            }
+        }
+        out.push_str(text.slice(copied, text.len()));
+        return out;
+    }
+
+    /// The pieces of `text` between its matches, as `String.prototype.split`
+    /// cuts them: an empty match cuts nowhere a piece just ended, nor at the
+    /// end of the text, and an empty text that matches has no pieces.
+    pub fn split<S: AsStrSlice>(&self, text: S) -> Split {
+        let view = text.as_str_slice();
+        let done = view.is_empty() && self.is_match(view);
+        return Split { regex: self, text: view, piece: 0, search: 0, done };
+    }
+}
+
+/// Where a search resumes after a match of `[start, end)` in `text`: past an
+/// empty match by one character, or past the end once none is left.
+fn step_past(text: StrSlice, start: i32, end: i32) -> i32 {
+    if end > start {
+        return end;
+    }
+    if end < text.len() {
+        return end + text.char_at_byte(end).len_utf8();
+    }
+    return end + 1;
+}
+
+/// What `replace` writes in place of each match.
+pub trait Replacer with () {
+    fn append(&self, caps: &Captures, out: &mut String);
+}
+
+/// A replacement template, read as ECMA-262's `GetSubstitution` reads one.
+impl Replacer for String {
+    fn append(&self, caps: &Captures, out: &mut String) {
+        substitute(self.as_str_slice(), caps, out);
+    }
+}
+
+impl Replacer for StrSlice {
+    fn append(&self, caps: &Captures, out: &mut String) {
+        substitute(*self, caps, out);
+    }
+}
+
+/// Inserts what the function returns, as it is.
+impl Replacer for fn(&Captures) -> String {
+    fn append(&self, caps: &Captures, out: &mut String) {
+        out.push_str(&(*self)(caps));
+    }
+}
+
+fn push_group(caps: &Captures, index: i32, out: &mut String) {
+    if let Some(m) = caps.get(index) {
+        out.push_str(m.as_str());
+    }
+}
+
+// GetSubstitution (§22.1.3.19.1): `$$`, `$&`, `$\``, `$'`, `$n`, `$nn` and
+// `$<name>`; any other `$` is itself.
+fn substitute(template: StrSlice, caps: &Captures, out: &mut String) {
+    let text = caps.text;
+    let count = caps.len() - 1;
+    let named = caps.regex.has_names();
+    let mut i = 0;
+    while i < template.len() {
+        let c = template.char_at_byte(i);
+        if c != '$' || i + 1 >= template.len() {
+            out.push(c);
+            i += c.len_utf8();
+            continue;
+        }
+        let next = template.byte_at(i + 1);
+        if next == b'$' {
+            out.push('$');
+            i += 2;
+        } else if next == b'&' {
+            out.push_str(text.slice(caps.slots[0], caps.slots[1]));
+            i += 2;
+        } else if next == b'`' {
+            out.push_str(text.slice(0, caps.slots[0]));
+            i += 2;
+        } else if next == b'\'' {
+            out.push_str(text.slice(caps.slots[1], text.len()));
+            i += 2;
+        } else if next >= b'0' && next <= b'9' {
+            let one = (next - b'0') as i32;
+            let two = if i + 2 < template.len() && template.byte_at(i + 2) >= b'0' && template.byte_at(i + 2) <= b'9' {
+                one * 10 + (template.byte_at(i + 2) - b'0') as i32
+            } else {
+                -1
+            };
+            if two >= 1 && two <= count {
+                push_group(caps, two, out);
+                i += 3;
+            } else if one >= 1 && one <= count {
+                push_group(caps, one, out);
+                i += 2;
+            } else {
+                out.push('$');
+                i += 1;
+            }
+        } else if next == b'<' && named && let Some(gt) = template.slice(i, template.len()).find(">") {
+            let name = template.slice(i + 2, i + gt);
+            if let Some(m) = caps.name(name) {
+                out.push_str(m.as_str());
+            }
+            i += gt + 1;
+        } else {
+            out.push('$');
+            i += 1;
+        }
     }
 }
 
@@ -167,25 +311,28 @@ pub struct Matches {
     next: i32,
 }
 
+impl Matches {
+    fn next_slots(&mut self) -> Option<List<i32>> {
+        if self.next > self.text.len() {
+            return null;
+        }
+        let Some(slots) = search(&self.regex.program, self.text, self.next) else {
+            self.next = self.text.len() + 1;
+            return null;
+        };
+        self.next = step_past(self.text, slots[0], slots[1]);
+        return Some(slots);
+    }
+}
+
 impl Iterator for Matches {
     type Item = Match;
 
     fn next(&mut self) -> Option<Match> {
-        if self.next > self.text.len() {
-            return null;
-        }
-        let Some(m) = self.regex.find_at(self.text, self.next) else {
-            self.next = self.text.len() + 1;
+        let Some(slots) = self.next_slots() else {
             return null;
         };
-        self.next = if m.end > m.start {
-            m.end;
-        } else if m.end < self.text.len() {
-            m.end + self.text.char_at_byte(m.end).len_utf8();
-        } else {
-            m.end + 1;
-        };
-        return Some(m);
+        return Some(Match { text: self.text, start: slots[0], end: slots[1] });
     }
 }
 
@@ -198,23 +345,43 @@ impl Iterator for CaptureMatches {
     type Item = Captures;
 
     fn next(&mut self) -> Option<Captures> {
-        let m = &mut self.matches;
-        if m.next > m.text.len() {
+        let Some(slots) = self.matches.next_slots() else {
+            return null;
+        };
+        return Some(Captures { text: self.matches.text, slots, regex: self.matches.regex });
+    }
+}
+
+/// The iterator `Regex::split` returns.
+pub struct Split {
+    regex: &Regex,
+    text: StrSlice,
+    /// Where the piece being cut starts.
+    piece: i32,
+    /// Where the next search starts.
+    search: i32,
+    done: bool,
+}
+
+impl Iterator for Split {
+    type Item = StrSlice;
+
+    fn next(&mut self) -> Option<StrSlice> {
+        if self.done {
             return null;
         }
-        let Some(caps) = m.regex.captures_at(m.text, m.next) else {
-            m.next = m.text.len() + 1;
-            return null;
-        };
-        let start = caps.slots[0];
-        let end = caps.slots[1];
-        m.next = if end > start {
-            end;
-        } else if end < m.text.len() {
-            end + m.text.char_at_byte(end).len_utf8();
-        } else {
-            end + 1;
-        };
-        return Some(caps);
+        let len = self.text.len();
+        while self.search < len && let Some(m) = self.regex.find_at(self.text, self.search) && m.start < len {
+            if m.end == self.piece {
+                self.search = step_past(self.text, m.start, m.end);
+                continue;
+            }
+            let piece = self.text.slice(self.piece, m.start);
+            self.piece = m.end;
+            self.search = m.end;
+            return Some(piece);
+        }
+        self.done = true;
+        return Some(self.text.slice(self.piece, len));
     }
 }

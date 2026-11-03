@@ -20,6 +20,11 @@ from ECMA-262's tables or from an engine, `core:icu` is right.
 
 - `src/ast.wado` — the tree a pattern parses to.
 - `src/parse.wado` — the parser, `rex`'s syntax included, and `PatternError`.
+- `src/charset.wado` — code point sets, and what each named set holds.
+- `src/utf8.wado` — a code point range as the UTF-8 byte sequences encoding it.
+- `src/program.wado` — the tree compiled to Pike VM instructions over bytes.
+- `src/pike.wado` — the Pike VM.
+- `src/regex.wado` — `Regex`, its searches, `replace` and `split`.
 
 ## Running tests
 

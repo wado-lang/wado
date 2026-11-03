@@ -1,4 +1,4 @@
-use { Regex } from "../src/lib.wado";
+use { Captures, Regex } from "../src/lib.wado";
 
 fn re(pattern: String) -> Regex {
     return Regex::new(pattern).unwrap();
@@ -130,6 +130,44 @@ test "the match takes time linear in the text" {
 
 test "a program too large is refused" {
     assert `${Regex::new("(?:a{1000}){1001}").unwrap_err()}` == "the pattern compiles to more than 1000000 instructions (at byte 0)";
+}
+
+test "replace reads a template as GetSubstitution does" {
+    let r = re("(\\d+)-(\\d+)");
+    assert r.replace("a 1-22 b 333-4", "$2-$1") == "a 22-1 b 333-4";
+    assert r.replace_all("a 1-22 b 333-4", "$2-$1") == "a 22-1 b 4-333";
+    assert r.replace("a 1-22 b", "[$&|$`|$'|$$|$3|$01|$10|$]") == "a [1-22|a | b|$|$3|1|10|$] b";
+    assert re("(?<y>\\d+)").replace("x 7", "<$<y>|$<z>|$<y>") == "x <7||7";
+    assert re("(\\d)").replace("x 7", "<$<y>>") == "x <$<y>>";
+    assert re("a*").replace_all("baaac", "-") == "-b--c-";
+    assert re("x").replace("abc", "-") == "abc";
+}
+
+test "replace takes a view or a function" {
+    let template: String = "[$&]";
+    assert re("b").replace_all("abcb", template.as_str_slice()) == "a[b]c[b]";
+    let shout: fn(&Captures) -> String = |caps| `${caps.get(0).unwrap().as_str()}!`;
+    assert re("\\d+").replace_all("1 22", shout) == "1! 22!";
+}
+
+fn pieces(pattern: String, text: String) -> String {
+    let mut parts: List<String> = [];
+    for let piece of re(pattern).split(text) {
+        parts.push(`<${piece}>`);
+    }
+    return parts.join("");
+}
+
+test "split cuts as String.prototype.split does" {
+    assert pieces(",", "a,b,,c") == "<a><b><><c>";
+    assert pieces(",", ",a,") == "<><a><>";
+    assert pieces("", "abc") == "<a><b><c>";
+    assert pieces("(?:)", "é漢") == "<é><漢>";
+    assert pieces("x*", "axbxx") == "<a><b><>";
+    assert pieces("\\b", "hi there") == "<hi>< ><there>";
+    assert pieces("a", "a") == "<><>";
+    assert pieces("a?", "") == "";
+    assert pieces("b", "") == "<>";
 }
 
 test "i waits for simple case folding" {

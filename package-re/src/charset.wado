@@ -6,11 +6,11 @@ use { CharSet, NamedSet } from "./ast.wado";
 
 internal global MAX_CODE_POINT: u32 = 0x10FFFF;
 
-/// `ranges` sorted and merged.
-internal fn normalize(mut ranges: List<[u32, u32]>) -> List<[u32, u32]> {
-    ranges.sort_by(|a, b| a.0.cmp(&b.0));
+/// `set` sorted and merged.
+internal fn normalize(mut set: List<[u32, u32]>) -> List<[u32, u32]> {
+    set.sort_by(|a, b| a.0.cmp(&b.0));
     let mut out: List<[u32, u32]> = [];
-    for let r of &ranges {
+    for let r of &set {
         let [lo, hi] = *r;
         let last = out.len() - 1;
         if last >= 0 && lo <= out[last].1 + 1 {
