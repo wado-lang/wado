@@ -27,6 +27,11 @@ test "smoke" {
 }
 
 #[workload]
+test "workload" {
+    let html = sqlite::highlight(#include_str("../sqlite_parse/queries_sample.sql"));
+    assert html.contains("<span class=\"keyword\">SELECT</span>");
+}
+
 test "fuel" {
     let sql = #include_str("../sqlite_parse/queries.sql");
     assert measure("gale/sqlite/highlight", || sqlite::highlight(&sql).len()) > 0;

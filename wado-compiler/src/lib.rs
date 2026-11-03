@@ -456,9 +456,6 @@ pub struct OptOverrides {
     pub iterations: Option<u32>,
     /// The clones constant-argument specialization may mint over the module.
     pub specializations: Option<usize>,
-    /// The shares of all runs that place a profile's hot and cold lines.
-    pub profile_summary_cutoff_hot: Option<pgo::Cutoff>,
-    pub profile_summary_cutoff_cold: Option<pgo::Cutoff>,
     /// The share of a branch's runs past which the branch is predictable.
     pub predictable_branch_threshold: Option<pgo::Percent>,
 }
@@ -467,13 +464,10 @@ impl OptOverrides {
     /// How a profile's counts are read.
     #[must_use]
     pub fn profile_thresholds(&self) -> pgo::Thresholds {
-        let default = pgo::Thresholds::default();
         pgo::Thresholds {
-            hot: self.profile_summary_cutoff_hot.unwrap_or(default.hot),
-            cold: self.profile_summary_cutoff_cold.unwrap_or(default.cold),
             predictable_branch: self
                 .predictable_branch_threshold
-                .unwrap_or(default.predictable_branch),
+                .unwrap_or(pgo::Thresholds::default().predictable_branch),
         }
     }
 }

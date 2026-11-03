@@ -27,7 +27,7 @@ use crate::hashmap::{IndexMap, IndexSet};
 use crate::loader::{ModuleLoader, cached_stdlib_module};
 use crate::logger::Logger;
 use crate::module_source::ModuleSource;
-use crate::pgo::{Applied, Profile, Reading};
+use crate::pgo::{Applied, Profile, Thresholds};
 use crate::resolve::Resolutions;
 use crate::semantics::{Semantics, semantics_with_logger};
 use crate::stdlib;
@@ -62,8 +62,8 @@ pub(crate) fn is_building() -> bool {
 
 /// What a profiled snapshot was built for: the coverage it measures the
 /// stdlib with, the stdlib part of the profile it applied, and how it read the
-/// counts, against the summary of the whole profile.
-type ProfiledKey = (Option<CoverageScope>, Profile, Reading);
+/// counts.
+type ProfiledKey = (Option<CoverageScope>, Profile, Thresholds);
 
 /// Return the current thread's stdlib [`Semantics`] snapshot for a compile
 /// measuring `coverage` and applying `profile`, building it on first call by
@@ -83,9 +83,9 @@ pub(crate) fn get_or_init_snapshot(
     }
     let probed = coverage.filter(|scope| scope.stdlib);
     let key = profile
-        .map(|applied| (applied.profile.stdlib_part(), applied.reading))
+        .map(|applied| (applied.profile.stdlib_part(), applied.thresholds))
         .filter(|(part, _)| !part.is_empty())
-        .map(|(part, reading)| (probed, part, reading));
+        .map(|(part, thresholds)| (probed, part, thresholds));
     if let Some(key) = key {
         return Some(PROFILED_SNAPSHOT.with(|cell| {
             if let Some((built, snap)) = &*cell.borrow()
@@ -95,7 +95,7 @@ pub(crate) fn get_or_init_snapshot(
             }
             let applied = Applied {
                 profile: &key.1,
-                reading: key.2,
+                thresholds: key.2,
             };
             let snap = Rc::new(build_guarded(probed, Some(applied)));
             *cell.borrow_mut() = Some((key, snap.clone()));

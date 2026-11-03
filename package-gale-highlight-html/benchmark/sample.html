@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Sample</title>
+  <style>
+    .card { margin: 0 auto; padding: 8px 12px; border: 1px solid #ccc; }
+    .card h2 { font-size: 1.25rem; color: rgb(20, 20, 20); }
+  </style>
+  <script type="application/ld+json">
+    { "@context": "https://schema.org", "@type": "Organization", "name": "Sample", "founded": 2024 }
+  </script>
+</head>
+<body>
+  <div class="card" style="display: flex; gap: 4px">
+    <h2>Counter</h2>
+    <button id="inc" onclick="count += 1; render()">+1</button>
+    <span id="out">0</span>
+  </div>
+  <script>
+    let count = 0;
+    class View {
+      constructor(el) { this.el = el; }
+      show(n) { this.el.textContent = `${n}`; }
+    }
+    const view = new View(document.getElementById("out"));
+    function render() { view.show(count); }
+  </script>
+</body>
+</html>

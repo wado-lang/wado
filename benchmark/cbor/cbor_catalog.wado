@@ -32,6 +32,13 @@ test "smoke" {
 }
 
 #[workload]
+test "workload" {
+    let catalog = json_from_bytes::<CitmCatalog, _>(#include_bytes("../json_catalog/citm_catalog_sample.json")).unwrap();
+    let back = cbor_from_bytes::<CitmCatalog, _>(cbor_to_bytes::<CitmCatalog>(&catalog).unwrap()).unwrap();
+    assert event_count(&back) == 10;
+    assert performance_count(&back) == 10;
+}
+
 test "fuel" {
     let catalog = json_from_bytes::<CitmCatalog, _>(#include_bytes("../json_catalog/citm_catalog.json")).unwrap();
     let cbor = cbor_to_bytes::<CitmCatalog>(&catalog).unwrap();
