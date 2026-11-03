@@ -44,17 +44,13 @@ the _remark mechanism_, and choosing where to point it surfaces a sharp design
 constraint, because Wado's optimizer is still developing and remarks must not be
 written to fit its current internals.
 
-Inlining was the obvious first candidate and is rejected. It fails three tests a
-remark must pass:
+A remark must pass three tests:
 
 - _Durable_ — it must not bind to optimizer heuristics that are in flux.
-  Inlining is governed by a cost-vs-threshold heuristic that will keep changing.
-- _Actionable_ — there must be a clear source change. "Too big to inline" leaves
-  the author with no reliable move.
-- _Reliable_ — applying the change must reliably help. An inline hint exists
-  already and does not reliably make code faster.
+- _Actionable_ — there must be a clear source change.
+- _Reliable_ — applying the change must reliably help.
 
-Inlining misses all three. The principle that survives the bar:
+The principle that survives the bar:
 
 > A remark should bind to the language's semantic cost model, not to an optimizer
 > heuristic, and it should fire from a fact observable in the final IR, not from a
@@ -231,7 +227,6 @@ Trade-offs and boundaries:
   classification above withholds the suggestion rather than guessing.
 - The paper's specific task (auto-vectorization) is intentionally out of scope:
   Wado leaves SIMD to the JIT. Only the remark mechanism transfers.
-- Rejected alternatives, recorded for design history: inlining remarks (fail
-  durable / actionable / reliable, above); loop-allocation hoisting remarks
-  (bind to the LICM pass rather than a language-level semantic cost, so they
-  violate the principle).
+- Rejected alternative, recorded for design history: loop-allocation hoisting
+  remarks (bind to the LICM pass rather than a language-level semantic cost, so
+  they violate the principle).
