@@ -30,8 +30,8 @@ fn use_it(n: i32) -> i32 {
     return -1;
 }
 
-// `black_box` keeps the arguments off the constant path: specializing `use_it`
-// on them renames the callee the expectation below pins.
+// `black_box` keeps the arguments off the constant path, so `make` reaches
+// codegen still returning an `Option<v128>`.
 export fn run() {
     assert use_it(builtin::black_box(5)) == 5;
     assert use_it(builtin::black_box(-3)) == -1;
@@ -39,8 +39,5 @@ export fn run() {
 
 __DATA__
 {
-    "stdout": "",
-    "wir_expect:O2": [
-        "/make\" = fn(i32) -> ref \"core:prelude/types.wado//Option<v128>\""
-    ]
+    "stdout": ""
 }

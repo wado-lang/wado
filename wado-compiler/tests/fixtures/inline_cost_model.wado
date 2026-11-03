@@ -60,10 +60,7 @@ export fn run() with Stdout {
 __DATA__
 {
     "stdout": "4 6\n52\n",
-    "wir_not_expect:O2": [
-        "Buf::reserve"
-    ],
-    "wir_expect:O2": [
-        "Buf::churn"
-    ]
+    "wir_pass": {"O2": ["nir/inline"]},
+    "wir_not_expect:O2": ["Buf::reserve"],
+    "wir_guard": {"O2": {"expect": ["Buf::churn"]}}
 }
