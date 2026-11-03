@@ -70,39 +70,55 @@ pub fn parse_header(source: &str) -> Option<GeneratedHeader> {
     let source = source.strip_prefix('\u{feff}').unwrap_or(source);
     let lexed = lex(source);
     let mut tokens = lexed.tokens.iter().map(|token| &token.kind).peekable();
-    let mut next_is = |kind: &TokenKind| tokens.next_if_eq(&kind).is_some();
-    if !(next_is(&TokenKind::Hash) && next_is(&TokenKind::Not) && next_is(&TokenKind::LBracket)) {
-        return None;
-    }
-    if tokens.next()? != &TokenKind::Ident("generated".to_string()) {
-        return None;
+    let opener = [
+        TokenKind::Hash,
+        TokenKind::Not,
+        TokenKind::LBracket,
+        TokenKind::Ident("generated".to_string()),
+    ];
+    for kind in &opener {
+        expect(&mut tokens, kind)?;
     }
 
     let mut header = GeneratedHeader {
         by: "unknown".to_string(),
         sources: Vec::new(),
     };
-    if tokens.next_if_eq(&&TokenKind::LParen).is_some() {
-        while tokens.next_if_eq(&&TokenKind::RParen).is_none() {
+    if eat(&mut tokens, &TokenKind::LParen) {
+        while !eat(&mut tokens, &TokenKind::RParen) {
             let TokenKind::Ident(key) = tokens.next()? else {
                 return None;
             };
-            if tokens.next()? != &TokenKind::Eq {
-                return None;
-            }
+            expect(&mut tokens, &TokenKind::Eq)?;
             match key.as_str() {
                 "by" => header.by = string(tokens.next()?)?,
                 "sources" => header.sources = string_list(&mut tokens)?,
                 _ => skip_value(&mut tokens)?,
             }
-            if tokens.next_if_eq(&&TokenKind::Comma).is_none()
-                && tokens.peek() != Some(&&TokenKind::RParen)
-            {
-                return None;
-            }
+            separator(&mut tokens, &TokenKind::RParen)?;
         }
     }
-    (tokens.next()? == &TokenKind::RBracket).then_some(header)
+    expect(&mut tokens, &TokenKind::RBracket)?;
+    Some(header)
+}
+
+fn eat<'t>(tokens: &mut Peekable<impl Iterator<Item = &'t TokenKind>>, kind: &TokenKind) -> bool {
+    tokens.next_if(|next| *next == kind).is_some()
+}
+
+fn expect<'t>(
+    tokens: &mut Peekable<impl Iterator<Item = &'t TokenKind>>,
+    kind: &TokenKind,
+) -> Option<()> {
+    eat(tokens, kind).then_some(())
+}
+
+/// The comma after a list element, which only the list's `closer` may stand in for.
+fn separator<'t>(
+    tokens: &mut Peekable<impl Iterator<Item = &'t TokenKind>>,
+    closer: &TokenKind,
+) -> Option<()> {
+    (eat(tokens, &TokenKind::Comma) || tokens.peek() == Some(&closer)).then_some(())
 }
 
 fn string(kind: &TokenKind) -> Option<String> {
@@ -116,17 +132,11 @@ fn string(kind: &TokenKind) -> Option<String> {
 fn string_list<'t>(
     tokens: &mut Peekable<impl Iterator<Item = &'t TokenKind>>,
 ) -> Option<Vec<String>> {
-    if tokens.next()? != &TokenKind::LBracket {
-        return None;
-    }
+    expect(tokens, &TokenKind::LBracket)?;
     let mut out = Vec::new();
-    while tokens.next_if_eq(&&TokenKind::RBracket).is_none() {
+    while !eat(tokens, &TokenKind::RBracket) {
         out.push(string(tokens.next()?)?);
-        if tokens.next_if_eq(&&TokenKind::Comma).is_none()
-            && tokens.peek() != Some(&&TokenKind::RBracket)
-        {
-            return None;
-        }
+        separator(tokens, &TokenKind::RBracket)?;
     }
     Some(out)
 }
