@@ -159,7 +159,7 @@ fn "opt_matches_sparse_set_search.wado/run"() with Stdout {
     let $sroa_$iter_5_repr_166: ref Array<u32>;
     let out_175: ref "core:prelude/string.wado//String";
     let x_246: i64;
-    let repr_265: ref Array<u8>;
+    let $sroa_view_repr_203: ref Array<u8>;
     inside = 0;
     outside = 0;
     $sroa_$iter_0_repr_155 = global:opt_matches_sparse_set_search.wado::EDGES.repr;
@@ -299,14 +299,14 @@ fn "opt_matches_sparse_set_search.wado/run"() with Stdout {
     inside = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_246(x_246 = builtin::i64_extend_i32_s(inside); select i64(x_246 < 0_i64, 0_i64 - x_246, x_246)));
     $sroa_$iter_0_index_156 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"(out_175, $sroa_$iter_0_index_156, inside);
     "core:prelude/primitive.wado/write_decimal_digits"(local.tee $load_1(out_175.repr), $sroa_$iter_0_index_156, x_246, inside);
-    repr_265 = global:opt_matches_sparse_set_search.wado::$const_obj_1;
+    $sroa_view_repr_203 = global:opt_matches_sparse_set_search.wado::$const_obj_1;
     if @unlikely(local.tee inside(out_175.used + 1) > builtin::array_len($load_1)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_175, inside);
     }
     $sroa_$iter_0_index_156 = out_175.used;
     out_175.used = inside;
-    builtin::array_copy<u8>(out_175.repr, $sroa_$iter_0_index_156, repr_265, 0, 1);
+    builtin::array_copy<u8>(out_175.repr, $sroa_$iter_0_index_156, $sroa_view_repr_203, 0, 1);
     inside = outside < 0;
     outside = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_246(x_246 = builtin::i64_extend_i32_s(outside); select i64(x_246 < 0_i64, 0_i64 - x_246, x_246)));
     inside = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"(out_175, inside, outside);
@@ -856,7 +856,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<opt_matches
     let out_3: ref "core:prelude/string.wado//String";
     let is_negative_65: bool;
     let x: i64;
-    let start_128: i32;
+    let start_125: i32;
     out_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
     $inline_core_prelude_string_wado_String__internal_push_view_20: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_20;
@@ -868,18 +868,18 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<opt_matches
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_3, is_negative_65);
         }
-        start_128 = out_3.used;
+        start_125 = out_3.used;
         out_3.used = is_negative_65;
-        builtin::array_set_u8(out_3.repr, start_128, 45);
+        builtin::array_set_u8(out_3.repr, start_125, 45);
     } else {
     }
     if @unlikely(local.tee is_negative_65(out_3.used + t) > builtin::array_len(out_3.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_3, is_negative_65);
     }
-    start_128 = out_3.used;
+    start_125 = out_3.used;
     out_3.used = is_negative_65;
-    "core:prelude/primitive.wado/write_decimal_digits"(out_3.repr, start_128, x, t);
+    "core:prelude/primitive.wado/write_decimal_digits"(out_3.repr, start_125, x, t);
     $inline_core_prelude_string_wado_String__internal_push_view_39: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_39;
     };

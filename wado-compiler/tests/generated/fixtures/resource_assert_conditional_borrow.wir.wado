@@ -918,11 +918,9 @@ fn "resource_assert_conditional_borrow.wado/$cm_binding__wasi:http/types@0.3.0#[
     let $name_packed: i64;
     let $name_flat1: i32;
     let $raw_result: bool;
-    let bytes: ref Array<u8>;
     let ptr_11: i32;
-    bytes = name.repr;
     ptr_11 = "mem/realloc"(0, 0, 1, 10);
-    "core:rt/gc_array_to_memory$spec0$dae[src_start]"(bytes, ptr_11, 10);
+    "core:rt/gc_array_to_memory$spec0$dae[src_start]"(name.repr, ptr_11, 10);
     ptr_11 = builtin::i32_wrap_i64(local.tee $name_packed(builtin::i64_extend_i32_u(ptr_11) | 42949672960_i64));
     $name_flat1 = builtin::i32_wrap_i64($name_packed >> 32_i64);
     $raw_result = "wasi/$wasi:http/types@0.3.0#[method]fields.has"(self.value, ptr_11, $name_flat1);

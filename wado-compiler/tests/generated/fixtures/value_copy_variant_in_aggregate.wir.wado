@@ -542,11 +542,12 @@ fn "value_copy_variant_in_aggregate.wado/$test_4_list_of_structs_with_variant_fi
             continue l13;
         };
     };
-    if ref.is_null(local.tee $sroa_$match_25_value_65(if @unlikely(0 >= used_31) {
+    if @unlikely(0 >= used_31) {
         cold_path;
         "value_copy_variant_in_aggregate.wado/$test_4_list_of_structs_with_variant_fields_copies_independently$cold4$dae[$contract_arg_0]"(used_31);
         unreachable;
-    }; builtin::array_get_value<ref "value_copy_variant_in_aggregate.wado//Item">($array_clone_dst_2, 0).tag)) == 0 {
+    }
+    if ref.is_null(local.tee $sroa_$match_25_value_65(builtin::array_get_value<ref "value_copy_variant_in_aggregate.wado//Item">($array_clone_dst_2, 0).tag)) == 0 {
         if @unlikely(local.tee used_31(local.tee v_3(ref.as_non_null($sroa_$match_25_value_65)).used) >= builtin::array_len(v_3.repr)) {
             cold_path;
             "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(v_3);

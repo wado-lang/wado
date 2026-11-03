@@ -1188,7 +1188,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     let defaulted = s.tysys.signatures.impl_sig(def).trait_type_args.is_empty();
                     let tt = s.tysys.type_table.borrow();
                     if defaulted {
-                        tt.type_key(arg) == tt.type_key(ty)
+                        tt.same_type(arg, ty)
                     } else {
                         drop(tt);
                         s.impl_takes_key(def, arg)
@@ -1245,9 +1245,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .first()
             .copied();
         let tt = self.tysys.type_table.borrow();
-        written.is_some_and(|written| {
-            tt.param_slot(written).is_some() || tt.type_key(written) == tt.type_key(key)
-        })
+        written
+            .is_some_and(|written| tt.param_slot(written).is_some() || tt.same_type(written, key))
     }
 
     /// Check the bounds impl `def` places on its parameters still open, once
@@ -1588,7 +1587,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let open: Vec<String> = reached_packs
             .into_iter()
             .filter(|&(_, slot, arg)| {
-                table.type_key(arg) == table.type_key(slot)
+                table.same_type(arg, slot)
                     || (self.tysys.is_unbound_type_param(arg) && !in_scope(arg))
                     || table.any_type_pack(arg, &|pack| !in_scope(pack))
             })

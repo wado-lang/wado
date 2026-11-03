@@ -376,7 +376,7 @@ impl BoxedLocals {
     ) -> Option<tir::TypeId> {
         let declared = *self.0.get(&local)?;
         let holding = *plan.box_struct_types.get(&ty)?;
-        (type_table.type_key(holding) == type_table.type_key(declared)).then_some(declared)
+        type_table.same_type(holding, declared).then_some(declared)
     }
 }
 
@@ -3041,6 +3041,7 @@ fn convert_test(test: &TirTest) -> NirTest {
 
 fn convert_enum(e: &TirEnum) -> NirEnum {
     NirEnum {
+        def: e.def,
         name: e.name.clone(),
         module_source: e.module_source.clone(),
         visibility: e.visibility,

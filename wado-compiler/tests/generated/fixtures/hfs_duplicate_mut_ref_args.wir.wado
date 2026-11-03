@@ -86,7 +86,7 @@ fn "hfs_duplicate_mut_ref_args.wado/run"() with Stdout {
     let i: i32;
     let out_36: ref "core:prelude/string.wado//String";
     let x_107: i64;
-    let repr_126: ref Array<u8>;
+    let $sroa_view_repr_203: ref Array<u8>;
     let $hfs_v_265: i32;
     b = struct.new "hfs_duplicate_mut_ref_args.wado//Buf" { v: 0, pad: 0 };
     sum = 0;
@@ -114,14 +114,14 @@ fn "hfs_duplicate_mut_ref_args.wado/run"() with Stdout {
     sum = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_107(x_107 = builtin::i64_extend_i32_s(sum); select i64(x_107 < 0_i64, 0_i64 - x_107, x_107)));
     $hfs_v_265 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"(out_36, $hfs_v_265, sum);
     "core:prelude/primitive.wado/write_decimal_digits"(local.tee $load_2(out_36.repr), $hfs_v_265, x_107, sum);
-    repr_126 = global:hfs_duplicate_mut_ref_args.wado::$const_obj_0;
+    $sroa_view_repr_203 = global:hfs_duplicate_mut_ref_args.wado::$const_obj_0;
     if @unlikely(local.tee sum(out_36.used + 1) > builtin::array_len($load_2)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_36, sum);
     }
     $hfs_v_265 = out_36.used;
     out_36.used = sum;
-    builtin::array_copy<u8>(out_36.repr, $hfs_v_265, repr_126, 0, 1);
+    builtin::array_copy<u8>(out_36.repr, $hfs_v_265, $sroa_view_repr_203, 0, 1);
     sum = i < 0;
     i = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_107(x_107 = builtin::i64_extend_i32_s(i); select i64(x_107 < 0_i64, 0_i64 - x_107, x_107)));
     sum = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"(out_36, sum, i);

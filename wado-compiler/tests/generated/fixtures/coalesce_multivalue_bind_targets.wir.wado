@@ -237,9 +237,9 @@ fn "coalesce_multivalue_bind_targets.wado/run"() with Stdout {
     let bottom: u64;
     let chunks: i32;
     let top_digits: i32;
-    let digit_count_181: i32;
+    let digit_count_178: i32;
     let arr: ref Array<u8>;
-    let start_232: i32;
+    let start_229: i32;
     self_1 = black_box(struct.new "core:prelude/int128.wado//i128" { low: 0_i64, high: -9223372036854775808_i64 });
     other_2 = black_box(struct.new "core:prelude/int128.wado//i128" { low: -1_i64, high: -1_i64 });
     self_9 = $inline_core_prelude_int128_wado_i128__abs_u128_6: block -> ref "core:prelude/int128.wado//u128" {
@@ -306,32 +306,32 @@ fn "coalesce_multivalue_bind_targets.wado/run"() with Stdout {
             chunks = 3;
         }
     }
-    digit_count_181 = local.tee top_digits("core:prelude/primitive.wado/count_digits_u64"($load_0)) + ((chunks - 1) * 19);
+    digit_count_178 = local.tee top_digits("core:prelude/primitive.wado/count_digits_u64"($load_0)) + ((chunks - 1) * 19);
     if is_neg {
         if @unlikely(local.tee is_neg(0 + 1) > builtin::array_len(out_48.repr)) {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_48, is_neg);
         }
-        start_232 = out_48.used;
+        start_229 = out_48.used;
         out_48.used = is_neg;
-        builtin::array_set_u8(out_48.repr, start_232, 45);
+        builtin::array_set_u8(out_48.repr, start_229, 45);
     } else {
     }
-    if @unlikely(local.tee is_neg(out_48.used + digit_count_181) > builtin::array_len(out_48.repr)) {
+    if @unlikely(local.tee is_neg(out_48.used + digit_count_178) > builtin::array_len(out_48.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_48, is_neg);
     }
-    start_232 = out_48.used;
+    start_229 = out_48.used;
     out_48.used = is_neg;
     arr = out_48.repr;
-    is_neg = start_232 + digit_count_181;
+    is_neg = start_229 + digit_count_178;
     if chunks == 3 {
         "core:prelude/primitive.wado/write_decimal_digits"(arr, is_neg - 38, hi_19, 19);
     }
     if chunks > 1 {
         "core:prelude/primitive.wado/write_decimal_digits"(arr, is_neg - 19, bottom, 19);
     }
-    "core:prelude/primitive.wado/write_decimal_digits"(arr, start_232, $load_0, top_digits);
+    "core:prelude/primitive.wado/write_decimal_digits"(arr, start_229, $load_0, top_digits);
     $inline_core_prelude_string_wado_String__internal_push_view_71: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_71;
     };

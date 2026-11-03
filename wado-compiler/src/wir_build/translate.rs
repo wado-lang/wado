@@ -25,7 +25,7 @@ use crate::nir_arena::{
 };
 use crate::nir_value_graph::{ValueId, ValueKind};
 use crate::optimize::arena_query::{MarkerBuiltins, RareRuns};
-use crate::optimize::multi_value_return::{block_tail, block_tail_call};
+use crate::optimize::multi_value_return::{block_tail, block_tail_call, split_exits};
 use crate::optimize::sroa_variant_return::settled_locals;
 use crate::rarity::{Mark, Rarity};
 use crate::token::Span;
@@ -944,6 +944,9 @@ pub(super) struct LabelEntry {
     pub(super) is_loop_break: bool,
     /// True if this is a loop instruction (target for continue).
     pub(super) is_loop_continue: bool,
+    /// The split locals a `break` to this block binds its call's results into,
+    /// when a `let` binds the block's value split.
+    pub(super) split_into: Option<Vec<String>>,
 }
 
 impl LabelEntry {
@@ -952,6 +955,7 @@ impl LabelEntry {
         label: None,
         is_loop_break: false,
         is_loop_continue: false,
+        split_into: None,
     };
 }
 
@@ -1145,26 +1149,37 @@ impl FunctionTranslator<'_, '_> {
         fields: &[(String, TypeId)],
         names: &[String],
     ) -> (Vec<WirInstr>, Vec<(String, WirType)>) {
-        assert_eq!(
-            names.len(),
-            fields.len(),
-            "[WIR] a multi-value bind needs one local per result"
-        );
-        let mut instrs = Vec::with_capacity(fields.len() + 1);
-        let mut bound = Vec::with_capacity(fields.len());
-        for ((_, field_type), name) in fields.iter().zip(names) {
-            let ty = self.ctx.type_id_to_wir_type(self.type_table, *field_type);
-            instrs.push(WirInstr::DeclareLocal {
-                name: name.clone(),
-                ty: ty.clone(),
-            });
-            bound.push((name.clone(), ty));
-        }
+        let (mut instrs, bound) = self.declare_split_locals(fields, names);
         instrs.push(WirInstr::MultiValueLocalBind {
             instr: Box::new(call),
             locals: bound.iter().map(|(name, _)| Some(name.clone())).collect(),
         });
         (instrs, bound)
+    }
+
+    /// Declare one local per field, named by `names`.
+    fn declare_split_locals(
+        &self,
+        fields: &[(String, TypeId)],
+        names: &[String],
+    ) -> (Vec<WirInstr>, Vec<(String, WirType)>) {
+        assert_eq!(
+            names.len(),
+            fields.len(),
+            "[WIR] a multi-value bind needs one local per result"
+        );
+        fields
+            .iter()
+            .zip(names)
+            .map(|((_, field_type), name)| {
+                let ty = self.ctx.type_id_to_wir_type(self.type_table, *field_type);
+                let declare = WirInstr::DeclareLocal {
+                    name: name.clone(),
+                    ty: ty.clone(),
+                };
+                (declare, (name.clone(), ty))
+            })
+            .unzip()
     }
 
     /// Translate the arguments of a call to `func`, handing a parameter that
@@ -1387,30 +1402,98 @@ impl FunctionTranslator<'_, '_> {
             return None;
         }
         let mut prefix: Vec<StmtId> = Vec::new();
-        let (func_id, _, call) = block_tail_call(self.body, Operand::Expr(value), &mut prefix)?;
-        let fields = self.multi_value_result_fields(func_id)?.to_vec();
+        if let Some((func_id, _, call)) =
+            block_tail_call(self.body, Operand::Expr(value), &mut prefix)
+        {
+            let fields = self.multi_value_result_fields(func_id)?.to_vec();
+            let names = self.multi_value_split_names(local_index, &fields);
+            // Whatever ran ahead of the call in the block still has to run, and
+            // ahead of the bind — the receiver the call reads is bound there.
+            let mut instrs: Vec<WirInstr> = self.translate_stmts(&prefix);
+            let call_instr = self.take_multi_value_results(|t| t.translate_expr(call));
+            let (bind, bound) = self.bind_multi_value_results(call_instr, &fields, &names);
+            instrs.extend(bind);
+            self.record_multi_value_split(local_index, &fields, bound);
+            return Some(WirInstr::Seq(instrs));
+        }
 
+        let exits = split_exits(self.body, Operand::Expr(value), |f| {
+            let fields = self.multi_value_result_fields(f)?;
+            Some(
+                fields
+                    .iter()
+                    .map(|(name, _)| name.clone())
+                    .collect::<Vec<_>>(),
+            )
+        })?;
+        let fields = self
+            .multi_value_result_fields(exits.calls[0].0)
+            .expect("every exit returns multi-value")
+            .to_vec();
+        let names = self.multi_value_split_names(local_index, &fields);
+        let (mut instrs, bound) = self.declare_split_locals(&fields, &names);
+        self.label_stack.push(LabelEntry {
+            label: Some(exits.label.clone()),
+            is_loop_break: false,
+            is_loop_continue: false,
+            split_into: Some(names.clone()),
+        });
+        let stmts = &self.body.blocks[exits.block].stmts;
+        let (&last, lead) = stmts
+            .split_last()
+            .expect("a block with an exit has a statement");
+        let mut body = self.translate_stmts(lead);
+        match &self.body.stmts[last].kind {
+            StmtKind::Expr(tail) => {
+                let call = tail.as_expr().expect("an exit is a call");
+                body.push(self.bind_multi_value_exit(call, &names));
+            }
+            _ => body.extend(self.translate_stmts(&[last])),
+        }
+        self.label_stack.pop();
+        instrs.push(WirInstr::Block {
+            label: Some(exits.label),
+            result: None,
+            body,
+        });
+        self.record_multi_value_split(local_index, &fields, bound);
+        Some(WirInstr::Seq(instrs))
+    }
+
+    /// The split locals a `let` of `local_index` binds the N results into.
+    fn multi_value_split_names(
+        &self,
+        local_index: u32,
+        fields: &[(String, TypeId)],
+    ) -> Vec<String> {
         let base = self.local_name(local_index);
-        let names: Vec<String> = fields
+        fields
             .iter()
             .map(|(field_name, _)| multi_value_split_local(&base, field_name))
-            .collect();
+            .collect()
+    }
 
-        // Whatever ran ahead of the call in the block still has to run, and
-        // ahead of the bind — the receiver the call reads is bound there.
-        let mut instrs: Vec<WirInstr> = self.translate_stmts(&prefix);
-        let call_instr = self.take_multi_value_results(|t| t.translate_expr(call));
-        let (bind, bound) = self.bind_multi_value_results(call_instr, &fields, &names);
-        instrs.extend(bind);
+    /// Bind the results of `call`, one exit of a split block, into `names`.
+    fn bind_multi_value_exit(&mut self, call: ExprId, names: &[String]) -> WirInstr {
+        let instr = self.take_multi_value_results(|t| t.translate_expr(call));
+        WirInstr::MultiValueLocalBind {
+            instr: Box::new(instr),
+            locals: names.iter().cloned().map(Some).collect(),
+        }
+    }
 
+    fn record_multi_value_split(
+        &mut self,
+        local_index: u32,
+        fields: &[(String, TypeId)],
+        bound: Vec<(String, WirType)>,
+    ) {
         let split = fields
             .iter()
             .zip(bound)
             .map(|((field_name, _), local)| (field_name.clone(), local))
             .collect();
         self.multi_value_split_locals.insert(local_index, split);
-
-        Some(WirInstr::Seq(instrs))
     }
 
     /// Lower `f` with the multi-value results accounted for: the caller is
@@ -2258,11 +2341,13 @@ impl FunctionTranslator<'_, '_> {
                     label: None,
                     is_loop_break: true,
                     is_loop_continue: false,
+                    split_into: None,
                 });
                 self.label_stack.push(LabelEntry {
                     label: None,
                     is_loop_break: false,
                     is_loop_continue: true,
+                    split_into: None,
                 });
                 let mut body_instrs = self.translate_stmts(&arena.blocks[*body].stmts);
                 // Unconditional back-edge: br 0 to loop header
@@ -2280,7 +2365,14 @@ impl FunctionTranslator<'_, '_> {
             }
             StmtKind::Break { label, value } => {
                 let depth = self.compute_break_depth(label.as_deref());
-                if let Some(val) = value {
+                let target = &self.label_stack[self.label_stack.len() - 1 - depth as usize];
+                if let Some(names) = target.split_into.clone() {
+                    let call = value
+                        .and_then(Operand::as_expr)
+                        .expect("a split block's exit is a call");
+                    let bind = self.bind_multi_value_exit(call, &names);
+                    Some(WirInstr::Seq(vec![bind, WirInstr::Br { depth }]))
+                } else if let Some(val) = value {
                     let val_instr = self.translate_operand(*val);
                     Some(WirInstr::Seq(vec![val_instr, WirInstr::Br { depth }]))
                 } else {
@@ -2316,6 +2408,7 @@ impl FunctionTranslator<'_, '_> {
                     label: Some(label.clone()),
                     is_loop_break: false,
                     is_loop_continue: false,
+                    split_into: None,
                 });
                 let body_instrs = self.translate_stmts(&arena.blocks[*block].stmts);
                 self.label_stack.pop();
@@ -3318,6 +3411,7 @@ impl FunctionTranslator<'_, '_> {
                         label: Some(label.clone()),
                         is_loop_break: false,
                         is_loop_continue: false,
+                        split_into: None,
                     });
                 }
                 let body = if has_result {

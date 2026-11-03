@@ -2419,15 +2419,14 @@ fn "core:collections/hashmap.wado/core:collections/hashmap.wado/HashMap<core:pre
     let b_20: i32;
     let self_22: ref "core:collections/hashmap.wado//HashSeed";
     let h_24: ref "core:collections/hashmap.wado//SeededHasher";
-    let repr: ref Array<u8>;
     let lo: i64;
     let hi: i64;
     let e_62: i32;
     let self_70: ref "core:prelude/string.wado//String";
-    let b_77: ref Array<u8>;
     let i: i32;
     let $licm_fps_26: ref Array<i32>;
     let $licm_keys_28: ref "Array<core:prelude/string.wado/String>";
+    let $licm_repr_30: ref Array<u8>;
     if ((local.tee e_2(self.log.count) + 1) * 2) > builtin::array_len(local.tee $load_2(self.table)) {
         "core:collections/hashmap.wado/core:collections/hashmap.wado/HashMap<core:prelude/string.wado/String,bool>::rebuild_table$unchecked"(self, b_20 = builtin::array_len($load_2) * 2; $v1 = local.tee b_20(select i32(8 > b_20, 8, b_20)) - 1; if @unlikely((local.tee $v2(b_20 & $v1) == 0) == 0) {
             cold_path;
@@ -2436,9 +2435,10 @@ fn "core:collections/hashmap.wado/core:collections/hashmap.wado/HashMap<core:pre
         }; b_20);
     }
     h_24 = struct.new "core:collections/hashmap.wado//SeededHasher" { state: local.tee self_22(self.seed).k0, key: (self_22.k1 ^ -7046029254386353131_i64) | 1_i64 };
-    repr = key.repr;
+    let $mv_field_2: ref Array<u8>;
+    $mv_field_2 = key.repr;
     b_20 = key.used;
-    "core:collections/hashmap.wado/core:collections/hashmap.wado/SeededHasher^core:prelude/traits.wado/Hasher::write_bytes"(h_24, repr, 0, b_20);
+    "core:collections/hashmap.wado/core:collections/hashmap.wado/SeededHasher^core:prelude/traits.wado/Hasher::write_bytes"(h_24, $mv_field_2, 0, b_20);
     b_20 = builtin::i32_wrap_i64(multivalue_bind [lo, hi] = i64.mul_wide_u(h_24.state, -4658895280553007687_i64); lo ^ hi >>u 32_i64);
     if local.tee $v1($inline_core_collections_hashmap_wado_HashMap_core_prelude_string_wado_String_bool___find_slot_0: block -> i32 {
         $v1 = builtin::array_len(local.tee $load_2(self.table)) - 1;
@@ -2453,29 +2453,28 @@ fn "core:collections/hashmap.wado/core:collections/hashmap.wado/HashMap<core:pre
                 if builtin::array_get_value<i32>($licm_fps_26, e_62) == b_20 {
                     self_70 = builtin::array_get_value<ref "core:prelude/string.wado//String">($licm_keys_28, e_62);
                     if $inline_core_collections_hashmap_wado_HashMap_core_prelude_string_wado_String_bool___find_slot_0__$inline_core_prelude_array_wado_seq_eq_u8__6: block -> bool {
-                        repr = self_70.repr;
-                        e_62 = self_70.used;
-                        b_77 = key.repr;
-                        if e_62 != key.used {
+                        if local.tee e_62(self_70.used) != key.used {
                             break $inline_core_collections_hashmap_wado_HashMap_core_prelude_string_wado_String_bool___find_slot_0__$inline_core_prelude_array_wado_seq_eq_u8__6: 0;
                         }
                         i = 0;
+                        $mv_field_2 = self_70.repr;
+                        $licm_repr_30 = key.repr;
                         b335: block {
                             l336: loop {
                                 break_if b335 (((i >= e_62) | ((i + 1) >= e_62)) | (((i + 1) + 1) >= e_62)) | ((((i + 1) + 1) + 1) >= e_62);
-                                if builtin::array_get_value<u8>(repr, i) != builtin::array_get_value<u8>(b_77, i) {
+                                if builtin::array_get_value<u8>($mv_field_2, i) != builtin::array_get_value<u8>($licm_repr_30, i) {
                                     break $inline_core_collections_hashmap_wado_HashMap_core_prelude_string_wado_String_bool___find_slot_0__$inline_core_prelude_array_wado_seq_eq_u8__6: 0;
                                 }
                                 i = i + 1;
-                                if builtin::array_get_value<u8>(repr, i) != builtin::array_get_value<u8>(b_77, i) {
+                                if builtin::array_get_value<u8>($mv_field_2, i) != builtin::array_get_value<u8>($licm_repr_30, i) {
                                     break $inline_core_collections_hashmap_wado_HashMap_core_prelude_string_wado_String_bool___find_slot_0__$inline_core_prelude_array_wado_seq_eq_u8__6: 0;
                                 }
                                 i = i + 1;
-                                if builtin::array_get_value<u8>(repr, i) != builtin::array_get_value<u8>(b_77, i) {
+                                if builtin::array_get_value<u8>($mv_field_2, i) != builtin::array_get_value<u8>($licm_repr_30, i) {
                                     break $inline_core_collections_hashmap_wado_HashMap_core_prelude_string_wado_String_bool___find_slot_0__$inline_core_prelude_array_wado_seq_eq_u8__6: 0;
                                 }
                                 i = i + 1;
-                                if builtin::array_get_value<u8>(repr, i) != builtin::array_get_value<u8>(b_77, i) {
+                                if builtin::array_get_value<u8>($mv_field_2, i) != builtin::array_get_value<u8>($licm_repr_30, i) {
                                     break $inline_core_collections_hashmap_wado_HashMap_core_prelude_string_wado_String_bool___find_slot_0__$inline_core_prelude_array_wado_seq_eq_u8__6: 0;
                                 }
                                 i = i + 1;
@@ -2485,7 +2484,7 @@ fn "core:collections/hashmap.wado/core:collections/hashmap.wado/HashMap<core:pre
                         b341: block {
                             l342: loop {
                                 break_if b341 i >= e_62;
-                                if builtin::array_get_value<u8>(repr, i) != builtin::array_get_value<u8>(b_77, i) {
+                                if builtin::array_get_value<u8>($mv_field_2, i) != builtin::array_get_value<u8>($licm_repr_30, i) {
                                     break $inline_core_collections_hashmap_wado_HashMap_core_prelude_string_wado_String_bool___find_slot_0__$inline_core_prelude_array_wado_seq_eq_u8__6: 0;
                                 }
                                 i = i + 1;

@@ -1279,7 +1279,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 && tt
                     .nominal_type_args(receiver)
                     .is_none_or(|args| args.is_empty());
-            if tt.type_key(arg) == tt.type_key(receiver) || bare_generic_of_arg {
+            if tt.same_type(arg, receiver) || bare_generic_of_arg {
                 (DesugarKind::NewtypeFromCollapse, arg)
             } else if tt.newtype_chain_holds(arg, receiver) {
                 (DesugarKind::NewtypeFromUnwrap, receiver)

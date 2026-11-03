@@ -411,10 +411,9 @@ global global:core:prelude/traits.wado::$const_obj_140: ref Array<u8> = array.ne
 fn "variadic_struct_pack_inspect.wado/$test_0_inspect_a_struct_with_a_pack_field"() {
     let t_0: ref "variadic_struct_pack_inspect.wado//One<[i32,bool]>";
     let out_6: ref "core:prelude/string.wado//String";
-    let a: ref Array<u8>;
     let a_end: i32;
-    let b: ref Array<u8>;
     let i: i32;
+    let $licm_repr_97: ref Array<u8>;
     t_0 = struct.new "variadic_struct_pack_inspect.wado//One<[i32,bool]>" { a: struct.new "tuple//[i32, bool]" { 0: 1, 1: 1 } };
     out_6 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
     $inline_core_prelude_string_wado_String__internal_push_view_21: block {
@@ -425,29 +424,27 @@ fn "variadic_struct_pack_inspect.wado/$test_0_inspect_a_struct_with_a_pack_field
         break $inline_core_prelude_string_wado_String__internal_push_view_35;
     };
     if @unlikely($inline_core_prelude_array_wado_seq_eq_u8__40: block -> bool {
-        a = out_6.repr;
-        a_end = out_6.used;
-        b = global:variadic_struct_pack_inspect.wado::$const_obj_0;
-        if a_end != 20 {
+        if local.tee a_end(out_6.used) != 20 {
             break $inline_core_prelude_array_wado_seq_eq_u8__40: 0;
         }
         i = 0;
+        $licm_repr_97 = out_6.repr;
         b2: block {
             l3: loop {
                 break_if b2 (((i >= a_end) | ((i + 1) >= a_end)) | (((i + 1) + 1) >= a_end)) | ((((i + 1) + 1) + 1) >= a_end);
-                if builtin::array_get_value<u8>(a, i) != builtin::array_get_value<u8>(b, i) {
+                if builtin::array_get_value<u8>($licm_repr_97, i) != builtin::array_get_value<u8>(global:variadic_struct_pack_inspect.wado::$const_obj_0, i) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__40: 0;
                 }
                 i = i + 1;
-                if builtin::array_get_value<u8>(a, i) != builtin::array_get_value<u8>(b, i) {
+                if builtin::array_get_value<u8>($licm_repr_97, i) != builtin::array_get_value<u8>(global:variadic_struct_pack_inspect.wado::$const_obj_0, i) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__40: 0;
                 }
                 i = i + 1;
-                if builtin::array_get_value<u8>(a, i) != builtin::array_get_value<u8>(b, i) {
+                if builtin::array_get_value<u8>($licm_repr_97, i) != builtin::array_get_value<u8>(global:variadic_struct_pack_inspect.wado::$const_obj_0, i) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__40: 0;
                 }
                 i = i + 1;
-                if builtin::array_get_value<u8>(a, i) != builtin::array_get_value<u8>(b, i) {
+                if builtin::array_get_value<u8>($licm_repr_97, i) != builtin::array_get_value<u8>(global:variadic_struct_pack_inspect.wado::$const_obj_0, i) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__40: 0;
                 }
                 i = i + 1;
@@ -457,7 +454,7 @@ fn "variadic_struct_pack_inspect.wado/$test_0_inspect_a_struct_with_a_pack_field
         b8: block {
             l9: loop {
                 break_if b8 i >= a_end;
-                if builtin::array_get_value<u8>(a, i) != builtin::array_get_value<u8>(b, i) {
+                if builtin::array_get_value<u8>($licm_repr_97, i) != builtin::array_get_value<u8>(global:variadic_struct_pack_inspect.wado::$const_obj_0, i) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__40: 0;
                 }
                 i = i + 1;
@@ -479,10 +476,9 @@ condition: `${t:?}` == \"One { a: [1, true] }\"
 fn "variadic_struct_pack_inspect.wado/$test_1_inspect_a_pack_field_of_one_element"() {
     let t_0: ref "tuple//[i32]";
     let out_6: ref "core:prelude/string.wado//String";
-    let a: ref Array<u8>;
     let a_end: i32;
-    let b: ref Array<u8>;
     let i: i32;
+    let $licm_repr_97: ref Array<u8>;
     t_0 = struct.new "tuple//[i32]" { 0: 1 };
     out_6 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
     $inline_core_prelude_string_wado_String__internal_push_view_21: block {
@@ -493,29 +489,27 @@ fn "variadic_struct_pack_inspect.wado/$test_1_inspect_a_pack_field_of_one_elemen
         break $inline_core_prelude_string_wado_String__internal_push_view_35;
     };
     if @unlikely($inline_core_prelude_array_wado_seq_eq_u8__40: block -> bool {
-        a = out_6.repr;
-        a_end = out_6.used;
-        b = global:variadic_struct_pack_inspect.wado::$const_obj_1;
-        if a_end != 14 {
+        if local.tee a_end(out_6.used) != 14 {
             break $inline_core_prelude_array_wado_seq_eq_u8__40: 0;
         }
         i = 0;
+        $licm_repr_97 = out_6.repr;
         b13: block {
             l14: loop {
                 break_if b13 (((i >= a_end) | ((i + 1) >= a_end)) | (((i + 1) + 1) >= a_end)) | ((((i + 1) + 1) + 1) >= a_end);
-                if builtin::array_get_value<u8>(a, i) != builtin::array_get_value<u8>(b, i) {
+                if builtin::array_get_value<u8>($licm_repr_97, i) != builtin::array_get_value<u8>(global:variadic_struct_pack_inspect.wado::$const_obj_1, i) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__40: 0;
                 }
                 i = i + 1;
-                if builtin::array_get_value<u8>(a, i) != builtin::array_get_value<u8>(b, i) {
+                if builtin::array_get_value<u8>($licm_repr_97, i) != builtin::array_get_value<u8>(global:variadic_struct_pack_inspect.wado::$const_obj_1, i) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__40: 0;
                 }
                 i = i + 1;
-                if builtin::array_get_value<u8>(a, i) != builtin::array_get_value<u8>(b, i) {
+                if builtin::array_get_value<u8>($licm_repr_97, i) != builtin::array_get_value<u8>(global:variadic_struct_pack_inspect.wado::$const_obj_1, i) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__40: 0;
                 }
                 i = i + 1;
-                if builtin::array_get_value<u8>(a, i) != builtin::array_get_value<u8>(b, i) {
+                if builtin::array_get_value<u8>($licm_repr_97, i) != builtin::array_get_value<u8>(global:variadic_struct_pack_inspect.wado::$const_obj_1, i) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__40: 0;
                 }
                 i = i + 1;
@@ -525,7 +519,7 @@ fn "variadic_struct_pack_inspect.wado/$test_1_inspect_a_pack_field_of_one_elemen
         b19: block {
             l20: loop {
                 break_if b19 i >= a_end;
-                if builtin::array_get_value<u8>(a, i) != builtin::array_get_value<u8>(b, i) {
+                if builtin::array_get_value<u8>($licm_repr_97, i) != builtin::array_get_value<u8>(global:variadic_struct_pack_inspect.wado::$const_obj_1, i) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__40: 0;
                 }
                 i = i + 1;
@@ -546,44 +540,43 @@ condition: `${t:?}` == \"One { a: [1] }\"
 
 fn "variadic_struct_pack_inspect.wado/$test_2_inspect_a_scalar_parameter_beside_a_pack"() {
     let out_7: ref "core:prelude/string.wado//String";
-    let a: ref Array<u8>;
     let a_end: i32;
-    let b: ref Array<u8>;
     let i: i32;
-    let $sroa_t_h0_101: ref "variadic_struct_pack_inspect.wado//Tagged<core:prelude/string.wado/String,[i32,bool]>";
-    $sroa_t_h0_101 = global:variadic_struct_pack_inspect.wado::$const_obj_3;
+    let $licm_repr_98: ref Array<u8>;
+    let $licm_repr_99: ref Array<u8>;
+    let $sroa_t_h0_100: ref "variadic_struct_pack_inspect.wado//Tagged<core:prelude/string.wado/String,[i32,bool]>";
+    $sroa_t_h0_100 = global:variadic_struct_pack_inspect.wado::$const_obj_3;
     out_7 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
     $inline_core_prelude_string_wado_String__internal_push_view_21: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_21;
     };
-    "core:prelude/traits.wado/variadic_struct_pack_inspect.wado/Tagged<core:prelude/string.wado/String,[i32,bool]>^core:prelude/traits.wado/Inspect::inspect$spec0$sroa[f.buf]"($sroa_t_h0_101.tag, $sroa_t_h0_101.rest, out_7);
+    "core:prelude/traits.wado/variadic_struct_pack_inspect.wado/Tagged<core:prelude/string.wado/String,[i32,bool]>^core:prelude/traits.wado/Inspect::inspect$spec0$sroa[f.buf]"($sroa_t_h0_100.tag, $sroa_t_h0_100.rest, out_7);
     $inline_core_prelude_string_wado_String__internal_push_view_35: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_35;
     };
     if @unlikely($inline_core_prelude_array_wado_seq_eq_u8__40: block -> bool {
-        a = out_7.repr;
-        a_end = out_7.used;
-        b = global:variadic_struct_pack_inspect.wado::$const_obj_2.repr;
-        if a_end != 37 {
+        if local.tee a_end(out_7.used) != 37 {
             break $inline_core_prelude_array_wado_seq_eq_u8__40: 0;
         }
         i = 0;
+        $licm_repr_98 = out_7.repr;
+        $licm_repr_99 = global:variadic_struct_pack_inspect.wado::$const_obj_2.repr;
         b24: block {
             l25: loop {
                 break_if b24 (((i >= a_end) | ((i + 1) >= a_end)) | (((i + 1) + 1) >= a_end)) | ((((i + 1) + 1) + 1) >= a_end);
-                if builtin::array_get_value<u8>(a, i) != builtin::array_get_value<u8>(b, i) {
+                if builtin::array_get_value<u8>($licm_repr_98, i) != builtin::array_get_value<u8>($licm_repr_99, i) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__40: 0;
                 }
                 i = i + 1;
-                if builtin::array_get_value<u8>(a, i) != builtin::array_get_value<u8>(b, i) {
+                if builtin::array_get_value<u8>($licm_repr_98, i) != builtin::array_get_value<u8>($licm_repr_99, i) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__40: 0;
                 }
                 i = i + 1;
-                if builtin::array_get_value<u8>(a, i) != builtin::array_get_value<u8>(b, i) {
+                if builtin::array_get_value<u8>($licm_repr_98, i) != builtin::array_get_value<u8>($licm_repr_99, i) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__40: 0;
                 }
                 i = i + 1;
-                if builtin::array_get_value<u8>(a, i) != builtin::array_get_value<u8>(b, i) {
+                if builtin::array_get_value<u8>($licm_repr_98, i) != builtin::array_get_value<u8>($licm_repr_99, i) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__40: 0;
                 }
                 i = i + 1;
@@ -593,7 +586,7 @@ fn "variadic_struct_pack_inspect.wado/$test_2_inspect_a_scalar_parameter_beside_
         b30: block {
             l31: loop {
                 break_if b30 i >= a_end;
-                if builtin::array_get_value<u8>(a, i) != builtin::array_get_value<u8>(b, i) {
+                if builtin::array_get_value<u8>($licm_repr_98, i) != builtin::array_get_value<u8>($licm_repr_99, i) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__40: 0;
                 }
                 i = i + 1;
@@ -3207,7 +3200,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<core:prelud
     let val_i64_66: i64;
     let q: i32;
     let arr: ref Array<u8>;
-    let start_233: i32;
+    let start_230: i32;
     out_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
     $inline_core_prelude_string_wado_String__internal_push_view_20: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_20;
@@ -3223,12 +3216,12 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<core:prelud
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_3, q);
     }
-    start_233 = out_3.used;
+    start_230 = out_3.used;
     out_3.used = q;
     arr = out_3.repr;
-    t = start_233 + t;
+    t = start_230 + t;
     if val_i64_66 == 0_i64 {
-        builtin::array_set_u8(arr, start_233, 48);
+        builtin::array_set_u8(arr, start_230, 48);
     } else {
         b445: block {
             l446: loop {

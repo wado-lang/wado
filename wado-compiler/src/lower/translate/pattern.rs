@@ -1790,7 +1790,7 @@ impl<'a> PatternLowerer<'a> {
     ) {
         let local_type = type_table.get_local_type(local_index, &self.locals);
         let value = coerce_value_to_binding(value, pattern_type, type_table, span);
-        let value = if type_table.type_key(local_type) == type_table.type_key(pattern_type) {
+        let value = if type_table.same_type(local_type, pattern_type) {
             value
         } else {
             box_literal(value, local_type, type_table, span)

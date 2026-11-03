@@ -89,7 +89,7 @@ fn "opt_closure_devirt_impure_callee.wado/run"() with Stdout {
     let out_37: ref "core:prelude/string.wado//String";
     let is_negative_104: bool;
     let x_108: i64;
-    let repr_127: ref Array<u8>;
+    let $sroa_view_repr_203: ref Array<u8>;
     let $sroa_t_h1_259: i32;
     c = struct.new "canonical//CanonicalClosure_0" { env: struct.new "opt_closure_devirt_impure_callee.wado//$Closure_0" { $capture_0: 10 }, func: ref.func "closure/opt_closure_devirt_impure_callee.wado/$closure_wrapper_0" };
     y = block -> i32 {
@@ -105,14 +105,14 @@ fn "opt_closure_devirt_impure_callee.wado/run"() with Stdout {
     y = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_108(x_108 = builtin::i64_extend_i32_s(y); select i64(x_108 < 0_i64, 0_i64 - x_108, x_108)));
     is_negative_104 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"(out_37, is_negative_104, y);
     "core:prelude/primitive.wado/write_decimal_digits"(local.tee $load_2(out_37.repr), is_negative_104, x_108, y);
-    repr_127 = global:opt_closure_devirt_impure_callee.wado::$const_obj_0;
+    $sroa_view_repr_203 = global:opt_closure_devirt_impure_callee.wado::$const_obj_0;
     if @unlikely(local.tee y(out_37.used + 1) > builtin::array_len($load_2)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_37, y);
     }
     is_negative_104 = out_37.used;
     out_37.used = y;
-    builtin::array_copy<u8>(out_37.repr, is_negative_104, repr_127, 0, 1);
+    builtin::array_copy<u8>(out_37.repr, is_negative_104, $sroa_view_repr_203, 0, 1);
     y = $sroa_t_h1_259 < 0;
     $sroa_t_h1_259 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_108(x_108 = builtin::i64_extend_i32_s($sroa_t_h1_259); select i64(x_108 < 0_i64, 0_i64 - x_108, x_108)));
     y = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"(out_37, y, $sroa_t_h1_259);
