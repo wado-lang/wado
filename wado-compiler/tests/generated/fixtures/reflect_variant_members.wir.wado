@@ -2902,20 +2902,22 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_newline_i
     let start_18: i32;
     let $licm_indent_20: i32;
     let $licm_buf_21: ref "core:prelude/string.wado//String";
+    let $licm_repr_24: ref Array<u8>;
     "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_byte"(self.buf, 10);
     i = 0;
     $licm_indent_20 = self.indent;
-    $licm_buf_21 = self.buf;
+    $licm_repr_24 = local.tee $licm_buf_21(self.buf).repr;
     b364: block {
         l365: loop {
             break_if b364 i >= $licm_indent_20;
-            if @unlikely(local.tee new_used($licm_buf_21.used + 2) > builtin::array_len($licm_buf_21.repr)) {
+            if @unlikely(local.tee new_used($licm_buf_21.used + 2) > builtin::array_len($licm_repr_24)) {
                 cold_path;
                 "core:prelude/string.wado/core:prelude/string.wado/String::grow"($licm_buf_21, new_used);
+                $licm_repr_24 = $licm_buf_21.repr;
             }
             start_18 = $licm_buf_21.used;
             $licm_buf_21.used = new_used;
-            builtin::array_copy<u8>($licm_buf_21.repr, start_18, global:core:prelude/format.wado::$const_obj_0, 0, 2);
+            builtin::array_copy<u8>($licm_repr_24, start_18, global:core:prelude/format.wado::$const_obj_0, 0, 2);
             i = i + 1;
             continue l365;
         };
@@ -3336,6 +3338,7 @@ fn "core:prelude/tuple.wado/[f64,f64]^core:prelude/traits.wado/Inspect::inspect"
     let start_28: i32;
     let new_used_47: i32;
     let start_48: i32;
+    let $licm_repr_235: ref Array<u8>;
     if f.alternate {
         if @unlikely(local.tee new_used_27(local.tee self_15(f.buf).used + 1) > builtin::array_len(self_15.repr)) {
             cold_path;
@@ -3348,17 +3351,18 @@ fn "core:prelude/tuple.wado/[f64,f64]^core:prelude/traits.wado/Inspect::inspect"
         "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_byte"(f.buf, 10);
         new_used_27 = 0;
         start_28 = f.indent;
-        self_15 = f.buf;
+        $licm_repr_235 = local.tee self_15(f.buf).repr;
         b409: block {
             l410: loop {
                 break_if b409 new_used_27 >= start_28;
-                if @unlikely(local.tee new_used_47(self_15.used + 2) > builtin::array_len(self_15.repr)) {
+                if @unlikely(local.tee new_used_47(self_15.used + 2) > builtin::array_len($licm_repr_235)) {
                     cold_path;
                     "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_15, new_used_47);
+                    $licm_repr_235 = self_15.repr;
                 }
                 start_48 = self_15.used;
                 self_15.used = new_used_47;
-                builtin::array_copy<u8>(self_15.repr, start_48, global:core:prelude/format.wado::$const_obj_0, 0, 2);
+                builtin::array_copy<u8>($licm_repr_235, start_48, global:core:prelude/format.wado::$const_obj_0, 0, 2);
                 new_used_27 = new_used_27 + 1;
                 continue l410;
             };
@@ -3374,17 +3378,18 @@ fn "core:prelude/tuple.wado/[f64,f64]^core:prelude/traits.wado/Inspect::inspect"
         "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_byte"(f.buf, 10);
         new_used_27 = 0;
         start_28 = f.indent;
-        self_15 = f.buf;
+        $licm_repr_235 = local.tee self_15(f.buf).repr;
         b413: block {
             l414: loop {
                 break_if b413 new_used_27 >= start_28;
-                if @unlikely(local.tee new_used_47(self_15.used + 2) > builtin::array_len(self_15.repr)) {
+                if @unlikely(local.tee new_used_47(self_15.used + 2) > builtin::array_len($licm_repr_235)) {
                     cold_path;
                     "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_15, new_used_47);
+                    $licm_repr_235 = self_15.repr;
                 }
                 start_48 = self_15.used;
                 self_15.used = new_used_47;
-                builtin::array_copy<u8>(self_15.repr, start_48, global:core:prelude/format.wado::$const_obj_0, 0, 2);
+                builtin::array_copy<u8>($licm_repr_235, start_48, global:core:prelude/format.wado::$const_obj_0, 0, 2);
                 new_used_27 = new_used_27 + 1;
                 continue l414;
             };
@@ -3401,17 +3406,18 @@ fn "core:prelude/tuple.wado/[f64,f64]^core:prelude/traits.wado/Inspect::inspect"
         "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_byte"(f.buf, 10);
         new_used_27 = 0;
         start_28 = f.indent;
-        self_15 = f.buf;
+        $licm_repr_235 = local.tee self_15(f.buf).repr;
         b417: block {
             l418: loop {
                 break_if b417 new_used_27 >= start_28;
-                if @unlikely(local.tee new_used_47(self_15.used + 2) > builtin::array_len(self_15.repr)) {
+                if @unlikely(local.tee new_used_47(self_15.used + 2) > builtin::array_len($licm_repr_235)) {
                     cold_path;
                     "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_15, new_used_47);
+                    $licm_repr_235 = self_15.repr;
                 }
                 start_48 = self_15.used;
                 self_15.used = new_used_47;
-                builtin::array_copy<u8>(self_15.repr, start_48, global:core:prelude/format.wado::$const_obj_0, 0, 2);
+                builtin::array_copy<u8>($licm_repr_235, start_48, global:core:prelude/format.wado::$const_obj_0, 0, 2);
                 new_used_27 = new_used_27 + 1;
                 continue l418;
             };
@@ -4463,21 +4469,23 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::close_brace<cor
     let start_20: i32;
     let $licm_indent_37: i32;
     let $licm_buf_38: ref "core:prelude/string.wado//String";
+    let $licm_repr_41: ref Array<u8>;
     self.indent = self.indent - 1;
     "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_byte"(self.buf, 10);
     i = 0;
     $licm_indent_37 = self.indent;
-    $licm_buf_38 = self.buf;
+    $licm_repr_41 = local.tee $licm_buf_38(self.buf).repr;
     b561: block {
         l562: loop {
             break_if b561 i >= $licm_indent_37;
-            if @unlikely(local.tee new_used_19($licm_buf_38.used + 2) > builtin::array_len($licm_buf_38.repr)) {
+            if @unlikely(local.tee new_used_19($licm_buf_38.used + 2) > builtin::array_len($licm_repr_41)) {
                 cold_path;
                 "core:prelude/string.wado/core:prelude/string.wado/String::grow"($licm_buf_38, new_used_19);
+                $licm_repr_41 = $licm_buf_38.repr;
             }
             start_20 = $licm_buf_38.used;
             $licm_buf_38.used = new_used_19;
-            builtin::array_copy<u8>($licm_buf_38.repr, start_20, global:core:prelude/format.wado::$const_obj_0, 0, 2);
+            builtin::array_copy<u8>($licm_repr_41, start_20, global:core:prelude/format.wado::$const_obj_0, 0, 2);
             i = i + 1;
             continue l562;
         };

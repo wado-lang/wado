@@ -258,42 +258,43 @@ import fn wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode f
 global global:core:prelude/primitive.wado::$const_obj_0: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
 
 fn "opt_licm_mut_ref_field_alias_grow.wado/run"() {
-    let $load_0: i32;
-    let $load_4: ref Array<i32>;
+    let $load_1: i32;
     let $sroa_a_xs_48: ref "core:prelude//List<i32>";
-    $sroa_a_xs_48 = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(), used: 0 };
+    let $licm_repr_50: ref Array<i32>;
+    $licm_repr_50 = local.tee $sroa_a_xs_48(struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(), used: 0 }).repr;
     b0: block {
         l1: loop {
-            break_if b0 local.tee $load_0($sroa_a_xs_48.used) > 3;
-            if @unlikely($load_0 >= builtin::array_len($sroa_a_xs_48.repr)) {
+            break_if b0 local.tee $load_1($sroa_a_xs_48.used) > 3;
+            if @unlikely($load_1 >= builtin::array_len($licm_repr_50)) {
                 cold_path;
                 "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"($sroa_a_xs_48);
+                $licm_repr_50 = $sroa_a_xs_48.repr;
             }
-            builtin::array_set<i32>($sroa_a_xs_48.repr, $load_0, -1);
-            $sroa_a_xs_48.used = $load_0 + 1;
+            builtin::array_set<i32>($licm_repr_50, $load_1, -1);
+            $sroa_a_xs_48.used = $load_1 + 1;
             continue l1;
         };
     };
-    $load_0 = $sroa_a_xs_48.used;
-    if @unlikely(3 >= $load_0) {
+    $load_1 = $sroa_a_xs_48.used;
+    if @unlikely(3 >= $load_1) {
         cold_path;
-        "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexAssign<i32>::index_assign$cold0$dae[self,value]"(3, $load_0);
+        "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexAssign<i32>::index_assign$cold0$dae[self,value]"(3, $load_1);
         unreachable;
     }
-    builtin::array_set<i32>(local.tee $load_4($sroa_a_xs_48.repr), 3, 42);
-    if @unlikely($load_0 != 4) {
+    builtin::array_set<i32>(local.tee $licm_repr_50($sroa_a_xs_48.repr), 3, 42);
+    if @unlikely($load_1 != 4) {
         cold_path;
-        "opt_licm_mut_ref_field_alias_grow.wado/run$cold3"($sroa_a_xs_48, 7, $load_0);
+        "opt_licm_mut_ref_field_alias_grow.wado/run$cold3"($sroa_a_xs_48, 7, $load_1);
         unreachable;
     }
-    if @unlikely(3 >= $load_0) {
+    if @unlikely(3 >= $load_1) {
         cold_path;
-        "opt_licm_mut_ref_field_alias_grow.wado/run$cold2$dae[$contract_arg_0]"($load_0);
+        "opt_licm_mut_ref_field_alias_grow.wado/run$cold2$dae[$contract_arg_0]"($load_1);
         unreachable;
     }
-    if @unlikely(local.tee $load_0(builtin::array_get_value<i32>($load_4, 3)) != 42) {
+    if @unlikely(local.tee $load_1(builtin::array_get_value<i32>($licm_repr_50, 3)) != 42) {
         cold_path;
-        "opt_licm_mut_ref_field_alias_grow.wado/run$cold1"($sroa_a_xs_48, 7, $load_0);
+        "opt_licm_mut_ref_field_alias_grow.wado/run$cold1"($sroa_a_xs_48, 7, $load_1);
         unreachable;
     }
 }

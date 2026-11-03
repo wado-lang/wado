@@ -1543,28 +1543,29 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
 }
 
 fn "core:prelude/array.wado/core:prelude/array.wado/write_seq_inspect<f32>$dae[start,marker]"(repr, end, f, limit) {
+    let $load_1: ref "core:prelude/string.wado//String";
     let shown: i32;
     let truncated: bool;
     let i: i32;
-    let $licm_arith_33: bool;
+    let $licm_arith_34: bool;
     if f.alternate {
         "core:prelude/array.wado/core:prelude/array.wado/write_seq_inspect_alt<f32>$dae[start,marker]"(repr, end, f, limit);
         return;
     }
-    "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_byte"(f.buf, 91);
+    "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_byte"(local.tee $load_1(f.buf), 91);
     shown = 0;
     truncated = 0;
     i = 0;
-    $licm_arith_33 = limit >= 0;
+    $licm_arith_34 = limit >= 0;
     b170: block {
         l171: loop {
             break_if b170 i >= end;
-            if select i32($licm_arith_33, shown >= limit, 0) {
+            if select i32($licm_arith_34, shown >= limit, 0) {
                 truncated = 1;
                 break b170;
             }
             if shown > 0 {
-                "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec0"(f.buf, global:core:prelude/array.wado::$const_obj_9);
+                "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec0"($load_1, global:core:prelude/array.wado::$const_obj_9);
             }
             "core:prelude/primitive.wado/f32::inspect_into$sroa[self.value]"(builtin::array_get_value<f32>(repr, i), f);
             shown = shown + 1;
@@ -1587,7 +1588,7 @@ fn "core:prelude/array.wado/core:prelude/array.wado/write_seq_inspect<u16>$dae[s
     let shown: i32;
     let truncated: bool;
     let i: i32;
-    let $licm_arith_35: bool;
+    let $licm_arith_36: bool;
     if f.alternate {
         "core:prelude/array.wado/core:prelude/array.wado/write_seq_inspect_alt<u16>$dae[start,marker]"(repr, end, f, limit);
         return;
@@ -1596,11 +1597,11 @@ fn "core:prelude/array.wado/core:prelude/array.wado/write_seq_inspect<u16>$dae[s
     shown = 0;
     truncated = 0;
     i = 0;
-    $licm_arith_35 = limit >= 0;
+    $licm_arith_36 = limit >= 0;
     b177: block {
         l178: loop {
             break_if b177 i >= end;
-            if select i32($licm_arith_35, shown >= limit, 0) {
+            if select i32($licm_arith_36, shown >= limit, 0) {
                 truncated = 1;
                 break b177;
             }
@@ -1640,10 +1641,11 @@ fn "core:prelude/format.wado/core:prelude/format.wado/pad_text<core:prelude/stri
 }
 
 fn "core:prelude/array.wado/core:prelude/array.wado/write_seq_inspect_alt<u16>$dae[start,marker]"(repr, end, f, limit) {
+    let $load_1: ref "core:prelude/string.wado//String";
     let shown: i32;
     let truncated: bool;
     let i: i32;
-    let $licm_arith_27: bool;
+    let $licm_arith_28: bool;
     if 0 >= end {
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec0"(f.buf, global:core:prelude/array.wado::$const_obj_23);
         return;
@@ -1652,17 +1654,18 @@ fn "core:prelude/array.wado/core:prelude/array.wado/write_seq_inspect_alt<u16>$d
     shown = 0;
     truncated = 0;
     i = 0;
-    $licm_arith_27 = limit >= 0;
+    $load_1 = f.buf;
+    $licm_arith_28 = limit >= 0;
     b186: block {
         l187: loop {
             break_if b186 i >= end;
-            if select i32($licm_arith_27, shown >= limit, 0) {
+            if select i32($licm_arith_28, shown >= limit, 0) {
                 truncated = 1;
                 break b186;
             }
             "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_newline_indent"(f);
             "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(builtin::array_get_value<u16>(repr, i), f);
-            "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_byte"(f.buf, 44);
+            "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_byte"($load_1, 44);
             shown = shown + 1;
             i = i + 1;
             continue l187;
@@ -1670,7 +1673,7 @@ fn "core:prelude/array.wado/core:prelude/array.wado/write_seq_inspect_alt<u16>$d
     };
     if truncated {
         "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_newline_indent"(f);
-        "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec2"(f.buf, global:core:prelude/array.wado::$const_obj_7);
+        "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec2"($load_1, global:core:prelude/array.wado::$const_obj_7);
     }
     "core:prelude/format.wado/core:prelude/format.wado/Formatter::close_brace<core:prelude/string.wado/String>$spec0"(f, global:core:prelude/array.wado::$const_obj_20);
 }
@@ -1679,7 +1682,8 @@ fn "core:prelude/array.wado/core:prelude/array.wado/write_seq_inspect_alt<f32>$d
     let shown: i32;
     let truncated: bool;
     let i: i32;
-    let $licm_arith_25: bool;
+    let $licm_buf_25: ref "core:prelude/string.wado//String";
+    let $licm_arith_26: bool;
     if 0 >= end {
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec0"(f.buf, global:core:prelude/array.wado::$const_obj_23);
         return;
@@ -1688,17 +1692,18 @@ fn "core:prelude/array.wado/core:prelude/array.wado/write_seq_inspect_alt<f32>$d
     shown = 0;
     truncated = 0;
     i = 0;
-    $licm_arith_25 = limit >= 0;
+    $licm_buf_25 = f.buf;
+    $licm_arith_26 = limit >= 0;
     b191: block {
         l192: loop {
             break_if b191 i >= end;
-            if select i32($licm_arith_25, shown >= limit, 0) {
+            if select i32($licm_arith_26, shown >= limit, 0) {
                 truncated = 1;
                 break b191;
             }
             "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_newline_indent"(f);
             "core:prelude/primitive.wado/f32::inspect_into$sroa[self.value]"(builtin::array_get_value<f32>(repr, i), f);
-            "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_byte"(f.buf, 44);
+            "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_byte"($licm_buf_25, 44);
             shown = shown + 1;
             i = i + 1;
             continue l192;

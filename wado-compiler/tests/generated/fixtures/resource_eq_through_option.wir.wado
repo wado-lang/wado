@@ -1456,28 +1456,29 @@ fn "core:prelude/traits.wado/core:prelude/traits.wado/inspect_variant_payload<re
 }
 
 fn "core:prelude/array.wado/core:prelude/array.wado/write_seq_inspect<resource_eq_through_option.wado/Node>$dae[start,marker]"(repr, end, f, limit) {
+    let $load_1: ref "core:prelude/string.wado//String";
     let shown: i32;
     let truncated: bool;
     let i: i32;
-    let $licm_arith_31: bool;
+    let $licm_arith_32: bool;
     if f.alternate {
         "core:prelude/array.wado/core:prelude/array.wado/write_seq_inspect_alt<resource_eq_through_option.wado/Node>$dae[start,marker]"(repr, end, f, limit);
         return;
     }
-    "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_byte"(f.buf, 91);
+    "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_byte"(local.tee $load_1(f.buf), 91);
     shown = 0;
     truncated = 0;
     i = 0;
-    $licm_arith_31 = limit >= 0;
+    $licm_arith_32 = limit >= 0;
     b148: block {
         l149: loop {
             break_if b148 i >= end;
-            if select i32($licm_arith_31, shown >= limit, 0) {
+            if select i32($licm_arith_32, shown >= limit, 0) {
                 truncated = 1;
                 break b148;
             }
             if shown > 0 {
-                "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec0"(f.buf, global:core:prelude/array.wado::$const_obj_16);
+                "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec0"($load_1, global:core:prelude/array.wado::$const_obj_16);
             }
             "resource_eq_through_option.wado/resource_eq_through_option.wado/Node^core:prelude/traits.wado/Inspect::inspect"(builtin::array_get_value<u64>(repr, i), f);
             shown = shown + 1;
@@ -1515,7 +1516,8 @@ fn "core:prelude/array.wado/core:prelude/array.wado/write_seq_inspect_alt<resour
     let shown: i32;
     let truncated: bool;
     let i: i32;
-    let $licm_arith_23: bool;
+    let $licm_buf_23: ref "core:prelude/string.wado//String";
+    let $licm_arith_24: bool;
     if 0 >= end {
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec0"(f.buf, global:core:prelude/array.wado::$const_obj_20);
         return;
@@ -1524,17 +1526,18 @@ fn "core:prelude/array.wado/core:prelude/array.wado/write_seq_inspect_alt<resour
     shown = 0;
     truncated = 0;
     i = 0;
-    $licm_arith_23 = limit >= 0;
+    $licm_buf_23 = f.buf;
+    $licm_arith_24 = limit >= 0;
     b157: block {
         l158: loop {
             break_if b157 i >= end;
-            if select i32($licm_arith_23, shown >= limit, 0) {
+            if select i32($licm_arith_24, shown >= limit, 0) {
                 truncated = 1;
                 break b157;
             }
             "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_newline_indent"(f);
             "resource_eq_through_option.wado/resource_eq_through_option.wado/Node^core:prelude/traits.wado/Inspect::inspect"(builtin::array_get_value<u64>(repr, i), f);
-            "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_byte"(f.buf, 44);
+            "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_byte"($licm_buf_23, 44);
             shown = shown + 1;
             i = i + 1;
             continue l158;

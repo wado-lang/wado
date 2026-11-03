@@ -1659,36 +1659,37 @@ fn "core:prelude/array.wado/core:prelude/array.wado/write_seq_inspect<f64>$dae[s
     let truncated: bool;
     let i: i32;
     let self_7: ref "core:prelude/string.wado//String";
-    let $licm_arith_33: bool;
-    let start_34: i32;
+    let $licm_arith_34: bool;
+    let start_35: i32;
     if f.alternate {
         "core:prelude/array.wado/core:prelude/array.wado/write_seq_inspect_alt<f64>$dae[start,marker]"(repr, end, f, limit);
         return;
     }
-    start_34 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(local.tee self_7(f.buf), 1);
-    "core:prelude/string.wado/core:prelude/string.wado/String::internal_set_byte_unchecked"(self_7, start_34, 91);
-    start_34 = 0;
+    start_35 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(local.tee self_7(f.buf), 1);
+    "core:prelude/string.wado/core:prelude/string.wado/String::internal_set_byte_unchecked"(self_7, start_35, 91);
+    start_35 = 0;
     truncated = 0;
     i = 0;
-    $licm_arith_33 = limit >= 0;
+    self_7 = f.buf;
+    $licm_arith_34 = limit >= 0;
     b189: block {
         l190: loop {
             break_if b189 i >= end;
-            if select i32($licm_arith_33, start_34 >= limit, 0) {
+            if select i32($licm_arith_34, start_35 >= limit, 0) {
                 truncated = 1;
                 break b189;
             }
-            if start_34 > 0 {
-                "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec0"(f.buf, global:core:prelude/array.wado::$const_obj_7);
+            if start_35 > 0 {
+                "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec0"(self_7, global:core:prelude/array.wado::$const_obj_7);
             }
             "core:prelude/primitive.wado/f64::inspect_into$sroa[self.value]"(builtin::array_get_value<f64>(repr, i), f);
-            start_34 = start_34 + 1;
+            start_35 = start_35 + 1;
             i = i + 1;
             continue l190;
         };
     };
     if truncated {
-        if start_34 > 0 {
+        if start_35 > 0 {
             "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec3"(f.buf, global:core:prelude/array.wado::$const_obj_6);
         } else {
             "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec2"(f.buf, global:core:prelude/array.wado::$const_obj_5);
@@ -1731,8 +1732,8 @@ fn "core:prelude/array.wado/core:prelude/array.wado/write_seq_inspect_alt<f64>$d
     let shown: i32;
     let truncated: bool;
     let i: i32;
-    let self_15: ref "core:prelude/string.wado//String";
-    let $licm_arith_25: bool;
+    let $licm_buf_25: ref "core:prelude/string.wado//String";
+    let $licm_arith_26: bool;
     let start: i32;
     if 0 >= end {
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec0"(f.buf, global:core:prelude/array.wado::$const_obj_11);
@@ -1742,18 +1743,19 @@ fn "core:prelude/array.wado/core:prelude/array.wado/write_seq_inspect_alt<f64>$d
     shown = 0;
     truncated = 0;
     i = 0;
-    $licm_arith_25 = limit >= 0;
+    $licm_buf_25 = f.buf;
+    $licm_arith_26 = limit >= 0;
     b200: block {
         l201: loop {
             break_if b200 i >= end;
-            if select i32($licm_arith_25, shown >= limit, 0) {
+            if select i32($licm_arith_26, shown >= limit, 0) {
                 truncated = 1;
                 break b200;
             }
             "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_newline_indent"(f);
             "core:prelude/primitive.wado/f64::inspect_into$sroa[self.value]"(builtin::array_get_value<f64>(repr, i), f);
-            start = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(local.tee self_15(f.buf), 1);
-            "core:prelude/string.wado/core:prelude/string.wado/String::internal_set_byte_unchecked"(self_15, start, 44);
+            start = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"($licm_buf_25, 1);
+            "core:prelude/string.wado/core:prelude/string.wado/String::internal_set_byte_unchecked"($licm_buf_25, start, 44);
             shown = shown + 1;
             i = i + 1;
             continue l201;
@@ -2270,18 +2272,21 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::apply_padding_s
 fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::shift_right"(self, start_pos, content_bytes, gap) {
     let $load_0: ref "core:prelude/string.wado//String";
     let $contract_arg_0: i32;
-    let self_16: i32;
+    let $licm_used_20: i32;
+    let $licm_repr_22: ref Array<u8>;
     "core:prelude/string.wado/core:prelude/string.wado/String::append_byte_filled"(local.tee $load_0(self.buf), 0, gap);
     content_bytes = content_bytes - 1;
+    $licm_used_20 = $load_0.used;
     gap = start_pos + gap;
+    $licm_repr_22 = $load_0.repr;
     b271: block {
         l272: loop {
             break_if b271 content_bytes < 0;
-            "core:prelude/string.wado/core:prelude/string.wado/String::internal_set_byte_unchecked"($load_0, gap + content_bytes, $contract_arg_0 = start_pos + content_bytes; self_16 = $load_0.used; if @unlikely($contract_arg_0 >=u self_16) {
+            "core:prelude/string.wado/core:prelude/string.wado/String::internal_set_byte_unchecked"($load_0, gap + content_bytes, $contract_arg_0 = start_pos + content_bytes; if @unlikely(((0 <= $contract_arg_0) & ($contract_arg_0 < $licm_used_20)) == 0) {
                 cold_path;
-                "core:prelude/string.wado/core:prelude/string.wado/String::byte_at$contract_report0"($contract_arg_0, self_16, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/format.wado:259"), used: 28 });
+                "core:prelude/string.wado/core:prelude/string.wado/String::byte_at$contract_report0"($contract_arg_0, $licm_used_20, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/format.wado:259"), used: 28 });
                 unreachable;
-            }; builtin::array_get_value<u8>($load_0.repr, $contract_arg_0));
+            }; builtin::array_get_value<u8>($licm_repr_22, $contract_arg_0));
             content_bytes = content_bytes - 1;
             continue l272;
         };
@@ -3079,18 +3084,21 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::count_chars_fro
 
 fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::shift_right$sroa[self.buf]"(self, start_pos, content_bytes, gap) {
     let $contract_arg_0: i32;
-    let self_16: i32;
+    let $licm_used_19: i32;
+    let $licm_repr_20: ref Array<u8>;
     "core:prelude/string.wado/core:prelude/string.wado/String::append_byte_filled"(self, 0, gap);
     content_bytes = content_bytes - 1;
+    $licm_used_19 = self.used;
+    $licm_repr_20 = self.repr;
     gap = start_pos + gap;
     b367: block {
         l368: loop {
             break_if b367 content_bytes < 0;
-            "core:prelude/string.wado/core:prelude/string.wado/String::internal_set_byte_unchecked"(self, gap + content_bytes, $contract_arg_0 = start_pos + content_bytes; self_16 = self.used; if @unlikely($contract_arg_0 >=u self_16) {
+            "core:prelude/string.wado/core:prelude/string.wado/String::internal_set_byte_unchecked"(self, gap + content_bytes, $contract_arg_0 = start_pos + content_bytes; if @unlikely(((0 <= $contract_arg_0) & ($contract_arg_0 < $licm_used_19)) == 0) {
                 cold_path;
-                "core:prelude/string.wado/core:prelude/string.wado/String::byte_at$contract_report0"($contract_arg_0, self_16, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/format.wado:259"), used: 28 });
+                "core:prelude/string.wado/core:prelude/string.wado/String::byte_at$contract_report0"($contract_arg_0, $licm_used_19, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/format.wado:259"), used: 28 });
                 unreachable;
-            }; builtin::array_get_value<u8>(self.repr, $contract_arg_0));
+            }; builtin::array_get_value<u8>($licm_repr_20, $contract_arg_0));
             content_bytes = content_bytes - 1;
             continue l368;
         };

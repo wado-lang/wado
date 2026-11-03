@@ -1508,17 +1508,18 @@ fn "core:prelude/traits.wado/core:prelude/traits.wado/inspect_struct_alternate<s
     builtin::array_set_u8(f_8.repr, start_26, 10);
     new_used_25 = 0;
     start_26 = f.indent;
-    f_8 = f.buf;
+    $load_4 = local.tee f_8(f.buf).repr;
     b195: block {
         l196: loop {
             break_if b195 new_used_25 >= start_26;
-            if @unlikely(local.tee new_used_77(f_8.used + 2) > builtin::array_len(f_8.repr)) {
+            if @unlikely(local.tee new_used_77(f_8.used + 2) > builtin::array_len($load_4)) {
                 cold_path;
                 "core:prelude/string.wado/core:prelude/string.wado/String::grow"(f_8, new_used_77);
+                $load_4 = f_8.repr;
             }
             start_78 = f_8.used;
             f_8.used = new_used_77;
-            builtin::array_copy<u8>(f_8.repr, start_78, global:core:prelude/traits.wado::$const_obj_7, 0, 2);
+            builtin::array_copy<u8>($load_4, start_78, global:core:prelude/traits.wado::$const_obj_7, 0, 2);
             new_used_25 = new_used_25 + 1;
             continue l196;
         };
@@ -1564,17 +1565,18 @@ fn "core:prelude/traits.wado/core:prelude/traits.wado/inspect_struct_alternate<s
     builtin::array_set_u8(f_8.repr, start_26, 10);
     new_used_25 = 0;
     start_26 = f.indent;
-    f_8 = f.buf;
+    $load_4 = local.tee f_8(f.buf).repr;
     b203: block {
         l204: loop {
             break_if b203 new_used_25 >= start_26;
-            if @unlikely(local.tee new_used_77(f_8.used + 2) > builtin::array_len(f_8.repr)) {
+            if @unlikely(local.tee new_used_77(f_8.used + 2) > builtin::array_len($load_4)) {
                 cold_path;
                 "core:prelude/string.wado/core:prelude/string.wado/String::grow"(f_8, new_used_77);
+                $load_4 = f_8.repr;
             }
             start_78 = f_8.used;
             f_8.used = new_used_77;
-            builtin::array_copy<u8>(f_8.repr, start_78, global:core:prelude/traits.wado::$const_obj_7, 0, 2);
+            builtin::array_copy<u8>($load_4, start_78, global:core:prelude/traits.wado::$const_obj_7, 0, 2);
             new_used_25 = new_used_25 + 1;
             continue l204;
         };
@@ -2406,6 +2408,7 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
     let prefix_len: i32;
     let self_21: ref "core:prelude/string.wado//String";
     let i_261: i32;
+    let $licm_repr_455: ref Array<u8>;
     $load_0 = self.sign_plus;
     sign_len = select i32(select i32(is_negative, 1, $load_0), 1, 0);
     prefix_len = select i32(self.alternate, 0, 0);
@@ -2491,13 +2494,15 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
         }
         self_21 = self.buf;
         is_negative = 0;
+        $licm_repr_455 = self_21.repr;
         $load_0 = self_21.used;
         b310: block {
             l311: loop {
                 break_if b310 is_negative >= sign_len;
-                if @unlikely(local.tee $load_0($load_0 + 1) > builtin::array_len(self_21.repr)) {
+                if @unlikely(local.tee $load_0($load_0 + 1) > builtin::array_len($licm_repr_455)) {
                     cold_path;
                     "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_21, $load_0);
+                    $licm_repr_455 = self_21.repr;
                 } else {
                 }
                 prefix_len = self_21.used;
@@ -2508,7 +2513,7 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
                     "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_at$contract_report0"(prefix_len, $load_2, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/string.wado:571"), used: 28 });
                     unreachable;
                 }
-                builtin::array_set_u8(self_21.repr, prefix_len, 48);
+                builtin::array_set_u8($licm_repr_455, prefix_len, 48);
                 is_negative = is_negative + 1;
                 self_21.used = $load_0;
                 continue l311;

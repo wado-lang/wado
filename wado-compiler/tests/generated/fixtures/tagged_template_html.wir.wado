@@ -93,81 +93,87 @@ global global:tagged_template_html.wado::$const_obj_6: ref Array<u8> = array.new
 global global:tagged_template_html.wado::$const_obj_7: ref Array<u8> = array.new_fixed<u8>(60, 97, 32, 116, 105, 116, 108, 101, 61, 34);
 
 fn "tagged_template_html.wado/escape"(ctx, value, out) {
+    let $licm_repr_62: ref Array<u8>;
     let b0: u32;
-    let b2_67: u32;
+    let b2_68: u32;
     let b3: u32;
-    let $sroa_slot_86: i32;
-    let $sroa_$iter_0_repr_87: ref Array<u8>;
-    let $sroa_$iter_0_used_88: i32;
-    let $sroa_$iter_0_byte_index_89: i32;
-    let $hfs_used_90: i32;
-    $sroa_$iter_0_repr_87 = value.repr;
-    $sroa_$iter_0_used_88 = value.used;
-    $sroa_$iter_0_byte_index_89 = 0;
-    $hfs_used_90 = out.used;
+    let $sroa_slot_87: i32;
+    let $sroa_$iter_0_repr_88: ref Array<u8>;
+    let $sroa_$iter_0_used_89: i32;
+    let $sroa_$iter_0_byte_index_90: i32;
+    let $hfs_used_91: i32;
+    $sroa_$iter_0_repr_88 = value.repr;
+    $sroa_$iter_0_used_89 = value.used;
+    $sroa_$iter_0_byte_index_90 = 0;
+    $licm_repr_62 = out.repr;
+    $hfs_used_91 = out.used;
     b0: block {
         l1: loop {
-            break_if b0 $sroa_$iter_0_byte_index_89 >= $sroa_$iter_0_used_88;
+            break_if b0 $sroa_$iter_0_byte_index_90 >= $sroa_$iter_0_used_89;
             $inline_decode_char_at_0: block {
-                if local.tee b0(builtin::array_get_value<u8>($sroa_$iter_0_repr_87, $sroa_$iter_0_byte_index_89)) <u 128 {
-                    $sroa_slot_86 = 1;
+                if local.tee b0(builtin::array_get_value<u8>($sroa_$iter_0_repr_88, $sroa_$iter_0_byte_index_90)) <u 128 {
+                    $sroa_slot_87 = 1;
                     break $inline_decode_char_at_0;
                 }
                 if b0 <u 224 {
-                    $sroa_slot_86 = builtin::array_get_value<u8>($sroa_$iter_0_repr_87, $sroa_$iter_0_byte_index_89 + 1);
-                    b0 = ((b0 & 31) << 6) | ($sroa_slot_86 & 63);
-                    $sroa_slot_86 = 2;
+                    $sroa_slot_87 = builtin::array_get_value<u8>($sroa_$iter_0_repr_88, $sroa_$iter_0_byte_index_90 + 1);
+                    b0 = ((b0 & 31) << 6) | ($sroa_slot_87 & 63);
+                    $sroa_slot_87 = 2;
                     break $inline_decode_char_at_0;
                 }
                 if b0 <u 240 {
-                    $sroa_slot_86 = builtin::array_get_value<u8>($sroa_$iter_0_repr_87, $sroa_$iter_0_byte_index_89 + 1);
-                    b2_67 = builtin::array_get_value<u8>($sroa_$iter_0_repr_87, $sroa_$iter_0_byte_index_89 + 2);
-                    b0 = (((b0 & 15) << 12) | (($sroa_slot_86 & 63) << 6)) | (b2_67 & 63);
-                    $sroa_slot_86 = 3;
+                    $sroa_slot_87 = builtin::array_get_value<u8>($sroa_$iter_0_repr_88, $sroa_$iter_0_byte_index_90 + 1);
+                    b2_68 = builtin::array_get_value<u8>($sroa_$iter_0_repr_88, $sroa_$iter_0_byte_index_90 + 2);
+                    b0 = (((b0 & 15) << 12) | (($sroa_slot_87 & 63) << 6)) | (b2_68 & 63);
+                    $sroa_slot_87 = 3;
                     break $inline_decode_char_at_0;
                 }
-                $sroa_slot_86 = builtin::array_get_value<u8>($sroa_$iter_0_repr_87, $sroa_$iter_0_byte_index_89 + 1);
-                b2_67 = builtin::array_get_value<u8>($sroa_$iter_0_repr_87, $sroa_$iter_0_byte_index_89 + 2);
-                b3 = builtin::array_get_value<u8>($sroa_$iter_0_repr_87, $sroa_$iter_0_byte_index_89 + 3);
-                b0 = ((((b0 & 7) << 18) | (($sroa_slot_86 & 63) << 12)) | ((b2_67 & 63) << 6)) | (b3 & 63);
-                $sroa_slot_86 = 4;
+                $sroa_slot_87 = builtin::array_get_value<u8>($sroa_$iter_0_repr_88, $sroa_$iter_0_byte_index_90 + 1);
+                b2_68 = builtin::array_get_value<u8>($sroa_$iter_0_repr_88, $sroa_$iter_0_byte_index_90 + 2);
+                b3 = builtin::array_get_value<u8>($sroa_$iter_0_repr_88, $sroa_$iter_0_byte_index_90 + 3);
+                b0 = ((((b0 & 7) << 18) | (($sroa_slot_87 & 63) << 12)) | ((b2_68 & 63) << 6)) | (b3 & 63);
+                $sroa_slot_87 = 4;
                 break $inline_decode_char_at_0;
             };
-            $sroa_$iter_0_byte_index_89 = $sroa_$iter_0_byte_index_89 + $sroa_slot_86;
+            $sroa_$iter_0_byte_index_90 = $sroa_$iter_0_byte_index_90 + $sroa_slot_87;
             if b0 == 60 {
-                if @unlikely(local.tee $hfs_used_90($hfs_used_90 + 4) > builtin::array_len(out.repr)) {
+                if @unlikely(local.tee $hfs_used_91($hfs_used_91 + 4) > builtin::array_len($licm_repr_62)) {
                     cold_path;
-                    "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out, $hfs_used_90);
+                    "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out, $hfs_used_91);
+                    $licm_repr_62 = out.repr;
                 } else {
                 }
                 b0 = out.used;
-                builtin::array_copy<u8>(out.repr, b0, global:tagged_template_html.wado::$const_obj_2, 0, 4);
+                builtin::array_copy<u8>($licm_repr_62, b0, global:tagged_template_html.wado::$const_obj_2, 0, 4);
             } else if b0 == 38 {
-                if @unlikely(local.tee $hfs_used_90($hfs_used_90 + 5) > builtin::array_len(out.repr)) {
+                if @unlikely(local.tee $hfs_used_91($hfs_used_91 + 5) > builtin::array_len($licm_repr_62)) {
                     cold_path;
-                    "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out, $hfs_used_90);
+                    "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out, $hfs_used_91);
+                    $licm_repr_62 = out.repr;
                 } else {
                 }
                 b0 = out.used;
-                builtin::array_copy<u8>(out.repr, b0, global:tagged_template_html.wado::$const_obj_1, 0, 5);
+                builtin::array_copy<u8>($licm_repr_62, b0, global:tagged_template_html.wado::$const_obj_1, 0, 5);
             } else if b0 == 34 {
                 if ctx == 1 {
-                    if @unlikely(local.tee $hfs_used_90($hfs_used_90 + 6) > builtin::array_len(out.repr)) {
+                    if @unlikely(local.tee $hfs_used_91($hfs_used_91 + 6) > builtin::array_len($licm_repr_62)) {
                         cold_path;
-                        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out, $hfs_used_90);
+                        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out, $hfs_used_91);
+                        $licm_repr_62 = out.repr;
                     } else {
                     }
                     b0 = out.used;
-                    builtin::array_copy<u8>(out.repr, b0, global:tagged_template_html.wado::$const_obj_0, 0, 6);
+                    builtin::array_copy<u8>($licm_repr_62, b0, global:tagged_template_html.wado::$const_obj_0, 0, 6);
                 } else {
                     "core:prelude/string.wado/core:prelude/string.wado/String::push"(out, b0);
-                    $hfs_used_90 = out.used;
+                    $hfs_used_91 = out.used;
                 }
             } else {
                 "core:prelude/string.wado/core:prelude/string.wado/String::push"(out, b0);
-                $hfs_used_90 = out.used;
+                $hfs_used_91 = out.used;
             }
-            out.used = $hfs_used_90;
+            $licm_repr_62 = out.repr;
+            out.used = $hfs_used_91;
             continue l1;
         };
     };

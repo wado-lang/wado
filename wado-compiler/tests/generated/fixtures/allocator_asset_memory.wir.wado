@@ -377,6 +377,7 @@ fn "allocator_asset_memory.wado/run"() with Stdout {
     let value_33: f32;
     let $cm_pair_7: i64;
     let $sroa_$iter_0_start_74: i32;
+    let $licm_repr_83: ref Array<f32>;
     let new_repr: ref Array<u8>;
     ptr = "mem/realloc"(0, 0, 1, 4194304);
     base = black_box(-1_f32);
@@ -398,21 +399,22 @@ fn "allocator_asset_memory.wado/run"() with Stdout {
     };
     builtin::memory_fill(ptr, 255, 4194304);
     ptr = 0;
+    $sroa_$iter_0_start_74 = before.used;
+    $licm_repr_83 = before.repr;
     b3: block {
         l4: loop {
             break_if b3 ptr >= 64;
-            ptr = local.tee $sroa_$iter_0_start_74(ptr) + 1;
-            value_33 = base - (builtin::f32_convert_i32_s($sroa_$iter_0_start_74) * 0.25_f32);
-            current_28 = before.used;
-            if @unlikely($sroa_$iter_0_start_74 >= current_28) {
+            ptr = local.tee current_28(ptr) + 1;
+            value_33 = base - (builtin::f32_convert_i32_s(current_28) * 0.25_f32);
+            if @unlikely(current_28 >= $sroa_$iter_0_start_74) {
                 cold_path;
-                "allocator_asset_memory.wado/run$cold1"($sroa_$iter_0_start_74, current_28);
+                "allocator_asset_memory.wado/run$cold1"(current_28, $sroa_$iter_0_start_74);
                 unreachable;
             }
-            $v3 = builtin::array_get_value<f32>(before.repr, $sroa_$iter_0_start_74);
+            $v3 = builtin::array_get_value<f32>($licm_repr_83, current_28);
             if @unlikely(((local.tee $v1_10("wasm:core:libm.wat/libm_expf"(value_33)) == $v3) | (($v1_10 != $v1_10) & ($v3 != $v3))) == 0) {
                 cold_path;
-                "allocator_asset_memory.wado/run$cold0"(before, $sroa_$iter_0_start_74, value_33, $v3, $v1_10);
+                "allocator_asset_memory.wado/run$cold0"(before, current_28, value_33, $v3, $v1_10);
                 unreachable;
             }
             continue l4;

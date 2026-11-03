@@ -2037,35 +2037,36 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
 fn "core:prelude/array.wado/core:prelude/array.wado/write_seq_inspect<i32>$dae[marker]"(repr, start, end, f, limit) {
     let truncated: bool;
     let self_8: ref "core:prelude/string.wado//String";
-    let $licm_arith_35: bool;
-    let start_37: i32;
+    let $licm_arith_36: bool;
+    let start_38: i32;
     if f.alternate {
         "core:prelude/array.wado/core:prelude/array.wado/write_seq_inspect_alt<i32>$dae[marker]"(repr, start, end, f, limit);
         return;
     }
-    start_37 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(local.tee self_8(f.buf), 1);
-    "core:prelude/string.wado/core:prelude/string.wado/String::internal_set_byte_unchecked"(self_8, start_37, 91);
-    start_37 = 0;
+    start_38 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(local.tee self_8(f.buf), 1);
+    "core:prelude/string.wado/core:prelude/string.wado/String::internal_set_byte_unchecked"(self_8, start_38, 91);
+    start_38 = 0;
     truncated = 0;
-    $licm_arith_35 = limit >= 0;
+    self_8 = f.buf;
+    $licm_arith_36 = limit >= 0;
     b345: block {
         l346: loop {
             break_if b345 start >= end;
-            if select i32($licm_arith_35, start_37 >= limit, 0) {
+            if select i32($licm_arith_36, start_38 >= limit, 0) {
                 truncated = 1;
                 break b345;
             }
-            if start_37 > 0 {
-                "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec0"(f.buf, global:core:prelude/array.wado::$const_obj_4);
+            if start_38 > 0 {
+                "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec0"(self_8, global:core:prelude/array.wado::$const_obj_4);
             }
             "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(builtin::array_get_value<i32>(repr, start), f);
-            start_37 = start_37 + 1;
+            start_38 = start_38 + 1;
             start = start + 1;
             continue l346;
         };
     };
     if truncated {
-        if start_37 > 0 {
+        if start_38 > 0 {
             "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec1"(f.buf, global:core:prelude/array.wado::$const_obj_3);
         } else {
             "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec2"(f.buf, global:core:prelude/array.wado::$const_obj_2);
@@ -2107,9 +2108,9 @@ fn "core:prelude/format.wado/core:prelude/format.wado/pad_text<core:prelude/stri
 fn "core:prelude/array.wado/core:prelude/array.wado/write_seq_inspect_alt<i32>$dae[marker]"(repr, start, end, f, limit) {
     let shown: i32;
     let truncated: bool;
-    let self_18: ref "core:prelude/string.wado//String";
-    let $licm_arith_27: bool;
-    let start_29: i32;
+    let $licm_buf_27: ref "core:prelude/string.wado//String";
+    let $licm_arith_28: bool;
+    let start_30: i32;
     if start >= end {
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec0"(f.buf, global:core:prelude/array.wado::$const_obj_8);
         return;
@@ -2117,18 +2118,19 @@ fn "core:prelude/array.wado/core:prelude/array.wado/write_seq_inspect_alt<i32>$d
     "core:prelude/format.wado/core:prelude/format.wado/Formatter::open_brace<core:prelude/string.wado/String>$spec0"(f, global:core:prelude/array.wado::$const_obj_7);
     shown = 0;
     truncated = 0;
-    $licm_arith_27 = limit >= 0;
+    $licm_buf_27 = f.buf;
+    $licm_arith_28 = limit >= 0;
     b356: block {
         l357: loop {
             break_if b356 start >= end;
-            if select i32($licm_arith_27, shown >= limit, 0) {
+            if select i32($licm_arith_28, shown >= limit, 0) {
                 truncated = 1;
                 break b356;
             }
             "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_newline_indent"(f);
             "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(builtin::array_get_value<i32>(repr, start), f);
-            start_29 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(local.tee self_18(f.buf), 1);
-            "core:prelude/string.wado/core:prelude/string.wado/String::internal_set_byte_unchecked"(self_18, start_29, 44);
+            start_30 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"($licm_buf_27, 1);
+            "core:prelude/string.wado/core:prelude/string.wado/String::internal_set_byte_unchecked"($licm_buf_27, start_30, 44);
             shown = shown + 1;
             start = start + 1;
             continue l357;

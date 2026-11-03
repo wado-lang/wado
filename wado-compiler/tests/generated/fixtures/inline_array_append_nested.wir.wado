@@ -74,7 +74,6 @@ import fn wasi/task-return from "wasi/task-return";
 global global:inline_array_append_nested.wado::$const_obj_0: ref Array<u8> = array.new_fixed<u8>(108, 101, 110, 61);
 
 fn "inline_array_append_nested.wado/run"() with Stdout {
-    let $load_2: ref Array<i32>;
     let $load_6: ref Array<u8>;
     let i_5: i32;
     let used_8: i32;
@@ -83,25 +82,29 @@ fn "inline_array_append_nested.wado/run"() with Stdout {
     let repr_62: ref Array<u8>;
     let x: i64;
     let $sroa_c_items_128: ref "core:prelude//List<i32>";
+    let $licm_repr_136: ref Array<i32>;
     let q: u64;
     let tens: i32;
     $sroa_c_items_128 = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(), used: 0 };
     i_5 = 0;
+    $licm_repr_136 = $sroa_c_items_128.repr;
     b0: block {
         l1: loop {
             break_if b0 i_5 >= 3;
-            if @unlikely(local.tee used_8($sroa_c_items_128.used) >= builtin::array_len($sroa_c_items_128.repr)) {
+            if @unlikely(local.tee used_8($sroa_c_items_128.used) >= builtin::array_len($licm_repr_136)) {
                 cold_path;
                 "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"($sroa_c_items_128);
+                $licm_repr_136 = $sroa_c_items_128.repr;
             }
-            builtin::array_set<i32>(local.tee $load_2($sroa_c_items_128.repr), used_8, i_5);
+            builtin::array_set<i32>($licm_repr_136, used_8, i_5);
             $sroa_c_items_128.used = used_8 + 1;
             used_8 = i_5 * 2;
-            if @unlikely(local.tee used_15($sroa_c_items_128.used) >= builtin::array_len($load_2)) {
+            if @unlikely(local.tee used_15($sroa_c_items_128.used) >= builtin::array_len($licm_repr_136)) {
                 cold_path;
                 "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"($sroa_c_items_128);
+                $licm_repr_136 = $sroa_c_items_128.repr;
             }
-            builtin::array_set<i32>($sroa_c_items_128.repr, used_15, used_8);
+            builtin::array_set<i32>($licm_repr_136, used_15, used_8);
             $sroa_c_items_128.used = used_15 + 1;
             i_5 = i_5 + 1;
             continue l1;
@@ -360,6 +363,7 @@ fn "inline_array_append_nested.wado/inline_array_append_nested.wado/Container::p
     let used_25: i32;
     let $licm_used_45: i32;
     let $licm_repr_46: ref Array<i32>;
+    let $licm_repr_49: ref Array<i32>;
     temp = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(), used: 0 };
     i = 0;
     $licm_used_45 = self.used;
@@ -382,15 +386,17 @@ fn "inline_array_append_nested.wado/inline_array_append_nested.wado/Container::p
     i = 0;
     $licm_used_45 = temp.used;
     $licm_repr_46 = temp.repr;
+    $licm_repr_49 = self.repr;
     b51: block {
         l52: loop {
             break_if b51 i >= $licm_used_45;
             val = builtin::array_get_value<i32>($licm_repr_46, i) + 100;
-            if @unlikely(local.tee used_25(self.used) >= builtin::array_len(self.repr)) {
+            if @unlikely(local.tee used_25(self.used) >= builtin::array_len($licm_repr_49)) {
                 cold_path;
                 "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(self);
+                $licm_repr_49 = self.repr;
             }
-            builtin::array_set<i32>(self.repr, used_25, val);
+            builtin::array_set<i32>($licm_repr_49, used_25, val);
             self.used = used_25 + 1;
             i = i + 1;
             continue l52;

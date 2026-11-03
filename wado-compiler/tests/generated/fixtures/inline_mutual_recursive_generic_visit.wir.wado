@@ -676,7 +676,7 @@ fn "core:prelude/array.wado/core:prelude/array.wado/write_seq_inspect<inline_mut
     let shown: i32;
     let truncated: bool;
     let i: i32;
-    let $licm_arith_31: bool;
+    let $licm_arith_32: bool;
     if f.alternate {
         "core:prelude/array.wado/core:prelude/array.wado/write_seq_inspect_alt<inline_mutual_recursive_generic_visit.wado/Node>$dae[start,marker]"(repr, end, f, limit);
         return;
@@ -685,11 +685,11 @@ fn "core:prelude/array.wado/core:prelude/array.wado/write_seq_inspect<inline_mut
     shown = 0;
     truncated = 0;
     i = 0;
-    $licm_arith_31 = limit >= 0;
+    $licm_arith_32 = limit >= 0;
     b56: block {
         l57: loop {
             break_if b56 i >= end;
-            if select i32($licm_arith_31, shown >= limit, 0) {
+            if select i32($licm_arith_32, shown >= limit, 0) {
                 truncated = 1;
                 break b56;
             }
@@ -713,10 +713,11 @@ fn "core:prelude/array.wado/core:prelude/array.wado/write_seq_inspect<inline_mut
 }
 
 fn "core:prelude/array.wado/core:prelude/array.wado/write_seq_inspect_alt<inline_mutual_recursive_generic_visit.wado/Node>$dae[start,marker]"(repr, end, f, limit) {
+    let $load_1: ref "core:prelude/string.wado//String";
     let shown: i32;
     let truncated: bool;
     let i: i32;
-    let $licm_arith_23: bool;
+    let $licm_arith_24: bool;
     if 0 >= end {
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec0"(f.buf, global:core:prelude/array.wado::$const_obj_21);
         return;
@@ -725,17 +726,18 @@ fn "core:prelude/array.wado/core:prelude/array.wado/write_seq_inspect_alt<inline
     shown = 0;
     truncated = 0;
     i = 0;
-    $licm_arith_23 = limit >= 0;
+    $load_1 = f.buf;
+    $licm_arith_24 = limit >= 0;
     b63: block {
         l64: loop {
             break_if b63 i >= end;
-            if select i32($licm_arith_23, shown >= limit, 0) {
+            if select i32($licm_arith_24, shown >= limit, 0) {
                 truncated = 1;
                 break b63;
             }
             "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_newline_indent"(f);
             "core:prelude/traits.wado/inline_mutual_recursive_generic_visit.wado/Node^core:prelude/traits.wado/Inspect::inspect$sroa[self.value]"(builtin::array_get_value<ref "inline_mutual_recursive_generic_visit.wado//Node">(repr, i), f);
-            "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_byte"(f.buf, 44);
+            "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_byte"($load_1, 44);
             shown = shown + 1;
             i = i + 1;
             continue l64;
@@ -743,7 +745,7 @@ fn "core:prelude/array.wado/core:prelude/array.wado/write_seq_inspect_alt<inline
     };
     if truncated {
         "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_newline_indent"(f);
-        "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec3"(f.buf, global:core:prelude/array.wado::$const_obj_15);
+        "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec3"($load_1, global:core:prelude/array.wado::$const_obj_15);
     }
     "core:prelude/format.wado/core:prelude/format.wado/Formatter::close_brace<core:prelude/string.wado/String>$spec0"(f, global:core:prelude/array.wado::$const_obj_18);
 }
@@ -1176,6 +1178,7 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
     let self_21: ref "core:prelude/string.wado//String";
     let c_223: char;
     let i_225: i32;
+    let $licm_repr_389: ref Array<u8>;
     $load_0 = self.sign_plus;
     sign_len = select i32(select i32(is_negative, 1, $load_0), 1, 0);
     prefix_len = select i32(self.alternate, 0, 0);
@@ -1237,16 +1240,18 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
         }
         self_21 = self.buf;
         is_negative = 0;
+        $licm_repr_389 = self_21.repr;
         b130: block {
             l131: loop {
                 break_if b130 is_negative >= sign_len;
-                if @unlikely(local.tee $load_0(self_21.used + 1) > builtin::array_len(self_21.repr)) {
+                if @unlikely(local.tee $load_0(self_21.used + 1) > builtin::array_len($licm_repr_389)) {
                     cold_path;
                     "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_21, $load_0);
+                    $licm_repr_389 = self_21.repr;
                 }
                 prefix_len = self_21.used;
                 self_21.used = $load_0;
-                builtin::array_set_u8(self_21.repr, prefix_len, 48);
+                builtin::array_set_u8($licm_repr_389, prefix_len, 48);
                 is_negative = is_negative + 1;
                 continue l131;
             };

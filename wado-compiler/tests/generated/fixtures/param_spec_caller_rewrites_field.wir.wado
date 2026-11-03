@@ -87,17 +87,20 @@ fn "param_spec_caller_rewrites_field.wado/emit$spec0$dae[opt]"(out) {
     let i: i32;
     let new_used_7: i32;
     let start_8: i32;
+    let $licm_repr_87: ref Array<u8>;
     i = 0;
+    $licm_repr_87 = out.repr;
     b0: block {
         l1: loop {
             break_if b0 i >= 2;
-            if @unlikely(local.tee new_used_7(out.used + 1) > builtin::array_len(out.repr)) {
+            if @unlikely(local.tee new_used_7(out.used + 1) > builtin::array_len($licm_repr_87)) {
                 cold_path;
                 "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out, new_used_7);
+                $licm_repr_87 = out.repr;
             }
             start_8 = out.used;
             out.used = new_used_7;
-            builtin::array_set_u8(out.repr, start_8, 97);
+            builtin::array_set_u8($licm_repr_87, start_8, 97);
             i = i + 1;
             continue l1;
         };
@@ -115,17 +118,20 @@ fn "param_spec_caller_rewrites_field.wado/emit$spec1$dae[opt]"(out) {
     let i: i32;
     let new_used_28: i32;
     let start_29: i32;
+    let $licm_repr_87: ref Array<u8>;
     i = 0;
+    $licm_repr_87 = out.repr;
     b4: block {
         l5: loop {
             break_if b4 i >= 2;
-            if @unlikely(local.tee new_used_28(out.used + 1) > builtin::array_len(out.repr)) {
+            if @unlikely(local.tee new_used_28(out.used + 1) > builtin::array_len($licm_repr_87)) {
                 cold_path;
                 "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out, new_used_28);
+                $licm_repr_87 = out.repr;
             }
             start_29 = out.used;
             out.used = new_used_28;
-            builtin::array_set_u8(out.repr, start_29, 98);
+            builtin::array_set_u8($licm_repr_87, start_29, 98);
             i = i + 1;
             continue l5;
         };
