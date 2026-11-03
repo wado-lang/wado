@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1793684801342,
+  "lastUpdate": 1793690022331,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -73933,6 +73933,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/d9d9d143065c1def29755e3ced1389e356258dd2"
         },
         "date": 1793684800539,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3099,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7303,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21809,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 316578,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "4028a365e7ae5412532792216fb832588bb23879",
+          "message": "Merge pull request #2534 from wado-lang/claude/awesome-mendel-jhnwrw\n\nperf: compile Gale's codegen_test faster, by value numbering and retained memory",
+          "timestamp": "2026-11-03T16:01:15+09:00",
+          "tree_id": "518325d5613f46b880bb6736cd15d8e07851d538",
+          "url": "https://github.com/wado-lang/wado/commit/4028a365e7ae5412532792216fb832588bb23879"
+        },
+        "date": 1793690021498,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
