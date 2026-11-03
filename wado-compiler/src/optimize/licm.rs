@@ -152,17 +152,28 @@ impl ModifiedVars {
         field_idx: u32,
     ) -> bool {
         self.field_written(ctx, body, root, root_type, field_idx)
-            || self.call_writes_object(ctx, body, root, root_type)
+            || self.call_writes_field(ctx, body, root, root_type, field_idx)
     }
 
-    /// True when a call in the loop may write the object `root` holds.
-    fn call_writes_object(&self, ctx: &LicmCtx, body: &Body, root: u32, root_type: TypeId) -> bool {
+    /// True when a call in the loop may write `root.field_idx`.
+    fn call_writes_field(
+        &self,
+        ctx: &LicmCtx,
+        body: &Body,
+        root: u32,
+        root_type: TypeId,
+        field_idx: u32,
+    ) -> bool {
         let Some(key) = ctx.type_table.heap_object_key(root_type) else {
             return false;
         };
-        self.call_sites
-            .iter()
-            .any(|&call| ctx.call_writes(body, call, key, root))
+        self.call_sites.iter().any(|&call| {
+            ctx.call_writes(body, call, key, root)
+                && ctx
+                    .heap
+                    .effects
+                    .call_may_write_field(body, call, key, field_idx)
+        })
     }
 
     fn add_alias(&mut self, a: u32, b: u32) {
@@ -723,7 +734,13 @@ fn hoist_reloadable_field_loads(
     candidates.retain(|c| {
         let root_ty = candidate_root_ty(engine, c.local_index, c.type_id);
         if modified_vars.field_written(ctx, engine.body, c.local_index, root_ty, c.field_index)
-            || !modified_vars.call_writes_object(ctx, engine.body, c.local_index, root_ty)
+            || !modified_vars.call_writes_field(
+                ctx,
+                engine.body,
+                c.local_index,
+                root_ty,
+                c.field_index,
+            )
         {
             return false;
         }
@@ -1549,11 +1566,12 @@ fn collect_modified_vars_in_expr(
         ExprKind::Cast { expr: inner, .. } => {
             collect_modified_vars_in_operand(body, *inner, modified, type_table);
         }
+        // What a direct call writes through an argument it is asked field by
+        // field (`call_writes_field`), so the argument is not fully modified.
         ExprKind::Call { args, .. } => {
             modified.call_sites.push(e);
             let arg_ids: Vec<ExprId> = args.iter().filter_map(|a| a.expr.as_expr()).collect();
             for a in arg_ids {
-                mark_gc_local_as_fully_modified(body, a, modified, type_table);
                 collect_modified_vars_in_expr(body, a, modified, type_table);
             }
         }
