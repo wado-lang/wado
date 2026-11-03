@@ -56,7 +56,7 @@ fn unterminated_string_keeps_preceding_tokens() {
     assert_matches!(kinds[0], TokenKind::Let);
     assert_matches!(kinds[1], TokenKind::Ident(ref s) if s == "x");
     assert_matches!(kinds[2], TokenKind::Eq);
-    assert_matches!(kinds[3], TokenKind::StringLit(ref s) if s == "oops");
+    assert_matches!(kinds[3], TokenKind::StringLit { ref raw, .. } if raw == "oops");
 }
 
 #[test]
