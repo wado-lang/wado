@@ -154,3 +154,91 @@ test "the symbol tools are offered only with an index" {
     assert !Workspace { root: "src" }.tools().into_iter().any(|t| t.name == "FindSymbol");
     assert workspace().tools().into_iter().any(|t| t.name == "FindSymbol");
 }
+
+test "typed ranges take precedence over packed ranges" {
+    let mut symbols = empty_index();
+    symbols.add(&scip::Index {
+        documents: [
+            scip::Document {
+                relative_path: "typed.rs",
+                occurrences: [
+                    scip::Occurrence {
+                        range: [20, 0, 1],
+                        typed_range: Some(scip::OccurrenceTypedRange::SingleLineRange(scip::SingleLineRange { line: 1, start_character: 3, end_character: 9 })),
+                        symbol: `${CRATE}target().`,
+                        symbol_roles: 1,
+                        enclosing_range: [20, 0, 21, 0],
+                        typed_enclosing_range: Some(scip::OccurrenceTypedEnclosingRange::MultiLineEnclosingRange(scip::MultiLineRange { start_line: 0, start_character: 0, end_line: 3, end_character: 1 })),
+                    },
+                    scip::Occurrence {
+                        typed_range: Some(scip::OccurrenceTypedRange::MultiLineRange(scip::MultiLineRange { start_line: 2, start_character: 4, end_line: 2, end_character: 10 })),
+                        symbol: `${CRATE}target().`,
+                        symbol_roles: 8,
+                    },
+                    scip::Occurrence {
+                        typed_range: Some(scip::OccurrenceTypedRange::MultiLineRange(scip::MultiLineRange { start_line: 5, start_character: 3, end_line: 5, end_character: 8 })),
+                        symbol: `${CRATE}other().`,
+                        symbol_roles: 1,
+                        typed_enclosing_range: Some(scip::OccurrenceTypedEnclosingRange::SingleLineEnclosingRange(scip::SingleLineRange { line: 5, start_character: 0, end_character: 20 })),
+                    },
+                ],
+                symbols: [
+                    scip::SymbolInformation { symbol: `${CRATE}target().`, display_name: "target", kind: Function },
+                    scip::SymbolInformation { symbol: `${CRATE}other().`, display_name: "other", kind: Function },
+                ],
+            },
+        ],
+    });
+    let ws = Workspace { root: "src", symbols: Some(symbols) };
+    assert ws.call(&"FindSymbol", &tool_input(`{"name": "target"}`)).unwrap() == "typed.rs:2-4: function target\n";
+    assert ws.call(&"FindSymbol", &tool_input(`{"name": "other"}`)).unwrap() == "typed.rs:6-6: function other\n";
+    assert ws.call(&"FindReferences", &tool_input(`{"name": "target"}`)).unwrap() == "function target (typed.rs:2): 1 references\ntyped.rs:3 in target: \n";
+}
+
+test "indexes merge references with definitions by symbol, not display name" {
+    let mut symbols = empty_index();
+    symbols.add(&scip::Index {
+        documents: [
+            scip::Document {
+                relative_path: "uses/calls.rs",
+                occurrences: [
+                    scip::Occurrence { range: [0, 0, 3], symbol: `${CRATE}A#run().`, symbol_roles: 8 },
+                    scip::Occurrence { range: [1, 0, 3], symbol: `${CRATE}B#run().`, symbol_roles: 8 },
+                    scip::Occurrence { range: [2, 0, 3], symbol: "local 0", symbol_roles: 8 },
+                ],
+            },
+        ],
+    });
+    symbols.add(&scip::Index {
+        documents: [
+            scip::Document {
+                relative_path: "defs/items.rs",
+                occurrences: [
+                    scip::Occurrence { range: [0, 3, 6], symbol: `${CRATE}A#run().`, symbol_roles: 1 },
+                    scip::Occurrence { range: [1, 3, 6], symbol: `${CRATE}B#run().`, symbol_roles: 1 },
+                    scip::Occurrence { range: [2, 3, 6], symbol: "local 0", symbol_roles: 1 },
+                ],
+                symbols: [
+                    scip::SymbolInformation { symbol: `${CRATE}A#run().`, display_name: "run", kind: Method },
+                    scip::SymbolInformation { symbol: `${CRATE}B#run().`, display_name: "run", kind: Method },
+                    scip::SymbolInformation { symbol: "local 0", display_name: "run" },
+                ],
+            },
+        ],
+    });
+    let ws = Workspace { root: "src", symbols: Some(symbols) };
+    assert ws.call(&"FindSymbol", &tool_input(`{"name": "run"}`)).unwrap() == "defs/items.rs:1-1: method A::run\ndefs/items.rs:2-2: method B::run\n";
+    assert ws.call(&"FindSymbol", &tool_input(`{"name": "B.run", "path": "defs/items.rs"}`)).unwrap() == "defs/items.rs:2-2: method B::run\n";
+    assert ws.call(&"FindSymbol", &tool_input(`{"name": "run", "path": "uses"}`)).unwrap() == "No symbols found";
+    assert ws.call(&"FindReferences", &tool_input(`{"name": "A::run", "path": "uses"}`)).unwrap() == "method A::run (defs/items.rs:1): 1 references\nuses/calls.rs:1: \n";
+    assert ws.call(&"FindReferences", &tool_input(`{"name": "B::run", "path": "defs"}`)).unwrap() == "method B::run (defs/items.rs:2): 0 references\n";
+}
+
+test "symbol tools validate and paginate output lines" {
+    let ws = workspace();
+    assert ws.call(&"FindSymbol", &tool_input(`{"name": "area", "head_limit": 1}`)).unwrap() == "testdata/shapes.rs:6-8: method Circle::area\n";
+    assert ws.call(&"FindSymbol", &tool_input(`{"name": "area", "offset": 1, "head_limit": 0}`)).unwrap() == "    pub fn area(&self) -> f64\n";
+    assert ws.call(&"FindSymbol", &tool_input(`{"name": "area", "offset": 2}`)).unwrap() == "";
+    assert ws.call(&"FindReferences", &tool_input(`{"name": "radius", "head_limit": -1}`)).is_err();
+    assert Workspace { root: "src" }.call(&"FindReferences", &tool_input(`{"name": "area"}`)).is_err();
+}

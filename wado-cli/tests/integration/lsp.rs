@@ -1,5 +1,6 @@
 //! Integration tests for `wado lsp` and `wado query` subcommands.
 
+use std::fs;
 use std::io::{BufRead, BufReader, Read, Write};
 use std::process::Stdio;
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError};
@@ -2720,4 +2721,91 @@ fn query_scip_leaves_out_what_an_exclude_matches() {
     let has = |needle: &str| index.windows(needle.len()).any(|w| w == needle.as_bytes());
     assert!(has("wado . a.wado . greet()."));
     assert!(!has("pkg/tests/f.wado"));
+}
+
+#[test]
+fn query_scip_applies_each_exclude_to_the_selected_root() {
+    let tmp = tempfile::tempdir().unwrap();
+    let root = tmp.path().join("project");
+    fs::create_dir_all(root.join("nested")).unwrap();
+    for (path, source) in [
+        ("keep.wado", "fn keep() {}\n"),
+        ("skip.wado", "fn skip() {}\n"),
+        ("nested/also_skip.wado", "fn also_skip() {}\n"),
+    ] {
+        fs::write(root.join(path), source).unwrap();
+    }
+
+    wado_in(tmp.path())
+        .args([
+            "query",
+            "scip",
+            "--output",
+            "result.scip",
+            "--exclude",
+            "skip.wado",
+            "--exclude",
+            "nested/**",
+            "project",
+        ])
+        .assert()
+        .success();
+
+    let index = fs::read(tmp.path().join("result.scip")).unwrap();
+    let has = |needle: &str| index.windows(needle.len()).any(|w| w == needle.as_bytes());
+    assert!(has("keep.wado"));
+    assert!(!has("skip.wado"));
+    assert!(!has("nested/also_skip.wado"));
+}
+
+#[test]
+fn query_rejects_scip_output_for_other_kinds() {
+    wado()
+        .args(["query", "diagnostics", "--output", "index.scip", "a.wado"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "--output does not apply to `diagnostics`",
+        ));
+}
+
+#[test]
+fn lsp_references_at_member_declarations_respect_include_declaration() {
+    let mut session = LspSession::start();
+    session.initialize();
+    let uri = "file:///tmp/lsp_member_refs.wado";
+    session.open_doc(
+        uri,
+        "struct P { x: i32 }\nimpl P {\n    fn get(&self) -> i32 { return self.x; }\n}\nfn f(p: P) -> i32 {\n    return p.get() + p.x;\n}\n",
+    );
+
+    for (line, character, uses, declaration) in [
+        (0, 11, vec![(2, 39), (5, 23)], (0, 11)),
+        (2, 8, vec![(5, 13)], (2, 7)),
+    ] {
+        for include in [false, true] {
+            let id = session.send_request(
+                "textDocument/references",
+                json!({
+                    "textDocument": { "uri": uri },
+                    "position": { "line": line, "character": character },
+                    "context": { "includeDeclaration": include }
+                }),
+            );
+            let response = session.read_message();
+            assert_eq!(response["id"], id);
+            let locations = response["result"].as_array().unwrap();
+            let mut expected = uses.clone();
+            if include {
+                expected.insert(0, declaration);
+            }
+            assert_eq!(locations.len(), expected.len(), "{locations:?}");
+            for (location, (expected_line, expected_character)) in locations.iter().zip(expected) {
+                assert_eq!(location["uri"], uri);
+                assert_eq!(location["range"]["start"]["line"], expected_line);
+                assert_eq!(location["range"]["start"]["character"], expected_character);
+            }
+        }
+    }
+    assert_eq!(session.shutdown_and_exit(), 0);
 }
