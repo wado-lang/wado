@@ -1715,16 +1715,16 @@ fn "core:linear/core:linear/LinearArray<core:simd/f32x4>::filled$unchecked"(len,
     let array: ref null "core:linear//LinearArray<core:simd/f32x4>";
     let bytes: i32;
     let current: i32;
-    let $licm_ptr_48: i32;
+    let $licm_ptr_56: i32;
     bytes = len * 16;
     array = struct.new "core:linear//LinearArray<core:simd/f32x4>" { block: struct.new "core:linear//Block" { ptr: "mem/realloc"(0, 0, 16, bytes), bytes: bytes }, len: len };
     bytes = 0;
-    $licm_ptr_48 = array.block.ptr;
+    $licm_ptr_56 = array.block.ptr;
     b228: block {
         l229: loop {
             break_if b228 bytes >= len;
             bytes = local.tee current(bytes) + 1;
-            builtin::store_v128($licm_ptr_48 + (current * 16), value);
+            builtin::store_v128($licm_ptr_56 + (current * 16), value);
             continue l229;
         };
     };

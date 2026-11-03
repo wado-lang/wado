@@ -74,43 +74,43 @@ global global:try_op_generic_method_call.wado::$const_obj_0: ref Array<i32> = ar
 
 fn "try_op_generic_method_call.wado/run"() with Stdout {
     let s_0: ref "try_op_generic_method_call.wado//StringSink";
-    let message_4: ref "core:prelude/string.wado//String";
-    let $cm_pair_7: i64;
-    let new_repr: ref Array<u8>;
-    let self_25: i32;
-    let $match_7: ref null "core:prelude/string.wado//String";
     let item: i32;
-    let $sroa_$iter_0_repr_19: ref Array<i32>;
-    let $sroa_$iter_0_index_20: i32;
+    let $local_7_19: ref null "core:prelude/string.wado//String";
+    let $sroa_$iter_0_repr_23: ref Array<i32>;
+    let $sroa_$iter_0_index_24: i32;
+    let message_63: ref "core:prelude/string.wado//String";
+    let $cm_pair_7_64: i64;
+    let self_75: i32;
+    let new_repr_76: ref Array<u8>;
     s_0 = struct.new "try_op_generic_method_call.wado//StringSink" { buf: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 } };
     $fused_$inline_write_values_0: block {
-        $sroa_$iter_0_repr_19 = global:try_op_generic_method_call.wado::$const_obj_0;
-        $sroa_$iter_0_index_20 = 0;
+        $sroa_$iter_0_repr_23 = global:try_op_generic_method_call.wado::$const_obj_0;
+        $sroa_$iter_0_index_24 = 0;
         b0: block {
             l1: loop {
-                break_if b0 $sroa_$iter_0_index_20 >= 3;
-                item = builtin::array_get_value<i32>($sroa_$iter_0_repr_19, $sroa_$iter_0_index_20);
-                $sroa_$iter_0_index_20 = $sroa_$iter_0_index_20 + 1;
-                if @likely(ref.is_null(local.tee $match_7("try_op_generic_method_call.wado/try_op_generic_method_call.wado/StringSink^try_op_generic_method_call.wado/Sink::put<i32>$sroa[v.value]"(s_0, item)))) {
+                break_if b0 $sroa_$iter_0_index_24 >= 3;
+                item = builtin::array_get_value<i32>($sroa_$iter_0_repr_23, $sroa_$iter_0_index_24);
+                $sroa_$iter_0_index_24 = $sroa_$iter_0_index_24 + 1;
+                if @likely(ref.is_null(local.tee $local_7_19("try_op_generic_method_call.wado/try_op_generic_method_call.wado/StringSink^try_op_generic_method_call.wado/Sink::put<i32>$sroa[v.value]"(s_0, item)))) {
                 } else {
-                    drop(ref.as_non_null($match_7));
+                    drop(ref.as_non_null($local_7_19));
                     break $fused_$inline_write_values_0: cold_path;
                 }
                 continue l1;
             };
         };
-        message_4 = s_0.buf;
-        $sroa_$iter_0_index_20 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
-        item = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
-        $sroa_$iter_0_index_20 = "try_op_generic_method_call.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$iter_0_index_20);
-        builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>(local.tee self_25(message_4.used) + 1)), 0, message_4.repr, 0, self_25);
-        builtin::array_set_u8(new_repr, self_25, 10);
+        message_63 = s_0.buf;
+        $sroa_$iter_0_index_24 = builtin::i32_wrap_i64(local.tee $cm_pair_7_64("wasi/stream-new"()));
+        item = builtin::i32_wrap_i64($cm_pair_7_64 >> 32_i64);
+        $sroa_$iter_0_index_24 = "try_op_generic_method_call.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$iter_0_index_24);
+        builtin::array_copy<u8>(local.tee new_repr_76(builtin::array_new<u8>(local.tee self_75(message_63.used) + 1)), 0, message_63.repr, 0, self_75);
+        builtin::array_set_u8(new_repr_76, self_75, 10);
         drop(block -> "core:prelude/types.wado//enum:CopyResult" {
-            self_25 = self_25 + 1;
-            "core:rt/cm_stream_write_raw_all_u8"(item, new_repr, 0, self_25);
+            self_75 = self_75 + 1;
+            "core:rt/cm_stream_write_raw_all_u8"(item, new_repr_76, 0, self_75);
         });
         "wasi/stream-drop-writable"(item);
-        "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_$iter_0_index_20);
+        "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_$iter_0_index_24);
         break $fused_$inline_write_values_0;
     };
 }

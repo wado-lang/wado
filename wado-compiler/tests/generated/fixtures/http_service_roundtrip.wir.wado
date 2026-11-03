@@ -934,7 +934,7 @@ fn "http_service_roundtrip.wado/$cm_task_entry__handle"(request) {
     let slice: ref "core:prelude/slice.wado//Slice<u8>";
     let builder: ref "core:prelude/string.wado//String";
     let out: ref Array<u8>;
-    let $sroa_$pattern_temp_0_1_271: i32;
+    let $sroa_$pattern_temp_0_1_281: i32;
     method = (if "http_service_roundtrip.wado/$cm_binding__wasi:http/types@0.3.0#[method]request.get-method"(request).discriminant == 3 -> ref "core:prelude/string.wado//String" {
         struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(80, 85, 84), used: 3 };
     } else {
@@ -952,7 +952,7 @@ fn "http_service_roundtrip.wado/$cm_task_entry__handle"(request) {
         "wasi/resource-drop:wasi:http/types.wado#Fields"($temp_18);
     }
     $temp_18 = builtin::i32_wrap_i64(local.tee $cm_pair_200("wasi/future-new:transmission-wasi:http/types.wado#ErrorCode"()));
-    $sroa_$pattern_temp_0_1_271 = builtin::i32_wrap_i64($cm_pair_200 >> 32_i64);
+    $sroa_$pattern_temp_0_1_281 = builtin::i32_wrap_i64($cm_pair_200 >> 32_i64);
     request_body = local.tee $local_209("http_service_roundtrip.wado/$cm_binding__wasi:http/types@0.3.0#[static]request.consume-body"(request, $temp_18)).0;
     _request_trailers = $local_209.1;
     builder = $inline_core_prelude_string_wado_String__from_utf8_lossy_core_prelude_bytes_wado_ByteList__1: block -> ref "core:prelude/string.wado//String" {
@@ -983,7 +983,7 @@ fn "http_service_roundtrip.wado/$cm_task_entry__handle"(request) {
         break $inline_core_prelude_string_wado_String__from_utf8_lossy_core_prelude_bytes_wado_ByteList__1: builder;
     };
     "wasi/stream-drop-readable"(request_body.value);
-    drop("http_service_roundtrip.wado/$cm_future_write_core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>"($sroa_$pattern_temp_0_1_271, ref.null none));
+    drop("http_service_roundtrip.wado/$cm_future_write_core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>"($sroa_$pattern_temp_0_1_281, ref.null none));
     request = "http_service_roundtrip.wado/$cm_binding__wasi:http/types@0.3.0#[constructor]fields"();
     if @unlikely(ref.is_null("http_service_roundtrip.wado/$cm_binding__wasi:http/types@0.3.0#[method]fields.append$spec0"(request, global:http_service_roundtrip.wado::$const_obj_0, $temp_18 = tags.used; if @unlikely(0 >= $temp_18) {
         cold_path;
@@ -998,9 +998,9 @@ condition: headers.append(\"x-tag-echo\" as FieldName, tags[0] as FieldValue) ma
     }
     request_body = struct.new "core:prelude//$Resource" { value: builtin::i32_wrap_i64(local.tee $cm_pair_200("wasi/stream-new"())) };
     $temp_18 = builtin::i32_wrap_i64($cm_pair_200 >> 32_i64);
-    $sroa_$pattern_temp_0_1_271 = builtin::i32_wrap_i64(local.tee $cm_pair_200("wasi/future-new:val-result<option<own<wasi:http/types.wado#Fields>>,wasi:http/types.wado#ErrorCode>"()));
+    $sroa_$pattern_temp_0_1_281 = builtin::i32_wrap_i64(local.tee $cm_pair_200("wasi/future-new:val-result<option<own<wasi:http/types.wado#Fields>>,wasi:http/types.wado#ErrorCode>"()));
     $mv$scalar$code = builtin::i32_wrap_i64($cm_pair_200 >> 32_i64);
-    request_body = local.tee $local_212("http_service_roundtrip.wado/$cm_binding__wasi:http/types@0.3.0#[static]response.new"(request, struct.new "core:prelude/types.wado//Option<core:prelude/types.wado/Stream<u8>>::Some" { discriminant: 1, payload_0: request_body }, $sroa_$pattern_temp_0_1_271)).0;
+    request_body = local.tee $local_212("http_service_roundtrip.wado/$cm_binding__wasi:http/types@0.3.0#[static]response.new"(request, struct.new "core:prelude/types.wado//Option<core:prelude/types.wado/Stream<u8>>::Some" { discriminant: 1, payload_0: request_body }, $sroa_$pattern_temp_0_1_281)).0;
     _sent = $local_212.1;
     if @unlikely(("http_service_roundtrip.wado/$cm_binding__wasi:http/types@0.3.0#[method]response.set-status-code"(request_body, 202).discriminant == 0) == 0) {
         cold_path;
@@ -1013,11 +1013,11 @@ condition: response.set_status_code(202) matches { Ok(_) }
     "wasi/task-return:handle"(0, request, 0, 0_i64, 0, 0, 0, 0);
     drop("core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_all"($temp_18, $load_6 = local.tee method(block -> ref "core:prelude/string.wado//String" {
         "core:prelude/string.wado/core:prelude/string.wado/String::format<http_service_roundtrip.wado/$tmpl$ace5d8bd7289ac71,[core:prelude/string.wado/String,core:prelude/string.wado/String,core:prelude/string.wado/String]>$spec0$spec0"(method, default, builder);
-    }).repr; request = method.used; $sroa_$pattern_temp_0_1_271 = 0; bytes_216 = struct.new "core:prelude//List<u8>" { repr: array.new_fixed<u8>(), used: 0 }; b26: block {
+    }).repr; request = method.used; $sroa_$pattern_temp_0_1_281 = 0; bytes_216 = struct.new "core:prelude//List<u8>" { repr: array.new_fixed<u8>(), used: 0 }; b26: block {
         l27: loop {
-            break_if b26 $sroa_$pattern_temp_0_1_271 >= request;
-            $mv$scalar$advance = builtin::array_get_value<u8>($load_6, $sroa_$pattern_temp_0_1_271);
-            $sroa_$pattern_temp_0_1_271 = $sroa_$pattern_temp_0_1_271 + 1;
+            break_if b26 $sroa_$pattern_temp_0_1_281 >= request;
+            $mv$scalar$advance = builtin::array_get_value<u8>($load_6, $sroa_$pattern_temp_0_1_281);
+            $sroa_$pattern_temp_0_1_281 = $sroa_$pattern_temp_0_1_281 + 1;
             if @unlikely(local.tee $mv$scalar$valid(bytes_216.used) >= builtin::array_len(bytes_216.repr)) {
                 cold_path;
                 "core:prelude/list.wado/core:prelude/list.wado/List<u8>::grow"(bytes_216);

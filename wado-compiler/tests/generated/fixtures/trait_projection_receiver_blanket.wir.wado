@@ -453,61 +453,61 @@ fn "trait_projection_receiver_blanket.wado/$test_0_a_projection_inside_a_receive
     let $v0: ref "core:prelude/slice.wado//SliceValueIter<i32>";
     let result: ref "core:prelude//List<i32>";
     let item_25: i32;
-    let used_28: i32;
-    let $sroa_it_repr_47: ref Array<i32>;
-    let $sroa_it_index_48: i32;
-    $sroa_it_repr_47 = local.tee $v0(struct.new "core:prelude/slice.wado//SliceValueIter<i32>" { repr: global:trait_projection_receiver_blanket.wado::$const_obj_1, index: 0, end: 3 }).repr;
-    $sroa_it_index_48 = 0;
+    let used_46: i32;
+    let $sroa_it_repr_57: ref Array<i32>;
+    let $sroa_it_index_58: i32;
+    $sroa_it_repr_57 = local.tee $v0(struct.new "core:prelude/slice.wado//SliceValueIter<i32>" { repr: global:trait_projection_receiver_blanket.wado::$const_obj_1, index: 0, end: 3 }).repr;
+    $sroa_it_index_58 = 0;
     result = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(), used: 0 };
     b0: block {
         l1: loop {
-            break_if b0 $sroa_it_index_48 >= 3;
-            item_25 = builtin::array_get_value<i32>($sroa_it_repr_47, $sroa_it_index_48);
-            $sroa_it_index_48 = $sroa_it_index_48 + 1;
-            if @unlikely(local.tee used_28(result.used) >= builtin::array_len(result.repr)) {
+            break_if b0 $sroa_it_index_58 >= 3;
+            item_25 = builtin::array_get_value<i32>($sroa_it_repr_57, $sroa_it_index_58);
+            $sroa_it_index_58 = $sroa_it_index_58 + 1;
+            if @unlikely(local.tee used_46(result.used) >= builtin::array_len(result.repr)) {
                 cold_path;
                 "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(result);
             }
-            builtin::array_set<i32>(result.repr, used_28, item_25);
-            result.used = used_28 + 1;
+            builtin::array_set<i32>(result.repr, used_46, item_25);
+            result.used = used_46 + 1;
             continue l1;
         };
     };
-    $sroa_it_index_48 = 0;
+    $sroa_it_index_58 = 0;
     item_25 = result.used;
-    $sroa_it_repr_47 = result.repr;
-    used_28 = 0;
+    $sroa_it_repr_57 = result.repr;
+    used_46 = 0;
     b3: block {
         l4: loop {
-            break_if b3 (((used_28 >= item_25) | ((used_28 + 1) >= item_25)) | (((used_28 + 1) + 1) >= item_25)) | ((((used_28 + 1) + 1) + 1) >= item_25);
-            drop(builtin::array_get_value<i32>($sroa_it_repr_47, used_28));
-            used_28 = used_28 + 1;
-            $sroa_it_index_48 = $sroa_it_index_48 + 1;
-            drop(builtin::array_get_value<i32>($sroa_it_repr_47, used_28));
-            used_28 = used_28 + 1;
-            $sroa_it_index_48 = $sroa_it_index_48 + 1;
-            drop(builtin::array_get_value<i32>($sroa_it_repr_47, used_28));
-            used_28 = used_28 + 1;
-            $sroa_it_index_48 = $sroa_it_index_48 + 1;
-            drop(builtin::array_get_value<i32>($sroa_it_repr_47, used_28));
-            used_28 = used_28 + 1;
-            $sroa_it_index_48 = $sroa_it_index_48 + 1;
+            break_if b3 (((used_46 >= item_25) | ((used_46 + 1) >= item_25)) | (((used_46 + 1) + 1) >= item_25)) | ((((used_46 + 1) + 1) + 1) >= item_25);
+            drop(builtin::array_get_value<i32>($sroa_it_repr_57, used_46));
+            used_46 = used_46 + 1;
+            $sroa_it_index_58 = $sroa_it_index_58 + 1;
+            drop(builtin::array_get_value<i32>($sroa_it_repr_57, used_46));
+            used_46 = used_46 + 1;
+            $sroa_it_index_58 = $sroa_it_index_58 + 1;
+            drop(builtin::array_get_value<i32>($sroa_it_repr_57, used_46));
+            used_46 = used_46 + 1;
+            $sroa_it_index_58 = $sroa_it_index_58 + 1;
+            drop(builtin::array_get_value<i32>($sroa_it_repr_57, used_46));
+            used_46 = used_46 + 1;
+            $sroa_it_index_58 = $sroa_it_index_58 + 1;
             continue l4;
         };
     };
     b5: block {
         l6: loop {
-            break_if b5 used_28 >= item_25;
-            drop(builtin::array_get_value<i32>($sroa_it_repr_47, used_28));
-            used_28 = used_28 + 1;
-            $sroa_it_index_48 = $sroa_it_index_48 + 1;
+            break_if b5 used_46 >= item_25;
+            drop(builtin::array_get_value<i32>($sroa_it_repr_57, used_46));
+            used_46 = used_46 + 1;
+            $sroa_it_index_58 = $sroa_it_index_58 + 1;
             continue l6;
         };
     };
-    if @unlikely($sroa_it_index_48 != 3) {
+    if @unlikely($sroa_it_index_58 != 3) {
         cold_path;
         let $mv_arg_1: ref "core:prelude/string.wado//String";
-        "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<trait_projection_receiver_blanket.wado/$tmpl$1beae6870a653c1c,[core:prelude/slice.wado/SliceValueIter<i32>,i32]>"(struct.new "trait_projection_receiver_blanket.wado//$tmpl$1beae6870a653c1c" { h0: $v0, h1: $sroa_it_index_48, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_0_a_projection_inside_a_receiver_s_arguments_lowers_with_it at trait_projection_receiver_blanket.wado:16
+        "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<trait_projection_receiver_blanket.wado/$tmpl$1beae6870a653c1c,[core:prelude/slice.wado/SliceValueIter<i32>,i32]>"(struct.new "trait_projection_receiver_blanket.wado//$tmpl$1beae6870a653c1c" { h0: $v0, h1: $sroa_it_index_58, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_0_a_projection_inside_a_receiver_s_arguments_lowers_with_it at trait_projection_receiver_blanket.wado:16
 condition: count(xs.into_iter()) == 3
 xs.into_iter(): "), used: 185 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_0_a_projection_inside_a_receiver_s_arguments_lowers_with_it at trait_projection_receiver_blanket.wado:16
 condition: count(xs.into_iter()) == 3

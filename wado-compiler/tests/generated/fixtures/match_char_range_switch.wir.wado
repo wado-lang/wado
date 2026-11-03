@@ -67,44 +67,44 @@ fn "match_char_range_switch.wado/run"() with Stdout {
     let out_26: ref "core:prelude/string.wado//String";
     let x: i64;
     let b0: u32;
-    let b2_138: u32;
+    let b2_142: u32;
     let b3: u32;
     let q: u64;
-    let $sroa_slot_182: i32;
-    let $sroa_$iter_0_repr_183: ref Array<u8>;
-    let $sroa_$iter_0_byte_index_185: i32;
+    let $sroa_slot_186: i32;
+    let $sroa_$iter_0_repr_187: ref Array<u8>;
+    let $sroa_$iter_0_byte_index_189: i32;
     sum = 0;
-    $sroa_$iter_0_repr_183 = global:match_char_range_switch.wado::$const_obj_0;
-    $sroa_$iter_0_byte_index_185 = 0;
+    $sroa_$iter_0_repr_187 = global:match_char_range_switch.wado::$const_obj_0;
+    $sroa_$iter_0_byte_index_189 = 0;
     b0: block {
         l1: loop {
-            break_if b0 $sroa_$iter_0_byte_index_185 >= 5;
+            break_if b0 $sroa_$iter_0_byte_index_189 >= 5;
             $inline_decode_char_at_1: block {
-                if local.tee b0(builtin::array_get_value<u8>($sroa_$iter_0_repr_183, $sroa_$iter_0_byte_index_185)) <u 128 {
-                    $sroa_slot_182 = 1;
+                if local.tee b0(builtin::array_get_value<u8>($sroa_$iter_0_repr_187, $sroa_$iter_0_byte_index_189)) <u 128 {
+                    $sroa_slot_186 = 1;
                     break $inline_decode_char_at_1;
                 }
                 if b0 <u 224 {
-                    $sroa_slot_182 = builtin::array_get_value<u8>($sroa_$iter_0_repr_183, $sroa_$iter_0_byte_index_185 + 1);
-                    b0 = ((b0 & 31) << 6) | ($sroa_slot_182 & 63);
-                    $sroa_slot_182 = 2;
+                    $sroa_slot_186 = builtin::array_get_value<u8>($sroa_$iter_0_repr_187, $sroa_$iter_0_byte_index_189 + 1);
+                    b0 = ((b0 & 31) << 6) | ($sroa_slot_186 & 63);
+                    $sroa_slot_186 = 2;
                     break $inline_decode_char_at_1;
                 }
                 if b0 <u 240 {
-                    $sroa_slot_182 = builtin::array_get_value<u8>($sroa_$iter_0_repr_183, $sroa_$iter_0_byte_index_185 + 1);
-                    b2_138 = builtin::array_get_value<u8>($sroa_$iter_0_repr_183, $sroa_$iter_0_byte_index_185 + 2);
-                    b0 = (((b0 & 15) << 12) | (($sroa_slot_182 & 63) << 6)) | (b2_138 & 63);
-                    $sroa_slot_182 = 3;
+                    $sroa_slot_186 = builtin::array_get_value<u8>($sroa_$iter_0_repr_187, $sroa_$iter_0_byte_index_189 + 1);
+                    b2_142 = builtin::array_get_value<u8>($sroa_$iter_0_repr_187, $sroa_$iter_0_byte_index_189 + 2);
+                    b0 = (((b0 & 15) << 12) | (($sroa_slot_186 & 63) << 6)) | (b2_142 & 63);
+                    $sroa_slot_186 = 3;
                     break $inline_decode_char_at_1;
                 }
-                $sroa_slot_182 = builtin::array_get_value<u8>($sroa_$iter_0_repr_183, $sroa_$iter_0_byte_index_185 + 1);
-                b2_138 = builtin::array_get_value<u8>($sroa_$iter_0_repr_183, $sroa_$iter_0_byte_index_185 + 2);
-                b3 = builtin::array_get_value<u8>($sroa_$iter_0_repr_183, $sroa_$iter_0_byte_index_185 + 3);
-                b0 = ((((b0 & 7) << 18) | (($sroa_slot_182 & 63) << 12)) | ((b2_138 & 63) << 6)) | (b3 & 63);
-                $sroa_slot_182 = 4;
+                $sroa_slot_186 = builtin::array_get_value<u8>($sroa_$iter_0_repr_187, $sroa_$iter_0_byte_index_189 + 1);
+                b2_142 = builtin::array_get_value<u8>($sroa_$iter_0_repr_187, $sroa_$iter_0_byte_index_189 + 2);
+                b3 = builtin::array_get_value<u8>($sroa_$iter_0_repr_187, $sroa_$iter_0_byte_index_189 + 3);
+                b0 = ((((b0 & 7) << 18) | (($sroa_slot_186 & 63) << 12)) | ((b2_142 & 63) << 6)) | (b3 & 63);
+                $sroa_slot_186 = 4;
                 break $inline_decode_char_at_1;
             };
-            $sroa_$iter_0_byte_index_185 = $sroa_$iter_0_byte_index_185 + $sroa_slot_182;
+            $sroa_$iter_0_byte_index_189 = $sroa_$iter_0_byte_index_189 + $sroa_slot_186;
             sum = sum + b5: block -> i32 {
                 b6: block {
                     b7: block {
@@ -134,7 +134,7 @@ fn "match_char_range_switch.wado/run"() with Stdout {
     $inline_core_prelude_string_wado_String__internal_push_view_28: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_28;
     };
-    $sroa_$iter_0_byte_index_185 = sum < 0;
+    $sroa_$iter_0_byte_index_189 = sum < 0;
     x = builtin::i64_extend_i32_s(sum);
     x = select i64(x < 0_i64, 0_i64 - x, x);
     sum = $inline_count_digits_u64_2: block -> i32 {
@@ -197,52 +197,52 @@ fn "match_char_range_switch.wado/run"() with Stdout {
         }
         break $inline_count_digits_u64_2: 20;
     };
-    if $sroa_$iter_0_byte_index_185 {
-        if @unlikely(local.tee $sroa_$iter_0_byte_index_185(0 + 1) > builtin::array_len(out_26.repr)) {
+    if $sroa_$iter_0_byte_index_189 {
+        if @unlikely(local.tee $sroa_$iter_0_byte_index_189(0 + 1) > builtin::array_len(out_26.repr)) {
             cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_26, $sroa_$iter_0_byte_index_185);
+            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_26, $sroa_$iter_0_byte_index_189);
         }
         b0 = out_26.used;
-        out_26.used = $sroa_$iter_0_byte_index_185;
+        out_26.used = $sroa_$iter_0_byte_index_189;
         builtin::array_set_u8(out_26.repr, b0, 45);
     } else {
     }
-    if @unlikely(local.tee $sroa_$iter_0_byte_index_185(out_26.used + sum) > builtin::array_len(out_26.repr)) {
+    if @unlikely(local.tee $sroa_$iter_0_byte_index_189(out_26.used + sum) > builtin::array_len(out_26.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_26, $sroa_$iter_0_byte_index_185);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_26, $sroa_$iter_0_byte_index_189);
     }
     b0 = out_26.used;
-    out_26.used = $sroa_$iter_0_byte_index_185;
-    $sroa_$iter_0_repr_183 = out_26.repr;
+    out_26.used = $sroa_$iter_0_byte_index_189;
+    $sroa_$iter_0_repr_187 = out_26.repr;
     sum = b0 + sum;
     b33: block {
         l34: loop {
             break_if b33 (sum - b0) < 2;
             q = x /u 100_i64;
-            $sroa_slot_182 = local.tee $sroa_$iter_0_byte_index_185(builtin::i32_wrap_i64(x - (q * 100_i64))) / 10;
-            builtin::array_set_u8($sroa_$iter_0_repr_183, sum - 1, (48 + $sroa_$iter_0_byte_index_185) - ($sroa_slot_182 * 10));
-            builtin::array_set_u8($sroa_$iter_0_repr_183, sum - 2, 48 + $sroa_slot_182);
+            $sroa_slot_186 = local.tee $sroa_$iter_0_byte_index_189(builtin::i32_wrap_i64(x - (q * 100_i64))) / 10;
+            builtin::array_set_u8($sroa_$iter_0_repr_187, sum - 1, (48 + $sroa_$iter_0_byte_index_189) - ($sroa_slot_186 * 10));
+            builtin::array_set_u8($sroa_$iter_0_repr_187, sum - 2, 48 + $sroa_slot_186);
             sum = sum - 2;
             x = q;
             continue l34;
         };
     };
     if sum > b0 {
-        builtin::array_set_u8($sroa_$iter_0_repr_183, b0, 48 + builtin::i32_wrap_i64(x %u 10_i64));
+        builtin::array_set_u8($sroa_$iter_0_repr_187, b0, 48 + builtin::i32_wrap_i64(x %u 10_i64));
     }
     $inline_core_prelude_string_wado_String__internal_push_view_47: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_47;
     };
     sum = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
-    $sroa_$iter_0_byte_index_185 = builtin::i32_wrap_i64(x >> 32_i64);
+    $sroa_$iter_0_byte_index_189 = builtin::i32_wrap_i64(x >> 32_i64);
     sum = "match_char_range_switch.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(sum);
-    builtin::array_copy<u8>(local.tee $sroa_$iter_0_repr_183(builtin::array_new<u8>(local.tee b0(out_26.used) + 1)), 0, out_26.repr, 0, b0);
-    builtin::array_set_u8($sroa_$iter_0_repr_183, b0, 10);
+    builtin::array_copy<u8>(local.tee $sroa_$iter_0_repr_187(builtin::array_new<u8>(local.tee b0(out_26.used) + 1)), 0, out_26.repr, 0, b0);
+    builtin::array_set_u8($sroa_$iter_0_repr_187, b0, 10);
     drop(block -> "core:prelude/types.wado//enum:CopyResult" {
         b0 = b0 + 1;
-        "core:rt/cm_stream_write_raw_all_u8"($sroa_$iter_0_byte_index_185, $sroa_$iter_0_repr_183, 0, b0);
+        "core:rt/cm_stream_write_raw_all_u8"($sroa_$iter_0_byte_index_189, $sroa_$iter_0_repr_187, 0, b0);
     });
-    "wasi/stream-drop-writable"($sroa_$iter_0_byte_index_185);
+    "wasi/stream-drop-writable"($sroa_$iter_0_byte_index_189);
     "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(sum);
 }
 

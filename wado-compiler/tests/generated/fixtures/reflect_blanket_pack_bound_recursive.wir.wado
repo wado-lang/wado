@@ -2796,35 +2796,35 @@ fn "core:collections/hashmap.wado/core:collections/hashmap.wado/HashMap<reflect_
     let $load_0: ref "core:collections/entries.wado//EntryLog<reflect_blanket_pack_bound_recursive.wado/Node,()>";
     let alive: ref Array<bool>;
     let table: ref Array<i32>;
-    let s: i32;
     let a: ref Array<i32>;
     let current: i32;
-    let $sroa_v_end_36: i32;
-    let $sroa_$iter_2_start_37: i32;
-    let $licm_arith_40: u32;
+    let s_43: i32;
+    let $sroa_v_end_52: i32;
+    let $sroa_$iter_2_start_53: i32;
+    let $licm_arith_56: u32;
     self.table = builtin::array_fill<i32>(local.tee a(builtin::array_new<i32>(slots)), 0, -1, slots); a;
     self.shift = 32 - builtin::i32_ctz(slots);
     slots = slots - 1;
     alive = local.tee $load_0(self.log).alive;
     a = self.fps;
     table = self.table;
-    $sroa_v_end_36 = $load_0.count;
-    $sroa_$iter_2_start_37 = 0;
-    $licm_arith_40 = self.shift;
+    $sroa_v_end_52 = $load_0.count;
+    $sroa_$iter_2_start_53 = 0;
+    $licm_arith_56 = self.shift;
     b339: block {
         l340: loop {
-            break_if b339 $sroa_$iter_2_start_37 >= $sroa_v_end_36;
-            $sroa_$iter_2_start_37 = local.tee current($sroa_$iter_2_start_37) + 1;
+            break_if b339 $sroa_$iter_2_start_53 >= $sroa_v_end_52;
+            $sroa_$iter_2_start_53 = local.tee current($sroa_$iter_2_start_53) + 1;
             if builtin::array_get_value<bool>(alive, current) {
-                s = builtin::array_get_value<i32>(a, current) >>u $licm_arith_40;
+                s_43 = builtin::array_get_value<i32>(a, current) >>u $licm_arith_56;
                 b342: block {
                     l343: loop {
-                        break_if b342 builtin::array_get_value<i32>(table, s) == -1;
-                        s = (s + 1) & slots;
+                        break_if b342 builtin::array_get_value<i32>(table, s_43) == -1;
+                        s_43 = (s_43 + 1) & slots;
                         continue l343;
                     };
                 };
-                builtin::array_set<i32>(table, s, current);
+                builtin::array_set<i32>(table, s_43, current);
             }
             continue l340;
         };

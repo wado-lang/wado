@@ -254,20 +254,20 @@ fn "inline_loop_site_allocates.wado/fill"(bytes) {
     let $load_0: i32;
     let out: ref "Array<inline_loop_site_allocates.wado/Cell>";
     let current: i32;
-    let $sroa_$iter_0_start_29: i32;
-    let $licm_repr_32: ref Array<u8>;
+    let $sroa_$iter_0_start_42: i32;
+    let $licm_repr_45: ref Array<u8>;
     out = builtin::array_new<ref "inline_loop_site_allocates.wado//Cell">(local.tee $load_0(bytes.used));
-    $sroa_$iter_0_start_29 = 0;
-    $licm_repr_32 = bytes.repr;
+    $sroa_$iter_0_start_42 = 0;
+    $licm_repr_45 = bytes.repr;
     b4: block {
         l5: loop {
-            break_if b4 $sroa_$iter_0_start_29 >= $load_0;
-            $sroa_$iter_0_start_29 = local.tee current($sroa_$iter_0_start_29) + 1;
+            break_if b4 $sroa_$iter_0_start_42 >= $load_0;
+            $sroa_$iter_0_start_42 = local.tee current($sroa_$iter_0_start_42) + 1;
             "inline_loop_site_allocates.wado/store_cell"(out, current, if @unlikely(current >=u $load_0) {
                 cold_path;
                 "inline_loop_site_allocates.wado/fill$cold0$dae[bytes]"(current, $load_0);
                 unreachable;
-            }; builtin::array_get_value<u8>($licm_repr_32, current));
+            }; builtin::array_get_value<u8>($licm_repr_45, current));
             continue l5;
         };
     };

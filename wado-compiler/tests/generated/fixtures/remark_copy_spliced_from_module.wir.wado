@@ -464,41 +464,41 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/
 fn "core:prelude/traits.wado/core:prelude/traits.wado/IterSkip<core:prelude/slice.wado/SliceValueIter<core:prelude/string.wado/String>>^core:prelude/traits.wado/Iterator::next"(self) {
     let $load_0: ref "core:prelude/slice.wado//SliceValueIter<core:prelude/string.wado/String>";
     let v_4: ref "core:prelude/string.wado//String";
-    let $licm_end_12: i32;
-    let $licm_repr_13: ref "Array<core:prelude/string.wado/String>";
-    let $hfs_index_14: i32;
-    let $av_15: i32;
-    $licm_end_12 = local.tee $load_0(self.inner).end;
-    $licm_repr_13 = $load_0.repr;
-    $hfs_index_14 = $load_0.index;
+    let $licm_end_14: i32;
+    let $licm_repr_15: ref "Array<core:prelude/string.wado/String>";
+    let $hfs_index_16: i32;
+    let $av_17: i32;
+    $licm_end_14 = local.tee $load_0(self.inner).end;
+    $licm_repr_15 = $load_0.repr;
+    $hfs_index_16 = $load_0.index;
     b57: block {
         l58: loop {
-            if local.tee $av_15(self.remaining) <= 0 {
-                $load_0.index = $hfs_index_14;
+            if local.tee $av_17(self.remaining) <= 0 {
+                $load_0.index = $hfs_index_16;
                 break b57;
             }
-            if $hfs_index_14 >= $licm_end_12 {
-                $load_0.index = $hfs_index_14;
+            if $hfs_index_16 >= $licm_end_14 {
+                $load_0.index = $hfs_index_16;
                 return ref.null none;
             }
-            v_4 = builtin::array_get_value<ref "core:prelude/string.wado//String">($licm_repr_13, $hfs_index_14);
+            v_4 = builtin::array_get_value<ref "core:prelude/string.wado//String">($licm_repr_15, $hfs_index_16);
             let $array_clone_src_1: ref Array<u8>;
             $array_clone_src_1 = v_4.repr;
             let $array_clone_len_3: i32;
             $array_clone_len_3 = v_4.used;
             builtin::array_copy<u8>(builtin::array_new<u8>($array_clone_len_3), 0, $array_clone_src_1, 0, $array_clone_len_3);
-            $hfs_index_14 = $hfs_index_14 + 1;
-            self.remaining = $av_15 - 1;
+            $hfs_index_16 = $hfs_index_16 + 1;
+            self.remaining = $av_17 - 1;
             continue l58;
         };
     };
     return $inline_core_prelude_slice_wado_SliceValueIter_core_prelude_string_wado_String__core_prelude_traits_wado_Iterator__next_2: block -> ref null "core:prelude/string.wado//String" {
-        if local.tee $licm_end_12($load_0.index) >= $load_0.end {
+        if local.tee $licm_end_14($load_0.index) >= $load_0.end {
             break $inline_core_prelude_slice_wado_SliceValueIter_core_prelude_string_wado_String__core_prelude_traits_wado_Iterator__next_2: ref.null none;
         }
-        $hfs_index_14 = local.tee v_4(builtin::array_get_value<ref "core:prelude/string.wado//String">($load_0.repr, $licm_end_12)).used;
-        v_4 = struct.new "core:prelude/string.wado//String" { repr: $array_clone_src_1 = v_4.repr; let $array_clone_dst_5: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_5(builtin::array_new<u8>($hfs_index_14)), 0, $array_clone_src_1, 0, $hfs_index_14); $array_clone_dst_5, used: $hfs_index_14 };
-        $load_0.index = $licm_end_12 + 1;
+        $hfs_index_16 = local.tee v_4(builtin::array_get_value<ref "core:prelude/string.wado//String">($load_0.repr, $licm_end_14)).used;
+        v_4 = struct.new "core:prelude/string.wado//String" { repr: $array_clone_src_1 = v_4.repr; let $array_clone_dst_5: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_5(builtin::array_new<u8>($hfs_index_16)), 0, $array_clone_src_1, 0, $hfs_index_16); $array_clone_dst_5, used: $hfs_index_16 };
+        $load_0.index = $licm_end_14 + 1;
         break $inline_core_prelude_slice_wado_SliceValueIter_core_prelude_string_wado_String__core_prelude_traits_wado_Iterator__next_2: v_4;
     };
 }

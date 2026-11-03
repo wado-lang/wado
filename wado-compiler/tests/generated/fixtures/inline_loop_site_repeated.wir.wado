@@ -247,27 +247,27 @@ fn "inline_loop_site_repeated.wado/tally"(bytes, modes) {
     let pos: i32;
     let end: i32;
     let ref_val: i32;
-    let $sroa_$iter_0_repr_22: ref Array<i32>;
-    let $sroa_$iter_0_index_23: i32;
+    let $sroa_$iter_0_repr_28: ref Array<i32>;
+    let $sroa_$iter_0_index_29: i32;
     total = 0;
     pos = 0;
     end = modes.used;
-    $sroa_$iter_0_repr_22 = modes.repr;
-    $sroa_$iter_0_index_23 = 0;
+    $sroa_$iter_0_repr_28 = modes.repr;
+    $sroa_$iter_0_index_29 = 0;
     b3: block {
         l4: loop {
-            break_if b3 $sroa_$iter_0_index_23 >= end;
-            ref_val = builtin::array_get_value<i32>($sroa_$iter_0_repr_22, $sroa_$iter_0_index_23);
-            $sroa_$iter_0_index_23 = $sroa_$iter_0_index_23 + 1;
+            break_if b3 $sroa_$iter_0_index_29 >= end;
+            ref_val = builtin::array_get_value<i32>($sroa_$iter_0_repr_28, $sroa_$iter_0_index_29);
+            $sroa_$iter_0_index_29 = $sroa_$iter_0_index_29 + 1;
             if ref_val == 0 {
-                let $mv$$pattern_temp_0$1: i32;
-                multivalue_bind [ref_val, $mv$$pattern_temp_0$1] = "inline_loop_site_repeated.wado/decode_at"(bytes, pos);
+                let $mv$$local_11_20$1: i32;
+                multivalue_bind [ref_val, $mv$$local_11_20$1] = "inline_loop_site_repeated.wado/decode_at"(bytes, pos);
                 total = total + ref_val;
-                pos = pos + $mv$$pattern_temp_0$1;
+                pos = pos + $mv$$local_11_20$1;
             } else {
-                multivalue_bind [ref_val, $mv$$pattern_temp_0$1] = "inline_loop_site_repeated.wado/decode_at"(bytes, pos);
+                multivalue_bind [ref_val, $mv$$local_11_20$1] = "inline_loop_site_repeated.wado/decode_at"(bytes, pos);
                 total = total - ref_val;
-                pos = pos + $mv$$pattern_temp_0$1;
+                pos = pos + $mv$$local_11_20$1;
             }
             continue l4;
         };

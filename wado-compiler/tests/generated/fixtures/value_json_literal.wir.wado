@@ -5688,14 +5688,14 @@ fn "core:value/core:value/Value^core:serde/Serialize::serialize<core:json/JsonSe
     let map: ref "core:collections/treemap.wado//TreeMap<core:prelude/string.wado/String,core:value/Value>";
     let $iter_1: ref "core:collections/entries.wado//MapEntriesRefIter<core:prelude/string.wado/String,core:value/Value>";
     let val_24: ref "core:prelude/types.wado//Box<core:value/Value>";
-    let $local_30: ref null "core:serde//SerializeError";
     let $local_31: ref null "tuple//[&core:prelude/string.wado/String, core:prelude/types.wado/Box<core:value/Value>]";
     let v_82: i64;
     let hi: i64;
     let v_368: f64;
     let v_374: ref "core:prelude/slice.wado//Slice<u8>";
-    let $sroa_$iter_0_repr_613: ref "Array<core:value/Value>";
-    let start_665: i32;
+    let $local_30_575: ref null "core:serde//SerializeError";
+    let $sroa_$iter_0_repr_614: ref "Array<core:value/Value>";
+    let start_666: i32;
     let $sroa_slot_54: "core:prelude/fpfmt.wado//enum:SpecialKind";
     $load_0 = s.used;
     return (if local.tee $load_1(self.discriminant) == 0 -> ref null "core:serde//SerializeError" {
@@ -5876,9 +5876,9 @@ fn "core:value/core:value/Value^core:serde/Serialize::serialize<core:json/JsonSe
                         cold_path;
                         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(s, $load_1);
                     }
-                    start_665 = s.used;
+                    start_666 = s.used;
                     s.used = $load_1;
-                    builtin::array_copy<u8>(s.repr, start_665, global:core:prelude/primitive.wado::$const_obj_4, 0, 1);
+                    builtin::array_copy<u8>(s.repr, start_666, global:core:prelude/primitive.wado::$const_obj_4, 0, 1);
                 } else {
                 }
                 "core:prelude/fpfmt.wado/write_decimal"(s, v_82, $load_0, $sroa_slot_54);
@@ -5928,16 +5928,16 @@ fn "core:value/core:value/Value^core:serde/Serialize::serialize<core:json/JsonSe
         builtin::array_copy<u8>(s.repr, $load_1, global:core:value::$const_obj_65, 0, 1);
         seq = struct.new "core:json//JsonSeqSerializer" { buf: s, count: 0 };
         $load_0 = arr.used;
-        $sroa_$iter_0_repr_613 = arr.repr;
+        $sroa_$iter_0_repr_614 = arr.repr;
         $load_1 = 0;
         b768: block {
             l769: loop {
                 break_if b768 $load_1 >= $load_0;
-                self = builtin::array_get_value<ref "core:value//Value">($sroa_$iter_0_repr_613, $load_1);
+                self = builtin::array_get_value<ref "core:value//Value">($sroa_$iter_0_repr_614, $load_1);
                 $load_1 = $load_1 + 1;
-                if @likely(ref.is_null(local.tee $local_30("core:json/core:json/JsonSeqSerializer^core:serde/SerializeSeq::element<core:value/Value>$sroa[value.value]"(seq, self)))) {
+                if @likely(ref.is_null(local.tee $local_30_575("core:json/core:json/JsonSeqSerializer^core:serde/SerializeSeq::element<core:value/Value>$sroa[value.value]"(seq, self)))) {
                 } else {
-                    $qm_e_17 = ref.as_non_null($local_30);
+                    $qm_e_17 = ref.as_non_null($local_30_575);
                     cold_path;
                     return $qm_e_17;
                 }
@@ -5986,11 +5986,11 @@ fn "core:value/core:value/Value^core:serde/Serialize::serialize<core:json/JsonSe
                     $sroa_slot_54 = s.used;
                     s.used = $load_1;
                     builtin::array_copy<u8>(s.repr, $sroa_slot_54, global:core:value::$const_obj_61, 0, 1);
-                    $local_30 = "core:value/core:value/Value^core:serde/Serialize::serialize<core:json/JsonSerializer>$sroa[self.value,s.buf]"(val_24.value, s);
+                    $local_30_575 = "core:value/core:value/Value^core:serde/Serialize::serialize<core:json/JsonSerializer>$sroa[self.value,s.buf]"(val_24.value, s);
                     $load_0 = $load_0 + 1;
-                    if @likely(ref.is_null($local_30)) {
+                    if @likely(ref.is_null($local_30_575)) {
                     } else {
-                        $qm_e_17 = ref.as_non_null($local_30);
+                        $qm_e_17 = ref.as_non_null($local_30_575);
                         cold_path;
                         return $qm_e_17;
                     }
