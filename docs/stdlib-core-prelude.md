@@ -4958,12 +4958,6 @@ The tag an untagged template is sugar for: every hole rendered through
 its specifier into one buffer. `` `x=${x}` `` is
 `` String::format`x=${x}` ``. See WEP 2026-01-10.
 
-#### `pub fn raw<T: ReflectTemplate<Holes = [..V]>, affine ..V>(t: T) -> String`
-
-The tag keeping a template's escapes as written: `` String::raw`a\nb` ``
-is `"a\\nb"`, its holes rendered as `String::format` renders them. See
-WEP 2026-01-10.
-
 #### `pub fn with_capacity(capacity: i32) -> String`
 
 Create an empty string with space for `capacity` bytes.
