@@ -1,7 +1,12 @@
 use std::cmp::Reverse;
 use std::collections::BTreeMap;
 use std::fs;
+use std::num::NonZero;
 use std::path::Path;
+use std::sync::Arc;
+
+use tokio::sync::Semaphore;
+use tokio::task::JoinSet;
 
 use serde_json::json;
 use wado_lsp::{
@@ -136,18 +141,55 @@ pub async fn run_scip(dir: &str, output: &str) -> Result<(), CliExit> {
         .flat_map(|pkg| pkg.files)
         .collect();
     files.sort();
-    let mut documents = Vec::new();
-    for file in &files {
-        let prepared = prepare_query(&file.to_string_lossy()).await?;
-        let document = prepared
-            .engine
-            .scip_document(&prepared.uri, &root_uri, &prepared.host)
+    let cores = std::thread::available_parallelism().map_or(1, NonZero::get);
+    let slots = Arc::new(Semaphore::new(cores));
+    let mut analyses = JoinSet::new();
+    for (order, file) in files.into_iter().enumerate() {
+        let slot = Arc::clone(&slots)
+            .acquire_owned()
             .await
-            .expect("the document was just opened");
-        documents.push(document);
+            .expect("the scip semaphore is never closed");
+        let root_uri = root_uri.clone();
+        // Each file is its own analysis, the stdlib included, so they run a
+        // core each; an engine is not `Send`, so each gets a runtime of its own.
+        analyses.spawn_blocking(move || {
+            let _slot = slot;
+            let document = tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .map_err(|e| CliExit::error(format!("unable to create a scip runtime: {e}")))?
+                .block_on(scip_document_of(&file, &root_uri));
+            Ok::<_, CliExit>((order, document))
+        });
     }
+    let mut documents = Vec::new();
+    while let Some(joined) = analyses.join_next().await {
+        if let (order, Some(document)) = joined.expect("a scip analysis panicked")? {
+            documents.push((order, document));
+        }
+    }
+    documents.sort_by_key(|(order, _)| *order);
+    let documents: Vec<_> = documents.into_iter().map(|(_, document)| document).collect();
     let index = wado_lsp::scip::encode_index(&root_uri, env!("CARGO_PKG_VERSION"), &documents);
     fs::write(output, index).map_err(|e| CliExit::error(format!("writing '{output}': {e}")))
+}
+
+/// One file that cannot load (a malformed manifest, say) costs its own
+/// document, not the index.
+async fn scip_document_of(file: &Path, root_uri: &str) -> Option<wado_lsp::scip::ScipDocument> {
+    let prepared = match prepare_query(&file.to_string_lossy()).await {
+        Ok(prepared) => prepared,
+        Err(e) => {
+            eprint!("warning: skipping '{}': {}", file.display(), e.message);
+            return None;
+        }
+    };
+    let document = prepared
+        .engine
+        .scip_document(&prepared.uri, root_uri, &prepared.host)
+        .await
+        .expect("the document was just opened");
+    Some(document)
 }
 
 pub async fn run_diagnostics(filename: &str, json_output: bool) -> Result<(), CliExit> {

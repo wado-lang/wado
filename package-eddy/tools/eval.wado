@@ -1,6 +1,9 @@
 //! What the evaluation-set tools share: running `git`, the pull requests merged
 //! into `main`, and the census they exchange as JSON.
 
+use { env, Environment } from "core:cli";
+use fs from "core:fs";
+use { Preopens } from "core:fs";
 use { Command, Process, ProcessError } from "core:process";
 use { Deserialize } from "core:serde";
 use { from_string } from "core:json";
@@ -150,8 +153,38 @@ pub fn snapshot(sha: &String) -> String with Process {
     return root;
 }
 
-pub fn drop_snapshot(root: &String) with Process {
+pub fn drop_snapshot(root: &String) with (Process, Preopens) {
     git(["worktree", "remove", "--force", *root]);
+    fs::remove_dir_all(index_dir(root)).unwrap();
+}
+
+fn index_dir(root: &String) -> String {
+    return `${*root}-index`;
+}
+
+/// SCIP indexes of the tree at `root`, outside it so Glob never lists them:
+/// its Rust by rust-analyzer and its Wado by `wado`, the binary at
+/// `wado_path`. The Wado index reads the old tree with today's compiler, so a
+/// file that no longer compiles indexes only what still resolves.
+pub fn index(root: &String, wado_path: &String) -> List<String> with (Process, Environment, Preopens) {
+    let dir = index_dir(root);
+    let rust = `${dir}/rust.scip`;
+    let wado = `${dir}/wado.scip`;
+    fs::create_dir_all(&dir).unwrap();
+    // A child gets a private HOME, where rustup would find no toolchain.
+    let home = env("HOME").unwrap_or("");
+    let analyzer = Command::new("rust-analyzer")
+        .args(["scip", *root, "--output", rust, "--exclude-vendored-libraries"])
+        .env("RUSTUP_HOME", env("RUSTUP_HOME").unwrap_or(`${home}/.rustup`))
+        .env("CARGO_HOME", env("CARGO_HOME").unwrap_or(`${home}/.cargo`));
+    succeed(&analyzer);
+    succeed(&Command::new(*wado_path).args(["query", "scip", "--output", wado, *root]));
+    return [rust, wado];
+}
+
+fn succeed(command: &Command) with Process {
+    let out = command.capture_limit(i32::MAX).output().unwrap();
+    assert out.status == Exited(0), `${String::from_utf8_lossy(out.stderr)}`;
 }
 
 /// The paths merge `sha` changed, both sides of a rename: a diff given only
