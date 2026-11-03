@@ -1,0 +1,20 @@
+// An `#[ambient]` function whose interface is absent returns
+// `Default::default()` instead of running, and `!` has no value to return.
+use { println, Stdout } from "core:cli";
+
+#[allow(undeclared_effects)]
+#[ambient(Stdout)]
+fn die(message: String) -> ! {
+    println(message);
+    builtin::unreachable();
+}
+
+export fn run() {
+    die("bye");
+}
+
+__DATA__
+{
+  "compile_error": ":7:4: analysis error: `#[ambient]` function 'die' returns '!', which does not implement `Default`",
+  "compile_error_codes": ["TRAIT_BOUND_NOT_SATISFIED"]
+}

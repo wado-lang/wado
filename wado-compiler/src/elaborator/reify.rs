@@ -22,8 +22,9 @@ use crate::lower::plan::value_copy::place::{is_source_place, source_place_subscr
 use crate::lower::wide_int_literal::{create_literal, method_ref};
 use crate::module_source::ModuleSource;
 use crate::name::{
-    CONTRACT_CLAUSE_INTRINSIC, CONTRACT_SITE_INTRINSIC, FqTypeName, Receiver, TypeHead,
-    contract_owner_name, global_init_function, global_name, unchecked_twin_name,
+    AMBIENT_GUARD_INTRINSIC, CONTRACT_CLAUSE_INTRINSIC, CONTRACT_SITE_INTRINSIC, FqTypeName,
+    Receiver, TypeHead, contract_owner_name, global_init_function, global_name,
+    unchecked_twin_name,
 };
 use crate::ownership::{self, BodyFacts as _, Modes};
 use crate::symbol::SymbolTable;
@@ -92,8 +93,8 @@ use crate::pgo::MarkMap;
 use crate::rarity::Mark;
 use crate::symbol::{Symbol, SymbolKind};
 use crate::synthesis::common::{
-    bare_cast, bool_lit, builtin_call, cold_path_stmt, handle_bits, known_cold_path_stmt,
-    marker_stmt_mark, not_expr, ord_bool_from_cmp, rt_call,
+    bare_cast, bool_lit, builtin_call, cold_path_stmt, compiler_item_call, handle_bits, i32_const,
+    known_cold_path_stmt, marker_stmt_mark, not_expr, ord_bool_from_cmp, rt_call,
 };
 use crate::tir::{
     EffectRef, ExitScope, StructDef, TemplateId, TirEffectOp, TirField, TirImpl, TirParam,
@@ -1423,27 +1424,14 @@ impl<'a> Reify<'a> {
     /// what an `#[ambient]` function answers without them: `Default::default()`,
     /// or nothing for one returning `()`. The optimizer decides each guard once
     /// for the whole component.
-    fn guard_ambient_body(
-        &self,
-        body: TirBlock,
-        hosts: &[String],
-        return_type: TypeId,
-    ) -> TirBlock {
+    fn guard_ambient_body(&self, body: TirBlock, hosts: &[usize], return_type: TypeId) -> TirBlock {
         let span = body.span;
-        let string_type = self
-            .tysys
-            .type_table
-            .borrow_mut()
-            .make_compiler_struct(CompilerItem::String);
-        let guarded = hosts.iter().rev().fold(body, |inner, fq| {
-            let fq = TirExpr::new(TirExprKind::StringLiteral(fq.clone()), string_type, span);
-            let condition = self.stdlib_call(
-                &ModuleSource::builtin(),
-                "ambient_available",
-                vec![],
-                vec![fq],
+        let guarded = hosts.iter().rev().fold(body, |inner, &host| {
+            let host = i32::try_from(host).expect("a program declares fewer than 2^31 interfaces");
+            let condition = builtin_call(
+                AMBIENT_GUARD_INTRINSIC,
+                vec![i32_const(host)],
                 TypeTable::BOOL,
-                span,
             );
             let guard = TirStmtKind::If {
                 condition,
@@ -1454,15 +1442,14 @@ impl<'a> Reify<'a> {
         });
         let mut stmts = guarded.stmts;
         if return_type != TypeTable::UNIT {
-            let (module, name) = {
-                let tt = self.tysys.type_table.borrow();
-                let (module, name) = tt
-                    .compiler_items()
-                    .require_function(CompilerItem::AmbientDefault);
-                (module.clone(), name.to_string())
-            };
-            let fallback =
-                self.stdlib_call(&module, &name, vec![return_type], vec![], return_type, span);
+            let fallback = compiler_item_call(
+                &self.tysys.type_table.borrow(),
+                CompilerItem::AmbientDefault,
+                vec![return_type],
+                vec![],
+                return_type,
+                span,
+            );
             stmts.push(TirStmt::new(
                 TirStmtKind::Return {
                     value: Some(fallback),
@@ -1471,39 +1458,6 @@ impl<'a> Reify<'a> {
             ));
         }
         TirBlock::new(stmts, span)
-    }
-
-    /// A call to the standard library function `name` that `module` declares.
-    fn stdlib_call(
-        &self,
-        module: &ModuleSource,
-        name: &str,
-        type_args: Vec<TypeId>,
-        args: Vec<TirExpr>,
-        result_type: TypeId,
-        span: Span,
-    ) -> TirExpr {
-        let def = self
-            .tysys
-            .resolutions
-            .resolve_in(module, name)
-            .expect("the standard library declares the functions the compiler calls");
-        let func = tir::FunctionRef {
-            module_source: module.clone(),
-            name: name.to_string(),
-            template: Some(self.tysys.signatures.declared_template(def)),
-            monomorph_info: None,
-            method_info: None,
-        };
-        TirExpr::new(
-            TirExprKind::Call {
-                func: Box::new(func),
-                type_args,
-                args: CallArgs::free(args.into_iter().map(|e| CallArg::new(e, false)).collect()),
-            },
-            result_type,
-            span,
-        )
     }
 
     /// Reify a free function.

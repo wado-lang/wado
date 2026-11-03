@@ -1,0 +1,14 @@
+// A generator reaching WASI through a `core:*` module names no `wasi:` import,
+// so the planned imports are what refuse it.
+
+use { hello } from "./sub/kiln/value.schema"
+    with {
+        generator: { module: "./sub/kiln/fs_reading_generator.wado" },
+    };
+
+test {
+    assert hello() == 7;
+}
+
+__DATA__
+{"compile_error": "error: kiln generator imports `wasi:filesystem/"}

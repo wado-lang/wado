@@ -1045,6 +1045,11 @@ pub struct CmInterfaceRegistry {
     /// interface of one component shares the same set (v1 component-level union).
     component_host_leaf_imports: IndexMap<String, Vec<String>>,
 
+    /// The host interfaces some `#[cm]` interface declaration performs, and the
+    /// position among them of each such declaration's.
+    host_interfaces: IndexSet<String>,
+    host_effects: IndexMap<DefId, usize>,
+
     /// World-level function imports (Phase 9), by the bodyless function
     /// declaring each -> its key in `functions`.
     world_imports: IndexMap<AstId, String>,
@@ -3183,19 +3188,45 @@ impl CmInterfaceRegistry {
             .any(|kind| self.declares_kind(kind, interface_fq, name))
     }
 
-    /// The interface whose functions the effects `module` declares perform: the
-    /// one of its interfaces that declares functions.
-    pub fn effect_interface(&self, module: &ModuleSource) -> Option<&str> {
-        let mut with_functions = self
-            .module_interfaces(module)
+    /// Record the host interface each `#[cm]` interface declaration among
+    /// `modules` performs. A component dependency's bindings declare none: the
+    /// interfaces it exports are served by that component, and those it imports
+    /// are guest effects its consumer handles.
+    pub fn register_host_effects<'m>(
+        &mut self,
+        modules: impl IntoIterator<Item = (&'m ModuleSource, &'m ast::Module)>,
+        defs: &DefTable,
+    ) {
+        let items = modules
             .into_iter()
-            .filter(|fq| self.declares_functions(fq));
-        let found = with_functions.next();
-        assert!(
-            with_functions.next().is_none(),
-            "a module binds at most one interface with functions"
-        );
-        found
+            .filter(|(source, _)| !matches!(source, ModuleSource::Wasm { .. }))
+            .flat_map(|(_, module)| &module.items);
+        for item in items {
+            let Item::Interface(decl) = item else {
+                continue;
+            };
+            let Some(cm) = cm_import_of(&decl.attrs) else {
+                continue;
+            };
+            let (host, _) = self.host_interfaces.insert_full(cm.interface_path());
+            self.host_effects.insert(defs.def_at(item.id()), host);
+        }
+    }
+
+    /// The position in [`Self::host_interface`] of the host interface the
+    /// effect `def` performs, or `None` for an effect a handler or a component
+    /// dependency answers.
+    #[must_use]
+    pub fn host_effect(&self, def: DefId) -> Option<usize> {
+        self.host_effects.get(&def).copied()
+    }
+
+    /// The host interface at `position`, as [`Self::host_effect`] numbers them.
+    #[must_use]
+    pub fn host_interface(&self, position: usize) -> &str {
+        self.host_interfaces
+            .get_index(position)
+            .expect("a position `host_effect` answered")
     }
 
     /// The interface declaring `decl`, and the CM name it exports `decl` under.

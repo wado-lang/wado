@@ -8,14 +8,12 @@
 use cranelift_entity::EntityRef;
 
 use super::dce::{DescriptorCache, reachable_cm_calls};
+use crate::name::AMBIENT_GUARD_INTRINSIC;
 use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, Operand, StmtId, StmtKind};
 use crate::nir_package::NirPackage;
 use crate::nir_value_graph::ValueKind;
 use crate::parallel::Executor;
 use crate::type_table::TypeTable;
-
-/// The `core:builtin` intrinsic a guard calls.
-const GUARD: &str = "ambient_available";
 
 /// One guard: the `if` statement at `stmt` in the function at `func`, whose
 /// condition `call` names `interface`.
@@ -110,18 +108,24 @@ fn find_guards(project: &NirPackage) -> Vec<Guard> {
             let ExprKind::Call { func_id, args, .. } = &body.exprs[*call].kind else {
                 continue;
             };
-            if project.functions[func_id.index()].borrow().intrinsic() != Some(GUARD) {
+            if project.functions[func_id.index()].borrow().intrinsic()
+                != Some(AMBIENT_GUARD_INTRINSIC)
+            {
                 continue;
             }
             let (None, [arg]) = args.split() else {
-                unreachable!("`{GUARD}` takes one argument");
+                unreachable!("the guard takes one argument");
             };
+            let host = host_position(body, arg.expr);
             guards.push(Guard {
                 func: pos,
                 stmt,
                 call: *call,
                 then_block: *then_block,
-                interface: literal_text(body, arg.expr),
+                interface: project
+                    .cm_interface_registry
+                    .host_interface(host)
+                    .to_string(),
                 withheld: None,
             });
         }
@@ -129,23 +133,14 @@ fn find_guards(project: &NirPackage) -> Vec<Guard> {
     guards
 }
 
-/// The text of the string literal reify passes a guard.
-fn literal_text(body: &Body, literal: Operand) -> String {
-    let Operand::Expr(literal) = literal else {
-        unreachable!("a guard's interface is a string literal");
+/// The host position reify passes a guard, an `i32` literal: the intrinsic is
+/// `internal` to the standard library, so no other caller reaches it.
+fn host_position(body: &Body, literal: Operand) -> usize {
+    let Operand::Value(value) = literal else {
+        unreachable!("a guard's host position is a literal");
     };
-    let ExprKind::StructLiteral { fields, .. } = &body.exprs[literal].kind else {
-        unreachable!("a string literal lowers to its struct");
+    let ValueKind::Int(host, _) = *body.values.kind(value) else {
+        unreachable!("a guard's host position is an integer");
     };
-    let backing = fields
-        .iter()
-        .find_map(|field| match field.value {
-            Operand::Expr(e) => match &body.exprs[e].kind {
-                ExprKind::PackedArray(data) => data.as_bytes(),
-                _ => None,
-            },
-            Operand::Value(_) => None,
-        })
-        .expect("a string literal holds its bytes");
-    String::from_utf8(backing.to_vec()).expect("an interface name is UTF-8")
+    usize::try_from(host).expect("a host position is not negative")
 }

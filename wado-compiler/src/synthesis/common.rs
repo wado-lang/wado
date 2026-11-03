@@ -7,7 +7,7 @@
 
 use crate::call_args::CallArgs;
 use crate::canonical::{CanonicalIntrinsic, CmCallTarget};
-use crate::compiler_item::{CompilerItem, CompilerItems};
+use crate::compiler_item::{CompilerItem, CompilerItems, Resolved};
 use crate::component_model::{CmFunctionInfo, peel_newtypes};
 use crate::hashmap::IndexSet;
 
@@ -262,15 +262,41 @@ pub fn rt_call(
     result_type: TypeId,
     span: Span,
 ) -> TirExpr {
-    let (module_source, name) = type_table.compiler_items().require_function(item);
-    let func = FunctionRef {
-        module_source: module_source.clone(),
-        name: name.to_string(),
-        template: None,
-        monomorph_info: None,
-        method_info: None,
+    compiler_item_call(type_table, item, vec![], vec![arg], result_type, span)
+}
+
+/// A call of the compiler function `item` at `type_args` on `args`.
+pub fn compiler_item_call(
+    type_table: &TypeTable,
+    item: CompilerItem,
+    type_args: Vec<TypeId>,
+    args: Vec<TirExpr>,
+    result_type: TypeId,
+    span: Span,
+) -> TirExpr {
+    let Resolved::Function {
+        module_source,
+        name,
+        def,
+    } = type_table.compiler_items().require(item)
+    else {
+        unreachable!("{item:?} is a function");
     };
-    unary_call(func, arg, result_type, span)
+    TirExpr::new(
+        TirExprKind::Call {
+            func: Box::new(FunctionRef {
+                module_source: module_source.clone(),
+                name: name.clone(),
+                template: def.map(|def| TemplateId::Declared { def, block: None }),
+                monomorph_info: None,
+                method_info: None,
+            }),
+            type_args,
+            args: CallArgs::free(args.into_iter().map(|e| CallArg::new(e, false)).collect()),
+        },
+        result_type,
+        span,
+    )
 }
 
 /// Wrap an `Ord::cmp` call into a `bool` by comparing the returned `Ordering`

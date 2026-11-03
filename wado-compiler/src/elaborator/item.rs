@@ -1339,23 +1339,18 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// reify guards its body with. Where one is absent the function answers
     /// `Default::default()`, so a value-returning one needs a `Default`.
     fn record_ambient_hosts(&mut self, func: &Function, return_type: TypeId) {
-        let hosts: Vec<String> = {
-            let resolutions = &self.tysys.resolutions;
-            let defs = resolutions.defs();
-            func.attrs
-                .iter()
-                .filter(|attr| attr.name == attribute::AMBIENT)
-                .flat_map(|attr| &attr.args)
-                .filter_map(|arg| resolutions.resolve_in(&self.current_module_source, arg.as_str()))
-                .filter(|&def| defs.kind(def).is_effect())
-                .filter_map(|def| {
-                    self.tysys
-                        .cm_interface_registry
-                        .effect_interface(defs.module(def))
-                        .map(str::to_string)
-                })
-                .collect()
-        };
+        let hosts: Vec<usize> = func
+            .attrs
+            .iter()
+            .filter(|attr| attr.name == attribute::AMBIENT)
+            .flat_map(|attr| &attr.args)
+            .filter_map(|arg| {
+                self.tysys
+                    .resolutions
+                    .resolve_in(&self.current_module_source, arg.as_str())
+            })
+            .filter_map(|def| self.tysys.cm_interface_registry.host_effect(def))
+            .collect();
         if hosts.is_empty() {
             return;
         }
@@ -1365,9 +1360,12 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 .type_table
                 .borrow()
                 .compiler_trait_fq(CompilerItem::Default);
-            if !self
-                .tysys
-                .type_implements_trait(&self.annotate_ctx, return_type, &default)
+            // `!` has no value to fall back on, whatever the trait query says
+            // of a type that coerces to every other.
+            if return_type == TypeTable::NEVER
+                || !self
+                    .tysys
+                    .type_implements_trait(&self.annotate_ctx, return_type, &default)
             {
                 let return_type = self.tysys.type_table.borrow().name(return_type);
                 let _ = self.emit(TypeError::AmbientWithoutDefault {

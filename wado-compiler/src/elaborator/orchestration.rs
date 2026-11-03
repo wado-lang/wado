@@ -906,6 +906,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             // annotate — the same role build_from_stdlib plays for WASI.
             fold_component_interfaces(&mut cm_interface_registry, modules, &stdlib_set)
                 .map_err(|msg| bail_with(logger, Code::DuplicateDefinition, msg))?;
+            Arc::make_mut(&mut cm_interface_registry)
+                .register_host_effects(modules, resolutions.defs());
             (cm_interface_registry, world_registry)
         };
         let builtin_registry = {
