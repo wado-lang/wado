@@ -22,6 +22,7 @@ use crate::module_source::ModuleSource;
 use crate::name::{
     FqTypeName, FreeFunctionName, FunctionId, MODULE_INIT_FUNCTION, MethodName, UNIT_TYPE_NAME,
     is_fn_type_name, mangle_generic_name, mangle_local_trait_method, mangle_method_generic,
+    retired_name,
 };
 use crate::nir::{FuncId, FunctionRef, NirFunction, NirImport, NirStruct};
 use crate::nir_arena::{
@@ -173,7 +174,7 @@ pub(super) fn analyze_dce(
     let mut graph = build_analysis_graph(project, descriptors, exec);
 
     let mut analysis = DceAnalysis::empty();
-    let reachable = compute_function_reachability(project, &mut graph);
+    let reachable = compute_function_reachability(project, &mut graph, &[]);
     resolve_imports(project, &graph, &reachable);
     analysis.functions = stored_positions(&reachable).collect();
     analysis.globals = compute_global_reachability(&graph, &analysis.functions);
@@ -181,7 +182,8 @@ pub(super) fn analyze_dce(
     analysis
 }
 
-/// Callers relevant to interprocedural facts, including cached rewrite targets.
+/// The functions reachable from the entries and from `cached`, the clones a
+/// later call may be pointed at.
 pub(super) fn reachable_function_positions(
     project: &NirPackage,
     cache: &mut DescriptorCache,
@@ -193,9 +195,11 @@ pub(super) fn reachable_function_positions(
     let functors = functor_methods(project);
     let analyses = walks.analyses(project, exec, descriptors, &functors);
     let mut graph = assemble_analysis_graph(project, Cow::Borrowed(analyses), functors);
-    let mut reachable = compute_function_reachability(project, &mut graph);
-    let roots = cached.into_iter().map(|id| Target::Stored(id.index()));
-    reachable.extend(compute_reachable(&graph, roots));
+    let roots: Vec<Target> = cached
+        .into_iter()
+        .map(|id| Target::Stored(id.index()))
+        .collect();
+    let reachable = compute_function_reachability(project, &mut graph, &roots);
     stored_positions(&reachable).collect()
 }
 
@@ -265,12 +269,17 @@ pub(super) fn callee_descriptor(descriptors: &[FunctionRef], func_id: FuncId) ->
 /// Consumes the call graph (and its pending inspect edges) built in the single
 /// AST walk of [`build_analysis_graph`]; mutates the graph by adding the gated
 /// per-functor `$Closure_N^Inspect` edges once the inspectable-signature set
-/// is known.
-fn compute_function_reachability(project: &NirPackage, graph: &mut AnalysisGraph) -> Reached {
+/// is known. `extra_roots` are reached as entries are, so every phase below
+/// sees what they reach.
+fn compute_function_reachability(
+    project: &NirPackage,
+    graph: &mut AnalysisGraph,
+    extra_roots: &[Target],
+) -> Reached {
     // Phase 2a: compute the provisional reachable set from the raw graph
     // (without per-functor `$Closure_N^Inspect` edges). This is what
     // determines whether a `:?` / `:#?` call site is actually live.
-    let reachable_v1 = compute_reachable_from_entries(project, graph);
+    let reachable_v1 = compute_reachable_from_entries(project, graph, extra_roots);
 
     // Phase 2b: derive the inspectable `(arity, ret)` set from the reachable
     // functions only, then add the gated inspect edges to the call graph. The
@@ -281,7 +290,7 @@ fn compute_function_reachability(project: &NirPackage, graph: &mut AnalysisGraph
     apply_inspect_edges(graph, &inspectable);
 
     // Phase 2c: re-compute the reachable set from the augmented graph.
-    let mut reachable = compute_reachable_from_entries(project, graph);
+    let mut reachable = compute_reachable_from_entries(project, graph, extra_roots);
 
     // Phase 3: extend reachable set with optimizer-induced virtual edges.
     // A pass may *synthesize* calls during the optimization loop. Their targets
@@ -298,44 +307,45 @@ fn stored_positions(reachable: &Reached) -> impl Iterator<Item = usize> + '_ {
     })
 }
 
-/// Add functions the NIR optimizer's rewrites reach without a call edge:
-/// `nir/string_push`'s append primitives and `array_clone::<T>`'s helper.
+/// Add functions the NIR optimizer's rewrites reach without a call edge: the
+/// items [`CompilerItem::rewritten_from`] declares, and `array_clone::<T>`'s
+/// helper.
 fn extend_reachable_for_optimizer_passes(
     project: &NirPackage,
     graph: &AnalysisGraph,
     reachable: &mut Reached,
 ) {
-    // `push_str` is generic over `AsStrSlice`, so the item marks one id per
-    // monomorph; any of them reaching the fusion keeps the primitives alive.
-    let mut append_ids: Vec<Target> = Vec::new();
-    let mut fused: Vec<Target> = Vec::new();
-    for (pos, func_rc) in project.functions.iter().enumerate() {
-        match func_rc.borrow().compiler_item {
-            Some(CompilerItem::StringPushStr | CompilerItem::StringPushChar) => {
-                append_ids.push(Target::Stored(pos));
-            }
-            Some(
-                CompilerItem::StringLen
-                | CompilerItem::StringReserveUninit
-                | CompilerItem::StringSetByteUnchecked
-                | CompilerItem::StringWriteStrAt,
-            ) => {
-                fused.push(Target::Stored(pos));
-            }
-            _ => {}
+    let items: Vec<(CompilerItem, Target)> = project
+        .functions
+        .iter()
+        .enumerate()
+        .filter_map(|(pos, func_rc)| Some((func_rc.borrow().compiler_item?, Target::Stored(pos))))
+        .collect();
+    // Rooted wherever what a rewrite replaces is reachable, though the rewrite
+    // may never fire: a later DCE drops what no rewrite called. A
+    // rooted target may itself be what another rewrite replaces, so to a
+    // fixpoint. A generic item marks one id per monomorph, so any of them counts.
+    loop {
+        let reached_items: IndexSet<CompilerItem> = items
+            .iter()
+            .filter(|(_, target)| reachable.contains(target))
+            .map(|(item, _)| *item)
+            .collect();
+        let rooted: Vec<Target> = items
+            .iter()
+            .filter(|(item, target)| {
+                !reachable.contains(target)
+                    && item
+                        .rewritten_from()
+                        .iter()
+                        .any(|from| reached_items.contains(from))
+            })
+            .map(|(_, target)| target.clone())
+            .collect();
+        if rooted.is_empty() {
+            break;
         }
-    }
-    // `nir/string_push`'s append fusion writes a run of appends in terms of the
-    // four `String` primitives above, so they must survive the pre-loop DCE
-    // wherever an append is reachable at all. Ungated beyond that: the fusion
-    // reads a run out of a block rather than a single recognisable call, and a
-    // later DCE drops the four again when no run fused.
-    //
-    // `push_ascii_byte` needs no root: both rules only recognise it, and
-    // `Ctx::resolve` reads the compiler item off an entry this pass leaves in
-    // place.
-    if append_ids.iter().any(|id| reachable.contains(id)) {
-        reachable.extend(compute_reachable(graph, fused));
+        reachable.extend(compute_reachable(graph, rooted));
     }
 
     // An `array_clone::<T>` site reaches its helper through the element type
@@ -389,7 +399,11 @@ fn extend_reachable_for_optimizer_passes(
 /// Entry points are:
 /// - `is_cm_export`: synthesized CM export wrappers (world-specific, always correct)
 /// - `is_export` in `wasm_module` sources: raw wasm exports with no CM wrapper
-fn compute_reachable_from_entries(project: &NirPackage, graph: &AnalysisGraph) -> Reached {
+fn compute_reachable_from_entries(
+    project: &NirPackage,
+    graph: &AnalysisGraph,
+    extra_roots: &[Target],
+) -> Reached {
     let roots = project
         .functions
         .iter()
@@ -402,7 +416,8 @@ fn compute_reachable_from_entries(project: &NirPackage, graph: &AnalysisGraph) -
                         .wasm_module_sources
                         .contains_key(&func.module_source));
             is_root.then_some(Target::Stored(pos))
-        });
+        })
+        .chain(extra_roots.iter().cloned());
     compute_reachable(graph, roots)
 }
 
@@ -1399,10 +1414,12 @@ fn compute_reachable(graph: &AnalysisGraph, roots: impl IntoIterator<Item = Targ
 /// and codegen already skip `body.is_none()`, and the type / global / string
 /// reachability is filtered by reachable *position* (not body presence), so
 /// clearing the body is behavior-preserving versus the old `retain` removal.
+/// Returns the live functions the cleared bodies called, whose callers just
+/// shrank.
 pub fn remove_unreachable_functions(
     project: &mut NirPackage,
     reachable_positions: &IndexSet<usize>,
-) {
+) -> IndexSet<FuncId> {
     // Dense `Vec<bool>` indexed by original position avoids hashing each
     // index against `reachable_positions` once per step.
     let mut keep = vec![false; project.functions.len()];
@@ -1411,13 +1428,43 @@ pub fn remove_unreachable_functions(
             keep[pos] = true;
         }
     }
+    let mut orphaned = IndexSet::default();
+    let mut retired = Vec::new();
     for (i, func_rc) in project.functions.iter().enumerate() {
-        if !keep[i] {
-            let mut func = func_rc.borrow_mut();
-            func.is_dead = true;
-            func.body = None;
+        // A borrow counts as a write, so one already dead is left unborrowed:
+        // the optimizer loop drops the unreachable every round, and a write
+        // would make each `BodyMemo` re-derive it every time.
+        if keep[i] || func_rc.borrow().is_dead {
+            continue;
         }
+        let mut func = func_rc.borrow_mut();
+        func.is_dead = true;
+        let Some(body) = func.body.take() else {
+            continue;
+        };
+        body.for_each_reachable_node(|node| {
+            if let NodeRef::Expr(e) = node
+                && let ExprKind::Call { func_id, .. } = &body.exprs[e].kind
+            {
+                orphaned.insert(*func_id);
+            }
+        });
+        let method = func
+            .method_info
+            .as_ref()
+            .map(|m| retired_name(&m.method_name, i));
+        retired.push((FuncId::new(i), retired_name(&func.name, i), method));
     }
+    // A pass that finds a function by its name to reuse it, rather than mint
+    // one, must not find a dead one: nothing would emit it. A live function
+    // may then take the name.
+    let merged = project.rename_functions(retired);
+    assert!(
+        merged.is_empty(),
+        "a retired name is unique by its position"
+    );
+    orphaned.retain(|id| !project.functions[id.index()].borrow().is_dead);
+    orphaned
 }
 
 impl DceAnalysis {

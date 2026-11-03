@@ -1,0 +1,18 @@
+// `#[ambient(E)]` admits only the effects it lists. `emit` lists `Stdout`, so
+// `println` is admitted, but `eprintln` performs `Stderr`, which the body
+// neither lists nor declares.
+
+use { println, eprintln, Stdout, Stderr } from "core:cli";
+
+#[ambient(Stdout)]
+fn emit() {
+    println("ok");
+    eprintln("oops");
+}
+
+export fn run() with (Stdout, Stderr) {
+    emit();
+}
+
+__DATA__
+{"compile_error": "missing effect 'Stderr' required by 'eprintln'"}

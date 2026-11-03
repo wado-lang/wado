@@ -1,0 +1,16 @@
+// `#[ambient]` names the effects its body performs. With none listed, the
+// attribute admits nothing, so it is rejected where it is written.
+
+use { log_stderr } from "core:cli";
+
+#[ambient]
+fn note() {
+    log_stderr("note");
+}
+
+export fn run() {
+    note();
+}
+
+__DATA__
+{"compile_error": "`ambient` takes one or more names, quoted or bare"}

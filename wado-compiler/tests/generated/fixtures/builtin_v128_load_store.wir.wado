@@ -192,9 +192,9 @@ type "functype//core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<c
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec0" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(69)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]" = fn(ref "core:prelude/string.wado//String", bool, i32) -> i32;  // TypeId(70)
+type "functype//core:prelude/primitive.wado/u64::fmt_base$sroa[self.value]$spec0$sroa[f.buf]$dae[alt_prefix]" = fn(u64, ref "core:prelude/string.wado//String", i32, bool);  // TypeId(70)
 
-type "functype//core:prelude/primitive.wado/u64::fmt_base$sroa[self.value]$spec0$sroa[f.buf]$dae[alt_prefix]" = fn(u64, ref "core:prelude/string.wado//String", i32, bool);  // TypeId(71)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]" = fn(ref "core:prelude/string.wado//String", bool, i32) -> i32;  // TypeId(71)
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(72)
 
@@ -223,8 +223,8 @@ import fn wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode f
 import fn wasi/task-return from "wasi/task-return";
 
 global global:builtin_v128_load_store.wado::$const_obj_0: ref Array<u8> = array.new_fixed<u8>(111, 107);
-global global:core:prelude/primitive.wado::$const_obj_4: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
-global global:core:prelude/primitive.wado::$const_obj_5: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(118, 49, 50, 56, 40, 48, 120), used: 7 };
+global global:core:prelude/primitive.wado::$const_obj_1: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
+global global:core:prelude/primitive.wado::$const_obj_2: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(118, 49, 50, 56, 40, 48, 120), used: 7 };
 
 fn "builtin_v128_load_store.wado/run"() with Stdout {
     let buf: i32;
@@ -1322,14 +1322,14 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(self, f) {
     let abs_val: u64;
     is_negative = self < 0;
     self = "core:prelude/primitive.wado/count_digits_u64"(local.tee abs_val("core:prelude/primitive.wado/i64::abs"(builtin::i64_extend_i32_s(self))));
-    is_negative = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>"(f, is_negative, global:core:prelude/primitive.wado::$const_obj_4, self);
+    is_negative = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>"(f, is_negative, global:core:prelude/primitive.wado::$const_obj_1, self);
     "core:prelude/primitive.wado/write_decimal_digits"(f.buf.repr, is_negative, abs_val, self);
 }
 
 fn "core:prelude/primitive.wado/v128^core:prelude/traits.wado/Inspect::inspect$sroa[self.value,f.buf]"(self, f) {
     let i: i32;
     let s_11: ref "core:prelude/string.wado//String";
-    "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec0"(f, global:core:prelude/primitive.wado::$const_obj_5);
+    "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec0"(f, global:core:prelude/primitive.wado::$const_obj_2);
     i = 0;
     b183: block {
         l184: loop {
@@ -1420,6 +1420,21 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_stri
     builtin::array_copy<u8>(self.repr, start, other.repr, 0, 7);
 }
 
+fn "core:prelude/primitive.wado/u64::fmt_base$sroa[self.value]$spec0$sroa[f.buf]$dae[alt_prefix]"(self, f, base, upper) {
+    let bits_per_digit: i32;
+    let digit_count: i32;
+    let offset: i32;
+    bits_per_digit = (if base == 2 -> i32 {
+        1;
+    } else {
+        select i32(base == 8, 3, 4);
+    });
+    base = base - 1;
+    digit_count = "core:prelude/primitive.wado/count_digits_u64_base"(self, bits_per_digit);
+    offset = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"(f, 0, digit_count);
+    "core:prelude/primitive.wado/write_u64_base_digits"(f.repr, offset, self, digit_count, bits_per_digit, base, upper);
+}
+
 fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"(self, is_negative, digit_count) {
     let content_len: i32;
     if local.tee content_len(select i32(is_negative, 1, 0) + digit_count) >= 2 {
@@ -1436,21 +1451,6 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
     }
     "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_char_n$sroa[self.buf]"(self, 48, content_len);
     return "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(self, digit_count);
-}
-
-fn "core:prelude/primitive.wado/u64::fmt_base$sroa[self.value]$spec0$sroa[f.buf]$dae[alt_prefix]"(self, f, base, upper) {
-    let bits_per_digit: i32;
-    let digit_count: i32;
-    let offset: i32;
-    bits_per_digit = (if base == 2 -> i32 {
-        1;
-    } else {
-        select i32(base == 8, 3, 4);
-    });
-    base = base - 1;
-    digit_count = "core:prelude/primitive.wado/count_digits_u64_base"(self, bits_per_digit);
-    offset = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"(f, 0, digit_count);
-    "core:prelude/primitive.wado/write_u64_base_digits"(f.repr, offset, self, digit_count, bits_per_digit, base, upper);
 }
 
 export fn "builtin_v128_load_store.wado/$cm_export__run" as "run"

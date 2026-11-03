@@ -22,8 +22,8 @@ use crate::lower::plan::value_copy::place::{is_source_place, source_place_subscr
 use crate::lower::wide_int_literal::{create_literal, method_ref};
 use crate::module_source::ModuleSource;
 use crate::name::{
-    CONTRACT_CLAUSE_INTRINSIC, CONTRACT_SITE_INTRINSIC, FqTypeName, Receiver, contract_owner_name,
-    global_init_function, global_name, unchecked_twin_name,
+    CONTRACT_CLAUSE_INTRINSIC, CONTRACT_SITE_INTRINSIC, FqTypeName, Receiver, TypeHead,
+    contract_owner_name, global_init_function, global_name, unchecked_twin_name,
 };
 use crate::ownership::{self, BodyFacts as _, Modes};
 use crate::symbol::SymbolTable;
@@ -88,23 +88,32 @@ use crate::name::{
     display_function_name, effect_default_impl_name, for_body_label, mangle_local_item_name,
     minted_name, range_local_name, template_block_label, template_hole_local, test_function_name,
 };
-use crate::pgo::ColdMap;
+use crate::pgo::MarkMap;
+use crate::rarity::Mark;
 use crate::symbol::{Symbol, SymbolKind};
 use crate::synthesis::common::{
-    bare_cast, bool_lit, builtin_call, cold_path_stmt, handle_bits, is_cold_marker_stmt,
-    known_cold_path_stmt, not_expr, ord_bool_from_cmp, rt_call,
+    bare_cast, bool_lit, builtin_call, cold_path_stmt, handle_bits, known_cold_path_stmt,
+    marker_stmt_mark, not_expr, ord_bool_from_cmp, rt_call,
 };
 use crate::tir::{
-    EffectRef, StructDef, TemplateId, TirEffectOp, TirField, TirImpl, TirParam, TirTypeParam,
-    agree_branch_types,
+    EffectRef, ExitScope, StructDef, TemplateId, TirEffectOp, TirField, TirImpl, TirParam,
+    TirTypeParam, agree_branch_types,
 };
 use crate::tir::{
     FunctionKind, FunctionRef, InlineHint, MonomorphInfo, ReturnAbi, TemplateHole, TemplateShape,
     TirHandlerBinding, TirLiteralPattern, TirMatchArm, TirStructField, TirStructPatternField,
     deref_to_layers, hold_hole, to_layers_of, wrapped_reference,
 };
+<<<<<<< HEAD
 use crate::tir_visitor::TirMutVisitor;
 use crate::token::{Quote, Span};
+||||||| 713ad085190
+use crate::tir_visitor::TirMutVisitor;
+use crate::token::Span;
+=======
+use crate::tir_visitor::{TirMutVisitor, TirRefVisitor};
+use crate::token::Span;
+>>>>>>> origin/main
 use crate::unparse::{unparse_expr_source, unparse_pattern_source};
 
 /// A template's text and holes as reify assembles it: one segment more than
@@ -534,8 +543,8 @@ pub(crate) struct Reify<'a> {
     /// The coverage plan whose probes reify puts in, under
     /// `wado test --coverage` or `--pgo`. See `probe.rs`.
     pub(crate) coverage: Option<&'a CoverageMap>,
-    /// Where the profile marks code cold. See `probe.rs`.
-    pub(crate) cold: Option<&'a ColdMap>,
+    /// Where the profile marks code rare. See `probe.rs`.
+    pub(crate) marks: Option<&'a MarkMap>,
     /// The probe ids reify has put in so far.
     pub(crate) probes_emitted: IndexSet<u32>,
     /// The probe ids of code reify emits no instance of: a tuple `for-of` body
@@ -665,7 +674,7 @@ impl<'a> Reify<'a> {
             pending_template_structs: Vec::new(),
             pending_local_newtypes: IndexMap::default(),
             coverage: None,
-            cold: None,
+            marks: None,
             probes_emitted: IndexSet::default(),
             probes_without_instance: IndexSet::default(),
             body_ownership: None,
@@ -1537,26 +1546,14 @@ impl<'a> Reify<'a> {
             return None;
         }
         let facts = self.types.impl_facts.get(&impl_block.id)?;
-
-        // Derive the target's name the way `reify_method` derives it for this
-        // block's methods, so the block and its methods agree on the key the
-        // effect-dispatch handler index is built from.
-        let mut naming = LocalMethodName::of(
-            facts.receiver.clone(),
-            facts.trait_name.clone(),
-            String::new(),
-        );
-        if let Some(owner) = facts.concrete_owner.as_ref() {
-            naming = naming.at_owner(owner);
-        }
-
         Some(TirImpl {
+            def: self.impl_origin(impl_block),
             trait_canonical: facts
                 .trait_name
                 .as_ref()
                 .and_then(|fq| fq.declared_head().cloned()),
             trait_type_args: facts.trait_type_args.clone(),
-            struct_name: naming.struct_name(),
+            is_blanket: matches!(facts.struct_name.head(), TypeHead::Binder { .. }),
             rest: impl_block.rest.map(|r| r.kind),
             span: impl_block.span,
         })
@@ -1729,11 +1726,7 @@ impl<'a> Reify<'a> {
             );
             info.is_ref_impl = facts.is_ref_impl;
             // Carry the impl's trait type args (`impl Future<i32> for …`
-            // → `[i32]`). The effect-dispatch synthesis keys its handler
-            // index on `(struct, effect_module, base_trait, trait_type_args)`;
-            // without the args a generic-effect
-            // handler is keyed `Future<>` and the `Future<i32>` binding
-            // finds no `DispatchPlan`.
+            // → `[i32]`), which the method's mangled trait spells.
             info.trait_type_args.clone_from(&facts.trait_type_args);
             info
         };
@@ -2126,20 +2119,23 @@ impl<'a> Reify<'a> {
     /// Marking here rather than at each synthesis site is what gives a
     /// `panic(…)` written in source the same treatment as the ones this file
     /// builds. A `return` / `break` ends a path too, but a normal exit is not a
-    /// cold one, so it is left alone.
+    /// cold one, so it is left alone, and so is a `!` statement that takes one
+    /// on some path: a `let … else` desugars to such a `match`.
     fn mark_diverging_stmts(&self, stmts: Vec<TirStmt>) -> Vec<TirStmt> {
         let tt = self.tysys.type_table.borrow();
-        let diverges =
-            |s: &TirStmt| matches!(&s.kind, TirStmtKind::Expr(e) if tt.is_never(e.type_id));
+        let diverges = |s: &TirStmt| {
+            matches!(&s.kind, TirStmtKind::Expr(e) if tt.is_never(e.type_id)) && !exits_normally(s)
+        };
         if !stmts.iter().any(diverges) {
             return stmts;
         }
         let mut out: Vec<TirStmt> = Vec::with_capacity(stmts.len() + 1);
         // A marker makes its whole basic block cold, so one per block is all
         // there is to place, and a synthesis site that placed its own keeps it.
+        // A profile's marker stating one half leaves the other to this one.
         let mut marked = false;
         for s in stmts {
-            marked = marked || is_cold_marker_stmt(&s);
+            marked = marked || marker_stmt_mark(&s) == Some(Mark::ColdPath);
             if diverges(&s) && !marked {
                 out.push(known_cold_path_stmt(s.span));
                 marked = true;
@@ -2746,6 +2742,11 @@ impl<'a> Reify<'a> {
                 self.reify_method_call(method_call, ctx, recorded_type)
             }
             ast::Expr::Binary(binary) => self.reify_binary(binary, ctx, recorded_type),
+            // The profile measured the author's `cold_path()` and marks its
+            // region by what it found.
+            ast::Expr::Call(call) if self.overridden(call.id) => {
+                TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, call.span)
+            }
             ast::Expr::Call(call) => self.reify_call(call, ctx, recorded_type),
             ast::Expr::Match(match_expr) => self.reify_match_expr(
                 match_expr,
@@ -5654,14 +5655,23 @@ impl<'a> Reify<'a> {
             // same shape annotate's recovery path produced.
             return TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, qm.span);
         };
-        // The early return is the desugared match's last arm.
-        if let TirExprKind::Match { arms, .. } = &mut desugared.kind
-            && let Some(exit) = arms.last_mut()
-        {
-            let placeholder = TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, qm.span);
-            let body = std::mem::replace(&mut exit.body, placeholder);
-            exit.body = self.probe_expr(ProbeSite::TryExit, qm.id, body);
+        let TirExprKind::Match { arms, .. } = &mut desugared.kind else {
+            unreachable!("a `?` desugars to a match");
+        };
+        let [_, exit] = arms.as_mut_slice() else {
+            unreachable!("a `?`'s match has a continuing arm and an early return");
+        };
+        let placeholder = TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, qm.span);
+        let mut body = std::mem::replace(&mut exit.body, placeholder);
+        // A failure is no trap, so its rarity is a guess, which the profile
+        // overrides.
+        if !self.overridden(qm.id) {
+            let TirExprKind::Block(block) = &mut body.kind else {
+                unreachable!("a `?`'s early return is a block");
+            };
+            block.stmts.insert(0, cold_path_stmt(qm.span));
         }
+        exit.body = self.probe_expr(ProbeSite::TryExit, qm.id, body);
         desugared
     }
 
@@ -5730,19 +5740,15 @@ impl<'a> Reify<'a> {
             guard: None,
             body: TirExpr::new(
                 TirExprKind::Block(TirBlock::new(
-                    vec![
-                        // A failure is no trap, so its rarity is a guess.
-                        cold_path_stmt(span),
-                        TirStmt::new(
-                            TirStmtKind::Return {
-                                // `Option<U>` and the operand's `Option<T>`
-                                // are distinct GC types, so the propagated
-                                // `None` is the enclosing function's.
-                                value: Some(TirExpr::new(TirExprKind::Null, ctx.return_type, span)),
-                            },
-                            span,
-                        ),
-                    ],
+                    vec![TirStmt::new(
+                        TirStmtKind::Return {
+                            // `Option<U>` and the operand's `Option<T>` are
+                            // distinct GC types, so the propagated `None` is
+                            // the enclosing function's.
+                            value: Some(TirExpr::new(TirExprKind::Null, ctx.return_type, span)),
+                        },
+                        span,
+                    )],
                     span,
                 )),
                 TypeTable::NEVER,
@@ -5864,15 +5870,12 @@ impl<'a> Reify<'a> {
             guard: None,
             body: TirExpr::new(
                 TirExprKind::Block(TirBlock::new(
-                    vec![
-                        cold_path_stmt(span),
-                        TirStmt::new(
-                            TirStmtKind::Return {
-                                value: Some(err_variant),
-                            },
-                            span,
-                        ),
-                    ],
+                    vec![TirStmt::new(
+                        TirStmtKind::Return {
+                            value: Some(err_variant),
+                        },
+                        span,
+                    )],
                     span,
                 )),
                 TypeTable::NEVER,
@@ -6756,6 +6759,7 @@ impl<'a> Reify<'a> {
                     trait_type_args: entry.trait_type_args.clone(),
                     handler: handler.clone(),
                     handler_type: facts.handler_type,
+                    impl_def: entry.impl_def,
                     span: binding.span,
                     bundle_group: facts.bundle_group,
                 });
@@ -10519,4 +10523,57 @@ fn half_literal(bits: u64, ty: TypeId, span: Span) -> TirExpr {
         ty,
         span,
     )
+}
+
+/// Whether `stmt` holds a `return`, or a `break` / `continue` leaving `stmt`.
+fn exits_normally(stmt: &TirStmt) -> bool {
+    let mut finder = ExitFinder {
+        scope: ExitScope::default(),
+        found: false,
+    };
+    finder.visit_stmt(stmt);
+    finder.found
+}
+
+struct ExitFinder {
+    scope: ExitScope,
+    found: bool,
+}
+
+impl ExitFinder {
+    fn within_label(&mut self, label: &str, block: &TirBlock) {
+        self.scope.enter_label(label);
+        self.visit_block(block);
+        self.scope.leave_label();
+    }
+}
+
+impl TirRefVisitor for ExitFinder {
+    fn visit_stmt(&mut self, stmt: &TirStmt) {
+        self.found |= self.scope.exits(&stmt.kind);
+        match &stmt.kind {
+            TirStmtKind::Loop { .. } | TirStmtKind::VariadicForOf { .. } => {
+                self.scope.enter_loop();
+                self.walk_stmt(stmt);
+                self.scope.leave_loop();
+            }
+            TirStmtKind::LabeledBlock { label, block } => self.within_label(label, block),
+            TirStmtKind::Let { .. }
+            | TirStmtKind::Expr(_)
+            | TirStmtKind::Return { .. }
+            | TirStmtKind::TaskReturn { .. }
+            | TirStmtKind::If { .. }
+            | TirStmtKind::Break { .. }
+            | TirStmtKind::Continue
+            | TirStmtKind::LetDestructure { .. } => self.walk_stmt(stmt),
+        }
+    }
+
+    fn visit_expr(&mut self, expr: &TirExpr) {
+        if let TirExprKind::LabeledBlock { label, block, .. } = &expr.kind {
+            self.within_label(label, block);
+        } else {
+            self.walk_expr_in_frame(expr);
+        }
+    }
 }

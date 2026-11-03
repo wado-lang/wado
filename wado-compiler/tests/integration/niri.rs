@@ -4870,7 +4870,7 @@ fn a_branch_hint_is_stepped_past() {
     // statement before the growth it guards.
     let table = TypeTable::new();
     let hint_id = next_test_func_id();
-    let builtins = ctfe_builtin_map(hint_id, CtfeBuiltin::ColdPath);
+    let builtins = ctfe_builtin_map(hint_id, CtfeBuiltin::RarityMarker);
 
     let hinted = make_pure_fn_stmts(
         "hinted",

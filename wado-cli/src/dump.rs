@@ -3,11 +3,12 @@ use std::fs;
 use std::path::Path;
 
 use lexopt::Arg::Value;
+use wado_lsp::host::discovery::Disk;
 
 use crate::args::{self, CliExit};
 use crate::compile::{Settled, build_load, entry_profile, load_nearest_manifest};
 use crate::compiler_host::FilesystemCompilerHost;
-use crate::knobs::{CompileKnobOpt, CompileKnobs};
+use crate::knobs::{CompileKnobOpt, CompileKnobs, HostKnobOpt, HostKnobs};
 
 pub struct DumpOptions {
     pub inputs: Vec<String>,
@@ -24,6 +25,7 @@ pub struct DumpOptions {
     pub show_nir: bool,
     pub show_wir: bool,
     pub knobs: CompileKnobs,
+    pub host: HostKnobs,
     /// `--world <name>`; `None` selects the default `wasi:cli/command`.
     pub target_world: Option<String>,
 }
@@ -71,6 +73,9 @@ impl Opt {
         CompileKnobOpt::OptIterations,
         CompileKnobOpt::Specializations,
         CompileKnobOpt::OptThreads,
+        CompileKnobOpt::ProfileSummaryCutoffHot,
+        CompileKnobOpt::ProfileSummaryCutoffCold,
+        CompileKnobOpt::PredictableBranchThreshold,
         CompileKnobOpt::LogLevel,
         CompileKnobOpt::Allocator,
         CompileKnobOpt::NoCache,
@@ -202,6 +207,7 @@ fn format_usage() -> String {
         args::OptsHelp::default()
             .add(&[Opt::World, Opt::Help], |o| o.spec())
             .add(Opt::KNOBS, |o| o.spec())
+            .add(HostKnobOpt::ALL, |o| o.spec())
             .add(args::ParamOpt::ALL, |o| o.spec())
             .render()
     )
@@ -227,10 +233,13 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<DumpOptions, CliExit> {
     let mut target_world: Option<String> = None;
     let mut any_phase = false;
     let mut knobs = CompileKnobs::default();
+    let mut host = HostKnobs::default();
 
     while let Some(arg) = args::next_arg(&mut parser)? {
         if let Some(k) = args::match_opt(&arg, Opt::KNOBS, |k| k.spec()) {
             knobs.apply(k, &mut parser)?;
+        } else if let Some(h) = args::match_opt(&arg, HostKnobOpt::ALL, |h| h.spec()) {
+            host.apply(h);
         } else if let Some(p) = args::match_opt(&arg, args::ParamOpt::ALL, |p| p.spec()) {
             args::apply_param_opt(&mut knobs.params, p, &mut parser)?;
         } else if let Some(opt) = args::match_opt(&arg, Opt::ALL, |o| o.spec()) {
@@ -315,6 +324,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<DumpOptions, CliExit> {
         show_nir,
         show_wir,
         knobs,
+        host,
         target_world,
     })
 }
@@ -342,7 +352,7 @@ async fn run_single(opts: &DumpOptions, input: &str) -> Result<(), CliExit> {
         .parent()
         .map(std::path::Path::to_path_buf)
         .unwrap_or_default();
-    let manifest_pair = load_nearest_manifest(path).map_err(CliExit::error)?;
+    let manifest_pair = load_nearest_manifest(path, &Disk).map_err(CliExit::error)?;
     let (host, invocations) = build_load(
         path,
         &source,

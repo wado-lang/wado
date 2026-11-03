@@ -37,8 +37,8 @@ where profile-guided optimization should prove itself first.
 
 A package states its real workload as tests marked `#[workload]`. Running them
 records how often each region ran into a profile, and the package commits it.
-Every later compile outside the test world reads the profile and marks each
-region that never ran as cold, so the optimizer's existing cold-path machinery
+Every later compile reads the profile and marks each
+region by what it measured, so the optimizer's existing cold-path machinery
 acts on measurement instead of guesses.
 
 ### A workload is a test marked `#[workload]`
@@ -124,7 +124,7 @@ call, the length load, the bounds check and the load on every run.
 
 The profile is a text file, so the repository holds no binary for it. It holds
 one record per line, so a merge conflicts only where the counts moved. Its
-format is in the [specification](./spec-testing.md#profiles). A file under
+format is in the [specification](./spec-pgo.md#the-profile-format). A file under
 `build/` would not reach CI or a release build, so their output would differ
 from the author's.
 
@@ -187,13 +187,81 @@ recording again refreshes them.
 A compile that discards a function's counts says so at `--log-level info`, so
 an author learns when to record again.
 
-### A region that never ran is marked cold
+### Rarity is two questions, as in LLVM and GCC
 
-In every function the workloads entered, reify inserts a `builtin::cold_path()`
-at the start of each outermost region whose count is zero. Reify is where
-coverage inserts its probes, so a region means the same thing to both. From
-there, the optimizer's passes act on the marker as they do on one the author
-wrote.
+`cold_path()` says two things at once. Its branch is rarely taken, which the
+branch hints read. And its code rarely runs, which the inliner, `cold_outline`,
+`param_spec`, `const_object_globalization` and the remarks read. A guess has no
+way to tell the two apart, but a measurement does, and they part often: a `?`
+that fails in 0.1% of a hot function's calls runs on a rare side of its branch,
+yet thousands of times in the whole program.
+
+LLVM and GCC answer the two questions with two yardsticks over the same counts.
+
+- Whether a branch is biased is a ratio within the branch. LLVM's
+  [`BranchProbabilityInfo`][llvm-bpi] reads branch weights, and a profile's
+  weights replace the static guesses. [HotColdSplitting][llvm-hcs], when it has
+  no profile, calls a successor cold at a probability of at most 1%, the
+  complement of [`predictable-branch-threshold`][llvm-tti] (99%). GCC's
+  `-fprofile-use` [sets each edge's probability][gcc-profile] to its count over
+  its block's count, which overrides every [static predictor][gcc-predict-def],
+  `__builtin_expect` and the Fortran front end's failure-path predictors
+  included. Its if-conversion calls a branch predictable at
+  [`predictable-branch-outcome`][gcc-params] (2%).
+- Whether code runs rarely is an absolute count against the whole profile.
+  LLVM's [`ProfileSummaryInfo`][llvm-psi] places hot and cold lines from shares
+  of all runs, and with a profile, HotColdSplitting outlines a block, and the
+  [inliner][llvm-inline] prices a call site, by `isColdBlock` and
+  `isHotCallSite`. GCC's [`maybe_hot_bb_p`][gcc-predict] reads
+  `hot-bb-count-ws-permille` the same way, and its `probably_never_executed`
+  treats a count of zero as never run.
+
+[llvm-bpi]: https://github.com/llvm/llvm-project/blob/main/llvm/lib/Analysis/BranchProbabilityInfo.cpp
+[llvm-hcs]: https://github.com/llvm/llvm-project/blob/main/llvm/lib/Transforms/IPO/HotColdSplitting.cpp
+[llvm-tti]: https://github.com/llvm/llvm-project/blob/main/llvm/lib/Analysis/TargetTransformInfo.cpp
+[llvm-psi]: https://github.com/llvm/llvm-project/blob/main/llvm/lib/Analysis/ProfileSummaryInfo.cpp
+[llvm-inline]: https://github.com/llvm/llvm-project/blob/main/llvm/lib/Analysis/InlineCost.cpp
+[gcc-profile]: https://github.com/gcc-mirror/gcc/blob/master/gcc/profile.cc
+[gcc-predict]: https://github.com/gcc-mirror/gcc/blob/master/gcc/predict.cc
+[gcc-predict-def]: https://github.com/gcc-mirror/gcc/blob/master/gcc/predict.def
+[gcc-params]: https://github.com/gcc-mirror/gcc/blob/master/gcc/params.opt
+
+Neither reads the summary to decide a branch's direction. A summary line says
+nothing about a branch: a profile of under a million runs puts the cold line on
+about its smallest count, so a ratio of 0.1% and one of 50% look the same to
+it.
+
+So a compile asks both. A region is unlikely when it ran at most 1% of the
+times the code around it did, under
+`--optimize-predictable-branch-threshold`, LLVM's name and default. It is cold
+when its count is cold against the summary, under LLVM's
+`--optimize-profile-summary-cutoff-hot` and `-cold`, or zero, as GCC holds.
+[Rarity](./spec-pgo.md#rarity) states both rules. For a path past a branch, or
+past a statement that can leave, that ratio is the branch's probability. A
+loop's test also runs once per pass through its body, so for a loop's body the
+ratio bounds the probability from above, and a body it calls unlikely is. A
+count on both summary lines is hot, since LLVM's inliner asks hot first. A share
+stays put when a workload runs twice, so a workload need not be large, only like
+real use. The thresholds are LLVM's for now; the benchmark machine
+settles Wado's own.
+
+### The profile marks each region by its answers
+
+In every function the workloads entered, reify inserts a marker at the start of
+each region by its answers: `builtin::cold_path()` where it is unlikely and
+cold, `builtin::unlikely_path()` where it is only unlikely, and
+`builtin::cold_code()` where it is only cold. The branch hints read
+`cold_path()` and `unlikely_path()`, and every other pass reads `cold_path()`
+and `cold_code()`. WIR keeps the split: its marker carries the halves it
+states, so a WIR pass reads the one it needs as a NIR pass does. The two halves are `internal` to `core:`, so no author
+writes one. Reify is where coverage inserts its probes, so a region means the
+same thing to both.
+
+A region is marked cold only where all of the code under it is cold. A marker
+covers what follows it in its block, so one over a loop the workload ran a
+million times would price the loop as cold. Under a region marked cold, a
+region that is also unlikely gets `unlikely_path()`, so its branch is still
+hinted.
 
 A function whose body region never ran gets no marker. Workloads are tests, so
 a build's own entry never runs under them, and neither does whatever only it
@@ -201,27 +269,15 @@ reaches, such as a benchmark's timing loop: a function they never entered says
 nothing about how often it runs. Marking such functions at their start made
 every benchmark slower, by 24% to 74%. The optimizer does not inline into a
 function only cold sites reach, and that took in the whole path the benchmark
-measures. A region that ran any number of times gets no marker; what its count
-says beyond that is the profile summary's to decide (below).
+measures. A function the workloads entered but whose code is cold everywhere is
+another matter: it gets `cold_code()` at its start, as LLVM treats a function
+whose entry count is cold.
 
 Each worker thread seeds its compiles from a snapshot of the reified standard
 library, built once. The thread builds it with the `core:` counts already
 applied, so a profiled compile seeds from the snapshot as a plain one does.
 
-### The profile summary says what is hot and what is cold
-
-A count alone says little: a million runs is a sliver of one program and most
-of another. So a compile reads each count against a summary of the whole
-profile, as LLVM's `ProfileSummaryInfo` does. With every count the profile holds
-sorted from the largest down, the hot line is the smallest count still inside
-the share of all runs that `--optimize-profile-summary-cutoff-hot` names, and
-the cold line the same for `--optimize-profile-summary-cutoff-cold`. A count at
-or above the hot line is hot, and any other at or below the cold line is cold.
-A profile whose counts are nearly all one value puts both lines on it, and such
-a count is hot: as in LLVM's inliner, hot is asked first. Both shares are in
-parts per million, with LLVM's defaults for its options of the same names:
-990000 and 999999. A share of all runs stays put when a workload
-runs twice, so a workload need not be large, only like real use.
+### The inliner prices a call site by the summary
 
 The inliner prices a call site by what the summary says of the region holding
 it. A hot site may inline a callee of up to
@@ -232,23 +288,30 @@ it. A hot site may inline a callee of up to
 (225), but count statements as Wado's inliner does, so the benchmarks settle
 their defaults.
 
-### The author wins over the profile; the compiler's guess does not
+### The profile overrides the source's markers
 
-An author's `cold_path()` in a region the workload ran stays in force. It
-states an intent the workload may not cover, such as an error path a test
-exercises often. The compile reports the conflict as an optimizer remark at
-`--log-level info`, naming the marker and the count. The remark audits the
-author's guesses against measurement, as LLVM's `-pgo-warn-misexpect` audits a
-`__builtin_expect`.
+An author's `cold_path()` and the marker the compiler puts on a `?`'s failure
+path are both guesses, and a workload modelled on real use measures better than
+either. So in a region the profile has a count for, both are dropped, and the
+region's own marks stand. GCC does the same: `-fprofile-use` replaces the
+probability a `__builtin_expect` gives with the measured one. So does LLVM's
+[IR profile][llvm-pgo-use], which overwrites the weights an expect lowered to.
+Clang's front-end profile is the exception: there
+[`LowerExpectIntrinsic`][llvm-lower-expect] replaces the measured weights with
+the expect's.
 
-The marker the compiler puts on a `?`'s failure path is its own guess, and a
-workload modelled on real use measures better than any guess. The guess is
-usually right: an HTTP service answers well under 1% of its requests with a 4xx
-or 5xx. So the marker stays while the summary calls the failure path's count
-cold. Otherwise the profile wins: the marker is dropped, and the same remark
-names the count. Comparing with zero would drop a right guess, since a rare
-path still runs now and then. LLVM settles the same question the same way,
-letting a measured count override a `__builtin_expect`.
+Where what the profile found is not both unlikely and cold, the compile says so
+in an optimizer remark at `--log-level info`. It names the marker, the region's
+count and the count of the code around it, and what the region was found to be. The remark audits
+a guess against measurement, as LLVM's [`-pgo-warn-misexpect`][llvm-misexpect]
+does, so an author learns which markers the workload contradicts. A `?`'s guess
+is usually right, since an HTTP service answers well under 1% of its requests
+with a 4xx or 5xx, and then the profile marks the failure path as the guess did
+and says nothing.
+
+[llvm-pgo-use]: https://github.com/llvm/llvm-project/blob/main/llvm/lib/Transforms/Instrumentation/PGOInstrumentation.cpp
+[llvm-lower-expect]: https://github.com/llvm/llvm-project/blob/main/llvm/lib/Transforms/Scalar/LowerExpectIntrinsic.cpp
+[llvm-misexpect]: https://github.com/llvm/llvm-project/blob/main/llvm/lib/Transforms/Utils/MisExpect.cpp
 
 The other markers the compiler places sit ahead of a trap, or past a global's
 once-guard. A workload that reaches a trap fails the recording, and a once-guard
@@ -258,17 +321,15 @@ of these: that arm is `unreachable`.
 
 ### Flags switch the marks
 
-`-f pgo` reads the profile and `-f no-pgo` ignores it. The default depends on
-the world:
+`-f pgo` reads the profile and `-f no-pgo` ignores it. It is on by default in
+every world, the test world included. A profile never changes what a program
+computes, but the markers it places steer inlining and outlining, so a test
+world without them would test code no build ships, and a pass that miscompiles
+only under a profile would go unseen.
 
-| Build                        | Default |
-| ---------------------------- | ------- |
-| the test world (`wado test`) | off     |
-| any other world              | on      |
-
-A test checks what a program computes, which a profile never changes, so the
-test world has no use for one by default. `-f pgo` turns it on there, mainly for
-fuzzing the application of profiles.
+`wado test --pgo` reads no profile. It rewrites the file, so reading it would
+make the run depend on what it overwrites, and the counts it records depend on
+no marker.
 
 A build that finds no profile compiles as one with `-f no-pgo`. Under an
 explicit `-f pgo` it also says so at `--log-level info`, since the author asked
@@ -283,11 +344,12 @@ one program: `-f no-cold-paths` has no markers, `-f no-pgo` has the author's
 and the compiler's, and the default adds the profile's.
 
 Reify and lowering spell a marker that states a guess `builtin::cold_path()`,
-as the author does, and any other `builtin::$known_cold_path()`, so the conflict
-remark can tell the two apart until NIR, which has one marker. The marker on a
-`?` propagating a failure is a guess. A global's once-guard runs once, and the
-profile's marker states a measurement. The spelling decides nothing about the
-profile: a `?`'s marker yields to it, and an author's never does.
+as the author does, and any other that states both halves
+`builtin::$known_cold_path()`, which lowering turns into `cold_path()`. The
+marker on a `?` propagating a failure is a guess. A global's once-guard runs
+once, and the profile's marker states a measurement. The spelling decides
+nothing about the profile, which overrides the author's and the `?`'s markers
+alike.
 
 The existing `-f no-branch-hinting` is a different cut. Every pass sees the
 same markers and hints with it as without, and only the emitter leaves out the
@@ -305,10 +367,10 @@ table, a compare on every dispatch, for a gain nobody has measured.
 ### A profile changes no output
 
 A profile, stale or wrong, only moves where the optimizer spends its effort. It
-never changes what a program computes. A test checks this the way
-[EMI](./optimizer.md#differential-testing-emi) checks injected dead code: the
-same program compiled with random profiles prints the same output at every
-level.
+never changes what a program computes. EMI's profile stage checks this
+([WEP: Compiler Fuzzing](./wep-2026-08-19-compiler-fuzzing.md#a-profile-is-a-third-axis)):
+the program compiled under its recorded profile and random ones prints the same
+output at every level. It is a nightly campaign, not a gate.
 
 ## Roadmap
 
@@ -325,29 +387,60 @@ level.
    regions end up cold.
 5. [x] `-f pgo` and `-f no-pgo`. The CLI hands a compile the entry's profile,
    and the compile looks each module up by its name.
-6. [ ] The profile summary. A compile derives the hot and cold lines from its
-   profile under `--optimize-profile-summary-cutoff-hot` and
-   `--optimize-profile-summary-cutoff-cold`, and a `?`'s failure path that is
-   not cold loses its marker, with the remark. An e2e fixture states both
-   sides of the cold line, and a count on both lines.
+6. [x] Unlikely and cold. A compile derives the summary's hot and cold lines
+   under `--optimize-profile-summary-cutoff-hot` and `-cold`, and judges each
+   region unlikely under `--optimize-predictable-branch-threshold`. It writes
+   `cold_path()`, `unlikely_path()` or `cold_code()` by the answers, and
+   overrides the author's and the `?`'s markers, with the remark. An e2e
+   fixture states each mark and each remark.
 7. [ ] Hot and cold call sites. The inliner prices a site by the summary under
    `--optimize-inline-hot-callsite-threshold` and
    `--optimize-inline-cold-callsite-threshold`, and the benchmarks, against
-   `-f no-pgo`, settle their defaults.
-8. [ ] The random-profile differential test.
+   `-f no-pgo`, settle their defaults and those of the summary's cutoffs and
+   `--optimize-predictable-branch-threshold`.
+8. [x] The random-profile differential test, as EMI's profile stage.
 9. [ ] The `benchmark/` pilot. Each benchmark gains a workload and a committed
    profile, `http_routing` a test to carry it first, and a table compares the
    three builds the flags give. A workload runs a smaller input than the
    benchmark measures, so the table does not judge a profile on the run that
    trained it.
+10. [ ] The design weighed against LLVM, GCC and Go. Each option below is
+    measured on the pilot's table, then adopted, or recorded as a known gap
+    with what it lost to. These are options, not the decision.
+    - The counts reach the optimizer. Three markers carry two bits per region,
+      so nothing weighs one side against the other, and the summary's hot line
+      only keeps a count out of cold. LLVM keeps branch weights (`!prof`) and
+      function entry counts on the IR, and its inliner raises the threshold at
+      a hot call site.
+    - Counts per calling context. One function holds one set of counts, so a
+      function cold overall but hot from one caller is cold everywhere, and a
+      cold call inside a hot region has nowhere to be marked. LLVM's CSPGO
+      records again after inlining, and Go's PGO keys its counts by call edge.
+    - Code the workloads never entered. It is compiled as unprofiled, so a
+      library's paths no workload takes are never cold. GCC's
+      `-fprofile-partial-training` lets the author choose between the two.
+    - Stale profiles. A changed hash is said once per function at `info`, and
+      counts that drift through a caller's change go unsaid. Clang warns at
+      `-Wprofile-instr-out-of-date` with the share of functions that no longer
+      match.
+    - The stdlib snapshot. It is keyed by the whole profile's summary, so a
+      change to the user's counts rebuilds it. Keying it by the marks it
+      receives would rebuild it only when they change. Each thread holds one
+      profiled snapshot, so under `wado test` every worker builds its own for
+      each package whose profile names a `core:` module.
+    - The inliner's `branch_weight` guard reads the cold half, while the layout
+      it protects follows the unlikely hint. The table settles which half it
+      should read.
 
 ## Known gaps
 
-- [ ] The conflict remark reads the author's markers and the `?`s from the
-  source, where the plan finds its regions, so nothing reads the difference
-  `$known_cold_path` keeps through TIR. Once a `?`'s marker yields by its share
-  of runs, no marker `$known_cold_path` writes can be contradicted, so the
-  distinction may have no reader left.
+- [ ] The profile finds the author's markers and the `?`s in the source,
+  where the plan finds its regions, so nothing reads the difference
+  `$known_cold_path` keeps through TIR. The distinction may have no reader
+  left.
+- [ ] An author's `cold_path()`, or a `?`, in the right operand of `&&` or
+  `||` keeps its marker when the profile measured it, since the profile has no
+  statement position there for a marker of its own.
 - [ ] A region that starts in an expression, the right operand of `&&` or
   `||`, has no statement position for a marker, so the regions inside one that
   never ran are marked in its place.

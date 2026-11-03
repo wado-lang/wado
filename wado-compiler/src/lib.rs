@@ -68,6 +68,7 @@ pub mod path;
 pub mod pgo;
 mod prelower_reach;
 pub mod primitive;
+pub mod rarity;
 mod reflect_marker;
 pub mod remarks;
 pub mod remote;
@@ -253,9 +254,9 @@ pub struct CompileResult {
     /// provider to skip a second compile when the driver asks for the
     /// descriptor.
     pub kiln_options_descriptor: Option<kiln::OptionsDescriptor>,
-    /// Each region [`CompilerOptions::profile`] marked cold, as
-    /// `module:line:column kind`.
-    pub cold_regions: Vec<String>,
+    /// Each region [`CompilerOptions::profile`] marked, as
+    /// `module:line:column kind mark`.
+    pub marked_regions: Vec<String>,
 }
 
 /// Report a compilation error the pipeline has no span for — it names the
@@ -455,6 +456,26 @@ pub struct OptOverrides {
     pub iterations: Option<u32>,
     /// The clones constant-argument specialization may mint over the module.
     pub specializations: Option<usize>,
+    /// The shares of all runs that place a profile's hot and cold lines.
+    pub profile_summary_cutoff_hot: Option<pgo::Cutoff>,
+    pub profile_summary_cutoff_cold: Option<pgo::Cutoff>,
+    /// The share of a branch's runs past which the branch is predictable.
+    pub predictable_branch_threshold: Option<pgo::Percent>,
+}
+
+impl OptOverrides {
+    /// How a profile's counts are read.
+    #[must_use]
+    pub fn profile_thresholds(&self) -> pgo::Thresholds {
+        let default = pgo::Thresholds::default();
+        pgo::Thresholds {
+            hot: self.profile_summary_cutoff_hot.unwrap_or(default.hot),
+            cold: self.profile_summary_cutoff_cold.unwrap_or(default.cold),
+            predictable_branch: self
+                .predictable_branch_threshold
+                .unwrap_or(default.predictable_branch),
+        }
+    }
 }
 
 /// Compilation options for the compiler
@@ -1660,13 +1681,14 @@ fn compile_after_load<H: CompilerHost>(
         options
             .profile
             .as_deref()
-            .filter(|_| codegen_flags.pgo.applies()),
+            .filter(|_| codegen_flags.pgo.applies())
+            .map(|profile| profile.applied(options.opt.profile_thresholds())),
         &LivenessScope::Compilation,
     );
     if !sem.is_complete() {
         return Err(Bail);
     }
-    let cold_regions = sem.cold_regions().to_vec();
+    let marked_regions = sem.marked_regions().to_vec();
 
     // Clone the WIT subset before `sem` is destructured into codegen (issue
     // #1654), so it survives the move. Captured pre-`--lib`-registration to
@@ -2415,7 +2437,7 @@ fn compile_after_load<H: CompilerHost>(
         is_todo_module,
         wit_emit_snapshot,
         kiln_options_descriptor,
-        cold_regions,
+        marked_regions,
     })
 }
 
@@ -2596,7 +2618,9 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
         &logger,
         true,
         None,
-        profile.filter(|_| parsed_codegen_flags.pgo.applies()),
+        profile
+            .filter(|_| parsed_codegen_flags.pgo.applies())
+            .map(|profile| profile.applied(opt.profile_thresholds())),
         &LivenessScope::Compilation,
     );
     // A rejected program reaches no phase after these, as under `compile`.

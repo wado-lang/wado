@@ -1,6 +1,7 @@
 //! EMI (equivalence modulo inputs) harness for the optimizer: [`calibrate_corpus`]
 //! keeps the sources an injected `builtin::black_box(false)` guard leaves
-//! alone, and [`mutate_corpus`] reports the ones a [`Payload`] behind it moves.
+//! alone, [`mutate_corpus`] reports the ones a [`Payload`] behind it moves, and
+//! [`profile_corpus`] the ones a profile moves.
 //!
 //! The material comes from every [`Root`] in [`ROOTS`]: the e2e fixtures, the
 //! stdlib modules that carry `test` blocks, the `example/` programs, and the
@@ -16,22 +17,25 @@
 //!
 //! Knobs: `WADO_EMI_JOBS`, `WADO_EMI_FILTER`, `WADO_EMI_ROOTS`,
 //! `WADO_EMI_LEVELS`, `WADO_EMI_SHARD` (`k/n`), `WADO_EMI_LIMIT`,
-//! `WADO_EMI_OUT`.
+//! `WADO_EMI_OUT`, `WADO_EMI_PROFILES`.
 
 use wado_compiler_tests as common;
 
 use common::repository_root;
+use rand::rngs::ChaCha12Rng;
+use rand::{RngExt, SeedableRng};
 use std::path::{Path, PathBuf};
-use std::sync::Mutex;
 use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 use wado_compiler::ast::{
     AstVisitor, Block, Condition, ConditionElement, Expr, Function, Item, MatchExpr, Module, Param,
     Pattern, SelfKind, Stmt, walk_block, walk_expr, walk_function, walk_item, walk_stmt,
 };
+use wado_compiler::coverage::{Coverage, CoverageScope, read_from_component};
 use wado_compiler::hashmap::{IndexMap, IndexSet};
 use wado_compiler::trace::parse_env_list;
-use wado_compiler::{CompilerOptions, OptLevel, TestSelection};
+use wado_compiler::{CompilerOptions, OptLevel, TestSelection, pgo};
 
 /// The levels both stages compare a mutant against its own baseline at. Each
 /// answers only for the pipeline it runs, and `O2` is what a release build and
@@ -86,6 +90,22 @@ fn levels() -> Vec<OptLevel> {
         common::opt_level_name,
         "optimization level",
     )
+}
+
+/// The knobs a stage reads, parsed before the campaign silences panics, so a
+/// malformed one stops the run with its message rather than inside a worker.
+struct Knobs {
+    levels: Vec<OptLevel>,
+    random_profiles: u64,
+}
+
+impl Knobs {
+    fn read() -> Self {
+        Self {
+            levels: levels(),
+            random_profiles: random_profiles(),
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -187,6 +207,16 @@ impl Root {
         TestSelection {
             skipped,
             ..TestSelection::default()
+        }
+    }
+
+    /// What a profile measures here: the package and its dependencies, and the
+    /// standard library only where it is the code under test. A profile
+    /// naming a `core:` module rebuilds the stdlib snapshot for each compile.
+    fn coverage_scope(self) -> CoverageScope {
+        CoverageScope {
+            include_deps: true,
+            stdlib: self == Root::Stdlib,
         }
     }
 
@@ -442,6 +472,33 @@ enum Excluded {
         level: OptLevel,
         detail: String,
     },
+    /// A profile's counts come from the probes only the test world carries.
+    NotTestWorld,
+    /// The instrumented compile or its run failed, so no plan keys a profile.
+    MeasureFailed(String),
+    /// The tests enter no function the root measures, so a profile has
+    /// nothing to judge.
+    NothingProfiled,
+    /// The findings of the profile stage: a profile moved the output, the trap
+    /// or test verdict, or made the compile fail or crash.
+    ProfileChangedOutput {
+        level: OptLevel,
+        detail: String,
+    },
+    ProfileTrapped {
+        level: OptLevel,
+        detail: String,
+    },
+    ProfileCrashed {
+        level: OptLevel,
+        detail: String,
+    },
+    /// A profile moves what a program costs, so it may push a run past the
+    /// harness's budget without computing anything else.
+    ProfileOutOfBudget {
+        level: OptLevel,
+        detail: String,
+    },
 }
 
 impl Excluded {
@@ -463,16 +520,27 @@ impl Excluded {
             Excluded::GuardOutOfBudget { .. } => "guard ran out of budget",
             Excluded::Nondeterministic { .. } => "source is nondeterministic",
             Excluded::GuardCrashed { .. } => "guard crashed the compiler",
+            Excluded::NotTestWorld => "not run under the test world",
+            Excluded::MeasureFailed(_) => "its tests could not be measured",
+            Excluded::NothingProfiled => "its tests enter no measured function",
+            Excluded::ProfileChangedOutput { .. } => "profile changed the output",
+            Excluded::ProfileTrapped { .. } => "profile changed whether it traps",
+            Excluded::ProfileCrashed { .. } => "profile crashed the compiler",
+            Excluded::ProfileOutOfBudget { .. } => "profile ran out of budget",
         }
     }
 
     fn detail(&self) -> String {
         match self {
-            Excluded::MalformedData(d) | Excluded::FormatFailed(d) => d.clone(),
-            Excluded::UnsupportedDataKey(k) => k.clone(),
-            Excluded::Todo | Excluded::NoInjectionSite | Excluded::NoBindingInScope => {
-                String::new()
+            Excluded::MalformedData(d) | Excluded::FormatFailed(d) | Excluded::MeasureFailed(d) => {
+                d.clone()
             }
+            Excluded::UnsupportedDataKey(k) => k.clone(),
+            Excluded::Todo
+            | Excluded::NoInjectionSite
+            | Excluded::NoBindingInScope
+            | Excluded::NotTestWorld
+            | Excluded::NothingProfiled => String::new(),
             Excluded::BaselineCompileFailed { level, detail }
             | Excluded::BaselineUnhealthy { level, detail }
             | Excluded::BaselineOutOfBudget { level, detail }
@@ -481,7 +549,11 @@ impl Excluded {
             | Excluded::GuardTrapped { level, detail }
             | Excluded::GuardOutOfBudget { level, detail }
             | Excluded::Nondeterministic { level, detail }
-            | Excluded::GuardCrashed { level, detail } => {
+            | Excluded::GuardCrashed { level, detail }
+            | Excluded::ProfileChangedOutput { level, detail }
+            | Excluded::ProfileTrapped { level, detail }
+            | Excluded::ProfileCrashed { level, detail }
+            | Excluded::ProfileOutOfBudget { level, detail } => {
                 format!("[{}] {detail}", common::opt_level_name(*level))
             }
         }
@@ -1097,8 +1169,12 @@ enum Evaluation {
 /// Compile and run `source`, catching a panic so one bad subject cannot take
 /// the campaign down with it.
 fn evaluate(path: &Path, source: &str, spec: &Spec, opt_level: OptLevel) -> Evaluation {
+    evaluate_under(path, source, spec, spec.compiler_options(opt_level))
+}
+
+fn evaluate_under(path: &Path, source: &str, spec: &Spec, options: CompilerOptions) -> Evaluation {
     let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        run_once(path, source, spec, opt_level)
+        run_once(path, source, spec, options)
     }));
     match result {
         Ok(evaluation) => evaluation,
@@ -1109,16 +1185,24 @@ fn evaluate(path: &Path, source: &str, spec: &Spec, opt_level: OptLevel) -> Eval
     }
 }
 
-fn run_once(path: &Path, source: &str, spec: &Spec, opt_level: OptLevel) -> Evaluation {
-    let options = spec.compiler_options(opt_level);
+fn compile(
+    path: &Path,
+    source: &str,
+    spec: &Spec,
+    options: CompilerOptions,
+) -> Result<wado_compiler::CompileResult, String> {
     let compiled = if spec.root.reads_manifests() {
         common::compile_in_package(path, source, options)
     } else {
         common::compile_source_with_compiler_options(path, source, options)
     };
-    let compiled = match compiled {
+    compiled.map_err(|e| e.to_string())
+}
+
+fn run_once(path: &Path, source: &str, spec: &Spec, options: CompilerOptions) -> Evaluation {
+    let compiled = match compile(path, source, spec, options) {
         Ok(compiled) => compiled,
-        Err(e) => return Evaluation::CompileError(e.to_string()),
+        Err(e) => return Evaluation::CompileError(e),
     };
 
     if spec.test_world {
@@ -1166,8 +1250,9 @@ fn run_once(path: &Path, source: &str, spec: &Spec, opt_level: OptLevel) -> Eval
 // Calibration
 // ---------------------------------------------------------------------------
 
-/// A source that survived a stage, with the number of guards it accepted and
-/// the shapes it accepted them in.
+/// A source that survived a stage, with what it brings — the guards it
+/// accepted, or in the profile stage the functions its profiles judge — and
+/// the shapes that brought them.
 struct Eligible {
     name: String,
     sites: usize,
@@ -1244,11 +1329,12 @@ fn baseline_moved(
     }
 }
 
-/// Delta-debug `sites` to a subset that still diverges.
+/// Delta-debug `sites` to a subset that still diverges: the guards of a mutant,
+/// or the functions of a profile.
 ///
 /// A mutant carries every site at once — one site per compile is tens of
 /// thousands of runs — so this is what makes a finding readable.
-fn reduce(mut sites: Vec<Site>, diverges: &dyn Fn(&[Site]) -> bool) -> Vec<Site> {
+fn reduce<T: Clone>(mut sites: Vec<T>, diverges: &dyn Fn(&[T]) -> bool) -> Vec<T> {
     let mut granularity = 2;
     while sites.len() > 1 {
         let chunk = sites.len().div_ceil(granularity);
@@ -1359,7 +1445,7 @@ fn is_calibration_finding(excluded: &Excluded) -> bool {
 ///
 /// A payload the compiler refuses is dropped rather than the source, which
 /// stays a subject as long as one payload survives.
-fn mutate(subject: &Source, source: &str) -> Result<Eligible, Excluded> {
+fn mutate(subject: &Source, source: &str, knobs: &Knobs) -> Result<Eligible, Excluded> {
     let name = subject.name();
     let spec = Spec::parse(subject.root, source)?;
     let canonical =
@@ -1378,7 +1464,7 @@ fn mutate(subject: &Source, source: &str) -> Result<Eligible, Excluded> {
     let mut refusals = Refusals::default();
     let path = &subject.path;
 
-    for level in levels() {
+    for &level in &knobs.levels {
         let baseline = baseline(path, &canonical, &spec, level)?;
         let mut survivors = Vec::new();
         for (shape, payload) in alive {
@@ -1537,7 +1623,7 @@ fn flat_name(name: &str) -> String {
     name.replace('/', "-")
 }
 
-fn calibrate(subject: &Source, source: &str) -> Result<Eligible, Excluded> {
+fn calibrate(subject: &Source, source: &str, knobs: &Knobs) -> Result<Eligible, Excluded> {
     let name = subject.name();
     let path = &subject.path;
     let spec = Spec::parse(subject.root, source)?;
@@ -1561,7 +1647,7 @@ fn calibrate(subject: &Source, source: &str) -> Result<Eligible, Excluded> {
     let mut alive: Vec<&Shape> = subject.shapes.clone();
     let mut refusals = Refusals::default();
 
-    for level in levels() {
+    for &level in &knobs.levels {
         let baseline = baseline(path, &canonical, &spec, level)?;
         if baseline.test_failed {
             return Err(Excluded::BaselineUnhealthy {
@@ -1605,6 +1691,382 @@ fn calibrate(subject: &Source, source: &str) -> Result<Eligible, Excluded> {
             .collect(),
         dropped: refusals.into_inner(),
     })
+}
+
+// ---------------------------------------------------------------------------
+// Profiles
+// ---------------------------------------------------------------------------
+
+/// How many random profiles each program is compiled under, beside the one its
+/// own tests record.
+fn random_profiles() -> u64 {
+    selection("WADO_EMI_PROFILES").map_or(2, |n| {
+        n.parse().expect("WADO_EMI_PROFILES must be a number")
+    })
+}
+
+/// A function a profile can judge: its module's key, and its place in that
+/// module's plan.
+type ProfiledFn = (String, usize);
+
+/// One profile, as the counts [`pgo::to_text`] renders.
+struct Counts {
+    /// Names it in a report and in a finding's file name.
+    key: String,
+    coverage: Coverage,
+}
+
+impl Counts {
+    /// The functions this profile judges: the ones it records a run of.
+    fn judged(&self) -> Vec<ProfiledFn> {
+        self.coverage
+            .files
+            .iter()
+            .flat_map(|(module, file)| {
+                file.plan
+                    .functions
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, function)| file.ran(function.region))
+                    .map(move |(index, _)| (module.clone(), index))
+            })
+            .collect()
+    }
+
+    /// This profile with every function outside `kept` never entered, which a
+    /// compile treats as unprofiled.
+    fn only(&self, kept: &[ProfiledFn]) -> Coverage {
+        let kept: IndexSet<(&str, usize)> = kept
+            .iter()
+            .map(|(module, index)| (module.as_str(), *index))
+            .collect();
+        let mut coverage = self.coverage.clone();
+        for (module, file) in &mut coverage.files {
+            for (index, ids) in file.plan.regions_by_function().into_iter().enumerate() {
+                if !kept.contains(&(module.as_str(), index)) {
+                    for id in ids {
+                        file.counts.remove(&id);
+                    }
+                }
+            }
+        }
+        coverage
+    }
+
+    fn function_name(&self, (module, index): &ProfiledFn) -> String {
+        format!(
+            "{module}::{}",
+            self.coverage.files[module].plan.functions[*index].name
+        )
+    }
+}
+
+fn parsed(coverage: &Coverage) -> Arc<pgo::Profile> {
+    Arc::new(pgo::parse(&pgo::to_text(coverage)).expect("a rendered profile parses"))
+}
+
+/// A count spread evenly over its magnitude, from 1 to 2^20, so one region may
+/// run a million times as often as another.
+fn random_count(rng: &mut ChaCha12Rng) -> i64 {
+    let base = 1i64 << rng.random_range(0..20);
+    base + rng.random_range(0..base)
+}
+
+/// SHA-256 rather than `DefaultHasher`, whose algorithm Rust may change in any
+/// release, so a seed rebuilds the same profile on every toolchain.
+fn seed(parts: &[&str]) -> u64 {
+    use sha2::{Digest, Sha256};
+    let digest = Sha256::digest(parts.join("\0"));
+    u64::from_le_bytes(digest[..8].try_into().expect("a digest holds eight bytes"))
+}
+
+/// Counts no workload would record, under `measured`'s plans: a function is
+/// entered seven times in eight, a region inside it never runs one time in
+/// three, and the rest run whatever count, its parent's notwithstanding. A
+/// profile, consistent or not, must not change what a program computes.
+fn random_counts(measured: &Coverage, seed: u64) -> Coverage {
+    let mut rng = ChaCha12Rng::seed_from_u64(seed);
+    let mut coverage = measured.clone();
+    for file in coverage.files.values_mut() {
+        file.counts.clear();
+        for (function, ids) in file
+            .plan
+            .functions
+            .iter()
+            .zip(file.plan.regions_by_function())
+        {
+            if rng.random_ratio(1, 8) {
+                continue;
+            }
+            for id in ids {
+                if id == function.region || !rng.random_ratio(1, 3) {
+                    file.counts.insert(id, random_count(&mut rng));
+                }
+            }
+        }
+    }
+    coverage
+}
+
+/// What `text`'s own tests ran at `level`, under the plans a profile is keyed
+/// by. The plans and the counts are the same at every level.
+fn measure(path: &Path, text: &str, spec: &Spec, level: OptLevel) -> Result<Coverage, String> {
+    let caught = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let options = CompilerOptions {
+            coverage: Some(spec.root.coverage_scope()),
+            ..spec.compiler_options(level)
+        };
+        let compiled = compile(path, text, spec, options)?;
+        let plans = read_from_component(&compiled.wasm)
+            .ok_or("the component carries no coverage section")?;
+        let result = common::run_test_world(
+            &compiled.wasm,
+            "emi",
+            indexmap::IndexMap::new(),
+            indexmap::IndexMap::new(),
+        )
+        .map_err(|e| format!("{e:#}"))?;
+        let mut coverage = Coverage::default();
+        let registered = coverage
+            .register(&plans, |plan| plan.name.clone())
+            .map_err(|mismatch| format!("plans disagree on {}", mismatch.path))?;
+        for counts in &result.coverage_counts {
+            coverage.record(&registered, counts, None);
+        }
+        Ok(coverage)
+    }));
+    caught.unwrap_or_else(|payload| {
+        Err(format!(
+            "panic: {}",
+            common::panic_message(payload.as_ref())
+        ))
+    })
+}
+
+/// One program the profile stage compiles: the source, or an empty-guard
+/// mutant, with the profiles it is compiled under.
+struct Program {
+    /// `source`, or the guard's keyword.
+    key: &'static str,
+    text: String,
+    profiles: Vec<Counts>,
+}
+
+/// Compile the source, and each empty-guard mutant calibration kept it for,
+/// under the profile its tests record and under random ones, at every level.
+/// The output must be the source's own. An empty guard is a region no run
+/// enters, which a profile marks cold.
+fn profile(subject: &Source, source: &str, knobs: &Knobs) -> Result<Eligible, Excluded> {
+    let name = subject.name();
+    let path = &subject.path;
+    let spec = Spec::parse(subject.root, source)?;
+    if !spec.test_world {
+        return Err(Excluded::NotTestWorld);
+    }
+    let canonical =
+        wado_compiler::format(source).map_err(|e| Excluded::FormatFailed(e.to_string()))?;
+    let sites = injection_sites(&canonical);
+    let texts = std::iter::once(("source", canonical.clone())).chain(
+        subject
+            .shapes
+            .iter()
+            .map(|shape| (shape.keyword, inject(&canonical, shape, &sites, ""))),
+    );
+    let levels = &knobs.levels;
+    let mut refusals = Refusals::default();
+    let mut programs = Vec::new();
+    for (key, text) in texts {
+        let measured = match measure(path, &text, &spec, levels[0]) {
+            Ok(coverage) => Counts {
+                key: "measured".to_string(),
+                coverage,
+            },
+            // The source decides whether the source is a subject; a mutant
+            // that does not measure drops out alone.
+            Err(detail) if programs.is_empty() => return Err(Excluded::MeasureFailed(detail)),
+            Err(detail) => {
+                refusals.note(Excluded::MeasureFailed(format!("{key}: {detail}")));
+                continue;
+            }
+        };
+        if programs.is_empty() && measured.judged().is_empty() {
+            return Err(Excluded::NothingProfiled);
+        }
+        let random: Vec<Counts> = (0..knobs.random_profiles)
+            .map(|index| Counts {
+                key: format!("random{index}"),
+                coverage: random_counts(
+                    &measured.coverage,
+                    seed(&[&name, key, &index.to_string()]),
+                ),
+            })
+            .collect();
+        let profiles = std::iter::once(measured).chain(random).collect();
+        programs.push(Program {
+            key,
+            text,
+            profiles,
+        });
+    }
+
+    let mut alive: Vec<(usize, usize)> = programs
+        .iter()
+        .enumerate()
+        .flat_map(|(p, program)| (0..program.profiles.len()).map(move |c| (p, c)))
+        .collect();
+    for &level in levels {
+        let baseline = baseline(path, &canonical, &spec, level)?;
+        let mut survivors = Vec::new();
+        for (p, c) in alive {
+            let program = &programs[p];
+            let counts = &program.profiles[c];
+            let run = ProfiledRun {
+                path,
+                program,
+                spec: &spec,
+                level,
+                baseline: &baseline,
+                counts,
+                label: format!("{}, {} profile", program.key, counts.key),
+                finding: format!(
+                    "profile-{}-{}-{}-{name}",
+                    program.key,
+                    counts.key,
+                    common::opt_level_name(level)
+                ),
+            };
+            match run.run() {
+                Ok(()) => survivors.push((p, c)),
+                Err(excluded) if is_profile_finding(&excluded) => return Err(excluded),
+                Err(excluded) => refusals.note(excluded),
+            }
+        }
+        alive = survivors;
+        if alive.is_empty() {
+            return Err(refusals.into_reason());
+        }
+    }
+
+    let mut covered: Vec<&Program> = alive.iter().map(|&(p, _)| &programs[p]).collect();
+    covered.dedup_by_key(|program| program.key);
+    let judged = |program: &&Program| program.profiles[0].judged().len();
+    Ok(Eligible {
+        name,
+        sites: covered.iter().map(judged).sum(),
+        shapes: covered
+            .iter()
+            .filter(|program| program.key != "source")
+            .map(|program| (program.key, judged(program)))
+            .collect(),
+        dropped: refusals.into_inner(),
+    })
+}
+
+fn is_profile_finding(excluded: &Excluded) -> bool {
+    matches!(
+        excluded,
+        Excluded::ProfileChangedOutput { .. }
+            | Excluded::ProfileTrapped { .. }
+            | Excluded::ProfileCrashed { .. }
+    )
+}
+
+/// One program under one profile at one level.
+struct ProfiledRun<'a> {
+    path: &'a Path,
+    program: &'a Program,
+    spec: &'a Spec,
+    level: OptLevel,
+    /// The source's output, which calibration found each mutant's to match.
+    baseline: &'a Outcome,
+    counts: &'a Counts,
+    label: String,
+    finding: String,
+}
+
+impl ProfiledRun<'_> {
+    fn evaluate(&self, coverage: &Coverage) -> Evaluation {
+        let options = CompilerOptions {
+            profile: Some(parsed(coverage)),
+            ..self.spec.compiler_options(self.level)
+        };
+        evaluate_under(self.path, &self.program.text, self.spec, options)
+    }
+
+    fn report(&self, detail: &str) -> String {
+        format!("{}: {detail}", self.label)
+    }
+
+    /// Compile under the whole profile, and reduce what misbehaves back to
+    /// the functions whose counts cause it.
+    fn run(&self) -> Result<(), Excluded> {
+        let level = self.level;
+        let (what, seen) = match self.evaluate(&self.counts.coverage) {
+            Evaluation::Ran(outcome) => {
+                let Some(what) = self.baseline.misbehaviour(&outcome) else {
+                    return Ok(());
+                };
+                // The program without the profile: a difference there is the
+                // program's own, not the profile's.
+                if let Some(detail) = baseline_moved(
+                    self.path,
+                    &self.program.text,
+                    self.spec,
+                    level,
+                    self.baseline,
+                ) {
+                    return Err(Excluded::Nondeterministic {
+                        level,
+                        detail: self.report(&detail),
+                    });
+                }
+                (what, self.baseline.differences(&outcome).join("; "))
+            }
+            // Where the program compiles and runs without the profile, a
+            // profile that makes the compile fail is as wrong as one that
+            // crashes it. Calibration checked that only at the levels it ran.
+            Evaluation::CompileError(detail) | Evaluation::Crashed(detail) => {
+                baseline(self.path, &self.program.text, self.spec, level)?;
+                (Misbehaviour::Crashed, detail)
+            }
+            Evaluation::OutOfBudget(detail) => {
+                return Err(Excluded::ProfileOutOfBudget {
+                    level,
+                    detail: self.report(&detail),
+                });
+            }
+        };
+        let judged = self.counts.judged();
+        let total = judged.len();
+        let reduced = reduce(judged, &|kept| self.reproduces(kept, what));
+        write_finding(&format!("{}.wado", self.finding), &self.program.text);
+        write_finding(
+            &format!("{}.pgo", self.finding),
+            &pgo::to_text(&self.counts.only(&reduced)),
+        );
+        let functions: Vec<String> = reduced
+            .iter()
+            .map(|function| self.counts.function_name(function))
+            .collect();
+        let detail = self.report(&format!(
+            "reduced to {} of {total} functions ({}) — {seen}",
+            reduced.len(),
+            functions.join(", ")
+        ));
+        Err(match what {
+            Misbehaviour::Diverged => Excluded::ProfileChangedOutput { level, detail },
+            Misbehaviour::Trapped => Excluded::ProfileTrapped { level, detail },
+            Misbehaviour::Crashed => Excluded::ProfileCrashed { level, detail },
+        })
+    }
+
+    fn reproduces(&self, kept: &[ProfiledFn], what: Misbehaviour) -> bool {
+        match self.evaluate(&self.counts.only(kept)) {
+            Evaluation::Ran(outcome) => self.baseline.misbehaviour(&outcome) == Some(what),
+            Evaluation::CompileError(_) | Evaluation::Crashed(_) => what == Misbehaviour::Crashed,
+            Evaluation::OutOfBudget(_) => false,
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -1771,9 +2233,10 @@ impl Drop for SilencedPanics {
 /// output disqualifies a source, while a payload that moves it is wrong code.
 fn campaign(
     subjects: &[Source],
-    stage: impl Fn(&Source, &str) -> Result<Eligible, Excluded> + Sync,
+    stage: impl Fn(&Source, &str, &Knobs) -> Result<Eligible, Excluded> + Sync,
     is_finding: impl Fn(&Excluded) -> bool + Sync,
 ) -> Results {
+    let knobs = Knobs::read();
     let total = subjects.len();
     assert!(
         total > 0,
@@ -1799,7 +2262,7 @@ fn campaign(
                     let name = subject.name();
 
                     let started = Instant::now();
-                    let outcome = stage(subject, &source);
+                    let outcome = stage(subject, &source, &knobs);
                     let cost = started.elapsed();
                     let finished = done.fetch_add(1, Ordering::Relaxed) + 1;
                     if finished.is_multiple_of(50) {
@@ -1844,7 +2307,7 @@ fn calibrate_corpus() {
     let subjects = corpus_sources();
     let results = campaign(&subjects, calibrate, is_calibration_finding);
     write_corpus(&results);
-    write_report(&results, &subjects, "calibration");
+    write_report(&results, &subjects, "calibration", INJECTION_SITES);
 
     assert!(
         results.findings.is_empty(),
@@ -1866,11 +2329,29 @@ fn calibrate_corpus() {
 fn mutate_corpus() {
     let subjects = corpus_subjects();
     let results = campaign(&subjects, mutate, is_finding);
-    write_report(&results, &subjects, "mutation");
+    write_report(&results, &subjects, "mutation", INJECTION_SITES);
 
     assert!(
         results.findings.is_empty(),
         "a payload behind an undecidable guard changed {} source(s); see the report",
+        results.findings.len()
+    );
+}
+
+/// Compile the calibrated corpus under profiles, and the program must not
+/// notice: a profile moves only what a program costs.
+///
+/// Reads `corpus.txt`, so the calibration runs first.
+#[test]
+#[ignore = "EMI campaign — minutes to hours over the calibrated corpus"]
+fn profile_corpus() {
+    let subjects = corpus_subjects();
+    let results = campaign(&subjects, profile, is_profile_finding);
+    write_report(&results, &subjects, "profile", "profiled functions");
+
+    assert!(
+        results.findings.is_empty(),
+        "a profile changed {} source(s); see the report",
         results.findings.len()
     );
 }
@@ -1900,7 +2381,10 @@ fn write_corpus(results: &Results) {
     std::fs::write(dir.join("corpus.txt"), &corpus).expect("cannot write corpus.txt");
 }
 
-fn write_report(results: &Results, subjects: &[Source], stage: &str) {
+const INJECTION_SITES: &str = "injection sites";
+
+/// `unit` names what [`Eligible::sites`] counts in this stage.
+fn write_report(results: &Results, subjects: &[Source], stage: &str, unit: &str) {
     let dir = out_dir();
     std::fs::create_dir_all(&dir)
         .unwrap_or_else(|e| panic!("cannot create {}: {e}", dir.display()));
@@ -1909,15 +2393,15 @@ fn write_report(results: &Results, subjects: &[Source], stage: &str) {
     let mut report = String::new();
     let sites: usize = results.eligible.iter().map(|e| e.sites).sum();
     report.push_str(&format!(
-        "sources scanned: {total}\neligible: {} ({sites} injection sites)\nexcluded: {}\nfindings: {}\n",
+        "sources scanned: {total}\neligible: {} ({sites} {unit})\nexcluded: {}\nfindings: {}\n",
         results.eligible.len(),
         results.excluded.len(),
         results.findings.len(),
     ));
     report.push_str(&per_reason(results));
-    report.push_str(&per_root(results, subjects));
-    report.push_str(&costliest(results));
-    report.push_str(&per_shape(results));
+    report.push_str(&per_root(results, subjects, unit));
+    report.push_str(&costliest(results, unit));
+    report.push_str(&per_shape(results, unit));
     report.push_str(&dropped(results));
 
     if !results.findings.is_empty() {
@@ -1945,9 +2429,8 @@ fn write_report(results: &Results, subjects: &[Source], stage: &str) {
     let path = dir.join(format!("{stage}.txt"));
     std::fs::write(&path, &report).expect("cannot write the report");
     eprintln!(
-        "[emi] {} eligible / {total} scanned, {} sites — {}",
+        "[emi] {} eligible / {total} scanned, {sites} {unit} — {}",
         results.eligible.len(),
-        sites,
         path.display()
     );
 }
@@ -1969,7 +2452,7 @@ fn per_reason(results: &Results) -> String {
 
 /// What each root contributed, so material that pays for its compile time can
 /// be told from material that does not.
-fn per_root(results: &Results, subjects: &[Source]) -> String {
+fn per_root(results: &Results, subjects: &[Source], unit: &str) -> String {
     let mut out = String::from("\n=== corpus ===\n");
     for root in ROOTS {
         let scanned = subjects.iter().filter(|s| s.root == root).count();
@@ -1992,7 +2475,7 @@ fn per_root(results: &Results, subjects: &[Source]) -> String {
             .map(|(_, cost)| *cost)
             .sum();
         out.push_str(&format!(
-            "{}: {}/{scanned} eligible ({sites} sites), {excluded} excluded, {findings} finding(s), {:.0}s\n",
+            "{}: {}/{scanned} eligible ({sites} {unit}), {excluded} excluded, {findings} finding(s), {:.0}s\n",
             root.name(),
             eligible.len(),
             cost.as_secs_f64(),
@@ -2003,7 +2486,7 @@ fn per_root(results: &Results, subjects: &[Source]) -> String {
 
 /// The sources that cost the stage most, with the sites each brought: a
 /// source dear for its sites is the first to sample or drop.
-fn costliest(results: &Results) -> String {
+fn costliest(results: &Results, unit: &str) -> String {
     const SHOWN: usize = 20;
     let mut out = String::from("\n=== costliest sources ===\n");
     for (name, cost) in results.costs.iter().take(SHOWN) {
@@ -2011,7 +2494,7 @@ fn costliest(results: &Results) -> String {
             .eligible
             .iter()
             .find(|e| &e.name == name)
-            .map_or_else(|| "excluded".to_string(), |e| format!("{} sites", e.sites));
+            .map_or_else(|| "excluded".to_string(), |e| format!("{} {unit}", e.sites));
         out.push_str(&format!("{:>7.1}s  {name} ({sites})\n", cost.as_secs_f64()));
     }
     out
@@ -2019,7 +2502,7 @@ fn costliest(results: &Results) -> String {
 
 /// What each guard shape survived on, so a shape that costs its compile time
 /// without reaching anything is visible.
-fn per_shape(results: &Results) -> String {
+fn per_shape(results: &Results, unit: &str) -> String {
     let mut out = String::from("\n=== guard shapes ===\n");
     for shape in &SHAPES {
         let reached: Vec<usize> = results
@@ -2028,7 +2511,7 @@ fn per_shape(results: &Results) -> String {
             .filter_map(|e| e.shapes.get(shape.keyword).copied())
             .collect();
         out.push_str(&format!(
-            "{}: {} source(s) ({} sites)\n",
+            "{}: {} source(s) ({} {unit})\n",
             shape.keyword,
             reached.len(),
             reached.iter().sum::<usize>(),
@@ -2112,6 +2595,99 @@ fn dump_mutants() {
 // Harness self-tests
 // ---------------------------------------------------------------------------
 
+/// The profile stage end to end on one program: its tests' counts key a
+/// profile, a reduction keeps only the functions it names, a random profile
+/// is rebuilt from its seed, and the program under each computes what it did.
+#[test]
+fn a_profile_keys_reduces_and_leaves_the_output_alone() {
+    const SOURCE: &str = "fn pick(x: i32) -> i32 {
+    if x > 100 {
+        return 1;
+    }
+    return 0;
+}
+
+fn twice(x: i32) -> i32 {
+    return x * 2;
+}
+
+test \"pick\" {
+    let mut sum = 0;
+    for let i of 1..=100 {
+        sum += twice(pick(i));
+    }
+    assert sum == 0;
+}
+";
+    let path = repository_root().join("wado-compiler/tests/fixtures/emi_profile.wado");
+    let spec = Root::Fixtures.default_spec();
+    let measured = Counts {
+        key: "measured".to_string(),
+        coverage: measure(&path, SOURCE, &spec, OptLevel::O0).expect("the program measures"),
+    };
+
+    let judged = measured.judged();
+    let pick = judged
+        .iter()
+        .find(|function| measured.function_name(function).ends_with("::pick"))
+        .expect("the test entered `pick`")
+        .clone();
+    assert_eq!(judged.len(), 2, "`twice` is judged too");
+    let only_pick = Counts {
+        key: "reduced".to_string(),
+        coverage: measured.only(std::slice::from_ref(&pick)),
+    };
+    assert_eq!(only_pick.judged(), vec![pick]);
+
+    let marked = |coverage: &Coverage| {
+        let options = CompilerOptions {
+            profile: Some(parsed(coverage)),
+            ..spec.compiler_options(OptLevel::O2)
+        };
+        compile(&path, SOURCE, &spec, options)
+            .expect("the program compiles")
+            .marked_regions
+    };
+    assert!(
+        !marked(&measured.coverage).is_empty(),
+        "the compile reads the profile under the plans' keys"
+    );
+
+    let text = |coverage: &Coverage| pgo::to_text(coverage);
+    let random = random_counts(&measured.coverage, 7);
+    assert_eq!(text(&random), text(&random_counts(&measured.coverage, 7)));
+    assert_ne!(text(&random), text(&random_counts(&measured.coverage, 8)));
+
+    let program = Program {
+        key: "source",
+        text: SOURCE.to_string(),
+        profiles: Vec::new(),
+    };
+    let level = OptLevel::O2;
+    let baseline = baseline(&path, SOURCE, &spec, level).expect("the program runs");
+    for counts in [
+        measured,
+        Counts {
+            key: "random".to_string(),
+            coverage: random,
+        },
+    ] {
+        let run = ProfiledRun {
+            path: &path,
+            program: &program,
+            spec: &spec,
+            level,
+            baseline: &baseline,
+            counts: &counts,
+            label: counts.key.clone(),
+            finding: String::new(),
+        };
+        if let Err(excluded) = run.run() {
+            panic!("{}: {}", excluded.kind(), excluded.detail());
+        }
+    }
+}
+
 #[test]
 fn every_guard_shape_is_single_line() {
     for shape in &SHAPES {
@@ -2160,9 +2736,15 @@ fn the_shape_report_counts_each_shape_s_own_sites() {
         }],
         ..Results::default()
     };
-    let report = per_shape(&results);
-    assert!(report.contains("if: 1 source(s) (10 sites)"), "{report}");
-    assert!(report.contains("while: 1 source(s) (4 sites)"), "{report}");
+    let report = per_shape(&results, INJECTION_SITES);
+    assert!(
+        report.contains("if: 1 source(s) (10 injection sites)"),
+        "{report}"
+    );
+    assert!(
+        report.contains("while: 1 source(s) (4 injection sites)"),
+        "{report}"
+    );
 }
 
 #[test]
@@ -2360,7 +2942,7 @@ __DATA__
         Root::Fixtures,
         Root::Fixtures.dir().join("emi_clock_nondeterminism.wado"),
     );
-    let excluded = calibrate(&subject, source)
+    let excluded = calibrate(&subject, source, &Knobs::read())
         .err()
         .expect("a printed clock reading cannot be an oracle");
     assert_eq!(excluded.kind(), "source is nondeterministic");

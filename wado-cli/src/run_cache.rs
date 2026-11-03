@@ -14,11 +14,13 @@
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
+use std::{fs, io};
 
+use indexmap::map::Entry;
 use sha2::{Digest, Sha256};
 use wado_compiler::hashmap::IndexMap;
-use wado_lsp::host::discovery::{absolutize, normalize_path};
-use wado_lsp::host::read_prefix;
+use wado_lsp::host::discovery::{PackageFiles, absolutize};
+use wado_lsp::host::{is_absent, read_prefix};
 
 use crate::fingerprint::{Input, InputKey};
 use wado_host::kiln::component_cache::ComponentCache;
@@ -100,20 +102,6 @@ impl RunCache {
         self.record(path, None, None);
     }
 
-    /// Record that what was read depends on what `path` holds now, for a file
-    /// the compile reads around the host, such as a manifest. The run's watch
-    /// is left out: it names moved sources. Only a scoped view reads the file,
-    /// since nothing asks any other what it depended on.
-    pub fn depend_on_file(&self, path: &Path) {
-        if self.reads.is_none() {
-            return;
-        }
-        match Input::on_disk(normalize_path(&absolutize(path)), None) {
-            Some(input) => self.record_input(input),
-            None => self.observe_untracked(),
-        }
-    }
-
     /// Record that what was read depends on `path`, which the run's watch
     /// already holds whole, as it does every stdlib file.
     pub fn depend_on_watched(&self, path: &Path) {
@@ -139,23 +127,26 @@ impl RunCache {
     /// so the scope's reads cannot vouch for its outcome.
     pub fn observe_untracked(&self) {
         if let Some(log) = &self.reads {
-            log.untracked.store(true, Ordering::Relaxed);
+            log.untrack();
+        }
+    }
+
+    /// Record that `path` holds `bytes`, which this run wrote there.
+    pub fn observe_written(&self, path: &Path, bytes: &[u8]) {
+        if let Some(log) = &self.reads {
+            log.wrote(path, bytes);
         }
     }
 
     fn record(&self, path: &Path, prefix: Option<u64>, hash: Option<[u8; 32]>) {
         if self.reads.is_some() {
-            self.record_input(Input::hashed(
-                normalize_path(&absolutize(path)),
-                prefix,
-                hash,
-            ));
+            self.record_input(Input::hashed(read_key(path), prefix, hash));
         }
     }
 
     fn record_input(&self, input: Input) {
         if let Some(log) = &self.reads {
-            lock(&log.inputs).entry(input.key()).or_insert(input);
+            log.record(input);
         }
     }
 
@@ -163,15 +154,11 @@ impl RunCache {
     /// untracked, or the view is not [`Self::scoped`].
     #[must_use]
     pub(crate) fn reads(&self) -> Option<Vec<Input>> {
-        let log = self.reads.as_ref()?;
-        if log.untracked.load(Ordering::Relaxed) {
-            return None;
-        }
-        Some(lock(&log.inputs).values().cloned().collect())
+        self.reads.as_ref()?.reads()
     }
 
     /// Record `reads`, which another view made, as read through this one.
-    fn replay(&self, reads: Option<&[Input]>) {
+    pub(crate) fn replay(&self, reads: Option<&[Input]>) {
         if self.reads.is_none() {
             return;
         }
@@ -185,11 +172,85 @@ impl RunCache {
     }
 }
 
-/// The reads of one [`RunCache::scoped`] view.
+/// A scoped view records the bytes each read returns. The run's watch leaves
+/// package files out: it names moved sources, and a run writes the `wado.lock`
+/// it reads.
+impl PackageFiles for RunCache {
+    fn read(&self, path: &Path) -> io::Result<String> {
+        match &self.reads {
+            Some(log) => log.read(path),
+            None => fs::read_to_string(path),
+        }
+    }
+}
+
+/// The reads of one compile, each file as it was first read. A file read twice
+/// to different bytes leaves the log untracked: the compile saw two trees.
 #[derive(Default)]
-struct ReadLog {
+pub(crate) struct ReadLog {
     inputs: Mutex<IndexMap<InputKey, Input>>,
     untracked: AtomicBool,
+}
+
+impl ReadLog {
+    fn record(&self, input: Input) {
+        let mut inputs = lock(&self.inputs);
+        match inputs.entry(input.key()) {
+            Entry::Occupied(first) if *first.get() != input => self.untrack(),
+            Entry::Occupied(_) => {}
+            Entry::Vacant(slot) => {
+                slot.insert(input);
+            }
+        }
+    }
+
+    /// Record that `path` holds `bytes`, written by the compile itself, in
+    /// place of what it held when first read.
+    fn wrote(&self, path: &Path, bytes: &[u8]) {
+        let input = file_input(path, Some(bytes));
+        lock(&self.inputs).insert(input.key(), input);
+    }
+
+    fn untrack(&self) {
+        self.untracked.store(true, Ordering::Relaxed);
+    }
+
+    /// What was read, or `None` where something read is untracked.
+    pub(crate) fn reads(&self) -> Option<Vec<Input>> {
+        if self.untracked.load(Ordering::Relaxed) {
+            return None;
+        }
+        Some(lock(&self.inputs).values().cloned().collect())
+    }
+
+    /// The text of the file at `path`, recorded as [`Self::read_bytes`] does.
+    pub(crate) fn read(&self, path: &Path) -> io::Result<String> {
+        String::from_utf8(self.read_bytes(path)?)
+            .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))
+    }
+
+    /// The bytes of the file at `path`, recording what the read returned, or
+    /// that it found none.
+    pub(crate) fn read_bytes(&self, path: &Path) -> io::Result<Vec<u8>> {
+        let read = fs::read(path);
+        match &read {
+            Ok(bytes) => self.record(file_input(path, Some(bytes))),
+            Err(e) if is_absent(e) => self.record(file_input(path, None)),
+            Err(_) => self.untrack(),
+        }
+        read
+    }
+}
+
+/// `path` holding `bytes`, or no file, keyed as every read of it is.
+fn file_input(path: &Path, bytes: Option<&[u8]>) -> Input {
+    Input::of(read_key(path), bytes)
+}
+
+/// `path` as a later check reads it again. `..` stays: the filesystem resolves
+/// it after any symlink before it, which folding it out of the text would not.
+fn read_key(path: &Path) -> PathBuf {
+    absolutize(path).components().collect()
 }
 
 /// Generators resolved by this run, keyed by manifest root + module. The first
@@ -561,5 +622,77 @@ mod tests {
         watch.observe(&file, None, b"v1");
         assert_eq!(watch.changed(), Vec::<PathBuf>::new());
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_file_read_twice_to_different_bytes_leaves_the_log_untracked() {
+        let dir = tempfile::tempdir().unwrap();
+        let file = dir.path().join("wado.toml");
+        write(&file, "v1");
+        let log = ReadLog::default();
+        log.read(&file).unwrap();
+        log.read(&file).unwrap();
+        assert!(log.reads().is_some());
+        write(&file, "v2");
+        log.read(&file).unwrap();
+        assert!(log.reads().is_none());
+    }
+
+    #[test]
+    fn a_write_of_the_compile_s_own_replaces_what_it_first_read() {
+        let dir = tempfile::tempdir().unwrap();
+        let file = dir.path().join("wado.lock");
+        let log = ReadLog::default();
+        assert!(log.read(&file).is_err());
+        write(&file, "pinned");
+        log.wrote(&file, b"pinned");
+        log.read(&file).unwrap();
+        let reads = log.reads().expect("tracked");
+        assert!(reads.iter().all(Input::unchanged));
+        assert_eq!(reads, [Input::of(file, Some(b"pinned"))]);
+    }
+
+    #[test]
+    fn bytes_that_are_not_text_are_recorded_as_they_are() {
+        let dir = tempfile::tempdir().unwrap();
+        let file = dir.path().join("wado.toml");
+        std::fs::write(&file, [0xff]).unwrap();
+        let log = ReadLog::default();
+        assert_eq!(
+            log.read(&file).unwrap_err().kind(),
+            io::ErrorKind::InvalidData
+        );
+        assert_eq!(
+            log.reads().expect("tracked"),
+            [Input::of(file, Some(&[0xff]))]
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_read_through_a_symlink_and_dot_dot_is_checked_where_it_landed() {
+        let dir = tempfile::tempdir().unwrap();
+        let sub = dir.path().join("real/sub");
+        std::fs::create_dir_all(&sub).unwrap();
+        std::os::unix::fs::symlink(&sub, dir.path().join("link")).unwrap();
+        write(&dir.path().join("real/wado.toml"), "read");
+        let log = ReadLog::default();
+        assert_eq!(
+            log.read(&dir.path().join("link/../wado.toml")).unwrap(),
+            "read"
+        );
+        assert!(log.reads().expect("tracked").iter().all(Input::unchanged));
+    }
+
+    #[test]
+    fn a_directory_is_recorded_as_no_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("wado.toml");
+        std::fs::create_dir(&path).unwrap();
+        let log = ReadLog::default();
+        assert!(log.read(&path).is_err());
+        let reads = log.reads().expect("tracked");
+        assert!(reads.iter().all(Input::unchanged));
+        assert_eq!(reads, [Input::of(path, None)]);
     }
 }

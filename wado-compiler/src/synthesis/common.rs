@@ -16,6 +16,7 @@ use std::cell::RefCell;
 use crate::ast::{BinaryOp, Visibility};
 use crate::module_source::ModuleSource;
 use crate::name::{COLD_PATH_INTRINSIC, FqTypeName, KNOWN_COLD_PATH_INTRINSIC, LocalMethodName};
+use crate::rarity::Mark;
 use crate::tir;
 use crate::tir::{
     CallArg, FunctionKind, FunctionRef, InlineHint, LetStorage, MonomorphInfo, TemplateId,
@@ -90,16 +91,29 @@ fn marker_stmt(intrinsic: &str, span: Span) -> TirStmt {
     )
 }
 
-/// Whether `stmt` is a cold marker, whoever placed it.
-pub fn is_cold_marker_stmt(stmt: &TirStmt) -> bool {
-    matches!(&stmt.kind, TirStmtKind::Expr(expr) if is_cold_marker_expr(expr))
+/// The marker a profile writes for `mark`: a measurement, so the one stating
+/// both halves is spelled as the compiler's own.
+pub fn profile_marker_stmt(mark: Mark, span: Span) -> TirStmt {
+    match mark {
+        Mark::ColdPath => known_cold_path_stmt(span),
+        Mark::Unlikely | Mark::Cold => marker_stmt(mark.builtin(), span),
+    }
 }
 
-/// Whether `expr` is a call to a cold marker, whoever placed it.
-pub fn is_cold_marker_expr(expr: &TirExpr) -> bool {
-    matches!(&expr.kind, TirExprKind::Call { func, .. }
-        if func.is_builtin_named(COLD_PATH_INTRINSIC)
-            || func.is_builtin_named(KNOWN_COLD_PATH_INTRINSIC))
+/// What `stmt` states, where it is a marker, whoever placed it.
+pub fn marker_stmt_mark(stmt: &TirStmt) -> Option<Mark> {
+    match &stmt.kind {
+        TirStmtKind::Expr(expr) => marker_mark(expr),
+        _ => None,
+    }
+}
+
+/// What `expr` states, where it is a call to a marker, whoever placed it.
+pub fn marker_mark(expr: &TirExpr) -> Option<Mark> {
+    match &expr.kind {
+        TirExprKind::Call { func, .. } => func.intrinsic().and_then(Mark::of_builtin),
+        _ => None,
+    }
 }
 
 /// Create a call to an internal function (e.g., `internal::cm_lower_string`).

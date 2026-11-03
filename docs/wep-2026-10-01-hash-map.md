@@ -103,9 +103,10 @@ optimization level.
   `#[ambient]` call whose result goes unused may be removed, and a probe returns
   `()`. [WEP: Test Coverage](./wep-2026-09-28-test-coverage.md) rests on no pass
   removing a probe that could run.
-- `eval` (`#[benign(EvalHost)]`) would still work, but `#[ambient]` is for
-  best-effort output and lifts the check from the whole body. `eval`'s case is
-  the one `#[benign]` names: an effect that does not show through the interface.
+- `eval` was `#[benign(EvalHost)]` here. Its output is the program's, so the
+  effect shows through the interface, which `#[benign]` must not hide: `eval`
+  now declares `with EvalHost`, and `measure` declares `with FuelHost`. A test
+  holds every effect, so a test calling either declares nothing.
 
 ### A Kiln generator hashes under a fixed seed
 

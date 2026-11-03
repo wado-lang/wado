@@ -25,7 +25,7 @@ use crate::tir::{ResolvedType, TypeId};
 use crate::token::Span;
 use crate::type_table::{TypeKey, TypeTable};
 
-use super::arena_query::ColdRuns;
+use super::arena_query::{MarkerBuiltins, RareRuns};
 use super::body_memo::BodyMemo;
 use super::const_branch_prune::BranchPruneRule;
 use super::const_folding::ConstFoldRule;
@@ -37,9 +37,10 @@ use super::inline::{body_callees, recursive_functions};
 use crate::ast::Visibility;
 use crate::compiler_trace;
 use crate::module_source::ModuleSource;
-use crate::name::{COLD_PATH_INTRINSIC, param_spec_name};
+use crate::name::param_spec_name;
 use crate::nir::NirLocal;
 use crate::parallel::Executor;
+use crate::rarity::Rarity;
 
 /// Default whole-module cap on synthesized clones, so a pathological program
 /// cannot trade unbounded code size for constant propagation;
@@ -411,6 +412,16 @@ impl ParamSpecState {
     /// What reaching the limit cost the run, if it did.
     pub(super) fn cap_hit(&self) -> Option<SpecializationCapHit> {
         self.cap_hit.clone()
+    }
+
+    /// The clones a later call may be pointed at again, which reachability
+    /// must keep though no call reaches them yet.
+    pub(super) fn cached_clones(&self, project: &NirPackage) -> Vec<FuncId> {
+        self.clones
+            .values()
+            .chain(project.sroa_param_clones.iter())
+            .copied()
+            .collect()
     }
 
     /// Whether `func` is itself a clone this pass minted.
@@ -1428,12 +1439,7 @@ pub(super) fn specialize_const_params(
     descriptors: &mut DescriptorCache,
     reachability: &mut ReachabilityCache,
 ) -> bool {
-    let cached: Vec<_> = state
-        .clones
-        .values()
-        .chain(project.sroa_param_clones.iter())
-        .copied()
-        .collect();
+    let cached = state.cached_clones(project);
     let mut reachable =
         reachable_function_positions(project, descriptors, reachability, gate.exec(), cached);
     let mut changed = false;
@@ -1461,14 +1467,14 @@ fn specialize_round(
         Signatures::build(project, &types, &recursive, gate.exec())
     };
     let facts = summarize_params(project, &signatures, gate.exec());
-    let cold = project.builtin_func_id(COLD_PATH_INTRINSIC);
+    let markers = MarkerBuiltins::of(project);
     let per_caller = collect_sites(
         project,
         state,
         &signatures,
         &facts,
         &constants,
-        cold,
+        markers,
         gate.exec(),
     );
     if per_caller.is_empty() {
@@ -1620,7 +1626,7 @@ fn collect_sites(
     signatures: &Signatures,
     facts: &IndexMap<(FuncId, u32), ParamFacts>,
     constants: &CallConsts,
-    cold: Option<FuncId>,
+    markers: MarkerBuiltins,
     exec: &Executor,
 ) -> Vec<(usize, Vec<Site>)> {
     let types = project.type_table.borrow();
@@ -1631,7 +1637,7 @@ fn collect_sites(
         let body = func.body.as_ref().filter(|_| !func.is_dead)?;
         let seed = state.param_consts.get(&FuncId::new(index));
         let roots = collect_roots(&func, body, types, signatures, facts, seed);
-        let cold_calls = ColdRuns::of(body, cold).exprs(body);
+        let cold_calls = RareRuns::of(body, markers, Rarity::Cold).exprs(body);
         let mut sites = select_sites(
             &func.locals,
             body,

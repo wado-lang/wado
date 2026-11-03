@@ -1,17 +1,19 @@
 // Test: `#[benign(E)]` lets a function perform effect `E` internally without
-// propagating it to callers. `emit` performs `Stdout`, but because it is
-// benign, `run` can call it without declaring `with Stdout`.
+// propagating it to callers. `seeded` asks for a seed its result does not
+// show, so `run` calls it without declaring `with InsecureSeed`.
 
 use { println, Stdout } from "core:cli";
+use { InsecureSeed } from "wasi:random";
 
-#[benign(Stdout)]
-fn emit(msg: String) {
-    println(msg);
+#[benign(InsecureSeed)]
+fn seeded() -> i32 {
+    let [_, _] = InsecureSeed::get_insecure_seed();
+    return 7;
 }
 
-export fn run() {
-    emit("benign effect works");
+export fn run() with Stdout {
+    println(`${seeded()}`);
 }
 
 __DATA__
-{"stdout": "benign effect works\n"}
+{"stdout": "7\n"}

@@ -17,11 +17,15 @@ is one global read, and `Log::enabled` runs the installed layer stack.
 `enabled(level)` exposes the same ladder for guarding fields too expensive
 to build.
 
-The facade is `#[ambient]`, so performing `Log` adds no `with Log` to a
-caller's signature, and every operation carries a default implementation, so
-a program that installs nothing still logs — `Info` and above, one text line
-per event on stderr. Installing a sink replaces that for its scope; `NopSink`
-is how a program asks for silence.
+The facade performs `Log` without a `with Log` in a caller's signature. The
+functions that emit or record are `#[benign(Log)]`: what they log is
+outside what the program computes. `enabled`, `span`, `current` and
+`in_span` hand a value back, so they are `#[ambient(Log)]`: `in_span`
+returns what its body computed inside the span it entered. Every operation
+carries a default implementation, so a program that installs nothing still
+logs — `Info` and above, one text line per event on stderr. Installing a
+sink replaces that for its scope; `NopSink` is how a program asks for
+silence.
 
 ## Synopsis
 
@@ -63,7 +67,7 @@ The process-wide threshold set by [`set_log_level`].
 
 ### `pub fn enabled(level: Level) -> bool`
 
-`#[ambient]`
+`#[ambient(Log)]`
 
 The three tiers, cheapest first, each narrowing what the one before
 admitted. Exposed as a predicate too, for guarding fields too expensive to
@@ -77,7 +81,7 @@ if enabled(Level::Debug) {
 
 ### `pub fn event<T: Serialize = NoFields>(level: Level, message: String, fields: T = NoFields {}, target: String = #function, file: String = #file, line: i32 = #line)`
 
-`#[ambient]`
+`#[benign(Log)]`
 
 Emit an event at a level a caller computes. The level wrappers' three gates
 apply here too; only tier 1 comes out weaker, since a level that is not a
@@ -86,37 +90,37 @@ resolve at the call site.
 
 ### `pub fn trace<T: Serialize = NoFields>(message: String, fields: T = NoFields {}, target: String = #function, file: String = #file, line: i32 = #line)`
 
-`#[ambient]`
+`#[benign(Log)]`
 
 ### `pub fn debug<T: Serialize = NoFields>(message: String, fields: T = NoFields {}, target: String = #function, file: String = #file, line: i32 = #line)`
 
-`#[ambient]`
+`#[benign(Log)]`
 
 ### `pub fn info<T: Serialize = NoFields>(message: String, fields: T = NoFields {}, target: String = #function, file: String = #file, line: i32 = #line)`
 
-`#[ambient]`
+`#[benign(Log)]`
 
 ### `pub fn warn<T: Serialize = NoFields>(message: String, fields: T = NoFields {}, target: String = #function, file: String = #file, line: i32 = #line)`
 
-`#[ambient]`
+`#[benign(Log)]`
 
 ### `pub fn error<T: Serialize = NoFields>(message: String, fields: T = NoFields {}, target: String = #function, file: String = #file, line: i32 = #line)`
 
-`#[ambient]`
+`#[benign(Log)]`
 
 ### `pub fn span<T: Serialize = NoFields>(level: Level, name: String, fields: T = NoFields {}, target: String = #function, file: String = #file, line: i32 = #line) -> Span`
 
-`#[ambient]`
+`#[ambient(Log)]`
 
 ### `pub fn current() -> Option<Span>`
 
-`#[ambient]`
+`#[ambient(Log)]`
 
 The innermost entered span, or `null` outside any.
 
 ### `pub fn in_span<T, effect E>(s: &Span, mut body: fn mut() -> T with E) -> T with E`
 
-`#[ambient]`
+`#[ambient(Log)]`
 
 Run `body` inside `s`. A closure can't skip the exit/close calls, so they
 run on every body exit path, an early `return` included.
@@ -231,19 +235,19 @@ _Fields are private._
 
 #### `pub fn record<T: Serialize>(&self, fields: T)`
 
-`#[ambient]`
+`#[benign(Log)]`
 
 Add fields to an open span.
 
 #### `pub fn follows_from(&self, cause: &Span)`
 
-`#[ambient]`
+`#[benign(Log)]`
 
 Record a non-parent causal link: this span follows from `cause`.
 
 #### `pub fn close(&self)`
 
-`#[ambient]`
+`#[benign(Log)]`
 
 Close a span entered by hand. [`in_span`] closes on every exit path, so
 this is only for a span the caller opened without it.
@@ -267,15 +271,16 @@ change, and may replace this once a mechanism keeps the guarantee.
 Wall-clock stamps with millisecond precision. Installing a sink over this
 adds a `wasi:clocks` import, so it belongs only in a world that has one.
 
-`#[ambient]` for the same reason the facade is: a sink's operations are
+`#[ambient(SystemClock)]` rather than `#[benign]`: a sink's operations are
 `Log`'s, whose signatures carry no effect, so the clock read cannot be
-declared on them.
+declared on them, and the stamp it returns is observable, which `#[benign]`
+forbids.
 
 #### `impl Clock for WallClock`
 
 ##### `fn now() -> Option<String>`
 
-`#[ambient]`
+`#[ambient(SystemClock)]`
 
 ### `pub struct TextSink<C: Clock = NoClock>`
 

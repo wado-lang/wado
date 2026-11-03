@@ -157,8 +157,17 @@ pub const CONTRACT_CLAUSE_INTRINSIC: &str = "$contract_clause";
 /// clause's own where a call reaches the function through a value.
 pub const CONTRACT_SITE_INTRINSIC: &str = "$contract_site";
 
-/// The `core:builtin` intrinsic marking a path rare, the one marker NIR has.
+/// The `core:builtin` intrinsic marking a path rare: its branch is unlikely,
+/// and it is cold code.
 pub const COLD_PATH_INTRINSIC: &str = "cold_path";
+
+/// The `core:builtin` intrinsic a profile writes where a branch is unlikely but
+/// its path is not cold code.
+pub const UNLIKELY_PATH_INTRINSIC: &str = "unlikely_path";
+
+/// The `core:builtin` intrinsic a profile writes where a path is cold code but
+/// its branch is not unlikely.
+pub const COLD_CODE_INTRINSIC: &str = "cold_code";
 
 /// The `core:builtin` intrinsic marking a path the program itself makes rare:
 /// ahead of a trap, or past a global's once-guard. Reify and lowering write it

@@ -21,7 +21,7 @@ use std::cell::{Cell, RefCell};
 use std::sync::Mutex;
 
 use crate::hashmap::{IndexMap, IndexSet};
-use crate::name::{COLD_PATH_INTRINSIC, inline_block_label, inline_temp_name};
+use crate::name::{inline_block_label, inline_temp_name};
 use crate::nir::{FunctionRef, InlineHint, NirFunction, NirLocal, NirUnaryOp};
 use crate::nir_arena::{
     ArenaCallArg, ArenaStructField, ArenaStructPatternField, ArmData, BlockId, BlockNode, Body,
@@ -36,7 +36,7 @@ use crate::type_table::TypeTable;
 
 use cranelift_entity::EntityRef;
 
-use super::arena_query::{self, ColdRuns, stmt_diverges, unreached_through};
+use super::arena_query::{self, MarkerBuiltins, RareRuns, stmt_diverges, unreached_through};
 use super::body_memo::BodyMemo;
 use super::gate::{FunctionGate, GatedPass};
 use crate::compiler_trace;
@@ -46,6 +46,7 @@ use crate::optimize::alias::{CallImmutability, call_verdicts, first_param_types}
 use crate::optimize::dce::{DescriptorCache, ReachabilityCache, reachable_function_positions};
 use crate::optimize::mod_ref::SummaryCache;
 use crate::parallel::{Executor, lock};
+use crate::rarity::Rarity;
 use crate::token::Span;
 use crate::trace::filter;
 
@@ -156,7 +157,7 @@ enum Price {
 struct CostWalk<'a> {
     body: &'a Body,
     type_table: &'a TypeTable,
-    cold: &'a ColdRuns,
+    cold: &'a RareRuns,
     price: Price,
     /// The constants this walk prices the body under, or `None` to price it as
     /// written. See [`ConstView`].
@@ -179,7 +180,7 @@ pub(super) struct ConstView<'a> {
 type SeenValues = IndexSet<ValueId>;
 
 impl<'a> CostWalk<'a> {
-    fn new(body: &'a Body, type_table: &'a TypeTable, cold: &'a ColdRuns, price: Price) -> Self {
+    fn new(body: &'a Body, type_table: &'a TypeTable, cold: &'a RareRuns, price: Price) -> Self {
         Self {
             body,
             type_table,
@@ -365,7 +366,7 @@ impl<'a> CostWalk<'a> {
         };
         let mut total = 0;
         for &stmt in stmts {
-            if self.cold.is_marker(self.body, stmt) {
+            if self.cold.marker_at(self.body, stmt).is_some() {
                 continue;
             }
             total += self.stmt(stmt, seen);
@@ -653,7 +654,7 @@ const FREE_ARITY: usize = 2;
 
 /// The inline cost of a function body, in the unit [`weight`] defines. `spliced`
 /// prices its calls — see [`CostWalk::splicing`]; empty prices them as ABI edges.
-fn inline_cost(body: &Body, type_table: &TypeTable, cold: &ColdRuns, spliced: &[usize]) -> usize {
+fn inline_cost(body: &Body, type_table: &TypeTable, cold: &RareRuns, spliced: &[usize]) -> usize {
     CostWalk::new(body, type_table, cold, Price::Hot)
         .splicing(spliced)
         .whole_body()
@@ -664,7 +665,7 @@ fn inline_cost(body: &Body, type_table: &TypeTable, cold: &ColdRuns, spliced: &[
 /// store, so this parts company with [`inline_cost`] exactly where a callee
 /// keeps a rare heavy arm: `TreeBuilder::push_row` in the Gale runtime prices at
 /// 27 hot and 166 by size.
-fn inline_size(body: &Body, type_table: &TypeTable, cold: &ColdRuns) -> usize {
+fn inline_size(body: &Body, type_table: &TypeTable, cold: &RareRuns) -> usize {
     CostWalk::new(body, type_table, cold, Price::Size).whole_body()
 }
 
@@ -675,7 +676,7 @@ fn inline_size(body: &Body, type_table: &TypeTable, cold: &ColdRuns) -> usize {
 pub(super) fn region_size(
     body: &Body,
     type_table: &TypeTable,
-    cold: &ColdRuns,
+    cold: &RareRuns,
     stmts: &[StmtId],
 ) -> usize {
     let walk = CostWalk::new(body, type_table, cold, Price::Size);
@@ -709,7 +710,7 @@ fn net_cost(gross: usize, param_count: usize) -> usize {
 fn inline_cost_folded(
     body: &Body,
     type_table: &TypeTable,
-    cold: &ColdRuns,
+    cold: &RareRuns,
     view: &ConstView<'_>,
     spliced: &[usize],
 ) -> usize {
@@ -843,14 +844,14 @@ fn fold_drops_loop(body: &Body, view: &ConstView<'_>, walk: &CostWalk<'_>) -> bo
 fn has_safepoint(
     body: &Body,
     type_table: &TypeTable,
-    cold: &ColdRuns,
+    cold: &RareRuns,
     safepoint_calls: &[bool],
     written: &IndexSet<u32>,
 ) -> bool {
     struct Walk<'a> {
         body: &'a Body,
         type_table: &'a TypeTable,
-        cold: &'a ColdRuns,
+        cold: &'a RareRuns,
         safepoint_calls: &'a [bool],
         written: &'a IndexSet<u32>,
     }
@@ -969,10 +970,9 @@ struct BodyScan {
     /// Every call, with its by-value arguments keyed by position: an
     /// [`ArgSite`] before the callee's own writes rule any out.
     calls: Vec<ArgSite>,
-    /// The callees called from at least one site no `cold_path()` marker
-    /// covers.
+    /// The callees called from at least one site no cold marker covers.
     hot_callees: IndexSet<FuncId>,
-    /// The callees called from at least one site a `cold_path()` marker covers.
+    /// The callees called from at least one site a cold marker covers.
     cold_callees: IndexSet<FuncId>,
     /// The callees called from at least one site outside every loop.
     unlooped_callees: IndexSet<FuncId>,
@@ -1027,7 +1027,7 @@ fn revisit_moved_reads(
     }
 }
 
-fn scan_body(func: &NirFunction, cold_path: Option<FuncId>) -> BodyScan {
+fn scan_body(func: &NirFunction, markers: MarkerBuiltins) -> BodyScan {
     // A site's arguments are keyed by position and the callee's writes by
     // local index.
     assert!(
@@ -1041,7 +1041,7 @@ fn scan_body(func: &NirFunction, cold_path: Option<FuncId>) -> BodyScan {
     let Some(body) = &func.body else {
         return scan;
     };
-    let cold = ColdRuns::of(body, cold_path).exprs(body);
+    let cold = RareRuns::of(body, markers, Rarity::Cold).exprs(body);
     let looped = looped_exprs(body);
     body.for_each_reachable_node(|node| match node {
         NodeRef::Stmt(st) => match &body.stmts[st].kind {
@@ -1578,7 +1578,7 @@ fn classify_callee(
     barred_cycle_members: &IndexSet<FuncId>,
     type_table: &TypeTable,
     inline_threshold: usize,
-    cold: &ColdRuns,
+    cold: &RareRuns,
     foldable: &[bool],
     loopy: &[bool],
     safepoint_calls: &[bool],
@@ -2149,9 +2149,9 @@ pub fn inline_functions(
     // borrow-safe), so a call site is recognized by its stamped id rather than the
     // call node's `FunctionRef`. Indexed by `func_id.index()` (== store position).
     let descriptors = descriptor_cache.descriptors(project);
-    let cold = project.builtin_func_id(COLD_PATH_INTRINSIC);
+    let markers = MarkerBuiltins::of(project);
     let InlineScans { bodies, read } = scans;
-    let scans = bodies.refresh(project, gate.exec(), |f| scan_body(f, cold));
+    let scans = bodies.refresh(project, gate.exec(), |f| scan_body(f, markers));
     let sites = argument_sites(scans, &live);
     // Taken every round, unlike the prices below: a callee's only site is one
     // where its splice pays back.
@@ -2260,11 +2260,12 @@ pub fn inline_functions(
     let exec = gate.exec().clone();
     let type_table: &TypeTable = &types;
     let functions = &project.functions;
-    let cold_runs: Vec<ColdRuns> = exec.map_indices(functions.len(), |i| {
+    let cold_runs: Vec<RareRuns> = exec.map_indices(functions.len(), |i| {
         let func = functions[i].borrow();
-        func.body
-            .as_ref()
-            .map_or_else(ColdRuns::default, |b| ColdRuns::of(b, cold))
+        func.body.as_ref().map_or_else(
+            || RareRuns::none(markers, Rarity::Cold),
+            |b| RareRuns::of(b, markers, Rarity::Cold),
+        )
     });
     let spliced: Vec<usize> = exec.map_indices(functions.len(), |i| {
         let func = functions[i].borrow();
@@ -2754,7 +2755,7 @@ fn inline_calls_in_block(
     body: &mut Body,
     block: BlockId,
     candidates: Candidates<'_>,
-    cold: &mut ColdRuns,
+    cold: &mut RareRuns,
     frame: &mut CallerFrame<'_>,
     type_table: &TypeTable,
     inlined_funcs: &mut Vec<FuncId>,
@@ -3940,7 +3941,7 @@ fn inline_calls_in_expr(
     body: &mut Body,
     e: ExprId,
     candidates: Candidates<'_>,
-    cold: &mut ColdRuns,
+    cold: &mut RareRuns,
     frame: &mut CallerFrame<'_>,
     type_table: &TypeTable,
     inlined_funcs: &mut Vec<FuncId>,

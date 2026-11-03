@@ -1,14 +1,14 @@
-// An ambient body may perform any effect, but that is what the body holds, not
-// what a function type it moves a closure into declares: `pure_caller` would
-// perform `Stdout` without declaring it.
+// An ambient body may perform the effects it lists, but that is what the body
+// holds, not what a function type it moves a closure into declares:
+// `pure_caller` would perform `Stdout` without declaring it.
 
-use { println } from "core:cli";
+use { println, Stdout } from "core:cli";
 
 fn pure_caller(f: fn()) {
     f();
 }
 
-#[ambient]
+#[ambient(Stdout)]
 fn setup() {
     pure_caller(|| { println("needs Stdout"); });
 }

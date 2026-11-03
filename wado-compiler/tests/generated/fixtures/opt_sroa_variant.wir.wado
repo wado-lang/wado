@@ -139,9 +139,9 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode";
 import fn wasi/task-return from "wasi/task-return";
 
-global global:opt_sroa_variant.wado::$const_obj_1: ref Array<u8> = array.new_fixed<u8>(111, 107);
-global global:opt_sroa_variant.wado::$const_obj_2: ref Array<u8> = array.new_fixed<u8>(104, 101, 108, 108, 111);
-global global:core:prelude/primitive.wado::$const_obj_3: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
+global global:opt_sroa_variant.wado::$const_obj_0: ref Array<u8> = array.new_fixed<u8>(111, 107);
+global global:opt_sroa_variant.wado::$const_obj_1: ref Array<u8> = array.new_fixed<u8>(104, 101, 108, 108, 111);
+global global:core:prelude/primitive.wado::$const_obj_2: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
 
 fn "opt_sroa_variant.wado/run"() with Stdout {
     let count: i32;
@@ -150,7 +150,7 @@ fn "opt_sroa_variant.wado/run"() with Stdout {
     let $sroa_$iter_0_repr_150: ref Array<u8>;
     let $sroa_$iter_0_byte_index_152: i32;
     count = 0;
-    $sroa_$iter_0_repr_150 = global:opt_sroa_variant.wado::$const_obj_2;
+    $sroa_$iter_0_repr_150 = global:opt_sroa_variant.wado::$const_obj_1;
     $sroa_$iter_0_byte_index_152 = 0;
     b0: block {
         l1: loop {
@@ -201,7 +201,7 @@ fn "opt_sroa_variant.wado/run"() with Stdout {
     count = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
     $sroa_$iter_0_byte_index_152 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
     count = "opt_sroa_variant.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(count);
-    builtin::array_copy<u8>(local.tee $sroa_$iter_0_repr_150(builtin::array_new<u8>(3)), 0, global:opt_sroa_variant.wado::$const_obj_1, 0, 2);
+    builtin::array_copy<u8>(local.tee $sroa_$iter_0_repr_150(builtin::array_new<u8>(3)), 0, global:opt_sroa_variant.wado::$const_obj_0, 0, 2);
     builtin::array_set_u8($sroa_$iter_0_repr_150, 2, 10);
     "core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]$dae[return]"($sroa_$iter_0_byte_index_152, $sroa_$iter_0_repr_150);
     "wasi/stream-drop-writable"($sroa_$iter_0_byte_index_152);
@@ -727,7 +727,7 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(self, f) {
     let abs_val: u64;
     is_negative = self < 0;
     self = "core:prelude/primitive.wado/count_digits_u64"(local.tee abs_val("core:prelude/primitive.wado/i64::abs"(builtin::i64_extend_i32_s(self))));
-    is_negative = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>"(f, is_negative, global:core:prelude/primitive.wado::$const_obj_3, self);
+    is_negative = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>"(f, is_negative, global:core:prelude/primitive.wado::$const_obj_2, self);
     "core:prelude/primitive.wado/write_decimal_digits"(f.buf.repr, is_negative, abs_val, self);
 }
 
