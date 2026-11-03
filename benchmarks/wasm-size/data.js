@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1793716837524,
+  "lastUpdate": 1793742681020,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -74085,6 +74085,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 316578,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "f5c2d6481dfdc5a356b1ef90dde1a9ac38b953a2",
+          "message": "Merge pull request #2537 from wado-lang/ccr-67696f54-x3aizq\n\nfix(optimize): identify struct instances by declaration and arguments, not by name or id",
+          "timestamp": "2026-11-04T06:39:02+09:00",
+          "tree_id": "dd4c24ae7605003aff0539616184e38bfe0d1bc7",
+          "url": "https://github.com/wado-lang/wado/commit/f5c2d6481dfdc5a356b1ef90dde1a9ac38b953a2"
+        },
+        "date": 1793742680400,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3099,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7303,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21996,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 377139,
             "unit": "bytes"
           }
         ]
