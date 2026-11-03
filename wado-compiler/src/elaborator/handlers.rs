@@ -390,28 +390,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         trait_type_args: &[TypeId],
     ) -> Option<InstanceOrder> {
         let tt = self.tysys.type_table.borrow();
-<<<<<<< HEAD
-        let fills = |key: &DefId| {
-            let written = &self.tysys.signatures.impl_sig(*key).trait_type_args;
-            written.len() == trait_type_args.len()
-                && std::iter::zip(written, trait_type_args)
-                    .all(|(&slot, &arg)| tt.same_type(slot, arg) || self.tysys.is_open_slot(slot))
-        };
-        keys.iter()
-            .find(|key| implements(key) && fills(key))
-            .copied()
-||||||| c0bdae6df
-        let fills = |key: &DefId| {
-            let written = &self.tysys.signatures.impl_sig(*key).trait_type_args;
-            written.len() == trait_type_args.len()
-                && std::iter::zip(written, trait_type_args).all(|(&slot, &arg)| {
-                    tt.type_key(slot) == tt.type_key(arg) || self.tysys.is_open_slot(slot)
-                })
-        };
-        keys.iter()
-            .find(|key| implements(key) && fills(key))
-            .copied()
-=======
         let args: Vec<FqTypeName> = trait_type_args
             .iter()
             .map(|&arg| tt.fq_type_name(arg))
@@ -419,7 +397,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.tysys
             .solver()
             .instance_order(&tt, handler_type, effect_decl, &args)
->>>>>>> origin/main
     }
 
     /// The impl-index key for a handler type: its own declaration, not what
