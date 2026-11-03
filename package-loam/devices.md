@@ -495,7 +495,7 @@ and a program for each shape class it has met. The caller owns it, and
      `compute` replays.
    - [x] Fusion over the recorded pass: elementwise chains, row groups,
      epilogues of products, and the products of one input by weights as one.
-   - [ ] Prologues of products and products in pairs over the recorded pass.
+   - [x] Prologues of products and products in pairs over the recorded pass.
    - [x] Attention over a shared cache, with or without a bias, in its kernels.
    - [ ] Each kernel's variant for the device and the shape class's extents,
      and the memory plan: one arena, a buffer reused once its tensor is dead.

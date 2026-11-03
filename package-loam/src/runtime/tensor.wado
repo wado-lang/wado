@@ -1891,9 +1891,8 @@ impl Expr {
     /// `step` as the output, which is always the last step: one already
     /// computed earlier is computed again there.
     fn ended(&mut self, step: Step) {
-        if self.shared(step) != self.last() {
-            self.steps.push(step);
-        }
+        let at = self.shared(step);
+        self.ending(at);
     }
 
     /// The output's `count` elements over whole operands, `operand(i)` reading

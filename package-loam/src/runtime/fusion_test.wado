@@ -147,7 +147,11 @@ test "a fold joins no kernel whose operands it would read neither per element no
 
 /// A gated layer over `x`: the product by one weight, through SiLU, times the
 /// product by another. The two products, then the result.
-fn gated(r: &mut Recorder, x: &Value<f32, Untyped>, scale: Option<&Value<f32, Untyped>>) -> [Value<f32, Untyped>, Value<f32, Untyped>, Value<f32, Untyped>] {
+fn gated(
+    r: &mut Recorder,
+    x: &Value<f32, Untyped>,
+    scale: Option<&Value<f32, Untyped>>,
+) -> [Value<f32, Untyped>, Value<f32, Untyped>, Value<f32, Untyped>] {
     let gate_w = r.parameter::<f32, Untyped>([2, 8]);
     let up_w = r.parameter::<f32, Untyped>([2, 8]);
     let gate = r.dot_general::<Untyped, Untyped, Untyped>(x, &gate_w, &last_axis_by_rows());

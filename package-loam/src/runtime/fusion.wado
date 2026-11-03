@@ -7,7 +7,7 @@
 use { HashMap, HashSet } from "core:collections";
 use { Binary, Comparison, Unary } from "./hlo.wado";
 use { Any, Operation, Recorded, RecordedNode, Region } from "./recorded.wado";
-use { BinaryOp, Cpu, Expr, RowOp, Step, UnaryOp, constant, operand } from "./tensor.wado";
+use { BinaryOp, Cpu, Expr, RowOp, Step, UnaryOp, operand } from "./tensor.wado";
 
 /// What a program runs for one region, in order, and the nodes it yields.
 pub struct Plan {
@@ -423,7 +423,10 @@ fn paired_products(
 /// Whether the products of `a` and `b` contract alike, as `rows_by_matrix`
 /// says, by right matrices of one shape.
 fn pairs_with(recorded: &Recorded, a: &Kernel, b: &Kernel) -> bool {
-    let [p, q] = [a.product.unwrap(), b.product.unwrap()];
+    let [p, q] = [
+        a.product.unwrap(),
+        b.product.unwrap(),
+    ];
     let [pn, qn] = [&recorded.nodes[p], &recorded.nodes[q]];
     return rows_by_matrix(recorded, p)
         && pn.op == qn.op
@@ -491,7 +494,11 @@ fn staged(recorded: &Recorded, readers: &HashMap<i32, List<i32>>, launches: List
         out.push(match &launches[i] {
             Kernel(k) => Launch::Kernel(from(k)),
             Joined(ks) => Launch::Joined(ks.into_iter().map(|k| from(k)).collect()),
-            Paired(p) => Launch::Paired(Pair { ..*p, first: from(&p.first), second: from(&p.second) }),
+            Paired(p) => Launch::Paired(Pair {
+                ..*p,
+                first: from(&p.first),
+                second: from(&p.second),
+            }),
             _ => unreachable(),
         });
     }
@@ -506,7 +513,10 @@ fn products_of(launch: &Launch) -> List<i32> {
             None => [],
         },
         Joined(ks) => ks.into_iter().map(|k| k.product.unwrap()).collect(),
-        Paired(p) => [p.first.product.unwrap(), p.second.product.unwrap()],
+        Paired(p) => [
+            p.first.product.unwrap(),
+            p.second.product.unwrap(),
+        ],
         _ => [],
     };
 }
@@ -834,7 +844,14 @@ fn read_at(e: &List<i32>, space: &List<i32>) -> List<i32> {
 
 /// The kernel computing `group`.
 fn kernel_of(recorded: &Recorded, group: &Group, splats: &HashMap<i32, Option<f32>>) -> Kernel {
-    let mut built = Built { recorded, group, splats, operands: [], op: Expr { steps: [] }, at: HashMap::new() };
+    let mut built = Built {
+        recorded,
+        group,
+        splats,
+        operands: [],
+        op: Expr { steps: [] },
+        at: HashMap::new(),
+    };
     let root = built.step_of(group.root);
     built.op.ending(root);
     return Kernel {
@@ -885,16 +902,24 @@ impl Built {
         }
         let x = self.step_of(node.operands[0]);
         let step = match &node.op {
-            Unary(op) => match unary_step(*op) {
-                Some(u) => Step::Unary([u, x]),
-                None => {
-                    let root = self.op.shared(Step::Unary([UnaryOp::Sqrt, x]));
-                    Step::Binary([BinaryOp::Div, self.op.shared(Step::Constant(1.0)), root]);
-                },
+            Unary(op) => {
+                return unary_at(&mut self.op, *op, x);
             },
-            Binary(op) => Step::Binary([binary_op(*op), x, self.step_of(node.operands[1])]),
-            Compare(direction) => Step::Binary([compared_op(*direction), x, self.step_of(node.operands[1])]),
-            Select => Step::Select([x, self.step_of(node.operands[1]), self.step_of(node.operands[2])]),
+            Binary(op) => Step::Binary([
+                binary_op(*op),
+                x,
+                self.step_of(node.operands[1]),
+            ]),
+            Compare(direction) => Step::Binary([
+                compared_op(*direction),
+                x,
+                self.step_of(node.operands[1]),
+            ]),
+            Select => Step::Select([
+                x,
+                self.step_of(node.operands[1]),
+                self.step_of(node.operands[2]),
+            ]),
             Convert => if node.kind matches { Bool } && self.recorded.nodes[node.operands[0]].kind matches { F32 } {
                 Step::Binary([BinaryOp::Ne, x, self.op.shared(Step::Constant(0.0))]);
             } else {
@@ -923,28 +948,33 @@ impl Built {
     }
 }
 
-/// `op` applied to `x`.
-pub fn unary_of(x: &Expr, op: Unary) -> Expr {
-    return match unary_step(op) {
-        Some(u) => x.unary(u),
-        None => constant(1.0).binary(BinaryOp::Div, &x.unary(UnaryOp::Sqrt)),
-    };
+/// `op` applied to `operand(0)`.
+pub fn unary_of(op: Unary) -> Expr {
+    let mut e = Expr { steps: [] };
+    let x = e.shared(Step::Operand(0));
+    let at = unary_at(&mut e, op, x);
+    e.ending(at);
+    return e;
 }
 
-/// The step computing `op`, where one does: all but `Rsqrt`, which divides 1
-/// by a square root.
-fn unary_step(op: Unary) -> Option<UnaryOp> {
-    return match op {
-        Abs => Option::Some(UnaryOp::Abs),
-        Erf => Option::Some(UnaryOp::Erf),
-        Exponential => Option::Some(UnaryOp::Exp),
-        Log => Option::Some(UnaryOp::Log),
-        Logistic => Option::Some(UnaryOp::Sigmoid),
-        Negate => Option::Some(UnaryOp::Neg),
-        Rsqrt => null,
-        Sqrt => Option::Some(UnaryOp::Sqrt),
-        Tanh => Option::Some(UnaryOp::Tanh),
+/// Where `e` computes `op` applied to its step `x`.
+fn unary_at(e: &mut Expr, op: Unary, x: i32) -> i32 {
+    let u = match op {
+        Abs => UnaryOp::Abs,
+        Erf => UnaryOp::Erf,
+        Exponential => UnaryOp::Exp,
+        Log => UnaryOp::Log,
+        Logistic => UnaryOp::Sigmoid,
+        Negate => UnaryOp::Neg,
+        Rsqrt => {
+            let root = e.shared(Step::Unary([UnaryOp::Sqrt, x]));
+            let one = e.shared(Step::Constant(1.0));
+            return e.shared(Step::Binary([BinaryOp::Div, one, root]));
+        },
+        Sqrt => UnaryOp::Sqrt,
+        Tanh => UnaryOp::Tanh,
     };
+    return e.shared(Step::Unary([u, x]));
 }
 
 pub fn binary_op(op: Binary) -> BinaryOp {
