@@ -1,12 +1,15 @@
-// A Kiln generator logging through the default sink, which stamps each event
-// with the wall clock. The generator world has no clock, and `WallClock::now()`
-// is `#[ambient(SystemClock)]`, so it answers `null` rather than importing one.
+// A Kiln generator installing a sink that stamps each event with the wall
+// clock. The generator world has no clock, and `WallClock::now()` is
+// `#[ambient(SystemClock)]`, so it answers `null` rather than importing one.
 
 use { Request, Response, OutputFile, Error } from "core:kiln";
-use { Clock, WallClock, info } from "core:log";
+use { Clock, Log, TextSink, WallClock, info } from "core:log";
 
 export fn generate(req: Request) -> Result<Response, Error> {
-    info(`generating`, { path: req.primary.path });
+    let mut sink: TextSink<WallClock> = TextSink {};
+    with Log => &mut sink do {
+        info(`generating`, { path: req.primary.path });
+    }
     let stamped = WallClock::now() matches { Some(_) };
     return Result::Ok(Response {
         files: [OutputFile {

@@ -148,7 +148,7 @@ Where a listed effect is not available, the function skips its body and returns
 `Default::default()`, or nothing when it returns `()`. "Do nothing" cannot be
 derived from an arbitrary body, but a value the type itself supplies can: a
 stdio write answers nothing, and `core:log`'s `WallClock::now` answers `null`,
-so the line leaves its stamp out. Reify guards each such body with
+an unstamped line. Reify guards each such body with
 `builtin::ambient_available("<interface>")`, and the optimizer settles every
 guard before the first DCE, at the least set of interfaces that explains
 itself, so two ambient bodies cannot keep each other's import alive.
@@ -201,22 +201,6 @@ runs without it.
 
 ## Implementation Notes
 
-### Host Capability Detection
-
-**Current approach**: `log()` and `log_error()` directly call the WASI write-via-stream functions. This works when the world provides stdout/stderr.
-
-**Future enhancement**: Add capability detection so these functions become no-ops when I/O is unavailable:
-
-```wado
-pub fn log_error(message: String) {
-    // Future: explicit capability check
-    // if builtin::has_capability("stderr") {
-    //     ... write to stderr ...
-    // }
-    // For now: always attempt to write
-}
-```
-
 ### Future: Assert Statement
 
 The `assert` statement will use `panic()`:
@@ -232,6 +216,15 @@ if !condition {
 ```
 
 Since `panic()` uses `log_error()`, no effect declaration is needed.
+
+## Known gaps
+
+- An ambient effect is available wherever the target world imports it, so the
+  component imports it whenever an ambient body reaches it. A host narrower than
+  the world then refuses the component, though the body would have degraded
+  without the import. `core:eval` compiles a `wasi:cli/command` and links no
+  `wasi:clocks`, so a program it runs that logs through `TextSink<WallClock>`
+  stops as `EvalError::Unavailable` rather than logging unstamped.
 
 ## Alternatives Considered
 

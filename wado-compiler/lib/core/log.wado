@@ -487,8 +487,9 @@ pub trait Clock with () {
     fn now() -> Option<String>;
 }
 
-/// No timestamp, and no `wasi:clocks` import, in any world. For output that
-/// must not vary between runs, such as a golden file or a trace a test reads.
+/// No timestamp, and no `wasi:clocks` import. The default sink's clock: a line
+/// is the same on every run, and a program that only logs asks its host for no
+/// clock.
 pub struct NoClock {
 }
 
@@ -498,11 +499,9 @@ impl Clock for NoClock {
     }
 }
 
-/// Wall-clock stamps with millisecond precision, and the sinks' default clock.
-/// Where the component has a clock, the sinks read it; where it has none, `now`
-/// answers `null`, the sinks leave the stamp out, and no `wasi:clocks` import
-/// is added. So a program that installs nothing logs in any world,
-/// `core:kiln/generator` included — its linker offers no WASI at all.
+/// Wall-clock stamps with millisecond precision. In a world with a clock, a
+/// sink over this imports `wasi:clocks`; in one without, `now` answers `null`
+/// and the lines go unstamped.
 ///
 /// `#[ambient(SystemClock)]` rather than `#[benign]`: a sink's operations are
 /// `Log`'s, whose signatures carry no effect, so the clock read cannot be
@@ -533,9 +532,8 @@ impl Clock for WallClock {
 /// Each part its configuration turns off is omitted; `location` appends
 /// ` at file:line`. Writes through the ambient `log_stderr`, so the sink needs
 /// no `Stderr` in its signature and installs in any world. `C` selects the
-/// timestamp: the default `TextSink` stamps where a clock is available, and
-/// `TextSink<NoClock>` never does.
-pub struct TextSink<C: Clock = WallClock> {
+/// timestamp: `TextSink<WallClock>` stamps, the default `TextSink` does not.
+pub struct TextSink<C: Clock = NoClock> {
     pub seq: bool = true,
     pub location: bool = false,
     spans: SpanStack = SpanStack {},
@@ -616,9 +614,10 @@ impl<C: Clock> Log for TextSink<C> {
 /// {"seq":42,"level":"info","target":"handle_request","message":"user logged in","span":3,"fields":{"user_id":7}}
 /// ```
 ///
-/// Keys a switch turns off are absent rather than null, and so is `ts` where
-/// `C` gives no stamp. `C` selects it the way it does for [`TextSink`].
-pub struct JsonSink<C: Clock = WallClock> {
+/// Keys a switch turns off are absent rather than null. `C` selects the `ts`
+/// key the way it does for [`TextSink`], so the default over `NoClock` writes
+/// no `ts` and `JsonSink<WallClock>` leads with one.
+pub struct JsonSink<C: Clock = NoClock> {
     pub seq: bool = true,
     pub location: bool = false,
     spans: SpanStack = SpanStack {},
