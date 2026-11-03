@@ -22,8 +22,8 @@ use crate::lower::plan::value_copy::place::{is_source_place, source_place_subscr
 use crate::lower::wide_int_literal::{create_literal, method_ref};
 use crate::module_source::ModuleSource;
 use crate::name::{
-    CONTRACT_CLAUSE_INTRINSIC, CONTRACT_SITE_INTRINSIC, FqTypeName, Receiver, contract_owner_name,
-    global_init_function, global_name, unchecked_twin_name,
+    CONTRACT_CLAUSE_INTRINSIC, CONTRACT_SITE_INTRINSIC, FqTypeName, Receiver, TypeHead,
+    contract_owner_name, global_init_function, global_name, unchecked_twin_name,
 };
 use crate::ownership::{self, BodyFacts as _, Modes};
 use crate::symbol::SymbolTable;
@@ -1536,26 +1536,14 @@ impl<'a> Reify<'a> {
             return None;
         }
         let facts = self.types.impl_facts.get(&impl_block.id)?;
-
-        // Derive the target's name the way `reify_method` derives it for this
-        // block's methods, so the block and its methods agree on the key the
-        // effect-dispatch handler index is built from.
-        let mut naming = LocalMethodName::of(
-            facts.receiver.clone(),
-            facts.trait_name.clone(),
-            String::new(),
-        );
-        if let Some(owner) = facts.concrete_owner.as_ref() {
-            naming = naming.at_owner(owner);
-        }
-
         Some(TirImpl {
+            def: self.impl_origin(impl_block),
             trait_canonical: facts
                 .trait_name
                 .as_ref()
                 .and_then(|fq| fq.declared_head().cloned()),
             trait_type_args: facts.trait_type_args.clone(),
-            struct_name: naming.struct_name(),
+            is_blanket: matches!(facts.struct_name.head(), TypeHead::Binder { .. }),
             rest: impl_block.rest.map(|r| r.kind),
             span: impl_block.span,
         })
@@ -1728,11 +1716,7 @@ impl<'a> Reify<'a> {
             );
             info.is_ref_impl = facts.is_ref_impl;
             // Carry the impl's trait type args (`impl Future<i32> for …`
-            // → `[i32]`). The effect-dispatch synthesis keys its handler
-            // index on `(struct, effect_module, base_trait, trait_type_args)`;
-            // without the args a generic-effect
-            // handler is keyed `Future<>` and the `Future<i32>` binding
-            // finds no `DispatchPlan`.
+            // → `[i32]`), which the method's mangled trait spells.
             info.trait_type_args.clone_from(&facts.trait_type_args);
             info
         };
@@ -6761,6 +6745,7 @@ impl<'a> Reify<'a> {
                     trait_type_args: entry.trait_type_args.clone(),
                     handler: handler.clone(),
                     handler_type: facts.handler_type,
+                    impl_def: entry.impl_def,
                     span: binding.span,
                     bundle_group: facts.bundle_group,
                 });

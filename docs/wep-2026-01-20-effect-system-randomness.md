@@ -155,16 +155,15 @@ This keeps WASI's capability-based security model intact: the dependency on `Ins
 
 #### `#[benign]` is not `ambient`
 
-`#[benign]` and the `ambient` facility (`log_stdout` / `log_stderr`, see `wep-2026-01-12-ambient-logging.md`) both suppress effect propagation, but they are distinct concepts justified by different principles:
+`#[benign(E)]` and `#[ambient(E)]` (see [WEP: Ambient Logging Functions](./wep-2026-01-12-ambient-logging.md)) both list effects a body performs without declaring them, and neither propagates to a caller. They are justified by opposite principles:
 
-|                    | `ambient` (logging)                                                                         | `#[benign(E)]`                     |
-| ------------------ | ------------------------------------------------------------------------------------------- | ---------------------------------- |
-| World import       | not required                                                                                | required                           |
-| `with` propagation | none                                                                                        | none                               |
-| The effect itself  | observable (output is visible) but best-effort / unreliable, so callers cannot depend on it | unobservable through the interface |
-| Justification      | ambient authority + best-effort                                                             | observational purity               |
+|                   | `#[ambient(E)]`                                                            | `#[benign(E)]`                     |
+| ----------------- | -------------------------------------------------------------------------- | ---------------------------------- |
+| World import      | used where the component has it, never added                               | required                           |
+| The effect itself | observable (output is visible), but best-effort, so no caller relies on it | unobservable through the interface |
+| Justification     | best-effort use of a capability already granted                            | observational purity               |
 
-`ambient` grants authority with no capability at all (ambient authority). `#[benign]` keeps the capability and only hides the propagation. They are nearly orthogonal — one is "observable but unreliable and capability-free," the other is "unobservable but capability-bound" — so they remain separate attributes rather than one shared name.
+An ambient effect is optional and may show. A benign effect is required and must not show. So they stay two attributes.
 
 #### `#[benign]` is a trust boundary
 

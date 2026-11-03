@@ -1108,10 +1108,8 @@ pub(crate) struct ImplFacts {
     /// Concrete `TypeId`s of the trait/resource type arguments at the
     /// impl site (`impl Future<i32> for …` → `[i32]`; `impl<T> Stream<T>`
     /// → the impl's `TypeParam` id). Written onto each method's
-    /// `LocalMethodName::trait_type_args`; the effect-dispatch synthesis
-    /// keys its handler index on `(struct, effect_module, base_trait,
-    /// trait_type_args)`, so a generic-effect handler needs the args to
-    /// match the binding's instantiation.
+    /// `LocalMethodName::trait_type_args`, and the instantiation the
+    /// effect-dispatch synthesis builds a generic effect's infrastructure for.
     pub(crate) trait_type_args: Vec<tir::TypeId>,
     /// True iff the impl target is `&T` / `&mut T`, whose `&self` holds two
     /// layers over the pointee.

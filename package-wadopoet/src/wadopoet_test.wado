@@ -15,10 +15,10 @@ use {
     char_range_pat,
     byte_string_literal,
 } from "./wadopoet.wado";
-use { eval } from "core:eval";
+use { eval, EvalHost } from "core:eval";
 
 /// What a command prints when `body` is its `run`, beside `items`.
-fn printed(body: String, items: String = "") -> String {
+fn printed(body: String, items: String = "") -> String with EvalHost {
     let out = eval(`use { print, Stdout } from "core:cli";
 ${items}
 export fn run() with Stdout {

@@ -12,7 +12,7 @@
 //! it, and a program for any other world that reaches this module does not
 //! compile.
 
-use { FuelHost } from "core:fuel/fuel_host.wado";
+pub use { FuelHost } from "core:fuel/fuel_host.wado";
 
 #[synopsis]
 test {
@@ -30,8 +30,7 @@ test {
 /// Runs `f` and reports the fuel it spent as region `label` of the running
 /// test. `f`'s result passes through `builtin::black_box`, so the work that
 /// produces it is never optimized out of the region.
-#[benign(FuelHost)]
-pub fn measure<T, effect E>(label: String, mut f: fn mut() -> T with E) -> T with E {
+pub fn measure<T, effect E>(label: String, mut f: fn mut() -> T with E) -> T with (E, FuelHost) {
     let Some(start) = FuelHost::spent() else {
         return f();
     };
