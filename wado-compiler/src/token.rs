@@ -27,7 +27,7 @@ pub enum TemplateTokenPart {
 
 /// How a string, byte string or template literal is delimited, which decides
 /// what a backslash in it means.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Quote {
     /// `"…"`, `` `…` ``: a backslash starts an escape.
     Cooked,

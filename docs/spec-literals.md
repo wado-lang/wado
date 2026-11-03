@@ -1137,12 +1137,13 @@ parameter of any other type, `&T` included, is reported as a tag error. Nothing
 on the declaration marks a function as a tag.
 
 Each template shape has an anonymous type of its own. The shape is the
-template's holes, each a type and a specifier, so `` tag`a=${a}` `` and
-`` tag`b: ${b}` `` are one type where `a` and `b` share one, and one
-instantiation of the tag. A value of it holds each hole and the literal text the
-site wrote. The type is unnameable and reached only through the bound; a
-diagnostic and `Reflect::decl_name()` show it as its holes, each spelled by its
-type and specifier, `` `${i32:04}` ``, cut at 50 characters with `...`.
+template's delimiters and its holes, each a type and a specifier, so
+`` tag`a=${a}` `` and `` tag`b: ${b}` `` are one type where `a` and `b` share
+one, and one instantiation of the tag. A value of it holds each hole and the
+literal text the site wrote. The type is unnameable and reached only through the
+bound; a diagnostic and `Reflect::decl_name()` show it as its delimiters around
+its holes, each spelled by its type and specifier, `` `${i32:04}` `` or
+`` #`${i32}`# ``, cut at 50 characters with `...`.
 
 `ReflectTemplate` is
 [sealed](./spec-reflection.md#sealed-traits), as the whole family is. Its
@@ -1181,18 +1182,20 @@ to it, `&V`), `spec()` (the specifier as written, or `None`), `has_spec()`, and
 affine hole, and its handles offer no `get`, since a copy of an affine value
 does not exist. `String::format` and `String::raw` declare it.
 `ReflectTemplate::<T>::tail(&t)` and `raw_tail(&t)` give the segment after the
-last hole, and `hashes(&t)` how many `#`s delimit `t` on each end: 0 for a
-cooked template. A segment is a `StrSlice` over the template's own text, so
-reading one copies nothing. `index()`, `spec()` and `has_spec()` are constants
-of the shape. A hole handle is minted only by `members()`.
+last hole, and `hashes()` how many `#`s delimit the template on each end: 0
+for a cooked template. A segment is a `StrSlice` over the template's own text,
+so reading one copies nothing. `index()`, `spec()`, `has_spec()` and
+`hashes()` are constants of the shape. A hole handle is minted only by
+`members()`.
 
 A template value inspects as the template it was written as: its delimiters,
 each segment raw, and each hole as its value inspected, followed by its
 specifier.
 `` `${t:?}` `` on `` id`n=${n:04}\n` `` with `n = 7` renders
-`` `n=${7:04}\n` ``. `==` compares the text as written and the delimiters as
-well as the holes, so the form shows both: `` `a${n}` `` equals neither
-`` #`a${n}`# `` nor `` `\u{61}${n}` ``.
+`` `n=${7:04}\n` ``. `==` compares the text as written as well as the holes, so
+the form shows the text: `` `a${n}` `` does not equal `` `\u{61}${n}` ``. The
+delimiters are part of the shape, so `` `a${n}` `` and `` #`a${n}`# `` are two
+types, and comparing them is a type error.
 
 `members()` walks a pack, so `Holes` is bound either as one (`[..V]`) or as the
 empty tuple (`[]`, for a tag that reads only `tail(&t)`). A concrete tuple

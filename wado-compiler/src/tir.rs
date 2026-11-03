@@ -20,7 +20,7 @@ use crate::module_source::ModuleSource;
 use crate::name::{DeclaredHead, FunctionId, LocalMethodName, checked_name, unchecked_twin_name};
 use crate::primitive::PrimitiveType;
 use crate::symbol_notation::render;
-use crate::token::Span;
+use crate::token::{Quote, Span};
 use crate::type_table::{AnonStructId, TypeKey, TypeTable};
 
 /// `ReflectNewtype`'s only associated type (`type Base`): what the newtype
@@ -443,12 +443,14 @@ pub struct TemplateHole {
     pub spec: Option<String>,
 }
 
-/// The static part of a tagged template literal: its holes. The literal
-/// segments are no part of it: a value carries its own, so templates differing
-/// only in their text share one type and one instantiation of the tag.
+/// The static part of a tagged template literal: its holes, and how it is
+/// delimited. The literal segments are no part of it: a value carries its
+/// own, so templates differing only in their text share one type and one
+/// instantiation of the tag.
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
 pub struct TemplateShape {
     pub holes: Vec<TemplateHole>,
+    pub quote: Quote,
 }
 
 impl TemplateShape {
@@ -484,16 +486,6 @@ impl TemplateShape {
     /// The segment keys, one cooked and one raw per segment, in field order.
     pub fn segment_keys(&self) -> std::ops::Range<u32> {
         0..Self::segment_key(self.holes.len() + 1, false)
-    }
-
-    /// The field holding how many `#`s delimit the template, after the
-    /// segments: what tells a raw template's text from a cooked one's.
-    #[must_use]
-    pub fn hashes_field(&self) -> (String, u32) {
-        (
-            "q".to_string(),
-            self.holes.len() as u32 + self.segment_keys().end,
-        )
     }
 
     #[must_use]

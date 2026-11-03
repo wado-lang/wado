@@ -1567,22 +1567,25 @@ fn generate_decl_name_fn(
     decl_name_method: &str,
     span: Span,
 ) -> TirFunction {
-    let method_info = trait_method_info(receiver, reflect_trait_name, decl_name_method);
-    let qualified_name = method_info.to_mangled_name();
+    constant_method(
+        trait_method_info(receiver, reflect_trait_name, decl_name_method),
+        TirExpr::new(
+            TirExprKind::StringLiteral(display_name.to_string()),
+            string_type,
+            span,
+        ),
+    )
+}
 
-    let literal = TirExpr::new(
-        TirExprKind::StringLiteral(display_name.to_string()),
-        string_type,
-        span,
-    );
-    let body = TirBlock::new(vec![return_stmt(literal, span)], span);
-
+/// A static method returning `value`, a constant of the type it is synthesized for.
+fn constant_method(method_info: LocalMethodName, value: TirExpr) -> TirFunction {
+    let (return_type, span) = (value.type_id, value.span);
     make_synthetic_method(
-        qualified_name,
+        method_info.to_mangled_name(),
         method_info,
         vec![],
-        string_type,
-        body,
+        return_type,
+        TirBlock::new(vec![return_stmt(value, span)], span),
         vec![],
     )
 }
@@ -1754,11 +1757,16 @@ fn generate_template_reflect_impls(
             members_fn,
             tail_fn(&tail_method, false),
             tail_fn(&raw_tail_method, true),
-            generate_template_hashes_fn(
-                &target.shape.hashes_field(),
-                ref_struct_type,
+            constant_method(
                 trait_method_info(receiver, template_trait_name, &hashes_method),
-                span,
+                TirExpr::new(
+                    TirExprKind::IntLiteral {
+                        value: target.shape.quote.hash_count() as u64,
+                        repr: target.shape.quote.hash_count().to_string(),
+                    },
+                    TypeTable::I32,
+                    span,
+                ),
             ),
         ];
         // An open shape's hole bridges would group its holes by a parameter,
@@ -1812,42 +1820,6 @@ fn generate_template_tail_fn(
         tail_view.view_type,
         span,
     );
-    template_reader(
-        method_info,
-        ref_struct_type,
-        tail_view.view_type,
-        read,
-        span,
-    )
-}
-
-/// Build `Shape^ReflectTemplate::hashes(t: &Shape)`: the `#` count `field` holds.
-fn generate_template_hashes_fn(
-    (field_name, field_index): &(String, u32),
-    ref_struct_type: TypeId,
-    method_info: LocalMethodName,
-    span: Span,
-) -> TirFunction {
-    let read = field_access_local(
-        0,
-        "t",
-        ref_struct_type,
-        *field_index,
-        field_name,
-        TypeTable::I32,
-        span,
-    );
-    template_reader(method_info, ref_struct_type, TypeTable::I32, read, span)
-}
-
-/// A method of one parameter, `t: &Shape`, returning `read`.
-fn template_reader(
-    method_info: LocalMethodName,
-    ref_struct_type: TypeId,
-    return_type: TypeId,
-    read: TirExpr,
-    span: Span,
-) -> TirFunction {
     let params = vec![TirParam {
         name: "t".to_string(),
         type_id: ref_struct_type,
@@ -1861,7 +1833,7 @@ fn template_reader(
         method_info.to_mangled_name(),
         method_info,
         params,
-        return_type,
+        tail_view.view_type,
         TirBlock::new(vec![return_stmt(read, span)], span),
         locals,
     )

@@ -72,8 +72,8 @@ type it takes, since the template's own type is one no source spells.
 ### The template type
 
 Each template literal that carries a tag denotes a value of a compiler-synthesized
-struct type, unique to that template's shape. The shape is the list of its
-holes, each a type and a specifier. Two templates with the same shape denote the
+struct type, unique to that template's shape. The shape is its delimiters and
+the list of its holes, each a type and a specifier. Two templates with the same shape denote the
 same type and share every instantiation of the tag, whatever their literal text,
 so `` tag`a=${a}` `` and `` tag`b: ${b}` `` are one type where `a` and `b`
 share one. The type is anonymous — nothing in the source can name it — and is
@@ -125,8 +125,8 @@ pub trait ReflectTemplate: Reflect {
     /// `tail(t)` with escapes preserved.
     fn raw_tail(t: &Self) -> StrSlice;
 
-    /// How many `#`s delimit `t` on each end: 0 for `` `…` ``.
-    fn hashes(t: &Self) -> i32;
+    /// How many `#`s delimit the template on each end: 0 for `` `…` ``.
+    fn hashes() -> i32;
 }
 ```
 
@@ -190,7 +190,10 @@ still a template segment, so it spells only the escapes the language has:
 any cooked template. A text full of backslashes, such as a regular expression,
 is a raw template, ``#`…`#``, which takes every backslash as itself, so both
 of its spellings are the text as written ([WEP: Re](./wep-2026-11-02-re.md)).
-The value also carries its `#` count, which `hashes(t)` reads.
+The `#` count is part of the shape, which `hashes()` answers as a constant. A
+runtime field on every template value was the alternative: it keeps a cooked and
+a raw template of the same holes one type, at the cost of a field in every
+`String::format` call, raw or not.
 
 A template value inspects as the template it was written as: its delimiters,
 the raw segments,
@@ -463,7 +466,7 @@ introduces a mechanism; each item names the existing one it extends.
 ### Type table (`tir.rs`)
 
 - `AnonShape::Template(TemplateShape)` beside `Fields` and `Synthetic`.
-  `TemplateShape { holes: Vec<TemplateHole> }`, each hole
+  `TemplateShape { holes: Vec<TemplateHole>, quote: Quote }`, each hole
   `{ ty, spec: Option<String> }`. The shape is the interning key, so two sites
   of one shape reach one `AnonStructId` through `intern_shape`, as struct
   literals do.

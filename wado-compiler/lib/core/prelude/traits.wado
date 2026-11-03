@@ -332,9 +332,10 @@ pub trait ReflectTemplate: Reflect with () {
     #[compiler_item("reflect_template_raw_tail")]
     fn raw_tail(t: &Self) -> StrSlice;
 
-    /// How many `#`s delimit `t` on each end: 0 for `` `…` ``, 1 for `` #`…`# ``.
+    /// How many `#`s delimit the template on each end: 0 for `` `…` ``, 1 for
+    /// `` #`…`# ``.
     #[compiler_item("reflect_template_hashes")]
-    fn hashes(t: &Self) -> i32;
+    fn hashes() -> i32;
 }
 
 /// A case handle minted by `ReflectVariant::members()`: the payload type `P`
@@ -1135,7 +1136,7 @@ impl<affine N: ReflectNewtype<Base = B>, affine B: Inspect> Inspect for N {
 /// the form shows them.
 impl<T: ReflectTemplate<Holes = [..V]>, affine ..V: Inspect> Inspect for T {
     fn inspect(&self, f: &mut Formatter) {
-        let hashes = ReflectTemplate::<T>::hashes(self);
+        let hashes = ReflectTemplate::<T>::hashes();
         f.write_char_n('#', hashes);
         f.write_char('`');
         for let h of ReflectTemplate::<T>::members() {

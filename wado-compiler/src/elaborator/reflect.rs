@@ -201,7 +201,12 @@ impl TemplateMethods {
             .any(|name| name == method)
     }
 
-    /// What a method reading a template value answers: the `#` count, or a
+    /// Whether `method` reads a template value rather than its shape.
+    fn reads_value(&self, method: &str) -> bool {
+        method != self.members && method != self.hashes
+    }
+
+    /// What a method other than `members` answers: the `#` count, or a
     /// segment's text.
     fn read_type(&self, method: &str, tt: &mut TypeTable) -> TypeId {
         if method == self.hashes {
@@ -980,11 +985,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             )
         };
 
-        // `tail`, `raw_tail` and `hashes` read a template value.
-        let params = if method == methods.members {
-            Vec::new()
-        } else {
+        let params = if methods.reads_value(&method) {
             vec![self.tysys.type_table.borrow_mut().make_ref(self_ty)]
+        } else {
+            Vec::new()
         };
         if !self.check_reflect_args(&params, static_call, ctx) {
             return TypeTable::ERROR;
@@ -1013,7 +1017,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             } else {
                 methods.read_type(&method, &mut self.tysys.type_table.borrow_mut())
             };
-            let param_is_mut = arg_param_is_mut(method != methods.members);
+            let param_is_mut = arg_param_is_mut(methods.reads_value(&method));
             self.record_type_param_reflect_dispatch(
                 &name,
                 trait_name,
@@ -1056,7 +1060,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.record_reflect_dispatch(
             static_call.id,
             func_ref,
-            arg_param_is_mut(method != methods.members),
+            arg_param_is_mut(methods.reads_value(&method)),
         );
 
         return_type

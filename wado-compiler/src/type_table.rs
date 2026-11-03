@@ -25,7 +25,7 @@ use crate::name::{
 };
 use crate::primitive::PrimitiveType;
 use crate::symbol_notation::render;
-use crate::token::Span;
+use crate::token::{Delimiter, Span};
 
 use crate::tir::{
     AnonShape, AssocTypeSig, EffectRef, EffectRows, InferVarId, REFLECT_NEWTYPE_BASE, ResolvedType,
@@ -1158,8 +1158,7 @@ impl TypeTable {
                 let segments = shape
                     .segment_keys()
                     .map(|key| (shape.segment_field(key).0, string_type));
-                let hashes = (shape.hashes_field().0, Self::I32);
-                holes.chain(segments).chain([hashes]).collect()
+                holes.chain(segments).collect()
             }
             AnonShape::Synthetic(name) => {
                 unreachable!("synthetic shape `{name}` carries its fields itself")
@@ -1279,6 +1278,7 @@ impl TypeTable {
                         ..hole
                     })
                     .collect(),
+                ..shape
             }),
         };
         if shape == self.anon_structs[id.0 as usize].shape {
@@ -1378,7 +1378,7 @@ impl TypeTable {
         shape: &TemplateShape,
         hole_type: &dyn Fn(TypeId) -> String,
     ) -> String {
-        let mut name = String::from("`");
+        let mut name = shape.quote.open(Delimiter::Backtick);
         let mut room = TEMPLATE_NAME_MAX_CHARS;
         let mut push = |text: &str| {
             for c in text.chars() {
@@ -1406,7 +1406,7 @@ impl TypeTable {
         if !complete {
             name.push_str("...");
         }
-        name.push('`');
+        name.push_str(&shape.quote.close(Delimiter::Backtick));
         name
     }
 

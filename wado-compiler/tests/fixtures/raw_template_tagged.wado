@@ -1,11 +1,11 @@
 // A tag over a raw template sees the text as written in both `lit` and `raw`,
-// and `hashes` says how many `#`s delimit it, so a raw template inspects as
-// written.
+// and `hashes()`, a constant of the type, says how many `#`s delimit it, so a
+// raw template inspects as written.
 use { println, Stdout } from "core:cli";
 use { ReflectTemplate } from "core:prelude";
 
 fn segments<T: ReflectTemplate<Holes = [..V]>, ..V>(t: T) -> String {
-    let mut out = `${ReflectTemplate::<T>::hashes(&t)}`;
+    let mut out = `${ReflectTemplate::<T>::hashes()}`;
     for let h of ReflectTemplate::<T>::members() {
         out.push_str(&`[${h.lit(&t)}|${h.raw(&t)}]`);
     }

@@ -1,0 +1,15 @@
+// A template's delimiters are part of its type, so a cooked and a raw
+// template of the same holes are two types, and `==` between them is an error.
+use { ReflectTemplate } from "core:prelude";
+
+fn id<T: ReflectTemplate>(t: T) -> T {
+    return t;
+}
+
+export fn run() {
+    let n = 1;
+    let _ = id`a${n}` == id#`a${n}`#;
+}
+
+__DATA__
+{"compile_error": ":11:26: error: type mismatch: expected '`${i32}`', found '#`${i32}`#'"}

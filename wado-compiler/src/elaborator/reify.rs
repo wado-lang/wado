@@ -91,7 +91,7 @@ use crate::name::{
 use crate::pgo::ColdMap;
 use crate::symbol::{Symbol, SymbolKind};
 use crate::synthesis::common::{
-    bare_cast, bool_lit, builtin_call, cold_path_stmt, handle_bits, i32_const, is_cold_marker_stmt,
+    bare_cast, bool_lit, builtin_call, cold_path_stmt, handle_bits, is_cold_marker_stmt,
     known_cold_path_stmt, not_expr, ord_bool_from_cmp, rt_call,
 };
 use crate::tir::{
@@ -4634,10 +4634,10 @@ impl<'a> Reify<'a> {
                 (value, TemplateHole { ty, spec })
             })
             .unzip();
-        let shape = TemplateShape { holes };
+        let shape = TemplateShape { holes, quote };
         let template_ty = self.reify_template_type(shape, span);
         let (literal, holes) =
-            self.reify_template_literal(template_ty, values, &segments, quote, span, ctx);
+            self.reify_template_literal(template_ty, values, &segments, span, ctx);
         let (func, type_args) = {
             let mut tt = self.tysys.type_table.borrow_mut();
             let mut func = method_ref(&tt, CompilerItem::StringFormat);
@@ -4717,14 +4717,8 @@ impl<'a> Reify<'a> {
             .into_iter()
             .map(|raw| [checked_template_segment(&raw, tagged.template.quote), raw])
             .collect();
-        let (literal, holes) = self.reify_template_literal(
-            template_ty,
-            values,
-            &segments,
-            tagged.template.quote,
-            span,
-            ctx,
-        );
+        let (literal, holes) =
+            self.reify_template_literal(template_ty, values, &segments, span, ctx);
 
         // The template is the tag's one written argument; a trailing parameter
         // with a default is filled here, as it is for a spelled call.
@@ -4750,16 +4744,14 @@ impl<'a> Reify<'a> {
         Self::bind_holes_around(call, holes, recorded_type, span)
     }
 
-    /// The literal of `template_ty` over the reified holes, each segment's
-    /// cooked and raw text and the `quote` delimiting it, and the statements
-    /// binding the holes it cannot read where it stands: a place that a later
-    /// computed hole may write.
+    /// The literal of `template_ty` over the reified holes and each segment's
+    /// cooked and raw text, and the statements binding the holes it cannot
+    /// read where it stands: a place that a later computed hole may write.
     fn reify_template_literal(
         &mut self,
         template_ty: TypeId,
         values: Vec<TirExpr>,
         segments: &[[String; 2]],
-        quote: Quote,
         span: Span,
         ctx: &mut FunctionContext,
     ) -> (TirExpr, HoleBindings) {
@@ -4856,14 +4848,6 @@ impl<'a> Reify<'a> {
                 field_index,
             });
         }
-        let (name, field_index) = shape.hashes_field();
-        let mut value = i32_const(quote.hash_count() as i32);
-        value.span = span;
-        fields.push(TirStructField {
-            name,
-            value,
-            field_index,
-        });
 
         let literal = TirExpr::new(
             TirExprKind::StructLiteral {
