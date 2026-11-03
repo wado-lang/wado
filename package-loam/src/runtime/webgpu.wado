@@ -272,11 +272,10 @@ struct Carved {
     spans: i32,
 }
 
-/// The launch of a program running, by the program's serial and the launch's
-/// root node, the words of each buffer it has made, and the shader of each
-/// dispatch.
+/// The launch of a program running, by its `launch_key`, the words of each
+/// buffer it has made, and the shader of each dispatch.
 struct Running {
-    launch: List<i32>,
+    launch: i64,
     made: List<i32>,
     dispatched: List<i32>,
     /// Whether its dispatches bind the launch's own parameters. A second call
@@ -301,6 +300,13 @@ fn binds_any(key: &List<i32>, ids: &HashSet<i32>) -> bool {
         }
     }
     return false;
+}
+
+/// The launch whose root is the node `root` of the programs `serial`.
+fn launch_key(serial: i32, root: i32) -> i64
+    contract serial >= 0 && root >= 0
+{
+    return (serial as i64 << 32) | root as i64;
 }
 
 /// The number `numbers` gives `key`, the next one where it gives none.
@@ -420,18 +426,18 @@ pub affine struct WebGpuBackend {
     /// The commands of the launch being recorded: none where no launch is, or
     /// where it wrote a host value or read one back, which a replay would not.
     taping: Option<List<Command>>,
-    /// Each launch recorded, by its program's serial and its root node, or
-    /// each of its roots for a product joined from several.
-    encoded: HashMap<List<i32>, List<Encoded>>,
+    /// Each launch recorded, by its `replay_key`.
+    encoded: HashMap<i32, List<Encoded>>,
+    replay_keys: HashMap<List<i32>, i32>,
     /// The serial of the programs of each structure `compiled` met.
     programs: HashMap<List<i32>, i32>,
     /// The number of each launch signature `compiled` met.
     signatures: HashMap<String, i32>,
-    /// The buffers each launch of a program makes, by the program's serial and
-    /// the launch's root node, in the order a launch makes them.
-    owned: HashMap<List<i32>, List<Owned>>,
+    /// The buffers each launch of a program makes, by its `launch_key`, in
+    /// the order a launch makes them.
+    owned: HashMap<i64, List<Owned>>,
     /// The parameters of each launch of a program, by the same key.
-    launch_parameters: HashMap<List<i32>, LaunchParameters>,
+    launch_parameters: HashMap<i64, LaunchParameters>,
     /// The buffers launches' parameters are carved from, the last the one
     /// carved from now.
     carved: List<Carved>,
@@ -591,6 +597,7 @@ impl WebGpuBackend {
             group_at: HashMap::new(),
             taping: null,
             encoded: HashMap::new(),
+            replay_keys: HashMap::new(),
             programs: HashMap::new(),
             signatures: HashMap::new(),
             owned: HashMap::new(),
@@ -760,7 +767,7 @@ impl WebGpuBackend {
     /// `serial`, which makes its buffers in those its calls own and binds the
     /// parameters they bound.
     internal fn launching(&mut self, serial: i32, root: i32) {
-        let launch = [serial, root] as List<i32>;
+        let launch = launch_key(serial, root);
         if !self.launch_parameters.contains_key(launch) {
             self.launch_parameters[launch] = LaunchParameters { spans: [], pipelines: [], words: [], pass: -1 };
         }
@@ -776,9 +783,9 @@ impl WebGpuBackend {
     /// slot to the one it takes in the pass.
     internal fn ran_program(&mut self, serial: i32, returned: &List<i32>) -> HashMap<i32, i32> {
         self.running = null;
-        let mut launches: List<List<i32>> = [];
+        let mut launches: List<i64> = [];
         for let key of self.owned.keys() {
-            if key[0] == serial {
+            if *key >> 32 == serial as i64 {
                 launches.push(*key);
             }
         }
@@ -884,7 +891,7 @@ impl WebGpuBackend {
     /// caller's, and its parameters. Each buffer dropped adds its `id` to
     /// `dropped`.
     fn dropped_idle_launches(&mut self, oldest: i32, dropped: &mut HashSet<i32>) {
-        let mut idle: List<List<i32>> = [];
+        let mut idle: List<i64> = [];
         for let [key, parameters] of self.launch_parameters.entries() {
             if parameters.pass < oldest {
                 idle.push(*key);
@@ -2264,10 +2271,16 @@ impl WebGpuBackend {
         self.taping = Option::Some([]);
     }
 
+    /// The number a launch's commands are recorded under, for `key`: the
+    /// program's serial, then each of its roots and that kernel's signature.
+    internal fn replay_key(&mut self, key: List<i32>) -> i32 {
+        return numbered(&mut self.replay_keys, key);
+    }
+
     /// Ends the recording `tape` started, keeping it under `key` as the
     /// commands of a launch over `reads` that yields `result` on the device,
     /// where it wrote no host value and read none back.
-    internal fn taped(&mut self, key: List<i32>, reads: List<DeviceTensor>, result: Option<DeviceTensor>) {
+    internal fn taped(&mut self, key: i32, reads: List<DeviceTensor>, result: Option<DeviceTensor>) {
         let taping = self.taping;
         self.taping = null;
         if let Some(commands) = taping && let Some(r) = result {
@@ -2291,7 +2304,7 @@ impl WebGpuBackend {
     /// `renamed_over` says.
     internal fn replayed(
         &mut self,
-        key: List<i32>,
+        key: i32,
         reads: &List<DeviceTensor>,
     ) -> Option<DeviceTensor> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuComputePassEncoder) {
         if !self.encoded.contains_key(key) {
@@ -2405,10 +2418,13 @@ impl Holds for WebGpuBackend {
                 self.groups.remove(at);
             }
         }
-        let mut stale: List<List<i32>> = [];
+        let mut stale: List<i32> = [];
         for let [key, layouts] of self.encoded.entries() {
-            if layouts.into_iter().any(|e| e.used < oldest) {
-                stale.push(*key);
+            for let e of layouts {
+                if e.used < oldest {
+                    stale.push(*key);
+                    break;
+                }
             }
         }
         for let key of stale {
