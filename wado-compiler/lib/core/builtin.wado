@@ -807,6 +807,13 @@ pub fn ambient_stdout_available() -> bool;
 #[side_effect(none)]
 pub fn ambient_stderr_available() -> bool;
 
+/// Whether the component has the Component Model interface `fq`, which an
+/// `#[ambient]` body performs. The compiler guards each such body with it, and
+/// decides it once for the whole component.
+#[storage(none)]
+#[side_effect(none)]
+pub fn ambient_available(fq: String) -> bool;
+
 /// Absolute value of f32
 /// Maps to Wasm f32.abs instruction
 #[storage(none)]

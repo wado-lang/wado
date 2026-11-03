@@ -1,0 +1,32 @@
+// An `#[ambient]` function answers `Default::default()` where an interface it
+// lists is absent, so one returning a value needs a `Default`. One listing only
+// an effect no interface backs answers nothing in its place, and needs none.
+use { Instant, SystemClock } from "wasi:clocks";
+
+interface Tally {
+    fn count() -> i32;
+}
+
+#[allow(undeclared_effects)]
+#[ambient(SystemClock)]
+fn stamp() -> Result<Instant, String> {
+    return Result::Ok(SystemClock::now());
+}
+
+#[allow(undeclared_effects)]
+#[ambient(Tally)]
+fn tally() -> Result<i32, String> {
+    return Result::Ok(Tally::count());
+}
+
+export fn run() {
+    let _ = stamp();
+    let _ = tally();
+}
+
+__DATA__
+{
+  "compile_error": ":12:4: analysis error: `#[ambient]` function 'stamp' returns 'Result<Instant, String>', which does not implement `Default`",
+  "compile_errors_not_contains": ["'tally'"],
+  "compile_error_codes": ["TRAIT_BOUND_NOT_SATISFIED"]
+}

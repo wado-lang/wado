@@ -715,6 +715,9 @@ pub enum CompilerItem {
     FormatterWriteStr,
     /// `core:rt::assert_failed`.
     AssertFailed,
+    /// `core:rt::ambient_default`, what an `#[ambient]` body answers where an
+    /// interface it lists is absent.
+    AmbientDefault,
     /// `core:rt::i64_add128_soft`.
     I64Add128Soft,
     /// `core:rt::i64_sub128_soft`.
@@ -1026,6 +1029,7 @@ impl CompilerItem {
         Self::FormatterWriteLiteral,
         Self::FormatterWriteStr,
         Self::AssertFailed,
+        Self::AmbientDefault,
         Self::I64Add128Soft,
         Self::I64Sub128Soft,
         Self::I64MulWideUSoft,
@@ -1244,6 +1248,7 @@ impl CompilerItem {
             Self::FormatterWriteLiteral => "formatter_write_literal",
             Self::FormatterWriteStr => "formatter_write_str",
             Self::AssertFailed => "assert_failed",
+            Self::AmbientDefault => "ambient_default",
             Self::I64Add128Soft => "i64_add128_soft",
             Self::I64Sub128Soft => "i64_sub128_soft",
             Self::I64MulWideUSoft => "i64_mul_wide_u_soft",
@@ -1359,6 +1364,7 @@ impl CompilerItem {
             // Always loaded — `core:prelude` is auto-imported, and `core:rt`
             // carries the CM ABI helpers the binding synthesis calls.
             | Self::AssertFailed
+            | Self::AmbientDefault
             | Self::I64Add128Soft
             | Self::I64Sub128Soft
             | Self::I64MulWideUSoft
@@ -1720,6 +1726,7 @@ impl CompilerItem {
                 CompilerItemKind::Method
             }
             Self::AssertFailed
+            | Self::AmbientDefault
             | Self::I64Add128Soft
             | Self::I64Sub128Soft
             | Self::I64MulWideUSoft

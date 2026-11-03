@@ -1329,9 +1329,56 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             .insert(func.id, affine_params);
         if let Some(b) = func.body.as_ref() {
             self.resolve_block(b, ctx, None);
+            self.record_ambient_hosts(func, return_type);
         }
         self.validate_missing_return_ast(return_type, func, ctx.in_handler_method);
         self.validate_loop_jumps_ast(func.body.as_ref());
+    }
+
+    /// Record the Component Model interfaces `func`'s `#[ambient]` lists, which
+    /// reify guards its body with. Where one is absent the function answers
+    /// `Default::default()`, so a value-returning one needs a `Default`.
+    fn record_ambient_hosts(&mut self, func: &Function, return_type: TypeId) {
+        let hosts: Vec<String> = {
+            let resolutions = &self.tysys.resolutions;
+            let defs = resolutions.defs();
+            func.attrs
+                .iter()
+                .filter(|attr| attr.name == attribute::AMBIENT)
+                .flat_map(|attr| &attr.args)
+                .filter_map(|arg| resolutions.resolve_in(&self.current_module_source, arg.as_str()))
+                .filter(|&def| defs.kind(def).is_effect())
+                .filter_map(|def| {
+                    self.tysys
+                        .cm_interface_registry
+                        .effect_interface(defs.module(def))
+                        .map(str::to_string)
+                })
+                .collect()
+        };
+        if hosts.is_empty() {
+            return;
+        }
+        if return_type != TypeTable::UNIT {
+            let default = self
+                .tysys
+                .type_table
+                .borrow()
+                .compiler_trait_fq(CompilerItem::Default);
+            if !self
+                .tysys
+                .type_implements_trait(&self.annotate_ctx, return_type, &default)
+            {
+                let return_type = self.tysys.type_table.borrow().name(return_type);
+                let _ = self.emit(TypeError::AmbientWithoutDefault {
+                    function: func.name.clone(),
+                    return_type,
+                    span: func.name_span,
+                });
+                return;
+            }
+        }
+        self.sem.types.ambient_hosts.insert(func.id, hosts);
     }
 
     /// Resolve one method parameter's type. A receiver comes from the impl

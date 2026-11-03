@@ -3183,6 +3183,21 @@ impl CmInterfaceRegistry {
             .any(|kind| self.declares_kind(kind, interface_fq, name))
     }
 
+    /// The interface whose functions the effects `module` declares perform: the
+    /// one of its interfaces that declares functions.
+    pub fn effect_interface(&self, module: &ModuleSource) -> Option<&str> {
+        let mut with_functions = self
+            .module_interfaces(module)
+            .into_iter()
+            .filter(|fq| self.declares_functions(fq));
+        let found = with_functions.next();
+        assert!(
+            with_functions.next().is_none(),
+            "a module binds at most one interface with functions"
+        );
+        found
+    }
+
     /// The interface declaring `decl`, and the CM name it exports `decl` under.
     pub fn declared_cm_type(&self, decl: &CmDecl) -> Option<(&str, &str)> {
         self.module_interfaces(decl.module())

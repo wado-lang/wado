@@ -121,6 +121,13 @@ internal fn write_string_to_stream(tx: StreamWritable<u8>, message: String, add_
     tx.drop();
 }
 
+/// What an `#[ambient]` function returns where an effect it lists is not
+/// available.
+#[compiler_item("ambient_default")]
+internal fn ambient_default<T: Default>() -> T {
+    return T::default();
+}
+
 use { ErrorCode as CliErrorCode } from "wasi:cli/types.wado";
 use { Stdout } from "wasi:cli/stdout.wado";
 use { Stderr } from "wasi:cli/stderr.wado";

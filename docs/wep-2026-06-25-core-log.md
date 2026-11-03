@@ -211,9 +211,9 @@ promise that. The call stays reachable, the import lands, and at `-O0` nothing
 folds it away.
 
 The import is what makes this worth a type parameter, because a world decides
-which imports a program may have. `core:kiln/generator` imports no clock, so a
-generator reaching a stamped sink is a compile error
-(`KILN_GENERATOR_FORBIDDEN_IMPORT`) rather than logging without a clock.
+which imports a program may have. `WallClock::now` is `#[ambient]`, so it never
+adds a clock the world lacks: `core:kiln/generator` imports none, and there it
+answers `null` and a stamped sink logs without stamps.
 
 ### Runtime filter directives
 

@@ -140,9 +140,23 @@ does, and the rest of the body is checked.
 
 An ambient effect uses a capability the component already has, and never adds
 one. It is available where the target world imports it, or where code outside
-an ambient body performs it. Where it is not, the body's operations of it do not
-reach the host. That is what made `log_stdout` and `log_stderr` ambient in the
-first place, and it is now the attribute's meaning for every effect it lists.
+an ambient body performs it. That is what made `log_stdout` and `log_stderr`
+ambient in the first place, and it is now the attribute's meaning for every
+effect it lists.
+
+Where a listed effect is not available, the function skips its body and returns
+`Default::default()`, or nothing when it returns `()`. "Do nothing" cannot be
+derived from an arbitrary body, but a value the type itself supplies can: a
+stdio write answers nothing, and `core:log`'s `WallClock::now` answers `null`,
+an unstamped line. Reify guards each such body with
+`builtin::ambient_available("<interface>")`, and the optimizer settles every
+guard before the first DCE, at the least set of interfaces that explains
+itself, so two ambient bodies cannot keep each other's import alive.
+
+Hiding an effect from every caller is the standard library's business, for now:
+a program writing `#[ambient]` or `#[benign]` is warned under
+`undeclared_effects`. The rule is provisional, to be revisited as use cases
+appear.
 
 This is what separates it from `#[benign(E)]`
 ([WEP: Effect System and Randomness in Collections](./wep-2026-01-20-effect-system-randomness.md)).
@@ -247,13 +261,9 @@ Create an ambient `Debug` effect available everywhere.
 
 ## Known gaps
 
-- Availability is decided for `Stdout` and `Stderr` alone, through
-  `builtin::ambient_std{out,err}_available`. An ambient body that performs
-  another host-backed effect imports it: `core:log`'s `WallClock::now`,
-  `#[ambient(SystemClock)]`, adds the `wasi:clocks` import.
-- What an operation of an unavailable effect evaluates to is not decided. A
-  stdio write returns nothing, so dropping it is enough; `SystemClock::now`
-  returns a value.
+- `log_stdout` and `log_stderr` still decide their own streams through
+  `builtin::ambient_std{out,err}_available`, beside the guard every ambient
+  body now carries.
 
 ## References
 

@@ -1419,6 +1419,94 @@ impl<'a> Reify<'a> {
         })
     }
 
+    /// `body` run only where the component has each of `hosts`, and otherwise
+    /// what an `#[ambient]` function answers without them: `Default::default()`,
+    /// or nothing for one returning `()`. The optimizer decides each guard once
+    /// for the whole component.
+    fn guard_ambient_body(&self, body: TirBlock, hosts: &[String], return_type: TypeId) -> TirBlock {
+        let span = body.span;
+        let string_type = self
+            .tysys
+            .type_table
+            .borrow_mut()
+            .make_compiler_struct(CompilerItem::String);
+        let guarded = hosts.iter().rev().fold(body, |inner, fq| {
+            let fq = TirExpr::new(TirExprKind::StringLiteral(fq.clone()), string_type, span);
+            let condition = self.stdlib_call(
+                &ModuleSource::builtin(),
+                "ambient_available",
+                vec![],
+                vec![fq],
+                TypeTable::BOOL,
+                span,
+            );
+            let guard = TirStmtKind::If {
+                condition,
+                then_block: inner,
+                else_block: None,
+            };
+            TirBlock::new(vec![TirStmt::new(guard, span)], span)
+        });
+        let mut stmts = guarded.stmts;
+        if return_type != TypeTable::UNIT {
+            let (module, name) = {
+                let tt = self.tysys.type_table.borrow();
+                let (module, name) = tt
+                    .compiler_items()
+                    .require_function(CompilerItem::AmbientDefault);
+                (module.clone(), name.to_string())
+            };
+            let fallback = self.stdlib_call(
+                &module,
+                &name,
+                vec![return_type],
+                vec![],
+                return_type,
+                span,
+            );
+            stmts.push(TirStmt::new(
+                TirStmtKind::Return {
+                    value: Some(fallback),
+                },
+                span,
+            ));
+        }
+        TirBlock::new(stmts, span)
+    }
+
+    /// A call to the standard library function `name` that `module` declares.
+    fn stdlib_call(
+        &self,
+        module: &ModuleSource,
+        name: &str,
+        type_args: Vec<TypeId>,
+        args: Vec<TirExpr>,
+        result_type: TypeId,
+        span: Span,
+    ) -> TirExpr {
+        let def = self
+            .tysys
+            .resolutions
+            .resolve_in(module, name)
+            .expect("the standard library declares the functions the compiler calls");
+        let func = tir::FunctionRef {
+            module_source: module.clone(),
+            name: name.to_string(),
+            template: Some(self.tysys.signatures.declared_template(def)),
+            monomorph_info: None,
+            method_info: None,
+        };
+        TirExpr::new(
+            TirExprKind::Call {
+                func: Box::new(func),
+                type_args,
+                args: CallArgs::free(args.into_iter().map(|e| CallArg::new(e, false)).collect()),
+            },
+            result_type,
+            span,
+        )
+    }
+
     /// Reify a free function.
     fn reify_function(&mut self, func: &ast::Function) -> TirFunction {
         self.reify_callable(func, func.name.clone())
@@ -1474,6 +1562,10 @@ impl<'a> Reify<'a> {
                 .expect("a walked body records its affine parameters");
             self.with_body_ownership(b, affine_params, |this| this.reify_block(b, &mut ctx, None))
         });
+        let body = match self.types.ambient_hosts.get(&func.id) {
+            Some(hosts) => body.map(|b| self.guard_ambient_body(b, hosts, return_type)),
+            None => body,
+        };
 
         // Projected while the type-param scope was alive, so defaults are
         // resolved; after it is torn down they cannot be.

@@ -503,8 +503,9 @@ impl Clock for NoClock {
     }
 }
 
-/// Wall-clock stamps with millisecond precision. Installing a sink over this
-/// adds a `wasi:clocks` import, so it belongs only in a world that has one.
+/// Wall-clock stamps with millisecond precision. In a world with a clock, a
+/// sink over this imports `wasi:clocks`; in one without, `now` answers `null`
+/// and the lines go unstamped.
 ///
 /// `#[ambient(SystemClock)]` rather than `#[benign]`: a sink's operations are
 /// `Log`'s, whose signatures carry no effect, so the clock read cannot be
