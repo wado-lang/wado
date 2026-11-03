@@ -5,8 +5,9 @@ use std::fmt;
 use crate::ast::AstIdSpace;
 #[derive(Debug, Clone, PartialEq)]
 pub enum TemplateTokenPart {
-    /// Literal text with escape sequences resolved (e.g. `\$` → `$`). Only
-    /// `${` opens an interpolation, so bare `{` / `}` stay literal.
+    /// Literal text as written, escapes unresolved: the elaborator decodes it
+    /// as the template's `Quote` says. Only `${` opens an interpolation, so
+    /// bare `{` / `}` stay literal.
     Literal(String),
     /// An interpolation. The lexer splits the content at the top-level `:`, so
     /// `expr` is the raw expression source (without enclosing braces) and
@@ -22,6 +23,66 @@ pub enum TemplateTokenPart {
         /// back on the file they came from.
         origin: Position,
     },
+}
+
+/// How a string, byte string or template literal is delimited, which decides
+/// what a backslash in it means.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Quote {
+    /// `"…"`, `` `…` ``: a backslash starts an escape.
+    Cooked,
+    /// `#"…"#`, `` #`…`# ``, with `hashes` `#`s on each end: a backslash is
+    /// itself.
+    Raw { hashes: usize },
+}
+
+/// What opens and closes a string literal (`"`) or a template (`` ` ``).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Delimiter {
+    Quote,
+    Backtick,
+}
+
+impl Delimiter {
+    #[must_use]
+    pub fn char(self) -> char {
+        match self {
+            Self::Quote => '"',
+            Self::Backtick => '`',
+        }
+    }
+}
+
+impl Quote {
+    /// How many `#`s stand on each end.
+    #[must_use]
+    pub fn hash_count(self) -> usize {
+        match self {
+            Self::Cooked => 0,
+            Self::Raw { hashes } => hashes,
+        }
+    }
+
+    /// The literal around `text`: `prefix` (`b` or nothing), then the opener,
+    /// the text and the closer.
+    #[must_use]
+    pub fn write(self, prefix: &str, delimiter: Delimiter, text: &str) -> String {
+        format!(
+            "{prefix}{}{text}{}",
+            self.open(delimiter),
+            self.close(delimiter)
+        )
+    }
+
+    #[must_use]
+    pub fn open(self, delimiter: Delimiter) -> String {
+        format!("{}{}", "#".repeat(self.hash_count()), delimiter.char())
+    }
+
+    #[must_use]
+    pub fn close(self, delimiter: Delimiter) -> String {
+        format!("{}{}", delimiter.char(), "#".repeat(self.hash_count()))
+    }
 }
 
 impl TemplateTokenPart {
@@ -144,14 +205,24 @@ pub enum TokenKind {
 
     // Literals
     Ident(String),
-    /// String literal: raw source text between the quotes (escape sequences not interpreted).
-    StringLit(String),
-    /// Byte-string literal `b"..."`: raw source text between the quotes (escape
-    /// sequences not interpreted). Lowers to a constant `List<u8>`.
-    ByteStringLit(String),
+    /// String literal. `raw` is its text as written between the delimiters,
+    /// escape sequences not interpreted.
+    StringLit {
+        raw: String,
+        quote: Quote,
+    },
+    /// Byte-string literal `b"..."`, its text held as a string literal's is.
+    /// Lowers to a constant `List<u8>`.
+    ByteStringLit {
+        raw: String,
+        quote: Quote,
+    },
     /// Byte literal `b'x'`: raw source between the quotes. Lowers to a `u8`.
     ByteCharLit(String),
-    TemplateStringLit(Vec<TemplateTokenPart>), // Structured template string parts
+    TemplateStringLit {
+        parts: Vec<TemplateTokenPart>,
+        quote: Quote,
+    },
     /// Char literal: raw source text between the quotes (escape sequences not interpreted).
     CharLit(String),
     NumberLit(String), // String representation only, type determined by context in elaborator
@@ -261,11 +332,11 @@ impl fmt::Display for TokenKind {
             Self::Ident(name) => return write!(f, "identifier `{name}`"),
             Self::NumberLit(text) => return write!(f, "number `{text}`"),
             Self::Error(text) => return write!(f, "`{text}`"),
-            Self::StringLit(_) => return f.write_str("a string literal"),
-            Self::ByteStringLit(_) => return f.write_str("a byte string literal"),
+            Self::StringLit { .. } => return f.write_str("a string literal"),
+            Self::ByteStringLit { .. } => return f.write_str("a byte string literal"),
             Self::ByteCharLit(_) => return f.write_str("a byte literal"),
             Self::CharLit(_) => return f.write_str("a character literal"),
-            Self::TemplateStringLit(_) => return f.write_str("a template literal"),
+            Self::TemplateStringLit { .. } => return f.write_str("a template literal"),
             Self::Eof => return f.write_str("end of file"),
             Self::LParen => "(",
             Self::RParen => ")",

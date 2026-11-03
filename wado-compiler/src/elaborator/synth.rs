@@ -416,7 +416,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }
             }
             ast::Literal::Byte(_) | ast::Literal::LocationLine => ArgClass::IntLit,
-            ast::Literal::String(_)
+            ast::Literal::String(..)
             | ast::Literal::IncludeStr(_)
             | ast::Literal::LocationFile
             | ast::Literal::LocationFunction
@@ -425,7 +425,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             ast::Literal::Bool(_) => ArgClass::Exact(TypeTable::BOOL),
             ast::Literal::Unit => ArgClass::Exact(TypeTable::UNIT),
             ast::Literal::Null => ArgClass::NullLit,
-            ast::Literal::Bytes(_) | ast::Literal::IncludeBytes(_) => ArgClass::BytesLit,
+            ast::Literal::Bytes(..) | ast::Literal::IncludeBytes(_) => ArgClass::BytesLit,
         }
     }
 

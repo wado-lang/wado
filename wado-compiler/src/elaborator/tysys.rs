@@ -75,7 +75,7 @@ pub(crate) struct TypeSystem {
     pub(crate) builtin_registry: Rc<BuiltinRegistry>,
 
     /// Pre-loaded file contents for `#include_str` / `#include_bytes`.
-    /// Key: `[module_source_display, raw_path]`, value: raw bytes.
+    /// Key: `[module_source_display, include_path]`, value: raw bytes.
     pub(crate) included_files: Rc<IndexMap<[String; 2], Vec<u8>>>,
 
     /// Per-module index from function name → position in `module.items`

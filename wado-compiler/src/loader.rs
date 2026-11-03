@@ -544,7 +544,7 @@ pub struct LoadResult {
     /// Modules that were implicitly loaded (not from user imports)
     pub implicit_modules: IndexSet<ModuleSource>,
     /// Included file contents from `#include_str` and `#include_bytes`.
-    /// Key is `(module_source_display, raw_path)`, value is raw bytes.
+    /// Key is `(module_source_display, include_path)`, value is raw bytes.
     pub included_files: IndexMap<[String; 2], Vec<u8>>,
     /// Wasm assets loaded via `use ... from "<path>" with { type: "wat"|"wasm" }`.
     ///
@@ -2432,7 +2432,7 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
 
     /// Scan all loaded modules for `#include_str`/`#include_bytes` and load referenced files.
     async fn load_included_files(&self) -> Result<IndexMap<[String; 2], Vec<u8>>, LoadError> {
-        // Collect (module_source, raw_path) pairs. The map key stays the
+        // Collect (module_source, include_path) pairs. The map key stays the
         // module's `Display` (matching the elaborator's `included_files`
         // lookup), but the include path resolves against the module's real
         // filename via `source_path`: an entry point's `Display` is its
@@ -2442,12 +2442,12 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
         let mut resolve_path: IndexMap<String, String> = IndexMap::default();
         for (module_source, module) in &self.loaded {
             let ms_str = module_source.to_string();
-            for (raw_path, span) in module.include_paths() {
+            for (include_path, span) in module.include_paths() {
                 let module_path = resolve_path
                     .entry(ms_str.clone())
                     .or_insert_with(|| module_source.source_path());
                 pairs
-                    .entry([ms_str.clone(), raw_path.clone()])
+                    .entry([ms_str.clone(), include_path.clone()])
                     .or_insert_with(|| DiagnosticSpan::from_span(span, Some(module_path)));
             }
         }
@@ -2459,12 +2459,12 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
             .map(ModuleSource::source_path);
         let mut included = IndexMap::default();
         for (pair, at) in pairs {
-            let [ref ms_str, ref raw_path] = pair;
+            let [ref ms_str, ref include_path] = pair;
             // Only a relative path names the file beside the module, which is
             // also what keeps a remote module off this machine.
-            if !is_cwd_relative(raw_path) {
+            if !is_cwd_relative(include_path) {
                 return Err(LoadError::InvalidIncludePath {
-                    path: raw_path.clone(),
+                    path: include_path.clone(),
                 }
                 .at_path(at));
             }
@@ -2472,13 +2472,16 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
             let module_path = resolve_path
                 .get(ms_str)
                 .map_or(ms_str.as_str(), String::as_str);
-            let resolved =
-                resolve_include_path_impl(entry_module_source.as_deref(), module_path, raw_path);
+            let resolved = resolve_include_path_impl(
+                entry_module_source.as_deref(),
+                module_path,
+                include_path,
+            );
             let bytes = self
                 .host
                 .load_file(&resolved, None, None)
                 .await
-                .map_err(|e| LoadError::reading_include(e, raw_path).at_path(at))?;
+                .map_err(|e| LoadError::reading_include(e, include_path).at_path(at))?;
             included.insert(pair, bytes);
         }
         Ok(included)
@@ -2493,13 +2496,13 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
 fn resolve_include_path_impl(
     entry_module_source: Option<&str>,
     module_source_str: &str,
-    raw_path: &str,
+    include_path: &str,
 ) -> String {
-    assert!(is_cwd_relative(raw_path), "an include path is relative");
+    assert!(is_cwd_relative(include_path), "an include path is relative");
     if is_remote(module_source_str) {
-        return resolve_module_path(module_source_str, raw_path);
+        return resolve_module_path(module_source_str, include_path);
     }
-    let stripped = raw_path.strip_prefix("./").unwrap_or(raw_path);
+    let stripped = include_path.strip_prefix("./").unwrap_or(include_path);
     if let Some(dir) = dir_prefix_to_keep(entry_module_source, module_source_str) {
         format!("{dir}/{stripped}")
     } else {

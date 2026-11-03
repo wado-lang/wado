@@ -16,7 +16,7 @@ use crate::compiler_host::{Code, Diagnostic, DiagnosticSpan, Severity};
 use crate::elaborator::float_literal::FloatFormat;
 use crate::primitive::PrimitiveType;
 use crate::token;
-use crate::token::{Position, Span, TemplateTokenPart, Token, TokenKind};
+use crate::token::{Delimiter, Position, Quote, Span, TemplateTokenPart, Token, TokenKind};
 
 /// Whether `c` may open an identifier: `[a-zA-Z_]`.
 pub fn is_ident_start(c: char) -> bool {
@@ -35,6 +35,17 @@ pub fn is_valid_ident(s: &str) -> bool {
     s != WILDCARD && chars.next().is_some_and(is_ident_start) && chars.all(is_ident_continue)
 }
 
+/// Whether `s` can name a variable: an identifier that lexes as one, or as a
+/// keyword only some positions reserve.
+pub fn is_binding_name(s: &str) -> bool {
+    is_valid_ident(s) && TokenKind::from_keyword(s).is_none_or(|kw| kw.as_ident_name().is_some())
+}
+
+/// How deep an expression, a type or a pattern may nest. Source nobody writes
+/// by hand is refused here rather than overflowing the stack of every
+/// recursive pass after the parser.
+pub const MAX_NESTING: u32 = 256;
+
 /// The wildcard's spelling.
 pub const WILDCARD: &str = "_";
 
@@ -51,6 +62,14 @@ pub(crate) fn normalize_line_breaks(text: &str) -> Cow<'_, str> {
 /// contract.
 pub fn lex(source: &str) -> LexResult {
     lex_in(source, AstIdSpace::next())
+}
+
+/// The kinds of `source`'s tokens, lexed only as far as the caller reads, for a
+/// reader of a file's head that must not pay for the whole file.
+pub fn token_kinds(source: &str) -> impl Iterator<Item = TokenKind> + '_ {
+    let mut lexer = Lexer::new(source);
+    lexer.skip_shebang();
+    std::iter::from_fn(move || Some(lexer.next_token().kind).filter(|kind| *kind != TokenKind::Eof))
 }
 
 /// [`lex`] into an existing parse, for text that belongs to one already: a
@@ -77,7 +96,7 @@ pub fn lex_interpolation(source: &str, origin: Position, space: AstIdSpace) -> L
     let mut result = lex_in(source, space);
     for token in &mut result.tokens {
         token.span = rebase_span(token.span, origin);
-        if let TokenKind::TemplateStringLit(parts) = &mut token.kind {
+        if let TokenKind::TemplateStringLit { parts, .. } = &mut token.kind {
             for part in parts {
                 if let TemplateTokenPart::Interpolation { origin: nested, .. } = part {
                     *nested = rebase_position(*nested, origin);
@@ -105,7 +124,7 @@ pub fn lex_interpolation(source: &str, origin: Position, space: AstIdSpace) -> L
 pub fn comments_deep(source: &str) -> Vec<Comment> {
     fn descend(tokens: &[Token], out: &mut Vec<Comment>) {
         for token in tokens {
-            let TokenKind::TemplateStringLit(parts) = &token.kind else {
+            let TokenKind::TemplateStringLit { parts, .. } = &token.kind else {
                 continue;
             };
             for part in parts {
@@ -205,33 +224,13 @@ impl LexResult {
 }
 
 /// What [`Lexer::collect_interpolation_source`] is currently inside of. Only
-/// [`Scan::Code`] has structural characters; everywhere else a `}` or a `:` is
+/// [`Scan::Code`] has structural characters; in a comment a `}` or a `:` is
 /// just text.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum Scan {
     Code,
-    String,
-    Char,
-    /// A nested `` `…` `` literal. Backticks strictly alternate open and close,
-    /// so a flag counts the same characters a depth would.
-    Template,
     LineComment,
     BlockComment,
-}
-
-impl Scan {
-    /// The character that returns the scan to [`Scan::Code`].
-    fn terminator(self) -> char {
-        match self {
-            Self::String => '"',
-            Self::Char => '\'',
-            Self::Template => '`',
-            Self::LineComment => '\n',
-            Self::Code | Self::BlockComment => {
-                unreachable!("no single-character terminator")
-            }
-        }
-    }
 }
 
 pub(crate) struct Lexer<'a> {
@@ -250,6 +249,8 @@ pub(crate) struct Lexer<'a> {
     shebang: Option<String>,
     /// Recovered errors, in source order. Drained into [`LexResult::errors`].
     errors: Vec<LexError>,
+    /// How many templates enclose the hole being scanned.
+    template_depth: u32,
 }
 
 /// Structured lexer error. Pair with [`LexError::span`] for source location.
@@ -479,6 +480,7 @@ impl<'a> Lexer<'a> {
             comments: Vec::new(),
             shebang: None,
             errors: Vec::new(),
+            template_depth: 0,
         }
     }
 
@@ -549,7 +551,10 @@ impl<'a> Lexer<'a> {
 
         let kind = match ch {
             // `b"..."` / `b'x'` — before the identifier rule so `b` is not an ident.
-            'b' if self.peek_second() == Some('"') => self.lex_byte_string(),
+            'b' if self.peek_second() == Some('"') => self.lex_byte_string(Quote::Cooked),
+            'b' if let Some((hashes, Delimiter::Quote)) = self.hash_run_then_delimiter(1) => {
+                self.lex_byte_string(Quote::Raw { hashes })
+            }
             'b' if self.peek_second() == Some('\'') => self.lex_byte_char(),
 
             // Identifiers and keywords
@@ -559,13 +564,13 @@ impl<'a> Lexer<'a> {
             '0'..='9' => self.lex_number(),
 
             // Strings
-            '"' => self.lex_string(),
+            '"' => self.lex_string(Quote::Cooked),
 
             // Character literals
             '\'' => self.lex_char(),
 
             // Template strings
-            '`' => self.lex_template_string(),
+            '`' => self.lex_template_string(Quote::Cooked),
 
             // Punctuation and operators
             '(' => {
@@ -788,10 +793,16 @@ impl<'a> Lexer<'a> {
                     _ => TokenKind::Ampersand,
                 }
             }
-            '#' => {
-                self.advance();
-                TokenKind::Hash
-            }
+            '#' => match self.hash_run_then_delimiter(0) {
+                Some((hashes, Delimiter::Backtick)) => {
+                    self.lex_template_string(Quote::Raw { hashes })
+                }
+                Some((hashes, Delimiter::Quote)) => self.lex_string(Quote::Raw { hashes }),
+                None => {
+                    self.advance();
+                    TokenKind::Hash
+                }
+            },
 
             _ => {
                 // Unrecognised character: consume it, record an error, and
@@ -1199,26 +1210,86 @@ impl<'a> Lexer<'a> {
         self.finish_number(start, start_line, start_column, Some(radix), error)
     }
 
-    fn lex_string(&mut self) -> TokenKind {
-        let start = self.pos;
-        let start_line = self.line;
-        let start_column = self.column;
-        self.advance(); // consume opening "
-        let raw = self.scan_quoted_raw(start, start_line, start_column);
-        TokenKind::StringLit(raw)
+    fn lex_string(&mut self, quote: Quote) -> TokenKind {
+        let raw = self.scan_string_body(quote);
+        TokenKind::StringLit { raw, quote }
     }
 
     /// Lex a byte-string literal `b"..."`. The leading `b` is still pending
-    /// (dispatched here because the next char is `"`, so it cannot be an
-    /// identifier). Same raw scan as a string; lowers to `List<u8>`.
-    fn lex_byte_string(&mut self) -> TokenKind {
+    /// (dispatched here because a quote or a raw opener follows, so it cannot
+    /// be an identifier). Same scan as a string; lowers to `List<u8>`.
+    fn lex_byte_string(&mut self, quote: Quote) -> TokenKind {
+        let raw = self.scan_string_body(quote);
+        TokenKind::ByteStringLit { raw, quote }
+    }
+
+    /// The text of a `"`-delimited literal from its first character, prefix
+    /// included, through its closer.
+    fn scan_string_body(&mut self, quote: Quote) -> String {
         let start = self.pos;
         let start_line = self.line;
         let start_column = self.column;
-        self.advance(); // consume `b`
-        self.advance(); // consume opening "
-        let raw = self.scan_quoted_raw(start, start_line, start_column);
-        TokenKind::ByteStringLit(raw)
+        let prefix = usize::from(self.peek_char() == Some('b'));
+        self.advance_n(prefix + quote.hash_count() + 1); // through the opening quote
+        match quote {
+            Quote::Cooked => self.scan_quoted_raw(start, start_line, start_column),
+            Quote::Raw { hashes } => self.scan_raw_quoted(hashes, start, start_line, start_column),
+        }
+    }
+
+    /// The text of a raw string as written, its closer consumed.
+    fn scan_raw_quoted(
+        &mut self,
+        hashes: usize,
+        start: usize,
+        start_line: usize,
+        start_column: usize,
+    ) -> String {
+        let mut text = String::new();
+        loop {
+            match self.peek() {
+                None => {
+                    self.errors.push(LexError {
+                        kind: LexErrorKind::UnterminatedString,
+                        span: self.span_from(start, start_line, start_column),
+                    });
+                    return text;
+                }
+                Some(_) => {
+                    if self.scan_text_char(Delimiter::Quote, hashes, &mut text) {
+                        return text;
+                    }
+                }
+            }
+        }
+    }
+
+    /// Consume the character at the cursor, a literal's text or its closer
+    /// (`delimiter` and `hashes` `#`s), appending text as written but for its
+    /// line breaks. A cooked literal's escapes are scanned before this.
+    /// Returns whether it closed.
+    fn scan_text_char(&mut self, delimiter: Delimiter, hashes: usize, text: &mut String) -> bool {
+        match self.peek() {
+            Some((_, ch)) if ch == delimiter.char() => {
+                self.advance();
+                if self.at_hashes(hashes) {
+                    self.advance_n(hashes);
+                    return true;
+                }
+                text.push(ch);
+            }
+            Some((_, '\r')) => {
+                if self.advance_literal_cr() {
+                    text.push('\n');
+                }
+            }
+            Some((_, ch)) => {
+                self.advance();
+                text.push(ch);
+            }
+            None => unreachable!("the caller handles the end of input"),
+        }
+        false
     }
 
     /// Scan the raw content of a `"`-quoted literal up to and including the
@@ -1331,12 +1402,38 @@ impl<'a> Lexer<'a> {
         }
     }
 
-    fn lex_template_string(&mut self) -> TokenKind {
+    /// The run of `#`s `skip` bytes past the cursor, with the raw literal's
+    /// delimiter that follows it. `None` where no delimiter follows.
+    fn hash_run_then_delimiter(&self, skip: usize) -> Option<(usize, Delimiter)> {
+        let rest = &self.input.as_bytes()[self.pos + skip..];
+        let hashes = rest.iter().take_while(|&&b| b == b'#').count();
+        match rest.get(hashes) {
+            Some(b'`') => Some((hashes, Delimiter::Backtick)),
+            Some(b'"') => Some((hashes, Delimiter::Quote)),
+            _ => None,
+        }
+    }
+
+    /// Whether the `hashes` characters after the cursor are all `#`.
+    fn at_hashes(&self, hashes: usize) -> bool {
+        self.input.as_bytes()[self.pos..]
+            .get(..hashes)
+            .is_some_and(|run| run.iter().all(|&b| b == b'#'))
+    }
+
+    fn advance_n(&mut self, n: usize) {
+        for _ in 0..n {
+            self.advance();
+        }
+    }
+
+    fn lex_template_string(&mut self, quote: Quote) -> TokenKind {
         let start = self.pos;
         let start_line = self.line;
         let start_column = self.column;
 
-        self.advance(); // consume opening `
+        let hashes = quote.hash_count();
+        self.advance_n(hashes + 1); // the opening `#`s and backtick
 
         let mut parts = Vec::new();
         let mut current_literal = String::new();
@@ -1351,9 +1448,9 @@ impl<'a> Lexer<'a> {
                     if !current_literal.is_empty() {
                         parts.push(TemplateTokenPart::Literal(current_literal));
                     }
-                    return TokenKind::TemplateStringLit(parts);
+                    return TokenKind::TemplateStringLit { parts, quote };
                 }
-                Some((_, '\\')) => {
+                Some((_, '\\')) if quote == Quote::Cooked => {
                     // Scanned by the shared rules, copied verbatim: the
                     // segment stays raw for the elaborator's unescaper.
                     let escape_start = self.pos;
@@ -1394,21 +1491,13 @@ impl<'a> Lexer<'a> {
                         // Outer template terminated mid-interpolation. The
                         // error was already recorded; surface whatever parts
                         // we have so the parser still sees a TemplateString.
-                        return TokenKind::TemplateStringLit(parts);
+                        return TokenKind::TemplateStringLit { parts, quote };
                     }
                 }
-                Some((_, '`')) => {
-                    self.advance();
-                    break;
-                }
-                Some((_, '\r')) => {
-                    if self.advance_literal_cr() {
-                        current_literal.push('\n');
+                Some(_) => {
+                    if self.scan_text_char(Delimiter::Backtick, hashes, &mut current_literal) {
+                        break;
                     }
-                }
-                Some((_, ch)) => {
-                    self.advance();
-                    current_literal.push(ch);
                 }
             }
         }
@@ -1417,7 +1506,7 @@ impl<'a> Lexer<'a> {
             parts.push(TemplateTokenPart::Literal(current_literal));
         }
 
-        TokenKind::TemplateStringLit(parts)
+        TokenKind::TemplateStringLit { parts, quote }
     }
 
     /// Collect an interpolation, split into expression source and optional format
@@ -1429,7 +1518,8 @@ impl<'a> Lexer<'a> {
     /// ends and where its specifier starts, and hands the text between verbatim
     /// to [`Parser::parse_interpolation_expr`], which lexes it properly. What it
     /// must get right is which characters are *structural* — a `}` inside a
-    /// string, a char, a nested template or a comment is not the closing one.
+    /// literal or a comment is not the closing one. A literal is skipped by
+    /// the scanner that lexes it, so a nested template's holes nest too.
     fn collect_interpolation_source(
         &mut self,
         start: usize,
@@ -1459,10 +1549,9 @@ impl<'a> Lexer<'a> {
         let mut paren_depth = 0u32;
         let mut bracket_depth = 0u32;
         let mut scan = Scan::Code;
-        let mut escape_next = false;
 
         loop {
-            let Some((_, ch)) = self.peek() else {
+            if self.peek().is_none() {
                 // EOF anywhere in here — a line comment's own end included —
                 // means the interpolation, and so the template, never closed.
                 self.errors.push(LexError {
@@ -1470,24 +1559,19 @@ impl<'a> Lexer<'a> {
                     span: self.span_from(start, start_line, start_column),
                 });
                 return (expr, format, true);
-            };
-            self.advance();
-            push(&mut expr, &mut format, ch);
-
-            if escape_next {
-                escape_next = false;
+            }
+            if scan == Scan::Code
+                && let Some(literal) = self.skip_nested_literal()
+            {
+                for ch in literal.chars() {
+                    push(&mut expr, &mut format, ch);
+                }
                 continue;
             }
+            let ch = self.advance().expect("the cursor is on a character");
+            push(&mut expr, &mut format, ch);
 
             match scan {
-                Scan::String | Scan::Char | Scan::Template => {
-                    if ch == '\\' {
-                        escape_next = true;
-                    } else if ch == scan.terminator() {
-                        scan = Scan::Code;
-                    }
-                    continue;
-                }
                 Scan::LineComment => {
                     if ch == '\n' {
                         scan = Scan::Code;
@@ -1506,10 +1590,6 @@ impl<'a> Lexer<'a> {
             }
 
             match ch {
-                '"' => scan = Scan::String,
-                // Wado has no lifetimes, so `'` always delimits a char literal.
-                '\'' => scan = Scan::Char,
-                '`' => scan = Scan::Template,
                 '/' => match self.peek_char() {
                     Some('/') => {
                         self.advance();
@@ -1554,6 +1634,37 @@ impl<'a> Lexer<'a> {
                 _ => {}
             }
         }
+    }
+
+    /// Consume the literal starting at the cursor, if one does, returning its
+    /// source. Wado has no lifetimes, so `'` always opens a char literal.
+    fn skip_nested_literal(&mut self) -> Option<&'a str> {
+        let before = self.pos;
+        let errors = self.errors.len();
+        let template = |lexer: &mut Self, quote| {
+            // Past the bound the rest is scanned as code and the hole may close
+            // early; the parser refuses that depth before it reads the hole.
+            if lexer.template_depth == MAX_NESTING {
+                return None;
+            }
+            lexer.template_depth += 1;
+            let kind = lexer.lex_template_string(quote);
+            lexer.template_depth -= 1;
+            Some(kind)
+        };
+        match self.peek_char()? {
+            '"' => self.lex_string(Quote::Cooked),
+            '\'' => self.lex_char(),
+            '`' => template(self, Quote::Cooked)?,
+            '#' => match self.hash_run_then_delimiter(0)? {
+                (hashes, Delimiter::Backtick) => template(self, Quote::Raw { hashes })?,
+                (hashes, Delimiter::Quote) => self.lex_string(Quote::Raw { hashes }),
+            },
+            _ => return None,
+        };
+        // The parser lexes the hole's source again, and reports its errors then.
+        self.errors.truncate(errors);
+        Some(&self.input[before..self.pos])
     }
 
     fn lex_char(&mut self) -> TokenKind {
@@ -1684,7 +1795,7 @@ mod tests {
         assert_matches!(&tokens[2].kind, TokenKind::Ident(s) if s == "println");
         assert_matches!(tokens[3].kind, TokenKind::RBrace);
         assert_matches!(tokens[4].kind, TokenKind::From);
-        assert_matches!(&tokens[5].kind, TokenKind::StringLit(raw) if raw == "core:cli");
+        assert_matches!(&tokens[5].kind, TokenKind::StringLit { raw, .. } if raw == "core:cli");
         assert_matches!(tokens[6].kind, TokenKind::Semicolon);
     }
 
@@ -1692,14 +1803,32 @@ mod tests {
     fn test_string_literal() {
         let tokens = tokens(r#""Hello, world!""#);
 
-        assert_matches!(&tokens[0].kind, TokenKind::StringLit(raw) if raw == "Hello, world!");
+        assert_matches!(&tokens[0].kind, TokenKind::StringLit { raw, quote: Quote::Cooked } if raw == "Hello, world!");
+    }
+
+    /// A raw string's text reaches the parser as written, and closes only at a
+    /// quote followed by as many `#`s as opened it.
+    #[test]
+    fn test_raw_string_kept_as_written() {
+        let t = tokens(r###"##"a\d"#b"## + 1"###);
+        assert_matches!(
+            &t[0].kind,
+            TokenKind::StringLit { raw, quote: Quote::Raw { hashes: 2 } } if raw == r##"a\d"#b"##
+        );
+        assert_matches!(t[1].kind, TokenKind::Plus);
+
+        let b = tokens(r##"b#"\x00"#"##);
+        assert_matches!(
+            &b[0].kind,
+            TokenKind::ByteStringLit { raw, quote: Quote::Raw { hashes: 1 } } if raw == r"\x00"
+        );
     }
 
     #[test]
     fn test_byte_string_literal() {
         // `b"..."` is a byte string; raw content is kept (escapes uninterpreted).
         let bs = tokens(r#"b"a\x00b""#);
-        assert_matches!(&bs[0].kind, TokenKind::ByteStringLit(raw) if raw == r"a\x00b");
+        assert_matches!(&bs[0].kind, TokenKind::ByteStringLit { raw, .. } if raw == r"a\x00b");
 
         // A bare `b` not followed by `"` is still an identifier.
         let ident = tokens("b + 1");
@@ -1708,7 +1837,7 @@ mod tests {
         // An identifier ending in `b` is not mistaken for a byte string.
         let suffixed = tokens(r#"ab"x""#);
         assert_matches!(&suffixed[0].kind, TokenKind::Ident(s) if s == "ab");
-        assert_matches!(&suffixed[1].kind, TokenKind::StringLit(raw) if raw == "x");
+        assert_matches!(&suffixed[1].kind, TokenKind::StringLit { raw, .. } if raw == "x");
     }
 
     #[test]
@@ -2019,7 +2148,7 @@ test data";
         let short = tokens(r"`\u12`");
         assert_matches!(
             &short[0].kind,
-            TokenKind::TemplateStringLit(parts)
+            TokenKind::TemplateStringLit { parts, .. }
                 if parts.as_slice() == [TemplateTokenPart::Literal(r"\u12".to_string())]
         );
 
@@ -2028,14 +2157,14 @@ test data";
         let unclosed = tokens(r"`\u{12` + 1");
         assert_matches!(
             &unclosed[0].kind,
-            TokenKind::TemplateStringLit(parts)
+            TokenKind::TemplateStringLit { parts, .. }
                 if parts.as_slice() == [TemplateTokenPart::Literal(r"\u{12".to_string())]
         );
         assert_matches!(unclosed[1].kind, TokenKind::Plus);
 
         // A plain string behaves the same way.
         let plain = tokens(r#""\u{12" + 1"#);
-        assert_matches!(&plain[0].kind, TokenKind::StringLit(raw) if raw == r"\u{12");
+        assert_matches!(&plain[0].kind, TokenKind::StringLit { raw, .. } if raw == r"\u{12");
         assert_matches!(plain[1].kind, TokenKind::Plus);
     }
 
@@ -2043,7 +2172,7 @@ test data";
     /// splits out, for a template holding exactly one `${…}`.
     fn interpolation(source: &str) -> (String, Option<String>) {
         let t = tokens(source);
-        let TokenKind::TemplateStringLit(parts) = &t[0].kind else {
+        let TokenKind::TemplateStringLit { parts, .. } = &t[0].kind else {
             panic!("expected a template, got {:?}", t[0].kind)
         };
         parts
@@ -2143,8 +2272,31 @@ test data";
         let t = tokens(r"`a\`b\{c\$d\u{1F600}eAf`");
         assert_matches!(
             &t[0].kind,
-            TokenKind::TemplateStringLit(parts)
+            TokenKind::TemplateStringLit { parts, quote: Quote::Cooked }
                 if parts.as_slice() == [TemplateTokenPart::Literal( r"a\`b\{c\$d\u{1F600}eAf".to_string() )]
+        );
+    }
+
+    /// A raw template's text reaches the parser as written, backslashes and
+    /// inner backticks included.
+    #[test]
+    fn test_raw_template_kept_as_written() {
+        let t = tokens(r"##`a\d`#b`## + 1");
+        assert_matches!(
+            &t[0].kind,
+            TokenKind::TemplateStringLit { parts, quote: Quote::Raw { hashes: 2 } }
+                if parts.as_slice() == [TemplateTokenPart::Literal(r"a\d`#b".to_string())]
+        );
+        assert_matches!(t[1].kind, TokenKind::Plus);
+    }
+
+    /// A raw template nested in a hole closes at its own closer, so a backslash
+    /// before its backtick does not hide the end.
+    #[test]
+    fn test_interpolation_skips_raw_template() {
+        assert_eq!(
+            interpolation(r"`${f(#`\`#)}`"),
+            (r"f(#`\`#)".to_string(), None)
         );
     }
 

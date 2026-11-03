@@ -543,6 +543,8 @@ pub enum CompilerItem {
     ReflectTemplateTail,
     /// `ReflectTemplate::raw_tail` — `tail` with escapes preserved.
     ReflectTemplateRawTail,
+    /// `ReflectTemplate::hashes` — how many `#`s delimit the template.
+    ReflectTemplateHashes,
     /// `Member::name` — the member's source field name.
     MemberName,
     /// `Member::wire_name_override` — the member's raw `#[wire(name)]` value.
@@ -961,6 +963,7 @@ impl CompilerItem {
         Self::ReflectTemplateMembers,
         Self::ReflectTemplateTail,
         Self::ReflectTemplateRawTail,
+        Self::ReflectTemplateHashes,
         Self::MemberName,
         Self::MemberWireNameOverride,
         Self::ReflectVariantDiscriminant,
@@ -1238,6 +1241,7 @@ impl CompilerItem {
             Self::ReflectTemplateMembers => "reflect_template_members",
             Self::ReflectTemplateTail => "reflect_template_tail",
             Self::ReflectTemplateRawTail => "reflect_template_raw_tail",
+            Self::ReflectTemplateHashes => "reflect_template_hashes",
             Self::MemberName => "member_name",
             Self::MemberWireNameOverride => "member_wire_name_override",
             Self::FormatterNew => "formatter_new",
@@ -1489,6 +1493,7 @@ impl CompilerItem {
             | Self::ReflectTemplateMembers
             | Self::ReflectTemplateTail
             | Self::ReflectTemplateRawTail
+            | Self::ReflectTemplateHashes
             | Self::MemberName
             | Self::MemberWireNameOverride
             | Self::FormatterNew
@@ -1876,6 +1881,7 @@ impl CompilerItem {
             | Self::ReflectTemplateMembers
             | Self::ReflectTemplateTail
             | Self::ReflectTemplateRawTail
+            | Self::ReflectTemplateHashes
             | Self::MemberName
             | Self::MemberWireNameOverride
             | Self::ReflectVariantDiscriminant

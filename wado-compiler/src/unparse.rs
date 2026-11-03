@@ -26,7 +26,7 @@ use crate::hashmap::{IndexMap, IndexSet};
 use crate::semantics::member_visible;
 use crate::tir;
 use crate::tir::{EffectRef, ResolvedType, TirCapture};
-use crate::token::Span;
+use crate::token::{Delimiter, Span};
 
 const MAX_LINE_WIDTH: usize = 120;
 
@@ -837,9 +837,9 @@ impl<'a> Unparser<'a> {
             } => {
                 match spelling {
                     UseNameSpelling::Ident => self.output.push_str(name),
-                    UseNameSpelling::InterfaceName(_) => {
-                        self.output
-                            .push_str(&StrLit::new(name.as_str()).as_written());
+                    UseNameSpelling::InterfaceName(_, written) => {
+                        assert_eq!(written.value, *name, "the literal spells the name");
+                        self.output.push_str(&written.as_written());
                     }
                 }
                 if let Some(alias) = alias {
@@ -1539,9 +1539,8 @@ impl<'a> Unparser<'a> {
         self.emit_outer_attrs(t.id, &t.attributes);
         self.output.push_str("test");
         if let Some(name) = &t.name {
-            self.output.push_str(" \"");
-            self.output.push_str(name);
-            self.output.push('"');
+            self.output.push(' ');
+            self.output.push_str(&name.as_written());
         }
         self.braced_block(t.span.start, &t.body);
         self.output.push('\n');
@@ -2073,15 +2072,13 @@ impl<'a> Unparser<'a> {
     fn unparse_literal(&mut self, lit: &Literal) {
         match lit {
             Literal::Number(repr) => self.output.push_str(repr),
-            Literal::String(raw) => {
-                self.output.push('"');
-                self.output.push_str(raw);
-                self.output.push('"');
+            Literal::String(raw, quote) => {
+                self.output
+                    .push_str(&quote.write("", Delimiter::Quote, raw));
             }
-            Literal::Bytes(raw) => {
-                self.output.push_str("b\"");
-                self.output.push_str(raw);
-                self.output.push('"');
+            Literal::Bytes(raw, quote) => {
+                self.output
+                    .push_str(&quote.write("b", Delimiter::Quote, raw));
             }
             Literal::Byte(raw) => {
                 self.output.push_str("b'");
@@ -2101,14 +2098,12 @@ impl<'a> Unparser<'a> {
             Literal::LocationFunction => self.output.push_str("#function"),
             Literal::DataSection => self.output.push_str("#data"),
             Literal::IncludeStr(path) => {
-                self.output.push_str("#include_str(\"");
-                self.output.push_str(path);
-                self.output.push_str("\")");
+                self.output
+                    .push_str(&format!("#include_str({})", path.as_written()));
             }
             Literal::IncludeBytes(path) => {
-                self.output.push_str("#include_bytes(\"");
-                self.output.push_str(path);
-                self.output.push_str("\")");
+                self.output
+                    .push_str(&format!("#include_bytes({})", path.as_written()));
             }
         }
     }
@@ -2641,7 +2636,7 @@ impl<'a> Unparser<'a> {
                         return;
                     };
                     let bare_name = is_valid_ident(&field.field_name);
-                    s.output.push_str(&format_field_name(&field.field_name));
+                    s.output.push_str(&format_field_name(&field.field_name, field.quoted.as_ref()));
                     let is_shorthand = bare_name
                         && matches!(&field.pattern, Pattern::Ident { name: n, .. } if n == &field.field_name);
                     if !is_shorthand {
@@ -2688,13 +2683,10 @@ impl<'a> Unparser<'a> {
         self.unparse_body(c.span.start, &c.body, closure_body_needs_parens(&c.body));
     }
 
-    /// Twin of [`unparse_template_string_into`], which prints the same shape
-    /// without comment tracking; keep the two in step.
     fn unparse_template_string(&mut self, t: &TemplateStringExpr) {
-        self.output.push('`');
+        self.output.push_str(&t.quote.open(Delimiter::Backtick));
         for part in &t.parts {
             match part {
-                // Literal segments are stored raw, escapes and all.
                 TemplatePart::String(s) => self.output.push_str(s),
                 TemplatePart::Interpolation { expr, format, open } => {
                     self.output.push_str("${");
@@ -2714,7 +2706,7 @@ impl<'a> Unparser<'a> {
                 }
             }
         }
-        self.output.push('`');
+        self.output.push_str(&t.quote.close(Delimiter::Backtick));
     }
 
     fn unparse_cast(&mut self, c: &CastExpr) {
@@ -2795,7 +2787,8 @@ impl<'a> Unparser<'a> {
     }
 
     fn emit_struct_literal_field(&mut self, field: &StructLiteralField) {
-        self.output.push_str(&format_field_name(&field.name));
+        self.output
+            .push_str(&format_field_name(&field.name, field.quoted.as_ref()));
         if !field.is_shorthand {
             self.output.push_str(": ");
             self.unparse_expr(&field.value);
@@ -3551,10 +3544,13 @@ fn needs_parens(expr: &Expr, parent_op: BinaryOp, is_left: bool) -> bool {
 
 /// Emit a struct-literal / struct-pattern field name. A name spelled as an
 /// identifier, a keyword included, stays bare; any other is quoted, as JSON
-/// compatibility allows.
-fn format_field_name(name: &str) -> String {
+/// compatibility allows, by the literal the source wrote where it wrote one.
+fn format_field_name(name: &str, written: Option<&StrLit>) -> String {
     if is_valid_ident(name) {
         name.to_string()
+    } else if let Some(written) = written {
+        assert_eq!(written.value, name, "the literal spells the name");
+        written.as_written()
     } else {
         quoted(name)
     }

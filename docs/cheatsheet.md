@@ -140,11 +140,15 @@ foo(100);                      // integer literal coerced to i64
 "Hello"         // String
 `Hello, ${name}` // Template string
 `{"key": ${v}}` // Braces are literal → {"key": <v>}
+#`C:\Users\${name}`#  // Raw template: a backslash is itself, holes still open
+##`a`#b`##       // More #s on both ends let the text hold a backtick
+#"\d+$"#         // Raw string: no escapes and no holes; goes wherever "…" does
 "Hello,
 world!"         // Multi-line string
 
 // Byte strings (b-prefix) → ByteList, ASCII + \xNN escapes (no \u)
 b"\x89PNG\r\n"                 // ByteList [137, 80, 78, 71, 13, 10]
+b#"\x"#                        // raw: ByteList [92, 120]
 let raw: List<u8> = b"abc";    // newtype literal coercion to the base type
 
 // Byte literal (b-prefix on a char) → u8, ASCII + \xNN escapes (no \u)
@@ -436,7 +440,6 @@ let q = sql`SELECT * FROM users WHERE id = ${id} AND name = ${user.name}`;
 // index(), and fmt(&t, f) renders through the trait the specifier selects.
 // `${t:?}` on a template value renders it as written, backticks included.
 String::format`x=${x:04}`  // what `x=${x:04}` is sugar for
-String::raw`a\n${x}`       // escapes kept as written: "a\\n" + x
 ```
 
 ### Structs
