@@ -123,6 +123,33 @@ fn position_from_one_based(line: u32, column: u32) -> Position {
     }
 }
 
+/// Write a SCIP index of every `.wado` file under `dir` to `output`. Each file
+/// is analyzed as an entry of its own, so the references a file makes are
+/// found whether or not anything imports it. Unfiltered by `[test]` /
+/// `[format]`, as `references` is.
+pub async fn run_scip(dir: &str, output: &str) -> Result<(), CliExit> {
+    let root =
+        fs::canonicalize(dir).map_err(|e| CliExit::error(format!("reading '{dir}': {e}")))?;
+    let root_uri = format!("{}/", wado_lsp::Uri::from_file_path(&root).as_str());
+    let mut files: Vec<_> = discover::discover_tree(&root, &discover::no_filters)?
+        .into_iter()
+        .flat_map(|pkg| pkg.files)
+        .collect();
+    files.sort();
+    let mut documents = Vec::new();
+    for file in &files {
+        let prepared = prepare_query(&file.to_string_lossy()).await?;
+        let document = prepared
+            .engine
+            .scip_document(&prepared.uri, &root_uri, &prepared.host)
+            .await
+            .expect("the document was just opened");
+        documents.push(document);
+    }
+    let index = wado_lsp::scip::encode_index(&root_uri, env!("CARGO_PKG_VERSION"), &documents);
+    fs::write(output, index).map_err(|e| CliExit::error(format!("writing '{output}': {e}")))
+}
+
 pub async fn run_diagnostics(filename: &str, json_output: bool) -> Result<(), CliExit> {
     let prepared = prepare_query(filename).await?;
     let diagnostics = prepared

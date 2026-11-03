@@ -13,6 +13,7 @@ enum QueryKind {
     Definition,
     Hover,
     InlayHints,
+    Scip,
 }
 
 impl QueryKind {
@@ -25,6 +26,7 @@ impl QueryKind {
         Self::Definition,
         Self::Hover,
         Self::InlayHints,
+        Self::Scip,
     ];
 
     const fn name(self) -> &'static str {
@@ -35,6 +37,7 @@ impl QueryKind {
             Self::Definition => "definition",
             Self::Hover => "hover",
             Self::InlayHints => "inlay-hints",
+            Self::Scip => "scip",
         }
     }
 
@@ -46,6 +49,7 @@ impl QueryKind {
             Self::Definition => "Jump to the definition of the symbol at --line/--column",
             Self::Hover => "Show the signature of the symbol at --line/--column",
             Self::InlayHints => "Show the inferred-type and parameter-name hints, in the source",
+            Self::Scip => "Write a SCIP index of every .wado file under a directory (default: .)",
         }
     }
 
@@ -74,6 +78,7 @@ pub struct QueryOptions {
     symbol: Option<String>,
     base: Option<String>,
     all: bool,
+    output: Option<String>,
 }
 
 #[derive(Clone, Copy)]
@@ -85,6 +90,7 @@ enum Opt {
     Symbol,
     Base,
     All,
+    Output,
     Help,
 }
 
@@ -97,6 +103,7 @@ impl Opt {
         Self::Symbol,
         Self::Base,
         Self::All,
+        Self::Output,
         Self::Help,
     ];
 
@@ -144,6 +151,12 @@ impl Opt {
                 value: None,
                 desc: "Show private members too (hover/suggestions); default is the public API",
             },
+            Self::Output => args::OptSpec {
+                long: Some("output"),
+                short: None,
+                value: Some("<path>"),
+                desc: "Where `scip` writes the index (default: index.scip)",
+            },
             Self::Help => args::HELP_SPEC,
         }
     }
@@ -152,6 +165,7 @@ impl Opt {
 fn format_usage() -> String {
     let mut buf = String::new();
     writeln!(buf, "Usage: wado query <kind> [options] <file.wado>").unwrap();
+    writeln!(buf, "       wado query scip [--output <path>] [dir]").unwrap();
     writeln!(
         buf,
         "       wado query definition --symbol <notation> [--base <dir>]"
@@ -189,6 +203,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<QueryOptions, CliExit> {
     let mut symbol: Option<String> = None;
     let mut base: Option<String> = None;
     let mut all = false;
+    let mut output: Option<String> = None;
 
     while let Some(arg) = args::next_arg(&mut parser)? {
         if let Some(opt) = args::match_opt(&arg, Opt::ALL, |o| o.spec()) {
@@ -206,6 +221,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<QueryOptions, CliExit> {
                 Opt::Symbol => symbol = Some(args::require_string(&mut parser)?),
                 Opt::Base => base = Some(args::require_string(&mut parser)?),
                 Opt::All => all = true,
+                Opt::Output => output = Some(args::require_string(&mut parser)?),
                 Opt::Help => return Err(CliExit::help(usage)),
             }
         } else if let Value(val) = arg {
@@ -222,6 +238,33 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<QueryOptions, CliExit> {
     }
 
     let kind = kind.ok_or_else(|| CliExit::error_with_usage("missing query kind", &usage))?;
+
+    if output.is_some() && kind != QueryKind::Scip {
+        return Err(CliExit::error_with_usage(
+            "--output is only valid for the `scip` kind",
+            &usage,
+        ));
+    }
+    if kind == QueryKind::Scip {
+        if symbol.is_some() || line.is_some() || column.is_some() {
+            return Err(CliExit::error_with_usage(
+                "`scip` takes a directory, not --symbol or --line/--column",
+                &usage,
+            ));
+        }
+        return Ok(QueryOptions {
+            kind,
+            input,
+            json,
+            line,
+            column,
+            include_declaration,
+            symbol,
+            base,
+            all,
+            output,
+        });
+    }
 
     if symbol.is_some() {
         if input.is_some() {
@@ -252,6 +295,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<QueryOptions, CliExit> {
             symbol,
             base,
             all,
+            output,
         });
     }
 
@@ -295,6 +339,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<QueryOptions, CliExit> {
         symbol,
         base,
         all,
+        output,
     })
 }
 
@@ -329,15 +374,24 @@ pub async fn run(opts: QueryOptions) -> Result<(), CliExit> {
             QueryKind::Hover => {
                 query_adapter::run_hover_by_symbol(notation, base, public_only, opts.json).await
             }
-            QueryKind::Diagnostics | QueryKind::InlayHints => {
-                unreachable!("--symbol rejected for diagnostics / inlay-hints")
+            QueryKind::Diagnostics | QueryKind::InlayHints | QueryKind::Scip => {
+                unreachable!("--symbol rejected for diagnostics / inlay-hints / scip")
             }
         };
+    }
+
+    if opts.kind == QueryKind::Scip {
+        return query_adapter::run_scip(
+            opts.input.as_deref().unwrap_or("."),
+            opts.output.as_deref().unwrap_or("index.scip"),
+        )
+        .await;
     }
 
     // Position-based kinds always carry an input file (validated in parse_args).
     let input = opts.input.as_deref().unwrap_or_default();
     match opts.kind {
+        QueryKind::Scip => unreachable!("scip returned above"),
         QueryKind::Diagnostics => query_adapter::run_diagnostics(input, opts.json).await,
         QueryKind::InlayHints => query_adapter::run_inlay_hints(input, opts.json).await,
         QueryKind::References => {

@@ -2585,3 +2585,35 @@ fn query_inlay_hints_path_form_call_keeps_the_receiver_slot() {
             "return Scale::scaled(&p, ‹factor: ›2, ‹bias: ›3)",
         ));
 }
+
+#[test]
+fn query_scip_indexes_a_file_nothing_imports() {
+    let tmp = tempfile::tempdir().unwrap();
+    std::fs::write(
+        tmp.path().join("a.wado"),
+        "pub fn greet() -> i32 {\n    return 1;\n}\n",
+    )
+    .unwrap();
+    std::fs::write(
+        tmp.path().join("b.wado"),
+        "use { greet } from \"./a.wado\";\nfn twice() -> i32 {\n    return greet() + greet();\n}\n",
+    )
+    .unwrap();
+
+    wado_in(tmp.path())
+        .args(["query", "scip", "--output", "index.scip", "."])
+        .assert()
+        .success();
+
+    let index = std::fs::read(tmp.path().join("index.scip")).unwrap();
+    let count = |needle: &str| {
+        index
+            .windows(needle.len())
+            .filter(|w| *w == needle.as_bytes())
+            .count()
+    };
+    // Each declaration's symbol: its definition and its SymbolInformation.
+    assert_eq!(count("wado . b.wado . twice()."), 2);
+    // Those two in a.wado's document, and the import and both calls in b.wado's.
+    assert_eq!(count("wado . a.wado . greet()."), 5);
+}
