@@ -1134,10 +1134,13 @@ impl WebGpuBackend {
     /// column, so a product of a few rows reads each column's run along the
     /// inner axis: one workgroup lane per run of it, rather than one per
     /// column, which leaves most of a device idle where the columns are few.
-    /// A matrix one binding does not hold is kept row by row instead, where a
-    /// row, and a run of rows, is a span of its own: column by column, every
-    /// row reaches across the whole buffer, and no gather or chunk of the
-    /// inner axis would bind.
+    /// Columns enough to fill `NARROW_GROUPS` workgroups a lane each are kept
+    /// row by row, where a run of lanes reads one row's run of columns at
+    /// once: Gemma 3 (270M)'s logits, 262144 columns, took a step over one
+    /// token 0.98 times as long so. A matrix one binding does not hold is kept
+    /// row by row too, where a row, and a run of rows, is a span of its own:
+    /// column by column, every row reaches across the whole buffer, and no
+    /// gather or chunk of the inner axis would bind.
     fn kept_matrix<K, N>(
         &mut self,
         k: i32,
@@ -1148,7 +1151,8 @@ impl WebGpuBackend {
         let count = k * n;
         let half = held_in_bf16(values);
         let words = if half { count.div_ceil(2) } else { count };
-        let by_columns = words <= self.max_binding;
+        let width = if half { 2 } else { 1 };
+        let by_columns = words <= self.max_binding && n < NARROW_GROUPS * narrow_columns(false, width, n);
         let element = |i: i32| if by_columns { at(i % k, i / k) } else { at(i / n, i % n) };
         let slot = if half {
             self.written(words, |w| {
