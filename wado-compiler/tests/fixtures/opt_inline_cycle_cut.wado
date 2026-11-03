@@ -1,0 +1,56 @@
+// Test: a call cycle bars only the members that cut it.
+//
+// `read` makes three calls, and its rare quoted form re-enters it through
+// `reread`, so all three lie on one cycle. Barring every member left each hot
+// call to `read` a call; barring `reread`, the costliest member, cuts the
+// cycle alone, so `read` and `quoted` splice and the expansion stops at the
+// call to `reread`. `core:json` reads a scalar the same way: its
+// `deserialize_i32` re-enters through `T::deserialize` on a quoted number.
+
+use { println, Stdout } from "core:cli";
+
+fn peek(x: i32) -> i32 {
+    return x % 50;
+}
+
+fn read(x: i32) -> i32 {
+    let lead = peek(x);
+    if lead == 34 {
+        return quoted(x);
+    }
+    return direct(x, lead);
+}
+
+fn direct(x: i32, lead: i32) -> i32 {
+    return x * 2 + lead;
+}
+
+fn quoted(x: i32) -> i32 {
+    return reread(x - 1) + 1;
+}
+
+fn reread(x: i32) -> i32 {
+    if x < 0 {
+        return 0;
+    }
+    let half = x / 2;
+    let rest = x - half * 2;
+    let scaled = half * 3 + rest * 5 - (half ^ rest);
+    return read(scaled % 1000) + rest;
+}
+
+export fn run() with Stdout {
+    let mut total = 0;
+    for let i of 0..<builtin::black_box(100) {
+        total += read(i);
+    }
+    println(`${total}`);
+}
+
+__DATA__
+{
+    "stdout": "12372\n",
+    "wir_not_expect:O2": [
+        "\"opt_inline_cycle_cut.wado/read\"("
+    ]
+}

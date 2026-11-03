@@ -1,6 +1,6 @@
-//! Replace a call to a small function off every call cycle, or a bridge onto
-//! one ([`splice_barred_cycle_members`]), with its body, spliced
-//! into a labeled block so the `return` becomes a `break`.
+//! Replace a call to a small function no call cycle is cut at
+//! ([`cut_call_cycles`]) with its body, spliced into a labeled block so the
+//! `return` becomes a `break`.
 //!
 //! A body carries two prices, parting company where it keeps a cold arm.
 //! `inline_cost` is what running one copy costs and is what the threshold
@@ -987,6 +987,8 @@ pub(super) struct InlineScans {
     bodies: BodyMemo<BodyScan>,
     /// Indexed by store position.
     read: Vec<SweepRead>,
+    /// See [`cut_call_cycles`].
+    cycle_cuts: IndexSet<FuncId>,
 }
 
 /// What a sweep reads about a function that its own body does not decide:
@@ -1529,16 +1531,15 @@ struct Verdict {
 /// for a body that will stay a call.
 fn splice_barred(
     func: &NirFunction,
-    barred_cycle_members: &IndexSet<FuncId>,
+    cycle_cuts: &IndexSet<FuncId>,
     type_table: &TypeTable,
 ) -> bool {
-    // Recursion is barred ahead of the `#[inline(always)]` short-circuit in
-    // `never_spliced`: splicing a recursive call only exposes the next one, so a
+    // A cut is barred ahead of the `#[inline(always)]` short-circuit in
+    // `never_spliced`: splicing around a cycle only exposes the next call, so a
     // force would expand without bound over the fixed point (a compiler stack
-    // overflow at higher iteration counts). A bridge is the exception
-    // `splice_barred_cycle_members` proves bounded. Keyed on `FuncId`, the
-    // identity the set is built on, so a cross-module cycle is not missed.
-    func.id.is_some_and(|id| barred_cycle_members.contains(&id)) || never_spliced(func, type_table)
+    // overflow at higher iteration counts). Keyed on `FuncId`, the identity the
+    // set is built on, so a cross-module cycle is not missed.
+    func.id.is_some_and(|id| cycle_cuts.contains(&id)) || never_spliced(func, type_table)
 }
 
 /// Whether this pass declines `func` whatever calls it. A call into such a
@@ -1575,7 +1576,7 @@ fn effective_threshold(func: &NirFunction, inline_threshold: usize) -> usize {
 fn classify_callee(
     func: &NirFunction,
     const_view: Option<&ConstView<'_>>,
-    barred_cycle_members: &IndexSet<FuncId>,
+    cycle_cuts: &IndexSet<FuncId>,
     type_table: &TypeTable,
     inline_threshold: usize,
     cold: &RareRuns,
@@ -1592,7 +1593,7 @@ fn classify_callee(
         return Verdict::default();
     };
 
-    if splice_barred(func, barred_cycle_members, type_table) {
+    if splice_barred(func, cycle_cuts, type_table) {
         return Verdict::default();
     }
 
@@ -1695,25 +1696,54 @@ pub(super) fn body_callees(func: &NirFunction) -> Vec<usize> {
     callee_ids.into_iter().collect()
 }
 
-/// The functions on a call cycle that splicing must leave alone: every member
-/// but a bridge, whose one call site enters a member that makes more than one
-/// call. Splicing a bridge exposes that member, which stays barred, so the
-/// expansion stops there. A bridge is how a cold re-entry closes a cycle
-/// through a hot forwarder: `T::deserialize` reaching a scalar reader whose
-/// quoted form re-reads through `T::deserialize`.
-fn splice_barred_cycle_members(call_graph: &[Vec<usize>]) -> IndexSet<FuncId> {
-    let recursive = recursive_functions(call_graph);
-    let is_bridge = |f: usize| match call_graph[f].as_slice() {
-        &[callee] => {
-            callee != f && recursive.contains(&FuncId::new(callee)) && call_graph[callee].len() != 1
+/// Settle `cuts` to the functions splicing must leave alone so no call cycle
+/// expands: a call into a cut member stays a call, so every cycle through one
+/// is closed. Each cycle no cut closes yet loses its costliest member by
+/// `price`, the one least worth splicing anyway, and the rest of the cycle
+/// splices. A cut kept while its member is on a cycle is what bounds the
+/// rounds: one that moved could splice what an earlier round left a call.
+///
+/// Barring every member left the hot entry of a cycle a call wherever it was
+/// reached: `core:json`'s `deserialize_i32` re-reads a quoted number through
+/// `T::deserialize`, and every scalar it read paid that call.
+fn cut_call_cycles(
+    call_graph: &[Vec<usize>],
+    cuts: &mut IndexSet<FuncId>,
+    price: impl Fn(usize) -> usize,
+) {
+    let on_cycle = recursive_scc_members(call_graph);
+    cuts.retain(|f| on_cycle[f.index()]);
+    loop {
+        let open: Vec<Vec<usize>> = call_graph
+            .iter()
+            .map(|callees| {
+                callees
+                    .iter()
+                    .copied()
+                    .filter(|&c| !cuts.contains(&FuncId::new(c)))
+                    .collect()
+            })
+            .collect();
+        let mut costliest: IndexMap<usize, (usize, usize)> = IndexMap::default();
+        for (f, component) in cycle_components(&open).into_iter().enumerate() {
+            let Some(component) = component else {
+                continue;
+            };
+            let p = price(f);
+            costliest
+                .entry(component)
+                .and_modify(|best| {
+                    if p > best.1 {
+                        *best = (f, p);
+                    }
+                })
+                .or_insert((f, p));
         }
-        _ => false,
-    };
-    recursive
-        .iter()
-        .copied()
-        .filter(|f| !is_bridge(f.index()))
-        .collect()
+        if costliest.is_empty() {
+            return;
+        }
+        cuts.extend(costliest.values().map(|&(f, _)| FuncId::new(f)));
+    }
 }
 
 /// The functions on a call cycle of `call_graph`, which holds each function's
@@ -1730,16 +1760,25 @@ pub(super) fn recursive_functions(call_graph: &[Vec<usize>]) -> IndexSet<FuncId>
         .collect()
 }
 
-/// Iterative Tarjan SCC. Returns one bool per node: `true` when the node lies on
-/// a call cycle (a non-singleton SCC member, or a node with a self-edge).
+/// One bool per node: `true` when the node lies on a call cycle (a
+/// non-singleton SCC member, or a node with a self-edge).
 pub(super) fn recursive_scc_members<E: AsRef<[usize]>>(call_graph: &[E]) -> Vec<bool> {
+    cycle_components(call_graph)
+        .into_iter()
+        .map(|c| c.is_some())
+        .collect()
+}
+
+/// Iterative Tarjan SCC. Per node, the component it shares a call cycle with,
+/// or `None` for a node on no cycle.
+fn cycle_components<E: AsRef<[usize]>>(call_graph: &[E]) -> Vec<Option<usize>> {
     let n = call_graph.len();
     const UNVISITED: usize = usize::MAX;
     let mut index_of = vec![UNVISITED; n];
     let mut lowlink = vec![0usize; n];
     let mut on_stack = vec![false; n];
     let mut scc_stack: Vec<usize> = Vec::new();
-    let mut recursive = vec![false; n];
+    let mut component = vec![None; n];
     let mut next_index = 0usize;
     // Explicit DFS stack: (node, next child position).
     let mut work: Vec<(usize, usize)> = Vec::new();
@@ -1774,7 +1813,7 @@ pub(super) fn recursive_scc_members<E: AsRef<[usize]>>(call_graph: &[E]) -> Vec<
                 loop {
                     let w = scc_stack.pop().unwrap();
                     on_stack[w] = false;
-                    recursive[w] = true;
+                    component[w] = Some(v);
                     size += 1;
                     if w == v {
                         break;
@@ -1782,7 +1821,7 @@ pub(super) fn recursive_scc_members<E: AsRef<[usize]>>(call_graph: &[E]) -> Vec<
                 }
                 // A singleton SCC is only recursive through a self-edge.
                 if size == 1 && !callees.contains(&v) {
-                    recursive[v] = false;
+                    component[v] = None;
                 }
             }
             work.pop();
@@ -1791,7 +1830,7 @@ pub(super) fn recursive_scc_members<E: AsRef<[usize]>>(call_graph: &[E]) -> Vec<
             }
         }
     }
-    recursive
+    component
 }
 
 /// The callee of every `Call` site under `node`, once per site.
@@ -2150,7 +2189,7 @@ pub fn inline_functions(
     // call node's `FunctionRef`. Indexed by `func_id.index()` (== store position).
     let descriptors = descriptor_cache.descriptors(project);
     let markers = MarkerBuiltins::of(project);
-    let InlineScans { bodies, read } = scans;
+    let InlineScans { bodies, read, cycle_cuts } = scans;
     let scans = bodies.refresh(project, gate.exec(), |f| scan_body(f, markers));
     let sites = argument_sites(scans, &live);
     // Taken every round, unlike the prices below: a callee's only site is one
@@ -2195,7 +2234,6 @@ pub fn inline_functions(
                 .collect()
         })
         .collect();
-    let barred_cycle_members = splice_barred_cycle_members(&call_graph);
 
     // Collect inline candidates from all modules, keyed by `FuncId` (the
     // function's store position). A call site resolves its candidate by its
@@ -2267,12 +2305,19 @@ pub fn inline_functions(
             |b| RareRuns::of(b, markers, Rarity::Cold),
         )
     });
+    cut_call_cycles(&call_graph, cycle_cuts, |i| {
+        let func = functions[i].borrow();
+        func.body
+            .as_ref()
+            .map_or(0, |b| inline_cost(b, type_table, &cold_runs[i], &[]))
+    });
+    let cycle_cuts: &IndexSet<FuncId> = cycle_cuts;
     let spliced: Vec<usize> = exec.map_indices(functions.len(), |i| {
         let func = functions[i].borrow();
         let Some(body) = func.body.as_ref() else {
             return 0;
         };
-        if !loopy[i] || splice_barred(&func, &barred_cycle_members, type_table) {
+        if !loopy[i] || splice_barred(&func, cycle_cuts, type_table) {
             return 0;
         }
         let gross = inline_cost(body, type_table, &cold_runs[i], &[]);
@@ -2302,7 +2347,7 @@ pub fn inline_functions(
         let verdict = classify_callee(
             &func,
             view.as_ref(),
-            &barred_cycle_members,
+            cycle_cuts,
             type_table,
             inline_threshold,
             runs,
@@ -2710,8 +2755,7 @@ fn add_site(
 
 /// [`Candidates::carried`]: per candidate, its body's call sites with each
 /// candidate among them expanded into the sites it carries in turn. No
-/// candidate reaches itself: the only one on a cycle is a bridge, and the
-/// member it enters is barred.
+/// candidate reaches itself: every cycle passes a cut member, which is none.
 fn carried_calls(
     candidates: &IndexMap<FuncId, NirFunction>,
 ) -> IndexMap<FuncId, IndexMap<FuncId, usize>> {
