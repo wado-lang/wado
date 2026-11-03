@@ -1,5 +1,6 @@
 //! The knobs shared across subcommands: [`CompileKnobs`] for what the compiler
-//! is told, [`RuntimeKnobs`] for what the wasmtime engine is built with.
+//! is told, [`RuntimeKnobs`] for what the wasmtime engine is built with, and
+//! [`HostKnobs`] for how the `wado` process itself runs.
 
 use lexopt::Parser;
 use wado_compiler::LogLevel;
@@ -7,6 +8,7 @@ use wado_compiler::param_resolution::ParamInputs;
 use wado_compiler::pgo::{Cutoff, Percent};
 
 use crate::args::{self, CliExit, OptSpec};
+use crate::host_memory::{FreedMemory, set_freed_memory};
 use crate::process_host::ProcessGrant;
 use crate::runtime::{parse_collector, parse_gc_heap_size};
 use wado_host::engine::{DEFAULT_COLLECTOR, DEFAULT_GC_HEAP_INITIAL_SIZE};
@@ -506,6 +508,68 @@ impl RuntimeKnobs {
             }
         }
         Ok(())
+    }
+}
+
+/// A knob shared by the subcommands that compile, for how the `wado` process
+/// itself runs, used for both matching and help rendering.
+#[derive(Clone, Copy)]
+pub enum HostKnobOpt {
+    RetainMemory,
+    NoRetainMemory,
+}
+
+impl HostKnobOpt {
+    pub const ALL: &[Self] = &[Self::RetainMemory, Self::NoRetainMemory];
+
+    #[must_use]
+    pub const fn spec(self) -> OptSpec {
+        match self {
+            // The two set one value, so the last one given wins.
+            Self::RetainMemory => OptSpec {
+                long: Some("retain-memory"),
+                short: None,
+                value: None,
+                desc: "Keep the memory wado frees for reuse instead of returning it to\nthe OS, which saves a compile rebuilding it (default: on, but\noff under serve, whose resident set would stay at its peak).\nA build without the mimalloc feature ignores it",
+            },
+            Self::NoRetainMemory => OptSpec {
+                long: Some("no-retain-memory"),
+                short: None,
+                value: None,
+                desc: "Return the memory wado frees to the OS (undoes --retain-memory)",
+            },
+        }
+    }
+}
+
+/// Every knob a compiling subcommand parses for the `wado` process itself.
+/// A subcommand without them leaves the allocator returning freed memory.
+#[derive(Clone, Copy, Debug)]
+pub struct HostKnobs {
+    pub freed_memory: FreedMemory,
+}
+
+impl Default for HostKnobs {
+    /// Retaining: a subcommand that runs long, where a resident set held at
+    /// its peak outlives the compile that grew it, starts from returning.
+    fn default() -> Self {
+        Self {
+            freed_memory: FreedMemory::Retain,
+        }
+    }
+}
+
+impl HostKnobs {
+    pub fn apply(&mut self, opt: HostKnobOpt) {
+        self.freed_memory = match opt {
+            HostKnobOpt::RetainMemory => FreedMemory::Retain,
+            HostKnobOpt::NoRetainMemory => FreedMemory::Return,
+        };
+    }
+
+    /// Set the process up as the knobs say, before the subcommand runs.
+    pub fn install(self) {
+        set_freed_memory(self.freed_memory);
     }
 }
 

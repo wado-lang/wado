@@ -1472,6 +1472,32 @@ fn test_test_skips_a_passed_file_until_something_it_read_changes() {
     assert!(!tmp.path().join("build").exists());
 }
 
+/// The compile looked for a `wado-workspace.toml` above the package and found
+/// none, so one appearing there is a changed input.
+#[test]
+fn test_test_compiles_again_once_a_workspace_governs_the_package() {
+    let tmp = tempfile::tempdir().unwrap();
+    let pkg = tmp.path().join("pkg");
+    std::fs::create_dir(&pkg).unwrap();
+    std::fs::write(
+        pkg.join("wado.toml"),
+        "[package]\nname = \"p\"\nversion = \"0.1.0\"\n",
+    )
+    .unwrap();
+    let main = pkg.join("main_test.wado");
+    std::fs::write(&main, "test \"t\" {\n    assert 1 + 1 == 2;\n}\n").unwrap();
+    let run = || wado().arg("test").arg(&main).assert().success();
+
+    run();
+    run().stdout(predicate::str::contains("cached:  1 files"));
+    std::fs::write(
+        tmp.path().join("wado-workspace.toml"),
+        "[workspace]\nmembers = [\"pkg\"]\n",
+    )
+    .unwrap();
+    run().stdout(predicate::str::contains("cached:").not());
+}
+
 /// An environment variable the compile read is an input like a file: a run
 /// that sees another value compiles again.
 #[test]

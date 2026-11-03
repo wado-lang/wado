@@ -1,8 +1,8 @@
 // `core:eval` is linked only by the `wado test` host, so a command that
 // reaches it is rejected at compile time rather than failing to instantiate.
-use { eval } from "core:eval";
+use { eval, EvalHost } from "core:eval";
 
-export fn run() {
+export fn run() with EvalHost {
     let _ = eval("export fn run() {}");
 }
 

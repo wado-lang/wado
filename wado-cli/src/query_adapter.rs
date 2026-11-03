@@ -9,6 +9,7 @@ use tokio::sync::Semaphore;
 use tokio::task::JoinSet;
 
 use serde_json::json;
+use wado_lsp::host::discovery::Disk;
 use wado_lsp::{
     DefinitionResult, DocumentHighlight, HighlightKind, HoverResult, Position, ReferenceLocation,
 };
@@ -58,7 +59,13 @@ async fn load_query(filename: &str) -> Result<PreparedQuery, String> {
         .parent()
         .map(std::path::Path::to_path_buf)
         .unwrap_or_default();
+<<<<<<< HEAD
     let manifest_pair = load_nearest_manifest(&canonical).map_err(|e| e.to_string())?;
+||||||| d0e5efa6dbb
+    let manifest_pair = load_nearest_manifest(&canonical).map_err(CliExit::error)?;
+=======
+    let manifest_pair = load_nearest_manifest(&canonical, &Disk).map_err(CliExit::error)?;
+>>>>>>> origin/main
     let host = attach_manifest_and_component_deps(
         FilesystemCompilerHost::silent(base.clone()),
         manifest_pair.as_ref(),
@@ -308,7 +315,7 @@ async fn symbol_env(notation: &str, base: &str) -> Result<SymbolEnv, CliExit> {
     // come from the notation, not source text, so there are no inline component
     // deps — pass empty source; manifest `[dependencies]` still resolve.
     let entry_path = base_dir.join(QUERY_ENTRY);
-    let manifest_pair = load_nearest_manifest(&entry_path).map_err(CliExit::error)?;
+    let manifest_pair = load_nearest_manifest(&entry_path, &Disk).map_err(CliExit::error)?;
     let host = attach_manifest_and_component_deps(
         FilesystemCompilerHost::silent(base_dir.clone()),
         manifest_pair.as_ref(),
@@ -378,7 +385,7 @@ async fn symbol_invocations(env: &SymbolEnv) -> Result<Option<InvocationIndex>, 
     // directory, so run it with a host based there — not `env.host`, which is
     // based at `base_dir` to resolve the synthetic entry's imports. Host and
     // pipeline share one manifest load, anchored at the target.
-    let manifest_pair = load_nearest_manifest(&target_abs).map_err(CliExit::error)?;
+    let manifest_pair = load_nearest_manifest(&target_abs, &Disk).map_err(CliExit::error)?;
     let pipeline_host = entry_host(&target_abs, manifest_pair.as_ref());
     let Some(raw) = run_generators_for(&target_abs, &pipeline_host, manifest_pair).await else {
         return Ok(None);

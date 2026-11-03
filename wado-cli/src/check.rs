@@ -12,6 +12,7 @@ use lexopt::Arg::Value;
 use wado_compiler::Code;
 use wado_compiler::kiln::InvocationIndex;
 use wado_compiler::path::normalize;
+use wado_lsp::host::discovery::Disk;
 
 use crate::args::{self, CliExit};
 use crate::build;
@@ -22,7 +23,7 @@ use crate::compile::{
 use crate::compiler_host::FilesystemCompilerHost;
 use crate::dep_component::Acquisition;
 use crate::discover;
-use crate::knobs::{CompileKnobOpt, CompileKnobs};
+use crate::knobs::{CompileKnobOpt, CompileKnobs, HostKnobOpt, HostKnobs};
 use crate::manifest;
 use crate::test::test_filters;
 
@@ -38,6 +39,7 @@ pub struct CheckOptions {
     /// to the library world; `Some("test")` is the synthetic test world.
     pub target_world: Option<String>,
     pub knobs: CompileKnobs,
+    pub host: HostKnobs,
 }
 
 #[derive(Clone, Copy)]
@@ -108,6 +110,7 @@ fn format_usage() -> String {
         args::OptsHelp::default()
             .add(Opt::ALL, |o| o.spec())
             .add(Opt::KNOBS, |o| o.spec())
+            .add(HostKnobOpt::ALL, |o| o.spec())
             .render()
     )
     .unwrap();
@@ -120,9 +123,12 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<CheckOptions, CliExit> {
     let mut warn_only = false;
     let mut target_world: Option<String> = None;
     let mut knobs = CompileKnobs::default();
+    let mut host = HostKnobs::default();
     while let Some(arg) = args::next_arg(&mut parser)? {
         if let Some(k) = args::match_opt(&arg, Opt::KNOBS, |k| k.spec()) {
             knobs.apply(k, &mut parser)?;
+        } else if let Some(h) = args::match_opt(&arg, HostKnobOpt::ALL, |h| h.spec()) {
+            host.apply(h);
         } else if let Some(opt) = args::match_opt(&arg, Opt::ALL, |o| o.spec()) {
             match opt {
                 Opt::Warn => warn_only = true,
@@ -143,6 +149,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<CheckOptions, CliExit> {
         warn_only,
         target_world,
         knobs,
+        host,
     })
 }
 
@@ -158,7 +165,7 @@ pub async fn run(opts: CheckOptions) -> Result<(), CliExit> {
         let project = build::project_at(&path, NO_PROJECT)?;
         return check_declared_worlds(&project, &opts).await;
     }
-    let project = load_nearest_manifest(&path).map_err(CliExit::error)?;
+    let project = load_nearest_manifest(&path, &Disk).map_err(CliExit::error)?;
     let world = check_world(opts.target_world.as_deref(), &path, project.as_ref());
     check_entry(&path, world, project, true, &opts, &mut Settled::default())
         .await
@@ -196,7 +203,7 @@ async fn check_declared_worlds(
             (_, Some(fq)) => CheckWorld::Target(fq.clone()),
             _ => unreachable!("a build target names exactly one world"),
         };
-        let entry_project = load_nearest_manifest(&target.entry).map_err(CliExit::error)?;
+        let entry_project = load_nearest_manifest(&target.entry, &Disk).map_err(CliExit::error)?;
         // Each entry compiles from its own invocations, so its walk passes
         // over nothing another entry's settled.
         let mut walked = Settled::default();

@@ -6,6 +6,7 @@ use std::io;
 use std::marker::PhantomData;
 use std::path::{Path, PathBuf};
 use wado_compiler::hashmap::IndexSet;
+use wado_lsp::host::discovery::Disk;
 use wado_manifest::Manifest;
 
 use glob::{Pattern, PatternError};
@@ -356,7 +357,7 @@ pub fn filters_at<S: AsRef<str>>(
     section: impl Fn(&Manifest) -> (&[String], &[String]),
     extra_excludes: &[S],
 ) -> Result<(ExcludeSet, IncludeSet), CliExit> {
-    let manifest = match project_manifest::discover(pkg_root) {
+    let manifest = match project_manifest::discover(pkg_root, &Disk) {
         Ok(Some(project)) if project.root == pkg_root => Some(project.manifest),
         Ok(_) => None,
         Err(e) => return Err(CliExit::error(e)),
@@ -427,7 +428,7 @@ pub fn files_in_dir(dir: &Path, filters: Filters<'_>) -> Result<Vec<PathBuf>, Cl
 /// package, so its root-relative globs match as authored, then narrowed back to
 /// `dir`; a package root, or a `dir` outside any package, is walked directly.
 fn discover_dir(dir: &Path, filters: Filters<'_>) -> Result<Vec<PackageFiles>, CliExit> {
-    let enclosing = match project_manifest::discover(dir) {
+    let enclosing = match project_manifest::discover(dir, &Disk) {
         Ok(project) => project.map(|p| p.root),
         Err(e) => return Err(CliExit::error(e)),
     };

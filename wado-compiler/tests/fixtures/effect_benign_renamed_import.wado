@@ -1,15 +1,17 @@
 // `#[benign(E)]` names its effect as this module spells it, alias included.
 
-use { println, Stdout as Out, Stdout } from "core:cli";
+use { println, Stdout } from "core:cli";
+use { InsecureSeed as Seed } from "wasi:random";
 
-#[benign(Out)]
-fn quiet() {
-    println("quiet");
+#[benign(Seed)]
+fn seeded() -> i32 {
+    let [_, _] = Seed::get_insecure_seed();
+    return 7;
 }
 
 export fn run() with Stdout {
-    quiet();
+    println(`${seeded()}`);
 }
 
 __DATA__
-{"stdout_contains": ["quiet"]}
+{"stdout": "7\n"}

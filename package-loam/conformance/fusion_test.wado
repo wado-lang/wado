@@ -4,12 +4,13 @@
 //! run under `core:eval`.
 
 use { generated, program_over, ran, tensor_of } from "./oracle.wado";
+use { EvalHost } from "core:eval";
 use { read } from "lib:loam/src/onnx_proto.wado";
 use text from "lib:loam/src/onnx_text.wado";
 
 /// The bits of every logit MNIST-12 computes from the shipped digit, built
 /// with `fuse` as given.
-fn mnist_logits(fuse: bool) -> String {
+fn mnist_logits(fuse: bool) -> String with EvalHost {
     let graph = read(#include_bytes("../tests/models/mnist-12/model.onnx")).unwrap();
     let source = generated(&graph, fuse).unwrap();
     let [x, extents] = tensor_of(#include_bytes("../tests/models/mnist-12/test_data_set_0/input_0.pb"));
@@ -38,7 +39,7 @@ fn gated_source(fuse: bool) -> String {
 }
 
 /// The bits of what `gated.onnxtext` computes, built with `fuse` as given.
-fn gated_bits(fuse: bool) -> String {
+fn gated_bits(fuse: bool) -> String with EvalHost {
     return ran(`${program_over(&gated_source(fuse))}
 export fn run() with Stdout {
     let mut cpu = Cpu {};
@@ -66,7 +67,7 @@ fn projected_source(fuse: bool) -> String {
 }
 
 /// The bits of what `projected.onnxtext` computes, built with `fuse` as given.
-fn projected_bits(fuse: bool) -> String {
+fn projected_bits(fuse: bool) -> String with EvalHost {
     return ran(`${program_over(&projected_source(fuse))}
 export fn run() with Stdout {
     let mut cpu = Cpu {};

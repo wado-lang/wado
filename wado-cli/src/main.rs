@@ -345,6 +345,7 @@ async fn run_cmd(cmd: Cmd, parser: lexopt::Parser) -> Result<(), CliExit> {
         }
         Cmd::Build => {
             let opts = wado_cli::build::parse_args(parser)?;
+            opts.host.install();
             Box::pin(wado_cli::build::run(opts)).await
         }
         // Each subcommand's future is boxed, or this state machine inlines
@@ -352,22 +353,27 @@ async fn run_cmd(cmd: Cmd, parser: lexopt::Parser) -> Result<(), CliExit> {
         // passes Rust's query-depth limit.
         Cmd::Compile => {
             let opts = wado_cli::compile::parse_args(parser)?;
+            opts.host.install();
             Box::pin(wado_cli::compile::run(opts)).await
         }
         Cmd::Check => {
             let opts = wado_cli::check::parse_args(parser)?;
+            opts.host.install();
             Box::pin(wado_cli::check::run(opts)).await
         }
         Cmd::Run => {
             let opts = wado_cli::run::parse_args(parser)?;
+            opts.host.install();
             Box::pin(wado_cli::run::run(opts)).await
         }
         Cmd::Serve => {
             let opts = wado_cli::serve::parse_args(parser)?;
+            opts.host.install();
             Box::pin(wado_cli::serve::run(opts)).await
         }
         Cmd::Test => {
             let opts = wado_cli::test::parse_args(parser)?;
+            opts.host.install();
             Box::pin(wado_cli::test::run(opts)).await
         }
         Cmd::Format => {
@@ -380,6 +386,7 @@ async fn run_cmd(cmd: Cmd, parser: lexopt::Parser) -> Result<(), CliExit> {
         }
         Cmd::Dump => {
             let opts = wado_cli::dump::parse_args(parser)?;
+            opts.host.install();
             Box::pin(wado_cli::dump::run(opts)).await
         }
         Cmd::Wit => {

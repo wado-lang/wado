@@ -26,8 +26,8 @@ use wado_compiler::{
     CompilerHost, CompilerOptions, DependencyIndex, Diagnostic, ModuleDir, Severity, SourceError,
 };
 use wado_lsp::FilesystemCompilerHost;
-use wado_lsp::host::dependency_index_from;
-use wado_lsp::host::discovery::{absolutize, normalize_path};
+use wado_lsp::host::discovery::{Disk, PackageFiles, absolutize, normalize_path};
+use wado_lsp::host::{dependency_index_from, is_absent};
 
 use crate::COMPILER_STACK_SIZE;
 use crate::cache::derived_dir;
@@ -35,7 +35,7 @@ use crate::compile::{load_nearest_manifest, render_error_diagnostics};
 use crate::fingerprint::{Input, compiler_digest, hash_field, write_entry};
 use crate::kiln_provider::hex32;
 use crate::knobs::CompileKnobs;
-use crate::manifest::resolution_inputs;
+use crate::run_cache::ReadLog;
 use crate::runtime::CAPTURED_STDIO_CAPACITY;
 use wado_host::engine::{DEFAULT_GC_HEAP_INITIAL_SIZE, fuel_engine};
 use wado_host::random;
@@ -219,36 +219,30 @@ impl EvalHost {
         {
             return entry.outcome;
         }
-        let entry = self.evaluate(source, fuel, deps).await;
-        if !matches!(entry.outcome, Outcome::CompileTimedOut)
-            && let Some(path) = &path
-        {
+        let (inputs, outcome) = self.evaluate(source, fuel, deps).await;
+        let Some(inputs) = inputs else {
+            return outcome;
+        };
+        let entry = Entry { inputs, outcome };
+        if let Some(path) = &path {
             write_entry(path, &entry);
         }
         entry.outcome
     }
 
+    /// The outcome, and the files the compile read: `None` where nothing they
+    /// say vouches for it.
     async fn evaluate(
         self: &Arc<Self>,
         source: String,
         fuel: u64,
         deps: Arc<Dependencies>,
-    ) -> Entry {
+    ) -> (Option<Vec<Input>>, Outcome) {
         let (compiled, inputs) = self.compile(source, deps).await;
         let wasm = match compiled {
             Compiled::Wasm(wasm) => wasm,
-            Compiled::Failed(failure) => {
-                return Entry {
-                    inputs,
-                    outcome: Outcome::CompileFailed(failure),
-                };
-            }
-            Compiled::TimedOut => {
-                return Entry {
-                    inputs,
-                    outcome: Outcome::CompileTimedOut,
-                };
-            }
+            Compiled::Failed(failure) => return (inputs, Outcome::CompileFailed(failure)),
+            Compiled::TimedOut => return (inputs, Outcome::CompileTimedOut),
         };
         let host = Arc::clone(self);
         let permit = self.cpu_permit().await;
@@ -262,7 +256,7 @@ impl EvalHost {
             })
             .await,
         );
-        Entry { inputs, outcome }
+        (inputs, outcome)
     }
 
     /// The compile's future is `!Send`, so it runs on a thread of its own. Past
@@ -274,7 +268,11 @@ impl EvalHost {
     ///
     /// A panic on either thread `evaluate` starts is a bug in the compiler or
     /// the host, so it ends the run.
-    async fn compile(&self, source: String, deps: Arc<Dependencies>) -> (Compiled, Vec<Input>) {
+    async fn compile(
+        &self,
+        source: String,
+        deps: Arc<Dependencies>,
+    ) -> (Compiled, Option<Vec<Input>>) {
         let options = CompilerOptions {
             opt_level: self.knobs.opt_level.to_compiler(),
             codegen_flags: self.knobs.codegen_flags.clone(),
@@ -292,7 +290,7 @@ impl EvalHost {
             ),
             Err(_elapsed) => {
                 self.abandon(&held, thread);
-                (Compiled::TimedOut, Vec::new())
+                (Compiled::TimedOut, None)
             }
         }
     }
@@ -359,12 +357,13 @@ impl Dependencies {
             caller_root: None,
             cache_dir,
         };
-        let project = match load_nearest_manifest(caller) {
+        // What the index binds keys an outcome, so the files it read need not.
+        let project = match load_nearest_manifest(caller, &Disk) {
             Ok(Some(project)) => project,
             Ok(None) => return none(derived_dir(None, "eval")),
             Err(_) => return none(None),
         };
-        let index = dependency_index_from(&project.manifest, &project.root, &base);
+        let index = dependency_index_from(&project.manifest, &project.root, &base, &Disk);
         let absolute = |entry: &String| normalize_path(&absolutize(&base.join(entry)));
         Self {
             roots: index
@@ -440,7 +439,7 @@ struct DependencyHost {
     packages: FilesystemCompilerHost,
     deps: Arc<Dependencies>,
     diagnostics: Mutex<Vec<Diagnostic>>,
-    read: Mutex<Vec<Input>>,
+    read: ReadLog,
 }
 
 impl DependencyHost {
@@ -449,14 +448,14 @@ impl DependencyHost {
             packages: FilesystemCompilerHost::new(deps.base.clone()),
             deps,
             diagnostics: Mutex::default(),
-            read: Mutex::default(),
+            read: ReadLog::default(),
         }
     }
+}
 
-    /// Record `file` as an input, present or not.
-    fn observe(&self, file: &Path) {
-        let bytes = std::fs::read(file).ok();
-        lock(&self.read).push(Input::of(file.to_path_buf(), bytes.as_deref()));
+impl PackageFiles for DependencyHost {
+    fn read(&self, path: &Path) -> std::io::Result<String> {
+        self.read.read(path)
     }
 }
 
@@ -468,23 +467,17 @@ impl CompilerHost for DependencyHost {
                 path: path.to_string(),
             });
         }
-        // An absent file is an input too: the outcome changes once it appears.
-        match std::fs::read(&file) {
-            Ok(bytes) => {
-                lock(&self.read).push(Input::of(file, Some(&bytes)));
-                Ok(bytes)
+        self.read.read_bytes(&file).map_err(|e| {
+            let path = path.to_string();
+            if is_absent(&e) {
+                SourceError::NotFound { path }
+            } else {
+                SourceError::IoError {
+                    path,
+                    message: e.to_string(),
+                }
             }
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
-                lock(&self.read).push(Input::of(file, None));
-                Err(SourceError::NotFound {
-                    path: path.to_string(),
-                })
-            }
-            Err(e) => Err(SourceError::IoError {
-                path: path.to_string(),
-                message: e.to_string(),
-            }),
-        }
+        })
     }
 
     fn emit_diagnostic(&self, diagnostic: Diagnostic) {
@@ -496,15 +489,11 @@ impl CompilerHost for DependencyHost {
     }
 
     fn module_dir(&self, path: &str) -> ModuleDir {
-        self.packages
-            .module_dir_probing(path, |manifest, _| self.observe(manifest))
+        self.packages.module_dir_with(path, self)
     }
 
     fn package_index(&self, root: &str) -> DependencyIndex {
-        for file in resolution_inputs(Path::new(root)) {
-            self.observe(&file);
-        }
-        self.packages.package_index(root)
+        self.packages.package_index_with(root, self)
     }
 
     /// An outcome is keyed by [`compiler_digest`], which covers the whole
@@ -527,7 +516,10 @@ fn spawn_compile(
     options: CompilerOptions,
     deps: Arc<Dependencies>,
     held: Arc<Mutex<Vec<OwnedSemaphorePermit>>>,
-) -> (oneshot::Receiver<(Compiled, Vec<Input>)>, CompileThread) {
+) -> (
+    oneshot::Receiver<(Compiled, Option<Vec<Input>>)>,
+    CompileThread,
+) {
     let (report, compiled) = oneshot::channel();
     let panicked = Arc::new(AtomicBool::new(false));
     let flag = Arc::clone(&panicked);
@@ -547,7 +539,7 @@ fn spawn_compile(
                     Err(_) => Compiled::Failed(compile_failure(&lock(&host.diagnostics))),
                 };
                 // Past the limit nobody is listening, and the outcome is dropped.
-                let _ = report.send((compiled, std::mem::take(&mut *lock(&host.read))));
+                let _ = report.send((compiled, host.read.reads()));
             })
             .expect("spawning the eval compile thread");
     (compiled, CompileThread { thread, panicked })
