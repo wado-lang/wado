@@ -22,7 +22,12 @@ test "smoke" {
     assert sqlite::parse("SELECT 1;").ok();
 }
 
+// Every eighth statement of queries.sql.
 #[workload]
+test "workload" {
+    assert sqlite::parse(#include_str("./queries_sample.sql")).ok();
+}
+
 test "fuel" {
     let sql = #include_str("./queries.sql");
     let result = measure("gale/sqlite/parse", || sqlite::parse(&sql));

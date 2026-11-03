@@ -81,37 +81,13 @@ impl Profile {
         self.modules.is_empty()
     }
 
-    /// This profile read under `thresholds`, against its own summary.
+    /// This profile read under `thresholds`.
     #[must_use]
     pub fn applied(&self, thresholds: Thresholds) -> Applied<'_> {
         Applied {
             profile: self,
-            reading: Reading {
-                summary: Summary::of(self, thresholds.hot, thresholds.cold),
-                predictable_branch: thresholds.predictable_branch,
-            },
+            thresholds,
         }
-    }
-
-    fn counts(&self) -> impl Iterator<Item = i64> + '_ {
-        self.modules
-            .values()
-            .flatten()
-            .flat_map(|function| function.counts.values().copied())
-    }
-}
-
-/// A share of all runs, in parts per million.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct Cutoff(u32);
-
-impl Cutoff {
-    pub const PER_MILLION: u32 = 1_000_000;
-
-    /// `per_million` as a share, where it is at most the whole.
-    #[must_use]
-    pub fn new(per_million: u32) -> Option<Self> {
-        (per_million <= Self::PER_MILLION).then_some(Self(per_million))
     }
 }
 
@@ -129,41 +105,29 @@ impl Percent {
     }
 }
 
-/// How a compile reads a profile's counts: the shares that place the summary's
-/// hot and cold lines, and the share of a branch's runs past which the branch
-/// is predictable. The defaults are LLVM's for its options of the same names.
+/// How a compile reads a profile's counts: a region is unlikely past the share
+/// of a branch's runs that makes the branch predictable, and cold where it
+/// never ran. The default share is LLVM's for its option of the same name.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Thresholds {
-    pub hot: Cutoff,
-    pub cold: Cutoff,
     pub predictable_branch: Percent,
 }
 
 impl Default for Thresholds {
     fn default() -> Self {
         Self {
-            hot: Cutoff(990_000),
-            cold: Cutoff(999_999),
             predictable_branch: Percent(99),
         }
     }
 }
 
-/// What a profile's counts mean to a compile: a region is cold by its count
-/// against the summary, and unlikely by its count against the code around it.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) struct Reading {
-    summary: Summary,
-    predictable_branch: Percent,
-}
-
-impl Reading {
-    /// Whether a region the profile ran `runs` times is cold. A region that
-    /// never ran is, whatever the summary's lines, as GCC's
-    /// `probably_never_executed` holds: a profile too small to place them
-    /// rounds both to zero.
-    fn is_cold(self, runs: i64) -> bool {
-        runs == 0 || self.summary.is_cold(runs)
+impl Thresholds {
+    /// Whether a region the profile ran `runs` times is cold. Only one that
+    /// never ran is, as GCC's `probably_never_executed` holds. The optimizer
+    /// takes every function only cold sites reach as cold, so a region that
+    /// ran, however rarely, may call what runs a million times.
+    fn is_cold(runs: i64) -> bool {
+        runs == 0
     }
 
     /// Whether a region the profile ran `runs` times, where the code around it
@@ -174,56 +138,11 @@ impl Reading {
     }
 }
 
-/// Where a profile's counts turn hot and cold. With every count sorted from
-/// the largest down, a line is the smallest count still inside its cutoff's
-/// share of all runs, the share rounded down as LLVM's `ProfileSummaryBuilder`
-/// rounds it.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) struct Summary {
-    hot: i64,
-    cold: i64,
-}
-
-impl Summary {
-    fn of(profile: &Profile, hot: Cutoff, cold: Cutoff) -> Self {
-        let mut counts: Vec<i64> = profile.counts().collect();
-        counts.sort_unstable_by(|a, b| b.cmp(a));
-        let total: u128 = counts.iter().map(|&count| count as u128).sum();
-        let line = |cutoff: Cutoff| {
-            let share = total * u128::from(cutoff.0) / u128::from(Cutoff::PER_MILLION);
-            let (mut runs, mut line) = (0, 0);
-            for &count in &counts {
-                if runs >= share {
-                    break;
-                }
-                runs += count as u128;
-                line = count;
-            }
-            line
-        };
-        Self {
-            hot: line(hot),
-            cold: line(cold),
-        }
-    }
-
-    fn is_hot(self, count: i64) -> bool {
-        count >= self.hot
-    }
-
-    /// Hot is asked first, as LLVM's inliner does, so a count on both lines
-    /// is hot.
-    fn is_cold(self, count: i64) -> bool {
-        !self.is_hot(count) && count <= self.cold
-    }
-}
-
-/// A profile a compile applies, with how its counts are read. The summary is
-/// the whole profile's, wherever a part of it is applied.
+/// A profile a compile applies, with how its counts are read.
 #[derive(Debug, Clone, Copy)]
 pub struct Applied<'a> {
     pub(crate) profile: &'a Profile,
-    pub(crate) reading: Reading,
+    pub(crate) thresholds: Thresholds,
 }
 
 /// Why a profile's text does not parse, at its 1-based `line`.
@@ -350,7 +269,7 @@ impl MarkMap {
             map.apply(
                 plan_module(source, module, rt_unreachable_calls),
                 functions,
-                applied.reading,
+                applied.thresholds,
             );
             map.sources.insert(source.clone());
         }
@@ -358,10 +277,15 @@ impl MarkMap {
     }
 
     /// Mark each region of `planned` by what `functions` recorded of it, read
-    /// as `reading` says. A function is matched by its name, the `n`th of a
+    /// under `thresholds`. A function is matched by its name, the `n`th of a
     /// name to the `n`th recorded, and its counts apply only where its hash is
     /// the recorded one.
-    fn apply(&mut self, planned: PlannedModule, functions: &[ProfiledFunction], reading: Reading) {
+    fn apply(
+        &mut self,
+        planned: PlannedModule,
+        functions: &[ProfiledFunction],
+        thresholds: Thresholds,
+    ) {
         let PlannedModule {
             plan,
             sites,
@@ -424,24 +348,10 @@ impl MarkMap {
         // test also runs once per iteration. A function's body and a closure's
         // are entered by a call, not a branch.
         let unlikely = |id: usize| match (counts[id], count_of(parents[id])) {
-            (Some(runs), Some(around)) => reading.is_unlikely(runs, around),
+            (Some(runs), Some(around)) => thresholds.is_unlikely(runs, around),
             _ => false,
         };
-        // Cold, here and in everything under it: a marker covers what follows
-        // it, so one over a hot loop would make the loop cold.
-        let mut cold: Vec<bool> = counts
-            .iter()
-            .map(|count| count.is_some_and(|runs| reading.is_cold(runs)))
-            .collect();
-        for id in (0..cold.len()).rev() {
-            if let Some(parent) = parents[id] {
-                assert!(
-                    (parent as usize) < id,
-                    "a region is numbered after its parent"
-                );
-                cold[parent as usize] &= cold[id];
-            }
-        }
+        let cold = |id: usize| counts[id].is_some_and(Thresholds::is_cold);
         // The region a marker for `id` sits under: a region in an expression
         // has no statement position to mark.
         let markable_parent = |id: usize| {
@@ -462,8 +372,7 @@ impl MarkMap {
             if count_of(parent) == Some(0) {
                 continue;
             }
-            let outermost_cold = cold[id] && !parent.is_some_and(|p| cold[p as usize]);
-            let Some(mark) = Mark::of(unlikely(id), outermost_cold) else {
+            let Some(mark) = Mark::of(unlikely(id), cold(id)) else {
                 continue;
             };
             self.sites.insert(site_of[&(id as u32)], mark);
@@ -487,16 +396,15 @@ impl MarkMap {
                 continue;
             }
             self.overridden.insert(marker.node());
-            // A path that never ran is unlikely and cold whatever the summary,
-            // which the marker said.
-            if runs == 0 {
+            // A path that never ran is unlikely and cold, which the marker
+            // said; one that ran is not cold.
+            if Thresholds::is_cold(runs) {
                 continue;
             }
-            let verdict = match Mark::of(unlikely(region), cold[region]) {
-                Some(Mark::ColdPath) => continue,
-                Some(Mark::Unlikely) => "unlikely but not cold",
-                Some(Mark::Cold) => "cold but not unlikely",
-                None => "neither unlikely nor cold",
+            let verdict = if unlikely(region) {
+                "unlikely but not cold"
+            } else {
+                "neither unlikely nor cold"
             };
             let subject = match marker {
                 SourceMarker::ColdPath(_) => "`cold_path()` marks this path rare",
@@ -636,55 +544,14 @@ mod tests {
         );
     }
 
-    fn summary(counts: &[i64], hot: Cutoff, cold: Cutoff) -> Summary {
-        let mut text = format!("{HEADER}\nmodule a\nfn 00000000000000ab 1 f\n");
-        for (region, count) in counts.iter().enumerate() {
-            let _ = writeln!(text, "{region} {count}");
-        }
-        Summary::of(&parse(&text).expect("it parses"), hot, cold)
-    }
-
-    fn default_summary(counts: &[i64]) -> Summary {
-        let Thresholds { hot, cold, .. } = Thresholds::default();
-        summary(counts, hot, cold)
-    }
-
-    #[test]
-    fn each_line_is_the_smallest_count_inside_its_share() {
-        let lines = summary(&[600, 300, 60, 30, 10], Cutoff(900_000), Cutoff(990_000));
-        assert_eq!(lines, Summary { hot: 300, cold: 30 });
-        assert!(lines.is_hot(300) && !lines.is_cold(300));
-        assert!(!lines.is_hot(60) && !lines.is_cold(60));
-        assert!(lines.is_cold(30) && lines.is_cold(10));
-    }
-
-    /// LLVM rounds the share down: of 4 runs, 99% is 3, so the 3 alone is
-    /// inside it, and the 1 is cold.
-    #[test]
-    fn a_share_is_rounded_down() {
-        let lines = default_summary(&[3, 1]);
-        assert_eq!(lines, Summary { hot: 3, cold: 3 });
-        assert!(lines.is_cold(1));
-    }
-
-    #[test]
-    fn a_count_on_both_lines_is_hot() {
-        let lines = default_summary(&[1, 1, 1]);
-        assert_eq!(lines, Summary { hot: 1, cold: 1 });
-        assert!(lines.is_hot(1) && !lines.is_cold(1));
-    }
-
     /// LLVM's default: a branch is predictable when one side takes 99% of its
     /// runs, so the other side is unlikely at 1% or less.
     #[test]
     fn a_side_is_unlikely_at_the_predictable_branchs_complement() {
-        let reading = Reading {
-            summary: default_summary(&[1]),
-            predictable_branch: Thresholds::default().predictable_branch,
-        };
-        assert!(reading.is_unlikely(10, 1000));
-        assert!(!reading.is_unlikely(11, 1000));
-        assert!(reading.is_unlikely(0, 1));
+        let thresholds = Thresholds::default();
+        assert!(thresholds.is_unlikely(10, 1000));
+        assert!(!thresholds.is_unlikely(11, 1000));
+        assert!(thresholds.is_unlikely(0, 1));
     }
 
     #[test]

@@ -16,6 +16,12 @@ Two measures live here, and they answer different questions:
   `mise run update-baselines`. Fuel leaves out GC and other host work by
   design: the wall clock is what shows them.
 
+Each benchmark's `#[workload]` test trains the profile in its `pgo/` on a
+smaller input than either measure runs, so neither judges a profile on the run
+that trained it. `wado test --pgo benchmark package-gale-highlight-html`
+records them again. Applied profiles change fuel, so a re-recording also
+commits the result of `mise run update-baselines`.
+
 Read the `wado-performance` skill before measuring a change, and its section
 "A/B-ing a stdlib change" before comparing two versions of `wado-compiler/lib`.
 Without `WADO_BIN`, `wado.sh` runs `cargo run --release`, and a release build
