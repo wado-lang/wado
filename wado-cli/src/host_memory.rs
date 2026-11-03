@@ -61,7 +61,7 @@ mod mimalloc_purge {
 
         #[test]
         fn purging_restores_the_starting_delay() {
-            // SAFETY: as in `retain_freed`.
+            // SAFETY: as in `set_freed_memory`.
             let start = unsafe { mi_option_get(PURGE_DELAY) };
             set_freed_memory(FreedMemory::Retain);
             assert_eq!(unsafe { mi_option_get(PURGE_DELAY) }, NEVER);

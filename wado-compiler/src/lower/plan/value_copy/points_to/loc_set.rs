@@ -332,6 +332,9 @@ mod tests {
         assert_ne!(small, words);
         assert_eq!(set((0..40).rev()), words);
         assert!(words.insert(Loc(100_000)));
-        assert_eq!(indices(&words), (0..40).chain([100_000]).collect::<Vec<u32>>());
+        assert_eq!(
+            indices(&words),
+            (0..40).chain([100_000]).collect::<Vec<u32>>()
+        );
     }
 }
