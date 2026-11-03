@@ -237,23 +237,30 @@ fn aliased_write_targets(targets: &[(u32, u32, Vec<u32>)], places: &[(u32, Vec<u
 ///
 /// [`clobbered_locals`]: super::trackability::clobbered_locals
 fn locals_written_under(body: &Body, e: ExprId) -> IndexSet<u32> {
-    let mut written = IndexSet::default();
-    body.find_in_nodes_under(NodeRef::Expr(e), |node| {
+    write_targets_under(body, NodeRef::Expr(e))
+        .into_iter()
+        .filter_map(|target| write_root_local(body, target))
+        .collect()
+}
+
+/// The operands something under `node` writes through: an assignment's
+/// target, a `&mut`'s operand, an argument reaching storage.
+fn write_targets_under(body: &Body, node: NodeRef) -> Vec<Operand> {
+    let mut targets = Vec::new();
+    body.find_in_nodes_under(node, |node| {
         let NodeRef::Expr(e) = node else {
             return None::<()>;
         };
         match &body.exprs[e].kind {
-            ExprKind::Assign { target, .. } => {
-                written.extend(write_root_local(body, (*target).into()));
-            }
+            ExprKind::Assign { target, .. } => targets.push((*target).into()),
             ExprKind::Unary {
                 op: NirUnaryOp::MutRef,
                 expr,
-            } => written.extend(write_root_local(body, *expr)),
+            } => targets.push(*expr),
             ExprKind::Call { args, .. } => {
                 for (arg, reaches_storage) in args.with_storage_reach(true) {
                     if reaches_storage {
-                        written.extend(write_root_local(body, arg.expr));
+                        targets.push(arg.expr);
                     }
                 }
             }
@@ -261,7 +268,7 @@ fn locals_written_under(body: &Body, e: ExprId) -> IndexSet<u32> {
         }
         None
     });
-    written
+    targets
 }
 
 /// Every local `e` names, read or written.
@@ -322,14 +329,7 @@ impl Interpreter<'_> {
                 {
                     return Flow::Bail;
                 }
-                // An array is one object every handle to it shares, and the
-                // frame holds arrays by value: a copy would miss every write
-                // made through the other handle.
-                if matches!(
-                    self.type_table.get(body.operand_type(value)),
-                    ResolvedType::BuiltinArray(_)
-                ) && write_root_local(body, value).is_some()
-                {
+                if self.binds_written_array_handle(body, index, value) {
                     return Flow::Bail;
                 }
                 // What makes a binding of a reference an alias is that nothing
@@ -815,6 +815,37 @@ impl Interpreter<'_> {
             .place_fields
             .contains_key(&place)
             .then_some(value)
+    }
+
+    /// Whether `let index = value` binds a second handle to an array that the
+    /// body writes through either handle. An array is one object every handle
+    /// shares, and the frame holds it by value, so the copy the `let` makes
+    /// would miss those writes.
+    fn binds_written_array_handle(&self, body: &Body, index: u32, value: Operand) -> bool {
+        if !matches!(
+            self.type_table.get(body.operand_type(value)),
+            ResolvedType::BuiltinArray(_)
+        ) {
+            return false;
+        }
+        let Some(source_root) = write_root_local(body, value) else {
+            return false;
+        };
+        let source = self.frame_place_of(body, value);
+        write_targets_under(body, NodeRef::Block(body.root()))
+            .into_iter()
+            .any(|target| {
+                if write_root_local(body, target) == Some(index) {
+                    return true;
+                }
+                match (self.frame_place_of(body, target), &source) {
+                    (Some((root, path)), Some((source_root, source_path))) => {
+                        root == *source_root
+                            && (path.starts_with(source_path) || source_path.starts_with(&path))
+                    }
+                    _ => write_root_local(body, target) == Some(source_root),
+                }
+            })
     }
 
     /// Resolve `index` to the place `inner` refers to, so later reads and writes
