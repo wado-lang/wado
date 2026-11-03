@@ -92,7 +92,7 @@ use field_scalarize::scalarize_hot_fields;
 use inline::inline_functions;
 pub(crate) use inline::is_constant_arg;
 use licm::apply_licm;
-use match_to_switch::{match_to_switch_all, match_to_switch_globals};
+use match_to_switch::match_to_switch_globals;
 use mod_ref::{SummaryCache, summarize};
 use scalar_forward::forward_scalar_temps;
 use sroa::scalar_replace_aggregates;
@@ -127,19 +127,20 @@ struct OptConfig {
     cap_is_defect: bool,
 }
 
-/// Optimization level. Every level runs DCE and the post-loop rewrites the Wasm
-/// backend depends on; `optimize` below sets each one's loop and inline budget.
+/// Optimization level. Every level runs DCE; `optimize` below sets each one's
+/// loop and inline budget.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum OptLevel {
-    /// No optimization loop. DCE plus the always-on post-optimization
-    /// rewrites required by the Wasm backend.
+    /// DCE alone, which keeps compiling a test cheap. Nothing else changes
+    /// the program.
     O0,
-    /// Development optimizations. All passes with fast iteration count.
+    /// The default of `wado run` and `wado test`: compile speed and run speed
+    /// in balance.
     O1,
-    /// Production optimizations. All passes including DCE.
+    /// For a release build.
     #[default]
     O2,
-    /// Aggressive production optimizations. All passes including DCE.
+    /// For fuzzing the optimizer, more than for a build.
     O3,
     /// Size optimizations. Same as O2 plus name section stripping.
     /// Intended for frontend/browser deployment.
@@ -197,7 +198,8 @@ pub fn optimize(
     let mut descriptors = dce::DescriptorCache::default();
     match opt_level {
         OptLevel::O0 => {
-            // No optimizations, but still run DCE to reduce codegen work
+            // DCE alone: it cuts codegen work, and nothing else may change
+            // the program `-O0` emits.
             run_dce(
                 &mut project,
                 profiler,
@@ -205,19 +207,10 @@ pub fn optimize(
                 &exec,
                 Initializers::DropUnread,
             );
-            // Dense-int / dense-enum `Match` → `Switch` is a codegen-
-            // friendly late lowering. The translator emits a canonical
-            // `Match` (see WEP 2026-05-11). Materialising `Switch` here
-            // — even at -O0 — keeps wir_build's `br_table` path live
-            // for dense matches when the optimizer loop is skipped.
-            // The synthesised default-arm call resolves to
-            // `builtin::unreachable`, which lowers to Wasm
-            // `unreachable` directly and is never DCE'd, so ordering
-            // around DCE is irrelevant.
-            run_pass("nir/match_to_switch", &mut project, profiler, |p| {
-                // O0 skips the loop/gate entirely; lower every function.
-                match_to_switch_all(p)
-            });
+            census::report(&project, "end-of-optimize");
+            #[cfg(debug_assertions)]
+            audit_nir(&project, "end-of-optimize");
+            return project;
         }
         OptLevel::O1 => {
             let config = OptConfig {
@@ -330,7 +323,6 @@ pub fn optimize(
     // the body into WIR-shaped forms the value-graph build would misread. The
     // two soundness gates (scalar-field + receiver-availability) and the WIR
     // const-local propagation keep it default-safe.
-    if opt_level != OptLevel::O0 {
         run_pass("nir/promote_fields", &mut project, profiler, |p| {
             extract::freeze_pure_arith(
                 p,
@@ -367,7 +359,6 @@ pub fn optimize(
         run_pass("nir/unsigned_range_check", &mut project, profiler, |p| {
             unsigned_range_check::fuse_unsigned_range_checks(p)
         });
-    }
 
     // Post-optimization rewrites: select lowering for branchless Wasm
     run_pass("nir/select_lowering", &mut project, profiler, |p| {

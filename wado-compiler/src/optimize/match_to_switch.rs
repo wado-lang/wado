@@ -34,41 +34,6 @@ const SWITCH_LONG_CASCADE_SPANS: usize = 12;
 /// Maximum range size for `br_table` (to avoid huge jump tables).
 const SWITCH_MAX_RANGE: i64 = 1024;
 
-/// Ungated: lower every function (and global). Used at `-O0`, where the loop
-/// (and thus the gate) is skipped — avoids building a throwaway `FunctionGate`
-/// (a full call-graph walk) just to satisfy the gated signature.
-pub fn match_to_switch_all(project: &mut NirPackage) -> bool {
-    let (cold_path_id, unreachable_id) = intern_cold_markers(project);
-    let pure_builtin_callees = project.pure_builtin_callee_ids();
-    let type_table = project.type_table.borrow();
-    let rule = MatchToSwitchRule::new(&type_table, cold_path_id, unreachable_id);
-    let mut buffers = EngineBuffers::default();
-    let mut changed = false;
-    for func_rc in &project.functions {
-        let mut func = func_rc.borrow_mut();
-        let FuncParts {
-            body,
-            locals,
-            params,
-            ..
-        } = func.parts();
-        if let Some(body) = body {
-            let mut engine = Engine::new(body, &mut buffers, locals, params);
-            engine.set_value_graph_type_table(&type_table);
-            engine.set_pure_builtin_callees(&pure_builtin_callees);
-            changed |= engine.run(&[&rule]);
-        }
-    }
-    changed
-        | run_globals(
-            &mut project.globals,
-            &rule,
-            &type_table,
-            &pure_builtin_callees,
-            &mut buffers,
-        )
-}
-
 /// Lower dense `Match` → `Switch` in global initializer bodies only. Functions
 /// are handled inside the unified peephole session (`MatchToSwitchRule` is one
 /// of its rules); globals are not, so the fixed-point driver runs this once.

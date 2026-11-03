@@ -22,10 +22,10 @@ since removing it changes what the program does.
 
 | Flag  | Iterations | Inline threshold | Contract checks | Notes                                                                    |
 | ----- | ---------- | ---------------- | --------------- | ------------------------------------------------------------------------ |
-| `-O0` | 0          | N/A              | on              | Part of the pipeline; see [Pipeline](#pipeline)                          |
-| `-O1` | 2          | 4                | on              | The default of `wado run` and `wado serve`                               |
-| `-O2` | 15         | 16               | off             | The default of every other subcommand                                    |
-| `-O3` | 20         | 26               | off             |                                                                          |
+| `-O0` | 0          | N/A              | on              | DCE alone, which keeps an e2e run cheap; nothing else is optimized       |
+| `-O1` | 2          | 4                | on              | The default of `wado run`, `wado serve` and `wado test`                  |
+| `-O2` | 15         | 16               | off             | For a release build; the default of every other subcommand               |
+| `-O3` | 20         | 26               | off             | For fuzzing the optimizer, more than for a build                         |
 | `-Os` | 15         | 16               | off             | Strips the name section; a failed `assert` only traps; no loop unrolling |
 
 The levels differ in what a program does, not only in its speed: below `-O2`, a
@@ -64,8 +64,8 @@ on how many. See [WEP: Parallel Optimizer](./wep-2026-10-08-parallel-optimizer.m
 
 ## Pipeline
 
-`-O0` runs only DCE, `match_to_switch`, step 7, and the part of step 8 that
-[WIR Passes](#wir-passes) keeps at `-O0`. Every other level runs the whole list.
+`-O0` runs only DCE, and the part of step 8 that [WIR Passes](#wir-passes) keeps
+at `-O0`. Every other level runs the whole list.
 
 1. DCE.
 2. Before the loop: `cold_outline`, `match_to_switch` over global initializers,
@@ -215,8 +215,8 @@ Whole program and backend:
 
 A WIR pass stays only if it changes the emitted Wasm. One that NIR or another
 WIR pass already covers is removed. At every level, nullable references are
-lowered first. `-O0` then only infers branch hints, removes dead items, and
-settles the locals (step 11).
+lowered first. `-O0` then only removes dead items and settles the locals
+(step 11).
 
 1. Trivial copy propagation.
 2. Box-local elimination.

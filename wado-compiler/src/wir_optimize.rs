@@ -124,10 +124,6 @@ fn optimize_scoped(
     lower_nullable_refs(module);
 
     if opt_level == OptLevel::O0 {
-        // Branch hints are independent of `-O`, like build-time cold-path hints.
-        wir_pass(scope, "infer_branch_hints", module, profiler, |m| {
-            infer_branch_hints(m);
-        });
         dce::compact_dead_items(module);
         finalize_locals(module);
         return;
