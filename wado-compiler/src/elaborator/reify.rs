@@ -1420,10 +1420,10 @@ impl<'a> Reify<'a> {
         })
     }
 
-    /// `body` run only where the component has each of `hosts`, and otherwise
-    /// what an `#[ambient]` function answers without them: `Default::default()`,
-    /// or nothing for one returning `()`. The optimizer decides each guard once
-    /// for the whole component.
+    /// `body` run only where the target world offers each of `hosts`, and
+    /// otherwise what an `#[ambient]` function answers without them:
+    /// `Default::default()`, or nothing for one returning `()`. Lowering
+    /// decides each guard, once the target world is known.
     fn guard_ambient_body(
         &self,
         body: TirBlock,
