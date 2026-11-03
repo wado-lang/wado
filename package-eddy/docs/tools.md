@@ -36,13 +36,19 @@ the code at length and then dropped the defect a single pass had named.
 
 ## Language Services
 
-Each needs the toolchain built at the merge's revision.
+They are in `src/symbols.wado`. They take a name, as Grep does, but find one
+item's uses where Grep finds every match of the text. They read SCIP indexes of the tree, which
+`rust-analyzer scip` writes for the Rust code and `wado query scip` for every
+`.wado` file, and one reader serves both.
 
-- [ ] `wado query`: definition, references, hover and diagnostics for Wado
-  source, the standard library and the packages.
-- [ ] rust-analyzer: definition, references and types for the Rust code, which
-  is where most of the compiler lives. Grep finds a name, not the uses of one
-  item.
+- [x] FindSymbol: each definition of `name` or `Owner::name`, with its lines
+  and its signature.
+- [x] FindReferences: each line that uses it, with the declaration the line
+  sits in.
+- [ ] Index the Wado code with the toolchain built at the merge's revision.
+  The evaluation indexes it with today's `wado`, which reads an old tree
+  through today's standard library and language.
+- [ ] Hover and diagnostics, which an index does not carry.
 
 ## Running
 
