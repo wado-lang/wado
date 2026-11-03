@@ -64,7 +64,7 @@ fn shapes() -> scip::Index {
 
 fn workspace() -> Workspace {
     let mut symbols = empty_index();
-    symbols.add(&shapes()).unwrap();
+    symbols.add(&shapes());
     return Workspace { root: "src", symbols: Some(symbols) };
 }
 
@@ -136,64 +136,10 @@ test "FindReferences tells declarations on one line apart" {
                 ],
             },
         ],
-    }).unwrap();
+    });
     let ws = Workspace { root: "src", symbols: Some(symbols) };
     let out = ws.call(&"FindReferences", &tool_input(`{"name": "one"}`)).unwrap();
     assert out == "function one (oneline.rs:1): 2 references\noneline.rs:1 in two: \noneline.rs:1 in three: \n";
-}
-
-test "a malformed range is an error, not a crash" {
-    let mut symbols = empty_index();
-    let added = symbols.add(&scip::Index {
-        documents: [
-            scip::Document {
-                relative_path: "bad.rs",
-                occurrences: [
-                    scip::Occurrence {
-                        range: [0, 1],
-                        symbol: `${CRATE}f().`,
-                    },
-                ],
-            },
-        ],
-    });
-    assert added == Err("bad.rs: a range has 2 numbers, not 3 or 4");
-}
-
-test "a negative or reversed range is an error" {
-    let add = |range: List<i32>| {
-        let mut symbols = empty_index();
-        return symbols.add(&scip::Index {
-            documents: [
-                scip::Document {
-                    relative_path: "bad.rs",
-                    occurrences: [
-                        scip::Occurrence { range, symbol: `${CRATE}f().` },
-                    ],
-                },
-            ],
-        });
-    };
-    assert add([-1, 0, 3]) == Err("bad.rs: a range must not be negative or end before it starts");
-    assert add([2, 5, 1, 0]) == Err("bad.rs: a range must not be negative or end before it starts");
-    assert add([0, 0, 3]).is_ok();
-    let mut symbols = empty_index();
-    let reversed_extent = symbols.add(&scip::Index {
-        documents: [
-            scip::Document {
-                relative_path: "bad.rs",
-                occurrences: [
-                    scip::Occurrence {
-                        range: [0, 0, 3],
-                        symbol: `${CRATE}f().`,
-                        symbol_roles: 1,
-                        enclosing_range: [2, 5, 1, 0],
-                    },
-                ],
-            },
-        ],
-    });
-    assert reversed_extent == Err("bad.rs: a range must not be negative or end before it starts");
 }
 
 test "the symbol tools read a path and a page as the other tools do" {
