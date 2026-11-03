@@ -136,47 +136,36 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // The block the order selects for the handler at the clause's
         // arguments is the one installed; anything else is diagnosed here,
         // since dispatch synthesis has no block to route the operations to.
-        let mut impl_def = None;
-        if let Some(EffectRef::Concrete(_)) = &effect {
-            // An unresolved handler (`Unknown` / `Error`) was diagnosed
-            // earlier.
+        if let Some(EffectRef::Concrete(head)) = &effect {
             let underlying = self.tysys.type_table.borrow().get(handler_type).clone();
-            let is_real_type = !matches!(underlying, ResolvedType::Unknown | ResolvedType::Error);
-            // A bare type parameter (`with E => h do` where `h: &H`, `H: E`)
-            // cannot be installed: dispatch synthesis runs before
-            // monomorphization and has no concrete impl to route the effect
-            // operations to.
-            let is_type_param = matches!(
-                underlying,
-                ResolvedType::TypeParam { .. } | ResolvedType::TypePack { .. }
-            );
-            let order = effect_decl
-                .and_then(|trait_| self.effect_impl_order(handler_type, trait_, &trait_type_args));
-            if is_real_type {
-                match order {
+            let mut impl_def = None;
+            match underlying {
+                // Diagnosed earlier.
+                ResolvedType::Unknown | ResolvedType::Error => {}
+                // A bare type parameter (`with E => h do` where `h: &H`,
+                // `H: E`) cannot be installed: dispatch synthesis runs before
+                // monomorphization and has no concrete impl to route the
+                // effect operations to.
+                ResolvedType::TypeParam { .. } | ResolvedType::TypePack { .. } => {
+                    self.report_handler_not_implemented(handler_type, &interface_name, binding);
+                }
+                _ => match effect_decl.and_then(|trait_| {
+                    self.effect_impl_order(handler_type, trait_, &trait_type_args)
+                }) {
                     Some(InstanceOrder::One(InstanceImpl {
                         body: InstanceBody::Block(block),
                         ..
-                    })) if !is_type_param => impl_def = Some(block),
-                    Some(InstanceOrder::Tied(tied)) if !is_type_param => {
+                    })) => impl_def = Some(block),
+                    Some(InstanceOrder::Tied(tied)) => {
                         self.report_tied_impls(&tied, handler_type, binding.span);
                     }
-                    _ => {
-                        let type_name = self.tysys.type_table.borrow().name(handler_type);
-                        let _ = self.emit(TypeError::HandlerEffectNotImplemented {
-                            type_name,
-                            interface_name: self.get_type_name(effect_ty),
-                            span: binding.span,
-                        });
+                    Some(InstanceOrder::One(_) | InstanceOrder::Nothing) | None => {
+                        self.report_handler_not_implemented(handler_type, &interface_name, binding);
                     }
-                }
+                },
             }
-        }
-
-        // Record this explicit binding so
-        // reify_with_handler reads the single-effect entry without
-        // re-resolving the effect reference.
-        if let Some(EffectRef::Concrete(head)) = &effect {
+            // Reify reads the single-effect entry without re-resolving the
+            // effect reference.
             self.record_handler_binding_facts(
                 binding.id,
                 HandlerBindingFacts {
@@ -190,6 +179,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 },
             );
         }
+    }
+
+    fn report_handler_not_implemented(
+        &mut self,
+        handler_type: TypeId,
+        interface_name: &str,
+        binding: &ast::EffectHandlerBinding,
+    ) {
+        let type_name = self.tysys.type_table.borrow().name(handler_type);
+        let _ = self.emit(TypeError::HandlerEffectNotImplemented {
+            type_name,
+            interface_name: interface_name.to_string(),
+            span: binding.span,
+        });
     }
 
     /// Annotate `handler_expr` — the bundled form.
