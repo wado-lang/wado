@@ -2653,8 +2653,8 @@ impl WebGpuBackend {
         for let c of &e.commands {
             match c {
                 Allocated([count, slot]) => {
-                    let fresh = slots.bound(*slot, self.allocated(*count, false));
-                    assert fresh, "a buffer a launch makes is no buffer it reads";
+                    let named = slots.bound(*slot, self.allocated(*count, false));
+                    assert named, "a buffer a launch makes is no buffer it reads";
                 },
                 Dispatched(d) => {
                     if heads.is_empty() {
