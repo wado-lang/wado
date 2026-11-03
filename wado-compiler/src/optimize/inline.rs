@@ -1712,21 +1712,32 @@ fn cut_call_cycles(
 ) {
     let on_cycle = recursive_scc_members(call_graph);
     cuts.retain(|f| on_cycle[f.index()]);
+    let mut cut = vec![false; call_graph.len()];
+    for f in cuts.iter() {
+        cut[f.index()] = true;
+    }
+    // Only an edge between two members of one cycle can close another, so each
+    // round walks the cycles the previous one left open, never the whole graph.
+    let mut open: Vec<Vec<usize>> = call_graph
+        .iter()
+        .enumerate()
+        .map(|(f, callees)| {
+            if !on_cycle[f] {
+                return Vec::new();
+            }
+            callees.iter().copied().filter(|&c| on_cycle[c]).collect()
+        })
+        .collect();
     let mut prices: Vec<Option<usize>> = vec![None; call_graph.len()];
     loop {
-        let open: Vec<Vec<usize>> = call_graph
-            .iter()
-            .map(|callees| {
-                callees
-                    .iter()
-                    .copied()
-                    .filter(|&c| !cuts.contains(&FuncId::new(c)))
-                    .collect()
-            })
-            .collect();
+        for callees in &mut open {
+            callees.retain(|&c| !cut[c]);
+        }
+        let components = cycle_components(&open);
         let mut costliest: IndexMap<usize, (usize, usize)> = IndexMap::default();
-        for (f, component) in cycle_components(&open).into_iter().enumerate() {
+        for (f, &component) in components.iter().enumerate() {
             let Some(component) = component else {
+                open[f].clear();
                 continue;
             };
             let p = *prices[f].get_or_insert_with(|| price(f));
@@ -1742,7 +1753,10 @@ fn cut_call_cycles(
         if costliest.is_empty() {
             return;
         }
-        cuts.extend(costliest.values().map(|&(f, _)| FuncId::new(f)));
+        for &(f, _) in costliest.values() {
+            cut[f] = true;
+            cuts.insert(FuncId::new(f));
+        }
     }
 }
 
