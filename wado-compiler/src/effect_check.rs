@@ -2073,7 +2073,7 @@ impl EffectIndex<'_> {
                     .map(|b| &**b)
                     .unwrap_or_default();
                 brought.effects.extend(
-                    self.close_over_args(declared, bounds, &target_args, &receiver_args)
+                    self.close_over_args(declared, bounds, &target_args, &receiver_args, None)
                         .into_iter()
                         .filter(|e| !e.is_param()),
                 );
@@ -2084,6 +2084,7 @@ impl EffectIndex<'_> {
                         &entry.bounds,
                         &entry.target_args,
                         &receiver_args,
+                        None,
                     )),
                     None => brought.open = true,
                 }
@@ -2207,6 +2208,7 @@ impl EffectIndex<'_> {
                         &entry.bounds,
                         &entry.target_args,
                         args,
+                        None,
                     ));
                 }
                 None => match self.blanket_for(*key, arg) {
@@ -2239,13 +2241,16 @@ impl EffectIndex<'_> {
     /// where the impl's `target_args` write the parameter in a function type's
     /// row, which is how an adapter's impl reaches the closure it holds. A
     /// variable in that row is solved where the effects are read. An argument
-    /// that is neither leaves the parameter.
+    /// that is neither leaves the parameter. A blanket impl's receiver, the
+    /// type itself, answers the bound on the impl's target where `receiver`
+    /// spells it; a call leaves that to `blanket_for`.
     fn close_over_args(
         &self,
         declared: &[EffectRef],
         bounds: &[ReceiverBound],
         target_args: &[FqTypeName],
         args: &[FqTypeName],
+        receiver: Option<&[TypeArg<'_>]>,
     ) -> IndexSet<EffectRef> {
         let mut out: IndexSet<EffectRef> = IndexSet::default();
         for effect in declared {
@@ -2259,15 +2264,18 @@ impl EffectIndex<'_> {
             }
             let mut brought = Brought::default();
             for bound in bounds {
-                // The empty path is a blanket impl's receiver, the type
-                // itself, which `blanket_for` answers.
-                if let Some(arg) = bound
-                    .path
-                    .as_deref()
-                    .filter(|path| !path.is_empty())
-                    .and_then(|path| type_arg_at(args, path))
-                {
-                    self.bring(&bound.traits, &[type_arg(arg)], &mut brought);
+                match bound.path.as_deref() {
+                    None => {}
+                    Some([]) => {
+                        if let Some(receiver) = receiver {
+                            self.bring(&bound.traits, receiver, &mut brought);
+                        }
+                    }
+                    Some(path) => {
+                        if let Some(arg) = type_arg_at(args, path) {
+                            self.bring(&bound.traits, &[type_arg(arg)], &mut brought);
+                        }
+                    }
                 }
             }
             out.extend(brought.effects);
@@ -2295,19 +2303,21 @@ impl EffectIndex<'_> {
         let target = self
             .types
             .fq_type_name_with_rows(self.types.impl_target_whole(block));
+        let spellings = self.spellings(handler, rows);
         // A blanket impl's target is its own parameter, which no spelling of
-        // the handler names: its bounds leave the effect parameter open.
-        let args = self
-            .spellings(handler, rows)
-            .into_iter()
+        // the handler names and which has no arguments to fill.
+        let args = spellings
+            .iter()
             .find(|spelling| spelling.head() == target.head())
             .map(|spelling| spelling.args().to_vec())
             .unwrap_or_default();
+        let receiver: Vec<TypeArg<'_>> = spellings.iter().map(type_arg).collect();
         self.close_over_args(
             &declared,
             bounds,
             &spelled_target_args(self.types, block),
             &args,
+            Some(&receiver),
         )
     }
 

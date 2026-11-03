@@ -1191,12 +1191,8 @@ impl TraitEnv {
                 impl_target_key_at(ty, module, resolutions)
             };
 
-        let mut violations = check_all_orphan_rules(
-            defs,
-            &impl_headers,
-            &tuple_decls,
-            &resolve_written,
-        );
+        let mut violations =
+            check_all_orphan_rules(defs, &impl_headers, &tuple_decls, &resolve_written);
 
         // The bound's own site says which trait it names, so an aliased
         // supertrait (`use { Base as B }; trait Extra: B`) keys on `Base`'s

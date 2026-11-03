@@ -1480,6 +1480,9 @@ pub struct TirHandlerBinding {
     /// The concrete struct type (after deref) implementing the effect.
     /// Used by codegen to pick the correct `impl E for T` methods.
     pub handler_type: TypeId,
+    /// The `impl` block the order selected for `handler_type`, a blanket's
+    /// included. `None` only where the binding was diagnosed.
+    pub impl_def: Option<DefId>,
     pub span: Span,
     /// `Some(id)` marks a binding from a bundled `with &mut h do` expansion; all
     /// bindings from one clause share the id, so dispatch synthesis can allocate
@@ -3865,6 +3868,7 @@ pub enum SynthTrait {
 /// impl block.
 #[derive(Debug, Clone)]
 pub struct TirImpl {
+    pub def: DefId,
     /// The trait this block implements; `None` for an inherent impl. Matches
     /// `LocalMethodName::base_trait_head`, so a block and its methods agree on
     /// which declaration they target.
@@ -3872,10 +3876,9 @@ pub struct TirImpl {
     /// Trait / resource type arguments at the impl site (`impl Stream<u8>` →
     /// `[u8]`). Matches `LocalMethodName::trait_type_args`.
     pub trait_type_args: Vec<TypeId>,
-    /// The target type's name, derived exactly as `reify_method` derives it
-    /// for this block's methods, so a block and its methods produce the same
-    /// key in the effect-dispatch handler index.
-    pub struct_name: String,
+    /// Whether the target is the block's own parameter, `impl<T: B> Trait for
+    /// T`: an instance of its methods is named after the type it answers for.
+    pub is_blanket: bool,
     /// `..trap` / `..forward`, when the block ends with a rest clause.
     pub rest: Option<RestClause>,
     pub span: Span,

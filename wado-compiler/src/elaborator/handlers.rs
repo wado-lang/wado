@@ -15,9 +15,10 @@ use super::types::{FunctionContext, TypeError};
 use super::tysys::TypeSystem;
 use crate::defs::DefId;
 use crate::elaborator::sem::types::{HandlerBindingFacts, HandlerEffectEntry};
+use crate::elaborator::solver_bridge::{InstanceBody, InstanceImpl, InstanceOrder};
 use crate::elaborator::trait_env::ImplTargetKey;
 use crate::hashmap;
-use crate::name::{DeclName, DeclaredHead, FqTraitName};
+use crate::name::{DeclName, DeclaredHead, FqTraitName, FqTypeName};
 
 impl<H: CompilerHost> Elaborator<'_, H> {
     /// Annotate `with E1 => h1, ... do { body }`. Walks each handler
@@ -300,22 +301,26 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let mut out: Vec<HandlerEffectEntry> = Vec::new();
         let mut seen: hashmap::IndexSet<(DefId, Vec<TypeKey>)> = hashmap::IndexSet::default();
 
-        let Some(entries) = self
-            .tysys
-            .trait_env
+        let trait_env = &self.tysys.trait_env;
+        let written = trait_env
             .impl_index
             .get(&self.handler_impl_target(handler_type))
-        else {
-            return out;
-        };
-        for &impl_def in entries {
+            .into_iter()
+            .flatten()
+            .map(|&def| (def, false));
+        let blankets = trait_env
+            .blanket_impls
+            .iter()
+            .filter(|(trait_, _)| defs.kind(**trait_).is_effect())
+            .flat_map(|(_, blankets)| blankets.iter().map(|blanket| (blanket.def, true)));
+        for (impl_def, is_blanket) in written.chain(blankets) {
             // Everything the block says about itself it says in its own frame:
             // `impl Stream<u8> for Ctx` names `Stream` and resolves `u8` where
             // the block was written, which is not where it is installed.
-            let Some(trait_ref) = self.tysys.trait_env.impl_headers[&impl_def].trait_def() else {
+            let Some(trait_ref) = trait_env.impl_headers[&impl_def].trait_def() else {
                 continue;
             };
-            if !self.tysys.resolutions.defs().kind(trait_ref).is_effect() {
+            if !defs.kind(trait_ref).is_effect() {
                 continue;
             }
             let type_args = self
@@ -324,6 +329,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .impl_sig(impl_def)
                 .trait_type_args
                 .clone();
+            // A blanket answers only where the order selects it for the
+            // handler: its bounds hold, and no written impl outranks it.
+            if is_blanket
+                && self.effect_impl_block(handler_type, trait_ref, &type_args) != Some(impl_def)
+            {
+                continue;
+            }
             let type_keys = self.tysys.type_table.borrow().type_keys(&type_args);
             if seen.insert((trait_ref, type_keys)) {
                 out.push(HandlerEffectEntry {
@@ -346,28 +358,26 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         effect_decl: DefId,
         trait_type_args: &[TypeId],
     ) -> Option<DefId> {
-        let keys = self
-            .tysys
-            .trait_env
-            .impl_index
-            .get(&self.handler_impl_target(handler_type))?;
-        let implements =
-            |key: &DefId| self.tysys.trait_env.impl_headers[key].trait_def() == Some(effect_decl);
-        // A block's arguments answer for the clause's when they are the same,
-        // or where the block left a slot for monomorphization to fill —
-        // `impl<T> Stream<T> for Ctx<T>` installed as `with Stream<u8>`. A
-        // block written for other arguments answers for nothing.
+        // The order answers as it does for a call: a block written for the
+        // handler, one leaving a slot the clause's arguments fill
+        // (`impl<T> Stream<T> for Ctx<T>` installed as `with Stream<u8>`), or
+        // a blanket whose bounds the handler meets.
         let tt = self.tysys.type_table.borrow();
-        let fills = |key: &DefId| {
-            let written = &self.tysys.signatures.impl_sig(*key).trait_type_args;
-            written.len() == trait_type_args.len()
-                && std::iter::zip(written, trait_type_args).all(|(&slot, &arg)| {
-                    tt.type_key(slot) == tt.type_key(arg) || self.tysys.is_open_slot(slot)
-                })
-        };
-        keys.iter()
-            .find(|key| implements(key) && fills(key))
-            .copied()
+        let args: Vec<FqTypeName> = trait_type_args
+            .iter()
+            .map(|&arg| tt.fq_type_name(arg))
+            .collect();
+        match self
+            .tysys
+            .solver()
+            .instance_order(&tt, handler_type, effect_decl, &args)?
+        {
+            InstanceOrder::One(InstanceImpl {
+                body: InstanceBody::Block(block),
+                ..
+            }) => Some(block),
+            InstanceOrder::One(_) | InstanceOrder::Nothing | InstanceOrder::Tied(_) => None,
+        }
     }
 
     /// The impl-index key for a handler type: its own declaration, not what
@@ -380,15 +390,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 }
 
 impl TypeSystem {
-    /// Whether `type_id` is a slot an impl block left for monomorphization,
-    /// rather than a type it committed to.
-    fn is_open_slot(&self, type_id: TypeId) -> bool {
-        matches!(
-            self.type_table.borrow().get(type_id),
-            ResolvedType::TypeParam { .. } | ResolvedType::TypePack { .. }
-        )
-    }
-
     /// The name an `impl <effect> for <handler>` block is indexed under — the
     /// bare head, so `impl<T> Log for Ctx<T>` answers for a `Ctx<i32>` handler.
     fn handler_impl_target_name(&self, handler_type: TypeId) -> String {

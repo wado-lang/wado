@@ -148,8 +148,8 @@ fn identify_active_effects(
     impl_index: &IndexMap<HandlerImplKey, HandlerImplInfo>,
 ) -> IndexSet<InstantiationKey> {
     impl_index
-        .keys()
-        .map(|(_struct, instantiation)| instantiation.clone())
+        .values()
+        .map(|info| info.instantiation.clone())
         .collect()
 }
 
@@ -1535,38 +1535,16 @@ fn desugar_with_handler(expr: &mut TirExpr, env: &DispatchEnv, ctx: &mut LowerCt
             )
         });
         let handler_type = binding.handler.type_id;
-        let handler_underlying = deref_type(&env.type_table.borrow(), handler_type);
-        // `build_handler_impl_index` keys on the impl method's own receiver
-        // name, so the lookup is built the same way — the display name would
-        // drop the declaring module the receiver carries.
-        let handler_type_name = env
-            .type_table
-            .borrow()
-            .mangle_type_arg_for_generic(handler_underlying);
-        let impl_key: HandlerImplKey = (handler_type_name.clone(), key.clone());
-        // Exact match first, then the generic-template fallback: a generic
-        // impl `impl<T> E for Holder<T>` registers under the bare head `Holder`
-        // (see `build_handler_impl_index`), which `Holder<i32>` never equals.
-        // Keying the fallback on the head exactly hits only the template, never
-        // a concrete sibling like `Holder<u8>`.
-        let impl_info = env.impl_index.get(&impl_key).or_else(|| {
-            let head = env
-                .type_table
-                .borrow()
-                .fq_base_type_name(handler_underlying);
-            env.impl_index.get(&(head.into_string(), key.clone()))
-        });
-        let impl_info = impl_info.unwrap_or_else(|| {
-            panic!(
-                "effect-dispatch synthesis: no `impl {interface_name} for \
-                 {handler_type_name}` (type args = {trait_type_args:?}) \
-                 registered in the impl index for effect module \
-                 {} — the elaborator should have rejected \
-                 the `with {interface_name} => h do` binding if no matching \
-                 impl exists",
-                effect.module()
-            )
-        });
+        let impl_info = binding
+            .impl_def
+            .and_then(|block| env.impl_index.get(&block))
+            .unwrap_or_else(|| {
+                panic!(
+                    "effect-dispatch synthesis: the `with {interface_name} => h do` \
+                     binding names no indexed `impl` block — the elaborator \
+                     diagnoses a handler no block answers"
+                )
+            });
 
         // Names both the dispatch struct (must agree with
         // `synthesize_dispatch_struct`) and the synthesised locals
@@ -2296,6 +2274,7 @@ fn build_handler_op_closure(
             func: Box::new(static_handler_method_ref(
                 template,
                 target,
+                impl_info.is_blanket,
                 handler_type,
                 &type_table.borrow(),
             )),
@@ -2345,21 +2324,37 @@ fn build_handler_op_closure(
 }
 
 /// The static call target of a handler method that declares no `self`: its
-/// `template`, instantiated at the handler type's own arguments.
+/// `template`, instantiated at the handler type's own arguments, or at the
+/// handler type itself for a blanket impl.
 fn static_handler_method_ref(
     template: FunctionRef,
     target: &HandlerMethodTarget,
+    is_blanket: bool,
     handler_type: TypeId,
     tt: &TypeTable,
 ) -> FunctionRef {
-    let type_args = tt
-        .nominal_type_args(deref_type(tt, handler_type))
-        .unwrap_or_default();
+    let handler = deref_type(tt, handler_type);
+    let type_args = if is_blanket {
+        vec![handler]
+    } else {
+        tt.nominal_type_args(handler).unwrap_or_default()
+    };
     if type_args.is_empty() {
         return template;
     }
     let arg_names: Vec<FqTypeName> = type_args.iter().map(|t| tt.fq_type_name(*t)).collect();
-    let method_info = target.method_info.with_struct_type_args(&arg_names);
+    // A blanket's instance is named after the type it answers for, as a
+    // written static call through the blanket names it.
+    let method_info = if is_blanket {
+        LocalMethodName::new(
+            tt.fq_base_type_name(handler),
+            target.method_info.trait_name.clone(),
+            target.method_info.method_name.clone(),
+        )
+    } else {
+        target.method_info.clone()
+    }
+    .with_struct_type_args(&arg_names);
     FunctionRef {
         module_source: template.module_source,
         name: method_info.to_mangled_name(),
@@ -2368,7 +2363,7 @@ fn static_handler_method_ref(
             generic_name: target.mangled_name.clone(),
             impl_type_args: type_args,
             method_type_args: Vec::new(),
-            is_blanket: false,
+            is_blanket,
         }),
         method_info: Some(method_info),
     }
@@ -3089,17 +3084,21 @@ fn synthesize_dispatch_infrastructure(
     plans
 }
 
-/// Canonical identity of an `impl <Effect> for <Type>` block:
-/// `(handler_type_name, instantiation)`. The trait-side type args keep
-/// `impl Stream<u8> for MockCM` and `impl Stream<i32> for MockCM` at distinct
-/// keys, so each gets its own dispatch infrastructure.
-type HandlerImplKey = (String, InstantiationKey);
+/// An `impl <Effect> for <Type>` block, by its declaration: the one a binding
+/// names, a blanket's included.
+type HandlerImplKey = DefId;
 
 #[derive(Debug, Clone)]
 struct HandlerImplInfo {
+    /// The instantiation the block implements. Its trait-side type args keep
+    /// `impl Stream<u8> for MockCM` and `impl Stream<i32> for MockCM` apart,
+    /// so each gets its own dispatch infrastructure.
+    instantiation: InstantiationKey,
     /// Module that owns the impl block — used to build the
     /// `FunctionRef::module_source` of the generated call.
     impl_module: ModuleSource,
+    /// Whether the block is a blanket over its own parameter.
+    is_blanket: bool,
     /// Per-operation call target, keyed by operation name.
     methods: IndexMap<String, HandlerMethodTarget>,
     /// The block's `..trap` / `..forward`, deciding what an operation absent
@@ -3122,43 +3121,47 @@ struct HandlerMethodTarget {
     takes_self: bool,
 }
 
-/// Build the `HandlerImplKey -> HandlerImplInfo` map from every TIR function
-/// tagged with `method_info.base_trait_name`. Membership is decided by looking
-/// the method's canonical `(base_trait_module, trait_name)` pair up in
-/// `effect_index`; a method whose trait matches no effect or resource belongs to
-/// a regular user trait or a prelude auto-impl and is skipped.
+/// Every `impl` block of an effect or resource in `effect_index`, with the
+/// methods emitted into it.
 fn build_handler_impl_index(
     project: &Package,
     effect_index: &IndexMap<EffectKey, EffectMeta>,
 ) -> IndexMap<HandlerImplKey, HandlerImplInfo> {
     let mut out: IndexMap<HandlerImplKey, HandlerImplInfo> = IndexMap::default();
+    // Every block, a method-less one ending in a rest clause included.
     for (module_source, module) in &project.tir_modules {
-        for func_rc in &module.functions {
-            let func = func_rc.borrow();
-            let Some(method_info) = &func.method_info else {
-                continue;
-            };
-            // `impl Stream<u8>` and `impl Stream<i32>` share the base name and
-            // differ in `trait_type_args`, so each instantiation gets its own key.
-            let Some(effect) = method_info.base_trait_head() else {
+        for tir_impl in &module.impls {
+            let Some(effect) = &tir_impl.trait_canonical else {
                 continue;
             };
             if !effect_index.contains_key(effect) {
                 continue;
             }
-            let key: HandlerImplKey = (
-                method_info.struct_name().clone(),
-                InstantiationKey::new(
-                    effect.clone(),
-                    method_info.trait_type_args.clone(),
-                    &module.type_table.borrow(),
-                ),
+            out.insert(
+                tir_impl.def,
+                HandlerImplInfo {
+                    instantiation: InstantiationKey::new(
+                        effect.clone(),
+                        tir_impl.trait_type_args.clone(),
+                        &module.type_table.borrow(),
+                    ),
+                    impl_module: module_source.clone(),
+                    is_blanket: tir_impl.is_blanket,
+                    methods: IndexMap::default(),
+                    rest: tir_impl.rest,
+                },
             );
-            let entry = out.entry(key).or_insert_with(|| HandlerImplInfo {
-                impl_module: module_source.clone(),
-                methods: IndexMap::default(),
-                rest: None,
-            });
+        }
+    }
+    for module in project.tir_modules.values() {
+        for func_rc in &module.functions {
+            let func = func_rc.borrow();
+            let (Some(block), Some(method_info)) = (func.impl_origin, &func.method_info) else {
+                continue;
+            };
+            let Some(entry) = out.get_mut(&block) else {
+                continue;
+            };
             entry.methods.insert(
                 method_info.method_name.clone(),
                 HandlerMethodTarget {
@@ -3168,34 +3171,6 @@ fn build_handler_impl_index(
                     takes_self: func.takes_self(),
                 },
             );
-        }
-
-        // The rest clause lives on the block, not on any method, so it comes
-        // from `module.impls`. A block whose only content is a rest clause has
-        // no method to be discovered through, so this is also what registers
-        // it as a handler at all.
-        for tir_impl in &module.impls {
-            let Some(effect) = &tir_impl.trait_canonical else {
-                continue;
-            };
-            if !effect_index.contains_key(effect) {
-                continue;
-            }
-            let key: HandlerImplKey = (
-                tir_impl.struct_name.clone(),
-                InstantiationKey::new(
-                    effect.clone(),
-                    tir_impl.trait_type_args.clone(),
-                    &module.type_table.borrow(),
-                ),
-            );
-            out.entry(key)
-                .or_insert_with(|| HandlerImplInfo {
-                    impl_module: module_source.clone(),
-                    methods: IndexMap::default(),
-                    rest: None,
-                })
-                .rest = tir_impl.rest;
         }
     }
     out
