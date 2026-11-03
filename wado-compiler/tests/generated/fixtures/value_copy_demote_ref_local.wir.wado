@@ -1337,6 +1337,7 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelud
     let n_27: i32;
     let start_99: i32;
     let $sroa_slot_202: i32;
+    let $licm_repr_259: ref Array<u8>;
     if local.tee $load_0(self.width) <= 0 {
         self_9 = self.buf;
         $inline_core_prelude_string_wado_String__internal_push_view_3: block {
@@ -1433,16 +1434,18 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelud
         };
         self_9 = self.buf;
         n_27 = 0;
+        $licm_repr_259 = self_9.repr;
         b242: block {
             l243: loop {
                 break_if b242 n_27 >= $load_0;
-                if @unlikely(local.tee $sroa_slot_202(self_9.used + 1) > builtin::array_len(self_9.repr)) {
+                if @unlikely(local.tee $sroa_slot_202(self_9.used + 1) > builtin::array_len($licm_repr_259)) {
                     cold_path;
                     "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_9, $sroa_slot_202);
+                    $licm_repr_259 = self_9.repr;
                 }
                 start_99 = self_9.used;
                 self_9.used = $sroa_slot_202;
-                builtin::array_set_u8(self_9.repr, start_99, 48);
+                builtin::array_set_u8($licm_repr_259, start_99, 48);
                 n_27 = n_27 + 1;
                 continue l243;
             };
@@ -1553,6 +1556,7 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelud
     let n_28: i32;
     let $sroa_slot_203: i32;
     let start_235: i32;
+    let $licm_repr_263: ref Array<u8>;
     if local.tee $load_0(self.width) <= 0 {
         self_9 = self.buf;
         $inline_core_prelude_string_wado_String__internal_push_string_2: block {
@@ -1648,16 +1652,18 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelud
         };
         self_9 = self.buf;
         n_28 = 0;
+        $licm_repr_263 = self_9.repr;
         b274: block {
             l275: loop {
                 break_if b274 n_28 >= $load_0;
-                if @unlikely(local.tee $sroa_slot_203(self_9.used + 1) > builtin::array_len(self_9.repr)) {
+                if @unlikely(local.tee $sroa_slot_203(self_9.used + 1) > builtin::array_len($licm_repr_263)) {
                     cold_path;
                     "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_9, $sroa_slot_203);
+                    $licm_repr_263 = self_9.repr;
                 }
                 start_235 = self_9.used;
                 self_9.used = $sroa_slot_203;
-                builtin::array_set_u8(self_9.repr, start_235, 48);
+                builtin::array_set_u8($licm_repr_263, start_235, 48);
                 n_28 = n_28 + 1;
                 continue l275;
             };
@@ -2022,6 +2028,7 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
     let self_21: ref "core:prelude/string.wado//String";
     let c_223: char;
     let i_225: i32;
+    let $licm_repr_389: ref Array<u8>;
     $load_0 = self.sign_plus;
     sign_len = select i32(select i32(is_negative, 1, $load_0), 1, 0);
     prefix_len = select i32(self.alternate, 0, 0);
@@ -2083,16 +2090,18 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
         }
         self_21 = self.buf;
         is_negative = 0;
+        $licm_repr_389 = self_21.repr;
         b353: block {
             l354: loop {
                 break_if b353 is_negative >= sign_len;
-                if @unlikely(local.tee $load_0(self_21.used + 1) > builtin::array_len(self_21.repr)) {
+                if @unlikely(local.tee $load_0(self_21.used + 1) > builtin::array_len($licm_repr_389)) {
                     cold_path;
                     "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_21, $load_0);
+                    $licm_repr_389 = self_21.repr;
                 }
                 prefix_len = self_21.used;
                 self_21.used = $load_0;
-                builtin::array_set_u8(self_21.repr, prefix_len, 48);
+                builtin::array_set_u8($licm_repr_389, prefix_len, 48);
                 is_negative = is_negative + 1;
                 continue l354;
             };
