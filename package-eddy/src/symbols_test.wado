@@ -167,21 +167,39 @@ test "typed ranges are read as packed ones are" {
                 relative_path: "typed.rs",
                 occurrences: [
                     scip::Occurrence {
-                        typed_range: Some(scip::OccurrenceTypedRange::SingleLineRange(scip::SingleLineRange { line: 1, start_character: 3, end_character: 9 })),
+                        typed_range: Some(scip::OccurrenceTypedRange::SingleLineRange(scip::SingleLineRange {
+                            line: 1,
+                            start_character: 3,
+                            end_character: 9,
+                        })),
                         symbol: `${CRATE}target().`,
                         symbol_roles: 1,
-                        typed_enclosing_range: Some(scip::OccurrenceTypedEnclosingRange::MultiLineEnclosingRange(scip::MultiLineRange { start_line: 0, start_character: 0, end_line: 3, end_character: 1 })),
+                        typed_enclosing_range: Some(scip::OccurrenceTypedEnclosingRange::MultiLineEnclosingRange(
+                            scip::MultiLineRange { start_line: 0, start_character: 0, end_line: 3, end_character: 1 },
+                        )),
                     },
                     scip::Occurrence {
-                        typed_range: Some(scip::OccurrenceTypedRange::MultiLineRange(scip::MultiLineRange { start_line: 2, start_character: 4, end_line: 2, end_character: 10 })),
+                        typed_range: Some(scip::OccurrenceTypedRange::MultiLineRange(scip::MultiLineRange {
+                            start_line: 2,
+                            start_character: 4,
+                            end_line: 2,
+                            end_character: 10,
+                        })),
                         symbol: `${CRATE}target().`,
                         symbol_roles: 8,
                     },
                     scip::Occurrence {
-                        typed_range: Some(scip::OccurrenceTypedRange::MultiLineRange(scip::MultiLineRange { start_line: 5, start_character: 3, end_line: 5, end_character: 8 })),
+                        typed_range: Some(scip::OccurrenceTypedRange::MultiLineRange(scip::MultiLineRange {
+                            start_line: 5,
+                            start_character: 3,
+                            end_line: 5,
+                            end_character: 8,
+                        })),
                         symbol: `${CRATE}other().`,
                         symbol_roles: 1,
-                        typed_enclosing_range: Some(scip::OccurrenceTypedEnclosingRange::SingleLineEnclosingRange(scip::SingleLineRange { line: 5, start_character: 0, end_character: 20 })),
+                        typed_enclosing_range: Some(scip::OccurrenceTypedEnclosingRange::SingleLineEnclosingRange(
+                            scip::SingleLineRange { line: 5, start_character: 0, end_character: 20 },
+                        )),
                     },
                 ],
                 symbols: [
@@ -204,9 +222,21 @@ test "indexes merge references with definitions by symbol, not display name" {
             scip::Document {
                 relative_path: "uses/calls.rs",
                 occurrences: [
-                    scip::Occurrence { range: [0, 0, 3], symbol: `${CRATE}A#run().`, symbol_roles: 8 },
-                    scip::Occurrence { range: [1, 0, 3], symbol: `${CRATE}B#run().`, symbol_roles: 8 },
-                    scip::Occurrence { range: [2, 0, 3], symbol: "local 0", symbol_roles: 8 },
+                    scip::Occurrence {
+                        range: [0, 0, 3],
+                        symbol: `${CRATE}A#run().`,
+                        symbol_roles: 8,
+                    },
+                    scip::Occurrence {
+                        range: [1, 0, 3],
+                        symbol: `${CRATE}B#run().`,
+                        symbol_roles: 8,
+                    },
+                    scip::Occurrence {
+                        range: [2, 0, 3],
+                        symbol: "local 0",
+                        symbol_roles: 8,
+                    },
                 ],
             },
         ],
@@ -216,9 +246,21 @@ test "indexes merge references with definitions by symbol, not display name" {
             scip::Document {
                 relative_path: "defs/items.rs",
                 occurrences: [
-                    scip::Occurrence { range: [0, 3, 6], symbol: `${CRATE}A#run().`, symbol_roles: 1 },
-                    scip::Occurrence { range: [1, 3, 6], symbol: `${CRATE}B#run().`, symbol_roles: 1 },
-                    scip::Occurrence { range: [2, 3, 6], symbol: "local 0", symbol_roles: 1 },
+                    scip::Occurrence {
+                        range: [0, 3, 6],
+                        symbol: `${CRATE}A#run().`,
+                        symbol_roles: 1,
+                    },
+                    scip::Occurrence {
+                        range: [1, 3, 6],
+                        symbol: `${CRATE}B#run().`,
+                        symbol_roles: 1,
+                    },
+                    scip::Occurrence {
+                        range: [2, 3, 6],
+                        symbol: "local 0",
+                        symbol_roles: 1,
+                    },
                 ],
                 symbols: [
                     scip::SymbolInformation { symbol: `${CRATE}A#run().`, display_name: "run", kind: Method },
@@ -235,4 +277,3 @@ test "indexes merge references with definitions by symbol, not display name" {
     assert ws.call(&"FindReferences", &tool_input(`{"name": "A::run", "path": "uses"}`)).unwrap() == "method A::run (defs/items.rs:1): 1 references\nuses/calls.rs:1: \n";
     assert ws.call(&"FindReferences", &tool_input(`{"name": "B::run", "path": "defs"}`)).unwrap() == "method B::run (defs/items.rs:2): 0 references\n";
 }
-
