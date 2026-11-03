@@ -6693,7 +6693,6 @@ fn "core:serde/spec_serialization_optional_fields.wado/Config^core:serde/Deseria
     let $sroa_$sroa_slots_1_137_0_156: i32;
     let $sroa_$sroa_slots_1_137_1_157: i32;
     let $sroa_fields_2_160: ref "core:prelude//List<core:prelude/string.wado/String>";
-    let $licm_depth_162: i32;
     $sroa_slots_0_136 = ref.null none;
     $sroa_$sroa_slots_1_137_0_156 = 0;
     $sroa_$sroa_slots_1_137_1_157 = 0;
@@ -6735,7 +6734,6 @@ fn "core:serde/spec_serialization_optional_fields.wado/Config^core:serde/Deseria
             let $mv$$vr_64$2: ref null "core:serde//DeserializeError";
             let $vr_payload_0_$mv$$vr_64$1: i32;
             multivalue_bind [depth, max_depth, $vr_payload_0_$mv$$vr_64$1, $mv$$vr_64$2] = "core:json/core:json/JsonStructAccess^core:serde/DeserializeStruct::next_field<spec_serialization_optional_fields.wado/Config>$sroa[self.value,return]"(d);
-            $licm_depth_162 = d.depth;
             if depth == 0 {
             } else if @unlikely(depth == 1) {
                 cold_path;
@@ -6757,7 +6755,6 @@ fn "core:serde/spec_serialization_optional_fields.wado/Config^core:serde/Deseria
                         return 1, ref.null none, $qm_e_142;
                     }
                     multivalue_bind [depth, $sroa_slots_0_136, $mv$$vr_64$2] = "core:json/core:json/JsonDeserializer::read_json_string$sroa[return]"(d);
-                    $licm_depth_162 = d.depth;
                     $sroa_slots_0_136 = (if depth == 0 -> ref "core:prelude/string.wado//String" {
                         ref.as_non_null($sroa_slots_0_136);
                     } else if @unlikely(depth == 1) -> ref "core:prelude/string.wado//String" {
@@ -6779,7 +6776,6 @@ fn "core:serde/spec_serialization_optional_fields.wado/Config^core:serde/Deseria
                         return 1, ref.null none, $qm_e_142;
                     }
                     multivalue_bind [$sroa_$sroa_slots_1_137_0_156, $sroa_$sroa_slots_1_137_1_157, $mv$$vr_64$2] = "core:json/core:json/JsonDeserializer^core:serde/Deserializer::deserialize_i32$sroa[return]"(d);
-                    $licm_depth_162 = d.depth;
                     $sroa_$sroa_slots_1_137_1_157 = (if $sroa_$sroa_slots_1_137_0_156 == 0 -> i32 {
                         $sroa_$sroa_slots_1_137_1_157;
                     } else if @unlikely($sroa_$sroa_slots_1_137_0_156 == 1) -> i32 {
@@ -6802,7 +6798,6 @@ fn "core:serde/spec_serialization_optional_fields.wado/Config^core:serde/Deseria
                         return 1, ref.null none, $qm_e_142;
                     }
                     multivalue_bind [depth, $sroa_slots_2_138, $mv$$vr_64$2] = "core:serde/core:prelude/list.wado/List<core:prelude/string.wado/String>^core:serde/Deserialize::deserialize<core:json/JsonDeserializer>$sroa[return]"(d);
-                    $licm_depth_162 = d.depth;
                     $sroa_slots_2_138 = (if depth == 0 -> ref "core:prelude//List<core:prelude/string.wado/String>" {
                         ref.as_non_null($sroa_slots_2_138);
                     } else if @unlikely(depth == 1) -> ref "core:prelude//List<core:prelude/string.wado/String>" {
@@ -6817,7 +6812,7 @@ fn "core:serde/spec_serialization_optional_fields.wado/Config^core:serde/Deseria
                 } else {
                 }
                 if depth == 0 {
-                    if @likely(ref.is_null(local.tee $mv$$vr_64$2("core:json/core:json/JsonDeserializer::skip_value"(d, $licm_depth_162)))) {
+                    if @likely(ref.is_null(local.tee $mv$$vr_64$2("core:json/core:json/JsonDeserializer::skip_value"(d, d.depth)))) {
                     } else {
                         $qm_e_142 = ref.as_non_null($mv$$vr_64$2);
                         cold_path;

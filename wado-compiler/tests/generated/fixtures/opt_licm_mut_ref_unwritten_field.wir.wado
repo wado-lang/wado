@@ -78,9 +78,9 @@ fn "opt_licm_mut_ref_unwritten_field.wado/run"() with Stdout {
     let out_16: ref "core:prelude/string.wado//String";
     let x: i64;
     let $licm_threshold_118: i32;
-    let $licm_scale_119: i32;
     let arr: ref Array<u8>;
     let q: u64;
+    let tens: i32;
     config = struct.new "opt_licm_mut_ref_unwritten_field.wado//Config" { threshold: black_box(100), scale: 2 };
     sum = 0;
     i_3 = 0;
@@ -89,8 +89,7 @@ fn "opt_licm_mut_ref_unwritten_field.wado/run"() with Stdout {
         l1: loop {
             break_if b0 i_3 >= 5;
             "opt_licm_mut_ref_unwritten_field.wado/increment_scale"(config);
-            $licm_scale_119 = config.scale;
-            sum = sum + (($licm_threshold_118 * i_3) + $licm_scale_119);
+            sum = sum + (($licm_threshold_118 * i_3) + config.scale);
             i_3 = i_3 + 1;
             continue l1;
         };
@@ -184,9 +183,9 @@ fn "opt_licm_mut_ref_unwritten_field.wado/run"() with Stdout {
         l25: loop {
             break_if b24 (sum - $licm_threshold_118) < 2;
             q = x /u 100_i64;
-            $licm_scale_119 = local.tee i_3(builtin::i32_wrap_i64(x - (q * 100_i64))) / 10;
-            builtin::array_set_u8(arr, sum - 1, (48 + i_3) - ($licm_scale_119 * 10));
-            builtin::array_set_u8(arr, sum - 2, 48 + $licm_scale_119);
+            tens = local.tee i_3(builtin::i32_wrap_i64(x - (q * 100_i64))) / 10;
+            builtin::array_set_u8(arr, sum - 1, (48 + i_3) - (tens * 10));
+            builtin::array_set_u8(arr, sum - 2, 48 + tens);
             sum = sum - 2;
             x = q;
             continue l25;

@@ -1756,7 +1756,6 @@ fn "core:prelude/array.wado/core:prelude/array.wado/write_seq_inspect<core:prelu
     let $licm_arith_61: bool;
     let new_used_65: i32;
     let start_66: i32;
-    let $licm_repr_120: ref Array<u8>;
     if @unlikely(local.tee new_used_65(local.tee self_7(f.buf).used + 1) > builtin::array_len(self_7.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_7, new_used_65);
@@ -1775,7 +1774,6 @@ fn "core:prelude/array.wado/core:prelude/array.wado/write_seq_inspect<core:prelu
     i = 0;
     self_7 = f.buf;
     $licm_arith_61 = limit >= 0;
-    $licm_repr_120 = self_7.repr;
     b254: block {
         l255: loop {
             break_if b254 i >= end;
@@ -1784,18 +1782,16 @@ fn "core:prelude/array.wado/core:prelude/array.wado/write_seq_inspect<core:prelu
                 break b254;
             }
             if new_used_65 > 0 {
-                if @unlikely(local.tee new_used_21(self_7.used + 2) > builtin::array_len($licm_repr_120)) {
+                if @unlikely(local.tee new_used_21(self_7.used + 2) > builtin::array_len(self_7.repr)) {
                     cold_path;
                     "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_7, new_used_21);
-                    $licm_repr_120 = self_7.repr;
                 }
                 start_22 = self_7.used;
                 self_7.used = new_used_21;
-                builtin::array_copy<u8>($licm_repr_120, start_22, global:core:prelude/array.wado::$const_obj_38, 0, 2);
+                builtin::array_copy<u8>(self_7.repr, start_22, global:core:prelude/array.wado::$const_obj_38, 0, 2);
             }
             self_24 = builtin::array_get_value<ref "core:prelude/string.wado//String">(repr, i);
             "core:prelude/format.wado/core:prelude/format.wado/inspect_text<core:prelude/string.wado/String>$spec0$sroa[f.buf]"(self_7, self_24.repr, self_24.used);
-            $licm_repr_120 = self_7.repr;
             new_used_65 = new_used_65 + 1;
             i = i + 1;
             continue l255;

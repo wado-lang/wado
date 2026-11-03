@@ -949,7 +949,6 @@ fn "core:prelude/array.wado/core:prelude/array.wado/write_seq_inspect<core:prelu
     let $licm_arith_63: bool;
     let new_used_67: i32;
     let start_68: i32;
-    let $licm_repr_111: ref Array<u8>;
     if @unlikely(local.tee new_used_67(local.tee self_7(f.buf).used + 1) > builtin::array_len(self_7.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_7, new_used_67);
@@ -962,7 +961,6 @@ fn "core:prelude/array.wado/core:prelude/array.wado/write_seq_inspect<core:prelu
     i = 0;
     self_7 = f.buf;
     $licm_arith_63 = limit >= 0;
-    $licm_repr_111 = self_7.repr;
     b103: block {
         l104: loop {
             break_if b103 i >= end;
@@ -971,17 +969,15 @@ fn "core:prelude/array.wado/core:prelude/array.wado/write_seq_inspect<core:prelu
                 break b103;
             }
             if new_used_67 > 0 {
-                if @unlikely(local.tee new_used_21(self_7.used + 2) > builtin::array_len($licm_repr_111)) {
+                if @unlikely(local.tee new_used_21(self_7.used + 2) > builtin::array_len(self_7.repr)) {
                     cold_path;
                     "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_7, new_used_21);
-                    $licm_repr_111 = self_7.repr;
                 }
                 start_22 = self_7.used;
                 self_7.used = new_used_21;
-                builtin::array_copy<u8>($licm_repr_111, start_22, global:core:prelude/array.wado::$const_obj_41, 0, 2);
+                builtin::array_copy<u8>(self_7.repr, start_22, global:core:prelude/array.wado::$const_obj_41, 0, 2);
             }
             "core:prelude/array.wado/core:prelude/array.wado/write_seq_inspect<i32>$dae[start,marker]$spec0$sroa[f.buf]"(local.tee self_24(builtin::array_get_value<ref "core:prelude//List<i32>">(repr, i)).repr, self_24.used, self_7, 256);
-            $licm_repr_111 = self_7.repr;
             new_used_67 = new_used_67 + 1;
             i = i + 1;
             continue l104;

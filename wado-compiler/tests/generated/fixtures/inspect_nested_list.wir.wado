@@ -1485,7 +1485,6 @@ fn "core:prelude/array.wado/core:prelude/array.wado/write_seq_inspect<core:prelu
     let $licm_arith_62: bool;
     let new_used_66: i32;
     let start_67: i32;
-    let $licm_repr_121: ref Array<u8>;
     if @unlikely(local.tee new_used_66(local.tee self_7(f.buf).used + 1) > builtin::array_len(self_7.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_7, new_used_66);
@@ -1504,7 +1503,6 @@ fn "core:prelude/array.wado/core:prelude/array.wado/write_seq_inspect<core:prelu
     i = 0;
     self_7 = f.buf;
     $licm_arith_62 = limit >= 0;
-    $licm_repr_121 = self_7.repr;
     b184: block {
         l185: loop {
             break_if b184 i >= end;
@@ -1513,17 +1511,15 @@ fn "core:prelude/array.wado/core:prelude/array.wado/write_seq_inspect<core:prelu
                 break b184;
             }
             if new_used_66 > 0 {
-                if @unlikely(local.tee new_used_21(self_7.used + 2) > builtin::array_len($licm_repr_121)) {
+                if @unlikely(local.tee new_used_21(self_7.used + 2) > builtin::array_len(self_7.repr)) {
                     cold_path;
                     "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_7, new_used_21);
-                    $licm_repr_121 = self_7.repr;
                 }
                 start_22 = self_7.used;
                 self_7.used = new_used_21;
-                builtin::array_copy<u8>($licm_repr_121, start_22, global:core:prelude/array.wado::$const_obj_50, 0, 2);
+                builtin::array_copy<u8>(self_7.repr, start_22, global:core:prelude/array.wado::$const_obj_50, 0, 2);
             }
             "core:prelude/array.wado/core:prelude/array.wado/write_seq_inspect<i32>$spec0$sroa[f.buf]$dae[start,marker]"(local.tee self_24(builtin::array_get_value<ref "core:prelude//List<i32>">(repr, i)).repr, self_24.used, self_7, 256);
-            $licm_repr_121 = self_7.repr;
             new_used_66 = new_used_66 + 1;
             i = i + 1;
             continue l185;
@@ -1938,7 +1934,6 @@ fn "core:prelude/array.wado/core:prelude/array.wado/write_seq_inspect<core:prelu
     let $licm_arith_63: bool;
     let new_used_67: i32;
     let start_68: i32;
-    let $licm_repr_123: ref Array<u8>;
     if @unlikely(local.tee new_used_67(local.tee self_7(f.buf).used + 1) > builtin::array_len(self_7.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_7, new_used_67);
@@ -1957,7 +1952,6 @@ fn "core:prelude/array.wado/core:prelude/array.wado/write_seq_inspect<core:prelu
     i = 0;
     self_7 = f.buf;
     $licm_arith_63 = limit >= 0;
-    $licm_repr_123 = self_7.repr;
     b278: block {
         l279: loop {
             break_if b278 i >= end;
@@ -1966,17 +1960,15 @@ fn "core:prelude/array.wado/core:prelude/array.wado/write_seq_inspect<core:prelu
                 break b278;
             }
             if new_used_67 > 0 {
-                if @unlikely(local.tee new_used_21(self_7.used + 2) > builtin::array_len($licm_repr_123)) {
+                if @unlikely(local.tee new_used_21(self_7.used + 2) > builtin::array_len(self_7.repr)) {
                     cold_path;
                     "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_7, new_used_21);
-                    $licm_repr_123 = self_7.repr;
                 }
                 start_22 = self_7.used;
                 self_7.used = new_used_21;
-                builtin::array_copy<u8>($licm_repr_123, start_22, global:core:prelude/array.wado::$const_obj_50, 0, 2);
+                builtin::array_copy<u8>(self_7.repr, start_22, global:core:prelude/array.wado::$const_obj_50, 0, 2);
             }
             "core:prelude/array.wado/core:prelude/array.wado/write_seq_inspect<core:prelude/string.wado/String>$dae[start,marker]$spec0$sroa[f.buf]"(local.tee self_24(builtin::array_get_value<ref "core:prelude//List<core:prelude/string.wado/String>">(repr, i)).repr, self_24.used, self_7, 256);
-            $licm_repr_123 = self_7.repr;
             new_used_67 = new_used_67 + 1;
             i = i + 1;
             continue l279;
@@ -2286,7 +2278,6 @@ fn "core:prelude/format.wado/core:prelude/format.wado/inspect_text<core:prelude/
 }
 
 fn "core:prelude/array.wado/core:prelude/array.wado/write_seq_inspect<core:prelude/string.wado/String>$dae[start,marker]$spec0$sroa[f.buf]"(repr, end, f, limit) {
-    let $load_4: ref Array<u8>;
     let i: i32;
     let new_used_21: i32;
     let start_22: i32;
@@ -2306,7 +2297,7 @@ fn "core:prelude/array.wado/core:prelude/array.wado/write_seq_inspect<core:prelu
         "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_at$contract_report0"(start_66, new_used_65, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/string.wado:571"), used: 28 });
         unreachable;
     }
-    builtin::array_set_u8(local.tee $load_4(f.repr), start_66, 91);
+    builtin::array_set_u8(f.repr, start_66, 91);
     new_used_65 = 0;
     start_66 = 0;
     i = 0;
@@ -2319,18 +2310,16 @@ fn "core:prelude/array.wado/core:prelude/array.wado/write_seq_inspect<core:prelu
                 break b331;
             }
             if new_used_65 > 0 {
-                if @unlikely(local.tee new_used_21(f.used + 2) > builtin::array_len($load_4)) {
+                if @unlikely(local.tee new_used_21(f.used + 2) > builtin::array_len(f.repr)) {
                     cold_path;
                     "core:prelude/string.wado/core:prelude/string.wado/String::grow"(f, new_used_21);
-                    $load_4 = f.repr;
                 }
                 start_22 = f.used;
                 f.used = new_used_21;
-                builtin::array_copy<u8>($load_4, start_22, global:core:prelude/array.wado::$const_obj_50, 0, 2);
+                builtin::array_copy<u8>(f.repr, start_22, global:core:prelude/array.wado::$const_obj_50, 0, 2);
             }
             self_24 = builtin::array_get_value<ref "core:prelude/string.wado//String">(repr, i);
             "core:prelude/format.wado/core:prelude/format.wado/inspect_text<core:prelude/string.wado/String>$spec0$sroa[f.buf]"(f, self_24.repr, self_24.used);
-            $load_4 = f.repr;
             new_used_65 = new_used_65 + 1;
             i = i + 1;
             continue l332;

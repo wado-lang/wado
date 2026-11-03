@@ -1681,10 +1681,9 @@ fn "core:serde/core:prelude/list.wado/List<i32>^core:serde/Serialize::serialize<
     let tens: i32;
     let $sroa_$iter_0_repr_108: ref Array<i32>;
     let $sroa_$iter_0_index_109: i32;
-    let start_144: i32;
-    let $licm_repr_517: ref Array<u8>;
-    let $hfs_used_520: i32;
-    let $hfs_call_521: ref null "core:serde//SerializeError";
+    let start_143: i32;
+    let $hfs_used_519: i32;
+    let $hfs_call_520: ref null "core:serde//SerializeError";
     if @unlikely(local.tee new_used_25(s.used + 1) > builtin::array_len(s.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(s, new_used_25);
@@ -1696,18 +1695,17 @@ fn "core:serde/core:prelude/list.wado/List<i32>^core:serde/Serialize::serialize<
     start_26 = self.used;
     $sroa_$iter_0_repr_108 = self.repr;
     $sroa_$iter_0_index_109 = 0;
-    $licm_repr_517 = $load_3;
-    $hfs_used_520 = s.used;
+    $hfs_used_519 = s.used;
     b167: block {
         l168: loop {
             break_if b167 $sroa_$iter_0_index_109 >= start_26;
             ref_val = builtin::array_get_value<i32>($sroa_$iter_0_repr_108, $sroa_$iter_0_index_109);
             $sroa_$iter_0_index_109 = $sroa_$iter_0_index_109 + 1;
             if new_used_25 > 0 {
-                if @unlikely(local.tee $hfs_used_520($hfs_used_520 + 1) > builtin::array_len($load_3)) {
+                if @unlikely(local.tee $hfs_used_519($hfs_used_519 + 1) > builtin::array_len($load_3)) {
                     cold_path;
-                    "core:prelude/string.wado/core:prelude/string.wado/String::grow"(s, $hfs_used_520);
-                    $load_3 = local.tee $licm_repr_517(s.repr);
+                    "core:prelude/string.wado/core:prelude/string.wado/String::grow"(s, $hfs_used_519);
+                    $load_3 = s.repr;
                 } else {
                 }
                 start_49 = s.used;
@@ -1778,54 +1776,53 @@ fn "core:serde/core:prelude/list.wado/List<i32>^core:serde/Serialize::serialize<
                 break $inline_count_digits_u64_0: 20;
             };
             if start_49 {
-                if @unlikely(local.tee start_49($hfs_used_520 + 1) > builtin::array_len($licm_repr_517)) {
+                if @unlikely(local.tee start_49($hfs_used_519 + 1) > builtin::array_len($load_3)) {
                     cold_path;
-                    s.used = $hfs_used_520;
+                    s.used = $hfs_used_519;
                     "core:prelude/string.wado/core:prelude/string.wado/String::grow"(s, start_49);
-                    $licm_repr_517 = s.repr;
-                    $hfs_used_520 = s.used;
+                    $load_3 = s.repr;
+                    $hfs_used_519 = s.used;
                 }
-                start_144 = $hfs_used_520;
-                $hfs_used_520 = start_49;
-                builtin::array_set_u8($licm_repr_517, start_144, 45);
+                start_143 = $hfs_used_519;
+                $hfs_used_519 = start_49;
+                builtin::array_set_u8($load_3, start_143, 45);
             } else {
             }
-            if @unlikely(local.tee start_49($hfs_used_520 + ref_val) > builtin::array_len($licm_repr_517)) {
+            if @unlikely(local.tee start_49($hfs_used_519 + ref_val) > builtin::array_len($load_3)) {
                 cold_path;
-                s.used = $hfs_used_520;
+                s.used = $hfs_used_519;
                 "core:prelude/string.wado/core:prelude/string.wado/String::grow"(s, start_49);
-                $licm_repr_517 = s.repr;
-                $hfs_used_520 = s.used;
+                $load_3 = s.repr;
+                $hfs_used_519 = s.used;
             }
-            start_144 = $hfs_used_520;
-            $hfs_used_520 = start_49;
-            $load_3 = $licm_repr_517;
-            ref_val = start_144 + ref_val;
+            start_143 = $hfs_used_519;
+            $hfs_used_519 = start_49;
+            ref_val = start_143 + ref_val;
             b193: block {
                 l194: loop {
-                    break_if b193 (ref_val - start_144) < 2;
+                    break_if b193 (ref_val - start_143) < 2;
                     q = x /u 100_i64;
                     tens = local.tee start_49(builtin::i32_wrap_i64(x - (q * 100_i64))) / 10;
-                    builtin::array_set_u8($licm_repr_517, ref_val - 1, (48 + start_49) - (tens * 10));
-                    builtin::array_set_u8($licm_repr_517, ref_val - 2, 48 + tens);
+                    builtin::array_set_u8($load_3, ref_val - 1, (48 + start_49) - (tens * 10));
+                    builtin::array_set_u8($load_3, ref_val - 2, 48 + tens);
                     ref_val = ref_val - 2;
                     x = q;
                     continue l194;
                 };
             };
-            if ref_val > start_144 {
-                builtin::array_set_u8($licm_repr_517, start_144, 48 + builtin::i32_wrap_i64(x %u 10_i64));
+            if ref_val > start_143 {
+                builtin::array_set_u8($load_3, start_143, 48 + builtin::i32_wrap_i64(x %u 10_i64));
             }
             new_used_25 = new_used_25 + 1;
             if @likely(ref.is_null(ref.null none)) {
             } else {
                 $qm_e_8 = ref.as_non_null(ref.null none);
                 cold_path;
-                $hfs_call_521 = $qm_e_8;
-                s.used = $hfs_used_520;
-                return $hfs_call_521;
+                $hfs_call_520 = $qm_e_8;
+                s.used = $hfs_used_519;
+                return $hfs_call_520;
             }
-            s.used = $hfs_used_520;
+            s.used = $hfs_used_519;
             continue l168;
         };
     };

@@ -4552,7 +4552,6 @@ fn "core:cbor/core:cbor/CborDeserializer^core:serde/Deserializer::deserialize_i3
 
 fn "core:cbor/core:cbor/CborDeserializer^core:serde/Deserializer::deserialize_string$sroa[return]"(self) {
     let $qm_e_2: ref "core:serde//DeserializeError";
-    let indef: bool;
     let $pattern_temp_0: ref "tuple//[u8, u8, u64, bool]";
     let $mv$$vr_18$0: i32;
     let $mv$$vr_18$1: u8;
@@ -4587,12 +4586,10 @@ fn "core:cbor/core:cbor/CborDeserializer^core:serde/Deserializer::deserialize_st
         });
         return "core:cbor/core:cbor/CborDeserializer::read_definite_text$sroa[return]"(self, $mv$$vr_19$1);
     }
-    drop(self.pos);
     block {
         l686: loop {
             let $mv$$vr_20$1: ref null "tuple//[u8, u8, u64, bool]";
             multivalue_bind [$mv$$vr_18$0, $mv$$vr_20$1, $mv$$vr_18$2] = "core:cbor/core:cbor/CborDeserializer::read_head$sroa[return]"(self);
-            $mv$$vr_18$1 = self.pos;
             $mv$$vr_18$0 = local.tee $pattern_temp_0((if $mv$$vr_18$0 == 0 -> ref "tuple//[u8, u8, u64, bool]" {
                 ref.as_non_null($mv$$vr_20$1);
             } else if @unlikely($mv$$vr_18$0 == 1) -> ref "tuple//[u8, u8, u64, bool]" {
@@ -4604,9 +4601,9 @@ fn "core:cbor/core:cbor/CborDeserializer^core:serde/Deserializer::deserialize_st
                 unreachable;
             })).0;
             $mv$$vr_19$1 = $pattern_temp_0.2;
-            indef = $pattern_temp_0.3;
+            $mv$$vr_18$1 = $pattern_temp_0.3;
             if $mv$$vr_18$0 == 3 {
-                return "core:cbor/core:cbor/CborDeserializer::read_text_body$sroa[return]"(self, $mv$$vr_19$1, indef);
+                return "core:cbor/core:cbor/CborDeserializer::read_text_body$sroa[return]"(self, $mv$$vr_19$1, $mv$$vr_18$1);
             } else if @likely((if $mv$$vr_18$0 == 6 -> i32 {
                 "core:cbor/is_passthrough_tag"($mv$$vr_19$1);
             } else {
@@ -4615,7 +4612,7 @@ fn "core:cbor/core:cbor/CborDeserializer^core:serde/Deserializer::deserialize_st
                 continue l686;
             } else {
                 cold_path;
-                return 1, ref.null none, "core:serde/core:serde/DeserializeError::unexpected_type<core:prelude/string.wado/String>"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("expected text string"), used: 20 }, builtin::i64_extend_i32_s($mv$$vr_18$1));
+                return 1, ref.null none, "core:serde/core:serde/DeserializeError::unexpected_type<core:prelude/string.wado/String>"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("expected text string"), used: 20 }, builtin::i64_extend_i32_s(self.pos));
             }
             continue l686;
         };
@@ -6193,21 +6190,20 @@ fn "core:cbor/core:cbor/CborDeserializer^core:serde/Deserializer::begin_containe
     let arg: u64;
     let indef: bool;
     let $pattern_temp_0: ref "tuple//[u8, u8, u64, bool]";
+    let offset: i64;
     let $licm_depth_24: i32;
     let $licm_max_depth_25: i32;
-    let $licm_pos_26: i32;
-    let $licm_arith_27: bool;
+    let $licm_arith_26: bool;
+    let $av_27: i32;
     $licm_depth_24 = self.depth;
     $licm_max_depth_25 = self.max_depth;
-    drop(self.pos);
-    $licm_arith_27 = local.tee $licm_depth_24($licm_depth_24 + 1) > $licm_max_depth_25;
+    $licm_arith_26 = local.tee $licm_depth_24($licm_depth_24 + 1) > $licm_max_depth_25;
     block {
         l946: loop {
             let $mv$$vr_14$0: i32;
             let $mv$$vr_14$1: ref null "tuple//[u8, u8, u64, bool]";
             let $mv$$vr_14$2: ref null "core:serde//DeserializeError";
             multivalue_bind [$mv$$vr_14$0, $mv$$vr_14$1, $mv$$vr_14$2] = "core:cbor/core:cbor/CborDeserializer::read_head$sroa[return]"(self);
-            $licm_pos_26 = self.pos;
             $mv$$vr_14$0 = local.tee $pattern_temp_0((if $mv$$vr_14$0 == 0 -> ref "tuple//[u8, u8, u64, bool]" {
                 ref.as_non_null($mv$$vr_14$1);
             } else if @unlikely($mv$$vr_14$0 == 1) -> ref "tuple//[u8, u8, u64, bool]" {
@@ -6221,25 +6217,27 @@ fn "core:cbor/core:cbor/CborDeserializer^core:serde/Deserializer::begin_containe
             arg = $pattern_temp_0.2;
             indef = $pattern_temp_0.3;
             continue_if l946 ($mv$$vr_14$0 == 6) & (arg == 55799_i64);
+            $av_27 = self.pos;
             if @unlikely($mv$$vr_14$0 != 5) {
                 cold_path;
-                return 1, ref.null none, "core:serde/core:serde/DeserializeError::unexpected_type<&core:prelude/string.wado/String>"(expected, builtin::i64_extend_i32_s($licm_pos_26));
+                return 1, ref.null none, "core:serde/core:serde/DeserializeError::unexpected_type<&core:prelude/string.wado/String>"(expected, builtin::i64_extend_i32_s($av_27));
             }
             $inline_deeper_sroa_return__1: block {
-                if @unlikely($licm_arith_27) {
+                offset = builtin::i64_extend_i32_s($av_27);
+                if @unlikely($licm_arith_26) {
                     cold_path;
-                    $licm_arith_27 = 1;
+                    $licm_arith_26 = 1;
                     $licm_depth_24 = 0;
-                    $mv$$vr_14$2 = "core:serde/core:serde/DeserializeError::depth_limit<core:prelude/string.wado/String>"("core:prelude/string.wado/core:prelude/string.wado/String::format<core:serde/$tmpl$fb51c04d54491732,[i32]>"(struct.new "core:serde//$tmpl$fb51c04d54491732" { h0: $licm_max_depth_25, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("exceeded maximum nesting depth of "), used: 34 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("exceeded maximum nesting depth of "), used: 34 }, s1: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, r1: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 } }), builtin::i64_extend_i32_s($licm_pos_26));
+                    $mv$$vr_14$2 = "core:serde/core:serde/DeserializeError::depth_limit<core:prelude/string.wado/String>"("core:prelude/string.wado/core:prelude/string.wado/String::format<core:serde/$tmpl$fb51c04d54491732,[i32]>"(struct.new "core:serde//$tmpl$fb51c04d54491732" { h0: $licm_max_depth_25, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("exceeded maximum nesting depth of "), used: 34 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("exceeded maximum nesting depth of "), used: 34 }, s1: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, r1: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 } }), offset);
                     break $inline_deeper_sroa_return__1;
                 }
-                $licm_arith_27 = 0;
+                $licm_arith_26 = 0;
                 $mv$$vr_14$2 = ref.null none;
                 break $inline_deeper_sroa_return__1;
             };
-            $licm_depth_24 = (if $licm_arith_27 == 0 -> i32 {
+            $licm_depth_24 = (if $licm_arith_26 == 0 -> i32 {
                 $licm_depth_24;
-            } else if @unlikely($licm_arith_27 == 1) -> i32 {
+            } else if @unlikely($licm_arith_26 == 1) -> i32 {
                 cold_path;
                 $qm_e_3 = ref.as_non_null($mv$$vr_14$2);
                 cold_path;

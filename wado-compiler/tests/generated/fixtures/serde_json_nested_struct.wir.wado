@@ -8109,7 +8109,6 @@ fn "core:serde/serde_json_nested_struct.wado/Line^core:serde/Deserialize::deseri
     let offset: i64;
     let $sroa_fields_0_121: ref "serde_json_nested_struct.wado//Point";
     let $sroa_fields_1_122: ref "serde_json_nested_struct.wado//Point";
-    let $licm_depth_123: i32;
     $sroa_slots_0_101 = ref.null none;
     $sroa_slots_1_102 = ref.null none;
     let $match_scrut_0: ref "core:prelude/types.wado//Result<&mut core:json/JsonDeserializer,core:serde/DeserializeError>";
@@ -8149,7 +8148,6 @@ fn "core:serde/serde_json_nested_struct.wado/Line^core:serde/Deserialize::deseri
             let $mv$$vr_51$2: ref null "core:serde//DeserializeError";
             let $vr_payload_0_$mv$$vr_51$1: i32;
             multivalue_bind [depth, max_depth, $vr_payload_0_$mv$$vr_51$1, $mv$$vr_51$2] = "core:json/core:json/JsonStructAccess^core:serde/DeserializeStruct::next_field<serde_json_nested_struct.wado/Line>$sroa[self.value,return]"(d);
-            $licm_depth_123 = d.depth;
             if depth == 0 {
             } else if @unlikely(depth == 1) {
                 cold_path;
@@ -8171,7 +8169,6 @@ fn "core:serde/serde_json_nested_struct.wado/Line^core:serde/Deserialize::deseri
                         return 1, ref.null none, $qm_e_106;
                     }
                     multivalue_bind [depth, $sroa_slots_0_101, $mv$$vr_51$2] = "core:serde/serde_json_nested_struct.wado/Point^core:serde/Deserialize::deserialize<core:json/JsonDeserializer>$sroa[return]"(d);
-                    $licm_depth_123 = d.depth;
                     $sroa_slots_0_101 = (if depth == 0 -> ref "serde_json_nested_struct.wado//Point" {
                         ref.as_non_null($sroa_slots_0_101);
                     } else if @unlikely(depth == 1) -> ref "serde_json_nested_struct.wado//Point" {
@@ -8193,7 +8190,6 @@ fn "core:serde/serde_json_nested_struct.wado/Line^core:serde/Deserialize::deseri
                         return 1, ref.null none, $qm_e_106;
                     }
                     multivalue_bind [depth, $sroa_slots_1_102, $mv$$vr_51$2] = "core:serde/serde_json_nested_struct.wado/Point^core:serde/Deserialize::deserialize<core:json/JsonDeserializer>$sroa[return]"(d);
-                    $licm_depth_123 = d.depth;
                     $sroa_slots_1_102 = (if depth == 0 -> ref "serde_json_nested_struct.wado//Point" {
                         ref.as_non_null($sroa_slots_1_102);
                     } else if @unlikely(depth == 1) -> ref "serde_json_nested_struct.wado//Point" {
@@ -8208,7 +8204,7 @@ fn "core:serde/serde_json_nested_struct.wado/Line^core:serde/Deserialize::deseri
                 } else {
                 }
                 if depth == 0 {
-                    if @likely(ref.is_null(local.tee $mv$$vr_51$2("core:json/core:json/JsonDeserializer::skip_value"(d, $licm_depth_123)))) {
+                    if @likely(ref.is_null(local.tee $mv$$vr_51$2("core:json/core:json/JsonDeserializer::skip_value"(d, d.depth)))) {
                     } else {
                         $qm_e_106 = ref.as_non_null($mv$$vr_51$2);
                         cold_path;

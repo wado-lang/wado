@@ -3049,7 +3049,6 @@ fn "core:prelude/array.wado/core:prelude/array.wado/write_seq_inspect<core:prelu
     let start_100: i32;
     let $licm_repr_169: ref Array<u8>;
     let start_265: i32;
-    let $licm_repr_628: ref Array<u8>;
     if @unlikely(local.tee new_used_99(local.tee self_7(f.buf).used + 1) > builtin::array_len(self_7.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_7, new_used_99);
@@ -3069,7 +3068,6 @@ fn "core:prelude/array.wado/core:prelude/array.wado/write_seq_inspect<core:prelu
     self_7 = f.buf;
     $licm_arith_95 = limit >= 0;
     $licm_repr_169 = self_7.repr;
-    $licm_repr_628 = self_7.repr;
     b394: block {
         l395: loop {
             break_if b394 i_6 >= end;
@@ -3081,7 +3079,6 @@ fn "core:prelude/array.wado/core:prelude/array.wado/write_seq_inspect<core:prelu
                 if @unlikely(local.tee new_used_21(self_7.used + 2) > builtin::array_len($licm_repr_169)) {
                     cold_path;
                     "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_7, new_used_21);
-                    $licm_repr_628 = self_7.repr;
                     $licm_repr_169 = self_7.repr;
                 }
                 start_22 = self_7.used;
@@ -3092,7 +3089,6 @@ fn "core:prelude/array.wado/core:prelude/array.wado/write_seq_inspect<core:prelu
             if @unlikely(local.tee new_used_21(self_7.used + 13) > builtin::array_len($licm_repr_169)) {
                 cold_path;
                 "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_7, new_used_21);
-                $licm_repr_628 = self_7.repr;
                 $licm_repr_169 = self_7.repr;
             }
             start_22 = self_7.used;
@@ -3105,10 +3101,9 @@ fn "core:prelude/array.wado/core:prelude/array.wado/write_seq_inspect<core:prelu
                 }
                 break $inline_count_digits_u64_base_16: select i32((new_used_21 - (start_22 * 4)) != 0, (local.tee start_22(local.tee new_used_21(64 - builtin::i32_wrap_i64(builtin::i64_clz(val_i64_48))) / 4) + 1) + ((new_used_21 ^ 4) >> 31), start_22);
             };
-            if @unlikely(local.tee start_22(self_7.used + new_used_21) > builtin::array_len($licm_repr_628)) {
+            if @unlikely(local.tee start_22(self_7.used + new_used_21) > builtin::array_len(self_7.repr)) {
                 cold_path;
                 "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_7, start_22);
-                $licm_repr_628 = self_7.repr;
             }
             start_265 = self_7.used;
             self_7.used = start_22;

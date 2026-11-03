@@ -7214,7 +7214,6 @@ fn "core:serde/serde_json_option_array_fields.wado/User^core:serde/Deserialize::
     let $sroa_$sroa_slots_1_130_0_151: i32;
     let $sroa_$sroa_slots_1_130_1_152: ref null "core:prelude/string.wado//String";
     let $sroa_fields_2_155: ref "core:prelude//List<i32>";
-    let $licm_depth_157: i32;
     $sroa_slots_0_129 = ref.null none;
     $sroa_$sroa_slots_1_130_0_151 = 0;
     $sroa_$sroa_slots_1_130_1_152 = ref.null none;
@@ -7256,7 +7255,6 @@ fn "core:serde/serde_json_option_array_fields.wado/User^core:serde/Deserialize::
             let $mv$$vr_64$2: ref null "core:serde//DeserializeError";
             let $vr_payload_0_$mv$$vr_64$1: i32;
             multivalue_bind [depth, max_depth, $vr_payload_0_$mv$$vr_64$1, $mv$$vr_64$2] = "core:json/core:json/JsonStructAccess^core:serde/DeserializeStruct::next_field<serde_json_option_array_fields.wado/User>$sroa[self.value,return]"(d);
-            $licm_depth_157 = d.depth;
             if depth == 0 {
             } else if @unlikely(depth == 1) {
                 cold_path;
@@ -7278,7 +7276,6 @@ fn "core:serde/serde_json_option_array_fields.wado/User^core:serde/Deserialize::
                         return 1, ref.null none, $qm_e_135;
                     }
                     multivalue_bind [depth, $sroa_slots_0_129, $mv$$vr_64$2] = "core:json/core:json/JsonDeserializer::read_json_string$sroa[return]"(d);
-                    $licm_depth_157 = d.depth;
                     $sroa_slots_0_129 = (if depth == 0 -> ref "core:prelude/string.wado//String" {
                         ref.as_non_null($sroa_slots_0_129);
                     } else if @unlikely(depth == 1) -> ref "core:prelude/string.wado//String" {
@@ -7300,7 +7297,6 @@ fn "core:serde/serde_json_option_array_fields.wado/User^core:serde/Deserialize::
                         return 1, ref.null none, $qm_e_135;
                     }
                     multivalue_bind [$sroa_$sroa_slots_1_130_0_151, $sroa_$sroa_slots_1_130_1_152, $mv$$vr_64$2] = "core:serde/core:prelude/types.wado/Option<core:prelude/string.wado/String>^core:serde/Deserialize::deserialize<core:json/JsonDeserializer>$sroa[return]"(d);
-                    $licm_depth_157 = d.depth;
                     $sroa_$sroa_slots_1_130_1_152 = (if $sroa_$sroa_slots_1_130_0_151 == 0 -> ref null "core:prelude/string.wado//String" {
                         $sroa_$sroa_slots_1_130_1_152;
                     } else if @unlikely($sroa_$sroa_slots_1_130_0_151 == 1) -> ref null "core:prelude/string.wado//String" {
@@ -7323,7 +7319,6 @@ fn "core:serde/serde_json_option_array_fields.wado/User^core:serde/Deserialize::
                         return 1, ref.null none, $qm_e_135;
                     }
                     multivalue_bind [depth, $sroa_slots_2_131, $mv$$vr_64$2] = "core:serde/core:prelude/list.wado/List<i32>^core:serde/Deserialize::deserialize<core:json/JsonDeserializer>$sroa[return]"(d);
-                    $licm_depth_157 = d.depth;
                     $sroa_slots_2_131 = (if depth == 0 -> ref "core:prelude//List<i32>" {
                         ref.as_non_null($sroa_slots_2_131);
                     } else if @unlikely(depth == 1) -> ref "core:prelude//List<i32>" {
@@ -7338,7 +7333,7 @@ fn "core:serde/serde_json_option_array_fields.wado/User^core:serde/Deserialize::
                 } else {
                 }
                 if depth == 0 {
-                    if @likely(ref.is_null(local.tee $mv$$vr_64$2("core:json/core:json/JsonDeserializer::skip_value"(d, $licm_depth_157)))) {
+                    if @likely(ref.is_null(local.tee $mv$$vr_64$2("core:json/core:json/JsonDeserializer::skip_value"(d, d.depth)))) {
                     } else {
                         $qm_e_135 = ref.as_non_null($mv$$vr_64$2);
                         cold_path;
@@ -10100,10 +10095,9 @@ fn "core:serde/core:prelude/list.wado/List<i32>^core:serde/Serialize::serialize<
     let tens: i32;
     let $sroa_$iter_0_repr_108: ref Array<i32>;
     let $sroa_$iter_0_index_109: i32;
-    let start_144: i32;
-    let $licm_repr_583: ref Array<u8>;
-    let $hfs_used_586: i32;
-    let $hfs_call_587: ref null "core:serde//SerializeError";
+    let start_143: i32;
+    let $hfs_used_585: i32;
+    let $hfs_call_586: ref null "core:serde//SerializeError";
     if @unlikely(local.tee new_used_25(s.used + 1) > builtin::array_len(s.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(s, new_used_25);
@@ -10115,18 +10109,17 @@ fn "core:serde/core:prelude/list.wado/List<i32>^core:serde/Serialize::serialize<
     start_26 = self.used;
     $sroa_$iter_0_repr_108 = self.repr;
     $sroa_$iter_0_index_109 = 0;
-    $licm_repr_583 = $load_3;
-    $hfs_used_586 = s.used;
+    $hfs_used_585 = s.used;
     b1430: block {
         l1431: loop {
             break_if b1430 $sroa_$iter_0_index_109 >= start_26;
             ref_val = builtin::array_get_value<i32>($sroa_$iter_0_repr_108, $sroa_$iter_0_index_109);
             $sroa_$iter_0_index_109 = $sroa_$iter_0_index_109 + 1;
             if new_used_25 > 0 {
-                if @unlikely(local.tee $hfs_used_586($hfs_used_586 + 1) > builtin::array_len($load_3)) {
+                if @unlikely(local.tee $hfs_used_585($hfs_used_585 + 1) > builtin::array_len($load_3)) {
                     cold_path;
-                    "core:prelude/string.wado/core:prelude/string.wado/String::grow"(s, $hfs_used_586);
-                    $load_3 = local.tee $licm_repr_583(s.repr);
+                    "core:prelude/string.wado/core:prelude/string.wado/String::grow"(s, $hfs_used_585);
+                    $load_3 = s.repr;
                 } else {
                 }
                 start_49 = s.used;
@@ -10197,60 +10190,59 @@ fn "core:serde/core:prelude/list.wado/List<i32>^core:serde/Serialize::serialize<
                 break $inline_count_digits_u64_26: 20;
             };
             if start_49 {
-                if @unlikely(local.tee start_49($hfs_used_586 + 1) > builtin::array_len($licm_repr_583)) {
+                if @unlikely(local.tee start_49($hfs_used_585 + 1) > builtin::array_len($load_3)) {
                     cold_path;
-                    s.used = $hfs_used_586;
+                    s.used = $hfs_used_585;
                     "core:prelude/string.wado/core:prelude/string.wado/String::grow"(s, start_49);
-                    $licm_repr_583 = s.repr;
-                    $hfs_used_586 = s.used;
+                    $load_3 = s.repr;
+                    $hfs_used_585 = s.used;
                 }
-                start_144 = $hfs_used_586;
-                start_49 = local.tee $hfs_used_586(start_49);
-                if @unlikely(((0 <= start_144) & (start_144 < start_49)) == 0) {
+                start_143 = $hfs_used_585;
+                start_49 = local.tee $hfs_used_585(start_49);
+                if @unlikely(((0 <= start_143) & (start_143 < start_49)) == 0) {
                     cold_path;
-                    s.used = $hfs_used_586;
-                    "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_at$contract_report0"(start_144, start_49, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/string.wado:571"), used: 28 });
+                    s.used = $hfs_used_585;
+                    "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_at$contract_report0"(start_143, start_49, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/string.wado:571"), used: 28 });
                     unreachable;
                 }
-                builtin::array_set_u8($licm_repr_583, start_144, 45);
+                builtin::array_set_u8($load_3, start_143, 45);
             } else {
             }
-            if @unlikely(local.tee start_49($hfs_used_586 + ref_val) > builtin::array_len($licm_repr_583)) {
+            if @unlikely(local.tee start_49($hfs_used_585 + ref_val) > builtin::array_len($load_3)) {
                 cold_path;
-                s.used = $hfs_used_586;
+                s.used = $hfs_used_585;
                 "core:prelude/string.wado/core:prelude/string.wado/String::grow"(s, start_49);
-                $licm_repr_583 = s.repr;
-                $hfs_used_586 = s.used;
+                $load_3 = s.repr;
+                $hfs_used_585 = s.used;
             }
-            start_144 = $hfs_used_586;
-            $hfs_used_586 = start_49;
-            $load_3 = $licm_repr_583;
-            ref_val = start_144 + ref_val;
+            start_143 = $hfs_used_585;
+            $hfs_used_585 = start_49;
+            ref_val = start_143 + ref_val;
             b1457: block {
                 l1458: loop {
-                    break_if b1457 (ref_val - start_144) < 2;
+                    break_if b1457 (ref_val - start_143) < 2;
                     q = x /u 100_i64;
                     tens = local.tee start_49(builtin::i32_wrap_i64(x - (q * 100_i64))) / 10;
-                    builtin::array_set_u8($licm_repr_583, ref_val - 1, (48 + start_49) - (tens * 10));
-                    builtin::array_set_u8($licm_repr_583, ref_val - 2, 48 + tens);
+                    builtin::array_set_u8($load_3, ref_val - 1, (48 + start_49) - (tens * 10));
+                    builtin::array_set_u8($load_3, ref_val - 2, 48 + tens);
                     ref_val = ref_val - 2;
                     x = q;
                     continue l1458;
                 };
             };
-            if ref_val > start_144 {
-                builtin::array_set_u8($licm_repr_583, start_144, 48 + builtin::i32_wrap_i64(x %u 10_i64));
+            if ref_val > start_143 {
+                builtin::array_set_u8($load_3, start_143, 48 + builtin::i32_wrap_i64(x %u 10_i64));
             }
             new_used_25 = new_used_25 + 1;
             if @likely(ref.is_null(ref.null none)) {
             } else {
                 $qm_e_8 = ref.as_non_null(ref.null none);
                 cold_path;
-                $hfs_call_587 = $qm_e_8;
-                s.used = $hfs_used_586;
-                return $hfs_call_587;
+                $hfs_call_586 = $qm_e_8;
+                s.used = $hfs_used_585;
+                return $hfs_call_586;
             }
-            s.used = $hfs_used_586;
+            s.used = $hfs_used_585;
             continue l1431;
         };
     };

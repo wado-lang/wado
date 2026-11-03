@@ -3484,30 +3484,27 @@ fn "core:uuid/core:uuid/Uuid::write_to$sroa[self.bytes]"(self, out) {
     let i: i32;
     let start_18: i32;
     let self_35: i32;
-    let $licm_repr_49: ref Array<u8>;
-    let $hfs_used_50: i32;
+    let $hfs_used_49: i32;
     i = 0;
-    $licm_repr_49 = out.repr;
-    $hfs_used_50 = out.used;
+    $hfs_used_49 = out.used;
     b406: block {
         l407: loop {
             break_if b406 i >= 16;
             if (((i == 4) | (i == 6)) | (i == 8)) | (i == 10) {
-                if @unlikely(local.tee $hfs_used_50($hfs_used_50 + 1) > builtin::array_len($licm_repr_49)) {
+                if @unlikely(local.tee $hfs_used_49($hfs_used_49 + 1) > builtin::array_len(out.repr)) {
                     cold_path;
-                    "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out, $hfs_used_50);
-                    $licm_repr_49 = out.repr;
+                    "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out, $hfs_used_49);
                 } else {
                 }
                 start_18 = out.used;
-                self_35 = $hfs_used_50;
+                self_35 = $hfs_used_49;
                 if @unlikely(((0 <= start_18) & (start_18 < self_35)) == 0) {
                     cold_path;
-                    out.used = $hfs_used_50;
+                    out.used = $hfs_used_49;
                     "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_at$contract_report0"(start_18, self_35, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/string.wado:571"), used: 28 });
                     unreachable;
                 }
-                builtin::array_set_u8($licm_repr_49, start_18, 45);
+                builtin::array_set_u8(out.repr, start_18, 45);
             } else {
             }
             start_18 = b411: block -> i32 {
@@ -3576,13 +3573,11 @@ fn "core:uuid/core:uuid/Uuid::write_to$sroa[self.bytes]"(self, out) {
                 };
                 i8x16.extract_lane_u(14, self);
             };
-            out.used = $hfs_used_50;
-            "core:prelude/string.wado/core:prelude/string.wado/String::push"(out, $hfs_used_50 = (start_18 >> 4) & 15; select char($hfs_used_50 < 10, (48 + ($hfs_used_50 & 255)) & 255, (97 + (($hfs_used_50 - 10) & 255)) & 255));
-            drop(out.repr);
-            "core:prelude/string.wado/core:prelude/string.wado/String::push"(out, $hfs_used_50 = start_18 & 15; select char($hfs_used_50 < 10, (48 + ($hfs_used_50 & 255)) & 255, (97 + (($hfs_used_50 - 10) & 255)) & 255));
-            $licm_repr_49 = out.repr;
+            out.used = $hfs_used_49;
+            "core:prelude/string.wado/core:prelude/string.wado/String::push"(out, $hfs_used_49 = (start_18 >> 4) & 15; select char($hfs_used_49 < 10, (48 + ($hfs_used_49 & 255)) & 255, (97 + (($hfs_used_49 - 10) & 255)) & 255));
+            "core:prelude/string.wado/core:prelude/string.wado/String::push"(out, $hfs_used_49 = start_18 & 15; select char($hfs_used_49 < 10, (48 + ($hfs_used_49 & 255)) & 255, (97 + (($hfs_used_49 - 10) & 255)) & 255));
             i = i + 1;
-            $hfs_used_50 = out.used;
+            $hfs_used_49 = out.used;
             continue l407;
         };
     };

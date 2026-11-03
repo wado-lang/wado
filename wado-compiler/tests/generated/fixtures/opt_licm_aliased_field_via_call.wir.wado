@@ -72,16 +72,13 @@ import fn wasi/task-return from "wasi/task-return";
 fn "opt_licm_aliased_field_via_call.wado/f"(a, b) {
     let sum: i32;
     let i: i32;
-    let $licm_value_4: i32;
     sum = 0;
     i = 0;
-    drop(b.value);
     b0: block {
         l1: loop {
             break_if b0 i >= 5;
             "opt_licm_aliased_field_via_call.wado/opt_licm_aliased_field_via_call.wado/Node::bump"(a);
-            $licm_value_4 = b.value;
-            sum = sum + $licm_value_4;
+            sum = sum + b.value;
             i = i + 1;
             continue l1;
         };
