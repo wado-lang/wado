@@ -357,6 +357,78 @@ server does, so the figure is the generator's limit rather than Axum's.
 HTTP routing needs `oha` and Bun, and is measured separately
 (`SLICE=10 ROUNDS=3 SHAPES="1 4" mise run benchmark-http-routing`).
 
+## Profile-Guided Optimization
+
+A Wado build applies the profile each benchmark's `#[workload]` recorded into
+its `pgo/`. These tables compare that build with the two the flags give. `-f no-pgo` ignores the profile and keeps
+the source's `cold_path()` markers; `-f no-cold-paths` drops every marker.
+`+` means the PGO build is faster.
+
+Fuel at `-O2`, Wado 2026-11-03. Fuel does not depend on the host, so one run
+per build settles it:
+
+```sh
+wado test -O2 --allocator freelist --report-fuel --test-name fuel benchmark                 # PGO
+wado test -O2 --allocator freelist --report-fuel --test-name fuel -f no-pgo benchmark
+wado test -O2 --allocator freelist --report-fuel --test-name fuel -f no-cold-paths benchmark
+```
+
+| Region                   | `no-cold-paths` |      `no-pgo` |           PGO | PGO vs `no-pgo` | PGO vs `no-cold-paths` |
+| ------------------------ | --------------: | ------------: | ------------: | --------------: | ---------------------: |
+| `codec/zlib/compress`    |     162,129,412 |   159,741,005 |   159,576,122 |           +0.1% |                  +1.6% |
+| `codec/zlib/decompress`  |      31,358,922 |    29,907,689 |    31,286,464 |           -4.6% |                  +0.2% |
+| `compute/fts`            |   1,505,789,292 | 1,507,789,480 | 1,513,789,617 |           -0.4% |                  -0.5% |
+| `compute/mandelbrot`     |   3,905,984,584 | 3,905,984,584 | 3,905,984,584 |           +0.0% |                  +0.0% |
+| `compute/sieve`          |     384,150,244 |   162,410,413 |   162,410,413 |           +0.0% |                 +57.7% |
+| `gale/generate`          |   1,380,545,538 | 1,348,962,877 | 1,397,180,287 |           -3.6% |                  -1.2% |
+| `gale/sqlite/highlight`  |      20,969,216 |    20,058,830 |    19,960,599 |           +0.5% |                  +4.8% |
+| `gale/sqlite/parse`      |      13,744,478 |    13,040,043 |    12,933,194 |           +0.8% |                  +5.9% |
+| `ml/microgpt/infer`      |   1,116,910,703 | 1,137,451,840 | 1,116,748,588 |           +1.8% |                  +0.0% |
+| `ml/microgpt/train`      |   1,492,245,742 | 1,452,277,210 | 1,442,687,843 |           +0.7% |                  +3.3% |
+| `serde/cbor/canada/de`   |     140,413,514 |   127,104,147 |   127,347,841 |           -0.2% |                  +9.3% |
+| `serde/cbor/canada/ser`  |      88,976,423 |    88,698,156 |    88,075,585 |           +0.7% |                  +1.0% |
+| `serde/cbor/catalog/de`  |      50,293,337 |    45,630,450 |    45,875,043 |           -0.5% |                  +8.8% |
+| `serde/cbor/catalog/ser` |      16,828,982 |    16,782,986 |    16,878,943 |           -0.6% |                  -0.3% |
+| `serde/cbor/twitter/de`  |      31,515,094 |    29,326,240 |    29,561,556 |           -0.8% |                  +6.2% |
+| `serde/cbor/twitter/ser` |       8,605,611 |     8,589,188 |     8,623,981 |           -0.4% |                  -0.2% |
+| `serde/json/canada/de`   |     325,995,440 |   323,563,455 |   323,694,342 |           -0.0% |                  +0.7% |
+| `serde/json/canada/ser`  |     256,794,570 |   255,678,936 |   260,186,644 |           -1.8% |                  -1.3% |
+| `serde/json/catalog/de`  |     124,971,727 |   122,704,688 |   122,774,197 |           -0.1% |                  +1.8% |
+| `serde/json/catalog/ser` |      24,291,523 |    22,564,704 |    22,374,473 |           +0.8% |                  +7.9% |
+| `serde/json/twitter/de`  |      71,845,422 |    70,883,010 |    70,840,192 |           +0.1% |                  +1.4% |
+| `serde/json/twitter/ser` |      18,035,922 |    18,042,287 |    17,742,397 |           +1.7% |                  +1.6% |
+
+Wall clock, ms/iter, best of three, with the builds interleaved in each round
+(`WADO_BENCH_FLAGS="-f no-pgo" mise run all-wado`, and so on). The last column
+reads `noise` where the two builds' ranges overlap, as `ab.ts` judges:
+
+| Benchmark                      | `no-cold-paths` | `no-pgo` |     PGO | PGO vs `no-pgo` |
+| ------------------------------ | --------------: | -------: | ------: | --------------: |
+| microgpt / Wado / train        |         311.435 |  322.964 | 327.904 |           noise |
+| microgpt / Wado / infer        |         159.348 |  159.471 | 157.239 |           noise |
+| mandelbrot / Wado              |         147.006 |  147.322 | 149.620 |           noise |
+| sieve / Wado                   |          21.968 |    6.853 |   7.032 |           noise |
+| fts / Wado                     |          56.536 |   54.481 |  51.074 |           noise |
+| json_twitter / Wado / ser      |           0.899 |    0.909 |   0.798 |           noise |
+| json_twitter / Wado / de       |           2.782 |    2.796 |   2.761 |           noise |
+| cbor_twitter / Wado / ser      |           0.575 |    0.595 |   0.574 |           noise |
+| cbor_twitter / Wado / de       |           1.533 |    1.619 |   1.397 |           noise |
+| cbor_canada / Wado / ser       |           3.811 |    3.994 |   4.208 |           -5.4% |
+| cbor_canada / Wado / de        |           6.744 |    6.353 |   6.371 |           noise |
+| cbor_catalog / Wado / ser      |           1.003 |    0.939 |   0.994 |           noise |
+| cbor_catalog / Wado / de       |           2.855 |    2.102 |   2.412 |          -14.7% |
+| json_canada / Wado / ser       |          10.502 |   10.145 |   9.422 |           noise |
+| json_canada / Wado / de        |          13.548 |   12.198 |  13.630 |           noise |
+| json_catalog / Wado / ser      |           1.132 |    1.102 |   1.180 |           noise |
+| json_catalog / Wado / de       |           5.310 |    4.461 |   4.816 |           noise |
+| zlib_bench / Wado / compress   |           8.144 |    7.601 |   7.903 |           noise |
+| zlib_bench / Wado / decompress |           1.617 |    1.540 |   1.604 |           noise |
+| sqlite_parse / Wado            |           0.998 |    0.907 |   1.027 |           noise |
+| syntax_highlight / Wado        |           1.714 |    1.310 |   1.339 |           noise |
+| gale_gen / Wado                |         190.968 |  203.000 | 210.758 |           noise |
+| gale_gen / Wado (1 GiB heap)   |         204.991 |  198.334 | 193.157 |           noise |
+| gale_html / Wado               |          15.643 |   13.822 |  14.920 |           noise |
+
 ## Running
 
 ```sh

@@ -409,7 +409,7 @@ output at every level. It is a nightly campaign, not a gate.
    `-f no-pgo`, settle their defaults and that of
    `--optimize-predictable-branch-threshold`.
 8. [x] The random-profile differential test, as EMI's profile stage.
-9. [ ] The `benchmark/` pilot. Each benchmark gains a workload and a committed
+9. [x] The `benchmark/` pilot. Each benchmark gains a workload and a committed
    profile, `http_routing` a test to carry it first, and a table compares the
    three builds the flags give. A workload runs a smaller input than the
    benchmark measures, so the table does not judge a profile on the run that
@@ -456,6 +456,13 @@ output at every level. It is a nightly campaign, not a gate.
 - [ ] A NIR `match` is read as if every arm's guard ran only on some paths. The
   first arm's guard runs on every path through the `match`, so a marker under
   it covers the `match` but is not read that way.
+- [ ] On the `benchmark/` pilot the profile buys nothing: against `-f no-pgo`,
+  every fuel region moves within a few percent, and the wall clock within its
+  noise. `gale/generate` and `codec/zlib/decompress` cost more fuel under the
+  profile, and why is not known. The tables are in
+  [the benchmark README](../benchmark/README.md#profile-guided-optimization).
+  `http_routing` records a profile but is in neither table: its `oha` run was
+  not repeated under the three builds.
 - [ ] The inliner reads a caller's cold code once, before it splices. A callee
   whose whole body is cold, spliced in, covers its block on both sides of the
   call, yet the calls after it are still inlined at hot-path prices.
