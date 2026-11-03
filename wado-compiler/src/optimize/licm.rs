@@ -787,7 +787,9 @@ fn hoist_reloadable_field_loads(
     }
     // A clobbering call that is the value-producing tail of a value-block would
     // have its (non-unit) value dropped by an appended reload — bail on those.
-    if has_nonunit_clobber_value_tail(ctx, engine.body, NodeRef::Block(loop_body), &clobbers) {
+    if has_nonunit_clobber_value_tail(ctx, engine.body, NodeRef::Block(loop_body), &clobbers)
+        || reload_skipped_by_jump(ctx, engine.body, loop_body, &clobbers)
+    {
         return;
     }
 
@@ -1039,6 +1041,106 @@ fn has_nonunit_clobber_value_tail(
     body.for_each_child(node, |c| {
         if !found && !matches!(c, NodeRef::Pat(_)) {
             found = has_nonunit_clobber_value_tail(ctx, body, c, clobbers);
+        }
+    });
+    found
+}
+
+/// Whether a statement that may write a watched object can then jump past the
+/// reload [`insert_reloads`] appends after it, to a point still inside the loop:
+/// the statement is itself a `break` or `continue`, or holds one landing in a
+/// block or a loop the loop body holds. Such a jump reaches a read of the
+/// hoisted local with nothing reloaded on its way. A jump out of the loop, or a
+/// `return`, leaves no read of it behind.
+fn reload_skipped_by_jump(
+    ctx: &LicmCtx,
+    body: &Body,
+    loop_body: BlockId,
+    clobbers: &Clobbers,
+) -> bool {
+    let mut inner_labels = IndexSet::default();
+    collect_block_labels(body, NodeRef::Block(loop_body), &mut inner_labels);
+    clobber_then_jump(
+        ctx,
+        body,
+        NodeRef::Block(loop_body),
+        0,
+        &inner_labels,
+        clobbers,
+    )
+}
+
+fn collect_block_labels(body: &Body, node: NodeRef, out: &mut IndexSet<String>) {
+    match node {
+        NodeRef::Stmt(s) => {
+            if let StmtKind::LabeledBlock { label, .. } = &body.stmts[s].kind {
+                out.insert(label.clone());
+            }
+        }
+        NodeRef::Expr(e) => {
+            if let ExprKind::LabeledBlock { label, .. } = &body.exprs[e].kind {
+                out.insert(label.clone());
+            }
+        }
+        NodeRef::Block(_) | NodeRef::Pat(_) => {}
+    }
+    body.for_each_child(node, |c| collect_block_labels(body, c, out));
+}
+
+/// The number of loops `node` opens: one for a `loop` statement.
+fn loops_opened(body: &Body, node: NodeRef) -> usize {
+    usize::from(matches!(node, NodeRef::Stmt(s) if matches!(body.stmts[s].kind, StmtKind::Loop { .. })))
+}
+
+/// [`reload_skipped_by_jump`] under `node`, `depth` loops inside the loop body.
+fn clobber_then_jump(
+    ctx: &LicmCtx,
+    body: &Body,
+    node: NodeRef,
+    depth: usize,
+    inner_labels: &IndexSet<String>,
+    clobbers: &Clobbers,
+) -> bool {
+    if let NodeRef::Stmt(_) = node
+        && node_contains_clobber(ctx, body, node, clobbers)
+        && jumps_within_loop(body, node, depth, inner_labels)
+    {
+        return true;
+    }
+    let depth = depth + loops_opened(body, node);
+    let mut found = false;
+    body.for_each_child(node, |c| {
+        if !found && !matches!(c, NodeRef::Pat(_)) {
+            found = clobber_then_jump(ctx, body, c, depth, inner_labels, clobbers);
+        }
+    });
+    found
+}
+
+/// Whether a `break` or `continue` under `node` lands inside the loop body:
+/// every `continue` does, as does a `break` to a block the body holds or one
+/// out of a loop nested in it.
+fn jumps_within_loop(
+    body: &Body,
+    node: NodeRef,
+    depth: usize,
+    inner_labels: &IndexSet<String>,
+) -> bool {
+    if let NodeRef::Stmt(s) = node {
+        match &body.stmts[s].kind {
+            StmtKind::Continue => return true,
+            StmtKind::Break { label: Some(label), .. } if inner_labels.contains(label) => {
+                return true;
+            }
+            StmtKind::Break { label: None, .. } if depth > 0 => return true,
+            _ => {}
+        }
+    }
+    let depth = depth + loops_opened(body, node);
+    let mut found = false;
+    body.for_each_child(node, |c| {
+        if !found && !matches!(c, NodeRef::Pat(_)) {
+            found = jumps_within_loop(body, c, depth, inner_labels);
         }
     });
     found
