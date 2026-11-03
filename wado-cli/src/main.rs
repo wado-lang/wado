@@ -5,6 +5,7 @@ use lexopt::Arg::{Long, Short, Value};
 use mimalloc::MiMalloc;
 use wado_cli::COMPILER_STACK_SIZE;
 use wado_cli::args::CliExit;
+use wado_cli::host_memory::{FreedMemory, set_freed_memory};
 
 // `wado serve` is allocation-heavy per request; mimalloc avoids the
 // system allocator's cross-thread contention.
@@ -327,7 +328,11 @@ fn unknown_command(name: &str) -> CliExit {
 
 async fn run_cmd(cmd: Cmd, parser: lexopt::Parser) -> Result<(), CliExit> {
     // Before parsing, so `--retain-memory` / `--no-retain-memory` override it.
-    wado_cli::host_memory::retain_freed(!matches!(cmd, Cmd::Serve | Cmd::Lsp));
+    set_freed_memory(if matches!(cmd, Cmd::Serve | Cmd::Lsp) {
+        FreedMemory::Return
+    } else {
+        FreedMemory::Retain
+    });
     match cmd {
         Cmd::Init => {
             let opts = wado_cli::init::parse_args(parser)?;

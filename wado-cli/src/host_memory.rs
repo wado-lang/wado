@@ -10,12 +10,20 @@
 //! The setting is process-wide. A page freed while memory is retained is never
 //! queued for a purge: it stays resident until it is reused.
 
-/// Retain freed memory, or purge it on mimalloc's own delay.
-pub fn retain_freed(retain: bool) {
+/// What the allocator does with the memory it frees.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum FreedMemory {
+    /// Kept resident for reuse.
+    Retain,
+    /// Handed back to the OS on mimalloc's own delay.
+    Return,
+}
+
+pub fn set_freed_memory(policy: FreedMemory) {
     #[cfg(feature = "mimalloc")]
-    mimalloc_purge::retain_freed(retain);
+    mimalloc_purge::set_freed_memory(policy);
     #[cfg(not(feature = "mimalloc"))]
-    let _ = retain;
+    let _ = policy;
 }
 
 #[cfg(feature = "mimalloc")]
@@ -24,6 +32,8 @@ mod mimalloc_purge {
     use std::sync::OnceLock;
 
     use libmimalloc_sys::{mi_option_get, mi_option_set, mi_option_t};
+
+    use super::FreedMemory;
 
     /// `mi_option_purge_delay` in mimalloc.h, v2 and v3 alike; the binding
     /// names no constant for it.
@@ -34,10 +44,13 @@ mod mimalloc_purge {
     /// The delay mimalloc started with, which purging restores.
     static DEFAULT_DELAY: OnceLock<c_long> = OnceLock::new();
 
-    pub(super) fn retain_freed(retain: bool) {
+    pub(super) fn set_freed_memory(policy: FreedMemory) {
         // SAFETY: an option is a word mimalloc reads at each purge decision.
         let default = *DEFAULT_DELAY.get_or_init(|| unsafe { mi_option_get(PURGE_DELAY) });
-        let delay = if retain { NEVER } else { default };
+        let delay = match policy {
+            FreedMemory::Retain => NEVER,
+            FreedMemory::Return => default,
+        };
         // SAFETY: as above; setting one is allowed at any time.
         unsafe { mi_option_set(PURGE_DELAY, delay) };
     }
@@ -50,9 +63,9 @@ mod mimalloc_purge {
         fn purging_restores_the_starting_delay() {
             // SAFETY: as in `retain_freed`.
             let start = unsafe { mi_option_get(PURGE_DELAY) };
-            retain_freed(true);
+            set_freed_memory(FreedMemory::Retain);
             assert_eq!(unsafe { mi_option_get(PURGE_DELAY) }, NEVER);
-            retain_freed(false);
+            set_freed_memory(FreedMemory::Return);
             assert_eq!(unsafe { mi_option_get(PURGE_DELAY) }, start);
         }
     }

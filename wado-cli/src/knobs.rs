@@ -7,6 +7,7 @@ use wado_compiler::param_resolution::ParamInputs;
 use wado_compiler::pgo::{Cutoff, Percent};
 
 use crate::args::{self, CliExit, OptSpec};
+use crate::host_memory::{FreedMemory, set_freed_memory};
 use crate::process_host::ProcessGrant;
 use crate::runtime::{parse_collector, parse_gc_heap_size};
 use wado_host::engine::{DEFAULT_COLLECTOR, DEFAULT_GC_HEAP_INITIAL_SIZE};
@@ -355,8 +356,8 @@ impl CompileKnobs {
             CompileKnobOpt::NoLint => self.lints = wado_compiler::Lints::Off,
             CompileKnobOpt::Lint => self.lints = wado_compiler::Lints::Own,
             CompileKnobOpt::LintGenerated => self.lints = wado_compiler::Lints::Generated,
-            CompileKnobOpt::RetainMemory => crate::host_memory::retain_freed(true),
-            CompileKnobOpt::NoRetainMemory => crate::host_memory::retain_freed(false),
+            CompileKnobOpt::RetainMemory => set_freed_memory(FreedMemory::Retain),
+            CompileKnobOpt::NoRetainMemory => set_freed_memory(FreedMemory::Return),
         }
         Ok(())
     }

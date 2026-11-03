@@ -468,7 +468,7 @@ struct Graph {
     /// Whether `solve` has put `locations` in node order.
     numbered: bool,
     /// The node each node's set is held at, shared by the nodes merged into
-    /// it: a cycle of copies, or a node fed by one copy alone.
+    /// it: a cycle of copies, or nodes that end alike by [`Self::substitute`].
     rep: DisjointSets,
     copy_to: Vec<Vec<u32>>,
     /// `loads[n]`: nodes receiving what each location in `pts[n]` holds.
@@ -648,20 +648,20 @@ impl Graph {
     /// plus what it holds now, so two such nodes whose sources and held
     /// locations number alike end alike. A cycle of copies ends alike too.
     fn substitute(&mut self) {
+        assert!(
+            self.merged.is_empty() && self.delta == self.pts,
+            "nothing is merged or solved yet"
+        );
         let fed = self.fed();
-        let n = self.pts.len();
-        let mut successors: Vec<Vec<usize>> = vec![Vec::new(); n];
-        let edges: Vec<(u32, u32)> = self.edges.iter().copied().collect();
-        for (from, to) in edges {
-            let (from, to) = (self.find(from), self.find(to));
-            if from != to {
-                successors[from as usize].push(to as usize);
-            }
-        }
-        let mut predecessors: Vec<Vec<u32>> = vec![Vec::new(); n];
-        for (from, tos) in successors.iter().enumerate() {
+        let successors: Vec<Vec<usize>> = self
+            .copy_to
+            .iter()
+            .map(|tos| tos.iter().map(|&to| to as usize).collect())
+            .collect();
+        let mut predecessors: Vec<Vec<u32>> = vec![Vec::new(); successors.len()];
+        for (from, tos) in (0..).zip(&successors) {
             for &to in tos {
-                predecessors[to].push(u32::try_from(from).expect("node count fits u32"));
+                predecessors[to].push(from);
             }
         }
         // A label numbers a value: a held location by its index, and each
@@ -669,22 +669,15 @@ impl Graph {
         let location_count = u32::try_from(self.locations.len()).expect("location count fits u32");
         let mut classes: IndexMap<Vec<u32>, u32> = IndexMap::default();
         let mut next_class = location_count;
-        let mut label: Vec<Option<u32>> = vec![None; n];
-        let mut groups: IndexMap<u32, Vec<u32>> = IndexMap::default();
-        // Each node that absorbed another, whose copies then point at nodes
-        // gone.
-        let mut roots: IndexSet<u32> = IndexSet::default();
+        let mut label: Vec<Option<u32>> = vec![None; successors.len()];
+        let mut alike: IndexMap<u32, Vec<u32>> = IndexMap::default();
         // Each component comes after every one it reaches, so its sources'
         // labels are known when it is reached walking backwards.
         for component in strongly_connected_components(&successors).into_iter().rev() {
             let members: Vec<u32> = component
                 .iter()
                 .map(|&m| u32::try_from(m).expect("node count fits u32"))
-                .filter(|&m| self.find(m) == m)
                 .collect();
-            let Some(&root) = members.first() else {
-                continue;
-            };
             let class = if members.iter().any(|m| fed.contains(m)) {
                 // Fed, so alike with nothing: a class of its own.
                 next_class += 1;
@@ -696,30 +689,18 @@ impl Graph {
                     _ => members.iter().copied().collect(),
                 };
                 let mut values: Vec<u32> = Vec::new();
-                let mut sources: Vec<u32> = Vec::new();
                 for &m in &members {
-                    sources.clear();
-                    sources.extend(
-                        predecessors[m as usize]
-                            .iter()
-                            .copied()
-                            .filter(|&p| p != m && !in_component.contains(&p)),
-                    );
+                    let sources: Vec<u32> = predecessors[m as usize]
+                        .iter()
+                        .copied()
+                        .filter(|p| !in_component.contains(p))
+                        .collect();
                     values.extend(
                         sources
                             .iter()
                             .map(|&p| label[p as usize].expect("a source is labelled first")),
                     );
-                    // A location a source already holds is in its class; only
-                    // one taken here is the node's own.
-                    values.extend(
-                        self.pts[m as usize]
-                            .iter()
-                            .filter(|&loc| {
-                                !sources.iter().any(|&p| self.pts[p as usize].contains(loc))
-                            })
-                            .map(|Loc(l)| l),
-                    );
+                    values.extend(self.own_locations(m, &sources).iter().map(|Loc(l)| l));
                 }
                 values.sort_unstable();
                 values.dedup();
@@ -735,26 +716,37 @@ impl Graph {
             for &m in &members {
                 label[m as usize] = Some(class);
             }
-            groups.entry(class).or_default().push(root);
-            if members.len() > 1 {
-                roots.insert(root);
-            }
-            for &member in &members[1..] {
-                self.absorb_unsolved(root, member);
+            alike.entry(class).or_default().extend(members);
+        }
+        for (_, nodes) in alike {
+            for &member in &nodes[1..] {
+                self.absorb_unsolved(nodes[0], member);
             }
         }
-        for (_, mut alike) in groups {
-            let root = alike.remove(0);
-            if !alike.is_empty() {
-                roots.insert(root);
-            }
-            for member in alike {
-                self.absorb_unsolved(root, member);
+        for node in 0..u32::try_from(successors.len()).expect("node count fits u32") {
+            if self.find(node) == node {
+                self.point_copies_at_representatives(node);
             }
         }
-        for root in roots {
-            self.point_copies_at_representatives(root);
+    }
+
+    /// The locations `node` holds that none of its copy `sources` does: a
+    /// location a source holds is already in that source's class.
+    fn own_locations(&self, node: u32, sources: &[u32]) -> LocSet {
+        let held = &self.pts[node as usize];
+        let mut own = LocSet::default();
+        match sources {
+            [] => return held.clone(),
+            [only] => held.difference_into(&self.pts[*only as usize], &mut own),
+            _ => {
+                let mut theirs = LocSet::default();
+                for &p in sources {
+                    theirs.union_into(&self.pts[p as usize], &mut LocSet::default());
+                }
+                held.difference_into(&theirs, &mut own);
+            }
         }
+        own
     }
 
     /// What may gain a location other than through its static copies: a
@@ -800,10 +792,6 @@ impl Graph {
     /// location along the edges the merge gathers: no merged node lacks one.
     fn absorb_unsolved(&mut self, root: u32, member: u32) {
         let (r, m) = (root as usize, member as usize);
-        assert!(
-            self.delta[r] == self.pts[r] && self.delta[m] == self.pts[m],
-            "nothing is solved yet"
-        );
         self.rep.link(member, root);
         let pts = std::mem::take(&mut self.pts[m]);
         self.delta[m] = LocSet::default();
@@ -1901,21 +1889,27 @@ mod tests {
 
     #[test]
     fn a_node_merged_twice_carries_along_its_own_edges() {
-        // `z -> a -> b`, each the only copy into its end, so `b` merges into
-        // `a` and then `a`, carrying `b`, into `z`. Only `z` holds a location,
-        // `l`, and only `b` loads through it, so `w` gains what `l` holds
-        // only if `b`'s load is found past the one `z` already held.
+        // `z -> a -> b` statically, and `b -> z` only once the solve carries
+        // `b` into `q`'s set, so the cycle collapses mid-solve. `a` is fed
+        // and `b` is a location, so neither merges ahead of the solve. Only
+        // `z` holds a location, `l`, and only `b` loads through it, so `w`
+        // gains what `l` holds only if `b`'s load is carried past the ones
+        // `z` already held.
         let mut g = Graph::default();
-        let [z, a, b, v, w, l, m] = [(); 7].map(|()| g.node());
+        let [z, a, b, v, w, l, m, q, x] = [(); 9].map(|()| g.node());
         g.add(l, m);
         g.add(z, l);
         g.load(z, v);
         g.load(b, w);
+        g.load(x, a);
         g.copy(a, b);
         g.copy(z, a);
+        g.load(q, z);
+        g.add(q, b);
         g.solve();
-        for node in [z, a, b] {
-            assert_eq!(g.find(node), z);
+        let root = g.find(b);
+        for node in [z, a] {
+            assert_eq!(g.find(node), root);
         }
         for node in [v, w] {
             let node = g.find(node);
