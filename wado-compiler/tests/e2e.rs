@@ -1302,9 +1302,8 @@ fn run_with_allocator(
             continue;
         }
         let key = wir_key(level);
-        if let Ok(candidates) = std::env::var("WADO_E2E_FIND_WIR_PASS") {
-            let candidates: Vec<String> = candidates.split(',').map(str::to_string).collect();
-            let skipped_wir = |skip: &[String]| {
+        if let Ok(out) = std::env::var("WADO_E2E_WIR_PASS_SEARCH") {
+            let compile = |skip: &[String]| {
                 let options = skip_base.clone();
                 common::compile_fixture_on_worker(
                     fixture_path.to_path_buf(),
@@ -1321,64 +1320,8 @@ fn run_with_allocator(
                 )
                 .wir_text
             };
-            let held = |skip: &[String]| -> Option<Vec<String>> {
-                let wir = skipped_wir(skip)?;
-                let wir = match spec.wir_scope.as_deref() {
-                    None => wir.as_str(),
-                    Some(scope) => match scope_to_function(&wir, scope) {
-                        Some(body) => body,
-                        None => return Some(vec![]),
-                    },
-                };
-                Some(
-                    spec.wir_checks(level)
-                        .iter()
-                        .filter(|c| c.holds(wir))
-                        .map(|c| c.describe(key))
-                        .collect(),
-                )
-            };
-            let ok = |skip: &[String]| held(skip).is_some_and(|h| h.is_empty());
-            match held(&candidates) {
-                None => panic!("FINDPASS {test_id} {key} COMPILE_FAIL"),
-                Some(h) if !h.is_empty() => {
-                    panic!("FINDPASS {test_id} {key} UNRESOLVED {}", serde_json::to_string(&h).unwrap())
-                }
-                Some(_) => {}
-            }
-            let mut set = candidates.clone();
-            let mut n = 2;
-            while set.len() >= 2 {
-                let chunk = set.len().div_ceil(n);
-                let chunks: Vec<Vec<String>> = set.chunks(chunk).map(<[String]>::to_vec).collect();
-                let mut progressed = false;
-                for c in &chunks {
-                    if ok(c) {
-                        set = c.clone();
-                        n = 2;
-                        progressed = true;
-                        break;
-                    }
-                }
-                if !progressed && chunks.len() > 2 {
-                    for c in &chunks {
-                        let rest: Vec<String> = set.iter().filter(|p| !c.contains(p)).cloned().collect();
-                        if ok(&rest) {
-                            set = rest;
-                            n = (n - 1).max(2);
-                            progressed = true;
-                            break;
-                        }
-                    }
-                }
-                if !progressed {
-                    if n >= set.len() {
-                        break;
-                    }
-                    n = (2 * n).min(set.len());
-                }
-            }
-            panic!("FINDPASS {test_id} {key} FOUND {}", serde_json::to_string(&set).unwrap());
+            search_wir_passes(&out, &compile, wir_text.as_deref().unwrap(), spec, level, test_id);
+            continue;
         }
         let passes = spec.wir_pass.get(key).unwrap_or_else(|| {
             panic!(
@@ -1403,6 +1346,9 @@ fn run_with_allocator(
         .wir_text
         .unwrap_or_else(|| panic!("[{test_id}] the compile skipping {passes:?} failed"));
         assert_wir_passes_measured(&skipped_wir, spec, level, test_id);
+    }
+    if std::env::var_os("WADO_E2E_WIR_PASS_SEARCH").is_some() {
+        return;
     }
     if let Some(expected) = &spec.marked_regions {
         assert!(
@@ -1621,6 +1567,124 @@ fn assert_wir_passes_measured(
         spec.wir_pass.get(key),
         held.join("\n  ")
     );
+}
+
+/// Search mode: which expectations under `level` fail with each candidate pass
+/// skipped alone, and how many WIR lines that skip changes; then, for each
+/// expectation no single skip fails, a minimal set that does. Each result is a
+/// JSON line appended to `out`.
+fn search_wir_passes(
+    out: &str,
+    compile: &dyn Fn(&[String]) -> Option<String>,
+    normal_wir: &str,
+    spec: &TestSpec,
+    level: Option<OptLevel>,
+    test_id: &str,
+) {
+    use std::io::Write as _;
+    let candidates: Vec<String> = std::env::var("WADO_E2E_WIR_PASS_CANDIDATES")
+        .expect("WADO_E2E_WIR_PASS_CANDIDATES lists the passes to try")
+        .split(',')
+        .map(str::to_string)
+        .collect();
+    let key = wir_key(level);
+    let checks = spec.wir_checks(level);
+    let failing = |wir: &str| -> Vec<usize> {
+        let scoped = match spec.wir_scope.as_deref() {
+            None => Some(Some(wir)),
+            Some(scope) => std::panic::catch_unwind(|| scope_to_function(wir, scope)).ok(),
+        };
+        match scoped {
+            // Ambiguous: the skip minted a second function of that name.
+            None => vec![],
+            Some(None) => (0..checks.len()).collect(),
+            Some(Some(body)) => (0..checks.len())
+                .filter(|&i| !checks[i].holds(body))
+                .collect(),
+        }
+    };
+    let mut normal: BTreeMap<&str, i64> = BTreeMap::new();
+    for line in normal_wir.lines() {
+        *normal.entry(line).or_default() += 1;
+    }
+    let diff = |wir: &str| -> i64 {
+        let mut counts = normal.clone();
+        for line in wir.lines() {
+            *counts.entry(line).or_default() -= 1;
+        }
+        counts.values().map(|n| n.abs()).sum()
+    };
+    let record = |skip: &[String], wir: &str| {
+        serde_json::json!({
+            "test": test_id, "key": key, "skip": skip,
+            "fails": failing(wir), "diff": diff(wir),
+        })
+    };
+    let mut lines = vec![serde_json::json!({
+        "test": test_id, "key": key,
+        "checks": checks.iter().map(|c| c.describe(key)).collect::<Vec<_>>(),
+    })];
+    let mut covered = vec![false; checks.len()];
+    for pass in &candidates {
+        let skip = [pass.clone()];
+        let Some(wir) = compile(&skip) else {
+            lines.push(serde_json::json!({"test": test_id, "key": key, "skip": skip, "compile_fail": true}));
+            continue;
+        };
+        let line = record(&skip, &wir);
+        for i in line["fails"].as_array().unwrap() {
+            covered[i.as_u64().unwrap() as usize] = true;
+        }
+        if line["diff"].as_i64().unwrap() > 0 {
+            lines.push(line);
+        }
+    }
+    for i in (0..checks.len()).filter(|&i| !covered[i]) {
+        let fails_i = |skip: &[String]| compile(skip).is_some_and(|wir| failing(&wir).contains(&i));
+        if !fails_i(&candidates) {
+            lines.push(serde_json::json!({"test": test_id, "key": key, "unresolved": i}));
+            continue;
+        }
+        let set = ddmin(candidates.clone(), &fails_i);
+        let wir = compile(&set).unwrap();
+        lines.push(record(&set, &wir));
+    }
+    let text: String = lines.iter().map(|l| l.to_string() + "\n").collect();
+    std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(out)
+        .and_then(|mut f| f.write_all(text.as_bytes()))
+        .unwrap();
+}
+
+/// A 1-minimal subset of `set` that `holds` still answers true for, by delta
+/// debugging.
+fn ddmin(mut set: Vec<String>, holds: &dyn Fn(&[String]) -> bool) -> Vec<String> {
+    let mut n = 2;
+    while set.len() >= 2 {
+        let chunk = set.len().div_ceil(n);
+        let chunks: Vec<Vec<String>> = set.chunks(chunk).map(<[String]>::to_vec).collect();
+        if let Some(c) = chunks.iter().find(|c| holds(c)) {
+            set.clone_from(c);
+            n = 2;
+            continue;
+        }
+        let rest = chunks.iter().find_map(|c| {
+            let rest: Vec<String> = set.iter().filter(|p| !c.contains(p)).cloned().collect();
+            (chunks.len() > 2 && holds(&rest)).then_some(rest)
+        });
+        if let Some(rest) = rest {
+            set = rest;
+            n = (n - 1).max(2);
+            continue;
+        }
+        if n >= set.len() {
+            break;
+        }
+        n = (2 * n).min(set.len());
+    }
+    set
 }
 
 /// Back each `preopened_dirs` entry with a fresh temp dir so filesystem tests

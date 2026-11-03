@@ -8,7 +8,7 @@ use crate::call_args::CallArgs;
 use crate::hashmap;
 use crate::module_source::ModuleSource;
 use crate::name::COLD_PATH_INTRINSIC;
-use crate::nir::{FuncId, FuncParts, FunctionRef, NirGlobal, NirLiteralPattern};
+use crate::nir::{FuncId, FunctionRef, NirGlobal, NirLiteralPattern};
 use crate::nir_arena::{
     ArmData, BlockId, Body, ExprId, ExprKind, Operand, PatId, PatKind, StmtKind, Tracked,
 };
