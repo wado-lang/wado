@@ -88,9 +88,9 @@ test "groups capture the last iteration, and each iteration starts unset" {
 
 test "named groups" {
     let caps = re("(?<y>\\d+)-(?<m>\\d+)").captures("1-2").unwrap();
-    assert caps.name("y").unwrap().as_str() == "1";
+    assert caps["y"].unwrap().as_str() == "1";
     assert caps.name("m").unwrap().as_str() == "2";
-    assert caps.name("d") matches { None };
+    assert caps["d"] matches { None };
 }
 
 test "find_at keeps the text before start as context" {
@@ -109,7 +109,7 @@ test "an iterator steps past an empty match by one character" {
 test "captures_iter" {
     let mut years: List<String> = [];
     for let caps of re("(\\d+)y").captures_iter("1y 22y 333y") {
-        years.push(`${caps.get(1).unwrap().as_str()}`);
+        years.push(`${caps[1].unwrap().as_str()}`);
     }
     assert years.join(",") == "1,22,333";
 }

@@ -165,7 +165,7 @@ impl Compiler {
                     self.node(n)?;
                 }
             },
-            Alternation(nodes) => self.alternation(&nodes)?,
+            Alternation(nodes) => self.choice(&nodes, |c, n| c.node(n))?,
         }
         return Ok(());
     }
@@ -174,20 +174,24 @@ impl Compiler {
         return self.flags & Flag::Multiline != Flag::none();
     }
 
-    /// `a|b|c`: each split prefers the alternative before it.
-    fn alternation(&mut self, nodes: &List<Node>) -> Result<(), PatternError> {
+    /// A choice among what `emit` compiles each of `items` to, each split
+    /// preferring the item before it.
+    fn choice<T>(
+        &mut self,
+        items: &List<T>,
+        emit: fn(&mut Compiler, &T) -> Result<(), PatternError>,
+    ) -> Result<(), PatternError>
+        contract !items.is_empty()
+    {
         let mut jumps: List<i32> = [];
-        for let i of 0..<nodes.len() {
-            if i + 1 < nodes.len() {
-                let split = self.push(Inst::Split([0, 0]))?;
-                self.node(&nodes[i])?;
-                jumps.push(self.push(Inst::Jump(0))?);
-                let next = self.pc();
-                self.patch(split, Inst::Split([split + 1, next]));
-            } else {
-                self.node(&nodes[i])?;
-            }
+        for let i of 0..<items.len() - 1 {
+            let split = self.push(Inst::Split([0, 0]))?;
+            emit(self, &items[i])?;
+            jumps.push(self.push(Inst::Jump(0))?);
+            let next = self.pc();
+            self.patch(split, Inst::Split([split + 1, next]));
         }
+        emit(self, &items[items.len() - 1])?;
         let end = self.pc();
         for let j of jumps {
             self.patch(j, Inst::Jump(end));
@@ -243,23 +247,11 @@ impl Compiler {
             self.push(Inst::Fail)?;
             return Ok(());
         }
-        let mut jumps: List<i32> = [];
-        for let i of 0..<seqs.len() {
-            let last = i + 1 == seqs.len();
-            let split = if last { -1 } else { self.push(Inst::Split([0, 0]))? };
-            for let b of &seqs[i] {
-                self.push(Inst::Byte(*b))?;
+        return self.choice(&seqs, |c, seq| {
+            for let b of seq {
+                c.push(Inst::Byte(*b))?;
             }
-            if !last {
-                jumps.push(self.push(Inst::Jump(0))?);
-                let next = self.pc();
-                self.patch(split, Inst::Split([split + 1, next]));
-            }
-        }
-        let end = self.pc();
-        for let j of jumps {
-            self.patch(j, Inst::Jump(end));
-        }
-        return Ok(());
+            return Ok(());
+        });
     }
 }
