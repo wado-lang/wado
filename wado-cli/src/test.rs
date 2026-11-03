@@ -16,6 +16,7 @@ use wado_compiler::TestSelection;
 use wado_compiler::ast::TodoMark;
 use wado_compiler::coverage::{CoverageScope, read_from_component};
 use wado_compiler::hashmap::{IndexMap, IndexSet};
+use wado_lsp::host::discovery::Disk;
 use wasmtime::component::{Component, Linker};
 use wasmtime::{Engine, GuestProfiler, Trap, UpdateDeadline};
 
@@ -103,7 +104,7 @@ impl TestGrants {
                 let root = lock(roots)
                     .entry(dir.to_path_buf())
                     .or_insert_with(|| {
-                        package_root(dir)
+                        package_root(dir, &Disk)
                             .unwrap_or_else(|| PathBuf::from("."))
                             .display()
                             .to_string()
@@ -638,7 +639,7 @@ fn pgo_profiles(runs: &[PackageRun]) -> Result<BTreeSet<PathBuf>, CliExit> {
     }
     let roots: BTreeSet<PathBuf> = files
         .iter()
-        .filter_map(|file| package_root(file.parent().expect("a test file has a directory")))
+        .filter_map(|file| package_root(file.parent().expect("a test file has a directory"), &Disk))
         .collect();
     for root in roots {
         for file in discover::package_files(&root, &|pkg| test_filters(pkg, &[]))? {

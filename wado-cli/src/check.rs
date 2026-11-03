@@ -12,6 +12,7 @@ use lexopt::Arg::Value;
 use wado_compiler::Code;
 use wado_compiler::kiln::InvocationIndex;
 use wado_compiler::path::normalize;
+use wado_lsp::host::discovery::Disk;
 
 use crate::args::{self, CliExit};
 use crate::build;
@@ -158,7 +159,7 @@ pub async fn run(opts: CheckOptions) -> Result<(), CliExit> {
         let project = build::project_at(&path, NO_PROJECT)?;
         return check_declared_worlds(&project, &opts).await;
     }
-    let project = load_nearest_manifest(&path).map_err(CliExit::error)?;
+    let project = load_nearest_manifest(&path, &Disk).map_err(CliExit::error)?;
     let world = check_world(opts.target_world.as_deref(), &path, project.as_ref());
     check_entry(&path, world, project, true, &opts, &mut Settled::default())
         .await
@@ -196,7 +197,7 @@ async fn check_declared_worlds(
             (_, Some(fq)) => CheckWorld::Target(fq.clone()),
             _ => unreachable!("a build target names exactly one world"),
         };
-        let entry_project = load_nearest_manifest(&target.entry).map_err(CliExit::error)?;
+        let entry_project = load_nearest_manifest(&target.entry, &Disk).map_err(CliExit::error)?;
         // Each entry compiles from its own invocations, so its walk passes
         // over nothing another entry's settled.
         let mut walked = Settled::default();

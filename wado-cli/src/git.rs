@@ -9,6 +9,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+use wado_lsp::host::discovery::{Disk, package_lib_entry};
 use wado_manifest::{GitTagInfo, Manifest, ProviderError};
 
 use crate::cache::{hold, root};
@@ -212,12 +213,11 @@ pub fn materialize_entry(
         Some(dir) => worktree.join(dir),
         None => worktree,
     };
-    let entry = wado_lsp::host::discovery::package_lib_entry(&pkg_dir).map_err(|message| {
-        ProviderError::InvalidManifest {
+    let entry =
+        package_lib_entry(&pkg_dir, &Disk).map_err(|message| ProviderError::InvalidManifest {
             source: pkg_dir.display().to_string(),
             message,
-        }
-    })?;
+        })?;
     Ok(entry.display().to_string())
 }
 

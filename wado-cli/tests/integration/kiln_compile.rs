@@ -71,11 +71,13 @@ export fn generate(req: Request) -> Result<Response, Error> {
 
 /// The `sources[].path` values in a serialized generator index.
 fn recorded_source_paths(index_json: &str) -> Vec<String> {
-    index_json
-        .lines()
-        .filter_map(|line| line.trim().strip_prefix("\"path\": \""))
-        .filter_map(|rest| rest.strip_suffix("\","))
-        .map(|p| p.trim_end_matches('"').to_string())
+    let index: serde_json::Value = serde_json::from_str(index_json).unwrap();
+    index["generators"]
+        .as_object()
+        .unwrap()
+        .values()
+        .flat_map(|generator| generator["sources"].as_array().unwrap())
+        .map(|source| source["path"].as_str().unwrap().to_string())
         .collect()
 }
 

@@ -14,7 +14,7 @@ use wado_compiler::{
 use wado_lsp::FilesystemCompilerHost;
 use wado_lsp::host::dependency_key;
 use wado_lsp::host::discovery::{
-    nearest_manifest_dir, normalize_path, resolve_member_manifest, slash_separated,
+    Disk, nearest_manifest_dir, normalize_path, resolve_member_manifest, slash_separated,
 };
 use wado_manifest::{DependencySource, MANIFEST_FILENAME, Manifest};
 
@@ -300,7 +300,7 @@ fn assert_diagnostic_is_attributed(diagnostic: &Diagnostic) {
 /// nearest `dir` names, keyed by its nickname, as a path relative to `base`.
 /// No manifest above `dir` names none.
 fn manifest_generators(dir: &Path, base: &Path) -> IndexMap<String, String> {
-    let Some(dir) = nearest_manifest_dir(dir) else {
+    let Some(dir) = nearest_manifest_dir(dir, &Disk) else {
         return IndexMap::new();
     };
     let manifest = read_manifest(&dir);
@@ -332,6 +332,6 @@ fn read_manifest(dir: &Path) -> Manifest {
     let path = dir.join(MANIFEST_FILENAME);
     let text = std::fs::read_to_string(&path)
         .unwrap_or_else(|e| panic!("cannot read {}: {e}", path.display()));
-    resolve_member_manifest(dir, &text)
+    resolve_member_manifest(dir, &text, &Disk)
         .unwrap_or_else(|e| panic!("{} does not parse: {e}", path.display()))
 }
