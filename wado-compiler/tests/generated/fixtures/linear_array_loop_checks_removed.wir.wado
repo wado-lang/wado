@@ -244,9 +244,9 @@ type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::pad
 
 type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>" = fn(ref "core:prelude/format.wado//Formatter", ref "core:prelude/string.wado//String");  // TypeId(84)
 
-type "functype//core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<core:linear/$tmpl$b06047956fb36b6f,core:prelude/string.wado/String>::lit$sroa[self.index]" = fn(i32, ref "core:linear//$tmpl$b06047956fb36b6f") -> ref "core:prelude/string.wado//StrSlice";  // TypeId(85)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::write_char_n$sroa[self.buf]" = fn(ref "core:prelude/string.wado//String", char, i32);  // TypeId(85)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::write_char_n$sroa[self.buf]" = fn(ref "core:prelude/string.wado//String", char, i32);  // TypeId(86)
+type "functype//core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<core:linear/$tmpl$b06047956fb36b6f,core:prelude/string.wado/String>::lit$sroa[self.index]" = fn(i32, ref "core:linear//$tmpl$b06047956fb36b6f") -> ref "core:prelude/string.wado//StrSlice";  // TypeId(86)
 
 type "functype//core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<core:linear/$tmpl$59e16269228f9c88,core:prelude/string.wado/String>::lit$sroa[self.index]" = fn(i32, ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//StrSlice";  // TypeId(87)
 
@@ -1953,23 +1953,23 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelud
     }
 }
 
+fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_char_n$sroa[self.buf]"(self, c, n) {
+    let i: i32;
+    i = 0;
+    b263: block {
+        l264: loop {
+            break_if b263 i >= n;
+            "core:prelude/string.wado/core:prelude/string.wado/String::push"(self, c);
+            i = i + 1;
+            continue l264;
+        };
+    };
+}
+
 fn "core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<core:linear/$tmpl$b06047956fb36b6f,core:prelude/string.wado/String>::lit$sroa[self.index]"(self, t) {
     return block -> ref "core:prelude/string.wado//StrSlice" {
         let $mv_arg_1: ref "core:prelude/string.wado//String";
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_view"(local.tee $mv_arg_1("core:linear/$template_segment$core:linear/$tmpl$b06047956fb36b6f"(t, 2 * self)).repr, $mv_arg_1.used);
-    };
-}
-
-fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_char_n$sroa[self.buf]"(self, c, n) {
-    let i: i32;
-    i = 0;
-    b264: block {
-        l265: loop {
-            break_if b264 i >= n;
-            "core:prelude/string.wado/core:prelude/string.wado/String::push"(self, c);
-            i = i + 1;
-            continue l265;
-        };
     };
 }
 

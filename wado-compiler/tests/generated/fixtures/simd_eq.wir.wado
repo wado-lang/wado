@@ -217,37 +217,7 @@ type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(79)
 
 type "functype//wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode" = fn(i32);  // TypeId(80)
 
-<<<<<<< HEAD
-type "functype//core:prelude/primitive.wado/u64::fmt_base$sroa[self.value]$spec0$sroa[f.buf]$dae[alt_prefix]" = fn(u64, ref "core:prelude/string.wado//String", i32, bool);  // TypeId(82)
-
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[is_negative,alt_prefix]" = fn(ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(83)
-
-type "functype//wasi/task-return" = fn(i32);  // TypeId(84)
-
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(85)
-
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(86)
-
-type "functype//wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode" = fn(i32);  // TypeId(87)
-
-type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(88)
-||||||| d9d9d1430
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[is_negative,alt_prefix]" = fn(ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(82)
-
-type "functype//core:prelude/primitive.wado/u64::fmt_base$sroa[self.value]$spec0$sroa[f.buf]$dae[alt_prefix]" = fn(u64, ref "core:prelude/string.wado//String", i32, bool);  // TypeId(83)
-
-type "functype//wasi/task-return" = fn(i32);  // TypeId(84)
-
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(85)
-
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(86)
-
-type "functype//wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode" = fn(i32);  // TypeId(87)
-
-type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(88)
-=======
 type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(81)
->>>>>>> origin/main
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -1047,6 +1017,14 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_stri
     builtin::array_copy<u8>(self.repr, start, other.repr, 0, 5);
 }
 
+fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[is_negative,alt_prefix]"(self, digit_count) {
+    if digit_count >= 2 {
+        return "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(self, digit_count);
+    }
+    "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_char_n$sroa[self.buf]"(self, 48, 2 - digit_count);
+    return "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(self, digit_count);
+}
+
 fn "core:prelude/primitive.wado/u64::fmt_base$sroa[self.value]$spec0$sroa[f.buf]$dae[alt_prefix]"(self, f, base, upper) {
     let bits_per_digit: i32;
     let digit_count: i32;
@@ -1060,14 +1038,6 @@ fn "core:prelude/primitive.wado/u64::fmt_base$sroa[self.value]$spec0$sroa[f.buf]
     digit_count = "core:prelude/primitive.wado/count_digits_u64_base"(self, bits_per_digit);
     offset = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[is_negative,alt_prefix]"(f, digit_count);
     "core:prelude/primitive.wado/write_u64_base_digits"(f.repr, offset, self, digit_count, bits_per_digit, base, upper);
-}
-
-fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[is_negative,alt_prefix]"(self, digit_count) {
-    if digit_count >= 2 {
-        return "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(self, digit_count);
-    }
-    "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_char_n$sroa[self.buf]"(self, 48, 2 - digit_count);
-    return "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(self, digit_count);
 }
 
 export fn "simd_eq.wado/$cm_export__run" as "run"
