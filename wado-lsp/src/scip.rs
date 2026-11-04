@@ -245,10 +245,10 @@ impl SymbolNames<'_, '_> {
     /// A file's path from the root, as the filesystem spells it, or a module's
     /// own name (`core:json`).
     fn module_name(&self, module: &ModuleSource) -> String {
-        self.from_root(module_uri(self.ctx.entry(), module, self.ctx.uri))
+        self.relative_to_root(module_uri(self.ctx.entry(), module, self.ctx.uri))
     }
 
-    fn from_root(&self, uri: String) -> String {
+    fn relative_to_root(&self, uri: String) -> String {
         match uri.strip_prefix(self.root) {
             Some(relative) => percent_decode(relative),
             None => uri,
@@ -262,7 +262,7 @@ impl SymbolNames<'_, '_> {
         let uri = module_uri(self.ctx.entry(), module, self.ctx.uri);
         match wado_compiler::stdlib::import_path_of_checkout_path(&percent_decode(&uri)) {
             Some(import) => import.to_string(),
-            None => self.from_root(uri),
+            None => self.relative_to_root(uri),
         }
     }
 }
