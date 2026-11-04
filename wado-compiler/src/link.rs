@@ -172,6 +172,7 @@ pub fn link(package: Package) -> FlatPackage {
         used_wasi_functions: package.used_wasi_functions,
         strip_names: package.strip_names,
         coverage_section: package.coverage_section,
+        demanded_imports_section: package.demanded_imports_section,
         codegen_flags: package.codegen_flags,
         skip_validation: package.skip_validation,
         target_world: package.target_world,

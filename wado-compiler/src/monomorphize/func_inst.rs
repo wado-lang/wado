@@ -1317,7 +1317,6 @@ impl Monomorphizer {
             is_cm_binding: false,
             is_dispatch_wrapper: false,
             is_cm_export: false,
-            is_ambient: false,
             inline_hint: generic.inline_hint,
             compiler_item: generic.compiler_item,
             export_name: generic.export_name.clone(),

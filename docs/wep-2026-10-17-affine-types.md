@@ -481,7 +481,7 @@ pub affine trait Drop with () {
   discards its fallback), and a declared effect would reach a function that
   declares none. A resource's drop is benign in its own effect, and a type
   whose `drop` performs another names it with
-  [`#[benign(E)]`](./spec-attributes.md#benigne-), which any function may
+  [`#[ambient(E)]`](./spec-effects.md#ambient-functions) (then `#[benign(E)]`), which any function may
   carry already. `AsyncCall`'s drop needs none: its signature names
   `AsyncCall`, whose field holds the `Subtask`. A flush is output
   a caller observes, so a writer that buffers ahead of a stream flushes by an

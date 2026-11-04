@@ -32,6 +32,7 @@ The lints are:
 | [`unconditional_trap`](#the-unconditional_trap-lint)       | an integer division or remainder that always traps                              |
 | [`hex_suffix_lookalike`](#the-hex_suffix_lookalike-lint)   | a hex literal ending in `_f16`, `_bf16`, `_f32` or `_f64`                       |
 | [`undecided_effects`](#the-undecided_effects-lint)         | a trait head that writes no `with` clause                                       |
+| [`undeclared_effects`](#the-undeclared_effects-lint)       | an `#[ambient]` in a program                                                    |
 | [`dead_code`](#the-dead_code-lint)                         | an unused or test-only free function or global                                  |
 | [`unused_imports`](#the-unused_imports-lint)               | a `use` bringing in a name its module never refers to                           |
 | [`unused_variables`](#the-unused_variables-lint)           | a variable or parameter nothing reads                                           |
@@ -228,6 +229,27 @@ pub trait Settled with () {
 `Undecided` warns, `Private` remarks, and `Deciding` and `Settled` report
 nothing.
 
+## The `undeclared_effects` Lint
+
+The `undeclared_effects` lint warns about each
+[`#[ambient]`](./spec-attributes.md#ambiente-) a program writes, on a function,
+a method or a global. The attribute hides an effect from every caller, which
+the effect system otherwise never allows, so only the standard library is meant
+to write one. A lint never reports in the standard library.
+
+<!-- {"fixture":"effect_attribute_outside_stdlib_warns.wado", "assert": false} -->
+
+```wado
+#[ambient(InsecureSeed)]
+fn seeded() -> i32 {
+    return draw() + 6;
+}
+```
+
+> Provisional: the rule stands until use cases show where the attribute
+> belongs outside the standard library. It may become an error, or admit some
+> uses without a warning.
+
 ## The `dead_code` Lint
 
 The `dead_code` lint warns about a free function or a global that its package
@@ -299,7 +321,7 @@ pub use { to_string } from "core:json";
 #[allow(unused_imports)]
 use { from_string } from "core:json";
 
-#[benign(Stderr)]
+#[ambient(Stderr)]
 fn quiet() {
     eprint("");
 }
@@ -326,7 +348,7 @@ written. Beyond that:
   dispatches to a method the trait declares or implements: `Doubled` for
   `doubled`, and the namespace `traits` for `tripled`. `Halved` stays unused:
   `halved` here is `Half`'s own method.
-- An effect named in `#[benign(…)]` or `#[ambient(…)]` is used there, here `Stderr`, and so is an
+- An effect named in `#[ambient(…)]` is used there, here `Stderr`, and so is an
   interface a world declaration imports or exports.
 - A namespace import is used where the module spells it: naming a member
   through it, or qualifying a case, as `parts` does. `cbor` stays unused:

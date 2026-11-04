@@ -41,6 +41,7 @@ mod kiln_loader_redirect;
 mod kiln_options;
 mod lexer_recovery;
 mod lib_aliased_import_export;
+mod lib_ambient_stderr;
 mod lib_async_task_return_free;
 mod lib_async_void_export;
 mod lib_cm_name_uniqueness;

@@ -1,11 +1,11 @@
 //! Kiln generator entry for Grog. Reads a `.proto` schema and emits Wado
 //! declarations that Grog's runtime encodes.
 
-use { Request, Response, Error, OutputFile, KilnHost, package_of, read_text } from "core:kiln";
+use { Request, Response, Error, OutputFile, package_of, read_text } from "core:kiln";
 use { EmitError, emit } from "./emit.wado";
 use { read } from "./parse.wado";
 
-export fn generate(req: Request) -> Result<Response, Error> with KilnHost {
+export fn generate(req: Request) -> Result<Response, Error> {
     let path = req.primary.path;
     let source = match read_text(req.primary.content) {
         Ok(text) => text,

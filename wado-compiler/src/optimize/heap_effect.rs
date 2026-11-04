@@ -11,7 +11,7 @@ use cranelift_entity::EntityRef;
 use crate::builtin_facts::{SideEffect, Storage};
 use crate::graph::{DisjointSets, strongly_connected_components};
 use crate::hashmap::{IndexMap, IndexSet};
-use crate::module_source::ModuleSource;
+use crate::nir::StructFieldTypes;
 use crate::nir::{FuncRef, NirFunction, NirUnaryOp};
 use crate::nir_arena::{Body, ExprId, ExprKind, NodeRef, Operand, PatId, PatKind, StmtKind};
 use crate::nir_package::NirPackage;
@@ -186,23 +186,14 @@ impl FunctionEntry {
 /// grows while they are kept.
 #[derive(Default, PartialEq)]
 struct Layouts {
-    struct_fields: IndexMap<(String, ModuleSource), Vec<TypeId>>,
+    struct_fields: StructFieldTypes,
     /// Every array type by its element, for the backing array a `List<T>` hides.
     arrays_of: IndexMap<TypeKey, Vec<TypeKey>>,
 }
 
 impl Layouts {
     fn of(project: &NirPackage, type_table: &TypeTable) -> Self {
-        let struct_fields = project
-            .structs
-            .iter()
-            .map(|s| {
-                (
-                    (s.name.clone(), s.module_source.clone()),
-                    s.fields.iter().map(|f| f.type_id).collect(),
-                )
-            })
-            .collect();
+        let struct_fields = StructFieldTypes::new(&project.structs, type_table);
         let mut arrays_of: IndexMap<TypeKey, Vec<TypeKey>> = IndexMap::default();
         for (id, ty) in type_table.all_types() {
             if let ResolvedType::BuiltinArray(element) = ty {
@@ -625,9 +616,7 @@ impl HeapEffects<'_> {
             }
             ResolvedType::GenericInstance { def, .. } if tt.is_resource_def(*def) => {}
             ResolvedType::GenericInstance { def, type_args } => {
-                if let Some(mono) = tt.monomorphized_struct(ty) {
-                    self.reach_into(mono, seen, out);
-                } else if let Some(fields) = self.struct_field_types(ty) {
+                if let Some(fields) = self.struct_field_types(ty) {
                     out.insert(tt.type_key(ty));
                     for &f in fields {
                         self.reach_into(f, seen, out);
@@ -729,25 +718,10 @@ impl HeapEffects<'_> {
 
     /// A struct's field types, the instance of a generic one included.
     fn struct_field_types(&self, ty: TypeId) -> Option<&[TypeId]> {
-        let tt = self.type_table;
-        let key = if let ResolvedType::Struct { def, type_args } = tt.get(ty) {
-            (
-                tt.struct_mangled_name(*def, type_args),
-                tt.struct_head_module(*def).clone(),
-            )
-        } else if let ResolvedType::GenericInstance { def, type_args } = tt.get(ty) {
-            (
-                tt.generic_mangled_name(*def, type_args),
-                tt.def_module(*def).clone(),
-            )
-        } else {
-            return None;
-        };
         self.cache
             .layouts
             .struct_fields
-            .get(&key)
-            .map(Vec::as_slice)
+            .of_type(ty, self.type_table)
     }
 
     /// The type of field `field` of the struct `ty` names, where it is known.

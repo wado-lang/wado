@@ -43,7 +43,7 @@ use crate::elaborator::expr::MemberOwner;
 use crate::elaborator::sem::types::DesugarKind;
 use crate::elaborator::trait_env::ImplMethodEntry;
 use crate::elaborator::types::{ImplMemberKind, RealTypeParams, VariantCaseData, VariantInfo};
-use crate::escape::unescape_bytes;
+use crate::escape::bytes_value;
 use crate::marker::WRAP_IN_CASE;
 use crate::primitive::PrimitiveType;
 use crate::{Span, token};
@@ -1290,7 +1290,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 && tt
                     .nominal_type_args(receiver)
                     .is_none_or(|args| args.is_empty());
-            if tt.type_key(arg) == tt.type_key(receiver) || bare_generic_of_arg {
+            if tt.same_type(arg, receiver) || bare_generic_of_arg {
                 (DesugarKind::NewtypeFromCollapse, arg)
             } else if tt.newtype_chain_holds(arg, receiver) {
                 (DesugarKind::NewtypeFromUnwrap, receiver)
@@ -1402,9 +1402,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return ByteLiteral::Not;
         };
         let len = match &lit.value {
-            ast::Literal::Bytes(raw) => unescape_bytes(raw).ok().map(|b| b.len()),
-            ast::Literal::IncludeBytes(raw_path) => {
-                let key = [self.home_module(lit.id).to_string(), raw_path.clone()];
+            ast::Literal::Bytes(raw, quote) => bytes_value(raw, *quote).ok().map(|b| b.len()),
+            ast::Literal::IncludeBytes(path) => {
+                let key = [self.home_module(lit.id).to_string(), path.value.clone()];
                 self.tysys.included_files.get(&key).map(Vec::len)
             }
             _ => return ByteLiteral::Not,
@@ -3482,7 +3482,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// [`Self::infer_type_args_from_assoc_bounds`] over a declared parameter
-    /// list, for a static method (`String::raw<T: ReflectTemplate<Holes =
+    /// list, for a static method (`String::format<T: ReflectTemplate<Holes =
     /// [..V]>, ..V>`), whose params come from its impl rather than a callee.
     pub(super) fn project_assoc_bound_args(
         &mut self,
@@ -4291,7 +4291,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // the method's own slot count says nothing about.
         let expected_args =
             self.expected_receiver_args(callee.type_name, callee.receiver_key, expected_type);
-        let own_slots = self
+        let [declaring_slots, own_slots] = self
             .static_call_sig(
                 callee.type_name,
                 callee.method_name,
@@ -4299,6 +4299,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 SigChoice::Any,
                 &expected_args,
             )
+<<<<<<< HEAD
             .map_or(0, |sig| sig.own_type_params().len());
         // The receiver's own level is inferred whatever the turbofish writes,
         // since it names only the method's.
@@ -4315,6 +4316,52 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             merge_turbofish_type_args(&mut written, &inferred);
         }
         let mut method_args = written;
+||||||| fd132d8d789
+            .map_or(0, |sig| sig.own_type_params().len());
+        let (impl_args, mut method_args) =
+            if !written.is_empty() && !turbofish_leaves_slot(&written, own_slots) {
+                (Vec::new(), written)
+            } else {
+                let (impl_args, inferred) = self.infer_static_call_type_args(
+                    callee.type_name,
+                    callee.method_name,
+                    raw_args,
+                    args,
+                    expected_type,
+                    span,
+                    callee.receiver_key,
+                );
+                merge_turbofish_type_args(&mut written, &inferred);
+                (impl_args, written)
+            };
+=======
+            .map_or([0, 0], |sig| {
+                [
+                    sig.declaring_type_params().len(),
+                    sig.own_type_params().len(),
+                ]
+            });
+        let names_own = !written.is_empty() && !turbofish_leaves_slot(&written, own_slots);
+        // A turbofish names only the method's own slots, so the receiver's are
+        // inferred wherever it declares any.
+        let (impl_args, mut method_args) = if names_own && declaring_slots == 0 {
+            (Vec::new(), written)
+        } else {
+            let (impl_args, inferred) = self.infer_static_call_type_args(
+                callee.type_name,
+                callee.method_name,
+                raw_args,
+                args,
+                expected_type,
+                span,
+                callee.receiver_key,
+            );
+            if !names_own {
+                merge_turbofish_type_args(&mut written, &inferred);
+            }
+            (impl_args, written)
+        };
+>>>>>>> origin/main
         // A method-level parameter bound only through another's associated
         // type (`..V` off `Holes`) is projected once the owner is inferred, as
         // the free-function path does; the bound check then sees it concrete.

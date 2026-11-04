@@ -5,7 +5,7 @@ use { Process } from "core:process";
 use { Client } from "wasi:http";
 use { Value } from "core:value";
 use { converse, message, Message, Usage } from "./anthropic.wado";
-use { tools, Workspace } from "./tools.wado";
+use { Workspace } from "./tools.wado";
 
 /// What an agent did. A run that failed keeps what it spent before the error.
 pub struct AgentRun {
@@ -53,7 +53,7 @@ pub fn run_agent(
     max_tokens: i32,
 ) -> AgentRun with (Client, Preopens, Process) {
     assert max_turns >= 1;
-    let declared = tools();
+    let declared = ws.tools();
     let mut messages = [message(&Message { role: "user", content: task })] as List<Value>;
     let [mut turns, mut calls, mut usage] = [0, [] as List<Call>, Usage {}];
     loop {

@@ -186,9 +186,16 @@ fn leading_operand(kind: &StmtKind) -> Option<Operand> {
 /// A call's argument is first when every argument ahead of it is a constant:
 /// `f({ …; Slice { … } })` is what an inlined constructor leaves in argument
 /// position, and hoisting it hands the literal to the split parameter ABI.
+/// A field access's object is first: `{ …; $v0 }.value` is what a call
+/// `sroa_param` narrowed leaves once inlined.
 fn first_evaluated(body: &Body, e: ExprId) -> ExprId {
-    let ExprKind::Call { args, .. } = &body.exprs[e].kind else {
-        return e;
+    let args = match &body.exprs[e].kind {
+        ExprKind::FieldAccess {
+            expr: Operand::Expr(object),
+            ..
+        } => return first_evaluated(body, *object),
+        ExprKind::Call { args, .. } => args,
+        _ => return e,
     };
     for arg in args {
         match arg.expr {

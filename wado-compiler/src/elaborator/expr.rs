@@ -581,10 +581,8 @@ fn slice_list_conversion(tt: &TypeTable, source: TypeId, target: TypeId) -> Opti
         _ => None,
     };
     let list_elem = |id| tt.as_list(tt.representation_head(id));
-    let same = |a: Option<TypeId>, b: Option<TypeId>| {
-        a.zip(b)
-            .is_some_and(|(a, b)| tt.type_key(a) == tt.type_key(b))
-    };
+    let same =
+        |a: Option<TypeId>, b: Option<TypeId>| a.zip(b).is_some_and(|(a, b)| tt.same_type(a, b));
     if same(slice_elem(source), list_elem(target)) {
         Some("to_list")
     } else if same(slice_elem(target), list_elem(source)) {
@@ -1071,9 +1069,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }
                 TypeTable::CHAR
             }
-            Literal::String(raw) => {
+            Literal::String(raw, quote) => {
                 let string_type = self.get_string_struct_type();
-                if let Err(message) = escape::unescape_string(raw) {
+                if let Err(message) = escape::string_value(raw, *quote) {
                     let _ = self.emit(TypeError::InvalidLiteral {
                         message,
                         span: lit.span,
@@ -1081,9 +1079,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }
                 string_type
             }
-            Literal::Bytes(raw) => {
+            Literal::Bytes(raw, quote) => {
                 let byte_list_type = self.tysys.type_table.borrow_mut().make_byte_list();
-                if let Err(message) = escape::unescape_bytes(raw) {
+                if let Err(message) = escape::bytes_value(raw, *quote) {
                     let _ = self.emit(TypeError::InvalidLiteral {
                         message,
                         span: lit.span,
@@ -1141,30 +1139,30 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }
                 string_type
             }
-            Literal::IncludeStr(raw_path) => {
-                let key = [self.home_module(lit.id).to_string(), raw_path.clone()];
+            Literal::IncludeStr(path) => {
+                let key = [self.home_module(lit.id).to_string(), path.value.clone()];
                 let string_type = self.get_string_struct_type();
                 if let Some(bytes) = self.tysys.included_files.get(&key) {
                     if std::str::from_utf8(bytes).is_err() {
                         let _ = self.emit(TypeError::InvalidLiteral {
-                            message: format!("file is not valid UTF-8: \"{raw_path}\""),
+                            message: format!("file is not valid UTF-8: {}", path.as_written()),
                             span: lit.span,
                         });
                     }
                 } else {
                     let _ = self.emit(TypeError::InvalidLiteral {
-                        message: format!("file not found: \"{raw_path}\""),
+                        message: format!("file not found: {}", path.as_written()),
                         span: lit.span,
                     });
                 }
                 string_type
             }
-            Literal::IncludeBytes(raw_path) => {
-                let key = [self.home_module(lit.id).to_string(), raw_path.clone()];
+            Literal::IncludeBytes(path) => {
+                let key = [self.home_module(lit.id).to_string(), path.value.clone()];
                 let array_u8_type = self.tysys.type_table.borrow_mut().make_byte_list();
                 if !self.tysys.included_files.contains_key(&key) {
                     let _ = self.emit(TypeError::InvalidLiteral {
-                        message: format!("file not found: \"{raw_path}\""),
+                        message: format!("file not found: {}", path.as_written()),
                         span: lit.span,
                     });
                 }
@@ -1279,6 +1277,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 Some(ident.id),
                 ident.span,
             );
+            self.record_type_name_reference(owner.id, &owner.name);
+            self.record_reference_to_def(member.id, assoc.decl);
             // Not an l-value.
             self.resolve_associated_const_body(&assoc, ctx);
             if !ident.type_args_on_prefix {
@@ -3397,7 +3397,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .find_map(|(guardless, earlier)| match earlier {
                 Pat::Narrow(earlier)
                     if *guardless
-                        && (tt.type_key(*earlier) == tt.type_key(*target)
+                        && (tt.same_type(*earlier, *target)
                             || tt.is_resource_narrowing(*earlier, *target)) =>
                 {
                     Some(format!(
@@ -3417,7 +3417,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             Literal::Number(..) | Literal::Byte(_) | Literal::Char(_) | Literal::Bool(_) => {
                 util::literal_pattern(lit).ok()?
             }
-            Literal::String(_) => {
+            Literal::String(..) => {
                 return (!self.string_pattern_mismatch(scrutinee_type)).then_some(Pat::Opaque);
             }
             // `null` is the `None` case where the scrutinee has one.

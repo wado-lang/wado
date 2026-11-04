@@ -80,11 +80,11 @@ fn "inline_array_append_nested.wado/run"() with Stdout {
     let used_8: i32;
     let used_15: i32;
     let out_32: ref "core:prelude/string.wado//String";
-    let repr_62: ref Array<u8>;
     let x: i64;
     let $sroa_c_items_128: ref "core:prelude//List<i32>";
     let q: u64;
     let tens: i32;
+    let $sroa_view_repr_561: ref Array<u8>;
     $sroa_c_items_128 = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(), used: 0 };
     i_5 = 0;
     b0: block {
@@ -110,9 +110,9 @@ fn "inline_array_append_nested.wado/run"() with Stdout {
     "inline_array_append_nested.wado/inline_array_append_nested.wado/Container::process$sroa[&mut(self.items)]"($sroa_c_items_128);
     i_5 = $sroa_c_items_128.used;
     out_32 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(20), used: 0 };
-    repr_62 = global:inline_array_append_nested.wado::$const_obj_0;
+    $sroa_view_repr_561 = global:inline_array_append_nested.wado::$const_obj_0;
     out_32.used = 4;
-    builtin::array_copy<u8>(local.tee $load_6(out_32.repr), 0, repr_62, 0, 4);
+    builtin::array_copy<u8>(local.tee $load_6(out_32.repr), 0, $sroa_view_repr_561, 0, 4);
     used_8 = i_5 < 0;
     x = builtin::i64_extend_i32_s(i_5);
     x = select i64(x < 0_i64, 0_i64 - x, x);
@@ -192,22 +192,22 @@ fn "inline_array_append_nested.wado/run"() with Stdout {
     }
     used_15 = out_32.used;
     out_32.used = used_8;
-    repr_62 = out_32.repr;
+    $sroa_view_repr_561 = out_32.repr;
     i_5 = used_15 + i_5;
     b26: block {
         l27: loop {
             break_if b26 (i_5 - used_15) < 2;
             q = x /u 100_i64;
             tens = local.tee used_8(builtin::i32_wrap_i64(x - (q * 100_i64))) / 10;
-            builtin::array_set_u8(repr_62, i_5 - 1, (48 + used_8) - (tens * 10));
-            builtin::array_set_u8(repr_62, i_5 - 2, 48 + tens);
+            builtin::array_set_u8($sroa_view_repr_561, i_5 - 1, (48 + used_8) - (tens * 10));
+            builtin::array_set_u8($sroa_view_repr_561, i_5 - 2, 48 + tens);
             i_5 = i_5 - 2;
             x = q;
             continue l27;
         };
     };
     if i_5 > used_15 {
-        builtin::array_set_u8(repr_62, used_15, 48 + builtin::i32_wrap_i64(x %u 10_i64));
+        builtin::array_set_u8($sroa_view_repr_561, used_15, 48 + builtin::i32_wrap_i64(x %u 10_i64));
     }
     $inline_core_prelude_string_wado_String__internal_push_view_51: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_51;
@@ -215,11 +215,11 @@ fn "inline_array_append_nested.wado/run"() with Stdout {
     i_5 = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
     used_8 = builtin::i32_wrap_i64(x >> 32_i64);
     i_5 = "inline_array_append_nested.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(i_5);
-    builtin::array_copy<u8>(local.tee repr_62(builtin::array_new<u8>(local.tee used_15(out_32.used) + 1)), 0, out_32.repr, 0, used_15);
-    builtin::array_set_u8(repr_62, used_15, 10);
+    builtin::array_copy<u8>(local.tee $sroa_view_repr_561(builtin::array_new<u8>(local.tee used_15(out_32.used) + 1)), 0, out_32.repr, 0, used_15);
+    builtin::array_set_u8($sroa_view_repr_561, used_15, 10);
     drop(block -> "core:prelude/types.wado//enum:CopyResult" {
         used_15 = used_15 + 1;
-        "core:rt/cm_stream_write_raw_all_u8"(used_8, repr_62, 0, used_15);
+        "core:rt/cm_stream_write_raw_all_u8"(used_8, $sroa_view_repr_561, 0, used_15);
     });
     "wasi/stream-drop-writable"(used_8);
     "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(i_5);

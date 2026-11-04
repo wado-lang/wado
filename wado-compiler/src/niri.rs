@@ -12,7 +12,7 @@ use crate::nir_arena::{
     BlockId, BlockNode, Body, ExprId, ExprKind, ExprNode, LocalSet, NodeRef, Operand, PatId,
     PatKind, StmtId, StmtKind, StmtNode,
 };
-use crate::nir_package::{AmbientStream, NirPackage};
+use crate::nir_package::NirPackage;
 use crate::nir_value_graph::{ValueId, ValueKind};
 use crate::parallel::Executor;
 use crate::primitive::PrimitiveType;
@@ -101,9 +101,6 @@ pub enum CtfeBuiltin {
     Ieee754Comparison(NirBinaryOp),
     /// `heap_base`, carrying the address it is for this package.
     HeapBase(i32),
-    /// `ambient_std{out,err}_available`, carrying what
-    /// [`NirPackage::ambient_stdio`] answers for its stream.
-    AmbientStdio(bool),
     /// `is_moved`: whether the place it reads holds the `null` a move wrote.
     IsMoved,
     /// `i32_clz` … `i64_popcnt`.
@@ -155,7 +152,6 @@ impl CtfeBuiltin {
             | Self::FloatIsNan
             | Self::Ieee754Comparison(_)
             | Self::HeapBase(_)
-            | Self::AmbientStdio(_)
             | Self::IsMoved
             | Self::BitCount(_) => false,
         }
@@ -343,9 +339,6 @@ pub(crate) fn build_ctfe_builtin_map(project: &NirPackage) -> CtfeBuiltinMap {
             Some("i32_clz" | "i64_clz") => CtfeBuiltin::BitCount(BitCount::LeadingZeros),
             Some("i32_ctz" | "i64_ctz") => CtfeBuiltin::BitCount(BitCount::TrailingZeros),
             Some("i32_popcnt" | "i64_popcnt") => CtfeBuiltin::BitCount(BitCount::Ones),
-            Some(name) if let Some(stream) = AmbientStream::of_availability_builtin(name) => {
-                CtfeBuiltin::AmbientStdio(project.ambient_stdio().writes(stream))
-            }
             Some("f32_ieee754_eq" | "f64_ieee754_eq") => {
                 CtfeBuiltin::Ieee754Comparison(NirBinaryOp::Eq)
             }

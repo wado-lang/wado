@@ -89,10 +89,7 @@ impl Reached {
     fn record_alias_refs(&mut self, body: &Body, reassigned: &LocalSet) {
         for s in reachable_stmts(body) {
             let StmtKind::Let {
-                value,
-                is_mut,
-                local_index,
-                ..
+                value, local_index, ..
             } = &body.stmts[s].kind
             else {
                 continue;
@@ -100,10 +97,10 @@ impl Reached {
             // The predicate the frame binds an alias under, and the two must
             // agree: a reference the frame aliases but this walk clobbers leaves
             // the frame holding no value for the place it just aliased.
-            if *is_mut && reassigned.contains(*local_index) {
+            if reassigned.contains(*local_index) {
                 compiler_trace!(
                     "region_seed",
-                    "alias reference skipped: let {local_index} is mut and reassigned"
+                    "alias reference skipped: let {local_index} is reassigned"
                 );
                 continue;
             }

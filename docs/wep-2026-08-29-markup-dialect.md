@@ -101,8 +101,8 @@ than the experiment it serves. An XML-strict subset avoids it, and discards the
 one advantage those positions hold over Wado-hosted.
 
 Diagnostics have two answers, and only one of them exists today. The compiler
-reports its own type errors against the generated source; only a generator's
-`emit-diagnostic` spans reach the input file. Layout preservation — emitting a
+reports its own type errors against the generated source, and no diagnostic
+reaches the input file. Layout preservation — emitting a
 module whose lines correspond to the input's — is a generator-side discipline
 needing no compiler change, but it is available only where the output is an
 in-place expansion of the input, which is to say Wado-hosted. A source map is

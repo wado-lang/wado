@@ -46,11 +46,7 @@ fn bad() {
 
 ### Ambient Effects
 
-`log_stdout` and `log_stderr` from `core:rt` are effect-less by compiler magic. They can be called from any function without effect declaration. This is _ambient authority_: no world import and no `with` annotation are required, justified by the effects being best-effort and unobservable as a dependency.
-
-### Benign Effects
-
-`#[benign(E)]` marks a function, or a global's initializer, that performs effect `E` but whose effect is observationally pure — unobservable through the function's interface, or through the global's value — so `E` is not propagated to callers. Unlike an ambient effect, a benign effect still requires the world import; only the `with E` propagation is elided. The canonical use is the global holding `HashMap`'s default seed, whose initializer consumes `InsecureSeed` for Hash DoS resistance without leaking it (the seed is unobservable because the map iterates in insertion order). See [WEP: HashMap](./wep-2026-10-01-hash-map.md).
+`#[ambient(E)]` marks a function, or a global's initializer, that performs effect `E` without propagating it to callers. Only the `with E` declaration is elided; the world import stays. `log_stdout` and `log_stderr` from `core:rt` are ambient, so they can be called from any function. So is the global holding `HashMap`'s default seed, whose initializer consumes `InsecureSeed` for Hash DoS resistance without leaking it (the seed is unobservable because the map iterates in insertion order). See [WEP: Ambient Logging Functions](./wep-2026-01-12-ambient-logging.md) and [WEP: HashMap](./wep-2026-10-01-hash-map.md).
 
 ### Generic Effects
 

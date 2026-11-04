@@ -546,6 +546,8 @@ pub enum CompilerItem {
     ReflectTemplateTail,
     /// `ReflectTemplate::raw_tail` — `tail` with escapes preserved.
     ReflectTemplateRawTail,
+    /// `ReflectTemplate::hashes` — how many `#`s delimit the template.
+    ReflectTemplateHashes,
     /// `Member::name` — the member's source field name.
     MemberName,
     /// `Member::wire_name_override` — the member's raw `#[wire(name)]` value.
@@ -967,6 +969,7 @@ impl CompilerItem {
         Self::ReflectTemplateMembers,
         Self::ReflectTemplateTail,
         Self::ReflectTemplateRawTail,
+        Self::ReflectTemplateHashes,
         Self::MemberName,
         Self::MemberWireNameOverride,
         Self::ReflectVariantDiscriminant,
@@ -1246,6 +1249,7 @@ impl CompilerItem {
             Self::ReflectTemplateMembers => "reflect_template_members",
             Self::ReflectTemplateTail => "reflect_template_tail",
             Self::ReflectTemplateRawTail => "reflect_template_raw_tail",
+            Self::ReflectTemplateHashes => "reflect_template_hashes",
             Self::MemberName => "member_name",
             Self::MemberWireNameOverride => "member_wire_name_override",
             Self::FormatterNew => "formatter_new",
@@ -1500,6 +1504,7 @@ impl CompilerItem {
             | Self::ReflectTemplateMembers
             | Self::ReflectTemplateTail
             | Self::ReflectTemplateRawTail
+            | Self::ReflectTemplateHashes
             | Self::MemberName
             | Self::MemberWireNameOverride
             | Self::FormatterNew
@@ -1889,6 +1894,7 @@ impl CompilerItem {
             | Self::ReflectTemplateMembers
             | Self::ReflectTemplateTail
             | Self::ReflectTemplateRawTail
+            | Self::ReflectTemplateHashes
             | Self::MemberName
             | Self::MemberWireNameOverride
             | Self::ReflectVariantDiscriminant
@@ -2403,20 +2409,6 @@ impl CompilerItems {
         (module.clone(), name.to_string())
     }
 
-    /// Owned `(module, name)` for a struct item, or `None` when the item has
-    /// not been registered yet — for callers that run before the declaring
-    /// stdlib module is elaborated.
-    pub fn struct_owned_opt(&self, item: CompilerItem) -> Option<(ModuleSource, String)> {
-        match self.get(item)? {
-            Resolved::Struct {
-                module_source,
-                name,
-                ..
-            } => Some((module_source.clone(), name.clone())),
-            _ => None,
-        }
-    }
-
     /// Module + variant name of a [`CompilerItemKind::Variant`] item
     /// (`Option`, `Result`).
     pub fn require_variant(&self, item: CompilerItem) -> (&ModuleSource, &str) {
@@ -2427,16 +2419,6 @@ impl CompilerItems {
                 ..
             } => (module_source, name.as_str()),
             other => kind_mismatch_ice(item, "Variant", other),
-        }
-    }
-
-    /// Module-only accessor for a variant. Kept for migration of
-    /// call sites that only need the module path (e.g.
-    /// `TypeTable::make_option`).
-    pub fn variant_module(&self, item: CompilerItem) -> Option<&ModuleSource> {
-        match self.get(item)? {
-            Resolved::Variant { module_source, .. } => Some(module_source),
-            _ => None,
         }
     }
 

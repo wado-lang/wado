@@ -208,10 +208,10 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, min_ca
 fn "core:prelude/string.wado/core:prelude/string.wado/String::format<niri_char_builtin_fold.wado/$tmpl$107f7edb16424b97,[char,i32]>$spec0$spec0$sroa[t.h1]"(t) {
     let $load_2: ref Array<u8>;
     let out_3: ref "core:prelude/string.wado//String";
-    let repr_87: ref Array<u8>;
     let x_130: i64;
     let q: u64;
     let tens: i32;
+    let $sroa_view_repr_853: ref Array<u8>;
     let new_used_875: i32;
     let start_876: i32;
     out_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 };
@@ -225,14 +225,14 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<niri_char_b
     start_876 = out_3.used;
     out_3.used = new_used_875;
     builtin::array_set_u8(local.tee $load_2(out_3.repr), start_876, 107);
-    repr_87 = global:core:prelude/string.wado::$const_obj_1;
+    $sroa_view_repr_853 = global:core:prelude/string.wado::$const_obj_1;
     if @unlikely(local.tee new_used_875(out_3.used + 1) > builtin::array_len($load_2)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_3, new_used_875);
     }
     start_876 = out_3.used;
     out_3.used = new_used_875;
-    builtin::array_copy<u8>(local.tee $load_2(out_3.repr), start_876, repr_87, 0, 1);
+    builtin::array_copy<u8>(local.tee $load_2(out_3.repr), start_876, $sroa_view_repr_853, 0, 1);
     new_used_875 = t < 0;
     x_130 = builtin::i64_extend_i32_s(t);
     x_130 = select i64(x_130 < 0_i64, 0_i64 - x_130, x_130);

@@ -164,7 +164,7 @@ fn lift_arg(type_table: &RefCell<TypeTable>, value: TirExpr, param: TypeId) -> T
         return handle_from_f64(value, param);
     }
     let table = type_table.borrow();
-    if table.type_key(value.type_id) == table.type_key(param) {
+    if table.same_type(value.type_id, param) {
         return value;
     }
     drop(table);

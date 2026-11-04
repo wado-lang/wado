@@ -171,6 +171,18 @@ pub fn i32_const(value: i32) -> TirExpr {
     )
 }
 
+/// An `i32` literal at `span`.
+pub fn int_literal(value: i64, span: Span) -> TirExpr {
+    TirExpr::new(
+        TirExprKind::IntLiteral {
+            value: value.cast_unsigned(),
+            repr: value.to_string(),
+        },
+        TypeTable::I32,
+        span,
+    )
+}
+
 /// Create an i64 literal expression.
 pub fn i64_const(value: i64) -> TirExpr {
     TirExpr::new(
@@ -868,7 +880,6 @@ pub fn make_synthetic_free_function(
         is_cm_binding: false,
         is_dispatch_wrapper: false,
         is_cm_export: false,
-        is_ambient: false,
         inline_hint: InlineHint::Auto,
         compiler_item: None,
         export_name: None,

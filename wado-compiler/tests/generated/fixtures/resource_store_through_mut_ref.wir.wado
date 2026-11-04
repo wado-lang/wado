@@ -252,12 +252,11 @@ fn "resource_store_through_mut_ref.wado/$cm_binding__wasi:http/types@0.3.0#[meth
     let $outptr: i32;
     let $result_val: ref null "wasi:http/types.wado//HeaderError";
     let $local_19: ref null "core:prelude/string.wado//String";
-    let bytes_25: ref Array<u8>;
     let ptr_26: i32;
     let ptr_37: i32;
-    bytes_25 = name.repr;
+    let arr_46: ref Array<u8>;
     ptr_26 = "mem/realloc"(0, 0, 1, 1);
-    "core:rt/gc_array_to_memory$spec0$dae[src_start]$spec0$dae[len]"(bytes_25, ptr_26);
+    "core:rt/gc_array_to_memory$spec0$dae[src_start]$spec0$dae[len]"(name.repr, ptr_26);
     $name_packed = builtin::i64_extend_i32_u(ptr_26) | 4294967296_i64;
     ptr_26 = value.used;
     ptr_37 = "mem/realloc"(0, 0, 1, ptr_26);
@@ -290,8 +289,8 @@ fn "resource_store_through_mut_ref.wado/$cm_binding__wasi:http/types@0.3.0#[meth
         $local_19 = ref.null none;
         if ptr_26 != 0 {
             ptr_26 = builtin::load_i32((($outptr + 4) + 4) + 4);
-            "core:rt/memory_into_gc_array$dae[at]"(local.tee bytes_25(builtin::array_new<u8>(local.tee ptr_37(builtin::load_i32(((($outptr + 4) + 4) + 4) + 4)))), ptr_26, ptr_37);
-            name = struct.new "core:prelude/string.wado//String" { repr: bytes_25, used: ptr_37 };
+            "core:rt/memory_into_gc_array$dae[at]"(local.tee arr_46(builtin::array_new<u8>(local.tee ptr_37(builtin::load_i32(((($outptr + 4) + 4) + 4) + 4)))), ptr_26, ptr_37);
+            name = struct.new "core:prelude/string.wado//String" { repr: arr_46, used: ptr_37 };
             if ptr_37 > 0 {
                 drop("mem/realloc"(ptr_26, ptr_37, 1, 0));
             }

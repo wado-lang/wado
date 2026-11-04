@@ -79,27 +79,27 @@ fn "array_bounds_elim_conditional_entry_oob.wado/run"() with Stdout {
     let out_16: ref "core:prelude/string.wado//String";
     let x: i64;
     let flag: bool;
-    let i_120: i32;
+    let i_117: i32;
     let arr: ref Array<u8>;
     let q: u64;
     let tens: i32;
     builtin::array_fill<i32>(local.tee repr_3(builtin::array_new<i32>(local.tee n_1(black_box(5)))), 0, 3, n_1);
     flag = black_box(0);
-    i_120 = -5;
+    i_117 = -5;
     if flag {
-        i_120 = 0;
+        i_117 = 0;
     }
     flag = 0;
     b1: block {
         l2: loop {
-            break_if b1 (i_120 < n_1) == 0;
-            if @unlikely(0 > i_120) {
+            break_if b1 (i_117 < n_1) == 0;
+            if @unlikely(0 > i_117) {
                 cold_path;
                 "core:rt/panic"(array.new_data<u8>("index out of range"), 18);
                 unreachable;
             }
-            flag = flag + builtin::array_get_value<i32>(repr_3, i_120);
-            i_120 = i_120 + 1;
+            flag = flag + builtin::array_get_value<i32>(repr_3, i_117);
+            i_117 = i_117 + 1;
             continue l2;
         };
     };
@@ -175,22 +175,22 @@ fn "array_bounds_elim_conditional_entry_oob.wado/run"() with Stdout {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_16, n_1);
         }
-        i_120 = out_16.used;
+        i_117 = out_16.used;
         out_16.used = n_1;
-        builtin::array_set_u8(out_16.repr, i_120, 45);
+        builtin::array_set_u8(out_16.repr, i_117, 45);
     } else {
     }
     if @unlikely(local.tee n_1(out_16.used + flag) > builtin::array_len(out_16.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_16, n_1);
     }
-    i_120 = out_16.used;
+    i_117 = out_16.used;
     out_16.used = n_1;
     arr = out_16.repr;
-    n_1 = i_120 + flag;
+    n_1 = i_117 + flag;
     b26: block {
         l27: loop {
-            break_if b26 (n_1 - i_120) < 2;
+            break_if b26 (n_1 - i_117) < 2;
             q = x /u 100_i64;
             tens = local.tee flag(builtin::i32_wrap_i64(x - (q * 100_i64))) / 10;
             builtin::array_set_u8(arr, n_1 - 1, (48 + flag) - (tens * 10));
@@ -200,8 +200,8 @@ fn "array_bounds_elim_conditional_entry_oob.wado/run"() with Stdout {
             continue l27;
         };
     };
-    if n_1 > i_120 {
-        builtin::array_set_u8(arr, i_120, 48 + builtin::i32_wrap_i64(x %u 10_i64));
+    if n_1 > i_117 {
+        builtin::array_set_u8(arr, i_117, 48 + builtin::i32_wrap_i64(x %u 10_i64));
     }
     $inline_core_prelude_string_wado_String__internal_push_view_43: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_43;

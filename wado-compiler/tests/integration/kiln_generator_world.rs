@@ -326,23 +326,6 @@ fn generator_with_extra_export_compiles_to_valid_component() {
     assert!(result.wasm.starts_with(b"\0asm"), "not component-shaped");
 }
 
-/// A generator reaching a `core:*` module that itself imports WASI must not
-/// pick up that import: the Kiln linker offers only `core:kiln/kiln-host` and
-/// insecure `wasi:random`, so any other `wasi:*` interface carrying a function fails
-/// instantiation.
-///
-/// `core:log` is no `wasi:` import at the source level, so the `use`-site check
-/// cannot see this and the guarantee is asserted on the emitted component.
-const CORE_LOG_GENERATOR: &str = r#"
-use { Request, Response, Error } from "core:kiln";
-use { info } from "core:log";
-
-export fn generate(req: Request) -> Result<Response, Error> {
-    info(`generating`, { path: req.primary.path });
-    return Result::Ok(Response { files: [] });
-}
-"#;
-
 /// The `wasi:` interfaces a generator's import plan carries, each with the kind
 /// codegen emits it as. `wit_import_plan` pins the plan against the component's
 /// actual imports, so reading the plan reads what the linker will be asked for.
@@ -375,30 +358,8 @@ fn function_bearing(imports: &[(String, ImportKind)]) -> Vec<&str> {
         .collect()
 }
 
-#[test]
-fn generator_using_core_log_adds_no_wasi_import() {
-    // A panic drops the future stderr hands back, whose payload names the cli
-    // `error-code`, so even this generator carries `wasi:cli/types`, and
-    // nothing more.
-    let baseline = wasi_imports_of(NOOP_GENERATOR, "noop generator");
-    assert!(
-        baseline
-            .iter()
-            .all(|(_, kind)| *kind == ImportKind::SharedTypes),
-        "a generator that only answers `generate` needs no WASI the linker provides, got {baseline:?}"
-    );
-
-    // With no stderr to write, `log_stderr` returns before opening a stream, so
-    // even the `wasi:cli/types` error-code its write future carries folds away.
-    let with_log = wasi_imports_of(CORE_LOG_GENERATOR, "core:log generator");
-    assert!(
-        with_log.is_empty(),
-        "core:log added {with_log:?}, a WASI import the generator world lacks"
-    );
-}
-
-/// `HashMap::new()` reads `DEFAULT_HASH_SEED`, whose `#[benign]` initializer
-/// asks the host: `#[benign]` waives the effect, not the world import, and the
+/// `HashMap::new()` reads `DEFAULT_HASH_SEED`, whose `#[ambient]` initializer
+/// asks the host: `#[ambient]` waives the effect, not the world import, and the
 /// generator world imports `wasi:random/insecure-seed`.
 const DEFAULT_SEED_MAP_GENERATOR: &str = r#"
 use { Request, Response, Error } from "core:kiln";
@@ -413,16 +374,19 @@ export fn generate(req: Request) -> Result<Response, Error> {
 
 #[test]
 fn generator_hashing_under_the_default_seed_imports_insecure_seed() {
-    let imports = wasi_imports_of(DEFAULT_SEED_MAP_GENERATOR, "default-seed generator");
-    assert_eq!(
-        function_bearing(&imports),
-        ["wasi:random/insecure-seed@0.3.0"]
-    );
+    let default = wasi_imports_of(DEFAULT_SEED_MAP_GENERATOR, "default-seed generator");
+    let fixed = wasi_imports_of(FIXED_SEED_MAP_GENERATOR, "fixed-seed generator");
+    let fixed = function_bearing(&fixed);
+    let added: Vec<&str> = function_bearing(&default)
+        .into_iter()
+        .filter(|fq| !fixed.contains(fq))
+        .collect();
+    assert_eq!(added, ["wasi:random/insecure-seed@0.3.0"]);
 }
 
 /// A map under a fixed seed leaves `DEFAULT_HASH_SEED` unread, so its
-/// initializer goes, and the import only it reached goes with it, at every
-/// optimization level.
+/// initializer goes, and `insecure-seed`, which only it reached, goes with it,
+/// at every optimization level. What stays is the stdio a panic writes.
 const FIXED_SEED_MAP_GENERATOR: &str = r#"
 use { Request, Response, Error } from "core:kiln";
 use { HashMap, HashSeed } from "core:collections";
@@ -435,12 +399,14 @@ export fn generate(req: Request) -> Result<Response, Error> {
 "#;
 
 #[test]
-fn generator_hashing_under_a_fixed_seed_adds_no_wasi_import() {
+fn generator_hashing_under_a_fixed_seed_imports_only_stdio() {
     for opt_level in [OptLevel::O0, OptLevel::O2] {
         let imports = wasi_imports_at(FIXED_SEED_MAP_GENERATOR, "fixed-seed generator", opt_level);
         let provided = function_bearing(&imports);
         assert!(
-            provided.is_empty(),
+            provided
+                .iter()
+                .all(|fq| ["wasi:cli/stdout@0.3.0", "wasi:cli/stderr@0.3.0"].contains(fq)),
             "a fixed-seed map imported {provided:?} at {opt_level:?}"
         );
     }

@@ -222,11 +222,11 @@ module cannot capture the name. Fixture:
 An effect parameter (`<effect E>`) names that parameter. A type parameter names
 no effect. A name reaching no `interface` or resource is rejected where it is
 written, even when another module declares an effect of that name. So
-`with Stdout` needs `Stdout` in scope like any other name. `#[benign(E)]` is
+`with Stdout` needs `Stdout` in scope like any other name. `#[ambient(E)]` is
 held to the same rule, and so is a bare operation call: `use { E::{op} }` brings
 `op` into scope but not `E`, and the call still requires `E`. Fixtures:
 `error_with_unknown_effect.wado`, `error_with_type_param_effect.wado`,
-`error_benign_unknown_effect.wado`,
+`error_ambient_unknown_effect.wado`,
 `error_with_bare_operation_import_missing_effect.wado`.
 
 ### 4. Queries take identities, never a name beside one
@@ -515,7 +515,7 @@ The one scope, which every other entry exists by not being:
 
 - `Scopes::resolve`, `resolve_value`
 - `Resolutions::resolve_in` — the same scope, for a spelling no walk visits,
-  such as the attribute argument in `#[benign(E)]`
+  such as the attribute argument in `#[ambient(E)]`
 
 Two single tiers of that scope, each for a caller asking about that tier alone:
 

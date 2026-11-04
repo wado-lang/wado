@@ -267,7 +267,6 @@ fn make_trait_method(
         is_cm_binding: false,
         is_dispatch_wrapper: false,
         is_cm_export: false,
-        is_ambient: false,
         inline_hint: InlineHint::Auto,
         compiler_item: None,
         export_name: None,
@@ -450,14 +449,13 @@ fn generate_struct_reflect_impls(
         return;
     }
 
-    let module_source = module.module_source.clone();
     let env = ReflectSynthEnv::resolve(&mut module.type_table.borrow_mut());
 
     let mut generated = Vec::new();
     for target in &targets {
         let tt = module.type_table.borrow();
         let eligible = tt
-            .find_decl_type_by_name(&target.name, &module_source)
+            .find_struct_type(target.def)
             .is_some_and(|type_id| tt.is_reflect_eligible(type_id));
         drop(tt);
         if !eligible {
@@ -492,9 +490,6 @@ struct ReflectFieldInfo {
 /// A struct selected for `ReflectStruct` synthesis. `type_params` is empty for
 /// a plain struct; a generic one gets a single impl over `S<T, …>`.
 struct ReflectTarget {
-    name: String,
-    /// The declaration selected, carried from the `TirStruct` rather than
-    /// looked back up by `name`.
     def: StructDef,
     /// The head every synthesised method of this target hangs off, rendered
     /// once from [`Self::def`] so no sub-pass spells the receiver.
@@ -531,7 +526,6 @@ fn collect_reflect_targets(module: &TirModule) -> Vec<ReflectTarget> {
             StructDef::Decl(_) => true,
         })
         .map(|s| ReflectTarget {
-            name: s.name.clone(),
             def: s.def,
             receiver: tt.fq_struct_head(s.def),
             type_params: s.type_params.clone(),
@@ -571,7 +565,6 @@ fn generate_struct_reflect_methods(
     target: &ReflectTarget,
 ) -> Vec<TirFunction> {
     let ReflectTarget {
-        name: _,
         def,
         receiver,
         type_params,
@@ -1567,22 +1560,25 @@ fn generate_decl_name_fn(
     decl_name_method: &str,
     span: Span,
 ) -> TirFunction {
-    let method_info = trait_method_info(receiver, reflect_trait_name, decl_name_method);
-    let qualified_name = method_info.to_mangled_name();
+    constant_method(
+        trait_method_info(receiver, reflect_trait_name, decl_name_method),
+        TirExpr::new(
+            TirExprKind::StringLiteral(display_name.to_string()),
+            string_type,
+            span,
+        ),
+    )
+}
 
-    let literal = TirExpr::new(
-        TirExprKind::StringLiteral(display_name.to_string()),
-        string_type,
-        span,
-    );
-    let body = TirBlock::new(vec![return_stmt(literal, span)], span);
-
+/// A static method returning `value`, a constant of the type it is synthesized for.
+fn constant_method(method_info: LocalMethodName, value: TirExpr) -> TirFunction {
+    let (return_type, span) = (value.type_id, value.span);
     make_synthetic_method(
-        qualified_name,
+        method_info.to_mangled_name(),
         method_info,
         vec![],
-        string_type,
-        body,
+        return_type,
+        TirBlock::new(vec![return_stmt(value, span)], span),
         vec![],
     )
 }
@@ -1664,7 +1660,7 @@ fn generate_template_reflect_impls(
             view: method_ref(&tt, CompilerItem::StringView),
         }
     };
-    let (members_method, tail_method, raw_tail_method) = {
+    let (members_method, tail_method, raw_tail_method, hashes_method) = {
         let tt = module.type_table.borrow();
         let items = tt.compiler_items();
         (
@@ -1676,6 +1672,9 @@ fn generate_template_reflect_impls(
                 .to_string(),
             items
                 .method_name(CompilerItem::ReflectTemplateRawTail)
+                .to_string(),
+            items
+                .method_name(CompilerItem::ReflectTemplateHashes)
                 .to_string(),
         )
     };
@@ -1751,6 +1750,10 @@ fn generate_template_reflect_impls(
             members_fn,
             tail_fn(&tail_method, false),
             tail_fn(&raw_tail_method, true),
+            constant_method(
+                trait_method_info(receiver, template_trait_name, &hashes_method),
+                common::int_literal(target.shape.quote.hash_count() as i64, span),
+            ),
         ];
         // An open shape's hole bridges would group its holes by a parameter,
         // which two holes may share only once substituted, so each concrete
@@ -1788,7 +1791,6 @@ fn generate_template_tail_fn(
     method_info: LocalMethodName,
     span: Span,
 ) -> TirFunction {
-    let qualified_name = method_info.to_mangled_name();
     let segment = field_access_local(
         0,
         "t",
@@ -1814,7 +1816,7 @@ fn generate_template_tail_fn(
     }];
     let locals = locals_from_params(&params);
     make_synthetic_method(
-        qualified_name,
+        method_info.to_mangled_name(),
         method_info,
         params,
         tail_view.view_type,
@@ -1957,7 +1959,7 @@ fn collect_reflect_variant_targets(module: &TirModule) -> Vec<ReflectVariantTarg
         .iter()
         .filter(|v| {
             let tt = module.type_table.borrow();
-            tt.find_decl_type_by_name(&v.name, &v.module_source)
+            tt.find_named_type_by_def(v.def)
                 .is_some_and(|type_id| tt.is_reflect_eligible(type_id))
         })
         .map(|v| ReflectVariantTarget {

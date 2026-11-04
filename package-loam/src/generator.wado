@@ -2,17 +2,8 @@
 //! conditions, and emits the axis types a checked graph earns; or reads a
 //! `tokenizer.json` and emits its `Tokenizer`.
 
-use {
-    Request,
-    Response,
-    Error as KilnError,
-    OutputFile,
-    KilnHost,
-    Diagnostic as KilnDiagnostic,
-    DiagnosticLevel,
-    package_of,
-    read_all,
-} from "core:kiln";
+use { Request, Response, Error as KilnError, OutputFile, package_of, read_all } from "core:kiln";
+use { NoFields, info } from "core:log";
 use { CheckpointFile } from "./safetensors.wado";
 use {
     Spelling,
@@ -68,7 +59,7 @@ export fn probe(content: Stream<u8>, type: Option<String>) -> Result<u64, KilnEr
 
 // A stream is outside drop elaboration, so every one is consumed or dropped
 // before the first return that could leave it open.
-export fn generate(req: Request<Options>) -> Result<Response, KilnError> with KilnHost {
+export fn generate(req: Request<Options>) -> Result<Response, KilnError> {
     let Some(runtime) = package_of(&req.module) else {
         let reason = `loam: invoked by the path ${req.module}; name it by the package spec its runtime is a dependency under`;
         return refused(req, KilnError::Unsupported(reason));
@@ -92,12 +83,24 @@ export fn generate(req: Request<Options>) -> Result<Response, KilnError> with Ki
 }
 
 /// An ONNX graph spelled as `spelling`, checked against the checkpoints in its
+<<<<<<< HEAD
 /// inputs, as the module its `compute` runs in.
 fn generate_graph(
     req: Request<Options>,
     spelling: Spelling,
     runtime: &String,
 ) -> Result<Response, KilnError> with KilnHost {
+||||||| fd132d8d789
+/// inputs, as the module its `forward` runs in.
+fn generate_graph(
+    req: Request<Options>,
+    spelling: Spelling,
+    runtime: &String,
+) -> Result<Response, KilnError> with KilnHost {
+=======
+/// inputs, as the module its `forward` runs in.
+fn generate_graph(req: Request<Options>, spelling: Spelling, runtime: &String) -> Result<Response, KilnError> {
+>>>>>>> origin/main
     if let Some(input) = req.inputs.iter_ref().find(
         |input| !input.type matches { Some("safetensors") | Some("safetensors-index") },
     ) {
@@ -122,10 +125,6 @@ fn generate_graph(
     };
     let model = checked.map_err(|e| KilnError::InvalidSchema(e))?;
     let source = generate_model(&model, &path, weights?, runtime).map_err(|e| KilnError::InvalidSchema(e))?;
-    KilnHost::emit_diagnostic(KilnDiagnostic {
-        level: DiagnosticLevel::Hint,
-        span: null,
-        message: `loam: ${model.graph.name}: ${model.graph.nodes.len()} operators checked`,
-    });
+    info(`${model.graph.name}: ${model.graph.nodes.len()} operators checked`, NoFields {}, "loam");
     return Result::Ok(entry("model.wado", source));
 }

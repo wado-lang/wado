@@ -69,7 +69,7 @@ mise run format          # format Rust, Markdown, and Wado files
 
 ## Tooling
 
-- Make every edit with the editing tools, never a shell rewrite (`sed`, `awk`, a script), however bulk the change.
+- Make every edit with the editing tools, never a shell rewrite (`sed`, `awk`, a script), however bulk the change. The one exception is renaming a Rust symbol with `wado-dev-tools rust-rename`, which edits where rust-analyzer resolves the name rather than where the text matches.
 - Run a long job (`mise run test`, `test-wado`, `update-golden-fixtures`) in the background, one per invocation. Run one heavy job at a time; two starve each other.
 - `test`, `test-wado`, `test-stdlib`, `test-gale-o2` and `test-fuel` refuse to start while another of the same is running (`test-e2e` counts as `test`, and `update-baselines` as `test-fuel`), naming the holder's pid — where `flock` exists; `scripts/exclusive.sh` says so on stderr and runs unlocked where it does not. Abandoning a job does not stop it, so restarting after an edit means killing that pid first.
 - Redirect a job's output to a file and read the file, so what you did not anticipate is still there. Scratch files go in `scratchpad/`: it is git-ignored, so `git add -A` leaves them out, and per worktree, so concurrent sessions do not overwrite each other's. A fixed path under `/tmp` is shared by every session.
@@ -167,6 +167,7 @@ hand-authored layout. Naming a file bypasses the exclusion, so never
 - `package-grog/` — a Protocol Buffers compiler in Wado: a `.proto` becomes Wado declarations, and the runtime library encodes them.
 - `package-jade/` — a JSON Schema 2020-12 validator in Wado.
 - `package-marl/` — a CommonMark subset in Wado.
+- `package-re/` — linear-time regular expressions in ECMA-262's syntax.
 - `package-loam/` — a tensor compiler in Wado: an ONNX graph becomes Wado source, shapes checked at build time.
 - `package-wadopoet/` — builders for generated Wado source, and the reserved vocabulary a minted name must avoid.
 - `package-web/` — `wado-lang:web`: the web platform bindings, their browser glue, and `SurfaceDom`, a DOM without a browser engine that serves them under `wado test`, `wado run` and `wado serve`.

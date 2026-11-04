@@ -1,0 +1,18 @@
+// A failing assert renders its operand through `Inspect`, which walks
+// `ReflectVariant::members()`. The caller is cold, so the inliner leaves the
+// call in place, and `const_fold` must still write the case list back as a
+// literal. Its element type is the generic `VariantCase<E, i32>`, an instance
+// no declaration names.
+variant E { A(i32), B }
+
+export fn run() {
+    let e: E = builtin::black_box(E::A(1));
+    assert e matches { A(_) };
+}
+
+__DATA__
+{
+    "wir_not_expect:O2": [
+        "ReflectVariant::members"
+    ]
+}

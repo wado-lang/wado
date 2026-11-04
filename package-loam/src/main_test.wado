@@ -2,7 +2,7 @@
 //!
 //! Each test writes its files under `target/`, which `wado test` grants, and
 //! runs `loam` on them. The Kiln generator runs under `Inputs`, which serves the
-//! input files' streams, and `Host`, which takes its diagnostics.
+//! input files' streams.
 
 use { loam } from "./main.wado";
 use { Report } from "./dump.wado";
@@ -11,7 +11,7 @@ use { generate as kiln_generate, Options } from "./generator.wado";
 use { StoredTensor, write_safetensors } from "./safetensors.wado";
 use fs from "core:fs";
 use { Preopens } from "core:fs";
-use { Request, Response, Error as KilnError, InputFile, KilnHost, Diagnostic as KilnDiagnostic } from "core:kiln";
+use { Request, Response, Error as KilnError, InputFile } from "core:kiln";
 
 global GRAPH: String = "<ir_version: 8, opset_import: [ \"\" : 13 ]>
 g (float[N, 2] X) => (float[N, 3] Y, float[N, 3] Z)
@@ -72,15 +72,6 @@ impl Stream<u8> for Inputs {
     ..trap
 }
 
-struct Host {
-}
-
-impl KilnHost for Host {
-    fn emit_diagnostic(&mut self, diagnostic: KilnDiagnostic) {
-        resume ();
-    }
-}
-
 /// The entry module the Kiln generator builds from `primary`, `[path, content,
 /// type]`, under `options`.
 fn kiln(primary: [String, ByteList, String], options: Options) -> String with (Stream, StreamWritable) {
@@ -95,7 +86,7 @@ fn kiln(primary: [String, ByteList, String], options: Options) -> String with (S
         module: "lib:loam",
         options,
     };
-    let result: Result<Response, KilnError> = with &mut inputs, &mut Host {} do {
+    let result: Result<Response, KilnError> = with &mut inputs do {
         kiln_generate(request);
     };
     let response = result.unwrap();

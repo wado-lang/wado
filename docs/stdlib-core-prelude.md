@@ -297,7 +297,15 @@ it has none — with escapes processed.
 
 `#[compiler_item("reflect_template_raw_tail")]`
 
-`tail(t)` with escapes preserved.
+`tail(t)` as written: a cooked template's escapes preserved, a raw
+template's text itself.
+
+#### `fn hashes() -> i32`
+
+`#[compiler_item("reflect_template_hashes")]`
+
+How many `#`s delimit the template on each end: 0 for `` `…` ``, 1 for
+``#`…`#``.
 
 ### `pub trait Ref with ()`
 
@@ -4949,12 +4957,6 @@ Create a new empty string.
 The tag an untagged template is sugar for: every hole rendered through
 its specifier into one buffer. `` `x=${x}` `` is
 `` String::format`x=${x}` ``. See WEP 2026-01-10.
-
-#### `pub fn raw<T: ReflectTemplate<Holes = [..V]>, affine ..V>(t: T) -> String`
-
-The tag keeping a template's escapes as written: `` String::raw`a\nb` ``
-is `"a\\nb"`, its holes rendered as `String::format` renders them. See
-WEP 2026-01-10.
 
 #### `pub fn with_capacity(capacity: i32) -> String`
 

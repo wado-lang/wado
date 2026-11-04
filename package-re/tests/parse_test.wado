@@ -1,0 +1,320 @@
+use { ClassItem, Flag, Group, Modified, Node } from "../src/ast.wado";
+use { Hole, PatternError, Syntax, parse } from "../src/parse.wado";
+
+fn code(c: u32) -> String {
+    if c > 0x20 && c < 0x7F {
+        return `${char::from_u32(c)}`;
+    }
+    return `U+${c:04X}`;
+}
+
+fn flags(f: Flag) -> String {
+    let mut out = "";
+    if f & Flag::IgnoreCase != Flag::none() {
+        out.push('i');
+    }
+    if f & Flag::Multiline != Flag::none() {
+        out.push('m');
+    }
+    if f & Flag::DotAll != Flag::none() {
+        out.push('s');
+    }
+    return out;
+}
+
+fn item(i: &ClassItem) -> String {
+    return match *i {
+        Range([lo, hi]) => if lo == hi { code(lo) } else { `${code(lo)}-${code(hi)}` },
+        Named(set) => {
+            let [letter, rest] = match set.kind {
+                Digit => ['d', ""],
+                Word => ['w', ""],
+                Space => ['s', ""],
+                Property(p) => ['p', `{${p.name}}`],
+            };
+            `\\${if set.negated { letter.to_ascii_uppercase() } else { letter }}${rest}`;
+        },
+    };
+}
+
+fn seq(nodes: &List<Node>) -> String {
+    let mut parts: List<String> = [];
+    for let n of nodes {
+        parts.push(show(n));
+    }
+    return parts.join(" ");
+}
+
+/// A compact rendering of the tree, one form per node.
+fn show(node: &Node) -> String {
+    return match *node {
+        Char(c) => code(c),
+        Any => ".",
+        Start => "^",
+        End => "$",
+        WordBoundary => #"\b"#,
+        NotWordBoundary => #"\B"#,
+        Set(set) => {
+            let mut parts: List<String> = [];
+            for let i of &set.items {
+                parts.push(item(i));
+            }
+            `[${if set.negated { "^" } else { "" }}${parts.join(" ")}]`;
+        },
+        Group(g) => {
+            let head = match g.index {
+                Some(n) => match g.name {
+                    Some(name) => `${n}<${name}>`,
+                    None => `${n}`,
+                },
+                None => "?:",
+            };
+            `(${head} ${show(&g.body)})`;
+        },
+        Modified(m) => `(?${flags(m.add)}-${flags(m.remove)} ${show(&m.body)})`,
+        Repeat(r) => {
+            let max = match r.max {
+                Some(m) => `${m}`,
+                None => "",
+            };
+            `{${r.min},${max}${if r.greedy { "" } else { "?" }} ${show(&r.body)}}`;
+        },
+        Concat(nodes) => `(cat ${seq(&nodes)})`,
+        Alternation(nodes) => `(alt ${seq(&nodes)})`,
+    };
+}
+
+fn tree(pattern: String) -> String {
+    let [node, _] = parse(pattern.as_str_slice(), Syntax::Plain).unwrap();
+    return show(&node);
+}
+
+fn ext(pattern: String) -> String {
+    let [node, _] = parse(pattern.as_str_slice(), Syntax::Extended).unwrap();
+    return show(&node);
+}
+
+fn error(pattern: String) -> String {
+    return `${parse(pattern.as_str_slice(), Syntax::Plain).unwrap_err()}`;
+}
+
+/// `pattern` with a hole holding the group `(H)`, or `(?<h>H)` where `named`,
+/// at each of `offsets`.
+fn holed(
+    pattern: String,
+    offsets: List<i32>,
+    syntax: Syntax = Syntax::Plain,
+    named: bool = false,
+) -> Result<[Node, i32], PatternError> {
+    let mut holes: List<Hole> = [];
+    for let offset of offsets {
+        let name: Option<String> = if named { Some("h") } else { null };
+        let node = Node::Group(Group {
+            index: Some(1),
+            name,
+            body: Node::Char('H' as u32),
+        });
+        holes.push(Hole { offset, node });
+    }
+    return parse(pattern.as_str_slice(), syntax, holes);
+}
+
+fn holed_tree(pattern: String, offsets: List<i32>) -> String {
+    let [node, groups] = holed(pattern, offsets).unwrap();
+    return `${groups} ${show(&node)}`;
+}
+
+fn holed_error(pattern: String, offsets: List<i32>, syntax: Syntax = Syntax::Plain, named: bool = false) -> String {
+    return `${holed(pattern, offsets, syntax, named).unwrap_err()}`;
+}
+
+test "a hole is an atom, its groups numbered where it stands" {
+    assert holed_tree(#"a*"#, [1]) == "1 (cat a {0, (1 H)})";
+    assert holed_tree(#"(x)"#, [0, 3, 3]) == "4 (cat (1 H) (2 x) (3 H) (4 H))";
+    assert holed_tree(#"|"#, [1]) == "1 (alt (cat ) (1 H))";
+    // A hole parts the halves of a surrogate pair.
+    assert holed_tree(#"\uD800\uDC00"#, [6]) == "1 (cat U+D800 (1 H) U+DC00)";
+}
+
+test "a hole stands only where an atom may" {
+    let message = "a hole may stand only where an atom may";
+    assert holed_error(#"[]"#, [1]) == `${message} (at byte 1)`;
+    assert holed_error(#"\"#, [1]) == `${message} (at byte 1)`;
+    assert holed_error(#"a{}"#, [2]) == `${message} (at byte 2)`;
+    assert holed_error(#"(?<>a)"#, [3]) == `${message} (at byte 3)`;
+    assert holed_error(#"(?:)"#, [2]) == `${message} (at byte 2)`;
+    assert holed_error(#"x # c"#, [5], Syntax::Extended) == `${message} (at byte 5)`;
+    // A raw string cannot end the line the comment needs ended.
+    assert holed_error("x # c\n", [5], Syntax::Extended) == `${message} (at byte 5)`;
+}
+
+test "a hole's group names are checked against the pattern's" {
+    assert holed_error(#"(?<h>a)"#, [7], Syntax::Plain, true) == "two groups are named `h` (at byte 7)";
+    assert holed_error(#"(?<h>a)"#, [0], Syntax::Plain, true) == "two groups are named `h` (at byte 0)";
+    assert holed_error(#""#, [0, 0], Syntax::Plain, true) == "two groups are named `h` (at byte 0)";
+}
+
+test "a sequence, an alternation and the empty pattern" {
+    assert tree(#"abc"#) == "(cat a b c)";
+    assert tree(#"a|bc|"#) == "(alt a (cat b c) (cat ))";
+    assert tree(#""#) == "(cat )";
+}
+
+test "quantifiers" {
+    assert tree(#"a*b+?c?"#) == "(cat {0, a} {1,? b} {0,1 c})";
+    assert tree(#"a{2}b{2,}c{2,5}?"#) == "(cat {2,2 a} {2, b} {2,5? c})";
+    assert tree(#"a{4294967295}"#) == "{4294967295,4294967295 a}";
+}
+
+test "groups count their opening parentheses" {
+    assert tree(#"(a(b))(?<n>c)(?:d)"#) == "(cat (1 (cat a (2 b))) (3<n> c) (?: d))";
+    assert parse(#"(a)(?:b)((c))"#.as_str_slice(), Syntax::Plain).unwrap().1 == 3;
+    assert tree(#"(?<$_ab1\u0063>x)"#) == "(1<$_ab1c> x)";
+}
+
+test "modifiers" {
+    assert tree(#"(?m:a)(?-ms:b)(?s-i:c)"#) == "(cat (?m- a) (?-ms b) (?s-i c))";
+}
+
+test "i is refused at the modifier, until core:icu folds case" {
+    assert error(#"abc(?mi:x)"#) == "the `i` modifier needs simple case folding, which core:icu does not offer yet (at byte 6)";
+}
+
+test "assertions and the dot" {
+    assert tree(#"^.\b\B$"#) == #"(cat ^ . \b \B $)"#;
+}
+
+test "classes" {
+    assert tree(#"[a-z0_]"#) == "[a-z 0 _]";
+    assert tree(#"[^-a-]"#) == "[^- a -]";
+    assert tree(#"[]"#) == "[]";
+    assert tree(#"[α-ω]"#) == "[U+03B1-U+03C9]";
+    assert tree(#"[\d\W\b\-\]]"#) == #"[\d \W U+0008 - ]]"#;
+    assert tree(#"\d\S"#) == #"(cat [\d] [\S])"#;
+}
+
+test "escapes" {
+    assert tree(#"\n\t\f\v\r\0"#) == "(cat U+000A U+0009 U+000C U+000B U+000D U+0000)";
+    assert tree(#"\x41\u0042\u{1F600}\cJ\/\.\$"#) == "(cat A B U+1F600 U+000A / . $)";
+    assert tree(#"\uD83D\uDE00"#) == "U+1F600";
+    assert tree(#"\uD83D"#) == "U+D83D";
+}
+
+fn property(pattern: String) -> List<[u32, u32]> {
+    let [node, _] = parse(pattern.as_str_slice(), Syntax::Plain).unwrap();
+    let Set(set) = node else {
+        unreachable();
+    };
+    let Named(named) = set.items[0] else {
+        unreachable();
+    };
+    let Property(p) = named.kind else {
+        unreachable();
+    };
+    return p.ranges;
+}
+
+test "Unicode properties read core:icu's names" {
+    assert tree(#"\p{L}"#) == #"[\p{L}]"#;
+    assert tree(#"\P{Lu}"#) == #"[\P{Lu}]"#;
+    assert tree(#"[\p{gc=Nd}]"#) == #"[\p{gc=Nd}]"#;
+    assert property(#"\p{White_Space}"#)[0] == [0x09, 0x0D];
+    assert property(#"\p{sc=Hiragana}"#)[0] == [0x3041, 0x3096];
+    assert property(#"\p{gc=Nd}"#)[0] == [0x30, 0x39];
+}
+
+test "ECMA-262's own properties" {
+    assert property(#"\p{Any}"#) == [
+        [0, 0x10FFFF],
+    ];
+    assert property(#"\p{ASCII}"#) == [
+        [0, 0x7F],
+    ];
+    let assigned = property(#"\p{Assigned}"#);
+    assert assigned[0] == [0, 0x377];
+    assert assigned[1].0 == 0x37A;
+}
+
+test "rex ignores whitespace and comments outside a class" {
+    // A raw string cannot hold the newline that ends the comment.
+    assert ext("a b # c\n  d") == "(cat a b d)";
+    assert ext(#"\d +"#) == #"{1, [\d]}"#;
+    assert ext(#"[ #]"#) == "[U+0020 #]";
+    assert ext(#"\ \#"#) == "(cat U+0020 #)";
+}
+
+test "lookaround and backreferences name why they are refused" {
+    assert error(#"a(?=b)"#) == "lookahead `(?=` `(?!` cannot be matched in linear time (at byte 1)";
+    assert error(#"(?!b)"#) == "lookahead `(?=` `(?!` cannot be matched in linear time (at byte 0)";
+    assert error(#"(?<=b)"#) == "lookbehind `(?<=` `(?<!` cannot be matched in linear time (at byte 0)";
+    assert error(#"(?<!b)"#) == "lookbehind `(?<=` `(?<!` cannot be matched in linear time (at byte 0)";
+    assert error(#"(a)\1"#) == "a backreference cannot be matched in linear time (at byte 3)";
+    assert error(#"(?<n>a)\k<n>"#) == #"a backreference `\k<name>` cannot be matched in linear time (at byte 7)"#;
+}
+
+test "syntax errors point at the offending character" {
+    assert error(#"a**"#) == "nothing to repeat (at byte 2)";
+    assert error(#"^*"#) == "an assertion cannot be repeated (at byte 0)";
+    assert error(#"(a"#) == "unclosed group (at byte 0)";
+    assert error(#"a)"#) == "unmatched `)` (at byte 1)";
+    assert error(#"]"#) == #"unmatched `]`; write `\]` for a literal one (at byte 0)"#;
+    assert error(#"{"#) == #"nothing to repeat; write `\{` for a literal `{` (at byte 0)"#;
+    assert error(#"a{2,1}"#) == "the count's maximum is below its minimum (at byte 1)";
+    assert error(#"a{x}"#) == "a count needs a number, as in `{2}` (at byte 1)";
+    assert error(#"a{4294967296}"#) == "a count may be at most 4294967295 (at byte 2)";
+    assert error(#"[a"#) == "unclosed class (at byte 0)";
+    assert error(#"x[a-"#) == "unclosed class (at byte 1)";
+    assert error(#"[z-a]"#) == "a class range runs from a higher code point to a lower one (at byte 1)";
+    assert error(#"[\d-z]"#) == #"a class range cannot start at a set such as `\d` (at byte 1)"#;
+    assert error(#"\q"#) == #"`\q` is not an escape in Unicode mode (at byte 0)"#;
+    assert error(#"\00"#) == "an octal escape is not allowed in Unicode mode (at byte 0)";
+    assert error(#"\u{110000}"#) == #"`\u{…}` must hold a code point up to 10FFFF (at byte 0)"#;
+    assert error(#"\p{Nope}"#) == "unknown Unicode property `Nope` (at byte 0)";
+    assert error(#"a\"#) == #"a pattern cannot end in `\` (at byte 1)"#;
+}
+
+test "group names and modifiers follow the early errors" {
+    assert error(#"(?<a>x)(?<a>y)"#) == "two groups are named `a` (at byte 7)";
+    assert error(#"(?<>x)"#) == "a group name cannot be empty (at byte 3)";
+    assert error(#"(?<1a>x)"#) == "`1` cannot appear in a group name here (at byte 3)";
+    assert error(#"(?ii:x)"#) == "a modifier may be written once (at byte 3)";
+    assert error(#"(?-:x)"#) == "`(?-:` must name a modifier to remove (at byte 2)";
+    assert error(#"(?i-i:x)"#) == "a modifier cannot be both added and removed (at byte 3)";
+    assert error(#"(?x)"#) == "`(?` must be followed by `:`, `<name>`, or modifiers `ims` and `:` (at byte 2)";
+}
+
+test "nesting is bounded" {
+    let mut deep = "";
+    for let _i of 0..<257 {
+        deep.push('(');
+    }
+    assert error(deep) == "groups may nest at most 256 deep (at byte 257)";
+}
+
+test "a hole's groups count toward the nesting around it" {
+    let mut open = "";
+    let mut close = "";
+    for let _i of 0..<255 {
+        open.push('(');
+        close.push(')');
+    }
+    assert holed(`${open}${close}`, [255]) matches { Ok(_) };
+    open.push('(');
+    close.push(')');
+    assert holed_error(`${open}${close}`, [256]) == "groups may nest at most 256 deep (at byte 256)";
+}
+
+test "a hole's modifier groups count toward the nesting around it" {
+    let mut node = Node::Char('a' as u32);
+    for let _i of 0..<257 {
+        node = Node::Modified(Modified {
+            add: Flag::none(),
+            remove: Flag::none(),
+            body: node,
+        });
+    }
+    let holes: List<Hole> = [
+        Hole { offset: 0, node },
+    ];
+    assert `${parse(#""#.as_str_slice(), Syntax::Plain, holes).unwrap_err()}` == "groups may nest at most 256 deep (at byte 0)";
+}

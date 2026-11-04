@@ -3,7 +3,7 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use crate::ast::{Expr, GenericParam};
+use crate::ast::{AstId, Expr, GenericParam};
 use crate::defs::{DefId, DefTable};
 use crate::hashmap::IndexMap;
 use crate::module_source::ModuleSource;
@@ -19,6 +19,7 @@ use crate::tir::SlotProjections;
 /// What an `impl` block's `const NAME: T = expr;` declares.
 #[derive(Debug, Clone)]
 pub(crate) struct AssocConstSig {
+    pub(crate) decl: AstId,
     /// The impl-declaring module; reify walks [`Self::value`] under it.
     pub(crate) module: ModuleSource,
     pub(crate) ty: TypeId,

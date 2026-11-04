@@ -1,0 +1,11 @@
+// A shorthand field binds a variable of the field's name, so the name must be
+// one a variable can take. `a-b` is not, and no later use could read it.
+struct Odd { a: i32 }
+
+export fn run() {
+    let o = Odd { a: 1 };
+    let Odd { #"a-b"# } = o;
+}
+
+__DATA__
+{"compile_error": ":7:15: parse error: a shorthand field must name a variable, and `a-b` cannot; write `#\"a-b\"#: name`"}

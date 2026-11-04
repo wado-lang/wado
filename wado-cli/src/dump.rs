@@ -182,7 +182,12 @@ impl Opt {
                 long: Some("inline-decisions"),
                 short: None,
                 value: Some("<pattern>"),
+<<<<<<< HEAD
                 desc: "Show what the inliner decided, and why, each round, for the callers\nand callees whose name holds <pattern> ('' for every function)",
+||||||| fd132d8d789
+=======
+                desc: "Show what the inliner decided, and why, each round, for the callers\nand callees whose name holds <pattern>, and every callee such a caller\ncalls ('' for every function)",
+>>>>>>> origin/main
             },
             Self::World => args::WORLD_SPEC,
             Self::Help => args::HELP_SPEC,

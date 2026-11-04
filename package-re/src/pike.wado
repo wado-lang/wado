@@ -1,0 +1,226 @@
+//! The Pike VM: every thread of a program advances over the text together, one
+//! byte at a time, so a search takes time linear in the text. Threads are kept
+//! in priority order and one is dropped where a higher one already reached its
+//! instruction, which is what makes the first match found the leftmost-first one.
+
+use { is_word_byte } from "./charset.wado";
+use { Look, Program } from "./program.wado";
+
+struct Thread {
+    pc: i32,
+    slots: List<i32>,
+    /// How many optional iterations guarded by a `Progress` this thread
+    /// entered at the current position. Each is one it cannot leave without
+    /// consuming, so they are the innermost of those around `pc`, and the
+    /// count says which.
+    entered: i32,
+}
+
+impl Thread {
+    /// The same thread moved on to `pc`, holding `slots`.
+    fn at(&self, pc: i32, slots: List<i32>) -> Thread {
+        return Thread { pc, slots, entered: self.entered };
+    }
+}
+
+/// The threads at one position, and which states they occupy.
+struct Threads {
+    list: List<Thread>,
+    /// `seen[state] == stamp` marks `state` occupied at this position.
+    seen: List<i32>,
+    stamp: i32,
+}
+
+impl Threads {
+    fn new(size: i32) -> Threads {
+        let mut seen: List<i32> = [];
+        for let _i of 0..<size {
+            seen.push(-1);
+        }
+        return Threads { list: [], seen, stamp: 0 };
+    }
+
+    fn clear(&mut self) {
+        self.list.truncate(0);
+        self.stamp += 1;
+    }
+}
+
+/// What a search works in, kept across the searches of one iterator so that
+/// each costs time in the text it reads, not in the program's size.
+internal struct Cache {
+    current: Threads,
+    next: Threads,
+    /// Every slot unset.
+    fresh: List<i32>,
+}
+
+impl Cache {
+    internal fn new(program: &Program) -> Cache {
+        let size = program.state_base[program.insts.len()];
+        let mut fresh: List<i32> = [];
+        for let _i of 0..<program.slots {
+            fresh.push(-1);
+        }
+        return Cache {
+            current: Threads::new(size),
+            next: Threads::new(size),
+            fresh,
+        };
+    }
+}
+
+/// How far a search goes.
+internal enum Goal {
+    /// The leftmost-first match, with its groups.
+    Groups,
+    /// Whether there is any match: the first thread to reach one answers.
+    Any,
+}
+
+/// The capture slots of the leftmost-first match at or after `start`, which
+/// lies on a character boundary of `text`; an unset slot is -1. Under
+/// `Goal::Any`, those of whichever match is found first.
+internal fn search(program: &Program, cache: &mut Cache, text: StrSlice, start: i32, goal: Goal) -> Option<List<i32>> {
+    cache.current.clear();
+    let len = text.len();
+    let mut matched: Option<List<i32>> = null;
+    let mut pos = start;
+    loop {
+        // A new start has the lowest priority, and none is tried once a match
+        // is found, since any match it led to would lie further right.
+        let found = matched matches { Some(_) };
+        if !found && text.is_char_boundary(pos) {
+            add(program, text, &mut cache.current, 0, cache.fresh, pos);
+        }
+        if cache.current.list.is_empty() && (found || pos >= len) {
+            return matched;
+        }
+        cache.next.clear();
+        for let t of &cache.current.list {
+            match program.insts[t.pc] {
+                Byte([lo, hi]) => {
+                    if pos < len {
+                        let b = text.byte_at(pos);
+                        if b >= lo && b <= hi {
+                            add(program, text, &mut cache.next, t.pc + 1, t.slots, pos + 1);
+                        }
+                    }
+                },
+                Match => {
+                    let mut slots = t.slots;
+                    slots.truncate(program.captures);
+                    if goal == Goal::Any {
+                        return Some(slots);
+                    }
+                    matched = Some(slots);
+                    break;
+                },
+                _ => unreachable(),
+            }
+        }
+        [cache.current, cache.next] = [cache.next, cache.current];
+        if pos >= len {
+            return matched;
+        }
+        pos += 1;
+    }
+}
+
+/// Follows every instruction that consumes nothing from `pc`, adding the
+/// threads that reach a `Byte` or `Match`, highest priority first. A thread
+/// is dropped where a higher one already reached its state: from there both
+/// can match the same, and the higher one's match wins.
+fn add(program: &Program, text: StrSlice, to: &mut Threads, pc: i32, slots: List<i32>, pos: i32) {
+    let mut stack: List<Thread> = [
+        Thread { pc, slots, entered: 0 },
+    ];
+    while let Some(t) = stack.pop() {
+        let inst = program.insts[t.pc];
+        // Past a `Byte` no `Progress` fails, so how many iterations a thread
+        // entered no longer matters there.
+        let entered = if inst matches { Byte(_) | Match } { 0 } else { t.entered };
+        let state = program.state_base[t.pc] + entered;
+        assert state < program.state_base[t.pc + 1];
+        if to.seen[state] == to.stamp {
+            continue;
+        }
+        to.seen[state] = to.stamp;
+        match inst {
+            Jump(target) => stack.push(t.at(target, t.slots)),
+            Split([first, second]) => {
+                stack.push(t.at(second, t.slots));
+                stack.push(t.at(first, t.slots));
+            },
+            Save(slot) => {
+                let mut s = t.slots;
+                s[slot] = pos;
+                // A `Progress` slot opens an optional iteration.
+                let opened = if slot >= program.captures { 1 } else { 0 };
+                stack.push(Thread { pc: t.pc + 1, slots: s, entered: t.entered + opened });
+            },
+            Clear([from, until]) => {
+                let mut s = t.slots;
+                for let k of from..<until {
+                    s[k] = -1;
+                }
+                stack.push(t.at(t.pc + 1, s));
+            },
+            Assert(look) => {
+                if holds(look, text, pos) {
+                    stack.push(t.at(t.pc + 1, t.slots));
+                }
+            },
+            Progress(slot) => {
+                if t.slots[slot] != pos {
+                    stack.push(t.at(t.pc + 1, t.slots));
+                }
+            },
+            Fail => {
+            },
+            Byte(_) | Match => to.list.push(t),
+        }
+    }
+}
+
+fn holds(look: Look, text: StrSlice, pos: i32) -> bool {
+    return match look {
+        StartText => pos == 0,
+        EndText => pos == text.len(),
+        StartLine => pos == 0 || terminator_ends_at(text, pos),
+        EndLine => pos == text.len() || terminator_starts_at(text, pos),
+        WordBoundary => word_before(text, pos) != word_after(text, pos),
+        NotWordBoundary => word_before(text, pos) == word_after(text, pos),
+    };
+}
+
+fn word_before(text: StrSlice, pos: i32) -> bool {
+    return pos > 0 && is_word_byte(text.byte_at(pos - 1));
+}
+
+fn word_after(text: StrSlice, pos: i32) -> bool {
+    return pos < text.len() && is_word_byte(text.byte_at(pos));
+}
+
+fn is_lf_or_cr(b: u8) -> bool {
+    return b == 0x0A || b == 0x0D;
+}
+
+/// LS or PS, which UTF-8 encodes as E2 80 A8 and E2 80 A9, at `from`.
+fn separator_at(text: StrSlice, from: i32) -> bool {
+    return from >= 0
+        && from + 2 < text.len()
+        && text.byte_at(from) == 0xE2
+        && text.byte_at(from + 1) == 0x80
+        && (text.byte_at(from + 2) == 0xA8 || text.byte_at(from + 2) == 0xA9);
+}
+
+/// Whether a LineTerminator starts at `pos`, which is below the text's length.
+fn terminator_starts_at(text: StrSlice, pos: i32) -> bool {
+    return is_lf_or_cr(text.byte_at(pos)) || separator_at(text, pos);
+}
+
+/// Whether a LineTerminator ends at `pos`, which is above 0.
+fn terminator_ends_at(text: StrSlice, pos: i32) -> bool {
+    return is_lf_or_cr(text.byte_at(pos - 1)) || separator_at(text, pos - 3);
+}

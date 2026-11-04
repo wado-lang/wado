@@ -43,6 +43,7 @@ impl Key {
 }
 
 /// Chains whose value a temp can supply here, each with its defining temp.
+<<<<<<< HEAD
 #[derive(Clone, Default)]
 struct Avail {
     chains: IndexMap<Key, usize>,
@@ -51,9 +52,25 @@ struct Avail {
     /// `chains`, as every `If` clones them.
     by_root: IndexMap<String, IndexSet<Key>>,
     by_field: IndexMap<String, IndexSet<Key>>,
+||||||| fd132d8d789
+type Avail = IndexMap<Key, usize>;
+=======
+///
+/// A chain is named by its position in the function's [`Key`] table, so the
+/// clone each `Block`, `Loop` and `If` takes copies no `Key`.
+#[derive(Clone, Default)]
+struct Avail {
+    chains: IndexMap<usize, usize>,
+    /// The chains read off each local, and through each field, so a write
+    /// reaches the chains it ends and no others. They hold exactly the keys of
+    /// `chains`, as every `If` clones them.
+    by_root: IndexMap<String, IndexSet<usize>>,
+    by_field: IndexMap<String, IndexSet<usize>>,
+>>>>>>> origin/main
 }
 
 impl Avail {
+<<<<<<< HEAD
     fn get(&self, key: &Key) -> Option<usize> {
         self.chains.get(key).copied()
     }
@@ -111,6 +128,72 @@ impl Avail {
         for (_, field) in &key.fields {
             if let Some(keys) = self.by_field.get_mut(field) {
                 keys.swap_remove(key);
+||||||| fd132d8d789
+fn forget_written(avail: &mut Avail, writes: &Footprint) {
+    avail.retain(|key, _| {
+        !writes.has_local(&key.root) && !key.fields.iter().any(|(_, f)| writes.may_have_field(f))
+    });
+=======
+    fn get(&self, chain: usize) -> Option<usize> {
+        self.chains.get(&chain).copied()
+    }
+
+    fn insert(&mut self, keys: &IndexSet<Key>, chain: usize, id: usize) {
+        let key = &keys[chain];
+        self.by_root
+            .entry(key.root.clone())
+            .or_default()
+            .insert(chain);
+        for (_, field) in &key.fields {
+            self.by_field
+                .entry(field.clone())
+                .or_default()
+                .insert(chain);
+        }
+        self.chains.insert(chain, id);
+    }
+
+    fn retain(&mut self, keys: &IndexSet<Key>, mut keep: impl FnMut(usize, usize) -> bool) {
+        let dropped: Vec<usize> = self
+            .chains
+            .iter()
+            .filter(|(chain, id)| !keep(**chain, **id))
+            .map(|(chain, _)| *chain)
+            .collect();
+        for chain in dropped {
+            self.forget(keys, chain);
+        }
+    }
+
+    fn forget_written(&mut self, keys: &IndexSet<Key>, writes: &Footprint) {
+        let Some(fields) = writes.fields() else {
+            *self = Self::default();
+            return;
+        };
+        let ended: Vec<usize> = writes
+            .locals()
+            .filter_map(|local| self.by_root.get(local))
+            .chain(fields.filter_map(|field| self.by_field.get(field)))
+            .flatten()
+            .copied()
+            .collect();
+        for chain in ended {
+            self.forget(keys, chain);
+        }
+    }
+
+    fn forget(&mut self, keys: &IndexSet<Key>, chain: usize) {
+        if self.chains.swap_remove(&chain).is_none() {
+            return;
+        }
+        let key = &keys[chain];
+        if let Some(chains) = self.by_root.get_mut(&key.root) {
+            chains.swap_remove(&chain);
+        }
+        for (_, field) in &key.fields {
+            if let Some(chains) = self.by_field.get_mut(field) {
+                chains.swap_remove(&chain);
+>>>>>>> origin/main
             }
         }
     }
@@ -125,6 +208,8 @@ struct Temp {
 struct Reuser<'c> {
     /// What the arm being visited consults (`arm_callees`).
     callees: Option<&'c CalleeWrites>,
+    /// Every chain the function reads, which [`Avail`] names by position.
+    keys: IndexSet<Key>,
     avail: Avail,
     temps: Vec<Temp>,
     taken: IndexSet<String>,
@@ -162,11 +247,23 @@ impl Reuser<'_> {
                 self.visit_body(body);
                 self.avail = before;
                 self.avail
+<<<<<<< HEAD
                     .forget_written(&Footprint::writes_all(body, self.callees));
+||||||| fd132d8d789
+                forget_written(&mut self.avail, &Footprint::writes_all(body, self.callees));
+=======
+                    .forget_written(&self.keys, &Footprint::writes_all(body, self.callees));
+>>>>>>> origin/main
             }
             WirInstr::Loop { body, .. } => {
                 self.avail
+<<<<<<< HEAD
                     .forget_written(&Footprint::writes_all(body, self.callees));
+||||||| fd132d8d789
+                forget_written(&mut self.avail, &Footprint::writes_all(body, self.callees));
+=======
+                    .forget_written(&self.keys, &Footprint::writes_all(body, self.callees));
+>>>>>>> origin/main
                 let entry = self.avail.clone();
                 self.visit_body(body);
                 self.avail = entry;
@@ -185,23 +282,39 @@ impl Reuser<'_> {
                     None => Some(before.clone()),
                 };
                 self.avail = before;
-                self.avail.retain(|key, id| {
+                self.avail.retain(&self.keys, |chain, id| {
                     [&then_end, &else_end]
                         .into_iter()
                         .flatten()
-                        .all(|end| end.get(key) == Some(id))
+                        .all(|end| end.get(chain) == Some(id))
                 });
             }
             _ => {
                 instr.for_each_boxed_child_mut(&mut |child| self.visit(child));
                 self.avail
+<<<<<<< HEAD
                     .forget_written(&Footprint::writes_of_node(instr, self.callees));
+||||||| fd132d8d789
+                forget_written(
+                    &mut self.avail,
+                    &Footprint::writes_of_node(instr, self.callees),
+                );
+=======
+                    .forget_written(&self.keys, &Footprint::writes_of_node(instr, self.callees));
+>>>>>>> origin/main
             }
         }
     }
 
     fn visit_chain(&mut self, instr: &mut WirInstr, key: Key) {
+<<<<<<< HEAD
         if let Some(id) = self.avail.get(&key) {
+||||||| fd132d8d789
+        if let Some(&id) = self.avail.get(&key) {
+=======
+        let (chain, _) = self.keys.insert_full(key);
+        if let Some(id) = self.avail.get(chain) {
+>>>>>>> origin/main
             let temp = &mut self.temps[id];
             temp.used = true;
             let WirInstr::StructGet { result_ty, .. } = instr else {
@@ -231,7 +344,7 @@ impl Reuser<'_> {
             ty: result_ty.clone(),
             used: false,
         });
-        self.avail.insert(key, id);
+        self.avail.insert(&self.keys, chain, id);
         let get = std::mem::replace(instr, WirInstr::Nop);
         *instr = WirInstr::LocalTee {
             name,
@@ -260,6 +373,7 @@ pub(super) fn reuse_struct_loads(module: &mut WirPackage) {
         };
         let mut reuser = Reuser {
             callees: Some(&callees),
+            keys: IndexSet::default(),
             avail: Avail::default(),
             temps: Vec::new(),
             taken: locals

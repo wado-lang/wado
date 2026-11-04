@@ -257,7 +257,7 @@ in (`Lints::reports_in`), the one predicate every lint and the dead-item
 emitter read, so both unused lints answer for the same files: a package check
 walks no dependency's bodies. The resolver records, per module, the import
 entries, by local name, that answered one of its sites. A name written where no site holds it, which a later
-pass reads by name, counts as one: a `#[benign(E)]` argument, and a
+pass reads by name, counts as one: an `#[ambient(E)]` argument, and a
 world's `import X;` / `export X;`. A
 declaration imported twice (`use { a }` and `use m` reaching `m$a`) is
 two entries, each used only where it is written. For each `UseItem`:
@@ -461,7 +461,7 @@ Gating is therefore disabled until both are addressed:
   wired into the LSP (`Engine::diagnostics`). Covers free / method /
   static / indirect calls, declared effects, signature resources
   (incl. struct-nested), resource injection, the propagation
-  closure, effect-parameter resolution, and `#[benign]`. Batch still
+  closure, effect-parameter resolution, and `#[ambient]`. Batch still
   runs the TIR `check_effects` (see "Batch switch — blocked" below).
 - [ ] 1c. Port `check_stores` likewise.
 - [ ] 1d. Port `check_default_purity` likewise.
@@ -578,15 +578,15 @@ Algorithm (unchanged from the TIR version, restated on facts):
 
 1. Build the effect index keyed by `(module, mangled_name)` —
    `mangled_name` from `method_names[method_key].mangled` for methods,
-   the source name for free functions — carrying effects, `is_ambient`,
-   `benign`, `is_method`, and param `TypeId`s.
+   the source name for free functions — carrying effects, the ambient
+   effects, `is_method`, and param `TypeId`s.
 2. Build `resource_names`, `struct_fields`, `variant_payloads`, and the
    propagation closure (`build_propagation_closure`) from the same decl
    and type data, now read off `Semantics` rather than `TirModule`.
-3. For each user function: `current_effects = expand(declared effects + signature_resources(param/return/task-return types) + benign)`.
+3. For each user function: `current_effects = expand(declared effects + signature_resources(param/return/task-return types) + ambient)`.
 4. Walk the AST body; at each call site resolve the callee via the table
    above, compute `get_function_effects` (callee effects + resource
-   effect for direct resource methods − benign, with effect-param
+   effect for direct resource methods − ambient, with effect-param
    resolution), and report `EffectError` for any effect not in
    `current_effects`.
 
