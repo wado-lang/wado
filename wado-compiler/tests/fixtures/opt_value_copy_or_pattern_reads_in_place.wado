@@ -1,0 +1,56 @@
+// An or-pattern arm of a `match` over a referenced place binds nothing out of
+// it, so the scrutinee is read where it lies, as a single pattern reads it,
+// though the arm calls through `&mut self`.
+
+use { println, Stdout } from "core:cli";
+
+variant Op {
+    Leaf(i32),
+    Dims(List<i32>),
+    Pair([List<i32>, i32]),
+}
+
+struct Node {
+    op: Op,
+    operands: List<i32>,
+}
+
+struct Counter {
+    n: i32,
+}
+
+impl Counter {
+    fn bump(&mut self, by: i32) {
+        self.n += by;
+    }
+
+    fn computed(&mut self, node: &Node) -> i32 {
+        return match &node.op {
+            Leaf(v) => *v,
+            Dims(_) | Pair(_) => {
+                self.bump(node.operands.len());
+                node.operands.len();
+            },
+        };
+    }
+}
+
+export fn run() with Stdout {
+    let nodes: List<Node> = [
+        Node { op: Op::Leaf(1), operands: [] },
+        Node { op: Op::Dims([1, 2, 3]), operands: [0] },
+        Node { op: Op::Pair([[4, 5], 6]), operands: [1, 2] },
+    ];
+    let mut c = Counter { n: 0 };
+    let mut total = 0;
+    for let i of 0..<nodes.len() {
+        total += c.computed(&nodes[i]);
+    }
+    println(`${total} ${c.n}`);
+}
+
+__DATA__
+{
+    "stdout": "4 3\n",
+    "wir_not_expect:O2": ["$value_copy$", "array_copy<i32>"]
+}
