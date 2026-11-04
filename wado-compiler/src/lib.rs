@@ -2129,9 +2129,7 @@ fn compile_after_load<H: CompilerHost>(
     package.test_selection = options.test_selection;
     package.wasm_assets = wasm_assets;
     package.codegen_flags = codegen_flags;
-    package.heat_map = marks
-        .map(pgo::MarkMap::into_heat_map)
-        .unwrap_or_default();
+    package.heat_map = marks.map(pgo::MarkMap::into_heat_map).unwrap_or_default();
     package.provided_import_fqs = options
         .providers
         .iter()

@@ -357,7 +357,10 @@ impl HeatMap {
         regions.sort_by_key(|r| (r.start, std::cmp::Reverse(r.end)));
         let mut open: Vec<usize> = Vec::new();
         for i in 0..regions.len() {
-            while open.last().is_some_and(|&o| regions[o].end <= regions[i].start) {
+            while open
+                .last()
+                .is_some_and(|&o| regions[o].end <= regions[i].start)
+            {
                 open.pop();
             }
             let enclosing = open.last().copied();
