@@ -113,7 +113,7 @@ runs, 990000 by default. The cold line is the same under
 
 A call site in a region whose count reaches the hot line, and that ran, is
 hot. One at or below the cold line is cold. The inliner splices a callee at a
-hot site up to `--optimize-inline-hot-callsite-threshold`, by default 8 times
+hot site up to `--optimize-inline-hot-callsite-threshold`, by default 4 times
 `--optimize-inline-threshold`, and at a cold site up to
 `--optimize-inline-cold-callsite-threshold`, by default a quarter of it. Any
 other site, and every site in a function the profile does not judge, keeps

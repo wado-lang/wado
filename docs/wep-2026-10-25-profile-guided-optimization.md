@@ -295,12 +295,15 @@ stays at its site and reaches no callee. A hot site may inline a callee of up to
 `--optimize-inline-threshold`. They mirror LLVM's `hot-callsite-threshold`
 (3000) and `inline-cold-callsite-threshold` (45) beside its `inline-threshold`
 (225), but count statements as Wado's inliner does, so the benchmarks settle
-their defaults: 8 times the level's threshold at a hot site and a quarter of it
+their defaults: 4 times the level's threshold at a hot site and a quarter of it
 at a cold one. LLVM's ratios are about 13 and a fifth.
 
 The hot ratio was measured at 4, 8 and 16 on the fuel benchmarks against
-`-f no-pgo`. 16 bought 0.2 points more of the geometric mean than 8, for nearly
-twice 8's growth of `gale_gen`. The cold ratio was measured at a half down to an
+`-f no-pgo`. Fuel favours the larger ratios, but it counts Wasm instructions,
+not what a huge function costs once compiled. At 8, `cbor_twitter`'s
+deserializer spliced its record decoders into one function and ran 58% longer
+by the wall clock for the same fuel, and `json_twitter`'s 29% longer. At 4 both
+ran within a few percent of `-f no-pgo`. The cold ratio was measured at a half down to an
 eighth, and moved no fuel region. A quarter grew `gale_gen` least.
 `--optimize-predictable-branch-threshold` keeps LLVM's 99: at 90, 95 and 98 the
 geometric mean moved by under 0.03 points.

@@ -120,7 +120,7 @@ impl CompileKnobOpt {
                 long: Some("optimize-inline-hot-callsite-threshold"),
                 short: None,
                 value: Some("<n>"),
-                desc: "Override the inlining threshold at a call site the profile\nmeasured hot (default: 8x the inlining threshold)",
+                desc: "Override the inlining threshold at a call site the profile\nmeasured hot (default: 4x the inlining threshold)",
             },
             Self::InlineColdCallsiteThreshold => OptSpec {
                 long: Some("optimize-inline-cold-callsite-threshold"),

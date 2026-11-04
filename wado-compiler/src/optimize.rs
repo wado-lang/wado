@@ -184,17 +184,18 @@ pub fn optimize(
         profile_summary_cutoff_hot: _,
         profile_summary_cutoff_cold: _,
     } = opt;
-    // A hot site at 8x the level's threshold, against 4x and 16x on the fuel
-    // benchmarks: 16x bought 0.2 points more of the geometric mean for nearly
-    // twice 8x's code growth on gale_gen. LLVM's ratio is 3000 to 225, about
-    // 13x. A cold site at a quarter: no fuel region moved from a half down to
-    // an eighth, and a quarter grew gale_gen least.
+    // A hot site at 4x the level's threshold. Fuel favours 8x, but at 8x
+    // `cbor_twitter`'s deserializer ran 58% longer by the wall clock for the
+    // same fuel: fuel does not price a huge function's native code. LLVM's
+    // ratio is 3000 to 225, about 13x. A cold site at a quarter: no fuel
+    // region moved from a half down to an eighth, and a quarter grew gale_gen
+    // least.
     let thresholds = |level: usize| {
         let plain = inline_threshold.unwrap_or(level);
         inline::Thresholds {
             cold: inline_cold_callsite_threshold.unwrap_or(plain / 4),
             plain,
-            hot: inline_hot_callsite_threshold.unwrap_or(plain * 8),
+            hot: inline_hot_callsite_threshold.unwrap_or(plain * 4),
         }
     };
     let specializations = specializations.unwrap_or(param_spec::MAX_TOTAL_SPECIALIZATIONS);
