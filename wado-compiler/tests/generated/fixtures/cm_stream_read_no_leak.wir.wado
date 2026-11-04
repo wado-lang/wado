@@ -1463,7 +1463,7 @@ fn "cm_stream_read_no_leak.wado/run"() with Stdout, Preopens {
     let seen: i32;
     let self_11: ref null "core:fs//FsError";
     let e_13: ref "core:fs//FsError";
-    let self_60: ref "tuple//[i32, core:prelude/types.wado/Option<core:prelude/list.wado/List<core:fs/DirEntry>>, core:prelude/types.wado/Option<core:fs/FsError>]";
+    let $self_60: ref "tuple//[i32, core:prelude/types.wado/Option<core:prelude/list.wado/List<core:fs/DirEntry>>, core:prelude/types.wado/Option<core:fs/FsError>]";
     let $sroa_$iter_1_start_72: i32;
     let $sroa_$iter_2_start_76: i32;
     let out_83: ref "core:prelude/string.wado//String";
@@ -1498,10 +1498,10 @@ fn "cm_stream_read_no_leak.wado/run"() with Stdout, Preopens {
         l4: loop {
             break_if b3 $sroa_$iter_1_start_72 >= 10;
             $sroa_$iter_1_start_72 = $sroa_$iter_1_start_72 + 1;
-            seen = seen + (if @likely(local.tee seen(local.tee self_60("core:fs/core:fs/read_dir<core:prelude/string.wado/String>$sroa[return]"(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 })).0) == 0) -> ref "core:prelude//List<core:fs/DirEntry>" {
-                ref.as_non_null(self_60.1);
+            seen = seen + (if @likely(local.tee seen(local.tee $self_60("core:fs/core:fs/read_dir<core:prelude/string.wado/String>$sroa[return]"(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 })).0) == 0) -> ref "core:prelude//List<core:fs/DirEntry>" {
+                ref.as_non_null($self_60.1);
             } else if seen == 1 -> ref "core:prelude//List<core:fs/DirEntry>" {
-                e_13 = ref.as_non_null(self_60.2);
+                e_13 = ref.as_non_null($self_60.2);
                 "core:prelude/types.wado/core:prelude/types.wado/unwrap_failed<core:fs/FsError>"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("called Result::unwrap() on an Err value"), used: 39 }, e_13);
                 unreachable;
             } else {
@@ -1516,10 +1516,10 @@ fn "cm_stream_read_no_leak.wado/run"() with Stdout, Preopens {
         l8: loop {
             break_if b7 $sroa_$iter_2_start_76 >= 1000;
             $sroa_$iter_2_start_76 = $sroa_$iter_2_start_76 + 1;
-            seen = seen + (if @likely(local.tee seen(local.tee self_60("core:fs/core:fs/read_dir<core:prelude/string.wado/String>$sroa[return]"(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 })).0) == 0) -> ref "core:prelude//List<core:fs/DirEntry>" {
-                ref.as_non_null(self_60.1);
+            seen = seen + (if @likely(local.tee seen(local.tee $self_60("core:fs/core:fs/read_dir<core:prelude/string.wado/String>$sroa[return]"(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 })).0) == 0) -> ref "core:prelude//List<core:fs/DirEntry>" {
+                ref.as_non_null($self_60.1);
             } else if seen == 1 -> ref "core:prelude//List<core:fs/DirEntry>" {
-                e_13 = ref.as_non_null(self_60.2);
+                e_13 = ref.as_non_null($self_60.2);
                 "core:prelude/types.wado/core:prelude/types.wado/unwrap_failed<core:fs/FsError>"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("called Result::unwrap() on an Err value"), used: 39 }, e_13);
                 unreachable;
             } else {
@@ -3420,7 +3420,7 @@ fn "core:fs/core:fs/read_dir<core:prelude/string.wado/String>$sroa[return]"(path
     let e: ref "core:fs//FsError";
     let v_44: ref "wasi:filesystem/types.wado//DirectoryEntry";
     let v_45: ref "wasi:filesystem/types.wado//DescriptorType";
-    let value_60: ref "core:fs//DirEntry";
+    let $value_60: ref "core:fs//DirEntry";
     let $rebox_71: ref null "tuple//[i32, core:prelude/types.wado/Option<wasi:filesystem/types.wado/Descriptor>, core:prelude/types.wado/Option<core:fs/FsError>]";
     let $sroa_$iter_0_repr_72: ref "Array<wasi:filesystem/types.wado/DirectoryEntry>";
     let $sroa_$iter_0_index_73: i32;
@@ -3506,7 +3506,7 @@ fn "core:fs/core:fs/read_dir<core:prelude/string.wado/String>$sroa[return]"(path
             });
             path = struct.new "core:prelude/string.wado//String" { repr: $array_clone_src_1 = local.tee path(v_44.name).repr; builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>(local.tee $load_14(path.used))), 0, $array_clone_src_1, 0, $load_14); $array_clone_dst_2, used: $load_14 };
             $sroa_$iter_0_index_73 = $sroa_$iter_0_index_73 + 1;
-            value_60 = struct.new "core:fs//DirEntry" { name: path, type: (if local.tee $load_14(v_45.discriminant) == 5 -> ref "core:fs//FileType" {
+            $value_60 = struct.new "core:fs//DirEntry" { name: path, type: (if local.tee $load_14(v_45.discriminant) == 5 -> ref "core:fs//FileType" {
                 global:core:builtin::$unit_case$core:fs//FileType$0;
             } else if $load_14 == 2 -> ref "core:fs//FileType" {
                 global:core:builtin::$unit_case$core:fs//FileType$1;
@@ -3517,7 +3517,7 @@ fn "core:fs/core:fs/read_dir<core:prelude/string.wado/String>$sroa[return]"(path
                 cold_path;
                 "core:prelude/list.wado/core:prelude/list.wado/List<core:fs/DirEntry>::grow"(out);
             }
-            builtin::array_set<ref "core:fs//DirEntry">(out.repr, $load_14, value_60);
+            builtin::array_set<ref "core:fs//DirEntry">(out.repr, $load_14, $value_60);
             out.used = $load_14 + 1;
             continue l490;
         };

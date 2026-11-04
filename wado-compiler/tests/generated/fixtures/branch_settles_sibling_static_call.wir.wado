@@ -2687,7 +2687,7 @@ fn "core:collections/hashmap.wado/core:collections/hashmap.wado/HashMap<core:pre
     let table: ref Array<i32>;
     let a: ref Array<i32>;
     let current: i32;
-    let s_43: i32;
+    let $s_43: i32;
     let $sroa_v_end_52: i32;
     let $sroa_$iter_2_start_53: i32;
     let $licm_arith_56: u32;
@@ -2705,15 +2705,15 @@ fn "core:collections/hashmap.wado/core:collections/hashmap.wado/HashMap<core:pre
             break_if b358 $sroa_$iter_2_start_53 >= $sroa_v_end_52;
             $sroa_$iter_2_start_53 = local.tee current($sroa_$iter_2_start_53) + 1;
             if builtin::array_get_value<bool>(alive, current) {
-                s_43 = builtin::array_get_value<i32>(a, current) >>u $licm_arith_56;
+                $s_43 = builtin::array_get_value<i32>(a, current) >>u $licm_arith_56;
                 b361: block {
                     l362: loop {
-                        break_if b361 builtin::array_get_value<i32>(table, s_43) == -1;
-                        s_43 = (s_43 + 1) & slots;
+                        break_if b361 builtin::array_get_value<i32>(table, $s_43) == -1;
+                        $s_43 = ($s_43 + 1) & slots;
                         continue l362;
                     };
                 };
-                builtin::array_set<i32>(table, s_43, current);
+                builtin::array_set<i32>(table, $s_43, current);
             }
             continue l359;
         };

@@ -469,7 +469,7 @@ fn "opt_copy_prop_nested_variant.wado/sum_until_none"(keys) {
     let sum: i32;
     let end: i32;
     let item: i32;
-    let opt_19: ref "core:prelude/types.wado//Option<i32>";
+    let $opt_19: ref "core:prelude/types.wado//Option<i32>";
     let $sroa_$iter_0_repr_22: ref Array<i32>;
     let $sroa_$iter_0_index_23: i32;
     sum = 0;
@@ -481,12 +481,12 @@ fn "opt_copy_prop_nested_variant.wado/sum_until_none"(keys) {
             break_if b2 $sroa_$iter_0_index_23 >= end;
             item = builtin::array_get_value<i32>($sroa_$iter_0_repr_22, $sroa_$iter_0_index_23);
             $sroa_$iter_0_index_23 = $sroa_$iter_0_index_23 + 1;
-            let $mv$result_18$1: ref null "core:prelude/types.wado//Option<i32>";
-            let $mv$result_18$2: ref null "core:prelude/string.wado//String";
-            multivalue_bind [item, $mv$result_18$1, $mv$result_18$2] = "opt_copy_prop_nested_variant.wado/find_item$sroa[return]"(item);
+            let $mv$$result_18$1: ref null "core:prelude/types.wado//Option<i32>";
+            let $mv$$result_18$2: ref null "core:prelude/string.wado//String";
+            multivalue_bind [item, $mv$$result_18$1, $mv$$result_18$2] = "opt_copy_prop_nested_variant.wado/find_item$sroa[return]"(item);
             if item == 0 {
-                if ref.test "core:prelude/types.wado//Option<i32>::Some"(local.tee opt_19(ref.as_non_null($mv$result_18$1))) {
-                    item = ref.cast "core:prelude/types.wado//Option<i32>::Some"(opt_19).payload_0;
+                if ref.test "core:prelude/types.wado//Option<i32>::Some"(local.tee $opt_19(ref.as_non_null($mv$$result_18$1))) {
+                    item = ref.cast "core:prelude/types.wado//Option<i32>::Some"($opt_19).payload_0;
                     sum = sum + item;
                 } else {
                     break b2;

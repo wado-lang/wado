@@ -4003,8 +4003,8 @@ fn "core:cbor/core:cbor/CborDeserializer::read_definite_text$sroa[return]"(self,
     let end: i32;
     let a_26: i32;
     let out: ref Array<u8>;
-    let e_58: ref "core:prelude/string.wado//Utf8Error";
-    let v_61: ref "core:prelude/string.wado//String";
+    let $e_58: ref "core:prelude/string.wado//Utf8Error";
+    let $v_61: ref "core:prelude/string.wado//String";
     let $sroa_slice_repr_62: ref Array<u8>;
     $load_0 = self.pos;
     if @unlikely(len >u builtin::i64_extend_i32_s((local.tee $load_2(local.tee $load_1(self.input).end) - local.tee $load_3($load_1.start)) - $load_0)) {
@@ -4032,7 +4032,7 @@ fn "core:cbor/core:cbor/CborDeserializer::read_definite_text$sroa[return]"(self,
         "core:prelude/string.wado/core:prelude/string.wado/String::utf8_valid_prefix"($sroa_slice_repr_62, end, $load_2);
     }) != ($load_2 - end)) {
         cold_path;
-        e_58 = block -> ref "core:prelude/string.wado//Utf8Error" {
+        $e_58 = block -> ref "core:prelude/string.wado//Utf8Error" {
             $load_2 = $load_2 - end;
             if @unlikely($load_3 == $load_2) {
                 cold_path;
@@ -4042,13 +4042,13 @@ fn "core:cbor/core:cbor/CborDeserializer::read_definite_text$sroa[return]"(self,
             "core:prelude/string.wado/core:prelude/string.wado/String::utf8_error_at$unchecked"($sroa_slice_repr_62, end, $load_3);
         };
         cold_path;
-        return 1, ref.null none, "core:serde/core:serde/DeserializeError::malformed<core:prelude/string.wado/String>"("core:prelude/string.wado/core:prelude/string.wado/String::format<core:cbor/$tmpl$5e78859e7c0c83ce,[core:prelude/string.wado/Utf8Error]>"(struct.new "core:cbor//$tmpl$5e78859e7c0c83ce" { h0: "core:prelude/string.wado/core:prelude/string.wado/Utf8Error::rebased"(e_58, $load_0), s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("text string contains "), used: 21 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("text string contains "), used: 21 }, s1: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, r1: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 } }), builtin::i64_extend_i32_s($load_0));
+        return 1, ref.null none, "core:serde/core:serde/DeserializeError::malformed<core:prelude/string.wado/String>"("core:prelude/string.wado/core:prelude/string.wado/String::format<core:cbor/$tmpl$5e78859e7c0c83ce,[core:prelude/string.wado/Utf8Error]>"(struct.new "core:cbor//$tmpl$5e78859e7c0c83ce" { h0: "core:prelude/string.wado/core:prelude/string.wado/Utf8Error::rebased"($e_58, $load_0), s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("text string contains "), used: 21 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("text string contains "), used: 21 }, s1: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, r1: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 } }), builtin::i64_extend_i32_s($load_0));
     }
-    v_61 = struct.new "core:prelude/string.wado//String" { repr: out = builtin::array_new<u8>(select i32($load_3 > 0, local.tee $load_3($load_2 - end), 0)); if $load_3 > 0 {
+    $v_61 = struct.new "core:prelude/string.wado//String" { repr: out = builtin::array_new<u8>(select i32($load_3 > 0, local.tee $load_3($load_2 - end), 0)); if $load_3 > 0 {
         builtin::array_copy<u8>(out, 0, $sroa_slice_repr_62, end, $load_3);
     }; out, used: $load_2 - end };
     self.pos = $load_0 + n;
-    return 0, v_61, ref.null none;
+    return 0, $v_61, ref.null none;
 }
 
 fn "core:cbor/core:cbor/CborDeserializer::read_text_body$sroa[return]"(self, arg, indef) {

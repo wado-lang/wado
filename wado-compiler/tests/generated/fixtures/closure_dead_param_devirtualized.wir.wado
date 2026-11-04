@@ -117,7 +117,7 @@ fn "closure_dead_param_devirtualized.wado/$cm_export__run"() {
 
 fn "closure_dead_param_devirtualized.wado/table$$Closure_1$sroa[at.$capture_0]"(rows, cols, at) {
     let out: ref "core:prelude//List<i32>";
-    let current_66: i32;
+    let $current_66: i32;
     let $sroa_$iter_0_start_86: i32;
     let $sroa_$iter_1_start_90: i32;
     let $cse_96: i32;
@@ -131,14 +131,14 @@ fn "closure_dead_param_devirtualized.wado/table$$Closure_1$sroa[at.$capture_0]"(
             b3: block {
                 l4: loop {
                     break_if b3 $sroa_$iter_1_start_90 >= cols;
-                    $sroa_$iter_1_start_90 = local.tee current_66($sroa_$iter_1_start_90) + 1;
-                    $cse_96 = current_66 + 1;
-                    current_66 = select i32(current_66 < cols, current_66 * at, 0) + (select i32($cse_96 < cols, $cse_96 * at, 0) * 2);
+                    $sroa_$iter_1_start_90 = local.tee $current_66($sroa_$iter_1_start_90) + 1;
+                    $cse_96 = $current_66 + 1;
+                    $current_66 = select i32($current_66 < cols, $current_66 * at, 0) + (select i32($cse_96 < cols, $cse_96 * at, 0) * 2);
                     if @unlikely(local.tee $cse_96(out.used) >= builtin::array_len(out.repr)) {
                         cold_path;
                         "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(out);
                     }
-                    builtin::array_set<i32>(out.repr, $cse_96, current_66);
+                    builtin::array_set<i32>(out.repr, $cse_96, $current_66);
                     out.used = $cse_96 + 1;
                     continue l4;
                 };

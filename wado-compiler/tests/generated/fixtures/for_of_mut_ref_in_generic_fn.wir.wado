@@ -106,7 +106,7 @@ fn "for_of_mut_ref_in_generic_fn.wado/run"() with Stdout {
     let tens: i32;
     let n_671: i32;
     let ref_val_681: ref "core:prelude/string.wado//String";
-    let repr_26: ref Array<u8>;
+    let $repr_26: ref Array<u8>;
     let $sroa_$iter_0_repr_32: ref "Array<core:prelude/string.wado/String>";
     let $sroa_$iter_0_index_33: i32;
     let i_708: i32;
@@ -121,7 +121,7 @@ fn "for_of_mut_ref_in_generic_fn.wado/run"() with Stdout {
             break_if b0 $sroa_$iter_0_index_33 >= 3;
             ref_val_681 = builtin::array_get_value<ref "core:prelude/string.wado//String">($sroa_$iter_0_repr_32, $sroa_$iter_0_index_33);
             $sroa_$iter_0_index_33 = $sroa_$iter_0_index_33 + 1;
-            repr_26 = global:for_of_mut_ref_in_generic_fn.wado::$const_obj_1;
+            $repr_26 = global:for_of_mut_ref_in_generic_fn.wado::$const_obj_1;
             if $inline_for_of_mut_ref_in_generic_fn_wado_count__core_prelude_string_wado_String__spec0_sroa_name_repr__0__$inline_core_prelude_string_wado_StrSlice__eq_str__core_prelude_string_wado_String__spec0_sroa_self_repr__0: block -> bool {
                 repr_713 = ref_val_681.repr;
                 if 1 != ref_val_681.used {
@@ -131,7 +131,7 @@ fn "for_of_mut_ref_in_generic_fn.wado/run"() with Stdout {
                 b4: block {
                     l5: loop {
                         break_if b4 i_708 >= 1;
-                        if builtin::array_get_value<u8>(repr_26, i_708) != builtin::array_get_value<u8>(repr_713, i_708) {
+                        if builtin::array_get_value<u8>($repr_26, i_708) != builtin::array_get_value<u8>(repr_713, i_708) {
                             break $inline_for_of_mut_ref_in_generic_fn_wado_count__core_prelude_string_wado_String__spec0_sroa_name_repr__0__$inline_core_prelude_string_wado_StrSlice__eq_str__core_prelude_string_wado_String__spec0_sroa_self_repr__0: 0;
                         }
                         i_708 = i_708 + 1;
@@ -228,22 +228,22 @@ fn "for_of_mut_ref_in_generic_fn.wado/run"() with Stdout {
     }
     i_708 = ref_val_681.used;
     ref_val_681.used = $sroa_$iter_0_index_33;
-    repr_26 = ref_val_681.repr;
+    $repr_26 = ref_val_681.repr;
     n_671 = i_708 + n_671;
     b29: block {
         l30: loop {
             break_if b29 (n_671 - i_708) < 2;
             q = x /u 100_i64;
             tens = local.tee $sroa_$iter_0_index_33(builtin::i32_wrap_i64(x - (q * 100_i64))) / 10;
-            builtin::array_set_u8(repr_26, n_671 - 1, (48 + $sroa_$iter_0_index_33) - (tens * 10));
-            builtin::array_set_u8(repr_26, n_671 - 2, 48 + tens);
+            builtin::array_set_u8($repr_26, n_671 - 1, (48 + $sroa_$iter_0_index_33) - (tens * 10));
+            builtin::array_set_u8($repr_26, n_671 - 2, 48 + tens);
             n_671 = n_671 - 2;
             x = q;
             continue l30;
         };
     };
     if n_671 > i_708 {
-        builtin::array_set_u8(repr_26, i_708, 48 + builtin::i32_wrap_i64(x %u 10_i64));
+        builtin::array_set_u8($repr_26, i_708, 48 + builtin::i32_wrap_i64(x %u 10_i64));
     }
     $inline_core_prelude_string_wado_String__internal_push_view_42: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_42;
@@ -253,7 +253,7 @@ fn "for_of_mut_ref_in_generic_fn.wado/run"() with Stdout {
     n_671 = "for_of_mut_ref_in_generic_fn.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(n_671);
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$iter_0_index_33, ref_val_681.repr, ref_val_681.used);
     "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(n_671);
-    repr_26 = array.new_fixed<u8>(97);
+    $repr_26 = array.new_fixed<u8>(97);
     $sroa_$iter_0_repr_32 = names_0.repr;
     n_671 = 0;
     b32: block {
@@ -261,7 +261,7 @@ fn "for_of_mut_ref_in_generic_fn.wado/run"() with Stdout {
             break_if b32 n_671 >= 3;
             ref_val_681 = builtin::array_get_value<ref "core:prelude/string.wado//String">($sroa_$iter_0_repr_32, n_671);
             n_671 = n_671 + 1;
-            repr_713 = repr_26;
+            repr_713 = $repr_26;
             if $inline_for_of_mut_ref_in_generic_fn_wado_mark__core_prelude_string_wado_String__spec0_spec0_dae_name__1__$inline_core_prelude_string_wado_StrSlice__eq_str__core_prelude_string_wado_String__spec0_sroa_self_repr__0: block -> bool {
                 repr_799 = ref_val_681.repr;
                 if 1 != ref_val_681.used {
@@ -497,7 +497,7 @@ fn "core:prelude/array.wado/core:prelude/array.wado/write_seq_inspect<core:prelu
 
 fn "core:prelude/format.wado/core:prelude/format.wado/inspect_text<core:prelude/string.wado/String>$spec0$sroa[f.buf]"(f, $mv$text$repr, $mv$text$used) {
     let $load_7: ref Array<u8>;
-    let s_136: ref "core:prelude/string.wado//String";
+    let $s_136: ref "core:prelude/string.wado//String";
     let new_used_163: i32;
     let start_164: i32;
     let b0: u32;
@@ -643,9 +643,9 @@ fn "core:prelude/format.wado/core:prelude/format.wado/inspect_text<core:prelude/
                 }
                 $sroa_slot_455 = f.used;
                 builtin::array_copy<u8>(f.repr, $sroa_slot_455, global:core:prelude/format.wado::$const_obj_24, 0, 3);
-                s_136 = "core:prelude/string.wado/core:prelude/string.wado/String::format<core:prelude/format.wado/$tmpl$47518b5dd822a983,[i32]>$spec0$spec0$sroa[t.h0]"(b0);
+                $s_136 = "core:prelude/string.wado/core:prelude/string.wado/String::format<core:prelude/format.wado/$tmpl$47518b5dd822a983,[i32]>$spec0$spec0$sroa[t.h0]"(b0);
                 $inline_core_prelude_string_wado_String__internal_push_string_29: block {
-                    break_if $inline_core_prelude_string_wado_String__internal_push_string_29 local.tee b0(s_136.used) == 0;
+                    break_if $inline_core_prelude_string_wado_String__internal_push_string_29 local.tee b0($s_136.used) == 0;
                     if @unlikely(local.tee $sroa_slot_455($hfs_used_464 + b0) > builtin::array_len(f.repr)) {
                         cold_path;
                         f.used = $hfs_used_464;
@@ -654,7 +654,7 @@ fn "core:prelude/format.wado/core:prelude/format.wado/inspect_text<core:prelude/
                     }
                     b2_184 = $hfs_used_464;
                     $hfs_used_464 = $sroa_slot_455;
-                    builtin::array_copy<u8>(f.repr, b2_184, s_136.repr, 0, b0);
+                    builtin::array_copy<u8>(f.repr, b2_184, $s_136.repr, 0, b0);
                 };
                 if @unlikely(local.tee b0($hfs_used_464 + 1) > builtin::array_len(f.repr)) {
                     cold_path;

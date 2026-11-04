@@ -282,7 +282,7 @@ fn "inline_sole_site_after_loop_splice.wado/run"() {
     let list: ref "core:prelude//List<u8>";
     let out: ref Array<u8>;
     let current: i32;
-    let value_38: u8;
+    let $value_38: u8;
     let $sroa_$iter_0_start_46: i32;
     let $licm_repr_49: ref Array<u8>;
     out = builtin::array_new<u8>(local.tee $load_0(local.tee list(black_box(struct.new "core:prelude//List<u8>" { repr: array.new_data<u8>("Aé€"), used: 6 })).used));
@@ -292,8 +292,8 @@ fn "inline_sole_site_after_loop_splice.wado/run"() {
         l9: loop {
             break_if b8 $sroa_$iter_0_start_46 >= $load_0;
             $sroa_$iter_0_start_46 = local.tee current($sroa_$iter_0_start_46) + 1;
-            value_38 = builtin::array_get_value<u8>($licm_repr_49, current);
-            builtin::array_set_u8(out, current, value_38);
+            $value_38 = builtin::array_get_value<u8>($licm_repr_49, current);
+            builtin::array_set_u8(out, current, $value_38);
             continue l9;
         };
     };

@@ -1557,7 +1557,7 @@ fn "http_client_send_body_read.wado/$cm_task_entry__handle"(request) with Client
     let byte: u8;
     let $sroa_slot_329: i32;
     let $sroa_slot_330: ref null "core:prelude/string.wado//String";
-    let used_337: i32;
+    let $used_337: i32;
     let $sroa_$pattern_temp_0_0_342: i32;
     let $sroa_$pattern_temp_0_1_343: i32;
     let event: ref "core:prelude/types.wado//ReadyEvent";
@@ -1748,12 +1748,12 @@ fn "http_client_send_body_read.wado/$cm_task_entry__handle"(request) with Client
             break_if b119 $sroa_slot_329 >= headers;
             byte = builtin::array_get_value<u8>($sroa_slice_repr_374, $sroa_slot_329);
             $sroa_slot_329 = $sroa_slot_329 + 1;
-            if @unlikely(local.tee used_337(bytes_254.used) >= builtin::array_len(bytes_254.repr)) {
+            if @unlikely(local.tee $used_337(bytes_254.used) >= builtin::array_len(bytes_254.repr)) {
                 cold_path;
                 "core:prelude/list.wado/core:prelude/list.wado/List<u8>::grow"(bytes_254);
             }
-            builtin::array_set_u8(bytes_254.repr, used_337, byte);
-            bytes_254.used = used_337 + 1;
+            builtin::array_set_u8(bytes_254.repr, $used_337, byte);
+            bytes_254.used = $used_337 + 1;
             continue l120;
         };
     }; bytes_254));

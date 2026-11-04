@@ -663,7 +663,7 @@ condition: `${c[0]}, ${c[1]}, ${c[2]}` == \"1.5, 2.5, 3.5\"
 
 fn "array_literal.wado/$test_5_a_list_of_tuples_holding_unit"() {
     let seen: ref "core:prelude//List<i32>";
-    let used_38: i32;
+    let $used_38: i32;
     let $sroa_item_0_45: i32;
     let $licm_repr_51: ref Array<i32>;
     let $sroa_$iter_0_repr_52: ref Array<[i32,()]>;
@@ -676,12 +676,12 @@ fn "array_literal.wado/$test_5_a_list_of_tuples_holding_unit"() {
             break_if b13 $sroa_$iter_0_index_53 >= 3;
             $sroa_item_0_45 = builtin::array_get_value<ref "tuple//[i32, ()]">($sroa_$iter_0_repr_52, $sroa_$iter_0_index_53).0;
             $sroa_$iter_0_index_53 = $sroa_$iter_0_index_53 + 1;
-            if @unlikely(local.tee used_38(seen.used) >= builtin::array_len(seen.repr)) {
+            if @unlikely(local.tee $used_38(seen.used) >= builtin::array_len(seen.repr)) {
                 cold_path;
                 "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(seen);
             }
-            builtin::array_set<i32>(seen.repr, used_38, $sroa_item_0_45);
-            seen.used = used_38 + 1;
+            builtin::array_set<i32>(seen.repr, $used_38, $sroa_item_0_45);
+            seen.used = $used_38 + 1;
             continue l14;
         };
     };

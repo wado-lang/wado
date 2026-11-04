@@ -1073,18 +1073,18 @@ fn "effect_handler_resource_stream_self_delegation.wado/effect_handler_resource_
     let index_11: i32;
     let end: i32;
     let item: u8;
-    let used_29: i32;
+    let $used_29: i32;
     return self_2 = self.$capture_0.buf, repr = data.repr, index_11 = data.start, end = data.end, b92: block {
         l93: loop {
             break_if b92 index_11 >= end;
             item = builtin::array_get_value<u8>(repr, index_11);
             index_11 = index_11 + 1;
-            if @unlikely(local.tee used_29(self_2.used) >= builtin::array_len(self_2.repr)) {
+            if @unlikely(local.tee $used_29(self_2.used) >= builtin::array_len(self_2.repr)) {
                 cold_path;
                 "core:prelude/list.wado/core:prelude/list.wado/List<u8>::grow"(self_2);
             }
-            builtin::array_set_u8(self_2.repr, used_29, item);
-            self_2.used = used_29 + 1;
+            builtin::array_set_u8(self_2.repr, $used_29, item);
+            self_2.used = $used_29 + 1;
             continue l93;
         };
     }, 0;

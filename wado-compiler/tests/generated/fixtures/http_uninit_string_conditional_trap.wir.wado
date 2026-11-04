@@ -651,7 +651,7 @@ fn "http_uninit_string_conditional_trap.wado/$cm_task_entry__handle"(request) {
     let $local_192: ref null "tuple//[wasi:http/types.wado/Response, core:prelude/types.wado/Future<core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>>]";
     let result_253: ref "core:prelude//List<u8>";
     let byte_259: u8;
-    let used_286: i32;
+    let $used_286: i32;
     let $sroa_$pattern_temp_0_0_291: i32;
     let $sroa_$pattern_temp_0_1_292: i32;
     let $sroa_$pattern_temp_1_0_293: ref null "core:prelude//$Resource";
@@ -677,12 +677,12 @@ fn "http_uninit_string_conditional_trap.wado/$cm_task_entry__handle"(request) {
             break_if b5 resp_headers >= $sroa_$pattern_temp_0_0_291;
             byte_259 = builtin::array_get_value<u8>($sroa_$temp_inline_core_prelude_string_wado_StrUtf8ByteIter_core_prelude_traits_wado_Iterator__collect_core_prelude_list_wado_List_u8___26_0_repr_300, resp_headers);
             resp_headers = resp_headers + 1;
-            if @unlikely(local.tee used_286(result_253.used) >= builtin::array_len(result_253.repr)) {
+            if @unlikely(local.tee $used_286(result_253.used) >= builtin::array_len(result_253.repr)) {
                 cold_path;
                 "core:prelude/list.wado/core:prelude/list.wado/List<u8>::grow"(result_253);
             }
-            builtin::array_set_u8(result_253.repr, used_286, byte_259);
-            result_253.used = used_286 + 1;
+            builtin::array_set_u8(result_253.repr, $used_286, byte_259);
+            result_253.used = $used_286 + 1;
             continue l6;
         };
     }; result_253));

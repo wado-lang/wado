@@ -118,7 +118,7 @@ fn "closure_param_devirtualized.wado/$cm_export__run"() {
 fn "closure_param_devirtualized.wado/table$$Closure_1$sroa[at.$capture_0]"(rows, cols, at) {
     let out: ref "core:prelude//List<i32>";
     let current_16: i32;
-    let current_74: i32;
+    let $current_74: i32;
     let $sroa_$iter_0_start_98: i32;
     let $sroa_$iter_1_start_102: i32;
     let $cse_108: i32;
@@ -135,16 +135,16 @@ fn "closure_param_devirtualized.wado/table$$Closure_1$sroa[at.$capture_0]"(rows,
             b3: block {
                 l4: loop {
                     break_if b3 $sroa_$iter_1_start_102 >= cols;
-                    $sroa_$iter_1_start_102 = local.tee current_74($sroa_$iter_1_start_102) + 1;
-                    $cse_108 = current_74 + 1;
-                    $cse_109 = current_74 + 2;
-                    $cse_110 = current_74 + 3;
-                    current_74 = ((select i32(current_74 < cols, current_16 + current_74, 0) + (select i32($cse_108 < cols, current_16 + $cse_108, 0) * 2)) + (select i32($cse_109 < cols, current_16 + $cse_109, 0) * 3)) + (select i32($cse_110 < cols, current_16 + $cse_110, 0) * 4);
+                    $sroa_$iter_1_start_102 = local.tee $current_74($sroa_$iter_1_start_102) + 1;
+                    $cse_108 = $current_74 + 1;
+                    $cse_109 = $current_74 + 2;
+                    $cse_110 = $current_74 + 3;
+                    $current_74 = ((select i32($current_74 < cols, current_16 + $current_74, 0) + (select i32($cse_108 < cols, current_16 + $cse_108, 0) * 2)) + (select i32($cse_109 < cols, current_16 + $cse_109, 0) * 3)) + (select i32($cse_110 < cols, current_16 + $cse_110, 0) * 4);
                     if @unlikely(local.tee $cse_108(out.used) >= builtin::array_len(out.repr)) {
                         cold_path;
                         "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(out);
                     }
-                    builtin::array_set<i32>(out.repr, $cse_108, current_74);
+                    builtin::array_set<i32>(out.repr, $cse_108, $current_74);
                     out.used = $cse_108 + 1;
                     continue l4;
                 };

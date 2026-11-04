@@ -145,7 +145,7 @@ fn "opt_fusion_hidden_break.wado/run"() with Stdout {
     let current: i32;
     let out_29: ref "core:prelude/string.wado//String";
     let x_95: i64;
-    let x_132: ref "core:prelude/types.wado//Option<i32>";
+    let $x_132: ref "core:prelude/types.wado//Option<i32>";
     let $sroa_$iter_0_start_136: i32;
     let arr: ref Array<u8>;
     let q: u64;
@@ -156,14 +156,14 @@ fn "opt_fusion_hidden_break.wado/run"() with Stdout {
         l2: loop {
             break_if b1 $sroa_$iter_0_start_136 >= 8;
             $sroa_$iter_0_start_136 = local.tee current($sroa_$iter_0_start_136) + 1;
-            let $mv$r_133$1: i32;
-            multivalue_bind [current, $mv$r_133$1] = "opt_fusion_hidden_break.wado/h$sroa[return]"(current);
-            if ref.test "core:prelude/types.wado//Option<i32>::Some"(local.tee x_132((if current == 0 -> ref "core:prelude/types.wado//Option<i32>" {
+            let $mv$$r_133$1: i32;
+            multivalue_bind [current, $mv$$r_133$1] = "opt_fusion_hidden_break.wado/h$sroa[return]"(current);
+            if ref.test "core:prelude/types.wado//Option<i32>::Some"(local.tee $x_132((if current == 0 -> ref "core:prelude/types.wado//Option<i32>" {
                 global:core:builtin::$unit_case$core:prelude/types.wado//Option<i32>$0;
             } else {
-                struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 1, payload_0: $mv$r_133$1 };
+                struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 1, payload_0: $mv$$r_133$1 };
             }))) {
-                current = ref.cast "core:prelude/types.wado//Option<i32>::Some"(x_132).payload_0;
+                current = ref.cast "core:prelude/types.wado//Option<i32>::Some"($x_132).payload_0;
                 got = got + current;
             } else {
                 got = got + 1000;
@@ -243,22 +243,22 @@ fn "opt_fusion_hidden_break.wado/run"() with Stdout {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_29, $sroa_$iter_0_start_136);
         }
-        $mv$r_133$1 = out_29.used;
+        $mv$$r_133$1 = out_29.used;
         out_29.used = $sroa_$iter_0_start_136;
-        builtin::array_set_u8(out_29.repr, $mv$r_133$1, 45);
+        builtin::array_set_u8(out_29.repr, $mv$$r_133$1, 45);
     } else {
     }
     if @unlikely(local.tee $sroa_$iter_0_start_136(out_29.used + current) > builtin::array_len(out_29.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_29, $sroa_$iter_0_start_136);
     }
-    $mv$r_133$1 = out_29.used;
+    $mv$$r_133$1 = out_29.used;
     out_29.used = $sroa_$iter_0_start_136;
     arr = out_29.repr;
-    $sroa_$iter_0_start_136 = $mv$r_133$1 + current;
+    $sroa_$iter_0_start_136 = $mv$$r_133$1 + current;
     b27: block {
         l28: loop {
-            break_if b27 ($sroa_$iter_0_start_136 - $mv$r_133$1) < 2;
+            break_if b27 ($sroa_$iter_0_start_136 - $mv$$r_133$1) < 2;
             q = x_95 /u 100_i64;
             tens = local.tee current(builtin::i32_wrap_i64(x_95 - (q * 100_i64))) / 10;
             builtin::array_set_u8(arr, $sroa_$iter_0_start_136 - 1, (48 + current) - (tens * 10));
@@ -268,8 +268,8 @@ fn "opt_fusion_hidden_break.wado/run"() with Stdout {
             continue l28;
         };
     };
-    if $sroa_$iter_0_start_136 > $mv$r_133$1 {
-        builtin::array_set_u8(arr, $mv$r_133$1, 48 + builtin::i32_wrap_i64(x_95 %u 10_i64));
+    if $sroa_$iter_0_start_136 > $mv$$r_133$1 {
+        builtin::array_set_u8(arr, $mv$$r_133$1, 48 + builtin::i32_wrap_i64(x_95 %u 10_i64));
     }
     $inline_core_prelude_string_wado_String__internal_push_view_47: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_47;

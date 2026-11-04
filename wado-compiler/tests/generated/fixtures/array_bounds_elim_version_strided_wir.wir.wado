@@ -288,7 +288,7 @@ fn "array_bounds_elim_version_strided_wir.wado/run"() with Stdout {
     let $load_3: ref Array<u8>;
     let m: ref "core:prelude//List<i32>";
     let current: i32;
-    let used_46: i32;
+    let $used_46: i32;
     let $sroa_v_end_52: i32;
     let $sroa_$iter_0_start_53: i32;
     let out_60: ref "core:prelude/string.wado//String";
@@ -301,12 +301,12 @@ fn "array_bounds_elim_version_strided_wir.wado/run"() with Stdout {
         l19: loop {
             break_if b18 $sroa_$iter_0_start_53 >= $sroa_v_end_52;
             $sroa_$iter_0_start_53 = local.tee current($sroa_$iter_0_start_53) + 1;
-            if @unlikely(local.tee used_46(m.used) >= builtin::array_len(m.repr)) {
+            if @unlikely(local.tee $used_46(m.used) >= builtin::array_len(m.repr)) {
                 cold_path;
                 "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(m);
             }
-            builtin::array_set<i32>(m.repr, used_46, current);
-            m.used = used_46 + 1;
+            builtin::array_set<i32>(m.repr, $used_46, current);
+            m.used = $used_46 + 1;
             continue l19;
         };
     };

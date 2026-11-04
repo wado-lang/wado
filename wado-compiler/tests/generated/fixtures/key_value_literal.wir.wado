@@ -2056,7 +2056,7 @@ fn "key_value_literal.wado/key_value_literal.wado/EitherBag<i32>^core:prelude/tr
     let $iter_0: ref "core:prelude/slice.wado//SliceValueIter<i32>";
     let end: i32;
     let item: i32;
-    let used_28: i32;
+    let $used_28: i32;
     let $hfs_index_35: i32;
     values = struct.new "core:prelude//List<i32>" { repr: builtin::array_new<i32>(builtin::array_len(elements)), used: 0 };
     end = builtin::array_len(elements);
@@ -2070,12 +2070,12 @@ fn "key_value_literal.wado/key_value_literal.wado/EitherBag<i32>^core:prelude/tr
             }
             item = builtin::array_get_value<i32>(elements, $hfs_index_35);
             $hfs_index_35 = $hfs_index_35 + 1;
-            if @unlikely(local.tee used_28(values.used) >= builtin::array_len(values.repr)) {
+            if @unlikely(local.tee $used_28(values.used) >= builtin::array_len(values.repr)) {
                 cold_path;
                 "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(values);
             }
-            builtin::array_set<i32>(values.repr, used_28, item);
-            values.used = used_28 + 1;
+            builtin::array_set<i32>(values.repr, $used_28, item);
+            values.used = $used_28 + 1;
             continue l240;
         };
     };

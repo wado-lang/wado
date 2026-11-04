@@ -551,7 +551,7 @@ global global:core:prelude/primitive.wado::$const_obj_12: ref "core:prelude/stri
 fn "iter_ref_adapter_monomorph.wado/$test_0_map_over_a__list_reference_iterator"() {
     let result: ref "core:prelude//List<i32>";
     let ref_val: i32;
-    let used_49: i32;
+    let $used_49: i32;
     let $sroa_self_repr_67: ref Array<i32>;
     let $sroa_self_index_68: i32;
     $sroa_self_repr_67 = global:iter_ref_adapter_monomorph.wado::$const_obj_2;
@@ -565,12 +565,12 @@ fn "iter_ref_adapter_monomorph.wado/$test_0_map_over_a__list_reference_iterator"
                     ref_val = builtin::array_get_value<i32>($sroa_self_repr_67, $sroa_self_index_68);
                     $sroa_self_index_68 = $sroa_self_index_68 + 1;
                     ref_val = ref_val * 2;
-                    if @unlikely(local.tee used_49(result.used) >= builtin::array_len(result.repr)) {
+                    if @unlikely(local.tee $used_49(result.used) >= builtin::array_len(result.repr)) {
                         cold_path;
                         "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(result);
                     }
-                    builtin::array_set<i32>(result.repr, used_49, ref_val);
-                    result.used = used_49 + 1;
+                    builtin::array_set<i32>(result.repr, $used_49, ref_val);
+                    result.used = $used_49 + 1;
                     break $fused_$inline_core_prelude_traits_wado_IterMap_core_prelude_slice_wado_SliceRefIter_i32__fn_mut__i32___i32__core_prelude_traits_wado_Iterator__next_sroa_return__7;
                 };
                 break b0;

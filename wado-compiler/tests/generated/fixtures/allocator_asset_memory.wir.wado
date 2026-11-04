@@ -373,7 +373,7 @@ fn "allocator_asset_memory.wado/run"() with Stdout {
     let before: ref "core:prelude//List<f32>";
     let current_28: i32;
     let $cm_pair_7: i64;
-    let value_77: f32;
+    let $value_77: f32;
     let $v3_93: f32;
     let $v1_99: f32;
     let $sroa_$iter_0_start_104: i32;
@@ -386,12 +386,12 @@ fn "allocator_asset_memory.wado/run"() with Stdout {
         l1: loop {
             break_if b0 $sroa_$iter_0_start_104 >= 64;
             $sroa_$iter_0_start_104 = local.tee current_28($sroa_$iter_0_start_104) + 1;
-            value_77 = "wasm:core:libm.wat/libm_expf"(base - (builtin::f32_convert_i32_s(current_28) * 0.25_f32));
+            $value_77 = "wasm:core:libm.wat/libm_expf"(base - (builtin::f32_convert_i32_s(current_28) * 0.25_f32));
             if @unlikely(local.tee current_28(before.used) >= builtin::array_len(before.repr)) {
                 cold_path;
                 "core:prelude/list.wado/core:prelude/list.wado/List<f32>::grow"(before);
             }
-            builtin::array_set<f32>(before.repr, current_28, value_77);
+            builtin::array_set<f32>(before.repr, current_28, $value_77);
             before.used = current_28 + 1;
             continue l1;
         };
@@ -402,7 +402,7 @@ fn "allocator_asset_memory.wado/run"() with Stdout {
         l4: loop {
             break_if b3 ptr >= 64;
             ptr = local.tee $sroa_$iter_0_start_104(ptr) + 1;
-            value_77 = base - (builtin::f32_convert_i32_s($sroa_$iter_0_start_104) * 0.25_f32);
+            $value_77 = base - (builtin::f32_convert_i32_s($sroa_$iter_0_start_104) * 0.25_f32);
             current_28 = before.used;
             if @unlikely($sroa_$iter_0_start_104 >= current_28) {
                 cold_path;
@@ -410,9 +410,9 @@ fn "allocator_asset_memory.wado/run"() with Stdout {
                 unreachable;
             }
             $v3_93 = builtin::array_get_value<f32>(before.repr, $sroa_$iter_0_start_104);
-            if @unlikely(((local.tee $v1_99("wasm:core:libm.wat/libm_expf"(value_77)) == $v3_93) | (($v1_99 != $v1_99) & ($v3_93 != $v3_93))) == 0) {
+            if @unlikely(((local.tee $v1_99("wasm:core:libm.wat/libm_expf"($value_77)) == $v3_93) | (($v1_99 != $v1_99) & ($v3_93 != $v3_93))) == 0) {
                 cold_path;
-                "allocator_asset_memory.wado/run$cold0"(before, $sroa_$iter_0_start_104, value_77, $v3_93, $v1_99);
+                "allocator_asset_memory.wado/run$cold0"(before, $sroa_$iter_0_start_104, $value_77, $v3_93, $v1_99);
                 unreachable;
             }
             continue l4;

@@ -533,8 +533,8 @@ fn "iter_mut_inplace.wado/$test_1_string_element_method_mutation_via__mut_iterat
     let ref_val: ref "core:prelude/string.wado//String";
     let a_55: ref Array<u8>;
     let b_58: ref Array<u8>;
-    let new_used_91: i32;
-    let start_93: i32;
+    let $new_used_91: i32;
+    let $start_93: i32;
     let $sroa_items_repr_96: ref "Array<core:prelude/string.wado/String>";
     let $sroa_$iter_0_index_99: i32;
     $sroa_items_repr_96 = array.new_fixed<ref "core:prelude/string.wado//String">(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97), used: 1 }, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(98), used: 1 });
@@ -544,13 +544,13 @@ fn "iter_mut_inplace.wado/$test_1_string_element_method_mutation_via__mut_iterat
             break_if b4 $sroa_$iter_0_index_99 >= 2;
             ref_val = builtin::array_get_value<ref "core:prelude/string.wado//String">($sroa_items_repr_96, $sroa_$iter_0_index_99);
             $sroa_$iter_0_index_99 = $sroa_$iter_0_index_99 + 1;
-            if @unlikely(local.tee new_used_91(ref_val.used + 1) > builtin::array_len(ref_val.repr)) {
+            if @unlikely(local.tee $new_used_91(ref_val.used + 1) > builtin::array_len(ref_val.repr)) {
                 cold_path;
-                "core:prelude/string.wado/core:prelude/string.wado/String::grow"(ref_val, new_used_91);
+                "core:prelude/string.wado/core:prelude/string.wado/String::grow"(ref_val, $new_used_91);
             }
-            start_93 = ref_val.used;
-            ref_val.used = new_used_91;
-            builtin::array_copy<u8>(ref_val.repr, start_93, global:iter_mut_inplace.wado::$const_obj_2, 0, 1);
+            $start_93 = ref_val.used;
+            ref_val.used = $new_used_91;
+            builtin::array_copy<u8>(ref_val.repr, $start_93, global:iter_mut_inplace.wado::$const_obj_2, 0, 1);
             continue l5;
         };
     };
@@ -562,36 +562,36 @@ fn "iter_mut_inplace.wado/$test_1_string_element_method_mutation_via__mut_iterat
         if $sroa_$iter_0_index_99 != 2 {
             break $inline_core_prelude_array_wado_seq_eq_u8__14: 0;
         }
-        new_used_91 = 0;
+        $new_used_91 = 0;
         b9: block {
             l10: loop {
-                break_if b9 (((new_used_91 >= $sroa_$iter_0_index_99) | ((new_used_91 + 1) >= $sroa_$iter_0_index_99)) | (((new_used_91 + 1) + 1) >= $sroa_$iter_0_index_99)) | ((((new_used_91 + 1) + 1) + 1) >= $sroa_$iter_0_index_99);
-                if builtin::array_get_value<u8>(a_55, new_used_91) != builtin::array_get_value<u8>(b_58, new_used_91) {
+                break_if b9 ((($new_used_91 >= $sroa_$iter_0_index_99) | (($new_used_91 + 1) >= $sroa_$iter_0_index_99)) | ((($new_used_91 + 1) + 1) >= $sroa_$iter_0_index_99)) | (((($new_used_91 + 1) + 1) + 1) >= $sroa_$iter_0_index_99);
+                if builtin::array_get_value<u8>(a_55, $new_used_91) != builtin::array_get_value<u8>(b_58, $new_used_91) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__14: 0;
                 }
-                new_used_91 = new_used_91 + 1;
-                if builtin::array_get_value<u8>(a_55, new_used_91) != builtin::array_get_value<u8>(b_58, new_used_91) {
+                $new_used_91 = $new_used_91 + 1;
+                if builtin::array_get_value<u8>(a_55, $new_used_91) != builtin::array_get_value<u8>(b_58, $new_used_91) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__14: 0;
                 }
-                new_used_91 = new_used_91 + 1;
-                if builtin::array_get_value<u8>(a_55, new_used_91) != builtin::array_get_value<u8>(b_58, new_used_91) {
+                $new_used_91 = $new_used_91 + 1;
+                if builtin::array_get_value<u8>(a_55, $new_used_91) != builtin::array_get_value<u8>(b_58, $new_used_91) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__14: 0;
                 }
-                new_used_91 = new_used_91 + 1;
-                if builtin::array_get_value<u8>(a_55, new_used_91) != builtin::array_get_value<u8>(b_58, new_used_91) {
+                $new_used_91 = $new_used_91 + 1;
+                if builtin::array_get_value<u8>(a_55, $new_used_91) != builtin::array_get_value<u8>(b_58, $new_used_91) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__14: 0;
                 }
-                new_used_91 = new_used_91 + 1;
+                $new_used_91 = $new_used_91 + 1;
                 continue l10;
             };
         };
         b15: block {
             l16: loop {
-                break_if b15 new_used_91 >= $sroa_$iter_0_index_99;
-                if builtin::array_get_value<u8>(a_55, new_used_91) != builtin::array_get_value<u8>(b_58, new_used_91) {
+                break_if b15 $new_used_91 >= $sroa_$iter_0_index_99;
+                if builtin::array_get_value<u8>(a_55, $new_used_91) != builtin::array_get_value<u8>(b_58, $new_used_91) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__14: 0;
                 }
-                new_used_91 = new_used_91 + 1;
+                $new_used_91 = $new_used_91 + 1;
                 continue l16;
             };
         };
@@ -615,36 +615,36 @@ String::from(\"a!\"): "), used: 21 }, s2: struct.new "core:prelude/string.wado//
         if $sroa_$iter_0_index_99 != 2 {
             break $inline_core_prelude_array_wado_seq_eq_u8__18: 0;
         }
-        new_used_91 = 0;
+        $new_used_91 = 0;
         b20: block {
             l21: loop {
-                break_if b20 (((new_used_91 >= $sroa_$iter_0_index_99) | ((new_used_91 + 1) >= $sroa_$iter_0_index_99)) | (((new_used_91 + 1) + 1) >= $sroa_$iter_0_index_99)) | ((((new_used_91 + 1) + 1) + 1) >= $sroa_$iter_0_index_99);
-                if builtin::array_get_value<u8>(a_55, new_used_91) != builtin::array_get_value<u8>(b_58, new_used_91) {
+                break_if b20 ((($new_used_91 >= $sroa_$iter_0_index_99) | (($new_used_91 + 1) >= $sroa_$iter_0_index_99)) | ((($new_used_91 + 1) + 1) >= $sroa_$iter_0_index_99)) | (((($new_used_91 + 1) + 1) + 1) >= $sroa_$iter_0_index_99);
+                if builtin::array_get_value<u8>(a_55, $new_used_91) != builtin::array_get_value<u8>(b_58, $new_used_91) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__18: 0;
                 }
-                new_used_91 = new_used_91 + 1;
-                if builtin::array_get_value<u8>(a_55, new_used_91) != builtin::array_get_value<u8>(b_58, new_used_91) {
+                $new_used_91 = $new_used_91 + 1;
+                if builtin::array_get_value<u8>(a_55, $new_used_91) != builtin::array_get_value<u8>(b_58, $new_used_91) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__18: 0;
                 }
-                new_used_91 = new_used_91 + 1;
-                if builtin::array_get_value<u8>(a_55, new_used_91) != builtin::array_get_value<u8>(b_58, new_used_91) {
+                $new_used_91 = $new_used_91 + 1;
+                if builtin::array_get_value<u8>(a_55, $new_used_91) != builtin::array_get_value<u8>(b_58, $new_used_91) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__18: 0;
                 }
-                new_used_91 = new_used_91 + 1;
-                if builtin::array_get_value<u8>(a_55, new_used_91) != builtin::array_get_value<u8>(b_58, new_used_91) {
+                $new_used_91 = $new_used_91 + 1;
+                if builtin::array_get_value<u8>(a_55, $new_used_91) != builtin::array_get_value<u8>(b_58, $new_used_91) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__18: 0;
                 }
-                new_used_91 = new_used_91 + 1;
+                $new_used_91 = $new_used_91 + 1;
                 continue l21;
             };
         };
         b26: block {
             l27: loop {
-                break_if b26 new_used_91 >= $sroa_$iter_0_index_99;
-                if builtin::array_get_value<u8>(a_55, new_used_91) != builtin::array_get_value<u8>(b_58, new_used_91) {
+                break_if b26 $new_used_91 >= $sroa_$iter_0_index_99;
+                if builtin::array_get_value<u8>(a_55, $new_used_91) != builtin::array_get_value<u8>(b_58, $new_used_91) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__18: 0;
                 }
-                new_used_91 = new_used_91 + 1;
+                $new_used_91 = $new_used_91 + 1;
                 continue l27;
             };
         };
@@ -664,7 +664,7 @@ String::from(\"b!\"): "), used: 21 }, s2: struct.new "core:prelude/string.wado//
 
 fn "iter_mut_inplace.wado/$test_2_nested_list_element_mutation_via__mut_iteration"() {
     let ref_val: ref "core:prelude//List<i32>";
-    let used_91: i32;
+    let $used_91: i32;
     let $sroa_rows_repr_98: ref "Array<core:prelude/list.wado/List<i32>>";
     let $sroa_$iter_0_index_101: i32;
     $sroa_rows_repr_98 = array.new_fixed<ref "core:prelude//List<i32>">(struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(1), used: 1 }, struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(2, 3), used: 2 });
@@ -674,12 +674,12 @@ fn "iter_mut_inplace.wado/$test_2_nested_list_element_mutation_via__mut_iteratio
             break_if b29 $sroa_$iter_0_index_101 >= 2;
             ref_val = builtin::array_get_value<ref "core:prelude//List<i32>">($sroa_rows_repr_98, $sroa_$iter_0_index_101);
             $sroa_$iter_0_index_101 = $sroa_$iter_0_index_101 + 1;
-            if @unlikely(local.tee used_91(ref_val.used) >= builtin::array_len(ref_val.repr)) {
+            if @unlikely(local.tee $used_91(ref_val.used) >= builtin::array_len(ref_val.repr)) {
                 cold_path;
                 "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(ref_val);
             }
-            builtin::array_set<i32>(ref_val.repr, used_91, 9);
-            ref_val.used = used_91 + 1;
+            builtin::array_set<i32>(ref_val.repr, $used_91, 9);
+            ref_val.used = $used_91 + 1;
             continue l30;
         };
     };
@@ -871,7 +871,7 @@ String::from(\"z\"): "), used: 20 }, s2: struct.new "core:prelude/string.wado//S
 fn "iter_mut_inplace.wado/$test_5_break_and_continue_keep_writes_on_in_place_elements"() {
     let seen: i32;
     let ref_val: ref "core:prelude//List<i32>";
-    let used_112: i32;
+    let $used_112: i32;
     let $sroa_rows_repr_119: ref "Array<core:prelude/list.wado/List<i32>>";
     let $sroa_$iter_0_index_122: i32;
     $sroa_rows_repr_119 = array.new_fixed<ref "core:prelude//List<i32>">(struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(1), used: 1 }, struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(2), used: 1 }, struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(3), used: 1 });
@@ -883,12 +883,12 @@ fn "iter_mut_inplace.wado/$test_5_break_and_continue_keep_writes_on_in_place_ele
             ref_val = builtin::array_get_value<ref "core:prelude//List<i32>">($sroa_rows_repr_119, $sroa_$iter_0_index_122);
             $sroa_$iter_0_index_122 = $sroa_$iter_0_index_122 + 1;
             continue_if l66 local.tee seen(seen + 1) == 2;
-            if @unlikely(local.tee used_112(ref_val.used) >= builtin::array_len(ref_val.repr)) {
+            if @unlikely(local.tee $used_112(ref_val.used) >= builtin::array_len(ref_val.repr)) {
                 cold_path;
                 "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(ref_val);
             }
-            builtin::array_set<i32>(ref_val.repr, used_112, 9);
-            ref_val.used = used_112 + 1;
+            builtin::array_set<i32>(ref_val.repr, $used_112, 9);
+            ref_val.used = $used_112 + 1;
             break_if b65 seen == 3;
             continue l66;
         };
