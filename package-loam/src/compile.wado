@@ -20,23 +20,19 @@ use { bind_dims, keep_last, keep_outputs, take_arg_max } from "./specialize.wado
 export struct Options {
     /// Static extents for the graph's symbolic dimensions, keyed by `dim_param`.
     pub dims: TreeMap<String, i32> = {},
-    /// The graph outputs `forward` returns. Empty keeps every output.
+    /// The graph outputs `compute` returns. Empty keeps every output.
     pub outputs: List<String> = [],
-    /// Outputs `forward` returns only the last position of, each by the axis
+    /// Outputs `compute` returns only the last position of, each by the axis
     /// it is cut along. What computes each position from the same position of
     /// its operands computes the last alone; what reads across them, as
     /// attention does, still computes them all.
     pub last: TreeMap<String, i32> = {},
-    /// Outputs `forward` returns the index of the greatest element of, each by
+    /// Outputs `compute` returns the index of the greatest element of, each by
     /// the axis it ranks along, kept at extent 1: a greedy pick reads one
     /// index rather than a vocabulary's scores. Applied after `last`.
     pub arg_max: TreeMap<String, i32> = {},
-    /// Whether operators fuse into one kernel where the plan finds they can.
-    /// Off, every kernel writes its output, which is what a fused module is
-    /// compared against.
-    pub fuse: bool = true,
     /// Whether the weights a `type: "onnx"` file carries are compiled into the
-    /// module. Off, the build reads past them, and `Prepared::load` reads them
+    /// module. Off, the build reads past them, and `Params::load` reads them
     /// out of that file where the build found them, so a model too large to
     /// compile in still builds.
     pub embed: bool = true,
@@ -78,11 +74,10 @@ fn read_graph(path: &String, spelling: Spelling, bytes: ByteList) -> Result<Grap
     return onnx_text::read(&text_of(path, bytes)?).map_err(|e| at(path, &e));
 }
 
-/// A graph, what checking it proved, and whether its kernels fuse.
+/// A graph, and what checking it proved.
 pub struct Model {
     pub graph: Graph,
     pub checked: Checked,
-    pub fuse: bool,
 }
 
 /// The graph at `path`, specialized by `options` and checked.
@@ -91,7 +86,7 @@ pub fn check(path: &String, spelling: Spelling, bytes: ByteList, options: &Optio
     bind_dims(&mut graph, &options.dims).map_err(|e| at(path, &e))?;
     keep_outputs(&mut graph, &options.outputs).map_err(|e| at(path, &e))?;
     // An extent the algebra cannot discharge stops the build here. The one
-    // tier below this is `forward`, which checks only an inequality over the
+    // tier below this is `compute`, which checks only an inequality over the
     // input symbols.
     let mut checked = infer(&graph).map_err(|e| at(path, &e))?;
     // Where a cut can move depends on each operand's rank and on which axes
@@ -104,7 +99,7 @@ pub fn check(path: &String, spelling: Spelling, bytes: ByteList, options: &Optio
         take_arg_max(&mut graph, &checked, output, *axis).map_err(|e| at(path, &e))?;
         checked = infer(&graph).map_err(|e| at(path, &e))?;
     }
-    return Result::Ok(Model { graph, checked, fuse: options.fuse });
+    return Result::Ok(Model { graph, checked });
 }
 
 /// The graph read off `content` with its weights' payloads left in the file at
@@ -180,14 +175,14 @@ pub fn weights_of(indexes: List<[String, ByteList]>, files: List<CheckpointFile>
     });
 }
 
-/// The module `model`'s `forward` runs in, importing its runtime from the
+/// The module `model`'s `compute` runs in, importing its runtime from the
 /// package spec `runtime`, once `model` is checked against `weights`.
 pub fn generate_model(model: &Model, path: &String, weights: Weights, runtime: &String) -> Result<String, String> {
     let graph = &model.graph;
     let shapes = &model.checked.shapes;
-    // Emitting first refuses an element type no kernel holds, which the checks
+    // Emitting first refuses an element type no tensor holds, which the checks
     // below take as given.
-    let emit_with = |weights_from: Placement| emit(graph, &model.checked, runtime, model.fuse, weights_from).map_err(
+    let emit_with = |weights_from: Placement| emit(graph, &model.checked, runtime, weights_from).map_err(
         |e| at(path, &e),
     );
     if let Some(in_place) = graph.in_place {

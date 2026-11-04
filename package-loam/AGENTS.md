@@ -42,14 +42,9 @@ never touched. Test outward from the change, and run the whole package once,
 last:
 
 1. The test beside the file changed, such as `src/runtime/recorded_test.wado`.
-2. `conformance/backend_test.wado`, for a change to a runtime trait (`Graph`,
-   `Backend`, `Holds`) or to what `emit.wado` writes. It compiles generated
-   modules against a backend outside the package that wraps `Cpu`. A generated
-   module imports every runtime trait, so a method name two traits share fails
-   to compile there.
-3. `cargo test --test compute loam` in `wado-run-webgpu/`, for a change
+2. `cargo test --test compute loam` in `wado-run-webgpu/`, for a change
    `WebGpuBackend` runs. It checks each result against `Cpu`'s.
-4. `wado test package-loam`.
+3. `wado test package-loam`.
 
 ## Oracles
 

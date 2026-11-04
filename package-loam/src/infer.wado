@@ -285,9 +285,9 @@ fn owe_equal(node: &Node, owed: &mut List<Condition>, a: &Poly, b: &Poly, condit
     return owe_equal_at(owed, &node.site(), a, b, condition).map_err(|reason| refusal(node, reason));
 }
 
-/// Check a graph. Producing a shape for every tensor a kernel reads is what
-/// discharges the graph's extent conditions, so a successful return is the
-/// proof, save the conditions it hands `forward` to check.
+/// Check a graph. Producing a shape for every tensor an operation reads is
+/// what discharges the graph's extent conditions, so a successful return is the
+/// proof, save the conditions it hands `compute` to check.
 pub fn infer(graph: &Graph) -> Result<Checked, InferError> {
     let mut scope = Checked {
         shapes: HashMap::new(),

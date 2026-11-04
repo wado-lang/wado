@@ -7,7 +7,7 @@ use { HashMap } from "core:collections";
 
 /// A condition on the symbols the build relies on and cannot prove, as a
 /// clamped `Slice` bound read as unclamped is: `slack` is at least 0 for every
-/// input `forward` accepts, since it checks this before any kernel runs.
+/// input `compute` accepts, since it checks this before the pass begins.
 pub struct Condition {
     pub slack: Poly,
     /// The condition as the refusal states it, at the node that relies on it.
@@ -28,7 +28,7 @@ pub struct Poly {
     terms: List<Term>,
 }
 
-/// An operation no polynomial expresses, which `forward` computes a derived
+/// An operation no polynomial expresses, which the run computes a derived
 /// symbol by.
 pub enum Op {
     /// The lesser of two operands.
@@ -46,7 +46,7 @@ pub enum Op {
     Wrap32,
 }
 
-/// How `forward` computes a derived symbol from others.
+/// How the run computes a derived symbol from others.
 struct Derivation {
     op: Op,
     operands: List<Poly>,
@@ -54,7 +54,7 @@ struct Derivation {
     origin: String,
 }
 
-/// A factor a term multiplies: a length an input carries, or a value `forward`
+/// A factor a term multiplies: a length an input carries, or a value the run
 /// derives from others by an operation no polynomial expresses.
 struct Symbol {
     /// An input symbol's `dim_param`, or a derived one as a message writes it:
@@ -375,7 +375,7 @@ impl Poly {
         };
     }
 
-    /// The symbol `forward` computes by `op` over `operands`, for the node
+    /// The symbol the run computes by `op` over `operands`, for the node
     /// `origin` names.
     fn derived(op: Op, operands: List<Poly>, origin: &String) -> Poly {
         let d = Derivation { op, operands, origin: *origin };
@@ -712,7 +712,7 @@ impl Poly {
     }
 
     /// Whether every value of the symbols keeps this within `i64`, and every
-    /// partial sum `forward` computes on the way, term by term, and every
+    /// partial sum the run computes on the way, term by term, and every
     /// derived symbol's operands. Stage 0's own algebra is exact however large
     /// it grows; this is what a value the run computes in `i64` needs. A
     /// partial sum lies between the negative terms' sum and the positive terms'.

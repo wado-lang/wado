@@ -226,7 +226,7 @@ fn read_initializer(
 }
 
 /// Records where `t`'s external data sits in its file, which the reader was
-/// not given, for `Prepared::load` to read it there.
+/// not given, for `Params::load` to read it there.
 fn leave_in_place(t: &onnx::TensorProto, name: &String, in_place: &mut Option<InPlace>) -> Result<(), String> {
     let location = external_location(t, name)?;
     let Some(length) = external_number(t, name, "length")? else {

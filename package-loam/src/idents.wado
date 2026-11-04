@@ -4,20 +4,17 @@
 use { HashSet } from "core:collections";
 use { is_reserved } from "lib:wadopoet";
 
-/// The type parameter `forward` takes its backend as.
+/// The type parameter `build` takes its backend as.
 pub global BACKEND_PARAM: String = "Bk";
 
 /// The type parameter `load` takes its checkpoint's bytes as.
 pub global CHECKPOINT_PARAM: String = "Ck";
 
-/// The struct `pass` returns several outputs in, as the backend holds them.
+/// The struct `build` returns several outputs in, as the backend holds them.
 pub global PASSED: String = "Passed";
 
-/// The struct `forward` returns several outputs in, on the host.
+/// The struct `compute` returns several outputs in, on the host.
 pub global OUTPUTS: String = "Outputs";
-
-/// The struct `forward` reads the weights from.
-pub global PREPARED: String = "Prepared";
 
 /// The struct `build` reads the weights from, each a tensor of the graph.
 pub global PARAMS: String = "Params";
@@ -41,8 +38,7 @@ pub global RECORDED: String = "recorded";
 /// The function giving the extents `recorded` takes at the least lengths.
 pub global LEAST_EXTENTS: String = "least_extents";
 
-/// The functions the constructors of `Prepared` and `Params` keep each folded
-/// literal with.
+/// The functions the constructor of `Params` keeps each folded literal with.
 pub global KEPT: String = "Kept";
 
 /// The map a sharded `load` takes the shards in, keyed by file name.
@@ -51,14 +47,12 @@ pub global MAP: String = "HashMap";
 /// What the generated module imports from the runtime: every name its code
 /// spells, whether or not one graph's code reads it.
 pub global RUNTIME_NAMES: List<String> = [
-    "Any", "Attention", "Backend", "Binary", "BinaryOp", "CheckpointBytes", "Columns", "Comparison", "Concat",
-    "Convolution", "Cpu", "DotDims", "Epilogue", "Expected", "Expr", "GatherDims", "Graph", "Holds", "LoadError",
-    "Merged", "One", "Paired", "Programs", "Prologue", "Recorded", "Recorder", "RowOp", "Step", "Tensor", "Unary",
-    "UnaryOp", "Untyped", "Window", "WindowReduce", "assembled", "axis_mismatch", "bool_host", "bool_of", "branched",
-    "capacity_of",
-    "expect_len", "extent_mismatch", "extents_mismatch", "f32_host", "f32_of", "fitted", "from_end", "from_end_indices",
-    "full", "i64_host", "i64_of", "input_mismatch", "joined_at", "lifted", "masked", "narrow", "payload_at", "quotient",
-    "range_i64", "read_checkpoint", "read_shards", "reduce_mean", "refuse", "resized", "softmax", "softmax_flattened",
+    "Any", "Attention", "Binary", "CheckpointBytes", "Convolution", "Cpu", "DotDims", "Expected", "GatherDims", "Graph",
+    "Holds", "LoadError", "Merged", "Programs", "Recorded", "Recorder", "Tensor", "Unary", "Untyped", "WindowReduce",
+    "assembled", "axis_mismatch", "bool_host", "bool_of", "branched", "capacity_of", "expect_len", "extent_mismatch",
+    "extents_mismatch", "f32_host", "f32_of", "fitted", "from_end", "from_end_indices", "full", "i64_host", "i64_of",
+    "input_mismatch", "joined_at", "lifted", "masked", "narrow", "payload_at", "quotient", "range_i64",
+    "read_checkpoint", "read_shards", "reduce_mean", "refuse", "resized", "softmax", "softmax_flattened",
     "strided_gather", "to_extent", "unmet", "widen", "written_at",
 ];
 
@@ -73,8 +67,6 @@ pub fn module_idents() -> HashSet<String> {
     for let name of RUNTIME_NAMES {
         reserved.insert(name);
     }
-    reserved.insert("forward");
-    reserved.insert("pass");
     reserved.insert("build");
     reserved.insert("compute");
     reserved.insert(LENGTHS);
@@ -87,7 +79,6 @@ pub fn module_idents() -> HashSet<String> {
     reserved.insert(PASSED);
     reserved.insert("weights");
     reserved.insert("Weights");
-    reserved.insert(PREPARED);
     reserved.insert(KEPT);
     reserved.insert(CACHE);
     reserved.insert("cache");
@@ -100,11 +91,10 @@ pub fn module_idents() -> HashSet<String> {
     reserved.insert("extents");
     reserved.insert("results");
     reserved.insert("passed");
-    // The methods `Weights`, `Prepared`, `Params` and `Cache` carry, which a
+    // The methods `Weights`, `Params` and `Cache` carry, which a
     // field must not share.
     reserved.insert("empty");
     reserved.insert("retain");
-    reserved.insert("prepare");
     reserved.insert("load");
     reserved.insert("embedded");
     reserved.insert("held");

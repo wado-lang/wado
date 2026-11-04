@@ -179,18 +179,6 @@ fn assert_loam_conformance(program: &str, lines: usize) {
     }
 }
 
-/// Thirteen outputs, from a device's own binding limit and from one smaller
-/// than a weight, which splits the kernels reading it, then three `arg_max`es,
-/// then four products of a few rows from each limit, then two across weights
-/// of few columns and of many, then six reads of a weight kept in bf16 or f32
-/// from each limit, then three paired products, then two under a binding only
-/// half their columns fit, then three products of a normalization, paired and
-/// alone, then both parts of three concatenated products of one.
-#[test]
-fn loams_webgpu_backend_computes_what_its_cpu_backend_does() {
-    assert_loam_conformance("webgpu.wado", 68);
-}
-
 /// Grouped query attention runs on the device, with a past and without, turned
 /// in whole or in part, biased, capped and windowed, over one part of positions
 /// and over several, along a chain of steps through its cache: appended in

@@ -1,0 +1,130 @@
+//! How `build` lowers each node of a checked graph. Emission and `loam dump`
+//! read the one answer.
+
+use { HashMap } from "core:collections";
+use { Graph, Node, data_type, read_at, settled } from "./graph.wado";
+use { Checked, transpose_perm } from "./infer.wado";
+
+/// What `build` does for one node.
+pub enum Lowering {
+    /// Nothing: stage 0 computed its outputs, which `build` spells as
+    /// literals.
+    Folded,
+    /// Nothing: its output is another name for its operand (`is_alias`).
+    Alias,
+    /// A conditional over the condition, each branch a block of its own.
+    Branch,
+    /// The operations of `Graph` that compute its outputs.
+    Operation,
+    /// Nothing: a weight matrix's `Transpose` that only a `MatMul` reads, as
+    /// its right operand, which the product reads by the weight as stored.
+    Transposed,
+}
+
+/// How `build` lowers each of `graph`'s nodes, by position.
+pub fn lowerings(graph: &Graph, checked: &Checked) -> List<Lowering> {
+    let mut lowered: List<Lowering> = graph.nodes.into_iter().map(|n| lowering_of(&n, checked)).collect();
+    let mut made = HashMap::<String, i32>::new();
+    let mut read = HashMap::<String, List<i32>>::new();
+    for let [at, node] of graph.nodes.into_iter().enumerate() {
+        for let o of node.outputs {
+            made[o] = at;
+        }
+        if lowered[at] matches { Folded } {
+            continue;
+        }
+        for let t of node.reads() {
+            read_at(&mut read, &t, at);
+        }
+    }
+    // The scope reads what it returns, at no node's position.
+    for let vi of &graph.outputs {
+        read_at(&mut read, &vi.name, -1);
+    }
+    let only_reader = |tensor: &String| -> Option<i32> {
+        let by = read.get(*tensor).unwrap_or([]);
+        return if by.len() == 1 { Option::Some(by[0]) } else { null };
+    };
+    for let [at, node] of graph.nodes.into_iter().enumerate() {
+        if node.op != "MatMul" || !lowered[at] matches { Operation } || checked.shapes[node.inputs[0]].rank() < 2 {
+            continue;
+        }
+        let Some(t) = made.get(node.inputs[1]) else {
+            continue;
+        };
+        let transpose = &graph.nodes[t];
+        let weight = &transpose.inputs[0];
+        if transpose.op == "Transpose"
+            && lowered[t] matches { Operation }
+            && checked.shapes[*weight].rank() == 2
+            && settled(transpose_perm(transpose, 2)) == [1, 0] as List<i32>
+            && graph.initializers.into_iter().any(|vi| vi.name == *weight)
+            && only_reader(&transpose.outputs[0]) == Option::Some(at) {
+            lowered[t] = Lowering::Transposed;
+        }
+    }
+    return lowered;
+}
+
+/// How `build` lowers `node`, in the scope `checked`, before a product reads
+/// a weight's transpose past it.
+pub fn lowering_of(node: &Node, checked: &Checked) -> Lowering {
+    if checked.known.contains_key(node.outputs[0]) {
+        return Lowering::Folded;
+    }
+    if is_alias(node, checked) {
+        return Lowering::Alias;
+    }
+    if node.op == "If" {
+        return Lowering::Branch;
+    }
+    return Lowering::Operation;
+}
+
+/// Whether a node computes nothing, so its output is another name for its
+/// operand: an `Identity`, or a `Cast` to the primitive the operand has. An
+/// int32 target is held in `i64` too, but keeps only the low half.
+pub fn is_alias(node: &Node, checked: &Checked) -> bool {
+    let primitives = &checked.primitives;
+    return node.op == "Identity"
+        || node.op == "Cast"
+            && !data_type(settled(node.required_int_attr("to"))) matches { Some(Int32) }
+            && primitives.get(node.inputs[0]) == primitives.get(node.outputs[0]);
+}
+
+/// One branch of an `If`: the attribute holding it, the graph stage 0 read
+/// from it, and the scope stage 0 checked it in.
+pub struct IfBranch {
+    pub attr: String,
+    pub graph: Graph,
+    pub checked: Checked,
+}
+
+/// An `If`'s two branches, then before else.
+pub fn branches(node: &Node, checked: &Checked) -> [IfBranch, IfBranch] {
+    let [then_scope, else_scope] = checked.branches[node.outputs[0]];
+    let branch = |attr: String, scope: Checked| IfBranch {
+        attr,
+        graph: node.attr(attr).unwrap().graph.unwrap(),
+        checked: scope,
+    };
+    return [
+        branch("then_branch", then_scope),
+        branch("else_branch", else_scope),
+    ];
+}
+
+/// Each `If`'s two branches in `graph`, in order: the graph each holds, and the
+/// scope stage 0 checked it in.
+pub fn branches_of(graph: &Graph, checked: &Checked) -> List<[Graph, Checked]> {
+    let mut found: List<[Graph, Checked]> = [];
+    for let node of &graph.nodes {
+        if !checked.branches.contains_key(node.outputs[0]) {
+            continue;
+        }
+        for let b of branches(node, checked) {
+            found.push([b.graph, b.checked]);
+        }
+    }
+    return found;
+}
