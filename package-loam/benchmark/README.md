@@ -50,8 +50,9 @@ the logits.
 
 ## Environment
 
-Wado 2026-11-04 (`-O2`), wasmtime 50.0.1, wgpu-core 29, onnxruntime 1.31.1
-on CUDA 13.2.2 (cuBLAS 13.4.1.3), onnxruntime-node 1.31.1 on Node 26.13.0, llama.cpp b11846, gcc 15.2.0 (`-O2`), AMD Ryzen 7 5700X (8 cores, 16 threads),
+Wado 2026-11-04 (`-O2`), wasmtime 50.0.1, wgpu-core 29, onnxruntime 1.31.1 on
+CUDA 13.2.2 (cuBLAS 13.4.1.3), onnxruntime-node 1.31.1 on Node 26.13.0,
+llama.cpp b11846, gcc 15.2.0 (`-O2`), AMD Ryzen 7 5700X (8 cores, 16 threads),
 NVIDIA GeForce RTX 4060 Ti (driver 595.99.02, Vulkan), Linux x86_64. `wado`
 and `wado-run-webgpu` are release builds, as the tasks build them. Each figure
 is the best of three runs.
@@ -77,8 +78,8 @@ Every arm generated "John. I'm a writer, and".
 ## Gemma 3 (270M)
 
 The Loam and onnxruntime arms read the weights `example/gemma3-270m/fetch.sh`
-downloads, in f32. llama.cpp reads GGUF in F16, the precision nearest it. Google ships no F16 GGUF and
-ggml-org only Q8_0, so it is unsloth's conversion.
+downloads, in f32. llama.cpp reads GGUF in F16, the precision nearest it.
+Google ships no F16 GGUF and ggml-org only Q8_0, so it is unsloth's conversion.
 
 | Arm                  | Program                                        |
 | -------------------- | ---------------------------------------------- |

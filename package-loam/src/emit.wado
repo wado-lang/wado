@@ -1327,7 +1327,7 @@ fn emit_held(
     least: String,
 ) {
     w.blank();
-    let mut block = ImplSpec::new(`${PARAMS}<${BACKEND_PARAM}>`);
+    let mut block = ImplSpec::new(PARAMS_TYPE);
     block.add_generic(GRAPH_BOUND);
     block.emit_begin(w);
     w.line("/// The initializers, `load(at)` the `at`th on the host, as `backend` keeps");
@@ -1335,7 +1335,7 @@ fn emit_held(
     FnSpec::new("held").add_generic("Er").add_param("backend", `&mut ${BACKEND_PARAM}`).add_param(
         "load",
         "fn(i32) -> Result<Any<Cpu>, Er> with _",
-    ).set_return_type(`Result<${PARAMS}<${BACKEND_PARAM}>, Er>`).add_effect("_").emit_begin(w);
+    ).set_return_type(`Result<${PARAMS_TYPE}, Er>`).add_effect("_").emit_begin(w);
     let count = graph.initializers.len();
     w.line(
         `let weights = backend.kept_weights(|recorder| ${least}, ${first}, ${count}, load)?;`,
@@ -1465,7 +1465,7 @@ fn weight_names(graph: &Graph, kept: &List<String>) -> List<String> {
 fn emit_model(w: &mut CodeWriter) {
     let mut model = StructSpec::new(MODEL, Vis::Pub);
     model.add_generic(GRAPH_BOUND);
-    model.add_field("weights", `${PARAMS}<${BACKEND_PARAM}>`);
+    model.add_field("weights", PARAMS_TYPE);
     model.add_pub_field("programs", `Programs<${BACKEND_PARAM}>`);
     w.blank();
     w.line("/// The weights as `Bk` holds them, and the program `Bk` compiled for each");
@@ -1475,7 +1475,7 @@ fn emit_model(w: &mut CodeWriter) {
     let mut held = ImplSpec::new(`${MODEL}<${BACKEND_PARAM}>`);
     held.add_generic(GRAPH_BOUND);
     held.emit_begin(w);
-    w.line(`pub fn new(weights: ${PARAMS}<${BACKEND_PARAM}>) -> ${MODEL}<${BACKEND_PARAM}> {`);
+    w.line(`pub fn new(weights: ${PARAMS_TYPE}) -> ${MODEL}<${BACKEND_PARAM}> {`);
     w.line(`    return ${MODEL} { weights, programs: Programs::new() };`);
     w.line("}");
     w.end();

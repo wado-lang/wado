@@ -46,8 +46,6 @@ fn mask(data: List<f32>) -> Tensor<f32, [grown::X0, grown::Mask1, grown::T]> {
     };
 }
 
-// The mask's length is owed equal to the past's and the sequence's, which
-// `build` spells over the grown past's capacity rather than the past's.
 test "compute hands keys that grow by each pass's positions to the next pass" {
     let mut cpu = Cpu {};
     let mut model = grown::Model::new(grown::Params::embedded(&mut cpu));
