@@ -6,9 +6,10 @@
 
 Kiln stdlib entry point.
 
-Import the user-facing Kiln types via `use { ... } from "core:kiln"`. This facade re-exports the WIT-generated
-submodules under `lib/core/kiln/` and adds the Wado-only `Request<T>`
-wrapper that generator authors write against.
+Import the user-facing Kiln types via `use { ... } from "core:kiln"`. This
+facade re-exports the WIT-generated submodules under `lib/core/kiln/` and
+adds the Wado-only `Request<T>` wrapper that generator authors write
+against.
 
 See WEP 2026-04-12 (Kiln) §"The generator contract" and §"Options are a
 typed argument in each generator's own world".
