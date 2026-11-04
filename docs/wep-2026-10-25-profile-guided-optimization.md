@@ -300,7 +300,17 @@ at a cold one. LLVM's ratios are about 13 and a fifth.
 
 The hot ratio was measured at 4, 8 and 16 on the fuel benchmarks against
 `-f no-pgo`. 16 bought 0.2 points more of the geometric mean than 8, for nearly
-twice 8's growth of `gale_gen`.
+twice 8's growth of `gale_gen`. The cold ratio was measured at a half down to an
+eighth, and moved no fuel region. A quarter grew `gale_gen` least.
+
+A hot site weighs the callee's cold paths, though the plain price leaves them
+out. A splice copies them all the same. Priced plain, `CitmCatalog::deserialize`
+spliced its field decoders and grew 42-fold, and `json_catalog`'s module more
+than doubled, for 4% less fuel.
+
+A call under a `?` is priced by the region around the `?`. The `?`'s own region
+spans its operand but counts only the failure path, which the call runs before,
+so every such call read as never run and was priced cold.
 
 The heat of each measured region is kept in a table beside the IR, keyed by
 the region's source span, and the inliner looks a call up by its span. A spliced

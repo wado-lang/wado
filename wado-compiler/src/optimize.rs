@@ -187,7 +187,8 @@ pub fn optimize(
     // A hot site at 8x the level's threshold, against 4x and 16x on the fuel
     // benchmarks: 16x bought 0.2 points more of the geometric mean for nearly
     // twice 8x's code growth on gale_gen. LLVM's ratio is 3000 to 225, about
-    // 13x.
+    // 13x. A cold site at a quarter: no fuel region moved from a half down to
+    // an eighth, and a quarter grew gale_gen least.
     let thresholds = |level: usize| {
         let plain = inline_threshold.unwrap_or(level);
         inline::Thresholds {
