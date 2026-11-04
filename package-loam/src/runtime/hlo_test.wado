@@ -321,6 +321,42 @@ test "dot_general puts the batch axes, then the left's free axes, then the right
     assert y.data == [1.0, 2.0, 6.0, 8.0] as List<f32>;
 }
 
+test "dot_general sums each column of a right operand whose contracting axis leads, past a run of 16" {
+    let g = &mut Cpu {};
+    let [batch, m, k, n] = [2, 2, 3, 18];
+    let mut a: List<f32> = [];
+    for let i of 0..<batch * m * k {
+        a.push(i as f32 + 1.0);
+    }
+    let mut b: List<f32> = [];
+    for let i of 0..<batch * k * n {
+        b.push((i % 7) as f32 - 3.0);
+    }
+    let lhs = Tensor::<f32, [A, B, C]> { data: a, extents: [batch, m, k] };
+    let rhs = Tensor::<f32, [A, C, D]> { data: b, extents: [batch, k, n] };
+    let dims = DotDims {
+        lhs_batch: [0],
+        rhs_batch: [0],
+        lhs_contracting: [2],
+        rhs_contracting: [1],
+    };
+    let y: Tensor<f32, [A, B, D]> = g.dot_general(&lhs, &rhs, &dims);
+    let mut expected: List<f32> = [];
+    for let s of 0..<batch {
+        for let r of 0..<m {
+            for let c of 0..<n {
+                let mut sum: f32 = 0.0;
+                for let j of 0..<k {
+                    sum += a[(s * m + r) * k + j] * b[(s * k + j) * n + c];
+                }
+                expected.push(sum);
+            }
+        }
+    }
+    assert y.extents == [batch, m, n] as List<i32>;
+    assert y.data == expected;
+}
+
 test "dot_general reads a right operand whose contracting axis is last in place" {
     let g = &mut Cpu {};
     let lhs = Tensor::<f32, [A, B]> {
