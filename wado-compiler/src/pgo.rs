@@ -91,15 +91,18 @@ impl Profile {
             reading: Reading {
                 thresholds,
                 hot_line: self.count_line(thresholds.hot),
-                cold_line: self.count_line(thresholds.cold),
+                // No count inside the share leaves only a region that never
+                // ran at or below it.
+                cold_line: self.count_line(thresholds.cold).unwrap_or(0),
             },
         }
     }
 
     /// The smallest count still inside `cutoff`'s share of all runs, with
     /// every count sorted from the largest down and the share rounded down, as
-    /// LLVM's `ProfileSummaryBuilder` places its hot and cold lines.
-    fn count_line(&self, cutoff: Cutoff) -> i64 {
+    /// LLVM's `ProfileSummaryBuilder` places its hot and cold lines. `None`
+    /// where the share holds no count.
+    fn count_line(&self, cutoff: Cutoff) -> Option<i64> {
         let mut counts: Vec<i64> = self
             .modules
             .values()
@@ -109,13 +112,13 @@ impl Profile {
         counts.sort_unstable_by(|a, b| b.cmp(a));
         let total: u128 = counts.iter().map(|&count| count as u128).sum();
         let share = total * u128::from(cutoff.0) / u128::from(Cutoff::PER_MILLION);
-        let (mut runs, mut line) = (0, 0);
+        let (mut runs, mut line) = (0, None);
         for &count in &counts {
             if runs >= share {
                 break;
             }
             runs += count as u128;
-            line = count;
+            line = Some(count);
         }
         line
     }
@@ -177,7 +180,7 @@ impl Default for Thresholds {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct Reading {
     thresholds: Thresholds,
-    hot_line: i64,
+    hot_line: Option<i64>,
     cold_line: i64,
 }
 
@@ -185,7 +188,7 @@ impl Reading {
     /// How a call in a region the profile ran `runs` times is priced, as
     /// LLVM's `isHotCount` and `isColdCount` read a count.
     fn heat(self, runs: i64) -> Heat {
-        if runs > 0 && runs >= self.hot_line {
+        if runs > 0 && self.hot_line.is_some_and(|line| runs >= line) {
             Heat::Hot
         } else if runs <= self.cold_line {
             Heat::Cold
@@ -339,6 +342,7 @@ pub(crate) struct MarkMap {
 #[derive(Debug, Clone, Default)]
 pub struct HeatMap {
     regions: IndexMap<AstIdSpace, Vec<MeasuredRegion>>,
+    any_hot: bool,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -351,15 +355,16 @@ struct MeasuredRegion {
 }
 
 impl HeatMap {
-    /// Whether no region was measured, so every site is [`Heat::Plain`].
+    /// Whether some region is [`Heat::Hot`].
     #[must_use]
-    pub fn is_empty(&self) -> bool {
-        self.regions.is_empty()
+    pub fn any_hot(&self) -> bool {
+        self.any_hot
     }
 
     fn add(&mut self, space: AstIdSpace, measured: impl IntoIterator<Item = MeasuredRegion>) {
         let regions = self.regions.entry(space).or_default();
         regions.extend(measured);
+        self.any_hot |= regions.iter().any(|r| r.heat == Heat::Hot);
         regions.sort_by_key(|r| (r.start, std::cmp::Reverse(r.end)));
         let mut open: Vec<usize> = Vec::new();
         for i in 0..regions.len() {
@@ -765,12 +770,33 @@ mod tests {
         )
         .expect("it parses");
         let line = |per_million| profile.count_line(Cutoff::new(per_million).expect("a share"));
-        assert_eq!(line(900_000), 900);
-        assert_eq!(line(990_000), 90);
-        assert_eq!(line(999_999), 10);
+        assert_eq!(line(900_000), Some(900));
+        assert_eq!(line(990_000), Some(90));
+        assert_eq!(line(999_999), Some(10));
+        assert_eq!(line(0), None);
         let reading = profile.applied(Thresholds::default()).reading;
         assert_eq!(reading.heat(90), Heat::Hot);
         assert_eq!(reading.heat(50), Heat::Plain);
+        assert_eq!(reading.heat(10), Heat::Cold);
+    }
+
+    /// A share that holds no count places no line, so nothing is hot.
+    #[test]
+    fn an_empty_hot_share_heats_nothing() {
+        let profile = parse(
+            "wado-pgo 1\n\
+             module src/a.wado\n\
+             fn 0000000000000001 1 f\n\
+             0 900\n\
+             1 10\n",
+        )
+        .expect("it parses");
+        let thresholds = Thresholds {
+            hot: Cutoff::new(0).expect("a share"),
+            ..Thresholds::default()
+        };
+        let reading = profile.applied(thresholds).reading;
+        assert_eq!(reading.heat(900), Heat::Plain);
         assert_eq!(reading.heat(10), Heat::Cold);
     }
 

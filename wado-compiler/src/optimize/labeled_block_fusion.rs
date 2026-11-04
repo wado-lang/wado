@@ -1330,7 +1330,8 @@ impl BoundValue {
 
 /// The locals `arm` binds, and `binding` where it is the arm's pattern binding,
 /// that a copy of the arm may bind afresh: every read of one lies in the arm,
-/// in the skeleton, which a copy renames, and no `let` outside binds it.
+/// in the skeleton, which a copy renames, and nothing else binds it, as
+/// [`Engine::local_bindings`] counts a binding.
 fn renamable_locals(engine: &Engine, arm: BlockId, binding: Option<u32>) -> Vec<u32> {
     let mut bound: IndexMap<u32, u32> = IndexMap::default();
     engine
@@ -1343,13 +1344,14 @@ fn renamable_locals(engine: &Engine, arm: BlockId, binding: Option<u32>) -> Vec<
             }
             NodeRef::Pat(p) => {
                 if let PatKind::Binding { local_index, .. } = engine.body.pats[p].kind {
-                    bound.entry(local_index).or_default();
+                    *bound.entry(local_index).or_default() += 1;
                 }
             }
             NodeRef::Expr(_) | NodeRef::Block(_) => {}
         });
+    // Bound by the consumer's pattern, outside the arm.
     if let Some(binding) = binding {
-        bound.entry(binding).or_default();
+        *bound.entry(binding).or_default() += 1;
     }
     let under_arm = |mut node: NodeRef| loop {
         if node == NodeRef::Block(arm) {

@@ -449,13 +449,13 @@ pub struct ProviderComponent {
     pub bytes: Vec<u8>,
 }
 
-/// What a caller may override in the optimizer, each `None` meaning "whatever
-/// the level decides".
 /// The largest inlining threshold an override may set: far past any body's
 /// size, and small enough that the inliner's rescan cap, its square, fits a
 /// 32-bit `usize`.
 pub const MAX_INLINE_THRESHOLD: usize = 1 << 15;
 
+/// What a caller may override in the optimizer, each `None` meaning "whatever
+/// the level decides".
 #[derive(Debug, Clone, Copy, Default)]
 pub struct OptOverrides {
     pub inline_threshold: Option<usize>,

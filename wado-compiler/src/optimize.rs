@@ -191,9 +191,18 @@ pub fn optimize(
     // ratio is 3000 to 225, about 13x. A cold site at a quarter: no fuel
     // region moved from a half down to an eighth, and a quarter grew gale_gen
     // least.
+    for threshold in [
+        inline_threshold,
+        inline_hot_callsite_threshold,
+        inline_cold_callsite_threshold,
+    ]
+    .into_iter()
+    .flatten()
+    {
+        assert!(threshold <= MAX_INLINE_THRESHOLD);
+    }
     let thresholds = |level: usize| {
         let plain = inline_threshold.unwrap_or(level);
-        assert!(plain <= MAX_INLINE_THRESHOLD);
         inline::Thresholds {
             cold: inline_cold_callsite_threshold.unwrap_or(plain / 4),
             plain,

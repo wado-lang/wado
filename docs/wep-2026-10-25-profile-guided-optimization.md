@@ -288,11 +288,19 @@ applied, so a profiled compile seeds from the snapshot as a plain one does.
 
 The inliner prices a call site by what a summary of the profile says of the
 region holding it. The summary places hot and cold lines from shares of all
-runs, as LLVM's `ProfileSummaryInfo` does. Unlike a cold mark, a cold price
+runs, as LLVM's `ProfileSummaryInfo` does. With every count sorted from the
+largest down, the hot line is the smallest count still inside
+`--optimize-profile-summary-cutoff-hot` parts per million of all runs, 990000
+by default, and the cold line the same under
+`--optimize-profile-summary-cutoff-cold`, 999999 by default. A share that holds
+no count places no line. A site in a region that ran and reaches the hot line is
+hot, and one at or below the cold line is cold. Unlike a cold mark, a cold price
 stays at its site and reaches no callee. A hot site may inline a callee of up to
 `--optimize-inline-hot-callsite-threshold` statements, a cold one of up to
 `--optimize-inline-cold-callsite-threshold`, and any other site keeps
-`--optimize-inline-threshold`. They mirror LLVM's `hot-callsite-threshold`
+`--optimize-inline-threshold`, every site of a function the profile does not
+judge included. A hot site in or under an unlikely region keeps it too: the
+branch into it is predicted not taken. They mirror LLVM's `hot-callsite-threshold`
 (3000) and `inline-cold-callsite-threshold` (45) beside its `inline-threshold`
 (225), but count statements as Wado's inliner does, so the benchmarks settle
 their defaults: 4 times the level's threshold at a hot site and a quarter of it

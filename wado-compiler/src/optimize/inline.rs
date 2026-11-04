@@ -1508,6 +1508,14 @@ impl<T> ByHeat<T> {
             Heat::Hot => &mut self.hot,
         }
     }
+
+    fn map<U>(&self, f: impl Fn(&T) -> U) -> ByHeat<U> {
+        ByHeat {
+            cold: f(&self.cold),
+            plain: f(&self.plain),
+            hot: f(&self.hot),
+        }
+    }
 }
 
 /// The inlining threshold at each heat of call site.
@@ -1595,10 +1603,10 @@ impl Site {
 /// `body`'s unlikely runs, which only lower a hot price: none where no site is
 /// hot.
 fn unlikely_runs(body: &Body, markers: MarkerBuiltins, heat_map: &HeatMap) -> RareRuns {
-    if heat_map.is_empty() {
-        RareRuns::none(markers, Rarity::Unlikely)
-    } else {
+    if heat_map.any_hot() {
         RareRuns::of(body, markers, Rarity::Unlikely)
+    } else {
+        RareRuns::none(markers, Rarity::Unlikely)
     }
 }
 
@@ -2336,8 +2344,9 @@ struct Candidates<'a> {
     /// Per candidate, the call sites a splice of it brings, its own splices'
     /// included: what a loop holding a site of it holds once the round ends.
     carried: &'a IndexMap<FuncId, IndexMap<FuncId, usize>>,
-    /// Each candidate's written price, net of the call site it replaces.
-    net_price: &'a IndexMap<FuncId, usize>,
+    /// Each candidate's written price at a site of each heat, net of the call
+    /// site it replaces.
+    net_price: &'a IndexMap<FuncId, ByHeat<Option<usize>>>,
     /// The candidates a cold site calls that are no bigger than the call they
     /// replace: splicing one shrinks the caller, so [`Site::Cold`] admits it.
     shrinking: &'a IndexSet<FuncId>,
@@ -2357,13 +2366,15 @@ struct Candidates<'a> {
 }
 
 impl<'a> Candidates<'a> {
-    /// Spend `id`'s price from the re-scan under way, if there is one and it
-    /// can pay.
-    fn charge(&self, id: FuncId) -> bool {
+    /// Spend `id`'s price at a site of `heat` from the re-scan under way, if
+    /// there is one and it can pay.
+    fn charge(&self, id: FuncId, heat: Heat) -> bool {
         let Some(left) = self.rescan_left else {
             return true;
         };
-        let price = self.net_price[&id];
+        let price = self.net_price[&id]
+            .at(heat)
+            .expect("a candidate is priced at every heat");
         if price > left.get() {
             return false;
         }
@@ -2523,7 +2534,7 @@ fn inline_round(
     // functions that happen to share a name.
     let mut inline_candidates: IndexMap<FuncId, NirFunction> = IndexMap::default();
     let mut reach: IndexMap<FuncId, ByHeat<Reach>> = IndexMap::default();
-    let mut net_price: IndexMap<FuncId, usize> = IndexMap::default();
+    let mut net_price: IndexMap<FuncId, ByHeat<Option<usize>>> = IndexMap::default();
     let mut shrinking: IndexSet<FuncId> = IndexSet::default();
 
     // Also collect function_strings for each candidate (to update caller's
@@ -2661,21 +2672,22 @@ fn inline_round(
         // too: the plain price leaves it out, but a splice copies it, and at
         // the hot threshold that let a deserializer grow 42-fold.
         let verdict = classify(thresholds.plain, runs);
-        let reach_at = |heat: Heat| {
+        let verdict_at = |heat: Heat| {
             if !*called_at[i].at(heat) {
-                return verdict.reach();
+                return verdict;
             }
             let runs = match heat {
                 Heat::Hot => &no_cold_runs,
                 Heat::Cold | Heat::Plain => runs,
             };
-            classify(*thresholds.at(heat), runs).reach()
+            classify(*thresholds.at(heat), runs)
         };
-        let reaches = ByHeat {
-            cold: reach_at(Heat::Cold),
-            plain: verdict.reach(),
-            hot: reach_at(Heat::Hot),
+        let verdicts = ByHeat {
+            cold: verdict_at(Heat::Cold),
+            plain: verdict,
+            hot: verdict_at(Heat::Hot),
         };
+        let reaches = verdicts.map(Verdict::reach);
         let reached = [reaches.cold, reaches.plain, reaches.hot]
             .iter()
             .any(|&r| r != Reach::Nowhere);
@@ -2690,7 +2702,9 @@ fn inline_round(
                 };
                 net_cost(written, func.params.len()) == 0
             };
-            (hot, net_cost(hot, func.params.len()), shrinks, func.clone())
+            // What a site of each heat copies, which a re-scan charges.
+            let nets = verdicts.map(|v| v.hot.map(|hot| net_cost(hot, func.params.len())));
+            (hot, nets, shrinks, func.clone())
         });
         // A function nothing calls has nothing decided about it.
         let logged = logging
@@ -2698,11 +2712,11 @@ fn inline_round(
         let entry = logged.then(|| CalleeEntry {
             name: func.name.clone(),
             module: func.module_source.clone(),
-            hot: verdict.hot,
+            hot: verdicts.map(|v| v.hot),
             size: func.body.as_ref().map(|_| size),
             params: func.params.len(),
             sites: call_sites[i],
-            basis: verdict.basis,
+            basis: verdicts.map(|v| v.basis),
             over_budget: false,
         });
         (func.id, size, verdict, reaches, candidate, entry)
@@ -2716,7 +2730,7 @@ fn inline_round(
         if let Some(entry) = entry {
             callee_entries.push((id, entry));
         }
-        let Some((hot, net, shrinks, func)) = candidate else {
+        let Some((hot, nets, shrinks, func)) = candidate else {
             continue;
         };
         let id = id.expect("func_id assigned at lower");
@@ -2736,7 +2750,7 @@ fn inline_round(
                 forced: func.inline_hint == InlineHint::Always,
             });
         }
-        net_price.insert(id, net);
+        net_price.insert(id, nets);
         if shrinks {
             shrinking.insert(id);
         }
@@ -3652,7 +3666,7 @@ fn try_inline_call_expr(
         (Site::Plain, Reach::Loops) => Some(Refusal::OutsideLoop),
         (Site::Plain | Site::Loop, Reach::Nowhere) => Some(Refusal::OtherHeat),
     }
-    .or_else(|| (!candidates.charge(func_id)).then_some(Refusal::RescanSpent));
+    .or_else(|| (!candidates.charge(func_id, heat)).then_some(Refusal::RescanSpent));
     let call_span = caller.exprs[call_id].span;
     if let Some(decisions) = frame.decisions.as_mut() {
         decisions.record(candidate, call_span, site, heat, refusal);

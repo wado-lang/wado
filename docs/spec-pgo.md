@@ -103,22 +103,4 @@ a `?`. Such a marker is dropped, and the region's own marks stand. Where the
 profile's answers are not both yes, the compile names the marker, the count,
 and what the region was found to be at `--log-level info`.
 
-### Call Site Heat
-
-A summary of the profile places two lines over the counts of every region it
-holds. Sorted from the largest count down, the hot line is the smallest count
-still inside `--optimize-profile-summary-cutoff-hot` parts per million of all
-runs, 990000 by default. The cold line is the same under
-`--optimize-profile-summary-cutoff-cold`, 999999 by default.
-
-A call site in a region whose count reaches the hot line, and that ran, is
-hot. One at or below the cold line is cold. The inliner splices a callee at a
-hot site up to `--optimize-inline-hot-callsite-threshold`, by default 4 times
-`--optimize-inline-threshold`, and at a cold site up to
-`--optimize-inline-cold-callsite-threshold`, by default a quarter of it. Any
-other site, and every site in a function the profile does not judge, keeps
-`--optimize-inline-threshold`, and so does a hot site in an unlikely region. At
-a hot site the callee's size counts its cold paths, since a splice
-copies them too. A call under a `?` is priced by the region holding the `?`.
-
 Rationale: [WEP: Profile-Guided Optimization](./wep-2026-10-25-profile-guided-optimization.md).

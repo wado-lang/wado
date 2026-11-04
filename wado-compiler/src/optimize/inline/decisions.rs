@@ -6,7 +6,7 @@
 
 use std::fmt::Write as _;
 
-use super::{Basis, ColdBy, Refusal, Site};
+use super::{Basis, ByHeat, ColdBy, Refusal, Site};
 use crate::pgo::Heat;
 use crate::module_source::{ModuleSource, ParseModules};
 use crate::token::Span;
@@ -72,13 +72,14 @@ pub(super) struct Round {
 pub(super) struct CalleeEntry {
     pub name: String,
     pub module: ModuleSource,
-    /// What running one copy costs, where the verdict priced it.
-    pub hot: Option<usize>,
+    /// What running one copy costs at a site of each heat, where the verdict
+    /// priced it.
+    pub hot: ByHeat<Option<usize>>,
     /// What holding one copy costs, where the round priced it.
     pub size: Option<usize>,
     pub params: usize,
     pub sites: usize,
-    pub basis: Basis,
+    pub basis: ByHeat<Basis>,
     /// Admitted, and then turned down by the growth budget.
     pub over_budget: bool,
 }
@@ -116,7 +117,7 @@ impl Round {
         }
         for c in &self.callees {
             let _ = write!(out, "  callee {}:", function(&c.name, &c.module));
-            if let Some(hot) = c.hot {
+            if let Some(hot) = c.hot.plain {
                 let _ = write!(out, " hot {hot},");
             }
             if let Some(size) = c.size {
@@ -127,8 +128,18 @@ impl Round {
                 " {} params, {} sites -> {}",
                 c.params,
                 c.sites,
-                basis_text(c.basis)
+                basis_text(c.basis.plain)
             );
+            for (heat, name) in [(Heat::Hot, "hot"), (Heat::Cold, "cold")] {
+                let (hot, basis) = (*c.hot.at(heat), *c.basis.at(heat));
+                if (hot, basis) != (c.hot.plain, c.basis.plain) {
+                    let _ = write!(out, "; at a profiled {name} site:");
+                    if let Some(hot) = hot {
+                        let _ = write!(out, " hot {hot},");
+                    }
+                    let _ = write!(out, " {}", basis_text(basis));
+                }
+            }
             if c.over_budget {
                 out.push_str(", over the growth budget");
             }

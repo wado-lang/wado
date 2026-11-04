@@ -713,6 +713,12 @@ impl<'a> Engine<'a> {
         if self.body_address_taken.is_none() {
             let mut set = IndexSet::default();
             self.body.collect_address_taken_locals(&mut set);
+            // A copy is not attached until the edit minting it places it.
+            for &[of, copy] in &self.copied_locals {
+                if set.contains(&of) {
+                    set.insert(copy);
+                }
+            }
             self.body_address_taken = Some(set);
         }
         self.body_address_taken.as_ref().unwrap()
@@ -1047,17 +1053,9 @@ impl<'a> Engine<'a> {
             let Some(parent) = self.parent_of(node) else {
                 return false;
             };
-            let held = match (parent, node) {
-                (NodeRef::Block(block), NodeRef::Stmt(stmt)) => {
-                    self.body.blocks[block].stmts.contains(&stmt)
-                }
-                _ => {
-                    let mut held = false;
-                    self.body
-                        .for_each_child(parent, |child| held |= child == node);
-                    held
-                }
-            };
+            let mut held = false;
+            self.body
+                .for_each_child(parent, |child| held |= child == node);
             if !held {
                 return false;
             }
@@ -1550,6 +1548,11 @@ impl<'a> Engine<'a> {
         } = self.locals[of as usize].clone();
         let fresh = self.alloc_minted_local(copied_local_what(&name), type_id, is_mut);
         self.copied_locals.push([of, fresh]);
+        if let Some(set) = self.body_address_taken.as_mut()
+            && set.contains(&of)
+        {
+            set.insert(fresh);
+        }
         fresh
     }
 
@@ -1957,7 +1960,7 @@ pub trait Rule {
 mod tests {
     use super::*;
     use crate::const_eval::Value;
-    use crate::nir::NirBinaryOp;
+    use crate::nir::{NirBinaryOp, NirUnaryOp};
     use crate::nir_arena::{BlockNode, ExprNode, StmtNode};
     use crate::primitive::PrimitiveType;
     use crate::type_table::TypeTable;
@@ -2051,6 +2054,37 @@ mod tests {
             let ret = ret_x(b);
             vec![let_stmt, ret]
         })
+    }
+
+    /// A copy of a local whose address is taken has its address taken too, in
+    /// a scan taken before the copy is placed and in one taken after.
+    #[test]
+    fn a_copy_of_an_address_taken_local_is_address_taken() {
+        let mut body = mk_body(|b| {
+            let x = local0(b);
+            let r = e(
+                b,
+                ExprKind::Unary {
+                    op: NirUnaryOp::MutRef,
+                    expr: x.into(),
+                },
+            );
+            vec![s(b, StmtKind::Expr(r.into()))]
+        });
+        let mut buf = EngineBuffers::default();
+        let mut locals = Tracked::new(vec![NirLocal {
+            name: "x".to_string(),
+            type_id: TypeTable::I32,
+            is_mut: true,
+        }]);
+        let mut eng = Engine::new(&mut body, &mut buf, &mut locals, &[]);
+        assert!(eng.body_address_taken().contains(&0));
+        let cached = eng.alloc_local_like(0);
+        assert!(eng.body_address_taken().contains(&cached));
+        eng.invalidate_address_taken();
+        let rescanned = eng.alloc_local_like(0);
+        assert!(eng.body_address_taken().contains(&cached));
+        assert!(eng.body_address_taken().contains(&rescanned));
     }
 
     #[test]
