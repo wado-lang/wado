@@ -1,10 +1,10 @@
 //! What the invocation fixes before stage 0 reads a graph: extents for its
-//! symbolic dimensions, the outputs `forward` returns, and the outputs it
-//! returns the last position of.
+//! symbolic dimensions, the outputs `compute` returns, the outputs it returns
+//! the last position of, and those it returns the greatest element's index of.
 
 use { HashMap, HashSet, TreeMap } from "core:collections";
 use { Extent, spelled_poly } from "./extent.wado";
-use { Attr, Dim, Graph, Node, Rank, ValueInfo, is_binary_elementwise, read_at } from "./graph.wado";
+use { Attr, Dim, Graph, KERNEL_ELEMENT, Node, Rank, ValueInfo, is_binary_elementwise, read_at } from "./graph.wado";
 use { Checked, is_reduction, is_unary_elementwise } from "./infer.wado";
 use { Shape } from "./shape.wado";
 
@@ -150,13 +150,7 @@ pub fn keep_outputs(graph: &mut Graph, names: &List<String>) -> Result<(), Optio
 /// `checked` is what checking the graph as it stands found: each operand's
 /// rank, the axes that broadcast, and the values stage 0 folds.
 pub fn keep_last(graph: &mut Graph, checked: &Checked, output: &String, axis: i32) -> Result<(), OptionConflict> {
-    let Some(at) = graph.outputs.position(|vi| vi.name == *output) else {
-        return conflict("last", `the graph declares no output ${*output}`);
-    };
-    let rank = checked.shapes.get(*output).unwrap().rank();
-    if axis < 0 || axis >= rank {
-        return conflict("last", `${*output} has ${rank} axes, and no axis ${axis}`);
-    }
+    let [at, rank] = output_with_axis("last", graph, checked, output, axis)?;
     if graph.nodes.into_iter().any(|n| n.reads().contains_str(output)) {
         return conflict("last", `${*output} is read inside the graph, which needs all of it`);
     }
@@ -164,11 +158,72 @@ pub fn keep_last(graph: &mut Graph, checked: &Checked, output: &String, axis: i3
         return conflict("last", `no node computes ${*output}, which the graph is given`);
     }
     cut_last(graph, checked, output, axis - rank);
+    declare_unit_axis(graph, at, axis);
+    return Result::Ok(());
+}
+
+/// The place among `graph`'s outputs of `output`, which `option` names along
+/// `axis`, and its rank.
+fn output_with_axis(
+    option: String,
+    graph: &Graph,
+    checked: &Checked,
+    output: &String,
+    axis: i32,
+) -> Result<[i32, i32], OptionConflict> {
+    let Some(at) = graph.outputs.position(|vi| vi.name == *output) else {
+        return conflict(option, `the graph declares no output ${*output}`);
+    };
+    let rank = checked.shapes.get(*output).unwrap().rank();
+    if axis < 0 || axis >= rank {
+        return conflict(option, `${*output} has ${rank} axes, and no axis ${axis}`);
+    }
+    return Result::Ok([at, rank]);
+}
+
+/// The output at `at` declared at extent 1 along `axis`, where it declares its
+/// extents.
+fn declare_unit_axis(graph: &mut Graph, at: i32, axis: i32) {
     if let Dims(written) = graph.outputs[at].rank {
         let mut declared = written;
         declared[axis] = Dim::Static(1);
         graph.outputs[at].rank = Rank::Dims(declared);
     }
+}
+
+/// `output` replaced by the index of its greatest element along `axis`, the
+/// first of equal ones, the axis kept at extent 1: a language model's greedy
+/// pick, which then reads one index rather than the vocabulary's scores. The
+/// node computing it writes `<output>/scores`, which an `ArgMax` ranks.
+pub fn take_arg_max(graph: &mut Graph, checked: &Checked, output: &String, axis: i32) -> Result<(), OptionConflict> {
+    let [at, _] = output_with_axis("arg_max", graph, checked, output, axis)?;
+    let element = checked.primitives[*output];
+    if element != KERNEL_ELEMENT {
+        return conflict("arg_max", `${*output} is ${element}, and ArgMax ranks ${KERNEL_ELEMENT}`);
+    }
+    if graph.nodes.into_iter().any(|n| n.reads().contains_str(output)) {
+        return conflict("arg_max", `${*output} is read inside the graph, which needs its elements`);
+    }
+    let Some(producer) = graph.nodes.position(|n| n.outputs.contains_str(output)) else {
+        return conflict("arg_max", `no node computes ${*output}, which the graph is given`);
+    };
+    let scores = `${*output}/scores`;
+    let written = &mut graph.nodes[producer].outputs;
+    written[written.position(|o| o == *output).unwrap()] = scores;
+    graph.nodes.push(Node {
+        op: "ArgMax",
+        outputs: [*output],
+        inputs: [scores],
+        attrs: [
+            Attr {
+                name: "axis",
+                values: [`${axis}`],
+                is_list: false,
+            },
+        ],
+    });
+    graph.outputs[at].dtype = "int64";
+    declare_unit_axis(graph, at, axis);
     return Result::Ok(());
 }
 

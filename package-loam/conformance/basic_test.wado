@@ -4,7 +4,7 @@
 
 use { Cpu, Tensor } from "lib:loam";
 use { assert_close, tensor_of } from "./oracle.wado";
-use { Axis00, Weights, forward } from "../tests/onnx/pytorch-operator/test_operator_basic/model.onnx"
+use { Axis00, Model, Params, compute } from "../tests/onnx/pytorch-operator/test_operator_basic/model.onnx"
     with {
         type: "onnx",
         generator: { module: "lib:loam" },
@@ -21,11 +21,11 @@ test "the generated graph reproduces the output ONNX ships" {
         #include_bytes("../tests/onnx/pytorch-operator/test_operator_basic/test_data_set_0/output_0.pb"),
     );
 
-    let got = forward(
+    let got = compute(
         &mut Cpu {},
         &Tensor::<f32, [Axis00]> { data: a, extents: a_extents },
         &Tensor::<f32, [Axis00]> { data: b, extents: b_extents },
-        &Weights {}.prepare(&mut Cpu {}),
+        &mut Model::new(Params::embedded(&mut Cpu {})),
     );
 
     assert got.extents == want_extents;

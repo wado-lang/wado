@@ -24,7 +24,7 @@ g (float[N, 2] X) => (float[N, 3] Y, float[N, 3] Z)
 }
 ";
 
-global OPTIONS: String = "{\"fuse\": true}";
+global OPTIONS: String = "{\"embed\": true}";
 
 /// `target/loam-main-test/<case>`, emptied, holding the graph and its options.
 fn scratch(case: String) -> String with Preopens {
@@ -98,7 +98,7 @@ test "gen prints the module the Kiln generator builds for the same graph and opt
     let dir = scratch("gen");
     let printed = on_graph("gen", &dir, []).unwrap();
     let path = `${dir}/g.onnxtext`;
-    assert printed == kiln([path, GRAPH.bytes().collect(), "onnxtext"], Options { fuse: true });
+    assert printed == kiln([path, GRAPH.bytes().collect(), "onnxtext"], Options { embed: true });
 }
 
 test "gen prints the tokenizer the Kiln generator builds" {
@@ -239,13 +239,10 @@ weights
     W: f32 [X1=2, Y1=3]
     B: f32 [Y1=3]
 nodes
-    fused     H = MatMul(X, W)
+    operation H = MatMul(X, W)
         H: f32 [N=N, Y1=3]
-        into the kernel writing Y
-    kernel    Y = Add(H, B)
+    operation Y = Add(H, B)
         Y: f32 [N=N, Y1=3]
-        written: the scope returns it
-        takes in H, keeping 12 * N bytes out of memory
     alias     Z = Identity(Y)
         Z: f32 [N=N, Y1=3]
     folded    S = Shape(X)
@@ -256,7 +253,7 @@ outputs
 padding
     N: padded
 
-1 kernels, 1 fused, 1 folded, 1 aliases, 0 branches, 0 reshapes spread, 0 transposes viewed
+2 operations, 1 folded, 1 aliases, 0 branches, 0 transposes viewed
 ";
 }
 
@@ -279,15 +276,12 @@ axes
             axes
                 T0: minted from T[0]
             nodes
-                kernel    T = Concat(P, X)
+                operation T = Concat(P, X)
                     T: f32 [T0=M + N, X1=2]
-                    written: a regrouping takes in no operator after it
 ");
     assert report.contains("
-                kernel    TZ = Mul(SK, W)
+                operation TZ = Mul(SK, W)
                     TZ: f32 [N=N, X1=2]
-                    written: the scope returns it
-                    takes in S, SK, keeping 16 * N bytes out of memory
 ");
     assert report.contains("
             owed
@@ -296,23 +290,20 @@ axes
     assert report.contains("
         else_branch
             nodes
-                kernel    E = Relu(X)
+                operation E = Relu(X)
 ");
-    assert report.ends_with(
-        "\n4 kernels, 2 fused, 1 folded, 0 aliases, 1 branches, 0 reshapes spread, 0 transposes viewed\n",
-    );
+    assert report.ends_with("\n6 operations, 1 folded, 0 aliases, 1 branches, 0 transposes viewed\n");
 }
 
-test "dump reports as JSON, every kernel with where its output goes" {
+test "dump reports as JSON, every node with its lowering" {
     let dir = scratch("dump-json");
     let json = on_graph("dump", &dir, ["--format", "json"]).unwrap();
-    assert json.contains("\"lowering\":\"fused\"") && json.contains("\"written\":\"returned\"");
+    assert json.contains("\"lowering\":\"operation\"");
     let nodes = from_string::<Report>(&json).unwrap().scope.nodes;
-    assert nodes[0].lowering matches { Fused } && nodes[0].into == Option::Some("Y");
-    assert nodes[1].lowering matches { Kernel } && nodes[1].written matches { Some(Returned) };
-    assert nodes[1].takes_in == ["H"] as List<String>;
-    assert nodes[1].kept_bytes == Option::Some("12 * N");
-    assert nodes[2].lowering matches { Alias } && nodes[2].written matches { None };
+    assert nodes[0].lowering matches { Operation } && nodes[0].inputs == ["X", "W"] as List<String>;
+    assert nodes[2].lowering matches { Alias };
+    assert nodes[3].lowering matches { Folded }
+        && nodes[3].outputs[0].values == Option::Some(["N", "2"] as List<String>);
     let padding = from_string::<Report>(&json).unwrap().padding;
     assert padding.len() == 1 && padding[0].symbol == "N" && padding[0].refused matches { None };
 }
@@ -346,7 +337,7 @@ test "an argument error names the subcommand and shows the usage" {
 
 test "an options file that is not the options' JSON names the file" {
     let dir = scratch("bad-options");
-    fs::write(`${dir}/options.json`, &"{\"fuse\": 3}").unwrap();
+    fs::write(`${dir}/options.json`, &"{\"embed\": 3}").unwrap();
     let refused = on_graph("dump", &dir, []).unwrap_err();
     assert refused.starts_with(`loam: '${dir}/options.json': `);
 }

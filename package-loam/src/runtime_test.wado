@@ -1,49 +1,31 @@
 use {
-    Backend,
     BinaryOp,
-    Columns,
-    Concat,
-    Cpu,
-    Epilogue,
     Expr,
-    Holds,
     Merged,
     Read,
+    RowOp,
     Tensor,
     UnaryOp,
     constant,
     operand,
     Window,
+    arg_max,
     axis_mismatch,
     checked_element_count,
-    concat,
-    conv,
-    conv_bias,
     conv_grouped,
-    conv_grouped_bias,
     extent_mismatch,
     from_end,
+    fused,
     fused_rows,
-    gather,
-    gather_rows,
     input_mismatch,
-    lift,
+    interleaved,
     map,
-    matmul,
     matmul_broadcast,
-    matmul_shared,
     max_pool,
     narrow,
     permute,
-    range_i64,
-    reduce,
-    reduce_mean,
     reshape,
-    select,
     sigmoid_f32,
-    slice_axis,
-    softmax,
-    softmax_flattened,
     to_extent,
     transpose2,
     unmet,
@@ -61,6 +43,11 @@ struct Inner {
 
 fn tensor<Axes>(extents: List<i32>, data: List<f32>) -> Tensor<f32, Axes> {
     return Tensor { data, extents };
+}
+
+/// `t` as an operand of an expression over `Axes`, which it is stretched to.
+fn read<Axes, In>(t: &Tensor<f32, In>) -> Read<Axes> {
+    return Read { data: &t.data, extents: t.extents };
 }
 
 test "an expression reads its operands and folds its constants in order" {
@@ -133,47 +120,64 @@ test "a select picks the second operand where the first is not zero" {
     assert e.over(3, &[&c, &a, &b]) == [10.0, -1.0, 30.0] as List<f32>;
 }
 
-test "a row kernel folds each row, as reduce_mean and softmax do, bit for bit" {
-    let mut cpu = Cpu {};
+test "a row kernel folds each row to its mean and to its softmax, summing in order" {
     let data: List<f32> = [0.1, 0.7, -0.3, 2.5, 1.0, -1.25, 0.5, 3.0];
-    let x = cpu.upload(&tensor::<[Row, Col]>([2, 4], data));
+    let x = tensor::<[Row, Col]>([2, 4], data);
+    let reads = [read(&x)] as List<Read<[Row, Col]>>;
     let mean = operand(0).row_sum(Option::Some(4.0));
-    let reduced = cpu.rows::<[Row, Col], [Row, Col]>([cpu.read(&x)], &mean, 1, true);
+    let reduced = fused_rows::<[Row, Col], [Row, Col]>(&reads, &mean, 1, true, x.extents);
     assert reduced.extents == [2, 1] as List<i32>;
-    assert reduced.data == reduce_mean(&x, [1]).data;
-    let normalized = cpu.rows::<[Row, Col], [Row, Col]>([cpu.read(&x)], &operand(0).row_softmax(), 1, false);
-    assert normalized.data == softmax(&x, 1).data;
+    let e = operand(0).binary(BinaryOp::Sub, &operand(0).row(RowOp::Max)).unary(UnaryOp::Exp);
+    let softmax = e.binary(BinaryOp::Div, &e.row(RowOp::Sum));
+    let normalized = fused_rows::<[Row, Col], [Row, Col]>(&reads, &softmax, 1, false, x.extents);
+    for let r of 0..<2 {
+        let row = data[r * 4..<r * 4 + 4].to_list();
+        let mut sum: f32 = 0.0;
+        let mut top = -f32::INFINITY;
+        for let v of row {
+            sum += v;
+            top = f32::ieee754_max(top, v);
+        }
+        assert reduced.data[r] == sum / 4.0;
+        let mut exponentials: f32 = 0.0;
+        for let v of row {
+            exponentials += f32::exp(v - top);
+        }
+        for let [j, v] of row.into_iter().enumerate() {
+            assert normalized.data[r * 4 + j] == f32::exp(v - top) / exponentials;
+        }
+    }
 }
 
 test "arg_max takes the first greatest along an axis, a NaN greatest of all" {
-    let mut cpu = Cpu {};
     let x = tensor::<[Row, Col]>([2, 3], [1.0, 3.0, 3.0, 2.0, f32::NAN, 9.0]);
-    let along_cols = cpu.arg_max(&x, 1);
+    let along_cols = arg_max(&x, 1);
     assert along_cols.extents == [2, 1] as List<i32>;
     assert along_cols.data == [1, 1] as List<i64>;
-    let along_rows = cpu.arg_max(&x, 0);
+    let along_rows = arg_max(&x, 0);
     assert along_rows.extents == [1, 3] as List<i32>;
     assert along_rows.data == [1, 1, 1] as List<i64>;
 }
 
 test "a row kernel over empty rows writes each row's fold of nothing" {
-    let mut cpu = Cpu {};
-    let x = cpu.upload(&tensor::<[Row, Col]>([3, 0], []));
-    let summed = cpu.rows::<[Row, Col], [Row, Col]>([cpu.read(&x)], &operand(0).row_sum(null), 1, true);
+    let x = tensor::<[Row, Col]>([3, 0], []);
+    let reads = [read(&x)] as List<Read<[Row, Col]>>;
+    let summed = fused_rows::<[Row, Col], [Row, Col]>(&reads, &operand(0).row_sum(null), 1, true, x.extents);
     assert summed.extents == [3, 1] as List<i32>;
-    assert summed.data == reduce(&x, [1], 0.0, |a, b| a + b).data;
-    let mean = cpu.rows::<[Row, Col], [Row, Col]>([cpu.read(&x)], &operand(0).row_sum(Option::Some(0.0)), 1, true);
+    assert summed.data == [0.0, 0.0, 0.0] as List<f32>;
+    let mean = fused_rows::<[Row, Col], [Row, Col]>(&reads, &operand(0).row_sum(Option::Some(0.0)), 1, true, x.extents);
     assert mean.data.len() == 3 && mean.data[0].is_nan();
     // A value per row, read after the fold, is each row's own.
-    let per_row = cpu.upload(&tensor::<[Row, Col]>([3, 1], [1.0, 2.0, 3.0]));
-    let shifted = cpu.rows::<[Row, Col], [Row, Col]>(
-        [
-            cpu.read(&x),
-            cpu.read(&per_row),
+    let per_row = tensor::<[Row, Col]>([3, 1], [1.0, 2.0, 3.0]);
+    let shifted = fused_rows::<[Row, Col], [Row, Col]>(
+        &[
+            read(&x),
+            read(&per_row),
         ],
         &operand(0).row_sum(null).binary(BinaryOp::Add, &operand(1)),
         1,
         true,
+        x.extents,
     );
     assert shifted.data == [1.0, 2.0, 3.0] as List<f32>;
 }
@@ -191,51 +195,25 @@ test "a row kernel iterates its own extents, which its operands may each read pe
     assert summed.data == [4.0, 8.0, 12.0] as List<f32>;
 }
 
-test "the CPU backend reads a condition as 1.0 and 0.0" {
-    let mut cpu = Cpu {};
-    let cond = cpu.upload(&Tensor::<bool, [Row]> {
-        data: [true, false],
-        extents: [2],
-    });
-    let x = cpu.upload(&tensor::<[Row]>([2], [5.0, 6.0]));
-    let picked = cpu.fused::<[Row]>([
-        cpu.read_condition(&cond),
-        cpu.read(&x),
-    ], &operand(0).select(&operand(1), &constant(-1.0)));
-    assert picked.data == [5.0, -1.0] as List<f32>;
-}
-
 test "an expression over no elements gives none, whatever its constants" {
-    let mut cpu = Cpu {};
-    let empty = cpu.upload(&tensor::<[Row]>([0], []));
+    let empty = tensor::<[Row]>([0], []);
+    let reads = [read(&empty)] as List<Read<[Row]>>;
     let shifted = operand(0).binary(BinaryOp::Add, &constant(1.0));
-    assert cpu.download(&cpu.fused::<[Row]>([cpu.read(&empty)], &shifted)).data.is_empty();
+    assert fused(&reads, &shifted, [0]).data.is_empty();
     let filled = operand(0).binary(BinaryOp::Mul, &constant(2.0).binary(BinaryOp::Mul, &constant(3.0)));
-    assert cpu.download(&cpu.fused::<[Row]>([cpu.read(&empty)], &filled)).data.is_empty();
+    assert fused(&reads, &filled, [0]).data.is_empty();
 }
 
-test "the CPU backend runs a kernel over an expression" {
-    let mut cpu = Cpu {};
-    let a = cpu.upload(&tensor::<[Row]>([3], [1.0, -2.0, 3.0]));
-    let b = cpu.upload(&tensor::<[Row]>([3], [10.0, 10.0, 10.0]));
-    let mapped = cpu.fused::<[Row]>([cpu.read(&a)], &operand(0).unary(UnaryOp::Abs));
-    assert cpu.download(&mapped).data == [1.0, 2.0, 3.0] as List<f32>;
-    let zipped = cpu.fused::<[Row]>([
-        cpu.read(&a),
-        cpu.read(&b),
-    ], &sum());
-    assert cpu.download(&zipped).data == [11.0, 8.0, 13.0] as List<f32>;
-}
-
-test "a cast converts as ONNX's Cast does" {
-    let mut cpu = Cpu {};
-    let floats = cpu.upload(&tensor::<[Row]>([3], [0.0, -2.5, f32::NAN]));
-    let bools = cpu.cast::<f32, bool, [Row]>(&floats);
-    assert cpu.download(&bools).data == [false, true, true] as List<bool>;
-    let ints = cpu.cast::<bool, i64, [Row]>(&bools);
-    assert cpu.download(&ints).data == [0, 1, 1] as List<i64>;
-    let back = cpu.cast::<f32, i64, [Row]>(&floats);
-    assert cpu.download(&back).data[1] == -2;
+test "fused computes an expression over its operands" {
+    let a = tensor::<[Row]>([3], [1.0, -2.0, 3.0]);
+    let b = tensor::<[Row]>([3], [10.0, 10.0, 10.0]);
+    let mapped = fused::<[Row]>(&[read(&a)], &operand(0).unary(UnaryOp::Abs), [3]);
+    assert mapped.data == [1.0, 2.0, 3.0] as List<f32>;
+    let zipped = fused::<[Row]>(&[
+        read(&a),
+        read(&b),
+    ], &sum(), [3]);
+    assert zipped.data == [11.0, 8.0, 13.0] as List<f32>;
 }
 
 test "an input the graph's extents describe passes" {
@@ -317,104 +295,25 @@ test "a length computed from the inputs reaches a kernel only where a list holds
 }
 
 #[expect_trap]
-test "a length past what a list holds stops forward" {
+test "a length past what a list holds stops the pass" {
     to_extent(i32::MAX as i64 + 1);
 }
 
-test "range_i64 counts from its start by its delta" {
-    let r = range_i64::<Row>(2, 3, 5);
-    assert r.data == [2, 7, 12] as List<i64>;
-    assert r.extents == [3] as List<i32>;
-}
-
-test "gather_rows looks up one row per index, counting a negative one from the end" {
-    let table: Tensor<f32, [Row, Col]> = tensor([3, 2], [0.0, 1.0, 10.0, 11.0, 20.0, 21.0]);
-    let ids: Tensor<i64, [Batch, Inner]> = Tensor {
-        data: [2, 0, -1],
-        extents: [1, 3],
-    };
-
-    let picked: Tensor<f32, [Batch, Inner, Col]> = gather_rows(&table, &ids);
-    assert picked.extents == [1, 3, 2] as List<i32>;
-    assert picked.data == [20.0, 21.0, 0.0, 1.0, 20.0, 21.0] as List<f32>;
-}
-
-test "gather puts the index axes where the gathered axis was" {
-    let t: Tensor<f32, [Batch, Row, Col]> = tensor([2, 2, 3], [
-        0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0,
-    ]);
-    let ids: Tensor<i64, [Inner]> = Tensor {
-        data: [2, -3, 1, 0],
-        extents: [4],
-    };
-
-    let picked = gather::<f32, [Batch, Row], Col, [], [Inner]>(&t, &ids, 2);
-    assert picked.extents == [2, 2, 4] as List<i32>;
-    assert picked.data == [2.0, 0.0, 1.0, 0.0, 5.0, 3.0, 4.0, 3.0, 8.0, 6.0, 7.0, 6.0, 11.0, 9.0, 10.0, 9.0] as List<f32>;
-}
-
-#[expect_trap]
-test "gather_rows traps on an index past the table" {
-    let table: Tensor<f32, [Row, Col]> = tensor([1, 2], [0.0, 1.0]);
-    let ids: Tensor<i64, [Inner]> = Tensor {
-        data: [1],
-        extents: [1],
-    };
-    let _: Tensor<f32, [Inner, Col]> = gather_rows(&table, &ids);
-}
-
-test "matmul contracts the trailing axis" {
-    let a: Tensor<f32, [Row, Inner]> = tensor([2, 3], [1.0, 2.0, 3.0, 4.0, 5.0, 6.0]);
-    let b: Tensor<f32, [Inner, Col]> = tensor([3, 2], [1.0, 0.0, 0.0, 1.0, 1.0, 1.0]);
-
-    let c: Tensor<f32, [Row, Col]> = matmul(&a, &b, &null);
-    assert c.extents == [2, 2] as List<i32>;
-    assert c.data == [4.0, 5.0, 10.0, 11.0] as List<f32>;
-}
-
-test "matmul runs one matrix per batch element" {
+test "matmul_broadcast contracts the trailing axis, one matrix per batch element" {
     let a: Tensor<f32, [Batch, Row, Inner]> = tensor([2, 1, 2], [1.0, 2.0, 3.0, 4.0]);
     let b: Tensor<f32, [Batch, Inner, Col]> = tensor([2, 2, 1], [1.0, 1.0, 2.0, 2.0]);
 
-    let c: Tensor<f32, [Batch, Row, Col]> = matmul(&a, &b, &null);
+    let c = matmul_broadcast::<[Batch, Row, Inner], [Batch, Inner, Col], [Batch, Row, Col]>(&a, &b, &null);
     assert c.extents == [2, 1, 1] as List<i32>;
     assert c.data == [3.0, 14.0] as List<f32>;
 }
 
-test "a paired product joins the products by both matrices, each operand where the epilogue reads it" {
-    let a: Tensor<f32, [Batch, Row, Inner]> = tensor([1, 2, 2], [1.0, 2.0, 3.0, 4.0]);
-    let b: Tensor<f32, [Inner, Col]> = tensor([2, 2], [1.0, 0.0, 0.0, 1.0]);
-    let c: Tensor<f32, [Inner, Col]> = tensor([2, 2], [2.0, 1.0, 1.0, 3.0]);
-    let bias: Tensor<f32, [Batch, Row, Col]> = tensor([1, 2, 2], [0.5, 0.5, 0.5, 0.5]);
-    let mut cpu = Cpu {};
-    let bc = cpu.keep_rhs_paired(&b, &c);
-    // operand(0) * operand(1) + operand(2)
-    let op = operand(0).binary(BinaryOp::Mul, &operand(1)).binary(BinaryOp::Add, &operand(2));
-    let got = cpu.matmul_rhs_paired(&a, &bc, Epilogue {
-        operands: [cpu.read(&bias)],
-        op,
-    });
-    // a·b is [[1, 2], [3, 4]] and a·c is [[4, 7], [10, 15]].
-    assert got.extents == [1, 2, 2] as List<i32>;
-    assert got.data == [4.5, 14.5, 30.5, 60.5] as List<f32>;
-}
-
-test "matrices joined by their columns hold each row's columns of each in turn" {
-    let a: Tensor<f32, [Row, Col]> = tensor([2, 1], [1.0, 2.0]);
-    let b: Tensor<f32, [Row, Inner]> = tensor([2, 2], [3.0, 4.0, 5.0, 6.0]);
-    let c: Tensor<f32, [Row, Col]> = tensor([2, 1], [7.0, 8.0]);
-    let joined: Tensor<f32, [Row, Concat<Concat<Col, Inner>, Col>]> = Columns::of(&a).then(&b).then(&c).joined();
-    assert joined.extents == [2, 4] as List<i32>;
-    assert joined.data == [1.0, 3.0, 4.0, 7.0, 2.0, 5.0, 6.0, 8.0] as List<f32>;
-}
-
-test "matmul_shared multiplies every batch element by one matrix" {
-    let a: Tensor<f32, [Batch, Row, Inner]> = tensor([2, 1, 2], [1.0, 2.0, 3.0, 4.0]);
-    let b: Tensor<f32, [Inner, Col]> = tensor([2, 1], [1.0, 10.0]);
-
-    let c: Tensor<f32, [Batch, Row, Col]> = matmul_shared(&a, &b, &null);
-    assert c.extents == [2, 1, 1] as List<i32>;
-    assert c.data == [21.0, 43.0] as List<f32>;
+test "paired matrices hold each column of the first, then the same column of the second" {
+    let b: Tensor<f32, [Inner, Col]> = tensor([2, 2], [1.0, 2.0, 3.0, 4.0]);
+    let c: Tensor<f32, [Inner, Col]> = tensor([2, 2], [10.0, 20.0, 30.0, 40.0]);
+    let bc = interleaved(&b, &c);
+    assert bc.extents == [2, 4] as List<i32>;
+    assert bc.data == [1.0, 10.0, 2.0, 20.0, 3.0, 30.0, 4.0, 40.0] as List<f32>;
 }
 
 test "matmul_broadcast stretches a batch axis of 1 on either side" {
@@ -442,17 +341,17 @@ test "matmul_broadcast reads a rank-1 operand as a row on the left and a column 
     assert dot.data == [5.0] as List<f32>;
 }
 
-test "matmul_shared agrees with the product element by element past a whole tile" {
-    // 5 to 8 rows leave 1 to 4 for the last band. 7 columns leave 3 past a
-    // tile of 4 and pad a vector, 11 make an odd number of vectors, 16 fit.
+test "matmul_broadcast agrees with the product element by element past a whole tile" {
+    // 5 to 8 rows leave 1 to 4 for the last band, and 7 and 11 columns leave
+    // some past a tile of 4.
     for let rows of 5..=8 {
         for let cols of [7, 11, 16] {
-            matmul_shared_matches_product(rows, cols);
+            product_matches_by_elements(rows, cols);
         }
     }
 }
 
-fn matmul_shared_matches_product(rows: i32, cols: i32) {
+fn product_matches_by_elements(rows: i32, cols: i32) {
     let [batch, inner] = [2, 5];
     let mut a_data: List<f32> = [];
     for let i of 0..<batch * rows * inner {
@@ -464,39 +363,19 @@ fn matmul_shared_matches_product(rows: i32, cols: i32) {
     }
     let a: Tensor<f32, [Batch, Row, Inner]> = tensor([batch, rows, inner], a_data);
     let b: Tensor<f32, [Inner, Col]> = tensor([inner, cols], b_data);
-    let mut cpu = Cpu {};
-    // The same matrix prepared as a product's right operand, from itself and
-    // from its transpose, as a `Gemm` that transposes it holds it.
-    let kept = cpu.keep_rhs(&b);
-    let kept_transposed = cpu.keep_rhs_transposed(&transpose2(&b));
-
-    let products: List<Tensor<f32, [Batch, Row, Col]>> = [
-        matmul_shared(&a, &b, &null),
-        cpu.matmul_rhs(&a, &kept, null),
-        cpu.matmul_rhs(&a, &kept_transposed, null),
-    ];
-    for let c of products {
-        assert c.extents == [batch, rows, cols] as List<i32>;
-        for let s of 0..<batch {
-            for let r of 0..<rows {
-                for let col of 0..<cols {
-                    let mut want: f32 = 0.0;
-                    for let k of 0..<inner {
-                        want += a.data[(s * rows + r) * inner + k] * b.data[k * cols + col];
-                    }
-                    assert c.data[(s * rows + r) * cols + col] == want;
+    let c = matmul_broadcast::<[Batch, Row, Inner], [Inner, Col], [Batch, Row, Col]>(&a, &b, &null);
+    assert c.extents == [batch, rows, cols] as List<i32>;
+    for let s of 0..<batch {
+        for let r of 0..<rows {
+            for let col of 0..<cols {
+                let mut want: f32 = 0.0;
+                for let k of 0..<inner {
+                    want += a.data[(s * rows + r) * inner + k] * b.data[k * cols + col];
                 }
+                assert c.data[(s * rows + r) * cols + col] == want;
             }
         }
     }
-}
-
-test "a prepared right operand multiplies a matrix with no batch axis" {
-    let a: Tensor<f32, [Row, Inner]> = tensor([2, 3], [1.0, 2.0, 3.0, 4.0, 5.0, 6.0]);
-    let b: Tensor<f32, [Inner, Col]> = tensor([3, 2], [1.0, 0.0, 0.0, 1.0, 1.0, 1.0]);
-    let mut cpu = Cpu {};
-    let c: Tensor<f32, [Row, Col]> = cpu.matmul_rhs(&a, &cpu.keep_rhs(&b), null);
-    assert c.data == [4.0, 5.0, 10.0, 11.0] as List<f32>;
 }
 
 /// The two operands' sum, or their product, as an `Expr`.
@@ -509,85 +388,84 @@ fn product() -> Expr {
 }
 
 test "fused repeats an operand of the trailing axes across the leading ones" {
-    let mut cpu = Cpu {};
     let a: Tensor<f32, [Row, Col]> = tensor([2, 2], [1.0, 2.0, 3.0, 4.0]);
     let b: Tensor<f32, [Col]> = tensor([2], [10.0, 20.0]);
 
-    let c = cpu.fused::<[Row, Col]>([
-        cpu.read(&a),
-        cpu.read_suffix::<[Row], [Col]>(&b),
-    ], &sum());
+    let c = fused::<[Row, Col]>(&[
+        read(&a),
+        read(&b),
+    ], &sum(), [2, 2]);
     assert c.extents == [2, 2] as List<i32>;
     assert c.data == [11.0, 22.0, 13.0, 24.0] as List<f32>;
 }
 
 test "fused keeps the operand order the operator wrote" {
-    let mut cpu = Cpu {};
     let a: Tensor<f32, [Col]> = tensor([2], [10.0, 20.0]);
     let b: Tensor<f32, [Row, Col]> = tensor([2, 2], [1.0, 2.0, 3.0, 4.0]);
 
-    let c = cpu.fused::<[Row, Col]>(
-        [
-            cpu.read_suffix::<[Row], [Col]>(&a),
-            cpu.read(&b),
+    let c = fused::<[Row, Col]>(
+        &[
+            read(&a),
+            read(&b),
         ],
         &operand(0).binary(BinaryOp::Sub, &operand(1)),
+        [2, 2],
     );
     assert c.data == [9.0, 18.0, 7.0, 16.0] as List<f32>;
 }
 
-test "read_at repeats the operand along the axes after it and before it" {
-    let mut cpu = Cpu {};
+test "an operand followed by extent-1 axes repeats along the axes after it and before it" {
     let a: Tensor<f32, [Batch, Row, Col]> = tensor([2, 2, 2], [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0]);
     let b: Tensor<f32, [Row]> = tensor([2], [10.0, 20.0]);
 
-    let c = cpu.fused::<[Batch, Row, Col]>([
-        cpu.read(&a),
-        cpu.read_at::<[Batch], [Row], [Col]>(&b, 1),
-    ], &sum());
+    let c = fused::<[Batch, Row, Col]>(&[
+        read(&a),
+        Read {
+            data: &b.data,
+            extents: [2, 1],
+        },
+    ], &sum(), [2, 2, 2]);
     assert c.extents == [2, 2, 2] as List<i32>;
     assert c.data == [11.0, 12.0, 23.0, 24.0, 15.0, 16.0, 27.0, 28.0] as List<f32>;
 }
 
 test "fused stretches an extent-1 axis on either side" {
-    let mut cpu = Cpu {};
     let a: Tensor<f32, [Row, Col]> = tensor([2, 1], [1.0, 2.0]);
     let b: Tensor<f32, [Row, Col]> = tensor([1, 3], [10.0, 20.0, 30.0]);
 
-    let c = cpu.fused::<[Row, Col]>([
-        cpu.read(&a),
-        cpu.read(&b),
-    ], &sum());
+    let c = fused::<[Row, Col]>(&[
+        read(&a),
+        read(&b),
+    ], &sum(), [2, 3]);
     assert c.extents == [2, 3] as List<i32>;
     assert c.data == [11.0, 21.0, 31.0, 12.0, 22.0, 32.0] as List<f32>;
 }
 
 test "fused stretches a middle extent-1 axis of the shorter operand" {
     // A per-channel bias `[C, 1, 1]` over `[N, C, H, W]`, as a convolution's is.
-    let mut cpu = Cpu {};
     let a: Tensor<f32, [Batch, Inner, Row, Col]> = tensor([1, 2, 2, 2], [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0]);
     let b: Tensor<f32, [Inner, Row, Col]> = tensor([2, 1, 1], [10.0, 100.0]);
 
-    let c = cpu.fused::<[Batch, Inner, Row, Col]>(
-        [
-            cpu.read(&a),
-            cpu.read_suffix::<[Batch], [Inner, Row, Col]>(&b),
+    let c = fused::<[Batch, Inner, Row, Col]>(
+        &[
+            read(&a),
+            read(&b),
         ],
         &sum(),
+        [1, 2, 2, 2],
     );
     assert c.extents == [1, 2, 2, 2] as List<i32>;
     assert c.data == [11.0, 12.0, 13.0, 14.0, 105.0, 106.0, 107.0, 108.0] as List<f32>;
 }
 
 test "fused stretches the longer operand's extent-1 axis to the shorter's" {
-    let mut cpu = Cpu {};
     let a: Tensor<f32, [Batch, Col]> = tensor([2, 1], [1.0, 2.0]);
     let b: Tensor<f32, [Col]> = tensor([3], [10.0, 20.0, 30.0]);
 
-    let c = cpu.fused::<[Batch, Col]>([
-        cpu.read(&a),
-        cpu.read_suffix::<[Batch], [Col]>(&b),
-    ], &product());
+    let c = fused::<[Batch, Col]>(&[
+        read(&a),
+        read(&b),
+    ], &product(), [2, 3]);
     assert c.extents == [2, 3] as List<i32>;
     assert c.data == [10.0, 20.0, 30.0, 20.0, 40.0, 60.0] as List<f32>;
 }
@@ -595,7 +473,6 @@ test "fused stretches the longer operand's extent-1 axis to the shorter's" {
 test "fused runs past one pass, an operand repeating across the passes" {
     // More elements than one pass of the steps covers, and a period that does
     // not divide it.
-    let mut cpu = Cpu {};
     let rows = 700;
     let mut data: List<f32> = [];
     for let i of 0..<rows * 3 {
@@ -604,10 +481,10 @@ test "fused runs past one pass, an operand repeating across the passes" {
     let a: Tensor<f32, [Row, Col]> = tensor([rows, 3], data);
     let b: Tensor<f32, [Col]> = tensor([3], [0.5, 1.5, 2.5]);
 
-    let c = cpu.fused::<[Row, Col]>([
-        cpu.read(&a),
-        cpu.read_suffix::<[Row], [Col]>(&b),
-    ], &sum());
+    let c = fused::<[Row, Col]>(&[
+        read(&a),
+        read(&b),
+    ], &sum(), [rows, 3]);
     for let i of 0..<rows * 3 {
         assert c.data[i] == a.data[i] + b.data[i % 3];
     }
@@ -641,14 +518,14 @@ test "max_pool takes each window's largest element, the padding never" {
     assert y.data == [1.0, 3.0, 7.0, 9.0] as List<f32>;
 }
 
-test "conv sums each window against the weight across the input channels" {
+test "conv_grouped sums each window against the weight across the input channels" {
     // Two input channels of 2x2 and one 2x2 filter per output channel.
     let x: Tensor<f32, [Batch, Inner, Row, Col]> = tensor([1, 2, 2, 2], [1.0, 2.0, 3.0, 4.0, 10.0, 20.0, 30.0, 40.0]);
     let w: Tensor<f32, [Col, Inner, Row, Col]> = tensor([2, 2, 2, 2], [
         1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0,
     ]);
 
-    let y = conv::<Batch, Inner, Col, [Row, Col], [Row, Col], [Row, Col]>(&x, &w, &window(
+    let y = conv_grouped::<Batch, Inner, Inner, Col, [Row, Col], [Row, Col], [Row, Col]>(&x, &w, 1, &window(
         [2, 2],
         [1, 1],
         [0, 0, 0, 0],
@@ -656,17 +533,6 @@ test "conv sums each window against the weight across the input channels" {
     ), &null);
     assert y.extents == [1, 2, 1, 1] as List<i32>;
     assert y.data == [11.0, 44.0] as List<f32>;
-}
-
-test "conv_bias adds each output channel's bias" {
-    let x: Tensor<f32, [Batch, Inner, Row, Col]> = tensor([1, 1, 1, 2], [1.0, 2.0]);
-    let w: Tensor<f32, [Col, Inner, Row, Col]> = tensor([2, 1, 1, 1], [1.0, 10.0]);
-    let b: Tensor<f32, [Col]> = tensor([2], [0.5, -0.5]);
-
-    let y = conv_bias::<Batch, Inner, Col, [Row, Col], [Row, Col], [Row, Col]>(&x, &w, &b, &window([1, 1], [1, 1], [
-        0, 0, 0, 0,
-    ], [1, 2]), &null);
-    assert y.data == [1.5, 2.5, 9.5, 19.5] as List<f32>;
 }
 
 test "conv_grouped reads each output channel's own group of input channels" {
@@ -680,20 +546,6 @@ test "conv_grouped reads each output channel's own group of input channels" {
         [1, 2],
     ), &null);
     assert y.data == [2.0, 4.0, 30.0, 60.0] as List<f32>;
-}
-
-test "conv_grouped_bias adds each output channel's bias to its group's sum" {
-    let x: Tensor<f32, [Batch, Inner, Row, Col]> = tensor([1, 2, 1, 2], [1.0, 2.0, 10.0, 20.0]);
-    let w: Tensor<f32, [Col, Row, Row, Col]> = tensor([2, 1, 1, 1], [2.0, 3.0]);
-    let b: Tensor<f32, [Col]> = tensor([2], [0.5, -0.5]);
-
-    let y = conv_grouped_bias::<Batch, Inner, Row, Col, [Row, Col], [Row, Col], [Row, Col]>(&x, &w, &b, 2, &window(
-        [1, 1],
-        [1, 1],
-        [0, 0, 0, 0],
-        [1, 2],
-    ), &null);
-    assert y.data == [2.5, 4.5, 29.5, 59.5] as List<f32>;
 }
 
 test "transpose2 swaps the two axes and their extents" {
@@ -718,110 +570,8 @@ test "transpose2 moves an i64 tensor as it moves a float one" {
     assert r.data == [1, 4, 2, 5, 3, 6] as List<i64>;
 }
 
-test "select takes x where the condition holds, each operand stretched" {
-    let cond: Tensor<bool, [Row, Col]> = Tensor {
-        data: [true, false],
-        extents: [1, 2],
-    };
-    let x: Tensor<f32, [Row, Col]> = tensor([2, 2], [1.0, 2.0, 3.0, 4.0]);
-    let y: Tensor<f32, [Row, Col]> = tensor([1, 1], [-1.0]);
-
-    let r = select(&cond, &x, &y);
-    assert r.extents == [2, 2] as List<i32>;
-    assert r.data == [1.0, -1.0, 3.0, -1.0] as List<f32>;
-}
-
-test "slice_axis keeps one run of positions along the axis" {
-    let t: Tensor<f32, [Batch, Row, Col]> = tensor([2, 3, 2], [
-        0.0, 1.0, 10.0, 11.0, 20.0, 21.0, 100.0, 101.0, 110.0, 111.0, 120.0, 121.0,
-    ]);
-
-    let r = slice_axis::<f32, [Batch], Row, Inner, [Col]>(&t, 1, 1, 2, 1);
-    assert r.extents == [2, 2, 2] as List<i32>;
-    assert r.data == [10.0, 11.0, 20.0, 21.0, 110.0, 111.0, 120.0, 121.0] as List<f32>;
-}
-
-test "slice_axis steps over positions, backwards too" {
-    let t: Tensor<f32, [Row, Col]> = tensor([3, 2], [0.0, 1.0, 10.0, 11.0, 20.0, 21.0]);
-
-    let back = slice_axis::<f32, [], Row, Inner, [Col]>(&t, 0, 2, 3, -1);
-    assert back.data == [20.0, 21.0, 10.0, 11.0, 0.0, 1.0] as List<f32>;
-    let skip = slice_axis::<f32, [], Row, Inner, [Col]>(&t, 0, 0, 2, 2);
-    assert skip.data == [0.0, 1.0, 20.0, 21.0] as List<f32>;
-    // A backward cut of an empty axis starts before it and keeps nothing.
-    let empty: Tensor<f32, [Row, Col]> = tensor([0, 2], []);
-    assert slice_axis::<f32, [], Row, Inner, [Col]>(&empty, 0, -1, 0, -1).extents == [0, 2] as List<i32>;
-}
-
-test "concat puts the second operand's run after the first's at each position ahead of the axis" {
-    let past: Tensor<f32, [Batch, Row, Col]> = tensor([2, 2, 2], [0.0, 1.0, 10.0, 11.0, 100.0, 101.0, 110.0, 111.0]);
-    let next: Tensor<f32, [Batch, Inner, Col]> = tensor([2, 1, 2], [20.0, 21.0, 120.0, 121.0]);
-
-    let r = concat::<f32, [Batch], Row, Inner, Row, [Col]>(&past, &next, 1);
-    assert r.extents == [2, 3, 2] as List<i32>;
-    assert r.data == [0.0, 1.0, 10.0, 11.0, 20.0, 21.0, 100.0, 101.0, 110.0, 111.0, 120.0, 121.0] as List<f32>;
-}
-
-test "concat of an empty operand is the other" {
-    let empty: Tensor<f32, [Batch, Row, Col]> = tensor([1, 0, 2], []);
-    let next: Tensor<f32, [Batch, Inner, Col]> = tensor([1, 1, 2], [20.0, 21.0]);
-
-    let r = concat::<f32, [Batch], Row, Inner, Row, [Col]>(&empty, &next, 1);
-    assert r.extents == [1, 1, 2] as List<i32>;
-    assert r.data == [20.0, 21.0] as List<f32>;
-    let none: Tensor<f32, [Batch, Row, Col]> = tensor([0, 1, 2], []);
-    assert concat::<f32, [Batch], Row, Row, Row, [Col]>(&none, &none, 1).extents == [0, 2, 2] as List<i32>;
-}
-
 test "from_end counts a negative index from the end" {
     assert from_end(-1, 8) == 7 && from_end(3, 8) == 3;
-}
-
-test "lift prepends extent-1 axes up to the rank" {
-    let s: Tensor<f32, []> = tensor([], [7.0]);
-
-    let r = lift::<f32, [], [Row, Col]>(&s, 2);
-    assert r.extents == [1, 1] as List<i32>;
-    assert r.data == [7.0] as List<f32>;
-}
-
-test "softmax normalizes each lane along the axis" {
-    let t: Tensor<f32, [Row, Col]> = tensor([2, 2], [0.0, 0.0, 1.0, -f32::INFINITY]);
-
-    let along_cols = softmax(&t, 1);
-    assert along_cols.data == [0.5, 0.5, 1.0, 0.0] as List<f32>;
-    let along_rows = softmax(&t, 0);
-    // Each lane's maximum is subtracted first, so column 0 is [e^-1, 1] scaled.
-    let a = f32::exp(-1.0);
-    assert along_rows.data == [a / (a + 1.0), 1.0, 1.0 / (a + 1.0), 0.0] as List<f32>;
-}
-
-test "softmax_flattened normalizes every axis from its own on as one lane" {
-    let t: Tensor<f32, [Row, Col]> = tensor([2, 2], [0.0, 0.0, 0.0, 0.0]);
-
-    assert softmax_flattened(&t, 0).data == [0.25, 0.25, 0.25, 0.25] as List<f32>;
-    assert softmax_flattened(&t, 1).data == [0.5, 0.5, 0.5, 0.5] as List<f32>;
-}
-
-test "reduce folds the named axes to extent 1" {
-    let t: Tensor<f32, [Batch, Row, Col]> = tensor([2, 2, 3], [
-        0.0, 1.0, 2.0, 10.0, 11.0, 12.0, 100.0, 101.0, 102.0, 110.0, 111.0, 112.0,
-    ]);
-
-    let rows = reduce(&t, [1], 0.0, |x, y| x + y);
-    assert rows.extents == [2, 1, 3] as List<i32>;
-    assert rows.data == [10.0, 12.0, 14.0, 210.0, 212.0, 214.0] as List<f32>;
-    let mean = reduce_mean(&t, [0, 2]);
-    assert mean.extents == [1, 2, 1] as List<i32>;
-    assert mean.data == [51.0, 61.0] as List<f32>;
-}
-
-test "reduce_mean over a tensor with no elements has none" {
-    let t: Tensor<f32, [Row, Col]> = tensor([0, 5], []);
-
-    let mean = reduce_mean(&t, [1]);
-    assert mean.extents == [0, 1] as List<i32>;
-    assert mean.data.is_empty();
 }
 
 test "permute puts input axis perm[i] at output axis i" {

@@ -39,7 +39,7 @@ use {
     operands_short,
     trailing_axes,
 } from "./graph.wado";
-use { Condition, Poly, owe as owe_at, owe_equal as owe_equal_at } from "./poly.wado";
+use { Condition, Poly, equalities, owe as owe_at, owe_equal as owe_equal_at } from "./poly.wado";
 use { from_end, spatial_extents } from "./runtime/tensor.wado";
 use { Geometry, ints, window_over } from "./window.wado";
 
@@ -285,9 +285,9 @@ fn owe_equal(node: &Node, owed: &mut List<Condition>, a: &Poly, b: &Poly, condit
     return owe_equal_at(owed, &node.site(), a, b, condition).map_err(|reason| refusal(node, reason));
 }
 
-/// Check a graph. Producing a shape for every tensor a kernel reads is what
-/// discharges the graph's extent conditions, so a successful return is the
-/// proof, save the conditions it hands `forward` to check.
+/// Check a graph. Producing a shape for every tensor an operation reads is
+/// what discharges the graph's extent conditions, so a successful return is the
+/// proof, save the conditions it hands `compute` to check.
 pub fn infer(graph: &Graph) -> Result<Checked, InferError> {
     let mut scope = Checked {
         shapes: HashMap::new(),
@@ -504,7 +504,7 @@ fn unspell_unbound(graph: &Graph, shapes: &mut HashMap<String, Shape>) {
     for let vi of &graph.inputs {
         extents.extend(&shapes[vi.name].extents());
     }
-    let bound: List<String> = solved(&extents).into_iter().map(|s| s.symbol).collect();
+    let bound: List<String> = solved(&extents, &HashSet::new()).into_iter().map(|s| s.symbol).collect();
     for let vi of &graph.inputs {
         let Dims(dims) = vi.rank else {
             continue;
@@ -619,7 +619,9 @@ fn branched(node: &Node, scope: &mut Checked) -> Result<(), InferError> {
                 scope.axes.read(&t.axes[j]),
                 scope.axes.read(&e.axes[j]),
             ];
-            let extent = if a.extent.agrees(&b.extent) { a.extent } else { Extent::symbol(&`${output}[${j}]`) };
+            let extent = owed_alike(&a.extent, &then_scope.owed, &b.extent, &else_scope.owed).unwrap_or(
+                Extent::symbol(&`${output}[${j}]`),
+            );
             axes.push(if a.name == b.name {
                 Axis { ..a, extent };
             } else {
@@ -633,6 +635,47 @@ fn branched(node: &Node, scope: &mut Checked) -> Result<(), InferError> {
     }
     scope.branches[node.outputs[0]] = [then_scope, else_scope];
     return Result::Ok(());
+}
+
+/// One length that `a`, where `a_owed` holds, and `b`, where `b_owed` holds,
+/// both are: either of them, or either moved by an equality its branch owes.
+/// A branch owes its equalities wherever it runs, so the output takes that
+/// length from either.
+fn owed_alike(a: &Extent, a_owed: &List<Condition>, b: &Extent, b_owed: &List<Condition>) -> Option<Extent> {
+    let [x, y] = [
+        a.poly(),
+        b.poly(),
+    ];
+    let [x_ties, y_ties] = [
+        equalities(a_owed),
+        equalities(b_owed),
+    ];
+    let mut candidates: List<Poly> = [x, y];
+    for let [length, ties] of [
+        [x, x_ties],
+        [y, y_ties],
+    ] {
+        for let t of ties {
+            if let Some(moved) = length.try_add(&t) {
+                candidates.push(moved);
+            }
+        }
+    }
+    for let c of candidates {
+        if owed_equal(&x, &c, &x_ties) && owed_equal(&y, &c, &y_ties) {
+            return Extent::of(c);
+        }
+    }
+    return null;
+}
+
+/// Whether `ties`, slacks owed to be 0 with each one's negation, make `a`
+/// and `b` one length.
+fn owed_equal(a: &Poly, b: &Poly, ties: &List<Poly>) -> bool {
+    let Some(d) = a.try_sub(b) else {
+        return false;
+    };
+    return d == Poly::constant(0) || ties.contains(&d);
 }
 
 /// Give `scope` the shape `branch` read each of `scope`'s constants under, so
@@ -778,6 +821,13 @@ fn produced_primitive(node: &Node, primitives: &HashMap<String, String>) -> Resu
     }
     if op == "Range" {
         // A float range folds, so only an integer one reaches the run.
+        return Result::Ok(Option::Some("i64"));
+    }
+    if op == "ArgMax" {
+        let x = node.inputs[0];
+        if let Some(p) = primitives.get(x) && p != KERNEL_ELEMENT {
+            return Result::Err(refusal(node, `operand ${x} is ${p}, and ArgMax ranks ${KERNEL_ELEMENT}`));
+        }
         return Result::Ok(Option::Some("i64"));
     }
     if op == "ConstantOfShape" {
@@ -1114,6 +1164,19 @@ fn infer_node(
     }
     if op == "Expand" {
         return expanded(node, &operand_at(node, shapes, 0), known, owed, classes);
+    }
+    if op == "ArgMax" {
+        let x = operand_at(node, shapes, 0);
+        let axis = arg_max_axis(node, x.rank())?;
+        let mut axes = x.axes;
+        if int_attr(node, "keepdims", 1)? != 0 {
+            // An index is no position along the axis it ranks, and an output
+            // sharing that axis's name would leave the name no single extent.
+            axes[axis] = new_axis(&node.outputs[0], axis, Extent::Static(1), classes);
+        } else {
+            axes.remove(axis);
+        }
+        return Result::Ok(Shape { axes });
     }
     if is_reduction(&op) {
         let x = operand_at(node, shapes, 0);
@@ -1888,6 +1951,15 @@ pub fn reduced_axes(node: &Node, known: &HashMap<String, Known>, rank: i32) -> R
     return Result::Ok(axes);
 }
 
+/// The axis `ArgMax` ranks along. The kernels take the first of equal greatest
+/// elements, so `select_last_index` is refused.
+pub fn arg_max_axis(node: &Node, rank: i32) -> Result<i32, InferError> {
+    if int_attr(node, "select_last_index", 0)? != 0 {
+        return Result::Err(attribute_error(node, "select_last_index", "is set, and the kernels take the first index"));
+    }
+    return axis_attr(node, 0, rank, rank - 1);
+}
+
 /// The `axis` attribute, where a negative one counts from `rank` and the
 /// operator reads at most `last`.
 fn axis_attr(node: &Node, fallback: i64, rank: i32, last: i32) -> Result<i32, InferError> {
@@ -1989,7 +2061,7 @@ fn required_operands(op: &String) -> Option<i32> {
     }
     return match op.as_str_slice() {
         "Constant" => Option::Some(0),
-        "Shape" | "Reshape" | "Unsqueeze" | "Squeeze" | "Flatten" | "Concat" | "Slice" | "ConstantOfShape" | "Transpose" | "Softmax" | "Split" | "MaxPool" => Option::Some(
+        "Shape" | "Reshape" | "Unsqueeze" | "Squeeze" | "Flatten" | "Concat" | "Slice" | "ConstantOfShape" | "Transpose" | "Softmax" | "Split" | "MaxPool" | "ArgMax" => Option::Some(
             1,
         ),
         "Gather" | "MatMul" | "Gemm" | "Conv" | "Expand" => Option::Some(2),

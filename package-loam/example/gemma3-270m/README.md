@@ -23,17 +23,13 @@ calls, so a call that extends the last one's ids runs only the new ones.
 
 ## On a WebGPU device
 
-`webgpu.wado` and `webgpu_compute.wado` continue each prompt `generate.json`
-records on `WebGpuBackend`. They print what `gemma3.wado` prints with no prompt,
-and the dispatches and read backs a token takes. `webgpu.wado` runs a token as a
-`pass` through the kernels, and `webgpu_compute.wado` as a `compute` through
-the program the backend compiled for the shape class:
+`webgpu.wado` continues each prompt `generate.json` records on
+`WebGpuBackend`, a token a `compute` through the program the backend compiled
+for the shape class. It prints what `gemma3.wado` prints with no prompt, and
+the dispatches and read backs a token takes:
 
     cd package-loam/example/gemma3-270m
     wado run-webgpu webgpu.wado
-    wado run-webgpu webgpu_compute.wado
-
-`continued.wado` holds what the two share.
 
 ## What the build reads
 
@@ -48,7 +44,7 @@ and the `Gelu` and `SimplifiedLayerNormalization` functions.
 `model.wado` imports `tokenizer.json` and `onnx/model.onnx` by their URLs,
 pinned by their SHA-256. The build downloads them once into Wado's cache. The
 graph names its weights in `onnx/model.onnx_data`, at an offset and a length
-each, and the build reads none of that file. `Prepared::load` reads the weights
+each, and the build reads none of that file. `Params::load` reads the weights
 from it at run time. A program reaches no file the build read, so `fetch.sh`
 downloads the data file into `build/`, which Git ignores, with the model and
 the tokenizer files the oracle scripts read.
@@ -62,9 +58,10 @@ a test file to run it once `fetch.sh` has.
   `build/tokenizer_config.json`. `tokenizer_test.wado` checks Loam's against
   it.
 - `generate.json` is the oracle for the model: the tokens onnxruntime picks
-  greedily after each prompt, and its time per token on the CPU. `generate.mjs`
-  writes it, running `build/model.onnx` with `onnxruntime-node` and feeding each
-  step the attention cache, as `model.wado` does. `generate_test.wado` checks
-  Loam's tokens against it:
+  greedily after each prompt, and its time per token on the CPU and on WebGPU,
+  which must pick the same tokens. `generate.mjs` writes it, running
+  `build/model.onnx` with `onnxruntime-node` and feeding each step the attention
+  cache, as `model.wado` does. `generate_test.wado` checks Loam's tokens
+  against it:
 
       wado test --collector drc generate_test.wado

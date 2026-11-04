@@ -6,8 +6,8 @@
 use { HashMap } from "core:collections";
 use { GROUP_QUERY_ATTENTION, Graph, Node } from "./graph.wado";
 use { Checked, attention_options, split_axis } from "./infer.wado";
-use { branches } from "./plan.wado";
-use { Poly, equalities } from "./poly.wado";
+use { branches } from "./lowering.wado";
+use { Condition, Poly, equalities } from "./poly.wado";
 use { Shape, short_of } from "./shape.wado";
 
 /// Why an operator keeps a length from being padded.
@@ -132,7 +132,9 @@ fn judge_scope(graph: &Graph, checked: &Checked, refusals: &mut HashMap<String, 
     }
 }
 
-/// The symbols some extent of `node`'s outputs may fall as they rise.
+/// The symbols some extent of `node`'s outputs may fall as they rise. An
+/// extent is read as presumed where the scope owes every condition that
+/// presumes, so a bound a length is owed to stay within caps no extent.
 fn shrinking(node: &Node, checked: &Checked) -> List<String> {
     let mut read: List<String> = [];
     for let output of node.outputs {
@@ -140,7 +142,7 @@ fn shrinking(node: &Node, checked: &Checked) -> List<String> {
             continue;
         };
         for let axis of shape.axes {
-            let extent = axis.extent.poly();
+            let extent = owed_presumed(&axis.extent.poly(), checked).unwrap_or(axis.extent.poly());
             for let symbol of extent.symbols() {
                 if !extent.grows_with(&symbol) {
                     read.push(symbol);
@@ -149,6 +151,19 @@ fn shrinking(node: &Node, checked: &Checked) -> List<String> {
         }
     }
     return read;
+}
+
+/// `extent` as `Poly::presumed` reads it, where `checked` owes every
+/// condition that reading takes.
+fn owed_presumed(extent: &Poly, checked: &Checked) -> Option<Poly> {
+    let mut conditions: List<Condition> = [];
+    let presumed = extent.presumed(&mut conditions)?;
+    for let c of conditions {
+        if !checked.owed.into_iter().any(|o| o.slack == c.slack) {
+            return null;
+        }
+    }
+    return Option::Some(presumed);
 }
 
 /// The symbols `node` keeps from being padded, and why, where it keeps any.

@@ -3,7 +3,7 @@
 //! otherwise. An `i64` tensor stays on the host, as it does for the kernels.
 //! A compiled program launches the kernels `fusion.wado` plans instead.
 
-use { HashMap } from "core:collections";
+use { HashMap, HashSet } from "core:collections";
 use {
     GpuDevice,
     GpuQueue,
@@ -32,8 +32,8 @@ use {
     elementwise_extents,
     free_axes,
     gathered_extents,
-    joined_extents,
     kept_axes,
+    padded_with_zeros,
     picked,
     reduced_extents,
     sliced_extents,
@@ -41,19 +41,35 @@ use {
 use {
     Attention,
     BinaryOp,
+    Cpu,
     Element,
+    ElementKind,
     Epilogue,
     Expr,
     Holds,
+    Prologue,
     RowOp,
     Tensor,
     constant,
     element_count,
+    interleaved,
     operand,
+    transpose2,
 } from "./tensor.wado";
-use { Kernel, Plan, binary_op, compared_op, planned, splats_of, unary_of } from "./fusion.wado";
-use { Any, Recorded, Recorder, Run, Untyped, bools, constants } from "./recorded.wado";
-use { DeviceTensor, Placed, PlacedRead, WebGpuBackend, contiguous, permuted, sliced } from "./webgpu.wado";
+use {
+    Kernel,
+    KernelOperand,
+    Pair,
+    Plan,
+    binary_op,
+    compared_op,
+    planned,
+    replanned,
+    splats_of,
+    unary_of,
+} from "./fusion.wado";
+use { Any, Operation, Recorded, Recorder, Run, Untyped, Values, bools, constants, kept_any } from "./recorded.wado";
+use { DeviceTensor, Placed, PlacedRead, WebGpuBackend, contiguous, permuted, reads_as, sliced } from "./webgpu.wado";
 
 /// A pass recorded once per shape class and planned into kernels, which each
 /// call launches, and the values of the nodes that read no argument, kept on
@@ -61,7 +77,25 @@ use { DeviceTensor, Placed, PlacedRead, WebGpuBackend, contiguous, permuted, sli
 pub struct WebGpuProgram {
     recorded: Recorded,
     plan: Plan,
+    /// What `plan` folds of the nodes that read no argument.
+    splats: HashMap<i32, Option<f32>>,
     constants: HashMap<i32, Any<WebGpuBackend>>,
+    /// What the backend keys this program's launches by: one serial for every
+    /// program of one structure, each shape class of a graph, so a launch of a
+    /// new class binds the buffers and parameters another class's made.
+    serial: i32,
+    /// How each launch of kernels replays, by the root `launched` starts it
+    /// by.
+    replays: HashMap<i32, Replay>,
+}
+
+/// What a launch's commands are recorded under, and the nodes whose views
+/// they read. The key holds the signature of each kernel: what its commands
+/// depend on beside those views, so a recording of one shape class replays in
+/// another only where they agree.
+struct Replay {
+    key: i32,
+    reads: List<i32>,
 }
 
 impl Graph for WebGpuBackend {
@@ -74,35 +108,139 @@ impl Graph for WebGpuBackend {
         };
     }
 
-    /// A constant is kept only where a launch reads it, so neither one only
-    /// other constants read nor one a kernel writes in.
-    fn compiled(&mut self, record: fn(&mut Recorder) -> Recorded with _) -> Option<WebGpuProgram> with _ {
+    /// A program takes the plan of an earlier one of its structure where the
+    /// extents let it. A constant is kept only where a launch reads it, so
+    /// neither one only other constants read nor one a kernel writes in.
+    fn compiled(
+        &mut self,
+        record: fn(&mut Recorder) -> Recorded with _,
+        earlier: &List<&WebGpuProgram>,
+    ) -> Option<WebGpuProgram> with _ {
         let recorded = record(&mut Recorder::new());
         let folded = constants(&recorded);
-        let plan = planned(&recorded, &splats_of(&folded));
+        let splats = splats_of(&folded);
+        let serial = self.program_serial(structure_of(&recorded));
+        let mut reused: Option<Plan> = null;
+        for let p of *earlier {
+            if p.serial == serial {
+                reused = replanned(&p.recorded, &p.plan, &p.splats, &recorded, &splats);
+                if reused matches { Some(_) } {
+                    break;
+                }
+            }
+        }
+        let plan = match reused {
+            Some(p) => p,
+            None => planned(&recorded, &splats),
+        };
         let mut kept = HashMap::<i32, Any<WebGpuBackend>>::new();
         for let id of plan.reads(&recorded) {
             if let Some(value) = folded.get(id) && !kept.contains_key(id) {
-                kept[id] = match value {
-                    F32(t) => Any::F32(self.keep(&t)),
-                    I64(t) => Any::I64(self.keep(&t)),
-                    Bool(t) => Any::Bool(self.keep(&t)),
-                };
+                kept[id] = kept_any(self, &value);
             }
         }
-        return Option::Some(WebGpuProgram { recorded, plan, constants: kept });
+        let mut replays = HashMap::<i32, Replay>::new();
+        keyed(self, &recorded, serial, &plan, &mut replays);
+        return Option::Some(WebGpuProgram { recorded, plan, splats, constants: kept, serial, replays });
+    }
+
+    /// A weight read only as products' right matrix, or as a gather's rows, is
+    /// kept as `kept_contracted` keeps one: column by column along the axis the
+    /// products contract, in bf16 where that loses nothing. The weights of a
+    /// `Joined` launch are kept so as one matrix, side by side, and those of a
+    /// `Paired` one as one matrix whose columns alternate between theirs, each
+    /// a view of it. Any other is kept as `keep` keeps it.
+    fn kept_weights<Er>(
+        &mut self,
+        record: fn(&mut Recorder) -> Recorded with _,
+        first: i32,
+        count: i32,
+        load: fn(i32) -> Result<Any<Cpu>, Er> with _,
+    ) -> Result<List<Any<WebGpuBackend>>, Er> with _ {
+        let recorded = record(&mut Recorder::new());
+        let contracted = contracted_axes(&recorded, first, count);
+        let mut kept = List::<Option<Any<WebGpuBackend>>>::filled(count, null);
+        for let [run, paired] of weight_runs(&recorded, first, count, &contracted) {
+            let axis = contracted[run[0]].unwrap();
+            let free = 1 - axis;
+            let mut parts: List<Tensor<f32, Untyped>> = [];
+            for let at of run {
+                let F32(t) = load(at)? else {
+                    unreachable();
+                };
+                parts.push(t);
+            }
+            if paired {
+                // As `[inner, columns]`, which `interleaved` pairs.
+                let matrix = |t: &Tensor<f32, Untyped>| {
+                    let m = Tensor::<f32, [Untyped, Untyped]> { data: t.data, extents: t.extents };
+                    return if axis == 0 { m } else { transpose2(&m) };
+                };
+                let both = interleaved(&matrix(&parts[0]), &matrix(&parts[1]));
+                let Device(d) = self.kept_contracted(&both, 0) else {
+                    unreachable();
+                };
+                for let [j, at] of run.into_iter().enumerate() {
+                    let view = DeviceTensor {
+                        ..d,
+                        offset: d.offset + j * d.strides[1],
+                        extents: [d.extents[0], d.extents[1] / 2],
+                        strides: [d.strides[0], 2 * d.strides[1]],
+                    };
+                    kept[at] = Option::Some(Any::F32(Placed::Device(if axis == 0 {
+                        view;
+                    } else {
+                        permuted(&view, &([1, 0] as List<i32>));
+                    })));
+                }
+                continue;
+            }
+            let mut joined = parts[0];
+            for let p of parts[1..<parts.len()].to_list() {
+                joined = self.cpu.concatenate::<f32, Untyped, Untyped, Untyped>(&joined, &p, free);
+            }
+            let Device(d) = self.kept_contracted(&joined, axis) else {
+                unreachable();
+            };
+            let mut start = 0;
+            for let [at, p] of run.into_iter().zip(parts.into_iter()) {
+                kept[at] = Option::Some(Any::F32(Placed::Device(sliced(&d, free, start, p.extents[free]))));
+                start += p.extents[free];
+            }
+        }
+        for let at of 0..<count {
+            if kept[at] matches { Some(_) } {
+                continue;
+            }
+            let host = load(at)?;
+            kept[at] = Option::Some(if let Some(axis) = contracted[at] && let F32(t) = &host {
+                Any::F32(self.kept_contracted(t, axis));
+            } else {
+                kept_any(self, &host);
+            });
+        }
+        return Result::Ok(kept.into_iter().map(|k| k.unwrap()).collect());
     }
 
     fn executed(
         &mut self,
         program: &WebGpuProgram,
         arguments: &List<Any<WebGpuBackend>>,
+        weights: &List<Any<WebGpuBackend>>,
     ) -> List<Any<WebGpuBackend>> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
-        let mut state = Run::<WebGpuBackend>::new();
-        for let [id, value] of program.constants.entries() {
-            state.values[*id] = *value;
+        let mut state = Run::<WebGpuBackend>::new(&program.recorded, arguments, weights, &program.constants);
+        let results = launched(self, &mut state, program, &program.plan);
+        let mut returned: List<i32> = [];
+        for let r of &results {
+            if let Some(d) = on_device(r) {
+                returned.push(d.slot);
+            }
         }
-        return launched(self, &mut state, &program.recorded, &program.plan, arguments);
+        let moved = self.ran_program(program.serial, &returned);
+        return results.into_iter().map(|r| match on_device(&r) {
+            Some(d) && moved.contains_key(d.slot) => at_slot(&r, moved[d.slot]),
+            _ => r,
+        }).collect();
     }
 
     fn iota<E: Element, Axes>(&mut self, extents: List<i32>, dimension: i32) -> Placed<E, Axes> {
@@ -129,7 +267,7 @@ impl Graph for WebGpuBackend {
         op: Unary,
         x: &Placed<f32, Axes>,
     ) -> Placed<f32, Axes> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
-        return self.fused_on(&([self.device_view(x)] as List<DeviceTensor>), &unary_of(&operand(0), op));
+        return self.fused_on(&([self.device_view(x)] as List<DeviceTensor>), &unary_of(op));
     }
 
     fn binary<E: Element, Axes>(
@@ -249,16 +387,32 @@ impl Graph for WebGpuBackend {
         if !E::exact_in_f32() {
             return Placed::Host(self.cpu.concatenate(&self.host(a), &self.host(b), dimension));
         }
-        let [first, second] = [
-            self.device_view(a),
-            self.device_view(b),
-        ];
-        let extents = joined_extents(&first.extents, &second.extents, dimension);
-        let out = contiguous(self.allocated(element_count(&extents), false), 0, extents);
-        self.copy(&first, &DeviceTensor { ..out, extents: first.extents });
-        let at = out.offset + first.extents[dimension] * out.strides[dimension];
-        self.copy(&second, &DeviceTensor { ..out, offset: at, extents: second.extents });
-        return Placed::Device(out);
+        return Placed::Device(self.joined(&self.device_view(a), &self.device_view(b), dimension));
+    }
+
+    /// A view over more of an attention cache's positions where it has room
+    /// for them, and zeros joined on otherwise.
+    fn grown<E: Element, Axes>(
+        &mut self,
+        x: &Placed<E, Axes>,
+        axis: i32,
+        extent: i32,
+    ) -> Placed<E, Axes> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
+        if let Device(d) = x && let Some(widened) = self.widened_cache(d, axis, extent) {
+            return Placed::Device(widened);
+        }
+        if !E::exact_in_f32() {
+            return padded_with_zeros::<WebGpuBackend, E, Axes>(self, x, axis, extent);
+        }
+        let mut extents = self.extents_of(x);
+        let own = extents[axis];
+        extents[axis] = extent;
+        let to = contiguous(self.allocated(element_count(&extents), false), 0, extents);
+        if element_count(&self.extents_of(x)) > 0 {
+            let from = self.device_view(x);
+            self.copy(&from, &sliced(&to, axis, 0, own));
+        }
+        return Placed::Device(to);
     }
 
     /// The row kernel where `init` is the fold's identity, so the fold from it
@@ -308,7 +462,7 @@ impl Graph for WebGpuBackend {
     ) -> Placed<E, Out> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
         let index = self.host(indices);
         let extents = self.extents_of(data);
-        if E::is_f32() && let Some(axis) = taken_axis(&extents, index.extents.len(), dims) {
+        if E::exact_in_f32() && let Some(axis) = taken_axis(&extents, index.extents.len(), dims) {
             let last = extents[axis] as i64 - 1;
             let mut starts = List::<i64>::with_capacity(index.data.len());
             for let i of index.data {
@@ -378,6 +532,14 @@ impl Graph for WebGpuBackend {
         return Placed::Device(view);
     }
 
+    fn arg_max<Axes>(
+        &mut self,
+        x: &Placed<f32, Axes>,
+        axis: i32,
+    ) -> Placed<i64, Axes> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
+        return self.arg_max_kernel(x, axis);
+    }
+
     /// The branch the condition picks, which is read back from the device.
     fn conditional<Axes, T>(
         &mut self,
@@ -430,7 +592,7 @@ impl Graph for WebGpuBackend {
             };
             assert !shared || valid + query.extents[1] <= positions, "a shared past holds the new positions after its valid ones";
             let biased = match bias {
-                Some(b) => Option::Some(sliced(&self.device_view(b), 3, 0, valid + query.extents[1])),
+                Some(b) => Option::Some(self.device_view(b)),
                 None => null,
             };
             if let Some([out, present_k, present_v]) = self.attended(
@@ -440,6 +602,7 @@ impl Graph for WebGpuBackend {
                 &held_k,
                 &held_v,
                 valid,
+                shared,
                 &rotary,
                 &biased,
                 options,
@@ -466,6 +629,85 @@ impl Graph for WebGpuBackend {
             options,
         );
     }
+}
+
+/// For each of the `count` weights `recorded` takes from its parameter
+/// `first` on, the axis the products reading it contract, where every node
+/// reading it is a product taking it as its right matrix or a gather taking
+/// its rows, and the pass returns none of them.
+internal fn contracted_axes(recorded: &Recorded, first: i32, count: i32) -> List<Option<i32>> {
+    let mut axes = List::<Option<i32>>::filled(count, null);
+    for let [id, node] of recorded.nodes.into_iter().enumerate() {
+        if let Parameter(p) = node.op && first <= p < first + count {
+            axes[p - first] = contracted_axis(recorded, id);
+        }
+    }
+    return axes;
+}
+
+/// The right matrices of each `Joined` and `Paired` launch `recorded` plans
+/// into, by their places among the `count` weights it takes from its parameter
+/// `first` on, and whether they pair: each run whose weights `contracted` keeps
+/// along one axis, and which share none with a run before it.
+fn weight_runs(recorded: &Recorded, first: i32, count: i32, contracted: &List<Option<i32>>) -> List<[List<i32>, bool]> {
+    let mut taken = HashSet::<i32>::new();
+    let mut runs: List<[List<i32>, bool]> = [];
+    for let launch of planned(recorded, &splats_of(&constants(recorded))).flattened() {
+        let [ks, paired] = match launch {
+            Joined(ks) => [ks, false],
+            Paired(p) => [[p.first, p.second] as List<Kernel>, true],
+            _ => {
+                continue;
+            },
+        };
+        let run: List<i32> = ks.into_iter().map(
+            |k| match recorded.nodes[recorded.nodes[k.product.unwrap()].operands[1]].op {
+                Parameter(p) => p - first,
+                _ => unreachable(),
+            },
+        ).collect();
+        if !run.into_iter().all(|w| 0 <= w < count) {
+            continue;
+        }
+        let axis = contracted[run[0]];
+        let mut own = HashSet::<i32>::new();
+        let kept_alike = run.into_iter().all(|w| contracted[w] == axis && !taken.contains(w) && own.insert(w));
+        if axis matches { Some(_) } && kept_alike {
+            for let w of run {
+                taken.insert(w);
+            }
+            runs.push([run, paired]);
+        }
+    }
+    return runs;
+}
+
+fn contracted_axis(recorded: &Recorded, weight: i32) -> Option<i32> {
+    let extents = &recorded.nodes[weight].extents;
+    if extents.len() != 2 || !recorded.nodes[weight].kind matches { F32 } || recorded.body.results.contains(&weight) {
+        return null;
+    }
+    let mut axis: Option<i32> = null;
+    for let node of &recorded.nodes {
+        if !node.operands.contains(&weight) {
+            continue;
+        }
+        let read = match node.op {
+            DotGeneral(dims) && node.operands[0] != weight
+                && dims.rhs_contracting.len() == 1
+                && dims.rhs_batch.is_empty() => dims.rhs_contracting[0],
+            Gather(dims) && node.operands[0] == weight
+                && taken_axis(extents, recorded.nodes[node.operands[1]].extents.len(), &dims) == Option::Some(0) => 1,
+            _ => {
+                return null;
+            },
+        };
+        if axis matches { Some(a) && a != read } {
+            return null;
+        }
+        axis = Option::Some(read);
+    }
+    return axis;
 }
 
 /// The extents a product of `l` by `r` computes before its result takes the
@@ -526,26 +768,51 @@ fn dotted(
 fn launched(
     g: &mut WebGpuBackend,
     state: &mut Run<WebGpuBackend>,
-    recorded: &Recorded,
+    program: &WebGpuProgram,
     plan: &Plan,
-    arguments: &List<Any<WebGpuBackend>>,
 ) -> List<Any<WebGpuBackend>> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
-    for let launch of plan.launches {
+    let recorded = &program.recorded;
+    for let launch of &plan.launches {
+        let root = match launch {
+            Node(id) | Case([id, _, _]) => *id,
+            Kernel(k) => k.root,
+            Joined(ks) => ks[0].root,
+            Paired(p) => p.second.root,
+        };
+        g.launching(program.serial, root);
         match launch {
-            Node(id) => {
-                let value = state.computed(g, id, &recorded.nodes[id], arguments);
-                state.values[id] = value;
+            Node(id) => state.ran(g, *id, &recorded.nodes[*id]),
+            Kernel(k) => rooted(
+                g,
+                &mut state.values,
+                root,
+                &program.replays[root],
+                recorded.nodes[root].kind,
+                || kernel_result(g, &state.values, recorded, k),
+            ),
+            Joined(ks) => {
+                let values = match joined_replayed(g, &state.values, program, ks) {
+                    Some(vs) => vs,
+                    None => apart(g, &mut state.values, program, ks),
+                };
+                for let [at, k] of ks.into_iter().enumerate() {
+                    state.values[k.root] = values[at];
+                }
             },
-            Kernel(k) => {
-                let value = kernel_result(g, &state.values, recorded, &k);
-                state.values[k.root] = value;
-            },
+            Paired(p) => rooted(
+                g,
+                &mut state.values,
+                root,
+                &program.replays[root],
+                recorded.nodes[root].kind,
+                || paired_result(g, &state.values, recorded, p),
+            ),
             Case([id, first, second]) => {
-                let pred = bools(&state.values[recorded.nodes[id].operands[0]]);
+                let pred = *bools(&state.values[recorded.nodes[*id].operands[0]]);
                 let yielded = g.conditional::<Untyped, List<Any<WebGpuBackend>>>(
                     &pred,
-                    || launched(g, state, recorded, &first, arguments),
-                    || launched(g, state, recorded, &second, arguments),
+                    || launched(g, state, program, first),
+                    || launched(g, state, program, second),
                 );
                 for let [k, result] of first.results.into_iter().enumerate() {
                     state.values[result] = yielded[k];
@@ -556,52 +823,527 @@ fn launched(
     return plan.results.into_iter().map(|r| state.values[r]).collect();
 }
 
+/// What every shape class of one graph records alike: each node's operation,
+/// without its attributes, and the nodes it reads, and the body's results.
+fn structure_of(recorded: &Recorded) -> List<i32> {
+    let mut structure: List<i32> = [];
+    for let node of &recorded.nodes {
+        structure.push(ReflectVariant::<Operation>::discriminant(&node.op));
+        structure.push(node.operands.len());
+        structure.extend(&node.operands);
+    }
+    structure.extend(&recorded.body.results);
+    return structure;
+}
+
+/// Adds how each launch of kernels of `plan`, a plan of the program `serial`,
+/// or of a branch within it, replays to `replays`, by the root `launched`
+/// starts it by.
+fn keyed(g: &mut WebGpuBackend, recorded: &Recorded, serial: i32, plan: &Plan, replays: &mut HashMap<i32, Replay>) {
+    for let launch of &plan.launches {
+        match launch {
+            Node(_) => {
+            },
+            Kernel(k) => {
+                replays[k.root] = kernel_replay(g, recorded, serial, k);
+            },
+            Joined(ks) => {
+                let all: List<&Kernel> = ks.into_iter().collect();
+                replays[ks[0].root] = Replay {
+                    key: signed(g, recorded, serial, &all),
+                    reads: left_reads(recorded, &ks[0]),
+                };
+            },
+            Paired(p) => {
+                let both = [&p.first, &p.second] as List<&Kernel>;
+                let mut reads = left_reads(recorded, &p.first);
+                for let k of both {
+                    reads.push(recorded.nodes[k.product.unwrap()].operands[1]);
+                }
+                for let o of &p.operands {
+                    reads.push(o.node);
+                }
+                replays[p.second.root] = Replay { key: signed(g, recorded, serial, &both), reads };
+            },
+            Case([_, first, second]) => {
+                keyed(g, recorded, serial, first, replays);
+                keyed(g, recorded, serial, second, replays);
+            },
+        }
+    }
+}
+
+/// How `k` alone replays, in the program `serial`.
+fn kernel_replay(g: &mut WebGpuBackend, recorded: &Recorded, serial: i32, k: &Kernel) -> Replay {
+    return Replay {
+        key: signed(g, recorded, serial, &([k] as List<&Kernel>)),
+        reads: k.reads(recorded),
+    };
+}
+
+/// The `replay_key` of the kernels `ks` of the program `serial`.
+fn signed(g: &mut WebGpuBackend, recorded: &Recorded, serial: i32, ks: &List<&Kernel>) -> i32 {
+    let mut key = [serial] as List<i32>;
+    for let k of *ks {
+        key.push(k.root);
+        key.push(g.signature(kernel_signature(recorded, k)));
+    }
+    return g.replay_key(key);
+}
+
+/// What `kernel_result` reads of `k` and `recorded` beside the views of the
+/// nodes it reads, each list after its length.
+fn kernel_signature(recorded: &Recorded, k: &Kernel) -> List<i32> {
+    let mut s = [k.op.steps.len()] as List<i32>;
+    for let step of &k.op.steps {
+        let [a, b, c, d] = step.key();
+        s.push(a);
+        s.push(b);
+        s.push(c);
+        s.push(d);
+    }
+    let list = |into: &mut List<i32>, l: &List<i32>| {
+        into.push(l.len());
+        into.extend(l);
+    };
+    s.push(k.operands.len());
+    for let o of &k.operands {
+        list(&mut s, &o.extents);
+    }
+    list(&mut s, &k.extents);
+    s.push(if k.reduced { 1 } else { 0 });
+    let root = &recorded.nodes[k.root];
+    list(&mut s, &root.extents);
+    s.push(ReflectEnum::<ElementKind>::discriminant(&root.kind));
+    if k.product matches { Some(_) } {
+        let dims = product_dims(recorded, k);
+        s.push(1);
+        for let axes of [dims.lhs_batch, dims.rhs_batch, dims.lhs_contracting, dims.rhs_contracting] as List<List<i32>> {
+            list(&mut s, &axes);
+        }
+    }
+    if let Some(p) = &k.prologue {
+        s.push(2);
+        s.extend(&kernel_signature(recorded, p));
+    }
+    return s;
+}
+
+/// How the product `k` computes contracts.
+fn product_dims(recorded: &Recorded, k: &Kernel) -> DotDims {
+    let DotGeneral(dims) = recorded.nodes[k.product.unwrap()].op else {
+        unreachable();
+    };
+    return dims;
+}
+
+/// Gives `root`, a node of `kind`, its value: the commands the backend
+/// recorded as `replay` says replayed where they were recorded over views laid
+/// out as the ones it reads are now, what `computed` yields otherwise,
+/// recorded. A replay's value is fresh, so it moves into `values` without a
+/// copy.
+fn rooted(
+    g: &mut WebGpuBackend,
+    values: &mut Values<WebGpuBackend>,
+    root: i32,
+    replay: &Replay,
+    kind: ElementKind,
+    computed: fn() -> Any<WebGpuBackend> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder),
+) with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
+    let Some(views) = device_reads(values, &replay.reads) else {
+        let value = computed();
+        values[root] = value;
+        return;
+    };
+    if let Some(out) = g.replayed(replay.key, &views) {
+        values[root] = of_kind(g, kind, Placed::Device(out));
+        return;
+    }
+    g.tape();
+    let value = computed();
+    g.taped(replay.key, &views, on_device(&value), []);
+    values[root] = value;
+}
+
+/// The nodes a product kernel `k` reads for its left matrix: its prologue's,
+/// or the matrix.
+fn left_reads(recorded: &Recorded, k: &Kernel) -> List<i32> {
+    return match k.prologue {
+        Some(p) => p.reads(recorded),
+        None => [recorded.nodes[k.product.unwrap()].operands[0]],
+    };
+}
+
+/// The values of the roots of `ks`, a `Joined` launch, each kernel launched
+/// on its own, after their prologue once.
+fn apart(
+    g: &mut WebGpuBackend,
+    values: &mut Values<WebGpuBackend>,
+    program: &WebGpuProgram,
+    ks: &List<Kernel>,
+) -> List<Any<WebGpuBackend>> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
+    let recorded = &program.recorded;
+    let alone = |k: &Kernel| rooted(
+        g,
+        values,
+        k.root,
+        &kernel_replay(g, recorded, program.serial, k),
+        recorded.nodes[k.root].kind,
+        || kernel_result(g, values, recorded, k),
+    );
+    if let Some(p) = ks[0].prologue {
+        alone(&p);
+    }
+    let mut out: List<Any<WebGpuBackend>> = [];
+    for let k of ks {
+        alone(&Kernel { ..*k, prologue: null });
+        out.push(values[k.root]);
+    }
+    return out;
+}
+
+/// The view `value` is, where it is on the device.
+fn on_device(value: &Any<WebGpuBackend>) -> Option<&DeviceTensor> {
+    return match value {
+        F32(Device(d)) | Bool(Device(d)) => Option::Some(d),
+        _ => null,
+    };
+}
+
+/// `value`, a view on the device, of the buffer at `slot`.
+fn at_slot(value: &Any<WebGpuBackend>, slot: i32) -> Any<WebGpuBackend> {
+    return match value {
+        F32(Device(d)) => Any::F32(Placed::Device(DeviceTensor { ..*d, slot })),
+        Bool(Device(d)) => Any::Bool(Placed::Device(DeviceTensor { ..*d, slot })),
+        _ => unreachable(),
+    };
+}
+
+/// The values of the roots of `ks`, a `Joined` launch: one product by their
+/// right matrices as one, each root a slice of it, where those lie side by
+/// side on the device and the left matrix is there to compute. `None`
+/// otherwise.
+fn joined_replayed(
+    g: &mut WebGpuBackend,
+    values: &Values<WebGpuBackend>,
+    program: &WebGpuProgram,
+    ks: &List<Kernel>,
+) -> Option<List<Any<WebGpuBackend>>> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
+    let recorded = &program.recorded;
+    let head = &ks[0];
+    let first = &recorded.nodes[head.product.unwrap()];
+    let dims = product_dims(recorded, head);
+    let free = 1 - dims.rhs_contracting[0];
+    let mut rights: List<DeviceTensor> = [];
+    for let k of ks {
+        if let Some(d) = on_device(&values[recorded.nodes[k.product.unwrap()].operands[1]]) {
+            rights.push(*d);
+        }
+    }
+    let joined = if rights.len() == ks.len() { side_by_side(&rights, free) } else { null };
+    let replay = &program.replays[head.root];
+    let [Some(left), Some(r)] = [device_reads(values, &replay.reads), joined] else {
+        return null;
+    };
+    let mut views = left;
+    views.push(&r);
+    let extents = dot_extents(&recorded.nodes[first.operands[0]].extents, &r.extents, &dims);
+    let key = replay.key;
+    let product = match g.replayed(key, &views) {
+        Some(out) => Placed::<f32, Untyped>::Device(out),
+        None => {
+            g.tape();
+            let computed = if head.prologue matches { Some(_) } {
+                let matrix = permuted(&r, &([dims.rhs_contracting[0], free] as List<i32>));
+                g.reshape::<f32, Untyped, Untyped>(&left_product(g, values, recorded, head, &matrix, &null), extents);
+            } else {
+                dotted(g, left[0], &r, &dims, &null);
+            };
+            g.taped(key, &views, if let Device(d) = &computed {
+                Option::Some(d);
+            } else {
+                null;
+            }, []);
+            computed;
+        },
+    };
+    let last = extents.len() - 1;
+    let mut start = List::<i32>::filled(extents.len(), 0);
+    let mut out: List<Any<WebGpuBackend>> = [];
+    for let k of ks {
+        let mut limit = extents;
+        limit[last] = start[last] + rights[out.len()].extents[free];
+        let part = g.slice::<f32, Untyped, Untyped>(&product, start, limit, List::<i32>::filled(extents.len(), 1));
+        out.push(Any::F32(g.reshape::<f32, Untyped, Untyped>(&part, recorded.nodes[k.root].extents)));
+        start[last] = limit[last];
+    }
+    return Option::Some(out);
+}
+
+/// The matrices `parts` as one, side by side along the axis `along`, where
+/// each starts in its buffer where the one before ends.
+fn side_by_side(parts: &List<DeviceTensor>, along: i32) -> Option<DeviceTensor> {
+    let mut joined = parts[0];
+    for let p of parts[1..<parts.len()].to_list() {
+        let mut extents = p.extents;
+        extents[along] = joined.extents[along];
+        let next = joined.offset + joined.extents[along] * joined.strides[along];
+        if p.slot != joined.slot
+            || p.half != joined.half
+            || extents != joined.extents
+            || !reads_as(&p, next, &joined.strides) {
+            return null;
+        }
+        joined.extents[along] += p.extents[along];
+    }
+    return Option::Some(joined);
+}
+
+/// The views of the nodes `ids`, or `None` where one is on the host.
+fn device_reads(values: &Values<WebGpuBackend>, ids: &List<i32>) -> Option<List<&DeviceTensor>> {
+    let mut reads: List<&DeviceTensor> = [];
+    for let id of *ids {
+        reads.push(on_device(&values[id])?);
+    }
+    return Option::Some(reads);
+}
+
 /// The value of `k`'s root, each operand read at the extents it names.
 fn kernel_result(
     g: &mut WebGpuBackend,
-    values: &HashMap<i32, Any<WebGpuBackend>>,
+    values: &Values<WebGpuBackend>,
     recorded: &Recorded,
     k: &Kernel,
 ) -> Any<WebGpuBackend> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
-    let view_of = |node: i32| match values[node] {
-        F32(t) => g.device_view(&t),
-        Bool(t) => g.device_view(&t),
-        I64(_) => unreachable(),
-    };
     let grouped = match k.product {
         Some(p) => {
             let node = &recorded.nodes[p];
             let DotGeneral(dims) = node.op else {
                 unreachable();
             };
-            let [l, r] = [
-                view_of(node.operands[0]),
-                view_of(node.operands[1]),
-            ];
-            // The epilogue reads its operands over the product's own extents,
-            // each element where the kernel's extents hold it.
-            let space = product_extents(&l.extents, &r.extents, &dims);
-            let mut operands: List<PlacedRead<Untyped>> = [];
-            for let o of k.operands {
-                let at = if o.extents == k.extents {
-                    space;
-                } else {
-                    let mut per_row = space[0..<space.len() - 1].to_list();
-                    per_row.push(1);
-                    per_row;
-                };
-                operands.push(PlacedRead { view: g.reshaped(&view_of(o.node), &at) });
+            let then = Option::Some(Epilogue {
+                operands: epilogue_reads(g, values, recorded, p, &k.operands, &k.extents),
+                op: k.op,
+            });
+            if k.prologue matches { Some(_) } {
+                left_product(g, values, recorded, k, &right_matrix(g, values, recorded, k), &then);
+            } else {
+                dotted(g, &view_of(g, values, node.operands[0]), &view_of(g, values, node.operands[1]), &dims, &then);
             }
-            dotted(g, &l, &r, &dims, &Option::Some(Epilogue { operands, op: k.op }));
         },
         None => {
-            let operands: List<DeviceTensor> = k.operands.into_iter().map(|o| g.reshaped(&view_of(o.node), &o.extents)).collect();
+            let operands: List<DeviceTensor> = k.operands.into_iter().map(|o| g.reshaped(
+                &view_of(g, values, o.node),
+                &o.extents,
+            )).collect();
             g.grouped::<Untyped>(&operands, k.extents, &k.op, k.reduced);
         },
     };
     let root = &recorded.nodes[k.root];
-    let computed = g.reshape::<f32, Untyped, Untyped>(&grouped, root.extents);
-    return match root.kind {
+    return of_kind(g, root.kind, g.reshape::<f32, Untyped, Untyped>(&grouped, root.extents));
+}
+
+/// The value of `p`'s second root: one product by both right matrices, where
+/// they lie interleaved and the device runs it so, and one by each otherwise.
+fn paired_result(
+    g: &mut WebGpuBackend,
+    values: &Values<WebGpuBackend>,
+    recorded: &Recorded,
+    p: &Pair,
+) -> Any<WebGpuBackend> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
+    let operands = epilogue_reads(g, values, recorded, p.second.product.unwrap(), &p.operands, &p.second.extents);
+    let then = Option::Some(Epilogue { operands, op: p.op });
+    let [b, c] = [
+        right_matrix(g, values, recorded, &p.first),
+        right_matrix(g, values, recorded, &p.second),
+    ];
+    let both = interleaved_view(&b, &c);
+    let computed = product: {
+        if let Some(bc) = both && let Some(out) = staged(g, values, recorded, &p.first, &bc, &then, true) {
+            break product: out;
+        }
+        let left = left_matrix(g, values, recorded, &p.first);
+        if let Some(bc) = both
+            && let Some(out) = g.product_kernel::<Untyped, Untyped, Untyped>(&left, &Placed::Device(bc), &then, true) {
+            break product: out;
+        }
+        // The first product joins the second's epilogue as its first operand.
+        let first = g.product::<Untyped, Untyped, Untyped>(&left, &Placed::Device(b), &null);
+        let mut reads = [
+            PlacedRead { view: g.device_view(&first) },
+        ] as List<PlacedRead<Untyped>>;
+        reads.extend(&operands);
+        let mut to = [1, 0] as List<i32>;
+        for let i of 0..<operands.len() {
+            to.push(i + 2);
+        }
+        g.product::<Untyped, Untyped, Untyped>(&left, &Placed::Device(c), &Option::Some(Epilogue {
+            operands: reads,
+            op: p.op.renumbered(&to),
+        }));
+    };
+    let root = &recorded.nodes[p.second.root];
+    return of_kind(g, root.kind, g.reshape::<f32, Untyped, Untyped>(&computed, root.extents));
+}
+
+/// The product of `k`'s left matrix, `[rows, inner]`, by `r`, `[inner,
+/// columns]`, then `then` over operands of `[rows, columns]`: `k`'s prologue
+/// computed row by row in the same dispatch where the device can, and on its
+/// own before it otherwise.
+fn left_product(
+    g: &mut WebGpuBackend,
+    values: &Values<WebGpuBackend>,
+    recorded: &Recorded,
+    k: &Kernel,
+    r: &DeviceTensor,
+    then: &Option<Epilogue<PlacedRead<Untyped>>>,
+) -> Placed<f32, Untyped> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
+    if let Some(out) = staged(g, values, recorded, k, r, then, false) {
+        return out;
+    }
+    return g.product::<Untyped, Untyped, Untyped>(&left_matrix(g, values, recorded, k), &Placed::Device(*r), then);
+}
+
+/// [`left_product`] as one dispatch computing `k`'s prologue, paired as
+/// `WebGpuBackend::staged_product` pairs, or `None` where it cannot run so.
+fn staged(
+    g: &mut WebGpuBackend,
+    values: &Values<WebGpuBackend>,
+    recorded: &Recorded,
+    k: &Kernel,
+    r: &DeviceTensor,
+    then: &Option<Epilogue<PlacedRead<Untyped>>>,
+    paired: bool,
+) -> Option<Placed<f32, Untyped>> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
+    let Some(p) = k.prologue else {
+        return null;
+    };
+    let operands = reads_over(g, values, &p.operands, &p.extents, &left_extents(recorded, k));
+    return g.staged_product::<Untyped, Untyped, Untyped>(
+        &Prologue { operands, op: p.op },
+        &Placed::Device(*r),
+        then,
+        paired,
+    );
+}
+
+/// `k`'s left matrix as `[rows, inner]`: its prologue's result, where it has
+/// one.
+fn left_matrix(
+    g: &mut WebGpuBackend,
+    values: &Values<WebGpuBackend>,
+    recorded: &Recorded,
+    k: &Kernel,
+) -> Placed<f32, Untyped> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
+    let left = match k.prologue {
+        Some(p) => any_view(g, &kernel_result(g, values, recorded, &p)),
+        None => view_of(g, values, recorded.nodes[k.product.unwrap()].operands[0]),
+    };
+    return Placed::Device(g.reshaped(&left, &left_extents(recorded, k)));
+}
+
+/// The extents of the left matrix of `k`'s product as `[rows, inner]`, its
+/// last axis the one contracted.
+fn left_extents(recorded: &Recorded, k: &Kernel) -> List<i32> {
+    let e = &recorded.nodes[recorded.nodes[k.product.unwrap()].operands[0]].extents;
+    let last = e.len() - 1;
+    return [element_count(&e[0..<last].to_list()), e[last]];
+}
+
+/// The right matrix of `k`'s product as `[inner, columns]`.
+fn right_matrix(
+    g: &mut WebGpuBackend,
+    values: &Values<WebGpuBackend>,
+    recorded: &Recorded,
+    k: &Kernel,
+) -> DeviceTensor with (GpuDevice, GpuQueue, GpuBuffer) {
+    let node = &recorded.nodes[k.product.unwrap()];
+    let c = product_dims(recorded, k).rhs_contracting[0];
+    return permuted(&view_of(g, values, node.operands[1]), &([c, 1 - c] as List<i32>));
+}
+
+/// The matrices `a` and `b`, each `[inner, columns]`, as one whose columns
+/// alternate between theirs, where they lie so in one buffer.
+fn interleaved_view(a: &DeviceTensor, b: &DeviceTensor) -> Option<DeviceTensor> {
+    let step = a.strides[1];
+    if a.slot != b.slot
+        || a.half != b.half
+        || a.extents != b.extents
+        || step % 2 != 0
+        || !reads_as(b, a.offset + step / 2, &a.strides) {
+        return null;
+    }
+    return Option::Some(DeviceTensor {
+        ..*a,
+        extents: [a.extents[0], 2 * a.extents[1]],
+        strides: [a.strides[0], step / 2],
+    });
+}
+
+/// `operands`, of a kernel iterating `extents`, as the epilogue of the product
+/// `product` reads them: over the product's own extents, each element where
+/// the kernel's extents hold it.
+fn epilogue_reads(
+    g: &mut WebGpuBackend,
+    values: &Values<WebGpuBackend>,
+    recorded: &Recorded,
+    product: i32,
+    operands: &List<KernelOperand>,
+    extents: &List<i32>,
+) -> List<PlacedRead<Untyped>> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
+    let node = &recorded.nodes[product];
+    let DotGeneral(dims) = node.op else {
+        unreachable();
+    };
+    let space = product_extents(
+        &recorded.nodes[node.operands[0]].extents,
+        &recorded.nodes[node.operands[1]].extents,
+        &dims,
+    );
+    return reads_over(g, values, operands, extents, &space);
+}
+
+/// `operands`, of a kernel iterating `extents`, read over `space`: each
+/// element where the kernel's extents hold it, one per row of `space` where
+/// the operand holds one per row of them.
+fn reads_over(
+    g: &mut WebGpuBackend,
+    values: &Values<WebGpuBackend>,
+    operands: &List<KernelOperand>,
+    extents: &List<i32>,
+    space: &List<i32>,
+) -> List<PlacedRead<Untyped>> with (GpuDevice, GpuQueue, GpuBuffer) {
+    let mut per_row = space[0..<space.len() - 1].to_list();
+    per_row.push(1);
+    return (*operands).into_iter().map(
+        |o| PlacedRead::<Untyped> { view: g.reshaped(&view_of(g, values, o.node), if o.extents == *extents {
+            space;
+        } else {
+            &per_row;
+        }) },
+    ).collect();
+}
+
+/// The view of node `id`'s value on the device.
+fn view_of(
+    g: &mut WebGpuBackend,
+    values: &Values<WebGpuBackend>,
+    id: i32,
+) -> DeviceTensor with (GpuDevice, GpuQueue, GpuBuffer) {
+    return any_view(g, &values[id]);
+}
+
+fn any_view(g: &mut WebGpuBackend, value: &Any<WebGpuBackend>) -> DeviceTensor with (GpuDevice, GpuQueue, GpuBuffer) {
+    return match value {
+        F32(t) => g.device_view(t),
+        Bool(t) => g.device_view(t),
+        I64(_) => unreachable(),
+    };
+}
+
+/// A kernel's f32 result as the element `kind` its root computes.
+fn of_kind(g: &mut WebGpuBackend, kind: ElementKind, computed: Placed<f32, Untyped>) -> Any<WebGpuBackend> {
+    return match kind {
         F32 => Any::F32(computed),
         Bool => Any::Bool(as_element(g, computed)),
         I64 => unreachable(),

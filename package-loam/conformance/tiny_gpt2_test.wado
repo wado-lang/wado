@@ -7,9 +7,8 @@ use { assert_close, ints_of, tensor_of } from "./oracle.wado";
 use { StoredTensor, write_safetensors } from "lib:loam/src/safetensors.wado";
 use gpt2 from "./tiny_gpt2.wado";
 
-/// The logits `forward` computes from one data set's inputs, and those the
-/// graph `build` adds to computes from them padded, against the ones
-/// onnxruntime computed.
+/// The logits the graph `build` adds to computes from one data set's inputs
+/// padded, against the ones onnxruntime computed.
 fn reproduces(input_ids: ByteList, attention_mask: ByteList, logits: ByteList) {
     let [ids, ids_extents] = ints_of(input_ids);
     let [mask, mask_extents] = ints_of(attention_mask);
@@ -19,11 +18,6 @@ fn reproduces(input_ids: ByteList, attention_mask: ByteList, logits: ByteList) {
     let checkpoint = #include_bytes("../tests/models/tiny-gpt2/model.safetensors");
 
     let mut cpu = Cpu {};
-    let weights = gpt2::Prepared::load(&mut cpu, &checkpoint).unwrap();
-    let got = gpt2::forward(&mut cpu, &ids, &mask, &weights);
-    assert got.extents == want_extents;
-    assert_close(&got.data, &want);
-
     let mut model = gpt2::Model::new(gpt2::Params::load(&mut cpu, &checkpoint).unwrap());
     let built = gpt2::compute(&mut cpu, &ids, &mask, &mut model);
     assert built.extents == want_extents;
@@ -47,13 +41,13 @@ test "the same module reproduces them for seven" {
 }
 
 // The causal mask covers 512 positions. That the owed check traps before any
-// kernel runs is `emit_test`'s to show; a trap is all this one can see.
+// operation runs is `emit_test`'s to show; a trap is all this one can see.
 #[expect_trap]
-test "a sequence longer than the mask stops forward" {
+test "a sequence longer than the mask stops compute" {
     let ids = List::<i64>::filled(513, 0);
     let mask = List::<i64>::filled(513, 1);
-    let weights = gpt2::Prepared::load(&mut Cpu {}, &#include_bytes("../tests/models/tiny-gpt2/model.safetensors")).unwrap();
-    gpt2::forward(
+    let weights = gpt2::Params::load(&mut Cpu {}, &#include_bytes("../tests/models/tiny-gpt2/model.safetensors")).unwrap();
+    gpt2::compute(
         &mut Cpu {},
         &Tensor::<i64, [gpt2::BatchSize, gpt2::SequenceLength]> {
             data: ids,
@@ -63,7 +57,7 @@ test "a sequence longer than the mask stops forward" {
             data: mask,
             extents: [1, 513],
         },
-        &weights,
+        &mut gpt2::Model::new(weights),
     );
 }
 
@@ -76,6 +70,6 @@ test "a checkpoint of another model names the axis it disagrees on" {
             data: ByteList::filled(1024 * 64 * 4, 0),
         },
     ]);
-    let e = gpt2::Prepared::load(&mut Cpu {}, &other).unwrap_err();
+    let e = gpt2::Params::load(&mut Cpu {}, &other).unwrap_err();
     assert `${e}` == "transformer.wte.weight: axis TransformerWteWeight1 is 64 in the checkpoint and 32 in the graph";
 }

@@ -179,18 +179,6 @@ fn assert_loam_conformance(program: &str, lines: usize) {
     }
 }
 
-/// Thirteen outputs, from a device's own binding limit and from one smaller
-/// than a weight, which splits the kernels reading it, then three `arg_max`es,
-/// then four products of a few rows from each limit, then two across weights
-/// of few columns and of many, then six reads of a weight kept in bf16 or f32
-/// from each limit, then three paired products, then two under a binding only
-/// half their columns fit, then three products of a normalization, paired and
-/// alone, then both parts of three concatenated products of one.
-#[test]
-fn loams_webgpu_backend_computes_what_its_cpu_backend_does() {
-    assert_loam_conformance("webgpu.wado", 68);
-}
-
 /// Grouped query attention runs on the device, with a past and without, turned
 /// in whole or in part, biased, capped and windowed, over one part of positions
 /// and over several, along a chain of steps through its cache: appended in
@@ -202,18 +190,19 @@ fn loams_webgpu_attention_computes_what_its_cpu_attention_does() {
 }
 
 /// Graphs built through `Graph` compute on the device what they compute on the
-/// CPU: every operation, a branch either way, attention through a shared
+/// CPU: every operation, a gather of consecutive rows as a view, a gather of a
+/// mask's rows on the device, a branch either way, attention through a shared
 /// cache, and a model's `compute` through the program compiled for each shape
-/// class.
+/// class, a second call replaying what the first recorded, products of one
+/// input joined into one, and a decoder branching on an input along its steps.
 #[test]
 fn loams_webgpu_graph_computes_what_its_cpu_graph_does() {
-    assert_loam_conformance("webgpu_graph.wado", 14);
+    assert_loam_conformance("webgpu_graph.wado", 33);
 }
 
-/// A whole model's pass stays on the device: each sequence length reads back
-/// once, for the logits `forward` returns, in as many dispatches as the plan
-/// leaves kernels, and one more for each prologue a product of that many rows
-/// writes with a kernel of its own.
+/// A whole model's `compute` stays on the device: each sequence length reads
+/// back once, for the logits it returns, and both lengths pad to one capacity,
+/// so they run one program in as many dispatches.
 #[test]
 fn a_model_runs_on_the_device_reading_back_only_what_it_returns() {
     let program = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -224,18 +213,15 @@ fn a_model_runs_on_the_device_reading_back_only_what_it_returns() {
     assert!(output.status.success(), "stderr: {stderr}");
     let lines: Vec<&str> = stdout.lines().collect();
     assert_eq!(lines.len(), 2, "stdout: {stdout}");
-    // Ten a layer over five layers, and the embeddings, the last
-    // normalization and the head: `package-loam/webgpu.md` counts them. Four
-    // rows compute each layer's two normalizations in the products after them,
-    // and seven write them.
-    for (line, dispatches) in lines.into_iter().zip(["46", "56"]) {
+    let dispatches_of = |line: &str| line.split(' ').rev().nth(3).unwrap().to_owned();
+    assert_eq!(
+        dispatches_of(lines[0]),
+        dispatches_of(lines[1]),
+        "stdout: {stdout}"
+    );
+    for line in lines {
         let words: Vec<&str> = line.split(' ').collect();
         assert_eq!(words[words.len() - 3..], ["read", "backs", "1"], "{line}");
-        assert_eq!(
-            words[words.len() - 5..words.len() - 3],
-            ["dispatches", dispatches],
-            "{line}"
-        );
         let deviation: f32 = words[words.len() - 6]
             .parse()
             .unwrap_or_else(|_| panic!("no deviation in {line:?}"));

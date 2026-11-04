@@ -4,7 +4,7 @@
 //! through the decoder taking them back, whose cache grows by the position it
 //! computes. Each step reproduces the logits onnxruntime computes for it.
 
-use { Cpu, Tensor } from "lib:loam";
+use { Cpu, Tensor, capacity_of } from "lib:loam";
 use { assert_close, ints_of, tensor_of } from "./oracle.wado";
 use prompt from "../tests/models/tiny-gpt2/model.onnxtext"
     with {
@@ -30,28 +30,32 @@ use step from "../tests/models/tiny-gpt2/with-past/model.onnx"
         },
     };
 
-/// The logits for `token` after the positions `cache` holds, and the cache
-/// grown by its position.
+/// The logits for `token` after the `past` positions `cache` holds, and the
+/// cache grown by its position.
 fn decode(
     token: i64,
+    past: i32,
     cache: &step::Cache<Cpu>,
-    weights: &step::Prepared<Cpu>,
+    model: &mut step::Model<Cpu>,
 ) -> [Tensor<f32, [step::BatchSize, step::InputIds1, step::Logits2]>, step::Cache<Cpu>] {
-    let length = cache.past_key_values_0_key.extents[2] + 1;
-    let o = step::forward(
+    let o = step::compute(
         &mut Cpu {},
         &Tensor::<i64, [step::BatchSize, step::InputIds1]> {
             data: [token],
             extents: [1, 1],
         },
         &Tensor::<i64, [step::BatchSize, step::AttentionMask1]> {
-            data: List::<i64>::filled(length, 1),
-            extents: [1, length],
+            data: List::<i64>::filled(past + 1, 1),
+            extents: [1, past + 1],
         },
         cache,
-        weights,
+        model,
     );
     return [o.logits, o.cache];
+}
+
+fn step_model() -> step::Model<Cpu> {
+    return step::Model::new(step::Params::embedded(&mut Cpu {}));
 }
 
 /// `t` under the axes `B`. The prompt's module names the presents it returns
@@ -65,15 +69,15 @@ fn prefill(
     input_ids: ByteList,
 ) -> [Tensor<f32, [prompt::BatchSize, prompt::SequenceLength, prompt::Logits2]>, step::Cache<Cpu>] {
     let [ids, extents] = ints_of(input_ids);
-    let weights = prompt::Prepared::load(&mut Cpu {}, &#include_bytes("../tests/models/tiny-gpt2/model.safetensors")).unwrap();
-    let o = prompt::forward(
+    let weights = prompt::Params::load(&mut Cpu {}, &#include_bytes("../tests/models/tiny-gpt2/model.safetensors")).unwrap();
+    let o = prompt::compute(
         &mut Cpu {},
         &Tensor::<i64, [prompt::BatchSize, prompt::SequenceLength]> { data: ids, extents },
         &Tensor::<i64, [prompt::BatchSize, prompt::SequenceLength]> {
             data: List::<i64>::filled(extents[1], 1),
             extents,
         },
-        &weights,
+        &mut prompt::Model::new(weights),
     );
     // A prompt's module has no past, so its presents are outputs like any.
     let cache: step::Cache<Cpu> = step::Cache {
@@ -109,7 +113,7 @@ test "the prompt returns the logits it did without the cache, and a key and valu
 
 test "each step after the prompt computes one position against the cache, as onnxruntime does" {
     let [_, prefilled] = prefill(#include_bytes("../tests/models/tiny-gpt2/test_data_set_0/input_0.pb"));
-    let weights = step::Prepared::embedded(&mut Cpu {});
+    let mut model = step_model();
     let mut cache = prefilled;
     let data: List<[ByteList, ByteList]> = [
         [
@@ -125,30 +129,18 @@ test "each step after the prompt computes one position against the cache, as onn
         let [input, output] = pair;
         let [ids, _] = ints_of(input);
         let [want, want_extents] = tensor_of(output);
-        let [logits, grown] = decode(ids[0], &cache, &weights);
+        let [logits, grown] = decode(ids[0], 4 + i, &cache, &mut model);
         assert logits.extents == want_extents;
         assert_close(&logits.data, &want);
-        assert grown.past_key_values_0_key.extents == [1, 4, 5 + i, 8] as List<i32>;
+        // The cache stays at the capacity the next step reads it at.
+        assert grown.past_key_values_0_key.extents == [1, 4, capacity_of(5 + i), 8] as List<i32>;
         cache = grown;
     }
 }
 
-// That the check names the mask's axis is `emit_test`'s to show; a trap is
-// all this one can see.
+// The mask says the past is five positions long, past the four the cache holds.
 #[expect_trap]
-test "a mask that is not one position longer than the cache stops the step" {
+test "a mask longer than the cache's past and the step stops the step" {
     let [_, cache] = prefill(#include_bytes("../tests/models/tiny-gpt2/test_data_set_0/input_0.pb"));
-    step::forward(
-        &mut Cpu {},
-        &Tensor::<i64, [step::BatchSize, step::InputIds1]> {
-            data: [11],
-            extents: [1, 1],
-        },
-        &Tensor::<i64, [step::BatchSize, step::AttentionMask1]> {
-            data: [1, 1, 1, 1],
-            extents: [1, 4],
-        },
-        &cache,
-        &step::Prepared::embedded(&mut Cpu {}),
-    );
+    decode(11, 5, &cache, &mut step_model());
 }

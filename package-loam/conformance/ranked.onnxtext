@@ -1,0 +1,7 @@
+# A language model's head: each position's scores over a vocabulary of 3.
+<ir_version: 8, opset_import: [ "" : 13 ]>
+ranked (float[N, S, 4] X, float[4, 3] W) => (float[N, S, 3] Y)
+{
+    H = Relu(X)
+    Y = MatMul(H, W)
+}

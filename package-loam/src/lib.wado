@@ -1,13 +1,10 @@
-//! Loam's runtime: the tensor, the backends that run the kernels, and the
+//! Loam's runtime: the tensor, the graphs that run its operations, and the
 //! checkpoint reader. The module Loam generates from a graph computes through
-//! it, and so does a program calling that module's `forward`.
+//! it, and so does a program calling that module's `compute`.
 
 pub use {
     Attention,
-    Backend,
     BinaryOp,
-    Columns,
-    Concat,
     Cpu,
     Element,
     Epilogue,
@@ -15,7 +12,6 @@ pub use {
     Held,
     Holds,
     Merged,
-    Packed,
     Paired,
     Prologue,
     Read,
@@ -49,6 +45,7 @@ pub use {
     Unary,
     WindowReduce,
     assembled,
+    branched,
     capacity_of,
     fitted,
     from_end_indices,
@@ -63,6 +60,7 @@ pub use {
     softmax,
     softmax_flattened,
     strided_gather,
+    written_at,
 } from "./runtime/hlo.wado";
 pub use {
     CheckpointBytes,
@@ -74,7 +72,19 @@ pub use {
     read_checkpoint,
     read_shards,
 } from "./runtime/checkpoint.wado";
-pub use { Any, Programs, Recorded, Recorder, Untyped, bool_of, f32_of, i64_of } from "./runtime/recorded.wado";
+pub use {
+    Any,
+    Programs,
+    Recorded,
+    Recorder,
+    Untyped,
+    bool_host,
+    bool_of,
+    f32_host,
+    f32_of,
+    i64_host,
+    i64_of,
+} from "./runtime/recorded.wado";
 pub use { DeviceTensor, Placed, WebGpuBackend } from "./runtime/webgpu.wado";
 use {} from "./runtime/webgpu_graph.wado";
 pub use { BpeTokenizer, TokenSpelling } from "./runtime/tokenizer.wado";

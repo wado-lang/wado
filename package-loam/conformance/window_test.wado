@@ -27,10 +27,10 @@ test "MaxPool over two padded axes reproduces the output ONNX ships" {
         #include_bytes("../tests/onnx/pytorch-converted/test_MaxPool2d/test_data_set_0/output_0.pb"),
     );
 
-    let got = pool2d::forward(
+    let got = pool2d::compute(
         &mut Cpu {},
         &Tensor::<f32, [pool2d::Axis00, pool2d::Axis01, pool2d::Axis02, pool2d::Axis03]> { data: x, extents: x_extents },
-        &pool2d::Weights {}.prepare(&mut Cpu {}),
+        &mut pool2d::Model::new(pool2d::Params::embedded(&mut Cpu {})),
     );
 
     assert got.extents == want_extents;
@@ -45,10 +45,10 @@ test "MaxPool over one axis reproduces the output ONNX ships" {
         #include_bytes("../tests/onnx/pytorch-operator/test_operator_maxpool/test_data_set_0/output_0.pb"),
     );
 
-    let got = pool1d::forward(
+    let got = pool1d::compute(
         &mut Cpu {},
         &Tensor::<f32, [pool1d::Axis00, pool1d::Axis01, pool1d::Axis02]> { data: x, extents: x_extents },
-        &pool1d::Weights {}.prepare(&mut Cpu {}),
+        &mut pool1d::Model::new(pool1d::Params::embedded(&mut Cpu {})),
     );
 
     assert got.extents == want_extents;
@@ -63,10 +63,10 @@ test "Conv with a bias reproduces the output ONNX ships" {
         #include_bytes("../tests/onnx/pytorch-converted/test_Conv2d/test_data_set_0/output_0.pb"),
     );
 
-    let got = conv2d::forward(
+    let got = conv2d::compute(
         &mut Cpu {},
         &Tensor::<f32, [conv2d::Axis00, conv2d::Axis01, conv2d::Axis02, conv2d::Axis03]> { data: x, extents: x_extents },
-        &conv2d::Prepared::embedded(&mut Cpu {}),
+        &mut conv2d::Model::new(conv2d::Params::embedded(&mut Cpu {})),
     );
 
     assert got.extents == want_extents;

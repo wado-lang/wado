@@ -9,6 +9,9 @@ onnxruntime oracles and the benchmarks are in [tools.md](./tools.md).
 any more. A design that changes one of its decisions is written in this
 directory and names the WEP's section.
 
+The documents here sketch a design and describe what exists; they decide
+nothing. Correctness and speed come first.
+
 ## Sources
 
 - Do not read the code of an ML framework, runtime, exporter or kernel library.
@@ -30,6 +33,18 @@ directory and names the WEP's section.
   leaves a behavior open, onnxruntime is run as an oracle for it.
 - Test data and models may be copied in and read, each directory carrying its
   source and license, as `tests/onnx/` and `tests/models/` do.
+
+## Testing a change
+
+Each semantics is written once per device: `Cpu`, `WebGpuBackend`, and a TPU
+to come. Generated code reaches all of them, so a change can break code it
+never touched. Test outward from the change, and run the whole package once,
+last:
+
+1. The test beside the file changed, such as `src/runtime/recorded_test.wado`.
+2. `cargo test --test compute loam` in `wado-run-webgpu/`, for a change
+   `WebGpuBackend` runs. It checks each result against `Cpu`'s.
+3. `wado test package-loam`.
 
 ## Oracles
 

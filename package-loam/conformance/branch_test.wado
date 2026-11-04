@@ -1,8 +1,8 @@
-//! An If, each branch a block of `forward` that runs only where the condition
-//! picks it.
+//! An If, each branch a block of the graph `build` adds to, which runs only
+//! where the condition picks it.
 
 use { Cpu, Tensor } from "lib:loam";
-use { C0, M, Model, N, Params, Prepared, X1, compute, forward } from "./branch.onnxtext"
+use { C0, M, Model, N, Params, X1, compute } from "./branch.onnxtext"
     with {
         type: "onnxtext",
         generator: { module: "lib:loam" },
@@ -29,50 +29,46 @@ fn past(data: List<f32>) -> Tensor<f32, [M, X1]> {
     };
 }
 
+fn model() -> Model<Cpu> {
+    return Model::new(Params::embedded(&mut Cpu {}));
+}
+
 test "the then branch joins the past to the sequence" {
-    let o = forward(&mut Cpu {}, &cond(true), &x([1.0, 2.0]), &past([3.0, 4.0]), &x([3.0, 4.0]), &weights());
+    let o = compute(&mut Cpu {}, &cond(true), &x([1.0, 2.0]), &past([3.0, 4.0]), &x([3.0, 4.0]), &mut model());
     assert o.Y.extents == [2, 2];
     assert o.Y.data == [3.0, 4.0, 1.0, 2.0];
     assert o.Z.data == [14.0, -26.0];
 }
 
 test "the else branch reads the sequence alone" {
-    let o = forward(&mut Cpu {}, &cond(false), &x([-1.0, 2.0]), &past([]), &x([]), &weights());
+    let o = compute(&mut Cpu {}, &cond(false), &x([-1.0, 2.0]), &past([]), &x([]), &mut model());
     assert o.Y.extents == [1, 2];
     assert o.Y.data == [0.0, 2.0];
     assert o.Z.data == [-11.0, -18.0];
 }
 
+test "one model runs either branch" {
+    let mut cpu = Cpu {};
+    let mut m = model();
+    let then = compute(&mut cpu, &cond(true), &x([1.0, 2.0]), &past([3.0, 4.0]), &x([3.0, 4.0]), &mut m);
+    assert then.Y.data == [3.0, 4.0, 1.0, 2.0];
+    let otherwise = compute(&mut cpu, &cond(false), &x([-1.0, 2.0]), &past([]), &x([]), &mut m);
+    assert otherwise.Y.data == [0.0, 2.0];
+}
+
 test "what one branch owes is not checked where the other runs" {
-    let o = forward(
+    let o = compute(
         &mut Cpu {},
         &cond(false),
         &x([1.0, 2.0]),
         &past([]),
         &x([3.0, 4.0, 5.0, 6.0]),
-        &weights(),
+        &mut model(),
     );
     assert o.Z.data == [-9.0, -18.0];
 }
 
 #[expect_trap]
 test "what a branch owes is checked where it runs" {
-    forward(&mut Cpu {}, &cond(true), &x([1.0, 2.0]), &past([]), &x([3.0, 4.0, 5.0, 6.0]), &weights());
-}
-
-test "build adds a conditional, each branch computing what forward's does" {
-    let mut cpu = Cpu {};
-    let mut model = Model::new(Params::embedded(&mut cpu));
-    let then = compute(&mut cpu, &cond(true), &x([1.0, 2.0]), &past([3.0, 4.0]), &x([3.0, 4.0]), &mut model);
-    assert then.Y.extents == [2, 2];
-    assert then.Y.data == [3.0, 4.0, 1.0, 2.0];
-    assert then.Z.data == [14.0, -26.0];
-    let otherwise = compute(&mut cpu, &cond(false), &x([-1.0, 2.0]), &past([]), &x([]), &mut model);
-    assert otherwise.Y.extents == [1, 2];
-    assert otherwise.Y.data == [0.0, 2.0];
-    assert otherwise.Z.data == [-11.0, -18.0];
-}
-
-fn weights() -> Prepared<Cpu> {
-    return Prepared::embedded(&mut Cpu {});
+    compute(&mut Cpu {}, &cond(true), &x([1.0, 2.0]), &past([]), &x([3.0, 4.0, 5.0, 6.0]), &mut model());
 }

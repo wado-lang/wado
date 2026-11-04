@@ -1,0 +1,48 @@
+use { infer } from "./infer.wado";
+use { read } from "./onnx_text.wado";
+use { Lowering, lowerings } from "./lowering.wado";
+
+fn lowerings_of(source: String) -> List<Lowering> {
+    let graph = read(&source).unwrap();
+    return lowerings(&graph, &infer(&graph).unwrap());
+}
+
+/// A language model's head: the hidden states by the token embedding's
+/// transpose. The embedding is a weight unless `input`, and the scope returns
+/// the transpose too where `returned`.
+fn head(input: bool, returned: bool) -> List<Lowering> {
+    let embedding = "float[6, 4] E";
+    let inputs = if input { `float[1, 2, 4] X, ${embedding}` } else { "float[1, 2, 4] X" };
+    let outputs = if returned { "float[1, 2, 6] Y, float[4, 6] T" } else { "float[1, 2, 6] Y" };
+    let weights = if input { "" } else { `<${embedding}>` };
+    return lowerings_of(`
+head (${inputs}) => (${outputs})
+${weights}
+{
+    T = Transpose(E)
+    Y = MatMul(X, T)
+}
+`);
+}
+
+test "a weight's transpose only a product reads is read as the weight is stored" {
+    let lowered = head(false, false);
+    assert lowered[0] matches { Transposed };
+    assert lowered[1] matches { Operation };
+}
+
+test "a transpose of an input, or one read again, is an operation" {
+    assert head(true, false)[0] matches { Operation };
+    assert head(false, true)[0] matches { Operation };
+}
+
+test "a product by an attention key's transpose, of rank 3, reads an operation's output" {
+    let source = `
+scores (float[1, 2, 4] Q, float[1, 3, 4] K) => (float[1, 2, 3] Y)
+{
+    T = Transpose<perm = [0, 2, 1]>(K)
+    Y = MatMul(Q, T)
+}
+`;
+    assert lowerings_of(source)[0] matches { Operation };
+}

@@ -1,17 +1,15 @@
-//! `loam dump`: what the generator decided for each operator of a checked
-//! graph, and the shape it proved for each tensor. One `Report` holds it, and
-//! renders as text for a reader or as JSON for a test. See WEP 2026-09-20
-//! § "The Generator Reports Every Fusion Decision".
+//! `loam dump`: how `build` lowers each operator of a checked graph, and the
+//! shape stage 0 proved for each tensor. One `Report` holds it, and renders as
+//! text for a reader or as JSON for a test. The device compiler's fusion is
+//! decided when it runs, so no build-time report holds it.
 
-use { HashMap } from "core:collections";
 use { to_string } from "core:json";
 use { Serialize } from "core:serde";
 use { CodeWriter } from "lib:wadopoet";
 use { Graph, Known, Node, ValueInfo, element_of } from "./graph.wado";
 use { Checked } from "./infer.wado";
+use { Lowering, branches, lowerings } from "./lowering.wado";
 use { Judged, padding } from "./pad.wado";
-use { Kind, Lowering, Plan, Reason, branches, plan } from "./plan.wado";
-use { Poly } from "./poly.wado";
 use { Shape } from "./shape.wado";
 
 /// What `loam dump` reports for one graph.
@@ -35,62 +33,29 @@ pub struct ScopeReport {
     pub weights: List<TensorReport>,
     pub nodes: List<NodeReport>,
     pub outputs: List<TensorReport>,
-    /// Each condition stage 0 left `forward` to check: its reason, and the
+    /// Each condition stage 0 left `compute` to check: its reason, and the
     /// slack that must not be negative.
     pub owed: List<[String, String]>,
 }
 
-/// One node: how `forward` lowers it, and for a kernel, where its output goes.
+/// One node: how `build` lowers it.
 pub struct NodeReport {
-    /// A `fused` node is a step of the kernel `into` names.
     pub lowering: Lowered,
     pub op: String,
     /// The node's operands, an absent optional one spelled `_`.
     pub inputs: List<String>,
     pub outputs: List<TensorReport>,
-    /// The tensor whose kernel computes this node's output inside it.
-    pub into: Option<String> = null,
-    /// Why a kernel writes its output.
-    pub written: Option<Written> = null,
-    /// What `written` names: the operator kind, or the times read.
-    pub detail: Option<String> = null,
-    /// The nodes fused into this kernel, by the tensor each computes.
-    pub takes_in: List<String> = [],
-    /// The bytes those tensors would hold, which the kernel never writes, as
-    /// an extent polynomial over the symbols the run binds.
-    pub kept_bytes: Option<String> = null,
     pub branches: List<BranchReport> = [],
 }
 
-/// How `forward` lowers a node, a kernel's step fused into a later kernel
-/// told apart.
+/// `Lowering` as a report spells it.
 #[wire(name_policy = "snake_case")]
 pub enum Lowered {
-    Kernel,
-    Fused,
-    /// Computed as a product kernel reads its left operand.
-    Prologue,
-    /// A product another product's kernel computes, by weights concatenated.
-    Concatenated,
+    Operation,
     Folded,
     Alias,
     Branch,
-    Flattened,
-    Restored,
     Viewed,
-}
-
-/// A `Reason` without what it names, which `NodeReport.detail` carries.
-#[wire(name_policy = "snake_case")]
-pub enum Written {
-    Unfused,
-    Computes,
-    Returned,
-    ReadTimes,
-    Reader,
-    Stretched,
-    SecondContraction,
-    ContractionAndFold,
 }
 
 /// One branch of an `If`, by the attribute holding it.
@@ -115,20 +80,19 @@ pub struct TensorReport {
     pub more: i32 = 0,
 }
 
-/// The report for `graph`, checked as `checked`, its kernels fused where
-/// `fuse` lets them.
-pub fn report(graph: &Graph, checked: &Checked, fuse: bool) -> Report {
+/// The report for `graph`, checked as `checked`.
+pub fn report(graph: &Graph, checked: &Checked) -> Report {
     return Report {
         graph: graph.name,
         opset: graph.opset,
-        scope: scope(graph, checked, fuse),
+        scope: scope(graph, checked),
         padding: padding(graph, checked),
     };
 }
 
 /// `report` as text.
-pub fn render_dump(graph: &Graph, checked: &Checked, fuse: bool) -> String {
-    let r = report(graph, checked, fuse);
+pub fn render_dump(graph: &Graph, checked: &Checked) -> String {
+    let r = report(graph, checked);
     let mut w = CodeWriter::with_capacity(4096);
     let opset = match r.opset {
         Some(v) => `${v}`,
@@ -147,23 +111,22 @@ pub fn render_dump(graph: &Graph, checked: &Checked, fuse: bool) -> String {
     }
     w.blank();
     w.line(
-        `${tally.kernels} kernels, ${tally.fused} fused, ${tally.folded} folded, ${tally.aliases} aliases, ${tally.branches} branches, ${tally.spread} reshapes spread, ${tally.viewed} transposes viewed`,
+        `${tally.operations} operations, ${tally.folded} folded, ${tally.aliases} aliases, ${tally.branches} branches, ${tally.viewed} transposes viewed`,
     );
     return w.to_string();
 }
 
 /// `report` as JSON.
-pub fn render_dump_json(graph: &Graph, checked: &Checked, fuse: bool) -> String {
+pub fn render_dump_json(graph: &Graph, checked: &Checked) -> String {
     // Every field is a string, a number, a list or an option of them.
-    return to_string(&report(graph, checked, fuse)).unwrap();
+    return to_string(&report(graph, checked)).unwrap();
 }
 
-fn scope(graph: &Graph, checked: &Checked, fuse: bool) -> ScopeReport {
-    let decided = plan(graph, checked, fuse);
-    let taken = taken_in(graph, &decided);
+fn scope(graph: &Graph, checked: &Checked) -> ScopeReport {
+    let lowered = lowerings(graph, checked);
     let mut nodes: List<NodeReport> = [];
     for let [at, node] of graph.nodes.into_iter().enumerate() {
-        nodes.push(node_report(&node, decided.lowering(at), checked, &decided, &taken, fuse));
+        nodes.push(node_report(&node, lowered[at], checked));
     }
     let mut owed: List<[String, String]> = [];
     for let c of &checked.owed {
@@ -179,135 +142,26 @@ fn scope(graph: &Graph, checked: &Checked, fuse: bool) -> ScopeReport {
     };
 }
 
-fn node_report(
-    node: &Node,
-    lowering: Lowering,
-    checked: &Checked,
-    decided: &Plan,
-    taken: &HashMap<String, List<String>>,
-    fuse: bool,
-) -> NodeReport {
+fn node_report(node: &Node, lowering: Lowering, checked: &Checked) -> NodeReport {
     // An optional output left unnamed is not computed.
     let computed = node.outputs.into_iter().filter(|o| o != "");
     let outputs: List<TensorReport> = computed.map(|o| tensor(checked, &o)).collect();
     let inputs: List<String> = node.inputs.into_iter().map(|i| if i == "" { "_" } else { i }).collect();
-    let mut r = NodeReport { lowering: lowered(lowering), op: node.op, inputs, outputs };
-    match lowering {
-        Kernel => {
-            match decided.of(&node.outputs[0]) {
-                Fused(into) => {
-                    r.lowering = Lowered::Fused;
-                    r.into = Option::Some(writer(decided, into));
-                },
-                Prologue(into) => {
-                    r.lowering = Lowered::Prologue;
-                    r.into = Option::Some(into);
-                },
-                Concatenated(into) => {
-                    r.lowering = Lowered::Concatenated;
-                    r.into = Option::Some(into);
-                },
-                Written(reason) => {
-                    let [code, detail] = reason_fields(&reason);
-                    r.written = Option::Some(code);
-                    r.detail = detail;
-                    if let Some(takes_in) = taken.get(node.outputs[0]) {
-                        r.kept_bytes = kept_bytes(checked, &takes_in);
-                        r.takes_in = takes_in;
-                    }
-                },
-            }
-        },
-        Branch => {
-            for let b of branches(node, checked) {
-                r.branches.push(BranchReport { attr: b.attr, scope: scope(&b.graph, &b.checked, fuse) });
-            }
-        },
-        _ => {
-        },
+    let mut r = NodeReport { lowering: reported(lowering), op: node.op, inputs, outputs };
+    if lowering matches { Branch } {
+        for let b of branches(node, checked) {
+            r.branches.push(BranchReport { attr: b.attr, scope: scope(&b.graph, &b.checked) });
+        }
     }
     return r;
 }
 
-/// The tensors `decided` fuses into each kernel that writes, by the tensor it
-/// writes, in graph order.
-fn taken_in(graph: &Graph, decided: &Plan) -> HashMap<String, List<String>> {
-    let mut taken = HashMap::<String, List<String>>::new();
-    for let node of &graph.nodes {
-        let into = match decided.decisions.get(node.outputs[0]) {
-            Some(Fused(into)) => writer(decided, into),
-            Some(Prologue(into) | Concatenated(into)) => into,
-            _ => {
-                continue;
-            },
-        };
-        let mut list = taken.get(into).unwrap_or([]);
-        list.push(node.outputs[0]);
-        taken[into] = list;
-    }
-    return taken;
-}
-
-/// The tensor written by the kernel computing `head`: `head` itself, or the
-/// product it is the prologue of.
-fn writer(decided: &Plan, head: String) -> String {
-    return match decided.of(&head) {
-        Prologue(product) => product,
-        _ => head,
-    };
-}
-
-/// The bytes `tensors` would hold, f32 each, or `None` where an extent product
-/// leaves what a polynomial holds.
-fn kept_bytes(checked: &Checked, tensors: &List<String>) -> Option<String> {
-    let mut total = Poly::constant(0);
-    for let t of *tensors {
-        let mut size = Poly::constant(4);
-        for let axis of checked.shapes[t].axes {
-            size = size.try_mul(&axis.extent.poly())?;
-        }
-        total = total.try_add(&size)?;
-    }
-    return Option::Some(`${total}`);
-}
-
-/// A `Reason` as a code a test reads, and what the code names.
-fn reason_fields(reason: &Reason) -> [Written, Option<String>] {
-    return match reason {
-        Unfused => [Written::Unfused, null],
-        Computes(kind) => [Written::Computes, Option::Some(kind_word(kind))],
-        Returned => [Written::Returned, null],
-        ReadTimes(n) => [Written::ReadTimes, Option::Some(`${n}`)],
-        Reader(kind) => [Written::Reader, Option::Some(kind_word(kind))],
-        Stretched => [Written::Stretched, null],
-        SecondContraction => [Written::SecondContraction, null],
-        ContractionAndFold => [Written::ContractionAndFold, null],
-    };
-}
-
-fn kind_word(kind: &Kind) -> String {
-    return match kind {
-        Elementwise => "elementwise",
-        Contraction => "contraction",
-        Reduction => "reduction",
-        Window => "window",
-        Regrouping => "regrouping",
-        Selection => "selection",
-        Conversion => "conversion",
-        Generation => "generation",
-        Branch => "branch",
-        Attention => "attention",
-    };
-}
-
-fn lowered(lowering: Lowering) -> Lowered {
+fn reported(lowering: Lowering) -> Lowered {
     return match lowering {
         Folded => Lowered::Folded,
         Alias => Lowered::Alias,
         Branch => Lowered::Branch,
-        Kernel => Lowered::Kernel,
-        Flattened => Lowered::Flattened,
-        Restored => Lowered::Restored,
+        Operation => Lowered::Operation,
         Transposed => Lowered::Viewed,
     };
 }
@@ -315,15 +169,10 @@ fn lowered(lowering: Lowering) -> Lowered {
 /// A lowering as the left column reads it.
 fn label(lowering: &Lowered) -> String {
     return match lowering {
-        Kernel => "kernel",
-        Fused => "fused",
-        Prologue => "prologue",
-        Concatenated => "concat",
+        Operation => "operation",
         Folded => "folded",
         Alias => "alias",
         Branch => "branch",
-        Flattened => "flattened",
-        Restored => "restored",
         Viewed => "viewed",
     };
 }
@@ -379,13 +228,10 @@ global SHOWN: i32 = 8;
 
 /// How many nodes each lowering took, over every scope.
 struct Tally {
-    kernels: i32 = 0,
-    fused: i32 = 0,
+    operations: i32 = 0,
     folded: i32 = 0,
     aliases: i32 = 0,
     branches: i32 = 0,
-    /// The `Reshape`s a spread product reads and writes past, two each.
-    spread: i32 = 0,
     /// The `Transpose`s a product reads past, by the weight as stored.
     viewed: i32 = 0,
 }
@@ -405,33 +251,18 @@ fn write_scope(w: &mut CodeWriter, s: &ScopeReport, tally: &mut Tally) {
     w.indent();
     for let node of &s.nodes {
         match node.lowering {
-            Kernel => tally.kernels += 1,
-            Fused | Prologue | Concatenated => tally.fused += 1,
+            Operation => tally.operations += 1,
             Folded => tally.folded += 1,
             Alias => tally.aliases += 1,
             Branch => tally.branches += 1,
-            Flattened | Restored => tally.spread += 1,
             Viewed => tally.viewed += 1,
         }
         let outputs: List<String> = node.outputs.into_iter().map(|t| t.name).collect();
-        // As wide as `flattened`, the longest label.
+        // As wide as `operation`, the longest label.
         w.line(`${label(&node.lowering):<9} ${outputs.join(", ")} = ${node.op}(${node.inputs.join(", ")})`);
         w.indent();
         for let t of &node.outputs {
             w.line(`${t.name}: ${tensor_text(t)}`);
-        }
-        if let Some(into) = &node.into {
-            w.line(`into the kernel writing ${*into}`);
-        }
-        if let Some(code) = &node.written {
-            w.line(`written: ${reason_text(code, &node.detail)}`);
-        }
-        if !node.takes_in.is_empty() {
-            let kept = match &node.kept_bytes {
-                Some(b) => `, keeping ${*b} bytes out of memory`,
-                None => "",
-            };
-            w.line(`takes in ${node.takes_in.join(", ")}${kept}`);
         }
         for let b of &node.branches {
             w.line(b.attr);
@@ -451,24 +282,6 @@ fn write_scope(w: &mut CodeWriter, s: &ScopeReport, tally: &mut Tally) {
         }
         w.dedent();
     }
-}
-
-/// Why a kernel writes its output, as a sentence ends.
-fn reason_text(code: &Written, detail: &Option<String>) -> String {
-    let named = match detail {
-        Some(d) => *d,
-        None => "",
-    };
-    return match code {
-        Unfused => "fuse is off",
-        Computes => `a ${named} takes in no operator after it`,
-        Returned => "the scope returns it",
-        ReadTimes => `read by ${named} kernels`,
-        Reader => `read by a ${named}, which takes in no operator before it`,
-        Stretched => "its readers' kernel covers other elements",
-        SecondContraction => "its readers' kernel already follows a contraction",
-        ContractionAndFold => "a contraction and a fold along a row would share a kernel",
-    };
 }
 
 /// One heading over the tensors a scope declares, which a branch may leave empty.

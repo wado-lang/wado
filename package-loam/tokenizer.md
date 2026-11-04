@@ -55,7 +55,7 @@ interpret at run time:
   written once in the runtime. Unicode classes such as `\p{L}` come from
   `core:icu`.
 - The vocabulary and the merges are embedded as data in byte literals, as
-  `Prepared::embedded` embeds a graph's weights. The tokens are separated by
+  `Params::embedded` embeds a graph's weights. The tokens are separated by
   NUL, which no supported vocabulary holds. Each merge is resolved at build
   time to three ids: the two it joins and the one they join to.
 

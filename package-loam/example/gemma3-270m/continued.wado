@@ -15,6 +15,7 @@ pub struct Generated {
     pub ids: List<i32>,
     pub generated: List<i32>,
     pub ms_per_token: f64,
+    pub webgpu_ms_per_token: f64,
 }
 
 struct Oracle {
@@ -61,7 +62,7 @@ pub fn continued<effect E>(
         let rest = (ended - prompted) as u64 as f64 / 1_000_000.0 / (steps - 1) as f64;
         println(`${g.prompt:?} -> ${generated:?}: ${verdict}`);
         println(
-            `  ${first:.0} ms for the prompt, ${rest:.1} ms a token after it in ${dispatches} dispatches and ${reads} read backs (onnxruntime ${g.ms_per_token:.1})`,
+            `  ${first:.0} ms for the prompt, ${rest:.1} ms a token after it in ${dispatches} dispatches and ${reads} read backs (onnxruntime ${g.ms_per_token:.1} on the CPU, ${g.webgpu_ms_per_token:.1} on WebGPU)`,
         );
     }
 }

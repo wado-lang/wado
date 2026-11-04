@@ -82,13 +82,12 @@ graph leaves open beside the past's own, as `Cache::empty(&mut backend, batch_si
 signature.
 
 - A field holds each past under the past's axes. A present's length axis is
-  minted apart from the past's, so `pass` relabels each present to its past's
-  axes with `reshape`, which moves no element, before it returns the cache.
+  minted apart from the past's, so `build` relabels each present to its past's
+  axes, which moves no element, before it returns the cache.
 - `Cache::empty` takes the length axis to be the one symbolic axis on which
   the past and its present differ, and gives it 0.
-- `forward` and `compute` retain the cache before they begin. A caller that drives `pass`
-  itself calls `cache.retain(&mut backend)` there, as the Gemma 3 and GPT-2
-  (124M) examples do.
+- `compute` retains the cache before it begins. A caller that drives `build`
+  itself calls `cache.retain(&mut backend)` there.
 
 The GPT-2 (124M) example builds from `decoder_model_merged.onnx`, whose graph
 branches on whether it is given a past, so one set of weights runs the prompt
@@ -102,7 +101,7 @@ each tensor's name to the file holding it. A use site gives the index and the
 shards as inputs, the index under `type: "safetensors-index"`:
 
 ```wado
-use { Prepared, forward } from "./model.onnxtext" with {
+use { Model, Params, compute } from "./model.onnxtext" with {
     type: "onnxtext",
     generator: {
         module: "lib:loam",
@@ -135,7 +134,7 @@ gives the loader one `ByteList`. A sharded module's loader takes the shards
 instead, keyed by the file names the index uses:
 
 ```wado
-Prepared::load(backend: &mut Bk, shards: &HashMap<String, ByteList>) -> Result<Prepared<Bk>, LoadError>
+Params::load(backend: &mut Bk, shards: &HashMap<String, ByteList>) -> Result<Params<Bk>, LoadError>
 ```
 
 The generated module carries the placement, so the loader reads no index. A
@@ -155,7 +154,7 @@ Face publishes such a model as it is, so reading the file in place spares a
 consumer the split into a checkpoint. The graph alone is the use site's file:
 
 ```wado
-use { Prepared, forward } from "./model.onnx" with {
+use { Model, Params, compute } from "./model.onnx" with {
     type: "onnx",
     generator: { module: "lib:loam" },
 };
@@ -166,7 +165,7 @@ the graph, checked against the weight's shape, so the generated module carries
 the ranges and the loader is handed the data file:
 
 ```wado
-Prepared::load(backend: &mut Bk, checkpoint: &Ck) -> Result<Prepared<Bk>, LoadError>
+Params::load(backend: &mut Bk, checkpoint: &Ck) -> Result<Params<Bk>, LoadError>
 ```
 
 A file shorter than a range is a `LoadError` naming the tensor. A build
