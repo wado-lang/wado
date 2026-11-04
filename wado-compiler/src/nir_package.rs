@@ -187,6 +187,8 @@ pub struct NirPackage {
     /// The `org.wado-lang.coverage` section payload, under `wado test --coverage`
     /// or `--pgo`.
     pub coverage_section: Option<Vec<u8>>,
+    /// The `org.wado-lang.demanded-imports` section payload, for a library.
+    pub demanded_imports_section: Option<Vec<u8>>,
     /// Fine-grained codegen feature flags from the CLI's `-f <flag>` option.
     /// Consulted by the WIR emitter to select alternative lowerings.
     pub codegen_flags: CodegenFlags,

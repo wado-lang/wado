@@ -22,6 +22,7 @@ use crate::component_model::{
     cm_instance_key, cm_return_needs_outptr, emit_cm_defined, one_per_cm_name, parse_resource_func,
 };
 use crate::coverage;
+use crate::demanded_imports;
 use crate::defs::DefId;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::kiln::import_check::KILN_TYPES_INTERFACE;
@@ -451,6 +452,13 @@ pub fn build_component(
         builder.custom_section(&wasm_encoder::CustomSection {
             name: coverage::SECTION_NAME.into(),
             data: plan.into(),
+        });
+    }
+
+    if let Some(demanded) = &project.demanded_imports_section {
+        builder.custom_section(&wasm_encoder::CustomSection {
+            name: demanded_imports::SECTION_NAME.into(),
+            data: demanded.into(),
         });
     }
 

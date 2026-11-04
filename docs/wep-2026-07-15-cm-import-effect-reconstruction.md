@@ -67,6 +67,14 @@ over-approximation by construction: it can over-include an unused capability but
 never miss one. Hidden non-determinism is surfaced, not silenced — a component
 that secretly reads the clock forces `with MonotonicClock` on its callers.
 
+An import only `#[ambient]` code reaches is the exception, as it is for a
+source dependency: an assertion's message on `wasi:cli/stderr` demands nothing
+of a caller. A Wado library lists in its custom section
+`org.wado-lang.demanded-imports` the `wasi:*` interfaces some `export fn` holds
+by what it declares, and reconstruction leaves out the `wasi:*` imports the list
+does not name. The consumer still forwards every import, so the host answers it.
+A component without the section, one not built by Wado, demands every import.
+
 The substitution unit moves with the rule: a consumer mocks the underlying
 capabilities a dependency uses (`MonotonicClock`), not "Marl". A pure component
 has nothing to substitute.
@@ -140,7 +148,7 @@ surveys the alternatives (a host effect pump, first-class function values).
 ## Scope
 
 The rule covers the synchronous value-type surface. Consuming attributes to each
-export the union of the component's imports — sound, and exact for a
+export the union of the component's demanded imports — sound, and exact for a
 well-factored pure package, over-approximating only where one component mixes
 pure and impure exports. Producing is the mirror: a guest effect left unhandled
 at a library boundary lowers to a CM import for a handler or a provider to

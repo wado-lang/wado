@@ -405,6 +405,7 @@ pub fn check_semantics(
     let index = data.index(&sem.types);
     run_effect_checks(sem, &index, &mut diags.effects, &mut diags.rows);
     run_purity_checks(sem, &index, &mut diags.purity);
+    diags.exported_host_interfaces = exported_host_interfaces(sem, &index);
     diags
 }
 
@@ -415,6 +416,8 @@ pub struct SemanticDiagnostics {
     pub purity: Vec<PurityError>,
     /// What each effect variable the bodies' calls minted was solved to.
     pub rows: EffectRows,
+    /// The `wasi:*` interfaces the program's `export fn`s hold.
+    pub exported_host_interfaces: IndexSet<String>,
 }
 
 impl SemanticDiagnostics {
@@ -1209,8 +1212,7 @@ fn operation_requirements(
         // operations demand the dependency's own host-leaf capabilities. A
         // types-only leaf has no operation to perform.
         return registry
-            .host_leaf_imports_for(fq)
-            .iter()
+            .demanded_imports_for(fq)
             .filter(|leaf| registry.declares_functions(leaf))
             .filter(|leaf| !index.provided_import_fqs.contains(leaf.as_str()))
             .filter_map(|leaf| index.effect_by_cm_fq.get(leaf).cloned())
@@ -1291,27 +1293,14 @@ fn check_function_effects_sem(
     };
     let caller_key = func.id;
     let annotations = module_annotations(sem, module);
-
-    // Declared effects, plus resources that appear in the signature so a
-    // `fn f(s: Stream<u8>)` need not repeat `with Stream`.
-    let mut current: IndexSet<EffectRef> = index
-        .fn_effects
-        .get(&caller_key)
-        .cloned()
-        .unwrap_or_default()
-        .into_iter()
-        .collect();
-    let scan = ResourceScan {
-        tt: &sem.types,
-        resolutions: index.resolutions,
-        members: index.members,
-    };
-    if let Some(ann) = annotations {
-        add_signature_resources(ann, caller_key, &scan, &mut current);
-    }
-    current.extend(admitted);
-    current.extend(held.iter().cloned());
-    let current = held_in_body(annotations, index, &scan, current, Body::Block(body));
+    let current = held_by(
+        sem,
+        annotations,
+        index,
+        func,
+        body,
+        admitted.into_iter().chain(held.iter().cloned()),
+    );
 
     // Parameter name → type id (aligned with the recorded signature types),
     // for resolving indirect calls through function-typed parameters.
@@ -1330,6 +1319,69 @@ fn check_function_effects_sem(
         holds_every_effect: false,
     };
     walk_body_effects(sem, module, annotations, index, walk, out, solved);
+}
+
+/// What `func`'s body holds: its declared effects, the resources its signature
+/// names, so a `fn f(s: Stream<u8>)` need not repeat `with Stream`, and
+/// `granted`, all expanded through the propagation closure.
+fn held_by(
+    sem: &Semantics,
+    annotations: Option<&TypeAnnotations>,
+    index: &EffectIndex,
+    func: &Function,
+    body: &Block,
+    granted: impl IntoIterator<Item = EffectRef>,
+) -> IndexSet<EffectRef> {
+    let mut current: IndexSet<EffectRef> = index
+        .fn_effects
+        .get(&func.id)
+        .cloned()
+        .unwrap_or_default()
+        .into_iter()
+        .collect();
+    let scan = ResourceScan {
+        tt: &sem.types,
+        resolutions: index.resolutions,
+        members: index.members,
+    };
+    if let Some(ann) = annotations {
+        add_signature_resources(ann, func.id, &scan, &mut current);
+    }
+    current.extend(granted);
+    held_in_body(annotations, index, &scan, current, Body::Block(body))
+}
+
+/// The `wasi:*` interfaces some `export fn` holds by what it declares, which a
+/// caller across the component boundary must hold too. A host import outside
+/// them is one only an `#[ambient]` body reaches.
+fn exported_host_interfaces(sem: &Semantics, index: &EffectIndex) -> IndexSet<String> {
+    let interface_of: IndexMap<&EffectRef, &str> = index
+        .interfaces
+        .values()
+        .filter_map(|(effect, fq)| Some((effect, fq.as_deref()?)))
+        .collect();
+    let mut out = IndexSet::default();
+    for (src, module) in &sem.modules {
+        let annotations = module_annotations(sem, src);
+        let exports = module.items.iter().flat_map(|item| match item {
+            Item::Function(func) => std::slice::from_ref(func),
+            Item::Impl(block) => &block.methods[..],
+            _ => &[],
+        });
+        for func in exports.filter(|func| func.is_export) {
+            let Some(body) = &func.body else {
+                continue;
+            };
+            let held = held_by(sem, annotations, index, func, body, []);
+            out.extend(
+                held.iter()
+                    .filter_map(|effect| interface_of.get(effect))
+                    .filter(|fq| fq.starts_with("wasi:"))
+                    .map(|fq| (*fq).to_string()),
+            );
+        }
+    }
+    out
 }
 
 /// A test holds every effect, so nothing it performs is missing. A function

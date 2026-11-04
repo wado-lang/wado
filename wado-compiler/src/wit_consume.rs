@@ -15,7 +15,7 @@ use crate::ast::{
     UseDecl, UseItem, UseNameSpelling, VariantCase, VariantDecl, Visibility, cm_function_path,
     cm_import_of,
 };
-use crate::attribute::{CM, CM_EXPORT, CM_HOST_IMPORTS, CM_PARAMS};
+use crate::attribute::{CM, CM_AMBIENT_IMPORTS, CM_EXPORT, CM_HOST_IMPORTS, CM_PARAMS};
 use crate::component_model::SourceInterfaceBatch;
 use crate::hashmap;
 use crate::module_source::ModuleSource;
@@ -62,10 +62,20 @@ pub struct ExportedInterface {
 /// The host-leaf import FQs a component-binding module carries in its
 /// [`CM_HOST_IMPORTS`] inner attribute. Empty where it carries none.
 pub fn module_host_leaf_imports(module: &Module) -> Vec<String> {
+    module_strings(module, CM_HOST_IMPORTS)
+}
+
+/// The host-leaf imports only the component's `#[ambient]` code reaches, from
+/// the [`CM_AMBIENT_IMPORTS`] inner attribute.
+pub fn module_ambient_imports(module: &Module) -> Vec<String> {
+    module_strings(module, CM_AMBIENT_IMPORTS)
+}
+
+fn module_strings(module: &Module, attribute: &str) -> Vec<String> {
     module
         .inner_attributes
         .iter()
-        .find(|a| a.name == CM_HOST_IMPORTS)
+        .find(|a| a.name == attribute)
         .map(|a| {
             a.args
                 .iter()
@@ -114,6 +124,8 @@ fn interfaces_on(module: &Module, side: Side) -> impl Iterator<Item = (&Interfac
 }
 
 /// Build a Wado AST module from a component's decoded `Resolve` + target world.
+/// `demanded` lists the `wasi:*` imports a caller of its exports must hold,
+/// where the component records them; `None` demands every one.
 ///
 /// # Errors
 /// A message naming each shape the component exports that has no import
@@ -122,6 +134,7 @@ pub fn build_bindings(
     resolve: &Resolve,
     world: WorldId,
     component: &ModuleSource,
+    demanded: Option<&[String]>,
 ) -> Result<ComponentBindings, String> {
     let namespace = component
         .wasm_canonical_namespace()
@@ -221,20 +234,30 @@ pub fn build_bindings(
         return Err(unique.into_iter().collect::<Vec<_>>().join("; "));
     }
 
-    // Carry the host-leaf set on the synthesized module so the registration
-    // path (`fold_component_interfaces`) recovers it from the AST alone.
-    let inner_attributes = if host_leaf_imports.is_empty() {
-        Vec::new()
-    } else {
-        vec![InnerAttribute {
-            name: CM_HOST_IMPORTS.to_string(),
-            args: host_leaf_imports
-                .iter()
-                .map(|import| AttrArg::Str(StrLit::new(import.as_str())))
-                .collect(),
-            span: syn(),
-        }]
-    };
+    // A guest import is always demanded: the consumer provides it.
+    let ambient_imports: Vec<&String> = demanded.map_or_else(Vec::new, |demanded| {
+        host_leaf_imports
+            .iter()
+            .filter(|fq| fq.starts_with("wasi:") && !demanded.contains(fq))
+            .collect()
+    });
+    // Carry both sets on the synthesized module so the registration path
+    // (`fold_component_interfaces`) recovers them from the AST alone.
+    let inner_attributes = [
+        (CM_HOST_IMPORTS, host_leaf_imports.iter().collect::<Vec<_>>()),
+        (CM_AMBIENT_IMPORTS, ambient_imports),
+    ]
+    .into_iter()
+    .filter(|(_, fqs)| !fqs.is_empty())
+    .map(|(name, fqs)| InnerAttribute {
+        name: name.to_string(),
+        args: fqs
+            .into_iter()
+            .map(|fq| AttrArg::Str(StrLit::new(fq.as_str())))
+            .collect(),
+        span: syn(),
+    })
+    .collect();
 
     if b.uses_tree_map {
         let tree_map_use = b.use_item("core:collections", "TreeMap");
@@ -1169,7 +1192,7 @@ mod tests {
     fn builds_catalog_bindings() {
         let (resolve, world) = decode_fixture();
         let component = component();
-        let b = build_bindings(&resolve, world, &component).expect("build bindings");
+        let b = build_bindings(&resolve, world, &component, None).expect("build bindings");
         let catalog_fq = catalog_fq(&resolve);
         // The program imports the interface under a name of this component's.
         let catalog_import = cm_dependency_interface(
@@ -1264,7 +1287,7 @@ mod tests {
             )
             .unwrap();
         let world = resolve.select_world(&[package], Some("w")).unwrap();
-        let b = build_bindings(&resolve, world, &component()).expect("build bindings");
+        let b = build_bindings(&resolve, world, &component(), None).expect("build bindings");
         let mut names = Vec::new();
         for item in &b.module.items {
             let functions = match item {

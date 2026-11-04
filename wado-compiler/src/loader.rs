@@ -34,7 +34,7 @@ use crate::remote::{
     Integrity, PinnedBy, check_digest, is_remote, next_in_pin_order, pin_of, url_fault,
 };
 use crate::wit_consume::{ComponentBindings, ExportedInterface, build_bindings};
-use crate::{bind, hashmap, parser, stdlib};
+use crate::{bind, demanded_imports, hashmap, parser, stdlib};
 
 /// Error that can occur during module loading
 #[derive(Debug, Clone)]
@@ -2045,7 +2045,8 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
                 return Err(err("expected a component, found a WIT package".to_string()));
             }
         };
-        build_bindings(&resolve, world, source).map_err(err)
+        let demanded = demanded_imports::read_from_component(bytes);
+        build_bindings(&resolve, world, source, demanded.as_deref()).map_err(err)
     }
 
     /// Fetch the raw bytes of a wasm asset by canonical path. Stdlib paths

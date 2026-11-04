@@ -29,6 +29,7 @@ pub mod const_eval;
 pub mod constant_arithmetic;
 pub mod coverage;
 pub mod defs;
+pub(crate) mod demanded_imports;
 pub(crate) mod divergence;
 pub mod doc;
 pub mod effect_check;
@@ -1657,12 +1658,12 @@ fn provider_directives<H: CompilerHost>(
 /// and its recorded facts) rather than the emitted TIR, so they see every
 /// source function whatever reify emits, and share their logic with the LSP.
 /// Every pipeline runs them before synthesis: a later phase assumes a program
-/// they passed.
+/// they passed. Answers the `wasi:*` interfaces the program's exports hold.
 fn check_effects_and_moves<H: CompilerHost>(
     sem: &mut semantics::Semantics,
     provided_import_fqs: hashmap::IndexSet<String>,
     logger: &Logger<'_, H>,
-) -> Result<(), Bail> {
+) -> Result<hashmap::IndexSet<String>, Bail> {
     let _span = logger.span("effect-check");
     let diags = effect_check::check_semantics(sem, provided_import_fqs);
     let move_errors = affine_move_check::check_affine_moves_semantic(sem);
@@ -1680,7 +1681,7 @@ fn check_effects_and_moves<H: CompilerHost>(
     if had_error {
         return Err(Bail);
     }
-    Ok(())
+    Ok(diags.exported_host_interfaces)
 }
 
 /// Internal: run compilation phases after module loading.
@@ -1793,7 +1794,7 @@ fn compile_after_load<H: CompilerHost>(
     }
 
     // === Phase 6b: Effect, Purity and Move Checks ===
-    check_effects_and_moves(
+    let exported_host_interfaces = check_effects_and_moves(
         &mut sem,
         options
             .providers
@@ -2184,6 +2185,10 @@ fn compile_after_load<H: CompilerHost>(
     if let Some(lib_world) = lib_world_info {
         if !is_kiln_generator {
             package.target_world.clone_from(&lib_world.fq_name);
+            // A library's consumer demands only what its exports hold.
+            package.demanded_imports_section = Some(demanded_imports::encode(
+                exported_host_interfaces.iter().map(String::as_str),
+            ));
         }
         package.lib_world_info = Some(lib_world);
     }

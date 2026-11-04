@@ -1045,6 +1045,11 @@ pub struct CmInterfaceRegistry {
     /// interface of one component shares the same set (v1 component-level union).
     component_host_leaf_imports: IndexMap<String, Vec<String>>,
 
+    /// Per component-dependency interface FQ, the subset of its host-leaf
+    /// imports that only the dependency's `#[ambient]` code reaches, which
+    /// reconstruction leaves out of the consumer's effects.
+    component_ambient_imports: IndexMap<String, Vec<String>>,
+
     /// World-level function imports (Phase 9), by the bodyless function
     /// declaring each -> its key in `functions`.
     world_imports: IndexMap<AstId, String>,
@@ -2464,6 +2469,7 @@ impl CmInterfaceRegistry {
         interface_fqs: &[String],
         imported_fqs: &[String],
         host_leaf_imports: &[String],
+        ambient_imports: &[String],
         module_source: &ModuleSource,
     ) -> Result<(), String> {
         self.register_module_decls(module, &CmDeclScope::Module)?;
@@ -2475,6 +2481,10 @@ impl CmInterfaceRegistry {
             if !host_leaf_imports.is_empty() {
                 self.component_host_leaf_imports
                     .insert(fq.clone(), host_leaf_imports.to_vec());
+            }
+            if !ambient_imports.is_empty() {
+                self.component_ambient_imports
+                    .insert(fq.clone(), ambient_imports.to_vec());
             }
         }
         // The bindings declare an imported interface's types too, so each maps
@@ -2493,15 +2503,27 @@ impl CmInterfaceRegistry {
         self.component_interfaces.contains(fq)
     }
 
-    /// The host-leaf import FQs the component owning `fq` declares — the raw
-    /// capabilities effect reconstruction unions into a consumer that uses this
-    /// interface. Empty for a purely-computational component or a non-component
-    /// interface. Ambient filtering is the consumer's responsibility.
+    /// The host-leaf import FQs the component owning `fq` declares, each of
+    /// which its consumer forwards. Empty for a purely-computational component
+    /// or a non-component interface.
     #[must_use]
     pub fn host_leaf_imports_for(&self, fq: &str) -> &[String] {
         self.component_host_leaf_imports
             .get(fq)
             .map_or(&[], Vec::as_slice)
+    }
+
+    /// The host-leaf imports of the component owning `fq` that a caller of its
+    /// exports must hold: all of them but those only its `#[ambient]` code
+    /// reaches.
+    pub fn demanded_imports_for(&self, fq: &str) -> impl Iterator<Item = &String> {
+        let ambient = self
+            .component_ambient_imports
+            .get(fq)
+            .map_or(&[][..], Vec::as_slice);
+        self.host_leaf_imports_for(fq)
+            .iter()
+            .filter(move |import| !ambient.contains(import))
     }
 
     /// Whether `fq` is a guest effect some component dependency imports: an

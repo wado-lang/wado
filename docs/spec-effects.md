@@ -417,7 +417,7 @@ Apart from a narrowing, nothing a body does adds to what its function holds.
 
 An argument names an effect the way a `with` clause does, by the name the function's module gives it, an import alias included. A name that reaches no effect there is an error. An effect of the same name declared in another module is a different effect, and stays required.
 
-Only the declaration is waived, not the capability. A listed effect the host provides is imported wherever a call reaches the body, as a declared one would be, and a host that does not offer it refuses the component. A Kiln generator's world has no clock, so a generator logging through `core:log`'s `TextSink<WallClock>` is refused.
+Only the declaration is waived, not the capability. A listed effect the host provides is imported wherever a call reaches the body, as a declared one would be, and a host that does not offer it refuses the component. A component boundary keeps the waiver: a call into an imported Wado library demands what the library's exports declare, and the consumer's component forwards the imports only `#[ambient]` code reaches. A Kiln generator's world has no clock, so a generator logging through `core:log`'s `TextSink<WallClock>` is refused.
 
 It is for what must work from any function: output, which `log_stdout` (`#[ambient(Stdout)]`) and `log_stderr` (`#[ambient(Stderr)]`) write, and effects no caller can tell apart from none, such as the seed `HashMap::new` reads. Whether a call whose result goes unused runs is [unspecified](./spec-overview.md#behavior-classes), so its output may never appear.
 
