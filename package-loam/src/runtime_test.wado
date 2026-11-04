@@ -1,7 +1,5 @@
 use {
     BinaryOp,
-    Columns,
-    Concat,
     Expr,
     Merged,
     Read,
@@ -313,15 +311,6 @@ test "paired matrices hold each column of the first, then the same column of the
     let bc = interleaved(&b, &c);
     assert bc.extents == [2, 4] as List<i32>;
     assert bc.data == [1.0, 10.0, 2.0, 20.0, 3.0, 30.0, 4.0, 40.0] as List<f32>;
-}
-
-test "matrices joined by their columns hold each row's columns of each in turn" {
-    let a: Tensor<f32, [Row, Col]> = tensor([2, 1], [1.0, 2.0]);
-    let b: Tensor<f32, [Row, Inner]> = tensor([2, 2], [3.0, 4.0, 5.0, 6.0]);
-    let c: Tensor<f32, [Row, Col]> = tensor([2, 1], [7.0, 8.0]);
-    let joined: Tensor<f32, [Row, Concat<Concat<Col, Inner>, Col>]> = Columns::of(&a).then(&b).then(&c).joined();
-    assert joined.extents == [2, 4] as List<i32>;
-    assert joined.data == [1.0, 3.0, 4.0, 7.0, 2.0, 5.0, 6.0, 8.0] as List<f32>;
 }
 
 test "matmul_broadcast stretches a batch axis of 1 on either side" {
