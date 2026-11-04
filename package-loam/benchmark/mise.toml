@@ -4,7 +4,9 @@
 #
 # The models are not in the repository: each example's `fetch.sh` downloads the
 # file its weights load from, and the model onnxruntime runs. onnxruntime and llama.cpp are their own releases, which
-# `fetch_onnxruntime.sh` and `fetch_llama_cpp.sh` download on first use.
+# `fetch_onnxruntime.sh` and `fetch_llama_cpp.sh` download on first use. The
+# WebGPU arm of onnxruntime is onnxruntime-node, which `mise run
+# loam-oracle-deps` installs.
 #
 # `WADO_BIN` and `WADO_BENCH_FLAGS` mean what they do in `benchmark/`.
 
@@ -76,6 +78,8 @@ build/onnxruntime_gpt2_124m
 echo "=== onnxruntime (CPU, 1 thread) ==="
 build/onnxruntime_gpt2_124m 1
 
+./onnxruntime_webgpu.sh $model
+
 echo "=== Loam (WebGPU) ==="
 WADO="$wado_exe" ../../wado-run-webgpu/target/release/wado-run-webgpu -O2 $WADO_BENCH_FLAGS --dir $model gpt2_124m/gpt2_124m_webgpu.wado
 
@@ -98,6 +102,8 @@ wado_exe="${WADO_BIN:-$(cd ../.. && pwd)/target/release/wado}"
 
 echo "=== onnxruntime (CPU) ==="
 build/onnxruntime_gemma3_270m
+
+./onnxruntime_webgpu.sh $model
 
 llama=$(./fetch_llama_cpp.sh)
 if [ -n "$llama" ]; then
