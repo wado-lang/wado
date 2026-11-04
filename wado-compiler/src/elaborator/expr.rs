@@ -9,7 +9,7 @@ use crate::ast::{
     self, AstId, AstVisitor, Condition, Expr, IfExpr, LabeledBlockExpr, Literal, MatchArm,
 };
 use crate::compiler_host::CompilerHost;
-use crate::cut_memo::CutMemo;
+use crate::cut_memo::CutWalk;
 use crate::module_source::ModuleSource;
 use crate::name::{FqTraitName, UNIT_TYPE_NAME, mangle_generic_name, split_local_method};
 use crate::tir::{
@@ -3323,17 +3323,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// Whether `ty` has no value: `!`, or a type each of whose values would hold one.
     pub(super) fn is_uninhabited(&self, ty: TypeId) -> bool {
-        self.is_uninhabited_within(ty, &mut Vec::new(), &mut CutMemo::new(true))
+        self.is_uninhabited_within(ty, &mut CutWalk::new(true))
     }
 
-    /// `open` holds the types being asked about further out. One met again inside
-    /// itself has no finite value, so it answers `true`.
-    fn is_uninhabited_within(
-        &self,
-        ty: TypeId,
-        open: &mut Vec<TypeKey>,
-        memo: &mut CutMemo<TypeKey>,
-    ) -> bool {
+    /// `walk` holds the types being asked about further out. One met again
+    /// inside itself has no finite value, so it answers `true`.
+    fn is_uninhabited_within(&self, ty: TypeId, walk: &mut CutWalk<TypeKey>) -> bool {
         let (head, key, elems) = {
             let tt = self.tysys.type_table.borrow();
             let head = tt.representation_head(ty);
@@ -3342,35 +3337,22 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
             (head, tt.type_key(head), tt.as_tuple(head))
         };
-        if let Some(answer) = memo.get(&key) {
-            return answer;
-        }
-        if let Some(at) = open.iter().position(|&o| o == key) {
-            return memo.cut(at);
-        }
-        let depth = memo.depth();
-        let outer_cuts = memo.begin();
-        open.push(key);
-        memo.open();
-        let answer = if let Some(elems) = elems {
-            elems
-                .iter()
-                .any(|&t| self.is_uninhabited_within(t, open, memo))
-        } else if let Some(fields) = self.struct_field_types(head) {
-            fields
-                .iter()
-                .any(|&(_, t)| self.is_uninhabited_within(t, open, memo))
-        } else if let Some(payloads) = self.tysys.case_payload_types(head) {
-            payloads
-                .iter()
-                .all(|&t| self.is_uninhabited_within(t, open, memo))
-        } else {
-            false
-        };
-        memo.close(answer);
-        open.pop();
-        memo.end(key, depth, answer, outer_cuts);
-        answer
+        walk.visit(key, |walk| {
+            if let Some(elems) = elems {
+                elems.iter().any(|&t| self.is_uninhabited_within(t, walk))
+            } else if let Some(fields) = self.struct_field_types(head) {
+                fields
+                    .iter()
+                    .any(|&(_, t)| self.is_uninhabited_within(t, walk))
+            } else if let Some(payloads) = self.tysys.case_payload_types(head) {
+                payloads
+                    .iter()
+                    .all(|&t| self.is_uninhabited_within(t, walk))
+            } else {
+                false
+            }
+        })
+        .answer
     }
 
     /// Report the arms no value reaches. Coverage reads no types, so a

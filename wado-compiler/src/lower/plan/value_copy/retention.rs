@@ -21,7 +21,7 @@ use super::is_reference_type;
 use super::place::unwrap_ref;
 use super::reach::ClosureCaptures;
 use crate::compiler_trace;
-use crate::cut_memo::CutMemo;
+use crate::cut_memo::CutWalk;
 use crate::flat_package::FlatPackage;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::lower::plan::value_copy::analyze;
@@ -1017,7 +1017,7 @@ impl<'a> RefCarrying<'a> {
 impl RefCarrying<'_> {
     #[must_use]
     pub fn holds(&self, type_id: TypeId) -> bool {
-        self.walk(type_id, &mut Walk::default())
+        self.walk(type_id, &mut CutWalk::new(false))
     }
 
     /// An answer that leans on a type still being walked is memoized only
@@ -1027,23 +1027,11 @@ impl RefCarrying<'_> {
         if let Some(&answer) = self.memo.borrow().get(&type_id) {
             return answer;
         }
-        if let Some(answer) = walk.memo.get(&type_id) {
-            return answer;
+        let visited = walk.visit(type_id, |walk| self.members(type_id, walk));
+        if visited.settled {
+            self.memo.borrow_mut().insert(type_id, visited.answer);
         }
-        if let Some(at) = walk.open.iter().position(|&open| open == type_id) {
-            return walk.memo.cut(at);
-        }
-        let depth = walk.memo.depth();
-        let outer_cuts = walk.memo.begin();
-        walk.open.push(type_id);
-        walk.memo.open();
-        let answer = self.members(type_id, walk);
-        walk.memo.close(answer);
-        walk.open.pop();
-        if walk.memo.end(type_id, depth, answer, outer_cuts) {
-            self.memo.borrow_mut().insert(type_id, answer);
-        }
-        answer
+        visited.answer
     }
 
     fn any(&self, types: Vec<TypeId>, walk: &mut Walk) -> bool {
@@ -1133,21 +1121,7 @@ impl RefCarrying<'_> {
     }
 }
 
-/// The types a [`RefCarrying`] walk is inside, outermost first, and what it
-/// has answered so far.
-struct Walk {
-    open: Vec<TypeId>,
-    memo: CutMemo<TypeId>,
-}
-
-impl Default for Walk {
-    fn default() -> Self {
-        Self {
-            open: Vec::new(),
-            memo: CutMemo::new(false),
-        }
-    }
-}
+type Walk = CutWalk<TypeId>;
 
 /// The tree a body walk starts from: a function's block, or the expression a
 /// closure's body is. Naming it lets one body be walked by two visitors.

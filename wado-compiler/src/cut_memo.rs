@@ -14,7 +14,7 @@
 
 use std::hash::Hash;
 
-use crate::hashmap::IndexMap;
+use crate::hashmap::{IndexMap, IndexSet};
 
 pub(crate) struct CutMemo<K> {
     cut_answer: bool,
@@ -110,7 +110,7 @@ impl<K: Eq + Hash> CutMemo<K> {
 
     /// Ends a walk whose answer rests on something other than the cuts, such
     /// as a depth limit, so it is kept nowhere.
-    pub(crate) fn end_unkept(&mut self, depth: usize, outer_cuts: Vec<(usize, u64)>) {
+    fn end_unkept(&mut self, depth: usize, outer_cuts: Vec<(usize, u64)>) {
         self.cuts.retain(|&(at, _)| at < depth);
         self.restore(outer_cuts);
     }
@@ -127,5 +127,68 @@ impl<K: Eq + Hash> CutMemo<K> {
             self.cuts.insert(slot, (at, self.open[at]));
         }
         self.cut_answer
+    }
+}
+
+/// A walk whose nodes are what it cuts at: a node met again inside itself is
+/// cut.
+pub(crate) struct CutWalk<K> {
+    /// The nodes the walk is inside, outermost first.
+    open: IndexSet<K>,
+    memo: CutMemo<K>,
+    /// How many answers have rested on something other than the cuts.
+    unkept: usize,
+}
+
+/// A node's answer, and whether it rests on nothing still open, so it holds
+/// outside this walk too.
+pub(crate) struct Visited {
+    pub(crate) answer: bool,
+    pub(crate) settled: bool,
+}
+
+impl<K: Clone + Eq + Hash> CutWalk<K> {
+    pub(crate) fn new(cut_answer: bool) -> Self {
+        Self {
+            open: IndexSet::default(),
+            memo: CutMemo::new(cut_answer),
+            unkept: 0,
+        }
+    }
+
+    /// The answer of `key`, by `walk` where the walk has none yet.
+    pub(crate) fn visit(&mut self, key: K, walk: impl FnOnce(&mut Self) -> bool) -> Visited {
+        let unsettled = |answer| Visited {
+            answer,
+            settled: false,
+        };
+        if let Some(answer) = self.memo.get(&key) {
+            return unsettled(answer);
+        }
+        if let Some(at) = self.open.get_index_of(&key) {
+            return unsettled(self.memo.cut(at));
+        }
+        let depth = self.memo.depth();
+        let outer_cuts = self.memo.begin();
+        let unkept = self.unkept;
+        self.open.insert(key.clone());
+        self.memo.open();
+        let answer = walk(self);
+        self.memo.close(answer);
+        self.open.pop();
+        if self.unkept == unkept {
+            let settled = self.memo.end(key, depth, answer, outer_cuts);
+            Visited { answer, settled }
+        } else {
+            self.memo.end_unkept(depth, outer_cuts);
+            unsettled(answer)
+        }
+    }
+
+    /// Marks the answer being walked as resting on something other than the
+    /// cuts, such as a depth limit: neither it nor any answer it reaches is
+    /// kept.
+    pub(crate) fn unkept(&mut self) {
+        self.unkept += 1;
     }
 }

@@ -32,7 +32,7 @@ use super::is_reference_type;
 use super::last_use::collect_child_exprs;
 use super::place::could_write_through;
 use super::{EnvFrame, NEEDS_COPY_DEPTH_LIMIT, resolve_param_in_env};
-use crate::cut_memo::CutMemo;
+use crate::cut_memo::CutWalk;
 use crate::defs::DefId;
 use crate::flat_package::FlatPackage;
 use crate::graph::{DisjointSets, strongly_connected_components};
@@ -222,54 +222,18 @@ enum Handle {
     Writes,
 }
 
-/// A struct by its type, a variant by its declaration and its arguments
-/// resolved to concrete types: what a walk is inside of, and what it answers
-/// alike wherever it reaches it.
-type Guard = (Option<DefId>, Vec<TypeKey>);
-
-/// A [`HoldsHandle`] walk's state.
-struct UnderWay {
-    /// What the walk is inside of, outermost first. A cycle back to one adds
-    /// no path to a handle.
-    open: IndexSet<Guard>,
-    memo: CutMemo<Guard>,
-    /// How many times the walk has answered at the depth limit, which no
-    /// memoized answer may rest on.
-    limited: usize,
-}
-
-impl UnderWay {
-    fn new() -> Self {
-        Self {
-            open: IndexSet::default(),
-            memo: CutMemo::new(false),
-            limited: 0,
-        }
-    }
-}
+/// The types a walk is inside of: a struct by its type, a variant by its
+/// declaration and its arguments resolved to concrete types. A cycle back to
+/// one adds no path to a handle.
+type UnderWay = CutWalk<(Option<DefId>, Vec<TypeKey>)>;
 
 /// `walk` inside `key`, or `false` where `key` is already under way.
-fn guarded(key: Guard, under_way: &mut UnderWay, walk: impl FnOnce(&mut UnderWay) -> bool) -> bool {
-    if let Some(answer) = under_way.memo.get(&key) {
-        return answer;
-    }
-    if let Some(at) = under_way.open.get_index_of(&key) {
-        return under_way.memo.cut(at);
-    }
-    let depth = under_way.memo.depth();
-    let outer_cuts = under_way.memo.begin();
-    let limited = under_way.limited;
-    under_way.open.insert(key.clone());
-    under_way.memo.open();
-    let answer = walk(under_way);
-    under_way.memo.close(answer);
-    under_way.open.pop();
-    if under_way.limited == limited {
-        under_way.memo.end(key, depth, answer, outer_cuts);
-    } else {
-        under_way.memo.end_unkept(depth, outer_cuts);
-    }
-    answer
+fn guarded(
+    key: (Option<DefId>, Vec<TypeKey>),
+    under_way: &mut UnderWay,
+    walk: impl FnOnce(&mut UnderWay) -> bool,
+) -> bool {
+    under_way.visit(key, walk).answer
 }
 
 /// Whether a value of a type holds a [`Handle`] at any depth. Everything else
@@ -293,7 +257,7 @@ impl<'a> HoldsHandle<'a> {
 
     fn of(&self, ty: TypeId) -> bool {
         self.known.get_or_compute(self.type_table.type_key(ty), || {
-            self.walk(ty, None, &mut UnderWay::new(), 0)
+            self.walk(ty, None, &mut UnderWay::new(false), 0)
         })
     }
 
@@ -306,7 +270,7 @@ impl<'a> HoldsHandle<'a> {
         depth: usize,
     ) -> bool {
         if depth > NEEDS_COPY_DEPTH_LIMIT {
-            under_way.limited += 1;
+            under_way.unkept();
             return true;
         }
         let tt = self.type_table;
