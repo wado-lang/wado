@@ -221,7 +221,7 @@ impl SymbolNames<'_, '_> {
         };
         let mut collector = DeclCollector {
             sem: self.ctx.sem,
-            module: format!("wado . {} . ", escape_package(&self.module_name(module))),
+            module: format!("wado . {} . ", escape_package(&self.package_name(module))),
             decls: IndexMap::new(),
             owners: Vec::new(),
             bodies: 0,
@@ -245,10 +245,24 @@ impl SymbolNames<'_, '_> {
     /// A file's path from the root, as the filesystem spells it, or a module's
     /// own name (`core:json`).
     fn module_name(&self, module: &ModuleSource) -> String {
-        let uri = module_uri(self.ctx.entry(), module, self.ctx.uri);
+        self.relative_to_root(module_uri(self.ctx.entry(), module, self.ctx.uri))
+    }
+
+    fn relative_to_root(&self, uri: String) -> String {
         match uri.strip_prefix(self.root) {
             Some(relative) => percent_decode(relative),
             None => uri,
+        }
+    }
+
+    /// The name `module`'s symbols carry. A stdlib file in a checkout of this
+    /// repository has the import path its importers reach it by, wherever the
+    /// index is rooted, so its definitions and their uses share one symbol.
+    fn package_name(&self, module: &ModuleSource) -> String {
+        let uri = module_uri(self.ctx.entry(), module, self.ctx.uri);
+        match wado_compiler::stdlib::import_path_of_checkout_path(&percent_decode(&uri)) {
+            Some(import) => import.to_string(),
+            None => self.relative_to_root(uri),
         }
     }
 }
@@ -740,6 +754,7 @@ fn put_packed(out: &mut Vec<u8>, field: u32, values: &[i32]) {
 mod tests {
     use super::*;
     use crate::query::test_ctx::with_ctx;
+    use crate::test_support::in_memory_host;
     use crate::text::PositionEncoding;
 
     async fn doc(source: &str) -> ScipDocument {
@@ -747,6 +762,45 @@ mod tests {
             document(ctx, "file:///")
         })
         .await
+    }
+
+    /// The document of `source` at `path`, indexed from `root`.
+    async fn doc_at(path: &str, source: &str, root: &str) -> ScipDocument {
+        let host = in_memory_host(&[(path, source)]);
+        let sem = wado_compiler::semantics(source, &host, Some(path)).await;
+        let uri = format!("file://{path}");
+        document(
+            &QueryContext::new(&sem, source, &uri, PositionEncoding::Utf32),
+            root,
+        )
+    }
+
+    #[test]
+    fn a_stdlib_file_in_a_checkout_shares_its_symbols_with_its_importers() {
+        futures::executor::block_on(async {
+            // Rooted below the repository, as `wado query scip wado-compiler` is.
+            let root = "file:///w/wado-compiler/";
+            let cli = doc_at(
+                "/w/wado-compiler/lib/core/cli.wado",
+                "pub fn println(message: String) {}\n",
+                root,
+            )
+            .await;
+            assert_eq!(cli.relative_path, "lib/core/cli.wado");
+            let user = doc_at(
+                "/w/wado-compiler/user.wado",
+                "use { println, Stdout } from \"core:cli\";\nfn f() with Stdout {\n    println(\"hi\");\n}\n",
+                root,
+            )
+            .await;
+            let defined = &symbol(&cli, "println").symbol;
+            assert_eq!(defined, "wado . core:cli . println().");
+            assert!(
+                user.occurrences.iter().any(|o| o.symbol == *defined),
+                "{:#?}",
+                user.occurrences
+            );
+        });
     }
 
     fn symbol<'d>(d: &'d ScipDocument, name: &str) -> &'d SymbolInformation {
