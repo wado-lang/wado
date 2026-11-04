@@ -511,6 +511,9 @@ pub enum CompilerItem {
     ListIndexAssign,
     /// `List::from_le_bytes` — a call on a byte literal folds to a constant.
     ListFromLeBytes,
+    /// `List<T>::internal_loaded` — a lifted `list<T>` of numbers, copied out of
+    /// linear memory in one call.
+    ListLoaded,
     /// `Reflect::decl_name` — the declaration's name, for every kind.
     ReflectDeclName,
     /// `Reflect::wire_name_policy` — the declaration's `#[wire(name_policy)]`.
@@ -735,6 +738,8 @@ pub enum CompilerItem {
     InspectHandle,
     /// `core:rt::memory_to_gc_string`.
     MemoryToGcString,
+    /// `core:rt::memory_to_byte_list`.
+    MemoryToByteList,
     /// `core:rt::cm_lower_string`.
     CmLowerString,
     /// `core:rt::cm_lower_array_u8`.
@@ -949,6 +954,7 @@ impl CompilerItem {
         Self::ListIndexValue,
         Self::ListIndexAssign,
         Self::ListFromLeBytes,
+        Self::ListLoaded,
         Self::ReflectDeclName,
         Self::ReflectWireNamePolicy,
         Self::TreeMapIndexAssign,
@@ -1038,6 +1044,7 @@ impl CompilerItem {
         Self::HandleClass,
         Self::InspectHandle,
         Self::MemoryToGcString,
+        Self::MemoryToByteList,
         Self::CmLowerString,
         Self::CmLowerArrayU8,
         Self::CmCallbackKey,
@@ -1227,6 +1234,7 @@ impl CompilerItem {
             Self::ListIndexValue => "list_index_value",
             Self::ListIndexAssign => "list_index_assign",
             Self::ListFromLeBytes => "list_from_le_bytes",
+            Self::ListLoaded => "list_loaded",
             Self::ReflectDeclName => "reflect_decl_name",
             Self::ReflectWireNamePolicy => "reflect_wire_name_policy",
             Self::TreeMapIndexAssign => "tree_map_index_assign",
@@ -1257,6 +1265,7 @@ impl CompilerItem {
             Self::HandleClass => "handle_class",
             Self::InspectHandle => "inspect_handle",
             Self::MemoryToGcString => "memory_to_gc_string",
+            Self::MemoryToByteList => "memory_to_byte_list",
             Self::CmLowerString => "cm_lower_string",
             Self::CmLowerArrayU8 => "cm_lower_array_u8",
             Self::CmCallbackKey => "cm_callback_key",
@@ -1372,6 +1381,7 @@ impl CompilerItem {
             | Self::HandleClass
             | Self::InspectHandle
             | Self::MemoryToGcString
+            | Self::MemoryToByteList
             | Self::CmLowerString
             | Self::CmLowerArrayU8
             | Self::CmCallbackKey
@@ -1484,6 +1494,7 @@ impl CompilerItem {
             | Self::ListIndexValue
             | Self::ListIndexAssign
             | Self::ListFromLeBytes
+            | Self::ListLoaded
             | Self::ReflectDeclName
             | Self::ReflectWireNamePolicy
             | Self::ReflectStructMembers
@@ -1734,6 +1745,7 @@ impl CompilerItem {
             | Self::HandleClass
             | Self::InspectHandle
             | Self::MemoryToGcString
+            | Self::MemoryToByteList
             | Self::CmLowerString
             | Self::CmLowerArrayU8
             | Self::CmCallbackKey
@@ -1867,6 +1879,7 @@ impl CompilerItem {
             | Self::ListIndexValue
             | Self::ListIndexAssign
             | Self::ListFromLeBytes
+            | Self::ListLoaded
             | Self::ReflectDeclName
             | Self::ReflectWireNamePolicy
             | Self::TreeMapIndexAssign
