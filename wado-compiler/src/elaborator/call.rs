@@ -4306,8 +4306,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 ]
             });
         let names_own = !written.is_empty() && !turbofish_leaves_slot(&written, own_slots);
-        // The receiver's own level is inferred whatever the turbofish writes,
-        // since it names only the method's.
+        // A turbofish names only the method's own slots, so the receiver's are
+        // inferred wherever it declares any.
         let (impl_args, mut method_args) = if names_own && declaring_slots == 0 {
             (Vec::new(), written)
         } else {
