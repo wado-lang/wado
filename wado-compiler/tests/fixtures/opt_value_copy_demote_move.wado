@@ -33,5 +33,9 @@ export fn run() with Stdout {
 __DATA__
 {
     "stdout": "a\n",
-    "wir_expect:O2": ["array_clone_deep"]
+    "wir_expect:O2": ["array_clone_deep"],
+    "wir_scope": "opt_value_copy_demote_move.wado/process",
+    "wir_contrast": {"O2": [
+        {"fn poke(mut v: List<String>) {\n    v[0].push_str(&\"!\");": "fn poke(v: List<String>) {\n    assert v.len() == 2;"}
+    ]}
 }

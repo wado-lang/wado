@@ -62,17 +62,40 @@ impl Prov {
     }
 }
 
-/// The object types an access reaches through the arguments, and elsewhere.
+/// The object types an access reaches through each parameter, and elsewhere.
+/// Kept per parameter so a call charges a callee's write to the argument it
+/// goes through: `format(t)` writing through its own fresh `Formatter` writes
+/// nothing `t` reaches.
 #[derive(Clone, Default, PartialEq, Debug)]
 struct Access {
-    through_args: ObjectTypes,
+    through_params: Vec<ObjectTypes>,
     elsewhere: ObjectTypes,
 }
 
 impl Access {
+    /// What the access reaches through parameter `index` (the last bit
+    /// [`Prov::param`] keeps stands for every parameter past it).
+    fn through(&self, index: usize) -> &ObjectTypes {
+        static NONE: std::sync::LazyLock<ObjectTypes> =
+            std::sync::LazyLock::new(ObjectTypes::default);
+        self.through_params.get(index.min(63)).unwrap_or(&NONE)
+    }
+
+    fn through_mut(&mut self, index: usize) -> &mut ObjectTypes {
+        if self.through_params.len() <= index {
+            self.through_params
+                .resize(index + 1, ObjectTypes::default());
+        }
+        &mut self.through_params[index]
+    }
+
+    fn params_of(prov: Prov) -> impl Iterator<Item = usize> {
+        (0..64).filter(move |&i| prov.has_param(i))
+    }
+
     fn record(&mut self, prov: Prov, keys: &ObjectTypes) {
-        if prov.params != 0 {
-            self.through_args.union(keys);
+        for i in Self::params_of(prov) {
+            self.through_mut(i).union(keys);
         }
         if prov.elsewhere {
             self.elsewhere.union(keys);
@@ -80,8 +103,8 @@ impl Access {
     }
 
     fn record_meet(&mut self, prov: Prov, a: &ObjectTypes, b: &ObjectTypes) {
-        if prov.params != 0 {
-            self.through_args.union_meet(a, b);
+        for i in Self::params_of(prov) {
+            self.through_mut(i).union_meet(a, b);
         }
         if prov.elsewhere {
             self.elsewhere.union_meet(a, b);
@@ -89,7 +112,9 @@ impl Access {
     }
 
     fn union(&mut self, other: &Access) {
-        self.through_args.union(&other.through_args);
+        for (i, keys) in other.through_params.iter().enumerate() {
+            self.through_mut(i).union(keys);
+        }
         self.elsewhere.union(&other.elsewhere);
     }
 }
@@ -594,7 +619,7 @@ impl HeapEffects<'_> {
         for (j, &a) in args.iter().enumerate() {
             let ty = body.operand_type(a);
             match target {
-                Target::Summary(t) => out.union_meet(&t.writes.through_args, &self.reach(ty)),
+                Target::Summary(t) => out.union_meet(t.writes.through(j), &self.reach(ty)),
                 Target::Builtin(declaration) if declaration.mut_params.contains(&j) => {
                     out.union(&builtin_touches(self, declaration, ty));
                 }
@@ -609,9 +634,10 @@ impl HeapEffects<'_> {
     /// not allocate, where code after the write may read it.
     pub(super) fn function_may_write(&self, index: usize, ty: TypeId) -> bool {
         let writes = &self.cache.summaries[index].writes;
-        self.type_table
-            .heap_object_key(ty)
-            .is_none_or(|key| writes.through_args.contains(key) || writes.elsewhere.contains(key))
+        self.type_table.heap_object_key(ty).is_none_or(|key| {
+            writes.through_params.iter().any(|keys| keys.contains(key))
+                || writes.elsewhere.contains(key)
+        })
     }
 
     /// Whether `call` may write field `field` of a `key` object it did not
@@ -1779,7 +1805,7 @@ impl HeapFrame {
             let ty = body.operand_type(a);
             match target {
                 Target::Summary(t) => {
-                    keys.meets_both(&t.access(effect).through_args, &effects.reach(ty))
+                    keys.meets_both(t.access(effect).through(j), &effects.reach(ty))
                 }
                 Target::Builtin(declaration) => {
                     (effect == Effect::Read || declaration.mut_params.contains(&j))
@@ -2021,8 +2047,8 @@ fn call_summary(
         match target {
             Target::Summary(t) => {
                 let reach = effects.reach(ty);
-                reads.record_meet(prov, &t.reads.through_args, &reach);
-                writes.record_meet(prov, &t.writes.through_args, &reach);
+                reads.record_meet(prov, t.reads.through(j), &reach);
+                writes.record_meet(prov, t.writes.through(j), &reach);
             }
             Target::Builtin(declaration) => {
                 let touched = builtin_touches(effects, declaration, ty);
