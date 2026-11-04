@@ -587,8 +587,10 @@ fn text_match_not_contains_leaves_out_the_texts_holding_one() {
 }
 
 fn with_passes(mut spec: TestSpec, passes: &[&str]) -> TestSpec {
-    spec.wir_pass
-        .insert("O2".to_string(), passes.iter().map(|p| p.to_string()).collect());
+    spec.wir_pass.insert(
+        "O2".to_string(),
+        passes.iter().map(|p| p.to_string()).collect(),
+    );
     spec
 }
 
@@ -656,11 +658,13 @@ fn an_expectation_its_twin_fails_is_measured() {
         },
         &["licm"],
     );
-    let twin: indexmap::IndexMap<String, String> =
-        [("bump(c);".to_string(), String::new())].into_iter().collect();
+    let twin: indexmap::IndexMap<String, String> = [("bump(c);".to_string(), String::new())]
+        .into_iter()
+        .collect();
     spec.wir_contrast.insert("O2".to_string(), vec![twin]);
     let compile = |_: &[String]| Some("level value".to_string());
-    let hoisting = |_: &indexmap::IndexMap<String, String>| Some("$licm_level $licm_value".to_string());
+    let hoisting =
+        |_: &indexmap::IndexMap<String, String>| Some("$licm_level $licm_value".to_string());
     assert_wir_checks_measured(&compile, &hoisting, &spec, OptLevel::O2, "unit");
     let unchanged = |_: &indexmap::IndexMap<String, String>| Some("$licm_level value".to_string());
     let held = std::panic::catch_unwind(|| {
@@ -673,7 +677,9 @@ fn an_expectation_its_twin_fails_is_measured() {
 fn a_twin_edit_names_text_the_program_holds_once() {
     let source = "a(); b();\n__DATA__\n{\"wir_contrast\": {\"O2\": [{\"a();\": \"c();\"}]}}";
     let edit = |from: &str| -> indexmap::IndexMap<String, String> {
-        [(from.to_string(), "c();".to_string())].into_iter().collect()
+        [(from.to_string(), "c();".to_string())]
+            .into_iter()
+            .collect()
     };
     assert!(twin_source(source, &edit("a();"), "unit").starts_with("c(); b();\n__DATA__"));
     let twice = std::panic::catch_unwind(|| twin_source(source, &edit("();"), "unit"));
