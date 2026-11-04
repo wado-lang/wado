@@ -47,7 +47,7 @@ and only the logits come back.
 
 ## Environment
 
-Wado 2026-11-04 (`-O2`), wasmtime 50.0.1, wgpu-core 29, onnxruntime 1.30.0,
+Wado 2026-11-04 (`-O2`), wasmtime 50.0.1, wgpu-core 29, onnxruntime 1.31.1,
 onnxruntime-node 1.31.1 on Node 26.13.0, llama.cpp b11846, gcc 15.2.0 (`-O2`), AMD Ryzen 7 5700X (8 cores, 16 threads),
 NVIDIA GeForce RTX 4060 Ti (driver 595.99.02, Vulkan), Linux x86_64. `wado`
 and `wado-run-webgpu` are release builds, as the tasks build them. Each figure
@@ -68,8 +68,8 @@ Every arm generated "John. I'm a writer, and".
 | Implementation                   |      Throughput |     ms/iter | vs best |
 | -------------------------------- | --------------: | ----------: | ------- |
 | **Loam** `WebGpuBackend`         | 248.22 tokens/s |   32.229 ms | 1.00x   |
-| onnxruntime, its own thread pool |  72.34 tokens/s |  110.586 ms | 3.43x   |
-| onnxruntime, 1 thread            |  60.10 tokens/s |  133.113 ms | 4.13x   |
+| onnxruntime, its own thread pool |  72.49 tokens/s |  110.361 ms | 3.42x   |
+| onnxruntime, 1 thread            |  60.97 tokens/s |  131.220 ms | 4.07x   |
 | onnxruntime WebGPU               |  54.06 tokens/s |  147.991 ms | 4.59x   |
 | **Loam** `Cpu`                   |   5.41 tokens/s | 1479.135 ms | 45.89x  |
 
@@ -95,7 +95,7 @@ Every arm generated "[Your Name] and I am a", the tokens the example's
 | llama.cpp Vulkan                 | 272.57 tokens/s |   29.350 ms | 1.00x   |
 | **Loam** `WebGpuBackend`         | 249.94 tokens/s |   32.007 ms | 1.09x   |
 | onnxruntime WebGPU               |  94.27 tokens/s |   84.863 ms | 2.89x   |
-| onnxruntime, its own thread pool |  35.78 tokens/s |  223.560 ms | 7.62x   |
+| onnxruntime, its own thread pool |  36.30 tokens/s |  220.394 ms | 7.51x   |
 | **Loam** `Cpu`                   |   2.77 tokens/s | 2888.650 ms | 98.42x  |
 
 Loam ran a generated sequence of kernel calls before it ran `compute`. On Wado

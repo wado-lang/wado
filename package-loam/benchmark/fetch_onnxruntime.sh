@@ -5,19 +5,19 @@
 # ~/.cache/loam.
 set -euo pipefail
 
-VERSION=1.30.0
+VERSION=1.31.1
 case "$(uname -s)-$(uname -m)" in
     Linux-x86_64)
         asset=onnxruntime-linux-x64-$VERSION
-        sha=a5ed5a3cac51fbb2e90da632ae43d19212faaa20e76484e62bcb7c23ddb3b3fd
+        sha=c849e36a1ef3e22d4ff217b9d1ce4a3cf5b9467b975610913ae959ad5b16bdc9
         ;;
     Linux-aarch64)
         asset=onnxruntime-linux-aarch64-$VERSION
-        sha=e16a27a8ed330bbc698df7330b0cf56e722f354e3bcc92118682c74ef3c3e3da
+        sha=5317505e2da99be65f8e2775ba3c2afd6d2961fd78aba1bd8f56159f48820c78
         ;;
     Darwin-arm64)
         asset=onnxruntime-osx-arm64-$VERSION
-        sha=6ebb5062a934537c352937821f9fe9718e7de1a2db1122a93dd363ffd53a7012
+        sha=2e1344a1926ee50eb25b38153cb6992c3567515aef0e677a1a520a1798896d6f
         ;;
     *)
         echo "no onnxruntime $VERSION release for $(uname -s)-$(uname -m)" >&2
