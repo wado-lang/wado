@@ -90,7 +90,14 @@ impl Access {
     }
 
     fn params_of(prov: Prov) -> impl Iterator<Item = usize> {
-        (0..64).filter(move |&i| prov.has_param(i))
+        let mut bits = prov.params;
+        std::iter::from_fn(move || {
+            (bits != 0).then(|| {
+                let index = bits.trailing_zeros() as usize;
+                bits &= bits - 1;
+                index
+            })
+        })
     }
 
     fn record(&mut self, prov: Prov, keys: &ObjectTypes) {

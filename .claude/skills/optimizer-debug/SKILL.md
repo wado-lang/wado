@@ -74,8 +74,10 @@ Passes and the optimization decisions made outside them are skippable;
 confirm a name with `WADO_LIST_PASSES=1` first. A rule of the peephole
 session is `nir/peephole/<rule>` (`nir/peephole/ref_elim`); `nir/peephole`
 skips the whole session. Lowering's value-copy elisions are
-`lower/value_copy/{move,owned,share,confined}`, and `-f no-cold-paths`
-dropping the markers is `lower/drop_cold_markers`. The WIR builder's are
+`lower/value_copy/{move,owned,share,confined,pass_through}`, and
+`-f no-cold-paths` dropping the markers is `lower/drop_cold_markers`. The
+value pool folding a constant operation as it interns it, in lowering and in
+every NIR pass, is `nir/value_pool/fold_const`. The WIR builder's are
 `wir_build/exhaustive_last_arm` (the exhaustive match's unchecked last arm),
 `wir_build/branch_hints` (hints from cold paths) and
 `wir_build/elide_terminator_unreachable` (no `unreachable` after a

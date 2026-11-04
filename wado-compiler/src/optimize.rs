@@ -725,10 +725,11 @@ pub mod pass_dump {
         }
     }
 
-    /// Whether the compile makes the optimization decision `name`: a choice
-    /// lowering or WIR building makes outside any pass, such as eliding a
-    /// value copy. Skipping one keeps the shape the decision would have
-    /// improved, so a check is measured against it as against a pass.
+    /// Whether the compile makes the optimization decision `name`: a choice no
+    /// pass's own name covers, such as lowering eliding a value copy, or the
+    /// value pool folding a constant operation for every pass that interns
+    /// one. Skipping one keeps the shape the decision would have improved, so
+    /// a check is measured against it as against a pass.
     pub fn decides(name: &str) -> bool {
         if list_passes_enabled() {
             static LISTED: OnceLock<Mutex<IndexSet<String>>> = OnceLock::new();

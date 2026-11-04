@@ -104,18 +104,16 @@ impl Executor {
     ) -> Vec<R> {
         #[cfg(not(target_arch = "wasm32"))]
         if let Some(pool) = self.pool_for(items.len()) {
-            return {
-                let skips = SkipScope::current();
-                pool.install(|| {
-                    items
-                        .par_iter()
-                        .map_init(init, |state, item| {
-                            let _scope = SkipScope::enter(&skips);
-                            f(state, item)
-                        })
-                        .collect()
-                })
-            };
+            let skips = SkipScope::current();
+            return pool.install(|| {
+                items
+                    .par_iter()
+                    .map_init(init, |state, item| {
+                        let _scope = SkipScope::enter(&skips);
+                        f(state, item)
+                    })
+                    .collect()
+            });
         }
         let mut state = init();
         items.iter().map(|item| f(&mut state, item)).collect()
