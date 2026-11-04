@@ -230,3 +230,9 @@ Trade-offs and boundaries:
 - Rejected alternative, recorded for design history: loop-allocation hoisting
   remarks (bind to the LICM pass rather than a language-level semantic cost, so
   they violate the principle).
+
+## Known gaps
+
+- The _Actionable_ test asks every remark for a clear source change, but the
+  Decision gates a remark on why and where alone, so a survivor no source change
+  removes is still reported. Which of the two rules holds is open.
