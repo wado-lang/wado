@@ -736,7 +736,7 @@ global global:core:builtin::$unit_case$core:prelude/types.wado//Option<i32>$0: r
 fn "spec_control_flow_loops.wado/$test_1_while_let"() {
     let seen: ref "core:prelude//List<i32>";
     let item: i32;
-    let used_41: i32;
+    let $used_41: i32;
     let $sroa_iter_repr_53: ref Array<i32>;
     let $sroa_iter_index_54: i32;
     $sroa_iter_repr_53 = global:spec_control_flow_loops.wado::$const_obj_1;
@@ -747,12 +747,12 @@ fn "spec_control_flow_loops.wado/$test_1_while_let"() {
             break_if b0 $sroa_iter_index_54 >= 3;
             item = builtin::array_get_value<i32>($sroa_iter_repr_53, $sroa_iter_index_54);
             $sroa_iter_index_54 = $sroa_iter_index_54 + 1;
-            if @unlikely(local.tee used_41(seen.used) >= builtin::array_len(seen.repr)) {
+            if @unlikely(local.tee $used_41(seen.used) >= builtin::array_len(seen.repr)) {
                 cold_path;
                 "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(seen);
             }
-            builtin::array_set<i32>(seen.repr, used_41, item);
-            seen.used = used_41 + 1;
+            builtin::array_set<i32>(seen.repr, $used_41, item);
+            seen.used = $used_41 + 1;
             continue l1;
         };
     };
@@ -1121,7 +1121,7 @@ fn "spec_control_flow_loops.wado/$test_6_for_with_a_let_chain"() {
     let i_2: i32;
     let $match_13: i32;
     let used_29: i32;
-    let used_86: i32;
+    let $used_86: i32;
     let $licm_repr_104: ref Array<i32>;
     taken = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(), used: 0 };
     i_2 = 0;
@@ -1211,12 +1211,12 @@ taken: "), used: 120 }, s1: struct.new "core:prelude/string.wado//String" { repr
                 $for_3_body: block {
                     break_if $for_3_body $match_13 == 20;
                     used_29 = 0 - $match_13;
-                    if @unlikely(local.tee used_86(taken.used) >= builtin::array_len(taken.repr)) {
+                    if @unlikely(local.tee $used_86(taken.used) >= builtin::array_len(taken.repr)) {
                         cold_path;
                         "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(taken);
                     }
-                    builtin::array_set<i32>(taken.repr, used_86, used_29);
-                    taken.used = used_86 + 1;
+                    builtin::array_set<i32>(taken.repr, $used_86, used_29);
+                    taken.used = $used_86 + 1;
                 };
                 if @unlikely(local.tee used_29(taken.used) >= builtin::array_len(taken.repr)) {
                     cold_path;

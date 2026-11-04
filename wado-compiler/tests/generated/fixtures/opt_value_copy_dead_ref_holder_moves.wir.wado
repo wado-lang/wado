@@ -360,11 +360,11 @@ fn "opt_value_copy_dead_ref_holder_moves.wado/swap_rebuilt$dae[n]"() {
     let cur: ref "core:prelude//List<opt_value_copy_dead_ref_holder_moves.wado/P>";
     let next_1: ref "core:prelude//List<opt_value_copy_dead_ref_holder_moves.wado/P>";
     let current: i32;
-    let end_82: i32;
-    let ref_val_83: ref "opt_value_copy_dead_ref_holder_moves.wado//P";
-    let value_62_85: ref "opt_value_copy_dead_ref_holder_moves.wado//P";
-    let used_63_86: i32;
-    let spent_98: ref "core:prelude//List<opt_value_copy_dead_ref_holder_moves.wado/P>";
+    let $end_82: i32;
+    let $ref_val_83: ref "opt_value_copy_dead_ref_holder_moves.wado//P";
+    let $value_62_85: ref "opt_value_copy_dead_ref_holder_moves.wado//P";
+    let $used_63_86: i32;
+    let $spent_98: ref "core:prelude//List<opt_value_copy_dead_ref_holder_moves.wado/P>";
     let $sroa_$iter_0_start_101: i32;
     let $sroa_$iter_1_repr_105: ref "Array<opt_value_copy_dead_ref_holder_moves.wado/P>";
     let $sroa_$iter_1_index_106: i32;
@@ -377,34 +377,34 @@ fn "opt_value_copy_dead_ref_holder_moves.wado/swap_rebuilt$dae[n]"() {
             $sroa_$iter_0_start_101 = local.tee current($sroa_$iter_0_start_101) + 1;
             builtin::array_fill<ref "opt_value_copy_dead_ref_holder_moves.wado//P">(next_1.repr, 0, ref.null none, next_1.used);
             next_1.used = 0;
-            end_82 = cur.used;
+            $end_82 = cur.used;
             $sroa_$iter_1_repr_105 = cur.repr;
             $sroa_$iter_1_index_106 = 0;
             b18: block {
                 l19: loop {
-                    break_if b18 $sroa_$iter_1_index_106 >= end_82;
-                    ref_val_83 = builtin::array_get_value<ref "opt_value_copy_dead_ref_holder_moves.wado//P">($sroa_$iter_1_repr_105, $sroa_$iter_1_index_106);
+                    break_if b18 $sroa_$iter_1_index_106 >= $end_82;
+                    $ref_val_83 = builtin::array_get_value<ref "opt_value_copy_dead_ref_holder_moves.wado//P">($sroa_$iter_1_repr_105, $sroa_$iter_1_index_106);
                     $sroa_$iter_1_index_106 = $sroa_$iter_1_index_106 + 1;
-                    value_62_85 = struct.new "opt_value_copy_dead_ref_holder_moves.wado//P" { a: ref_val_83.a + current, b: ref_val_83.b };
-                    if @unlikely(local.tee used_63_86(next_1.used) >= builtin::array_len(next_1.repr)) {
+                    $value_62_85 = struct.new "opt_value_copy_dead_ref_holder_moves.wado//P" { a: $ref_val_83.a + current, b: $ref_val_83.b };
+                    if @unlikely(local.tee $used_63_86(next_1.used) >= builtin::array_len(next_1.repr)) {
                         cold_path;
                         "core:prelude/list.wado/core:prelude/list.wado/List<opt_value_copy_dead_ref_holder_moves.wado/P>::grow"(next_1);
                     }
-                    builtin::array_set<ref "opt_value_copy_dead_ref_holder_moves.wado//P">(next_1.repr, used_63_86, value_62_85);
-                    next_1.used = used_63_86 + 1;
-                    ref_val_83 = struct.new "opt_value_copy_dead_ref_holder_moves.wado//P" { a: ref_val_83.a, b: ref_val_83.b == 0 };
-                    if @unlikely(local.tee used_63_86(next_1.used) >= builtin::array_len(next_1.repr)) {
+                    builtin::array_set<ref "opt_value_copy_dead_ref_holder_moves.wado//P">(next_1.repr, $used_63_86, $value_62_85);
+                    next_1.used = $used_63_86 + 1;
+                    $ref_val_83 = struct.new "opt_value_copy_dead_ref_holder_moves.wado//P" { a: $ref_val_83.a, b: $ref_val_83.b == 0 };
+                    if @unlikely(local.tee $used_63_86(next_1.used) >= builtin::array_len(next_1.repr)) {
                         cold_path;
                         "core:prelude/list.wado/core:prelude/list.wado/List<opt_value_copy_dead_ref_holder_moves.wado/P>::grow"(next_1);
                     }
-                    builtin::array_set<ref "opt_value_copy_dead_ref_holder_moves.wado//P">(next_1.repr, used_63_86, ref_val_83);
-                    next_1.used = used_63_86 + 1;
+                    builtin::array_set<ref "opt_value_copy_dead_ref_holder_moves.wado//P">(next_1.repr, $used_63_86, $ref_val_83);
+                    next_1.used = $used_63_86 + 1;
                     continue l19;
                 };
             };
-            spent_98 = cur;
+            $spent_98 = cur;
             cur = next_1;
-            next_1 = spent_98;
+            next_1 = $spent_98;
             continue l17;
         };
     };

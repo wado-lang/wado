@@ -636,7 +636,7 @@ fn "serde_default_init.wado/run"() {
     let c_17: char;
     let $match_7: ref null "core:serde//SerializeError";
     let de: ref "core:json//JsonDeserializer";
-    let v_80: ref "serde_default_init.wado//Config";
+    let v_76: ref "serde_default_init.wado//Config";
     $fused_$inline_core_json_to_string_serde_default_init_wado_Config__sroa_return__1: block {
         buf = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(128), used: 0 };
         if @likely(ref.is_null(local.tee $match_7("core:serde/serde_default_init.wado/Config^core:serde/Serialize::serialize<core:json/JsonSerializer>$spec0$sroa[s.buf]"(global:serde_default_init.wado::$const_obj_1, buf)))) {
@@ -664,7 +664,7 @@ fn "serde_default_init.wado/run"() {
             let $mv$$vr_6$1: ref null "serde_default_init.wado//Config";
             let $mv$$vr_6$2: ref null "core:serde//DeserializeError";
             multivalue_bind [c_17, $mv$$vr_6$1, $mv$$vr_6$2] = "core:serde/serde_default_init.wado/Config^core:serde/Deserialize::deserialize<core:json/JsonDeserializer>$sroa[return]"(de);
-            v_80 = (if c_17 == 0 -> ref "serde_default_init.wado//Config" {
+            v_76 = (if c_17 == 0 -> ref "serde_default_init.wado//Config" {
                 ref.as_non_null($mv$$vr_6$1);
             } else if @unlikely(c_17 == 1) -> ref "serde_default_init.wado//Config" {
                 cold_path;
@@ -686,11 +686,11 @@ fn "serde_default_init.wado/run"() {
                 break $inline_core_json_from_bytes_serde_default_init_wado_Config_core_prelude_bytes_wado_ByteSlice__sroa_return__1;
             }
             c_17 = 0;
-            $mv$$vr_6$1 = v_80;
+            $mv$$vr_6$1 = v_76;
             break $inline_core_json_from_bytes_serde_default_init_wado_Config_core_prelude_bytes_wado_ByteSlice__sroa_return__1;
         };
         if @likely(c_17 == 0) {
-            buf = local.tee v_80(ref.as_non_null($mv$$vr_6$1)).host;
+            buf = local.tee v_76(ref.as_non_null($mv$$vr_6$1)).host;
             if @unlikely($inline_core_prelude_array_wado_seq_eq_u8__12: block -> bool {
                 $array_clone_src_3 = buf.repr;
                 c_17 = buf.used;
@@ -741,12 +741,12 @@ condition: p.host == \"localhost\"
 p.host: "), used: 95 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, buf.used);
                 unreachable;
             }
-            if @unlikely(local.tee c_17(v_80.port) != 8080) {
+            if @unlikely(local.tee c_17(v_76.port) != 8080) {
                 cold_path;
                 "serde_default_init.wado/run$cold1"(c_17);
                 unreachable;
             }
-            if @unlikely(local.tee c_17(v_80.debug) != 1) {
+            if @unlikely(local.tee c_17(v_76.debug) != 1) {
                 cold_path;
                 "serde_default_init.wado/run$cold0"(c_17);
                 unreachable;

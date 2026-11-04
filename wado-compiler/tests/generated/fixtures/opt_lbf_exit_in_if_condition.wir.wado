@@ -87,104 +87,104 @@ fn "opt_lbf_exit_in_if_condition.wado/run"() with Stdout {
     let n_0: i32;
     let t_12: ref "opt_lbf_exit_in_if_condition.wado//$tmpl$fb51c04d54491732";
     let view_51: ref "core:prelude/string.wado//StrSlice";
-    let out_126: ref "core:prelude/string.wado//String";
-    let start_151: i32;
-    let x_166: i64;
+    let $out_125: ref "core:prelude/string.wado//String";
+    let $start_148: i32;
+    let $x_163: i64;
     n_0 = black_box(7);
     $fused_check: block {
         if n_0 > 0 {
-            out_126 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(local.tee t_12(struct.new "opt_lbf_exit_in_if_condition.wado//$tmpl$fb51c04d54491732" { h0: n_0, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("some "), used: 5 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("some "), used: 5 }, s1: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, r1: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 } }).s1.used + (local.tee $load_3(local.tee $load_2(t_12.s0).used) + 16)), used: 0 };
+            $out_125 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(local.tee t_12(struct.new "opt_lbf_exit_in_if_condition.wado//$tmpl$fb51c04d54491732" { h0: n_0, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("some "), used: 5 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("some "), used: 5 }, s1: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, r1: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 } }).s1.used + (local.tee $load_3(local.tee $load_2(t_12.s0).used) + 16)), used: 0 };
             view_51 = struct.new "core:prelude/string.wado//StrSlice" { repr: $load_2.repr, start: 0, end: $load_3 };
             $inline_core_prelude_string_wado_String__internal_push_view_23: block {
                 break_if $inline_core_prelude_string_wado_String__internal_push_view_23 local.tee $load_3(view_51.end) == 0;
-                if @unlikely($load_3 > builtin::array_len(out_126.repr)) {
+                if @unlikely($load_3 > builtin::array_len($out_125.repr)) {
                     cold_path;
-                    "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_126, $load_3);
+                    "core:prelude/string.wado/core:prelude/string.wado/String::grow"($out_125, $load_3);
                 }
-                start_151 = out_126.used;
-                out_126.used = $load_3;
-                builtin::array_copy<u8>(out_126.repr, start_151, view_51.repr, 0, $load_3);
+                $start_148 = $out_125.used;
+                $out_125.used = $load_3;
+                builtin::array_copy<u8>($out_125.repr, $start_148, view_51.repr, 0, $load_3);
             };
             $load_3 = n_0 < 0;
-            x_166 = builtin::i64_extend_i32_s(n_0);
-            x_166 = select i64(x_166 < 0_i64, 0_i64 - x_166, x_166);
+            $x_163 = builtin::i64_extend_i32_s(n_0);
+            $x_163 = select i64($x_163 < 0_i64, 0_i64 - $x_163, $x_163);
             n_0 = $inline_count_digits_u64_1: block -> i32 {
-                if x_166 <u 100000_i64 {
-                    if x_166 <u 100_i64 {
-                        if x_166 <u 10_i64 {
+                if $x_163 <u 100000_i64 {
+                    if $x_163 <u 100_i64 {
+                        if $x_163 <u 10_i64 {
                             break $inline_count_digits_u64_1: 1;
                         }
                         break $inline_count_digits_u64_1: 2;
                     }
-                    if x_166 <u 1000_i64 {
+                    if $x_163 <u 1000_i64 {
                         break $inline_count_digits_u64_1: 3;
                     }
-                    if x_166 <u 10000_i64 {
+                    if $x_163 <u 10000_i64 {
                         break $inline_count_digits_u64_1: 4;
                     }
                     break $inline_count_digits_u64_1: 5;
                 }
-                if x_166 <u 10000000000_i64 {
-                    if x_166 <u 10000000_i64 {
-                        if x_166 <u 1000000_i64 {
+                if $x_163 <u 10000000000_i64 {
+                    if $x_163 <u 10000000_i64 {
+                        if $x_163 <u 1000000_i64 {
                             break $inline_count_digits_u64_1: 6;
                         }
                         break $inline_count_digits_u64_1: 7;
                     }
-                    if x_166 <u 100000000_i64 {
+                    if $x_163 <u 100000000_i64 {
                         break $inline_count_digits_u64_1: 8;
                     }
-                    if x_166 <u 1000000000_i64 {
+                    if $x_163 <u 1000000000_i64 {
                         break $inline_count_digits_u64_1: 9;
                     }
                     break $inline_count_digits_u64_1: 10;
                 }
-                if x_166 <u 1000000000000000_i64 {
-                    if x_166 <u 1000000000000_i64 {
-                        if x_166 <u 100000000000_i64 {
+                if $x_163 <u 1000000000000000_i64 {
+                    if $x_163 <u 1000000000000_i64 {
+                        if $x_163 <u 100000000000_i64 {
                             break $inline_count_digits_u64_1: 11;
                         }
                         break $inline_count_digits_u64_1: 12;
                     }
-                    if x_166 <u 10000000000000_i64 {
+                    if $x_163 <u 10000000000000_i64 {
                         break $inline_count_digits_u64_1: 13;
                     }
-                    if x_166 <u 100000000000000_i64 {
+                    if $x_163 <u 100000000000000_i64 {
                         break $inline_count_digits_u64_1: 14;
                     }
                     break $inline_count_digits_u64_1: 15;
                 }
-                if x_166 <u 100000000000000000_i64 {
-                    if x_166 <u 10000000000000000_i64 {
+                if $x_163 <u 100000000000000000_i64 {
+                    if $x_163 <u 10000000000000000_i64 {
                         break $inline_count_digits_u64_1: 16;
                     }
                     break $inline_count_digits_u64_1: 17;
                 }
-                if x_166 <u 1000000000000000000_i64 {
+                if $x_163 <u 1000000000000000000_i64 {
                     break $inline_count_digits_u64_1: 18;
                 }
-                if x_166 <u -8446744073709551616_i64 {
+                if $x_163 <u -8446744073709551616_i64 {
                     break $inline_count_digits_u64_1: 19;
                 }
                 break $inline_count_digits_u64_1: 20;
             };
-            $load_3 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"(out_126, $load_3, n_0);
-            "core:prelude/primitive.wado/write_decimal_digits"(local.tee $load_10(out_126.repr), $load_3, x_166, n_0);
+            $load_3 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"($out_125, $load_3, n_0);
+            "core:prelude/primitive.wado/write_decimal_digits"(local.tee $load_10($out_125.repr), $load_3, $x_163, n_0);
             view_51 = struct.new "core:prelude/string.wado//StrSlice" { repr: local.tee $load_2(t_12.s1).repr, start: 0, end: $load_2.used };
             $inline_core_prelude_string_wado_String__internal_push_view_42: block {
                 break_if $inline_core_prelude_string_wado_String__internal_push_view_42 local.tee n_0(view_51.end) == 0;
-                if @unlikely(local.tee $load_3(out_126.used + n_0) > builtin::array_len($load_10)) {
+                if @unlikely(local.tee $load_3($out_125.used + n_0) > builtin::array_len($load_10)) {
                     cold_path;
-                    "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_126, $load_3);
+                    "core:prelude/string.wado/core:prelude/string.wado/String::grow"($out_125, $load_3);
                 }
-                start_151 = out_126.used;
-                out_126.used = $load_3;
-                builtin::array_copy<u8>(out_126.repr, start_151, view_51.repr, 0, n_0);
+                $start_148 = $out_125.used;
+                $out_125.used = $load_3;
+                builtin::array_copy<u8>($out_125.repr, $start_148, view_51.repr, 0, n_0);
             };
-            n_0 = builtin::i32_wrap_i64(local.tee x_166("wasi/stream-new"()));
-            $load_3 = builtin::i32_wrap_i64(x_166 >> 32_i64);
+            n_0 = builtin::i32_wrap_i64(local.tee $x_163("wasi/stream-new"()));
+            $load_3 = builtin::i32_wrap_i64($x_163 >> 32_i64);
             n_0 = "opt_lbf_exit_in_if_condition.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(n_0);
-            "core:rt/write_string_to_stream$dae[add_newline]"($load_3, out_126.repr, out_126.used);
+            "core:rt/write_string_to_stream$dae[add_newline]"($load_3, $out_125.repr, $out_125.used);
             "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(n_0);
             break $fused_check;
         }
@@ -199,8 +199,8 @@ fn "opt_lbf_exit_in_if_condition.wado/run"() with Stdout {
         $inline_core_prelude_string_wado_String__internal_push_view_42: block {
             break $inline_core_prelude_string_wado_String__internal_push_view_42;
         };
-        n_0 = builtin::i32_wrap_i64(local.tee x_166("wasi/stream-new"()));
-        $load_3 = builtin::i32_wrap_i64(x_166 >> 32_i64);
+        n_0 = builtin::i32_wrap_i64(local.tee $x_163("wasi/stream-new"()));
+        $load_3 = builtin::i32_wrap_i64($x_163 >> 32_i64);
         n_0 = "opt_lbf_exit_in_if_condition.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(n_0);
         "core:rt/write_string_to_stream$dae[add_newline]"($load_3, $load_2.repr, $load_2.used);
         "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(n_0);

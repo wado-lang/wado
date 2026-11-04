@@ -747,8 +747,8 @@ fn "stream_await_blocked_roundtrip.wado/$cm_task_entry__handle"(request) {
     let $local_210: ref null "tuple//[core:prelude/types.wado/Stream<u8>, core:prelude/types.wado/Future<core:prelude/types.wado/Result<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>>]";
     let $local_215: ref null "tuple//[wasi:http/types.wado/Response, core:prelude/types.wado/Future<core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>>]";
     let item_224: u8;
-    let used_246: i32;
-    let elements_256: ref Array<u8>;
+    let $used_246: i32;
+    let $elements_256: ref Array<u8>;
     let $sroa_$pattern_temp_0_0_258: i32;
     let $sroa_$pattern_temp_0_1_259: i32;
     let chunk_275: ref "core:prelude/types.wado//StreamChunk<u8>";
@@ -788,12 +788,12 @@ fn "stream_await_blocked_roundtrip.wado/$cm_task_entry__handle"(request) {
                     break_if b5 $sroa_$pattern_temp_0_0_258 >= request;
                     item_224 = builtin::array_get_value<u8>($sroa_$iter_0_repr_297, $sroa_$pattern_temp_0_0_258);
                     $sroa_$pattern_temp_0_0_258 = $sroa_$pattern_temp_0_0_258 + 1;
-                    if @unlikely(local.tee used_246(body.used) >= builtin::array_len(body.repr)) {
+                    if @unlikely(local.tee $used_246(body.used) >= builtin::array_len(body.repr)) {
                         cold_path;
                         "core:prelude/list.wado/core:prelude/list.wado/List<u8>::grow"(body);
                     }
-                    builtin::array_set_u8(body.repr, used_246, item_224);
-                    body.used = used_246 + 1;
+                    builtin::array_set_u8(body.repr, $used_246, item_224);
+                    body.used = $used_246 + 1;
                     continue l6;
                 };
             };
@@ -817,10 +817,10 @@ fn "stream_await_blocked_roundtrip.wado/$cm_task_entry__handle"(request) {
     b8: block {
         l9: loop {
             break_if b8 item_224 >= request;
-            used_246 = builtin::array_get_value<u8>($sroa_$iter_0_repr_297, item_224);
+            $used_246 = builtin::array_get_value<u8>($sroa_$iter_0_repr_297, item_224);
             item_224 = item_224 + 1;
-            used_246 = builtin::array_len(local.tee elements_256(array.new_fixed<u8>(used_246)));
-            body = struct.new "core:prelude//List<u8>" { repr: elements_256, used: used_246 };
+            $used_246 = builtin::array_len(local.tee $elements_256(array.new_fixed<u8>($used_246)));
+            body = struct.new "core:prelude//List<u8>" { repr: $elements_256, used: $used_246 };
             drop("core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_all"($sroa_$pattern_temp_0_1_259, body));
             continue l9;
         };

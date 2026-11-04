@@ -1470,7 +1470,7 @@ fn "struct_literal_newtype_target.wado/struct_literal_newtype_target.wado/Bag<i3
     let $iter_0: ref "core:prelude/slice.wado//SliceValueIter<i32>";
     let end: i32;
     let item: i32;
-    let used_26: i32;
+    let $used_26: i32;
     let $hfs_index_33: i32;
     items = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(), used: 0 };
     end = builtin::array_len(a);
@@ -1484,12 +1484,12 @@ fn "struct_literal_newtype_target.wado/struct_literal_newtype_target.wado/Bag<i3
             }
             item = builtin::array_get_value<i32>(a, $hfs_index_33);
             $hfs_index_33 = $hfs_index_33 + 1;
-            if @unlikely(local.tee used_26(items.used) >= builtin::array_len(items.repr)) {
+            if @unlikely(local.tee $used_26(items.used) >= builtin::array_len(items.repr)) {
                 cold_path;
                 "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(items);
             }
-            builtin::array_set<i32>(items.repr, used_26, item);
-            items.used = used_26 + 1;
+            builtin::array_set<i32>(items.repr, $used_26, item);
+            items.used = $used_26 + 1;
             continue l182;
         };
     };

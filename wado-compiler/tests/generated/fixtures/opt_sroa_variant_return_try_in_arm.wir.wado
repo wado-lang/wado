@@ -1050,7 +1050,7 @@ fn "core:prelude/fpfmt.wado/big_shl"(n, bits) {
     let words: i32;
     let shifted: ref "core:prelude//List<u32>";
     let used_15: i32;
-    let used_39: i32;
+    let $used_39: i32;
     let $sroa_$iter_1_repr_46: ref Array<u32>;
     words = bits / 32;
     if local.tee bits(bits % 32) != 0 {
@@ -1080,12 +1080,12 @@ fn "core:prelude/fpfmt.wado/big_shl"(n, bits) {
                 break_if b97 words >= bits;
                 used_15 = builtin::array_get_value<u32>($sroa_$iter_1_repr_46, words);
                 words = words + 1;
-                if @unlikely(local.tee used_39(shifted.used) >= builtin::array_len(shifted.repr)) {
+                if @unlikely(local.tee $used_39(shifted.used) >= builtin::array_len(shifted.repr)) {
                     cold_path;
                     "core:prelude/list.wado/core:prelude/list.wado/List<u32>::grow"(shifted);
                 }
-                builtin::array_set<u32>(shifted.repr, used_39, used_15);
-                shifted.used = used_39 + 1;
+                builtin::array_set<u32>(shifted.repr, $used_39, used_15);
+                shifted.used = $used_39 + 1;
                 continue l98;
             };
         };

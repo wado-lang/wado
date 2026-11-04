@@ -453,7 +453,7 @@ fn "trait_projection_receiver_blanket.wado/$test_0_a_projection_inside_a_receive
     let $v0: ref "core:prelude/slice.wado//SliceValueIter<i32>";
     let result: ref "core:prelude//List<i32>";
     let item_25: i32;
-    let used_46: i32;
+    let $used_46: i32;
     let $sroa_it_repr_57: ref Array<i32>;
     let $sroa_it_index_58: i32;
     $sroa_it_repr_57 = local.tee $v0(struct.new "core:prelude/slice.wado//SliceValueIter<i32>" { repr: global:trait_projection_receiver_blanket.wado::$const_obj_1, index: 0, end: 3 }).repr;
@@ -464,42 +464,42 @@ fn "trait_projection_receiver_blanket.wado/$test_0_a_projection_inside_a_receive
             break_if b0 $sroa_it_index_58 >= 3;
             item_25 = builtin::array_get_value<i32>($sroa_it_repr_57, $sroa_it_index_58);
             $sroa_it_index_58 = $sroa_it_index_58 + 1;
-            if @unlikely(local.tee used_46(result.used) >= builtin::array_len(result.repr)) {
+            if @unlikely(local.tee $used_46(result.used) >= builtin::array_len(result.repr)) {
                 cold_path;
                 "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(result);
             }
-            builtin::array_set<i32>(result.repr, used_46, item_25);
-            result.used = used_46 + 1;
+            builtin::array_set<i32>(result.repr, $used_46, item_25);
+            result.used = $used_46 + 1;
             continue l1;
         };
     };
     $sroa_it_index_58 = 0;
     item_25 = result.used;
     $sroa_it_repr_57 = result.repr;
-    used_46 = 0;
+    $used_46 = 0;
     b3: block {
         l4: loop {
-            break_if b3 (((used_46 >= item_25) | ((used_46 + 1) >= item_25)) | (((used_46 + 1) + 1) >= item_25)) | ((((used_46 + 1) + 1) + 1) >= item_25);
-            drop(builtin::array_get_value<i32>($sroa_it_repr_57, used_46));
-            used_46 = used_46 + 1;
+            break_if b3 ((($used_46 >= item_25) | (($used_46 + 1) >= item_25)) | ((($used_46 + 1) + 1) >= item_25)) | (((($used_46 + 1) + 1) + 1) >= item_25);
+            drop(builtin::array_get_value<i32>($sroa_it_repr_57, $used_46));
+            $used_46 = $used_46 + 1;
             $sroa_it_index_58 = $sroa_it_index_58 + 1;
-            drop(builtin::array_get_value<i32>($sroa_it_repr_57, used_46));
-            used_46 = used_46 + 1;
+            drop(builtin::array_get_value<i32>($sroa_it_repr_57, $used_46));
+            $used_46 = $used_46 + 1;
             $sroa_it_index_58 = $sroa_it_index_58 + 1;
-            drop(builtin::array_get_value<i32>($sroa_it_repr_57, used_46));
-            used_46 = used_46 + 1;
+            drop(builtin::array_get_value<i32>($sroa_it_repr_57, $used_46));
+            $used_46 = $used_46 + 1;
             $sroa_it_index_58 = $sroa_it_index_58 + 1;
-            drop(builtin::array_get_value<i32>($sroa_it_repr_57, used_46));
-            used_46 = used_46 + 1;
+            drop(builtin::array_get_value<i32>($sroa_it_repr_57, $used_46));
+            $used_46 = $used_46 + 1;
             $sroa_it_index_58 = $sroa_it_index_58 + 1;
             continue l4;
         };
     };
     b5: block {
         l6: loop {
-            break_if b5 used_46 >= item_25;
-            drop(builtin::array_get_value<i32>($sroa_it_repr_57, used_46));
-            used_46 = used_46 + 1;
+            break_if b5 $used_46 >= item_25;
+            drop(builtin::array_get_value<i32>($sroa_it_repr_57, $used_46));
+            $used_46 = $used_46 + 1;
             $sroa_it_index_58 = $sroa_it_index_58 + 1;
             continue l6;
         };

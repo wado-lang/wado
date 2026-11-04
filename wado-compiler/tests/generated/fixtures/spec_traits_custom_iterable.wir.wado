@@ -423,7 +423,7 @@ global global:core:prelude/primitive.wado::$const_obj_10: ref "core:prelude/stri
 fn "spec_traits_custom_iterable.wado/$test_0"() {
     let seen: ref "core:prelude//List<i32>";
     let $fused_slot_48_50: i32;
-    let used_53: i32;
+    let $used_53: i32;
     let $sroa_$iter_0_index_55: i32;
     let $licm_repr_57: ref Array<i32>;
     seen = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(), used: 0 };
@@ -438,12 +438,12 @@ fn "spec_traits_custom_iterable.wado/$test_0"() {
                 unreachable;
             }
             $fused_slot_48_50 = builtin::array_get_value<i32>($licm_repr_57, $sroa_$iter_0_index_55);
-            if @unlikely(local.tee used_53(seen.used) >= builtin::array_len(seen.repr)) {
+            if @unlikely(local.tee $used_53(seen.used) >= builtin::array_len(seen.repr)) {
                 cold_path;
                 "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(seen);
             }
-            builtin::array_set<i32>(seen.repr, used_53, $fused_slot_48_50);
-            seen.used = used_53 + 1;
+            builtin::array_set<i32>(seen.repr, $used_53, $fused_slot_48_50);
+            seen.used = $used_53 + 1;
             continue l1;
         };
     };

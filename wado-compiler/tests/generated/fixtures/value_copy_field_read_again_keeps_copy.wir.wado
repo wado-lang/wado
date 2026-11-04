@@ -753,7 +753,7 @@ fn "value_copy_field_read_again_keeps_copy.wado/$test_3_the_next_iteration_reads
     let $load_1: i32;
     let taken: ref "core:prelude//List<core:prelude/list.wado/List<i32>>";
     let current: i32;
-    let t_53: ref "core:prelude//List<i32>";
+    let $t_53: ref "core:prelude//List<i32>";
     let $sroa_p_y_70: ref "core:prelude//List<i32>";
     let $sroa_$iter_0_start_73: i32;
     let i_94: i32;
@@ -765,12 +765,12 @@ fn "value_copy_field_read_again_keeps_copy.wado/$test_3_the_next_iteration_reads
         l50: loop {
             break_if b49 $sroa_$iter_0_start_73 >= 3;
             $sroa_$iter_0_start_73 = local.tee current($sroa_$iter_0_start_73) + 1;
-            t_53 = struct.new "core:prelude//List<i32>" { repr: let $array_clone_src_1: ref Array<i32>; $array_clone_src_1 = $sroa_p_y_70.repr; $load_1 = $sroa_p_y_70.used; let $array_clone_dst_2: ref Array<i32>; builtin::array_copy<i32>(local.tee $array_clone_dst_2(builtin::array_new<i32>($load_1)), 0, $array_clone_src_1, 0, $load_1); $array_clone_dst_2, used: $load_1 };
+            $t_53 = struct.new "core:prelude//List<i32>" { repr: let $array_clone_src_1: ref Array<i32>; $array_clone_src_1 = $sroa_p_y_70.repr; $load_1 = $sroa_p_y_70.used; let $array_clone_dst_2: ref Array<i32>; builtin::array_copy<i32>(local.tee $array_clone_dst_2(builtin::array_new<i32>($load_1)), 0, $array_clone_src_1, 0, $load_1); $array_clone_dst_2, used: $load_1 };
             if @unlikely(local.tee $load_1(taken.used) >= builtin::array_len(taken.repr)) {
                 cold_path;
                 "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/list.wado/List<i32>>::grow"(taken);
             }
-            builtin::array_set<ref "core:prelude//List<i32>">(taken.repr, $load_1, t_53);
+            builtin::array_set<ref "core:prelude//List<i32>">(taken.repr, $load_1, $t_53);
             taken.used = $load_1 + 1;
             if @unlikely(local.tee $load_1($sroa_p_y_70.used) >= builtin::array_len($sroa_p_y_70.repr)) {
                 cold_path;
@@ -790,13 +790,13 @@ fn "value_copy_field_read_again_keeps_copy.wado/$test_3_the_next_iteration_reads
         b55: block {
             l56: loop {
                 break_if b55 current >= $sroa_$iter_0_start_73;
-                if $sroa_p_y_70 = builtin::array_get_value<ref "core:prelude//List<i32>">($licm_repr_97, current); t_53 = builtin::array_get_value<ref "core:prelude//List<i32>">(global:value_copy_field_read_again_keeps_copy.wado::$const_obj_5, current); $inline_core_prelude_array_wado_seq_eq_core_prelude_list_wado_List_i32___0__$inline_core_prelude_array_wado_seq_eq_i32__1: block -> bool {
-                    if local.tee $load_1($sroa_p_y_70.used) != t_53.used {
+                if $sroa_p_y_70 = builtin::array_get_value<ref "core:prelude//List<i32>">($licm_repr_97, current); $t_53 = builtin::array_get_value<ref "core:prelude//List<i32>">(global:value_copy_field_read_again_keeps_copy.wado::$const_obj_5, current); $inline_core_prelude_array_wado_seq_eq_core_prelude_list_wado_List_i32___0__$inline_core_prelude_array_wado_seq_eq_i32__1: block -> bool {
+                    if local.tee $load_1($sroa_p_y_70.used) != $t_53.used {
                         break $inline_core_prelude_array_wado_seq_eq_core_prelude_list_wado_List_i32___0__$inline_core_prelude_array_wado_seq_eq_i32__1: 0;
                     }
                     i_94 = 0;
                     $array_clone_src_1 = $sroa_p_y_70.repr;
-                    $array_clone_dst_2 = t_53.repr;
+                    $array_clone_dst_2 = $t_53.repr;
                     b59: block {
                         l60: loop {
                             break_if b59 (((i_94 >= $load_1) | ((i_94 + 1) >= $load_1)) | (((i_94 + 1) + 1) >= $load_1)) | ((((i_94 + 1) + 1) + 1) >= $load_1);
