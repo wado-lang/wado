@@ -533,8 +533,10 @@ global WRITE_BYTES: i32 = 16_777_216;
 global PARAMETER_WORDS: i32 = 65536;
 
 /// The dispatches recorded before they are submitted, so the device runs the
-/// first while the host records the rest.
-global SUBMIT_EVERY: i32 = 32;
+/// first while the host records the rest. Gemma 3 (270M)'s 7 steps after a
+/// prompt took 0.97 times as long through `compute` at 16 as at 32, and 1.05
+/// times at 8, where each submit costs the host more than the device waits.
+global SUBMIT_EVERY: i32 = 16;
 
 /// The layouts of its reads a launch keeps the commands of. A generation's
 /// first step reads a cache the prompt wrote, laid out unlike the one a step
