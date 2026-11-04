@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1793770269591,
+  "lastUpdate": 1793780197430,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -74285,6 +74285,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/cdcf9f52adb85b05705b6169ed1f1a3e84c1de98"
         },
         "date": 1793770269198,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3099,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7303,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21996,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 377139,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "8525641e0f320ff9f2fabc1988140da48473b19a",
+          "message": "Merge pull request #2542 from wado-lang/ccr-2dfcf54c-ylqcdp\n\nfeat(effects)!: one `#[ambient]` whose imports always land, and Kiln generators that report through stdio",
+          "timestamp": "2026-11-04T17:02:27+09:00",
+          "tree_id": "a8f36c84377c9f033e5ff24908212ca5d25fe652",
+          "url": "https://github.com/wado-lang/wado/commit/8525641e0f320ff9f2fabc1988140da48473b19a"
+        },
+        "date": 1793780196542,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
