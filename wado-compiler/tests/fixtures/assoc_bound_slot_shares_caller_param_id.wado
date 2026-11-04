@@ -1,15 +1,15 @@
 // A callee's slot left as its own parameter shares its id with the caller's
-// parameter of the same name and index: `String::raw`'s `..V` and `f`'s `..V`.
-// Bound-driven inference took the slot for one the caller forwards and
+// parameter of the same name and index: `String::format`'s `..V` and `f`'s
+// `..V`. Bound-driven inference took the slot for one the caller forwards and
 // projected off it, which crashed the compiler.
 
 fn f<A, ..V>(a: A, v: [..V]) -> String {
     let x = 1;
-    return String::raw`a\n${x}`;
+    return String::format`a\n${x}`;
 }
 
 test {
-    assert f(1, [true]) == "a\\n1";
+    assert f(1, [true]) == "a\n1";
 }
 
 __DATA__

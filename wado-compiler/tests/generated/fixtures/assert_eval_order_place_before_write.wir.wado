@@ -114,17 +114,15 @@ type "functype//core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]" =
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(41)
 
-type "functype//wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode" = fn(i32);  // TypeId(42)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(42)
 
-type "functype//wasi/task-return" = fn(i32);  // TypeId(43)
+type "functype//wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode" = fn(i32);  // TypeId(43)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(44)
+type "functype//wasi/task-return" = fn(i32);  // TypeId(44)
 
 type "functype//assert_eval_order_place_before_write.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(45)
 
 type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(46)
-
-type "functype//core:rt/write_string_to_stream$spec0$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(47)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -136,9 +134,9 @@ import fn wasi/$wasi:cli/stderr@0.3.0#write-via-stream from "wasi/$wasi:cli/stde
 import fn wasi/$wasi:cli/stdout@0.3.0#write-via-stream from "wasi/$wasi:cli/stdout@0.3.0#write-via-stream";
 import memory (1) from "mem/memory";
 import fn wasi/stream-new from "wasi/stream-new";
+import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode";
 import fn wasi/task-return from "wasi/task-return";
-import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
 global global:core:prelude/primitive.wado::$const_obj_0: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
 
@@ -150,15 +148,19 @@ fn "assert_eval_order_place_before_write.wado/$cm_export__run"() {
     let $cm_pair_7: i64;
     let $sroa_$pattern_temp_0_0_13: i32;
     let $sroa_$pattern_temp_0_1_14: i32;
+    let new_repr: ref Array<u8>;
+    let $sroa_message_repr_34: ref Array<u8>;
     cold_path;
     "assert_eval_order_place_before_write.wado/run$cold0$dae[$v1]"(struct.new "core:prelude/types.wado//Box<i32>" { value: 105 });
     unreachable;
     $sroa_$pattern_temp_0_0_13 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_14 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
     $sroa_$pattern_temp_0_0_13 = "assert_eval_order_place_before_write.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$pattern_temp_0_0_13);
-    let $mv_field_2: ref Array<u8>;
-    $mv_field_2 = array.new_data<u8>("the condition was reordered");
-    "core:rt/write_string_to_stream$spec0$dae[add_newline]"($sroa_$pattern_temp_0_1_14, $mv_field_2, 27);
+    $sroa_message_repr_34 = array.new_data<u8>("the condition was reordered");
+    builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>(28)), 0, $sroa_message_repr_34, 0, 27);
+    builtin::array_set_u8(new_repr, 27, 10);
+    "core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]$dae[return]"($sroa_$pattern_temp_0_1_14, new_repr);
+    "wasi/stream-drop-writable"($sroa_$pattern_temp_0_1_14);
     "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_13);
     "wasi/task-return"(0);
 }
@@ -404,14 +406,6 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
             continue l36;
         };
     };
-}
-
-fn "core:rt/write_string_to_stream$spec0$dae[add_newline]"(tx, $mv$message$repr, $mv$message$used) {
-    let new_repr: ref Array<u8>;
-    builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>(28)), 0, $mv$message$repr, 0, 27);
-    builtin::array_set_u8(new_repr, 27, 10);
-    "core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]$dae[return]"(tx, new_repr);
-    "wasi/stream-drop-writable"(tx);
 }
 
 fn "core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]$dae[return]"(handle, data) {

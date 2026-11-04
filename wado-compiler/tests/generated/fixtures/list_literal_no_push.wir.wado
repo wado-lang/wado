@@ -190,13 +190,15 @@ fn "list_literal_no_push.wado/run"() with Stdout {
     let arr: ref Array<u8>;
     let q: u64;
     let tens: i32;
-    let start_179: i32;
+    let start_176: i32;
     used = builtin::array_len(local.tee elements(array.new_fixed<ref "list_literal_no_push.wado//Widget">(struct.new "list_literal_no_push.wado//Widget" { id: black_box(7) })));
-    used = used = local.tee widgets(black_box(struct.new "core:prelude//List<list_literal_no_push.wado/Widget>" { repr: elements, used: used })).used; if @unlikely(0 >= used) {
+    used = local.tee widgets(black_box(struct.new "core:prelude//List<list_literal_no_push.wado/Widget>" { repr: elements, used: used })).used;
+    if @unlikely(0 >= used) {
         cold_path;
         "list_literal_no_push.wado/run$cold0$dae[$contract_arg_0]"(used);
         unreachable;
-    }; builtin::array_get_value<ref "list_literal_no_push.wado//Widget">(widgets.repr, 0).id;
+    }
+    used = builtin::array_get_value<ref "list_literal_no_push.wado//Widget">(widgets.repr, 0).id;
     out_21 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
     $inline_core_prelude_string_wado_String__internal_push_view_26: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_26;
@@ -269,22 +271,22 @@ fn "list_literal_no_push.wado/run"() with Stdout {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_21, is_negative_90);
         }
-        start_179 = out_21.used;
+        start_176 = out_21.used;
         out_21.used = is_negative_90;
-        builtin::array_set_u8(out_21.repr, start_179, 45);
+        builtin::array_set_u8(out_21.repr, start_176, 45);
     } else {
     }
     if @unlikely(local.tee is_negative_90(out_21.used + used) > builtin::array_len(out_21.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_21, is_negative_90);
     }
-    start_179 = out_21.used;
+    start_176 = out_21.used;
     out_21.used = is_negative_90;
     arr = out_21.repr;
-    used = start_179 + used;
+    used = start_176 + used;
     b23: block {
         l24: loop {
-            break_if b23 (used - start_179) < 2;
+            break_if b23 (used - start_176) < 2;
             q = x /u 100_i64;
             tens = local.tee is_negative_90(builtin::i32_wrap_i64(x - (q * 100_i64))) / 10;
             builtin::array_set_u8(arr, used - 1, (48 + is_negative_90) - (tens * 10));
@@ -294,8 +296,8 @@ fn "list_literal_no_push.wado/run"() with Stdout {
             continue l24;
         };
     };
-    if used > start_179 {
-        builtin::array_set_u8(arr, start_179, 48 + builtin::i32_wrap_i64(x %u 10_i64));
+    if used > start_176 {
+        builtin::array_set_u8(arr, start_176, 48 + builtin::i32_wrap_i64(x %u 10_i64));
     }
     $inline_core_prelude_string_wado_String__internal_push_view_45: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_45;

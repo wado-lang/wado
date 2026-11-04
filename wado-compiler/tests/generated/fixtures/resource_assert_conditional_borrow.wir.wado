@@ -918,11 +918,9 @@ fn "resource_assert_conditional_borrow.wado/$cm_binding__wasi:http/types@0.3.0#[
     let $name_packed: i64;
     let $name_flat1: i32;
     let $raw_result: bool;
-    let bytes: ref Array<u8>;
     let ptr_11: i32;
-    bytes = name.repr;
     ptr_11 = "mem/realloc"(0, 0, 1, 10);
-    "core:rt/gc_array_to_memory$spec0$dae[src_start]"(bytes, ptr_11, 10);
+    "core:rt/gc_array_to_memory$spec0$dae[src_start]"(name.repr, ptr_11, 10);
     ptr_11 = builtin::i32_wrap_i64(local.tee $name_packed(builtin::i64_extend_i32_u(ptr_11) | 42949672960_i64));
     $name_flat1 = builtin::i32_wrap_i64($name_packed >> 32_i64);
     $raw_result = "wasi/$wasi:http/types@0.3.0#[method]fields.has"(self.value, ptr_11, $name_flat1);
@@ -2144,7 +2142,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::internal_set_byte_
     self_15 = self.used;
     if @unlikely(index >=u self_15) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_at$contract_report0"(index, self_15, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/string.wado:571"), used: 28 });
+        "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_at$contract_report0"(index, self_15, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/string.wado:558"), used: 28 });
         unreachable;
     }
     builtin::array_set_u8(self.repr, index, value);
@@ -2241,7 +2239,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/StrSlice^core:prelude/stri
         $v1 = self.end - local.tee $load_1(self.start);
         if @unlikely(((0 <= index) & (index < $v1)) == 0) {
             cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/StrSlice::byte_at$contract_report0"(index, $v1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/string.wado:1770"), used: 29 });
+            "core:prelude/string.wado/core:prelude/string.wado/StrSlice::byte_at$contract_report0"(index, $v1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/string.wado:1757"), used: 29 });
             unreachable;
         }
         "core:prelude/string.wado/core:prelude/string.wado/StrSlice::byte_at$unchecked"(self.repr, $load_1, index);

@@ -630,11 +630,9 @@ fn "wasi_tls_result_error.wado/$cm_binding__wasi:tls/client@0.3.0-draft#[static]
     let $server_name_flat1: i32;
     let $args: i32;
     let $subtask: ref null "core:prelude/types.wado//Option<core:prelude/types.wado/Subtask>";
-    let bytes: ref Array<u8>;
     let ptr_13: i32;
-    bytes = server_name.repr;
     ptr_13 = "mem/realloc"(0, 0, 1, 11);
-    "core:rt/gc_array_to_memory$spec0$dae[src_start]"(bytes, ptr_13, 11);
+    "core:rt/gc_array_to_memory$spec0$dae[src_start]"(server_name.repr, ptr_13, 11);
     $server_name_packed = builtin::i64_extend_i32_u(ptr_13) | 47244640256_i64;
     ptr_13 = "mem/realloc"(0, 0, 4, 8);
     $server_name_flat0 = builtin::i32_wrap_i64($server_name_packed);

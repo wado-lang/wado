@@ -40,7 +40,7 @@ impl ProvidedInterface<'_> {
     fn is_named_by(&self, package: CmPackage<'_>, name: &str, spelling: &UseNameSpelling) -> bool {
         match spelling {
             UseNameSpelling::Ident => self.package == package && self.name == name,
-            UseNameSpelling::InterfaceName(wanted) => self.full_name.is_named_by(wanted),
+            UseNameSpelling::InterfaceName(wanted, _) => self.full_name.is_named_by(wanted),
         }
     }
 }
@@ -250,6 +250,7 @@ pub fn inject_kiln_request_adapter(
     // `NoOptions {}` for a no-options generator).
     let ident_field = |module: &mut Module, name: &str| StructLiteralField {
         name: name.to_string(),
+        quoted: None,
         name_id: module.alloc_ast_id(),
         name_span: span,
         value: Expr::Ident(IdentExpr {
@@ -271,6 +272,7 @@ pub fn inject_kiln_request_adapter(
     } else {
         StructLiteralField {
             name: "options".to_string(),
+            quoted: None,
             name_id: module.alloc_ast_id(),
             name_span: span,
             value: empty_struct_literal(module, "NoOptions", span),
@@ -586,7 +588,8 @@ mod tests {
         assert!(seed.is_named_by(random, "InsecureSeed", &UseNameSpelling::Ident));
         assert!(!seed.is_named_by(random, "Insecure", &UseNameSpelling::Ident));
         let named_by_full_name = |name: &str| {
-            let spelling = UseNameSpelling::InterfaceName(CmImport::parse(name).unwrap());
+            let spelling =
+                UseNameSpelling::InterfaceName(CmImport::parse(name).unwrap(), StrLit::new(name));
             seed.is_named_by(random, name, &spelling)
         };
         assert!(named_by_full_name("wasi:random/insecure-seed"));

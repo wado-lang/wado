@@ -11,7 +11,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::diagnostics::{Position, Range};
-use crate::location::{module_uri, symbol_uri};
+use crate::location::{def_uri, module_uri};
 use crate::query::QueryContext;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -74,15 +74,8 @@ pub(crate) fn declaration_location(
     def_id: wado_compiler::ast::AstId,
 ) -> Option<ReferenceLocation> {
     let span = ctx.declaration_span(def_id)?;
-    // Module-level symbols carry a symbol-table entry; methods / associated
-    // constants (reached by a `Type::m` notation) do not, so fall back to the
-    // node's own module.
-    let uri = match ctx.sem.symbol_at(def_id) {
-        Some(symbol) => symbol_uri(ctx.entry(), symbol, ctx.uri)?,
-        None => module_uri(ctx.entry(), ctx.sem.module_of_id(def_id)?, ctx.uri)?,
-    };
     Some(ReferenceLocation {
-        uri,
+        uri: def_uri(ctx.sem, def_id, ctx.uri)?,
         range: ctx.range_of(&span, def_id),
     })
 }
@@ -92,7 +85,7 @@ pub(crate) fn use_site_location(
     use_id: wado_compiler::ast::AstId,
 ) -> Option<ReferenceLocation> {
     let span = ctx.sem.span_of_id(use_id)?;
-    let uri = module_uri(ctx.entry(), ctx.sem.module_of_id(use_id)?, ctx.uri)?;
+    let uri = module_uri(ctx.entry(), ctx.sem.module_of_id(use_id)?, ctx.uri);
     Some(ReferenceLocation {
         uri,
         range: ctx.range_of(&span, use_id),
@@ -169,6 +162,48 @@ mod tests {
             // cursor on the first call to `helper`
             let refs = refs_at(source, 4, 13, false).await;
             assert_eq!(ranges(&refs), vec![(4, 12, 4, 18), (5, 12, 5, 18),]);
+        });
+    }
+
+    const MEMBERS: &str = "struct P { x: i32 }\nimpl P {\n    fn get(&self) -> i32 { return self.x; }\n}\nfn f(p: P) -> i32 {\n    return p.get() + p.x;\n}\n";
+
+    #[test]
+    fn method_references_from_its_declaration() {
+        futures::executor::block_on(async {
+            // cursor on `get` in `fn get(&self)`
+            let refs = refs_at(MEMBERS, 2, 8, false).await;
+            assert_eq!(ranges(&refs), vec![(5, 13, 5, 16)]);
+        });
+    }
+
+    #[test]
+    fn field_references_from_its_declaration() {
+        futures::executor::block_on(async {
+            // cursor on `x` in `struct P { x: i32 }`
+            let refs = refs_at(MEMBERS, 0, 11, false).await;
+            assert_eq!(ranges(&refs), vec![(2, 39, 2, 40), (5, 23, 5, 24)]);
+        });
+    }
+
+    #[test]
+    fn member_references_from_its_declaration_include_it() {
+        futures::executor::block_on(async {
+            let refs = refs_at(MEMBERS, 0, 11, true).await;
+            assert_eq!(
+                ranges(&refs),
+                vec![(0, 11, 0, 12), (2, 39, 2, 40), (5, 23, 5, 24)]
+            );
+            let refs = refs_at(MEMBERS, 2, 8, true).await;
+            assert_eq!(ranges(&refs), vec![(2, 7, 2, 10), (5, 13, 5, 16)]);
+        });
+    }
+
+    #[test]
+    fn no_match_in_a_body_off_any_name() {
+        futures::executor::block_on(async {
+            // cursor on the whitespace after `{` in `get`'s body
+            let refs = refs_at(MEMBERS, 2, 26, false).await;
+            assert!(refs.is_empty(), "got: {refs:?}");
         });
     }
 

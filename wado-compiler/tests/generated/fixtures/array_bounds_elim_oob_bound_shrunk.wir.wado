@@ -178,7 +178,7 @@ fn "array_bounds_elim_oob_bound_shrunk.wado/run"() with Stdout {
     let out_38: ref "core:prelude/string.wado//String";
     let x: i64;
     let $sroa_arr_used_134: i32;
-    let arr_143: ref Array<u8>;
+    let arr_140: ref Array<u8>;
     let q: u64;
     let tens: i32;
     elements = array.new_fixed<i32>(10, 20, 30);
@@ -300,22 +300,22 @@ fn "array_bounds_elim_oob_bound_shrunk.wado/run"() with Stdout {
     }
     sum = out_38.used;
     out_38.used = $sroa_arr_used_134;
-    arr_143 = out_38.repr;
+    arr_140 = out_38.repr;
     $sroa_arr_used_134 = sum + i_1;
     b26: block {
         l27: loop {
             break_if b26 ($sroa_arr_used_134 - sum) < 2;
             q = x /u 100_i64;
             tens = local.tee i_1(builtin::i32_wrap_i64(x - (q * 100_i64))) / 10;
-            builtin::array_set_u8(arr_143, $sroa_arr_used_134 - 1, (48 + i_1) - (tens * 10));
-            builtin::array_set_u8(arr_143, $sroa_arr_used_134 - 2, 48 + tens);
+            builtin::array_set_u8(arr_140, $sroa_arr_used_134 - 1, (48 + i_1) - (tens * 10));
+            builtin::array_set_u8(arr_140, $sroa_arr_used_134 - 2, 48 + tens);
             $sroa_arr_used_134 = $sroa_arr_used_134 - 2;
             x = q;
             continue l27;
         };
     };
     if $sroa_arr_used_134 > sum {
-        builtin::array_set_u8(arr_143, sum, 48 + builtin::i32_wrap_i64(x %u 10_i64));
+        builtin::array_set_u8(arr_140, sum, 48 + builtin::i32_wrap_i64(x %u 10_i64));
     }
     $inline_core_prelude_string_wado_String__internal_push_view_49: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_49;

@@ -577,44 +577,41 @@ global global:core:prelude/primitive.wado::$const_obj_39: ref "core:prelude/stri
 
 fn "inspect_closure_indirect.wado/$test_0_literal_site_____still_works"() {
     let add_one: ref struct;
-    let a: ref Array<u8>;
     let a_end: i32;
-    let b: ref Array<u8>;
     let i: i32;
-    let out_16: ref "core:prelude/string.wado//String";
+    let $licm_repr_13: ref Array<u8>;
+    let out_17: ref "core:prelude/string.wado//String";
     add_one = struct.new "canonical//CanonicalClosure_0" { env: struct.new "inspect_closure_indirect.wado//$Closure_0" {}, inspect: ref.func "closure/inspect_closure_indirect.wado/$closure_inspect_wrapper_0", func: ref.func "closure/inspect_closure_indirect.wado/$closure_wrapper_0" };
-    out_16 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
+    out_17 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
     $inline_core_prelude_string_wado_String__format_inspect_closure_indirect_wado__tmpl_99d0bd09e20123ef__fn_i32___i32___spec0_spec0_sroa_t_h0__0__$inline_core_prelude_string_wado_String__internal_push_view_20: block {
         break $inline_core_prelude_string_wado_String__format_inspect_closure_indirect_wado__tmpl_99d0bd09e20123ef__fn_i32___i32___spec0_spec0_sroa_t_h0__0__$inline_core_prelude_string_wado_String__internal_push_view_20;
     };
-    "inspect_closure_indirect.wado/fn(i32)->i32^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude/types.wado//Box<fn(i32)->i32>" { value: add_one }, struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 1, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: out_16 });
+    "inspect_closure_indirect.wado/fn(i32)->i32^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude/types.wado//Box<fn(i32)->i32>" { value: add_one }, struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 1, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: out_17 });
     $inline_core_prelude_string_wado_String__format_inspect_closure_indirect_wado__tmpl_99d0bd09e20123ef__fn_i32___i32___spec0_spec0_sroa_t_h0__0__$inline_core_prelude_string_wado_String__internal_push_view_34: block {
         break $inline_core_prelude_string_wado_String__format_inspect_closure_indirect_wado__tmpl_99d0bd09e20123ef__fn_i32___i32___spec0_spec0_sroa_t_h0__0__$inline_core_prelude_string_wado_String__internal_push_view_34;
     };
     if @unlikely($inline_core_prelude_array_wado_seq_eq_u8__1: block -> bool {
-        a = out_16.repr;
-        a_end = out_16.used;
-        b = global:inspect_closure_indirect.wado::$const_obj_0;
-        if a_end != 16 {
+        if local.tee a_end(out_17.used) != 16 {
             break $inline_core_prelude_array_wado_seq_eq_u8__1: 0;
         }
         i = 0;
+        $licm_repr_13 = out_17.repr;
         b2: block {
             l3: loop {
                 break_if b2 (((i >= a_end) | ((i + 1) >= a_end)) | (((i + 1) + 1) >= a_end)) | ((((i + 1) + 1) + 1) >= a_end);
-                if builtin::array_get_value<u8>(a, i) != builtin::array_get_value<u8>(b, i) {
+                if builtin::array_get_value<u8>($licm_repr_13, i) != builtin::array_get_value<u8>(global:inspect_closure_indirect.wado::$const_obj_0, i) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__1: 0;
                 }
                 i = i + 1;
-                if builtin::array_get_value<u8>(a, i) != builtin::array_get_value<u8>(b, i) {
+                if builtin::array_get_value<u8>($licm_repr_13, i) != builtin::array_get_value<u8>(global:inspect_closure_indirect.wado::$const_obj_0, i) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__1: 0;
                 }
                 i = i + 1;
-                if builtin::array_get_value<u8>(a, i) != builtin::array_get_value<u8>(b, i) {
+                if builtin::array_get_value<u8>($licm_repr_13, i) != builtin::array_get_value<u8>(global:inspect_closure_indirect.wado::$const_obj_0, i) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__1: 0;
                 }
                 i = i + 1;
-                if builtin::array_get_value<u8>(a, i) != builtin::array_get_value<u8>(b, i) {
+                if builtin::array_get_value<u8>($licm_repr_13, i) != builtin::array_get_value<u8>(global:inspect_closure_indirect.wado::$const_obj_0, i) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__1: 0;
                 }
                 i = i + 1;
@@ -624,7 +621,7 @@ fn "inspect_closure_indirect.wado/$test_0_literal_site_____still_works"() {
         b8: block {
             l9: loop {
                 break_if b8 i >= a_end;
-                if builtin::array_get_value<u8>(a, i) != builtin::array_get_value<u8>(b, i) {
+                if builtin::array_get_value<u8>($licm_repr_13, i) != builtin::array_get_value<u8>(global:inspect_closure_indirect.wado::$const_obj_0, i) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__1: 0;
                 }
                 i = i + 1;
@@ -634,227 +631,22 @@ fn "inspect_closure_indirect.wado/$test_0_literal_site_____still_works"() {
         break $inline_core_prelude_array_wado_seq_eq_u8__1: 1;
     } == 0) {
         cold_path;
-        "core:rt/panic"(local.tee out_16("core:prelude/string.wado/core:prelude/string.wado/String::format<inspect_closure_indirect.wado/$tmpl$d48748ffcad618c0,[core:prelude/string.wado/String]>"(struct.new "inspect_closure_indirect.wado//$tmpl$d48748ffcad618c0" { h0: out_16, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_0_literal_site_____still_works at inspect_closure_indirect.wado:21
+        "core:rt/panic"(local.tee out_17("core:prelude/string.wado/core:prelude/string.wado/String::format<inspect_closure_indirect.wado/$tmpl$d48748ffcad618c0,[core:prelude/string.wado/String]>"(struct.new "inspect_closure_indirect.wado//$tmpl$d48748ffcad618c0" { h0: out_17, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_0_literal_site_____still_works at inspect_closure_indirect.wado:21
 condition: `${add_one:#?}` == \"|x: i32| (x + 1)\"
 `${add_one:#?}`: "), used: 159 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_0_literal_site_____still_works at inspect_closure_indirect.wado:21
 condition: `${add_one:#?}` == \"|x: i32| (x + 1)\"
-`${add_one:#?}`: "), used: 159 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, out_16.used);
+`${add_one:#?}`: "), used: 159 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, out_17.used);
         unreachable;
     }
 }
 
 fn "inspect_closure_indirect.wado/$test_3_closure_stored_in_struct_field_keeps_source_for____"() {
-    let a: ref Array<u8>;
     let a_end: i32;
-    let b: ref Array<u8>;
     let i: i32;
-    let t_13: ref struct;
-    let out_16: ref "core:prelude/string.wado//String";
-    t_13 = struct.new "canonical//CanonicalClosure_0" { env: struct.new "inspect_closure_indirect.wado//$Closure_3" {}, inspect: ref.func "closure/inspect_closure_indirect.wado/$closure_inspect_wrapper_3", func: ref.func "closure/inspect_closure_indirect.wado/$closure_wrapper_3" };
-    out_16 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
-    $inline_core_prelude_string_wado_String__format_inspect_closure_indirect_wado__tmpl_99d0bd09e20123ef__fn_i32___i32___spec0_spec0_sroa_t_h0__0__$inline_core_prelude_string_wado_String__internal_push_view_20: block {
-        break $inline_core_prelude_string_wado_String__format_inspect_closure_indirect_wado__tmpl_99d0bd09e20123ef__fn_i32___i32___spec0_spec0_sroa_t_h0__0__$inline_core_prelude_string_wado_String__internal_push_view_20;
-    };
-    "inspect_closure_indirect.wado/fn(i32)->i32^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude/types.wado//Box<fn(i32)->i32>" { value: t_13 }, struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 1, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: out_16 });
-    $inline_core_prelude_string_wado_String__format_inspect_closure_indirect_wado__tmpl_99d0bd09e20123ef__fn_i32___i32___spec0_spec0_sroa_t_h0__0__$inline_core_prelude_string_wado_String__internal_push_view_34: block {
-        break $inline_core_prelude_string_wado_String__format_inspect_closure_indirect_wado__tmpl_99d0bd09e20123ef__fn_i32___i32___spec0_spec0_sroa_t_h0__0__$inline_core_prelude_string_wado_String__internal_push_view_34;
-    };
-    if @unlikely($inline_core_prelude_array_wado_seq_eq_u8__1: block -> bool {
-        a = out_16.repr;
-        a_end = out_16.used;
-        b = global:inspect_closure_indirect.wado::$const_obj_1;
-        if a_end != 16 {
-            break $inline_core_prelude_array_wado_seq_eq_u8__1: 0;
-        }
-        i = 0;
-        b13: block {
-            l14: loop {
-                break_if b13 (((i >= a_end) | ((i + 1) >= a_end)) | (((i + 1) + 1) >= a_end)) | ((((i + 1) + 1) + 1) >= a_end);
-                if builtin::array_get_value<u8>(a, i) != builtin::array_get_value<u8>(b, i) {
-                    break $inline_core_prelude_array_wado_seq_eq_u8__1: 0;
-                }
-                i = i + 1;
-                if builtin::array_get_value<u8>(a, i) != builtin::array_get_value<u8>(b, i) {
-                    break $inline_core_prelude_array_wado_seq_eq_u8__1: 0;
-                }
-                i = i + 1;
-                if builtin::array_get_value<u8>(a, i) != builtin::array_get_value<u8>(b, i) {
-                    break $inline_core_prelude_array_wado_seq_eq_u8__1: 0;
-                }
-                i = i + 1;
-                if builtin::array_get_value<u8>(a, i) != builtin::array_get_value<u8>(b, i) {
-                    break $inline_core_prelude_array_wado_seq_eq_u8__1: 0;
-                }
-                i = i + 1;
-                continue l14;
-            };
-        };
-        b19: block {
-            l20: loop {
-                break_if b19 i >= a_end;
-                if builtin::array_get_value<u8>(a, i) != builtin::array_get_value<u8>(b, i) {
-                    break $inline_core_prelude_array_wado_seq_eq_u8__1: 0;
-                }
-                i = i + 1;
-                continue l20;
-            };
-        };
-        break $inline_core_prelude_array_wado_seq_eq_u8__1: 1;
-    } == 0) {
-        cold_path;
-        "core:rt/panic"(local.tee out_16("core:prelude/string.wado/core:prelude/string.wado/String::format<inspect_closure_indirect.wado/$tmpl$d48748ffcad618c0,[core:prelude/string.wado/String]>"(struct.new "inspect_closure_indirect.wado//$tmpl$d48748ffcad618c0" { h0: out_16, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_3_closure_stored_in_struct_field_keeps_source_for____ at inspect_closure_indirect.wado:36
-condition: `${h.cb:#?}` == \"|y: i32| (y * 2)\"
-`${h.cb:#?}`: "), used: 176 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_3_closure_stored_in_struct_field_keeps_source_for____ at inspect_closure_indirect.wado:36
-condition: `${h.cb:#?}` == \"|y: i32| (y * 2)\"
-`${h.cb:#?}`: "), used: 176 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, out_16.used);
-        unreachable;
-    }
-}
-
-fn "inspect_closure_indirect.wado/$test_4_let_bound_closure_stored_in_struct_field_then_read_back_keeps_source_for____"() {
-    let inner: ref struct;
-    let a: ref Array<u8>;
-    let a_end: i32;
-    let b: ref Array<u8>;
-    let i: i32;
-    let out_17: ref "core:prelude/string.wado//String";
-    inner = struct.new "canonical//CanonicalClosure_0" { env: struct.new "inspect_closure_indirect.wado//$Closure_4" {}, inspect: ref.func "closure/inspect_closure_indirect.wado/$closure_inspect_wrapper_4", func: ref.func "closure/inspect_closure_indirect.wado/$closure_wrapper_4" };
-    out_17 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
-    $inline_core_prelude_string_wado_String__format_inspect_closure_indirect_wado__tmpl_99d0bd09e20123ef__fn_i32___i32___spec0_spec0_sroa_t_h0__0__$inline_core_prelude_string_wado_String__internal_push_view_20: block {
-        break $inline_core_prelude_string_wado_String__format_inspect_closure_indirect_wado__tmpl_99d0bd09e20123ef__fn_i32___i32___spec0_spec0_sroa_t_h0__0__$inline_core_prelude_string_wado_String__internal_push_view_20;
-    };
-    "inspect_closure_indirect.wado/fn(i32)->i32^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude/types.wado//Box<fn(i32)->i32>" { value: inner }, struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 1, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: out_17 });
-    $inline_core_prelude_string_wado_String__format_inspect_closure_indirect_wado__tmpl_99d0bd09e20123ef__fn_i32___i32___spec0_spec0_sroa_t_h0__0__$inline_core_prelude_string_wado_String__internal_push_view_34: block {
-        break $inline_core_prelude_string_wado_String__format_inspect_closure_indirect_wado__tmpl_99d0bd09e20123ef__fn_i32___i32___spec0_spec0_sroa_t_h0__0__$inline_core_prelude_string_wado_String__internal_push_view_34;
-    };
-    if @unlikely($inline_core_prelude_array_wado_seq_eq_u8__1: block -> bool {
-        a = out_17.repr;
-        a_end = out_17.used;
-        b = global:inspect_closure_indirect.wado::$const_obj_2;
-        if a_end != 16 {
-            break $inline_core_prelude_array_wado_seq_eq_u8__1: 0;
-        }
-        i = 0;
-        b24: block {
-            l25: loop {
-                break_if b24 (((i >= a_end) | ((i + 1) >= a_end)) | (((i + 1) + 1) >= a_end)) | ((((i + 1) + 1) + 1) >= a_end);
-                if builtin::array_get_value<u8>(a, i) != builtin::array_get_value<u8>(b, i) {
-                    break $inline_core_prelude_array_wado_seq_eq_u8__1: 0;
-                }
-                i = i + 1;
-                if builtin::array_get_value<u8>(a, i) != builtin::array_get_value<u8>(b, i) {
-                    break $inline_core_prelude_array_wado_seq_eq_u8__1: 0;
-                }
-                i = i + 1;
-                if builtin::array_get_value<u8>(a, i) != builtin::array_get_value<u8>(b, i) {
-                    break $inline_core_prelude_array_wado_seq_eq_u8__1: 0;
-                }
-                i = i + 1;
-                if builtin::array_get_value<u8>(a, i) != builtin::array_get_value<u8>(b, i) {
-                    break $inline_core_prelude_array_wado_seq_eq_u8__1: 0;
-                }
-                i = i + 1;
-                continue l25;
-            };
-        };
-        b30: block {
-            l31: loop {
-                break_if b30 i >= a_end;
-                if builtin::array_get_value<u8>(a, i) != builtin::array_get_value<u8>(b, i) {
-                    break $inline_core_prelude_array_wado_seq_eq_u8__1: 0;
-                }
-                i = i + 1;
-                continue l31;
-            };
-        };
-        break $inline_core_prelude_array_wado_seq_eq_u8__1: 1;
-    } == 0) {
-        cold_path;
-        "core:rt/panic"(local.tee out_17("core:prelude/string.wado/core:prelude/string.wado/String::format<inspect_closure_indirect.wado/$tmpl$d48748ffcad618c0,[core:prelude/string.wado/String]>"(struct.new "inspect_closure_indirect.wado//$tmpl$d48748ffcad618c0" { h0: out_17, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_4_let_bound_closure_stored_in_struct_field_then_read_back_keeps_source_for____ at inspect_closure_indirect.wado:42
-condition: `${h.cb:#?}` == \"|a: i32| (a * 3)\"
-`${h.cb:#?}`: "), used: 201 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_4_let_bound_closure_stored_in_struct_field_then_read_back_keeps_source_for____ at inspect_closure_indirect.wado:42
-condition: `${h.cb:#?}` == \"|a: i32| (a * 3)\"
-`${h.cb:#?}`: "), used: 201 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, out_17.used);
-        unreachable;
-    }
-}
-
-fn "inspect_closure_indirect.wado/$test_6_capturing_closure_shows_captures_clause_in____"() {
-    let f_1: ref struct;
-    let a: ref Array<u8>;
-    let a_end: i32;
-    let b: ref Array<u8>;
-    let i: i32;
-    let out_17: ref "core:prelude/string.wado//String";
-    f_1 = struct.new "canonical//CanonicalClosure_0" { env: struct.new "inspect_closure_indirect.wado//$Closure_6" { $capture_0: 7 }, inspect: ref.func "closure/inspect_closure_indirect.wado/$closure_inspect_wrapper_6", func: ref.func "closure/inspect_closure_indirect.wado/$closure_wrapper_6" };
-    out_17 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
-    $inline_core_prelude_string_wado_String__format_inspect_closure_indirect_wado__tmpl_99d0bd09e20123ef__fn_i32___i32___spec0_spec0_sroa_t_h0__0__$inline_core_prelude_string_wado_String__internal_push_view_20: block {
-        break $inline_core_prelude_string_wado_String__format_inspect_closure_indirect_wado__tmpl_99d0bd09e20123ef__fn_i32___i32___spec0_spec0_sroa_t_h0__0__$inline_core_prelude_string_wado_String__internal_push_view_20;
-    };
-    "inspect_closure_indirect.wado/fn(i32)->i32^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude/types.wado//Box<fn(i32)->i32>" { value: f_1 }, struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 1, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: out_17 });
-    $inline_core_prelude_string_wado_String__format_inspect_closure_indirect_wado__tmpl_99d0bd09e20123ef__fn_i32___i32___spec0_spec0_sroa_t_h0__0__$inline_core_prelude_string_wado_String__internal_push_view_34: block {
-        break $inline_core_prelude_string_wado_String__format_inspect_closure_indirect_wado__tmpl_99d0bd09e20123ef__fn_i32___i32___spec0_spec0_sroa_t_h0__0__$inline_core_prelude_string_wado_String__internal_push_view_34;
-    };
-    if @unlikely($inline_core_prelude_array_wado_seq_eq_u8__1: block -> bool {
-        a = out_17.repr;
-        a_end = out_17.used;
-        b = global:inspect_closure_indirect.wado::$const_obj_3;
-        if a_end != 28 {
-            break $inline_core_prelude_array_wado_seq_eq_u8__1: 0;
-        }
-        i = 0;
-        b35: block {
-            l36: loop {
-                break_if b35 (((i >= a_end) | ((i + 1) >= a_end)) | (((i + 1) + 1) >= a_end)) | ((((i + 1) + 1) + 1) >= a_end);
-                if builtin::array_get_value<u8>(a, i) != builtin::array_get_value<u8>(b, i) {
-                    break $inline_core_prelude_array_wado_seq_eq_u8__1: 0;
-                }
-                i = i + 1;
-                if builtin::array_get_value<u8>(a, i) != builtin::array_get_value<u8>(b, i) {
-                    break $inline_core_prelude_array_wado_seq_eq_u8__1: 0;
-                }
-                i = i + 1;
-                if builtin::array_get_value<u8>(a, i) != builtin::array_get_value<u8>(b, i) {
-                    break $inline_core_prelude_array_wado_seq_eq_u8__1: 0;
-                }
-                i = i + 1;
-                if builtin::array_get_value<u8>(a, i) != builtin::array_get_value<u8>(b, i) {
-                    break $inline_core_prelude_array_wado_seq_eq_u8__1: 0;
-                }
-                i = i + 1;
-                continue l36;
-            };
-        };
-        b41: block {
-            l42: loop {
-                break_if b41 i >= a_end;
-                if builtin::array_get_value<u8>(a, i) != builtin::array_get_value<u8>(b, i) {
-                    break $inline_core_prelude_array_wado_seq_eq_u8__1: 0;
-                }
-                i = i + 1;
-                continue l42;
-            };
-        };
-        break $inline_core_prelude_array_wado_seq_eq_u8__1: 1;
-    } == 0) {
-        cold_path;
-        "core:rt/panic"(local.tee out_17("core:prelude/string.wado/core:prelude/string.wado/String::format<inspect_closure_indirect.wado/$tmpl$d48748ffcad618c0,[core:prelude/string.wado/String]>"(struct.new "inspect_closure_indirect.wado//$tmpl$d48748ffcad618c0" { h0: out_17, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_6_capturing_closure_shows_captures_clause_in____ at inspect_closure_indirect.wado:54
-condition: `${f:#?}` == \"|x: i32| captures[n] (x + n)\"
-`${f:#?}`: "), used: 177 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_6_capturing_closure_shows_captures_clause_in____ at inspect_closure_indirect.wado:54
-condition: `${f:#?}` == \"|x: i32| captures[n] (x + n)\"
-`${f:#?}`: "), used: 177 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, out_17.used);
-        unreachable;
-    }
-}
-
-fn "inspect_closure_indirect.wado/$test_8_capturing_closure_stored_in_struct_field_keeps_captures_clause_for____"() {
-    let a: ref Array<u8>;
-    let a_end: i32;
-    let b: ref Array<u8>;
-    let i: i32;
+    let $licm_repr_13: ref Array<u8>;
     let t_14: ref struct;
     let out_17: ref "core:prelude/string.wado//String";
-    t_14 = struct.new "canonical//CanonicalClosure_0" { env: struct.new "inspect_closure_indirect.wado//$Closure_8" { $capture_0: 3 }, inspect: ref.func "closure/inspect_closure_indirect.wado/$closure_inspect_wrapper_8", func: ref.func "closure/inspect_closure_indirect.wado/$closure_wrapper_8" };
+    t_14 = struct.new "canonical//CanonicalClosure_0" { env: struct.new "inspect_closure_indirect.wado//$Closure_3" {}, inspect: ref.func "closure/inspect_closure_indirect.wado/$closure_inspect_wrapper_3", func: ref.func "closure/inspect_closure_indirect.wado/$closure_wrapper_3" };
     out_17 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
     $inline_core_prelude_string_wado_String__format_inspect_closure_indirect_wado__tmpl_99d0bd09e20123ef__fn_i32___i32___spec0_spec0_sroa_t_h0__0__$inline_core_prelude_string_wado_String__internal_push_view_20: block {
         break $inline_core_prelude_string_wado_String__format_inspect_closure_indirect_wado__tmpl_99d0bd09e20123ef__fn_i32___i32___spec0_spec0_sroa_t_h0__0__$inline_core_prelude_string_wado_String__internal_push_view_20;
@@ -864,29 +656,222 @@ fn "inspect_closure_indirect.wado/$test_8_capturing_closure_stored_in_struct_fie
         break $inline_core_prelude_string_wado_String__format_inspect_closure_indirect_wado__tmpl_99d0bd09e20123ef__fn_i32___i32___spec0_spec0_sroa_t_h0__0__$inline_core_prelude_string_wado_String__internal_push_view_34;
     };
     if @unlikely($inline_core_prelude_array_wado_seq_eq_u8__1: block -> bool {
-        a = out_17.repr;
-        a_end = out_17.used;
-        b = global:inspect_closure_indirect.wado::$const_obj_4;
-        if a_end != 46 {
+        if local.tee a_end(out_17.used) != 16 {
             break $inline_core_prelude_array_wado_seq_eq_u8__1: 0;
         }
         i = 0;
+        $licm_repr_13 = out_17.repr;
+        b13: block {
+            l14: loop {
+                break_if b13 (((i >= a_end) | ((i + 1) >= a_end)) | (((i + 1) + 1) >= a_end)) | ((((i + 1) + 1) + 1) >= a_end);
+                if builtin::array_get_value<u8>($licm_repr_13, i) != builtin::array_get_value<u8>(global:inspect_closure_indirect.wado::$const_obj_1, i) {
+                    break $inline_core_prelude_array_wado_seq_eq_u8__1: 0;
+                }
+                i = i + 1;
+                if builtin::array_get_value<u8>($licm_repr_13, i) != builtin::array_get_value<u8>(global:inspect_closure_indirect.wado::$const_obj_1, i) {
+                    break $inline_core_prelude_array_wado_seq_eq_u8__1: 0;
+                }
+                i = i + 1;
+                if builtin::array_get_value<u8>($licm_repr_13, i) != builtin::array_get_value<u8>(global:inspect_closure_indirect.wado::$const_obj_1, i) {
+                    break $inline_core_prelude_array_wado_seq_eq_u8__1: 0;
+                }
+                i = i + 1;
+                if builtin::array_get_value<u8>($licm_repr_13, i) != builtin::array_get_value<u8>(global:inspect_closure_indirect.wado::$const_obj_1, i) {
+                    break $inline_core_prelude_array_wado_seq_eq_u8__1: 0;
+                }
+                i = i + 1;
+                continue l14;
+            };
+        };
+        b19: block {
+            l20: loop {
+                break_if b19 i >= a_end;
+                if builtin::array_get_value<u8>($licm_repr_13, i) != builtin::array_get_value<u8>(global:inspect_closure_indirect.wado::$const_obj_1, i) {
+                    break $inline_core_prelude_array_wado_seq_eq_u8__1: 0;
+                }
+                i = i + 1;
+                continue l20;
+            };
+        };
+        break $inline_core_prelude_array_wado_seq_eq_u8__1: 1;
+    } == 0) {
+        cold_path;
+        "core:rt/panic"(local.tee out_17("core:prelude/string.wado/core:prelude/string.wado/String::format<inspect_closure_indirect.wado/$tmpl$d48748ffcad618c0,[core:prelude/string.wado/String]>"(struct.new "inspect_closure_indirect.wado//$tmpl$d48748ffcad618c0" { h0: out_17, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_3_closure_stored_in_struct_field_keeps_source_for____ at inspect_closure_indirect.wado:36
+condition: `${h.cb:#?}` == \"|y: i32| (y * 2)\"
+`${h.cb:#?}`: "), used: 176 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_3_closure_stored_in_struct_field_keeps_source_for____ at inspect_closure_indirect.wado:36
+condition: `${h.cb:#?}` == \"|y: i32| (y * 2)\"
+`${h.cb:#?}`: "), used: 176 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, out_17.used);
+        unreachable;
+    }
+}
+
+fn "inspect_closure_indirect.wado/$test_4_let_bound_closure_stored_in_struct_field_then_read_back_keeps_source_for____"() {
+    let inner: ref struct;
+    let a_end: i32;
+    let i: i32;
+    let $licm_repr_14: ref Array<u8>;
+    let out_18: ref "core:prelude/string.wado//String";
+    inner = struct.new "canonical//CanonicalClosure_0" { env: struct.new "inspect_closure_indirect.wado//$Closure_4" {}, inspect: ref.func "closure/inspect_closure_indirect.wado/$closure_inspect_wrapper_4", func: ref.func "closure/inspect_closure_indirect.wado/$closure_wrapper_4" };
+    out_18 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
+    $inline_core_prelude_string_wado_String__format_inspect_closure_indirect_wado__tmpl_99d0bd09e20123ef__fn_i32___i32___spec0_spec0_sroa_t_h0__0__$inline_core_prelude_string_wado_String__internal_push_view_20: block {
+        break $inline_core_prelude_string_wado_String__format_inspect_closure_indirect_wado__tmpl_99d0bd09e20123ef__fn_i32___i32___spec0_spec0_sroa_t_h0__0__$inline_core_prelude_string_wado_String__internal_push_view_20;
+    };
+    "inspect_closure_indirect.wado/fn(i32)->i32^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude/types.wado//Box<fn(i32)->i32>" { value: inner }, struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 1, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: out_18 });
+    $inline_core_prelude_string_wado_String__format_inspect_closure_indirect_wado__tmpl_99d0bd09e20123ef__fn_i32___i32___spec0_spec0_sroa_t_h0__0__$inline_core_prelude_string_wado_String__internal_push_view_34: block {
+        break $inline_core_prelude_string_wado_String__format_inspect_closure_indirect_wado__tmpl_99d0bd09e20123ef__fn_i32___i32___spec0_spec0_sroa_t_h0__0__$inline_core_prelude_string_wado_String__internal_push_view_34;
+    };
+    if @unlikely($inline_core_prelude_array_wado_seq_eq_u8__1: block -> bool {
+        if local.tee a_end(out_18.used) != 16 {
+            break $inline_core_prelude_array_wado_seq_eq_u8__1: 0;
+        }
+        i = 0;
+        $licm_repr_14 = out_18.repr;
+        b24: block {
+            l25: loop {
+                break_if b24 (((i >= a_end) | ((i + 1) >= a_end)) | (((i + 1) + 1) >= a_end)) | ((((i + 1) + 1) + 1) >= a_end);
+                if builtin::array_get_value<u8>($licm_repr_14, i) != builtin::array_get_value<u8>(global:inspect_closure_indirect.wado::$const_obj_2, i) {
+                    break $inline_core_prelude_array_wado_seq_eq_u8__1: 0;
+                }
+                i = i + 1;
+                if builtin::array_get_value<u8>($licm_repr_14, i) != builtin::array_get_value<u8>(global:inspect_closure_indirect.wado::$const_obj_2, i) {
+                    break $inline_core_prelude_array_wado_seq_eq_u8__1: 0;
+                }
+                i = i + 1;
+                if builtin::array_get_value<u8>($licm_repr_14, i) != builtin::array_get_value<u8>(global:inspect_closure_indirect.wado::$const_obj_2, i) {
+                    break $inline_core_prelude_array_wado_seq_eq_u8__1: 0;
+                }
+                i = i + 1;
+                if builtin::array_get_value<u8>($licm_repr_14, i) != builtin::array_get_value<u8>(global:inspect_closure_indirect.wado::$const_obj_2, i) {
+                    break $inline_core_prelude_array_wado_seq_eq_u8__1: 0;
+                }
+                i = i + 1;
+                continue l25;
+            };
+        };
+        b30: block {
+            l31: loop {
+                break_if b30 i >= a_end;
+                if builtin::array_get_value<u8>($licm_repr_14, i) != builtin::array_get_value<u8>(global:inspect_closure_indirect.wado::$const_obj_2, i) {
+                    break $inline_core_prelude_array_wado_seq_eq_u8__1: 0;
+                }
+                i = i + 1;
+                continue l31;
+            };
+        };
+        break $inline_core_prelude_array_wado_seq_eq_u8__1: 1;
+    } == 0) {
+        cold_path;
+        "core:rt/panic"(local.tee out_18("core:prelude/string.wado/core:prelude/string.wado/String::format<inspect_closure_indirect.wado/$tmpl$d48748ffcad618c0,[core:prelude/string.wado/String]>"(struct.new "inspect_closure_indirect.wado//$tmpl$d48748ffcad618c0" { h0: out_18, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_4_let_bound_closure_stored_in_struct_field_then_read_back_keeps_source_for____ at inspect_closure_indirect.wado:42
+condition: `${h.cb:#?}` == \"|a: i32| (a * 3)\"
+`${h.cb:#?}`: "), used: 201 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_4_let_bound_closure_stored_in_struct_field_then_read_back_keeps_source_for____ at inspect_closure_indirect.wado:42
+condition: `${h.cb:#?}` == \"|a: i32| (a * 3)\"
+`${h.cb:#?}`: "), used: 201 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, out_18.used);
+        unreachable;
+    }
+}
+
+fn "inspect_closure_indirect.wado/$test_6_capturing_closure_shows_captures_clause_in____"() {
+    let f_1: ref struct;
+    let a_end: i32;
+    let i: i32;
+    let $licm_repr_14: ref Array<u8>;
+    let out_18: ref "core:prelude/string.wado//String";
+    f_1 = struct.new "canonical//CanonicalClosure_0" { env: struct.new "inspect_closure_indirect.wado//$Closure_6" { $capture_0: 7 }, inspect: ref.func "closure/inspect_closure_indirect.wado/$closure_inspect_wrapper_6", func: ref.func "closure/inspect_closure_indirect.wado/$closure_wrapper_6" };
+    out_18 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
+    $inline_core_prelude_string_wado_String__format_inspect_closure_indirect_wado__tmpl_99d0bd09e20123ef__fn_i32___i32___spec0_spec0_sroa_t_h0__0__$inline_core_prelude_string_wado_String__internal_push_view_20: block {
+        break $inline_core_prelude_string_wado_String__format_inspect_closure_indirect_wado__tmpl_99d0bd09e20123ef__fn_i32___i32___spec0_spec0_sroa_t_h0__0__$inline_core_prelude_string_wado_String__internal_push_view_20;
+    };
+    "inspect_closure_indirect.wado/fn(i32)->i32^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude/types.wado//Box<fn(i32)->i32>" { value: f_1 }, struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 1, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: out_18 });
+    $inline_core_prelude_string_wado_String__format_inspect_closure_indirect_wado__tmpl_99d0bd09e20123ef__fn_i32___i32___spec0_spec0_sroa_t_h0__0__$inline_core_prelude_string_wado_String__internal_push_view_34: block {
+        break $inline_core_prelude_string_wado_String__format_inspect_closure_indirect_wado__tmpl_99d0bd09e20123ef__fn_i32___i32___spec0_spec0_sroa_t_h0__0__$inline_core_prelude_string_wado_String__internal_push_view_34;
+    };
+    if @unlikely($inline_core_prelude_array_wado_seq_eq_u8__1: block -> bool {
+        if local.tee a_end(out_18.used) != 28 {
+            break $inline_core_prelude_array_wado_seq_eq_u8__1: 0;
+        }
+        i = 0;
+        $licm_repr_14 = out_18.repr;
+        b35: block {
+            l36: loop {
+                break_if b35 (((i >= a_end) | ((i + 1) >= a_end)) | (((i + 1) + 1) >= a_end)) | ((((i + 1) + 1) + 1) >= a_end);
+                if builtin::array_get_value<u8>($licm_repr_14, i) != builtin::array_get_value<u8>(global:inspect_closure_indirect.wado::$const_obj_3, i) {
+                    break $inline_core_prelude_array_wado_seq_eq_u8__1: 0;
+                }
+                i = i + 1;
+                if builtin::array_get_value<u8>($licm_repr_14, i) != builtin::array_get_value<u8>(global:inspect_closure_indirect.wado::$const_obj_3, i) {
+                    break $inline_core_prelude_array_wado_seq_eq_u8__1: 0;
+                }
+                i = i + 1;
+                if builtin::array_get_value<u8>($licm_repr_14, i) != builtin::array_get_value<u8>(global:inspect_closure_indirect.wado::$const_obj_3, i) {
+                    break $inline_core_prelude_array_wado_seq_eq_u8__1: 0;
+                }
+                i = i + 1;
+                if builtin::array_get_value<u8>($licm_repr_14, i) != builtin::array_get_value<u8>(global:inspect_closure_indirect.wado::$const_obj_3, i) {
+                    break $inline_core_prelude_array_wado_seq_eq_u8__1: 0;
+                }
+                i = i + 1;
+                continue l36;
+            };
+        };
+        b41: block {
+            l42: loop {
+                break_if b41 i >= a_end;
+                if builtin::array_get_value<u8>($licm_repr_14, i) != builtin::array_get_value<u8>(global:inspect_closure_indirect.wado::$const_obj_3, i) {
+                    break $inline_core_prelude_array_wado_seq_eq_u8__1: 0;
+                }
+                i = i + 1;
+                continue l42;
+            };
+        };
+        break $inline_core_prelude_array_wado_seq_eq_u8__1: 1;
+    } == 0) {
+        cold_path;
+        "core:rt/panic"(local.tee out_18("core:prelude/string.wado/core:prelude/string.wado/String::format<inspect_closure_indirect.wado/$tmpl$d48748ffcad618c0,[core:prelude/string.wado/String]>"(struct.new "inspect_closure_indirect.wado//$tmpl$d48748ffcad618c0" { h0: out_18, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_6_capturing_closure_shows_captures_clause_in____ at inspect_closure_indirect.wado:54
+condition: `${f:#?}` == \"|x: i32| captures[n] (x + n)\"
+`${f:#?}`: "), used: 177 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_6_capturing_closure_shows_captures_clause_in____ at inspect_closure_indirect.wado:54
+condition: `${f:#?}` == \"|x: i32| captures[n] (x + n)\"
+`${f:#?}`: "), used: 177 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, out_18.used);
+        unreachable;
+    }
+}
+
+fn "inspect_closure_indirect.wado/$test_8_capturing_closure_stored_in_struct_field_keeps_captures_clause_for____"() {
+    let a_end: i32;
+    let i: i32;
+    let $licm_repr_14: ref Array<u8>;
+    let t_15: ref struct;
+    let out_18: ref "core:prelude/string.wado//String";
+    t_15 = struct.new "canonical//CanonicalClosure_0" { env: struct.new "inspect_closure_indirect.wado//$Closure_8" { $capture_0: 3 }, inspect: ref.func "closure/inspect_closure_indirect.wado/$closure_inspect_wrapper_8", func: ref.func "closure/inspect_closure_indirect.wado/$closure_wrapper_8" };
+    out_18 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
+    $inline_core_prelude_string_wado_String__format_inspect_closure_indirect_wado__tmpl_99d0bd09e20123ef__fn_i32___i32___spec0_spec0_sroa_t_h0__0__$inline_core_prelude_string_wado_String__internal_push_view_20: block {
+        break $inline_core_prelude_string_wado_String__format_inspect_closure_indirect_wado__tmpl_99d0bd09e20123ef__fn_i32___i32___spec0_spec0_sroa_t_h0__0__$inline_core_prelude_string_wado_String__internal_push_view_20;
+    };
+    "inspect_closure_indirect.wado/fn(i32)->i32^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude/types.wado//Box<fn(i32)->i32>" { value: t_15 }, struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 1, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: out_18 });
+    $inline_core_prelude_string_wado_String__format_inspect_closure_indirect_wado__tmpl_99d0bd09e20123ef__fn_i32___i32___spec0_spec0_sroa_t_h0__0__$inline_core_prelude_string_wado_String__internal_push_view_34: block {
+        break $inline_core_prelude_string_wado_String__format_inspect_closure_indirect_wado__tmpl_99d0bd09e20123ef__fn_i32___i32___spec0_spec0_sroa_t_h0__0__$inline_core_prelude_string_wado_String__internal_push_view_34;
+    };
+    if @unlikely($inline_core_prelude_array_wado_seq_eq_u8__1: block -> bool {
+        if local.tee a_end(out_18.used) != 46 {
+            break $inline_core_prelude_array_wado_seq_eq_u8__1: 0;
+        }
+        i = 0;
+        $licm_repr_14 = out_18.repr;
         b46: block {
             l47: loop {
                 break_if b46 (((i >= a_end) | ((i + 1) >= a_end)) | (((i + 1) + 1) >= a_end)) | ((((i + 1) + 1) + 1) >= a_end);
-                if builtin::array_get_value<u8>(a, i) != builtin::array_get_value<u8>(b, i) {
+                if builtin::array_get_value<u8>($licm_repr_14, i) != builtin::array_get_value<u8>(global:inspect_closure_indirect.wado::$const_obj_4, i) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__1: 0;
                 }
                 i = i + 1;
-                if builtin::array_get_value<u8>(a, i) != builtin::array_get_value<u8>(b, i) {
+                if builtin::array_get_value<u8>($licm_repr_14, i) != builtin::array_get_value<u8>(global:inspect_closure_indirect.wado::$const_obj_4, i) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__1: 0;
                 }
                 i = i + 1;
-                if builtin::array_get_value<u8>(a, i) != builtin::array_get_value<u8>(b, i) {
+                if builtin::array_get_value<u8>($licm_repr_14, i) != builtin::array_get_value<u8>(global:inspect_closure_indirect.wado::$const_obj_4, i) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__1: 0;
                 }
                 i = i + 1;
-                if builtin::array_get_value<u8>(a, i) != builtin::array_get_value<u8>(b, i) {
+                if builtin::array_get_value<u8>($licm_repr_14, i) != builtin::array_get_value<u8>(global:inspect_closure_indirect.wado::$const_obj_4, i) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__1: 0;
                 }
                 i = i + 1;
@@ -896,7 +881,7 @@ fn "inspect_closure_indirect.wado/$test_8_capturing_closure_stored_in_struct_fie
         b52: block {
             l53: loop {
                 break_if b52 i >= a_end;
-                if builtin::array_get_value<u8>(a, i) != builtin::array_get_value<u8>(b, i) {
+                if builtin::array_get_value<u8>($licm_repr_14, i) != builtin::array_get_value<u8>(global:inspect_closure_indirect.wado::$const_obj_4, i) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__1: 0;
                 }
                 i = i + 1;
@@ -906,56 +891,53 @@ fn "inspect_closure_indirect.wado/$test_8_capturing_closure_stored_in_struct_fie
         break $inline_core_prelude_array_wado_seq_eq_u8__1: 1;
     } == 0) {
         cold_path;
-        "core:rt/panic"(local.tee out_17("core:prelude/string.wado/core:prelude/string.wado/String::format<inspect_closure_indirect.wado/$tmpl$d48748ffcad618c0,[core:prelude/string.wado/String]>"(struct.new "inspect_closure_indirect.wado//$tmpl$d48748ffcad618c0" { h0: out_17, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_8_capturing_closure_stored_in_struct_field_keeps_captures_clause_for____ at inspect_closure_indirect.wado:68
+        "core:rt/panic"(local.tee out_18("core:prelude/string.wado/core:prelude/string.wado/String::format<inspect_closure_indirect.wado/$tmpl$d48748ffcad618c0,[core:prelude/string.wado/String]>"(struct.new "inspect_closure_indirect.wado//$tmpl$d48748ffcad618c0" { h0: out_18, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_8_capturing_closure_stored_in_struct_field_keeps_captures_clause_for____ at inspect_closure_indirect.wado:68
 condition: `${h.cb:#?}` == \"|y: i32| captures[multiplier] (y * multiplier)\"
 `${h.cb:#?}`: "), used: 225 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_8_capturing_closure_stored_in_struct_field_keeps_captures_clause_for____ at inspect_closure_indirect.wado:68
 condition: `${h.cb:#?}` == \"|y: i32| captures[multiplier] (y * multiplier)\"
-`${h.cb:#?}`: "), used: 225 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, out_17.used);
+`${h.cb:#?}`: "), used: 225 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, out_18.used);
         unreachable;
     }
 }
 
 fn "inspect_closure_indirect.wado/$test_9_closure_stored_in_global_keeps_source_for____"() {
-    let a: ref Array<u8>;
     let a_end: i32;
-    let b: ref Array<u8>;
     let i: i32;
-    let t_12: ref struct;
-    let out_15: ref "core:prelude/string.wado//String";
+    let $licm_repr_12: ref Array<u8>;
+    let t_13: ref struct;
+    let out_16: ref "core:prelude/string.wado//String";
     global:inspect_closure_indirect.wado::GLOBAL_CB = struct.new "canonical//CanonicalClosure_0" { env: struct.new "inspect_closure_indirect.wado//$Closure_9" {}, inspect: ref.func "closure/inspect_closure_indirect.wado/$closure_inspect_wrapper_9", func: ref.func "closure/inspect_closure_indirect.wado/$closure_wrapper_9" };
-    t_12 = global:inspect_closure_indirect.wado::GLOBAL_CB;
-    out_15 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
+    t_13 = global:inspect_closure_indirect.wado::GLOBAL_CB;
+    out_16 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
     $inline_core_prelude_string_wado_String__format_inspect_closure_indirect_wado__tmpl_99d0bd09e20123ef__fn_i32___i32___spec0_spec0_sroa_t_h0__0__$inline_core_prelude_string_wado_String__internal_push_view_20: block {
         break $inline_core_prelude_string_wado_String__format_inspect_closure_indirect_wado__tmpl_99d0bd09e20123ef__fn_i32___i32___spec0_spec0_sroa_t_h0__0__$inline_core_prelude_string_wado_String__internal_push_view_20;
     };
-    "inspect_closure_indirect.wado/fn(i32)->i32^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude/types.wado//Box<fn(i32)->i32>" { value: t_12 }, struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 1, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: out_15 });
+    "inspect_closure_indirect.wado/fn(i32)->i32^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude/types.wado//Box<fn(i32)->i32>" { value: t_13 }, struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 1, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: out_16 });
     $inline_core_prelude_string_wado_String__format_inspect_closure_indirect_wado__tmpl_99d0bd09e20123ef__fn_i32___i32___spec0_spec0_sroa_t_h0__0__$inline_core_prelude_string_wado_String__internal_push_view_34: block {
         break $inline_core_prelude_string_wado_String__format_inspect_closure_indirect_wado__tmpl_99d0bd09e20123ef__fn_i32___i32___spec0_spec0_sroa_t_h0__0__$inline_core_prelude_string_wado_String__internal_push_view_34;
     };
     if @unlikely($inline_core_prelude_array_wado_seq_eq_u8__1: block -> bool {
-        a = out_15.repr;
-        a_end = out_15.used;
-        b = global:inspect_closure_indirect.wado::$const_obj_5;
-        if a_end != 18 {
+        if local.tee a_end(out_16.used) != 18 {
             break $inline_core_prelude_array_wado_seq_eq_u8__1: 0;
         }
         i = 0;
+        $licm_repr_12 = out_16.repr;
         b57: block {
             l58: loop {
                 break_if b57 (((i >= a_end) | ((i + 1) >= a_end)) | (((i + 1) + 1) >= a_end)) | ((((i + 1) + 1) + 1) >= a_end);
-                if builtin::array_get_value<u8>(a, i) != builtin::array_get_value<u8>(b, i) {
+                if builtin::array_get_value<u8>($licm_repr_12, i) != builtin::array_get_value<u8>(global:inspect_closure_indirect.wado::$const_obj_5, i) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__1: 0;
                 }
                 i = i + 1;
-                if builtin::array_get_value<u8>(a, i) != builtin::array_get_value<u8>(b, i) {
+                if builtin::array_get_value<u8>($licm_repr_12, i) != builtin::array_get_value<u8>(global:inspect_closure_indirect.wado::$const_obj_5, i) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__1: 0;
                 }
                 i = i + 1;
-                if builtin::array_get_value<u8>(a, i) != builtin::array_get_value<u8>(b, i) {
+                if builtin::array_get_value<u8>($licm_repr_12, i) != builtin::array_get_value<u8>(global:inspect_closure_indirect.wado::$const_obj_5, i) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__1: 0;
                 }
                 i = i + 1;
-                if builtin::array_get_value<u8>(a, i) != builtin::array_get_value<u8>(b, i) {
+                if builtin::array_get_value<u8>($licm_repr_12, i) != builtin::array_get_value<u8>(global:inspect_closure_indirect.wado::$const_obj_5, i) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__1: 0;
                 }
                 i = i + 1;
@@ -965,7 +947,7 @@ fn "inspect_closure_indirect.wado/$test_9_closure_stored_in_global_keeps_source_
         b63: block {
             l64: loop {
                 break_if b63 i >= a_end;
-                if builtin::array_get_value<u8>(a, i) != builtin::array_get_value<u8>(b, i) {
+                if builtin::array_get_value<u8>($licm_repr_12, i) != builtin::array_get_value<u8>(global:inspect_closure_indirect.wado::$const_obj_5, i) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__1: 0;
                 }
                 i = i + 1;
@@ -975,57 +957,54 @@ fn "inspect_closure_indirect.wado/$test_9_closure_stored_in_global_keeps_source_
         break $inline_core_prelude_array_wado_seq_eq_u8__1: 1;
     } == 0) {
         cold_path;
-        "core:rt/panic"(local.tee out_15("core:prelude/string.wado/core:prelude/string.wado/String::format<inspect_closure_indirect.wado/$tmpl$d48748ffcad618c0,[core:prelude/string.wado/String]>"(struct.new "inspect_closure_indirect.wado//$tmpl$d48748ffcad618c0" { h0: out_15, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_9_closure_stored_in_global_keeps_source_for____ at inspect_closure_indirect.wado:73
+        "core:rt/panic"(local.tee out_16("core:prelude/string.wado/core:prelude/string.wado/String::format<inspect_closure_indirect.wado/$tmpl$d48748ffcad618c0,[core:prelude/string.wado/String]>"(struct.new "inspect_closure_indirect.wado//$tmpl$d48748ffcad618c0" { h0: out_16, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_9_closure_stored_in_global_keeps_source_for____ at inspect_closure_indirect.wado:73
 condition: `${GLOBAL_CB:#?}` == \"|z: i32| (z + 100)\"
 `${GLOBAL_CB:#?}`: "), used: 182 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_9_closure_stored_in_global_keeps_source_for____ at inspect_closure_indirect.wado:73
 condition: `${GLOBAL_CB:#?}` == \"|z: i32| (z + 100)\"
-`${GLOBAL_CB:#?}`: "), used: 182 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, out_15.used);
+`${GLOBAL_CB:#?}`: "), used: 182 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, out_16.used);
         unreachable;
     }
 }
 
 fn "inspect_closure_indirect.wado/$test_10_closure_stored_in_global_keeps_signature_for___"() {
-    let a: ref Array<u8>;
     let a_end: i32;
-    let b: ref Array<u8>;
     let i: i32;
-    let t_12: ref struct;
-    let out_15: ref "core:prelude/string.wado//String";
+    let $licm_repr_12: ref Array<u8>;
+    let t_13: ref struct;
+    let out_16: ref "core:prelude/string.wado//String";
     let $temp_inline_core_prelude_traits_wado_TemplateHole_inspect_closure_indirect_wado__tmpl_69962e23b355dc19_fn_i32___i32___fmt_24_0: ref "core:prelude/format.wado//Formatter";
-    t_12 = global:inspect_closure_indirect.wado::GLOBAL_CB;
-    out_15 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
+    t_13 = global:inspect_closure_indirect.wado::GLOBAL_CB;
+    out_16 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
     $inline_core_prelude_string_wado_String__format_inspect_closure_indirect_wado__tmpl_69962e23b355dc19__fn_i32___i32___spec0_spec0_sroa_t_h0__0__$inline_core_prelude_string_wado_String__internal_push_view_20: block {
         break $inline_core_prelude_string_wado_String__format_inspect_closure_indirect_wado__tmpl_69962e23b355dc19__fn_i32___i32___spec0_spec0_sroa_t_h0__0__$inline_core_prelude_string_wado_String__internal_push_view_20;
     };
-    $temp_inline_core_prelude_traits_wado_TemplateHole_inspect_closure_indirect_wado__tmpl_69962e23b355dc19_fn_i32___i32___fmt_24_0 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: out_15 };
-    "inspect_closure_indirect.wado/fn(i32)->i32^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude/types.wado//Box<fn(i32)->i32>" { value: t_12 }, $temp_inline_core_prelude_traits_wado_TemplateHole_inspect_closure_indirect_wado__tmpl_69962e23b355dc19_fn_i32___i32___fmt_24_0);
+    $temp_inline_core_prelude_traits_wado_TemplateHole_inspect_closure_indirect_wado__tmpl_69962e23b355dc19_fn_i32___i32___fmt_24_0 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: out_16 };
+    "inspect_closure_indirect.wado/fn(i32)->i32^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude/types.wado//Box<fn(i32)->i32>" { value: t_13 }, $temp_inline_core_prelude_traits_wado_TemplateHole_inspect_closure_indirect_wado__tmpl_69962e23b355dc19_fn_i32___i32___fmt_24_0);
     $inline_core_prelude_string_wado_String__format_inspect_closure_indirect_wado__tmpl_69962e23b355dc19__fn_i32___i32___spec0_spec0_sroa_t_h0__0__$inline_core_prelude_string_wado_String__internal_push_view_34: block {
         break $inline_core_prelude_string_wado_String__format_inspect_closure_indirect_wado__tmpl_69962e23b355dc19__fn_i32___i32___spec0_spec0_sroa_t_h0__0__$inline_core_prelude_string_wado_String__internal_push_view_34;
     };
     if @unlikely($inline_core_prelude_array_wado_seq_eq_u8__1: block -> bool {
-        a = out_15.repr;
-        a_end = out_15.used;
-        b = global:inspect_closure_indirect.wado::$const_obj_6;
-        if a_end != 12 {
+        if local.tee a_end(out_16.used) != 12 {
             break $inline_core_prelude_array_wado_seq_eq_u8__1: 0;
         }
         i = 0;
+        $licm_repr_12 = out_16.repr;
         b68: block {
             l69: loop {
                 break_if b68 (((i >= a_end) | ((i + 1) >= a_end)) | (((i + 1) + 1) >= a_end)) | ((((i + 1) + 1) + 1) >= a_end);
-                if builtin::array_get_value<u8>(a, i) != builtin::array_get_value<u8>(b, i) {
+                if builtin::array_get_value<u8>($licm_repr_12, i) != builtin::array_get_value<u8>(global:inspect_closure_indirect.wado::$const_obj_6, i) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__1: 0;
                 }
                 i = i + 1;
-                if builtin::array_get_value<u8>(a, i) != builtin::array_get_value<u8>(b, i) {
+                if builtin::array_get_value<u8>($licm_repr_12, i) != builtin::array_get_value<u8>(global:inspect_closure_indirect.wado::$const_obj_6, i) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__1: 0;
                 }
                 i = i + 1;
-                if builtin::array_get_value<u8>(a, i) != builtin::array_get_value<u8>(b, i) {
+                if builtin::array_get_value<u8>($licm_repr_12, i) != builtin::array_get_value<u8>(global:inspect_closure_indirect.wado::$const_obj_6, i) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__1: 0;
                 }
                 i = i + 1;
-                if builtin::array_get_value<u8>(a, i) != builtin::array_get_value<u8>(b, i) {
+                if builtin::array_get_value<u8>($licm_repr_12, i) != builtin::array_get_value<u8>(global:inspect_closure_indirect.wado::$const_obj_6, i) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__1: 0;
                 }
                 i = i + 1;
@@ -1035,7 +1014,7 @@ fn "inspect_closure_indirect.wado/$test_10_closure_stored_in_global_keeps_signat
         b74: block {
             l75: loop {
                 break_if b74 i >= a_end;
-                if builtin::array_get_value<u8>(a, i) != builtin::array_get_value<u8>(b, i) {
+                if builtin::array_get_value<u8>($licm_repr_12, i) != builtin::array_get_value<u8>(global:inspect_closure_indirect.wado::$const_obj_6, i) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__1: 0;
                 }
                 i = i + 1;
@@ -1045,55 +1024,52 @@ fn "inspect_closure_indirect.wado/$test_10_closure_stored_in_global_keeps_signat
         break $inline_core_prelude_array_wado_seq_eq_u8__1: 1;
     } == 0) {
         cold_path;
-        "core:rt/panic"(local.tee out_15("core:prelude/string.wado/core:prelude/string.wado/String::format<inspect_closure_indirect.wado/$tmpl$d48748ffcad618c0,[core:prelude/string.wado/String]>"(struct.new "inspect_closure_indirect.wado//$tmpl$d48748ffcad618c0" { h0: out_15, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_10_closure_stored_in_global_keeps_signature_for___ at inspect_closure_indirect.wado:77
+        "core:rt/panic"(local.tee out_16("core:prelude/string.wado/core:prelude/string.wado/String::format<inspect_closure_indirect.wado/$tmpl$d48748ffcad618c0,[core:prelude/string.wado/String]>"(struct.new "inspect_closure_indirect.wado//$tmpl$d48748ffcad618c0" { h0: out_16, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_10_closure_stored_in_global_keeps_signature_for___ at inspect_closure_indirect.wado:77
 condition: `${GLOBAL_CB:?}` == \"|i32| -> i32\"
 `${GLOBAL_CB:?}`: "), used: 177 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_10_closure_stored_in_global_keeps_signature_for___ at inspect_closure_indirect.wado:77
 condition: `${GLOBAL_CB:?}` == \"|i32| -> i32\"
-`${GLOBAL_CB:?}`: "), used: 177 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, out_15.used);
+`${GLOBAL_CB:?}`: "), used: 177 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, out_16.used);
         unreachable;
     }
 }
 
 fn "inspect_closure_indirect.wado/$test_11_closure_escaped_through_return_value_keeps_source_for____"() {
     let r: ref struct;
-    let a: ref Array<u8>;
     let a_end: i32;
-    let b: ref Array<u8>;
     let i: i32;
-    let out_16: ref "core:prelude/string.wado//String";
+    let $licm_repr_13: ref Array<u8>;
+    let out_17: ref "core:prelude/string.wado//String";
     r = struct.new "canonical//CanonicalClosure_0" { env: struct.new "inspect_closure_indirect.wado//$Closure_10" {}, inspect: ref.func "closure/inspect_closure_indirect.wado/$closure_inspect_wrapper_10", func: ref.func "closure/inspect_closure_indirect.wado/$closure_wrapper_10" };
-    out_16 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
+    out_17 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
     $inline_core_prelude_string_wado_String__format_inspect_closure_indirect_wado__tmpl_99d0bd09e20123ef__fn_i32___i32___spec0_spec0_sroa_t_h0__0__$inline_core_prelude_string_wado_String__internal_push_view_20: block {
         break $inline_core_prelude_string_wado_String__format_inspect_closure_indirect_wado__tmpl_99d0bd09e20123ef__fn_i32___i32___spec0_spec0_sroa_t_h0__0__$inline_core_prelude_string_wado_String__internal_push_view_20;
     };
-    "inspect_closure_indirect.wado/fn(i32)->i32^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude/types.wado//Box<fn(i32)->i32>" { value: r }, struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 1, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: out_16 });
+    "inspect_closure_indirect.wado/fn(i32)->i32^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude/types.wado//Box<fn(i32)->i32>" { value: r }, struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 1, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: out_17 });
     $inline_core_prelude_string_wado_String__format_inspect_closure_indirect_wado__tmpl_99d0bd09e20123ef__fn_i32___i32___spec0_spec0_sroa_t_h0__0__$inline_core_prelude_string_wado_String__internal_push_view_34: block {
         break $inline_core_prelude_string_wado_String__format_inspect_closure_indirect_wado__tmpl_99d0bd09e20123ef__fn_i32___i32___spec0_spec0_sroa_t_h0__0__$inline_core_prelude_string_wado_String__internal_push_view_34;
     };
     if @unlikely($inline_core_prelude_array_wado_seq_eq_u8__2: block -> bool {
-        a = out_16.repr;
-        a_end = out_16.used;
-        b = global:inspect_closure_indirect.wado::$const_obj_7;
-        if a_end != 17 {
+        if local.tee a_end(out_17.used) != 17 {
             break $inline_core_prelude_array_wado_seq_eq_u8__2: 0;
         }
         i = 0;
+        $licm_repr_13 = out_17.repr;
         b79: block {
             l80: loop {
                 break_if b79 (((i >= a_end) | ((i + 1) >= a_end)) | (((i + 1) + 1) >= a_end)) | ((((i + 1) + 1) + 1) >= a_end);
-                if builtin::array_get_value<u8>(a, i) != builtin::array_get_value<u8>(b, i) {
+                if builtin::array_get_value<u8>($licm_repr_13, i) != builtin::array_get_value<u8>(global:inspect_closure_indirect.wado::$const_obj_7, i) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__2: 0;
                 }
                 i = i + 1;
-                if builtin::array_get_value<u8>(a, i) != builtin::array_get_value<u8>(b, i) {
+                if builtin::array_get_value<u8>($licm_repr_13, i) != builtin::array_get_value<u8>(global:inspect_closure_indirect.wado::$const_obj_7, i) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__2: 0;
                 }
                 i = i + 1;
-                if builtin::array_get_value<u8>(a, i) != builtin::array_get_value<u8>(b, i) {
+                if builtin::array_get_value<u8>($licm_repr_13, i) != builtin::array_get_value<u8>(global:inspect_closure_indirect.wado::$const_obj_7, i) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__2: 0;
                 }
                 i = i + 1;
-                if builtin::array_get_value<u8>(a, i) != builtin::array_get_value<u8>(b, i) {
+                if builtin::array_get_value<u8>($licm_repr_13, i) != builtin::array_get_value<u8>(global:inspect_closure_indirect.wado::$const_obj_7, i) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__2: 0;
                 }
                 i = i + 1;
@@ -1103,7 +1079,7 @@ fn "inspect_closure_indirect.wado/$test_11_closure_escaped_through_return_value_
         b85: block {
             l86: loop {
                 break_if b85 i >= a_end;
-                if builtin::array_get_value<u8>(a, i) != builtin::array_get_value<u8>(b, i) {
+                if builtin::array_get_value<u8>($licm_repr_13, i) != builtin::array_get_value<u8>(global:inspect_closure_indirect.wado::$const_obj_7, i) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__2: 0;
                 }
                 i = i + 1;
@@ -1113,55 +1089,52 @@ fn "inspect_closure_indirect.wado/$test_11_closure_escaped_through_return_value_
         break $inline_core_prelude_array_wado_seq_eq_u8__2: 1;
     } == 0) {
         cold_path;
-        "core:rt/panic"(local.tee out_16("core:prelude/string.wado/core:prelude/string.wado/String::format<inspect_closure_indirect.wado/$tmpl$d48748ffcad618c0,[core:prelude/string.wado/String]>"(struct.new "inspect_closure_indirect.wado//$tmpl$d48748ffcad618c0" { h0: out_16, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_11_closure_escaped_through_return_value_keeps_source_for____ at inspect_closure_indirect.wado:86
+        "core:rt/panic"(local.tee out_17("core:prelude/string.wado/core:prelude/string.wado/String::format<inspect_closure_indirect.wado/$tmpl$d48748ffcad618c0,[core:prelude/string.wado/String]>"(struct.new "inspect_closure_indirect.wado//$tmpl$d48748ffcad618c0" { h0: out_17, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_11_closure_escaped_through_return_value_keeps_source_for____ at inspect_closure_indirect.wado:86
 condition: `${r:#?}` == \"|k: i32| (k + 42)\"
 `${r:#?}`: "), used: 178 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_11_closure_escaped_through_return_value_keeps_source_for____ at inspect_closure_indirect.wado:86
 condition: `${r:#?}` == \"|k: i32| (k + 42)\"
-`${r:#?}`: "), used: 178 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, out_16.used);
+`${r:#?}`: "), used: 178 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, out_17.used);
         unreachable;
     }
 }
 
 fn "inspect_closure_indirect.wado/$test_12_closure_rebound_to_another_local_keeps_source_for____"() {
     let inner: ref struct;
-    let a: ref Array<u8>;
     let a_end: i32;
-    let b: ref Array<u8>;
     let i: i32;
-    let out_17: ref "core:prelude/string.wado//String";
+    let $licm_repr_14: ref Array<u8>;
+    let out_18: ref "core:prelude/string.wado//String";
     inner = struct.new "canonical//CanonicalClosure_0" { env: struct.new "inspect_closure_indirect.wado//$Closure_11" {}, inspect: ref.func "closure/inspect_closure_indirect.wado/$closure_inspect_wrapper_11", func: ref.func "closure/inspect_closure_indirect.wado/$closure_wrapper_11" };
-    out_17 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
+    out_18 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
     $inline_core_prelude_string_wado_String__format_inspect_closure_indirect_wado__tmpl_99d0bd09e20123ef__fn_i32___i32___spec0_spec0_sroa_t_h0__0__$inline_core_prelude_string_wado_String__internal_push_view_20: block {
         break $inline_core_prelude_string_wado_String__format_inspect_closure_indirect_wado__tmpl_99d0bd09e20123ef__fn_i32___i32___spec0_spec0_sroa_t_h0__0__$inline_core_prelude_string_wado_String__internal_push_view_20;
     };
-    "inspect_closure_indirect.wado/fn(i32)->i32^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude/types.wado//Box<fn(i32)->i32>" { value: inner }, struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 1, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: out_17 });
+    "inspect_closure_indirect.wado/fn(i32)->i32^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude/types.wado//Box<fn(i32)->i32>" { value: inner }, struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 1, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: out_18 });
     $inline_core_prelude_string_wado_String__format_inspect_closure_indirect_wado__tmpl_99d0bd09e20123ef__fn_i32___i32___spec0_spec0_sroa_t_h0__0__$inline_core_prelude_string_wado_String__internal_push_view_34: block {
         break $inline_core_prelude_string_wado_String__format_inspect_closure_indirect_wado__tmpl_99d0bd09e20123ef__fn_i32___i32___spec0_spec0_sroa_t_h0__0__$inline_core_prelude_string_wado_String__internal_push_view_34;
     };
     if @unlikely($inline_core_prelude_array_wado_seq_eq_u8__1: block -> bool {
-        a = out_17.repr;
-        a_end = out_17.used;
-        b = global:inspect_closure_indirect.wado::$const_obj_8;
-        if a_end != 16 {
+        if local.tee a_end(out_18.used) != 16 {
             break $inline_core_prelude_array_wado_seq_eq_u8__1: 0;
         }
         i = 0;
+        $licm_repr_14 = out_18.repr;
         b90: block {
             l91: loop {
                 break_if b90 (((i >= a_end) | ((i + 1) >= a_end)) | (((i + 1) + 1) >= a_end)) | ((((i + 1) + 1) + 1) >= a_end);
-                if builtin::array_get_value<u8>(a, i) != builtin::array_get_value<u8>(b, i) {
+                if builtin::array_get_value<u8>($licm_repr_14, i) != builtin::array_get_value<u8>(global:inspect_closure_indirect.wado::$const_obj_8, i) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__1: 0;
                 }
                 i = i + 1;
-                if builtin::array_get_value<u8>(a, i) != builtin::array_get_value<u8>(b, i) {
+                if builtin::array_get_value<u8>($licm_repr_14, i) != builtin::array_get_value<u8>(global:inspect_closure_indirect.wado::$const_obj_8, i) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__1: 0;
                 }
                 i = i + 1;
-                if builtin::array_get_value<u8>(a, i) != builtin::array_get_value<u8>(b, i) {
+                if builtin::array_get_value<u8>($licm_repr_14, i) != builtin::array_get_value<u8>(global:inspect_closure_indirect.wado::$const_obj_8, i) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__1: 0;
                 }
                 i = i + 1;
-                if builtin::array_get_value<u8>(a, i) != builtin::array_get_value<u8>(b, i) {
+                if builtin::array_get_value<u8>($licm_repr_14, i) != builtin::array_get_value<u8>(global:inspect_closure_indirect.wado::$const_obj_8, i) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__1: 0;
                 }
                 i = i + 1;
@@ -1171,7 +1144,7 @@ fn "inspect_closure_indirect.wado/$test_12_closure_rebound_to_another_local_keep
         b96: block {
             l97: loop {
                 break_if b96 i >= a_end;
-                if builtin::array_get_value<u8>(a, i) != builtin::array_get_value<u8>(b, i) {
+                if builtin::array_get_value<u8>($licm_repr_14, i) != builtin::array_get_value<u8>(global:inspect_closure_indirect.wado::$const_obj_8, i) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__1: 0;
                 }
                 i = i + 1;
@@ -1181,11 +1154,11 @@ fn "inspect_closure_indirect.wado/$test_12_closure_rebound_to_another_local_keep
         break $inline_core_prelude_array_wado_seq_eq_u8__1: 1;
     } == 0) {
         cold_path;
-        "core:rt/panic"(local.tee out_17("core:prelude/string.wado/core:prelude/string.wado/String::format<inspect_closure_indirect.wado/$tmpl$d48748ffcad618c0,[core:prelude/string.wado/String]>"(struct.new "inspect_closure_indirect.wado//$tmpl$d48748ffcad618c0" { h0: out_17, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_12_closure_rebound_to_another_local_keeps_source_for____ at inspect_closure_indirect.wado:92
+        "core:rt/panic"(local.tee out_18("core:prelude/string.wado/core:prelude/string.wado/String::format<inspect_closure_indirect.wado/$tmpl$d48748ffcad618c0,[core:prelude/string.wado/String]>"(struct.new "inspect_closure_indirect.wado//$tmpl$d48748ffcad618c0" { h0: out_18, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_12_closure_rebound_to_another_local_keeps_source_for____ at inspect_closure_indirect.wado:92
 condition: `${alias:#?}` == \"|m: i32| (m * 7)\"
 `${alias:#?}`: "), used: 181 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_12_closure_rebound_to_another_local_keeps_source_for____ at inspect_closure_indirect.wado:92
 condition: `${alias:#?}` == \"|m: i32| (m * 7)\"
-`${alias:#?}`: "), used: 181 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, out_17.used);
+`${alias:#?}`: "), used: 181 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, out_18.used);
         unreachable;
     }
 }
@@ -1234,11 +1207,11 @@ fn "inspect_closure_indirect.wado/$cm_export__$test_0_literal_site_____still_wor
 
 fn "inspect_closure_indirect.wado/$cm_export__$test_1_closure_passed_as_fn_param_keeps_signature_for___"() {
     let add_one: ref struct;
-    let a: ref Array<u8>;
     let a_end: i32;
     let b: ref Array<u8>;
     let i: i32;
-    let out_17: ref "core:prelude/string.wado//String";
+    let $licm_repr_14: ref Array<u8>;
+    let out_18: ref "core:prelude/string.wado//String";
     let $temp_inline_core_prelude_traits_wado_TemplateHole_inspect_closure_indirect_wado__tmpl_69962e23b355dc19_fn_i32___i32___fmt_24_0: ref "core:prelude/format.wado//Formatter";
     $inline__initialize_modules_0: block {
         break_if $inline__initialize_modules_0 @likely(global:inspect_closure_indirect.wado::$modules_initialized);
@@ -1246,39 +1219,39 @@ fn "inspect_closure_indirect.wado/$cm_export__$test_1_closure_passed_as_fn_param
         "inspect_closure_indirect.wado/$initialize_modules$cold0"();
     };
     add_one = struct.new "canonical//CanonicalClosure_0" { env: struct.new "inspect_closure_indirect.wado//$Closure_1" {}, inspect: ref.func "closure/inspect_closure_indirect.wado/$closure_inspect_wrapper_1", func: ref.func "closure/inspect_closure_indirect.wado/$closure_wrapper_1" };
-    out_17 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
+    out_18 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
     $inline_core_prelude_string_wado_String__format_inspect_closure_indirect_wado__tmpl_69962e23b355dc19__fn_i32___i32___spec0_spec0_sroa_t_h0__0__$inline_core_prelude_string_wado_String__internal_push_view_20: block {
         break $inline_core_prelude_string_wado_String__format_inspect_closure_indirect_wado__tmpl_69962e23b355dc19__fn_i32___i32___spec0_spec0_sroa_t_h0__0__$inline_core_prelude_string_wado_String__internal_push_view_20;
     };
-    $temp_inline_core_prelude_traits_wado_TemplateHole_inspect_closure_indirect_wado__tmpl_69962e23b355dc19_fn_i32___i32___fmt_24_0 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: out_17 };
+    $temp_inline_core_prelude_traits_wado_TemplateHole_inspect_closure_indirect_wado__tmpl_69962e23b355dc19_fn_i32___i32___fmt_24_0 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: out_18 };
     "inspect_closure_indirect.wado/fn(i32)->i32^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude/types.wado//Box<fn(i32)->i32>" { value: add_one }, $temp_inline_core_prelude_traits_wado_TemplateHole_inspect_closure_indirect_wado__tmpl_69962e23b355dc19_fn_i32___i32___fmt_24_0);
     $inline_core_prelude_string_wado_String__format_inspect_closure_indirect_wado__tmpl_69962e23b355dc19__fn_i32___i32___spec0_spec0_sroa_t_h0__0__$inline_core_prelude_string_wado_String__internal_push_view_34: block {
         break $inline_core_prelude_string_wado_String__format_inspect_closure_indirect_wado__tmpl_69962e23b355dc19__fn_i32___i32___spec0_spec0_sroa_t_h0__0__$inline_core_prelude_string_wado_String__internal_push_view_34;
     };
     if @unlikely($inline_core_prelude_array_wado_seq_eq_u8__4: block -> bool {
-        a = out_17.repr;
-        a_end = out_17.used;
+        a_end = out_18.used;
         b = array.new_data<u8>("|i32| -> i32");
         if a_end != 12 {
             break $inline_core_prelude_array_wado_seq_eq_u8__4: 0;
         }
         i = 0;
+        $licm_repr_14 = out_18.repr;
         b111: block {
             l112: loop {
                 break_if b111 (((i >= a_end) | ((i + 1) >= a_end)) | (((i + 1) + 1) >= a_end)) | ((((i + 1) + 1) + 1) >= a_end);
-                if builtin::array_get_value<u8>(a, i) != builtin::array_get_value<u8>(b, i) {
+                if builtin::array_get_value<u8>($licm_repr_14, i) != builtin::array_get_value<u8>(b, i) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__4: 0;
                 }
                 i = i + 1;
-                if builtin::array_get_value<u8>(a, i) != builtin::array_get_value<u8>(b, i) {
+                if builtin::array_get_value<u8>($licm_repr_14, i) != builtin::array_get_value<u8>(b, i) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__4: 0;
                 }
                 i = i + 1;
-                if builtin::array_get_value<u8>(a, i) != builtin::array_get_value<u8>(b, i) {
+                if builtin::array_get_value<u8>($licm_repr_14, i) != builtin::array_get_value<u8>(b, i) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__4: 0;
                 }
                 i = i + 1;
-                if builtin::array_get_value<u8>(a, i) != builtin::array_get_value<u8>(b, i) {
+                if builtin::array_get_value<u8>($licm_repr_14, i) != builtin::array_get_value<u8>(b, i) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__4: 0;
                 }
                 i = i + 1;
@@ -1288,7 +1261,7 @@ fn "inspect_closure_indirect.wado/$cm_export__$test_1_closure_passed_as_fn_param
         b117: block {
             l118: loop {
                 break_if b117 i >= a_end;
-                if builtin::array_get_value<u8>(a, i) != builtin::array_get_value<u8>(b, i) {
+                if builtin::array_get_value<u8>($licm_repr_14, i) != builtin::array_get_value<u8>(b, i) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__4: 0;
                 }
                 i = i + 1;
@@ -1298,13 +1271,13 @@ fn "inspect_closure_indirect.wado/$cm_export__$test_1_closure_passed_as_fn_param
         break $inline_core_prelude_array_wado_seq_eq_u8__4: 1;
     } == 0) {
         cold_path;
-        "core:rt/panic"(local.tee out_17("core:prelude/string.wado/core:prelude/string.wado/String::format<inspect_closure_indirect.wado/$tmpl$480939cea924638b,[fn(i32)->i32,core:prelude/string.wado/String]>"(struct.new "inspect_closure_indirect.wado//$tmpl$480939cea924638b" { h0: add_one, h1: out_17, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_1_closure_passed_as_fn_param_keeps_signature_for___ at inspect_closure_indirect.wado:26
+        "core:rt/panic"(local.tee out_18("core:prelude/string.wado/core:prelude/string.wado/String::format<inspect_closure_indirect.wado/$tmpl$480939cea924638b,[fn(i32)->i32,core:prelude/string.wado/String]>"(struct.new "inspect_closure_indirect.wado//$tmpl$480939cea924638b" { h0: add_one, h1: out_18, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_1_closure_passed_as_fn_param_keeps_signature_for___ at inspect_closure_indirect.wado:26
 condition: fmt_def(add_one) == \"|i32| -> i32\"
 add_one: "), used: 169 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_1_closure_passed_as_fn_param_keeps_signature_for___ at inspect_closure_indirect.wado:26
 condition: fmt_def(add_one) == \"|i32| -> i32\"
 add_one: "), used: 169 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 fmt_def(add_one): "), used: 19 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
-fmt_def(add_one): "), used: 19 }, s2: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r2: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, out_17.used);
+fmt_def(add_one): "), used: 19 }, s2: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r2: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, out_18.used);
         unreachable;
     }
     "wasi/task-return"(0);
@@ -1312,49 +1285,49 @@ fmt_def(add_one): "), used: 19 }, s2: struct.new "core:prelude/string.wado//Stri
 
 fn "inspect_closure_indirect.wado/$cm_export__$test_2_closure_passed_as_fn_param_keeps_source_for____"() {
     let add_one: ref struct;
-    let a: ref Array<u8>;
     let a_end: i32;
     let b: ref Array<u8>;
     let i: i32;
-    let out_17: ref "core:prelude/string.wado//String";
+    let $licm_repr_14: ref Array<u8>;
+    let out_18: ref "core:prelude/string.wado//String";
     $inline__initialize_modules_0: block {
         break_if $inline__initialize_modules_0 @likely(global:inspect_closure_indirect.wado::$modules_initialized);
         cold_path;
         "inspect_closure_indirect.wado/$initialize_modules$cold0"();
     };
     add_one = struct.new "canonical//CanonicalClosure_0" { env: struct.new "inspect_closure_indirect.wado//$Closure_2" {}, inspect: ref.func "closure/inspect_closure_indirect.wado/$closure_inspect_wrapper_2", func: ref.func "closure/inspect_closure_indirect.wado/$closure_wrapper_2" };
-    out_17 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
+    out_18 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
     $inline_core_prelude_string_wado_String__format_inspect_closure_indirect_wado__tmpl_99d0bd09e20123ef__fn_i32___i32___spec0_spec0_sroa_t_h0__0__$inline_core_prelude_string_wado_String__internal_push_view_20: block {
         break $inline_core_prelude_string_wado_String__format_inspect_closure_indirect_wado__tmpl_99d0bd09e20123ef__fn_i32___i32___spec0_spec0_sroa_t_h0__0__$inline_core_prelude_string_wado_String__internal_push_view_20;
     };
-    "inspect_closure_indirect.wado/fn(i32)->i32^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude/types.wado//Box<fn(i32)->i32>" { value: add_one }, struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 1, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: out_17 });
+    "inspect_closure_indirect.wado/fn(i32)->i32^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude/types.wado//Box<fn(i32)->i32>" { value: add_one }, struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 1, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: out_18 });
     $inline_core_prelude_string_wado_String__format_inspect_closure_indirect_wado__tmpl_99d0bd09e20123ef__fn_i32___i32___spec0_spec0_sroa_t_h0__0__$inline_core_prelude_string_wado_String__internal_push_view_34: block {
         break $inline_core_prelude_string_wado_String__format_inspect_closure_indirect_wado__tmpl_99d0bd09e20123ef__fn_i32___i32___spec0_spec0_sroa_t_h0__0__$inline_core_prelude_string_wado_String__internal_push_view_34;
     };
     if @unlikely($inline_core_prelude_array_wado_seq_eq_u8__4: block -> bool {
-        a = out_17.repr;
-        a_end = out_17.used;
+        a_end = out_18.used;
         b = array.new_data<u8>("|x: i32| (x + 1)");
         if a_end != 16 {
             break $inline_core_prelude_array_wado_seq_eq_u8__4: 0;
         }
         i = 0;
+        $licm_repr_14 = out_18.repr;
         b122: block {
             l123: loop {
                 break_if b122 (((i >= a_end) | ((i + 1) >= a_end)) | (((i + 1) + 1) >= a_end)) | ((((i + 1) + 1) + 1) >= a_end);
-                if builtin::array_get_value<u8>(a, i) != builtin::array_get_value<u8>(b, i) {
+                if builtin::array_get_value<u8>($licm_repr_14, i) != builtin::array_get_value<u8>(b, i) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__4: 0;
                 }
                 i = i + 1;
-                if builtin::array_get_value<u8>(a, i) != builtin::array_get_value<u8>(b, i) {
+                if builtin::array_get_value<u8>($licm_repr_14, i) != builtin::array_get_value<u8>(b, i) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__4: 0;
                 }
                 i = i + 1;
-                if builtin::array_get_value<u8>(a, i) != builtin::array_get_value<u8>(b, i) {
+                if builtin::array_get_value<u8>($licm_repr_14, i) != builtin::array_get_value<u8>(b, i) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__4: 0;
                 }
                 i = i + 1;
-                if builtin::array_get_value<u8>(a, i) != builtin::array_get_value<u8>(b, i) {
+                if builtin::array_get_value<u8>($licm_repr_14, i) != builtin::array_get_value<u8>(b, i) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__4: 0;
                 }
                 i = i + 1;
@@ -1364,7 +1337,7 @@ fn "inspect_closure_indirect.wado/$cm_export__$test_2_closure_passed_as_fn_param
         b128: block {
             l129: loop {
                 break_if b128 i >= a_end;
-                if builtin::array_get_value<u8>(a, i) != builtin::array_get_value<u8>(b, i) {
+                if builtin::array_get_value<u8>($licm_repr_14, i) != builtin::array_get_value<u8>(b, i) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__4: 0;
                 }
                 i = i + 1;
@@ -1374,13 +1347,13 @@ fn "inspect_closure_indirect.wado/$cm_export__$test_2_closure_passed_as_fn_param
         break $inline_core_prelude_array_wado_seq_eq_u8__4: 1;
     } == 0) {
         cold_path;
-        "core:rt/panic"(local.tee out_17("core:prelude/string.wado/core:prelude/string.wado/String::format<inspect_closure_indirect.wado/$tmpl$480939cea924638b,[fn(i32)->i32,core:prelude/string.wado/String]>"(struct.new "inspect_closure_indirect.wado//$tmpl$480939cea924638b" { h0: add_one, h1: out_17, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_2_closure_passed_as_fn_param_keeps_source_for____ at inspect_closure_indirect.wado:31
+        "core:rt/panic"(local.tee out_18("core:prelude/string.wado/core:prelude/string.wado/String::format<inspect_closure_indirect.wado/$tmpl$480939cea924638b,[fn(i32)->i32,core:prelude/string.wado/String]>"(struct.new "inspect_closure_indirect.wado//$tmpl$480939cea924638b" { h0: add_one, h1: out_18, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_2_closure_passed_as_fn_param_keeps_source_for____ at inspect_closure_indirect.wado:31
 condition: fmt_alt(add_one) == \"|x: i32| (x + 1)\"
 add_one: "), used: 171 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_2_closure_passed_as_fn_param_keeps_source_for____ at inspect_closure_indirect.wado:31
 condition: fmt_alt(add_one) == \"|x: i32| (x + 1)\"
 add_one: "), used: 171 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 fmt_alt(add_one): "), used: 19 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
-fmt_alt(add_one): "), used: 19 }, s2: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r2: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, out_17.used);
+fmt_alt(add_one): "), used: 19 }, s2: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r2: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, out_18.used);
         unreachable;
     }
     "wasi/task-return"(0);
@@ -1408,49 +1381,49 @@ fn "inspect_closure_indirect.wado/$cm_export__$test_4_let_bound_closure_stored_i
 
 fn "inspect_closure_indirect.wado/$cm_export__$test_5_let_bound_closure_stored_in_struct_field_passed_across_fn_boundary_keeps_source"() {
     let inner: ref struct;
-    let a: ref Array<u8>;
     let a_end: i32;
     let b: ref Array<u8>;
     let i: i32;
-    let out_20: ref "core:prelude/string.wado//String";
+    let $licm_repr_17: ref Array<u8>;
+    let out_21: ref "core:prelude/string.wado//String";
     $inline__initialize_modules_0: block {
         break_if $inline__initialize_modules_0 @likely(global:inspect_closure_indirect.wado::$modules_initialized);
         cold_path;
         "inspect_closure_indirect.wado/$initialize_modules$cold0"();
     };
     inner = struct.new "canonical//CanonicalClosure_0" { env: struct.new "inspect_closure_indirect.wado//$Closure_5" {}, inspect: ref.func "closure/inspect_closure_indirect.wado/$closure_inspect_wrapper_5", func: ref.func "closure/inspect_closure_indirect.wado/$closure_wrapper_5" };
-    out_20 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
+    out_21 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
     $inline_core_prelude_string_wado_String__format_inspect_closure_indirect_wado__tmpl_99d0bd09e20123ef__fn_i32___i32___spec0_spec0_sroa_t_h0__0__$inline_core_prelude_string_wado_String__internal_push_view_20: block {
         break $inline_core_prelude_string_wado_String__format_inspect_closure_indirect_wado__tmpl_99d0bd09e20123ef__fn_i32___i32___spec0_spec0_sroa_t_h0__0__$inline_core_prelude_string_wado_String__internal_push_view_20;
     };
-    "inspect_closure_indirect.wado/fn(i32)->i32^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude/types.wado//Box<fn(i32)->i32>" { value: inner }, struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 1, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: out_20 });
+    "inspect_closure_indirect.wado/fn(i32)->i32^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude/types.wado//Box<fn(i32)->i32>" { value: inner }, struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 1, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: out_21 });
     $inline_core_prelude_string_wado_String__format_inspect_closure_indirect_wado__tmpl_99d0bd09e20123ef__fn_i32___i32___spec0_spec0_sroa_t_h0__0__$inline_core_prelude_string_wado_String__internal_push_view_34: block {
         break $inline_core_prelude_string_wado_String__format_inspect_closure_indirect_wado__tmpl_99d0bd09e20123ef__fn_i32___i32___spec0_spec0_sroa_t_h0__0__$inline_core_prelude_string_wado_String__internal_push_view_34;
     };
     if @unlikely($inline_core_prelude_array_wado_seq_eq_u8__4: block -> bool {
-        a = out_20.repr;
-        a_end = out_20.used;
+        a_end = out_21.used;
         b = array.new_data<u8>("|a: i32| (a * 3)");
         if a_end != 16 {
             break $inline_core_prelude_array_wado_seq_eq_u8__4: 0;
         }
         i = 0;
+        $licm_repr_17 = out_21.repr;
         b133: block {
             l134: loop {
                 break_if b133 (((i >= a_end) | ((i + 1) >= a_end)) | (((i + 1) + 1) >= a_end)) | ((((i + 1) + 1) + 1) >= a_end);
-                if builtin::array_get_value<u8>(a, i) != builtin::array_get_value<u8>(b, i) {
+                if builtin::array_get_value<u8>($licm_repr_17, i) != builtin::array_get_value<u8>(b, i) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__4: 0;
                 }
                 i = i + 1;
-                if builtin::array_get_value<u8>(a, i) != builtin::array_get_value<u8>(b, i) {
+                if builtin::array_get_value<u8>($licm_repr_17, i) != builtin::array_get_value<u8>(b, i) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__4: 0;
                 }
                 i = i + 1;
-                if builtin::array_get_value<u8>(a, i) != builtin::array_get_value<u8>(b, i) {
+                if builtin::array_get_value<u8>($licm_repr_17, i) != builtin::array_get_value<u8>(b, i) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__4: 0;
                 }
                 i = i + 1;
-                if builtin::array_get_value<u8>(a, i) != builtin::array_get_value<u8>(b, i) {
+                if builtin::array_get_value<u8>($licm_repr_17, i) != builtin::array_get_value<u8>(b, i) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__4: 0;
                 }
                 i = i + 1;
@@ -1460,7 +1433,7 @@ fn "inspect_closure_indirect.wado/$cm_export__$test_5_let_bound_closure_stored_i
         b139: block {
             l140: loop {
                 break_if b139 i >= a_end;
-                if builtin::array_get_value<u8>(a, i) != builtin::array_get_value<u8>(b, i) {
+                if builtin::array_get_value<u8>($licm_repr_17, i) != builtin::array_get_value<u8>(b, i) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__4: 0;
                 }
                 i = i + 1;
@@ -1470,13 +1443,13 @@ fn "inspect_closure_indirect.wado/$cm_export__$test_5_let_bound_closure_stored_i
         break $inline_core_prelude_array_wado_seq_eq_u8__4: 1;
     } == 0) {
         cold_path;
-        "core:rt/panic"(local.tee out_20("core:prelude/string.wado/core:prelude/string.wado/String::format<inspect_closure_indirect.wado/$tmpl$480939cea924638b,[fn(i32)->i32,core:prelude/string.wado/String]>"(struct.new "inspect_closure_indirect.wado//$tmpl$480939cea924638b" { h0: inner, h1: out_20, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_5_let_bound_closure_stored_in_struct_field_passed_across_fn_boundary_keeps_source at inspect_closure_indirect.wado:48
+        "core:rt/panic"(local.tee out_21("core:prelude/string.wado/core:prelude/string.wado/String::format<inspect_closure_indirect.wado/$tmpl$480939cea924638b,[fn(i32)->i32,core:prelude/string.wado/String]>"(struct.new "inspect_closure_indirect.wado//$tmpl$480939cea924638b" { h0: inner, h1: out_21, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_5_let_bound_closure_stored_in_struct_field_passed_across_fn_boundary_keeps_source at inspect_closure_indirect.wado:48
 condition: fmt_alt(h.cb) == \"|a: i32| (a * 3)\"
 h.cb: "), used: 197 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_5_let_bound_closure_stored_in_struct_field_passed_across_fn_boundary_keeps_source at inspect_closure_indirect.wado:48
 condition: fmt_alt(h.cb) == \"|a: i32| (a * 3)\"
 h.cb: "), used: 197 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 fmt_alt(h.cb): "), used: 16 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
-fmt_alt(h.cb): "), used: 16 }, s2: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r2: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, out_20.used);
+fmt_alt(h.cb): "), used: 16 }, s2: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r2: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, out_21.used);
         unreachable;
     }
     "wasi/task-return"(0);
@@ -1494,49 +1467,49 @@ fn "inspect_closure_indirect.wado/$cm_export__$test_6_capturing_closure_shows_ca
 
 fn "inspect_closure_indirect.wado/$cm_export__$test_7_capturing_closure_passed_through_fn_parameter_keeps_captures_clause_for____"() {
     let f_1: ref struct;
-    let a: ref Array<u8>;
     let a_end: i32;
     let b: ref Array<u8>;
     let i: i32;
-    let out_18: ref "core:prelude/string.wado//String";
+    let $licm_repr_15: ref Array<u8>;
+    let out_19: ref "core:prelude/string.wado//String";
     $inline__initialize_modules_0: block {
         break_if $inline__initialize_modules_0 @likely(global:inspect_closure_indirect.wado::$modules_initialized);
         cold_path;
         "inspect_closure_indirect.wado/$initialize_modules$cold0"();
     };
     f_1 = struct.new "canonical//CanonicalClosure_0" { env: struct.new "inspect_closure_indirect.wado//$Closure_7" { $capture_0: 7 }, inspect: ref.func "closure/inspect_closure_indirect.wado/$closure_inspect_wrapper_7", func: ref.func "closure/inspect_closure_indirect.wado/$closure_wrapper_7" };
-    out_18 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
+    out_19 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
     $inline_core_prelude_string_wado_String__format_inspect_closure_indirect_wado__tmpl_99d0bd09e20123ef__fn_i32___i32___spec0_spec0_sroa_t_h0__0__$inline_core_prelude_string_wado_String__internal_push_view_20: block {
         break $inline_core_prelude_string_wado_String__format_inspect_closure_indirect_wado__tmpl_99d0bd09e20123ef__fn_i32___i32___spec0_spec0_sroa_t_h0__0__$inline_core_prelude_string_wado_String__internal_push_view_20;
     };
-    "inspect_closure_indirect.wado/fn(i32)->i32^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude/types.wado//Box<fn(i32)->i32>" { value: f_1 }, struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 1, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: out_18 });
+    "inspect_closure_indirect.wado/fn(i32)->i32^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude/types.wado//Box<fn(i32)->i32>" { value: f_1 }, struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 1, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: out_19 });
     $inline_core_prelude_string_wado_String__format_inspect_closure_indirect_wado__tmpl_99d0bd09e20123ef__fn_i32___i32___spec0_spec0_sroa_t_h0__0__$inline_core_prelude_string_wado_String__internal_push_view_34: block {
         break $inline_core_prelude_string_wado_String__format_inspect_closure_indirect_wado__tmpl_99d0bd09e20123ef__fn_i32___i32___spec0_spec0_sroa_t_h0__0__$inline_core_prelude_string_wado_String__internal_push_view_34;
     };
     if @unlikely($inline_core_prelude_array_wado_seq_eq_u8__4: block -> bool {
-        a = out_18.repr;
-        a_end = out_18.used;
+        a_end = out_19.used;
         b = array.new_data<u8>("|x: i32| captures[n] (x + n)");
         if a_end != 28 {
             break $inline_core_prelude_array_wado_seq_eq_u8__4: 0;
         }
         i = 0;
+        $licm_repr_15 = out_19.repr;
         b144: block {
             l145: loop {
                 break_if b144 (((i >= a_end) | ((i + 1) >= a_end)) | (((i + 1) + 1) >= a_end)) | ((((i + 1) + 1) + 1) >= a_end);
-                if builtin::array_get_value<u8>(a, i) != builtin::array_get_value<u8>(b, i) {
+                if builtin::array_get_value<u8>($licm_repr_15, i) != builtin::array_get_value<u8>(b, i) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__4: 0;
                 }
                 i = i + 1;
-                if builtin::array_get_value<u8>(a, i) != builtin::array_get_value<u8>(b, i) {
+                if builtin::array_get_value<u8>($licm_repr_15, i) != builtin::array_get_value<u8>(b, i) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__4: 0;
                 }
                 i = i + 1;
-                if builtin::array_get_value<u8>(a, i) != builtin::array_get_value<u8>(b, i) {
+                if builtin::array_get_value<u8>($licm_repr_15, i) != builtin::array_get_value<u8>(b, i) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__4: 0;
                 }
                 i = i + 1;
-                if builtin::array_get_value<u8>(a, i) != builtin::array_get_value<u8>(b, i) {
+                if builtin::array_get_value<u8>($licm_repr_15, i) != builtin::array_get_value<u8>(b, i) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__4: 0;
                 }
                 i = i + 1;
@@ -1546,7 +1519,7 @@ fn "inspect_closure_indirect.wado/$cm_export__$test_7_capturing_closure_passed_t
         b150: block {
             l151: loop {
                 break_if b150 i >= a_end;
-                if builtin::array_get_value<u8>(a, i) != builtin::array_get_value<u8>(b, i) {
+                if builtin::array_get_value<u8>($licm_repr_15, i) != builtin::array_get_value<u8>(b, i) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__4: 0;
                 }
                 i = i + 1;
@@ -1556,13 +1529,13 @@ fn "inspect_closure_indirect.wado/$cm_export__$test_7_capturing_closure_passed_t
         break $inline_core_prelude_array_wado_seq_eq_u8__4: 1;
     } == 0) {
         cold_path;
-        "core:rt/panic"(local.tee out_18("core:prelude/string.wado/core:prelude/string.wado/String::format<inspect_closure_indirect.wado/$tmpl$480939cea924638b,[fn(i32)->i32,core:prelude/string.wado/String]>"(struct.new "inspect_closure_indirect.wado//$tmpl$480939cea924638b" { h0: f_1, h1: out_18, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_7_capturing_closure_passed_through_fn_parameter_keeps_captures_clause_for____ at inspect_closure_indirect.wado:60
+        "core:rt/panic"(local.tee out_19("core:prelude/string.wado/core:prelude/string.wado/String::format<inspect_closure_indirect.wado/$tmpl$480939cea924638b,[fn(i32)->i32,core:prelude/string.wado/String]>"(struct.new "inspect_closure_indirect.wado//$tmpl$480939cea924638b" { h0: f_1, h1: out_19, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_7_capturing_closure_passed_through_fn_parameter_keeps_captures_clause_for____ at inspect_closure_indirect.wado:60
 condition: fmt_alt(f) == \"|x: i32| captures[n] (x + n)\"
 f: "), used: 199 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_7_capturing_closure_passed_through_fn_parameter_keeps_captures_clause_for____ at inspect_closure_indirect.wado:60
 condition: fmt_alt(f) == \"|x: i32| captures[n] (x + n)\"
 f: "), used: 199 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 fmt_alt(f): "), used: 13 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
-fmt_alt(f): "), used: 13 }, s2: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r2: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, out_18.used);
+fmt_alt(f): "), used: 13 }, s2: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r2: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, out_19.used);
         unreachable;
     }
     "wasi/task-return"(0);
@@ -2665,7 +2638,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::internal_set_byte_
     self_15 = self.used;
     if @unlikely(index >=u self_15) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_at$contract_report0"(index, self_15, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/string.wado:571"), used: 28 });
+        "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_at$contract_report0"(index, self_15, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/string.wado:558"), used: 28 });
         unreachable;
     }
     builtin::array_set_u8(self.repr, index, value);
@@ -2780,7 +2753,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/StrSlice^core:prelude/stri
         $v1 = self.end - local.tee $load_1(self.start);
         if @unlikely(((0 <= index) & (index < $v1)) == 0) {
             cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/StrSlice::byte_at$contract_report0"(index, $v1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/string.wado:1770"), used: 29 });
+            "core:prelude/string.wado/core:prelude/string.wado/StrSlice::byte_at$contract_report0"(index, $v1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/string.wado:1757"), used: 29 });
             unreachable;
         }
         "core:prelude/string.wado/core:prelude/string.wado/StrSlice::byte_at$unchecked"(self.repr, $load_1, index);

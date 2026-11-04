@@ -130,10 +130,10 @@ fn "array_bounds_elim_loop_guard.wado/run"() with Stdout {
     let i_2: i32;
     let out_30: ref "core:prelude/string.wado//String";
     let x: i64;
-    let arr_135: ref Array<u8>;
+    let arr_132: ref Array<u8>;
     let q: u64;
     let tens: i32;
-    let start_183: i32;
+    let start_180: i32;
     sum = 0;
     i_2 = 0;
     b0: block {
@@ -235,33 +235,33 @@ fn "array_bounds_elim_loop_guard.wado/run"() with Stdout {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_30, i_2);
         }
-        start_183 = out_30.used;
+        start_180 = out_30.used;
         out_30.used = i_2;
-        builtin::array_set_u8(out_30.repr, start_183, 45);
+        builtin::array_set_u8(out_30.repr, start_180, 45);
     } else {
     }
     if @unlikely(local.tee i_2(out_30.used + sum) > builtin::array_len(out_30.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_30, i_2);
     }
-    start_183 = out_30.used;
+    start_180 = out_30.used;
     out_30.used = i_2;
-    arr_135 = out_30.repr;
-    sum = start_183 + sum;
+    arr_132 = out_30.repr;
+    sum = start_180 + sum;
     b27: block {
         l28: loop {
-            break_if b27 (sum - start_183) < 2;
+            break_if b27 (sum - start_180) < 2;
             q = x /u 100_i64;
             tens = local.tee i_2(builtin::i32_wrap_i64(x - (q * 100_i64))) / 10;
-            builtin::array_set_u8(arr_135, sum - 1, (48 + i_2) - (tens * 10));
-            builtin::array_set_u8(arr_135, sum - 2, 48 + tens);
+            builtin::array_set_u8(arr_132, sum - 1, (48 + i_2) - (tens * 10));
+            builtin::array_set_u8(arr_132, sum - 2, 48 + tens);
             sum = sum - 2;
             x = q;
             continue l28;
         };
     };
-    if sum > start_183 {
-        builtin::array_set_u8(arr_135, start_183, 48 + builtin::i32_wrap_i64(x %u 10_i64));
+    if sum > start_180 {
+        builtin::array_set_u8(arr_132, start_180, 48 + builtin::i32_wrap_i64(x %u 10_i64));
     }
     $inline_core_prelude_string_wado_String__internal_push_view_46: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_46;

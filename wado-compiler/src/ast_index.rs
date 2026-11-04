@@ -38,10 +38,8 @@ pub struct AstIndex {
     /// `StructField::name_span`. Useful for `goto-definition` ranges that
     /// should not cover the entire item body.
     ///
-    /// Populated for every named declaration the AST exposes a
-    /// `name_span` for. Nodes without a dedicated `name_span` (e.g.
-    /// `Item::Resource`, anonymous `Item::Impl`) are absent; consumers
-    /// should fall back to [`Self::span_of`].
+    /// Populated for every named declaration. An anonymous one
+    /// (`Item::Impl`) is absent; consumers fall back to [`Self::span_of`].
     name_spans: IndexMap<AstId, Span>,
     /// `IdentExpr.id` values that appear as the direct LHS target of
     /// `=` or a compound-assign. Direct targets only — for `obj.field = v`
@@ -108,12 +106,12 @@ impl AstIndex {
     pub fn ast_id_at(&self, line: usize, column: usize) -> Option<AstId> {
         let mut best: Option<(AstId, Span)> = None;
         for (&id, &span) in &self.spans {
-            if !span_contains(span, line, column) {
+            if !span.contains(line, column) {
                 continue;
             }
             match best {
                 None => best = Some((id, span)),
-                Some((_, current)) if span_byte_len(span) <= span_byte_len(current) => {
+                Some((_, current)) if span.byte_len() <= current.byte_len() => {
                     best = Some((id, span));
                 }
                 _ => {}
@@ -121,27 +119,6 @@ impl AstIndex {
         }
         best.map(|(id, _)| id)
     }
-}
-
-/// Returns true if `(line, column)` lies in
-/// `[span.line:column, span.end_line:end_column)`. Mirrors the helper
-/// in `ast.rs` (kept module-private there); duplicated here to keep the
-/// position-lookup logic colocated with the data.
-fn span_contains(span: Span, line: usize, column: usize) -> bool {
-    if line < span.line || line > span.end_line {
-        return false;
-    }
-    if line == span.line && column < span.column {
-        return false;
-    }
-    if line == span.end_line && column >= span.end_column {
-        return false;
-    }
-    true
-}
-
-fn span_byte_len(span: Span) -> usize {
-    span.end.saturating_sub(span.start)
 }
 
 struct IndexBuilder {
@@ -265,6 +242,12 @@ fn record_item_name_spans(index: &mut AstIndex, item: &Item) {
             for tp in &t.type_params {
                 index.name_spans.insert(tp.id, tp.name_span);
             }
+            for assoc in &t.associated_types {
+                index.name_spans.insert(assoc.id, assoc.name_span);
+                for tp in &assoc.type_params {
+                    index.name_spans.insert(tp.id, tp.name_span);
+                }
+            }
             // Methods and their params get their name_spans recorded when
             // `visit_function` dispatches them during the walk.
         }
@@ -274,8 +257,7 @@ fn record_item_name_spans(index: &mut AstIndex, item: &Item) {
             // `visit_function` override, which every member goes through.
         }
         Item::Resource(r) => {
-            // ResourceDecl has no `name_span`; the table simply has no
-            // entry for `r.id` — consumers should fall back to span_of.
+            index.name_spans.insert(r.id, r.name_span);
             for tp in &r.type_params {
                 index.name_spans.insert(tp.id, tp.name_span);
             }
@@ -290,7 +272,10 @@ fn record_item_name_spans(index: &mut AstIndex, item: &Item) {
             }
         }
         Item::Impl(imp) => record_impl_name_spans(index, imp),
-        Item::Use(_) | Item::World(_) | Item::Test(_) | Item::TupleTypeDecl(_) => {}
+        Item::World(w) => {
+            index.name_spans.insert(w.id, w.name_span);
+        }
+        Item::Use(_) | Item::Test(_) | Item::TupleTypeDecl(_) => {}
         // Error-recovery placeholder; its own span is the only fact to record,
         // handled by the generic item-span pass, not here.
         Item::Error(_) => {}
@@ -342,6 +327,15 @@ fn record_function_locations(index: &mut AstIndex, items: &[Item]) {
 fn record_impl_name_spans(index: &mut AstIndex, imp: &ImplBlock) {
     for tp in &imp.type_params {
         index.name_spans.insert(tp.id, tp.name_span);
+    }
+    for c in &imp.constants {
+        index.name_spans.insert(c.id, c.name_span);
+    }
+    for assoc in &imp.associated_types {
+        index.name_spans.insert(assoc.id, assoc.name_span);
+        for tp in &assoc.type_params {
+            index.name_spans.insert(tp.id, tp.name_span);
+        }
     }
     // ImplBlock itself has no own name_span (anonymous decl); methods and
     // params are recorded by `visit_function` during the walk.

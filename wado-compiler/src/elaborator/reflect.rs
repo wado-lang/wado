@@ -173,6 +173,7 @@ struct TemplateMethods {
     members: String,
     tail: String,
     raw_tail: String,
+    hashes: String,
 }
 
 impl TemplateMethods {
@@ -188,13 +189,31 @@ impl TemplateMethods {
             raw_tail: items
                 .method_name(CompilerItem::ReflectTemplateRawTail)
                 .to_string(),
+            hashes: items
+                .method_name(CompilerItem::ReflectTemplateHashes)
+                .to_string(),
         }
     }
 
     fn declares(&self, method: &str) -> bool {
-        [&self.members, &self.tail, &self.raw_tail]
+        [&self.members, &self.tail, &self.raw_tail, &self.hashes]
             .into_iter()
             .any(|name| name == method)
+    }
+
+    /// Whether `method` reads a template value rather than its shape.
+    fn reads_value(&self, method: &str) -> bool {
+        method != self.members && method != self.hashes
+    }
+
+    /// What a method other than `members` answers: the `#` count, or a
+    /// segment's text.
+    fn read_type(&self, method: &str, tt: &mut TypeTable) -> TypeId {
+        if method == self.hashes {
+            TypeTable::I32
+        } else {
+            tt.make_compiler_struct(CompilerItem::StrSlice)
+        }
     }
 }
 
@@ -966,11 +985,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             )
         };
 
-        // `tail` and `raw_tail` read the segment out of a template value.
-        let params = if method == methods.members {
-            Vec::new()
-        } else {
+        let params = if methods.reads_value(&method) {
             vec![self.tysys.type_table.borrow_mut().make_ref(self_ty)]
+        } else {
+            Vec::new()
         };
         if !self.check_reflect_args(&params, static_call, ctx) {
             return TypeTable::ERROR;
@@ -997,12 +1015,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 };
                 members_ty
             } else {
-                self.tysys
-                    .type_table
-                    .borrow_mut()
-                    .make_compiler_struct(CompilerItem::StrSlice)
+                methods.read_type(&method, &mut self.tysys.type_table.borrow_mut())
             };
-            let param_is_mut = arg_param_is_mut(method != methods.members);
+            let param_is_mut = arg_param_is_mut(methods.reads_value(&method));
             self.record_type_param_reflect_dispatch(
                 &name,
                 trait_name,
@@ -1025,10 +1040,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let return_type = if method == methods.members {
             self.payload_members_ty(CompilerItem::ReflectTemplateHole, self_ty, &holes)
         } else {
-            self.tysys
-                .type_table
-                .borrow_mut()
-                .make_compiler_struct(CompilerItem::StrSlice)
+            methods.read_type(&method, &mut self.tysys.type_table.borrow_mut())
         };
 
         let (base_name, module_source) = self
@@ -1048,7 +1060,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.record_reflect_dispatch(
             static_call.id,
             func_ref,
-            arg_param_is_mut(method != methods.members),
+            arg_param_is_mut(methods.reads_value(&method)),
         );
 
         return_type

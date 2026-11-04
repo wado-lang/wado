@@ -96,7 +96,7 @@ fn "param_spec_alias_rebound.wado/run"() with Stdout {
     let out_42: ref "core:prelude/string.wado//String";
     let is_negative_109: bool;
     let x_113: i64;
-    let repr_132: ref Array<u8>;
+    let $sroa_view_repr_203: ref Array<u8>;
     let $sroa_t_h0_263: i32;
     n_0 = black_box(7);
     cfg_11 = struct.new "param_spec_alias_rebound.wado//Config" { verbose: 1, level: 3 };
@@ -117,14 +117,14 @@ fn "param_spec_alias_rebound.wado/run"() with Stdout {
     $sroa_t_h0_263 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_113(x_113 = builtin::i64_extend_i32_s($sroa_t_h0_263); select i64(x_113 < 0_i64, 0_i64 - x_113, x_113)));
     is_negative_109 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"(out_42, is_negative_109, $sroa_t_h0_263);
     "core:prelude/primitive.wado/write_decimal_digits"(local.tee $load_2(out_42.repr), is_negative_109, x_113, $sroa_t_h0_263);
-    repr_132 = global:param_spec_alias_rebound.wado::$const_obj_0;
+    $sroa_view_repr_203 = global:param_spec_alias_rebound.wado::$const_obj_0;
     if @unlikely(local.tee $sroa_t_h0_263(out_42.used + 1) > builtin::array_len($load_2)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_42, $sroa_t_h0_263);
     }
     is_negative_109 = out_42.used;
     out_42.used = $sroa_t_h0_263;
-    builtin::array_copy<u8>(out_42.repr, is_negative_109, repr_132, 0, 1);
+    builtin::array_copy<u8>(out_42.repr, is_negative_109, $sroa_view_repr_203, 0, 1);
     $sroa_t_h0_263 = n_0 < 0;
     n_0 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_113(x_113 = builtin::i64_extend_i32_s(n_0); select i64(x_113 < 0_i64, 0_i64 - x_113, x_113)));
     $sroa_t_h0_263 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"(out_42, $sroa_t_h0_263, n_0);

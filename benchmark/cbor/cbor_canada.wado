@@ -32,6 +32,12 @@ test "smoke" {
 }
 
 #[workload]
+test "workload" {
+    let fc = json_from_bytes::<FeatureCollection, _>(#include_bytes("../json_canada/canada_sample.json")).unwrap();
+    let back = cbor_from_bytes::<FeatureCollection, _>(cbor_to_bytes::<FeatureCollection>(&fc).unwrap()).unwrap();
+    assert count_points(&back) == 163;
+}
+
 test "fuel" {
     let fc = json_from_bytes::<FeatureCollection, _>(#include_bytes("../json_canada/canada.json")).unwrap();
     let cbor = cbor_to_bytes::<FeatureCollection>(&fc).unwrap();

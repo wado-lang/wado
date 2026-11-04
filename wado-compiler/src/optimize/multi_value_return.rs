@@ -4,7 +4,7 @@
 //! across a call, and one result is a plain Wasm return.
 
 use crate::hashmap::{IndexMap, IndexSet};
-use crate::nir::{FuncId, NirFunction, NirStruct, ReturnAbi, aggregate_field_info};
+use crate::nir::{FuncId, NirFunction, ReturnAbi, StructDecls, aggregate_field_info};
 use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, NodeRef, Operand, StmtId, StmtKind};
 use crate::nir_package::NirPackage;
 use crate::optimize::arena_query::every_return;
@@ -60,6 +60,63 @@ pub(crate) fn block_tail(body: &Body, op: Operand, prefix: &mut Vec<StmtId>) -> 
     block_tail(body, *inner, prefix)
 }
 
+/// A labeled block whose value a `let` binds split: every way out that yields
+/// the value is a direct call to a multi-value function, so binding each
+/// call's results binds the block's. This is what the inliner leaves of a
+/// callee that returned another call's aggregate.
+pub(crate) struct SplitExits {
+    pub(crate) block: BlockId,
+    pub(crate) label: String,
+    /// Each `break` to the block carries one; so does a tail it falls off with.
+    pub(crate) calls: Vec<(FuncId, ExprId)>,
+}
+
+/// [`SplitExits`] of `op`, where `results` answers each callee's result
+/// fields, `None` for one that does not return multi-value; every exit must
+/// answer the same. The candidate walk and
+/// `wir_build::translate::try_emit_multi_value_let` share this, so neither
+/// side can split what the other refuses.
+pub(crate) fn split_exits<T: PartialEq>(
+    body: &Body,
+    op: Operand,
+    results: impl Fn(FuncId) -> Option<T>,
+) -> Option<SplitExits> {
+    let e = op.as_expr()?;
+    let ExprKind::LabeledBlock { label, block, .. } = &body.exprs[e].kind else {
+        return None;
+    };
+    let mut exits = body.break_values_to(NodeRef::Block(*block), label)?;
+    match body.blocks[*block]
+        .stmts
+        .last()
+        .map(|&s| &body.stmts[s].kind)
+    {
+        Some(StmtKind::Expr(tail)) => exits.push(*tail),
+        Some(StmtKind::Break { .. } | StmtKind::Return { .. } | StmtKind::Continue) => {}
+        _ => return None,
+    }
+    let calls = exits
+        .into_iter()
+        .map(|v| match &body.exprs[v.as_expr()?].kind {
+            ExprKind::Call { func_id, .. } => Some((*func_id, v.as_expr()?)),
+            _ => None,
+        })
+        .collect::<Option<Vec<_>>>()?;
+    let (&(first, _), rest) = calls.split_first()?;
+    let shared = results(first)?;
+    if !rest
+        .iter()
+        .all(|&(f, _)| results(f).is_some_and(|r| r == shared))
+    {
+        return None;
+    }
+    Some(SplitExits {
+        block: *block,
+        label: label.clone(),
+        calls,
+    })
+}
+
 /// Walk the argument expressions of a (Method)Call so tracked-local escapes in
 /// the args invalidate the right candidate (the call's own ABI is accepted).
 fn walk_call_args_for_uses(
@@ -67,7 +124,7 @@ fn walk_call_args_for_uses(
     expr: ExprId,
     cx: &UseCx<'_>,
     invalid: &mut IndexSet<usize>,
-    tracked: &IndexMap<u32, usize>,
+    tracked: &Tracked,
 ) {
     let args: Vec<ExprId> = match &body.exprs[expr].kind {
         ExprKind::Call { args, .. } => args.iter().filter_map(|a| a.expr.as_expr()).collect(),
@@ -82,7 +139,7 @@ fn walk_call_args_for_uses(
 /// every return statement and call site permit the multi-value ABI.
 pub fn classify_multi_value_returns(project: &mut NirPackage) -> bool {
     let type_table = project.type_table.borrow();
-    let structs = &project.structs;
+    let structs = StructDecls::new(&project.structs, &type_table);
 
     // The tail-call rule couples caller and callee candidacy, so the candidate
     // set is refuted to a fix-point: optimistic (assume every aggregate-returning
@@ -98,7 +155,7 @@ pub fn classify_multi_value_returns(project: &mut NirPackage) -> bool {
         .collect();
 
     let candidates = loop {
-        let candidates = collect_candidates(project, &type_table, structs, &tail_ok);
+        let candidates = collect_candidates(project, &type_table, &structs, &tail_ok);
         if candidates.is_empty() {
             return false;
         }
@@ -149,7 +206,7 @@ pub fn classify_multi_value_returns(project: &mut NirPackage) -> bool {
 fn collect_candidates(
     project: &NirPackage,
     type_table: &TypeTable,
-    structs: &[NirStruct],
+    structs: &StructDecls<'_>,
     tail_ok: &IndexMap<FuncId, TypeId>,
 ) -> IndexMap<usize, CandidateInfo> {
     let mut out = IndexMap::default();
@@ -219,7 +276,7 @@ fn refute_candidates(
 fn candidate_info(
     func: &NirFunction,
     type_table: &TypeTable,
-    structs: &[NirStruct],
+    structs: &StructDecls<'_>,
     tail_ok: &IndexMap<FuncId, TypeId>,
 ) -> Option<CandidateInfo> {
     if !func.only_reached_by_direct_call() {
@@ -371,14 +428,19 @@ fn expr_returns_match(body: &Body, expr: ExprId, expected: &ExpectedShape<'_>) -
         // ABI: its results are already on the stack in our result order.
         ExprKind::Call { func_id, .. } => {
             expected.tail_call_lowerable
-                && expected.tail_ok.get(func_id) == Some(&expected.return_type)
+                && expected
+                    .tail_ok
+                    .get(func_id)
+                    .is_some_and(|&ret| expected.type_table.same_type(ret, expected.return_type))
         }
         ExprKind::StructLiteral {
             struct_type,
             fields,
             ..
         } => match expected.struct_type {
-            Some(t) => *struct_type == t && fields.len() == expected.arity,
+            Some(t) => {
+                expected.type_table.same_type(*struct_type, t) && fields.len() == expected.arity
+            }
             None => false,
         },
         ExprKind::LabeledBlock { block: b, .. } => {
@@ -485,7 +547,7 @@ fn validate_uses_in_block(
     invalid: &mut IndexSet<usize>,
     yields_value: bool,
 ) {
-    let mut tracked: IndexMap<u32, usize> = IndexMap::default();
+    let mut tracked = Tracked::default();
     let settled = settled_locals(body);
     let cx = UseCx {
         candidate_ids,
@@ -501,6 +563,11 @@ fn validate_uses_in_block(
         validate_stmt(body, stmt, &cx, invalid, &mut tracked, discarded);
     }
 }
+
+/// Per local bound split, the candidates whose results it holds: one for a
+/// call, every exit's for a block. A whole use refutes them all, since the
+/// local splits only while each of them takes the ABI.
+type Tracked = IndexMap<u32, Vec<usize>>;
 
 /// Per-body context for the call-site walk.
 #[derive(Clone, Copy)]
@@ -532,7 +599,7 @@ fn validate_stmt(
     stmt: StmtId,
     cx: &UseCx<'_>,
     invalid: &mut IndexSet<usize>,
-    tracked: &mut IndexMap<u32, usize>,
+    tracked: &mut Tracked,
     discarded: bool,
 ) {
     match &body.stmts[stmt].kind {
@@ -557,11 +624,31 @@ fn validate_stmt(
                 for &s in &prefix {
                     validate_stmt(body, s, cx, invalid, tracked, true);
                 }
-                tracked.insert(local_index, candidate_idx);
+                tracked.insert(local_index, vec![candidate_idx]);
                 walk_call_args_for_uses(body, call, cx, invalid, tracked);
                 return;
             }
+            // Each exit call is walked as a call, its arguments only, so the
+            // block is ordinary code.
+            let exits = cx
+                .settled
+                .contains(&local_index)
+                .then(|| {
+                    split_exits(body, value, |f| {
+                        let idx = cx.candidate_ids.get(&f)?;
+                        Some(&cx.candidates[idx].field_names)
+                    })
+                })
+                .flatten();
             walk_expr_for_uses_operand(body, value, cx, invalid, tracked);
+            if let Some(exits) = exits {
+                let held = exits
+                    .calls
+                    .iter()
+                    .map(|(f, _)| cx.candidate_ids[f])
+                    .collect();
+                tracked.insert(local_index, held);
+            }
         }
         StmtKind::Expr(e) => {
             let e = *e;
@@ -664,7 +751,7 @@ fn validate_tail_return(
     ours: TypeId,
     cx: &UseCx<'_>,
     invalid: &mut IndexSet<usize>,
-    tracked: &mut IndexMap<u32, usize>,
+    tracked: &mut Tracked,
 ) {
     let Some(e) = op.as_expr() else {
         return;
@@ -727,7 +814,7 @@ fn validate_tail_block(
     ours: TypeId,
     cx: &UseCx<'_>,
     invalid: &mut IndexSet<usize>,
-    tracked: &mut IndexMap<u32, usize>,
+    tracked: &mut Tracked,
 ) {
     let stmts = body.blocks[block].stmts.clone();
     let Some((&last, lead)) = stmts.split_last() else {
@@ -750,7 +837,7 @@ fn walk_expr_for_uses_operand(
     op: Operand,
     cx: &UseCx<'_>,
     invalid: &mut IndexSet<usize>,
-    tracked: &IndexMap<u32, usize>,
+    tracked: &Tracked,
 ) {
     if let Some(e) = op.as_expr() {
         walk_expr_for_uses(body, e, cx, invalid, tracked);
@@ -762,7 +849,7 @@ fn walk_expr_for_uses(
     expr: ExprId,
     cx: &UseCx<'_>,
     invalid: &mut IndexSet<usize>,
-    tracked: &IndexMap<u32, usize>,
+    tracked: &Tracked,
 ) {
     match &body.exprs[expr].kind {
         ExprKind::FieldAccess {
@@ -774,7 +861,7 @@ fn walk_expr_for_uses(
             // A promoted `Operand::Value` source falls through to the operand walk.
             if let Some(source_e) = source.as_expr()
                 && let ExprKind::Local { index, .. } = &body.exprs[source_e].kind
-                && let Some(&candidate_idx) = tracked.get(index)
+                && let Some(&candidate_idx) = tracked.get(index).and_then(|held| held.first())
                 && let Some(info) = cx.candidates.get(&candidate_idx)
                 && info.field_name_set.contains(field_name)
             {
@@ -785,8 +872,8 @@ fn walk_expr_for_uses(
         // A struct rebuilt from the split locals is a copy, so a mutation
         // through it would not reach the next read.
         ExprKind::Local { index, .. } => {
-            if let Some(&candidate_idx) = tracked.get(index) {
-                invalid.insert(candidate_idx);
+            if let Some(held) = tracked.get(index) {
+                invalid.extend(held.iter().copied());
             }
         }
         ExprKind::Call { func_id, args, .. } => {

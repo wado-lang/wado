@@ -219,10 +219,9 @@ import fn wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode f
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
-global global:contract_checks_default_off.wado::$const_obj_0: ref Array<u8> = array.new_fixed<u8>(97, 98, 99, 100, 101, 102);
+global global:contract_checks_default_off.wado::$const_obj_0: ref "core:prelude/string.wado//StrSlice" = struct.new "core:prelude/string.wado//StrSlice" { repr: array.new_fixed<u8>(97, 98, 99, 100, 101, 102), start: 0, end: 6 };
 
 fn "contract_checks_default_off.wado/run"() with Stdout {
-    let $contract_arg_0: ref "core:prelude/string.wado//StrSlice";
     let end_62: i32;
     let out_88: ref "core:prelude/string.wado//String";
     let is_negative_151: bool;
@@ -230,10 +229,10 @@ fn "contract_checks_default_off.wado/run"() with Stdout {
     let arr: ref Array<u8>;
     let q: u64;
     let tens: i32;
-    let start_248: i32;
-    if @unlikely(((builtin::array_get_value<u8>(local.tee $contract_arg_0(struct.new "core:prelude/string.wado//StrSlice" { repr: global:contract_checks_default_off.wado::$const_obj_0, start: 0, end: 6 }).repr, 3) & 192) != 128) == 0) {
+    let start_245: i32;
+    if @unlikely(((builtin::array_get_value<u8>(global:contract_checks_default_off.wado::$const_obj_0.repr, 3) & 192) != 128) == 0) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/StrSlice::slice$contract_report1"(1, $contract_arg_0, 3, 0, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("contract_checks_default_off.wado:8"), used: 34 });
+        "core:prelude/string.wado/core:prelude/string.wado/StrSlice::slice$contract_report1"(1, global:contract_checks_default_off.wado::$const_obj_0, 3, 0, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("contract_checks_default_off.wado:8"), used: 34 });
         unreachable;
     }
     end_62 = black_box(5);
@@ -309,22 +308,22 @@ fn "contract_checks_default_off.wado/run"() with Stdout {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_88, is_negative_151);
         }
-        start_248 = out_88.used;
+        start_245 = out_88.used;
         out_88.used = is_negative_151;
-        builtin::array_set_u8(out_88.repr, start_248, 45);
+        builtin::array_set_u8(out_88.repr, start_245, 45);
     } else {
     }
     if @unlikely(local.tee is_negative_151(out_88.used + end_62) > builtin::array_len(out_88.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_88, is_negative_151);
     }
-    start_248 = out_88.used;
+    start_245 = out_88.used;
     out_88.used = is_negative_151;
     arr = out_88.repr;
-    end_62 = start_248 + end_62;
+    end_62 = start_245 + end_62;
     b23: block {
         l24: loop {
-            break_if b23 (end_62 - start_248) < 2;
+            break_if b23 (end_62 - start_245) < 2;
             q = x /u 100_i64;
             tens = local.tee is_negative_151(builtin::i32_wrap_i64(x - (q * 100_i64))) / 10;
             builtin::array_set_u8(arr, end_62 - 1, (48 + is_negative_151) - (tens * 10));
@@ -334,8 +333,8 @@ fn "contract_checks_default_off.wado/run"() with Stdout {
             continue l24;
         };
     };
-    if end_62 > start_248 {
-        builtin::array_set_u8(arr, start_248, 48 + builtin::i32_wrap_i64(x %u 10_i64));
+    if end_62 > start_245 {
+        builtin::array_set_u8(arr, start_245, 48 + builtin::i32_wrap_i64(x %u 10_i64));
     }
     $inline_core_prelude_string_wado_String__internal_push_view_59: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_59;

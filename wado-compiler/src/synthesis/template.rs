@@ -21,7 +21,8 @@ use crate::hashmap::IndexMap;
 use crate::module_source::ModuleSource;
 use crate::name::{FqTraitName, FqTypeName, LocalMethodName, RefKind, hole_fmt_helper_name};
 use crate::synthesis::common::{
-    field_access, locals_from_params, make_synthetic_free_function, mut_ref_expr, ref_expr,
+    field_access, int_literal, locals_from_params, make_synthetic_free_function, mut_ref_expr,
+    ref_expr,
 };
 use crate::synthesis::traits::case_index_dispatch;
 use crate::tir::{
@@ -296,17 +297,6 @@ struct TemplateCtx<'a> {
     module_src: ModuleSource,
     trait_env: &'a Arc<TraitEnv>,
     names: &'a FormatStdlibNames,
-}
-
-fn int_literal(value: i64, span: Span) -> TirExpr {
-    TirExpr::new(
-        TirExprKind::IntLiteral {
-            value: value.cast_unsigned(),
-            repr: value.to_string(),
-        },
-        TypeTable::I32,
-        span,
-    )
 }
 
 /// The full `Formatter { … }` literal a field-setting specifier asks for,

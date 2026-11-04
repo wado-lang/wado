@@ -268,20 +268,20 @@ fn "sroa_param_snapshot_interior_alias.wado/run"() with Stdout {
     let arr: ref Array<u8>;
     let q: u64;
     let tens: i32;
-    let $sroa_t_h0_132: i32;
-    let start_171: i32;
+    let $sroa_t_h0_129: i32;
+    let start_168: i32;
     $sroa_hh_data_114 = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(1, 2, 3), used: 3 };
     out_1 = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(), used: 0 };
     "sroa_param_snapshot_interior_alias.wado/probe"($sroa_hh_data_114, struct.new "sroa_param_snapshot_interior_alias.wado//Holder" { data: $sroa_hh_data_114 }, out_1);
-    $sroa_t_h0_132 = out_1.used;
+    $sroa_t_h0_129 = out_1.used;
     out_18 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
     $inline_core_prelude_string_wado_String__internal_push_view_26: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_26;
     };
-    is_negative_81 = $sroa_t_h0_132 < 0;
-    x = builtin::i64_extend_i32_s($sroa_t_h0_132);
+    is_negative_81 = $sroa_t_h0_129 < 0;
+    x = builtin::i64_extend_i32_s($sroa_t_h0_129);
     x = select i64(x < 0_i64, 0_i64 - x, x);
-    $sroa_t_h0_132 = $inline_count_digits_u64_1: block -> i32 {
+    $sroa_t_h0_129 = $inline_count_digits_u64_1: block -> i32 {
         if x <u 100000_i64 {
             if x <u 100_i64 {
                 if x <u 10_i64 {
@@ -346,42 +346,42 @@ fn "sroa_param_snapshot_interior_alias.wado/run"() with Stdout {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_18, is_negative_81);
         }
-        start_171 = out_18.used;
+        start_168 = out_18.used;
         out_18.used = is_negative_81;
-        builtin::array_set_u8(out_18.repr, start_171, 45);
+        builtin::array_set_u8(out_18.repr, start_168, 45);
     } else {
     }
-    if @unlikely(local.tee is_negative_81(out_18.used + $sroa_t_h0_132) > builtin::array_len(out_18.repr)) {
+    if @unlikely(local.tee is_negative_81(out_18.used + $sroa_t_h0_129) > builtin::array_len(out_18.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_18, is_negative_81);
     }
-    start_171 = out_18.used;
+    start_168 = out_18.used;
     out_18.used = is_negative_81;
     arr = out_18.repr;
-    $sroa_t_h0_132 = start_171 + $sroa_t_h0_132;
+    $sroa_t_h0_129 = start_168 + $sroa_t_h0_129;
     b35: block {
         l36: loop {
-            break_if b35 ($sroa_t_h0_132 - start_171) < 2;
+            break_if b35 ($sroa_t_h0_129 - start_168) < 2;
             q = x /u 100_i64;
             tens = local.tee is_negative_81(builtin::i32_wrap_i64(x - (q * 100_i64))) / 10;
-            builtin::array_set_u8(arr, $sroa_t_h0_132 - 1, (48 + is_negative_81) - (tens * 10));
-            builtin::array_set_u8(arr, $sroa_t_h0_132 - 2, 48 + tens);
-            $sroa_t_h0_132 = $sroa_t_h0_132 - 2;
+            builtin::array_set_u8(arr, $sroa_t_h0_129 - 1, (48 + is_negative_81) - (tens * 10));
+            builtin::array_set_u8(arr, $sroa_t_h0_129 - 2, 48 + tens);
+            $sroa_t_h0_129 = $sroa_t_h0_129 - 2;
             x = q;
             continue l36;
         };
     };
-    if $sroa_t_h0_132 > start_171 {
-        builtin::array_set_u8(arr, start_171, 48 + builtin::i32_wrap_i64(x %u 10_i64));
+    if $sroa_t_h0_129 > start_168 {
+        builtin::array_set_u8(arr, start_168, 48 + builtin::i32_wrap_i64(x %u 10_i64));
     }
     $inline_core_prelude_string_wado_String__internal_push_view_45: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_45;
     };
-    $sroa_t_h0_132 = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
+    $sroa_t_h0_129 = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
     is_negative_81 = builtin::i32_wrap_i64(x >> 32_i64);
-    $sroa_t_h0_132 = "sroa_param_snapshot_interior_alias.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_t_h0_132);
+    $sroa_t_h0_129 = "sroa_param_snapshot_interior_alias.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_t_h0_129);
     "core:rt/write_string_to_stream$dae[add_newline]"(is_negative_81, out_18.repr, out_18.used);
-    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_t_h0_132);
+    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_t_h0_129);
 }
 
 fn "sroa_param_snapshot_interior_alias.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {

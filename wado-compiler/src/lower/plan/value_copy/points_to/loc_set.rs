@@ -45,15 +45,6 @@ impl LocSet {
         self.len() == 0
     }
 
-    pub fn contains(&self, Loc(loc): Loc) -> bool {
-        match &self.repr {
-            Repr::Small(locs) => locs.binary_search(&loc).is_ok(),
-            Repr::Words { words, .. } => words
-                .binary_search_by_key(&(loc / 64), |&(i, _)| i)
-                .is_ok_and(|at| words[at].1 & (1 << (loc % 64)) != 0),
-        }
-    }
-
     /// Ascending.
     pub fn iter(&self) -> impl Iterator<Item = Loc> + '_ {
         let (small, words) = self.forms();
@@ -334,15 +325,16 @@ mod tests {
     }
 
     #[test]
-    fn membership_and_equality_ignore_the_form() {
+    fn insertion_and_equality_ignore_the_form() {
         let small = set(0..20);
         let mut words = set(0..40);
-        assert!(words.contains(Loc(39)) && !words.contains(Loc(40)));
-        assert!(!words.contains(Loc(100_000)));
         assert!(!words.insert(Loc(6)));
         assert_ne!(small, words);
         assert_eq!(set((0..40).rev()), words);
-        words.insert(Loc(100_000));
-        assert!(words.contains(Loc(100_000)));
+        assert!(words.insert(Loc(100_000)));
+        assert_eq!(
+            indices(&words),
+            (0..40).chain([100_000]).collect::<Vec<u32>>()
+        );
     }
 }

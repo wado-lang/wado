@@ -1,0 +1,48 @@
+// Test: a `break` to a nested block that reuses the label of a split block is
+// that nested block's, not an exit of the split one.
+//
+// The outer `blk` is a `let` of a block every exit of which is a multi-value
+// call, so its exits bind straight into the let's split locals. The inner
+// `blk` shadows the label, and its `break blk: 7` targets the inner block.
+// Keying the split exits by label name bound that `7` as the outer block's
+// results: an invalid module.
+
+use { println, Stdout } from "core:cli";
+
+#[inline(never)]
+fn low(x: i32) -> [i32, i32] {
+    return [x, x + 1];
+}
+
+#[inline(never)]
+fn high(x: i32) -> [i32, i32] {
+    return [x * 2, x - 1];
+}
+
+export fn run() with Stdout {
+    let mut total = 0;
+    for let i of 0..<builtin::black_box(20) {
+        let pair = blk: {
+            if i > 10 {
+                break blk: high(i);
+            }
+            let k = blk: {
+                if i == 3 {
+                    break blk: builtin::black_box(7);
+                }
+                builtin::black_box(1)
+            };
+            low(i + k)
+        };
+        total += pair.0 * 3 + pair.1;
+    }
+    println(`${total}`);
+}
+
+__DATA__
+{
+    "stdout": "1235\n",
+    "wir_not_expect:O2": [
+        "struct.new \"tuple"
+    ]
+}

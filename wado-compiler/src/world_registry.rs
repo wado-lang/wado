@@ -421,6 +421,7 @@ mod tests {
         let world = WorldDecl {
             id: AstId::fresh(),
             name: "Command".to_string(),
+            name_span: Span::default(),
             visibility: Visibility::Private,
             attrs: vec![Attribute {
                 name: CM.to_string(),

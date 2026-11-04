@@ -131,7 +131,7 @@ fn "list_index_assign_negative_oob.wado/run"() with Stdout {
     let arr: ref Array<u8>;
     let q: u64;
     let tens: i32;
-    let start_191: i32;
+    let start_188: i32;
     repr_8 = builtin::array_new<i32>(4);
     if @unlikely(local.tee index_10(black_box(-1)) >=u 4) {
         cold_path;
@@ -212,22 +212,22 @@ fn "list_index_assign_negative_oob.wado/run"() with Stdout {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_31, is_negative_100);
         }
-        start_191 = out_31.used;
+        start_188 = out_31.used;
         out_31.used = is_negative_100;
-        builtin::array_set_u8(out_31.repr, start_191, 45);
+        builtin::array_set_u8(out_31.repr, start_188, 45);
     } else {
     }
     if @unlikely(local.tee is_negative_100(out_31.used + index_10) > builtin::array_len(out_31.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_31, is_negative_100);
     }
-    start_191 = out_31.used;
+    start_188 = out_31.used;
     out_31.used = is_negative_100;
     arr = out_31.repr;
-    index_10 = start_191 + index_10;
+    index_10 = start_188 + index_10;
     b23: block {
         l24: loop {
-            break_if b23 (index_10 - start_191) < 2;
+            break_if b23 (index_10 - start_188) < 2;
             q = x /u 100_i64;
             tens = local.tee is_negative_100(builtin::i32_wrap_i64(x - (q * 100_i64))) / 10;
             builtin::array_set_u8(arr, index_10 - 1, (48 + is_negative_100) - (tens * 10));
@@ -237,8 +237,8 @@ fn "list_index_assign_negative_oob.wado/run"() with Stdout {
             continue l24;
         };
     };
-    if index_10 > start_191 {
-        builtin::array_set_u8(arr, start_191, 48 + builtin::i32_wrap_i64(x %u 10_i64));
+    if index_10 > start_188 {
+        builtin::array_set_u8(arr, start_188, 48 + builtin::i32_wrap_i64(x %u 10_i64));
     }
     $inline_core_prelude_string_wado_String__internal_push_view_47: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_47;

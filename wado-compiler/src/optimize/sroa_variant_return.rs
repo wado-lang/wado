@@ -325,21 +325,15 @@ fn scalarized_returns(project: &NirPackage) -> IndexMap<FuncId, (TypeId, Layout)
         let Some(layout) = compute_layout(project, variant) else {
             continue;
         };
-        if same_type(
-            &project.type_table.borrow(),
-            layout.tuple_type,
-            func.return_type,
-        ) {
+        if project
+            .type_table
+            .borrow()
+            .same_type(layout.tuple_type, func.return_type)
+        {
             out.insert(key, (variant, layout));
         }
     }
     out
-}
-
-/// Whether two ids name one type. A `TypeId` is a slot: newtype erasure and the
-/// boxing rewrite leave several resolving to the same type.
-fn same_type(type_table: &TypeTable, a: TypeId, b: TypeId) -> bool {
-    type_table.type_key(a) == type_table.type_key(b)
 }
 
 /// Call nodes whose consumer already reads a tuple: a `let` whose declared type
@@ -546,7 +540,7 @@ fn handled_call_sites(
         .filter(|s| {
             scalarized
                 .get(&s.callee)
-                .is_some_and(|(_, l)| same_type(type_table, l.tuple_type, s.expected))
+                .is_some_and(|(_, l)| type_table.same_type(l.tuple_type, s.expected))
         })
         .map(|s| s.call)
         .collect()
@@ -796,11 +790,10 @@ fn debug_assert_call_sites_rewritten(project: &NirPackage) {
                 continue;
             };
             assert!(
-                same_type(
-                    &project.type_table.borrow(),
-                    site.expected,
-                    layout.tuple_type
-                ),
+                project
+                    .type_table
+                    .borrow()
+                    .same_type(site.expected, layout.tuple_type),
                 "variant-return SROA left local {local} in `{}` typed by the variant \
                  its callee no longer returns",
                 func.name
@@ -1022,9 +1015,10 @@ fn compute_layout(project: &NirPackage, variant_type: TypeId) -> Option<Layout> 
                 (option_type, Pad::NoneOf(option_type), true)
             }
         };
-        // Shared layout: a slot already carrying this exact type is reused, so
+        // Shared layout: a slot already carrying this type is reused, so
         // `Option<char>` stays `[i32, char]` instead of growing a second slot.
-        let index = if let Some(i) = slot_types.iter().position(|t| *t == slot_type) {
+        let same_type = |t: &TypeId| project.type_table.borrow().same_type(*t, slot_type);
+        let index = if let Some(i) = slot_types.iter().position(same_type) {
             i
         } else {
             slot_types.push(slot_type);
@@ -1161,7 +1155,10 @@ fn collect_and_validate(
             }
             let func = project.functions[callee.index()].borrow();
             if !is_eligible(&func)
-                || !same_type(&project.type_table.borrow(), func.return_type, variant_type)
+                || !project
+                    .type_table
+                    .borrow()
+                    .same_type(func.return_type, variant_type)
             {
                 continue;
             }
@@ -1304,14 +1301,14 @@ impl Returns<'_> {
         }
         match &body.exprs[expr].kind {
             ExprKind::VariantConstruct { variant_type, .. } => {
-                same_type(self.type_table, *variant_type, cand.variant_type)
+                self.type_table.same_type(*variant_type, cand.variant_type)
             }
             // `return g(x)` where `g` shares the variant, hence the layout: `g`
             // already returns this function's tuple, whichever round rewrote it.
             ExprKind::Call { func_id, .. } => self
                 .tail_ok
                 .get(func_id)
-                .is_some_and(|&t| same_type(self.type_table, t, cand.variant_type)),
+                .is_some_and(|&t| self.type_table.same_type(t, cand.variant_type)),
             ExprKind::Local { index, .. } => {
                 single_def_variant_construct(body, *index, cand, self.type_table).is_some()
             }
@@ -1388,7 +1385,7 @@ fn single_def_variant_construct(
     let init = value.as_expr()?;
     match &body.exprs[init].kind {
         ExprKind::VariantConstruct { variant_type, .. }
-            if same_type(type_table, *variant_type, cand.variant_type) =>
+            if type_table.same_type(*variant_type, cand.variant_type) =>
         {
             Some(init)
         }

@@ -20,7 +20,7 @@ use crate::module_source::ModuleSource;
 use crate::name::{DeclaredHead, FunctionId, LocalMethodName, checked_name, unchecked_twin_name};
 use crate::primitive::PrimitiveType;
 use crate::symbol_notation::render;
-use crate::token::Span;
+use crate::token::{Quote, Span};
 use crate::type_table::{AnonStructId, TypeKey, TypeTable};
 
 /// `ReflectNewtype`'s only associated type (`type Base`): what the newtype
@@ -443,12 +443,14 @@ pub struct TemplateHole {
     pub spec: Option<String>,
 }
 
-/// The static part of a tagged template literal: its holes. The literal
-/// segments are no part of it: a value carries its own, so templates differing
-/// only in their text share one type and one instantiation of the tag.
+/// The static part of a tagged template literal: its holes, and how it is
+/// delimited. The literal segments are no part of it: a value carries its
+/// own, so templates differing only in their text share one type and one
+/// instantiation of the tag.
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
 pub struct TemplateShape {
     pub holes: Vec<TemplateHole>,
+    pub quote: Quote,
 }
 
 impl TemplateShape {
@@ -502,7 +504,7 @@ pub fn hold_hole(field: &mut TirStructField, hole_ty: TypeId, tt: &mut TypeTable
     // drained, while one generic instance may still be spelled both as a
     // `GenericInstance` and as its struct.
     let same = |tt: &TypeTable, a: TypeId, b: TypeId| {
-        tt.type_key(a) == tt.type_key(b) || tt.instance_key(a) == tt.instance_key(b)
+        tt.same_type(a, b) || tt.instance_key(a) == tt.instance_key(b)
     };
     if same(tt, field_ty, hole_ty) || same(tt, field.value.type_id, field_ty) {
         return None;

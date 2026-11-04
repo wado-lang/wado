@@ -176,9 +176,7 @@ pub fn optimize(
         inline_growth,
         iterations: opt_iterations,
         specializations,
-        // Applying the profile reads these, ahead of reify.
-        profile_summary_cutoff_hot: _,
-        profile_summary_cutoff_cold: _,
+        // Applying the profile reads it, ahead of reify.
         predictable_branch_threshold: _,
     } = opt;
     let specializations = specializations.unwrap_or(param_spec::MAX_TOTAL_SPECIALIZATIONS);

@@ -79,6 +79,36 @@ fn only_the_workloads_are_recorded_into_the_package_profile() {
     );
 }
 
+/// `HashMap::new` hashes under `wasi:random/insecure-seed`, and the seed
+/// decides how far its probes go, so a recording run fixes it.
+#[test]
+fn a_hash_map_records_the_same_profile_every_run() {
+    let tmp = tempfile::tempdir().unwrap();
+    fs::write(
+        tmp.path().join("prog.wado"),
+        "use { HashMap } from \"core:collections\";\n\n\
+         #[workload]\ntest {\n    let mut map = HashMap::<String, i32>::new();\n    \
+         for let i of 0..<2000 {\n        map[`key-${i}`] = i;\n    }\n    \
+         assert map.len() == 2000;\n}\n",
+    )
+    .unwrap();
+    let record = || {
+        wado_in(tmp.path())
+            .args(["test", "--pgo", "prog.wado"])
+            .assert()
+            .success();
+        fs::read_to_string(tmp.path().join("pgo/prog.pgo")).unwrap()
+    };
+    let first = record();
+    assert!(
+        first.contains("\nmodule core:collections/hashmap.wado\n"),
+        "{first}"
+    );
+    for _ in 0..3 {
+        assert_eq!(record(), first);
+    }
+}
+
 #[test]
 fn a_program_in_no_package_keeps_a_profile_of_its_own() {
     let tmp = tempfile::tempdir().unwrap();

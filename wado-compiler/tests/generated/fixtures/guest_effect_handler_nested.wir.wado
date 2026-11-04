@@ -129,21 +129,19 @@ type "functype//guest_effect_handler_nested.wado/guest_effect_handler_nested.wad
 
 type "functype//guest_effect_handler_nested.wado/guest_effect_handler_nested.wado/$Closure_3::$call$dae[self]" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//String";  // TypeId(47)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0$sroa[self.buf]" = fn(ref "core:prelude/string.wado//String", ref Array<u8>, i32);  // TypeId(48)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::format<guest_effect_handler_nested.wado/$tmpl$ace5d8bd7289ac71,[core:prelude/string.wado/String,core:prelude/string.wado/String,core:prelude/string.wado/String]>$spec0$spec0" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//String";  // TypeId(48)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::format<guest_effect_handler_nested.wado/$tmpl$ace5d8bd7289ac71,[core:prelude/string.wado/String,core:prelude/string.wado/String,core:prelude/string.wado/String]>$spec0$spec0" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//String";  // TypeId(49)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(49)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(50)
+type "functype//wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode" = fn(i32);  // TypeId(50)
 
-type "functype//wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode" = fn(i32);  // TypeId(51)
+type "functype//wasi/task-return" = fn(i32);  // TypeId(51)
 
-type "functype//wasi/task-return" = fn(i32);  // TypeId(52)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(52)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(53)
+type "functype//guest_effect_handler_nested.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(53)
 
-type "functype//guest_effect_handler_nested.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(54)
-
-type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(55)
+type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(54)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -227,18 +225,16 @@ fn "guest_effect_handler_nested.wado/$cm_binding__test:hlc-dependency11730810bda
     let $lang_flat1: i32;
     let $outptr: i32;
     let $struct_result: ref "sub/hlc.wasm//Wrapped";
-    let bytes_19: ref Array<u8>;
     let ptr_20: i32;
     let self_21: i32;
+    let arr_38: ref Array<u8>;
     self_21 = code.used;
-    bytes_19 = code.repr;
     ptr_20 = "mem/realloc"(0, 0, 1, self_21);
-    "core:rt/gc_array_to_memory$spec0$dae[src_start]"(bytes_19, ptr_20, self_21);
+    "core:rt/gc_array_to_memory$spec0$dae[src_start]"(code.repr, ptr_20, self_21);
     $code_packed = builtin::i64_extend_i32_u(ptr_20) | (builtin::i64_extend_i32_s(self_21) << 32_i64);
     self_21 = lang.used;
-    bytes_19 = lang.repr;
     ptr_20 = "mem/realloc"(0, 0, 1, self_21);
-    "core:rt/gc_array_to_memory$spec0$dae[src_start]"(bytes_19, ptr_20, self_21);
+    "core:rt/gc_array_to_memory$spec0$dae[src_start]"(lang.repr, ptr_20, self_21);
     $lang_packed = builtin::i64_extend_i32_u(ptr_20) | (builtin::i64_extend_i32_s(self_21) << 32_i64);
     self_21 = builtin::i32_wrap_i64($code_packed);
     ptr_20 = builtin::i32_wrap_i64($code_packed >> 32_i64);
@@ -253,8 +249,8 @@ fn "guest_effect_handler_nested.wado/$cm_binding__test:hlc-dependency11730810bda
         drop("mem/realloc"($lang_flat0, $lang_flat1, 1, 0));
     }
     self_21 = builtin::load_i32($outptr);
-    "core:rt/memory_into_gc_array$dae[at]"(local.tee bytes_19(builtin::array_new<u8>(local.tee ptr_20(builtin::load_i32($outptr + 4)))), self_21, ptr_20);
-    code = struct.new "core:prelude/string.wado//String" { repr: bytes_19, used: ptr_20 };
+    "core:rt/memory_into_gc_array$dae[at]"(local.tee arr_38(builtin::array_new<u8>(local.tee ptr_20(builtin::load_i32($outptr + 4)))), self_21, ptr_20);
+    code = struct.new "core:prelude/string.wado//String" { repr: arr_38, used: ptr_20 };
     if ptr_20 > 0 {
         drop("mem/realloc"(self_21, ptr_20, 1, 0));
     }
@@ -330,15 +326,13 @@ fn "guest_effect_handler_nested.wado/$cm_binding__test:hlc-dependency11730810bda
     let $lang_flat1: i32;
     let $outptr: i32;
     let $struct_result: ref "sub/hlc.wasm//Wrapped";
-    let bytes_19: ref Array<u8>;
     let ptr_20: i32;
-    bytes_19 = code.repr;
+    let arr_38: ref Array<u8>;
     ptr_20 = "mem/realloc"(0, 0, 1, 1);
-    "core:rt/gc_array_to_memory$spec0$dae[src_start]$spec0$dae[len]"(bytes_19, ptr_20);
+    "core:rt/gc_array_to_memory$spec0$dae[src_start]$spec0$dae[len]"(code.repr, ptr_20);
     $code_packed = builtin::i64_extend_i32_u(ptr_20) | 4294967296_i64;
-    bytes_19 = lang.repr;
     ptr_20 = "mem/realloc"(0, 0, 1, 4);
-    "core:rt/gc_array_to_memory$spec0$dae[src_start]$spec1$dae[len]"(bytes_19, ptr_20);
+    "core:rt/gc_array_to_memory$spec0$dae[src_start]$spec1$dae[len]"(lang.repr, ptr_20);
     $lang_packed = builtin::i64_extend_i32_u(ptr_20) | 17179869184_i64;
     ptr_20 = builtin::i32_wrap_i64($code_packed);
     $code_flat1 = builtin::i32_wrap_i64($code_packed >> 32_i64);
@@ -353,8 +347,8 @@ fn "guest_effect_handler_nested.wado/$cm_binding__test:hlc-dependency11730810bda
         drop("mem/realloc"($lang_flat0, $lang_flat1, 1, 0));
     }
     ptr_20 = builtin::load_i32($outptr);
-    "core:rt/memory_into_gc_array$dae[at]"(local.tee bytes_19(builtin::array_new<u8>(local.tee $code_flat1(builtin::load_i32($outptr + 4)))), ptr_20, $code_flat1);
-    code = struct.new "core:prelude/string.wado//String" { repr: bytes_19, used: $code_flat1 };
+    "core:rt/memory_into_gc_array$dae[at]"(local.tee arr_38(builtin::array_new<u8>(local.tee $code_flat1(builtin::load_i32($outptr + 4)))), ptr_20, $code_flat1);
+    code = struct.new "core:prelude/string.wado//String" { repr: arr_38, used: $code_flat1 };
     if $code_flat1 > 0 {
         drop("mem/realloc"(ptr_20, $code_flat1, 1, 0));
     }
@@ -371,15 +365,13 @@ fn "guest_effect_handler_nested.wado/$cm_binding__test:hlc-dependency11730810bda
     let $lang_flat1: i32;
     let $outptr: i32;
     let $struct_result: ref "sub/hlc.wasm//Wrapped";
-    let bytes_19: ref Array<u8>;
     let ptr_20: i32;
-    bytes_19 = code.repr;
+    let arr_38: ref Array<u8>;
     ptr_20 = "mem/realloc"(0, 0, 1, 1);
-    "core:rt/gc_array_to_memory$spec0$dae[src_start]$spec0$dae[len]"(bytes_19, ptr_20);
+    "core:rt/gc_array_to_memory$spec0$dae[src_start]$spec0$dae[len]"(code.repr, ptr_20);
     $code_packed = builtin::i64_extend_i32_u(ptr_20) | 4294967296_i64;
-    bytes_19 = lang.repr;
     ptr_20 = "mem/realloc"(0, 0, 1, 2);
-    "core:rt/gc_array_to_memory$spec0$dae[src_start]$spec2$dae[len]"(bytes_19, ptr_20);
+    "core:rt/gc_array_to_memory$spec0$dae[src_start]$spec2$dae[len]"(lang.repr, ptr_20);
     $lang_packed = builtin::i64_extend_i32_u(ptr_20) | 8589934592_i64;
     ptr_20 = builtin::i32_wrap_i64($code_packed);
     $code_flat1 = builtin::i32_wrap_i64($code_packed >> 32_i64);
@@ -394,8 +386,8 @@ fn "guest_effect_handler_nested.wado/$cm_binding__test:hlc-dependency11730810bda
         drop("mem/realloc"($lang_flat0, $lang_flat1, 1, 0));
     }
     ptr_20 = builtin::load_i32($outptr);
-    "core:rt/memory_into_gc_array$dae[at]"(local.tee bytes_19(builtin::array_new<u8>(local.tee $code_flat1(builtin::load_i32($outptr + 4)))), ptr_20, $code_flat1);
-    code = struct.new "core:prelude/string.wado//String" { repr: bytes_19, used: $code_flat1 };
+    "core:rt/memory_into_gc_array$dae[at]"(local.tee arr_38(builtin::array_new<u8>(local.tee $code_flat1(builtin::load_i32($outptr + 4)))), ptr_20, $code_flat1);
+    code = struct.new "core:prelude/string.wado//String" { repr: arr_38, used: $code_flat1 };
     if $code_flat1 > 0 {
         drop("mem/realloc"(ptr_20, $code_flat1, 1, 0));
     }
@@ -412,15 +404,13 @@ fn "guest_effect_handler_nested.wado/$cm_binding__test:hlc-dependency11730810bda
     let $lang_flat1: i32;
     let $outptr: i32;
     let $struct_result: ref "sub/hlc.wasm//Wrapped";
-    let bytes_19: ref Array<u8>;
     let ptr_20: i32;
-    bytes_19 = code.repr;
+    let arr_38: ref Array<u8>;
     ptr_20 = "mem/realloc"(0, 0, 1, 1);
-    "core:rt/gc_array_to_memory$spec0$dae[src_start]$spec0$dae[len]"(bytes_19, ptr_20);
+    "core:rt/gc_array_to_memory$spec0$dae[src_start]$spec0$dae[len]"(code.repr, ptr_20);
     $code_packed = builtin::i64_extend_i32_u(ptr_20) | 4294967296_i64;
-    bytes_19 = lang.repr;
     ptr_20 = "mem/realloc"(0, 0, 1, 1);
-    "core:rt/gc_array_to_memory$spec0$dae[src_start]$spec0$dae[len]"(bytes_19, ptr_20);
+    "core:rt/gc_array_to_memory$spec0$dae[src_start]$spec0$dae[len]"(lang.repr, ptr_20);
     $lang_packed = builtin::i64_extend_i32_u(ptr_20) | 4294967296_i64;
     ptr_20 = builtin::i32_wrap_i64($code_packed);
     $code_flat1 = builtin::i32_wrap_i64($code_packed >> 32_i64);
@@ -435,8 +425,8 @@ fn "guest_effect_handler_nested.wado/$cm_binding__test:hlc-dependency11730810bda
         drop("mem/realloc"($lang_flat0, $lang_flat1, 1, 0));
     }
     ptr_20 = builtin::load_i32($outptr);
-    "core:rt/memory_into_gc_array$dae[at]"(local.tee bytes_19(builtin::array_new<u8>(local.tee $code_flat1(builtin::load_i32($outptr + 4)))), ptr_20, $code_flat1);
-    code = struct.new "core:prelude/string.wado//String" { repr: bytes_19, used: $code_flat1 };
+    "core:rt/memory_into_gc_array$dae[at]"(local.tee arr_38(builtin::array_new<u8>(local.tee $code_flat1(builtin::load_i32($outptr + 4)))), ptr_20, $code_flat1);
+    code = struct.new "core:prelude/string.wado//String" { repr: arr_38, used: $code_flat1 };
     if $code_flat1 > 0 {
         drop("mem/realloc"(ptr_20, $code_flat1, 1, 0));
     }
@@ -803,35 +793,34 @@ fn "guest_effect_handler_nested.wado/guest_effect_handler_nested.wado/$Closure_3
     return inner = struct.new "guest_effect_handler_nested.wado//Tag" { prefix: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(105, 110, 47), used: 3 } }, global:guest_effect_handler_nested.wado::$effect_sub/hlc.wasm/Highlight = struct.new "guest_effect_handler_nested.wado//$Dispatch_sub/hlc.wasm/Highlight" { outer: local.tee $local_6(global:guest_effect_handler_nested.wado::$effect_sub/hlc.wasm/Highlight), op_highlight: struct.new "canonical//CanonicalClosure_0" { env: struct.new "guest_effect_handler_nested.wado//$Closure_0" { $capture_0: inner }, func: ref.func "closure/guest_effect_handler_nested.wado/$closure_wrapper_0" } }, code = "guest_effect_handler_nested.wado/$cm_binding__test:hlc-dependency11730810bdafac14/hlc@0.1.0#wrap"(code, lang).text, global:guest_effect_handler_nested.wado::$effect_sub/hlc.wasm/Highlight = $local_6, code;
 }
 
-fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0$sroa[self.buf]"(self, $mv$content$repr, $mv$content$used) {
-    let new_used_19: i32;
-    let start_20: i32;
-    $inline_core_prelude_string_wado_String__internal_push_string_2: block {
-        break_if $inline_core_prelude_string_wado_String__internal_push_string_2 $mv$content$used == 0;
-        if @unlikely(local.tee new_used_19(self.used + $mv$content$used) > builtin::array_len(self.repr)) {
-            cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, new_used_19);
-        }
-        start_20 = self.used;
-        self.used = new_used_19;
-        builtin::array_copy<u8>(self.repr, start_20, $mv$content$repr, 0, $mv$content$used);
-    };
-    return;
-}
-
 fn "core:prelude/string.wado/core:prelude/string.wado/String::format<guest_effect_handler_nested.wado/$tmpl$ace5d8bd7289ac71,[core:prelude/string.wado/String,core:prelude/string.wado/String,core:prelude/string.wado/String]>$spec0$spec0"($mv$t$h0, $mv$t$h1, $mv$t$h2) {
     let out_3: ref "core:prelude/string.wado//String";
     let $temp_inline_core_prelude_traits_wado_TemplateHole_guest_effect_handler_nested_wado__tmpl_ace5d8bd7289ac71_core_prelude_string_wado_String___fmt_30_0: ref "core:prelude/format.wado//Formatter";
-    let repr_266: ref Array<u8>;
-    let new_used_282: i32;
-    let start_283: i32;
+    let self_434: ref "core:prelude/string.wado//String";
+    let n_449: i32;
+    let new_used_453: i32;
+    let start_454: i32;
+    let $sroa_view_repr_1231: ref Array<u8>;
     out_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(49), used: 0 };
     $inline_core_prelude_string_wado_String__internal_push_view_26: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_26;
     };
     $temp_inline_core_prelude_traits_wado_TemplateHole_guest_effect_handler_nested_wado__tmpl_ace5d8bd7289ac71_core_prelude_string_wado_String___fmt_30_0 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: out_3 };
     $inline_core_prelude_format_wado_pad_text_core_prelude_string_wado_String__34: block {
-        "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0$sroa[self.buf]"($temp_inline_core_prelude_traits_wado_TemplateHole_guest_effect_handler_nested_wado__tmpl_ace5d8bd7289ac71_core_prelude_string_wado_String___fmt_30_0.buf, $mv$t$h0.repr, $mv$t$h0.used);
+        $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__0: block {
+            self_434 = $temp_inline_core_prelude_traits_wado_TemplateHole_guest_effect_handler_nested_wado__tmpl_ace5d8bd7289ac71_core_prelude_string_wado_String___fmt_30_0.buf;
+            $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__0__$inline_core_prelude_string_wado_String__internal_push_string_2: block {
+                break_if $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__0__$inline_core_prelude_string_wado_String__internal_push_string_2 local.tee n_449($mv$t$h0.used) == 0;
+                if @unlikely(local.tee new_used_453(self_434.used + n_449) > builtin::array_len(self_434.repr)) {
+                    cold_path;
+                    "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_434, new_used_453);
+                }
+                start_454 = self_434.used;
+                self_434.used = new_used_453;
+                builtin::array_copy<u8>(self_434.repr, start_454, $mv$t$h0.repr, 0, n_449);
+            };
+            break $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__0;
+        };
         break $inline_core_prelude_format_wado_pad_text_core_prelude_string_wado_String__34;
     };
     $inline_core_prelude_string_wado_String__internal_push_view_58: block {
@@ -839,20 +828,46 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<guest_effec
     };
     $temp_inline_core_prelude_traits_wado_TemplateHole_guest_effect_handler_nested_wado__tmpl_ace5d8bd7289ac71_core_prelude_string_wado_String___fmt_30_0 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: out_3 };
     $inline_core_prelude_format_wado_pad_text_core_prelude_string_wado_String__72: block {
-        "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0$sroa[self.buf]"($temp_inline_core_prelude_traits_wado_TemplateHole_guest_effect_handler_nested_wado__tmpl_ace5d8bd7289ac71_core_prelude_string_wado_String___fmt_30_0.buf, $mv$t$h1.repr, $mv$t$h1.used);
+        $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__1: block {
+            $mv$t$h0 = $temp_inline_core_prelude_traits_wado_TemplateHole_guest_effect_handler_nested_wado__tmpl_ace5d8bd7289ac71_core_prelude_string_wado_String___fmt_30_0.buf;
+            $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__1__$inline_core_prelude_string_wado_String__internal_push_string_2: block {
+                break_if $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__1__$inline_core_prelude_string_wado_String__internal_push_string_2 local.tee n_449($mv$t$h1.used) == 0;
+                if @unlikely(local.tee new_used_453($mv$t$h0.used + n_449) > builtin::array_len($mv$t$h0.repr)) {
+                    cold_path;
+                    "core:prelude/string.wado/core:prelude/string.wado/String::grow"($mv$t$h0, new_used_453);
+                }
+                start_454 = $mv$t$h0.used;
+                $mv$t$h0.used = new_used_453;
+                builtin::array_copy<u8>($mv$t$h0.repr, start_454, $mv$t$h1.repr, 0, n_449);
+            };
+            break $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__1;
+        };
         break $inline_core_prelude_format_wado_pad_text_core_prelude_string_wado_String__72;
     };
-    repr_266 = global:core:prelude/string.wado::$const_obj_8;
-    if @unlikely(local.tee new_used_282(out_3.used + 1) > builtin::array_len(out_3.repr)) {
+    $sroa_view_repr_1231 = global:core:prelude/string.wado::$const_obj_8;
+    if @unlikely(local.tee n_449(out_3.used + 1) > builtin::array_len(out_3.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_3, new_used_282);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_3, n_449);
     }
-    start_283 = out_3.used;
-    out_3.used = new_used_282;
-    builtin::array_copy<u8>(out_3.repr, start_283, repr_266, 0, 1);
+    new_used_453 = out_3.used;
+    out_3.used = n_449;
+    builtin::array_copy<u8>(out_3.repr, new_used_453, $sroa_view_repr_1231, 0, 1);
     $temp_inline_core_prelude_traits_wado_TemplateHole_guest_effect_handler_nested_wado__tmpl_ace5d8bd7289ac71_core_prelude_string_wado_String___fmt_30_0 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: out_3 };
     $inline_core_prelude_format_wado_pad_text_core_prelude_string_wado_String__110: block {
-        "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0$sroa[self.buf]"($temp_inline_core_prelude_traits_wado_TemplateHole_guest_effect_handler_nested_wado__tmpl_ace5d8bd7289ac71_core_prelude_string_wado_String___fmt_30_0.buf, $mv$t$h2.repr, $mv$t$h2.used);
+        $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__2: block {
+            $mv$t$h0 = $temp_inline_core_prelude_traits_wado_TemplateHole_guest_effect_handler_nested_wado__tmpl_ace5d8bd7289ac71_core_prelude_string_wado_String___fmt_30_0.buf;
+            $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__2__$inline_core_prelude_string_wado_String__internal_push_string_2: block {
+                break_if $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__2__$inline_core_prelude_string_wado_String__internal_push_string_2 local.tee n_449($mv$t$h2.used) == 0;
+                if @unlikely(local.tee new_used_453($mv$t$h0.used + n_449) > builtin::array_len($mv$t$h0.repr)) {
+                    cold_path;
+                    "core:prelude/string.wado/core:prelude/string.wado/String::grow"($mv$t$h0, new_used_453);
+                }
+                start_454 = $mv$t$h0.used;
+                $mv$t$h0.used = new_used_453;
+                builtin::array_copy<u8>($mv$t$h0.repr, start_454, $mv$t$h2.repr, 0, n_449);
+            };
+            break $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__2;
+        };
         break $inline_core_prelude_format_wado_pad_text_core_prelude_string_wado_String__110;
     };
     $inline_core_prelude_string_wado_String__internal_push_view_122: block {

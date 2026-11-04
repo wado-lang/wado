@@ -13,8 +13,7 @@ use std::sync::Arc;
 
 use crate::call_args::CallArgs;
 use crate::hashmap::{IndexMap, IndexSet};
-use crate::module_source::ModuleSource;
-use crate::nir::{FuncId, FuncParts, FunctionRef, NirFunction, NirStruct, NirUnaryOp};
+use crate::nir::{FuncId, FuncParts, FunctionRef, NirFunction, NirUnaryOp, StructDecls};
 use crate::nir_arena::{
     ArenaCallArg, BlockId, Body, ExprId, ExprKind, NodeRef, Operand, StmtId, StmtKind,
 };
@@ -34,7 +33,6 @@ use super::gate::{FunctionGate, GatedPass};
 use crate::compiler_item::{CompilerItem, SeqField};
 use crate::lower::plan::value_copy;
 use crate::name::{FqTraitName, LocalMethodName, minted_what};
-use crate::nir::NirField;
 use crate::nir_value_graph::{ValueId, ValueKind};
 use crate::niri::{CtfeBuiltin, build_ctfe_builtin_map};
 
@@ -97,15 +95,14 @@ fn classify_array_method_sig(func: &NirFunction, type_table: &TypeTable) -> Opti
         |ty: TypeId| matches!(type_table.get(ty), ResolvedType::Ref(inner) if is_list_of_t(*inner));
     let is_mut_ref_list_of_t = |ty: TypeId| matches!(type_table.get(ty), ResolvedType::MutRef(inner) if is_list_of_t(*inner));
     let is_array_of_t = |ty: TypeId| matches!(type_table.get(ty), ResolvedType::BuiltinArray(inner) if is_t(*inner));
-    let is = |ty: TypeId, want: TypeId| type_table.type_key(ty) == type_table.type_key(want);
-    let is_i32 = |ty: TypeId| is(ty, TypeTable::I32);
-    let is_unit = |ty: TypeId| is(ty, TypeTable::UNIT);
+    let is_i32 = |ty: TypeId| type_table.same_type(ty, TypeTable::I32);
+    let is_unit = |ty: TypeId| type_table.same_type(ty, TypeTable::UNIT);
     // Names the impl exactly, the receiver being `List<T>` already: a second
     // `From<Array<T>>` for it would overlap.
     let from = type_table.compiler_items().trait_def(CompilerItem::From);
     let is_from_impl = from.is_some() && info.trait_decl() == from;
     // Length-invariant query return types: i32 (len, capacity) or bool (is_empty).
-    let is_query_return = |ty: TypeId| is_i32(ty) || is(ty, TypeTable::BOOL);
+    let is_query_return = |ty: TypeId| is_i32(ty) || type_table.same_type(ty, TypeTable::BOOL);
 
     match params.as_slice() {
         // fn(&List<T>) -> i32 | bool — Query
@@ -235,9 +232,7 @@ pub fn scalarize_containers(project: &mut NirPackage, gate: &mut FunctionGate) -
         return false;
     }
 
-    // Build a struct lookup: (name, module_source) → &NirStruct. Used by
-    // `collect_candidates` to expand `List<UserStruct>` element types.
-    let struct_index = build_struct_index(&project.structs);
+    let struct_index = StructDecls::new(&project.structs, &project.type_table.borrow());
     let value_copy_ids = project.value_copy_func_ids();
     let len = project.functions.len();
     let exec = Arc::clone(gate.exec());
@@ -344,7 +339,7 @@ pub fn scalarize_containers(project: &mut NirPackage, gate: &mut FunctionGate) -
 fn holds_candidate(
     func: &NirFunction,
     type_table: &TypeTable,
-    struct_index: &StructIndex<'_>,
+    struct_index: &StructDecls<'_>,
     sig: &MethodSig,
     value_copy_ids: &IndexSet<FuncId>,
 ) -> bool {
@@ -382,17 +377,6 @@ impl Rule for ContainerSroaRule<'_> {
         }
         scalarize_at_root(engine, self)
     }
-}
-
-/// Lookup index for user-defined structs by (name, module source).
-type StructIndex<'a> = IndexMap<(String, ModuleSource), &'a NirStruct>;
-
-fn build_struct_index(structs: &[NirStruct]) -> StructIndex<'_> {
-    let mut out: StructIndex = IndexMap::default();
-    for s in structs {
-        out.insert((s.name.clone(), s.module_source.clone()), s);
-    }
-    out
 }
 
 /// Build a catalog of monomorphized `List<T>::{method}` function references in
@@ -1102,7 +1086,7 @@ impl LengthOnly<'_> {
 fn plan_body(
     body: &Body,
     type_table: &TypeTable,
-    struct_index: &StructIndex<'_>,
+    struct_index: &StructDecls<'_>,
     sig: &MethodSig,
     catalog: &MethodCatalog,
     value_copy_ids: &IndexSet<FuncId>,
@@ -1266,7 +1250,7 @@ fn field_constructor(init: &CandidateInit, elem: TypeKey, sig: &MethodSig) -> Op
 fn collect_candidates(
     body: &Body,
     type_table: &TypeTable,
-    struct_index: &StructIndex<'_>,
+    struct_index: &StructDecls<'_>,
     sig: &MethodSig,
     value_copy_ids: &IndexSet<FuncId>,
 ) -> Vec<Candidate> {
@@ -1327,34 +1311,19 @@ fn collect_candidates(
 fn element_layout_of(
     elem_ty: TypeId,
     type_table: &TypeTable,
-    struct_index: &StructIndex<'_>,
+    struct_index: &StructDecls<'_>,
 ) -> Option<(ElementLayout, Vec<TypeId>)> {
     // Tuple element (e.g., `List<[i32, i32]>`).
     if let Some(tuple_elems) = type_table.as_tuple(elem_ty) {
         return Some((ElementLayout::Tuple, tuple_elems));
     }
-    // User struct element (e.g., `List<Point>`). Generic struct instances
-    // appear as `ResolvedType::Struct` after monomorphization.
-    if let ResolvedType::Struct { def, type_args } = type_table.get(elem_ty)
-        && let module_source = &type_table.struct_head_module(*def).clone()
-    {
-        let key = (
-            type_table.struct_mangled_name(*def, type_args),
-            module_source.clone(),
-        );
-        let tir_struct = struct_index.get(&key)?;
-        if tir_struct.fields.is_empty() {
+    // User struct element (e.g., `List<Point>`).
+    if let Some(decl) = struct_index.of_type(elem_ty, type_table) {
+        let fields = decl.fields_in_order();
+        if fields.is_empty() {
             return None;
         }
-        // Fields indexed 0..N by declaration order. We sort defensively.
-        let mut ordered: Vec<&NirField> = tir_struct.fields.iter().collect();
-        ordered.sort_by_key(|f| f.index);
-        for (i, f) in ordered.iter().enumerate() {
-            if f.index != i as u32 {
-                return None;
-            }
-        }
-        let field_types: Vec<TypeId> = ordered.iter().map(|f| f.type_id).collect();
+        let field_types: Vec<TypeId> = fields.iter().map(|f| f.type_id).collect();
         let layout = ElementLayout::Struct {
             key: type_table.type_key(elem_ty),
         };

@@ -189,7 +189,7 @@ fn "opt_bce_write_through_param_alias.wado/h"(a, b, i) with Stdout {
     let $v1_7: i32;
     let out_51: ref "core:prelude/string.wado//String";
     let x_122: i64;
-    let repr_141: ref Array<u8>;
+    let $sroa_view_repr_203: ref Array<u8>;
     $v1_7 = a.used;
     if @unlikely(i >=u $v1_7) {
         cold_path;
@@ -224,14 +224,14 @@ fn "opt_bce_write_through_param_alias.wado/h"(a, b, i) with Stdout {
     $v1_7 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_122(x_122 = builtin::i64_extend_i32_s($v1_7); select i64(x_122 < 0_i64, 0_i64 - x_122, x_122)));
     $load_2 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"(out_51, $load_2, $v1_7);
     "core:prelude/primitive.wado/write_decimal_digits"(local.tee $load_9(out_51.repr), $load_2, x_122, $v1_7);
-    repr_141 = global:opt_bce_write_through_param_alias.wado::$const_obj_0;
+    $sroa_view_repr_203 = global:opt_bce_write_through_param_alias.wado::$const_obj_0;
     if @unlikely(local.tee $v1_7(out_51.used + 1) > builtin::array_len($load_9)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_51, $v1_7);
     }
     $load_2 = out_51.used;
     out_51.used = $v1_7;
-    builtin::array_copy<u8>(out_51.repr, $load_2, repr_141, 0, 1);
+    builtin::array_copy<u8>(out_51.repr, $load_2, $sroa_view_repr_203, 0, 1);
     $v1_7 = i < 0;
     i = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_122(x_122 = builtin::i64_extend_i32_s(i); select i64(x_122 < 0_i64, 0_i64 - x_122, x_122)));
     $v1_7 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"(out_51, $v1_7, i);

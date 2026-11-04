@@ -1,0 +1,15 @@
+// A field name is spelled the same wherever one stands: a keyword names a field
+// in a struct pattern as it does in the declaration and in a literal.
+use { println, Stdout } from "core:cli";
+
+struct Flagged { true: i32, type: i32 }
+
+export fn run() with Stdout {
+    let f = Flagged { true: 1, type: 2 };
+    let Flagged { true: t, type } = f;
+    let Flagged { "true": u, .. } = f;
+    println(`${t} ${type} ${u}`);
+}
+
+__DATA__
+{"stdout": "1 2 1\n"}

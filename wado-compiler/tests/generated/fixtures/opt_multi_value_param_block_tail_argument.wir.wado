@@ -59,17 +59,19 @@ type "functype//opt_multi_value_param_block_tail_argument.wado/opt_multi_value_p
 
 type "functype//opt_multi_value_param_block_tail_argument.wado/opt_multi_value_param_block_tail_argument.wado/Table::lookup<&core:prelude/string.wado/String>$sroa[self.width,return]" = fn(i32, ref Array<u8>, i32) -> [i32, i32];  // TypeId(26)
 
-type "functype//opt_multi_value_param_block_tail_argument.wado/opt_multi_value_param_block_tail_argument.wado/Table::lookup<&core:prelude/string.wado/String>$sroa[self.width,return]$spec0" = fn(i32, ref "core:prelude/string.wado//String") -> [i32, i32];  // TypeId(27)
+type "functype//opt_multi_value_param_block_tail_argument.wado/opt_multi_value_param_block_tail_argument.wado/Table::lookup<&core:prelude/string.wado/String>$sroa[self.width,return]$spec0$dae[key]" = fn(i32) -> [i32, i32];  // TypeId(27)
 
-type "functype//wasi/task-return" = fn(i32);  // TypeId(28)
+type "functype//opt_multi_value_param_block_tail_argument.wado/opt_multi_value_param_block_tail_argument.wado/Table::find$sroa[self.width]$spec0$dae[key]" = fn(i32) -> i32;  // TypeId(28)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(29)
+type "functype//wasi/task-return" = fn(i32);  // TypeId(29)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(30)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(30)
 
-type "functype//wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode" = fn(i32);  // TypeId(31)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(31)
 
-type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(32)
+type "functype//wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode" = fn(i32);  // TypeId(32)
+
+type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(33)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -83,8 +85,6 @@ import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode";
-
-global global:opt_multi_value_param_block_tail_argument.wado::$const_obj_0: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(122, 122, 122), used: 3 };
 
 fn "opt_multi_value_param_block_tail_argument.wado/run"() {
     let probe: ref "core:prelude/string.wado//String";
@@ -103,7 +103,7 @@ fn "opt_multi_value_param_block_tail_argument.wado/run"() {
         "opt_multi_value_param_block_tail_argument.wado/run$cold1"();
         unreachable;
     }
-    multivalue_bind [$sroa_t_width_7, $mv$$vr_5$0] = "opt_multi_value_param_block_tail_argument.wado/opt_multi_value_param_block_tail_argument.wado/Table::lookup<&core:prelude/string.wado/String>$sroa[self.width,return]$spec0"($sroa_t_width_7, global:opt_multi_value_param_block_tail_argument.wado::$const_obj_0);
+    multivalue_bind [$sroa_t_width_7, $mv$$vr_5$0] = "opt_multi_value_param_block_tail_argument.wado/opt_multi_value_param_block_tail_argument.wado/Table::lookup<&core:prelude/string.wado/String>$sroa[self.width,return]$spec0$dae[key]"($sroa_t_width_7);
     if @unlikely(($sroa_t_width_7 == 0) == 0) {
         cold_path;
         "opt_multi_value_param_block_tail_argument.wado/run$cold0"();
@@ -305,14 +305,37 @@ fn "opt_multi_value_param_block_tail_argument.wado/opt_multi_value_param_block_t
     return 1, self;
 }
 
+<<<<<<< HEAD
 fn "opt_multi_value_param_block_tail_argument.wado/opt_multi_value_param_block_tail_argument.wado/Table::lookup<&core:prelude/string.wado/String>$sroa[self.width,return]$spec0"(self, key) {
     if local.tee self(block -> i32 {
         drop(key.repr);
         "opt_multi_value_param_block_tail_argument.wado/opt_multi_value_param_block_tail_argument.wado/Table::find$sroa[self.width]"(self, 0, 3);
     }) < 0 {
+||||||| d9d9d1430
+fn "opt_multi_value_param_block_tail_argument.wado/opt_multi_value_param_block_tail_argument.wado/Table::find$sroa[self.width]"(self, $mv$key$start, $mv$key$end) {
+    return select i32(($mv$key$end - $mv$key$start) == self, 1, -1);
+}
+
+fn "opt_multi_value_param_block_tail_argument.wado/opt_multi_value_param_block_tail_argument.wado/Table::lookup<&core:prelude/string.wado/String>$sroa[self.width,return]$spec0"(self, key) {
+    if local.tee self(block -> i32 {
+        drop(key.repr);
+        "opt_multi_value_param_block_tail_argument.wado/opt_multi_value_param_block_tail_argument.wado/Table::find$sroa[self.width]"(self, 0, 3);
+    }) < 0 {
+=======
+fn "opt_multi_value_param_block_tail_argument.wado/opt_multi_value_param_block_tail_argument.wado/Table::find$sroa[self.width]"(self, $mv$key$start, $mv$key$end) {
+    return select i32(($mv$key$end - $mv$key$start) == self, 1, -1);
+}
+
+fn "opt_multi_value_param_block_tail_argument.wado/opt_multi_value_param_block_tail_argument.wado/Table::lookup<&core:prelude/string.wado/String>$sroa[self.width,return]$spec0$dae[key]"(self) {
+    if local.tee self("opt_multi_value_param_block_tail_argument.wado/opt_multi_value_param_block_tail_argument.wado/Table::find$sroa[self.width]$spec0$dae[key]"(self)) < 0 {
+>>>>>>> origin/main
         return 0, 0;
     }
     return 1, self;
+}
+
+fn "opt_multi_value_param_block_tail_argument.wado/opt_multi_value_param_block_tail_argument.wado/Table::find$sroa[self.width]$spec0$dae[key]"(self) {
+    return select i32(3 == self, 1, -1);
 }
 
 export fn "opt_multi_value_param_block_tail_argument.wado/$cm_export__run" as "run"

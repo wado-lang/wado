@@ -167,6 +167,7 @@ hand-authored layout. Naming a file bypasses the exclusion, so never
 - `package-grog/` — a Protocol Buffers compiler in Wado: a `.proto` becomes Wado declarations, and the runtime library encodes them.
 - `package-jade/` — a JSON Schema 2020-12 validator in Wado.
 - `package-marl/` — a CommonMark subset in Wado.
+- `package-re/` — linear-time regular expressions in ECMA-262's syntax.
 - `package-loam/` — a tensor compiler in Wado: an ONNX graph becomes Wado source, shapes checked at build time.
 - `package-wadopoet/` — builders for generated Wado source, and the reserved vocabulary a minted name must avoid.
 - `package-web/` — `wado-lang:web`: the web platform bindings, their browser glue, and `SurfaceDom`, a DOM without a browser engine that serves them under `wado test`, `wado run` and `wado serve`.

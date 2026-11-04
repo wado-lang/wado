@@ -226,7 +226,7 @@ fn "const_object_globalization_impure_call.wado/run"() with Stdout {
     let $sroa_$iter_0_start_31: i32;
     let out_38: ref "core:prelude/string.wado//String";
     let x_109: i64;
-    let repr_128: ref Array<u8>;
+    let $sroa_view_repr_203: ref Array<u8>;
     acc = 0;
     $sroa_$iter_0_start_31 = 0;
     b1: block {
@@ -259,14 +259,14 @@ fn "const_object_globalization_impure_call.wado/run"() with Stdout {
     acc = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_109(x_109 = builtin::i64_extend_i32_s(acc); select i64(x_109 < 0_i64, 0_i64 - x_109, x_109)));
     $sroa_slot_28 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"(out_38, $sroa_slot_28, acc);
     "core:prelude/primitive.wado/write_decimal_digits"(local.tee $load_0(out_38.repr), $sroa_slot_28, x_109, acc);
-    repr_128 = global:const_object_globalization_impure_call.wado::$const_obj_0;
+    $sroa_view_repr_203 = global:const_object_globalization_impure_call.wado::$const_obj_0;
     if @unlikely(local.tee acc(out_38.used + 1) > builtin::array_len($load_0)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_38, acc);
     }
     $sroa_slot_28 = out_38.used;
     out_38.used = acc;
-    builtin::array_copy<u8>(out_38.repr, $sroa_slot_28, repr_128, 0, 1);
+    builtin::array_copy<u8>(out_38.repr, $sroa_slot_28, $sroa_view_repr_203, 0, 1);
     acc = $sroa_$iter_0_start_31 < 0;
     $sroa_$iter_0_start_31 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_109(x_109 = builtin::i64_extend_i32_s($sroa_$iter_0_start_31); select i64(x_109 < 0_i64, 0_i64 - x_109, x_109)));
     acc = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"(out_38, acc, $sroa_$iter_0_start_31);

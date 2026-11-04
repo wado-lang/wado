@@ -128,6 +128,11 @@ Lints skip `#![generated]` modules; `--lint-generated` reports there too, and
 `--no-lint` reports none and skips the passes only lints need. Every compiling
 subcommand takes them, and the last one given wins.
 
+`build`, `check`, `compile`, `dump`, `run` and `test` keep the memory they free
+instead of returning it to the OS, which spares a compile rebuilding it.
+`--no-retain-memory` returns it, and `--retain-memory` has `serve` keep it too.
+Every other subcommand, the long-running `lsp` included, returns it.
+
 ## Run
 
 ```sh
@@ -257,6 +262,16 @@ hint with the labels spliced in at the anchors an editor would render them at
 (`let x‹: i32› = add(‹a: ›1, ‹b: ›2);`). That is how to check anchor placement —
 against `example/`, say — without reading positions off a list. `--json` prints
 the raw hints instead, positioned in the LSP's default UTF-16 encoding.
+
+`scip` takes a directory (default `.`) and writes a
+[SCIP](https://github.com/scip-code/scip) index of every `.wado` file under it,
+each analyzed as its own entry, to `--output` (default `index.scip`).
+`--exclude <glob>`, repeatable and relative to that directory, leaves files
+out:
+
+```sh
+wado query scip --output wado.scip --exclude 'wado-compiler/tests/**' .
+```
 
 Common options:
 

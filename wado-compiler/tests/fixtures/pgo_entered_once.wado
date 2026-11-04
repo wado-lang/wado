@@ -1,0 +1,37 @@
+// A region the profile ran is never cold, however rarely it ran: `encode` ran
+// once, but its call reaches `total`, whose loop ran a million times, and the
+// optimizer takes every function only cold sites reach as cold. Only a region
+// that never ran is cold: the `then` of `x < 0` in `step`.
+use { println, Stdout } from "core:cli";
+
+fn step(x: i32) -> i32 {
+    if x < 0 {
+        return 0;
+    }
+    return x + 1;
+}
+
+fn total(n: i32) -> i32 {
+    let mut s = 0;
+    for let i of 0..<n {
+        s = step(s + i);
+    }
+    return s;
+}
+
+fn encode(n: i32) -> i32 {
+    return total(n);
+}
+
+export fn run() with Stdout {
+    println(`${encode(builtin::black_box(4))}`);
+}
+
+__DATA__
+{
+  "profile": "testdata/pgo_entered_once.pgo",
+  "marked_regions": [
+    "pgo_entered_once.wado:8:14 then unlikely cold"
+  ],
+  "stdout": "10\n"
+}

@@ -368,7 +368,17 @@
     "strings": {
       "patterns": [
         {
-          "begin": "b\"",
+          "begin": "\\bb(#+)\"",
+          "end": "\"\\1",
+          "name": "string.quoted.double.byte.raw.wado"
+        },
+        {
+          "begin": "(#+)\"",
+          "end": "\"\\1",
+          "name": "string.quoted.double.raw.wado"
+        },
+        {
+          "begin": "\\bb\"",
           "end": "\"",
           "name": "string.quoted.double.byte.wado",
           "patterns": [
@@ -388,6 +398,16 @@
           ]
         },
         {
+          "begin": "(#+)`",
+          "end": "`\\1",
+          "name": "string.interpolated.raw.wado",
+          "patterns": [
+            {
+              "include": "#template-interpolation"
+            }
+          ]
+        },
+        {
           "begin": "`",
           "end": "`",
           "name": "string.interpolated.wado",
@@ -396,26 +416,29 @@
               "include": "#string-escapes"
             },
             {
-              "begin": "\\$\\{",
-              "beginCaptures": {
-                "0": {
-                  "name": "punctuation.definition.interpolation.begin.wado"
-                }
-              },
-              "end": "\\}",
-              "endCaptures": {
-                "0": {
-                  "name": "punctuation.definition.interpolation.end.wado"
-                }
-              },
-              "name": "meta.interpolation.wado",
-              "patterns": [
-                {
-                  "include": "$self"
-                }
-              ]
+              "include": "#template-interpolation"
             }
           ]
+        }
+      ]
+    },
+    "template-interpolation": {
+      "begin": "\\$\\{",
+      "beginCaptures": {
+        "0": {
+          "name": "punctuation.definition.interpolation.begin.wado"
+        }
+      },
+      "end": "\\}",
+      "endCaptures": {
+        "0": {
+          "name": "punctuation.definition.interpolation.end.wado"
+        }
+      },
+      "name": "meta.interpolation.wado",
+      "patterns": [
+        {
+          "include": "$self"
         }
       ]
     },

@@ -6,8 +6,9 @@
 //! `ModuleSource → URI` helpers that read the compiler's per-module
 //! metadata.
 
+use wado_compiler::ast::AstId;
 use wado_compiler::module_source::ModuleSource;
-use wado_compiler::symbol::Symbol;
+use wado_compiler::semantics::Semantics;
 
 use crate::uri::{Uri, percent_encode_path};
 
@@ -15,34 +16,30 @@ use crate::uri::{Uri, percent_encode_path};
 ///
 /// `request_uri` provides the base directory used to anchor `./relative.wado`
 /// imports. Returns the request URI itself when the module is the entry point.
-pub(crate) fn module_uri(
-    entry: &ModuleSource,
-    module: &ModuleSource,
-    request_uri: &str,
-) -> Option<String> {
+pub(crate) fn module_uri(entry: &ModuleSource, module: &ModuleSource, request_uri: &str) -> String {
     if module == entry {
-        return Some(request_uri.to_string());
+        return request_uri.to_string();
     }
     match module {
-        ModuleSource::EntryPoint { filename, .. } => Some(filename_to_uri(filename)),
+        ModuleSource::EntryPoint { filename, .. } => filename_to_uri(filename),
         ModuleSource::Local { path, .. } | ModuleSource::Dependency { path, .. } => {
-            Some(resolve_local_uri(path, request_uri))
+            resolve_local_uri(path, request_uri)
         }
-        ModuleSource::Core { name } => Some(format!("core:{name}")),
+        ModuleSource::Core { name } => format!("core:{name}"),
         ModuleSource::Binding {
             namespace,
             interface,
-        } => Some(format!("{namespace}:{interface}")),
-        ModuleSource::Remote { url, .. } => Some(url.to_string()),
+        } => format!("{namespace}:{interface}"),
+        ModuleSource::Remote { url, .. } => url.to_string(),
         // Kiln-redirected modules already carry a fully-qualified URI;
         // hand it to the LSP client unchanged.
-        ModuleSource::Redirected { uri, .. } => Some(uri.to_string()),
+        ModuleSource::Redirected { uri, .. } => uri.to_string(),
         // Wasm assets (`.wat`/`.wasm` imported via `with { type: ... }`)
         // expose their canonical path; opening these in the editor isn't
         // useful (binary `.wasm`) and stdlib `.wat` paths can't be served
         // until `workspace/textDocumentContent` lands. Emit the path so
         // CLI consumers can still see the reference site.
-        ModuleSource::Wasm { path, .. } => Some(path.to_string()),
+        ModuleSource::Wasm { path, .. } => path.to_string(),
         // An operation's namespace opens where its interface is declared.
         ModuleSource::Effect(head) => module_uri(entry, head.module(), request_uri),
     }
@@ -144,12 +141,15 @@ fn split_scheme(path: &str) -> (&str, &str) {
 }
 
 /// URI of the module defining `symbol`, relative to the requesting document.
-pub(crate) fn symbol_uri(
-    entry: &ModuleSource,
-    symbol: &Symbol,
-    request_uri: &str,
-) -> Option<String> {
-    module_uri(entry, symbol.module_source(), request_uri)
+/// The URI of the module declaring `def`. A module-level symbol names it in
+/// its symbol-table entry; a method or an associated constant, which has
+/// none, by the module its node belongs to.
+pub(crate) fn def_uri(sem: &Semantics, def: AstId, request_uri: &str) -> Option<String> {
+    let module = match sem.symbol_at(def) {
+        Some(symbol) => symbol.module_source(),
+        None => sem.module_of_id(def)?,
+    };
+    Some(module_uri(&sem.entry_module_source, module, request_uri))
 }
 
 #[cfg(test)]

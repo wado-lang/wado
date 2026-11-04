@@ -91,8 +91,8 @@ fn "cm_component_import_resource_pure.wado/run"() {
     let $load_4: ref Array<u8>;
     let out_31: ref "core:prelude/string.wado//String";
     let value_98: u64;
-    let repr_117: ref Array<u8>;
-    let start_294: i32;
+    let start_291: i32;
+    let $sroa_view_repr_971: ref Array<u8>;
     let x: i32;
     let y: i32;
     let $drop_spill_4: u32;
@@ -115,17 +115,17 @@ fn "cm_component_import_resource_pure.wado/run"() {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_31, $drop_spill_4);
     }
-    start_294 = out_31.used;
+    start_291 = out_31.used;
     out_31.used = $drop_spill_4;
-    "core:prelude/primitive.wado/write_decimal_digits"(local.tee $load_4(out_31.repr), start_294, value_98, y);
-    repr_117 = global:cm_component_import_resource_pure.wado::$const_obj_0;
+    "core:prelude/primitive.wado/write_decimal_digits"(local.tee $load_4(out_31.repr), start_291, value_98, y);
+    $sroa_view_repr_971 = global:cm_component_import_resource_pure.wado::$const_obj_0;
     if @unlikely(local.tee y(out_31.used + 7) > builtin::array_len($load_4)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_31, y);
     }
     $drop_spill_4 = out_31.used;
     out_31.used = y;
-    builtin::array_copy<u8>(local.tee $load_4(out_31.repr), $drop_spill_4, repr_117, 0, 7);
+    builtin::array_copy<u8>(local.tee $load_4(out_31.repr), $drop_spill_4, $sroa_view_repr_971, 0, 7);
     x = "core:prelude/primitive.wado/count_digits_u64"(local.tee value_98(builtin::i64_extend_i32_u(x)));
     if @unlikely(local.tee y(out_31.used + x) > builtin::array_len($load_4)) {
         cold_path;

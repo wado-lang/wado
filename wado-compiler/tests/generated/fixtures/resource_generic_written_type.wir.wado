@@ -73,7 +73,7 @@ fn "resource_generic_written_type.wado/run"() with Stdout {
     let out_36: ref "core:prelude/string.wado//String";
     let is_negative_103: bool;
     let x_107: i64;
-    let repr_126: ref Array<u8>;
+    let $sroa_view_repr_203: ref Array<u8>;
     let $sroa_t_h0_257: i32;
     let $sroa_t_h1_258: i32;
     $sroa_t_h0_257 = $inline_count_2: block -> i32 {
@@ -96,14 +96,14 @@ fn "resource_generic_written_type.wado/run"() with Stdout {
     $sroa_t_h0_257 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_107(x_107 = builtin::i64_extend_i32_s($sroa_t_h0_257); select i64(x_107 < 0_i64, 0_i64 - x_107, x_107)));
     is_negative_103 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"(out_36, is_negative_103, $sroa_t_h0_257);
     "core:prelude/primitive.wado/write_decimal_digits"(local.tee $load_0(out_36.repr), is_negative_103, x_107, $sroa_t_h0_257);
-    repr_126 = global:resource_generic_written_type.wado::$const_obj_0;
+    $sroa_view_repr_203 = global:resource_generic_written_type.wado::$const_obj_0;
     if @unlikely(local.tee $sroa_t_h0_257(out_36.used + 1) > builtin::array_len($load_0)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_36, $sroa_t_h0_257);
     }
     is_negative_103 = out_36.used;
     out_36.used = $sroa_t_h0_257;
-    builtin::array_copy<u8>(out_36.repr, is_negative_103, repr_126, 0, 1);
+    builtin::array_copy<u8>(out_36.repr, is_negative_103, $sroa_view_repr_203, 0, 1);
     $sroa_t_h0_257 = $sroa_t_h1_258 < 0;
     $sroa_t_h1_258 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_107(x_107 = builtin::i64_extend_i32_s($sroa_t_h1_258); select i64(x_107 < 0_i64, 0_i64 - x_107, x_107)));
     $sroa_t_h0_257 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"(out_36, $sroa_t_h0_257, $sroa_t_h1_258);

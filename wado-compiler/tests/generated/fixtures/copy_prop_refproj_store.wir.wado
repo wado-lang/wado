@@ -223,7 +223,7 @@ fn "copy_prop_refproj_store.wado/run"() with Stdout {
     let arr: ref Array<u8>;
     let q: u64;
     let tens: i32;
-    let start_178: i32;
+    let start_175: i32;
     "copy_prop_refproj_store.wado/fill"(local.tee xs(struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(0, 0, 0, 0), used: 4 }), 3);
     $v1_4 = xs.used;
     if @unlikely(3 >= $v1_4) {
@@ -304,22 +304,22 @@ fn "copy_prop_refproj_store.wado/run"() with Stdout {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_20, is_negative_89);
         }
-        start_178 = out_20.used;
+        start_175 = out_20.used;
         out_20.used = is_negative_89;
-        builtin::array_set_u8(out_20.repr, start_178, 45);
+        builtin::array_set_u8(out_20.repr, start_175, 45);
     } else {
     }
     if @unlikely(local.tee is_negative_89(out_20.used + $v1_4) > builtin::array_len(out_20.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_20, is_negative_89);
     }
-    start_178 = out_20.used;
+    start_175 = out_20.used;
     out_20.used = is_negative_89;
     arr = out_20.repr;
-    $v1_4 = start_178 + $v1_4;
+    $v1_4 = start_175 + $v1_4;
     b25: block {
         l26: loop {
-            break_if b25 ($v1_4 - start_178) < 2;
+            break_if b25 ($v1_4 - start_175) < 2;
             q = x /u 100_i64;
             tens = local.tee is_negative_89(builtin::i32_wrap_i64(x - (q * 100_i64))) / 10;
             builtin::array_set_u8(arr, $v1_4 - 1, (48 + is_negative_89) - (tens * 10));
@@ -329,8 +329,8 @@ fn "copy_prop_refproj_store.wado/run"() with Stdout {
             continue l26;
         };
     };
-    if $v1_4 > start_178 {
-        builtin::array_set_u8(arr, start_178, 48 + builtin::i32_wrap_i64(x %u 10_i64));
+    if $v1_4 > start_175 {
+        builtin::array_set_u8(arr, start_175, 48 + builtin::i32_wrap_i64(x %u 10_i64));
     }
     $inline_core_prelude_string_wado_String__internal_push_view_45: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_45;

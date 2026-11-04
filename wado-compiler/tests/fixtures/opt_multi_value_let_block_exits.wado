@@ -1,0 +1,45 @@
+// Test: a `let` of a labeled block every exit of which is a multi-value call
+// binds the results split, without a tuple.
+//
+// `pick` returns `low(x)` or `high(x)`, both of which return their pair as two
+// Wasm results. Spliced into `run`, `pick` becomes a block that breaks with
+// one call or the other, and the `let` reads the pair only by field. Each
+// break re-packed the results into a tuple the `let` then took apart, an
+// allocation per call: `core:json` read every integer through
+// `deserialize_i64` that way once the inliner spliced it.
+
+use { println, Stdout } from "core:cli";
+
+#[inline(never)]
+fn low(x: i32) -> [i32, i32] {
+    return [x, x + 1];
+}
+
+#[inline(never)]
+fn high(x: i32) -> [i32, i32] {
+    return [x * 2, x - 1];
+}
+
+fn pick(x: i32) -> [i32, i32] {
+    if x > 10 {
+        return high(x);
+    }
+    return low(x);
+}
+
+export fn run() with Stdout {
+    let mut total = 0;
+    for let i of 0..<builtin::black_box(20) {
+        let pair = pick(i);
+        total += pair.0 * 3 + pair.1;
+    }
+    println(`${total}`);
+}
+
+__DATA__
+{
+    "stdout": "1167\n",
+    "wir_not_expect:O2": [
+        "struct.new \"tuple"
+    ]
+}

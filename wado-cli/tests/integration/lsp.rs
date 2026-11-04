@@ -1922,7 +1922,7 @@ fn query_unknown_kind_lists_available_kinds() {
     let stderr = String::from_utf8(output).unwrap();
     assert_eq!(
         stderr,
-        "Error: unknown query kind 'signature'. Available: diagnostics, references, document-highlight, definition, hover, inlay-hints\n",
+        "Error: unknown query kind 'signature'. Available: diagnostics, references, document-highlight, definition, hover, inlay-hints, scip\n",
     );
 }
 
@@ -2584,4 +2584,179 @@ fn query_inlay_hints_path_form_call_keeps_the_receiver_slot() {
         .stdout(predicate::str::contains(
             "return Scale::scaled(&p, ‹factor: ›2, ‹bias: ›3)",
         ));
+}
+
+#[test]
+fn query_scip_indexes_a_file_nothing_imports() {
+    let tmp = tempfile::tempdir().unwrap();
+    std::fs::write(
+        tmp.path().join("a.wado"),
+        "pub fn greet() -> i32 {\n    return 1;\n}\n",
+    )
+    .unwrap();
+    std::fs::write(
+        tmp.path().join("b.wado"),
+        "use { greet } from \"./a.wado\";\nfn twice() -> i32 {\n    return greet() + greet();\n}\n",
+    )
+    .unwrap();
+
+    wado_in(tmp.path())
+        .args(["query", "scip", "--output", "index.scip", "."])
+        .assert()
+        .success();
+
+    let index = std::fs::read(tmp.path().join("index.scip")).unwrap();
+    let count = |needle: &str| {
+        index
+            .windows(needle.len())
+            .filter(|w| *w == needle.as_bytes())
+            .count()
+    };
+    // Each declaration's symbol: its definition and its SymbolInformation.
+    assert_eq!(count("wado . b.wado . twice()."), 2);
+    // Those two in a.wado's document, and the import and both calls in b.wado's.
+    assert_eq!(count("wado . a.wado . greet()."), 5);
+}
+
+#[test]
+fn query_refuses_a_flag_its_kind_does_not_read() {
+    for (args, flag) in [
+        (&["query", "scip", "--json", "."][..], "--json"),
+        (
+            &[
+                "query",
+                "hover",
+                "--include-declaration",
+                "--line",
+                "1",
+                "--column",
+                "1",
+                "a.wado",
+            ][..],
+            "--include-declaration",
+        ),
+        (&["query", "diagnostics", "--all", "a.wado"][..], "--all"),
+        (
+            &["query", "hover", "--exclude", "x", "a.wado"][..],
+            "--exclude",
+        ),
+        (&["query", "scip", "--line", "1", "."][..], "--line"),
+        (
+            &["query", "inlay-hints", "--column", "1", "a.wado"][..],
+            "--column",
+        ),
+        (
+            &["query", "diagnostics", "--symbol", "core:cli#println"][..],
+            "--symbol",
+        ),
+        (
+            &["query", "diagnostics", "--base", "x", "a.wado"][..],
+            "--base",
+        ),
+        (
+            &["query", "diagnostics", "--output", "index.scip", "a.wado"][..],
+            "--output",
+        ),
+    ] {
+        let stderr = wado()
+            .args(args)
+            .assert()
+            .failure()
+            .get_output()
+            .stderr
+            .clone();
+        let stderr = String::from_utf8(stderr).unwrap();
+        assert!(
+            stderr.contains(&format!("{flag} does not apply to")),
+            "{args:?}: {stderr}"
+        );
+    }
+}
+
+#[test]
+fn query_scip_paths_are_spelled_as_the_filesystem_does() {
+    let tmp = tempfile::tempdir().unwrap();
+    std::fs::write(
+        tmp.path().join("my file.wado"),
+        "fn f() -> i32 {\n    return 1;\n}\n",
+    )
+    .unwrap();
+
+    wado_in(tmp.path())
+        .args(["query", "scip", "."])
+        .assert()
+        .success();
+
+    let index = std::fs::read(tmp.path().join("index.scip")).unwrap();
+    let has = |needle: &str| index.windows(needle.len()).any(|w| w == needle.as_bytes());
+    assert!(has("my file.wado"));
+    assert!(!has("my%20file.wado"));
+}
+
+#[test]
+fn query_scip_leaves_out_what_an_exclude_matches() {
+    let tmp = tempfile::tempdir().unwrap();
+    std::fs::write(
+        tmp.path().join("a.wado"),
+        "pub fn greet() -> i32 {\n    return 1;\n}\n",
+    )
+    .unwrap();
+    let fixtures = tmp.path().join("pkg/tests");
+    std::fs::create_dir_all(&fixtures).unwrap();
+    // A package of its own: the glob still reaches it from the root.
+    std::fs::write(
+        tmp.path().join("pkg/wado.toml"),
+        "[package]\nname = \"pkg\"\n",
+    )
+    .unwrap();
+    std::fs::write(
+        fixtures.join("f.wado"),
+        "use { greet } from \"../../a.wado\";\nfn f() -> i32 {\n    return greet();\n}\n",
+    )
+    .unwrap();
+
+    wado_in(tmp.path())
+        .args(["query", "scip", "--exclude", "pkg/tests/**", "."])
+        .assert()
+        .success();
+
+    let index = std::fs::read(tmp.path().join("index.scip")).unwrap();
+    let has = |needle: &str| index.windows(needle.len()).any(|w| w == needle.as_bytes());
+    assert!(has("wado . a.wado . greet()."));
+    assert!(!has("pkg/tests/f.wado"));
+}
+
+#[test]
+fn query_scip_applies_each_exclude_to_the_selected_root() {
+    let tmp = tempfile::tempdir().unwrap();
+    let root = tmp.path().join("project");
+    std::fs::create_dir_all(root.join("nested")).unwrap();
+    for (path, source) in [
+        ("keep.wado", "fn keep() {}\n"),
+        ("skip.wado", "fn skip() {}\n"),
+        ("nested/also_skip.wado", "fn also_skip() {}\n"),
+    ] {
+        std::fs::write(root.join(path), source).unwrap();
+    }
+
+    wado_in(tmp.path())
+        .args([
+            "query",
+            "scip",
+            "--output",
+            "result.scip",
+            "--exclude",
+            "skip.wado",
+            "--exclude",
+            "nested/**",
+            "project",
+        ])
+        .assert()
+        .success();
+
+    let index = std::fs::read(tmp.path().join("result.scip")).unwrap();
+    let has = |needle: &str| index.windows(needle.len()).any(|w| w == needle.as_bytes());
+    assert!(has("keep.wado"));
+    assert!(!has("skip.wado"));
+    assert!(!has("nested/also_skip.wado"));
 }

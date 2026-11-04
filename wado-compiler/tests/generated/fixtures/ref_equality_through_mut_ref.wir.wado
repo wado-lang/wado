@@ -417,23 +417,23 @@ fn "ref_equality_through_mut_ref.wado/$template_segment$ref_equality_through_mut
 }
 
 fn "ref_equality_through_mut_ref.wado/$cm_export__$test_0_a_mutable_reference_to_a_string_equals_the_string_it_names"() {
-    let $load_0: ref Array<u8>;
     let s: ref "core:prelude/string.wado//String";
     let other_5: ref "core:prelude/string.wado//String";
     s = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(120), used: 1 };
     other_5 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(120), used: 1 };
-    $load_0 = s.repr;
     if @unlikely(block -> bool {
-        "core:prelude/string.wado/core:prelude/string.wado/StrSlice::eq_str<&core:prelude/string.wado/String>$spec0$spec0"($load_0, 1, other_5);
+        "core:prelude/string.wado/core:prelude/string.wado/StrSlice::eq_str<&core:prelude/string.wado/String>$spec0$spec0"(s.repr, 1, other_5);
     } == 0) {
         cold_path;
         "ref_equality_through_mut_ref.wado/$test_0_a_mutable_reference_to_a_string_equals_the_string_it_names$cold1"(s);
         unreachable;
     }
     if @unlikely((other_5 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(121), used: 1 }; block -> bool {
+        let $mv_field_4: ref Array<u8>;
+        $mv_field_4 = s.repr;
         let $mv_field_6: i32;
         $mv_field_6 = s.used;
-        "core:prelude/string.wado/core:prelude/string.wado/StrSlice::eq_str<&core:prelude/string.wado/String>$spec0$spec0"($load_0, $mv_field_6, other_5);
+        "core:prelude/string.wado/core:prelude/string.wado/StrSlice::eq_str<&core:prelude/string.wado/String>$spec0$spec0"($mv_field_4, $mv_field_6, other_5);
     } == 0) == 0) {
         cold_path;
         "ref_equality_through_mut_ref.wado/$test_0_a_mutable_reference_to_a_string_equals_the_string_it_names$cold0"(s);
@@ -1502,7 +1502,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::internal_set_byte_
     self_15 = self.used;
     if @unlikely(index >=u self_15) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_at$contract_report0"(index, self_15, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/string.wado:571"), used: 28 });
+        "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_at$contract_report0"(index, self_15, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/string.wado:558"), used: 28 });
         unreachable;
     }
     builtin::array_set_u8(self.repr, index, value);
@@ -1604,7 +1604,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/StrSlice^core:prelude/stri
         $v1 = self.end - local.tee $load_1(self.start);
         if @unlikely(((0 <= index) & (index < $v1)) == 0) {
             cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/StrSlice::byte_at$contract_report0"(index, $v1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/string.wado:1770"), used: 29 });
+            "core:prelude/string.wado/core:prelude/string.wado/StrSlice::byte_at$contract_report0"(index, $v1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/string.wado:1757"), used: 29 });
             unreachable;
         }
         "core:prelude/string.wado/core:prelude/string.wado/StrSlice::byte_at$unchecked"(self.repr, $load_1, index);
@@ -2228,8 +2228,8 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_stri
 
 fn "core:prelude/string.wado/core:prelude/string.wado/StrSlice::eq_str<&core:prelude/string.wado/String>$spec0$spec0"($mv$self$repr, $mv$self$end, other) {
     let i: i32;
-    let repr: ref Array<u8>;
-    repr = other.repr;
+    let $sroa_b_repr_21: ref Array<u8>;
+    $sroa_b_repr_21 = other.repr;
     if $mv$self$end != 1 {
         return 0;
     }
@@ -2237,19 +2237,19 @@ fn "core:prelude/string.wado/core:prelude/string.wado/StrSlice::eq_str<&core:pre
     b271: block {
         l272: loop {
             break_if b271 (((i >= $mv$self$end) | ((i + 1) >= $mv$self$end)) | (((i + 1) + 1) >= $mv$self$end)) | ((((i + 1) + 1) + 1) >= $mv$self$end);
-            if builtin::array_get_value<u8>($mv$self$repr, i) != builtin::array_get_value<u8>(repr, i) {
+            if builtin::array_get_value<u8>($mv$self$repr, i) != builtin::array_get_value<u8>($sroa_b_repr_21, i) {
                 return 0;
             }
             i = i + 1;
-            if builtin::array_get_value<u8>($mv$self$repr, i) != builtin::array_get_value<u8>(repr, i) {
+            if builtin::array_get_value<u8>($mv$self$repr, i) != builtin::array_get_value<u8>($sroa_b_repr_21, i) {
                 return 0;
             }
             i = i + 1;
-            if builtin::array_get_value<u8>($mv$self$repr, i) != builtin::array_get_value<u8>(repr, i) {
+            if builtin::array_get_value<u8>($mv$self$repr, i) != builtin::array_get_value<u8>($sroa_b_repr_21, i) {
                 return 0;
             }
             i = i + 1;
-            if builtin::array_get_value<u8>($mv$self$repr, i) != builtin::array_get_value<u8>(repr, i) {
+            if builtin::array_get_value<u8>($mv$self$repr, i) != builtin::array_get_value<u8>($sroa_b_repr_21, i) {
                 return 0;
             }
             i = i + 1;
@@ -2259,7 +2259,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/StrSlice::eq_str<&core:pre
     b277: block {
         l278: loop {
             break_if b277 i >= $mv$self$end;
-            if builtin::array_get_value<u8>($mv$self$repr, i) != builtin::array_get_value<u8>(repr, i) {
+            if builtin::array_get_value<u8>($mv$self$repr, i) != builtin::array_get_value<u8>($sroa_b_repr_21, i) {
                 return 0;
             }
             i = i + 1;

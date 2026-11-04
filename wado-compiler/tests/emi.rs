@@ -3380,9 +3380,11 @@ fn a_compile_time_expectation_keeps_the_fixture() {
 /// A benchmark whose every test is skipped has nothing left to run.
 #[test]
 fn a_source_with_only_skipped_tests_is_no_subject() {
-    let dir = Root::Benchmark.dir();
-    assert!(!Root::Benchmark.is_subject(&dir.join("gale_gen/gale_gen.wado")));
-    assert!(Root::Benchmark.is_subject(&dir.join("sieve/sieve.wado")));
+    let tmp = tempfile::tempdir().expect("a temporary directory");
+    let fuel_only = tmp.path().join("fuel_only.wado");
+    std::fs::write(&fuel_only, "test \"fuel\" {\n    assert 1 == 1;\n}\n").expect("written");
+    assert!(!Root::Benchmark.is_subject(&fuel_only));
+    assert!(Root::Benchmark.is_subject(&Root::Benchmark.dir().join("sieve/sieve.wado")));
 }
 
 /// Reduction keeps the misbehaviour it reduces: a subset whose output moved

@@ -234,16 +234,25 @@ it.
 So a compile asks both. A region is unlikely when it ran at most 1% of the
 times the code around it did, under
 `--optimize-predictable-branch-threshold`, LLVM's name and default. It is cold
-when its count is cold against the summary, under LLVM's
-`--optimize-profile-summary-cutoff-hot` and `-cold`, or zero, as GCC holds.
+when it never ran, as GCC's `probably_never_executed` holds.
 [Rarity](./spec-pgo.md#rarity) states both rules. For a path past a branch, or
 past a statement that can leave, that ratio is the branch's probability. A
 loop's test also runs once per pass through its body, so for a loop's body the
 ratio bounds the probability from above, and a body it calls unlikely is. A
-count on both summary lines is hot, since LLVM's inliner asks hot first. A share
-stays put when a workload runs twice, so a workload need not be large, only like
-real use. The thresholds are LLVM's for now; the benchmark machine
+ratio stays put when a workload runs twice, so a workload need not be large,
+only like real use. The threshold is LLVM's for now; the benchmark machine
 settles Wado's own.
+
+A region that ran is not cold, however rarely it ran. The optimizer reads a
+cold region as rarely run together with everything it calls: it inlines into
+no function that only cold sites reach. A count says how often the region's
+own code ran, not its callees'. An entry such as `core:json`'s `to_bytes` runs
+once per document and calls the whole serializer. A cold line placed as LLVM's
+`ProfileSummaryInfo` places one, at the smallest counts of the profile, marked
+it cold. Then nothing under it was inlined, and serializing cost up to 2.9
+times the fuel it costs without a profile, even trained on the input it
+measured. A count of zero says the same of the callees: from a region that
+never ran, they never ran either.
 
 ### The profile marks each region by its answers
 
@@ -257,11 +266,9 @@ states, so a WIR pass reads the one it needs as a NIR pass does. The two halves 
 writes one. Reify is where coverage inserts its probes, so a region means the
 same thing to both.
 
-A region is marked cold only where all of the code under it is cold. A marker
-covers what follows it in its block, so one over a loop the workload ran a
-million times would price the loop as cold. Under a region marked cold, a
-region that is also unlikely gets `unlikely_path()`, so its branch is still
-hinted.
+A marker covers what follows it in its block. Everything under a region that
+never ran never ran either, so one marker at the outermost such region covers
+it all.
 
 A function whose body region never ran gets no marker. Workloads are tests, so
 a build's own entry never runs under them, and neither does whatever only it
@@ -269,9 +276,9 @@ reaches, such as a benchmark's timing loop: a function they never entered says
 nothing about how often it runs. Marking such functions at their start made
 every benchmark slower, by 24% to 74%. The optimizer does not inline into a
 function only cold sites reach, and that took in the whole path the benchmark
-measures. A function the workloads entered but whose code is cold everywhere is
-another matter: it gets `cold_code()` at its start, as LLVM treats a function
-whose entry count is cold.
+measures. A closure the workloads never called, in a function they entered, is
+another matter: no branch leads into it, so it is cold without being unlikely,
+and it gets `cold_code()` at its start.
 
 Each worker thread seeds its compiles from a snapshot of the reified standard
 library, built once. The thread builds it with the `core:` counts already
@@ -279,8 +286,10 @@ applied, so a profiled compile seeds from the snapshot as a plain one does.
 
 ### The inliner prices a call site by the summary
 
-The inliner prices a call site by what the summary says of the region holding
-it. A hot site may inline a callee of up to
+The inliner prices a call site by what a summary of the profile says of the
+region holding it. The summary places hot and cold lines from shares of all
+runs, as LLVM's `ProfileSummaryInfo` does. Unlike a cold mark, a cold price
+stays at its site and reaches no callee. A hot site may inline a callee of up to
 `--optimize-inline-hot-callsite-threshold` statements, a cold one of up to
 `--optimize-inline-cold-callsite-threshold`, and any other site keeps
 `--optimize-inline-threshold`. They mirror LLVM's `hot-callsite-threshold`
@@ -387,19 +396,20 @@ output at every level. It is a nightly campaign, not a gate.
    regions end up cold.
 5. [x] `-f pgo` and `-f no-pgo`. The CLI hands a compile the entry's profile,
    and the compile looks each module up by its name.
-6. [x] Unlikely and cold. A compile derives the summary's hot and cold lines
-   under `--optimize-profile-summary-cutoff-hot` and `-cold`, and judges each
-   region unlikely under `--optimize-predictable-branch-threshold`. It writes
+6. [x] Unlikely and cold. A compile judges each region unlikely under
+   `--optimize-predictable-branch-threshold`, and cold where it never ran. It
+   writes
    `cold_path()`, `unlikely_path()` or `cold_code()` by the answers, and
    overrides the author's and the `?`'s markers, with the remark. An e2e
    fixture states each mark and each remark.
-7. [ ] Hot and cold call sites. The inliner prices a site by the summary under
-   `--optimize-inline-hot-callsite-threshold` and
+7. [ ] Hot and cold call sites. The summary places its hot and cold lines
+   under `--optimize-profile-summary-cutoff-hot` and `-cold`. The inliner
+   prices a site by it under `--optimize-inline-hot-callsite-threshold` and
    `--optimize-inline-cold-callsite-threshold`, and the benchmarks, against
-   `-f no-pgo`, settle their defaults and those of the summary's cutoffs and
+   `-f no-pgo`, settle their defaults and that of
    `--optimize-predictable-branch-threshold`.
 8. [x] The random-profile differential test, as EMI's profile stage.
-9. [ ] The `benchmark/` pilot. Each benchmark gains a workload and a committed
+9. [x] The `benchmark/` pilot. Each benchmark gains a workload and a committed
    profile, `http_routing` a test to carry it first, and a table compares the
    three builds the flags give. A workload runs a smaller input than the
    benchmark measures, so the table does not judge a profile on the run that
@@ -408,13 +418,13 @@ output at every level. It is a nightly campaign, not a gate.
     measured on the pilot's table, then adopted, or recorded as a known gap
     with what it lost to. These are options, not the decision.
     - The counts reach the optimizer. Three markers carry two bits per region,
-      so nothing weighs one side against the other, and the summary's hot line
-      only keeps a count out of cold. LLVM keeps branch weights (`!prof`) and
-      function entry counts on the IR, and its inliner raises the threshold at
-      a hot call site.
+      so nothing weighs one side against the other. LLVM keeps branch weights
+      (`!prof`) and function entry counts on the IR, and its inliner raises the
+      threshold at a hot call site.
     - Counts per calling context. One function holds one set of counts, so a
-      function cold overall but hot from one caller is cold everywhere, and a
-      cold call inside a hot region has nowhere to be marked. LLVM's CSPGO
+      function that runs rarely overall but often from one caller reads the
+      same from every caller, and a rare call inside a hot region has nowhere
+      to be marked. LLVM's CSPGO
       records again after inlining, and Go's PGO keys its counts by call edge.
     - Code the workloads never entered. It is compiled as unprofiled, so a
       library's paths no workload takes are never cold. GCC's
@@ -423,11 +433,9 @@ output at every level. It is a nightly campaign, not a gate.
       counts that drift through a caller's change go unsaid. Clang warns at
       `-Wprofile-instr-out-of-date` with the share of functions that no longer
       match.
-    - The stdlib snapshot. It is keyed by the whole profile's summary, so a
-      change to the user's counts rebuilds it. Keying it by the marks it
-      receives would rebuild it only when they change. Each thread holds one
-      profiled snapshot, so under `wado test` every worker builds its own for
-      each package whose profile names a `core:` module.
+    - The stdlib snapshot. Each thread holds one profiled snapshot, so under
+      `wado test` every worker builds its own for each package whose profile
+      names a `core:` module.
     - The inliner's `branch_weight` guard reads the cold half, while the layout
       it protects follows the unlikely hint. The table settles which half it
       should read.
@@ -450,6 +458,13 @@ output at every level. It is a nightly campaign, not a gate.
 - [ ] A NIR `match` is read as if every arm's guard ran only on some paths. The
   first arm's guard runs on every path through the `match`, so a marker under
   it covers the `match` but is not read that way.
+- [ ] On the `benchmark/` pilot the profile buys nothing: against `-f no-pgo`,
+  every fuel region moves within a few percent, and all but two wall-clock rows
+  within their noise. `gale/generate` and `codec/zlib/decompress` cost more
+  fuel under the profile, and why is not known. The tables are in
+  [the benchmark README](../benchmark/README.md#profile-guided-optimization).
+  `http_routing` records a profile but is in neither table: its `oha` run was
+  not repeated under the three builds.
 - [ ] The inliner reads a caller's cold code once, before it splices. A callee
   whose whole body is cold, spliced in, covers its block on both sides of the
   call, yet the calls after it are still inlined at hot-path prices.
