@@ -490,10 +490,12 @@ output at every level. It is a nightly campaign, not a gate.
 - [ ] A NIR `match` is read as if every arm's guard ran only on some paths. The
   first arm's guard runs on every path through the `match`, so a marker under
   it covers the `match` but is not read that way.
-- [ ] On the `benchmark/` pilot the profile buys nothing: against `-f no-pgo`,
-  every fuel region moves within a few percent, and all but two wall-clock rows
-  within their noise. `gale/generate` and `codec/zlib/decompress` cost more
-  fuel under the profile, and why is not known. The tables are in
+- [ ] On the `benchmark/` pilot the profile is mixed. Against `-f no-pgo` it buys
+  up to 19% of fuel on the serde rows. But `microgpt`'s inference runs 46%
+  longer by the wall clock for 4% more fuel: with a 2 GiB heap the PGO build is
+  faster, so the hot splices make its collections dearer, and why is not known.
+  `zlib` decompression and `json_twitter` serialization run about 10% longer
+  for the same fuel. The tables are in
   [the benchmark README](../benchmark/README.md#profile-guided-optimization).
   `http_routing` records a profile but is in neither table: its `oha` run was
   not repeated under the three builds.
