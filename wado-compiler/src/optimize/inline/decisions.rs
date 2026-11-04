@@ -38,7 +38,7 @@ impl InlineLog {
     /// The log as text, each span named by the module whose parse it indexes.
     pub fn render(&self, parses: &ParseModules) -> String {
         if self.rounds.is_empty() {
-            return "(the inliner does not run at this optimization level)\n".to_string();
+            return "(no inliner round ran)\n".to_string();
         }
         let mut out = String::new();
         for (i, round) in self.rounds.iter().enumerate() {
@@ -70,6 +70,7 @@ pub(super) struct Round {
 #[derive(Debug)]
 pub(super) struct CalleeEntry {
     pub name: String,
+    pub module: ModuleSource,
     /// What running one copy costs, where the verdict priced it.
     pub hot: Option<usize>,
     /// What holding one copy costs, where the round priced it.
@@ -86,6 +87,7 @@ pub(super) struct SiteEntry {
     pub caller: String,
     pub caller_module: ModuleSource,
     pub callee: String,
+    pub callee_module: ModuleSource,
     pub span: Span,
     pub site: Site,
     pub refusal: Option<Refusal>,
@@ -105,7 +107,7 @@ impl Round {
             let _ = writeln!(out, "  held: {}", self.held.join(", "));
         }
         for c in &self.callees {
-            let _ = write!(out, "  callee `{}`:", c.name);
+            let _ = write!(out, "  callee `{}` in {}:", c.name, c.module);
             if let Some(hot) = c.hot {
                 let _ = write!(out, " hot {hot},");
             }
@@ -128,10 +130,11 @@ impl Round {
             let at = location(s.span, &s.caller_module, parses);
             let _ = write!(
                 out,
-                "  site `{}` {at} ({}) -> `{}`: ",
+                "  site `{}` {at} ({}) -> `{}` in {}: ",
                 s.caller,
                 site_text(s.site, &s.caller_module, parses),
-                s.callee
+                s.callee,
+                s.callee_module
             );
             match s.refusal {
                 None => out.push_str("spliced"),
@@ -145,6 +148,9 @@ impl Round {
 }
 
 fn location(span: Span, holder: &ModuleSource, parses: &ParseModules) -> String {
+    if span.is_synthetic() {
+        return "(synthesized)".to_string();
+    }
     format!(
         "{}:{}:{}",
         parses.module_of_span(span, holder),
@@ -164,7 +170,7 @@ fn site_text(site: Site, holder: &ModuleSource, parses: &ParseModules) -> String
 fn cold_text(by: ColdBy, holder: &ModuleSource, parses: &ParseModules) -> String {
     match by {
         ColdBy::Run(span) => format!("in the run from {}", location(span, holder, parses)),
-        ColdBy::Callers => "every live caller calls it from a cold run".to_string(),
+        ColdBy::Callers => "every path into it passes a cold run".to_string(),
     }
 }
 

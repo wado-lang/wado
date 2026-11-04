@@ -1512,7 +1512,7 @@ enum ColdBy {
     /// The statement opening the cold run the site is in, which a marker's
     /// path passes through.
     Run(Span),
-    /// No live caller calls the function outside a cold run.
+    /// Every path into the function passes a cold run.
     Callers,
 }
 
@@ -2502,7 +2502,7 @@ fn inline_round(
     let called_by_named: Vec<bool> = logging.map_or_else(Vec::new, |log| {
         let mut called = vec![false; functions.len()];
         for (caller, scan) in scans.iter().enumerate() {
-            if log.wants(&functions[caller].borrow().name) {
+            if live[caller] && log.wants(&functions[caller].borrow().name) {
                 for (callee, _) in &scan.calls {
                     called[callee.index()] = true;
                 }
@@ -2558,6 +2558,7 @@ fn inline_round(
             .is_some_and(|log| call_sites[i] > 0 && (called_by_named[i] || log.wants(&func.name)));
         let entry = logged.then(|| CalleeEntry {
             name: func.name.clone(),
+            module: func.module_source.clone(),
             hot: verdict.hot,
             size: func.body.as_ref().map(|_| size),
             params: func.params.len(),
@@ -2894,12 +2895,13 @@ struct Decisions<'l> {
 }
 
 impl Decisions<'_> {
-    fn record(&mut self, callee: &str, span: Span, site: Site, refusal: Option<Refusal>) {
-        if self.caller_named || self.log.wants(callee) {
+    fn record(&mut self, callee: &NirFunction, span: Span, site: Site, refusal: Option<Refusal>) {
+        if self.caller_named || self.log.wants(&callee.name) {
             self.sites.push(SiteEntry {
                 caller: self.caller.clone(),
                 caller_module: self.caller_module.clone(),
-                callee: callee.to_string(),
+                callee: callee.name.clone(),
+                callee_module: callee.module_source.clone(),
                 span,
                 site,
                 refusal,
@@ -3487,7 +3489,7 @@ fn try_inline_call_expr(
     .or_else(|| (!candidates.charge(func_id)).then_some(Refusal::RescanSpent));
     let call_span = caller.exprs[call_id].span;
     if let Some(decisions) = frame.decisions.as_mut() {
-        decisions.record(&candidate.name, call_span, site, refusal);
+        decisions.record(candidate, call_span, site, refusal);
     }
     if refusal.is_some() {
         return None;

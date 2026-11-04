@@ -65,19 +65,29 @@ fn a_site_names_its_decision_and_why() {
     let log = decisions("medium", 1);
     assert!(
         log.contains(
-            "callee `medium`: hot 6, size 6, 1 params, 2 sites -> everywhere: under the threshold"
+            "callee `medium` in entry.wado: hot 6, size 6, 1 params, 2 sites -> everywhere: under the threshold"
         ),
         "{log}"
     );
     assert!(
-        log.contains("site `work` entry.wado:5:17 (plain) -> `medium`: spliced"),
+        log.contains("site `work` entry.wado:5:17 (plain) -> `medium` in entry.wado: spliced"),
         "{log}"
     );
     assert!(
         log.contains(
-            "site `work` entry.wado:8:14 (cold, in the run from entry.wado:7:9) -> `medium`: \
-             declined, a cold site takes only `#[inline(always)]` or a callee that shrinks it"
+            "site `work` entry.wado:8:14 (cold, in the run from entry.wado:7:9) -> `medium` in \
+             entry.wado: declined, a cold site takes only `#[inline(always)]` or a callee that \
+             shrinks it"
         ),
+        "{log}"
+    );
+}
+
+#[test]
+fn a_synthesized_call_names_no_position() {
+    let log = decisions("", 1);
+    assert!(
+        log.contains("site `$cm_export__run` (synthesized) (plain) -> `run` in entry.wado"),
         "{log}"
     );
 }
@@ -94,8 +104,9 @@ fn the_pattern_keeps_only_the_functions_it_names() {
 fn a_named_caller_shows_the_callees_turned_down_before_any_site() {
     let log = decisions("run", 1);
     assert!(
-        log.lines().any(|line| line.starts_with("  callee `kept`:")
-            && line.ends_with("-> nowhere: `#[inline(never)]`")),
+        log.lines()
+            .any(|line| line.starts_with("  callee `kept` in entry.wado:")
+                && line.ends_with("-> nowhere: `#[inline(never)]`")),
         "{log}"
     );
 }
@@ -103,7 +114,7 @@ fn a_named_caller_shows_the_callees_turned_down_before_any_site() {
 #[test]
 fn a_forced_callee_is_reported_at_its_price() {
     let log = decisions("forced", 1);
-    assert!(log.contains("callee `forced`: hot "), "{log}");
+    assert!(log.contains("callee `forced` in entry.wado: hot "), "{log}");
     assert!(!log.contains("hot 0,"), "{log}");
     assert!(log.contains("-> everywhere: `#[inline(always)]`"), "{log}");
 }
@@ -112,7 +123,7 @@ fn a_forced_callee_is_reported_at_its_price() {
 fn an_empty_log_says_why() {
     assert_eq!(
         decisions_at(OptLevel::O0, "medium", 1),
-        "(the inliner does not run at this optimization level)\n"
+        "(no inliner round ran)\n"
     );
     assert_eq!(
         decisions("no_such_function", 1),
