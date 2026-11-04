@@ -460,6 +460,16 @@ impl TestSpec {
             .collect()
     }
 
+    /// The part of a variant's WIR the expectations read. One holding no
+    /// function `wir_scope` names is an empty body: a `wir_expect` fails there,
+    /// and a `wir_not_expect` holds without measuring anything.
+    fn variant_body<'w>(&self, wir: &'w str) -> &'w str {
+        match self.wir_scope.as_deref() {
+            None => wir,
+            Some(scope) => scope_to_function(wir, scope).unwrap_or_default(),
+        }
+    }
+
     /// Whether this test reads the WIR it compiles at `opt_level`.
     fn has_wir_expectations(&self, opt_level: OptLevel) -> bool {
         !self.wir_checks(opt_level).is_empty()
@@ -1387,42 +1397,35 @@ fn run_with_allocator(
     // dispatch: one placed after it is silently skipped by `compile_only`.
     assert_wir_expectations(wir_text.as_deref(), spec, opt_level, test_id);
     let compile_variant = |source: String, skip: &[String]| {
-        let options = skip_base.clone();
         common::compile_fixture_on_worker(
             fixture_path.to_path_buf(),
             source,
             CompilerOptions {
                 opt: OptOverrides {
                     skip_passes: skip.to_vec(),
-                    ..options.opt.clone()
+                    ..skip_base.opt.clone()
                 },
                 retain_wir: true,
-                ..options
+                ..skip_base.clone()
             },
             spec.compile.host_stubs(),
         )
         .wir_text
     };
     let compile_skipping = |skip: &[String]| compile_variant(source.to_string(), skip);
+    let search_out = std::env::var("WADO_E2E_WIR_PASS_SEARCH").ok();
     if spec.has_wir_expectations(opt_level) {
-        if let Ok(out) = std::env::var("WADO_E2E_WIR_PASS_SEARCH") {
+        if let Some(out) = &search_out {
             let normal_wir = wir_text.as_deref().unwrap();
-            search_wir_passes(
-                &out,
-                &compile_skipping,
-                normal_wir,
-                spec,
-                opt_level,
-                test_id,
-            );
-            return;
+            search_wir_passes(out, &compile_skipping, normal_wir, spec, opt_level, test_id);
+        } else {
+            let compile_twin = |edits: &indexmap::IndexMap<String, String>| {
+                compile_variant(twin_source(source, edits, test_id), &[])
+            };
+            assert_wir_checks_measured(&compile_skipping, &compile_twin, spec, opt_level, test_id);
         }
-        let compile_twin = |edits: &indexmap::IndexMap<String, String>| {
-            compile_variant(twin_source(source, edits, test_id), &[])
-        };
-        assert_wir_checks_measured(&compile_skipping, &compile_twin, spec, opt_level, test_id);
     }
-    if std::env::var_os("WADO_E2E_WIR_PASS_SEARCH").is_some() {
+    if search_out.is_some() {
         return;
     }
     if let Some(expected) = &spec.marked_regions {
@@ -1633,15 +1636,9 @@ fn assert_wir_checks_measured(
          each fail, or twins of the source each fails on"
     );
     let checks = spec.wir_checks(level);
-    // A variant whose WIR holds no function `wir_scope` names is checked
-    // against an empty body: a `wir_expect` fails there, and a
-    // `wir_not_expect` holds without measuring anything.
     let holding = |wir: Option<String>, what: &str| -> (String, Vec<usize>) {
         let wir = wir.unwrap_or_else(|| panic!("[{test_id}] the compile {what} failed"));
-        let body = match spec.wir_scope.as_deref() {
-            None => wir.as_str(),
-            Some(scope) => scope_to_function(&wir, scope).unwrap_or_default(),
-        };
+        let body = spec.variant_body(&wir);
         let held = (0..checks.len())
             .filter(|&i| checks[i].holds(body))
             .collect();
@@ -1720,16 +1717,11 @@ fn search_wir_passes(
         .collect();
     let checks = spec.wir_checks(level);
     let key = common::opt_level_name(level);
-    // An absent function is an empty body, as `assert_wir_checks_measured`
-    // reads one.
     let failing = |wir: &str| -> Vec<usize> {
-        let body = match spec.wir_scope.as_deref() {
-            None => wir,
-            Some(scope) => match std::panic::catch_unwind(|| scope_to_function(wir, scope)) {
-                // Ambiguous: the skip minted a second function of that name.
-                Err(_) => return vec![],
-                Ok(body) => body.unwrap_or_default(),
-            },
+        // A panic is an ambiguous scope: the skip minted a second function of
+        // that name.
+        let Ok(body) = std::panic::catch_unwind(|| spec.variant_body(wir)) else {
+            return vec![];
         };
         (0..checks.len())
             .filter(|&i| !checks[i].holds(body))
