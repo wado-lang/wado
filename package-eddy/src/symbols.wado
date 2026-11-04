@@ -209,14 +209,14 @@ impl SymbolIndex {
         let mut sources = HashMap::<i32, List<String>>::new();
         for let id of self.lookup(query, &"") {
             let s = &self.syms[id];
-            let at = if s.definitions.is_empty() {
+            let defined_at = if s.definitions.is_empty() {
                 "";
             } else {
                 let d = &s.definitions[0];
                 ` (${self.files[d.file]}:${d.line + 1})`;
             };
             let kept = s.references.into_iter().filter(|r| is_under(&self.files[r.file], path)).collect();
-            out.push(`${s.kind} ${self.qualified(id)}${at}: ${kept.len()} references`);
+            out.push(`${s.kind} ${self.qualified(id)}${defined_at}: ${kept.len()} references`);
             // A line is listed once for each declaration it holds uses in.
             let mut last: Option<[i32, i32, Option<i32>]> = null;
             for let r of &kept {
@@ -234,7 +234,7 @@ impl SymbolIndex {
                 let lines = sources.get(r.file).unwrap();
                 let text = if r.line < lines.len() { lines[r.line].trim().to_string() } else { "" };
                 let inside = match scope {
-                    Some(s) => ` in ${self.qualified(s)}`,
+                    Some(holder) => ` in ${self.qualified(holder)}`,
                     None => "",
                 };
                 out.push(`${*file}:${r.line + 1}${inside}: ${text}`);
