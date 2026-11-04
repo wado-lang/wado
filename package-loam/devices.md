@@ -509,8 +509,8 @@ and a program for each shape class it has met. The caller owns it, and
      input takes its branch on the host.
    - [x] Every caller on `compute`; the generator's plan, the kernel pass and
      the `Backend` trait deleted.
-   - [ ] Gemma 3's `compute` at most the kernel pass's last measured time per
-     token ([measured](#gemma-3-on-webgpu)).
+   - [x] Gemma 3's `compute` at most the kernel pass's last measured time per
+     token ([measured](benchmark/README.md#gemma-3-270m)).
 5. [ ] Attention matched from its parts. Finished when GPT-2's attention runs
    as the composite on `WebGpuBackend` with onnxruntime's tokens, and its
    dispatches a layer are recorded beside the ten
