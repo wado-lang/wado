@@ -1,8 +1,7 @@
 #![stdlib("core:kiln")]
 //! Kiln stdlib entry point.
 //!
-//! Import the user-facing Kiln types and the `KilnHost` effect via
-//! `use { ... } from "core:kiln"`. This facade re-exports the WIT-generated
+//! Import the user-facing Kiln types via `use { ... } from "core:kiln"`. This facade re-exports the WIT-generated
 //! submodules under `lib/core/kiln/` and adds the Wado-only `Request<T>`
 //! wrapper that generator authors write against.
 //!
@@ -13,8 +12,7 @@
 use { Deserialize } from "core:serde";
 use { Error as CoreError } from "core:prelude/traits.wado";
 use { Log, Event, Level, write_fields_text } from "core:log";
-
-pub use { KilnHost, Diagnostic, DiagnosticLevel, SourceSpan } from "core:kiln/kiln_host.wado";
+use { log_stdout, log_stderr } from "core:rt";
 
 pub use { InputFile, OutputFile, Response, Error } from "core:kiln/types.wado";
 
@@ -34,43 +32,54 @@ impl Display for Error {
 impl CoreError for Error {
 }
 
-/// The `core:log` handler a generator runs under. Its host turns each stderr
-/// line into a warning, so the compiler installs this one around `generate`'s
-/// body, which reports each event at its own level.
+/// The `core:log` handler a generator runs under. Its host reports each stdout
+/// line as an info and each stderr line as a warning, so the compiler installs
+/// this one around `generate`'s body, which writes each event to the stream of
+/// its level.
 pub struct KilnLogSink {
 }
 
 impl Log for KilnLogSink {
     fn enabled(&self, level: Level) -> bool {
-        resume diagnostic_level(level) matches { Some(_) };
+        resume kiln_stream(level) matches { Some(_) };
     }
 
     fn event(&mut self, event: Event) {
-        if let Some(level) = diagnostic_level(event.meta.level) {
-            let mut message = `${event.meta.target}: ${event.message}`;
-            write_fields_text(&event.fields, &mut message);
-            report(Diagnostic { level, span: null, message });
+        if let Some([stream, line]) = kiln_line(&event) {
+            match stream {
+                Stdout => log_stdout(line),
+                Stderr => log_stderr(line),
+            }
         }
         resume ();
     }
 }
 
+/// The stdio stream a `KilnLogSink` line goes to.
+internal enum KilnStream {
+    Stdout,
+    Stderr,
+}
+
 /// An error event warns rather than errs: a generator fails the build by
 /// returning an `Error`, and a log line only reports. `Debug` and `Trace` reach
-/// no diagnostic.
-fn diagnostic_level(level: Level) -> Option<DiagnosticLevel> {
+/// no stream.
+fn kiln_stream(level: Level) -> Option<KilnStream> {
     return match level {
-        Level::Error | Warn => Option::Some(DiagnosticLevel::Warning),
-        Info => Option::Some(DiagnosticLevel::Info),
+        Level::Error | Warn => Option::Some(KilnStream::Stderr),
+        Info => Option::Some(KilnStream::Stdout),
         Debug | Trace => null,
     };
 }
 
-/// Ambient, as the default sink's stderr write is, so installing the sink
-/// demands nothing of `generate`.
-#[ambient(KilnHost)]
-fn report(diagnostic: Diagnostic) {
-    KilnHost::emit_diagnostic(diagnostic);
+/// The line `KilnLogSink` writes for `event`, and where.
+internal fn kiln_line(event: &Event) -> Option<[KilnStream, String]> {
+    let Some(stream) = kiln_stream(event.meta.level) else {
+        return null;
+    };
+    let mut line = `${event.meta.target}: ${event.message}`;
+    write_fields_text(&event.fields, &mut line);
+    return Option::Some([stream, line]);
 }
 
 /// How many bytes each copy asks for while draining an input. Large enough

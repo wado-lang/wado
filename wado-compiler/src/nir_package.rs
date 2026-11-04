@@ -868,8 +868,7 @@ impl NirPackage {
             .collect()
     }
 
-    /// Whether the target world is a kiln generator world (imports
-    /// [`crate::world_registry::GENERATOR_HOST_INTERFACE`]).
+    /// Whether the target world is the kiln generator world.
     pub fn is_generator_world(&self) -> bool {
         self.generator_world().is_some()
     }

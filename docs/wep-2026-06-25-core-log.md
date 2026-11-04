@@ -283,9 +283,10 @@ discarding it when the test passes, which is exactly the attribution a
 should be — the sink a test installs to assert on events.
 
 A Kiln generator is the one entry point that gets a shim. Its host turns each
-stderr line into a warning, so the default sink would report every event at one
-level, and the compiler installs `KilnLogSink` around `generate`'s body to send
-each to the host as a diagnostic at its own
+stdout line into an info and each stderr line into a warning, so the default
+sink would report every event as a warning, and the compiler installs
+`KilnLogSink` around `generate`'s body to write each to the stream its level
+picks
 ([WEP: Kiln](./wep-2026-04-12-kiln.md#the-generator-contract)). The sink lives in
 `core:kiln`, so the policy stays in the library; the compiler only names it.
 

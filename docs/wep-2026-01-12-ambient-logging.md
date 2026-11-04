@@ -133,7 +133,7 @@ Note: `effect_wait()` is encapsulated inside `log_error()` rather than in `panic
 
 The attribute first exempted a whole body from effect checking. Every function
 that carried it performed a few effects it could name: `Stdout` or `Stderr`,
-`Log` in the `core:log` facade, `KilnHost` in a Kiln generator's report. The
+`Log` in the `core:log` facade. The
 exemption hid every other effect too, so a facade that called `println` by
 mistake drew no diagnostic. The attribute now lists its effects, and the rest of
 the body is checked.

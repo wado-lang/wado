@@ -1,11 +1,11 @@
 //! Native wasmtime runtime for Kiln generators.
 //!
-//! Instantiates a compiled generator component, linking `emit-diagnostic`,
-//! `wasi:random`'s `insecure` and `insecure-seed`, both from a fixed seed, and
-//! `wasi:cli`'s `stdout` and `stderr`, whose lines become the generator's
-//! diagnostics. Everything else — `random`, clocks, filesystem, http — is
-//! unlinked; a generator that imports any of those fails at link time, which is
-//! the determinism guarantee.
+//! Instantiates a compiled generator component, linking `wasi:random`'s
+//! `insecure` and `insecure-seed`, both from a fixed seed, and `wasi:cli`'s
+//! `stdout` and `stderr`, whose lines become the generator's diagnostics.
+//! Everything else — `random`, clocks, filesystem, http — is unlinked; a
+//! generator that imports any of those fails at link time, which is the
+//! determinism guarantee.
 //!
 //! Revision 3: each generator has its own synthesized world (the `options` shape is
 //! per-generator), so `generate` is invoked dynamically as typed `Val`s rather
@@ -20,23 +20,23 @@ use std::sync::{Arc, Mutex};
 use std::task::{Context, Poll};
 
 use anyhow::Result;
+use tokio::io::AsyncWrite;
 use wasmtime::component::types::{ComponentItem, Type};
 use wasmtime::component::{
-    Component, Destination, Func, HasSelf, Instance, Linker, ResourceTable, StreamProducer,
-    StreamReader, StreamResult, Val,
+    Component, Destination, Func, Instance, Linker, ResourceTable, StreamProducer, StreamReader,
+    StreamResult, Val,
 };
 use wasmtime::{AsContextMut, Engine, Store, StoreContextMut};
-use wasmtime_wasi::cli::{WasiCli, WasiCliView};
-use wasmtime_wasi::p2::pipe::MemoryOutputPipe;
+use wasmtime_wasi::cli::{IsTerminal, StdoutStream, WasiCli, WasiCliView};
 use wasmtime_wasi::p3::bindings::cli::{stderr, stdout};
 use wasmtime_wasi::{WasiCtx, WasiCtxView, WasiView};
 
 use wado_compiler::kiln::{CanonicalOptions, CanonicalValue};
 use wado_compiler::name::to_cm_name;
 use wado_compiler::{
-    CompilerHost, GeneratorDiagnostic, GeneratorDiagnosticLevel, GeneratorError,
-    GeneratorInputFile, GeneratorOutputFile, GeneratorRequest, GeneratorResponse,
-    GeneratorRunnerError, GeneratorSourceSpan, ProbeRequest, SourceReader,
+    Code, CompilerHost, Diagnostic, GeneratorError, GeneratorInputFile, GeneratorOutputFile,
+    GeneratorRequest, GeneratorResponse, GeneratorRunnerError, ProbeRequest, Severity,
+    SourceReader,
 };
 
 use crate::engine::fuel_engine;
@@ -54,8 +54,6 @@ wasmtime::component::bindgen!({
     },
 });
 
-use self::core::kiln::kiln_host;
-
 /// Host policy for a single generator invocation.
 ///
 /// `fuel` is the wasmtime fuel ceiling for the call; `0` means no ceiling
@@ -68,14 +66,9 @@ pub struct KilnRunPolicy {
     pub fuel: u64,
 }
 
-/// The most a generator's stdout, or its stderr, holds for one call. A write
-/// past it fails, which the ambient writes of a panic or a log line ignore.
-const CAPTURED_STDIO_CAPACITY: usize = 1024 * 1024;
-
 struct KilnHostState {
-    diagnostics: Arc<Mutex<Vec<GeneratorDiagnostic>>>,
-    /// The insecure random context and the captured stdio; nothing else of
-    /// WASI is linked.
+    /// The insecure random context and the stdio; nothing else of WASI is
+    /// linked.
     wasi: WasiCtx,
     table: ResourceTable,
 }
@@ -90,59 +83,107 @@ impl WasiView for KilnHostState {
 }
 
 /// What a generator writes to stdout and stderr across the instances of one
-/// call. Each line becomes a diagnostic, stdout's an `Info` and stderr's a
-/// `Warning`, as a `core:log` event at those levels does.
-struct CapturedStdio {
-    stdout: MemoryOutputPipe,
-    stderr: MemoryOutputPipe,
+/// call, each line a diagnostic the moment it ends: stdout's an `Info` and
+/// stderr's a `Warning`, as `core:kiln`'s `KilnLogSink` writes `core:log`
+/// events at those levels. The two share one list, so the lines keep the order
+/// the generator wrote them in.
+struct Stdio {
+    stdout: LineSink,
+    stderr: LineSink,
+    diagnostics: Arc<Mutex<Vec<Diagnostic>>>,
 }
 
-impl CapturedStdio {
+impl Stdio {
     fn new() -> Self {
+        let diagnostics = Arc::new(Mutex::new(Vec::new()));
         Self {
-            stdout: MemoryOutputPipe::new(CAPTURED_STDIO_CAPACITY),
-            stderr: MemoryOutputPipe::new(CAPTURED_STDIO_CAPACITY),
+            stdout: LineSink::new(Severity::Info, &diagnostics),
+            stderr: LineSink::new(Severity::Warning, &diagnostics),
+            diagnostics,
         }
     }
 
-    fn into_diagnostics(self) -> impl Iterator<Item = GeneratorDiagnostic> {
-        let lines = |pipe: MemoryOutputPipe, level: GeneratorDiagnosticLevel| {
-            String::from_utf8_lossy(&pipe.contents())
-                .lines()
-                .filter(|line| !line.is_empty())
-                .map(|line| GeneratorDiagnostic {
-                    level,
-                    span: None,
-                    message: line.to_string(),
-                })
-                .collect::<Vec<_>>()
-        };
-        lines(self.stdout, GeneratorDiagnosticLevel::Info)
-            .into_iter()
-            .chain(lines(self.stderr, GeneratorDiagnosticLevel::Warning))
+    /// Every line written, a last one left unended among them.
+    fn finish(self) -> Vec<Diagnostic> {
+        self.stdout.end_line();
+        self.stderr.end_line();
+        std::mem::take(&mut *lock(&self.diagnostics))
     }
 }
 
-impl kiln_host::Host for KilnHostState {
-    async fn emit_diagnostic(&mut self, diagnostic: kiln_host::Diagnostic) {
-        lock(&self.diagnostics).push(lift_diagnostic(diagnostic));
+/// One stdio stream of a generator. Every handle the guest opens on it shares
+/// the line it has not ended yet.
+#[derive(Clone)]
+struct LineSink {
+    severity: Severity,
+    diagnostics: Arc<Mutex<Vec<Diagnostic>>>,
+    unended: Arc<Mutex<Vec<u8>>>,
+}
+
+impl LineSink {
+    fn new(severity: Severity, diagnostics: &Arc<Mutex<Vec<Diagnostic>>>) -> Self {
+        Self {
+            severity,
+            diagnostics: Arc::clone(diagnostics),
+            unended: Arc::default(),
+        }
+    }
+
+    fn write(&self, bytes: &[u8]) {
+        let mut unended = lock(&self.unended);
+        unended.extend_from_slice(bytes);
+        while let Some(end) = unended.iter().position(|&b| b == b'\n') {
+            let line: Vec<u8> = unended.drain(..=end).collect();
+            self.emit(&line[..end]);
+        }
+    }
+
+    fn end_line(&self) {
+        let line = std::mem::take(&mut *lock(&self.unended));
+        self.emit(&line);
+    }
+
+    fn emit(&self, line: &[u8]) {
+        if line.is_empty() {
+            return;
+        }
+        lock(&self.diagnostics).push(Diagnostic {
+            severity: self.severity,
+            code: Code::Log,
+            message: String::from_utf8_lossy(line).into_owned(),
+            span: None,
+        });
     }
 }
 
-fn lift_diagnostic(d: kiln_host::Diagnostic) -> GeneratorDiagnostic {
-    GeneratorDiagnostic {
-        level: match d.level {
-            kiln_host::DiagnosticLevel::Error => GeneratorDiagnosticLevel::Error,
-            kiln_host::DiagnosticLevel::Warning => GeneratorDiagnosticLevel::Warning,
-            kiln_host::DiagnosticLevel::Info => GeneratorDiagnosticLevel::Info,
-            kiln_host::DiagnosticLevel::Hint => GeneratorDiagnosticLevel::Hint,
-        },
-        span: d.span.map(|s| GeneratorSourceSpan {
-            path: s.path,
-            byte_start: s.byte_start,
-            byte_end: s.byte_end,
-        }),
-        message: d.message,
+impl IsTerminal for LineSink {
+    fn is_terminal(&self) -> bool {
+        false
+    }
+}
+
+impl StdoutStream for LineSink {
+    fn async_stream(&self) -> Box<dyn AsyncWrite + Send + Sync> {
+        Box::new(self.clone())
+    }
+}
+
+impl AsyncWrite for LineSink {
+    fn poll_write(
+        self: Pin<&mut Self>,
+        _: &mut Context<'_>,
+        bytes: &[u8],
+    ) -> Poll<std::io::Result<usize>> {
+        self.write(bytes);
+        Poll::Ready(Ok(bytes.len()))
+    }
+
+    fn poll_flush(self: Pin<&mut Self>, _: &mut Context<'_>) -> Poll<std::io::Result<()>> {
+        Poll::Ready(Ok(()))
+    }
+
+    fn poll_shutdown(self: Pin<&mut Self>, _: &mut Context<'_>) -> Poll<std::io::Result<()>> {
+        Poll::Ready(Ok(()))
     }
 }
 
@@ -187,18 +228,15 @@ fn exports(component: &Component, engine: &Engine, export: &str) -> bool {
 
 /// A fresh store and instance for one generator call. The kiln determinism
 /// guarantee (WEP 2026-04-12 §"Design principles" #1) is what keeps the linker
-/// to `core:kiln/kiln-host`, a fixed-seed insecure `wasi:random`, and the
-/// captured stdio.
+/// to a fixed-seed insecure `wasi:random` and the stdio.
 async fn instantiate(
     engine: &Engine,
     component: &Component,
     policy: KilnRunPolicy,
-    diagnostics: Arc<Mutex<Vec<GeneratorDiagnostic>>>,
-    stdio: &CapturedStdio,
+    stdio: &Stdio,
 ) -> Result<(Store<KilnHostState>, Instance), GeneratorRunnerError> {
     let mut linker: Linker<KilnHostState> = Linker::new(engine);
-    kiln_host::add_to_linker::<_, HasSelf<_>>(&mut linker, |s| s)
-        .and_then(|()| random::add_to_linker(&mut linker))
+    random::add_to_linker(&mut linker)
         .and_then(|()| stdout::add_to_linker::<_, WasiCli>(&mut linker, KilnHostState::cli))
         .and_then(|()| stderr::add_to_linker::<_, WasiCli>(&mut linker, KilnHostState::cli))
         .map_err(|e| GeneratorRunnerError::Host(format!("linker setup: {e:#}")))?;
@@ -210,7 +248,6 @@ async fn instantiate(
     let mut store = Store::new(
         engine,
         KilnHostState {
-            diagnostics,
             wasi: builder.build(),
             table: ResourceTable::new(),
         },
@@ -589,19 +626,15 @@ pub async fn run_generator(
     policy: KilnRunPolicy,
 ) -> (
     Result<GeneratorResponse, GeneratorRunnerError>,
-    Vec<GeneratorDiagnostic>,
+    Vec<Diagnostic>,
 ) {
-    let diagnostics = Arc::new(Mutex::new(Vec::<GeneratorDiagnostic>::new()));
-
     // Diagnostics are drained on both the success and the failure path, so a
     // failing generator cannot swallow the ones explaining why. Printing them
     // is the caller's job — see `FilesystemCompilerHost::run_generator`.
-    let diagnostics_inner = diagnostics.clone();
-    let stdio = CapturedStdio::new();
+    let stdio = Stdio::new();
     let stdio_inner = &stdio;
     let outcome: Result<GeneratorResponse, GeneratorRunnerError> = async move {
-        let (mut store, instance) =
-            instantiate(engine, component, policy, diagnostics_inner, stdio_inner).await?;
+        let (mut store, instance) = instantiate(engine, component, policy, stdio_inner).await?;
 
         let generate = find_export(component, engine, &instance, &mut store, "generate")
             .ok_or_else(|| {
@@ -656,18 +689,7 @@ pub async fn run_generator(
     }
     .await;
 
-    (outcome, drain_diagnostics(&diagnostics, stdio))
-}
-
-/// The diagnostics a call emitted, then the lines it wrote to stdio.
-fn drain_diagnostics(
-    diagnostics: &Mutex<Vec<GeneratorDiagnostic>>,
-    stdio: CapturedStdio,
-) -> Vec<GeneratorDiagnostic> {
-    lock(diagnostics)
-        .drain(..)
-        .chain(stdio.into_diagnostics())
-        .collect()
+    (outcome, stdio.finish())
 }
 
 /// Call the generator's `probe` once per input file of `request`, reading each
@@ -684,24 +706,15 @@ async fn run_probe(
     policy: KilnRunPolicy,
 ) -> (
     Result<Vec<Option<u64>>, GeneratorRunnerError>,
-    Vec<GeneratorDiagnostic>,
+    Vec<Diagnostic>,
 ) {
-    let diagnostics = Arc::new(Mutex::new(Vec::<GeneratorDiagnostic>::new()));
-    let diagnostics_inner = diagnostics.clone();
-    let stdio = CapturedStdio::new();
+    let stdio = Stdio::new();
     let stdio_inner = &stdio;
 
     let outcome: Result<Vec<Option<u64>>, GeneratorRunnerError> = async move {
         let mut extents = Vec::with_capacity(request.files.len());
         for (file, source) in request.files.iter().zip(files) {
-            let (mut store, instance) = instantiate(
-                engine,
-                component,
-                policy,
-                diagnostics_inner.clone(),
-                stdio_inner,
-            )
-            .await?;
+            let (mut store, instance) = instantiate(engine, component, policy, stdio_inner).await?;
 
             let Some(probe) = find_export(component, engine, &instance, &mut store, "probe") else {
                 unreachable!("the component type carries a `probe` export");
@@ -758,7 +771,7 @@ async fn run_probe(
     }
     .await;
 
-    (outcome, drain_diagnostics(&diagnostics, stdio))
+    (outcome, stdio.finish())
 }
 
 /// [`run_generator`] under the default policy, for a host's
@@ -807,34 +820,10 @@ pub async fn probe_for<H: CompilerHost + ?Sized>(
 /// Report a generator's diagnostics through `host`. The runtime has no host to
 /// print through, so they surface here, before the outcome propagates: a
 /// failing generator does not swallow the explanation.
-fn relay_diagnostics<H: CompilerHost + ?Sized>(host: &H, diagnostics: Vec<GeneratorDiagnostic>) {
+fn relay_diagnostics<H: CompilerHost + ?Sized>(host: &H, diagnostics: Vec<Diagnostic>) {
     for diagnostic in diagnostics {
-        relay_diagnostic(host, diagnostic);
+        host.emit_diagnostic(diagnostic);
     }
-}
-
-fn relay_diagnostic<H: CompilerHost + ?Sized>(host: &H, diag: GeneratorDiagnostic) {
-    use wado_compiler::{Code, Diagnostic, DiagnosticSpan, Severity};
-    let severity = match diag.level {
-        GeneratorDiagnosticLevel::Error => Severity::Error,
-        GeneratorDiagnosticLevel::Warning => Severity::Warning,
-        GeneratorDiagnosticLevel::Info => Severity::Info,
-        GeneratorDiagnosticLevel::Hint => Severity::Info,
-    };
-    let span = diag.span.map(|s| DiagnosticSpan {
-        file: s.path,
-        line: 0,
-        column: 0,
-        end_line: None,
-        end_column: None,
-        space: wado_compiler::ast::AstIdSpace::FRESH,
-    });
-    host.emit_diagnostic(Diagnostic {
-        severity,
-        code: Code::Log,
-        message: diag.message,
-        span,
-    });
 }
 
 #[cfg(test)]
@@ -855,6 +844,28 @@ mod tests {
             Err(other) => panic!("expected Host error, got {other:?}"),
             Ok(_) => panic!("expected error on malformed bytes, got Ok"),
         }
+    }
+
+    #[test]
+    fn stdio_lines_keep_the_order_written_and_the_unended_tail() {
+        let stdio = Stdio::new();
+        stdio.stdout.write(b"one\ntw");
+        stdio.stderr.write(b"warned\n\n");
+        stdio.stdout.write(b"o\nthree");
+        let lines: Vec<(Severity, String)> = stdio
+            .finish()
+            .into_iter()
+            .map(|d| (d.severity, d.message))
+            .collect();
+        assert_eq!(
+            lines,
+            [
+                (Severity::Info, "one".to_string()),
+                (Severity::Warning, "warned".to_string()),
+                (Severity::Info, "two".to_string()),
+                (Severity::Info, "three".to_string()),
+            ]
+        );
     }
 
     #[test]

@@ -609,7 +609,6 @@ mod tests {
         let provided = provided();
         let provided = provided.as_slice();
         assert!(forbid_reason("core:kiln", provided).is_none());
-        assert!(forbid_reason("core:kiln/kiln_host.wado", provided).is_none());
         assert!(forbid_reason("core:prelude", provided).is_none());
         assert!(forbid_reason("core:json", provided).is_none());
         assert!(forbid_reason("core:cbor", provided).is_none());

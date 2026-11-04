@@ -143,8 +143,8 @@ in the graph can import a generated module of its own.
 
 Generated files are compiled exactly like hand-written source, so a generator
 that emits invalid Wado fails with an ordinary error against the generated file
-on disk. Only the diagnostics a generator reports itself point into its input
-files.
+on disk. No diagnostic points into a generator's input files: a generator names
+the file in its message.
 
 ### Import Errors
 
@@ -349,8 +349,8 @@ beside it, and a consuming build uses that output without running the generator
 
 ### The Generator World
 
-A generator targets the `core:kiln/generator` world. It imports `KilnHost`, two
-of the `wasi:random` interfaces, `Insecure` and `InsecureSeed`, and `wasi:cli`'s
+A generator targets the `core:kiln/generator` world. It imports two of the
+`wasi:random` interfaces, `Insecure` and `InsecureSeed`, and `wasi:cli`'s
 `Stdout` and `Stderr`, and nothing else ([The Sandbox](#the-sandbox)):
 
 <!-- {"source": "wado-compiler/lib/core/kiln/worlds.wado"} -->
@@ -358,7 +358,6 @@ of the `wasi:random` interfaces, `Insecure` and `InsecureSeed`, and `wasi:cli`'s
 ```wado
 #[cm("core:kiln/generator@0.1.0")]
 pub world Generator {
-    import KilnHost;
     import Insecure;
     import InsecureSeed;
     import Stdout;
@@ -405,13 +404,12 @@ test {
 ```
 
 A generator with no configuration declares no `Options` and writes
-`fn generate(req: Request)`. A `generate` that reports diagnostics declares
-`with KilnHost`. Grog's does both:
+`fn generate(req: Request)`, as Grog's does:
 
 <!-- {"source": "package-grog/src/generator.wado"} -->
 
 ```wado
-export fn generate(req: Request) -> Result<Response, Error> with KilnHost {
+export fn generate(req: Request) -> Result<Response, Error> {
     let path = req.primary.path;
     let source = match read_text(req.primary.content) {
         Ok(text) => text,
@@ -615,75 +613,55 @@ fn at(path: &String, e: EmitError) -> Error {
 
 ### Diagnostics
 
-A generator reports diagnostics through the `KilnHost` effect. Each one has a
-level, a message, and an optional span:
+A generator reports to the build by writing to stdout and stderr:
 
-```wit
-emit-diagnostic: func(diagnostic: diagnostic);
+- Each line written to stdout becomes an info diagnostic, and each line written
+  to stderr, a panic's message included, a warning.
+- A line is reported the moment it ends, and the lines of both streams keep the
+  order they were written in. A last line left unended is reported when the
+  call returns.
+- Every line is reported, whether the run then succeeds or fails.
+- A diagnostic carries no span.
 
-record diagnostic {
-    level: diagnostic-level,
-    span: option<source-span>,
-    message: string,
-}
+A generator logs through `core:log` rather than writing a stream itself. The
+compiler runs `generate`'s body under `KilnLogSink`, which writes each event to
+a stream by its level:
 
-enum diagnostic-level { error, warning, info, hint }
+| Event level      | Stream        | Diagnostic level |
+| ---------------- | ------------- | ---------------- |
+| `Error`, `Warn`  | stderr        | `warning`        |
+| `Info`           | stdout        | `info`           |
+| `Debug`, `Trace` | none: dropped | none             |
 
-record source-span {
-    path: string,
-    byte-start: u32,
-    byte-end: u32,
-}
-```
+The line is the event's target and message, then its fields as `key=value`.
+An `Error` event does not fail the build. A generator fails only by returning an
+`Error`.
 
-- A diagnostic surfaces as an ordinary compile diagnostic at its level.
-- A span names one of the files the generator received, by the path that file
-  carried, and a byte range in it.
-- Every diagnostic is reported, whether the run then succeeds or fails.
-- Each line a generator writes to stdout becomes an info diagnostic, and each
-  line it writes to stderr, a panic's message included, a warning.
-
-Gale relays the diagnostics of its own analysis, and collects its errors to
-fail the run with:
+Gale logs the warnings of its own analysis, and collects its errors to fail the
+run with:
 
 <!-- {"source": "package-gale/src/generator.wado"} -->
 
 ```wado
 for let d of &generated.diagnostics {
     if let Some(level) = diagnostic_level(&d.kind) {
-        let message = `gale: ${d.owner.label()}: ${d.message}`;
+        let message = `${d.owner.label()}: ${d.message}`;
         if level matches { Error } {
-            refusals.push(message);
+            refusals.push(`gale: ${message}`);
+        } else {
+            event(level, message, NoFields {}, "gale");
         }
-        KilnHost::emit_diagnostic(KilnDiagnostic { level: kiln_level(level), span: null, message });
     }
 }
 ```
 
-Loam reports a successful check as a hint:
+Loam reports a successful check as an info:
 
 <!-- {"source": "package-loam/src/generator.wado"} -->
 
 ```wado
-KilnHost::emit_diagnostic(KilnDiagnostic {
-    level: DiagnosticLevel::Hint,
-    span: null,
-    message: `loam: ${model.graph.name}: ${model.graph.nodes.len()} operators checked`,
-});
+info(`${model.graph.name}: ${model.graph.nodes.len()} operators checked`, NoFields {}, "loam");
 ```
-
-A `core:log` event becomes a diagnostic too. The compiler runs `generate`'s body
-under `KilnLogSink`, which maps each event by its level:
-
-| Event level      | Diagnostic level |
-| ---------------- | ---------------- |
-| `Error`, `Warn`  | `warning`        |
-| `Info`           | `info`           |
-| `Debug`, `Trace` | none: dropped    |
-
-The message is the event's target and message, then its fields as `key=value`.
-An `Error` event does not fail the build. A generator fails only by returning an
-`Error`.
 
 ### The Probe
 
@@ -737,9 +715,8 @@ environment, filesystem, or secure randomness. It is a function of what the
 invocation hands it: the input files, the name it was invoked under, and the
 options.
 
-- The host provides `KilnHost`, `wasi:random/insecure`,
-  `wasi:random/insecure-seed`, `wasi:cli/stdout` and `wasi:cli/stderr`, and
-  nothing else. Stdout and stderr reach the build as
+- The host provides `wasi:random/insecure`, `wasi:random/insecure-seed`,
+  `wasi:cli/stdout` and `wasi:cli/stderr`, and nothing else. Stdout and stderr reach the build as
   [diagnostics](#diagnostics).
 - A generator that logs through `core:log`'s `TextSink<WallClock>` imports a
   clock, so it is refused as below.
