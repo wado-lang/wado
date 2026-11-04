@@ -442,6 +442,14 @@ description = "Regenerate Gale's oracle-pinned driver tests (sqlite, json, or al
 tools = { java = "lts" }
 run = 'WADO="$(scripts/dev-bin.sh --path wado)" scripts/dev-bin.sh wado run package-gale/scripts/regen_oracle.wado'
 
+[tasks.oracle-re]
+description = "Regenerate Re's oracle-pinned tests from Node's RegExp (package-re/scripts/oracle.mjs)"
+run = "node package-re/scripts/oracle.mjs && scripts/dev-bin.sh wado format -w package-re/tests/generated/oracle_test.wado package-re/tests/generated/test262_oracle_test.wado"
+
+[tasks.test262-re]
+description = "Regenerate Re's test262 syntax test and input corpus from vendor/test262, then the oracle tests"
+run = "node package-re/scripts/test262.mjs && node package-re/scripts/test262-inputs.mjs && scripts/dev-bin.sh wado format -w package-re/tests/generated/test262_test.wado && mise run oracle-re"
+
 [tasks.oracle-gale-typescript]
 description = "List where Gale's TypeScript parse tree for a file differs from the ANTLR4 jar's"
 tools = { java = "lts" }
