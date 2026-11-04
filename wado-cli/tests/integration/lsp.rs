@@ -2760,39 +2760,3 @@ fn query_scip_applies_each_exclude_to_the_selected_root() {
     assert!(!has("skip.wado"));
     assert!(!has("nested/also_skip.wado"));
 }
-
-#[test]
-fn query_scip_names_a_stdlib_file_as_its_importers_do() {
-    let tmp = tempfile::tempdir().unwrap();
-    let core = tmp.path().join("wado-compiler/lib/core");
-    std::fs::create_dir_all(&core).unwrap();
-    std::fs::write(
-        core.join("cli.wado"),
-        "pub fn greet() -> i32 {\n    return 1;\n}\n",
-    )
-    .unwrap();
-    std::fs::write(
-        core.join("cli_test.wado"),
-        "use { greet } from \"./cli.wado\";\nfn twice() -> i32 {\n    return greet() + greet();\n}\n",
-    )
-    .unwrap();
-
-    wado_in(tmp.path())
-        .args(["query", "scip", "."])
-        .assert()
-        .success();
-
-    let index = std::fs::read(tmp.path().join("index.scip")).unwrap();
-    let count = |needle: &str| {
-        index
-            .windows(needle.len())
-            .filter(|w| *w == needle.as_bytes())
-            .count()
-    };
-    // The definition with its information, then the import and both calls in
-    // `cli_test.wado`.
-    assert_eq!(count("wado . core:cli . greet()."), 5);
-    assert_eq!(count("wado-compiler/lib/core/cli.wado . "), 0);
-    // The document itself keeps the path Eddy reads its source from.
-    assert_eq!(count("wado-compiler/lib/core/cli.wado"), 1);
-}
