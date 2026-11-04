@@ -214,7 +214,11 @@ fn a_model_runs_on_the_device_reading_back_only_what_it_returns() {
     let lines: Vec<&str> = stdout.lines().collect();
     assert_eq!(lines.len(), 2, "stdout: {stdout}");
     let dispatches_of = |line: &str| line.split(' ').rev().nth(3).unwrap().to_owned();
-    assert_eq!(dispatches_of(lines[0]), dispatches_of(lines[1]), "stdout: {stdout}");
+    assert_eq!(
+        dispatches_of(lines[0]),
+        dispatches_of(lines[1]),
+        "stdout: {stdout}"
+    );
     for line in lines {
         let words: Vec<&str> = line.split(' ').collect();
         assert_eq!(words[words.len() - 3..], ["read", "backs", "1"], "{line}");
