@@ -117,8 +117,8 @@ hot site up to `--optimize-inline-hot-callsite-threshold`, by default 4 times
 `--optimize-inline-threshold`, and at a cold site up to
 `--optimize-inline-cold-callsite-threshold`, by default a quarter of it. Any
 other site, and every site in a function the profile does not judge, keeps
-`--optimize-inline-threshold`. A hot site in an unlikely region is priced as
-neither. At a hot site the callee's size counts its cold paths, since a splice
+`--optimize-inline-threshold`, and so does a hot site in an unlikely region. At
+a hot site the callee's size counts its cold paths, since a splice
 copies them too. A call under a `?` is priced by the region holding the `?`.
 
 Rationale: [WEP: Profile-Guided Optimization](./wep-2026-10-25-profile-guided-optimization.md).

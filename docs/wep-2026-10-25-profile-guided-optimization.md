@@ -303,8 +303,8 @@ The hot ratio was measured at 4, 8 and 16 on the fuel benchmarks against
 not what a huge function costs once compiled. At 8, `cbor_twitter`'s
 deserializer spliced its record decoders into one function and ran 58% longer
 by the wall clock for the same fuel, and `json_twitter`'s 29% longer. At 4 both
-ran within a few percent of `-f no-pgo`. The cold ratio was measured at a half down to an
-eighth, and moved no fuel region. A quarter grew `gale_gen` least.
+ran within a few percent of `-f no-pgo`. The cold ratio was measured at a half
+down to an eighth, and moved no fuel region. A quarter grew `gale_gen` least.
 `--optimize-predictable-branch-threshold` keeps LLVM's 99: at 90, 95 and 98 the
 geometric mean moved by under 0.03 points.
 
@@ -495,7 +495,7 @@ output at every level. It is a nightly campaign, not a gate.
   longer by the wall clock for 4% more fuel: with a 2 GiB heap the PGO build is
   faster, so the hot splices make its collections dearer, and why is not known.
   `zlib` decompression and `json_twitter` serialization run about 10% longer
-  for the same fuel. The tables are in
+  for slightly less fuel. The tables are in
   [the benchmark README](../benchmark/README.md#profile-guided-optimization).
   `http_routing` records a profile but is in neither table: its `oha` run was
   not repeated under the three builds.
