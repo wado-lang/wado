@@ -302,6 +302,8 @@ The hot ratio was measured at 4, 8 and 16 on the fuel benchmarks against
 `-f no-pgo`. 16 bought 0.2 points more of the geometric mean than 8, for nearly
 twice 8's growth of `gale_gen`. The cold ratio was measured at a half down to an
 eighth, and moved no fuel region. A quarter grew `gale_gen` least.
+`--optimize-predictable-branch-threshold` keeps LLVM's 99: at 90, 95 and 98 the
+geometric mean moved by under 0.03 points.
 
 A hot site weighs the callee's cold paths, though the plain price leaves them
 out. A splice copies them all the same. Priced plain, `CitmCatalog::deserialize`
@@ -429,7 +431,7 @@ output at every level. It is a nightly campaign, not a gate.
    `cold_path()`, `unlikely_path()` or `cold_code()` by the answers, and
    overrides the author's and the `?`'s markers, with the remark. An e2e
    fixture states each mark and each remark.
-7. [ ] Hot and cold call sites. The summary places its hot and cold lines
+7. [x] Hot and cold call sites. The summary places its hot and cold lines
    under `--optimize-profile-summary-cutoff-hot` and `-cold`. The inliner
    prices a site by it under `--optimize-inline-hot-callsite-threshold` and
    `--optimize-inline-cold-callsite-threshold`, and the benchmarks, against
