@@ -140,8 +140,8 @@ fn start_server(root: &Path) -> Client {
         "workspace": { "symbol": { "search": { "kind": "all_symbols", "limit": SYMBOL_SEARCH_LIMIT } } },
         // Priming indexes every crate up front; a rename asks for only what it reaches.
         "cachePriming": { "enable": false },
-        // The session reads the files once, so no watcher is needed. The
-        // client declares no watching either, so none runs.
+        // A session reads each file once; the client watches nothing, so
+        // nothing does.
         "files": { "watcher": "client" },
     });
     let client = Client::start("rust-analyzer", root, capabilities, options);
@@ -177,7 +177,7 @@ fn request_rename(
         "textDocument/rename",
         json!({
             "textDocument": { "uri": target.uri },
-            "position": { "line": target.position.line, "character": target.position.column },
+            "position": target.position.to_lsp(),
             "newName": new_name,
         }),
     )?;

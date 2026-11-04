@@ -140,8 +140,11 @@ impl Resolver<'_> {
                     .to_string(),
                 position: Position::from_lsp(&symbol["location"]["range"]["start"]),
             };
-            let (document_symbol, in_trait_impl) = self.document_symbol(&location);
-            if in_trait_impl || self.owner(&location)? + "::" + notation.name() != notation.path() {
+            let (document_symbol, in_trait_impl) = self.document_symbol(&location)?;
+            let owner = self.owner(&location)?;
+            let named =
+                owner.is_some_and(|owner| owner + "::" + notation.name() == notation.path());
+            if in_trait_impl || !named {
                 continue;
             }
             items.push(Item {
@@ -154,41 +157,36 @@ impl Resolver<'_> {
 
     /// The document symbol named at `location`, and whether a trait impl
     /// holds it.
-    fn document_symbol(&mut self, location: &Location) -> (Option<Value>, bool) {
-        let client = &mut *self.client;
-        let tree = self
-            .document_symbols
-            .entry(location.uri.clone())
-            .or_insert_with(|| {
-                client
-                    .request(
-                        "textDocument/documentSymbol",
-                        json!({ "textDocument": { "uri": location.uri } }),
-                    )
-                    .unwrap_or_else(|e| panic!("documentSymbol failed: {e}"))
-            });
-        find_symbol(
-            tree.as_array().into_iter().flatten(),
-            location.position,
-            false,
-        )
-        .map_or((None, false), |(symbol, in_trait_impl)| {
+    fn document_symbol(&mut self, location: &Location) -> Result<(Option<Value>, bool), String> {
+        if !self.document_symbols.contains_key(&location.uri) {
+            let tree = self.client.request(
+                "textDocument/documentSymbol",
+                json!({ "textDocument": { "uri": location.uri } }),
+            )?;
+            self.document_symbols.insert(location.uri.clone(), tree);
+        }
+        let tree = self.document_symbols[&location.uri].as_array();
+        let found = find_symbol(tree.into_iter().flatten(), location.position, false);
+        Ok(found.map_or((None, false), |(symbol, in_trait_impl)| {
             (Some(symbol.clone()), in_trait_impl)
-        })
+        }))
     }
 
     /// The path rust-analyzer's hover puts above an item: its module, or for
-    /// an associated item, the type or trait that holds it.
-    fn owner(&mut self, location: &Location) -> Result<String, String> {
+    /// an associated item, the type or trait that holds it. `None` where the
+    /// item has no hover.
+    fn owner(&mut self, location: &Location) -> Result<Option<String>, String> {
         let hover = self.client.request(
             "textDocument/hover",
             json!({
                 "textDocument": { "uri": location.uri },
-                "position": { "line": location.position.line, "character": location.position.column },
+                "position": location.position.to_lsp(),
             }),
         )?;
-        let text = hover["contents"]["value"].as_str().unwrap_or_default();
-        Ok(text.lines().next().unwrap_or_default().to_string())
+        let text = hover["contents"]["value"].as_str();
+        Ok(text
+            .and_then(|text| text.lines().next())
+            .map(str::to_string))
     }
 }
 
@@ -201,7 +199,9 @@ fn find_symbol<'a>(
         if Position::from_lsp(&symbol["selectionRange"]["start"]) == position {
             return Some((symbol, in_trait_impl));
         }
-        let name = symbol["name"].as_str().unwrap_or_default();
+        let name = symbol["name"]
+            .as_str()
+            .expect("a document symbol has a name");
         let is_trait_impl = name.starts_with("impl") && name.contains(" for ");
         if let Some(found) = find_symbol(children(symbol), position, is_trait_impl) {
             return Some(found);

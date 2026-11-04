@@ -4,7 +4,7 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use serde_json::Value;
+use serde_json::{Value, json};
 
 use super::lsp::uri_path;
 
@@ -26,6 +26,10 @@ impl Position {
             line: field("line"),
             column: field("character"),
         }
+    }
+
+    pub fn to_lsp(self) -> Value {
+        json!({ "line": self.line, "character": self.column })
     }
 }
 
@@ -164,8 +168,6 @@ pub fn offset(text: &str, pos: Position) -> Option<usize> {
 
 #[cfg(test)]
 mod tests {
-    use serde_json::json;
-
     use super::*;
 
     fn pos(line: usize, column: usize) -> Position {

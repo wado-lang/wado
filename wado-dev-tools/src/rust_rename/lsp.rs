@@ -5,9 +5,9 @@
 use std::io::{BufRead, BufReader, Read, Write};
 use std::path::{Path, PathBuf};
 use std::process::{self, Child, ChildStdin, ChildStdout, Command, Stdio};
-use std::str;
 
 use serde_json::{Value, json};
+use wado_lsp::{Uri, UriScheme};
 
 pub struct Client {
     child: Child,
@@ -71,7 +71,10 @@ impl Client {
             }
             assert_eq!(message["id"], id, "responses must arrive in request order");
             if let Some(error) = message.get("error") {
-                return Err(error["message"].as_str().unwrap_or_default().to_string());
+                let message = error["message"].as_str();
+                return Err(message
+                    .expect("an error response has a message")
+                    .to_string());
             }
             return Ok(message["result"].clone());
         }
@@ -142,50 +145,17 @@ impl Client {
     }
 }
 
-/// The `file://` URI of an absolute path, percent-encoding every byte outside
-/// RFC 3986's unreserved set and `/`.
 pub fn file_uri(path: &Path) -> String {
     assert!(path.is_absolute(), "a file URI needs an absolute path");
-    let text = path.to_str().expect("path must be UTF-8");
-    let mut uri = String::from("file://");
-    for byte in text.bytes() {
-        if byte.is_ascii_alphanumeric() || b"-._~/".contains(&byte) {
-            uri.push(char::from(byte));
-        } else {
-            uri.push_str(&format!("%{byte:02X}"));
-        }
-    }
-    uri
+    Uri::from_file_path(path).to_string()
 }
 
 pub fn uri_path(uri: &str) -> PathBuf {
-    let encoded = uri
-        .strip_prefix("file://")
-        .unwrap_or_else(|| panic!("not a file URI: {uri}"));
-    let mut bytes = Vec::with_capacity(encoded.len());
-    let mut rest = encoded.as_bytes();
-    while let Some((&byte, tail)) = rest.split_first() {
-        if byte == b'%' {
-            let hex = str::from_utf8(&tail[..2]).expect("percent escape must be ASCII");
-            bytes.push(u8::from_str_radix(hex, 16).expect("percent escape must be hex"));
-            rest = &tail[2..];
-        } else {
-            bytes.push(byte);
-            rest = tail;
-        }
-    }
-    PathBuf::from(String::from_utf8(bytes).expect("file URI must decode to UTF-8"))
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn file_uri_round_trips_reserved_and_non_ascii_bytes() {
-        let path = Path::new("/tmp/a b/c#d/あ.rs");
-        let uri = file_uri(path);
-        assert_eq!(uri, "file:///tmp/a%20b/c%23d/%E3%81%82.rs");
-        assert_eq!(uri_path(&uri), path);
-    }
+    let uri = Uri::new(uri);
+    assert_eq!(
+        uri.scheme(),
+        UriScheme::File,
+        "the server names files by file URI"
+    );
+    PathBuf::from(uri.to_filename())
 }
