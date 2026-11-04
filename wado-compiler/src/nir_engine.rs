@@ -1012,6 +1012,34 @@ impl<'a> Engine<'a> {
         self.buf.walk_children = children;
     }
 
+    /// Whether `node` is reachable from the root. An edit that drops a node
+    /// leaves its parent edge in place, so each edge is checked against the
+    /// parent's children.
+    fn is_attached(&self, mut node: NodeRef) -> bool {
+        let root = NodeRef::Block(self.body.root());
+        while node != root {
+            let Some(parent) = self.parent_of(node) else {
+                return false;
+            };
+            let held = match (parent, node) {
+                (NodeRef::Block(block), NodeRef::Stmt(stmt)) => {
+                    self.body.blocks[block].stmts.contains(&stmt)
+                }
+                _ => {
+                    let mut held = false;
+                    self.body
+                        .for_each_child(parent, |child| held |= child == node);
+                    held
+                }
+            };
+            if !held {
+                return false;
+            }
+            node = parent;
+        }
+        true
+    }
+
     /// Push a node onto the worklist unless it is already queued.
     pub fn enqueue(&mut self, node: NodeRef) {
         self.buf.enqueue(node);
@@ -1810,6 +1838,12 @@ impl<'a> Engine<'a> {
     pub fn run(&mut self, rules: &[&dyn Rule]) -> bool {
         let mut any = false;
         while let Some(node) = self.pop() {
+            // A rule reads the live body's indices, so at a detached node it
+            // would rewrite the live body from a site they never counted: a
+            // clone left behind shares its locals with the live copy.
+            if !self.is_attached(node) {
+                continue;
+            }
             loop {
                 let mut changed = false;
                 for rule in rules {
@@ -2177,6 +2211,64 @@ mod tests {
         assert_eq!(kept.len(), 2);
         assert_matches!(body.stmts[kept[0]].kind, StmtKind::Let { .. });
         assert_matches!(body.stmts[kept[1]].kind, StmtKind::Return { .. });
+    }
+
+    /// Drops the block's `let`, leaving its value on the worklist as a rule
+    /// that detaches a subtree leaves what it had queued.
+    struct DetachLet;
+    impl Rule for DetachLet {
+        fn apply_block(&self, e: &mut Engine, id: BlockId) -> bool {
+            let mut stmts = e.body.blocks[id].stmts.clone();
+            let Some(at) = stmts
+                .iter()
+                .position(|s| matches!(e.body.stmts[*s].kind, StmtKind::Let { .. }))
+            else {
+                return false;
+            };
+            let StmtKind::Let {
+                value: Operand::Expr(value),
+                ..
+            } = e.body.stmts[stmts[at]].kind
+            else {
+                unreachable!("the sample binds an expression");
+            };
+            stmts.remove(at);
+            e.set_block_stmts(id, stmts);
+            e.enqueue(NodeRef::Expr(value));
+            true
+        }
+    }
+
+    struct SeenExprs(std::cell::RefCell<Vec<ExprId>>);
+    impl Rule for SeenExprs {
+        fn apply_expr(&self, _: &mut Engine, id: ExprId) -> bool {
+            self.0.borrow_mut().push(id);
+            false
+        }
+    }
+
+    /// A detached node is garbage. A rule there reads the live body's indices
+    /// and would rewrite the live body from a site they never counted.
+    #[test]
+    fn no_rule_runs_at_a_detached_node() {
+        let mut body = sample_body();
+        let root = body.root();
+        let StmtKind::Let {
+            value: Operand::Expr(add),
+            ..
+        } = body.stmts[body.blocks[root].stmts[0]].kind
+        else {
+            panic!("expected let");
+        };
+        let seen = SeenExprs(std::cell::RefCell::default());
+        {
+            let mut buf = EngineBuffers::default();
+            let mut locals = Tracked::new(Vec::new());
+            let mut eng = Engine::new(&mut body, &mut buf, &mut locals, &[]);
+            assert!(eng.run(&[&DetachLet, &seen]));
+        }
+        let visits = seen.0.borrow().iter().filter(|&&id| id == add).count();
+        assert_eq!(visits, 1, "only the visit before the `let` was dropped");
     }
 
     #[test]
