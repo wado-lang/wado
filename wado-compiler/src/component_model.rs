@@ -1039,9 +1039,10 @@ pub struct CmInterfaceRegistry {
     component_interfaces: IndexSet<String>,
 
     /// Per component-dependency interface FQ, the host-leaf import FQs the
-    /// dependency component itself declares (its WASI capabilities). Effect
-    /// reconstruction unions these into the consumer when the interface is used;
-    /// a purely-computational component maps to an empty set. Every exported
+    /// dependency component itself declares (its WASI capabilities), each of
+    /// which the consumer forwards; reconstruction demands those
+    /// [`Self::demanded_imports_for`] answers. A purely-computational component
+    /// maps to an empty set. Every exported
     /// interface of one component shares the same set (v1 component-level union).
     component_host_leaf_imports: IndexMap<String, Vec<String>>,
 

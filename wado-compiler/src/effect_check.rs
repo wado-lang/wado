@@ -1215,7 +1215,11 @@ fn operation_requirements(
     owner: Option<DefId>,
 ) -> Vec<EffectRef> {
     let demands = operation_demands(sem, index, owner);
-    demands.certain.into_iter().chain(demands.unrecorded).collect()
+    demands
+        .certain
+        .into_iter()
+        .chain(demands.unrecorded)
+        .collect()
 }
 
 /// [`operation_requirements`], split by why each is demanded.
