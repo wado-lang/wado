@@ -1633,48 +1633,37 @@ fn assert_wir_checks_measured(
          each fail, or twins of the source each fails on"
     );
     let checks = spec.wir_checks(level);
-    // `None` where the WIR holds no function `wir_scope` names: what the
-    // variant changed is the whole function, so no expectation holds.
-    let holding = |wir: Option<String>, what: &str| -> Option<(String, Vec<usize>)> {
+    // A variant whose WIR holds no function `wir_scope` names is checked
+    // against an empty body: a `wir_expect` fails there, and a
+    // `wir_not_expect` holds without measuring anything.
+    let holding = |wir: Option<String>, what: &str| -> (String, Vec<usize>) {
         let wir = wir.unwrap_or_else(|| panic!("[{test_id}] the compile {what} failed"));
         let body = match spec.wir_scope.as_deref() {
             None => wir.as_str(),
-            Some(scope) => scope_to_function(&wir, scope)?,
+            Some(scope) => scope_to_function(&wir, scope).unwrap_or_default(),
         };
         let held = (0..checks.len())
             .filter(|&i| checks[i].holds(body))
             .collect();
-        Some((body.to_string(), held))
+        (body.to_string(), held)
     };
     let mut held: Vec<usize> = (0..checks.len()).collect();
     let mut last_wir = String::new();
     if !passes.is_empty() {
         let skipping = |skip: &[String]| holding(compile(skip), &format!("skipping {skip:?}"));
-        match skipping(passes) {
-            Some((wir, still)) => {
-                held = still;
-                last_wir = wir;
-            }
-            None => held.clear(),
-        }
+        (last_wir, held) = skipping(passes);
         if passes.len() > 1 {
             for pass in passes {
                 if held.is_empty() {
                     break;
                 }
-                match skipping(std::slice::from_ref(pass)) {
-                    Some((_, still)) => held.retain(|i| still.contains(i)),
-                    None => held.clear(),
-                }
+                let (_, still) = skipping(std::slice::from_ref(pass));
+                held.retain(|i| still.contains(i));
             }
         }
     }
     for edits in twins {
-        let what = format!("of the twin {edits:?}");
-        let Some((wir, still)) = holding(compile_twin(edits), &what) else {
-            held.clear();
-            continue;
-        };
+        let (wir, still) = holding(compile_twin(edits), &format!("of the twin {edits:?}"));
         assert!(
             still.len() < checks.len(),
             "[{test_id}] every WIR expectation under `{name}` holds on the twin {edits:?}, \
@@ -1731,19 +1720,20 @@ fn search_wir_passes(
         .collect();
     let checks = spec.wir_checks(level);
     let key = common::opt_level_name(level);
+    // An absent function is an empty body, as `assert_wir_checks_measured`
+    // reads one.
     let failing = |wir: &str| -> Vec<usize> {
-        let scoped = match spec.wir_scope.as_deref() {
-            None => Some(Some(wir)),
-            Some(scope) => std::panic::catch_unwind(|| scope_to_function(wir, scope)).ok(),
+        let body = match spec.wir_scope.as_deref() {
+            None => wir,
+            Some(scope) => match std::panic::catch_unwind(|| scope_to_function(wir, scope)) {
+                // Ambiguous: the skip minted a second function of that name.
+                Err(_) => return vec![],
+                Ok(body) => body.unwrap_or_default(),
+            },
         };
-        match scoped {
-            // Ambiguous: the skip minted a second function of that name.
-            None => vec![],
-            Some(None) => (0..checks.len()).collect(),
-            Some(Some(body)) => (0..checks.len())
-                .filter(|&i| !checks[i].holds(body))
-                .collect(),
-        }
+        (0..checks.len())
+            .filter(|&i| !checks[i].holds(body))
+            .collect()
     };
     let mut normal: BTreeMap<&str, i64> = BTreeMap::new();
     for line in normal_wir.lines() {
