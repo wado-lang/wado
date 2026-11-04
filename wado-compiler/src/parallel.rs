@@ -17,7 +17,8 @@ use rayon::prelude::*;
 use crate::optimize::pass_dump::SkipScope;
 
 /// `f`, entering on whichever thread runs it the skip list of the thread that
-/// handed it out.
+/// handed it out. Called before `install`, which runs its closure on a pool
+/// thread.
 #[cfg(not(target_arch = "wasm32"))]
 fn carrying_skips<A, R>(f: impl Fn(A) -> R + Sync + Send) -> impl Fn(A) -> R + Sync + Send {
     let skips = SkipScope::current();
@@ -88,7 +89,8 @@ impl Executor {
     pub fn map<T: Sync, R: Send>(&self, items: &[T], f: impl Fn(&T) -> R + Sync + Send) -> Vec<R> {
         #[cfg(not(target_arch = "wasm32"))]
         if let Some(pool) = self.pool_for(items.len()) {
-            return pool.install(|| items.par_iter().map(carrying_skips(f)).collect());
+            let f = carrying_skips(f);
+            return pool.install(|| items.par_iter().map(f).collect());
         }
         items.iter().map(f).collect()
     }
@@ -123,7 +125,8 @@ impl Executor {
     pub fn map_indices<R: Send>(&self, len: usize, f: impl Fn(usize) -> R + Sync + Send) -> Vec<R> {
         #[cfg(not(target_arch = "wasm32"))]
         if let Some(pool) = self.pool_for(len) {
-            return pool.install(|| (0..len).into_par_iter().map(carrying_skips(f)).collect());
+            let f = carrying_skips(f);
+            return pool.install(|| (0..len).into_par_iter().map(f).collect());
         }
         (0..len).map(f).collect()
     }
@@ -136,7 +139,8 @@ impl Executor {
     ) -> Vec<R> {
         #[cfg(not(target_arch = "wasm32"))]
         if let Some(pool) = self.pool_for(items.len()) {
-            return pool.install(|| items.par_iter().filter_map(carrying_skips(f)).collect());
+            let f = carrying_skips(f);
+            return pool.install(|| items.par_iter().filter_map(f).collect());
         }
         items.iter().filter_map(f).collect()
     }
@@ -149,12 +153,8 @@ impl Executor {
     ) -> Vec<R> {
         #[cfg(not(target_arch = "wasm32"))]
         if let Some(pool) = self.pool_for(len) {
-            return pool.install(|| {
-                (0..len)
-                    .into_par_iter()
-                    .filter_map(carrying_skips(f))
-                    .collect()
-            });
+            let f = carrying_skips(f);
+            return pool.install(|| (0..len).into_par_iter().filter_map(f).collect());
         }
         (0..len).filter_map(f).collect()
     }
@@ -163,7 +163,8 @@ impl Executor {
     pub fn for_each<T: Sync>(&self, items: &[T], f: impl Fn(&T) + Sync + Send) {
         #[cfg(not(target_arch = "wasm32"))]
         if let Some(pool) = self.pool_for(items.len()) {
-            pool.install(|| items.par_iter().for_each(carrying_skips(f)));
+            let f = carrying_skips(f);
+            pool.install(|| items.par_iter().for_each(f));
             return;
         }
         items.iter().for_each(f);
@@ -173,7 +174,8 @@ impl Executor {
     pub fn for_each_index(&self, len: usize, f: impl Fn(usize) + Sync + Send) {
         #[cfg(not(target_arch = "wasm32"))]
         if let Some(pool) = self.pool_for(len) {
-            pool.install(|| (0..len).into_par_iter().for_each(carrying_skips(f)));
+            let f = carrying_skips(f);
+            pool.install(|| (0..len).into_par_iter().for_each(f));
             return;
         }
         (0..len).for_each(f);
@@ -201,5 +203,34 @@ impl Executor {
 impl Default for Executor {
     fn default() -> Self {
         Self::new(1)
+    }
+}
+
+#[cfg(all(test, not(target_arch = "wasm32")))]
+mod tests {
+    use super::*;
+    use crate::optimize::pass_dump::decides;
+
+    #[test]
+    fn every_visit_skips_what_its_caller_skips() {
+        let _scope = SkipScope::enter(&["x".to_string()]);
+        let executor = Executor::new(4);
+        let items: Vec<u32> = (0..64).collect();
+        let skips = |_: &u32| !decides("x");
+        let indexed = |_: usize| !decides("x");
+        assert!(executor.map(&items, skips).into_iter().all(|s| s));
+        assert!(executor.map_init(&items, || (), |(), i| skips(i)).into_iter().all(|s| s));
+        assert!(executor.map_indices(64, indexed).into_iter().all(|s| s));
+        assert_eq!(executor.filter_map(&items, |i| skips(i).then_some(())).len(), 64);
+        assert_eq!(executor.indices_where(64, indexed).len(), 64);
+        let unskipped = std::sync::atomic::AtomicUsize::new(0);
+        let count = |skipped: bool| {
+            if !skipped {
+                unskipped.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            }
+        };
+        executor.for_each(&items, |i| count(skips(i)));
+        executor.for_each_index(64, |i| count(indexed(i)));
+        assert_eq!(unskipped.into_inner(), 0);
     }
 }

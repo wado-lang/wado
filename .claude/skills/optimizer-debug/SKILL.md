@@ -82,7 +82,8 @@ every NIR pass, is `nir/value_pool/fold_const`. The WIR builder's are
 `wir_build/branch_hints` (hints from cold paths) and
 `wir_build/elide_terminator_unreachable` (no `unreachable` after a
 terminator). A decision is listed
-once per compile, and its `@N` counts the sites it is asked at.
+once per compile and takes no `@N`: the optimizer's threads ask it in no fixed
+order.
 
 When a pass is the only one whose skipping makes the bug go away that
 just narrows the _participants_ in the buggy interaction — it does not

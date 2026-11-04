@@ -729,7 +729,8 @@ pub mod pass_dump {
     /// pass's own name covers, such as lowering eliding a value copy, or the
     /// value pool folding a constant operation for every pass that interns
     /// one. Skipping one keeps the shape the decision would have improved, so
-    /// a check is measured against it as against a pass.
+    /// a check is measured against it as against a pass. A decision takes no
+    /// `@<n>`: the optimizer's threads ask it in no fixed order.
     pub fn decides(name: &str) -> bool {
         if list_passes_enabled() {
             static LISTED: OnceLock<Mutex<IndexSet<String>>> = OnceLock::new();
@@ -738,7 +739,12 @@ pub mod pass_dump {
                 list_pass(name);
             }
         }
-        !should_skip_pass(name)
+        !skips_by_name(name)
+    }
+
+    fn skips_by_name(name: &str) -> bool {
+        SKIPPED.with_borrow(|skipped| skipped.iter().any(|s| s == name))
+            || skip_list().iter().any(|s| s == name)
     }
 
     /// Returns true if the compile skips `name`, or if `name` matches one of the
