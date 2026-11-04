@@ -2303,22 +2303,14 @@ pub fn inline_functions(
     // call node's `FunctionRef`. Indexed by `func_id.index()` (== store position).
     let descriptors = descriptor_cache.descriptors(project);
     let markers = MarkerBuiltins::of(project);
-<<<<<<< HEAD
-    let InlineScans { bodies, read } = scans;
-    let inline_threshold = thresholds.plain;
-    let heat_map = &project.heat_map;
-    let scans = bodies.refresh(project, gate.exec(), |f| scan_body(f, markers, heat_map));
-||||||| fd132d8d7
-    let InlineScans { bodies, read } = scans;
-    let scans = bodies.refresh(project, gate.exec(), |f| scan_body(f, markers));
-=======
     let InlineScans {
         bodies,
         read,
         cycle_cuts,
     } = scans;
-    let scans = bodies.refresh(project, gate.exec(), |f| scan_body(f, markers));
->>>>>>> origin/main
+    let inline_threshold = thresholds.plain;
+    let heat_map = &project.heat_map;
+    let scans = bodies.refresh(project, gate.exec(), |f| scan_body(f, markers, heat_map));
     let sites = argument_sites(scans, &live);
     // Taken every round, unlike the prices below: a callee's only site is one
     // where its splice pays back.
@@ -2483,12 +2475,11 @@ pub fn inline_functions(
                 foldable: &foldable,
                 loopy: &loopy,
             });
-<<<<<<< HEAD
         let classify = |threshold: usize, runs: &RareRuns| {
             classify_callee(
                 &func,
                 view.as_ref(),
-                &barred_cycle_members,
+                cycle_cuts,
                 type_table,
                 threshold,
                 runs,
@@ -2520,39 +2511,6 @@ pub fn inline_functions(
             plain: verdict.reach,
             hot: reach_at(Heat::Hot),
         };
-||||||| fd132d8d7
-        let verdict = classify_callee(
-            &func,
-            view.as_ref(),
-            &barred_cycle_members,
-            type_table,
-            inline_threshold,
-            runs,
-            &foldable,
-            &loopy,
-            &safepoint_calls,
-            &scans[i].written,
-            call_sites[i],
-            &spliced,
-            &hopeful_params[i],
-        );
-=======
-        let verdict = classify_callee(
-            &func,
-            view.as_ref(),
-            cycle_cuts,
-            type_table,
-            inline_threshold,
-            runs,
-            &foldable,
-            &loopy,
-            &safepoint_calls,
-            &scans[i].written,
-            call_sites[i],
-            &spliced,
-            &hopeful_params[i],
-        );
->>>>>>> origin/main
         compiler_trace!(
             "inline_verdict",
             "{}: hot {} for {} params, {} sites -> {:?}",
