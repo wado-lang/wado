@@ -294,7 +294,7 @@ impl CompileInputs {
     }
 
     /// The fields of `options` these inputs set, the rest kept. The e2e
-    /// harness and the golden dumps both compile through it, so neither drops
+    /// harness and the WIR goldens both compile through it, so neither drops
     /// an input the other honours.
     #[must_use]
     pub fn apply(&self, options: CompilerOptions, fixture_dir: &Path) -> CompilerOptions {
@@ -304,7 +304,10 @@ impl CompileInputs {
             coverage: self.coverage.as_ref().map(|_| CoverageScope::default()),
             profile: self.profile(fixture_dir),
             lib_world: self.lib_world.clone(),
-            opt: self.opt_overrides(),
+            opt: OptOverrides {
+                inline_threshold: self.optimize_inline_threshold,
+                ..options.opt
+            },
             unused_diagnostics: self
                 .unused_diagnostics
                 .unwrap_or(options.unused_diagnostics),
