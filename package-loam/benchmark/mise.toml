@@ -3,10 +3,11 @@
 # reads, so `benchmark/pick.ts` and `benchmark/ab.ts` work on its logs.
 #
 # The models are not in the repository: each example's `fetch.sh` downloads the
-# file its weights load from, and the model onnxruntime runs. onnxruntime and llama.cpp are their own releases, which
-# `fetch_onnxruntime.sh` and `fetch_llama_cpp.sh` download on first use. The
-# WebGPU arm of onnxruntime is onnxruntime-node, which `mise run
-# loam-oracle-deps` installs.
+# file its weights load from, and the model onnxruntime runs. onnxruntime and
+# llama.cpp are their own releases, which `fetch_onnxruntime_cuda.sh` (with the
+# CUDA libraries its CUDA provider loads) and `fetch_llama_cpp.sh` download on
+# first use. The WebGPU arm of onnxruntime is onnxruntime-node, which
+# `mise run loam-oracle-deps` installs.
 #
 # `WADO_BIN` and `WADO_BENCH_FLAGS` mean what they do in `benchmark/`.
 
@@ -26,18 +27,24 @@ fi
 """
 
 [tasks.build-onnxruntime]
-description = "Build the onnxruntime arms"
+description = "Build the onnxruntime CUDA arms, where the host has an NVIDIA driver"
 hide = true
-sources = ["fetch_onnxruntime.sh", "harness.hpp", "decoder.hpp", "*/onnxruntime.cpp"]
+sources = ["fetch_onnxruntime_cuda.sh", "harness.hpp", "decoder.hpp", "*/onnxruntime.cpp"]
 outputs = ["build/onnxruntime_gpt2_124m", "build/onnxruntime_gemma3_270m"]
 run = """
 #!/usr/bin/env bash
 set -e
-ort=$(./fetch_onnxruntime.sh)
+ort=$(./fetch_onnxruntime_cuda.sh)
+if [ -z "$ort" ]; then
+    echo "SKIP: onnxruntime has no CUDA release for this host, or it has no NVIDIA driver"
+    exit 0
+fi
 mkdir -p build
+# DT_RPATH, unlike RUNPATH, also finds the CUDA libraries the CUDA provider
+# links, which onnxruntime loads with dlopen and which carry no path of their own.
 for model in gpt2_124m gemma3_270m; do
     c++ -O2 -std=c++17 -I. -I"$ort/include" $model/onnxruntime.cpp \
-        -L"$ort/lib" -lonnxruntime -Wl,-rpath,"$ort/lib" -o build/onnxruntime_$model
+        -L"$ort/lib" -lonnxruntime -Wl,--disable-new-dtags,-rpath,"$ort/lib" -o build/onnxruntime_$model
 done
 """
 
@@ -72,11 +79,10 @@ if [ ! -f $model/model.onnx ]; then
 fi
 wado_exe="${WADO_BIN:-$(cd ../.. && pwd)/target/release/wado}"
 
-echo "=== onnxruntime (CPU) ==="
-build/onnxruntime_gpt2_124m
-
-echo "=== onnxruntime (CPU, 1 thread) ==="
-build/onnxruntime_gpt2_124m 1
+if [ -x build/onnxruntime_gpt2_124m ]; then
+    echo "=== onnxruntime (CUDA) ==="
+    build/onnxruntime_gpt2_124m
+fi
 
 ./onnxruntime_webgpu.sh $model
 
@@ -100,8 +106,10 @@ if [ ! -f $model/build/model.onnx_data ] || [ ! -f $model/build/model.onnx ]; th
 fi
 wado_exe="${WADO_BIN:-$(cd ../.. && pwd)/target/release/wado}"
 
-echo "=== onnxruntime (CPU) ==="
-build/onnxruntime_gemma3_270m
+if [ -x build/onnxruntime_gemma3_270m ]; then
+    echo "=== onnxruntime (CUDA) ==="
+    build/onnxruntime_gemma3_270m
+fi
 
 ./onnxruntime_webgpu.sh $model
 
