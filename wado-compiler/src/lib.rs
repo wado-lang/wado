@@ -1083,7 +1083,21 @@ fn collect_lib_surface(
     entry_source: &ModuleSource,
     modules: &hashmap::IndexMap<ModuleSource, ast::Module>,
 ) -> LibSurface {
-    let mut submodule_exports = Vec::new();
+    let submodule_exports = lib_export_functions(entry_source, modules)
+        .filter(|(source, _)| *source != entry_source)
+        .map(|(source, func)| WorldExportInfo {
+            name: func.name.clone(),
+            is_async: func.is_async,
+            params: func
+                .params
+                .iter()
+                .map(|p| (p.name.clone(), p.ty.clone()))
+                .collect(),
+            return_type: func.return_type.clone(),
+            from_interface_fq: None,
+            reexport_origin: Some((source.clone(), func.name.clone())),
+        })
+        .collect();
     let mut submodule_type_decls = Vec::new();
     let mut submodule_interfaces = Vec::new();
     for (source, module) in modules {
@@ -1097,20 +1111,6 @@ fn collect_lib_surface(
                 // private, internally-handled effect is excluded.
                 Item::Interface(decl) if decl.visibility.is_public() => {
                     submodule_interfaces.push(decl.clone());
-                }
-                Item::Function(func) if func.exports_own_name() => {
-                    submodule_exports.push(WorldExportInfo {
-                        name: func.name.clone(),
-                        is_async: func.is_async,
-                        params: func
-                            .params
-                            .iter()
-                            .map(|p| (p.name.clone(), p.ty.clone()))
-                            .collect(),
-                        return_type: func.return_type.clone(),
-                        from_interface_fq: None,
-                        reexport_origin: Some((source.clone(), func.name.clone())),
-                    });
                 }
                 // Not `is_public`: a lowered type carries its fields whatever
                 // their scope, so an `internal` type reaches the CM interface

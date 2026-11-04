@@ -1971,7 +1971,7 @@ fn call_site_effects(
                 } else {
                     OperationDemands::default()
                 },
-                resource: resolved.dispatched,
+                resource: resolved.resource,
                 params: resolved.params,
                 returns: index.callee_return(&func_ref),
             }
@@ -2005,7 +2005,7 @@ fn dispatch_effects(
         Brought::default()
     };
     Resolved {
-        dispatched: index.resource_demands(sem, func_ref),
+        resource: index.resource_demands(sem, func_ref),
         ..resolve_effect_params(
             sem,
             &effects,
@@ -2493,7 +2493,7 @@ fn resolve_effect_params(
     if param_names.is_empty() {
         return Resolved {
             required: callee_effects.to_vec(),
-            dispatched: OperationDemands::default(),
+            resource: OperationDemands::default(),
             params: IndexMap::default(),
         };
     }
@@ -2591,7 +2591,7 @@ fn resolve_effect_params(
     }
     Resolved {
         required: resolved,
-        dispatched: OperationDemands::default(),
+        resource: OperationDemands::default(),
         params,
     }
 }
@@ -2601,8 +2601,8 @@ fn resolve_effect_params(
 struct Resolved {
     /// What the callee declares.
     required: Vec<EffectRef>,
-    /// What dispatching it demands besides, as a resource method does.
-    dispatched: OperationDemands,
+    /// What a method of a resource demands besides its declaration.
+    resource: OperationDemands,
     params: IndexMap<String, IndexSet<EffectRef>>,
 }
 
@@ -3043,7 +3043,7 @@ impl SemEffectWalker<'_> {
     /// Report what a dispatch to one callee requires.
     fn report_resolved(&mut self, resolved: &Resolved, callee: &str, span: Span) {
         self.report_missing(&resolved.required, callee, span);
-        self.report_dispatched(&resolved.dispatched, callee, span);
+        self.report_dispatched(&resolved.resource, callee, span);
     }
 
     /// Record what each variable a call's type carries out stands for. Where
@@ -3525,7 +3525,7 @@ impl<'a> PurityWalker<'a> {
             args,
             &Rows::default(),
         );
-        if self.unanswered(&resolved.required) || self.unanswered(&resolved.dispatched.all()) {
+        if self.unanswered(&resolved.required) || self.unanswered(&resolved.resource.all()) {
             self.flag(Impurity::Call(callee.to_string()), span);
         }
     }
