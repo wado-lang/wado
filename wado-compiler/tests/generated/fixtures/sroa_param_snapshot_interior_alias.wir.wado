@@ -200,32 +200,34 @@ fn "sroa_param_snapshot_interior_alias.wado/probe"(sink, h, out) {
     let value_11: i32;
     let used: i32;
     let $licm_repr_25: ref Array<i32>;
-    let $bce_limit_26: i32;
+    let $licm_repr_26: ref Array<i32>;
+    let $bce_limit_27: i32;
     n = local.tee $load_0(h.data).used;
     i = 0;
-    $licm_repr_25 = out.repr;
-    $bce_limit_26 = n;
+    $licm_repr_25 = $load_0.repr;
+    $licm_repr_26 = out.repr;
+    $bce_limit_27 = n;
     if n <= $load_0.used {
         b2: block {
             l3: loop {
-                break_if b2 i >= $bce_limit_26;
-                value_11 = builtin::array_get_value<i32>($load_0.repr, i);
-                if @unlikely(local.tee used(out.used) >= builtin::array_len($licm_repr_25)) {
+                break_if b2 i >= $bce_limit_27;
+                value_11 = builtin::array_get_value<i32>($licm_repr_25, i);
+                if @unlikely(local.tee used(out.used) >= builtin::array_len($licm_repr_26)) {
                     cold_path;
                     "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(out);
                     if n > $load_0.used {
-                        $bce_limit_26 = -2147483648;
+                        $bce_limit_27 = -2147483648;
                     }
-                    $licm_repr_25 = out.repr;
+                    $licm_repr_25 = $load_0.repr;
+                    $licm_repr_26 = out.repr;
                 }
-                builtin::array_set<i32>($licm_repr_25, used, value_11);
+                builtin::array_set<i32>($licm_repr_26, used, value_11);
                 out.used = used + 1;
                 if i == 0 {
                     "sroa_param_snapshot_interior_alias.wado/shrink"(sink);
                     if n > $load_0.used {
-                        $bce_limit_26 = -2147483648;
+                        $bce_limit_27 = -2147483648;
                     }
-                    $licm_repr_25 = out.repr;
                 }
                 i = i + 1;
                 continue l3;
@@ -235,23 +237,23 @@ fn "sroa_param_snapshot_interior_alias.wado/probe"(sink, h, out) {
     b8: block {
         l9: loop {
             break_if b8 i >= n;
-            $bce_limit_26 = $load_0.used;
-            if @unlikely(i >= $bce_limit_26) {
+            $bce_limit_27 = $load_0.used;
+            if @unlikely(i >= $bce_limit_27) {
                 cold_path;
-                "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(i, $bce_limit_26, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("sroa_param_snapshot_interior_alias.wado:21"), used: 42 });
+                "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(i, $bce_limit_27, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("sroa_param_snapshot_interior_alias.wado:21"), used: 42 });
                 unreachable;
             }
-            value_11 = builtin::array_get_value<i32>($load_0.repr, i);
-            if @unlikely(local.tee used(out.used) >= builtin::array_len($licm_repr_25)) {
+            value_11 = builtin::array_get_value<i32>($licm_repr_25, i);
+            if @unlikely(local.tee used(out.used) >= builtin::array_len($licm_repr_26)) {
                 cold_path;
                 "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(out);
-                $licm_repr_25 = out.repr;
+                $licm_repr_25 = $load_0.repr;
+                $licm_repr_26 = out.repr;
             }
-            builtin::array_set<i32>($licm_repr_25, used, value_11);
+            builtin::array_set<i32>($licm_repr_26, used, value_11);
             out.used = used + 1;
             if i == 0 {
                 "sroa_param_snapshot_interior_alias.wado/shrink"(sink);
-                $licm_repr_25 = out.repr;
             }
             i = i + 1;
             continue l9;
