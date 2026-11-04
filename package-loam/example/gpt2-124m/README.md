@@ -43,7 +43,7 @@ each token after it run through one set of weights, and the model keeps the
 attention cache between calls. The build downloads it once into Wado's cache.
 Its weights are in the file, so
 `embed: false` leaves them there: the build reads past them, and
-`Prepared::load` reads them from the same file at run time. A program reaches no
+`Params::load` reads them from the same file at run time. A program reaches no
 file the build read, so `fetch.sh` downloads the model as `model.onnx`, which
 Git ignores.
 

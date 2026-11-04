@@ -71,14 +71,14 @@ Both devices are fastest under the same conditions:
 They differ in one thing: who fuses and schedules. On a TPU that is XLA. On
 WebGPU it is Loam.
 
-### Why the current seam cannot reach this
+### Why a sequence of kernel calls cannot reach this
 
-`forward<Bk: Backend>` is a sequence of kernel calls that runs on every call.
-The generator's plan has already fused those kernels for WebGPU's dispatch
+The WEP's seam is a generated sequence of kernel calls over a `Backend` trait,
+run on every call, its kernels fused by the generator for WebGPU's dispatch
 count. So:
 
 - A whole-program compiler gets the graph back only by recording the calls and
-  undoing the fusion the plan did. The graph existed at build time, and the
+  undoing the generator's fusion. The graph existed at build time, and the
   seam threw it away.
 - The trait's methods follow WebGPU's fusion: products with prologues,
   products in pairs, concatenated weights. Each new fusion adds methods that
@@ -114,8 +114,7 @@ rather than computing, it adds nodes to a graph. `build<G: Graph>` takes the
 inputs, the weights and the cache as nodes of `G`, and returns the outputs.
 
 `Graph` is a trait whose methods are the operations below, each typed by its
-axes as the kernels are today. A tensor is `G::Tensor<E, Axes>`, a node of the
-graph being built.
+axes. A tensor is `G::Tensor<E, Axes>`, a node of the graph being built.
 
 - A device backend's `Graph` records the nodes. The runtime runs `build` once
   per shape class and hands the recorded graph to the device's compiler.
@@ -127,18 +126,18 @@ graph being built.
   a recorded graph on `Cpu` node by node, so a compiled program has something
   to agree with.
 - `WebGpuBackend`'s `Graph` computes each node as it is added, as `Cpu`'s
-  does, through the kernels `forward` dispatches. Its `compiled` records the
-  pass, folds the nodes that read no argument on `Cpu`, and groups the rest
-  into kernels (`src/runtime/fusion.wado`); `executed` launches them. A
-  generated `compute` keeps one program per shape class in the caller's
-  `Model`. `conformance/webgpu_graph.wado` holds both to `Cpu` on the graphs
-  in `src/runtime/graph_cases.wado` and on `gated`.
+  does, through its device kernels. Its `compiled` records the pass, folds the
+  nodes that read no argument on `Cpu`, and groups the rest into kernels
+  (`src/runtime/fusion.wado`); `executed` launches them. A generated `compute`
+  keeps one program per shape class in the caller's `Model`.
+  `conformance/webgpu_graph.wado` holds both to `Cpu` on the graphs in
+  `src/runtime/graph_cases.wado` and on `gated`.
 
-`Holds` is what a backend and a graph share: a tensor type, `upload`,
-`extents_of`, and the pass `begin` starts and `retain` keeps a tensor through. `Backend` and `Graph` both extend it, so `Cache<H>` and
-`Passed<H>` serve the kernels' `pass` and the graph's `build` alike until the
-WebGPU compiler replaces `pass`. The weights a graph reads are `Params<G>`, each
-a tensor of the graph in the element type it computes in.
+`Holds` is how a graph holds a tensor: a tensor type, `upload`, `extents_of`,
+and the pass `begin` starts and `retain` keeps a tensor through. `Graph`
+extends it, and `Cache<H>` and `Passed<H>` are generic over it. The weights a
+graph reads are `Params<G>`, each a tensor of the graph in the element type it
+computes in.
 
 An operation whose output axes are not its operands' takes them as a type
 argument, as `reshape` does, and the generator spells them. Wado's packs cannot
@@ -396,7 +395,7 @@ for each row.
 
 ### The loop around the model runs on the device
 
-The generated module offers a decoding program beside `forward`. It composes the
+The generated module offers a decoding program beside `compute`. It composes the
 model with a sampler and feeds the token the sampler picks back into the next
 step, for a number of steps the caller gives. It returns the token ids and
 nothing else.
@@ -443,14 +442,14 @@ and a program for each shape class it has met. The caller owns it, and
 
 ### What a call does
 
-1. Check the inputs against the graph, as `forward` does now, and each valid
-   length against its capacity.
+1. Check the inputs against the graph, and each valid length against its
+   capacity.
 2. Find the shape class's program in the model, building and compiling it on
    first use.
 3. Write the inputs and the per-call values.
 4. Run the program.
 5. Read back what it returns: token ids from a decoding program, the outputs
-   the caller asked for from `forward`.
+   the caller asked for from `compute`.
 
 ### What this changes
 
@@ -506,10 +505,12 @@ and a program for each shape class it has met. The caller owns it, and
      recorded beside the device's.
    - [ ] An `If` on a value as indirect dispatches, with no condition read
      back.
-   - [ ] The merged tiny GPT-2's `compute`.
-   - [ ] Gemma 3's `compute` at most the `pass`'s time per token
-     ([measured](#gemma-3-on-webgpu)), then `plan.wado` and the fused `Backend`
-     methods deleted.
+   - [x] The merged tiny GPT-2's `compute`, its lengths padded. An `If` on an
+     input takes its branch on the host.
+   - [x] Every caller on `compute`; the generator's plan, the kernel pass and
+     the `Backend` trait deleted.
+   - [ ] Gemma 3's `compute` at most the kernel pass's last measured time per
+     token ([measured](#gemma-3-on-webgpu)).
 5. [ ] Attention matched from its parts. Finished when GPT-2's attention runs
    as the composite on `WebGpuBackend` with onnxruntime's tokens, and its
    dispatches a layer are recorded beside the ten
@@ -529,19 +530,19 @@ and a program for each shape class it has met. The caller owns it, and
 ### The graph on the CPU
 
 Gemma 3 (270M) picking `generate.json`'s tokens greedily on `Cpu`, the test
-CPU time of each entry, the weights' loading included:
+CPU time of each entry, the weights' loading included. The kernel pass was
+measured before its deletion, by the same test running it:
 
-| Entry                                        | Ratio to `pass` |
-| -------------------------------------------- | --------------- |
-| `pass`, the kernels                          | 1               |
-| `compute`, the graph's ops at the capacities | 0.89            |
+| Entry                                        | Ratio to the kernel pass |
+| -------------------------------------------- | ------------------------ |
+| the kernel pass                              | 1                        |
+| `compute`, the graph's ops at the capacities | 0.89                     |
 
-Each is one test of `example/gemma3-270m/generate_test.wado`, run alone:
+`compute` is the one test of `example/gemma3-270m/generate_test.wado`:
 
 ```sh
 cd package-loam/example
-wado test --collector drc gemma3-270m/generate_test.wado --test-name greedily
-wado test --collector drc gemma3-270m/generate_test.wado --test-name "graph build"
+wado test --collector drc gemma3-270m/generate_test.wado
 ```
 
 ### Gemma 3 on WebGPU
@@ -551,32 +552,35 @@ after the prompt's first. Every entry picks onnxruntime's tokens. The device is
 an RTX 4060 Ti under Vulkan, and `wado run-webgpu` is the `dev` build of
 `wado-run-webgpu`. onnxruntime is `generate.mjs` on `onnxruntime-node`, on the
 CPU and on its WebGPU provider, which keeps the attention cache on the device
-and reads back the logits. The range spans the two prompts.
+and reads back the logits. The range spans the two prompts. The kernel pass
+was measured before its deletion, by the same program running it:
 
 | Entry                                             | Time a token, onnxruntime on the CPU as 1 | Dispatches a token | Read backs a token |
 | ------------------------------------------------- | ----------------------------------------- | ------------------ | ------------------ |
-| `pass`, the kernels                               | 0.17–0.20                                 | 204                | 1                  |
-| `compute`, the compiled program at the capacities | 0.25–0.34                                 | 275–280            | 1                  |
+| the kernel pass                                   | 0.17–0.20                                 | 204                | 1                  |
+| `compute`, the compiled program at the capacities | 0.15–0.23                                 | 203                | 1                  |
 | onnxruntime on WebGPU                             | 0.34–0.75                                 |                    |                    |
 | onnxruntime on the CPU                            | 1                                         |                    |                    |
 
 onnxruntime on WebGPU reads near 0.35 on the first prompt, and near 0.35 or
 near 0.75 on the second from one run to the next. Both Loam entries rank the
-logits on the device and read back one index, `compute` through the generator's
-`arg_max` option, on the kernel `pass` runs. `compute` runs the products of one
-input as one, and replays each fused kernel's dispatches as the call before encoded
-them. It replays the attention too, with the positions' parameters set anew,
-where a decode step appends to the cache in place. It encodes the gather again
-on every call, since it reads a value on the host.
+logits on the device and read back one index, through the generator's
+`arg_max` option. `compute` runs the products of one input as one, and replays
+each fused kernel's dispatches as the call before encoded them. It replays the
+attention too, with the positions' parameters set anew, where a decode step
+appends to the cache in place. It encodes the gather again on every call, since
+it reads a value on the host.
 
-Each Loam entry is one program in `example/gemma3-270m`, which prints each
+`compute`'s entry is `example/gemma3-270m/webgpu.wado`, which prints each
 prompt's time a token beside onnxruntime's on both:
 
 ```sh
 cd package-loam/example/gemma3-270m
 wado run-webgpu -O2 webgpu.wado
-wado run-webgpu -O2 webgpu_compute.wado
 ```
+
+[The benchmarks](./benchmark/README.md#gemma-3-270m) time the first prompt on
+release builds, `compute` beside the kernel pass's last time.
 
 ## Known gaps
 
@@ -585,6 +589,10 @@ wado run-webgpu -O2 webgpu_compute.wado
 - `build` cannot check what the graph owes over a padded length, which only
   `compute` knows on the host. A caller of `build` vouches for it.
 - `compute` takes no capacities from the caller.
+- GPT-2 (124M)'s `compute` on `WebGpuBackend` takes 2.5 times the kernel
+  pass's time a token, and on `Cpu` 1.9 times; Gemma 3's on `Cpu` 4 times
+  ([measured](./webgpu.md#measurements)). `Cpu` reads each weight from a
+  `List`, where the kernel pass read packed vectors from linear memory.
 - On `Cpu` a pass still copies the cache it writes into, since `scatter`
   returns a new tensor. Writing in place waits for the device compiler,
   which plans the memory.
