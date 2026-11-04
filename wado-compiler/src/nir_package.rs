@@ -204,12 +204,7 @@ pub struct NirPackage {
     pub specialization_cap: Option<SpecializationCapHit>,
     /// What the inliner decided each round, where `wado dump --inline-decisions`
     /// asked for it.
-<<<<<<< HEAD
-    pub inline_log: Option<crate::optimize::InlineLog>,
-||||||| fd132d8d789
-=======
     pub inline_log: Option<InlineLog>,
->>>>>>> origin/main
     /// When true, skip Wasm validation after code generation.
     pub skip_validation: bool,
     /// Target world fully-qualified name (e.g., "wasi:cli/command", "wasi:http/service")

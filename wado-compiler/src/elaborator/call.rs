@@ -4299,42 +4299,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 SigChoice::Any,
                 &expected_args,
             )
-<<<<<<< HEAD
-            .map_or(0, |sig| sig.own_type_params().len());
-        // The receiver's own level is inferred whatever the turbofish writes,
-        // since it names only the method's.
-        let (impl_args, inferred) = self.infer_static_call_type_args(
-            callee.type_name,
-            callee.method_name,
-            raw_args,
-            args,
-            expected_type,
-            span,
-            callee.receiver_key,
-        );
-        if written.is_empty() || turbofish_leaves_slot(&written, own_slots) {
-            merge_turbofish_type_args(&mut written, &inferred);
-        }
-        let mut method_args = written;
-||||||| fd132d8d789
-            .map_or(0, |sig| sig.own_type_params().len());
-        let (impl_args, mut method_args) =
-            if !written.is_empty() && !turbofish_leaves_slot(&written, own_slots) {
-                (Vec::new(), written)
-            } else {
-                let (impl_args, inferred) = self.infer_static_call_type_args(
-                    callee.type_name,
-                    callee.method_name,
-                    raw_args,
-                    args,
-                    expected_type,
-                    span,
-                    callee.receiver_key,
-                );
-                merge_turbofish_type_args(&mut written, &inferred);
-                (impl_args, written)
-            };
-=======
             .map_or([0, 0], |sig| {
                 [
                     sig.declaring_type_params().len(),
@@ -4361,7 +4325,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
             (impl_args, written)
         };
->>>>>>> origin/main
         // A method-level parameter bound only through another's associated
         // type (`..V` off `Holes`) is projected once the owner is inferred, as
         // the free-function path does; the bound check then sees it concrete.

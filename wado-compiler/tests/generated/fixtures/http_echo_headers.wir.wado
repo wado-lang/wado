@@ -764,28 +764,10 @@ fn "http_echo_headers.wado/$cm_binding__wasi:http/types@0.3.0#[method]fields.get
     let $elem_addr: i32;
     let $base_13: i32;
     let $result_15: ref "core:prelude//List<u8>";
-<<<<<<< HEAD
-    let bytes: ref Array<u8>;
-    let ptr_19: i32;
-    bytes = name.repr;
-    ptr_19 = "mem/realloc"(0, 0, 1, 6);
-    "core:rt/gc_array_to_memory$spec0$dae[src_start]$spec0$dae[len]"(bytes, ptr_19);
-||||||| fd132d8d789
-    let $i_16: i32;
-    let bytes: ref Array<u8>;
-    let ptr_21: i32;
-    let value_29: u8;
-    let used_30: i32;
-    bytes = name.repr;
-    ptr_21 = "mem/realloc"(0, 0, 1, 6);
-    "core:rt/gc_array_to_memory$spec0$dae[src_start]$spec0$dae[len]"(bytes, ptr_21);
-    ptr_21 = builtin::i32_wrap_i64(local.tee $name_packed(builtin::i64_extend_i32_u(ptr_21) | 25769803776_i64));
-=======
     let ptr_19: i32;
     let arr: ref Array<u8>;
     ptr_19 = "mem/realloc"(0, 0, 1, 6);
     "core:rt/gc_array_to_memory$spec0$dae[src_start]$spec0$dae[len]"(name.repr, ptr_19);
->>>>>>> origin/main
     ptr_19 = builtin::i32_wrap_i64(local.tee $name_packed(builtin::i64_extend_i32_u(ptr_19) | 25769803776_i64));
     $name_flat1 = builtin::i32_wrap_i64($name_packed >> 32_i64);
     $outptr = "mem/realloc"(0, 0, 4, 8);
@@ -800,34 +782,8 @@ fn "http_echo_headers.wado/$cm_binding__wasi:http/types@0.3.0#[method]fields.get
         l80: loop {
             break_if b79 $name_flat1 >= ptr_19;
             $base_13 = builtin::load_i32(local.tee $elem_addr(self + ($name_flat1 * 8)));
-<<<<<<< HEAD
-            "core:rt/memory_into_gc_array$dae[at]"(local.tee bytes(builtin::array_new<u8>(local.tee $elem_addr(builtin::load_i32($elem_addr + 4)))), $base_13, $elem_addr);
-            $result_15 = struct.new "core:prelude//List<u8>" { repr: bytes, used: $elem_addr };
-||||||| fd132d8d789
-            break_if b79 $name_flat1 >= ptr_21;
-            $base_13 = builtin::load_i32(local.tee $elem_addr_12(self + ($name_flat1 * 8)));
-            $result_15 = struct.new "core:prelude//List<u8>" { repr: builtin::array_new<u8>(local.tee $elem_addr_12(builtin::load_i32($elem_addr_12 + 4))), used: 0 };
-            $i_16 = 0;
-            b81: block {
-                l82: loop {
-                    break_if b81 $i_16 >= $elem_addr_12;
-                    value_29 = builtin::load_u8($base_13 + $i_16);
-                    if @unlikely(local.tee used_30($result_15.used) >= builtin::array_len($result_15.repr)) {
-                        cold_path;
-                        "core:prelude/list.wado/core:prelude/list.wado/List<u8>::grow"($result_15);
-                    }
-                    builtin::array_set_u8($result_15.repr, used_30, value_29);
-                    $result_15.used = used_30 + 1;
-                    $i_16 = $i_16 + 1;
-                    continue l82;
-                };
-            };
-            if $elem_addr_12 > 0 {
-                drop("mem/realloc"($base_13, $elem_addr_12, 1, 0));
-=======
             "core:rt/memory_into_gc_array$dae[at]"(local.tee arr(builtin::array_new<u8>(local.tee $elem_addr(builtin::load_i32($elem_addr + 4)))), $base_13, $elem_addr);
             $result_15 = struct.new "core:prelude//List<u8>" { repr: arr, used: $elem_addr };
->>>>>>> origin/main
             if $elem_addr > 0 {
                 drop("mem/realloc"($base_13, $elem_addr, 1, 0));
             }

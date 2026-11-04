@@ -538,13 +538,8 @@ fn future_and_stream_map_to_wit() {
 fn cm_catalog_matches_committed_wit() {
     let source = include_str!("../../../package-cm-catalog/src/lib.wado");
     let expected = include_str!("../../../package-cm-catalog/cm-catalog.wit");
-<<<<<<< HEAD
-    // The library world `wado wit --lib` emits for the package.
-||||||| fd132d8d789
-=======
     // The library world `wado wit --lib` emits, without the imports the
     // compiled component makes.
->>>>>>> origin/main
     let text = emit_with_contract(
         source,
         wit_emit::wit_contract(None, Some("wado-lang:cm-catalog/cm-catalog"), None),
@@ -553,13 +548,7 @@ fn cm_catalog_matches_committed_wit() {
     assert_eq!(
         text.trim_end(),
         expected.trim_end(),
-<<<<<<< HEAD
-        "cm-catalog.wit is stale; regenerate with `wado wit --lib -o cm-catalog.wit` in package-cm-catalog\n--- emitted ---\n{text}"
-||||||| fd132d8d789
-        "cm-catalog.wit is stale; regenerate with `wado wit package-cm-catalog/src/lib.wado`\n--- emitted ---\n{text}"
-=======
         "cm-catalog.wit is stale; replace it with the emitted text\n--- emitted ---\n{text}"
->>>>>>> origin/main
     );
     let mut resolve = wit_parser::Resolve::new();
     resolve

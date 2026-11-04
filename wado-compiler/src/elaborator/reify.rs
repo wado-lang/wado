@@ -2112,32 +2112,11 @@ impl<'a> Reify<'a> {
     /// that takes one on some path is left alone: a `let … else` desugars to
     /// such a `match`, and marking it made the rest of its block cold to the
     /// inliner.
-<<<<<<< HEAD
-    fn mark_diverging_stmts(&self, stmts: Vec<TirStmt>) -> Vec<TirStmt> {
-||||||| fd132d8d789
-    /// builds. A `return` / `break` ends a path too, but a normal exit is not a
-    /// cold one, so it is left alone, and so is a `!` statement that takes one
-    /// on some path: a `let … else` desugars to such a `match`.
-    fn mark_diverging_stmts(&self, stmts: Vec<TirStmt>) -> Vec<TirStmt> {
-=======
     fn mark_diverging_stmts(&self, mut stmts: Vec<TirStmt>) -> Vec<TirStmt> {
->>>>>>> origin/main
         let tt = self.tysys.type_table.borrow();
-<<<<<<< HEAD
-        let diverges = |s: &TirStmt| {
-            matches!(&s.kind, TirStmtKind::Expr(e) if tt.is_never(e.type_id)) && traps(s)
-        };
-        if !stmts.iter().any(diverges) {
-||||||| fd132d8d789
-        let diverges = |s: &TirStmt| {
-            matches!(&s.kind, TirStmtKind::Expr(e) if tt.is_never(e.type_id)) && !exits_normally(s)
-        };
-        if !stmts.iter().any(diverges) {
-=======
         let Some(first) = stmts.iter().position(|s| {
             matches!(&s.kind, TirStmtKind::Expr(e) if tt.is_never(e.type_id)) && traps(s)
         }) else {
->>>>>>> origin/main
             return stmts;
         };
         // A marker makes its whole basic block cold, so one per block is all

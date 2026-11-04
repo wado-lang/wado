@@ -1512,13 +1512,7 @@ enum ColdBy {
     /// The statement opening the cold run the site is in, which a marker's
     /// path passes through.
     Run(Span),
-<<<<<<< HEAD
-    /// No live caller calls the function outside a cold run.
-||||||| fd132d8d789
-    Cold,
-=======
     /// Every path into the function passes a cold run.
->>>>>>> origin/main
     Callers,
 }
 
@@ -1535,41 +1529,6 @@ impl Site {
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 enum Basis {
     NoBody,
-<<<<<<< HEAD
-    /// On a call cycle splicing would expand without bound.
-    OnCycle,
-    /// `#[inline(never)]`.
-    NeverHint,
-    /// A CM binding, which stays a function of its own.
-    CmBinding,
-    /// It returns `!`: an error path, never hot.
-    Diverges,
-    /// `#[inline(always)]`.
-    Forced,
-    /// Its net price is under the threshold.
-    Fits,
-    /// The constants every caller passes fold it under the threshold.
-    Folds,
-    /// Its net price is over [`PAYBACK_FACTOR`] times the threshold.
-    OverPayback,
-    /// Under the payback bound, but it reaches a safepoint: one site outside a
-    /// loop, where the body holds none, or nowhere.
-    Safepoint {
-        sole_and_loop_free: bool,
-    },
-    /// Under the payback bound: its one site, or its sites in loops.
-    Payback {
-        sole: bool,
-    },
-}
-
-impl Basis {
-    fn reach(self) -> Reach {
-        match self {
-            Basis::NoBody
-            | Basis::OnCycle
-||||||| fd132d8d789
-=======
     /// The member a call cycle is cut at, which splicing around the cycle
     /// would expand without bound.
     CycleCut,
@@ -1603,7 +1562,6 @@ impl Basis {
         match self {
             Basis::NoBody
             | Basis::CycleCut
->>>>>>> origin/main
             | Basis::NeverHint
             | Basis::CmBinding
             | Basis::Diverges
@@ -1648,15 +1606,7 @@ enum Refusal {
 struct Verdict {
     /// The hot price the verdict was reached on, or `None` for a callee turned
     /// down before it was priced at all.
-<<<<<<< HEAD
-    hot: usize,
-||||||| fd132d8d789
-    hot: usize,
-    /// Which of its call sites splice it.
-    reach: Reach,
-=======
     hot: Option<usize>,
->>>>>>> origin/main
     /// Why its call sites splice it where they do.
     basis: Basis,
     /// Keep it as a template: splice nothing *into* it.
@@ -1671,19 +1621,12 @@ struct Verdict {
 impl Verdict {
     /// A verdict reached before any price was taken.
     fn unpriced(basis: Basis) -> Self {
-<<<<<<< HEAD
-        Verdict {
-            hot: 0,
-||||||| fd132d8d789
-/// Whether this pass declines `func` outright, before any price is taken. The
-=======
         assert!(
             basis.reach() == Reach::Nowhere,
             "a callee splicing admits is priced"
         );
         Verdict {
             hot: None,
->>>>>>> origin/main
             basis,
             hold: false,
         }
@@ -1702,35 +1645,13 @@ fn splice_barred(
     cycle_cuts: &IndexSet<FuncId>,
     type_table: &TypeTable,
 ) -> Option<Basis> {
-<<<<<<< HEAD
-    // Recursion is barred ahead of the `#[inline(always)]` short-circuit in
-    // `never_spliced`: splicing a recursive call only exposes the next one, so a
-||||||| fd132d8d789
-) -> bool {
-    // Recursion is barred ahead of the `#[inline(always)]` short-circuit in
-    // `never_spliced`: splicing a recursive call only exposes the next one, so a
-=======
     // A cut is barred ahead of the `#[inline(always)]` short-circuit in
     // `never_spliced`: splicing around a cycle only exposes the next call, so a
->>>>>>> origin/main
     // force would expand without bound over the fixed point (a compiler stack
-<<<<<<< HEAD
-    // overflow at higher iteration counts). A bridge is the exception
-    // `splice_barred_cycle_members` proves bounded. Keyed on `FuncId`, the
-    // identity the set is built on, so a cross-module cycle is not missed.
-    if func.id.is_some_and(|id| barred_cycle_members.contains(&id)) {
-        return Some(Basis::OnCycle);
-||||||| fd132d8d789
-    // overflow at higher iteration counts). A bridge is the exception
-    // `splice_barred_cycle_members` proves bounded. Keyed on `FuncId`, the
-    // identity the set is built on, so a cross-module cycle is not missed.
-    func.id.is_some_and(|id| barred_cycle_members.contains(&id)) || never_spliced(func, type_table)
-=======
     // overflow at higher iteration counts). Keyed on `FuncId`, the identity the
     // set is built on, so a cross-module cycle is not missed.
     if func.id.is_some_and(|id| cycle_cuts.contains(&id)) {
         return Some(Basis::CycleCut);
->>>>>>> origin/main
     }
     never_spliced(func, type_table)
 }
@@ -1789,14 +1710,7 @@ fn classify_callee(
         return Verdict::unpriced(Basis::NoBody);
     };
 
-<<<<<<< HEAD
-    if let Some(basis) = splice_barred(func, barred_cycle_members, type_table) {
-||||||| fd132d8d789
-    if splice_barred(func, barred_cycle_members, type_table) {
-        return Verdict::default();
-=======
     if let Some(basis) = splice_barred(func, cycle_cuts, type_table) {
->>>>>>> origin/main
         return Verdict::unpriced(basis);
     }
 
@@ -1804,21 +1718,11 @@ fn classify_callee(
     // #[inline(always)] skips the remaining heuristic checks (but still requires
     // a body and passes `splice_barred`, both checked above)
     if func.inline_hint == InlineHint::Always {
-<<<<<<< HEAD
-        return Verdict::unpriced(Basis::Forced);
-||||||| fd132d8d789
-        return Verdict {
-            hot: 0,
-            reach: Reach::Everywhere,
-            hold: false,
-        };
-=======
         return Verdict {
             hot: Some(plain),
             basis: Basis::Forced,
             hold: false,
         };
->>>>>>> origin/main
     }
 
     let effective_threshold = effective_threshold(func, inline_threshold);
@@ -1826,14 +1730,7 @@ fn classify_callee(
     let params = func.params.len();
     if net_cost(plain, params) <= effective_threshold {
         return Verdict {
-<<<<<<< HEAD
-            hot: plain,
-||||||| fd132d8d789
-            hot: plain,
-            reach: Reach::Everywhere,
-=======
             hot: Some(plain),
->>>>>>> origin/main
             basis: Basis::Fits,
             hold: false,
         };
@@ -1888,14 +1785,7 @@ fn classify_callee(
         Basis::Payback { sole: sites == 1 }
     };
     Verdict {
-<<<<<<< HEAD
-        hot: plain,
-||||||| fd132d8d789
-        hot: plain,
-        reach,
-=======
         hot: Some(plain),
->>>>>>> origin/main
         basis,
         hold: optimistic_loop,
     }
@@ -2594,13 +2484,7 @@ fn inline_round(
         let Some(body) = func.body.as_ref() else {
             return 0;
         };
-<<<<<<< HEAD
-        if !loopy[i] || splice_barred(&func, &barred_cycle_members, type_table).is_some() {
-||||||| fd132d8d789
-        if !loopy[i] || splice_barred(&func, &barred_cycle_members, type_table) {
-=======
         if !loopy[i] || splice_barred(&func, cycle_cuts, type_table).is_some() {
->>>>>>> origin/main
             return 0;
         }
         let gross = inline_cost(body, type_table, &cold_runs[i], &[]);
@@ -2613,9 +2497,6 @@ fn inline_round(
         }
     });
     let logging: Option<&InlineLog> = record.as_ref().map(|(log, _)| *log);
-<<<<<<< HEAD
-||||||| fd132d8d789
-=======
     // A callee a named caller calls is logged under its own name too: a call
     // turned down before any site saw it leaves no site entry.
     let called_by_named: Vec<bool> = logging.map_or_else(Vec::new, |log| {
@@ -2629,7 +2510,6 @@ fn inline_round(
         }
         called
     });
->>>>>>> origin/main
     let classified = exec.map_indices(functions.len(), |i| {
         let func = functions[i].borrow();
         let runs = &cold_runs[i];
@@ -2674,19 +2554,11 @@ fn inline_round(
             (hot, net_cost(hot, func.params.len()), shrinks, func.clone())
         });
         // A function nothing calls has nothing decided about it.
-<<<<<<< HEAD
-        let logged = logging.is_some_and(|log| call_sites[i] > 0 && log.wants(&func.name));
-        let entry = logged.then(|| CalleeEntry {
-            name: func.name.clone(),
-||||||| fd132d8d789
-        (func.id, size, verdict, candidate)
-=======
         let logged = logging
             .is_some_and(|log| call_sites[i] > 0 && (called_by_named[i] || log.wants(&func.name)));
         let entry = logged.then(|| CalleeEntry {
             name: func.name.clone(),
             module: func.module_source.clone(),
->>>>>>> origin/main
             hot: verdict.hot,
             size: func.body.as_ref().map(|_| size),
             params: func.params.len(),
@@ -2705,13 +2577,7 @@ fn inline_round(
         if let Some(entry) = entry {
             callee_entries.push((id, entry));
         }
-<<<<<<< HEAD
-        let Some((net, shrinks, func)) = candidate else {
-||||||| fd132d8d789
-        let Some((net, shrinks, func)) = candidate else {
-=======
         let Some((hot, net, shrinks, func)) = candidate else {
->>>>>>> origin/main
             continue;
         };
         let id = id.expect("func_id assigned at lower");
@@ -2752,17 +2618,11 @@ fn inline_round(
         round.held = holds
             .held
             .iter()
-<<<<<<< HEAD
-            .map(|id| project.functions[id.index()].borrow().name.clone())
-            .filter(|name| log.wants(name))
-||||||| fd132d8d789
-=======
             .map(|id| {
                 let func = project.functions[id.index()].borrow();
                 (func.name.clone(), func.module_source.clone())
             })
             .filter(|(name, _)| log.wants(name))
->>>>>>> origin/main
             .collect();
         round.callees = callee_entries
             .into_iter()
@@ -3038,15 +2898,6 @@ struct Decisions<'l> {
 }
 
 impl Decisions<'_> {
-<<<<<<< HEAD
-    fn record(&mut self, callee: &str, span: Span, site: Site, refusal: Option<Refusal>) {
-        if self.caller_named || self.log.wants(callee) {
-            self.sites.push(SiteEntry {
-                caller: self.caller.clone(),
-                caller_module: self.caller_module.clone(),
-                callee: callee.to_string(),
-||||||| fd132d8d789
-=======
     fn record(&mut self, callee: &NirFunction, span: Span, site: Site, refusal: Option<Refusal>) {
         if self.caller_named || self.log.wants(&callee.name) {
             self.sites.push(SiteEntry {
@@ -3054,7 +2905,6 @@ impl Decisions<'_> {
                 caller_module: self.caller_module.clone(),
                 callee: callee.name.clone(),
                 callee_module: callee.module_source.clone(),
->>>>>>> origin/main
                 span,
                 site,
                 refusal,
@@ -3642,27 +3492,12 @@ fn try_inline_call_expr(
     .or_else(|| (!candidates.charge(func_id)).then_some(Refusal::RescanSpent));
     let call_span = caller.exprs[call_id].span;
     if let Some(decisions) = frame.decisions.as_mut() {
-<<<<<<< HEAD
-        decisions.record(&candidate.name, call_span, site, refusal);
-    }
-    if refusal.is_some() {
-        return None;
-    }
-    let callee = candidate.body.as_ref()?;
-||||||| fd132d8d789
-    if !candidates.charge(func_id) {
-        return None;
-    }
-    let callee = candidate.body.as_ref()?;
-    let call_span = caller.exprs[call_id].span;
-=======
         decisions.record(candidate, call_span, site, refusal);
     }
     if refusal.is_some() {
         return None;
     }
     let callee = candidate.body.as_ref().expect("a candidate has a body");
->>>>>>> origin/main
     let ExprKind::Call { args, .. } = &caller.exprs[call_id].kind else {
         unreachable!("matched a Call above")
     };

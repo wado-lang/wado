@@ -37,130 +37,6 @@ impl InlineLog {
 
     /// The log as text, each span named by the module whose parse it indexes.
     pub fn render(&self, parses: &ParseModules) -> String {
-<<<<<<< HEAD
-        let mut out = String::new();
-        for (i, round) in self.rounds.iter().enumerate() {
-            round.render(i + 1, parses, &mut out);
-        }
-        out
-    }
-}
-
-/// One run of the inliner.
-#[derive(Debug, Default)]
-pub(super) struct Round {
-    pub threshold: usize,
-    /// What the unit holds as the round starts, or `None` where nothing
-    /// priced it.
-    pub unit_size: Option<usize>,
-    pub held: Vec<String>,
-    pub callees: Vec<CalleeEntry>,
-    pub sites: Vec<SiteEntry>,
-}
-
-#[derive(Debug)]
-pub(super) struct CalleeEntry {
-    pub name: String,
-    pub hot: usize,
-    /// What holding one copy costs, where the round priced it.
-    pub size: Option<usize>,
-    pub params: usize,
-    pub sites: usize,
-    pub basis: Basis,
-    /// Admitted, and then turned down by the growth budget.
-    pub over_budget: bool,
-}
-
-#[derive(Debug)]
-pub(super) struct SiteEntry {
-    pub caller: String,
-    pub caller_module: ModuleSource,
-    pub callee: String,
-    pub span: Span,
-    pub site: Site,
-    pub refusal: Option<Refusal>,
-}
-
-impl Round {
-    fn render(&self, number: usize, parses: &ParseModules, out: &mut String) {
-        if self.held.is_empty() && self.callees.is_empty() && self.sites.is_empty() {
-            return;
-        }
-        let _ = write!(out, "round {number}: threshold {}", self.threshold);
-        if let Some(unit) = self.unit_size {
-            let _ = write!(out, ", unit {unit}");
-        }
-        out.push('\n');
-        if !self.held.is_empty() {
-            let _ = writeln!(out, "  held: {}", self.held.join(", "));
-        }
-        for c in &self.callees {
-            let _ = write!(out, "  callee `{}`: hot {}", c.name, c.hot);
-            if let Some(size) = c.size {
-                let _ = write!(out, ", size {size}");
-            }
-            let _ = write!(
-                out,
-                ", {} params, {} sites -> {}",
-                c.params,
-                c.sites,
-                basis_text(c.basis)
-            );
-            if c.over_budget {
-                out.push_str(", over the growth budget");
-            }
-            out.push('\n');
-        }
-        for s in &self.sites {
-            let at = location(s.span, &s.caller_module, parses);
-            let _ = write!(
-                out,
-                "  site `{}` {at} ({}) -> `{}`: ",
-                s.caller,
-                site_text(s.site, &s.caller_module, parses),
-                s.callee
-            );
-            match s.refusal {
-                None => out.push_str("spliced"),
-                Some(refusal) => {
-                    let _ = write!(out, "declined, {}", refusal_text(refusal));
-                }
-            }
-            out.push('\n');
-        }
-    }
-}
-
-fn location(span: Span, holder: &ModuleSource, parses: &ParseModules) -> String {
-    format!(
-        "{}:{}:{}",
-        parses.module_of_span(span, holder),
-        span.line,
-        span.column
-    )
-}
-
-fn site_text(site: Site, holder: &ModuleSource, parses: &ParseModules) -> String {
-    match site {
-        Site::Plain => "plain".to_string(),
-        Site::Loop => "loop".to_string(),
-        Site::Cold(by) => format!("cold, {}", cold_text(by, holder, parses)),
-    }
-}
-
-fn cold_text(by: ColdBy, holder: &ModuleSource, parses: &ParseModules) -> String {
-    match by {
-        ColdBy::Run(span) => format!("in the run from {}", location(span, holder, parses)),
-        ColdBy::Callers => "every live caller calls it from a cold run".to_string(),
-    }
-}
-
-fn basis_text(basis: Basis) -> &'static str {
-    match basis {
-        Basis::NoBody => "nowhere: no body",
-        Basis::OnCycle => "nowhere: on a call cycle",
-||||||| fd132d8d789
-=======
         if self.rounds.is_empty() {
             return "(no inliner round ran)\n".to_string();
         }
@@ -311,7 +187,6 @@ fn basis_text(basis: Basis) -> &'static str {
     match basis {
         Basis::NoBody => "nowhere: no body",
         Basis::CycleCut => "nowhere: a call cycle is cut here",
->>>>>>> origin/main
         Basis::NeverHint => "nowhere: `#[inline(never)]`",
         Basis::CmBinding => "nowhere: a CM binding",
         Basis::Diverges => "nowhere: it returns `!`",

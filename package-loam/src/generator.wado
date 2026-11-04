@@ -83,24 +83,8 @@ export fn generate(req: Request<Options>) -> Result<Response, KilnError> {
 }
 
 /// An ONNX graph spelled as `spelling`, checked against the checkpoints in its
-<<<<<<< HEAD
 /// inputs, as the module its `compute` runs in.
-fn generate_graph(
-    req: Request<Options>,
-    spelling: Spelling,
-    runtime: &String,
-) -> Result<Response, KilnError> with KilnHost {
-||||||| fd132d8d789
-/// inputs, as the module its `forward` runs in.
-fn generate_graph(
-    req: Request<Options>,
-    spelling: Spelling,
-    runtime: &String,
-) -> Result<Response, KilnError> with KilnHost {
-=======
-/// inputs, as the module its `forward` runs in.
 fn generate_graph(req: Request<Options>, spelling: Spelling, runtime: &String) -> Result<Response, KilnError> {
->>>>>>> origin/main
     if let Some(input) = req.inputs.iter_ref().find(
         |input| !input.type matches { Some("safetensors") | Some("safetensors-index") },
     ) {

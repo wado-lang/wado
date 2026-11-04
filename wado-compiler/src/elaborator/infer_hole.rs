@@ -410,17 +410,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// written `!` answers it, where an inferred one, a diverging arm's, says
     /// nothing.
     pub(super) fn solve_infer_var_as_written(&mut self, var: TypeId, written: TypeId) {
-<<<<<<< HEAD
-        if written != TypeTable::NEVER {
-||||||| fd132d8d789
-=======
         let never = self
             .tysys
             .type_table
             .borrow()
             .same_type(written, TypeTable::NEVER);
         if !never {
->>>>>>> origin/main
             self.solve_infer_var(var, written);
         } else if let Some(slot @ None) = self.infer_holes.solutions.get_mut(&var) {
             *slot = Some(written);
