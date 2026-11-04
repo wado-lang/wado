@@ -221,7 +221,7 @@ impl SymbolNames<'_, '_> {
         };
         let mut collector = DeclCollector {
             sem: self.ctx.sem,
-            module: format!("wado . {} . ", escape_package(&self.module_name(module))),
+            module: format!("wado . {} . ", escape_package(&self.package_name(module))),
             decls: IndexMap::new(),
             owners: Vec::new(),
             bodies: 0,
@@ -251,7 +251,21 @@ impl SymbolNames<'_, '_> {
             None => uri,
         }
     }
+
+    /// The name `module`'s symbols carry. A stdlib file has the import path
+    /// its importers reach it by, so its definitions and their uses share one
+    /// symbol.
+    fn package_name(&self, module: &ModuleSource) -> String {
+        let name = self.module_name(module);
+        name.rsplit_once(STDLIB_DIR)
+            .filter(|(dir, _)| dir.is_empty() || dir.ends_with('/'))
+            .and_then(|(_, file)| wado_compiler::stdlib::import_path_of_file(file))
+            .map_or(name, str::to_string)
+    }
 }
+
+/// Where a checkout of this repository keeps the stdlib sources.
+const STDLIB_DIR: &str = "wado-compiler/lib/";
 
 /// A package name in a SCIP symbol, where a space separates fields.
 fn escape_package(name: &str) -> String {
@@ -747,6 +761,21 @@ mod tests {
             document(ctx, "file:///")
         })
         .await
+    }
+
+    #[test]
+    fn a_stdlib_file_names_its_symbols_by_its_import_path() {
+        futures::executor::block_on(async {
+            let path = "/w/wado-compiler/lib/core/cli.wado";
+            let source = "pub fn greet() -> i32 {\n    return 1;\n}\n";
+            let host = crate::test_support::in_memory_host(&[(path, source)]);
+            let sem = wado_compiler::semantics(source, &host, Some(path)).await;
+            let uri = format!("file://{path}");
+            let ctx = QueryContext::new(&sem, source, &uri, PositionEncoding::Utf32);
+            let d = document(&ctx, "file:///w/");
+            assert_eq!(d.relative_path, "wado-compiler/lib/core/cli.wado");
+            assert_eq!(symbol(&d, "greet").symbol, "wado . core:cli . greet().");
+        });
     }
 
     fn symbol<'d>(d: &'d ScipDocument, name: &str) -> &'d SymbolInformation {
