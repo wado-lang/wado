@@ -15,12 +15,11 @@
 // Run from the repository root, with vendor/test262 checked out:
 // mise run test262-re
 
-import { readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import vm from "node:vm";
+import { acceptsUnderU, corpus, files, root } from "./test262-corpus.mjs";
 
-const root = new URL("..", import.meta.url).pathname;
-const corpus = join(root, "../vendor/test262");
 const dirs = [
   "test/built-ins/RegExp",
   "test/built-ins/String/prototype/match",
@@ -34,20 +33,6 @@ const MAX_SUBJECT = 200;
 const MAX_PATTERN = 200;
 // The first subjects each pattern ran: `\S+` alone is run over every code point.
 const MAX_SUBJECTS = 16;
-
-function* files(dir) {
-  for (const name of readdirSync(dir).sort()) {
-    const path = join(dir, name);
-    if (statSync(path).isDirectory()) {
-      // One test per property over every code point: `core:icu`'s data.
-      if (name !== "generated") {
-        yield* files(path);
-      }
-    } else if (name.endsWith(".js") && !name.includes("_FIXTURE")) {
-      yield path;
-    }
-  }
-}
 
 function metadata(source) {
   const block = /\/\*---([\s\S]*?)---\*\//.exec(source)?.[1] ?? "";
@@ -98,16 +83,29 @@ function asRe(source, flags) {
   }
   const modifiers = [...flags].filter((f) => f === "m" || f === "s").join("");
   const pattern = modifiers ? `(?${modifiers}:${source})` : source;
-  try {
-    new RegExp(pattern, "u");
-  } catch {
-    return null;
-  }
-  return refused(pattern) ? null : pattern;
+  return acceptsUnderU(pattern) && !refused(pattern) ? pattern : null;
 }
 
-const harness = (name) => readFileSync(join(corpus, "harness", name), "utf8");
+const harnesses = new Map();
+const harness = (name) => {
+  if (!harnesses.has(name)) {
+    harnesses.set(name, readFileSync(join(corpus, "harness", name), "utf8"));
+  }
+  return harnesses.get(name);
+};
 const found = new Map();
+const record = (pattern, flags, subject) => {
+  const re = asRe(pattern, flags);
+  if (re === null || subject.length > MAX_SUBJECT || !subject.isWellFormed()) {
+    return;
+  }
+  if (!found.has(re)) {
+    found.set(re, new Set());
+  }
+  if (found.get(re).size < MAX_SUBJECTS) {
+    found.get(re).add(subject);
+  }
+};
 for (const dir of dirs) {
   for (const path of files(join(corpus, dir))) {
     const source = readFileSync(path, "utf8");
@@ -115,18 +113,6 @@ for (const dir of dirs) {
     if (skip) {
       continue;
     }
-    const record = (pattern, flags, subject) => {
-      const re = asRe(pattern, flags);
-      if (re === null || subject.length > MAX_SUBJECT || !subject.isWellFormed()) {
-        return;
-      }
-      if (!found.has(re)) {
-        found.set(re, new Set());
-      }
-      if (found.get(re).size < MAX_SUBJECTS) {
-        found.get(re).add(subject);
-      }
-    };
     const context = vm.createContext({ print() {}, __record: record });
     try {
       vm.runInContext(

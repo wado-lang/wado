@@ -16,6 +16,13 @@ struct Thread {
     entered: i32,
 }
 
+impl Thread {
+    /// The same thread moved on to `pc`, holding `slots`.
+    fn at(&self, pc: i32, slots: List<i32>) -> Thread {
+        return Thread { pc, slots, entered: self.entered };
+    }
+}
+
 /// The threads at one position, and which states they occupy.
 struct Threads {
     list: List<Thread>,
@@ -50,7 +57,7 @@ internal struct Cache {
 
 impl Cache {
     internal fn new(program: &Program) -> Cache {
-        let size = program.states;
+        let size = program.state_base[program.insts.len()];
         let mut fresh: List<i32> = [];
         for let _i of 0..<program.slots {
             fresh.push(-1);
@@ -134,17 +141,16 @@ fn add(program: &Program, text: StrSlice, to: &mut Threads, pc: i32, slots: List
         // entered no longer matters there.
         let entered = if inst matches { Byte(_) | Match } { 0 } else { t.entered };
         let state = program.state_base[t.pc] + entered;
-        assert state < program.states && (t.pc + 1 == program.insts.len() || state < program.state_base[t.pc + 1]);
+        assert state < program.state_base[t.pc + 1];
         if to.seen[state] == to.stamp {
             continue;
         }
         to.seen[state] = to.stamp;
-        let next = |slots: List<i32>| Thread { pc: t.pc + 1, slots, entered: t.entered };
         match inst {
-            Jump(target) => stack.push(Thread { pc: target, slots: t.slots, entered: t.entered }),
+            Jump(target) => stack.push(t.at(target, t.slots)),
             Split([first, second]) => {
-                stack.push(Thread { pc: second, slots: t.slots, entered: t.entered });
-                stack.push(Thread { pc: first, slots: t.slots, entered: t.entered });
+                stack.push(t.at(second, t.slots));
+                stack.push(t.at(first, t.slots));
             },
             Save(slot) => {
                 let mut s = t.slots;
@@ -158,16 +164,16 @@ fn add(program: &Program, text: StrSlice, to: &mut Threads, pc: i32, slots: List
                 for let k of from..<until {
                     s[k] = -1;
                 }
-                stack.push(next(s));
+                stack.push(t.at(t.pc + 1, s));
             },
             Assert(look) => {
                 if holds(look, text, pos) {
-                    stack.push(next(t.slots));
+                    stack.push(t.at(t.pc + 1, t.slots));
                 }
             },
             Progress(slot) => {
                 if t.slots[slot] != pos {
-                    stack.push(next(t.slots));
+                    stack.push(t.at(t.pc + 1, t.slots));
                 }
             },
             Fail => {
