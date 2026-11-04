@@ -987,14 +987,6 @@ impl Expr {
         };
     }
 
-    /// ONNX's `Softmax` of this along its row: each element's exponential,
-    /// less the row's largest first so none overflows, over the row's sum of
-    /// them.
-    pub fn row_softmax(&self) -> Expr {
-        let e = self.binary(BinaryOp::Sub, &self.row(RowOp::Max)).unary(UnaryOp::Exp);
-        return e.binary(BinaryOp::Div, &e.row(RowOp::Sum));
-    }
-
     /// The one value a reducing row kernel writes for a row of no elements,
     /// `operands[k]` the value per row operand `k` holds there, or `None` for
     /// an operand along the row. A fold of nothing is its start, 0.0 for a

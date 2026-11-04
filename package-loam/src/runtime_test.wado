@@ -3,6 +3,7 @@ use {
     Expr,
     Merged,
     Read,
+    RowOp,
     Tensor,
     UnaryOp,
     constant,
@@ -126,7 +127,9 @@ test "a row kernel folds each row to its mean and to its softmax, summing in ord
     let mean = operand(0).row_sum(Option::Some(4.0));
     let reduced = fused_rows::<[Row, Col], [Row, Col]>(&reads, &mean, 1, true, x.extents);
     assert reduced.extents == [2, 1] as List<i32>;
-    let normalized = fused_rows::<[Row, Col], [Row, Col]>(&reads, &operand(0).row_softmax(), 1, false, x.extents);
+    let e = operand(0).binary(BinaryOp::Sub, &operand(0).row(RowOp::Max)).unary(UnaryOp::Exp);
+    let softmax = e.binary(BinaryOp::Div, &e.row(RowOp::Sum));
+    let normalized = fused_rows::<[Row, Col], [Row, Col]>(&reads, &softmax, 1, false, x.extents);
     for let r of 0..<2 {
         let row = data[r * 4..<r * 4 + 4].to_list();
         let mut sum: f32 = 0.0;
