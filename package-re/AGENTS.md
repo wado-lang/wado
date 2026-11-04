@@ -25,6 +25,7 @@ from ECMA-262's tables or from an engine, `core:icu` is right.
 - `src/program.wado` — the tree compiled to Pike VM instructions over bytes.
 - `src/pike.wado` — the Pike VM.
 - `src/regex.wado` — `Regex`, its searches, `replace` and `split`.
+- `src/template.wado` — the tags `re` and `rex`, and `PatternPart`.
 
 ## Running tests
 

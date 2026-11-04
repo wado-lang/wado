@@ -1,5 +1,5 @@
-use { ClassItem, Flag, Node } from "../src/ast.wado";
-use { Syntax, parse } from "../src/parse.wado";
+use { ClassItem, Flag, Group, Node } from "../src/ast.wado";
+use { Hole, PatternError, Syntax, parse } from "../src/parse.wado";
 
 fn code(c: u32) -> String {
     if c > 0x20 && c < 0x7F {
@@ -96,6 +96,61 @@ fn ext(pattern: String) -> String {
 
 fn error(pattern: String) -> String {
     return `${parse(pattern.as_str_slice(), Syntax::Plain).unwrap_err()}`;
+}
+
+/// `pattern` with a hole holding the group `(H)`, or `(?<h>H)` where `named`,
+/// at each of `offsets`.
+fn holed(
+    pattern: String,
+    offsets: List<i32>,
+    syntax: Syntax = Syntax::Plain,
+    named: bool = false,
+) -> Result<[Node, i32], PatternError> {
+    let mut holes: List<Hole> = [];
+    for let offset of offsets {
+        let name: Option<String> = if named { Some("h") } else { null };
+        let node = Node::Group(Group {
+            index: Some(1),
+            name,
+            body: Node::Char('H' as u32),
+        });
+        holes.push(Hole { offset, node });
+    }
+    return parse(pattern.as_str_slice(), syntax, holes);
+}
+
+fn holed_tree(pattern: String, offsets: List<i32>) -> String {
+    let [node, groups] = holed(pattern, offsets).unwrap();
+    return `${groups} ${show(&node)}`;
+}
+
+fn holed_error(pattern: String, offsets: List<i32>, syntax: Syntax = Syntax::Plain, named: bool = false) -> String {
+    return `${holed(pattern, offsets, syntax, named).unwrap_err()}`;
+}
+
+test "a hole is an atom, its groups numbered where it stands" {
+    assert holed_tree("a*", [1]) == "1 (cat a {0, (1 H)})";
+    assert holed_tree("(x)", [0, 3, 3]) == "4 (cat (1 H) (2 x) (3 H) (4 H))";
+    assert holed_tree("|", [1]) == "1 (alt (cat ) (1 H))";
+    // A hole parts the halves of a surrogate pair.
+    assert holed_tree("\\uD800\\uDC00", [6]) == "1 (cat U+D800 (1 H) U+DC00)";
+}
+
+test "a hole stands only where an atom may" {
+    let message = "a hole may stand only where an atom may";
+    assert holed_error("[]", [1]) == `${message} (at byte 1)`;
+    assert holed_error("\\", [1]) == `${message} (at byte 1)`;
+    assert holed_error("a{}", [2]) == `${message} (at byte 2)`;
+    assert holed_error("(?<>a)", [3]) == `${message} (at byte 3)`;
+    assert holed_error("(?:)", [2]) == `${message} (at byte 2)`;
+    assert holed_error("x # c", [5], Syntax::Extended) == `${message} (at byte 5)`;
+    assert holed_error("x # c\n", [5], Syntax::Extended) == `${message} (at byte 5)`;
+}
+
+test "a hole's group names are checked against the pattern's" {
+    assert holed_error("(?<h>a)", [7], Syntax::Plain, true) == "two groups are named `h` (at byte 7)";
+    assert holed_error("(?<h>a)", [0], Syntax::Plain, true) == "two groups are named `h` (at byte 0)";
+    assert holed_error("", [0, 0], Syntax::Plain, true) == "two groups are named `h` (at byte 0)";
 }
 
 test "a sequence, an alternation and the empty pattern" {

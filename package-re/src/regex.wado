@@ -1,7 +1,7 @@
 //! `Regex` and what a search answers.
 
 use { Node } from "./ast.wado";
-use { PatternError, Syntax, parse } from "./parse.wado";
+use { Hole, PatternError, Syntax, parse } from "./parse.wado";
 use { search } from "./pike.wado";
 use { Program, compile } from "./program.wado";
 
@@ -10,6 +10,18 @@ pub struct Regex {
     program: Program,
     /// The name of each group, by index; group 0 has none.
     names: List<Option<String>>,
+    /// What a template splices where this stands in a hole.
+    internal tree: Node,
+    /// The pattern as written, each hole spelled as pattern syntax.
+    internal source: String,
+}
+
+/// The pattern, for reading. A template's holes appear as escaped text and
+/// as non-capturing groups.
+impl Display for Regex {
+    fn fmt(&self, f: &mut Formatter) {
+        f.write_str(&self.source);
+    }
 }
 
 /// Records each named group's name at its index in `names`.
@@ -33,14 +45,14 @@ fn collect_names(node: &Node, names: &mut List<Option<String>>) {
     }
 }
 
-internal fn build(pattern: StrSlice, syntax: Syntax) -> Result<Regex, PatternError> {
-    let [node, groups] = parse(pattern, syntax)?;
+internal fn build(pattern: StrSlice, syntax: Syntax, holes: List<Hole>, source: String) -> Result<Regex, PatternError> {
+    let [tree, groups] = parse(pattern, syntax, holes)?;
     let mut names: List<Option<String>> = [];
     for let _i of 0..=groups {
         names.push(null);
     }
-    collect_names(&node, &mut names);
-    return Ok(Regex { program: compile(&node, groups)?, names });
+    collect_names(&tree, &mut names);
+    return Ok(Regex { program: compile(&tree, groups)?, names, tree, source });
 }
 
 impl Regex {
@@ -55,7 +67,8 @@ impl Regex {
 
     /// The regular expression `pattern` spells, or why it spells none.
     pub fn new<S: AsStrSlice>(pattern: S) -> Result<Regex, PatternError> {
-        return build(pattern.as_str_slice(), Syntax::Plain);
+        let view = pattern.as_str_slice();
+        return build(view, Syntax::Plain, [], view.to_string());
     }
 
     /// Whether `text` holds a match.

@@ -1,0 +1,107 @@
+use { Regex, re, rex } from "../src/lib.wado";
+
+fn groups(regex: &Regex, text: String) -> String {
+    let Some(caps) = regex.captures(text) else {
+        return "none";
+    };
+    let mut parts: List<String> = [];
+    for let i of 0..<caps.len() {
+        parts.push(match caps[i] {
+            Some(m) => `${m.as_str()}`,
+            None => "-",
+        });
+    }
+    return parts.join(",");
+}
+
+test "a raw template is the pattern as written" {
+    let date = re#`(?<y>\d{4})-(?<m>\d{2})`#;
+    assert groups(&date, "on 2026-11 at") == "2026-11,2026,11";
+}
+
+test "rex ignores whitespace and comments" {
+    let float = rex#`
+        ^ [+-]?
+        ( \d+ (\.\d*)? | \.\d+ )   # mantissa
+        ( [eE] [+-]? \d+ )?        # exponent
+        $
+    `#;
+    assert float.is_match("-1.5e10");
+    assert float.is_match(".5");
+    assert !float.is_match("1 .5");
+    assert rex#`a\ b [#] \#`#.is_match("a b##");
+}
+
+test "a text hole matches its text" {
+    let prefix = "a.b*";
+    let r = re#`^${prefix}+$`#;
+    assert r.is_match("a.b*");
+    assert r.is_match("a.b*a.b*");
+    assert !r.is_match("axbb");
+    let dot = '.';
+    assert re#`x${dot}y`#.is_match("x.y");
+    assert !re#`x${dot}y`#.is_match("xzy");
+    let view = "q|r".as_str_slice();
+    assert !re#`^${view}$`#.is_match("q");
+}
+
+test "a regex hole is spliced as a group" {
+    let word = re#`(\w+)`#;
+    let pair = re#`(\d)=${word}|${word}`#;
+    assert groups(&pair, "7=ab") == "7=ab,7,ab,-";
+    assert groups(&pair, "!cd") == "cd,-,-,cd";
+}
+
+test "a regex hole keeps its own modifiers" {
+    let start = re#`^a`#;
+    let r = re#`(?m:x\n${start})`#;
+    assert !r.is_match("x\na");
+    assert re#`(?m:x\n^a)`#.is_match("x\na");
+}
+
+test "a regex hole's names join the template's" {
+    let year = re#`(?<y>\d{4})`#;
+    let r = re#`${year}/(?<m>\d+)`#;
+    let caps = r.captures("2026/11").unwrap();
+    assert caps["y"].unwrap().as_str() == "2026";
+    assert caps["m"].unwrap().as_str() == "11";
+}
+
+test "a regex displays its pattern, holes spelled as syntax" {
+    let word = re#`\w+`#;
+    let text = "a.b";
+    let r = re#`^${text}=${word}$`#;
+    assert `${r}` == #"^a\.b=(?-ims:\w+)$"#;
+    assert Regex::new(`${r}`).unwrap().is_match("a.b=xy");
+    let gap = " #";
+    assert `${rex#`x ${gap}`#}` == #"x \ \#"#;
+}
+
+#[expect_trap]
+test "two groups sharing a name panic" {
+    let year = re#`(?<y>\d{4})`#;
+    re#`(?<y>x)${year}`#;
+}
+
+#[expect_trap]
+test "a hole inside a class panics" {
+    let c = 'a';
+    re#`[${c}]`#;
+}
+
+#[expect_trap]
+test "a hole inside an escape panics" {
+    let c = 'd';
+    re#`\${c}`#;
+}
+
+#[expect_trap]
+test "a hole inside a comment panics" {
+    let c = 'a';
+    rex#`x # ${c}`#;
+}
+
+#[expect_trap]
+test "a malformed literal pattern panics" {
+    re#`(a`#;
+}

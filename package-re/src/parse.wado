@@ -30,14 +30,37 @@ internal enum Syntax {
     Extended,
 }
 
-/// The tree of `pattern`, and how many capturing groups it holds.
-internal fn parse(pattern: StrSlice, syntax: Syntax) -> Result<[Node, i32], PatternError> {
-    let mut p = Parser { src: pattern, pos: 0, syntax, depth: 0, groups: 0, names: [] };
-    let node = p.disjunction()?;
+/// A template's hole: a tree standing as one atom at a byte offset of the
+/// pattern, ahead of any character there.
+internal struct Hole {
+    internal offset: i32,
+    internal node: Node,
+}
+
+/// The tree of `pattern` with `holes` in their places, ordered by offset, and
+/// how many capturing groups it holds.
+internal fn parse(pattern: StrSlice, syntax: Syntax, holes: List<Hole> = []) -> Result<[Node, i32], PatternError> {
+    let mut p = Parser {
+        src: pattern,
+        pos: 0,
+        syntax,
+        depth: 0,
+        groups: 0,
+        names: [],
+        holes,
+        next_hole: 0,
+        blocked: false,
+    };
+    let parsed = p.disjunction();
+    if parsed matches { Err(_) } && p.blocked {
+        return Err(p.misplaced_hole());
+    }
+    let node = parsed?;
     if p.pos < p.src.len() {
         // Only an unmatched `)` stops a top-level disjunction early.
         return Err(p.error_here("unmatched `)`"));
     }
+    assert p.next_hole == p.holes.len(), "a parse that reaches the end takes every hole";
     return Ok([node, p.groups]);
 }
 
@@ -48,9 +71,15 @@ struct Parser {
     depth: i32,
     groups: i32,
     names: List<String>,
+    holes: List<Hole>,
+    /// The first hole not taken yet.
+    next_hole: i32,
+    /// Whether a read found that hole in its way, so that a failure there is
+    /// the hole's: one stands only where an atom may.
+    blocked: bool,
 }
 
-fn is_syntax_char(c: char) -> bool {
+internal fn is_syntax_char(c: char) -> bool {
     return match c {
         '^' | '$' | '\\' | '.' | '*' | '+' | '?' | '(' | ')' | '[' | ']' | '{' | '}' | '|' => true,
         _ => false,
@@ -81,30 +110,94 @@ impl Parser {
         return self.error_at(self.pos, message);
     }
 
-    fn at_end(&self) -> bool {
+    fn at_hole(&self) -> bool {
+        return self.next_hole < self.holes.len() && self.holes[self.next_hole].offset == self.pos;
+    }
+
+    fn misplaced_hole(&self) -> PatternError {
+        return self.error_at(self.holes[self.next_hole].offset, "a hole may stand only where an atom may");
+    }
+
+    /// Whether no character can be read here: at the pattern's end, or at a
+    /// hole.
+    fn at_end(&mut self) -> bool {
+        if self.at_hole() {
+            self.blocked = true;
+            return true;
+        }
         return self.pos >= self.src.len();
     }
 
-    fn peek(&self) -> Option<char> {
+    fn take_hole(&mut self) -> Result<Node, PatternError> {
+        let hole = self.holes[self.next_hole];
+        self.next_hole += 1;
+        self.blocked = false;
+        return self.splice(&hole.node, hole.offset);
+    }
+
+    /// `node` renumbered to follow the groups read so far, its names checked
+    /// against theirs.
+    fn splice(&mut self, node: &Node, at: i32) -> Result<Node, PatternError> {
+        return Ok(match *node {
+            Group(g) => {
+                let mut index: Option<i32> = null;
+                if g.index matches { Some(_) } {
+                    self.groups += 1;
+                    index = Some(self.groups);
+                }
+                if let Some(name) = g.name {
+                    self.claim(name, at)?;
+                }
+                Node::Group(Group { index, name: g.name, body: self.splice(&g.body, at)? });
+            },
+            Modified(m) => Node::Modified(Modified { ..m, body: self.splice(&m.body, at)? }),
+            Repeat(r) => Node::Repeat(Repeat { ..r, body: self.splice(&r.body, at)? }),
+            Concat(nodes) => Node::Concat(self.splice_all(&nodes, at)?),
+            Alternation(nodes) => Node::Alternation(self.splice_all(&nodes, at)?),
+            _ => *node,
+        });
+    }
+
+    fn splice_all(&mut self, nodes: &List<Node>, at: i32) -> Result<List<Node>, PatternError> {
+        let mut out: List<Node> = [];
+        for let n of nodes {
+            out.push(self.splice(n, at)?);
+        }
+        return Ok(out);
+    }
+
+    fn claim(&mut self, name: String, at: i32) -> Result<(), PatternError> {
+        if self.names.contains_str(&name) {
+            return Err(self.error_at(at, `two groups are named \`${name}\``));
+        }
+        self.names.push(name);
+        return Ok(());
+    }
+
+    fn peek(&mut self) -> Option<char> {
         if self.at_end() {
             return null;
         }
         return Some(self.src.char_at_byte(self.pos));
     }
 
-    fn peek_hex(&self) -> Option<u32> {
+    fn peek_hex(&mut self) -> Option<u32> {
         if let Some(c) = self.peek() && c.is_hexdigit() {
             return Some(c.hex_digit_value() as u32);
         }
         return null;
     }
 
-    fn peek_is(&self, c: char) -> bool {
+    fn peek_is(&mut self, c: char) -> bool {
         return self.peek() == Some(c);
     }
 
-    fn looking_at(&self, text: String) -> bool {
+    fn looking_at(&mut self, text: String) -> bool {
         let end = self.pos + text.len();
+        if self.next_hole < self.holes.len() && self.holes[self.next_hole].offset < end {
+            self.blocked = true;
+            return false;
+        }
         return end <= self.src.len() && self.src.is_char_boundary(end) && self.src.slice(self.pos, end) == text;
     }
 
@@ -130,21 +223,27 @@ impl Parser {
     }
 
     /// `rex` skips whitespace and comments between tokens, outside a class.
-    fn skip_trivia(&mut self) {
+    fn skip_trivia(&mut self) -> Result<(), PatternError> {
         if self.syntax != Syntax::Extended {
-            return;
+            return Ok(());
         }
         while let Some(c) = self.peek() {
             if c == '#' {
-                while let Some(d) = self.peek() && !is_line_terminator(d as u32) {
+                while self.pos < self.src.len() && !is_line_terminator(self.src.char_at_byte(self.pos) as u32) {
                     self.bump();
+                }
+                // A hole up to the line's end, that end included, is in the
+                // comment.
+                if self.next_hole < self.holes.len() && self.holes[self.next_hole].offset <= self.pos {
+                    return Err(self.misplaced_hole());
                 }
             } else if contains(BinaryProperty::PatternWhiteSpace, c) {
                 self.bump();
             } else {
-                return;
+                break;
             }
         }
+        return Ok(());
     }
 
     fn enter(&mut self) -> Result<(), PatternError> {
@@ -168,8 +267,8 @@ impl Parser {
     fn alternative(&mut self) -> Result<Node, PatternError> {
         let mut terms: List<Node> = [];
         loop {
-            self.skip_trivia();
-            if self.at_end() || self.peek_is('|') || self.peek_is(')') {
+            self.skip_trivia()?;
+            if self.at_end() && !self.at_hole() || self.peek_is('|') || self.peek_is(')') {
                 return Ok(collapse(terms, |nodes| Node::Concat(nodes)));
             }
             terms.push(self.term()?);
@@ -180,7 +279,7 @@ impl Parser {
     fn term(&mut self) -> Result<Node, PatternError> {
         let start = self.pos;
         let [atom, quantifiable] = self.atom()?;
-        self.skip_trivia();
+        self.skip_trivia()?;
         let Some([min, max]) = self.quantifier_prefix()? else {
             return Ok(atom);
         };
@@ -235,6 +334,9 @@ impl Parser {
 
     /// The atom, and whether a quantifier may follow it.
     fn atom(&mut self) -> Result<[Node, bool], PatternError> {
+        if self.at_hole() {
+            return Ok([self.take_hole()?, true]);
+        }
         let start = self.pos;
         let c = self.bump();
         return match c {
@@ -276,10 +378,7 @@ impl Parser {
             self.groups += 1;
             let index = self.groups;
             let name = self.group_name()?;
-            if self.names.contains_str(&name) {
-                return Err(self.error_at(start, `two groups are named \`${name}\``));
-            }
-            self.names.push(name);
+            self.claim(name, start)?;
             let body = self.disjunction()?;
             self.close_group(start)?;
             return Ok(Node::Group(Group {
