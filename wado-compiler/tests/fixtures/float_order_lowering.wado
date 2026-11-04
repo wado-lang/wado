@@ -59,6 +59,8 @@ __DATA__
     "wir_pass": {"O1": ["wir/run_peephole"], "O2": ["wir/fuse_remaining_local_tees"]},
     "wir_contrast": {"O1": [
         {"            ordered += 1;": "            ordered += 1;\n            builtin::drop(builtin::black_box(0));"}
+    ], "O0": [
+        {"    return x > 1.0;": "    return x > builtin::black_box(1.0);", "    return x < 1.0;": "    return x < builtin::black_box(1.0);", "    return a <= b;": "    return a <= 1.0;", "    return a == b;": "    return a == 1.0;"}
     ]},
     "wir_expect:O1": ["return (a != 2) & (b != 2);"],
     "wir_not_expect:O1": ["(a == 2) == 0", "ordered = ordered + 1;"],
