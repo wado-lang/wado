@@ -130,9 +130,15 @@ test "the match takes time linear in the text" {
 }
 
 test "a program too large is refused" {
-    assert `${Regex::new(#"(?:a{1000}){1001}"#).unwrap_err()}` == "the pattern compiles to more than 1000000 instructions (at byte 0)";
+    assert `${Regex::new(#"(?:a{1000}){1001}"#).unwrap_err()}` == "the pattern compiles to a program over re.max_program (1000000) (at byte 0)";
     assert Regex::new(#"(?:){0,4000000000}"#).is_err();
     assert Regex::new(#"(?:^){4000000000}"#).is_err();
+}
+
+test "an instruction counts once more for each repetition of an empty-matching body around it" {
+    assert Regex::new(#"(?:a{600000})*"#).is_ok();
+    assert Regex::new(#"(?:a{600000}|)*"#).is_err();
+    assert re(#"(?:a{400000}|)*b"#).is_match("b");
 }
 
 test "a count over a body that compiles to nothing costs nothing" {

@@ -69,8 +69,11 @@ function refused(pattern) {
         return true;
       }
       names.add(name);
-    } else if (c === "{" && Number(/^(\d+)/.exec(rest)?.[1] ?? 0) > 4294967295) {
-      return true;
+    } else if (c === "{") {
+      const [, min, max] = /^(\d+)(?:,(\d*))?\}/.exec(rest) ?? [];
+      if (Number(min ?? 0) > 4294967295 || Number(max || 0) > 4294967295) {
+        return true;
+      }
     }
   }
   return false;
