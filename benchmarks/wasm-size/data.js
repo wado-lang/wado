@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1793742681020,
+  "lastUpdate": 1793752268258,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -74109,6 +74109,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/f5c2d6481dfdc5a356b1ef90dde1a9ac38b953a2"
         },
         "date": 1793742680400,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3099,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7303,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21996,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 377139,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "751b7b19e10c52ebc2d7d97598102c48575dc5d8",
+          "message": "Merge pull request #2536 from wado-lang/claude/peaceful-volta-u08hot\n\nfeat(eddy): FindSymbol and FindReferences over SCIP indexes of Rust and Wado",
+          "timestamp": "2026-11-04T09:17:01+09:00",
+          "tree_id": "258a6bc46cb2528d177a6d3b10f0ba29a0ac389e",
+          "url": "https://github.com/wado-lang/wado/commit/751b7b19e10c52ebc2d7d97598102c48575dc5d8"
+        },
+        "date": 1793752267039,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
