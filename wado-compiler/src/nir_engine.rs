@@ -58,10 +58,10 @@ impl FieldValues {
 #[derive(Default, Debug)]
 pub struct LocalUses {
     /// The first `Let` statement binding the local, if any. Parameters have
-    /// none, and neither does a `LetDestructure` binding (it binds through a
-    /// pattern, which this index does not walk).
+    /// none, and neither does a pattern binding.
     pub def: Option<StmtId>,
-    /// How many `Let` statements bind the local; a second is a second version.
+    /// How many `Let` statements and pattern bindings bind the local; a second
+    /// is a second version.
     pub defs: u32,
     /// Every `Local { index }` expression node that names this local. (The
     /// place-form distinction — read vs write — is refined when a rule needs
@@ -886,8 +886,7 @@ impl<'a> Engine<'a> {
     /// predicate, so the value query and the freeze agree by construction.
     pub fn local_has_one_version(&mut self, local: u32) -> bool {
         let bound_once = match self.local_bindings(local) {
-            // No `Let`: a parameter, or a `LetDestructure` binding the use index
-            // does not record — which then fails the membership test.
+            // Nothing binds it: a parameter.
             0 => {
                 self.params.contains(&local)
                     && self.locals().get(local as usize).is_some_and(|l| !l.is_mut)
@@ -910,7 +909,7 @@ impl<'a> Engine<'a> {
             .any(|&m| self.is_assign_target(m))
     }
 
-    /// How many `Let` statements bind `local`.
+    /// How many `Let` statements and pattern bindings bind `local`.
     pub fn local_bindings(&self, local: u32) -> u32 {
         self.buf.uses.get(local as usize).map_or(0, |u| u.defs)
     }
@@ -1257,8 +1256,9 @@ impl<'a> Engine<'a> {
     /// Edit API: rewrite an expression node's kind in place. The id is stable,
     /// so parent links and worklist entries survive. Keeps the use index
     /// coherent (if the node was / becomes a `Local`), detaches the old kind's
-    /// id children and re-parents the new kind's, and re-enqueues the affected neighbourhood — the
-    /// node's parent (its context may now reduce) and the new children.
+    /// id children and re-parents the new kind's, and re-enqueues the affected
+    /// neighbourhood: the node's parent (its context may now reduce) and the
+    /// new children.
     pub fn replace_expr_kind(&mut self, id: ExprId, new_kind: ExprKind) {
         // Drop the old `Local` mention, if any, from the use index.
         if let ExprKind::Local { index, .. } = &self.body.exprs[id].kind {
@@ -1483,6 +1483,9 @@ impl<'a> Engine<'a> {
 
     /// Edit API: allocate a fresh pattern node.
     pub fn alloc_pat(&mut self, kind: PatKind, span: Span) -> PatId {
+        if let PatKind::Binding { local_index, .. } = &kind {
+            self.buf.uses_entry(*local_index).defs += 1;
+        }
         let id = self.body.pats.push(PatNode { kind, span });
         self.buf.note_alloc(NodeRef::Pat(id));
         let Self { body, buf, .. } = self;
@@ -2085,6 +2088,26 @@ mod tests {
         let rescanned = eng.alloc_local_like(0);
         assert!(eng.body_address_taken().contains(&cached));
         assert!(eng.body_address_taken().contains(&rescanned));
+    }
+
+    /// A pattern binding an edit allocates is a version of its local, as one
+    /// the body held from the start is.
+    #[test]
+    fn an_allocated_pattern_binding_is_a_second_version() {
+        let mut body = sample_body();
+        let mut buf = EngineBuffers::default();
+        let mut locals = Tracked::new(Vec::new());
+        let mut eng = Engine::new(&mut body, &mut buf, &mut locals, &[]);
+        assert_eq!(eng.local_bindings(0), 1);
+        eng.alloc_pat(
+            PatKind::Binding {
+                name: "x".to_string(),
+                local_index: 0,
+                type_id: TypeTable::UNIT,
+            },
+            Span::default(),
+        );
+        assert_eq!(eng.local_bindings(0), 2);
     }
 
     #[test]

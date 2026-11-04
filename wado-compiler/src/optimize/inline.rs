@@ -1095,10 +1095,9 @@ fn scan_body(func: &NirFunction, markers: MarkerBuiltins, heat_map: &HeatMap) ->
                     scan.cold_callees.insert(*func_id);
                 } else {
                     scan.hot_callees.insert(*func_id);
-                    let heat = match heat_map.heat(body.exprs[e].span) {
-                        Heat::Hot if unlikely.contains(&e) => Heat::Plain,
-                        heat => heat,
-                    };
+                    let heat = heat_map
+                        .heat(body.exprs[e].span)
+                        .plain_where(unlikely.contains(&e));
                     scan.callees_at.at_mut(heat).insert(*func_id);
                 }
                 if !looped.contains(&e) {
@@ -2668,9 +2667,9 @@ fn inline_round(
                 &hopeful_params[i],
             )
         };
-        // Only the reach differs between heats. A hot site weighs the cold code
-        // too: the plain price leaves it out, but a splice copies it, and at
-        // the hot threshold that let a deserializer grow 42-fold.
+        // Each heat prices the callee at its own threshold. A hot site weighs
+        // the cold code too: the plain price leaves it out, but a splice copies
+        // it, and at the hot threshold that let a deserializer grow 42-fold.
         let verdict = classify(thresholds.plain, runs);
         let verdict_at = |heat: Heat| {
             if !*called_at[i].at(heat) {
@@ -3036,7 +3035,7 @@ struct CallerFrame<'f> {
     /// whose body `container_sroa` and `const_object_globalization` skip: a
     /// callee moved into one goes without the cleanup it gets where it stands.
     glue: bool,
-    /// The caller is itself spliced this round. A hot price inside it would
+    /// The caller may itself be spliced this round. A hot price inside it would
     /// grow it past what its own sites admit, trading the outer call for the
     /// inner one, so its hot sites wait until it has moved into its callers.
     candidate: bool,
@@ -3615,10 +3614,10 @@ fn try_inline_call_expr(
     // The call's stamped `func_id` is the exact callee identity; look the
     // candidate up directly (no `(module, name)` resolution).
     let candidate = candidates.bodies.get(&func_id)?;
-    let heat = match candidates.heat_map.heat(caller.exprs[call_id].span) {
-        Heat::Hot if !site.heats() || frame.candidate => Heat::Plain,
-        heat => heat,
-    };
+    let heat = candidates
+        .heat_map
+        .heat(caller.exprs[call_id].span)
+        .plain_where(!site.heats() || frame.candidate);
     let reach = *candidates.reach[&func_id].at(heat);
     let sole_site = |frame: &CallerFrame<'_>| {
         if frame.glue {

@@ -7,8 +7,8 @@
 use std::fmt::Write as _;
 
 use super::{Basis, ByHeat, ColdBy, Refusal, Site};
-use crate::pgo::Heat;
 use crate::module_source::{ModuleSource, ParseModules};
+use crate::pgo::Heat;
 use crate::token::Span;
 
 /// Every round's decisions about the functions whose name holds a pattern.

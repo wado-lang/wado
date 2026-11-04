@@ -207,6 +207,17 @@ pub enum Heat {
     Hot,
 }
 
+impl Heat {
+    /// This heat, with a hot one priced plain where `demoted` holds.
+    #[must_use]
+    pub fn plain_where(self, demoted: bool) -> Self {
+        match self {
+            Heat::Hot if demoted => Heat::Plain,
+            heat => heat,
+        }
+    }
+}
+
 impl Thresholds {
     /// Whether a region the profile ran `runs` times is cold. Only one that
     /// never ran is, as GCC's `probably_never_executed` holds. The optimizer
@@ -546,10 +557,7 @@ impl MarkMap {
                 counts[id].map(|runs| MeasuredRegion {
                     start: region.start,
                     end: region.end,
-                    heat: match reading.heat(runs) {
-                        Heat::Hot if under_unlikely(id) => Heat::Plain,
-                        heat => heat,
-                    },
+                    heat: reading.heat(runs).plain_where(under_unlikely(id)),
                     enclosing: None,
                 })
             }),
