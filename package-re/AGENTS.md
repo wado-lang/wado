@@ -43,5 +43,7 @@ wado test package-re
 neither:
 
 - `mise run oracle-re` asks Node's `RegExp` about each case in
-  `tests/oracle/cases.json`.
-- `mise run test262-re` reads test262's parse-phase negative tests.
+  `tests/oracle/cases.json` and `tests/generated/test262.json`.
+- `mise run test262-re` reads test262's parse-phase negative tests, and runs
+  test262's RegExp tests in Node to collect the patterns and inputs they use
+  into `tests/generated/test262.json`. It then runs `oracle-re`.

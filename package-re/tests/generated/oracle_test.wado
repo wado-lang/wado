@@ -381,6 +381,22 @@ test "(a?)??b" {
     assert spans(#"(a?)??b"#, "ab") == "0..2,0..1";
 }
 
+test "(a?b??)*" {
+    assert spans(#"(a?b??)*"#, "ab") == "0..2,1..2";
+    assert spans(#"(a?b??)*"#, "abab") == "0..4,3..4";
+    assert spans(#"(a?b??)*"#, "aab") == "0..3,2..3";
+}
+
+test "(?:(a?b??)*)*c" {
+    assert spans(#"(?:(a?b??)*)*c"#, "abc") == "0..3,1..2";
+    assert spans(#"(?:(a?b??)*)*c"#, "ababc") == "0..5,3..4";
+}
+
+test "(a??b?){2,3}" {
+    assert spans(#"(a??b?){2,3}"#, "ab") == "0..2,0..2";
+    assert spans(#"(a??b?){2,3}"#, "abb") == "0..2,0..2 2..3,3..3";
+}
+
 test "(?:a?)*?b" {
     assert spans(#"(?:a?)*?b"#, "aab") == "0..3";
 }

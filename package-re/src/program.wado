@@ -7,6 +7,8 @@ use { sequences } from "./utf8.wado";
 
 /// How many instructions a program may hold, so that a pattern read at run
 /// time cannot spend unbounded memory on its expanded counts (`a{1000}{1000}`).
+/// One inside optional iterations of an empty-matching body counts once for
+/// each of them and once more, as the Pike VM tracks it once for each.
 #[param(name = "re.max_program")]
 internal global MAX_PROGRAM: i32 = 1_000_000;
 
@@ -45,21 +47,38 @@ internal struct Program {
     internal slots: i32,
     /// How many of `slots` are the groups'.
     internal captures: i32,
+    /// Where each instruction's states start among `states`. A thread's state
+    /// at an instruction is how many of the optional iterations around it it
+    /// entered at the current position: past a `Progress`, threads that differ
+    /// in that differ in what they can match.
+    internal state_base: List<i32>,
+    internal states: i32,
 }
 
 /// The program matching `node`, whose capturing groups number `groups`.
 internal fn compile(node: &Node, groups: i32) -> Result<Program, PatternError> {
     let captures = 2 * (groups + 1);
-    let mut c = Compiler { insts: [], flags: Flag::none(), slots: captures };
+    let mut c = Compiler { insts: [], depths: [], states: 0, depth: 0, flags: Flag::none(), slots: captures };
     c.push(Inst::Save(0))?;
     c.node(node)?;
     c.push(Inst::Save(1))?;
     c.push(Inst::Match)?;
-    return Ok(Program { insts: c.insts, slots: c.slots, captures });
+    let mut state_base: List<i32> = [];
+    let mut states = 0;
+    for let d of &c.depths {
+        state_base.push(states);
+        states += *d + 1;
+    }
+    return Ok(Program { insts: c.insts, slots: c.slots, captures, state_base, states });
 }
 
 struct Compiler {
     insts: List<Inst>,
+    /// How many optional iterations guarded by a `Progress` hold each
+    /// instruction.
+    depths: List<i32>,
+    states: i32,
+    depth: i32,
     flags: Flag,
     slots: i32,
 }
@@ -140,13 +159,19 @@ impl Compiler {
     }
 
     fn push(&mut self, inst: Inst) -> Result<i32, PatternError> {
-        if self.insts.len() >= MAX_PROGRAM {
+        return self.push_at(inst, self.depth);
+    }
+
+    fn push_at(&mut self, inst: Inst, depth: i32) -> Result<i32, PatternError> {
+        self.states += depth + 1;
+        if self.states > MAX_PROGRAM {
             return Err(PatternError {
                 offset: 0,
                 message: `the pattern compiles to more than ${MAX_PROGRAM} instructions`,
             });
         }
         self.insts.push(inst);
+        self.depths.push(depth);
         return Ok(self.insts.len() - 1);
     }
 
@@ -279,13 +304,14 @@ impl Compiler {
     /// One whose body can match empty must consume something.
     fn optional_iteration(&mut self, body: &Node, progress: Option<i32>) -> Result<(), PatternError> {
         self.push(Inst::Split([0, 0]))?;
-        if let Some(k) = progress {
-            self.push(Inst::Save(k))?;
-        }
+        let Some(k) = progress else {
+            return self.iteration(body);
+        };
+        self.push(Inst::Save(k))?;
+        self.depth += 1;
         self.iteration(body)?;
-        if let Some(k) = progress {
-            self.push(Inst::Progress(k))?;
-        }
+        self.push(Inst::Progress(k))?;
+        self.depth -= 1;
         return Ok(());
     }
 
@@ -304,7 +330,7 @@ impl Compiler {
             for let _i of 1..<count {
                 let delta = self.pc() - from;
                 for let i of from..<to {
-                    self.push(relocate(self.insts[i], delta))?;
+                    self.push_at(relocate(self.insts[i], delta), self.depths[i])?;
                 }
             }
         }

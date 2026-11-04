@@ -9,12 +9,17 @@ use { Look, Program } from "./program.wado";
 struct Thread {
     pc: i32,
     slots: List<i32>,
+    /// How many optional iterations guarded by a `Progress` this thread
+    /// entered at the current position. Each is one it cannot leave without
+    /// consuming, so they are the innermost of those around `pc`, and the
+    /// count says which.
+    entered: i32,
 }
 
-/// The threads at one position, and which instructions they occupy.
+/// The threads at one position, and which states they occupy.
 struct Threads {
     list: List<Thread>,
-    /// `seen[pc] == stamp` marks `pc` occupied at this position.
+    /// `seen[state] == stamp` marks `state` occupied at this position.
     seen: List<i32>,
     stamp: i32,
 }
@@ -45,7 +50,7 @@ internal struct Cache {
 
 impl Cache {
     internal fn new(program: &Program) -> Cache {
-        let size = program.insts.len();
+        let size = program.states;
         let mut fresh: List<i32> = [];
         for let _i of 0..<program.slots {
             fresh.push(-1);
@@ -116,42 +121,53 @@ internal fn search(program: &Program, cache: &mut Cache, text: StrSlice, start: 
 }
 
 /// Follows every instruction that consumes nothing from `pc`, adding the
-/// threads that reach a `Byte` or `Match`, highest priority first.
+/// threads that reach a `Byte` or `Match`, highest priority first. A thread
+/// is dropped where a higher one already reached its state: from there both
+/// can match the same, and the higher one's match wins.
 fn add(program: &Program, text: StrSlice, to: &mut Threads, pc: i32, slots: List<i32>, pos: i32) {
     let mut stack: List<Thread> = [
-        Thread { pc, slots },
+        Thread { pc, slots, entered: 0 },
     ];
     while let Some(t) = stack.pop() {
-        if to.seen[t.pc] == to.stamp {
+        let inst = program.insts[t.pc];
+        // Past a `Byte` no `Progress` fails, so how many iterations a thread
+        // entered no longer matters there.
+        let entered = if inst matches { Byte(_) | Match } { 0 } else { t.entered };
+        let state = program.state_base[t.pc] + entered;
+        assert state < program.states && (t.pc + 1 == program.insts.len() || state < program.state_base[t.pc + 1]);
+        if to.seen[state] == to.stamp {
             continue;
         }
-        to.seen[t.pc] = to.stamp;
-        match program.insts[t.pc] {
-            Jump(target) => stack.push(Thread { pc: target, slots: t.slots }),
+        to.seen[state] = to.stamp;
+        let next = |slots: List<i32>| Thread { pc: t.pc + 1, slots, entered: t.entered };
+        match inst {
+            Jump(target) => stack.push(Thread { pc: target, slots: t.slots, entered: t.entered }),
             Split([first, second]) => {
-                stack.push(Thread { pc: second, slots: t.slots });
-                stack.push(Thread { pc: first, slots: t.slots });
+                stack.push(Thread { pc: second, slots: t.slots, entered: t.entered });
+                stack.push(Thread { pc: first, slots: t.slots, entered: t.entered });
             },
             Save(slot) => {
                 let mut s = t.slots;
                 s[slot] = pos;
-                stack.push(Thread { pc: t.pc + 1, slots: s });
+                // A `Progress` slot opens an optional iteration.
+                let opened = if slot >= program.captures { 1 } else { 0 };
+                stack.push(Thread { pc: t.pc + 1, slots: s, entered: t.entered + opened });
             },
             Clear([from, until]) => {
                 let mut s = t.slots;
                 for let k of from..<until {
                     s[k] = -1;
                 }
-                stack.push(Thread { pc: t.pc + 1, slots: s });
+                stack.push(next(s));
             },
             Assert(look) => {
                 if holds(look, text, pos) {
-                    stack.push(Thread { pc: t.pc + 1, slots: t.slots });
+                    stack.push(next(t.slots));
                 }
             },
             Progress(slot) => {
                 if t.slots[slot] != pos {
-                    stack.push(Thread { pc: t.pc + 1, slots: t.slots });
+                    stack.push(next(t.slots));
                 }
             },
             Fail => {
