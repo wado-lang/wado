@@ -74,8 +74,12 @@ Passes and the optimization decisions made outside them are skippable;
 confirm a name with `WADO_LIST_PASSES=1` first. A rule of the peephole
 session is `nir/peephole/<rule>` (`nir/peephole/ref_elim`); `nir/peephole`
 skips the whole session. Lowering's value-copy elisions are
-`lower/value_copy/{move,owned,share,confined}`, and the exhaustive match's
-unchecked last arm is `wir_build/exhaustive_last_arm`. A decision is listed
+`lower/value_copy/{move,owned,share,confined}`, and `-f no-cold-paths`
+dropping the markers is `lower/drop_cold_markers`. The WIR builder's are
+`wir_build/exhaustive_last_arm` (the exhaustive match's unchecked last arm),
+`wir_build/branch_hints` (hints from cold paths) and
+`wir_build/elide_terminator_unreachable` (no `unreachable` after a
+terminator). A decision is listed
 once per compile, and its `@N` counts the sites it is asked at.
 
 When a pass is the only one whose skipping makes the bug go away that

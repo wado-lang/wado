@@ -171,8 +171,8 @@ __DATA__
         "builtin::store_i32($params_buf + 4, $len)",
         "builtin::store_u8($params_buf + 10, tail)"
     ],
-    "wir_not_expect:O0": [
-        "builtin::store_i32($params_buf, c)",
-        "builtin::store_i32($params_buf + 3, p)"
-    ]
+    "wir_not_expect:O0": ["builtin::store_i32($params_buf, c)", "builtin::store_i32($params_buf + 3, p)"],
+    "wir_contrast": {"O0": [
+        {"    let packed = CmCatalog::narrow_scalars_in_params_buffer(\n        Color::Green,\n        Option::Some(7),\n        Perms::Read | Perms::Execute,\n        Status::Inactive,\n    ).wait();\n    assert packed == 2007052;": "", "    assert CmCatalog::map_in_params_buffer(m, Option::Some(7), 9).wait() == 30709;": "", "    let got = CmCatalog::past_flat_params(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, \"wide\");\n    assert got == \"wide:49:16110\";": ""}
+    ]}
 }

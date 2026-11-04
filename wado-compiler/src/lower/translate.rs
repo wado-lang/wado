@@ -76,7 +76,7 @@ pub fn translate(flat: FlatPackage, plan: LowerPlan, profiler: &dyn SpanEmitter)
         value_copy,
     } = plan;
     // After the plan, whose global once-guards place a marker of their own.
-    if !flat.codegen_flags.cold_paths {
+    if !flat.codegen_flags.cold_paths && pass_dump::decides("lower/drop_cold_markers") {
         cold_paths::drop_markers(&flat);
     }
     // Before pattern lowering, which keeps a destructure of a multi-value

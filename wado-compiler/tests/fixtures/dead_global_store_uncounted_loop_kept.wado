@@ -61,5 +61,10 @@ __DATA__
 {
     "stdout": "ok\n",
     "wir_expect:O0": ["collatz_steps", "counts_to_a_parameter"],
-    "wir_not_expect:O0": ["counts_to_ten"]
+    "wir_not_expect:O0": ["counts_to_ten"],
+    "wir_contrast": {"O0": [
+        {"    while n != 1 {": "    while steps < 10 {", "collatz_steps(builtin::black_box(27))": "collatz_steps(27)"},
+        {"    while i < limit {": "    while i < 10 {", "counts_to_a_parameter(builtin::black_box(10))": "counts_to_a_parameter(10)"},
+        {"    println(\"ok\");": "    println(`${read()}`);"}
+    ]}
 }

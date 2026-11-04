@@ -63,6 +63,9 @@ __DATA__
 {
     "stdout": "1000\n302\n",
     "wir_pass": {"O2": ["nir/sroa", "nir/licm"]},
+    "wir_contrast": {"O2": [
+        {"    let config = Config { threshold: t, scale: 2 };": "    let mut config = Config { threshold: t, scale: 2 };", "        sum += r.threshold * i;\n": "        sum += r.threshold * i;\n        bump_t(&mut config);\n", "#[inline(never)]\nfn accumulate": "#[inline(never)]\nfn bump_t(c: &mut Config) {\n    c.threshold += 1;\n}\n\n#[inline(never)]\nfn accumulate"}
+    ]},
     "wir_expect:O2": ["t * i"],
     "wir_not_expect:O2": ["config.threshold"]
 }

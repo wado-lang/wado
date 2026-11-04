@@ -63,6 +63,9 @@ __DATA__
 {
     "stdout": "",
     "wir_pass": {"O2": ["nir/multi_value_return"]},
+    "wir_contrast": {"O2": [
+        {"    return wrap(v + 1);": "    let w = wrap(v + 1);\n    builtin::drop(builtin::black_box(0));\n    return w;"}
+    ]},
     "wir_expect:O2": [
         "wrap\" = fn(i32) -> i32",
         "wrap_again\" = fn(i32) -> i32",
