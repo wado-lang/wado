@@ -2,14 +2,22 @@
 //! `TirOptVisitor` to mutate with change tracking. Plus a few shared TIR queries.
 
 use crate::flat_package::FlatPackage;
-use crate::tir::{TirBlock, TirExpr, TirExprKind, TirPattern, TirStmt, TirStmtKind};
+use crate::tir::{
+    FunctionKind, MonomorphInfo, ReturnAbi, TirBlock, TirExpr, TirExprKind, TirFunction,
+    TirGlobal, TirLocal, TirPattern, TirStmt, TirStmtKind, TypeId,
+};
 
 /// Trait for mutable traversal of TIR trees.
 ///
 /// Override `visit_*` methods to add custom logic at specific nodes.
 /// Call the corresponding `walk_*` method within your override to recurse into children.
 /// The default implementations simply delegate to `walk_*`.
+///
+/// The walks hand every `TypeId` a node holds to [`Self::visit_type_id`]. They
+/// destructure each node in full, so a field added to the TIR fails to compile
+/// here until the walk visits it.
 pub trait TirMutVisitor {
+    fn visit_type_id(&mut self, _type_id: &mut TypeId) {}
     fn visit_expr(&mut self, expr: &mut TirExpr) {
         self.walk_expr(expr);
     }
@@ -23,6 +31,107 @@ pub trait TirMutVisitor {
         self.walk_pattern(pattern);
     }
 
+    fn visit_type_ids(&mut self, type_ids: &mut [TypeId]) {
+        for type_id in type_ids {
+            self.visit_type_id(type_id);
+        }
+    }
+
+    /// The function's signature, locals and body.
+    fn walk_function(&mut self, func: &mut TirFunction) {
+        let TirFunction {
+            name: _,
+            def_id: _,
+            module_source: _,
+            visibility: _,
+            is_export: _,
+            is_async: _,
+            type_params,
+            impl_type_params,
+            impl_origin: _,
+            monomorph_info,
+            method_info: _,
+            params,
+            return_type,
+            task_return_type,
+            effects: _,
+            immediates: _,
+            declared: _,
+            body,
+            span: _,
+            local_count: _,
+            locals,
+            address_taken_locals: _,
+            is_cm_binding: _,
+            is_dispatch_wrapper: _,
+            is_cm_export: _,
+            inline_hint: _,
+            compiler_item: _,
+            export_name: _,
+            allocator_tag: _,
+            kind,
+            return_abi,
+        } = func;
+        for param in type_params.iter_mut().chain(impl_type_params) {
+            if let Some(default) = &mut param.default {
+                self.visit_type_id(default);
+            }
+        }
+        if let Some(info) = monomorph_info {
+            self.walk_monomorph_info(info);
+        }
+        for param in params {
+            self.visit_type_id(&mut param.type_id);
+        }
+        self.visit_type_id(return_type);
+        if let Some(task_return_type) = task_return_type {
+            self.visit_type_id(task_return_type);
+        }
+        self.walk_locals(locals);
+        match kind {
+            FunctionKind::ValueCopy { type_id } => self.visit_type_id(type_id),
+            FunctionKind::FnCanonicalDispatch {
+                arity: _,
+                return_type,
+            } => self.visit_type_id(return_type),
+            FunctionKind::Regular
+            | FunctionKind::UncheckedTwin { .. }
+            | FunctionKind::ContractReport => {}
+        }
+        match return_abi {
+            ReturnAbi::MultiValue {
+                result_types,
+                field_names: _,
+            } => self.visit_type_ids(result_types),
+            ReturnAbi::Single => {}
+        }
+        if let Some(body) = body {
+            self.visit_block(body);
+        }
+    }
+
+    fn walk_global(&mut self, global: &mut TirGlobal) {
+        self.visit_type_id(&mut global.ty);
+        self.visit_expr(global.init.slot_expr_mut());
+    }
+
+    fn walk_monomorph_info(&mut self, info: &mut MonomorphInfo) {
+        let MonomorphInfo {
+            generic_name: _,
+            impl_type_args,
+            method_type_args,
+            is_blanket: _,
+        } = info;
+        self.visit_type_ids(impl_type_args);
+        self.visit_type_ids(method_type_args);
+    }
+
+    fn walk_locals(&mut self, locals: &mut [TirLocal]) {
+        for local in locals {
+            self.visit_type_id(&mut local.type_id);
+        }
+    }
+
     fn walk_block(&mut self, block: &mut TirBlock) {
         for stmt in &mut block.stmts {
             self.visit_stmt(stmt);
@@ -31,7 +140,15 @@ pub trait TirMutVisitor {
 
     fn walk_stmt(&mut self, stmt: &mut TirStmt) {
         match &mut stmt.kind {
-            TirStmtKind::Let { value, .. } => {
+            TirStmtKind::Let {
+                name: _,
+                local_index: _,
+                is_mut: _,
+                type_id,
+                value,
+                storage: _,
+            } => {
+                self.visit_type_id(type_id);
                 self.visit_expr(value);
             }
             TirStmtKind::Expr(expr) => {
@@ -56,23 +173,34 @@ pub trait TirMutVisitor {
             TirStmtKind::Loop { body } => {
                 self.visit_block(body);
             }
-            TirStmtKind::Break { value, .. } => {
+            TirStmtKind::Break { label: _, value } => {
                 if let Some(v) = value {
                     self.visit_expr(v);
                 }
             }
             TirStmtKind::Continue => {}
-            TirStmtKind::LabeledBlock { block, .. } => {
+            TirStmtKind::LabeledBlock { label: _, block } => {
                 self.visit_block(block);
             }
-            TirStmtKind::LetDestructure { pattern, value, .. } => {
+            TirStmtKind::LetDestructure { pattern, value } => {
                 self.visit_pattern(pattern);
                 self.visit_expr(value);
             }
             TirStmtKind::TaskReturn { value } => {
                 self.visit_expr(value);
             }
-            TirStmtKind::VariadicForOf { iterable, body, .. } => {
+            TirStmtKind::VariadicForOf {
+                iterable,
+                binding_name: _,
+                binding_local: _,
+                is_mut: _,
+                body,
+                unique_id: _,
+                by_ref: _,
+                is_enumerate: _,
+                walk: _,
+                moves: _,
+            } => {
                 self.visit_expr(iterable);
                 self.visit_block(body);
             }
@@ -81,22 +209,63 @@ pub trait TirMutVisitor {
 
     fn walk_pattern(&mut self, pattern: &mut TirPattern) {
         match pattern {
-            TirPattern::Wildcard | TirPattern::Binding { .. } | TirPattern::Literal(_) => {}
+            TirPattern::Wildcard | TirPattern::Literal(_) => {}
+            TirPattern::Binding {
+                name: _,
+                local_index: _,
+                type_id,
+            } => self.visit_type_id(type_id),
             TirPattern::Tuple(patterns, _) => {
                 for p in patterns {
                     self.visit_pattern(p);
                 }
             }
-            TirPattern::Variant { bindings, .. } => {
+            TirPattern::Variant {
+                enum_type,
+                variant_name: _,
+                case_index: _,
+                bindings,
+                payload_type,
+            } => {
+                self.visit_type_id(enum_type);
+                self.visit_type_id(payload_type);
                 for binding in bindings {
                     self.visit_pattern(binding);
                 }
             }
-            TirPattern::Enum { .. } | TirPattern::Range { .. } | TirPattern::PerInstance { .. } => {
-            }
+            TirPattern::Enum {
+                enum_type,
+                case_name: _,
+                case_index: _,
+            } => self.visit_type_id(enum_type),
+            TirPattern::Range {
+                start: _,
+                end: _,
+                inclusive: _,
+                is_unsigned: _,
+            } => {}
+            TirPattern::PerInstance {
+                pattern: _,
+                scrutinee_type,
+                span: _,
+            } => self.visit_type_id(scrutinee_type),
             TirPattern::ConstantValue { expr } => self.visit_expr(expr),
-            TirPattern::Narrow { test, .. } => self.visit_expr(test),
-            TirPattern::Struct { fields, .. } => {
+            TirPattern::Narrow {
+                name: _,
+                local_index: _,
+                type_id,
+                test,
+                shown: _,
+            } => {
+                self.visit_type_id(type_id);
+                self.visit_expr(test);
+            }
+            TirPattern::Struct {
+                struct_type,
+                fields,
+                has_rest: _,
+            } => {
+                self.visit_type_id(struct_type);
                 for field in fields {
                     self.visit_pattern(&mut field.pattern);
                 }
@@ -110,6 +279,7 @@ pub trait TirMutVisitor {
     }
 
     fn walk_expr(&mut self, expr: &mut TirExpr) {
+        self.visit_type_id(&mut expr.type_id);
         match &mut expr.kind {
             TirExprKind::IntLiteral { .. }
             | TirExprKind::FloatLiteral { .. }
@@ -119,40 +289,89 @@ pub trait TirMutVisitor {
             | TirExprKind::BytesLiteral(_)
             | TirExprKind::Null
             | TirExprKind::Unit
-            | TirExprKind::Local { .. }
-            | TirExprKind::FuncRef { .. }
-            | TirExprKind::GlobalVarGet { .. }
-            | TirExprKind::Capture { .. }
-            | TirExprKind::EnumConstruct { .. } => {}
-            TirExprKind::GlobalVarSet { value, .. } => {
+            | TirExprKind::Local { index: _, name: _ }
+            | TirExprKind::GlobalVarGet {
+                module_source: _,
+                name: _,
+            }
+            | TirExprKind::Capture { index: _, name: _ } => {}
+            TirExprKind::FuncRef {
+                module_source: _,
+                name: _,
+                type_args,
+                template: _,
+            } => self.visit_type_ids(type_args),
+            TirExprKind::EnumConstruct {
+                enum_type,
+                case_index: _,
+                case_name: _,
+            } => self.visit_type_id(enum_type),
+            TirExprKind::GlobalVarSet {
+                module_source: _,
+                name: _,
+                value,
+            } => {
                 self.visit_expr(value);
             }
-            TirExprKind::Binary { left, right, .. } => {
+            TirExprKind::Binary { left, op: _, right } => {
                 self.visit_expr(left);
                 self.visit_expr(right);
             }
-            TirExprKind::Unary { expr: inner, .. }
-            | TirExprKind::Cast { expr: inner, .. }
+            TirExprKind::Cast {
+                expr: inner,
+                target_type,
+            } => {
+                self.visit_type_id(target_type);
+                self.visit_expr(inner);
+            }
+            TirExprKind::TypePackExpansion {
+                call_expr,
+                pack_type_id,
+                settled_pack,
+            } => {
+                self.visit_type_id(pack_type_id);
+                if let Some(settled_pack) = settled_pack {
+                    self.visit_type_id(settled_pack);
+                }
+                self.visit_expr(call_expr);
+            }
+            TirExprKind::VariantPayload {
+                expr: inner,
+                case_index: _,
+                payload_type,
+            } => {
+                self.visit_type_id(payload_type);
+                self.visit_expr(inner);
+            }
+            TirExprKind::Unary { op: _, expr: inner }
             | TirExprKind::Move { expr: inner }
             | TirExprKind::ListViewOf { value: inner }
             | TirExprKind::Widen { value: inner }
-            | TirExprKind::FieldAccess { expr: inner, .. }
+            | TirExprKind::FieldAccess {
+                expr: inner,
+                field_index: _,
+                field_name: _,
+            }
             | TirExprKind::TupleSpread { expr: inner }
             | TirExprKind::TupleZip { expr: inner }
             | TirExprKind::TupleLen { expr: inner }
-            | TirExprKind::TypePackExpansion {
-                call_expr: inner, ..
-            }
             | TirExprKind::VariantTag { expr: inner }
-            | TirExprKind::VariantTest { expr: inner, .. }
-            | TirExprKind::VariantPayload { expr: inner, .. } => {
+            | TirExprKind::VariantTest {
+                expr: inner,
+                case_index: _,
+                case_name: _,
+            } => {
                 self.visit_expr(inner);
             }
             TirExprKind::VariadicTupleComprehension {
                 iterable,
+                binding_name: _,
+                binding_local: _,
                 destructure,
                 body,
-                ..
+                unique_id: _,
+                is_enumerate: _,
+                walk: _,
             } => {
                 self.visit_expr(iterable);
                 for stmt in destructure {
@@ -168,17 +387,33 @@ pub trait TirMutVisitor {
                 self.visit_expr(target);
                 self.visit_expr(value);
             }
-            TirExprKind::Call { args, .. } => {
+            TirExprKind::Call {
+                func,
+                type_args,
+                args,
+            } => {
+                if let Some(info) = &mut func.monomorph_info {
+                    self.walk_monomorph_info(info);
+                }
+                self.visit_type_ids(type_args);
                 for arg in args {
                     self.visit_expr(&mut arg.expr);
                 }
             }
-            TirExprKind::CmRawCall { args, .. } => {
+            TirExprKind::CmRawCall { target: _, args } => {
                 for arg in args {
                     self.visit_expr(arg);
                 }
             }
-            TirExprKind::Block(block) | TirExprKind::LabeledBlock { block, .. } => {
+            TirExprKind::Block(block) => {
+                self.visit_block(block);
+            }
+            TirExprKind::LabeledBlock {
+                label: _,
+                block,
+                result_type,
+            } => {
+                self.visit_type_id(result_type);
                 self.visit_block(block);
             }
             TirExprKind::If {
@@ -205,7 +440,12 @@ pub trait TirMutVisitor {
                     self.visit_expr(&mut arm.body);
                 }
             }
-            TirExprKind::StructLiteral { fields, .. } => {
+            TirExprKind::StructLiteral {
+                struct_type,
+                struct_name: _,
+                fields,
+            } => {
+                self.visit_type_id(struct_type);
                 for field in fields {
                     self.visit_expr(&mut field.value);
                 }
@@ -215,10 +455,31 @@ pub trait TirMutVisitor {
                     self.visit_expr(elem);
                 }
             }
-            TirExprKind::Closure { body, .. } => {
+            TirExprKind::Closure {
+                params,
+                body,
+                captures,
+                functor_id: _,
+                address_taken_locals: _,
+                body_locals,
+                declared_effects: _,
+            } => {
+                for (_, type_id) in params {
+                    self.visit_type_id(type_id);
+                }
+                for capture in captures {
+                    self.visit_type_id(&mut capture.type_id);
+                }
+                self.walk_locals(body_locals);
                 self.visit_expr(body);
             }
-            TirExprKind::VariantConstruct { payload, .. } => {
+            TirExprKind::VariantConstruct {
+                variant_type,
+                case_index: _,
+                case_name: _,
+                payload,
+            } => {
+                self.visit_type_id(variant_type);
                 if let Some(payload_expr) = payload {
                     self.visit_expr(payload_expr);
                 }
@@ -229,8 +490,15 @@ pub trait TirMutVisitor {
                     self.visit_expr(arg);
                 }
             }
-            TirExprKind::WithHandler { bindings, body, .. } => {
+            TirExprKind::WithHandler {
+                bindings,
+                body,
+                result_type,
+            } => {
+                self.visit_type_id(result_type);
                 for binding in bindings {
+                    self.visit_type_ids(&mut binding.trait_type_args);
+                    self.visit_type_id(&mut binding.handler_type);
                     self.visit_expr(&mut binding.handler);
                 }
                 self.visit_block(body);
