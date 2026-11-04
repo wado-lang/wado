@@ -258,8 +258,9 @@ code faster marks a case the optimizer misses.
 
 Improving the inliner is what pays, and it keeps being improved. A better price
 reaches every program at once. When it declines a callee that should be spliced,
-that is a cost-model bug: find the price with `WADO_TRACE=inline` and fix it in
-`optimize/inline.rs`.
+that is a cost-model bug. `wado dump -O2 --inline-decisions <name>` gives the
+callee's price and each of its sites' decision with the reason, a cold site's
+run included. Fix the price in `optimize/inline.rs`.
 
 Never bend source to the inliner's current prices. Collapsing `let`s into one
 expression, choosing an operation width, or splitting a function only to get

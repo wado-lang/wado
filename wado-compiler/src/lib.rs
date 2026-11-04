@@ -422,6 +422,8 @@ pub struct DumpResult {
     pub monomorphized_tir_text: Option<String>,
     /// Lowered TIR snapshot (unparsed text)
     pub lowered_nir_text: Option<String>,
+    /// The inliner's decisions about the functions `inline_decisions` named.
+    pub inline_decisions_text: Option<String>,
     /// Optimized NIR package — the post-`optimize` body IR consumed by
     /// `wir_build` and `codegen`. See WEP `wep-2026-05-11-nir.md`.
     pub optimized_package: Option<nir_package::NirPackage>,
@@ -2600,6 +2602,7 @@ pub async fn dump_with_host<H: CompilerHost>(
         &param_resolution::ParamInputs::default(),
         kiln::InvocationIndex::default(),
         1,
+        None,
     )
     .await
 }
@@ -2612,6 +2615,8 @@ pub async fn dump_with_host<H: CompilerHost>(
 /// their Kiln-generated output, exactly as [`compile_with_options`]'s
 /// `CompilerOptions::invocations` does — the caller is responsible for
 /// running the Kiln pipeline first (see `wado-cli`'s `maybe_run_pipeline`).
+/// `inline_decisions` names the functions whose inlining decisions to record,
+/// by a pattern their names hold.
 pub async fn dump_with_host_and_world<H: CompilerHost>(
     source: &str,
     host: &H,
@@ -2625,6 +2630,7 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
     params: &param_resolution::ParamInputs,
     invocations: kiln::InvocationIndex,
     parallelism: usize,
+    inline_decisions: Option<&str>,
 ) -> Result<DumpResult, Bail> {
     let logger = Logger::new(host, compiler_host::LogLevel::default());
     let filename = filename.map(String::from);
@@ -2737,6 +2743,7 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
     let assert_plan_text = sem.assert_plan_text();
     let coverage_plan_text = sem.coverage_plan_text();
     let export_mappings = sem.export_mappings.clone();
+    let parses = sem.space_modules.clone();
 
     // === Phase 7b+8+9+10: Build Package and run remaining phases ===
     // Create Package early so CM binding synthesis runs before monomorphize,
@@ -2848,14 +2855,14 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
             let prelower_reached = prelower_reach::before_lower(&mut flat);
 
             // Lower (FlatPackage → NirPackage)
-            let nir = {
+            let mut nir = {
                 let _span = logger.span("lower");
                 lower(flat, &logger, &logger)?
             };
             // Snapshot lowered state (NIR right after lower, before optimize)
             let lower_text = Some(nir_unparse::unparse_nir_package(&nir));
 
-            // Optimize
+            nir.inline_log = inline_decisions.map(optimize::InlineLog::new);
             let nir = {
                 let _span = logger.span("optimize");
                 optimize(nir, opt_level, opt, parallelism, &logger)
@@ -2888,6 +2895,10 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
         coverage_plan_text,
         monomorphized_tir_text,
         lowered_nir_text,
+        inline_decisions_text: optimized_package
+            .as_ref()
+            .and_then(|nir| nir.inline_log.as_ref())
+            .map(|log| log.render(&parses)),
         optimized_package,
         wir_package,
         trivia,

@@ -201,6 +201,9 @@ pub struct NirPackage {
     /// Set by `optimize` when `param_spec` ran out of clones with calls left
     /// to specialize, for the remark that says so.
     pub specialization_cap: Option<SpecializationCapHit>,
+    /// What the inliner decided each round, where `wado dump --inline-decisions`
+    /// asked for it.
+    pub inline_log: Option<crate::optimize::InlineLog>,
     /// When true, skip Wasm validation after code generation.
     pub skip_validation: bool,
     /// Target world fully-qualified name (e.g., "wasi:cli/command", "wasi:http/service")
