@@ -109,7 +109,7 @@ use heap_effect::HeapEffectsCache;
 use crate::compiler_host::{SpanEmitter, in_span};
 use crate::nir_package::NirPackage;
 use crate::parallel::Executor;
-use crate::{OptOverrides, compiler_trace};
+use crate::{MAX_INLINE_THRESHOLD, OptOverrides, compiler_trace};
 
 /// Configuration for optimization passes
 struct OptConfig {
@@ -193,7 +193,7 @@ pub fn optimize(
     // least.
     let thresholds = |level: usize| {
         let plain = inline_threshold.unwrap_or(level);
-        assert!(plain <= crate::MAX_INLINE_THRESHOLD);
+        assert!(plain <= MAX_INLINE_THRESHOLD);
         inline::Thresholds {
             cold: inline_cold_callsite_threshold.unwrap_or(plain / 4),
             plain,
