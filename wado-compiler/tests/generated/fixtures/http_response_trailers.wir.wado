@@ -614,10 +614,10 @@ fn "http_response_trailers.wado/$cm_task_entry__handle"(request) {
     let headers: ref null "core:prelude//$Resource";
     let $cm_pair_189: i64;
     let $local_193: ref null "tuple//[wasi:http/types.wado/Response, core:prelude/types.wado/Future<core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>>]";
-    let $sroa_$pattern_temp_0_0_318: i32;
-    let $sroa_$pattern_temp_0_1_319: i32;
-    let $sroa_$pattern_temp_1_0_320: ref null "core:prelude//$Resource";
-    let $sroa_$pattern_temp_1_1_321: i32;
+    let $sroa_$pattern_temp_0_0_278: i32;
+    let $sroa_$pattern_temp_0_1_279: i32;
+    let $sroa_$pattern_temp_1_0_280: ref null "core:prelude//$Resource";
+    let $sroa_$pattern_temp_1_1_281: i32;
     drop("http_response_trailers.wado/$cm_binding__wasi:http/types@0.3.0#[method]fields.append$spec0"(local.tee trailers("http_response_trailers.wado/$cm_binding__wasi:http/types@0.3.0#[constructor]fields"()), global:http_response_trailers.wado::$const_obj_3, global:http_response_trailers.wado::$const_obj_7));
     drop("http_response_trailers.wado/$cm_binding__wasi:http/types@0.3.0#[method]fields.append$spec1"(trailers, global:http_response_trailers.wado::$const_obj_2, global:http_response_trailers.wado::$const_obj_5));
     if @unlikely("http_response_trailers.wado/$cm_binding__wasi:http/types@0.3.0#[method]fields.has$spec0"(trailers, global:http_response_trailers.wado::$const_obj_3) == 0) {
@@ -634,18 +634,18 @@ condition: trailers.has(\"x-request-id\" as FieldName)
 "), 114);
         unreachable;
     }
-    $sroa_$pattern_temp_0_0_318 = builtin::i32_wrap_i64(local.tee $cm_pair_189("wasi/future-new:val-result<option<own<wasi:http/types.wado#Fields>>,wasi:http/types.wado#ErrorCode>"()));
-    $sroa_$pattern_temp_0_1_319 = builtin::i32_wrap_i64($cm_pair_189 >> 32_i64);
-    $sroa_$pattern_temp_1_0_320 = struct.new "core:prelude//$Resource" { value: builtin::i32_wrap_i64(local.tee $cm_pair_189("wasi/stream-new"())) };
-    $sroa_$pattern_temp_1_1_321 = builtin::i32_wrap_i64($cm_pair_189 >> 32_i64);
+    $sroa_$pattern_temp_0_0_278 = builtin::i32_wrap_i64(local.tee $cm_pair_189("wasi/future-new:val-result<option<own<wasi:http/types.wado#Fields>>,wasi:http/types.wado#ErrorCode>"()));
+    $sroa_$pattern_temp_0_1_279 = builtin::i32_wrap_i64($cm_pair_189 >> 32_i64);
+    $sroa_$pattern_temp_1_0_280 = struct.new "core:prelude//$Resource" { value: builtin::i32_wrap_i64(local.tee $cm_pair_189("wasi/stream-new"())) };
+    $sroa_$pattern_temp_1_1_281 = builtin::i32_wrap_i64($cm_pair_189 >> 32_i64);
     drop("http_response_trailers.wado/$cm_binding__wasi:http/types@0.3.0#[method]fields.append$spec1"(local.tee headers("http_response_trailers.wado/$cm_binding__wasi:http/types@0.3.0#[constructor]fields"()), global:http_response_trailers.wado::$const_obj_0, global:http_response_trailers.wado::$const_obj_1));
-    $sroa_$pattern_temp_1_0_320 = local.tee $local_193("http_response_trailers.wado/$cm_binding__wasi:http/types@0.3.0#[static]response.new"(headers, struct.new "core:prelude/types.wado//Option<core:prelude/types.wado/Stream<u8>>::Some" { discriminant: 1, payload_0: $sroa_$pattern_temp_1_0_320 }, $sroa_$pattern_temp_0_0_318)).0;
+    $sroa_$pattern_temp_1_0_280 = local.tee $local_193("http_response_trailers.wado/$cm_binding__wasi:http/types@0.3.0#[static]response.new"(headers, struct.new "core:prelude/types.wado//Option<core:prelude/types.wado/Stream<u8>>::Some" { discriminant: 1, payload_0: $sroa_$pattern_temp_1_0_280 }, $sroa_$pattern_temp_0_0_278)).0;
     headers = $local_193.1;
-    $sroa_$pattern_temp_0_0_318 = ref.cast "core:prelude/types.wado//Option<wasi:http/types.wado/Response>::Some"(struct.new "core:prelude/types.wado//Option<wasi:http/types.wado/Response>::Some" { discriminant: 1, payload_0: $sroa_$pattern_temp_1_0_320 }).payload_0.value;
-    "wasi/task-return:handle"(0, $sroa_$pattern_temp_0_0_318, 0, 0_i64, 0, 0, 0, 0);
-    drop("core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_all"($sroa_$pattern_temp_1_1_321, struct.new "core:prelude//List<u8>" { repr: array.new_data<u8>("response body"), used: 13 }));
-    "wasi/stream-drop-writable"($sroa_$pattern_temp_1_1_321);
-    drop("http_response_trailers.wado/$cm_future_write_core:prelude/types.wado/Result<core:prelude/types.wado/Option<wasi:http/types.wado/Trailers>,wasi:http/types.wado/ErrorCode>"($sroa_$pattern_temp_0_1_319, struct.new "core:prelude/types.wado//Result<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>::Ok" { discriminant: 0, payload_0: struct.new "core:prelude/types.wado//Box<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>>" { value: struct.new "core:prelude/types.wado//Option<wasi:http/types.wado/Fields>::Some" { discriminant: 1, payload_0: trailers } } }));
+    $sroa_$pattern_temp_0_0_278 = ref.cast "core:prelude/types.wado//Option<wasi:http/types.wado/Response>::Some"(struct.new "core:prelude/types.wado//Option<wasi:http/types.wado/Response>::Some" { discriminant: 1, payload_0: $sroa_$pattern_temp_1_0_280 }).payload_0.value;
+    "wasi/task-return:handle"(0, $sroa_$pattern_temp_0_0_278, 0, 0_i64, 0, 0, 0, 0);
+    drop("core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_all"($sroa_$pattern_temp_1_1_281, struct.new "core:prelude//List<u8>" { repr: array.new_data<u8>("response body"), used: 13 }));
+    "wasi/stream-drop-writable"($sroa_$pattern_temp_1_1_281);
+    drop("http_response_trailers.wado/$cm_future_write_core:prelude/types.wado/Result<core:prelude/types.wado/Option<wasi:http/types.wado/Trailers>,wasi:http/types.wado/ErrorCode>"($sroa_$pattern_temp_0_1_279, struct.new "core:prelude/types.wado//Result<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>::Ok" { discriminant: 0, payload_0: struct.new "core:prelude/types.wado//Box<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>>" { value: struct.new "core:prelude/types.wado//Option<wasi:http/types.wado/Fields>::Some" { discriminant: 1, payload_0: trailers } } }));
     if ref.is_null(headers) == 0 {
         "wasi/future-drop-readable:transmission-wasi:http/types.wado#ErrorCode"(headers.value);
     }

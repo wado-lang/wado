@@ -569,30 +569,30 @@ fn "destructuring_assign_index_swap.wado/sizes"(xs) {
     let end: i32;
     let ref_val: ref "core:prelude//List<i32>";
     let other_13: ref "core:prelude/string.wado//String";
-    let $n_30: i32;
-    let $new_used_34: i32;
-    let $start_36: i32;
-    let $sroa_$iter_0_repr_39: ref "Array<core:prelude/list.wado/List<i32>>";
-    let $sroa_$iter_0_index_40: i32;
+    let n_19: i32;
+    let new_used: i32;
+    let start_24: i32;
+    let $sroa_$iter_0_repr_28: ref "Array<core:prelude/list.wado/List<i32>>";
+    let $sroa_$iter_0_index_29: i32;
     out_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
     end = xs.used;
-    $sroa_$iter_0_repr_39 = xs.repr;
-    $sroa_$iter_0_index_40 = 0;
+    $sroa_$iter_0_repr_28 = xs.repr;
+    $sroa_$iter_0_index_29 = 0;
     b0: block {
         l1: loop {
-            break_if b0 $sroa_$iter_0_index_40 >= end;
-            ref_val = builtin::array_get_value<ref "core:prelude//List<i32>">($sroa_$iter_0_repr_39, $sroa_$iter_0_index_40);
-            $sroa_$iter_0_index_40 = $sroa_$iter_0_index_40 + 1;
+            break_if b0 $sroa_$iter_0_index_29 >= end;
+            ref_val = builtin::array_get_value<ref "core:prelude//List<i32>">($sroa_$iter_0_repr_28, $sroa_$iter_0_index_29);
+            $sroa_$iter_0_index_29 = $sroa_$iter_0_index_29 + 1;
             other_13 = "core:prelude/string.wado/core:prelude/string.wado/String::format<destructuring_assign_index_swap.wado/$tmpl$fb51c04d54491732,[i32]>$spec0$spec0$sroa[t.h0]"(ref_val.used);
             $inline_core_prelude_string_wado_String__internal_push_string_6: block {
-                break_if $inline_core_prelude_string_wado_String__internal_push_string_6 local.tee $n_30(other_13.used) == 0;
-                if @unlikely(local.tee $new_used_34(out_1.used + $n_30) > builtin::array_len(out_1.repr)) {
+                break_if $inline_core_prelude_string_wado_String__internal_push_string_6 local.tee n_19(other_13.used) == 0;
+                if @unlikely(local.tee new_used(out_1.used + n_19) > builtin::array_len(out_1.repr)) {
                     cold_path;
-                    "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_1, $new_used_34);
+                    "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_1, new_used);
                 }
-                $start_36 = out_1.used;
-                out_1.used = $new_used_34;
-                builtin::array_copy<u8>(out_1.repr, $start_36, other_13.repr, 0, $n_30);
+                start_24 = out_1.used;
+                out_1.used = new_used;
+                builtin::array_copy<u8>(out_1.repr, start_24, other_13.repr, 0, n_19);
             };
             continue l1;
         };
