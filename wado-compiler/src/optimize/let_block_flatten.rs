@@ -49,47 +49,61 @@ pub(super) fn flatten_let_blocks(project: &mut NirPackage, gate: &mut FunctionGa
 pub(super) struct LetBlockFlattenRule;
 
 impl Rule for LetBlockFlattenRule {
+    /// Every statement of `block` flattened in one pass, and the block written
+    /// once: a body of many inlined calls holds as many blocks to flatten.
     fn apply_block(&self, engine: &mut Engine, block: BlockId) -> bool {
-        let stmts = engine.body.blocks[block].stmts.clone();
-        for (i, &sid) in stmts.iter().enumerate() {
-            let Some((block_expr, inner)) = flattenable_inner_block(engine.body, sid) else {
+        // A stack, the next statement on top.
+        let mut pending: Vec<StmtId> = engine.body.blocks[block].stmts.clone();
+        pending.reverse();
+        let mut flattened = Vec::with_capacity(pending.len());
+        let mut changed = false;
+        while let Some(sid) = pending.pop() {
+            let Some(leading) = flatten(engine, sid) else {
+                flattened.push(sid);
                 continue;
             };
-            let inner_stmts = engine.body.blocks[inner].stmts.clone();
-            let Some((&tail_s, leading)) = inner_stmts.split_last() else {
-                continue;
-            };
-            let StmtKind::Expr(tail_op) = engine.body.stmts[tail_s].kind else {
-                continue;
-            };
-            compiler_trace!(
-                "let_block_flatten",
-                "flatten let stmt {sid:?}: hoist {} leading stmt(s)",
-                leading.len()
-            );
-            // Clear the inner list before splicing, so no statement is listed in
-            // two blocks. The binding keeps its `StmtId` and local def.
-            engine.set_block_stmts(inner, Vec::new());
-            let mut new_stmts = Vec::with_capacity(stmts.len() + leading.len());
-            new_stmts.extend_from_slice(&stmts[..i]);
-            new_stmts.extend_from_slice(leading);
-            new_stmts.extend_from_slice(&stmts[i..]);
-            engine.set_block_stmts(block, new_stmts);
-            // A skeleton tail moves its kind into the wrapper (`become_expr`),
-            // leaving the orphaned tail statement a `Dead` node — never a shared
-            // id, which the parent-map tripwire rejects.
-            match tail_op {
-                Operand::Expr(tail_e) => {
-                    engine.become_expr(block_expr, tail_e);
-                }
-                op @ Operand::Value(_) => {
-                    engine.redirect_expr(block_expr, op);
-                }
-            }
-            return true;
+            changed = true;
+            // The hoisted statements, then the binding again, whose value may
+            // open with another block.
+            pending.push(sid);
+            pending.extend(leading.into_iter().rev());
         }
-        false
+        if changed {
+            engine.set_block_stmts(block, flattened);
+        }
+        changed
     }
+}
+
+/// Hoists the leading statements of the block `sid`'s value opens with out of
+/// it, and returns them; `None` where it opens with none to hoist.
+fn flatten(engine: &mut Engine, sid: StmtId) -> Option<Vec<StmtId>> {
+    let (block_expr, inner) = flattenable_inner_block(engine.body, sid)?;
+    let mut leading = engine.body.blocks[inner].stmts.clone();
+    let tail_s = leading.pop().expect("a flattenable block has a tail");
+    let StmtKind::Expr(tail_op) = engine.body.stmts[tail_s].kind else {
+        unreachable!("a flattenable block's tail is a value");
+    };
+    compiler_trace!(
+        "let_block_flatten",
+        "flatten let stmt {sid:?}: hoist {} leading stmt(s)",
+        leading.len()
+    );
+    // Clear the inner list before the outer one takes its statements, so none
+    // is listed in two blocks. The binding keeps its `StmtId` and local def.
+    engine.set_block_stmts(inner, Vec::new());
+    // A skeleton tail moves its kind into the wrapper (`become_expr`), leaving
+    // the orphaned tail statement a `Dead` node — never a shared id, which the
+    // parent-map tripwire rejects.
+    match tail_op {
+        Operand::Expr(tail_e) => {
+            engine.become_expr(block_expr, tail_e);
+        }
+        op @ Operand::Value(_) => {
+            engine.redirect_expr(block_expr, op);
+        }
+    }
+    Some(leading)
 }
 
 /// If the operand `sid` evaluates first runs an unbroken block with leading
