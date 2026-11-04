@@ -1012,10 +1012,32 @@ impl<'a> Engine<'a> {
         self.buf.walk_children = children;
     }
 
-    /// Whether `node` is reachable from the root. An edit that drops a node
-    /// leaves its parent edge in place, so each edge is checked against the
-    /// parent's children.
-    fn is_attached(&self, mut node: NodeRef) -> bool {
+    /// Whether `node` is reachable from the root. Every edit that drops a child
+    /// clears its parent edge, so the edges alone answer.
+    fn is_attached(&self, node: NodeRef) -> bool {
+        let root = NodeRef::Block(self.body.root());
+        let mut at = node;
+        let attached = loop {
+            if at == root {
+                break true;
+            }
+            match self.parent_of(at) {
+                Some(parent) => at = parent,
+                None => break false,
+            }
+        };
+        debug_assert_eq!(
+            attached,
+            self.is_held_from_root(node),
+            "[NIR engine] {node:?} keeps a parent edge its parent dropped: an edit \
+             wrote the body outside the edit API"
+        );
+        attached
+    }
+
+    /// [`Engine::is_attached`] checked edge by edge against each parent's
+    /// children.
+    fn is_held_from_root(&self, mut node: NodeRef) -> bool {
         let root = NodeRef::Block(self.body.root());
         while node != root {
             let Some(parent) = self.parent_of(node) else {
@@ -1176,6 +1198,18 @@ impl<'a> Engine<'a> {
         self.buf.set_parent(child, parent);
     }
 
+    /// Clear the parent edge of each child `node` still owns, ahead of an edit
+    /// that replaces its children; the edit re-parents the ones it keeps. A
+    /// child already moved under another node keeps that edge.
+    fn detach_children(&mut self, node: NodeRef) {
+        let Self { body, buf, .. } = self;
+        body.for_each_child(node, |c| {
+            if buf.parent(c) == Some(node) {
+                buf.set_parent(c, None);
+            }
+        });
+    }
+
     /// Edit API: rewrite every operand slot of `node` through `f`.
     ///
     /// For a pass rewriting a whole subtree's slots in one sweep (`licm`'s
@@ -1231,6 +1265,7 @@ impl<'a> Engine<'a> {
                 u.reads.retain(|&r| r != id);
             }
         }
+        self.detach_children(NodeRef::Expr(id));
         self.body.exprs[id].kind = new_kind;
         self.census_add_subtree(NodeRef::Expr(id));
         // Register a new `Local` mention, if any.
@@ -1359,6 +1394,7 @@ impl<'a> Engine<'a> {
         // A write marks the function changed for its memos, so an unchanged
         // list is not written back.
         if self.body.blocks[block].stmts != stmts {
+            self.detach_children(NodeRef::Block(block));
             self.body.blocks[block].stmts = stmts;
         }
         for s in arrived {
