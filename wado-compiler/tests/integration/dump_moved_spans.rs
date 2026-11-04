@@ -4,7 +4,7 @@
 //! defensive `$value_copy$` the real compilation never emits.
 
 use crate::common::{block_on, in_memory_host};
-use wado_compiler::{OptLevel, dump_with_host_and_world};
+use wado_compiler::{OptLevel, dump_with_host};
 
 const SOURCE: &str = r#"
 fn consume(xs: List<i32>) -> i32 {
@@ -21,20 +21,7 @@ export fn run() {
 #[test]
 fn dump_applies_last_use_moves() {
     let host = in_memory_host(&[]);
-    let dump = block_on(dump_with_host_and_world(
-        SOURCE,
-        &host,
-        Some("entry.wado"),
-        OptLevel::O0,
-        None,
-        None,
-        wado_compiler::OptOverrides::default(),
-        &[],
-        None,
-        &wado_compiler::param_resolution::ParamInputs::default(),
-        wado_compiler::kiln::InvocationIndex::default(),
-        1,
-    ))
+    let dump = block_on(dump_with_host(SOURCE, &host, Some("entry.wado"), OptLevel::O0))
     .expect("dump succeeds");
 
     let lowered = dump

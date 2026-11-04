@@ -8,7 +8,7 @@
 //! `payload: T` field then panicked with "`TypeId`(..) not found in `TypeTable`".
 
 use crate::common::{block_on, in_memory_host};
-use wado_compiler::{OptLevel, dump_with_host_and_world, unparse::unparse_tir};
+use wado_compiler::{OptLevel, dump_with_host, unparse::unparse_tir};
 
 const SOURCE: &str = r#"
 struct Holder<T> {
@@ -33,19 +33,11 @@ fn resolved_modules() -> Vec<String> {
 /// The resolved TIR of every module `source` pulls in, unparsed.
 fn resolved_modules_of(source: &str) -> Vec<String> {
     let host = in_memory_host(&[]);
-    let dump = block_on(dump_with_host_and_world(
+    let dump = block_on(dump_with_host(
         source,
         &host,
         Some("entry.wado"),
         OptLevel::O2,
-        None,
-        None,
-        wado_compiler::OptOverrides::default(),
-        &[],
-        None,
-        &wado_compiler::param_resolution::ParamInputs::default(),
-        wado_compiler::kiln::InvocationIndex::default(),
-        1,
     ))
     .expect("dump succeeds");
     dump.tir_modules

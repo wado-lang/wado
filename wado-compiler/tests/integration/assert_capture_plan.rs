@@ -3,7 +3,7 @@
 //! operand, so `EXPECTED_EMPTY` is empty; a shape that stops is a regression.
 
 use crate::common::{block_on, in_memory_host};
-use wado_compiler::{OptLevel, dump_with_host_and_world};
+use wado_compiler::{OptLevel, dump_with_host};
 
 const SOURCE: &str = r#"
 struct Inner {
@@ -100,20 +100,7 @@ const EXPECTED_UNCONDITIONAL: &[(&str, &[&str])] = &[("0 <= a < b", &["a", "b"])
 
 fn entry_plan() -> String {
     let host = in_memory_host(&[]);
-    let dump = block_on(dump_with_host_and_world(
-        SOURCE,
-        &host,
-        Some("entry.wado"),
-        OptLevel::O2,
-        None,
-        None,
-        wado_compiler::OptOverrides::default(),
-        &[],
-        None,
-        &wado_compiler::param_resolution::ParamInputs::default(),
-        wado_compiler::kiln::InvocationIndex::default(),
-        1,
-    ))
+    let dump = block_on(dump_with_host(SOURCE, &host, Some("entry.wado"), OptLevel::O2))
     .expect("dump succeeds");
 
     let text = dump

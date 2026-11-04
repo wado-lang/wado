@@ -362,21 +362,22 @@ async fn run_single(opts: &DumpOptions, input: &str) -> Result<(), CliExit> {
     let profile =
         entry_profile(path, knobs, opts.target_world.as_deref(), &host).map_err(CliExit::error)?;
     // Diagnostics are already emitted by the host; signal silently on failure.
-    let result = wado_compiler::dump_with_host_and_world(
-        &source,
-        &host,
-        Some(input),
-        knobs.opt_level.to_compiler(),
-        opts.target_world.as_deref(),
-        knobs.allocator.as_deref(),
-        knobs.opt.clone(),
-        &knobs.codegen_flags,
-        profile.as_deref(),
-        &knobs.params,
+    let options = wado_compiler::CompilerOptions {
+        opt_level: knobs.opt_level.to_compiler(),
+        target_world: opts.target_world.clone(),
+        allocator: knobs.allocator.clone(),
+        opt: knobs.opt.clone(),
+        codegen_flags: knobs.codegen_flags.clone(),
+        profile,
+        params: knobs.params.clone(),
         invocations,
-        knobs.optimize_threads(),
-    )
-    .await
+        parallelism: knobs.optimize_threads(),
+        log_level: Some(knobs.log_level),
+        lints: knobs.lints,
+        ..wado_compiler::CompilerOptions::default()
+    };
+    let result = wado_compiler::dump_with_options(&source, &host, Some(input), options)
+        .await
     .map_err(|_bail| CliExit::silent_failure(1))?;
     if opts.show_tokens {
         println!("=== Tokens ===");

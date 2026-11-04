@@ -1009,19 +1009,16 @@ pub fn compile_source_with_opts(
 /// The world surface `wado compile` embeds for `source` under `world_fq`: empty
 /// where it compiles to no component, as the CLI's is.
 pub fn world_surface(host: &impl CompilerHost, source: &str, world_fq: &str) -> WorldSurface {
-    match block_on(wado_compiler::dump_with_host_and_world(
+    let options = wado_compiler::CompilerOptions {
+        opt_level: OptLevel::O2,
+        target_world: Some(world_fq.to_string()),
+        ..wado_compiler::CompilerOptions::default()
+    };
+    match block_on(wado_compiler::dump_with_options(
         source,
         host,
         Some("entry.wado"),
-        OptLevel::O2,
-        Some(world_fq),
-        None,
-        wado_compiler::OptOverrides::default(),
-        &[],
-        None,
-        &wado_compiler::param_resolution::ParamInputs::default(),
-        wado_compiler::kiln::InvocationIndex::default(),
-        1,
+        options,
     )) {
         Ok(dump) => dump
             .wir_package

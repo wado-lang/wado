@@ -529,26 +529,27 @@ async fn render_phases(
         return out;
     };
 
-    if needs_dump {
-        let profile = inputs.profile(&base_path);
-        let host = StubHost::new(base_path.clone()).with_stubs(inputs.host_stubs());
-        let dumped = wado_compiler::dump_with_host_and_world(
-            source,
-            &host,
-            Some(input_path),
+    let options = inputs.apply(
+        wado_compiler::CompilerOptions {
             opt_level,
-            target_world.as_deref(),
-            Some(&allocator),
-            inputs.opt_overrides(),
-            &inputs.codegen_flags,
-            profile.as_deref(),
-            &inputs.param_inputs(),
-            invocations.clone(),
+            target_world,
+            log_level: Some(wado_compiler::LogLevel::Off),
+            retain_wir: needs_wir,
+            allocator: Some(allocator),
+            invocations,
             // More than one, so a golden that depends on the thread count
             // drifts from the one committed.
-            2,
-        )
-        .await;
+            parallelism: 2,
+            ..wado_compiler::CompilerOptions::default()
+        },
+        &base_path,
+    );
+
+    if needs_dump {
+        let host = StubHost::new(base_path.clone()).with_stubs(inputs.host_stubs());
+        let dumped =
+            wado_compiler::dump_with_options(source, &host, Some(input_path), options.clone())
+                .await;
 
         match dumped {
             Err(_) => {
@@ -604,19 +605,6 @@ async fn render_phases(
     }
 
     if needs_compile {
-        let options = inputs.apply(
-            wado_compiler::CompilerOptions {
-                opt_level,
-                target_world: target_world.clone(),
-                log_level: Some(wado_compiler::LogLevel::Off),
-                retain_wir: needs_wir,
-                allocator: Some(allocator),
-                invocations,
-                parallelism: 2,
-                ..wado_compiler::CompilerOptions::default()
-            },
-            &base_path,
-        );
         let host = StubHost::new(base_path).with_stubs(inputs.host_stubs());
         match wado_compiler::compile_with_options(source, &host, Some(input_path), options).await {
             Err(_) => {
@@ -650,7 +638,7 @@ async fn render_phases(
 }
 
 /// Build an error string that attaches buffered diagnostics from a
-/// [`StubHost`], which prints none. `dump_with_host_and_world` converts a resolve `Bail`
+/// [`StubHost`], which prints none. `dump_with_options` converts a resolve `Bail`
 /// into a `DumpResult` with all post-resolve fields `None`, so the
 /// pipeline otherwise sees only an empty output with no context.
 fn diagnostics_summary(host: &StubHost, prefix: &str) -> String {

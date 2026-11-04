@@ -294,7 +294,7 @@ impl CompileInputs {
     }
 
     /// The fields of `options` these inputs set, the rest kept. The e2e
-    /// harness and the WIR goldens both compile through it, so neither drops
+    /// harness and the golden dumps both compile through it, so neither drops
     /// an input the other honours.
     #[must_use]
     pub fn apply(&self, options: CompilerOptions, fixture_dir: &Path) -> CompilerOptions {
@@ -312,15 +312,6 @@ impl CompileInputs {
                 .unused_diagnostics
                 .unwrap_or(options.unused_diagnostics),
             ..options
-        }
-    }
-
-    /// The optimizer overrides these inputs set.
-    #[must_use]
-    pub fn opt_overrides(&self) -> OptOverrides {
-        OptOverrides {
-            inline_threshold: self.optimize_inline_threshold,
-            ..OptOverrides::default()
         }
     }
 

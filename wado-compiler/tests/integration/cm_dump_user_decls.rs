@@ -3,7 +3,7 @@
 //! WIR with the binding's call unresolved.
 
 use crate::common::{block_on, in_memory_host};
-use wado_compiler::{OptLevel, dump_with_host_and_world};
+use wado_compiler::{OptLevel, dump_with_host};
 
 const USER_CM_BINDING: &str = r#"
 interface Entropy {
@@ -19,19 +19,11 @@ export fn run() with Entropy {
 #[test]
 fn dump_registers_a_user_modules_cm_declarations() {
     let host = in_memory_host(&[]);
-    let dump = block_on(dump_with_host_and_world(
+    let dump = block_on(dump_with_host(
         USER_CM_BINDING,
         &host,
         Some("entry.wado"),
         OptLevel::O0,
-        None,
-        None,
-        wado_compiler::OptOverrides::default(),
-        &[],
-        None,
-        &wado_compiler::param_resolution::ParamInputs::default(),
-        wado_compiler::kiln::InvocationIndex::default(),
-        1,
     ))
     .expect("dumping a user CM binding succeeds");
 
