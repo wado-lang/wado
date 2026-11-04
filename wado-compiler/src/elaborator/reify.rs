@@ -2112,28 +2112,24 @@ impl<'a> Reify<'a> {
     /// that takes one on some path is left alone: a `let … else` desugars to
     /// such a `match`, and marking it made the rest of its block cold to the
     /// inliner.
-    fn mark_diverging_stmts(&self, stmts: Vec<TirStmt>) -> Vec<TirStmt> {
+    fn mark_diverging_stmts(&self, mut stmts: Vec<TirStmt>) -> Vec<TirStmt> {
         let tt = self.tysys.type_table.borrow();
-        let diverges = |s: &TirStmt| {
+        let Some(first) = stmts.iter().position(|s| {
             matches!(&s.kind, TirStmtKind::Expr(e) if tt.is_never(e.type_id)) && traps(s)
-        };
-        if !stmts.iter().any(diverges) {
+        }) else {
             return stmts;
-        }
-        let mut out: Vec<TirStmt> = Vec::with_capacity(stmts.len() + 1);
+        };
         // A marker makes its whole basic block cold, so one per block is all
         // there is to place, and a synthesis site that placed its own keeps it.
         // A profile's marker stating one half leaves the other to this one.
-        let mut marked = false;
-        for s in stmts {
-            marked = marked || marker_stmt_mark(&s) == Some(Mark::ColdPath);
-            if diverges(&s) && !marked {
-                out.push(known_cold_path_stmt(s.span));
-                marked = true;
-            }
-            out.push(s);
+        if !stmts[..=first]
+            .iter()
+            .any(|s| marker_stmt_mark(s) == Some(Mark::ColdPath))
+        {
+            let span = stmts[first].span;
+            stmts.insert(first, known_cold_path_stmt(span));
         }
-        out
+        stmts
     }
 
     /// Desugar `let PAT = EXPR else { ELSE };` followed by `rest` into a
