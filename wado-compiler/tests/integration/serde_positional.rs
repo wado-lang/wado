@@ -15,7 +15,12 @@ use wado_compiler::{OptLevel, dump_with_host};
 /// Monomorphized TIR text for `source`.
 fn monomorphized_tir(source: &str) -> String {
     let host = in_memory_host(&[]);
-    let dump = block_on(dump_with_host(source, &host, Some("entry.wado"), OptLevel::O0))
+    let dump = block_on(dump_with_host(
+        source,
+        &host,
+        Some("entry.wado"),
+        OptLevel::O0,
+    ))
     .expect("dump succeeds");
     dump.monomorphized_tir_text
         .expect("monomorphized TIR present after dump")

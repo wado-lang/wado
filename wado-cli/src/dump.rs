@@ -378,7 +378,7 @@ async fn run_single(opts: &DumpOptions, input: &str) -> Result<(), CliExit> {
     };
     let result = wado_compiler::dump_with_options(&source, &host, Some(input), options)
         .await
-    .map_err(|_bail| CliExit::silent_failure(1))?;
+        .map_err(|_bail| CliExit::silent_failure(1))?;
     if opts.show_tokens {
         println!("=== Tokens ===");
         for (i, token) in result.tokens.iter().enumerate() {

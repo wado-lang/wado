@@ -27,7 +27,12 @@ export fn run() {
 
 fn monomorphized_tir(source: &str) -> String {
     let host = in_memory_host(&[]);
-    let dump = block_on(dump_with_host(source, &host, Some("entry.wado"), OptLevel::O2))
+    let dump = block_on(dump_with_host(
+        source,
+        &host,
+        Some("entry.wado"),
+        OptLevel::O2,
+    ))
     .expect("dump succeeds");
     dump.monomorphized_tir_text
         .expect("monomorphized TIR snapshot present after dump")

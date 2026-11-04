@@ -100,7 +100,12 @@ const EXPECTED_UNCONDITIONAL: &[(&str, &[&str])] = &[("0 <= a < b", &["a", "b"])
 
 fn entry_plan() -> String {
     let host = in_memory_host(&[]);
-    let dump = block_on(dump_with_host(SOURCE, &host, Some("entry.wado"), OptLevel::O2))
+    let dump = block_on(dump_with_host(
+        SOURCE,
+        &host,
+        Some("entry.wado"),
+        OptLevel::O2,
+    ))
     .expect("dump succeeds");
 
     let text = dump

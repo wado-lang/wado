@@ -2638,8 +2638,8 @@ pub async fn dump_with_options<H: CompilerHost>(
 
     // === Phase 4: Load all modules ===
     let mut load_result = {
-        let module_loader =
-            loader::ModuleLoader::new(host, log_level).with_invocations(options.invocations.clone());
+        let module_loader = loader::ModuleLoader::new(host, log_level)
+            .with_invocations(options.invocations.clone());
         module_loader
             .load_all(source, filename.as_deref())
             .await

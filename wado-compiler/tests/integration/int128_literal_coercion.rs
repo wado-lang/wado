@@ -22,7 +22,12 @@ export fn run() {
 #[test]
 fn byte_literal_at_int128_reifies_to_the_constructor_call() {
     let host = in_memory_host(&[]);
-    let dump = block_on(dump_with_host(SOURCE, &host, Some("entry.wado"), OptLevel::O2))
+    let dump = block_on(dump_with_host(
+        SOURCE,
+        &host,
+        Some("entry.wado"),
+        OptLevel::O2,
+    ))
     .expect("dump succeeds");
 
     let modules = dump

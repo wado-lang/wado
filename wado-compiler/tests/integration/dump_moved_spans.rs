@@ -21,7 +21,12 @@ export fn run() {
 #[test]
 fn dump_applies_last_use_moves() {
     let host = in_memory_host(&[]);
-    let dump = block_on(dump_with_host(SOURCE, &host, Some("entry.wado"), OptLevel::O0))
+    let dump = block_on(dump_with_host(
+        SOURCE,
+        &host,
+        Some("entry.wado"),
+        OptLevel::O0,
+    ))
     .expect("dump succeeds");
 
     let lowered = dump

@@ -18,8 +18,13 @@ use wado_compiler::{
 /// The plan: `WirPackage::world_surface.imports`, obtained from a dump.
 fn plan_imports(source: &str) -> BTreeSet<String> {
     let host = in_memory_host(&[]);
-    let dump = block_on(dump_with_host(source, &host, Some("entry.wado"), OptLevel::O2))
-        .expect("dump succeeds");
+    let dump = block_on(dump_with_host(
+        source,
+        &host,
+        Some("entry.wado"),
+        OptLevel::O2,
+    ))
+    .expect("dump succeeds");
     let pkg = dump.wir_package.expect("wir package present after dump");
     pkg.world_surface.imports.iter().cloned().collect()
 }
@@ -129,7 +134,12 @@ fn plan_matches_component_for_http_service_with_resources() {
             target_world: Some(world.to_string()),
             ..CompilerOptions::default()
         };
-        let dump = block_on(dump_with_options(&source, &host, Some("entry.wado"), options))
+        let dump = block_on(dump_with_options(
+            &source,
+            &host,
+            Some("entry.wado"),
+            options,
+        ))
         .expect("dump succeeds");
         dump.wir_package
             .expect("wir package present")
@@ -199,7 +209,12 @@ fn component_plan_and_actual(source: &str) -> (BTreeSet<String>, BTreeSet<String
 
     let plan: BTreeSet<String> = {
         let host = StubHost::new(base.clone());
-        let dump = block_on(dump_with_host(source, &host, Some("entry.wado"), OptLevel::O2))
+        let dump = block_on(dump_with_host(
+            source,
+            &host,
+            Some("entry.wado"),
+            OptLevel::O2,
+        ))
         .expect("dump succeeds");
         dump.wir_package
             .expect("wir package present after dump")
