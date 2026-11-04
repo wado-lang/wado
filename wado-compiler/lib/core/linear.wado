@@ -75,7 +75,7 @@ impl<T: AnyBits> ListView<T> {
     /// The elements, copied into a `List`.
     pub fn to_list(&self) -> List<T> {
         assert !*self.released, "a view is read only while it lives";
-        return loaded(self.ptr, self.len);
+        return List::<T>::internal_loaded(self.ptr, self.len);
     }
 }
 
@@ -86,17 +86,6 @@ impl<T: AnyBits> Drop for ListView<T> {
             let _ = builtin::realloc(self.ptr, self.owned_bytes, builtin::size_of::<T>(), 0);
         }
     }
-}
-
-/// The `len` `T`s lying from `ptr` on, read at any alignment, copied into a
-/// `List`.
-fn loaded<T: AnyBits>(ptr: i32, len: i32) -> List<T> {
-    let width = builtin::size_of::<T>();
-    let mut list = List::<T>::with_capacity(len);
-    for let i of 0..<len {
-        list.push(builtin::load::<T>(ptr + i * width));
-    }
-    return list;
 }
 
 impl<T: AnyBits> IndexValue<i32> for ListView<T> {
@@ -230,7 +219,7 @@ impl<T: AnyBits> LinearArray<T> {
 
     /// The elements, copied into a `List`.
     pub fn to_list(&self) -> List<T> {
-        return loaded(self.block.ptr, self.len);
+        return List::<T>::internal_loaded(self.block.ptr, self.len);
     }
 
     /// The same bytes as an array of `U`, read little-endian, with no element
@@ -252,7 +241,7 @@ impl LinearArray<u8> {
         contract 0 <= start <= end <= self.len()
         contract (end - start) % builtin::size_of::<U>() == 0
     {
-        return loaded(self.block.ptr + start, (end - start) / builtin::size_of::<U>());
+        return List::<U>::internal_loaded(self.block.ptr + start, (end - start) / builtin::size_of::<U>());
     }
 
     /// Every byte `stream` delivers until its writer drops. A host copy lands

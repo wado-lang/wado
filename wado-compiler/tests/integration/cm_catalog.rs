@@ -190,9 +190,31 @@ fn cases() -> Vec<Case> {
         case("id-char", Val::Char('λ')),
         case("id-string", Val::String("héllo, wörld".into())),
         // Built-in containers.
+        // Eleven bytes, so a copy moving eight at a time leaves a tail.
+        case("id-list-u8", Val::List((1..=11).map(Val::U8).collect())),
         case(
-            "id-list-u8",
-            Val::List(vec![Val::U8(1), Val::U8(2), Val::U8(3)]),
+            "id-list-s8",
+            Val::List(vec![Val::S8(-1), Val::S8(i8::MIN), Val::S8(7)]),
+        ),
+        case(
+            "id-list-s16",
+            Val::List(vec![Val::S16(-2), Val::S16(i16::MAX), Val::S16(i16::MIN)]),
+        ),
+        case(
+            "id-list-u64",
+            Val::List(vec![Val::U64(u64::MAX), Val::U64(0x0123_4567_89AB_CDEF)]),
+        ),
+        case(
+            "id-list-f32",
+            Val::List(vec![Val::Float32(-0.5), Val::Float32(f32::MAX)]),
+        ),
+        case(
+            "id-list-f64",
+            Val::List(vec![Val::Float64(1e300), Val::Float64(-0.0)]),
+        ),
+        case(
+            "id-list-bool",
+            Val::List(vec![Val::Bool(true), Val::Bool(false)]),
         ),
         case(
             "id-list-string",

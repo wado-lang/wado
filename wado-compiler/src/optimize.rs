@@ -89,6 +89,7 @@ use dce::{
 };
 use drve::eliminate_dead_return_values;
 use field_scalarize::scalarize_hot_fields;
+pub use inline::InlineLog;
 use inline::inline_functions;
 pub(crate) use inline::is_constant_arg;
 use licm::apply_licm;

@@ -69,7 +69,7 @@ mise run format          # format Rust, Markdown, and Wado files
 
 ## Tooling
 
-- Make every edit with the editing tools, never a shell rewrite (`sed`, `awk`, a script), however bulk the change.
+- Make every edit with the editing tools, never a shell rewrite (`sed`, `awk`, a script), however bulk the change. The one exception is renaming a Rust symbol with `wado-dev-tools rust-rename`, which edits where rust-analyzer resolves the name rather than where the text matches.
 - Run a long job (`mise run test`, `test-wado`, `update-golden-fixtures`) in the background, one per invocation. Run one heavy job at a time; two starve each other.
 - `test`, `test-wado`, `test-stdlib`, `test-gale-o2` and `test-fuel` refuse to start while another of the same is running (`test-e2e` counts as `test`, and `update-baselines` as `test-fuel`), naming the holder's pid — where `flock` exists; `scripts/exclusive.sh` says so on stderr and runs unlocked where it does not. Abandoning a job does not stop it, so restarting after an edit means killing that pid first.
 - Redirect a job's output to a file and read the file, so what you did not anticipate is still there. Scratch files go in `scratchpad/`: it is git-ignored, so `git add -A` leaves them out, and per worktree, so concurrent sessions do not overwrite each other's. A fixed path under `/tmp` is shared by every session.
