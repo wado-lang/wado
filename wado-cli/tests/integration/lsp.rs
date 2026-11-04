@@ -2793,4 +2793,6 @@ fn query_scip_names_a_stdlib_file_as_its_importers_do() {
     // `cli_test.wado`.
     assert_eq!(count("wado . core:cli . greet()."), 5);
     assert_eq!(count("wado-compiler/lib/core/cli.wado . "), 0);
+    // The document itself keeps the path Eddy reads its source from.
+    assert_eq!(count("wado-compiler/lib/core/cli.wado"), 1);
 }

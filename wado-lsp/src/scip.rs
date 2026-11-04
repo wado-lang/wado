@@ -763,21 +763,6 @@ mod tests {
         .await
     }
 
-    #[test]
-    fn a_stdlib_file_names_its_symbols_by_its_import_path() {
-        futures::executor::block_on(async {
-            let path = "/w/wado-compiler/lib/core/cli.wado";
-            let source = "pub fn greet() -> i32 {\n    return 1;\n}\n";
-            let host = crate::test_support::in_memory_host(&[(path, source)]);
-            let sem = wado_compiler::semantics(source, &host, Some(path)).await;
-            let uri = format!("file://{path}");
-            let ctx = QueryContext::new(&sem, source, &uri, PositionEncoding::Utf32);
-            let d = document(&ctx, "file:///w/");
-            assert_eq!(d.relative_path, "wado-compiler/lib/core/cli.wado");
-            assert_eq!(symbol(&d, "greet").symbol, "wado . core:cli . greet().");
-        });
-    }
-
     fn symbol<'d>(d: &'d ScipDocument, name: &str) -> &'d SymbolInformation {
         d.symbols
             .iter()
