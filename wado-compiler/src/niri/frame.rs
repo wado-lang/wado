@@ -340,9 +340,6 @@ impl Interpreter<'_> {
                 {
                     return Flow::Bail;
                 }
-                if self.binds_written_array_handle(body, index, value) {
-                    return Flow::Bail;
-                }
                 // What makes a binding of a reference an alias is that nothing
                 // displaces it. `mut` does not say so: scalarizing leaves an
                 // immutable `let` that is assigned later.
@@ -360,6 +357,10 @@ impl Interpreter<'_> {
                     if let Some(flow) = self.bind_place_fields(body, index, value) {
                         return flow;
                     }
+                }
+                // Past the aliases, the binding copies what it reads.
+                if self.binds_written_array_handle(body, index, value) {
+                    return Flow::Bail;
                 }
                 let lattice = match value.as_expr().and_then(|e| self.exec_call_stmt(body, e)) {
                     Some(Flow::Fallthrough(lattice)) => lattice,
