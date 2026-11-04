@@ -70,8 +70,8 @@ function refused(pattern) {
       }
       names.add(name);
     } else if (c === "{") {
-      const [, min, max] = /^(\d+)(?:,(\d*))?\}/.exec(rest) ?? [];
-      if (Number(min ?? 0) > 4294967295 || Number(max || 0) > 4294967295) {
+      const bounds = /^(\d+)(?:,(\d*))?\}/.exec(rest)?.slice(1) ?? [];
+      if (bounds.some((n) => Number(n || 0) > 4294967295)) {
         return true;
       }
     }
