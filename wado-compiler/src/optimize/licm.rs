@@ -1353,7 +1353,14 @@ fn jumps_within_loop(
                 return true;
             }
             StmtKind::Break { label: None, .. } if depth > 0 => return true,
-            _ => {}
+            StmtKind::Break { .. }
+            | StmtKind::Return { .. }
+            | StmtKind::Let { .. }
+            | StmtKind::Expr(_)
+            | StmtKind::If { .. }
+            | StmtKind::Loop { .. }
+            | StmtKind::LabeledBlock { .. }
+            | StmtKind::LetDestructure { .. } => {}
         }
     }
     let depth = depth + loops_opened(body, node);

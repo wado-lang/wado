@@ -603,12 +603,18 @@ impl Interpreter<'_> {
     /// root. A target naming no place, or a projection into a root the frame
     /// holds no constant for, bails.
     fn exec_store(&mut self, body: &mut Body, target: ExprId, value: Operand) -> Flow {
+        // Only a reload assigns an alias (`reassigned_locals`): it names the
+        // place again, and anything else would rebind it.
         if let Some(index) = named_local(body, target.into())
-            && let Some(bound) = self.frame.array_aliases.get(&index)
+            && let Some(bound) = self
+                .frame
+                .array_aliases
+                .get(&index)
+                .or_else(|| self.frame.place_aliases.get(&index))
+                .cloned()
         {
-            // Only a reload assigns an array alias (`reassigned_locals`).
-            return if self.frame_place_of(body, value).as_ref() == Some(bound) {
-                self.frame.place_aliases.insert(index, bound.clone());
+            return if self.frame_place_of(body, value) == Some(bound.clone()) {
+                self.frame.place_aliases.insert(index, bound);
                 Flow::Fallthrough(Lattice::Unevaluated)
             } else {
                 Flow::Bail
