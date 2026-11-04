@@ -167,13 +167,14 @@ impl ModifiedVars {
         let Some(key) = ctx.type_table.heap_object_key(root_type) else {
             return false;
         };
-        self.call_sites.iter().any(|&call| {
-            ctx.call_writes(body, call, key, root)
-                && ctx
-                    .heap
-                    .effects
-                    .call_may_write_field(body, call, key, field_idx)
-        })
+        let watch = Watch {
+            key,
+            root,
+            field: field_idx,
+        };
+        self.call_sites
+            .iter()
+            .any(|&call| ctx.call_writes_field(body, call, watch))
     }
 
     fn add_alias(&mut self, a: u32, b: u32) {
@@ -369,11 +370,14 @@ impl<'a> LicmCtx<'a> {
         index
     }
 
-    /// Whether `call` may write an object of type `key` that `root` holds.
-    fn call_writes(&self, body: &Body, call: ExprId, key: TypeKey, root: u32) -> bool {
+    /// Whether `call` may write field `field` of a `key` object that `root`
+    /// holds.
+    fn call_writes_field(&self, body: &Body, call: ExprId, watch: Watch) -> bool {
+        let Watch { key, root, field } = watch;
         self.heap
             .get(body)
             .call_may(self.heap.effects, body, call, Effect::Write, key, root)
+            && self.heap.effects.call_may_write_field(body, call, key, field)
     }
 }
 
@@ -744,7 +748,7 @@ fn hoist_reloadable_field_loads(
         {
             return false;
         }
-        let Some(key) = ctx.type_table.heap_object_key(root_ty) else {
+        let Some(watch) = c.watch(engine, ctx) else {
             return false;
         };
         let mut readers = vec![c.local_index];
@@ -760,7 +764,7 @@ fn hoist_reloadable_field_loads(
             readers: &readers,
             field_index: c.field_index,
             clobbers: &Clobbers {
-                watched: [(key, c.local_index)].into_iter().collect(),
+                watched: [watch].into_iter().collect(),
             },
         };
         gain.pays(loop_body)
@@ -770,14 +774,11 @@ fn hoist_reloadable_field_loads(
         return;
     }
 
-    // The calls that force a reload: each writes some candidate's object.
+    // The calls that force a reload: each may write some candidate's field.
     let clobbers = Clobbers {
         watched: candidates
             .iter()
-            .filter_map(|c| {
-                let root_ty = candidate_root_ty(engine, c.local_index, c.type_id);
-                Some((ctx.type_table.heap_object_key(root_ty)?, c.local_index))
-            })
+            .filter_map(|c| c.watch(engine, ctx))
             .collect(),
     };
 
@@ -810,9 +811,8 @@ fn hoist_reloadable_field_loads(
     let mut specs = Vec::with_capacity(candidates.len());
     for candidate in &candidates {
         let local_type_id = candidate_root_ty(engine, candidate.local_index, candidate.type_id);
-        let key = ctx
-            .type_table
-            .heap_object_key(local_type_id)
+        let watch = candidate
+            .watch(engine, ctx)
             .expect("a candidate's call clobber was found by its object key");
         let new_local_index = ctx.alloc_hoist(
             engine,
@@ -850,7 +850,7 @@ fn hoist_reloadable_field_loads(
             field_index: candidate.field_index,
             field_name: candidate.field_name.clone(),
             field_type: candidate.type_id,
-            watch: (key, candidate.local_index),
+            watch,
             hoist_local: new_local_index,
             hoist_name,
         });
@@ -1067,20 +1067,28 @@ impl ReloadGain<'_> {
     }
 }
 
-/// The objects whose writes the reload path watches for, each an object key
-/// and the local holding the object.
+/// A field whose writes the reload path watches for: the `field` of the `key`
+/// object the local `root` holds.
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+struct Watch {
+    key: TypeKey,
+    root: u32,
+    field: u32,
+}
+
+/// The fields whose writes the reload path watches for.
 struct Clobbers {
-    watched: IndexSet<(TypeKey, u32)>,
+    watched: IndexSet<Watch>,
 }
 
 impl Clobbers {
-    /// The watched objects the call at `e` may write; none for a non-call.
+    /// The watched fields the call at `e` may write; none for a non-call.
     fn written_by<'s>(
         &'s self,
         ctx: &'s LicmCtx,
         body: &'s Body,
         e: ExprId,
-    ) -> impl Iterator<Item = (TypeKey, u32)> + 's {
+    ) -> impl Iterator<Item = Watch> + 's {
         let is_call = matches!(
             body.exprs[e].kind,
             ExprKind::Call { .. } | ExprKind::IndirectCall { .. }
@@ -1088,10 +1096,10 @@ impl Clobbers {
         self.watched
             .iter()
             .copied()
-            .filter(move |&(key, root)| is_call && ctx.call_writes(body, e, key, root))
+            .filter(move |&watch| is_call && ctx.call_writes_field(body, e, watch))
     }
 
-    fn hits(&self, ctx: &LicmCtx, body: &Body, e: ExprId) -> IndexSet<(TypeKey, u32)> {
+    fn hits(&self, ctx: &LicmCtx, body: &Body, e: ExprId) -> IndexSet<Watch> {
         self.written_by(ctx, body, e).collect()
     }
 
@@ -1110,8 +1118,7 @@ struct ReloadSpec {
     field_index: u32,
     field_name: String,
     field_type: TypeId,
-    /// The watched object whose writes require this field to be reloaded.
-    watch: (TypeKey, u32),
+    watch: Watch,
     hoist_local: u32,
     hoist_name: String,
 }
@@ -1366,7 +1373,7 @@ fn node_clobbered(
     body: &Body,
     node: NodeRef,
     clobbers: &Clobbers,
-) -> IndexSet<(TypeKey, u32)> {
+) -> IndexSet<Watch> {
     let mut hit = IndexSet::default();
     collect_clobbered(ctx, body, node, clobbers, &mut hit);
     hit
@@ -1377,7 +1384,7 @@ fn collect_clobbered(
     body: &Body,
     node: NodeRef,
     clobbers: &Clobbers,
-    hit: &mut IndexSet<(TypeKey, u32)>,
+    hit: &mut IndexSet<Watch>,
 ) {
     if let NodeRef::Expr(e) = node {
         hit.extend(clobbers.hits(ctx, body, e));
@@ -1561,38 +1568,6 @@ fn collect_modified_vars_in_block(
 ) {
     for s in &body.blocks[block].stmts {
         collect_modified_vars_in_stmt(body, *s, modified, type_table);
-    }
-}
-
-fn mark_gc_local_as_fully_modified_operand(
-    body: &Body,
-    op: Operand,
-    modified: &mut ModifiedVars,
-    type_table: &TypeTable,
-) {
-    if let Some(e) = op.as_expr() {
-        mark_gc_local_as_fully_modified(body, e, modified, type_table);
-    }
-}
-
-/// Mark a local as fully modified if it has a GC struct type and is passed to a
-/// function call (callees can mutate any field). Immutable `&T` locals are
-/// skipped — no callee can mutate the pointee through them.
-fn mark_gc_local_as_fully_modified(
-    body: &Body,
-    e: ExprId,
-    modified: &mut ModifiedVars,
-    type_table: &TypeTable,
-) {
-    if let ExprKind::Local { index, .. } = &body.exprs[e].kind
-        && is_gc_heap_type(body.exprs[e].type_id, type_table)
-    {
-        if let ResolvedType::Ref(inner) = type_table.get(body.exprs[e].type_id)
-            && !matches!(type_table.get(*inner), ResolvedType::MutRef(_))
-        {
-            return;
-        }
-        modified.insert_full(*index);
     }
 }
 
@@ -1883,11 +1858,20 @@ fn collect_modified_vars_in_expr(
         }
         // A call's writes through an argument are asked field by field
         // (`call_writes_field`), so the call leaves the argument unmarked here.
+        // A closure's captures ride the callee, which is the indirect call's
+        // first argument there.
         ExprKind::Call { args, .. } => {
             modified.call_sites.push(e);
             let arg_ids: Vec<ExprId> = args.iter().filter_map(|a| a.expr.as_expr()).collect();
             for a in arg_ids {
                 collect_modified_vars_in_expr(body, a, modified, type_table);
+            }
+        }
+        ExprKind::IndirectCall { callee, args } => {
+            modified.call_sites.push(e);
+            let operands: Vec<Operand> = std::iter::once(*callee).chain(args.clone()).collect();
+            for a in operands {
+                collect_modified_vars_in_operand(body, a, modified, type_table);
             }
         }
         ExprKind::CmRawCall { args, .. } => {
@@ -1929,15 +1913,6 @@ fn collect_modified_vars_in_expr(
             let elements = elements.clone();
             for el in elements {
                 collect_modified_vars_in_operand(body, el, modified, type_table);
-            }
-        }
-        // A closure's captures ride the callee, so it is scanned as an argument is.
-        ExprKind::IndirectCall { callee, args } => {
-            modified.call_sites.push(e);
-            let operands: Vec<Operand> = std::iter::once(*callee).chain(args.clone()).collect();
-            for a in operands {
-                mark_gc_local_as_fully_modified_operand(body, a, modified, type_table);
-                collect_modified_vars_in_operand(body, a, modified, type_table);
             }
         }
         ExprKind::ClosureToCanonical { functor, .. } => {
@@ -2102,6 +2077,19 @@ struct HoistCandidate {
     field_index: u32,
     field_name: String,
     type_id: TypeId,
+}
+
+impl HoistCandidate {
+    /// The field the candidate reads, as the reload path watches for writes to
+    /// it; none where the root is no heap object.
+    fn watch(&self, engine: &Engine, ctx: &LicmCtx) -> Option<Watch> {
+        let root_ty = candidate_root_ty(engine, self.local_index, self.type_id);
+        Some(Watch {
+            key: ctx.type_table.heap_object_key(root_ty)?,
+            root: self.local_index,
+            field: self.field_index,
+        })
+    }
 }
 
 /// A hoist performed in step 4: the (source local, field) pair now served by
