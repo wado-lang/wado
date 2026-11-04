@@ -9,8 +9,9 @@ description: Check the branch marks its generated files, review it with /code-re
    alone. Among the files `scripts/changed-sources.sh` lists, find each one a
    script, a generator or a `mise` task writes. Mark it in `.gitattributes`
    (`linguist-generated=true -diff`) and in `.coderabbit.yaml`'s `path_filters`,
-   by a glob where its siblings are generated too. `mise run check-review-filters` holds the two files to each other, and commit the
-   marks.
+   by a glob where its siblings are generated too. Then run
+   `mise run check-review-filters`, which holds the two files to each other,
+   and commit the marks.
 2. Invoke the `code-review` skill with `high`, over `origin/main...HEAD`: once
    the branch is pushed its upstream diff is empty, and a stale local `main`
    pulls in merged work.
