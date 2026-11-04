@@ -150,13 +150,7 @@ pub fn keep_outputs(graph: &mut Graph, names: &List<String>) -> Result<(), Optio
 /// `checked` is what checking the graph as it stands found: each operand's
 /// rank, the axes that broadcast, and the values stage 0 folds.
 pub fn keep_last(graph: &mut Graph, checked: &Checked, output: &String, axis: i32) -> Result<(), OptionConflict> {
-    let Some(at) = graph.outputs.position(|vi| vi.name == *output) else {
-        return conflict("last", `the graph declares no output ${*output}`);
-    };
-    let rank = checked.shapes.get(*output).unwrap().rank();
-    if axis < 0 || axis >= rank {
-        return conflict("last", `${*output} has ${rank} axes, and no axis ${axis}`);
-    }
+    let [at, rank] = output_with_axis("last", graph, checked, output, axis)?;
     if graph.nodes.into_iter().any(|n| n.reads().contains_str(output)) {
         return conflict("last", `${*output} is read inside the graph, which needs all of it`);
     }
@@ -164,12 +158,37 @@ pub fn keep_last(graph: &mut Graph, checked: &Checked, output: &String, axis: i3
         return conflict("last", `no node computes ${*output}, which the graph is given`);
     }
     cut_last(graph, checked, output, axis - rank);
+    declare_unit_axis(graph, at, axis);
+    return Result::Ok(());
+}
+
+/// The place among `graph`'s outputs of `output`, which `option` names along
+/// `axis`, and its rank.
+fn output_with_axis(
+    option: String,
+    graph: &Graph,
+    checked: &Checked,
+    output: &String,
+    axis: i32,
+) -> Result<[i32, i32], OptionConflict> {
+    let Some(at) = graph.outputs.position(|vi| vi.name == *output) else {
+        return conflict(option, `the graph declares no output ${*output}`);
+    };
+    let rank = checked.shapes.get(*output).unwrap().rank();
+    if axis < 0 || axis >= rank {
+        return conflict(option, `${*output} has ${rank} axes, and no axis ${axis}`);
+    }
+    return Result::Ok([at, rank]);
+}
+
+/// The output at `at` declared at extent 1 along `axis`, where it declares its
+/// extents.
+fn declare_unit_axis(graph: &mut Graph, at: i32, axis: i32) {
     if let Dims(written) = graph.outputs[at].rank {
         let mut declared = written;
         declared[axis] = Dim::Static(1);
         graph.outputs[at].rank = Rank::Dims(declared);
     }
-    return Result::Ok(());
 }
 
 /// `output` replaced by the index of its greatest element along `axis`, the
@@ -177,13 +196,7 @@ pub fn keep_last(graph: &mut Graph, checked: &Checked, output: &String, axis: i3
 /// pick, which then reads one index rather than the vocabulary's scores. The
 /// node computing it writes `<output>/scores`, which an `ArgMax` ranks.
 pub fn take_arg_max(graph: &mut Graph, checked: &Checked, output: &String, axis: i32) -> Result<(), OptionConflict> {
-    let Some(at) = graph.outputs.position(|vi| vi.name == *output) else {
-        return conflict("arg_max", `the graph declares no output ${*output}`);
-    };
-    let rank = checked.shapes.get(*output).unwrap().rank();
-    if axis < 0 || axis >= rank {
-        return conflict("arg_max", `${*output} has ${rank} axes, and no axis ${axis}`);
-    }
+    let [at, _] = output_with_axis("arg_max", graph, checked, output, axis)?;
     let element = checked.primitives[*output];
     if element != KERNEL_ELEMENT {
         return conflict("arg_max", `${*output} is ${element}, and ArgMax ranks ${KERNEL_ELEMENT}`);
@@ -210,11 +223,7 @@ pub fn take_arg_max(graph: &mut Graph, checked: &Checked, output: &String, axis:
         ],
     });
     graph.outputs[at].dtype = "int64";
-    if let Dims(declared) = graph.outputs[at].rank {
-        let mut kept = declared;
-        kept[axis] = Dim::Static(1);
-        graph.outputs[at].rank = Rank::Dims(kept);
-    }
+    declare_unit_axis(graph, at, axis);
     return Result::Ok(());
 }
 

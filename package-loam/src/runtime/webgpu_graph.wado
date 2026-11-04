@@ -795,10 +795,8 @@ fn launched(
                     Some(vs) => vs,
                     None => apart(g, &mut state.values, program, ks),
                 };
-                let mut at = 0;
-                for let k of ks {
+                for let [at, k] of ks.into_iter().enumerate() {
                     state.values[k.root] = values[at];
-                    at += 1;
                 }
             },
             Paired(p) => rooted(
