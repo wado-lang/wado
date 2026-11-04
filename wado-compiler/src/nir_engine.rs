@@ -12,6 +12,7 @@ use cranelift_entity::EntityRef;
 use crate::compiler_trace;
 use crate::const_eval::Value;
 use crate::hashmap::{IndexMap, IndexSet};
+use crate::name::copied_local_what;
 use crate::nir::{FuncId, NirLocal, NirParam};
 use crate::nir_arena::{
     ArenaCallArg, ArenaStructField, ArenaStructPatternField, ArmData, BlockId, BlockNode, Body,
@@ -57,10 +58,10 @@ impl FieldValues {
 #[derive(Default, Debug)]
 pub struct LocalUses {
     /// The first `Let` statement binding the local, if any. Parameters have
-    /// none, and neither does a `LetDestructure` binding (it binds through a
-    /// pattern, which this index does not walk).
+    /// none, and neither does a pattern binding.
     pub def: Option<StmtId>,
-    /// How many `Let` statements bind the local; a second is a second version.
+    /// How many `Let` statements and pattern bindings bind the local; a second
+    /// is a second version.
     pub defs: u32,
     /// Every `Local { index }` expression node that names this local. (The
     /// place-form distinction — read vs write — is refined when a rule needs
@@ -341,6 +342,12 @@ pub struct Engine<'a> {
     /// so passes consuming [`Engine::loop_entry_value`] must call
     /// [`Engine::seed_params`] first.
     seeds_params: bool,
+    /// The locals a clone under way binds afresh: see
+    /// [`Engine::clone_block_renaming`].
+    clone_renames: IndexMap<u32, u32>,
+    /// Each local [`Engine::alloc_local_like`] minted, after the one it copies:
+    /// what the owner of the function's per-local annotations must carry over.
+    copied_locals: Vec<[u32; 2]>,
     /// Calls that mutate no caller local; the build skips their per-call
     /// `mut_escaped` bump. Empty is conservative.
     pure_calls: IndexSet<ExprId>,
@@ -401,6 +408,8 @@ impl<'a> Engine<'a> {
             alias: AliasSets::default(),
             params: params.iter().map(|p| p.local_index).collect(),
             seeds_params: false,
+            clone_renames: IndexMap::default(),
+            copied_locals: Vec::new(),
             pure_calls: IndexSet::default(),
             receiver_immutable_calls: IndexSet::default(),
             call_writes: IndexMap::default(),
@@ -704,6 +713,12 @@ impl<'a> Engine<'a> {
         if self.body_address_taken.is_none() {
             let mut set = IndexSet::default();
             self.body.collect_address_taken_locals(&mut set);
+            // A copy is not attached until the edit minting it places it.
+            for &[of, copy] in &self.copied_locals {
+                if set.contains(&of) {
+                    set.insert(copy);
+                }
+            }
             self.body_address_taken = Some(set);
         }
         self.body_address_taken.as_ref().unwrap()
@@ -871,8 +886,7 @@ impl<'a> Engine<'a> {
     /// predicate, so the value query and the freeze agree by construction.
     pub fn local_has_one_version(&mut self, local: u32) -> bool {
         let bound_once = match self.local_bindings(local) {
-            // No `Let`: a parameter, or a `LetDestructure` binding the use index
-            // does not record — which then fails the membership test.
+            // Nothing binds it: a parameter.
             0 => {
                 self.params.contains(&local)
                     && self.locals().get(local as usize).is_some_and(|l| !l.is_mut)
@@ -895,8 +909,8 @@ impl<'a> Engine<'a> {
             .any(|&m| self.is_assign_target(m))
     }
 
-    /// How many `Let` statements bind `local`.
-    fn local_bindings(&self, local: u32) -> u32 {
+    /// How many `Let` statements and pattern bindings bind `local`.
+    pub fn local_bindings(&self, local: u32) -> u32 {
         self.buf.uses.get(local as usize).map_or(0, |u| u.defs)
     }
 
@@ -1005,6 +1019,48 @@ impl<'a> Engine<'a> {
         }
         self.buf.walk_stack = stack;
         self.buf.walk_children = children;
+    }
+
+    /// Whether `node` is reachable from the root. Every edit that drops a child
+    /// clears its parent edge, so the edges alone answer.
+    fn is_attached(&self, node: NodeRef) -> bool {
+        let root = NodeRef::Block(self.body.root());
+        let mut at = node;
+        let attached = loop {
+            if at == root {
+                break true;
+            }
+            match self.parent_of(at) {
+                Some(parent) => at = parent,
+                None => break false,
+            }
+        };
+        debug_assert_eq!(
+            attached,
+            self.is_held_from_root(node),
+            "[NIR engine] {node:?} keeps a parent edge its parent dropped: an edit \
+             wrote the body outside the edit API"
+        );
+        attached
+    }
+
+    /// [`Engine::is_attached`] checked edge by edge against each parent's
+    /// children.
+    fn is_held_from_root(&self, mut node: NodeRef) -> bool {
+        let root = NodeRef::Block(self.body.root());
+        while node != root {
+            let Some(parent) = self.parent_of(node) else {
+                return false;
+            };
+            let mut held = false;
+            self.body
+                .for_each_child(parent, |child| held |= child == node);
+            if !held {
+                return false;
+            }
+            node = parent;
+        }
+        true
     }
 
     /// Push a node onto the worklist unless it is already queued.
@@ -1143,6 +1199,18 @@ impl<'a> Engine<'a> {
         self.buf.set_parent(child, parent);
     }
 
+    /// Clear the parent edge of each child `node` still owns, ahead of an edit
+    /// that replaces its children; the edit re-parents the ones it keeps. A
+    /// child already moved under another node keeps that edge.
+    fn detach_children(&mut self, node: NodeRef) {
+        let Self { body, buf, .. } = self;
+        body.for_each_child(node, |c| {
+            if buf.parent(c) == Some(node) {
+                buf.set_parent(c, None);
+            }
+        });
+    }
+
     /// Edit API: rewrite every operand slot of `node` through `f`.
     ///
     /// For a pass rewriting a whole subtree's slots in one sweep (`licm`'s
@@ -1187,9 +1255,10 @@ impl<'a> Engine<'a> {
 
     /// Edit API: rewrite an expression node's kind in place. The id is stable,
     /// so parent links and worklist entries survive. Keeps the use index
-    /// coherent (if the node was / becomes a `Local`), re-parents the new
-    /// kind's id children, and re-enqueues the affected neighbourhood — the
-    /// node's parent (its context may now reduce) and the new children.
+    /// coherent (if the node was / becomes a `Local`), detaches the old kind's
+    /// id children and re-parents the new kind's, and re-enqueues the affected
+    /// neighbourhood: the node's parent (its context may now reduce) and the
+    /// new children.
     pub fn replace_expr_kind(&mut self, id: ExprId, new_kind: ExprKind) {
         // Drop the old `Local` mention, if any, from the use index.
         if let ExprKind::Local { index, .. } = &self.body.exprs[id].kind {
@@ -1198,6 +1267,7 @@ impl<'a> Engine<'a> {
                 u.reads.retain(|&r| r != id);
             }
         }
+        self.detach_children(NodeRef::Expr(id));
         self.body.exprs[id].kind = new_kind;
         self.census_add_subtree(NodeRef::Expr(id));
         // Register a new `Local` mention, if any.
@@ -1326,6 +1396,7 @@ impl<'a> Engine<'a> {
         // A write marks the function changed for its memos, so an unchanged
         // list is not written back.
         if self.body.blocks[block].stmts != stmts {
+            self.detach_children(NodeRef::Block(block));
             self.body.blocks[block].stmts = stmts;
         }
         for s in arrived {
@@ -1412,6 +1483,9 @@ impl<'a> Engine<'a> {
 
     /// Edit API: allocate a fresh pattern node.
     pub fn alloc_pat(&mut self, kind: PatKind, span: Span) -> PatId {
+        if let PatKind::Binding { local_index, .. } = &kind {
+            self.buf.uses_entry(*local_index).defs += 1;
+        }
         let id = self.body.pats.push(PatNode { kind, span });
         self.buf.note_alloc(NodeRef::Pat(id));
         let Self { body, buf, .. } = self;
@@ -1452,6 +1526,50 @@ impl<'a> Engine<'a> {
         let node = self.body.blocks[id].clone();
         let stmts = node.stmts.iter().map(|s| self.clone_stmt(*s)).collect();
         self.alloc_block(stmts, node.span)
+    }
+
+    /// [`Engine::clone_block`], each local `renames` names bound and read in
+    /// the copy as its fresh counterpart. Two copies that bind one local leave
+    /// it with two versions, which every single-version rewrite declines.
+    pub fn clone_block_renaming(&mut self, id: BlockId, renames: IndexMap<u32, u32>) -> BlockId {
+        assert!(
+            self.clone_renames.is_empty(),
+            "clones do not nest a renaming"
+        );
+        self.clone_renames = renames;
+        let block = self.clone_block(id);
+        self.clone_renames.clear();
+        block
+    }
+
+    /// A fresh local typed as `of`, for a copy of what binds it.
+    pub fn alloc_local_like(&mut self, of: u32) -> u32 {
+        let NirLocal {
+            name,
+            type_id,
+            is_mut,
+        } = self.locals[of as usize].clone();
+        let fresh = self.alloc_minted_local(copied_local_what(&name), type_id, is_mut);
+        self.copied_locals.push([of, fresh]);
+        if let Some(set) = self.body_address_taken.as_mut()
+            && set.contains(&of)
+        {
+            set.insert(fresh);
+        }
+        fresh
+    }
+
+    /// Each `[original, copy]` [`Engine::alloc_local_like`] minted.
+    pub fn copied_locals(&self) -> &[[u32; 2]] {
+        &self.copied_locals
+    }
+
+    /// `local` and its name as the clone under way spells them.
+    fn renamed(&self, local: u32, name: String) -> (u32, String) {
+        match self.clone_renames.get(&local) {
+            Some(&fresh) => (fresh, self.local_name(fresh)),
+            None => (local, name),
+        }
     }
 
     fn clone_stmt(&mut self, id: StmtId) -> StmtId {
@@ -1641,6 +1759,10 @@ impl<'a> Engine<'a> {
                 arms: arms.into_iter().map(|a| self.clone_block(a)).collect(),
                 default: self.clone_block(default),
             },
+            ExprKind::Local { index, name } => {
+                let (index, name) = self.renamed(index, name);
+                ExprKind::Local { index, name }
+            }
             // Leaves carry no id children.
             leaf => leaf,
         }
@@ -1655,14 +1777,17 @@ impl<'a> Engine<'a> {
                 type_id,
                 value,
                 skip_value_copy,
-            } => StmtKind::Let {
-                name,
-                local_index,
-                is_mut,
-                type_id,
-                value: self.clone_operand(value),
-                skip_value_copy,
-            },
+            } => {
+                let (local_index, name) = self.renamed(local_index, name);
+                StmtKind::Let {
+                    name,
+                    local_index,
+                    is_mut,
+                    type_id,
+                    value: self.clone_operand(value),
+                    skip_value_copy,
+                }
+            }
             StmtKind::Expr(e) => StmtKind::Expr(self.clone_operand(e)),
             StmtKind::Return { value } => StmtKind::Return {
                 value: value.map(|e| self.clone_operand(e)),
@@ -1733,6 +1858,18 @@ impl<'a> Engine<'a> {
             PatKind::ConstantValue { expr } => PatKind::ConstantValue {
                 expr: self.clone_operand(expr),
             },
+            PatKind::Binding {
+                name,
+                local_index,
+                type_id,
+            } => {
+                let (local_index, name) = self.renamed(local_index, name);
+                PatKind::Binding {
+                    name,
+                    local_index,
+                    type_id,
+                }
+            }
             // Leaves carry no id children.
             leaf => leaf,
         }
@@ -1748,6 +1885,12 @@ impl<'a> Engine<'a> {
     pub fn run(&mut self, rules: &[&dyn Rule]) -> bool {
         let mut any = false;
         while let Some(node) = self.pop() {
+            // A rule reads the live body's indices, so at a detached node it
+            // would rewrite the live body from a site they never counted: a
+            // clone left behind shares its locals with the live copy.
+            if !self.is_attached(node) {
+                continue;
+            }
             loop {
                 let mut changed = false;
                 for rule in rules {
@@ -1820,7 +1963,7 @@ pub trait Rule {
 mod tests {
     use super::*;
     use crate::const_eval::Value;
-    use crate::nir::NirBinaryOp;
+    use crate::nir::{NirBinaryOp, NirUnaryOp};
     use crate::nir_arena::{BlockNode, ExprNode, StmtNode};
     use crate::primitive::PrimitiveType;
     use crate::type_table::TypeTable;
@@ -1914,6 +2057,57 @@ mod tests {
             let ret = ret_x(b);
             vec![let_stmt, ret]
         })
+    }
+
+    /// A copy of a local whose address is taken has its address taken too, in
+    /// a scan taken before the copy is placed and in one taken after.
+    #[test]
+    fn a_copy_of_an_address_taken_local_is_address_taken() {
+        let mut body = mk_body(|b| {
+            let x = local0(b);
+            let r = e(
+                b,
+                ExprKind::Unary {
+                    op: NirUnaryOp::MutRef,
+                    expr: x.into(),
+                },
+            );
+            vec![s(b, StmtKind::Expr(r.into()))]
+        });
+        let mut buf = EngineBuffers::default();
+        let mut locals = Tracked::new(vec![NirLocal {
+            name: "x".to_string(),
+            type_id: TypeTable::I32,
+            is_mut: true,
+        }]);
+        let mut eng = Engine::new(&mut body, &mut buf, &mut locals, &[]);
+        assert!(eng.body_address_taken().contains(&0));
+        let cached = eng.alloc_local_like(0);
+        assert!(eng.body_address_taken().contains(&cached));
+        eng.invalidate_address_taken();
+        let rescanned = eng.alloc_local_like(0);
+        assert!(eng.body_address_taken().contains(&cached));
+        assert!(eng.body_address_taken().contains(&rescanned));
+    }
+
+    /// A pattern binding an edit allocates is a version of its local, as one
+    /// the body held from the start is.
+    #[test]
+    fn an_allocated_pattern_binding_is_a_second_version() {
+        let mut body = sample_body();
+        let mut buf = EngineBuffers::default();
+        let mut locals = Tracked::new(Vec::new());
+        let mut eng = Engine::new(&mut body, &mut buf, &mut locals, &[]);
+        assert_eq!(eng.local_bindings(0), 1);
+        eng.alloc_pat(
+            PatKind::Binding {
+                name: "x".to_string(),
+                local_index: 0,
+                type_id: TypeTable::UNIT,
+            },
+            Span::default(),
+        );
+        assert_eq!(eng.local_bindings(0), 2);
     }
 
     #[test]
@@ -2115,6 +2309,64 @@ mod tests {
         assert_eq!(kept.len(), 2);
         assert_matches!(body.stmts[kept[0]].kind, StmtKind::Let { .. });
         assert_matches!(body.stmts[kept[1]].kind, StmtKind::Return { .. });
+    }
+
+    /// Drops the block's `let`, leaving its value on the worklist as a rule
+    /// that detaches a subtree leaves what it had queued.
+    struct DetachLet;
+    impl Rule for DetachLet {
+        fn apply_block(&self, e: &mut Engine, id: BlockId) -> bool {
+            let mut stmts = e.body.blocks[id].stmts.clone();
+            let Some(at) = stmts
+                .iter()
+                .position(|s| matches!(e.body.stmts[*s].kind, StmtKind::Let { .. }))
+            else {
+                return false;
+            };
+            let StmtKind::Let {
+                value: Operand::Expr(value),
+                ..
+            } = e.body.stmts[stmts[at]].kind
+            else {
+                unreachable!("the sample binds an expression");
+            };
+            stmts.remove(at);
+            e.set_block_stmts(id, stmts);
+            e.enqueue(NodeRef::Expr(value));
+            true
+        }
+    }
+
+    struct SeenExprs(std::cell::RefCell<Vec<ExprId>>);
+    impl Rule for SeenExprs {
+        fn apply_expr(&self, _: &mut Engine, id: ExprId) -> bool {
+            self.0.borrow_mut().push(id);
+            false
+        }
+    }
+
+    /// A detached node is garbage. A rule there reads the live body's indices
+    /// and would rewrite the live body from a site they never counted.
+    #[test]
+    fn no_rule_runs_at_a_detached_node() {
+        let mut body = sample_body();
+        let root = body.root();
+        let StmtKind::Let {
+            value: Operand::Expr(add),
+            ..
+        } = body.stmts[body.blocks[root].stmts[0]].kind
+        else {
+            panic!("expected let");
+        };
+        let seen = SeenExprs(std::cell::RefCell::default());
+        {
+            let mut buf = EngineBuffers::default();
+            let mut locals = Tracked::new(Vec::new());
+            let mut eng = Engine::new(&mut body, &mut buf, &mut locals, &[]);
+            assert!(eng.run(&[&DetachLet, &seen]));
+        }
+        let visits = seen.0.borrow().iter().filter(|&&id| id == add).count();
+        assert_eq!(visits, 1, "only the visit before the `let` was dropped");
     }
 
     #[test]

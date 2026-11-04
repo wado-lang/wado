@@ -288,14 +288,54 @@ applied, so a profiled compile seeds from the snapshot as a plain one does.
 
 The inliner prices a call site by what a summary of the profile says of the
 region holding it. The summary places hot and cold lines from shares of all
-runs, as LLVM's `ProfileSummaryInfo` does. Unlike a cold mark, a cold price
+runs, as LLVM's `ProfileSummaryInfo` does. With every count sorted from the
+largest down, the hot line is the smallest count still inside
+`--optimize-profile-summary-cutoff-hot` parts per million of all runs, 990000
+by default, and the cold line the same under
+`--optimize-profile-summary-cutoff-cold`, 999999 by default. A share that holds
+no count places no line. A site in a region that ran and reaches the hot line is
+hot, and one at or below the cold line is cold. Unlike a cold mark, a cold price
 stays at its site and reaches no callee. A hot site may inline a callee of up to
 `--optimize-inline-hot-callsite-threshold` statements, a cold one of up to
 `--optimize-inline-cold-callsite-threshold`, and any other site keeps
-`--optimize-inline-threshold`. They mirror LLVM's `hot-callsite-threshold`
+`--optimize-inline-threshold`, every site of a function the profile does not
+judge included. A hot site in or under an unlikely region keeps it too: the
+branch into it is predicted not taken. They mirror LLVM's `hot-callsite-threshold`
 (3000) and `inline-cold-callsite-threshold` (45) beside its `inline-threshold`
 (225), but count statements as Wado's inliner does, so the benchmarks settle
-their defaults.
+their defaults: 4 times the level's threshold at a hot site and a quarter of it
+at a cold one. LLVM's ratios are about 13 and a fifth.
+
+The hot ratio was measured at 4, 8 and 16 on the fuel benchmarks against
+`-f no-pgo`. Fuel favours the larger ratios, but it counts Wasm instructions,
+not what a huge function costs once compiled. At 8, `cbor_twitter`'s
+deserializer spliced its record decoders into one function and ran 58% longer
+by the wall clock for the same fuel, and `json_twitter`'s 29% longer. At 4 both
+ran within a few percent of `-f no-pgo`. The cold ratio was measured at a half
+down to an eighth, and moved no fuel region. A quarter grew `gale_gen` least.
+`--optimize-predictable-branch-threshold` keeps LLVM's 99: at 90, 95 and 98 the
+geometric mean moved by under 0.03 points.
+
+A hot site weighs the callee's cold paths, though the plain price leaves them
+out. A splice copies them all the same. Priced plain, `CitmCatalog::deserialize`
+spliced its field decoders and grew 42-fold, and `json_catalog`'s module more
+than doubled, for 4% less fuel.
+
+A call under a `?` is priced by the region around the `?`. The `?`'s own region
+spans its operand but counts only the failure path, which the call runs before,
+so every such call read as never run and was priced cold.
+
+The heat of each measured region is kept in a table beside the IR, keyed by
+the region's source span, and the inliner looks a call up by its span. A spliced
+body keeps its spans, so a site keeps its heat in whatever caller it lands in.
+A marker statement would also have carried the heat, but a statement in a hot
+loop is in the way of the passes that match the loop's shape.
+
+A site inside a function the same round may splice is priced plain, not hot.
+Splicing a large callee there grows a small helper past what its own callers
+splice, and the hot loop then calls the helper instead of its callee.
+`json/catalog/ser` cost 32% more fuel that way, with `write_json_i64` grown
+fifteenfold.
 
 ### The profile overrides the source's markers
 
@@ -402,7 +442,7 @@ output at every level. It is a nightly campaign, not a gate.
    `cold_path()`, `unlikely_path()` or `cold_code()` by the answers, and
    overrides the author's and the `?`'s markers, with the remark. An e2e
    fixture states each mark and each remark.
-7. [ ] Hot and cold call sites. The summary places its hot and cold lines
+7. [x] Hot and cold call sites. The summary places its hot and cold lines
    under `--optimize-profile-summary-cutoff-hot` and `-cold`. The inliner
    prices a site by it under `--optimize-inline-hot-callsite-threshold` and
    `--optimize-inline-cold-callsite-threshold`, and the benchmarks, against
@@ -439,6 +479,17 @@ output at every level. It is a nightly campaign, not a gate.
     - The inliner's `branch_weight` guard reads the cold half, while the layout
       it protects follows the unlikely hint. The table settles which half it
       should read.
+11. [ ] Call-site heat in context. The inliner prices each case below by where
+    the site's code now stands, and an e2e fixture states each.
+    - A spliced callee's sites. A site keeps the span it was written at, so
+      after a splice it reads the callee's heat wherever it landed. A site that
+      a splice at a cold site brought in can still pay the hot price.
+    - A candidate's own hot sites. A caller that is itself a candidate this
+      round prices its hot sites plain. A candidate that no site ever admits
+      stays a candidate, so its hot sites never take the hot price.
+    - The lookahead at a hot site. The table of what this round splices is
+      built at the plain threshold. A hot site's price therefore counts a loopy
+      callee that only a hot site would splice as a call, not as its size.
 
 ## Known gaps
 
@@ -458,10 +509,12 @@ output at every level. It is a nightly campaign, not a gate.
 - [ ] A NIR `match` is read as if every arm's guard ran only on some paths. The
   first arm's guard runs on every path through the `match`, so a marker under
   it covers the `match` but is not read that way.
-- [ ] On the `benchmark/` pilot the profile buys nothing: against `-f no-pgo`,
-  every fuel region moves within a few percent, and all but two wall-clock rows
-  within their noise. `gale/generate` and `codec/zlib/decompress` cost more
-  fuel under the profile, and why is not known. The tables are in
+- [ ] On the `benchmark/` pilot the profile is mixed. Against `-f no-pgo` it buys
+  up to 19% of fuel on the serde rows. But `microgpt`'s inference runs 46%
+  longer by the wall clock for 4% more fuel: with a 2 GiB heap the PGO build is
+  faster, so the hot splices make its collections dearer, and why is not known.
+  `zlib` decompression and `json_twitter` serialization run about 10% longer
+  for slightly less fuel. The tables are in
   [the benchmark README](../benchmark/README.md#profile-guided-optimization).
   `http_routing` records a profile but is in neither table: its `oha` run was
   not repeated under the three builds.

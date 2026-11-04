@@ -6,8 +6,9 @@
 
 use std::fmt::Write as _;
 
-use super::{Basis, ColdBy, Refusal, Site};
+use super::{Basis, ByHeat, ColdBy, Refusal, Site};
 use crate::module_source::{ModuleSource, ParseModules};
+use crate::pgo::Heat;
 use crate::token::Span;
 
 /// Every round's decisions about the functions whose name holds a pattern.
@@ -71,13 +72,14 @@ pub(super) struct Round {
 pub(super) struct CalleeEntry {
     pub name: String,
     pub module: ModuleSource,
-    /// What running one copy costs, where the verdict priced it.
-    pub hot: Option<usize>,
+    /// What running one copy costs at a site of each heat, where the verdict
+    /// priced it.
+    pub hot: ByHeat<Option<usize>>,
     /// What holding one copy costs, where the round priced it.
     pub size: Option<usize>,
     pub params: usize,
     pub sites: usize,
-    pub basis: Basis,
+    pub basis: ByHeat<Basis>,
     /// Admitted, and then turned down by the growth budget.
     pub over_budget: bool,
 }
@@ -90,6 +92,8 @@ pub(super) struct SiteEntry {
     pub callee_module: ModuleSource,
     pub span: Span,
     pub site: Site,
+    /// The heat the site was priced at.
+    pub heat: Heat,
     pub refusal: Option<Refusal>,
 }
 
@@ -113,7 +117,7 @@ impl Round {
         }
         for c in &self.callees {
             let _ = write!(out, "  callee {}:", function(&c.name, &c.module));
-            if let Some(hot) = c.hot {
+            if let Some(hot) = c.hot.plain {
                 let _ = write!(out, " hot {hot},");
             }
             if let Some(size) = c.size {
@@ -124,8 +128,18 @@ impl Round {
                 " {} params, {} sites -> {}",
                 c.params,
                 c.sites,
-                basis_text(c.basis)
+                basis_text(c.basis.plain)
             );
+            for (heat, name) in [(Heat::Hot, "hot"), (Heat::Cold, "cold")] {
+                let (hot, basis) = (*c.hot.at(heat), *c.basis.at(heat));
+                if (hot, basis) != (c.hot.plain, c.basis.plain) {
+                    let _ = write!(out, "; at a profiled {name} site:");
+                    if let Some(hot) = hot {
+                        let _ = write!(out, " hot {hot},");
+                    }
+                    let _ = write!(out, " {}", basis_text(basis));
+                }
+            }
             if c.over_budget {
                 out.push_str(", over the growth budget");
             }
@@ -135,9 +149,10 @@ impl Round {
             let at = location(s.span, &s.caller_module, parses);
             let _ = write!(
                 out,
-                "  site {} at {at} ({}) -> {}: ",
+                "  site {} at {at} ({}{}) -> {}: ",
                 function(&s.caller, &s.caller_module),
                 site_text(s.site, &s.caller_module, parses),
+                heat_text(s.heat),
                 function(&s.callee, &s.callee_module)
             );
             match s.refusal {
@@ -173,6 +188,17 @@ fn site_text(site: Site, holder: &ModuleSource, parses: &ParseModules) -> String
         Site::Plain => "plain".to_string(),
         Site::Loop => "loop".to_string(),
         Site::Cold(by) => format!("cold, {}", cold_text(by, holder, parses)),
+        Site::UnlikelyPlain => "plain, unlikely".to_string(),
+        Site::UnlikelyLoop => "loop, unlikely".to_string(),
+    }
+}
+
+/// The profile's heat, where it moved the site's price.
+fn heat_text(heat: Heat) -> &'static str {
+    match heat {
+        Heat::Plain => "",
+        Heat::Hot => ", profiled hot",
+        Heat::Cold => ", profiled cold",
     }
 }
 
@@ -215,6 +241,7 @@ fn refusal_text(refusal: Refusal) -> &'static str {
         Refusal::LeftToEngine => "left to the compile-time engine to fold",
         Refusal::InLoop => "admitted outside loops only",
         Refusal::OutsideLoop => "admitted in loops only",
+        Refusal::OtherHeat => "admitted only at sites the profile heats otherwise",
         Refusal::SeveralLoopSites => "called from several sites of this loop",
         Refusal::RescanSpent => "the splice under way spent what its re-scan may add",
     }

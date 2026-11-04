@@ -1,0 +1,66 @@
+// A `while let` over `next()?`, where `next` returns `Result<Option<f64>, _>`
+// and calls `read()?`, both spliced into the loop.
+//
+// The fused `next` exits each bind the slot local they hand the consumer's arm,
+// and the inner `read` block's tuple is matched as the tail of a value block.
+// Neither reached the fold that drops the aggregate, so every step allocated
+// an `Option` and a tuple the call had returned in slots.
+struct Reader {
+    pos: i32,
+    data: List<u8>,
+}
+
+#[inline("never")]
+fn peek(r: &Reader) -> Result<u8, String> {
+    if r.pos < r.data.len() {
+        return Result::Ok(r.data[r.pos]);
+    }
+    return Result::Err("eof");
+}
+
+#[inline("always")]
+fn read(r: &mut Reader) -> Result<f64, String> {
+    let b = peek(r)?;
+    if b == 1 {
+        r.pos += 1;
+        return Result::Ok(1.5);
+    }
+    loop {
+        let c = peek(r)?;
+        r.pos += 1;
+        if c == 2 {
+            return Result::Ok(2.5);
+        }
+    }
+}
+
+#[inline("always")]
+fn next(r: &mut Reader) -> Result<Option<f64>, String> {
+    if r.pos >= r.data.len() {
+        return Result::Ok(null);
+    }
+    let v = read(r)?;
+    return Result::Ok(Option::Some(v));
+}
+
+#[inline("never")]
+fn sum(r: &mut Reader) -> Result<f64, String> {
+    let mut s = 0.0;
+    while let Some(v) = next(r)? {
+        s += v;
+    }
+    return Result::Ok(s);
+}
+
+export fn run() {
+    let mut r = Reader { pos: 0, data: [1, 3, 2, 1] };
+    assert sum(&mut r).unwrap() == 5.5;
+    let mut short = Reader { pos: 0, data: [1, 3] };
+    assert sum(&mut short).is_err();
+}
+
+__DATA__
+{
+    "stdout": "",
+    "wir_not_expect:O2": ["struct.new \"tuple//", "struct.new \"core:prelude/types.wado//Option<f64>::Some\""]
+}

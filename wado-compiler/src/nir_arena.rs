@@ -21,6 +21,7 @@ use crate::name::minted_name;
 use crate::nir::{FuncId, NirBinaryOp, NirLiteralPattern, NirLocal, NirUnaryOp};
 use crate::nir_value_graph::builder::ValueGraphBuild;
 use crate::nir_value_graph::{ValueId, ValueKind, ValuePool};
+use crate::nir_visitor::NirRefVisitor;
 use crate::primitive::PrimitiveType;
 use crate::tir::TypeId;
 use crate::token::Span;
@@ -1878,7 +1879,31 @@ impl Body {
         !self.blocks[block]
             .stmts
             .last()
-            .is_some_and(|s| self.terminates(*s))
+            .is_some_and(|&s| self.terminates(s) || self.loops_forever(s))
+    }
+
+    /// Whether `s` is a `loop` no unlabeled `break` leaves, so only a jump past
+    /// it ends it. A nested loop takes its own unlabeled breaks.
+    pub fn loops_forever(&self, s: StmtId) -> bool {
+        struct Search(bool);
+        impl NirRefVisitor for Search {
+            fn visit_node(&mut self, body: &Body, node: NodeRef) {
+                if let NodeRef::Stmt(s) = node {
+                    match body.stmts[s].kind {
+                        StmtKind::Loop { .. } => return,
+                        StmtKind::Break { label: None, .. } => self.0 = true,
+                        _ => {}
+                    }
+                }
+                self.walk_node(body, node);
+            }
+        }
+        let StmtKind::Loop { body } = self.stmts[s].kind else {
+            return false;
+        };
+        let mut search = Search(false);
+        search.visit_node(self, NodeRef::Block(body));
+        !search.0
     }
 
     /// Whether `block`, jumping nowhere on the way, ends in a call typed `!`

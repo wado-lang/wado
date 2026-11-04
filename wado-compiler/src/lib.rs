@@ -449,27 +449,43 @@ pub struct ProviderComponent {
     pub bytes: Vec<u8>,
 }
 
+/// The largest inlining threshold an override may set: far past any body's
+/// size, and small enough that the inliner's rescan cap, its square, fits a
+/// 32-bit `usize`.
+pub const MAX_INLINE_THRESHOLD: usize = 1 << 15;
+
 /// What a caller may override in the optimizer, each `None` meaning "whatever
 /// the level decides".
 #[derive(Debug, Clone, Copy, Default)]
 pub struct OptOverrides {
     pub inline_threshold: Option<usize>,
+    /// The threshold at a call site a profile measured hot.
+    pub inline_hot_callsite_threshold: Option<usize>,
+    /// The threshold at a call site a profile measured cold.
+    pub inline_cold_callsite_threshold: Option<usize>,
     pub inline_growth: Option<u32>,
     pub iterations: Option<u32>,
     /// The clones constant-argument specialization may mint over the module.
     pub specializations: Option<usize>,
     /// The share of a branch's runs past which the branch is predictable.
     pub predictable_branch_threshold: Option<pgo::Percent>,
+    /// The share of all runs that places a profile's hot line.
+    pub profile_summary_cutoff_hot: Option<pgo::Cutoff>,
+    /// The share of all runs that places a profile's cold line.
+    pub profile_summary_cutoff_cold: Option<pgo::Cutoff>,
 }
 
 impl OptOverrides {
     /// How a profile's counts are read.
     #[must_use]
     pub fn profile_thresholds(&self) -> pgo::Thresholds {
+        let default = pgo::Thresholds::default();
         pgo::Thresholds {
             predictable_branch: self
                 .predictable_branch_threshold
-                .unwrap_or(pgo::Thresholds::default().predictable_branch),
+                .unwrap_or(default.predictable_branch),
+            hot: self.profile_summary_cutoff_hot.unwrap_or(default.hot),
+            cold: self.profile_summary_cutoff_cold.unwrap_or(default.cold),
         }
     }
 }
@@ -2116,6 +2132,7 @@ fn compile_after_load<H: CompilerHost>(
         interner,
         coverage,
         space_modules,
+        marks,
         ..
     } = sem;
 
@@ -2225,6 +2242,7 @@ fn compile_after_load<H: CompilerHost>(
     package.test_selection = options.test_selection;
     package.wasm_assets = wasm_assets;
     package.codegen_flags = codegen_flags;
+    package.heat_map = marks.map(pgo::MarkMap::into_heat_map).unwrap_or_default();
     package.provided_import_fqs = options
         .providers
         .iter()
@@ -2743,6 +2761,11 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
     let assert_plan_text = sem.assert_plan_text();
     let coverage_plan_text = sem.coverage_plan_text();
     let export_mappings = sem.export_mappings.clone();
+    let heat_map = sem
+        .marks
+        .as_ref()
+        .map(|marks| marks.heat_map().clone())
+        .unwrap_or_default();
     let parses = sem.space_modules;
 
     // === Phase 7b+8+9+10: Build Package and run remaining phases ===
@@ -2792,6 +2815,7 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
             }
             package.wasm_assets.clone_from(&wasm_assets);
             package.codegen_flags = parsed_codegen_flags;
+            package.heat_map = heat_map;
 
             // Validate target world (test world is synthetic, not in registry)
             if !package.is_test_world()

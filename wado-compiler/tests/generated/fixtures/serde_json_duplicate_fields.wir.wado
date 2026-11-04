@@ -5538,13 +5538,13 @@ fn "core:json/core:json/JsonStructAccess^core:serde/DeserializeStruct::next_fiel
     let b_2: i32;
     let $qm_e_7: ref "core:serde//DeserializeError";
     let key: ref "core:prelude/string.wado//String";
-    let $sroa_$key_repr_63: ref Array<u8>;
-    let $av_66: i32;
+    let $sroa_$key_repr_67: ref Array<u8>;
+    let $av_70: i32;
     b_2 = "core:json/core:json/JsonDeserializer::peek_after_whitespace"(self);
-    $av_66 = self.pos;
+    $av_70 = self.pos;
     if @unlikely(b_2 < 0) {
         cold_path;
-        return 1, 0, 0, "core:serde/core:serde/DeserializeError::eof"(builtin::i64_extend_i32_s($av_66));
+        return 1, 0, 0, "core:serde/core:serde/DeserializeError::eof"(builtin::i64_extend_i32_s($av_70));
     }
     if @likely(b_2 == 125) {
         return 0, 0, 0, ref.null none;
@@ -5552,9 +5552,9 @@ fn "core:json/core:json/JsonStructAccess^core:serde/DeserializeStruct::next_fiel
     if self.first_entry == 0 {
         if @unlikely(b_2 != 44) {
             cold_path;
-            return 1, 0, 0, "core:json/core:json/JsonDeserializer::entry_separator_error$sroa[self.pos]"($av_66, 125);
+            return 1, 0, 0, "core:json/core:json/JsonDeserializer::entry_separator_error$sroa[self.pos]"($av_70, 125);
         }
-        self.pos = $av_66 + 1;
+        self.pos = $av_70 + 1;
         b_2 = "core:json/core:json/JsonDeserializer::peek_after_whitespace"(self);
     }
     self.first_entry = 0;
@@ -5566,15 +5566,15 @@ fn "core:json/core:json/JsonStructAccess^core:serde/DeserializeStruct::next_fiel
     b_2 = self.pos;
     let $mv$scan$stop: i32;
     let $mv$scan$valid: bool;
-    multivalue_bind [$av_66, $mv$scan$stop, $mv$scan$valid] = "core:json/core:json/JsonDeserializer::scan_string_run$sroa[self.input]"(self.input, b_2);
-    self.pos = $av_66;
+    multivalue_bind [$av_70, $mv$scan$stop, $mv$scan$valid] = "core:json/core:json/JsonDeserializer::scan_string_run$sroa[self.input]"(self.input, b_2);
+    self.pos = $av_70;
     if @likely($mv$scan$stop == 34) {
         if @unlikely($mv$scan$valid == 0) {
             cold_path;
             return 1, 0, 0, "core:json/core:json/JsonDeserializer::invalid_utf8_string$dae[self]"(b_2);
         }
         $mv$scan$stop = self.pos;
-        self.pos = $av_66 + 1;
+        self.pos = $av_70 + 1;
         $thread_$inline_core_json_JsonDeserializer__expect_char_0: block {
             if @likely("core:json/core:json/JsonDeserializer::peek_after_whitespace"(self) == 58) {
                 self.pos = self.pos + 1;
@@ -5586,7 +5586,7 @@ fn "core:json/core:json/JsonStructAccess^core:serde/DeserializeStruct::next_fiel
             return 1, 0, 0, $qm_e_7;
         };
         b_2 = $fused_$inline_serde_json_duplicate_fields_wado_Point_core_serde_FieldSchema__lookup_sroa_return__1: block -> i32 {
-            $mv$scan$valid = local.tee $load_10(self.input).end - local.tee $av_66($load_10.start);
+            $mv$scan$valid = local.tee $load_10(self.input).end - local.tee $av_70($load_10.start);
             if @unlikely(0 > $mv$scan$valid) {
                 cold_path;
                 "core:prelude/primitive.wado/i32::clamp$contract_report0"(0, $mv$scan$valid, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/slice.wado:106"), used: 27 });
@@ -5598,10 +5598,10 @@ fn "core:json/core:json/JsonStructAccess^core:serde/DeserializeStruct::next_fiel
                 unreachable;
             }
             $mv$scan$stop = select i32($mv$scan$stop < $mv$scan$valid, local.tee $mv$scan$stop(select i32($mv$scan$stop > b_2, $mv$scan$stop, b_2)), $mv$scan$valid);
-            $sroa_$key_repr_63 = $load_10.repr;
-            b_2 = $av_66 + b_2;
-            if (($av_66 + $mv$scan$stop) - b_2) == 1 {
-                if local.tee b_2(builtin::array_get_value<u8>($sroa_$key_repr_63, b_2)) == 120 {
+            $sroa_$key_repr_67 = $load_10.repr;
+            b_2 = $av_70 + b_2;
+            if (($av_70 + $mv$scan$stop) - b_2) == 1 {
+                if local.tee b_2(builtin::array_get_value<u8>($sroa_$key_repr_67, b_2)) == 120 {
                     break $fused_$inline_serde_json_duplicate_fields_wado_Point_core_serde_FieldSchema__lookup_sroa_return__1: 0;
                 } else if b_2 == 121 {
                     break $fused_$inline_serde_json_duplicate_fields_wado_Point_core_serde_FieldSchema__lookup_sroa_return__1: 1;
@@ -5634,9 +5634,9 @@ fn "core:json/core:json/JsonStructAccess^core:serde/DeserializeStruct::next_fiel
         cold_path;
         return 1, 0, 0, $qm_e_7;
     }
-    multivalue_bind [b_2, $av_66] = (multivalue_bind [$sroa_$key_repr_63, b_2, $av_66] = "core:prelude/string.wado/core:prelude/string.wado/String::as_bytes"(key.repr, key.used); "serde_json_duplicate_fields.wado/serde_json_duplicate_fields.wado/Point^core:serde/FieldSchema::lookup$sroa[return]"($sroa_$key_repr_63, b_2, $av_66));
+    multivalue_bind [b_2, $av_70] = (multivalue_bind [$sroa_$key_repr_67, b_2, $av_70] = "core:prelude/string.wado/core:prelude/string.wado/String::as_bytes"(key.repr, key.used); "serde_json_duplicate_fields.wado/serde_json_duplicate_fields.wado/Point^core:serde/FieldSchema::lookup$sroa[return]"($sroa_$key_repr_67, b_2, $av_70));
     b_2 = (if b_2 == 1 -> i32 {
-        $av_66;
+        $av_70;
     } else if @likely(b_2 == 0) -> i32 {
         -1;
     } else {

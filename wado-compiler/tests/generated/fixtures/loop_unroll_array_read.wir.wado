@@ -243,13 +243,13 @@ fn "loop_unroll_array_read.wado/run"() with Stdout {
     let a_13: ref Array<f32>;
     let a_16: ref Array<f32>;
     let current_20: i32;
-    let sum_45: f32;
-    let i_46: i32;
     let out_71: ref "core:prelude/string.wado//String";
     let $temp_inline_core_prelude_traits_wado_TemplateHole_loop_unroll_array_read_wado__tmpl_e0db778cc2aefb4e_core_prelude_list_wado_List_f32____fmt_50_0: ref "core:prelude/format.wado//Formatter";
     let $sroa_$iter_0_start_257: i32;
     let current_267: i32;
     let $cm_pair_7_279: i64;
+    let $sum_322: f32;
+    let $i_323: i32;
     a_13 = builtin::array_new<f32>(local.tee len_0(black_box(10)));
     a_16 = builtin::array_new<f32>(len_0);
     $sroa_$iter_0_start_257 = 0;
@@ -277,78 +277,78 @@ fn "loop_unroll_array_read.wado/run"() with Stdout {
                 current_267 = $sroa_$iter_0_start_257;
                 if $sroa_$iter_0_start_257 == len_0 {
                     current_20 = 1;
-                    sum_45 = 0_f32;
-                    i_46 = 0;
+                    $sum_322 = 0_f32;
+                    $i_323 = 0;
                     b6: block {
                         l7: loop {
-                            break_if b6 (((i_46 >= current_267) | ((i_46 + 1) >= current_267)) | (((i_46 + 1) + 1) >= current_267)) | ((((i_46 + 1) + 1) + 1) >= current_267);
-                            sum_45 = sum_45 + (builtin::array_get_value<f32>(a_13, i_46) * builtin::array_get_value<f32>(a_16, i_46));
-                            i_46 = i_46 + 1;
-                            sum_45 = sum_45 + (builtin::array_get_value<f32>(a_13, i_46) * builtin::array_get_value<f32>(a_16, i_46));
-                            i_46 = i_46 + 1;
-                            sum_45 = sum_45 + (builtin::array_get_value<f32>(a_13, i_46) * builtin::array_get_value<f32>(a_16, i_46));
-                            i_46 = i_46 + 1;
-                            sum_45 = sum_45 + (builtin::array_get_value<f32>(a_13, i_46) * builtin::array_get_value<f32>(a_16, i_46));
-                            i_46 = i_46 + 1;
+                            break_if b6 ((($i_323 >= current_267) | (($i_323 + 1) >= current_267)) | ((($i_323 + 1) + 1) >= current_267)) | (((($i_323 + 1) + 1) + 1) >= current_267);
+                            $sum_322 = $sum_322 + (builtin::array_get_value<f32>(a_13, $i_323) * builtin::array_get_value<f32>(a_16, $i_323));
+                            $i_323 = $i_323 + 1;
+                            $sum_322 = $sum_322 + (builtin::array_get_value<f32>(a_13, $i_323) * builtin::array_get_value<f32>(a_16, $i_323));
+                            $i_323 = $i_323 + 1;
+                            $sum_322 = $sum_322 + (builtin::array_get_value<f32>(a_13, $i_323) * builtin::array_get_value<f32>(a_16, $i_323));
+                            $i_323 = $i_323 + 1;
+                            $sum_322 = $sum_322 + (builtin::array_get_value<f32>(a_13, $i_323) * builtin::array_get_value<f32>(a_16, $i_323));
+                            $i_323 = $i_323 + 1;
                             continue l7;
                         };
                     };
                     b8: block {
                         l9: loop {
-                            break_if b8 i_46 >= current_267;
-                            sum_45 = sum_45 + (builtin::array_get_value<f32>(a_13, i_46) * builtin::array_get_value<f32>(a_16, i_46));
-                            i_46 = i_46 + 1;
+                            break_if b8 $i_323 >= current_267;
+                            $sum_322 = $sum_322 + (builtin::array_get_value<f32>(a_13, $i_323) * builtin::array_get_value<f32>(a_16, $i_323));
+                            $i_323 = $i_323 + 1;
                             continue l9;
                         };
                     };
-                    if @unlikely(local.tee i_46(sums.used) >= builtin::array_len(sums.repr)) {
+                    if @unlikely(local.tee $i_323(sums.used) >= builtin::array_len(sums.repr)) {
                         cold_path;
                         "core:prelude/list.wado/core:prelude/list.wado/List<f32>::grow"(sums);
                     }
-                    builtin::array_set<f32>(sums.repr, i_46, sum_45);
-                    sums.used = i_46 + 1;
+                    builtin::array_set<f32>(sums.repr, $i_323, $sum_322);
+                    sums.used = $i_323 + 1;
                     current_267 = $inline_first_at_least_21__found: block -> i32 {
-                        i_46 = 0;
+                        $i_323 = 0;
                         b11: block {
                             l12: loop {
-                                break_if b11 (((i_46 >= current_267) | ((i_46 + 1) >= current_267)) | (((i_46 + 1) + 1) >= current_267)) | ((((i_46 + 1) + 1) + 1) >= current_267);
-                                if (builtin::array_get_value<f32>(a_16, i_46) < 1_f32) == 0 {
-                                    break $inline_first_at_least_21__found: i_46;
+                                break_if b11 ((($i_323 >= current_267) | (($i_323 + 1) >= current_267)) | ((($i_323 + 1) + 1) >= current_267)) | (((($i_323 + 1) + 1) + 1) >= current_267);
+                                if (builtin::array_get_value<f32>(a_16, $i_323) < 1_f32) == 0 {
+                                    break $inline_first_at_least_21__found: $i_323;
                                 }
-                                i_46 = i_46 + 1;
-                                if (builtin::array_get_value<f32>(a_16, i_46) < 1_f32) == 0 {
-                                    break $inline_first_at_least_21__found: i_46;
+                                $i_323 = $i_323 + 1;
+                                if (builtin::array_get_value<f32>(a_16, $i_323) < 1_f32) == 0 {
+                                    break $inline_first_at_least_21__found: $i_323;
                                 }
-                                i_46 = i_46 + 1;
-                                if (builtin::array_get_value<f32>(a_16, i_46) < 1_f32) == 0 {
-                                    break $inline_first_at_least_21__found: i_46;
+                                $i_323 = $i_323 + 1;
+                                if (builtin::array_get_value<f32>(a_16, $i_323) < 1_f32) == 0 {
+                                    break $inline_first_at_least_21__found: $i_323;
                                 }
-                                i_46 = i_46 + 1;
-                                if (builtin::array_get_value<f32>(a_16, i_46) < 1_f32) == 0 {
-                                    break $inline_first_at_least_21__found: i_46;
+                                $i_323 = $i_323 + 1;
+                                if (builtin::array_get_value<f32>(a_16, $i_323) < 1_f32) == 0 {
+                                    break $inline_first_at_least_21__found: $i_323;
                                 }
-                                i_46 = i_46 + 1;
+                                $i_323 = $i_323 + 1;
                                 continue l12;
                             };
                         };
                         b17: block {
                             l18: loop {
-                                break_if b17 i_46 >= current_267;
-                                if (builtin::array_get_value<f32>(a_16, i_46) < 1_f32) == 0 {
-                                    break $inline_first_at_least_21__found: i_46;
+                                break_if b17 $i_323 >= current_267;
+                                if (builtin::array_get_value<f32>(a_16, $i_323) < 1_f32) == 0 {
+                                    break $inline_first_at_least_21__found: $i_323;
                                 }
-                                i_46 = i_46 + 1;
+                                $i_323 = $i_323 + 1;
                                 continue l18;
                             };
                         };
                         -1;
                     };
-                    if @unlikely(local.tee i_46(firsts.used) >= builtin::array_len(firsts.repr)) {
+                    if @unlikely(local.tee $i_323(firsts.used) >= builtin::array_len(firsts.repr)) {
                         cold_path;
                         "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(firsts);
                     }
-                    builtin::array_set<i32>(firsts.repr, i_46, current_267);
-                    firsts.used = i_46 + 1;
+                    builtin::array_set<i32>(firsts.repr, $i_323, current_267);
+                    firsts.used = $i_323 + 1;
                     break $fused_$inline_core_prelude_range_wado_RangeInclusive_i32__core_prelude_traits_wado_Iterator__next_sroa_return__0;
                 }
                 $inline_core_prelude_range_wado_RangeInclusive_i32__core_prelude_traits_wado_Iterator__next_sroa_return__0__$fused_$inline_i32_core_prelude_range_wado_Step__next_step_sroa_self_value_return__0: block {
@@ -359,78 +359,78 @@ fn "loop_unroll_array_read.wado/run"() with Stdout {
                     $sroa_$iter_0_start_257 = current_267 + 1;
                     break $inline_core_prelude_range_wado_RangeInclusive_i32__core_prelude_traits_wado_Iterator__next_sroa_return__0__$fused_$inline_i32_core_prelude_range_wado_Step__next_step_sroa_self_value_return__0;
                 };
-                sum_45 = 0_f32;
-                i_46 = 0;
+                $sum_322 = 0_f32;
+                $i_323 = 0;
                 b22: block {
                     l23: loop {
-                        break_if b22 (((i_46 >= current_267) | ((i_46 + 1) >= current_267)) | (((i_46 + 1) + 1) >= current_267)) | ((((i_46 + 1) + 1) + 1) >= current_267);
-                        sum_45 = sum_45 + (builtin::array_get_value<f32>(a_13, i_46) * builtin::array_get_value<f32>(a_16, i_46));
-                        i_46 = i_46 + 1;
-                        sum_45 = sum_45 + (builtin::array_get_value<f32>(a_13, i_46) * builtin::array_get_value<f32>(a_16, i_46));
-                        i_46 = i_46 + 1;
-                        sum_45 = sum_45 + (builtin::array_get_value<f32>(a_13, i_46) * builtin::array_get_value<f32>(a_16, i_46));
-                        i_46 = i_46 + 1;
-                        sum_45 = sum_45 + (builtin::array_get_value<f32>(a_13, i_46) * builtin::array_get_value<f32>(a_16, i_46));
-                        i_46 = i_46 + 1;
+                        break_if b22 ((($i_323 >= current_267) | (($i_323 + 1) >= current_267)) | ((($i_323 + 1) + 1) >= current_267)) | (((($i_323 + 1) + 1) + 1) >= current_267);
+                        $sum_322 = $sum_322 + (builtin::array_get_value<f32>(a_13, $i_323) * builtin::array_get_value<f32>(a_16, $i_323));
+                        $i_323 = $i_323 + 1;
+                        $sum_322 = $sum_322 + (builtin::array_get_value<f32>(a_13, $i_323) * builtin::array_get_value<f32>(a_16, $i_323));
+                        $i_323 = $i_323 + 1;
+                        $sum_322 = $sum_322 + (builtin::array_get_value<f32>(a_13, $i_323) * builtin::array_get_value<f32>(a_16, $i_323));
+                        $i_323 = $i_323 + 1;
+                        $sum_322 = $sum_322 + (builtin::array_get_value<f32>(a_13, $i_323) * builtin::array_get_value<f32>(a_16, $i_323));
+                        $i_323 = $i_323 + 1;
                         continue l23;
                     };
                 };
                 b24: block {
                     l25: loop {
-                        break_if b24 i_46 >= current_267;
-                        sum_45 = sum_45 + (builtin::array_get_value<f32>(a_13, i_46) * builtin::array_get_value<f32>(a_16, i_46));
-                        i_46 = i_46 + 1;
+                        break_if b24 $i_323 >= current_267;
+                        $sum_322 = $sum_322 + (builtin::array_get_value<f32>(a_13, $i_323) * builtin::array_get_value<f32>(a_16, $i_323));
+                        $i_323 = $i_323 + 1;
                         continue l25;
                     };
                 };
-                if @unlikely(local.tee i_46(sums.used) >= builtin::array_len(sums.repr)) {
+                if @unlikely(local.tee $i_323(sums.used) >= builtin::array_len(sums.repr)) {
                     cold_path;
                     "core:prelude/list.wado/core:prelude/list.wado/List<f32>::grow"(sums);
                 }
-                builtin::array_set<f32>(sums.repr, i_46, sum_45);
-                sums.used = i_46 + 1;
+                builtin::array_set<f32>(sums.repr, $i_323, $sum_322);
+                sums.used = $i_323 + 1;
                 current_267 = $inline_first_at_least_21__found: block -> i32 {
-                    i_46 = 0;
+                    $i_323 = 0;
                     b27: block {
                         l28: loop {
-                            break_if b27 (((i_46 >= current_267) | ((i_46 + 1) >= current_267)) | (((i_46 + 1) + 1) >= current_267)) | ((((i_46 + 1) + 1) + 1) >= current_267);
-                            if (builtin::array_get_value<f32>(a_16, i_46) < 1_f32) == 0 {
-                                break $inline_first_at_least_21__found: i_46;
+                            break_if b27 ((($i_323 >= current_267) | (($i_323 + 1) >= current_267)) | ((($i_323 + 1) + 1) >= current_267)) | (((($i_323 + 1) + 1) + 1) >= current_267);
+                            if (builtin::array_get_value<f32>(a_16, $i_323) < 1_f32) == 0 {
+                                break $inline_first_at_least_21__found: $i_323;
                             }
-                            i_46 = i_46 + 1;
-                            if (builtin::array_get_value<f32>(a_16, i_46) < 1_f32) == 0 {
-                                break $inline_first_at_least_21__found: i_46;
+                            $i_323 = $i_323 + 1;
+                            if (builtin::array_get_value<f32>(a_16, $i_323) < 1_f32) == 0 {
+                                break $inline_first_at_least_21__found: $i_323;
                             }
-                            i_46 = i_46 + 1;
-                            if (builtin::array_get_value<f32>(a_16, i_46) < 1_f32) == 0 {
-                                break $inline_first_at_least_21__found: i_46;
+                            $i_323 = $i_323 + 1;
+                            if (builtin::array_get_value<f32>(a_16, $i_323) < 1_f32) == 0 {
+                                break $inline_first_at_least_21__found: $i_323;
                             }
-                            i_46 = i_46 + 1;
-                            if (builtin::array_get_value<f32>(a_16, i_46) < 1_f32) == 0 {
-                                break $inline_first_at_least_21__found: i_46;
+                            $i_323 = $i_323 + 1;
+                            if (builtin::array_get_value<f32>(a_16, $i_323) < 1_f32) == 0 {
+                                break $inline_first_at_least_21__found: $i_323;
                             }
-                            i_46 = i_46 + 1;
+                            $i_323 = $i_323 + 1;
                             continue l28;
                         };
                     };
                     b33: block {
                         l34: loop {
-                            break_if b33 i_46 >= current_267;
-                            if (builtin::array_get_value<f32>(a_16, i_46) < 1_f32) == 0 {
-                                break $inline_first_at_least_21__found: i_46;
+                            break_if b33 $i_323 >= current_267;
+                            if (builtin::array_get_value<f32>(a_16, $i_323) < 1_f32) == 0 {
+                                break $inline_first_at_least_21__found: $i_323;
                             }
-                            i_46 = i_46 + 1;
+                            $i_323 = $i_323 + 1;
                             continue l34;
                         };
                     };
                     -1;
                 };
-                if @unlikely(local.tee i_46(firsts.used) >= builtin::array_len(firsts.repr)) {
+                if @unlikely(local.tee $i_323(firsts.used) >= builtin::array_len(firsts.repr)) {
                     cold_path;
                     "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(firsts);
                 }
-                builtin::array_set<i32>(firsts.repr, i_46, current_267);
-                firsts.used = i_46 + 1;
+                builtin::array_set<i32>(firsts.repr, $i_323, current_267);
+                firsts.used = $i_323 + 1;
                 break $fused_$inline_core_prelude_range_wado_RangeInclusive_i32__core_prelude_traits_wado_Iterator__next_sroa_return__0;
             };
             continue l4;
@@ -465,13 +465,13 @@ fn "loop_unroll_array_read.wado/run"() with Stdout {
     "core:rt/write_string_to_stream$dae[add_newline]"(current_20, out_71.repr, out_71.used);
     "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_$iter_0_start_257);
     out_71 = block -> ref "core:prelude/string.wado//String" {
-        sum_45 = 0_f32;
+        $sum_322 = 0_f32;
         $sroa_$iter_0_start_257 = len_0;
         current_20 = 0;
         b38: block {
             l39: loop {
                 break_if b38 current_20 >= $sroa_$iter_0_start_257;
-                sum_45 = sum_45 + builtin::array_get_value<f32>(a_13, current_20);
+                $sum_322 = $sum_322 + builtin::array_get_value<f32>(a_13, current_20);
                 if builtin::array_get_value<f32>(a_13, current_20) < 0_f32 {
                     $sroa_$iter_0_start_257 = current_20 + 1;
                 }
@@ -490,7 +490,7 @@ fn "loop_unroll_array_read.wado/run"() with Stdout {
                 continue l42;
             };
         };
-        "core:prelude/string.wado/core:prelude/string.wado/String::format<loop_unroll_array_read.wado/$tmpl$ae7ab3fe71bca154,[f32,i32]>$spec0$spec0"(sum_45, $sroa_$iter_0_start_257);
+        "core:prelude/string.wado/core:prelude/string.wado/String::format<loop_unroll_array_read.wado/$tmpl$ae7ab3fe71bca154,[f32,i32]>$spec0$spec0"($sum_322, $sroa_$iter_0_start_257);
     };
     len_0 = builtin::i32_wrap_i64(local.tee $cm_pair_7_279("wasi/stream-new"()));
     $sroa_$iter_0_start_257 = builtin::i32_wrap_i64($cm_pair_7_279 >> 32_i64);

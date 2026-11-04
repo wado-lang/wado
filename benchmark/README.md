@@ -361,10 +361,10 @@ HTTP routing needs `oha` and Bun, and is measured separately
 
 A Wado build applies the profile each benchmark's `#[workload]` recorded into
 its `pgo/`. These tables compare that build with the two the flags give. `-f no-pgo` ignores the profile and keeps
-the source's `cold_path()` markers; `-f no-cold-paths` drops every marker.
-`+` means the PGO build is faster.
+the source's `cold_path()` markers; `-f no-cold-paths` drops every marker but
+still prices each call site by the profile. `+` means the PGO build is faster.
 
-Fuel at `-O2`, Wado 2026-11-03. Fuel does not depend on the host, so one run
+Fuel at `-O2`, Wado 2026-11-04. Fuel does not depend on the host, so one run
 per build settles it:
 
 ```sh
@@ -375,28 +375,28 @@ wado test -O2 --allocator freelist --report-fuel --test-name fuel -f no-cold-pat
 
 | Region                   | `no-cold-paths` |      `no-pgo` |           PGO | PGO vs `no-pgo` | PGO vs `no-cold-paths` |
 | ------------------------ | --------------: | ------------: | ------------: | --------------: | ---------------------: |
-| `codec/zlib/compress`    |     162,129,412 |   159,741,005 |   159,576,122 |           +0.1% |                  +1.6% |
-| `codec/zlib/decompress`  |      31,358,922 |    29,907,689 |    31,286,464 |           -4.6% |                  +0.2% |
-| `compute/fts`            |   1,505,789,292 | 1,507,789,480 | 1,513,789,617 |           -0.4% |                  -0.5% |
+| `codec/zlib/compress`    |     157,047,662 |   159,741,005 |   157,042,417 |           +1.7% |                  +0.0% |
+| `codec/zlib/decompress`  |      29,706,522 |    29,907,689 |    29,698,989 |           +0.7% |                  +0.0% |
+| `compute/fts`            |   1,452,789,394 | 1,507,789,480 | 1,498,789,589 |           +0.6% |                  -3.1% |
 | `compute/mandelbrot`     |   3,905,984,584 | 3,905,984,584 | 3,905,984,584 |           +0.0% |                  +0.0% |
-| `compute/sieve`          |     384,150,244 |   162,410,413 |   162,410,413 |           +0.0% |                 +57.7% |
-| `gale/generate`          |   1,380,545,538 | 1,348,962,877 | 1,397,180,287 |           -3.6% |                  -1.2% |
-| `gale/sqlite/highlight`  |      20,969,216 |    20,058,830 |    19,960,599 |           +0.5% |                  +4.8% |
-| `gale/sqlite/parse`      |      13,744,478 |    13,040,043 |    12,933,194 |           +0.8% |                  +5.9% |
-| `ml/microgpt/infer`      |   1,116,910,703 | 1,137,451,840 | 1,116,748,588 |           +1.8% |                  +0.0% |
-| `ml/microgpt/train`      |   1,492,245,742 | 1,452,277,210 | 1,442,687,843 |           +0.7% |                  +3.3% |
-| `serde/cbor/canada/de`   |     140,413,514 |   127,104,147 |   127,347,841 |           -0.2% |                  +9.3% |
-| `serde/cbor/canada/ser`  |      88,976,423 |    88,698,156 |    88,075,585 |           +0.7% |                  +1.0% |
-| `serde/cbor/catalog/de`  |      50,293,337 |    45,630,450 |    45,875,043 |           -0.5% |                  +8.8% |
-| `serde/cbor/catalog/ser` |      16,828,982 |    16,782,986 |    16,878,943 |           -0.6% |                  -0.3% |
-| `serde/cbor/twitter/de`  |      31,515,094 |    29,326,240 |    29,561,556 |           -0.8% |                  +6.2% |
-| `serde/cbor/twitter/ser` |       8,605,611 |     8,589,188 |     8,623,981 |           -0.4% |                  -0.2% |
-| `serde/json/canada/de`   |     325,995,440 |   323,563,455 |   323,694,342 |           -0.0% |                  +0.7% |
-| `serde/json/canada/ser`  |     256,794,570 |   255,678,936 |   260,186,644 |           -1.8% |                  -1.3% |
-| `serde/json/catalog/de`  |     124,971,727 |   122,704,688 |   122,774,197 |           -0.1% |                  +1.8% |
-| `serde/json/catalog/ser` |      24,291,523 |    22,564,704 |    22,374,473 |           +0.8% |                  +7.9% |
-| `serde/json/twitter/de`  |      71,845,422 |    70,883,010 |    70,840,192 |           +0.1% |                  +1.4% |
-| `serde/json/twitter/ser` |      18,035,922 |    18,042,287 |    17,742,397 |           +1.7% |                  +1.6% |
+| `compute/sieve`          |     162,410,454 |   162,410,413 |   162,410,454 |           -0.0% |                  +0.0% |
+| `gale/generate`          |   1,187,740,062 | 1,213,837,925 | 1,237,409,864 |           -1.9% |                  -4.0% |
+| `gale/sqlite/highlight`  |      20,933,237 |    20,179,458 |    20,078,287 |           +0.5% |                  +4.3% |
+| `gale/sqlite/parse`      |      13,708,868 |    13,016,963 |    12,910,720 |           +0.8% |                  +6.2% |
+| `ml/microgpt/infer`      |   1,189,536,098 | 1,137,451,840 | 1,189,702,247 |           -4.4% |                  -0.0% |
+| `ml/microgpt/train`      |   1,483,251,612 | 1,452,277,210 | 1,483,419,461 |           -2.1% |                  -0.0% |
+| `serde/cbor/canada/de`   |     106,422,735 |   127,104,268 |   106,472,876 |          +19.4% |                  -0.0% |
+| `serde/cbor/canada/ser`  |      86,341,257 |    88,698,022 |    86,452,112 |           +2.6% |                  -0.1% |
+| `serde/cbor/catalog/de`  |      45,024,565 |    45,630,318 |    42,931,200 |           +6.3% |                  +4.9% |
+| `serde/cbor/catalog/ser` |      17,122,382 |    16,783,031 |    17,141,845 |           -2.1% |                  -0.1% |
+| `serde/cbor/twitter/de`  |      30,137,933 |    29,099,610 |    29,046,286 |           +0.2% |                  +3.8% |
+| `serde/cbor/twitter/ser` |       7,682,286 |     8,590,694 |     7,696,471 |          +11.6% |                  -0.2% |
+| `serde/json/canada/de`   |     294,467,474 |   320,144,526 |   297,914,187 |           +7.5% |                  -1.2% |
+| `serde/json/canada/ser`  |     258,077,143 |   255,678,556 |   260,356,582 |           -1.8% |                  -0.9% |
+| `serde/json/catalog/de`  |     119,567,041 |   121,352,920 |   119,364,988 |           +1.7% |                  +0.2% |
+| `serde/json/catalog/ser` |      22,411,505 |    22,564,738 |    22,113,610 |           +2.0% |                  +1.3% |
+| `serde/json/twitter/de`  |      70,848,118 |    70,409,517 |    70,175,202 |           +0.3% |                  +1.0% |
+| `serde/json/twitter/ser` |      17,372,496 |    17,793,428 |    17,379,309 |           +2.4% |                  -0.0% |
 
 Wall clock, ms/iter, best of three, with the builds interleaved in each round
 (`WADO_BENCH_FLAGS="-f no-pgo" mise run all-wado`, and so on). The last column
@@ -404,30 +404,30 @@ reads `noise` where the two builds' ranges overlap, as `ab.ts` judges:
 
 | Benchmark                      | `no-cold-paths` | `no-pgo` |     PGO | PGO vs `no-pgo` |
 | ------------------------------ | --------------: | -------: | ------: | --------------: |
-| microgpt / Wado / train        |         311.435 |  322.964 | 327.904 |           noise |
-| microgpt / Wado / infer        |         159.348 |  159.471 | 157.239 |           noise |
-| mandelbrot / Wado              |         147.006 |  147.322 | 149.620 |           noise |
-| sieve / Wado                   |          21.968 |    6.853 |   7.032 |           noise |
-| fts / Wado                     |          56.536 |   54.481 |  51.074 |           noise |
-| json_twitter / Wado / ser      |           0.899 |    0.909 |   0.798 |           noise |
-| json_twitter / Wado / de       |           2.782 |    2.796 |   2.761 |           noise |
-| cbor_twitter / Wado / ser      |           0.575 |    0.595 |   0.574 |           noise |
-| cbor_twitter / Wado / de       |           1.533 |    1.619 |   1.397 |           noise |
-| cbor_canada / Wado / ser       |           3.811 |    3.994 |   4.208 |           -5.4% |
-| cbor_canada / Wado / de        |           6.744 |    6.353 |   6.371 |           noise |
-| cbor_catalog / Wado / ser      |           1.003 |    0.939 |   0.994 |           noise |
-| cbor_catalog / Wado / de       |           2.855 |    2.102 |   2.412 |          -14.7% |
-| json_canada / Wado / ser       |          10.502 |   10.145 |   9.422 |           noise |
-| json_canada / Wado / de        |          13.548 |   12.198 |  13.630 |           noise |
-| json_catalog / Wado / ser      |           1.132 |    1.102 |   1.180 |           noise |
-| json_catalog / Wado / de       |           5.310 |    4.461 |   4.816 |           noise |
-| zlib_bench / Wado / compress   |           8.144 |    7.601 |   7.903 |           noise |
-| zlib_bench / Wado / decompress |           1.617 |    1.540 |   1.604 |           noise |
-| sqlite_parse / Wado            |           0.998 |    0.907 |   1.027 |           noise |
-| syntax_highlight / Wado        |           1.714 |    1.310 |   1.339 |           noise |
-| gale_gen / Wado                |         190.968 |  203.000 | 210.758 |           noise |
-| gale_gen / Wado (1 GiB heap)   |         204.991 |  198.334 | 193.157 |           noise |
-| gale_html / Wado               |          15.643 |   13.822 |  14.920 |           noise |
+| microgpt / Wado / train        |         321.926 |  311.134 | 335.282 |           noise |
+| microgpt / Wado / infer        |         222.721 |  155.063 | 226.649 |          -46.2% |
+| mandelbrot / Wado              |         140.008 |  144.435 | 145.469 |           noise |
+| sieve / Wado                   |           6.732 |    8.081 |   6.051 |          +25.1% |
+| fts / Wado                     |          51.293 |   49.246 |  49.298 |           noise |
+| json_twitter / Wado / ser      |           0.813 |    0.805 |   0.878 |           -9.1% |
+| json_twitter / Wado / de       |           2.945 |    2.719 |   2.660 |           noise |
+| cbor_twitter / Wado / ser      |           0.501 |    0.585 |   0.495 |          +15.4% |
+| cbor_twitter / Wado / de       |           1.546 |    1.333 |   1.378 |           noise |
+| cbor_canada / Wado / ser       |           3.743 |    3.893 |   3.777 |           noise |
+| cbor_canada / Wado / de        |           4.677 |    5.930 |   4.894 |          +17.5% |
+| cbor_catalog / Wado / ser      |           0.783 |    0.901 |   0.789 |          +12.4% |
+| cbor_catalog / Wado / de       |           2.353 |    2.163 |   1.898 |           noise |
+| json_canada / Wado / ser       |           9.695 |    8.718 |  10.187 |           noise |
+| json_canada / Wado / de        |          11.015 |   11.949 |  10.939 |           +8.5% |
+| json_catalog / Wado / ser      |           0.966 |    0.986 |   0.934 |           noise |
+| json_catalog / Wado / de       |           4.487 |    4.651 |   4.665 |           noise |
+| zlib_bench / Wado / compress   |           7.632 |    7.697 |   7.644 |           noise |
+| zlib_bench / Wado / decompress |           1.442 |    1.486 |   1.651 |          -11.1% |
+| sqlite_parse / Wado            |           1.033 |    0.892 |   0.957 |           noise |
+| syntax_highlight / Wado        |           1.450 |    1.341 |   1.355 |           noise |
+| gale_gen / Wado                |         200.329 |  191.166 | 194.251 |           noise |
+| gale_gen / Wado (1 GiB heap)   |         178.236 |  186.320 | 179.397 |           noise |
+| gale_html / Wado               |          15.431 |   12.893 |  12.956 |           noise |
 
 ## Running
 

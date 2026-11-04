@@ -10,8 +10,10 @@
 use std::collections::BTreeMap;
 use std::fmt::{self, Write as _};
 
-use crate::ast::{self, AstId};
-use crate::coverage::{Coverage, PlannedModule, ProbeSite, RegionKind, SourceMarker, plan_module};
+use crate::ast::{self, AstId, AstIdSpace};
+use crate::coverage::{
+    Coverage, PlannedModule, Pos, ProbeSite, RegionKind, SourceMarker, plan_module,
+};
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::rarity::Mark;
@@ -81,13 +83,58 @@ impl Profile {
         self.modules.is_empty()
     }
 
-    /// This profile read under `thresholds`.
+    /// This profile read under `thresholds`, against its own hot line.
     #[must_use]
     pub fn applied(&self, thresholds: Thresholds) -> Applied<'_> {
         Applied {
             profile: self,
-            thresholds,
+            reading: Reading {
+                thresholds,
+                hot_line: self.count_line(thresholds.hot),
+                // No count inside the share leaves only a region that never
+                // ran at or below it.
+                cold_line: self.count_line(thresholds.cold).unwrap_or(0),
+            },
         }
+    }
+
+    /// The smallest count still inside `cutoff`'s share of all runs, with
+    /// every count sorted from the largest down and the share rounded down, as
+    /// LLVM's `ProfileSummaryBuilder` places its hot and cold lines. `None`
+    /// where the share holds no count.
+    fn count_line(&self, cutoff: Cutoff) -> Option<i64> {
+        let mut counts: Vec<i64> = self
+            .modules
+            .values()
+            .flatten()
+            .flat_map(|function| function.counts.values().copied())
+            .collect();
+        counts.sort_unstable_by(|a, b| b.cmp(a));
+        let total: u128 = counts.iter().map(|&count| count as u128).sum();
+        let share = total * u128::from(cutoff.0) / u128::from(Cutoff::PER_MILLION);
+        let (mut runs, mut line) = (0, None);
+        for &count in &counts {
+            if runs >= share {
+                break;
+            }
+            runs += count as u128;
+            line = Some(count);
+        }
+        line
+    }
+}
+
+/// A share of all runs, in parts per million.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Cutoff(u32);
+
+impl Cutoff {
+    pub const PER_MILLION: u32 = 1_000_000;
+
+    /// `per_million` as a share, where it is at most the whole.
+    #[must_use]
+    pub fn new(per_million: u32) -> Option<Self> {
+        (per_million <= Self::PER_MILLION).then_some(Self(per_million))
     }
 }
 
@@ -106,17 +153,67 @@ impl Percent {
 }
 
 /// How a compile reads a profile's counts: a region is unlikely past the share
-/// of a branch's runs that makes the branch predictable, and cold where it
-/// never ran. The default share is LLVM's for its option of the same name.
+/// of a branch's runs that makes the branch predictable, cold where it never
+/// ran, and hot at or above the smallest count inside the `hot` share of all
+/// runs. A call site is priced cold at or below the smallest count inside the
+/// `cold` share. The defaults are LLVM's for its options of the same names.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Thresholds {
     pub predictable_branch: Percent,
+    pub hot: Cutoff,
+    pub cold: Cutoff,
 }
 
 impl Default for Thresholds {
     fn default() -> Self {
         Self {
             predictable_branch: Percent(99),
+            hot: Cutoff(990_000),
+            cold: Cutoff(999_999),
+        }
+    }
+}
+
+/// What a profile's counts mean to a compile: the thresholds, and the hot and
+/// cold lines they place over the whole profile, wherever a part of it is
+/// applied.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct Reading {
+    thresholds: Thresholds,
+    hot_line: Option<i64>,
+    cold_line: i64,
+}
+
+impl Reading {
+    /// How a call in a region the profile ran `runs` times is priced, as
+    /// LLVM's `isHotCount` and `isColdCount` read a count.
+    fn heat(self, runs: i64) -> Heat {
+        if runs > 0 && self.hot_line.is_some_and(|line| runs >= line) {
+            Heat::Hot
+        } else if runs <= self.cold_line {
+            Heat::Cold
+        } else {
+            Heat::Plain
+        }
+    }
+}
+
+/// The price a profile sets on a call site: the inliner's hot threshold, its
+/// cold one, or the threshold a site without a profile pays.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Heat {
+    Cold,
+    Plain,
+    Hot,
+}
+
+impl Heat {
+    /// This heat, with a hot one priced plain where `demoted` holds.
+    #[must_use]
+    pub fn plain_where(self, demoted: bool) -> Self {
+        match self {
+            Heat::Hot if demoted => Heat::Plain,
+            heat => heat,
         }
     }
 }
@@ -142,7 +239,7 @@ impl Thresholds {
 #[derive(Debug, Clone, Copy)]
 pub struct Applied<'a> {
     pub(crate) profile: &'a Profile,
-    pub(crate) thresholds: Thresholds,
+    pub(crate) reading: Reading,
 }
 
 /// Why a profile's text does not parse, at its 1-based `line`.
@@ -246,6 +343,76 @@ pub(crate) struct MarkMap {
     /// Each region marked, as `module:line:column kind mark`.
     marked: Vec<String>,
     remarks: Vec<(Span, String)>,
+    /// The price each measured region sets on a call site, for the inliner.
+    heat: HeatMap,
+}
+
+/// The [`Heat`] a profile found for each region it measured, per parse,
+/// sorted by where a region starts, the outer of two starting together first.
+/// Regions nest, so the innermost holding a position decides.
+#[derive(Debug, Clone, Default)]
+pub struct HeatMap {
+    regions: IndexMap<AstIdSpace, Vec<MeasuredRegion>>,
+    any_hot: bool,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct MeasuredRegion {
+    start: Pos,
+    end: Pos,
+    heat: Heat,
+    /// The index of the innermost region holding this one.
+    enclosing: Option<usize>,
+}
+
+impl HeatMap {
+    /// Whether some region is [`Heat::Hot`].
+    #[must_use]
+    pub fn any_hot(&self) -> bool {
+        self.any_hot
+    }
+
+    fn add(&mut self, space: AstIdSpace, measured: impl IntoIterator<Item = MeasuredRegion>) {
+        let regions = self.regions.entry(space).or_default();
+        regions.extend(measured);
+        self.any_hot |= regions.iter().any(|r| r.heat == Heat::Hot);
+        regions.sort_by_key(|r| (r.start, std::cmp::Reverse(r.end)));
+        let mut open: Vec<usize> = Vec::new();
+        for i in 0..regions.len() {
+            while open
+                .last()
+                .is_some_and(|&o| regions[o].end <= regions[i].start)
+            {
+                open.pop();
+            }
+            let enclosing = open.last().copied();
+            if let Some(o) = enclosing {
+                assert!(regions[i].end <= regions[o].end, "regions must nest");
+            }
+            regions[i].enclosing = enclosing;
+            open.push(i);
+        }
+    }
+
+    /// The heat of the code at `span`: the innermost measured region's that
+    /// holds its start, [`Heat::Plain`] where none does.
+    #[must_use]
+    pub fn heat(&self, span: Span) -> Heat {
+        let Some(regions) = self.regions.get(&span.space) else {
+            return Heat::Plain;
+        };
+        let at = Pos::start(span);
+        // The last region to start before `at` either holds it or is held by
+        // every region that does.
+        let mut next = regions.partition_point(|r| r.start <= at).checked_sub(1);
+        while let Some(i) = next {
+            if at < regions[i].end {
+                return regions[i].heat;
+            }
+            next = regions[i].enclosing;
+        }
+        Heat::Plain
+    }
 }
 
 impl MarkMap {
@@ -268,8 +435,9 @@ impl MarkMap {
             };
             map.apply(
                 plan_module(source, module, rt_unreachable_calls),
+                module.ast_id_space(),
                 functions,
-                applied.thresholds,
+                applied.reading,
             );
             map.sources.insert(source.clone());
         }
@@ -277,15 +445,17 @@ impl MarkMap {
     }
 
     /// Mark each region of `planned` by what `functions` recorded of it, read
-    /// under `thresholds`. A function is matched by its name, the `n`th of a
+    /// as `reading` says. A function is matched by its name, the `n`th of a
     /// name to the `n`th recorded, and its counts apply only where its hash is
     /// the recorded one.
     fn apply(
         &mut self,
         planned: PlannedModule,
+        space: AstIdSpace,
         functions: &[ProfiledFunction],
-        thresholds: Thresholds,
+        reading: Reading,
     ) {
+        let thresholds = reading.thresholds;
         let PlannedModule {
             plan,
             sites,
@@ -363,6 +533,35 @@ impl MarkMap {
             }
             parent
         };
+        // A hot price on the rare side of a branch would grow code that rarely
+        // runs, so an unlikely region pays the plain one, and so does every
+        // region inside it, as the inliner reads the hint a marker writes. A
+        // `?`'s region spans its operand, whose calls run before the failure
+        // path the region counts, so it prices none of them.
+        let under_unlikely = |id: usize| {
+            let mut region = Some(id);
+            while let Some(r) = region {
+                if unlikely(r) {
+                    return true;
+                }
+                region = parents[r].map(|p| p as usize);
+            }
+            false
+        };
+        self.heat.add(
+            space,
+            plan.regions.iter().enumerate().filter_map(|(id, region)| {
+                if region.kind == RegionKind::Try {
+                    return None;
+                }
+                counts[id].map(|runs| MeasuredRegion {
+                    start: region.start,
+                    end: region.end,
+                    heat: reading.heat(runs).plain_where(under_unlikely(id)),
+                    enclosing: None,
+                })
+            }),
+        );
         for (id, region) in plan.regions.iter().enumerate() {
             if counts[id].is_none() || region.kind == RegionKind::Rhs {
                 continue;
@@ -447,6 +646,16 @@ impl MarkMap {
     #[must_use]
     pub(crate) fn marked(&self) -> &[String] {
         &self.marked
+    }
+
+    #[must_use]
+    pub(crate) fn heat_map(&self) -> &HeatMap {
+        &self.heat
+    }
+
+    #[must_use]
+    pub(crate) fn into_heat_map(self) -> HeatMap {
+        self.heat
     }
 
     /// What applying the profile says about its counts: a function's
@@ -552,6 +761,96 @@ mod tests {
         assert!(thresholds.is_unlikely(10, 1000));
         assert!(!thresholds.is_unlikely(11, 1000));
         assert!(thresholds.is_unlikely(0, 1));
+    }
+
+    /// A line is the smallest of the largest counts that, added up, reach the
+    /// cutoff's share of all runs. LLVM's defaults put the hot one at 99% and
+    /// the cold one at 99.9999%.
+    #[test]
+    fn a_count_line_is_the_smallest_count_inside_the_cutoff() {
+        let profile = parse(
+            "wado-pgo 1\n\
+             module src/a.wado\n\
+             fn 0000000000000001 1 f\n\
+             0 900\n\
+             1 90\n\
+             2 10\n",
+        )
+        .expect("it parses");
+        let line = |per_million| profile.count_line(Cutoff::new(per_million).expect("a share"));
+        assert_eq!(line(900_000), Some(900));
+        assert_eq!(line(990_000), Some(90));
+        assert_eq!(line(999_999), Some(10));
+        assert_eq!(line(0), None);
+        let reading = profile.applied(Thresholds::default()).reading;
+        assert_eq!(reading.heat(90), Heat::Hot);
+        assert_eq!(reading.heat(50), Heat::Plain);
+        assert_eq!(reading.heat(10), Heat::Cold);
+    }
+
+    /// A share that holds no count places no line, so nothing is hot.
+    #[test]
+    fn an_empty_hot_share_heats_nothing() {
+        let profile = parse(
+            "wado-pgo 1\n\
+             module src/a.wado\n\
+             fn 0000000000000001 1 f\n\
+             0 900\n\
+             1 10\n",
+        )
+        .expect("it parses");
+        let thresholds = Thresholds {
+            hot: Cutoff::new(0).expect("a share"),
+            ..Thresholds::default()
+        };
+        let reading = profile.applied(thresholds).reading;
+        assert_eq!(reading.heat(900), Heat::Plain);
+        assert_eq!(reading.heat(10), Heat::Cold);
+    }
+
+    #[test]
+    fn the_innermost_measured_region_decides_the_heat_of_code() {
+        let space = AstIdSpace::next();
+        let region = |start: [u32; 2], end: [u32; 2], heat| MeasuredRegion {
+            start: Pos {
+                line: start[0],
+                column: start[1],
+            },
+            end: Pos {
+                line: end[0],
+                column: end[1],
+            },
+            heat,
+            enclosing: None,
+        };
+        let mut map = HeatMap::default();
+        map.add(
+            space,
+            [
+                region([3, 5], [5, 6], Heat::Cold),
+                region([6, 1], [7, 1], Heat::Cold),
+                region([10, 1], [11, 1], Heat::Cold),
+                region([1, 1], [9, 2], Heat::Hot),
+            ],
+        );
+        let at = |line, column| Span {
+            line,
+            column,
+            space,
+            ..Span::default()
+        };
+        assert_eq!(map.heat(at(2, 1)), Heat::Hot);
+        assert_eq!(map.heat(at(3, 5)), Heat::Cold);
+        assert_eq!(map.heat(at(5, 5)), Heat::Cold);
+        assert_eq!(map.heat(at(5, 6)), Heat::Hot);
+        assert_eq!(map.heat(at(8, 1)), Heat::Hot);
+        assert_eq!(map.heat(at(9, 2)), Heat::Plain);
+        assert_eq!(map.heat(at(12, 1)), Heat::Plain);
+        let elsewhere = Span {
+            space: AstIdSpace::next(),
+            ..at(2, 1)
+        };
+        assert_eq!(map.heat(elsewhere), Heat::Plain);
     }
 
     #[test]

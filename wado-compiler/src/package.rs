@@ -11,6 +11,7 @@ use crate::elaborator::trait_env::TraitEnv;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::loader::WasmAsset;
 use crate::module_source::{ModuleSource, ModuleSourceInterner};
+use crate::pgo::HeatMap;
 use crate::symbol::SymbolTable;
 use crate::synthesis::effect_dispatch::ResourceWrapperIndex;
 use crate::tir::{TirModule, TirTest};
@@ -62,6 +63,8 @@ pub struct Package {
     /// Threaded unchanged through to the WIR emitter, which consults them to
     /// pick alternative lowerings (e.g. native `array.copy`).
     pub codegen_flags: CodegenFlags,
+    /// The price the applied profile sets on each call site, for the inliner.
+    pub heat_map: HeatMap,
     /// When true, skip Wasm validation after code generation.
     /// Returns raw bytes even if invalid — useful for debugging codegen.
     pub skip_validation: bool,
@@ -193,6 +196,7 @@ impl Package {
             coverage_section: None,
             demanded_imports_section: None,
             codegen_flags: CodegenFlags::default(),
+            heat_map: HeatMap::default(),
             skip_validation: false,
             target_world: "wasi:cli/command".to_string(),
             lib_world_info: None,

@@ -1334,14 +1334,18 @@ fn constify_check_temp(
             && is_pure_operand(engine.body, *value)
             && is_check_comparison(engine, binds, fast_body, *value, var, limit)
         {
-            let v = engine
-                .body
-                .values
-                .alloc_unshared(ValueKind::Bool(konst), TypeTable::BOOL);
-            if let StmtKind::Let { value, .. } = &mut engine.body.stmts[s].kind {
-                *value = Operand::Value(v);
-            }
-            engine.enqueue(NodeRef::Stmt(s));
+            let value = *value;
+            let v = Operand::Value(
+                engine
+                    .body
+                    .values
+                    .alloc_unshared(ValueKind::Bool(konst), TypeTable::BOOL),
+            );
+            let redirected = match value {
+                Operand::Expr(e) => engine.redirect_expr(e, v),
+                Operand::Value(old) => engine.redirect_value_operand(NodeRef::Stmt(s), old, v),
+            };
+            assert!(redirected, "the `let` holds its value");
             return;
         }
         engine.body.for_each_child(n, |c| stack.push(c));

@@ -2234,44 +2234,45 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.
 }
 
 fn "core:prelude/traits.wado/core:prelude/traits.wado/IterMap<core:prelude/traits.wado/IterFilter<core:prelude/slice.wado/SliceRefIter<i32>,fn mut(&i32)->bool>,fn mut(&i32)->i32>^core:prelude/traits.wado/Iterator::next$sroa[return]"(self) {
-    let $load_5: i32;
-    let $match_2: ref null "core:prelude/types.wado//Box<i32>";
     let ref_val: ref "core:prelude/types.wado//Box<i32>";
     let $licm_inner_8: ref "core:prelude/traits.wado//IterFilter<core:prelude/slice.wado/SliceRefIter<i32>,fn mut(&i32)->bool>";
-    let $licm_inner_9: ref "core:prelude/slice.wado//SliceRefIter<i32>";
-    let $licm_pred_10: ref struct;
-    let $licm_end_11: i32;
-    let $licm_repr_12: ref Array<i32>;
-    if ref.is_null(local.tee $match_2($inline_core_prelude_traits_wado_IterFilter_core_prelude_slice_wado_SliceRefIter_i32__fn_mut__i32___bool__core_prelude_traits_wado_Iterator__next_0: block -> ref null "core:prelude/types.wado//Box<i32>" {
-        $licm_inner_9 = local.tee $licm_inner_8(self.inner).inner;
-        $licm_pred_10 = $licm_inner_8.pred;
-        $licm_end_11 = $licm_inner_9.end;
-        $licm_repr_12 = $licm_inner_9.repr;
+    let $licm_f_9: ref struct;
+    let $licm_inner_10: ref "core:prelude/slice.wado//SliceRefIter<i32>";
+    let $licm_pred_11: ref struct;
+    let $licm_end_12: i32;
+    let $licm_repr_13: ref Array<i32>;
+    let $hfs_index_14: i32;
+    $fused_$inline_core_prelude_traits_wado_IterFilter_core_prelude_slice_wado_SliceRefIter_i32__fn_mut__i32___bool__core_prelude_traits_wado_Iterator__next_0: block {
+        $licm_inner_8 = self.inner;
+        $licm_f_9 = self.f;
+        $licm_inner_10 = $licm_inner_8.inner;
+        $licm_pred_11 = $licm_inner_8.pred;
+        $licm_end_12 = $licm_inner_10.end;
+        $licm_repr_13 = $licm_inner_10.repr;
+        $hfs_index_14 = $licm_inner_10.index;
         block {
-            l269: loop {
-                if local.tee $load_5($licm_inner_9.index) >= $licm_end_11 {
-                    break $inline_core_prelude_traits_wado_IterFilter_core_prelude_slice_wado_SliceRefIter_i32__fn_mut__i32___bool__core_prelude_traits_wado_Iterator__next_0: ref.null none;
+            l268: loop {
+                if $hfs_index_14 >= $licm_end_12 {
+                    $licm_inner_10.index = $hfs_index_14;
+                    break $fused_$inline_core_prelude_traits_wado_IterFilter_core_prelude_slice_wado_SliceRefIter_i32__fn_mut__i32___bool__core_prelude_traits_wado_Iterator__next_0;
                 }
-                ref_val = struct.new "core:prelude/types.wado//Box<i32>" { value: builtin::array_get_value<i32>($licm_repr_12, $load_5) };
-                $licm_inner_9.index = $load_5 + 1;
+                ref_val = struct.new "core:prelude/types.wado//Box<i32>" { value: builtin::array_get_value<i32>($licm_repr_13, $hfs_index_14) };
+                $hfs_index_14 = $hfs_index_14 + 1;
                 if block -> bool {
                     let $indirect_call_1: ref "canonical//CanonicalClosure_1";
-                    call_ref "functype/$canonical_closure_fn_1"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_1"($licm_pred_10)).env, ref_val);
+                    call_ref "functype/$canonical_closure_fn_1"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_1"($licm_pred_11)).env, ref_val);
                 } {
-                    break $inline_core_prelude_traits_wado_IterFilter_core_prelude_slice_wado_SliceRefIter_i32__fn_mut__i32___bool__core_prelude_traits_wado_Iterator__next_0: ref_val;
+                    $licm_end_12 = block -> i32 {
+                        let $indirect_call_2: ref "canonical//CanonicalClosure_0";
+                        call_ref "functype/$canonical_closure_fn_0"($indirect_call_2.func, local.tee $indirect_call_2(ref.cast "canonical//CanonicalClosure_0"($licm_f_9)).env, ref_val);
+                    };
+                    $licm_inner_10.index = $hfs_index_14;
+                    return 1, $licm_end_12;
                 }
-                continue l269;
+                continue l268;
             };
         };
-        unreachable;
-    })) == 0 {
-        ref_val = ref.as_non_null($match_2);
-        return 1, block -> i32 {
-            let $indirect_call_2: ref "canonical//CanonicalClosure_0";
-            call_ref "functype/$canonical_closure_fn_0"($indirect_call_2.func, local.tee $indirect_call_2(ref.cast "canonical//CanonicalClosure_0"(self.f)).env, ref_val);
-        };
-    } else {
-    }
+    };
     return 0, 0;
 }
 
@@ -2666,12 +2667,12 @@ fn "core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<core:prelude/
 fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_char_n$sroa[self.buf]"(self, c, n) {
     let i: i32;
     i = 0;
-    b321: block {
-        l322: loop {
-            break_if b321 i >= n;
+    b320: block {
+        l321: loop {
+            break_if b320 i >= n;
             "core:prelude/string.wado/core:prelude/string.wado/String::push"(self, c);
             i = i + 1;
-            continue l322;
+            continue l321;
         };
     };
 }

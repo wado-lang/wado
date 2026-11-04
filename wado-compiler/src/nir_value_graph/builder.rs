@@ -2062,9 +2062,7 @@ impl<'a> Builder<'a> {
                 self.block_falls_through(*block)
                     || self.body.breaks_to(NodeRef::Block(*block), label)
             }
-            // A `Loop` falls through only via `break`, which we do not
-            // analyse here; treat it as falling through.
-            StmtKind::Loop { .. } => true,
+            StmtKind::Loop { .. } => !self.body.loops_forever(s),
             _ => true,
         }
     }
