@@ -979,6 +979,12 @@ pub fn eq_payload_local(side: &str, case: &str, index: u32) -> String {
     format!("{INTERNAL_PREFIX}eq_{side}_{case}_{index}")
 }
 
+/// What a copy of the local named `name` is minted under, for [`minted_name`].
+#[must_use]
+pub fn copied_local_what(name: &str) -> &str {
+    name.strip_prefix(INTERNAL_PREFIX).unwrap_or(name)
+}
+
 /// `name` told apart by `serial` from a same-spelled name already taken.
 #[must_use]
 pub fn serial_suffixed(name: &str, serial: u32) -> String {

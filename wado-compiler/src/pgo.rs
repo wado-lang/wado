@@ -346,6 +346,8 @@ struct MeasuredRegion {
     start: Pos,
     end: Pos,
     heat: Heat,
+    /// The index of the innermost region holding this one.
+    enclosing: Option<usize>,
 }
 
 impl HeatMap {
@@ -353,6 +355,18 @@ impl HeatMap {
         let regions = self.regions.entry(space).or_default();
         regions.extend(measured);
         regions.sort_by_key(|r| (r.start, std::cmp::Reverse(r.end)));
+        let mut open: Vec<usize> = Vec::new();
+        for i in 0..regions.len() {
+            while open.last().is_some_and(|&o| regions[o].end <= regions[i].start) {
+                open.pop();
+            }
+            let enclosing = open.last().copied();
+            if let Some(o) = enclosing {
+                assert!(regions[i].end <= regions[o].end, "regions must nest");
+            }
+            regions[i].enclosing = enclosing;
+            open.push(i);
+        }
     }
 
     /// The heat of the code at `span`: the innermost measured region's that
@@ -366,12 +380,16 @@ impl HeatMap {
             line: span.line as u32,
             column: span.column as u32,
         };
-        let started = regions.partition_point(|r| r.start <= at);
-        regions[..started]
-            .iter()
-            .rev()
-            .find(|r| at < r.end)
-            .map_or(Heat::Plain, |r| r.heat)
+        // The last region to start before `at` either holds it or is held by
+        // every region that does.
+        let mut next = regions.partition_point(|r| r.start <= at).checked_sub(1);
+        while let Some(i) = next {
+            if at < regions[i].end {
+                return regions[i].heat;
+            }
+            next = regions[i].enclosing;
+        }
+        Heat::Plain
     }
 }
 
@@ -510,6 +528,7 @@ impl MarkMap {
                         Heat::Hot if unlikely(id) => Heat::Plain,
                         heat => heat,
                     },
+                    enclosing: None,
                 })
             }),
         );
@@ -602,6 +621,11 @@ impl MarkMap {
     #[must_use]
     pub(crate) fn heat_map(&self) -> &HeatMap {
         &self.heat
+    }
+
+    #[must_use]
+    pub(crate) fn into_heat_map(self) -> HeatMap {
+        self.heat
     }
 
     /// What applying the profile says about its counts: a function's
@@ -736,21 +760,26 @@ mod tests {
     #[test]
     fn the_innermost_measured_region_decides_the_heat_of_code() {
         let space = AstIdSpace::next();
-        let pos = |line, column| Pos { line, column };
+        let region = |start: [u32; 2], end: [u32; 2], heat| MeasuredRegion {
+            start: Pos {
+                line: start[0],
+                column: start[1],
+            },
+            end: Pos {
+                line: end[0],
+                column: end[1],
+            },
+            heat,
+            enclosing: None,
+        };
         let mut map = HeatMap::default();
         map.add(
             space,
             [
-                MeasuredRegion {
-                    start: pos(1, 1),
-                    end: pos(9, 2),
-                    heat: Heat::Hot,
-                },
-                MeasuredRegion {
-                    start: pos(3, 5),
-                    end: pos(5, 6),
-                    heat: Heat::Cold,
-                },
+                region([3, 5], [5, 6], Heat::Cold),
+                region([6, 1], [7, 1], Heat::Cold),
+                region([10, 1], [11, 1], Heat::Cold),
+                region([1, 1], [9, 2], Heat::Hot),
             ],
         );
         let at = |line, column| Span {
@@ -763,7 +792,9 @@ mod tests {
         assert_eq!(map.heat(at(3, 5)), Heat::Cold);
         assert_eq!(map.heat(at(5, 5)), Heat::Cold);
         assert_eq!(map.heat(at(5, 6)), Heat::Hot);
+        assert_eq!(map.heat(at(8, 1)), Heat::Hot);
         assert_eq!(map.heat(at(9, 2)), Heat::Plain);
+        assert_eq!(map.heat(at(12, 1)), Heat::Plain);
         let elsewhere = Span {
             space: AstIdSpace::next(),
             ..at(2, 1)

@@ -12,7 +12,7 @@ use cranelift_entity::EntityRef;
 use crate::compiler_trace;
 use crate::const_eval::Value;
 use crate::hashmap::{IndexMap, IndexSet};
-use crate::name::serial_suffixed;
+use crate::name::copied_local_what;
 use crate::nir::{FuncId, NirLocal, NirParam};
 use crate::nir_arena::{
     ArenaCallArg, ArenaStructField, ArenaStructPatternField, ArmData, BlockId, BlockNode, Body,
@@ -1503,18 +1503,12 @@ impl<'a> Engine<'a> {
 
     /// A fresh local typed as `of`, for a copy of what binds it.
     pub fn alloc_local_like(&mut self, of: u32) -> u32 {
-        let index = u32::try_from(self.locals.len()).expect("local index overflow");
         let NirLocal {
             name,
             type_id,
             is_mut,
         } = self.locals[of as usize].clone();
-        self.locals.push(NirLocal {
-            name: serial_suffixed(&name, index),
-            type_id,
-            is_mut,
-        });
-        index
+        self.alloc_minted_local(copied_local_what(&name), type_id, is_mut)
     }
 
     /// `local` and its name as the clone under way spells them.
