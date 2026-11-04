@@ -1795,7 +1795,6 @@ impl<'a> Builder<'a> {
         // from `pre`) do not leak past the merge; `merge_two_arms` then
         // overwrites every pre-branch key with its joined value.
         self.current_value.clone_from(&pre.current_value);
-        self.rebump_all = true;
         self.merge_two_arms(
             cond_v,
             &pre.current_value,
@@ -1826,7 +1825,6 @@ impl<'a> Builder<'a> {
         }
         // See `flow_join_two`: reset to the pre-branch base before merging.
         self.current_value.clone_from(&pre.current_value);
-        self.rebump_all = true;
         self.merge_n_arms(&pre.current_value, &states);
         self.merge_ref_targets(&refs);
         self.join_heap(&pre.heap, &heaps);

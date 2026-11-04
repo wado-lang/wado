@@ -4291,7 +4291,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // the method's own slot count says nothing about.
         let expected_args =
             self.expected_receiver_args(callee.type_name, callee.receiver_key, expected_type);
-        let own_slots = self
+        let [declaring_slots, own_slots] = self
             .static_call_sig(
                 callee.type_name,
                 callee.method_name,
@@ -4299,22 +4299,32 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 SigChoice::Any,
                 &expected_args,
             )
-            .map_or(0, |sig| sig.own_type_params().len());
+            .map_or([0, 0], |sig| {
+                [
+                    sig.declaring_type_params().len(),
+                    sig.own_type_params().len(),
+                ]
+            });
+        let names_own = !written.is_empty() && !turbofish_leaves_slot(&written, own_slots);
         // The receiver's own level is inferred whatever the turbofish writes,
         // since it names only the method's.
-        let (impl_args, inferred) = self.infer_static_call_type_args(
-            callee.type_name,
-            callee.method_name,
-            raw_args,
-            args,
-            expected_type,
-            span,
-            callee.receiver_key,
-        );
-        if written.is_empty() || turbofish_leaves_slot(&written, own_slots) {
-            merge_turbofish_type_args(&mut written, &inferred);
-        }
-        let mut method_args = written;
+        let (impl_args, mut method_args) = if names_own && declaring_slots == 0 {
+            (Vec::new(), written)
+        } else {
+            let (impl_args, inferred) = self.infer_static_call_type_args(
+                callee.type_name,
+                callee.method_name,
+                raw_args,
+                args,
+                expected_type,
+                span,
+                callee.receiver_key,
+            );
+            if !names_own {
+                merge_turbofish_type_args(&mut written, &inferred);
+            }
+            (impl_args, written)
+        };
         // A method-level parameter bound only through another's associated
         // type (`..V` off `Holes`) is projected once the owner is inferred, as
         // the free-function path does; the bound check then sees it concrete.
