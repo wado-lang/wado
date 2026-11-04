@@ -613,7 +613,7 @@ impl Interpreter<'_> {
                 .or_else(|| self.frame.place_aliases.get(&index))
                 .cloned()
         {
-            return if self.frame_place_of(body, value) == Some(bound.clone()) {
+            return if self.frame_place_of(body, value).as_ref() == Some(&bound) {
                 self.frame.place_aliases.insert(index, bound);
                 Flow::Fallthrough(Lattice::Unevaluated)
             } else {

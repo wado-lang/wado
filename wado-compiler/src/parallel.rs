@@ -219,9 +219,19 @@ mod tests {
         let skips = |_: &u32| !decides("x");
         let indexed = |_: usize| !decides("x");
         assert!(executor.map(&items, skips).into_iter().all(|s| s));
-        assert!(executor.map_init(&items, || (), |(), i| skips(i)).into_iter().all(|s| s));
+        assert!(
+            executor
+                .map_init(&items, || (), |(), i| skips(i))
+                .into_iter()
+                .all(|s| s)
+        );
         assert!(executor.map_indices(64, indexed).into_iter().all(|s| s));
-        assert_eq!(executor.filter_map(&items, |i| skips(i).then_some(())).len(), 64);
+        assert_eq!(
+            executor
+                .filter_map(&items, |i| skips(i).then_some(()))
+                .len(),
+            64
+        );
         assert_eq!(executor.indices_where(64, indexed).len(), 64);
         let unskipped = std::sync::atomic::AtomicUsize::new(0);
         let count = |skipped: bool| {

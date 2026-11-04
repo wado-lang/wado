@@ -377,7 +377,10 @@ impl<'a> LicmCtx<'a> {
         self.heap
             .get(body)
             .call_may(self.heap.effects, body, call, Effect::Write, key, root)
-            && self.heap.effects.call_may_write_field(body, call, key, field)
+            && self
+                .heap
+                .effects
+                .call_may_write_field(body, call, key, field)
     }
 }
 
@@ -1865,8 +1868,6 @@ fn collect_modified_vars_in_expr(
         }
         // A call's writes through an argument are asked field by field
         // (`call_writes_field`), so the call leaves the argument unmarked here.
-        // A closure's captures ride the callee, which is the indirect call's
-        // first argument there.
         ExprKind::Call { args, .. } => {
             modified.call_sites.push(e);
             let arg_ids: Vec<ExprId> = args.iter().filter_map(|a| a.expr.as_expr()).collect();
@@ -1874,6 +1875,7 @@ fn collect_modified_vars_in_expr(
                 collect_modified_vars_in_expr(body, a, modified, type_table);
             }
         }
+        // A closure's captures ride the callee, the heap summary's parameter 0.
         ExprKind::IndirectCall { callee, args } => {
             modified.call_sites.push(e);
             let operands: Vec<Operand> = std::iter::once(*callee).chain(args.clone()).collect();
