@@ -131,6 +131,12 @@ test "the match takes time linear in the text" {
 
 test "a program too large is refused" {
     assert `${Regex::new(#"(?:a{1000}){1001}"#).unwrap_err()}` == "the pattern compiles to more than 1000000 instructions (at byte 0)";
+    assert Regex::new(#"(?:){0,4000000000}"#).is_err();
+    assert Regex::new(#"(?:^){4000000000}"#).is_err();
+}
+
+test "a count over a body that compiles to nothing costs nothing" {
+    assert re(#"(?:){4000000000}a"#).is_match("a");
 }
 
 test "replace reads a template as GetSubstitution does" {
@@ -200,6 +206,20 @@ test "splitn keeps the rest in its last piece" {
     assert show(r.splitn("a,b,c", 1)) == "<a,b,c>";
     assert show(r.splitn("a,b,c", 2)) == "<a><b,c>";
     assert show(r.splitn("a,b,c", 5)) == "<a><b><c>";
+}
+
+test "Display reads back to the same regular expression" {
+    let patterns: List<String> = [
+        #"a(b|c)d"#, #"(?:a|b)*?c{2}d{2,}e{2,3}?f??"#, #"^\d\D\w\W\s\S.\b\B$"#, #"[^a-z\-\]\\\d\p{L}\P{sc=Greek}]"#,
+        #"(?<year>\d{4})(?m-s:^x)(?s:.)"#, #"\.\*\+\?\(\)\[\]\{\}\|\^\$\/"#, #"\t\u{0}\x7F\uD800é😀"#,
+        #"(?:)|a||(?:(?:a)*)+"#, #"\p{Any}\p{ASCII}\P{Assigned}"#,
+    ];
+    for let pattern of patterns {
+        let shown = `${re(pattern)}`;
+        assert `${re(shown)}` == shown;
+    }
+    assert `${re(#"\t\uD800"#)}` == #"\u{9}\u{D800}"#;
+    assert `${re(#"[\-a]"#)}` == #"[\-a]"#;
 }
 
 test "i waits for simple case folding" {

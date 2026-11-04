@@ -73,8 +73,17 @@ test "a regex displays its pattern, holes spelled as syntax" {
     let r = re#`^${text}=${word}$`#;
     assert `${r}` == #"^a\.b=(?-ims:\w+)$"#;
     assert Regex::new(`${r}`).unwrap().is_match("a.b=xy");
+    let two = "ab";
+    assert `${re#`${two}+`#}` == #"(?:ab)+"#;
+}
+
+test "a rex displays in re's syntax" {
     let gap = " #";
-    assert `${rex#`x ${gap}`#}` == #"x \ \#"#;
+    assert `${rex#`x ${gap} # comment`#}` == "x #";
+    let inner = rex#`a b`#;
+    let outer = re#`${inner} c`#;
+    assert `${outer}` == "(?-ims:ab) c";
+    assert Regex::new(`${outer}`).unwrap().is_match("ab c");
 }
 
 #[expect_trap]

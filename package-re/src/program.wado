@@ -30,6 +30,9 @@ internal variant Inst {
     /// atom does (RepeatMatcher, step 4).
     Clear([i32, i32]),
     Assert(Look),
+    /// Passes only past the position slot `k` holds: an optional iteration
+    /// that matched empty fails (RepeatMatcher, step 2.b).
+    Progress(i32),
     /// What an empty set compiles to: no thread passes.
     Fail,
     Match,
@@ -37,23 +40,64 @@ internal variant Inst {
 
 internal struct Program {
     internal insts: List<Inst>,
-    /// Two per group, group 0 being the whole match.
+    /// Two per group, group 0 being the whole match, then one per
+    /// `Progress`.
     internal slots: i32,
+    /// How many of `slots` are the groups'.
+    internal captures: i32,
 }
 
 /// The program matching `node`, whose capturing groups number `groups`.
 internal fn compile(node: &Node, groups: i32) -> Result<Program, PatternError> {
-    let mut c = Compiler { insts: [], flags: Flag::none() };
+    let captures = 2 * (groups + 1);
+    let mut c = Compiler { insts: [], flags: Flag::none(), slots: captures };
     c.push(Inst::Save(0))?;
     c.node(node)?;
     c.push(Inst::Save(1))?;
     c.push(Inst::Match)?;
-    return Ok(Program { insts: c.insts, slots: 2 * (groups + 1) });
+    return Ok(Program { insts: c.insts, slots: c.slots, captures });
 }
 
 struct Compiler {
     insts: List<Inst>,
     flags: Flag,
+    slots: i32,
+}
+
+/// Whether `node` can match without consuming a character.
+fn can_match_empty(node: &Node) -> bool {
+    return match *node {
+        Char(_) | Any | Set(_) => false,
+        Start | End | WordBoundary | NotWordBoundary => true,
+        Group(g) => can_match_empty(&g.body),
+        Modified(m) => can_match_empty(&m.body),
+        Repeat(r) => r.min == 0 || can_match_empty(&r.body),
+        Concat(nodes) => {
+            for let n of &nodes {
+                if !can_match_empty(n) {
+                    return false;
+                }
+            }
+            true;
+        },
+        Alternation(nodes) => {
+            for let n of &nodes {
+                if can_match_empty(n) {
+                    return true;
+                }
+            }
+            false;
+        },
+    };
+}
+
+/// `inst` moved `delta` instructions on, its targets with it.
+fn relocate(inst: Inst, delta: i32) -> Inst {
+    return match inst {
+        Split([a, b]) => Inst::Split([a + delta, b + delta]),
+        Jump(target) => Inst::Jump(target + delta),
+        _ => inst,
+    };
 }
 
 /// The lowest and highest capturing group `node` holds.
@@ -149,12 +193,7 @@ impl Compiler {
                 }
             },
             Modified(m) => {
-                if m.add & Flag::IgnoreCase != Flag::none() {
-                    return Err(PatternError {
-                        offset: 0,
-                        message: "the `i` modifier needs simple case folding, which core:icu does not offer yet",
-                    });
-                }
+                assert m.add & Flag::IgnoreCase == Flag::none(), "the parser refuses the `i` modifier";
                 let outer = self.flags;
                 self.flags = (self.flags | m.add) & ~m.remove;
                 self.node(&m.body)?;
@@ -213,29 +252,68 @@ impl Compiler {
     }
 
     fn repeat(&mut self, body: &Node, min: u32, max: Option<u32>, greedy: bool) -> Result<(), PatternError> {
-        for let _i of 0..<min {
-            self.iteration(body)?;
-        }
+        self.copies(min, |c| c.iteration(body))?;
+        let progress: Option<i32> = if can_match_empty(body) { Some(self.slot()) } else { null };
+        let optional = |c: &mut Compiler| c.optional_iteration(body, progress);
         let Some(max) = max else {
             // body*: L: split(body, end); body; jump L
-            let top = self.push(Inst::Split([0, 0]))?;
-            self.iteration(body)?;
+            let top = self.pc();
+            optional(self)?;
             self.push(Inst::Jump(top))?;
             let end = self.pc();
             self.split_toward(top, top + 1, end, greedy);
             return Ok(());
         };
         // Each optional iteration may stop, and stopping skips the rest.
-        let mut splits: List<i32> = [];
-        for let _i of min..<max {
-            splits.push(self.push(Inst::Split([0, 0]))?);
-            self.iteration(body)?;
-        }
+        let first = self.pc();
+        let size = self.copies(max - min, optional)?;
         let end = self.pc();
-        for let s of splits {
-            self.split_toward(s, s + 1, end, greedy);
+        for let k of 0..<max - min {
+            let split = first + k as i32 * size;
+            self.split_toward(split, split + 1, end, greedy);
         }
         return Ok(());
+    }
+
+    /// An iteration a quantifier may skip, led by the split that skips it.
+    /// One whose body can match empty must consume something.
+    fn optional_iteration(&mut self, body: &Node, progress: Option<i32>) -> Result<(), PatternError> {
+        self.push(Inst::Split([0, 0]))?;
+        if let Some(k) = progress {
+            self.push(Inst::Save(k))?;
+        }
+        self.iteration(body)?;
+        if let Some(k) = progress {
+            self.push(Inst::Progress(k))?;
+        }
+        return Ok(());
+    }
+
+    /// `count` copies of what `emit` writes, which runs once: compiling a
+    /// body again would redo its sets' UTF-8 splitting. Returns the size of
+    /// one copy. A copy of nothing is nothing, so an empty body under a
+    /// count as high as `u32::MAX` costs no time.
+    fn copies(&mut self, count: u32, emit: fn(&mut Compiler) -> Result<(), PatternError>) -> Result<i32, PatternError> {
+        if count == 0 {
+            return Ok(0);
+        }
+        let from = self.pc();
+        emit(self)?;
+        let to = self.pc();
+        if to > from {
+            for let _i of 1..<count {
+                let delta = self.pc() - from;
+                for let i of from..<to {
+                    self.push(relocate(self.insts[i], delta))?;
+                }
+            }
+        }
+        return Ok(to - from);
+    }
+
+    fn slot(&mut self) -> i32 {
+        self.slots += 1;
+        return self.slots - 1;
     }
 
     /// A choice among `set`'s UTF-8 sequences, lowest first.

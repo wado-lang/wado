@@ -353,6 +353,65 @@ test "(a|b)*" {
     assert spans(#"(a|b)*"#, "abab") == "0..4,3..4";
 }
 
+test "(a?)?" {
+    assert spans(#"(a?)?"#, "") == "0..0,-";
+    assert spans(#"(a?)?"#, "a") == "0..1,0..1";
+    assert spans(#"(a?)?"#, "b") == "0..0,- 1..1,-";
+}
+
+test "(a?){0,2}" {
+    assert spans(#"(a?){0,2}"#, "") == "0..0,-";
+    assert spans(#"(a?){0,2}"#, "a") == "0..1,0..1";
+    assert spans(#"(a?){0,2}"#, "aa") == "0..2,1..2";
+}
+
+test "(a?){1,2}" {
+    assert spans(#"(a?){1,2}"#, "") == "0..0,0..0";
+    assert spans(#"(a?){1,2}"#, "a") == "0..1,0..1";
+}
+
+test "(a?){2,3}" {
+    assert spans(#"(a?){2,3}"#, "") == "0..0,0..0";
+    assert spans(#"(a?){2,3}"#, "a") == "0..1,1..1";
+    assert spans(#"(a?){2,3}"#, "aaaa") == "0..3,2..3 3..4,4..4";
+}
+
+test "(a?)??b" {
+    assert spans(#"(a?)??b"#, "b") == "0..1,-";
+    assert spans(#"(a?)??b"#, "ab") == "0..2,0..1";
+}
+
+test "(?:a?)*?b" {
+    assert spans(#"(?:a?)*?b"#, "aab") == "0..3";
+}
+
+test "(a*)+?" {
+    assert spans(#"(a*)+?"#, "aa") == "0..2,0..2";
+    assert spans(#"(a*)+?"#, "b") == "0..0,0..0 1..1,1..1";
+}
+
+test "(|a)*" {
+    assert spans(#"(|a)*"#, "a") == "0..1,0..1";
+}
+
+test "((a?)|b)*" {
+    assert spans(#"((a?)|b)*"#, "ab") == "0..2,1..2,-";
+    assert spans(#"((a?)|b)*"#, "b") == "0..1,0..1,-";
+}
+
+test "(\\b)*x" {
+    assert spans(#"(\b)*x"#, "x") == "0..1,-";
+}
+
+test "(?:^)*a" {
+    assert spans(#"(?:^)*a"#, "a") == "0..1";
+}
+
+test "(a?b?)*$" {
+    assert spans(#"(a?b?)*$"#, "ab") == "0..2,0..2";
+    assert spans(#"(a?b?)*$"#, "ba") == "0..2,1..2";
+}
+
 test "((a)|(b))+" {
     assert spans(#"((a)|(b))+"#, "ab") == "0..2,1..2,-,1..2";
     assert spans(#"((a)|(b))+"#, "ba") == "0..2,1..2,1..2,-";

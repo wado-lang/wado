@@ -1,7 +1,6 @@
 //! The tree a pattern parses to. Code points are `u32`, since a pattern may
 //! name a lone surrogate, which no `char` holds and no UTF-8 text contains.
 
-use { Property } from "core:icu";
 
 internal variant Node {
     Char(u32),
@@ -74,5 +73,11 @@ internal variant SetKind {
     Digit,
     Word,
     Space,
-    Property(Property),
+    Property(NamedProperty),
+}
+
+/// A `\p{…}`: the name as written, and the code points it names.
+internal struct NamedProperty {
+    internal name: String,
+    internal ranges: List<[u32, u32]>,
 }

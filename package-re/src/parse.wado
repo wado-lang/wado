@@ -1,14 +1,16 @@
 //! Reads an ECMA-262 `Pattern` (§22.2.1) as the `u` flag reads it, into the
 //! tree of `ast.wado`. Rules cite `vendor/ecma262/spec.html`.
 
-use { BinaryProperty, GeneralCategoryGroup, Property, contains } from "core:icu";
-use { CharSet, ClassItem, Flag, Group, Modified, NamedSet, Node, Repeat, SetKind } from "./ast.wado";
+use { BinaryProperty, GeneralCategoryGroup, Property, contains, ranges } from "core:icu";
+use { CharSet, ClassItem, Flag, Group, Modified, NamedProperty, NamedSet, Node, Repeat, SetKind } from "./ast.wado";
+use { MAX_CODE_POINT, complement, normalize } from "./charset.wado";
 
 /// How deep groups may nest, so that a pattern read at run time cannot
 /// exhaust the stack.
 internal global MAX_NESTING: i32 = 256;
 
-/// Why a pattern was refused, and the byte of the pattern where it went wrong.
+/// Why a pattern was refused, and the byte of the pattern where it went wrong:
+/// 0 for one too large to compile, which no one byte makes so.
 pub struct PatternError {
     pub offset: i32,
     pub message: String,
@@ -79,15 +81,14 @@ struct Parser {
     blocked: bool,
 }
 
-/// Whether `c` takes a `\` to stand for itself outside a class, which is
-/// also what an identity escape may escape: a SyntaxCharacter, or in `rex`
-/// whitespace and `#`.
-internal fn needs_escape(c: char, syntax: Syntax) -> bool {
+/// Whether an identity escape may escape `c`: a SyntaxCharacter, or in
+/// `rex` whitespace and `#`.
+fn escapes_itself(c: char, syntax: Syntax) -> bool {
     return is_syntax_char(c)
         || syntax == Syntax::Extended && (c == '#' || contains(BinaryProperty::PatternWhiteSpace, c));
 }
 
-fn is_syntax_char(c: char) -> bool {
+internal fn is_syntax_char(c: char) -> bool {
     return match c {
         '^' | '$' | '\\' | '.' | '*' | '+' | '?' | '(' | ')' | '[' | ']' | '{' | '}' | '|' => true,
         _ => false,
@@ -408,6 +409,13 @@ impl Parser {
             }
         }
         self.expect(':', "`(?` must be followed by `:`, `<name>`, or modifiers `ims` and `:`")?;
+        if add & Flag::IgnoreCase != Flag::none() {
+            let at = start + 2 + self.src.slice(start + 2, dash).find("i").unwrap();
+            return Err(self.error_at(
+                at,
+                "the `i` modifier needs simple case folding, which core:icu does not offer yet",
+            ));
+        }
         let body = self.disjunction()?;
         self.close_group(start)?;
         if add == Flag::none() && remove == Flag::none() {
@@ -522,8 +530,10 @@ impl Parser {
         return Ok(Some(NamedSet { kind, negated: c.is_ascii_uppercase() }));
     }
 
-    // `\p{` UnicodePropertyValueExpression `}`, the names `core:icu` knows.
-    fn property(&mut self, start: i32) -> Result<Property, PatternError> {
+    // `\p{` UnicodePropertyValueExpression `}`: ECMA-262's own `Any`, `ASCII`
+    // and `Assigned` (table-binary-unicode-properties), then the names
+    // `core:icu` knows.
+    fn property(&mut self, start: i32) -> Result<NamedProperty, PatternError> {
         self.expect('{', "`\\p` must be followed by `{`")?;
         let from = self.pos;
         while let Some(c) = self.peek() && c != '}' {
@@ -531,16 +541,10 @@ impl Parser {
         }
         let text = self.src.slice(from, self.pos);
         self.expect('}', "unclosed `\\p{`")?;
-        if text.contains("=") {
-            if let Ok(property) = Property::from_str(text) {
-                return Ok(property);
-            }
-        } else if let Ok(binary) = BinaryProperty::from_str(text) {
-            return Ok(Property::BinaryProperty(binary));
-        } else if let Ok(category) = GeneralCategoryGroup::from_str(text) {
-            return Ok(Property::GeneralCategoryGroup(category));
-        }
-        return Err(self.error_at(start, `unknown Unicode property \`${text}\``));
+        let Some(points) = property_ranges(text) else {
+            return Err(self.error_at(start, `unknown Unicode property \`${text}\``));
+        };
+        return Ok(NamedProperty { name: text.to_string(), ranges: points });
     }
 
     // CharacterEscape[+UnicodeMode], with `rex`'s `\ ` and `\#`.
@@ -579,7 +583,7 @@ impl Parser {
             'u' => self.unicode_escape(start),
             '/' => Ok('/' as u32),
             _ => {
-                if needs_escape(c, self.syntax) {
+                if escapes_itself(c, self.syntax) {
                     return Ok(c as u32);
                 }
                 Err(self.error_at(start, `\`\\${c}\` is not an escape in Unicode mode`));
@@ -647,6 +651,9 @@ impl Parser {
                 continue;
             }
             self.bump();
+            if self.at_end() {
+                return Err(self.error_at(start, "unclosed class"));
+            }
             let high = self.class_atom()?;
             let ClassItem::Range([lo, _]) = low else {
                 return Err(self.error_at(from, "a class range cannot start at a set such as `\\d`"));
@@ -686,6 +693,32 @@ impl Parser {
         let code = self.character_escape(start)?;
         return Ok(ClassItem::Range([code, code]));
     }
+}
+
+fn property_ranges(text: StrSlice) -> Option<List<[u32, u32]>> {
+    if text == "Any" {
+        return Some([
+            [0, MAX_CODE_POINT],
+        ]);
+    }
+    if text == "ASCII" {
+        return Some([
+            [0, 0x7F],
+        ]);
+    }
+    if text == "Assigned" {
+        return Some(complement(&normalize(ranges(GeneralCategoryGroup::Unassigned))));
+    }
+    if text.contains("=") {
+        if let Ok(property) = Property::from_str(text) {
+            return Some(normalize(ranges(property)));
+        }
+    } else if let Ok(binary) = BinaryProperty::from_str(text) {
+        return Some(normalize(ranges(binary)));
+    } else if let Ok(category) = GeneralCategoryGroup::from_str(text) {
+        return Some(normalize(ranges(category)));
+    }
+    return null;
 }
 
 // LineTerminator: LF, CR, LS, PS.

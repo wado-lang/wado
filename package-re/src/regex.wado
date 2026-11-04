@@ -2,7 +2,8 @@
 
 use { Node } from "./ast.wado";
 use { Hole, PatternError, Syntax, parse } from "./parse.wado";
-use { search } from "./pike.wado";
+use { Cache, Goal, search } from "./pike.wado";
+use { print } from "./print.wado";
 use { Program, compile } from "./program.wado";
 
 /// A compiled regular expression.
@@ -12,15 +13,14 @@ pub struct Regex {
     names: List<Option<String>>,
     /// What a template splices where this stands in a hole.
     internal tree: Node,
-    /// The pattern as written, each hole spelled as pattern syntax.
-    internal source: String,
 }
 
-/// The pattern, for reading. A template's holes appear as escaped text and
-/// as non-capturing groups.
+/// The pattern in `re`'s syntax, which `Regex::new` reads back to the same
+/// regular expression: a template's text holes escaped, its `Regex` holes as
+/// groups, and `rex`'s whitespace and comments gone.
 impl Display for Regex {
     fn fmt(&self, f: &mut Formatter) {
-        f.write_str(&self.source);
+        f.write_str(&print(&self.tree));
     }
 }
 
@@ -45,14 +45,14 @@ fn collect_names(node: &Node, names: &mut List<Option<String>>) {
     }
 }
 
-internal fn build(pattern: StrSlice, syntax: Syntax, holes: List<Hole>, source: String) -> Result<Regex, PatternError> {
+internal fn build(pattern: StrSlice, syntax: Syntax, holes: List<Hole> = []) -> Result<Regex, PatternError> {
     let [tree, groups] = parse(pattern, syntax, holes)?;
     let mut names: List<Option<String>> = [];
     for let _i of 0..=groups {
         names.push(null);
     }
     collect_names(&tree, &mut names);
-    return Ok(Regex { program: compile(&tree, groups)?, names, tree, source });
+    return Ok(Regex { program: compile(&tree, groups)?, names, tree });
 }
 
 impl Regex {
@@ -67,13 +67,12 @@ impl Regex {
 
     /// The regular expression `pattern` spells, or why it spells none.
     pub fn new<S: AsStrSlice>(pattern: S) -> Result<Regex, PatternError> {
-        let view = pattern.as_str_slice();
-        return build(view, Syntax::Plain, [], view.to_string());
+        return build(pattern.as_str_slice(), Syntax::Plain);
     }
 
     /// Whether `text` holds a match.
     pub fn is_match<S: AsStrSlice>(&self, text: S) -> bool {
-        return search(&self.program, text.as_str_slice(), 0) matches { Some(_) };
+        return search(&self.program, &mut Cache::new(&self.program), text.as_str_slice(), 0, Goal::Any) matches { Some(_) };
     }
 
     /// The leftmost match in `text`.
@@ -102,7 +101,7 @@ impl Regex {
         contract text.as_str_slice().is_char_boundary(start), "start must lie on a character boundary"
     {
         let view = text.as_str_slice();
-        let Some(slots) = search(&self.program, view, start) else {
+        let Some(slots) = search(&self.program, &mut Cache::new(&self.program), view, start, Goal::Groups) else {
             return null;
         };
         return Some(Captures { text: view, slots, regex: self });
@@ -113,7 +112,13 @@ impl Regex {
     /// ended is skipped: `a*` finds `""`, `"aaa"` and `""` in `"baaac"`, not a
     /// second `""` before the `c`.
     pub fn find_iter<S: AsStrSlice>(&self, text: S) -> Matches {
-        return Matches { regex: self, text: text.as_str_slice(), next: 0, last_end: -1 };
+        return Matches {
+            regex: self,
+            text: text.as_str_slice(),
+            next: 0,
+            last_end: -1,
+            cache: Cache::new(&self.program),
+        };
     }
 
     /// The groups of each match in `text`, left to right, resuming as
@@ -351,6 +356,7 @@ pub struct Matches {
     next: i32,
     /// Where the match found last ended; -1 before the first.
     last_end: i32,
+    cache: Cache,
 }
 
 impl Matches {
@@ -359,7 +365,7 @@ impl Matches {
             if self.next > self.text.len() {
                 return null;
             }
-            let Some(slots) = search(&self.regex.program, self.text, self.next) else {
+            let Some(slots) = search(&self.regex.program, &mut self.cache, self.text, self.next, Goal::Groups) else {
                 self.next = self.text.len() + 1;
                 return null;
             };

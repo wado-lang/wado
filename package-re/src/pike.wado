@@ -34,16 +34,43 @@ impl Threads {
     }
 }
 
-/// The capture slots of the leftmost-first match at or after `start`, which
-/// lies on a character boundary of `text`; an unset slot is -1.
-internal fn search(program: &Program, text: StrSlice, start: i32) -> Option<List<i32>> {
-    let size = program.insts.len();
-    let mut current = Threads::new(size);
-    let mut next = Threads::new(size);
-    let mut fresh: List<i32> = [];
-    for let _i of 0..<program.slots {
-        fresh.push(-1);
+/// What a search works in, kept across the searches of one iterator so that
+/// each costs time in the text it reads, not in the program's size.
+internal struct Cache {
+    current: Threads,
+    next: Threads,
+    /// Every slot unset.
+    fresh: List<i32>,
+}
+
+impl Cache {
+    internal fn new(program: &Program) -> Cache {
+        let size = program.insts.len();
+        let mut fresh: List<i32> = [];
+        for let _i of 0..<program.slots {
+            fresh.push(-1);
+        }
+        return Cache {
+            current: Threads::new(size),
+            next: Threads::new(size),
+            fresh,
+        };
     }
+}
+
+/// How far a search goes.
+internal enum Goal {
+    /// The leftmost-first match, with its groups.
+    Groups,
+    /// Whether there is any match: the first thread to reach one answers.
+    Any,
+}
+
+/// The capture slots of the leftmost-first match at or after `start`, which
+/// lies on a character boundary of `text`; an unset slot is -1. Under
+/// `Goal::Any`, those of whichever match is found first.
+internal fn search(program: &Program, cache: &mut Cache, text: StrSlice, start: i32, goal: Goal) -> Option<List<i32>> {
+    cache.current.clear();
     let len = text.len();
     let mut matched: Option<List<i32>> = null;
     let mut pos = start;
@@ -52,30 +79,35 @@ internal fn search(program: &Program, text: StrSlice, start: i32) -> Option<List
         // is found, since any match it led to would lie further right.
         let found = matched matches { Some(_) };
         if !found && text.is_char_boundary(pos) {
-            add(program, text, &mut current, 0, fresh, pos);
+            add(program, text, &mut cache.current, 0, cache.fresh, pos);
         }
-        if current.list.is_empty() && (found || pos >= len) {
+        if cache.current.list.is_empty() && (found || pos >= len) {
             return matched;
         }
-        next.clear();
-        for let t of &current.list {
+        cache.next.clear();
+        for let t of &cache.current.list {
             match program.insts[t.pc] {
                 Byte([lo, hi]) => {
                     if pos < len {
                         let b = text.byte_at(pos);
                         if b >= lo && b <= hi {
-                            add(program, text, &mut next, t.pc + 1, t.slots, pos + 1);
+                            add(program, text, &mut cache.next, t.pc + 1, t.slots, pos + 1);
                         }
                     }
                 },
                 Match => {
-                    matched = Some(t.slots);
+                    let mut slots = t.slots;
+                    slots.truncate(program.captures);
+                    if goal == Goal::Any {
+                        return Some(slots);
+                    }
+                    matched = Some(slots);
                     break;
                 },
                 _ => unreachable(),
             }
         }
-        [current, next] = [next, current];
+        [cache.current, cache.next] = [cache.next, cache.current];
         if pos >= len {
             return matched;
         }
@@ -114,6 +146,11 @@ fn add(program: &Program, text: StrSlice, to: &mut Threads, pc: i32, slots: List
             },
             Assert(look) => {
                 if holds(look, text, pos) {
+                    stack.push(Thread { pc: t.pc + 1, slots: t.slots });
+                }
+            },
+            Progress(slot) => {
+                if t.slots[slot] != pos {
                     stack.push(Thread { pc: t.pc + 1, slots: t.slots });
                 }
             },

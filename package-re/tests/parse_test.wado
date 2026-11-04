@@ -30,7 +30,7 @@ fn item(i: &ClassItem) -> String {
                 Digit => ['d', ""],
                 Word => ['w', ""],
                 Space => ['s', ""],
-                Property(p) => ['p', `{${p:?}}`],
+                Property(p) => ['p', `{${p.name}}`],
             };
             `\\${if set.negated { letter.to_ascii_uppercase() } else { letter }}${rest}`;
         },
@@ -173,7 +173,11 @@ test "groups count their opening parentheses" {
 }
 
 test "modifiers" {
-    assert tree(#"(?i:a)(?-ms:b)(?s-i:c)"#) == "(cat (?i- a) (?-ms b) (?s-i c))";
+    assert tree(#"(?m:a)(?-ms:b)(?s-i:c)"#) == "(cat (?m- a) (?-ms b) (?s-i c))";
+}
+
+test "i is refused at the modifier, until core:icu folds case" {
+    assert error(#"abc(?mi:x)"#) == "the `i` modifier needs simple case folding, which core:icu does not offer yet (at byte 6)";
 }
 
 test "assertions and the dot" {
@@ -196,12 +200,39 @@ test "escapes" {
     assert tree(#"\uD83D"#) == "U+D83D";
 }
 
+fn property(pattern: String) -> List<[u32, u32]> {
+    let [node, _] = parse(pattern.as_str_slice(), Syntax::Plain).unwrap();
+    let Set(set) = node else {
+        unreachable();
+    };
+    let Named(named) = set.items[0] else {
+        unreachable();
+    };
+    let Property(p) = named.kind else {
+        unreachable();
+    };
+    return p.ranges;
+}
+
 test "Unicode properties read core:icu's names" {
-    assert tree(#"\p{L}"#) == #"[\p{Property::GeneralCategoryGroup(GeneralCategoryGroup::Letter)}]"#;
-    assert tree(#"\P{Lu}"#) == #"[\P{Property::GeneralCategoryGroup(GeneralCategoryGroup::UppercaseLetter)}]"#;
-    assert tree(#"\p{White_Space}"#) == #"[\p{Property::BinaryProperty(BinaryProperty::WhiteSpace)}]"#;
-    assert tree(#"\p{sc=Hiragana}"#) == #"[\p{Property::Script(Script::Hiragana)}]"#;
-    assert tree(#"[\p{gc=Nd}]"#) == #"[\p{Property::GeneralCategoryGroup(GeneralCategoryGroup::DecimalNumber)}]"#;
+    assert tree(#"\p{L}"#) == #"[\p{L}]"#;
+    assert tree(#"\P{Lu}"#) == #"[\P{Lu}]"#;
+    assert tree(#"[\p{gc=Nd}]"#) == #"[\p{gc=Nd}]"#;
+    assert property(#"\p{White_Space}"#)[0] == [0x09, 0x0D];
+    assert property(#"\p{sc=Hiragana}"#)[0] == [0x3041, 0x3096];
+    assert property(#"\p{gc=Nd}"#)[0] == [0x30, 0x39];
+}
+
+test "ECMA-262's own properties" {
+    assert property(#"\p{Any}"#) == [
+        [0, 0x10FFFF],
+    ];
+    assert property(#"\p{ASCII}"#) == [
+        [0, 0x7F],
+    ];
+    let assigned = property(#"\p{Assigned}"#);
+    assert assigned[0] == [0, 0x377];
+    assert assigned[1].0 == 0x37A;
 }
 
 test "rex ignores whitespace and comments outside a class" {
@@ -232,6 +263,7 @@ test "syntax errors point at the offending character" {
     assert error(#"a{x}"#) == "a count needs a number, as in `{2}` (at byte 1)";
     assert error(#"a{4294967296}"#) == "a count may be at most 4294967295 (at byte 2)";
     assert error(#"[a"#) == "unclosed class (at byte 0)";
+    assert error(#"x[a-"#) == "unclosed class (at byte 1)";
     assert error(#"[z-a]"#) == "a class range runs from a higher code point to a lower one (at byte 1)";
     assert error(#"[\d-z]"#) == #"a class range cannot start at a set such as `\d` (at byte 1)"#;
     assert error(#"\q"#) == #"`\q` is not an escape in Unicode mode (at byte 0)"#;
