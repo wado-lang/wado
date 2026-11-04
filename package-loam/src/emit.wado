@@ -8,6 +8,7 @@ use {
     BACKEND_PARAM,
     CACHE,
     CHECKPOINT_PARAM,
+    CHOSEN,
     KEPT,
     LEAST_EXTENTS,
     LENGTHS,
@@ -23,7 +24,7 @@ use {
     module_idents,
 } from "./idents.wado";
 use { padding } from "./pad.wado";
-use { Lowers, Op, Poly, equalities } from "./poly.wado";
+use { Condition, Lowers, Op, Poly, equalities } from "./poly.wado";
 use { Axes, Axis, Shape } from "./shape.wado";
 use {
     Elements,
@@ -105,6 +106,9 @@ pub variant EmitError {
     Unbound(String),
     /// A value the run computes in `i64`, which some input carries past it.
     Wide(Poly),
+    /// An `If`, by its first output, whose branches owe the lengths conditions
+    /// `compute` checks on the host, where the host does not hold its condition.
+    HiddenCondition(String),
 }
 
 impl Display for UnmappedDtype {
@@ -129,6 +133,9 @@ impl Display for EmitError {
                 f.write_str(`${Poly::symbol(symbol)}: the run needs this length, and no input's axis gives it`);
             },
             Wide(p) => f.write_str(`${p}: the run computes this in i64, and some input carries it past`),
+            HiddenCondition(node) => f.write_str(
+                `${node} = If: its branches owe the lengths conditions, and its condition is no input the host holds to check them by`,
+            ),
         }
     }
 }
@@ -247,6 +254,8 @@ pub fn emit(
     // A length is padded where no node refuses it and an input carries it.
     let padded: List<String> = padding(graph, checked).into_iter().filter(|j| j.refused matches { None }
         && carriers.into_iter().any(|c| c.solved.symbol == j.symbol)).map(|j| j.symbol).collect();
+    let inputs: List<String> = graph.inputs.into_iter().map(|vi| vi.name).filter(|t| !crossing.cached.contains(t)).collect();
+    let conditions = held_conditions(graph, checked, &inputs);
     let read = emit_build(
         &mut w,
         graph,
@@ -255,8 +264,9 @@ pub fn emit(
         &names,
         &built,
         &kept.graph,
-        held_symbols.padded(&padded),
+        held_symbols.padded(&padded, &grown.unwrap_or([]), &conditions, &names),
         &crossing,
+        &conditions,
     )?;
     // A past is held in the cache, at its capacity.
     let cached: List<String> = crossing.cached.into_iter().map(|t| names.get(&t)).collect();
@@ -279,6 +289,7 @@ pub fn emit(
             &kept.graph,
             &crossing,
             &grown,
+            &conditions,
         )?;
     }
     return Result::Ok(w.to_string());
@@ -1051,6 +1062,12 @@ struct Symbols {
     lengths: HashMap<String, String> = HashMap::new(),
     /// The padded symbols something read the value of.
     read: HashSet<String> = HashSet::new(),
+    /// Each padded symbol a past grows along, whose past `build` takes at the
+    /// present's capacity.
+    grown: HashSet<String> = HashSet::new(),
+    /// Each `If` condition the host holds, and the field of `chosen` naming the
+    /// branch `build` takes on it.
+    chosen: HashMap<String, String> = HashMap::new(),
 }
 
 impl Symbols {
@@ -1111,10 +1128,22 @@ impl Symbols {
 
     /// The symbols as `build` reads them where `padded` names a symbol: its
     /// extent the capacity, and its value `lengths`'s field of the symbol's name.
-    fn padded(&self, padded: &List<String>) -> Symbols {
+    /// A grown one's past holds the present's capacity, so its extent is what
+    /// `owed` leaves of that beside the other lengths. Each of `conditions` is
+    /// read from `chosen`.
+    fn padded(&self, padded: &List<String>, owed: &List<[Grown, Poly]>, conditions: &List<String>, names: &Names) -> Symbols {
         let mut symbols = *self;
+        for let c of *conditions {
+            symbols.chosen[c] = `chosen.${names.get(&c)}`;
+        }
         for let symbol of *padded {
             symbols.lengths[symbol] = `lengths.${self.idents[symbol]}`;
+        }
+        for let [g, length] of *owed {
+            if padded.contains(&g.symbol) {
+                symbols.derive(&g.symbol, &length);
+                symbols.grown.insert(g.symbol);
+            }
         }
         return symbols;
     }
@@ -1409,8 +1438,8 @@ fn emit_forward(
 }
 
 /// The pass built as a graph, each node as the operations of `Graph` that
-/// compute it, and `Lengths`. Returns the padded symbols it reads the value
-/// of, which `Lengths` holds.
+/// compute it, `Lengths`, and `Chosen`, a field for each of `conditions`.
+/// Returns the padded symbols it reads the value of, which `Lengths` holds.
 fn emit_build(
     w: &mut CodeWriter,
     graph: &Graph,
@@ -1421,6 +1450,7 @@ fn emit_build(
     kept: &List<String>,
     symbols: Symbols,
     crossing: &Crossing,
+    conditions: &List<String>,
 ) -> Result<List<String>, EmitError> {
     let exprs = Operands {
         values: HashMap::<String, String>::new(),
@@ -1456,6 +1486,16 @@ fn emit_build(
         w.line("/// extent, where `build` reads it.");
         lengths.emit(w);
     }
+    if !conditions.is_empty() {
+        let mut chosen = StructSpec::new(CHOSEN, Vis::Pub);
+        for let c of *conditions {
+            chosen.add_pub_field(names.get(&c), "Option<bool>");
+        }
+        w.blank();
+        w.line("/// The branch each `If` on an input takes, which the host read off it; or");
+        w.line("/// none, where `build` adds both at lengths each branch holds at.");
+        chosen.emit(w);
+    }
     return Result::Ok(read);
 }
 
@@ -1476,6 +1516,7 @@ fn emit_compute(
     kept: &List<String>,
     crossing: &Crossing,
     owed: &List<[Grown, Poly]>,
+    conditions: &List<String>,
 ) -> Result<(), EmitError> {
     let shapes = &checked.shapes;
     let returned = crossing.returned;
@@ -1510,6 +1551,20 @@ fn emit_compute(
         compute.add_param("cache", `&${CACHE}<${BACKEND_PARAM}>`);
     }
     lines.extend(&owed_checks(checked, &mut symbols)?);
+    lines.extend(&branch_checks(graph, checked, names, conditions, &mut symbols)?);
+    // Each `If` on an input takes its branch on the host, so the program holds
+    // the one branch, at lengths it holds at.
+    let chosen: List<String> = conditions.into_iter().map(|c| names.get(c)).collect();
+    if !chosen.is_empty() {
+        let fields: List<String> = chosen.into_iter().map(|c| `${c}: Option::Some(${c}.data[0])`).collect();
+        lines.push(`let chosen = ${CHOSEN} { ${fields.join(", ")} };`);
+    }
+    for let [g, _] of *owed {
+        let past = symbols.spell(&Poly::symbol(&g.symbol))?;
+        let held_extent = `backend.extents_of(&cache.${names.get(&g.past)})[${g.axis}] as i64`;
+        lines.push(wado`refuse(unmet(${past}, "${g.symbol} must not be negative"));`);
+        lines.push(wado`refuse(unmet(${held_extent} - ${past}, "${g.past} holds fewer positions than ${g.symbol}"));`);
+    }
     let mut capacities = at_capacities(&mut symbols, &mut lines, padded, owed, names)?;
     // The cache was computed before the pass this call begins.
     if has_cache {
@@ -1543,7 +1598,11 @@ fn emit_compute(
     for let [past, _] of crossing.pairs {
         taken_args.push(ProgramArgument::of(checked, names, &past, Crossed::Cache));
     }
-    let class: List<String> = taken_args.into_iter().map(|a| `backend.extents_of(&${a.held()})`).collect();
+    let mut class: List<String> = taken_args.into_iter().map(|a| `backend.extents_of(&${a.held()})`).collect();
+    // The branches the host took tell the programs apart too.
+    for let c of chosen {
+        class.push(`[chosen.${c}.unwrap() as i32]`);
+    }
     if !read.is_empty() {
         let mut fields: List<String> = [];
         for let symbol of *read {
@@ -1566,6 +1625,17 @@ fn emit_compute(
     for let weight of weight_names(graph, kept) {
         taken_args.push(ProgramArgument::of(checked, names, &weight, Crossed::Weight));
     }
+    // `build` and `recorded` take the branches where they take the lengths.
+    let [record, least] = if chosen.is_empty() {
+        [RECORDED, `${RECORDED}(recorder, &${LEAST_EXTENTS}())`];
+    } else {
+        arguments.push("&chosen");
+        let unchosen: List<String> = chosen.into_iter().map(|c| `${c}: null`).collect();
+        [
+            `|recorder, extents| ${RECORDED}(recorder, extents, &chosen)`,
+            `${RECORDED}(recorder, &${LEAST_EXTENTS}(), &${CHOSEN} { ${unchosen.join(", ")} })`,
+        ];
+    };
     arguments.push("&model.weights");
     let erased: List<String> = taken_args.into_iter().take(first_weight).map(|a| a.erased()).collect();
     let erased_weights: List<String> = taken_args.into_iter().skip(first_weight).map(|a| a.erased()).collect();
@@ -1588,7 +1658,7 @@ fn emit_compute(
     // Bound by a pattern, the run reads the `cache` the pattern shadows.
     let mut bind_run = |pattern: String| {
         lines.push(
-            `let ${pattern} = match model.programs.run(backend, [${class.join(", ")}], ${RECORDED}, || [${erased.join(
+            `let ${pattern} = match model.programs.run(backend, [${class.join(", ")}], ${record}, || [${erased.join(
                 ", ",
             )}], || [${erased_weights.join(", ")}]) {`,
         );
@@ -1642,9 +1712,9 @@ fn emit_compute(
         w.line(&line);
     }
     w.end();
-    emit_recorded(w, names, &taken_args, &returned, crossing);
+    emit_recorded(w, names, &taken_args, &returned, crossing, !chosen.is_empty());
     emit_least_extents(w, checked, carriers, names, owed, padded, &taken_args)?;
-    emit_held(w, graph, checked, names, kept, first_weight);
+    emit_held(w, graph, checked, names, kept, first_weight, least);
     return Result::Ok(());
 }
 
@@ -1687,9 +1757,17 @@ fn emit_least_extents(
 }
 
 /// `Params::held`: the initializers as the backend keeps them for the pass
-/// `recorded` records at the least lengths, the weights taking its parameters
-/// from `first` on, and the folded literals `kept`.
-fn emit_held(w: &mut CodeWriter, graph: &Graph, checked: &Checked, names: &Names, kept: &List<String>, first: i32) {
+/// `least`, a call of `recorded`, records at the least lengths, the weights
+/// taking its parameters from `first` on, and the folded literals `kept`.
+fn emit_held(
+    w: &mut CodeWriter,
+    graph: &Graph,
+    checked: &Checked,
+    names: &Names,
+    kept: &List<String>,
+    first: i32,
+    least: String,
+) {
     w.blank();
     let mut block = ImplSpec::new(`${PARAMS}<${BACKEND_PARAM}>`);
     block.add_generic(GRAPH_BOUND);
@@ -1702,7 +1780,7 @@ fn emit_held(w: &mut CodeWriter, graph: &Graph, checked: &Checked, names: &Names
     ).set_return_type(`Result<${PARAMS}<${BACKEND_PARAM}>, Er>`).add_effect("_").emit_begin(w);
     let count = graph.initializers.len();
     w.line(
-        `let weights = backend.kept_weights(|recorder| ${RECORDED}(recorder, &${LEAST_EXTENTS}()), ${first}, ${count}, load)?;`,
+        `let weights = backend.kept_weights(|recorder| ${least}, ${first}, ${count}, load)?;`,
     );
     w.begin(`return Result::Ok(${PARAMS}`);
     for let [at, vi] of graph.initializers.into_iter().enumerate() {
@@ -1837,18 +1915,21 @@ fn emit_model(w: &mut CodeWriter) {
 }
 
 /// `recorded`: [`build`] recorded over parameters, one for each of `taken`,
-/// in its order, for a backend to compile.
+/// in its order, for a backend to compile, taking the branches `chosen` where
+/// `chooses`.
 fn emit_recorded(
     w: &mut CodeWriter,
     names: &Names,
     taken: &List<ProgramArgument>,
     returned: &List<String>,
     crossing: &Crossing,
+    chooses: bool,
 ) {
     w.blank();
     w.line("/// [`build`] recorded over parameters of `extents`, in the order `compute`");
     w.line("/// passes its program the arguments.");
-    w.begin(`fn ${RECORDED}(recorder: &mut Recorder, extents: &List<List<i32>>) -> Recorded`);
+    let chosen = if chooses { `, chosen: &${CHOSEN}` } else { "" };
+    w.begin(`fn ${RECORDED}(recorder: &mut Recorder, extents: &List<List<i32>>${chosen}) -> Recorded`);
     let mut arguments: List<String> = ["recorder"];
     for let [at, a] of taken.into_iter().enumerate() {
         if a.crossed matches { Input } {
@@ -1866,6 +1947,9 @@ fn emit_recorded(
             if a.crossed == crossed {
                 fields.push(`${a.ident}: ${a.parameter(at)}`);
             }
+        }
+        if crossed matches { Weight } && chooses {
+            arguments.push("chosen");
         }
         if !fields.is_empty() || crossed matches { Weight } {
             w.line(`let ${local} = ${ty}::<Recorder> { ${fields.join(", ")} };`);
@@ -1930,9 +2014,35 @@ fn grown_lengths(checked: &Checked, crossing: &Crossing) -> Option<List<[Grown, 
 
 /// The value the graph owes `symbol` to be, where it owes it to equal a sum
 /// of the other inputs' lengths: `symbol` once in a slack owed to be 0,
-/// beside no grown length.
+/// beside no grown length. A branch owes it where it runs, and a branch that
+/// reads no past owes it nothing, so each scope that solves it must agree.
 fn owed_value(checked: &Checked, symbol: &String, grown: &List<Grown>) -> Option<Poly> {
-    for let slack of equalities(&checked.owed) {
+    let mut value: Option<Poly> = null;
+    for let owed of scopes_owed(checked) {
+        let Some(found) = solved_in(&owed, symbol, grown) else {
+            continue;
+        };
+        if let Some(v) = value && v != found {
+            return null;
+        }
+        value = Option::Some(found);
+    }
+    return value;
+}
+
+/// What `checked` owes and what each branch in it owes, scope by scope.
+fn scopes_owed(checked: &Checked) -> List<List<Condition>> {
+    let mut all: List<List<Condition>> = [checked.owed];
+    for let [_, [then_scope, else_scope]] of checked.branches.entries() {
+        all.extend(&scopes_owed(then_scope));
+        all.extend(&scopes_owed(else_scope));
+    }
+    return all;
+}
+
+/// `symbol` as one equality of `owed` solves it, as `owed_value` takes it.
+fn solved_in(owed: &List<Condition>, symbol: &String, grown: &List<Grown>) -> Option<Poly> {
+    for let slack of equalities(owed) {
         let Some([coefficient, rest]) = slack.linear_in(symbol) else {
             continue;
         };
@@ -2063,6 +2173,9 @@ fn emit_entry(
     let read: List<String> = symbols.order.into_iter().filter(|s| symbols.read.contains(s)).collect();
     if !read.is_empty() {
         entry.add_param("lengths", `&${LENGTHS}<${BACKEND_PARAM}>`);
+    }
+    if !symbols.chosen.is_empty() {
+        entry.add_param("chosen", `&${CHOSEN}`);
     }
     let passed_type = if several { `${PASSED}<${BACKEND_PARAM}>` } else { prepared_type(checked, &returned[0]) };
     entry.add_param("weights", `&${holder.ty()}`).set_return_type(passed_type).add_effect("_");
@@ -2240,6 +2353,64 @@ fn owed_checks(checked: &Checked, symbols: &mut Symbols) -> Result<List<String>,
             continue;
         }
         lines.push(wado`refuse(unmet(${symbols.spell(&c.slack)?}, "${c.reason}"));`);
+    }
+    return Result::Ok(lines);
+}
+
+/// Each input among `inputs` some `If` in `graph` branches on, in the order
+/// the `If`s come.
+fn held_conditions(graph: &Graph, checked: &Checked, inputs: &List<String>) -> List<String> {
+    let mut found: List<String> = [];
+    for let node of &graph.nodes {
+        if !checked.branches.contains_key(node.outputs[0]) {
+            continue;
+        }
+        if inputs.contains(&node.inputs[0]) && !found.contains(&node.inputs[0]) {
+            found.push(node.inputs[0]);
+        }
+        for let b of branches(node, checked) {
+            for let c of held_conditions(&b.graph, &b.checked, inputs) {
+                if !found.contains(&c) {
+                    found.push(c);
+                }
+            }
+        }
+    }
+    return found;
+}
+
+/// What each `If` in `graph` owes in the branch it takes, checked on the host
+/// against its condition, which must be one of `conditions`, the inputs the
+/// host holds.
+fn branch_checks(
+    graph: &Graph,
+    checked: &Checked,
+    names: &Names,
+    conditions: &List<String>,
+    symbols: &mut Symbols,
+) -> Result<List<String>, EmitError> {
+    let mut lines: List<String> = [];
+    for let node of &graph.nodes {
+        if !checked.branches.contains_key(node.outputs[0]) {
+            continue;
+        }
+        let mut owed: List<List<String>> = [];
+        for let b of branches(node, checked) {
+            let mut scope = owed_checks(&b.checked, symbols)?;
+            scope.extend(&branch_checks(&b.graph, &b.checked, names, conditions, symbols)?);
+            owed.push(scope);
+        }
+        if owed.into_iter().all(|o| o.is_empty()) {
+            continue;
+        }
+        if !conditions.contains(&node.inputs[0]) {
+            return Result::Err(EmitError::HiddenCondition(node.outputs[0]));
+        }
+        lines.push(`if ${names.get(&node.inputs[0])}.data[0] {`);
+        lines.extend(&indented(owed[0]));
+        lines.push("} else {");
+        lines.extend(&indented(owed[1]));
+        lines.push("}");
     }
     return Result::Ok(lines);
 }
@@ -2469,8 +2640,8 @@ fn bound_to(output: &String, call: String, names: &Names, exprs: &mut Operands) 
 
 /// An `If`, each branch a block that checks what it owes, computes its
 /// outputs, and yields them under the axes the node's outputs carry. `pass`
-/// reads the condition's element and takes one block; `build` adds a
-/// conditional whose branches are the blocks.
+/// reads the condition's element and takes one block; `build` takes the one
+/// the host chose, or adds a conditional whose branches are the blocks.
 fn branch_block(
     node: &Node,
     checked: &Checked,
@@ -2491,7 +2662,11 @@ fn branch_block(
             let types: List<String> = node.outputs.into_iter().map(|o| prepared_type(checked, &o)).collect();
             let yielded = if types.len() == 1 { types[0] } else { `[${types.join(", ")}]` };
             let axes = axis_list(&checked.shapes[node.inputs[0]]);
-            [`let ${bound} = backend.conditional::<[${axes}], ${yielded}>(${condition}, || {`, "}, || {", "});"];
+            let opening = match symbols.chosen.get(node.inputs[0]) {
+                Some(chosen) => `branched::<${BACKEND_PARAM}, [${axes}], ${yielded}>(backend, ${condition}, ${chosen}, || {`,
+                None => `backend.conditional::<[${axes}], ${yielded}>(${condition}, || {`,
+            };
+            [`let ${bound} = ${opening}`, "}, || {", "});"];
         },
     };
     let mut lines: List<String> = [opening];
@@ -3467,12 +3642,24 @@ fn built_reduction(node: &Node, checked: &Checked, exprs: &Operands, symbols: &m
 /// A `Concat` as `concatenate` folded over its operands from the left, each
 /// partial join under the output's axes. Where the join so far reads a valid
 /// length, the next part is written from it on, past which the join's padding
-/// lies.
+/// lies. A grown past holds the present's capacity, so the rest is written
+/// into it.
 fn built_concat(node: &Node, checked: &Checked, exprs: &Operands, symbols: &mut Symbols) -> Result<String, EmitError> {
     let shapes = &checked.shapes;
     let out = axis_list(&shapes[node.outputs[0]]);
     let axis = settled(concat_axis(node, shapes[node.outputs[0]].rank()));
     let element = checked.primitives[node.outputs[0]];
+    let past = shapes[node.inputs[0]];
+    if let Symbolic(length) = past.axes[axis].extent && symbols.grown.into_iter().any(|g| length == Poly::symbol(&g)) {
+        assert node.inputs.len() == 2, "a past grows by one part";
+        let into = `backend.relabeled::<${element}, [${axis_list(&past)}], [${out}]>(${exprs.reference(&node.inputs[0])})`;
+        let types = `${element}, [${out}], [${axis_list(&shapes[node.inputs[1]])}]`;
+        return Result::Ok(
+            `written_at::<${BACKEND_PARAM}, ${types}>(backend, &${into}, ${exprs.reference(&node.inputs[1])}, ${axis}, &${symbols.value(
+                &length,
+            )?})`,
+        );
+    }
     // A single operand is joined to nothing, and every result is bound as a value.
     let mut call = exprs.value(&node.inputs[0]);
     let mut left = exprs.reference(&node.inputs[0]);

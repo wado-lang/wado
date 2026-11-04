@@ -1299,6 +1299,15 @@ test "an If's output takes a fresh length where its branches' lengths differ" {
     assert y_axes(source).unwrap() == `Y0="Y[0]",X1=4`;
 }
 
+test "an If's output takes the length each branch owes its own equal to" {
+    // As a merged decoder's present is the past and the step in the branch
+    // with a past, and the step alone in the other: the mask's length in both.
+    let source = `g (bool[1] C, float[N, 4] X, float[M, 4] P, float[T, 4] K) => (float[?, 4] Y) {
+        Y = If <then_branch = t () => (float[?, 4] A) { J = Concat<axis = 0>(P, X) A = Add(J, K) }, else_branch = e () => (float[N, 4] B) { B = Add(X, K) }> (C)
+    }`;
+    assert y_axes(source).unwrap() == `N=T,X1=4`;
+}
+
 test "an If's output axis its branches give apart is minted" {
     let source = `g (bool[1] C, float[N, 4] X, float[M, 4] Z) => (float[?, 4] Y) {
         Y = If <then_branch = t () => (float[?, 4] A) { A = Relu(X) }, else_branch = e () => (float[?, 4] B) { B = Neg(Z) }> (C)

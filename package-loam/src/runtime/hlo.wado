@@ -551,6 +551,23 @@ pub fn joined_at<affine G: Graph, E: Element, A, B, Out>(
     return written_at::<G, E, Out, B>(g, &joined, b, axis, length);
 }
 
+/// The branch `chosen` names, where the host took it, or `g`'s conditional on
+/// `pred`, which adds both. A branch's lengths may hold only where it is taken,
+/// so `g` adds both only at lengths that hold in each.
+pub fn branched<affine G: Graph, Axes, T>(
+    g: &mut G,
+    pred: &G::Tensor<bool, Axes>,
+    chosen: Option<bool>,
+    then: fn() -> T with _,
+    otherwise: fn() -> T with _,
+) -> T with _ {
+    return match chosen {
+        Some(true) => then(),
+        Some(false) => otherwise(),
+        None => g.conditional(pred, then, otherwise),
+    };
+}
+
 /// `a` with `b` written over it along `axis` from `at` on, any part of `b`
 /// past `a`'s end dropped.
 pub fn written_at<affine G: Graph, E: Element, A, B>(

@@ -462,7 +462,7 @@ impl Graph for WebGpuBackend {
     ) -> Placed<E, Out> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
         let index = self.host(indices);
         let extents = self.extents_of(data);
-        if E::is_f32() && let Some(axis) = taken_axis(&extents, index.extents.len(), dims) {
+        if E::exact_in_f32() && let Some(axis) = taken_axis(&extents, index.extents.len(), dims) {
             let last = extents[axis] as i64 - 1;
             let mut starts = List::<i64>::with_capacity(index.data.len());
             for let i of index.data {

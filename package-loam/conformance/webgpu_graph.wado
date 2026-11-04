@@ -22,7 +22,7 @@ use {
     GpuSupportedLimits,
     RecordOptionGpuSize64,
 } from "wasi:webgpu";
-use { Cpu, Element, full, Graph, Holds, Placed, strided_gather, Tensor, WebGpuBackend } from "lib:loam";
+use { Comparison, Cpu, Element, full, Graph, Holds, Placed, strided_gather, Tensor, WebGpuBackend } from "lib:loam";
 use cases from "lib:loam/src/runtime/graph_cases.wado";
 use { deviation } from "lib:loam/example/webgpu/compare.wado";
 use gated from "./gated.onnxtext"
@@ -44,6 +44,16 @@ use shared from "./shared.onnxtext"
     with {
         type: "onnxtext",
         generator: { module: "lib:loam" },
+    };
+use merged from "../tests/models/tiny-gpt2/merged/model.onnx"
+    with {
+        type: "onnx",
+        generator: {
+            module: "lib:loam",
+            options: {
+                dims: { batch_size: 1 },
+            },
+        },
     };
 
 export fn run() with (Stdout, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder, GpuSupportedLimits, RecordOptionGpuSize64) {
@@ -72,6 +82,19 @@ export fn run() with (Stdout, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuC
     let taken = strided_gather::<WebGpuBackend, f32, [Rows, Run, Pair], [Rows, Run, Pair]>(&mut gpu, &uploaded, 1, &start, 3, 1);
     assert gpu.dispatches() == gathering;
     println(`consecutive rows ${apart(&mut gpu, &taken, &gathered)}`);
+
+    // Rows of a mask a step apart are gathered on the device, as a causal
+    // mask's are, read back by nothing.
+    let zero = full::<Cpu, f32, [Rows, Run, Pair]>(cpu, 0.0, [1, 5, 2]);
+    let positive = cpu.compare(Comparison::Gt, &rows, &zero);
+    let from_zero = full::<Cpu, i64, []>(cpu, 0, []);
+    let picked = strided_gather::<Cpu, bool, [Rows, Run, Pair], [Rows, Run, Pair]>(cpu, &positive, 1, &from_zero, 3, 2);
+    let held_mask = gpu.compare(Comparison::Gt, &uploaded, &gpu.upload(&zero));
+    let read_before = gpu.read_backs();
+    let start_zero = full::<WebGpuBackend, i64, []>(&mut gpu, 0, []);
+    let alternate = strided_gather::<WebGpuBackend, bool, [Rows, Run, Pair], [Rows, Run, Pair]>(&mut gpu, &held_mask, 1, &start_zero, 3, 2);
+    assert gpu.read_backs() == read_before, "a mask's rows are gathered on the device";
+    println(`mask rows ${apart(&mut gpu, &alternate, &picked)}`);
 
     let w = cases::windowed_input();
     println(`windowed ${apart(&mut gpu, &cases::windowed(&mut gpu, &gpu.upload(&w)), &cases::windowed(cpu, &w))}`);
@@ -245,6 +268,34 @@ export fn run() with (Stdout, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuC
         println(`compiled attended ${total} ${deviation(&stepped.Y.data, &wanted.Y.data)}`);
         cache_gpu = stepped.cache;
         cache_cpu = wanted.cache;
+    }
+
+    // An `If` on an input: the prompt takes the branch without a past, each
+    // step after it the one with, and each program records its branch alone.
+    let mut merged_gpu = merged::Model::new(merged::Params::embedded(&mut gpu));
+    let mut merged_cpu = merged::Model::new(merged::Params::embedded(cpu));
+    let mut past_gpu = merged::Cache::empty(&mut gpu);
+    let mut past_cpu = merged::Cache::empty(cpu);
+    let mut length = 0;
+    for let tokens of [[1, 5, 42, 7], [11], [13]] as List<List<i64>> {
+        let fresh = Tensor::<i64, [merged::BatchSize, merged::SequenceLength]> {
+            data: tokens,
+            extents: [1, tokens.len()],
+        };
+        let mask = Tensor::<i64, [merged::BatchSize, merged::SequenceLength]> {
+            data: List::<i64>::filled(length + tokens.len(), 1),
+            extents: [1, length + tokens.len()],
+        };
+        let branch = Tensor::<bool, [merged::UseCacheBranch0]> {
+            data: [length > 0],
+            extents: [1],
+        };
+        let stepped = merged::compute(&mut gpu, &fresh, &mask, &branch, &past_gpu, &mut merged_gpu);
+        let wanted = merged::compute(cpu, &fresh, &mask, &branch, &past_cpu, &mut merged_cpu);
+        length += tokens.len();
+        println(`compiled merged ${length} ${deviation(&stepped.logits.data, &wanted.logits.data)}`);
+        past_gpu = stepped.cache;
+        past_cpu = wanted.cache;
     }
 }
 

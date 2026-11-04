@@ -39,7 +39,7 @@ use {
     operands_short,
     trailing_axes,
 } from "./graph.wado";
-use { Condition, Poly, owe as owe_at, owe_equal as owe_equal_at } from "./poly.wado";
+use { Condition, Poly, equalities, owe as owe_at, owe_equal as owe_equal_at } from "./poly.wado";
 use { from_end, spatial_extents } from "./runtime/tensor.wado";
 use { Geometry, ints, window_over } from "./window.wado";
 
@@ -619,7 +619,9 @@ fn branched(node: &Node, scope: &mut Checked) -> Result<(), InferError> {
                 scope.axes.read(&t.axes[j]),
                 scope.axes.read(&e.axes[j]),
             ];
-            let extent = if a.extent.agrees(&b.extent) { a.extent } else { Extent::symbol(&`${output}[${j}]`) };
+            let extent = owed_alike(&a.extent, &then_scope.owed, &b.extent, &else_scope.owed).unwrap_or(
+                Extent::symbol(&`${output}[${j}]`),
+            );
             axes.push(if a.name == b.name {
                 Axis { ..a, extent };
             } else {
@@ -633,6 +635,38 @@ fn branched(node: &Node, scope: &mut Checked) -> Result<(), InferError> {
     }
     scope.branches[node.outputs[0]] = [then_scope, else_scope];
     return Result::Ok(());
+}
+
+/// One length that `a`, where `a_owed` holds, and `b`, where `b_owed` holds,
+/// both are: either of them, or either moved by an equality its branch owes.
+/// A branch owes its equalities wherever it runs, so the output takes that
+/// length from either.
+fn owed_alike(a: &Extent, a_owed: &List<Condition>, b: &Extent, b_owed: &List<Condition>) -> Option<Extent> {
+    let [x, y] = [a.poly(), b.poly()];
+    let [x_ties, y_ties] = [equalities(a_owed), equalities(b_owed)];
+    let mut candidates: List<Poly> = [x, y];
+    for let [length, ties] of [[x, x_ties], [y, y_ties]] {
+        for let t of ties {
+            if let Some(moved) = length.try_add(&t) {
+                candidates.push(moved);
+            }
+        }
+    }
+    for let c of candidates {
+        if owed_equal(&x, &c, &x_ties) && owed_equal(&y, &c, &y_ties) {
+            return Extent::of(c);
+        }
+    }
+    return null;
+}
+
+/// Whether `ties`, slacks owed to be 0 with each one's negation, make `a`
+/// and `b` one length.
+fn owed_equal(a: &Poly, b: &Poly, ties: &List<Poly>) -> bool {
+    let Some(d) = a.try_sub(b) else {
+        return false;
+    };
+    return d == Poly::constant(0) || ties.contains(&d);
 }
 
 /// Give `scope` the shape `branch` read each of `scope`'s constants under, so
