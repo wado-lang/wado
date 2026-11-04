@@ -63,7 +63,7 @@ export fn run() with Stdout {
 __DATA__
 {
     "stdout": "i=42\nb=true\nneg=-7\npad=0007\nhex=ff\ndbg=42\n13\n",
-    "wir_pass": {"O2": ["nir/let_block_flatten"]},
+    "wir_pass": {"O2": ["nir/const_fold", "nir/const_fold_post_global", "nir/store_load_forward_post_scalarize"]},
     "wir_expect:O2": [
         "array.new_fixed<u8>(105, 61, 52, 50)",
         "array.new_fixed<u8>(98, 61, 116, 114, 117, 101)",
