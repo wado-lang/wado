@@ -170,16 +170,6 @@ pub struct WorldInfo {
 }
 
 impl WorldInfo {
-    /// True when this world has an `import {interface_name} { ... }` block.
-    ///
-    /// The check is by locally-bound interface name (the identifier written in
-    /// the world declaration), which is unique within a world's imports.
-    pub fn imports_interface(&self, interface_name: &str) -> bool {
-        self.imports
-            .iter()
-            .any(|i| i.interface_name == interface_name)
-    }
-
     /// True when this world imports the interface whose CM FQ is `fq`
     /// (`wasi:random/random@0.3.0`).
     pub fn imports_cm_interface(&self, fq: &str) -> bool {
@@ -505,7 +495,7 @@ mod tests {
             world_registry.has_world("core:kiln/generator"),
             "core:kiln/generator world should be registered"
         );
-        // Revision 3: the static world is an import-only template — each generator
+        // The static world is an import-only template: each generator
         // synthesizes its own world with a typed `generate` (its `options`
         // shape is per-generator), so the static world carries no `generate`
         // export. It exists to hold the shared imports and anchor the
@@ -544,19 +534,20 @@ mod tests {
 
     #[test]
     fn test_imports_populated_from_stdlib() {
-        // Real-world check: the worlds in `lib/core/kiln/worlds.wado` and
-        // `wasi:cli` surface the imports they declare, and no other.
         let (_registry, world_registry) = CmInterfaceRegistry::build_from_stdlib();
-
-        let kiln = world_registry
-            .get("core:kiln/generator")
-            .expect("kiln world registered");
-        assert!(kiln.imports_interface("Stderr"));
-        assert!(!kiln.imports_interface("SystemClock"));
-
-        let cli = world_registry
-            .get("wasi:cli/command")
-            .expect("cli world registered");
-        assert!(cli.imports_interface("Stdout"));
+        let imports = |world: &str| -> Vec<String> {
+            world_registry
+                .get(world)
+                .expect("world registered")
+                .imports
+                .iter()
+                .map(|i| i.interface_name.clone())
+                .collect()
+        };
+        assert_eq!(
+            imports("core:kiln/generator"),
+            ["Insecure", "InsecureSeed", "Stdout", "Stderr"]
+        );
+        assert!(imports("wasi:cli/command").contains(&"Stdout".to_string()));
     }
 }

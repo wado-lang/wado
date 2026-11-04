@@ -7,7 +7,7 @@
 //! generator that imports any of those fails at link time, which is the
 //! determinism guarantee.
 //!
-//! Revision 3: each generator has its own synthesized world (the `options` shape is
+//! Each generator has its own synthesized world (the `options` shape is
 //! per-generator), so `generate` is invoked dynamically as typed `Val`s rather
 //! than through a shared static binding. The invocation's validated options are
 //! materialized into a typed value shaped by the component's own introspected
