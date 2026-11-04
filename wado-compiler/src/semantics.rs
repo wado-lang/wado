@@ -2226,6 +2226,36 @@ mod tests {
         assert_eq!(markers["panicked"], ["$known_cold_path"]);
     }
 
+    /// A `!` statement is cold only where every path through it traps. One
+    /// whose paths break or continue out, or loop forever, leaves the code
+    /// around it hot; a loop a `break` leaves is no such path.
+    #[test]
+    fn only_a_statement_that_traps_is_marked_cold() {
+        let host = InMemoryCompilerHost::new();
+        let sem = block_on(semantics(
+            "fn breaks_out(xs: List<Option<i32>>) -> i32 {
+                 let mut n = 0;
+                 for let o of xs { let Some(v) = o else { break; }; n += v; continue; }
+                 return n;
+             }
+             fn serves(o: Option<i32>) { let Some(_) = o else { loop { builtin::black_box(0); } }; panic(\"b\"); }
+             fn traps_after_a_loop(o: Option<i32>, x: i32) {
+                 let mut i = 0;
+                 let Some(_) = o else { loop { i += 1; if i > x { break; } } panic(\"a\"); };
+                 panic(\"b\");
+             }
+             export fn run() { breaks_out([null]); serves(null); traps_after_a_loop(null, 0); }",
+            &host,
+            Some("entry.wado"),
+        ));
+        let markers = markers([&sem.tir_modules[&sem.entry_module_source]]);
+        assert_eq!(markers["breaks_out"], [] as [String; 0]);
+        // Only the `panic("b")` the `let … else` arm runs.
+        assert_eq!(markers["serves"], ["$known_cold_path"]);
+        // The `let … else` itself, its else block's panic, and its arm's.
+        assert_eq!(markers["traps_after_a_loop"], ["$known_cold_path"; 3]);
+    }
+
     /// What an `iter_*` yields is what a point lookup answers, so the entry a
     /// node's other walk recorded is not handed out.
     #[test]
