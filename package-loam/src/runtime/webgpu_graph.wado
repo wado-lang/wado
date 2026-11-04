@@ -1090,7 +1090,10 @@ fn side_by_side(parts: &List<DeviceTensor>, along: i32) -> Option<DeviceTensor> 
         let mut extents = p.extents;
         extents[along] = joined.extents[along];
         let next = joined.offset + joined.extents[along] * joined.strides[along];
-        if p.slot != joined.slot || p.half != joined.half || extents != joined.extents || !reads_as(&p, next, &joined.strides) {
+        if p.slot != joined.slot
+            || p.half != joined.half
+            || extents != joined.extents
+            || !reads_as(&p, next, &joined.strides) {
             return null;
         }
         joined.extents[along] += p.extents[along];

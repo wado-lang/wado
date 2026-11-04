@@ -1571,7 +1571,11 @@ fn grown_axes(checked: &Checked, crossing: &Crossing) -> List<Grown> {
 /// Each axis a pass grows, and the length the graph owes its past to be, or
 /// none where an input outside the cache carries it. Where neither gives it,
 /// the cache's extent is a capacity, and nothing says how much of it is past.
-fn grown_lengths(checked: &Checked, crossing: &Crossing, carriers: &List<Carrier>) -> Result<List<[Grown, Option<Poly>]>, EmitError> {
+fn grown_lengths(
+    checked: &Checked,
+    crossing: &Crossing,
+    carriers: &List<Carrier>,
+) -> Result<List<[Grown, Option<Poly>]>, EmitError> {
     let grown = grown_axes(checked, crossing);
     let mut owed: List<[Grown, Option<Poly>]> = [];
     for let g of grown {

@@ -79,7 +79,14 @@ export fn run() with (Stdout, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuC
     let gathering = gpu.dispatches();
     let uploaded = gpu.upload(&rows);
     let start = full::<WebGpuBackend, i64, []>(&mut gpu, 1, []);
-    let taken = strided_gather::<WebGpuBackend, f32, [Rows, Run, Pair], [Rows, Run, Pair]>(&mut gpu, &uploaded, 1, &start, 3, 1);
+    let taken = strided_gather::<WebGpuBackend, f32, [Rows, Run, Pair], [Rows, Run, Pair]>(
+        &mut gpu,
+        &uploaded,
+        1,
+        &start,
+        3,
+        1,
+    );
     assert gpu.dispatches() == gathering;
     println(`consecutive rows ${apart(&mut gpu, &taken, &gathered)}`);
 
@@ -92,7 +99,14 @@ export fn run() with (Stdout, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuC
     let held_mask = gpu.compare(Comparison::Gt, &uploaded, &gpu.upload(&zero));
     let read_before = gpu.read_backs();
     let start_zero = full::<WebGpuBackend, i64, []>(&mut gpu, 0, []);
-    let alternate = strided_gather::<WebGpuBackend, bool, [Rows, Run, Pair], [Rows, Run, Pair]>(&mut gpu, &held_mask, 1, &start_zero, 3, 2);
+    let alternate = strided_gather::<WebGpuBackend, bool, [Rows, Run, Pair], [Rows, Run, Pair]>(
+        &mut gpu,
+        &held_mask,
+        1,
+        &start_zero,
+        3,
+        2,
+    );
     assert gpu.read_backs() == read_before, "a mask's rows are gathered on the device";
     println(`mask rows ${apart(&mut gpu, &alternate, &picked)}`);
 
@@ -131,9 +145,14 @@ export fn run() with (Stdout, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuC
     println(`attending out ${apart(&mut gpu, &attended.0, &expected.0)}`);
     // What a shared present holds past the valid positions is unspecified.
     let valid = case.past.2.data[0] as i32 + case.inputs.0.extents[1];
-    for let [name, present, reference] of [["present_k", attended.1, expected.1], ["present_v", attended.2, expected.2]] {
+    for let [name, present, reference] of [
+        ["present_k", attended.1, expected.1],
+        ["present_v", attended.2, expected.2],
+    ] {
         let read = gpu.download(&present);
-        println(`attending ${name} ${deviation(&leading(cpu, &read, valid).data, &leading(cpu, &reference, valid).data)}`);
+        println(
+            `attending ${name} ${deviation(&leading(cpu, &read, valid).data, &leading(cpu, &reference, valid).data)}`,
+        );
     }
 
     // `compute` compiles one program per shape class and replays it: 5 and 6
@@ -256,7 +275,10 @@ export fn run() with (Stdout, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuC
             data: List::<i64>::filled(total, 1),
             extents: [1, total],
         };
-        let [replayed_before, dispatched_before] = [gpu.replays(), gpu.dispatches()];
+        let [replayed_before, dispatched_before] = [
+            gpu.replays(),
+            gpu.dispatches(),
+        ];
         let stepped = attended::compute(&mut gpu, &fresh, &mask, &cache_gpu, &mut attended_gpu);
         assert gpu.replays() - replayed_before == replays;
         let dispatched = gpu.dispatches() - dispatched_before;
@@ -277,7 +299,11 @@ export fn run() with (Stdout, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuC
     let mut past_gpu = merged::Cache::empty(&mut gpu);
     let mut past_cpu = merged::Cache::empty(cpu);
     let mut length = 0;
-    for let tokens of [[1, 5, 42, 7], [11], [13]] as List<List<i64>> {
+    for let tokens of [
+        [1, 5, 42, 7],
+        [11],
+        [13],
+    ] as List<List<i64>> {
         let fresh = Tensor::<i64, [merged::BatchSize, merged::SequenceLength]> {
             data: tokens,
             extents: [1, tokens.len()],

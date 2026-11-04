@@ -164,8 +164,9 @@ test "a strided gather takes each element its start and step reach, back to fron
 
 test "a capacity is the next power of two or one and a half of it, and 0 its own" {
     let lengths: List<i32> = [0, 1, 2, 3, 4, 5, 6, 7, 9, 13, 16, 17, 25, 1 << 30];
-    assert lengths.into_iter().map(|n| capacity_of(n)).collect()
-        == [0, 1, 2, 3, 4, 6, 6, 8, 12, 16, 16, 24, 32, 1 << 30] as List<i32>;
+    assert lengths.into_iter().map(|n| capacity_of(n)).collect() == [
+        0, 1, 2, 3, 4, 6, 6, 8, 12, 16, 16, 24, 32, 1 << 30,
+    ] as List<i32>;
 }
 
 test "resizing pads each axis past its extent with zeros and cuts it short of it" {
@@ -332,8 +333,14 @@ test "dot_general sums each column of a right operand whose contracting axis lea
     for let i of 0..<batch * k * n {
         b.push((i % 7) as f32 - 3.0);
     }
-    let lhs = Tensor::<f32, [A, B, C]> { data: a, extents: [batch, m, k] };
-    let rhs = Tensor::<f32, [A, C, D]> { data: b, extents: [batch, k, n] };
+    let lhs = Tensor::<f32, [A, B, C]> {
+        data: a,
+        extents: [batch, m, k],
+    };
+    let rhs = Tensor::<f32, [A, C, D]> {
+        data: b,
+        extents: [batch, k, n],
+    };
     let dims = DotDims {
         lhs_batch: [0],
         rhs_batch: [0],

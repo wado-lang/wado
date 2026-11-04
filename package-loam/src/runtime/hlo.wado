@@ -268,7 +268,12 @@ pub affine trait Graph: Holds with _ {
     /// `x` with `axis` grown to `extent`, what it holds past its own extent
     /// unspecified: a cache moved to a larger capacity, whose attention reads
     /// none of those positions. Zeros, where the graph keeps no room there.
-    fn grown<E: Element, Axes>(&mut self, x: &Self::Tensor<E, Axes>, axis: i32, extent: i32) -> Self::Tensor<E, Axes> with _ {
+    fn grown<E: Element, Axes>(
+        &mut self,
+        x: &Self::Tensor<E, Axes>,
+        axis: i32,
+        extent: i32,
+    ) -> Self::Tensor<E, Axes> with _ {
         return padded_with_zeros::<Self, E, Axes>(self, x, axis, extent);
     }
 
@@ -1449,8 +1454,12 @@ fn product_by_columns(a: &List<f32>, b: &List<f32>, batch: i32, m: i32, k: i32, 
         for let r of 0..<m {
             let a_at = (s * m + r) * k;
             for let mut c = 0; c < runs; c += 16 {
-                let [mut s0, mut s1, mut s2, mut s3, mut s4, mut s5, mut s6, mut s7]: [f32, f32, f32, f32, f32, f32, f32, f32] = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0];
-                let [mut s8, mut s9, mut s10, mut s11, mut s12, mut s13, mut s14, mut s15]: [f32, f32, f32, f32, f32, f32, f32, f32] = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0];
+                let [mut s0, mut s1, mut s2, mut s3, mut s4, mut s5, mut s6, mut s7]: [f32, f32, f32, f32, f32, f32, f32, f32] = [
+                    0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+                ];
+                let [mut s8, mut s9, mut s10, mut s11, mut s12, mut s13, mut s14, mut s15]: [f32, f32, f32, f32, f32, f32, f32, f32] = [
+                    0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+                ];
                 for let j of 0..<k {
                     let av = unchecked a[a_at + j];
                     let at = b_at + j * n + c;

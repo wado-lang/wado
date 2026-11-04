@@ -771,8 +771,12 @@ g (float[1, 4, 24] X) => (float[1, 4, 8] K)
     let out = generate(source).unwrap();
 
     assert out.contains("let Q = backend.slice::<f32, [X0, X1, X2], [X0, X1, Q2]>(X, [0, 0, 0], [1, 4, 8], [1, 1, 1]);");
-    assert out.contains("let K = backend.slice::<f32, [X0, X1, X2], [X0, X1, K2]>(X, [0, 0, 8], [1, 4, 16], [1, 1, 1]);");
-    assert out.contains("let V = backend.slice::<f32, [X0, X1, X2], [X0, X1, V2]>(X, [0, 0, 16], [1, 4, 24], [1, 1, 1]);");
+    assert out.contains(
+        "let K = backend.slice::<f32, [X0, X1, X2], [X0, X1, K2]>(X, [0, 0, 8], [1, 4, 16], [1, 1, 1]);",
+    );
+    assert out.contains(
+        "let V = backend.slice::<f32, [X0, X1, X2], [X0, X1, V2]>(X, [0, 0, 16], [1, 4, 24], [1, 1, 1]);",
+    );
 }
 
 test "Concat joins its operands pairwise at each valid length, each join naming the output's axis" {
@@ -1352,7 +1356,9 @@ test "an embedding lookup is a gather of rows, and a folded index tensor is a li
         "let E = backend.gather::<f32, [W0, Y2], [I0, I1], [I0, I1, Y2]>(&weights.W, &from_end_indices::<Bk, [I0, I1]>(backend, I, &full::<Bk, i64, []>(backend, 16, [])), &GatherDims { offset_dims: [2], collapsed_slice_dims: [0], start_index_map: [0], index_vector_dim: 2, slice_sizes: [1, 8] });",
     );
     assert out.contains("return backend.keep(&Tensor::<i64, [I0, I1]> { data: [0, 1, 2, 3], extents: [1, 4] });");
-    assert out.contains("let F = backend.gather::<f32, [P0, Y2], [I0, I1], [I0, I1, Y2]>(&weights.P, &from_end_indices::<Bk, [I0, I1]>(backend, &weights.Q, ");
+    assert out.contains(
+        "let F = backend.gather::<f32, [P0, Y2], [I0, I1], [I0, I1, Y2]>(&weights.P, &from_end_indices::<Bk, [I0, I1]>(backend, &weights.Q, ",
+    );
 }
 
 test "an embedding the head multiplies by its transpose is read as stored, by the gather and the product both" {
@@ -1397,7 +1403,9 @@ test "a Cast to the element a tensor already has computes nothing" {
     }`;
     let out = generate(source).unwrap();
     assert !out.contains("let C");
-    assert out.contains("let Y = backend.binary::<f32, [X0]>(Binary::Maximum, X, &full::<Bk, f32, [X0]>(backend, 0 as f32, [2]));");
+    assert out.contains(
+        "let Y = backend.binary::<f32, [X0]>(Binary::Maximum, X, &full::<Bk, f32, [X0]>(backend, 0 as f32, [2]));",
+    );
 }
 
 test "a Cast that truncates is spelled apart from the constant it reads" {
@@ -1550,7 +1558,9 @@ test "a folded tensor a Cast names again under its own type is spelled once" {
     let out = generate(source).unwrap();
     assert out.contains("return backend.keep(&Tensor::<i64, [Y0]> { data: [0, 1, 2, 3], extents: [4] });");
     assert !out.contains("pub C:");
-    assert out.contains("let F = backend.gather::<f32, [W0, Y1], [Y0], [Y0, Y1]>(&weights.W, &from_end_indices::<Bk, [Y0]>(backend, &weights.Q, ");
+    assert out.contains(
+        "let F = backend.gather::<f32, [W0, Y1], [Y0], [Y0, Y1]>(&weights.W, &from_end_indices::<Bk, [Y0]>(backend, &weights.Q, ",
+    );
 }
 
 test "a constant both branches read is held once, where the weights are" {

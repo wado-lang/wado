@@ -642,10 +642,19 @@ fn branched(node: &Node, scope: &mut Checked) -> Result<(), InferError> {
 /// A branch owes its equalities wherever it runs, so the output takes that
 /// length from either.
 fn owed_alike(a: &Extent, a_owed: &List<Condition>, b: &Extent, b_owed: &List<Condition>) -> Option<Extent> {
-    let [x, y] = [a.poly(), b.poly()];
-    let [x_ties, y_ties] = [equalities(a_owed), equalities(b_owed)];
+    let [x, y] = [
+        a.poly(),
+        b.poly(),
+    ];
+    let [x_ties, y_ties] = [
+        equalities(a_owed),
+        equalities(b_owed),
+    ];
     let mut candidates: List<Poly> = [x, y];
-    for let [length, ties] of [[x, x_ties], [y, y_ties]] {
+    for let [length, ties] of [
+        [x, x_ties],
+        [y, y_ties],
+    ] {
         for let t of ties {
             if let Some(moved) = length.try_add(&t) {
                 candidates.push(moved);

@@ -417,7 +417,10 @@ test "an operand followed by extent-1 axes repeats along the axes after it and b
 
     let c = fused::<[Batch, Row, Col]>(&[
         read(&a),
-        Read { data: &b.data, extents: [2, 1] },
+        Read {
+            data: &b.data,
+            extents: [2, 1],
+        },
     ], &sum(), [2, 2, 2]);
     assert c.extents == [2, 2, 2] as List<i32>;
     assert c.data == [11.0, 12.0, 23.0, 24.0, 15.0, 16.0, 27.0, 28.0] as List<f32>;
