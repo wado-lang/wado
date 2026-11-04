@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1793828828145,
+  "lastUpdate": 1793833321428,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -74461,6 +74461,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/812fd0eee772bb9b9422b30f96b48bf82b827c41"
         },
         "date": 1793828826913,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3099,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7303,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21996,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 377139,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "8f8d1fdd0f6d279786c350660675245f3d62dfba",
+          "message": "Merge pull request #2547 from wado-lang/loam/webgpu-variants\n\nfeat(loam)!: every model runs one recorded graph, compiled per device",
+          "timestamp": "2026-11-05T07:46:09+09:00",
+          "tree_id": "8e4ebadb8b33437622bb9f6a7ab2e1e7ce9f008d",
+          "url": "https://github.com/wado-lang/wado/commit/8f8d1fdd0f6d279786c350660675245f3d62dfba"
+        },
+        "date": 1793833320535,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
