@@ -135,8 +135,11 @@ impl Snapshot {
         if let Some(cached) = self.semantic.borrow().clone() {
             return cached;
         }
-        let checked =
-            wado_compiler::check_semantics(&self.sem, wado_compiler::hashmap::IndexSet::default());
+        let checked = wado_compiler::check_semantics(
+            &self.sem,
+            wado_compiler::hashmap::IndexSet::default(),
+            None,
+        );
         let mut out: Vec<CompilerDiagnostic> = checked
             .effects
             .into_iter()

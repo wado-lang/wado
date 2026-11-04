@@ -1,4 +1,4 @@
-// `#[benign(E)]` on a global admits only the listed effects: the initializer
+// `#[ambient(E)]` on a global admits only the listed effects: the initializer
 // also performs `Stderr`, which the attribute does not name.
 
 use { println, eprintln, Stdout, Stderr } from "core:cli";
@@ -9,7 +9,7 @@ fn announce() -> i32 with (Stdout, Stderr) {
     return 7;
 }
 
-#[benign(Stdout)]
+#[ambient(Stdout)]
 global SEVEN: i32 = announce();
 
 export fn run() with Stdout {

@@ -406,7 +406,6 @@ struct Head {
     is_cm_binding: bool,
     is_dispatch_wrapper: bool,
     is_cm_export: bool,
-    is_ambient: bool,
     inline_hint: InlineHint,
     compiler_item: Option<CompilerItem>,
     export_name: Option<String>,
@@ -440,7 +439,6 @@ impl Head {
             is_cm_binding,
             is_dispatch_wrapper,
             is_cm_export,
-            is_ambient,
             inline_hint,
             compiler_item,
             export_name,
@@ -473,7 +471,6 @@ impl Head {
             is_cm_binding: *is_cm_binding,
             is_dispatch_wrapper: *is_dispatch_wrapper,
             is_cm_export: *is_cm_export,
-            is_ambient: *is_ambient,
             inline_hint: *inline_hint,
             compiler_item: *compiler_item,
             export_name: export_name.clone(),
@@ -507,7 +504,6 @@ impl Head {
             is_cm_binding,
             is_dispatch_wrapper,
             is_cm_export,
-            is_ambient,
             inline_hint,
             compiler_item,
             export_name,
@@ -539,7 +535,6 @@ impl Head {
             && self.is_cm_binding == *is_cm_binding
             && self.is_dispatch_wrapper == *is_dispatch_wrapper
             && self.is_cm_export == *is_cm_export
-            && self.is_ambient == *is_ambient
             && self.inline_hint == *inline_hint
             && self.compiler_item == *compiler_item
             && self.export_name == *export_name
@@ -691,10 +686,6 @@ pub struct NirFunction {
     /// When true, the global initializer (`$initialize_modules`) is injected at the start
     /// of this function's body during lowering.
     pub is_cm_export: bool,
-
-    /// Whether this function is marked `#[ambient(…)]`, whose listed effects a
-    /// call does not demand.
-    pub is_ambient: bool,
 
     /// Inline hint from `#[inline]`, `#[inline(always)]`, or `#[inline(never)]` attributes.
     pub inline_hint: InlineHint,
@@ -859,7 +850,6 @@ impl NirFunction {
             is_cm_binding: false,
             is_dispatch_wrapper: false,
             is_cm_export: false,
-            is_ambient: false,
             inline_hint: InlineHint::default(),
             compiler_item: None,
             export_name: None,

@@ -267,7 +267,6 @@ fn make_trait_method(
         is_cm_binding: false,
         is_dispatch_wrapper: false,
         is_cm_export: false,
-        is_ambient: false,
         inline_hint: InlineHint::Auto,
         compiler_item: None,
         export_name: None,

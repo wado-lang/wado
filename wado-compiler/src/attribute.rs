@@ -11,11 +11,9 @@ use crate::token::Span;
 pub const ALLOC: &str = "allocator";
 pub const ALLOW: &str = "allow";
 pub const AMBIENT: &str = "ambient";
-pub const BENIGN: &str = "benign";
-/// The attributes whose arguments are effects a body performs undeclared.
-pub const ADMITS_EFFECTS: [&str; 2] = [BENIGN, AMBIENT];
 pub const CANONICAL: &str = "canonical";
 pub const CM: &str = "cm";
+pub const CM_DEMANDED_IMPORTS: &str = "cm_demanded_imports";
 pub const CM_EXPORT: &str = "cm_export";
 pub const CM_HOST_IMPORTS: &str = "cm_host_imports";
 pub const CM_PARAMS: &str = "cm_params";
@@ -136,7 +134,7 @@ pub enum AttrArgs {
     /// One or more bare identifiers, as `#[allow(dead_code)]`. A lint name is
     /// read as an identifier alone, so a quoted one waives nothing.
     Idents,
-    /// One or more words, quoted or bare, as `#[benign(Stdout)]`.
+    /// One or more words, quoted or bare, as `#[ambient(Stdout)]`.
     Words,
     /// Words, or nothing at all, as `#[inline]` / `#[inline("never")]`.
     OptionalWords,
@@ -320,14 +318,6 @@ pub const ATTRIBUTES: &[AttributeSchema] = &[
     },
     AttributeSchema {
         name: AMBIENT,
-        targets: FUNCTION_TARGET,
-        args: AttrArgs::Words,
-        summary: "best-effort effects, used only where the component already has them",
-        stdlib_only: false,
-        bodyless: None,
-    },
-    AttributeSchema {
-        name: BENIGN,
         targets: &[AttrTarget::Function, AttrTarget::Global],
         args: AttrArgs::Words,
         summary: "effects a caller need not declare onward",
@@ -347,6 +337,14 @@ pub const ATTRIBUTES: &[AttributeSchema] = &[
         targets: CM_TARGET,
         args: AttrArgs::Read("the CM-side identifier, with an optional `linearity = \"…\"`"),
         summary: "this declaration's identity at the Component Model boundary",
+        stdlib_only: false,
+        bodyless: None,
+    },
+    AttributeSchema {
+        name: CM_DEMANDED_IMPORTS,
+        targets: MODULE_TARGET,
+        args: AttrArgs::OptionalStrings,
+        summary: "the host imports an imported component records its exports demand",
         stdlib_only: false,
         bodyless: None,
     },

@@ -1,7 +1,7 @@
 // A Kiln generator installing a sink that stamps each event with the wall
-// clock. `WallClock::now()` is `#[ambient]`, so no `use` here names the clock.
+// clock.
 
-use { Request, Response, Error } from "core:kiln";
+use { Request, Response, OutputFile, Error } from "core:kiln";
 use { Log, TextSink, WallClock, info } from "core:log";
 
 export fn generate(req: Request) -> Result<Response, Error> {
@@ -9,5 +9,11 @@ export fn generate(req: Request) -> Result<Response, Error> {
     with Log => &mut sink do {
         info(`generating`, { path: req.primary.path });
     }
-    return Result::Ok(Response { files: [] });
+    return Result::Ok(Response {
+        files: [OutputFile {
+            path: "out.wado",
+            content: "pub fn stamped() -> bool { return true; }",
+            is_entry: true,
+        }],
+    });
 }

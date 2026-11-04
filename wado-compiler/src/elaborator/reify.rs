@@ -10,8 +10,7 @@ use crate::ast::{
     self, AstId, AstVisitor, CompoundAssignOp, Expr, Item, Module, UnaryOp, walk_expr,
 };
 use crate::attribute::{
-    ALLOC, AMBIENT, EXPORT_NAME, INLINE, SECRET, WIRE, wire_name_override, wire_name_policy,
-    wire_value,
+    ALLOC, EXPORT_NAME, INLINE, SECRET, WIRE, wire_name_override, wire_name_policy, wire_value,
 };
 use crate::call_args::CallArgs;
 use crate::const_eval::{format_float_repr, truncate_int};
@@ -1518,7 +1517,6 @@ impl<'a> Reify<'a> {
             is_cm_binding: false,
             is_dispatch_wrapper: false,
             is_cm_export: false,
-            is_ambient: extract_is_ambient_attr(&func.attrs),
             inline_hint: extract_inline_hint_attr(&func.attrs),
             compiler_item,
             export_name: extract_export_name_attr(&func.attrs),
@@ -1798,7 +1796,6 @@ impl<'a> Reify<'a> {
             is_cm_binding: false,
             is_dispatch_wrapper: false,
             is_cm_export: false,
-            is_ambient: false,
             inline_hint: InlineHint::Auto,
             compiler_item: None,
             export_name: None,
@@ -9862,10 +9859,6 @@ impl TypeSystem {
 /// Attribute extractors, reify's own. An attribute is uniquely determined by
 /// the AST alone, which is what the completeness rule lets reify re-derive, so
 /// these need no recorded fact and no elaborator to run.
-fn extract_is_ambient_attr(attrs: &[Attribute]) -> bool {
-    attrs.iter().any(|a| a.name == AMBIENT)
-}
-
 fn extract_inline_hint_attr(attrs: &[Attribute]) -> tir::InlineHint {
     let Some(attr) = attrs.iter().find(|a| a.name == INLINE) else {
         return tir::InlineHint::Auto;

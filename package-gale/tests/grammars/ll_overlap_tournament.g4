@@ -1,7 +1,6 @@
 // Both alts of `r` start with `A`, so lowering resolves the overlap with a
 // scan-side longest-match tournament and raises one OverlapTournament
-// diagnostic. Used to exercise the Kiln generator surfacing that warning
-// through `KilnHost::emit_diagnostic` at build time.
+// diagnostic. Used to exercise the Kiln generator logging it at build time.
 grammar OverlapTournament;
 
 r : A B | A C ;

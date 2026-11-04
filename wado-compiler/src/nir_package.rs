@@ -76,14 +76,6 @@ impl AmbientStream {
         cm_function_path(&interface, "write-via-stream")
     }
 
-    /// `core:builtin`'s `ambient_std{out,err}_available`.
-    pub fn availability_builtin(self) -> &'static str {
-        match self {
-            Self::Stdout => "ambient_stdout_available",
-            Self::Stderr => "ambient_stderr_available",
-        }
-    }
-
     /// `core:builtin`'s `call_indirect_std{out,err}_write_via_stream`.
     pub fn write_builtin(self) -> &'static str {
         match self {
@@ -92,35 +84,10 @@ impl AmbientStream {
         }
     }
 
-    pub fn of_availability_builtin(name: &str) -> Option<Self> {
-        Self::ALL
-            .into_iter()
-            .find(|stream| stream.availability_builtin() == name)
-    }
-
     pub fn of_write_builtin(name: &str) -> Option<Self> {
         Self::ALL
             .into_iter()
             .find(|stream| stream.write_builtin() == name)
-    }
-}
-
-/// The stdio streams the ambient `log_std{out,err}` path writes: those the
-/// world provides, and in a sink-less world those the program imports anyway.
-/// Decided once, so the fold of `ambient_std{out,err}_available` and the import
-/// keep agreeing whatever optimization removes afterwards.
-#[derive(Debug, Clone, Copy)]
-pub struct AmbientStdio {
-    pub stdout: bool,
-    pub stderr: bool,
-}
-
-impl AmbientStdio {
-    pub fn writes(self, stream: AmbientStream) -> bool {
-        match stream {
-            AmbientStream::Stdout => self.stdout,
-            AmbientStream::Stderr => self.stderr,
-        }
     }
 }
 
@@ -215,13 +182,13 @@ pub struct NirPackage {
 
     /// The CM functions called, by `CmFunctionInfo::cm_identifier`.
     pub used_wasi_functions: IndexSet<String>,
-    /// Set by the first DCE; read it through [`Self::ambient_stdio`].
-    pub ambient_stdio: Option<AmbientStdio>,
     /// When true, strip debug name sections for smaller binary size (-Os)
     pub strip_names: bool,
     /// The `org.wado-lang.coverage` section payload, under `wado test --coverage`
     /// or `--pgo`.
     pub coverage_section: Option<Vec<u8>>,
+    /// The `org.wado-lang.demanded-imports` section payload, for a library.
+    pub demanded_imports_section: Option<Vec<u8>>,
     /// Fine-grained codegen feature flags from the CLI's `-f <flag>` option.
     /// Consulted by the WIR emitter to select alternative lowerings.
     pub codegen_flags: CodegenFlags,
@@ -877,21 +844,6 @@ impl NirPackage {
         self.target_world == world_registry::TEST_WORLD
     }
 
-    /// Whether the target world provides an ambient sink for `stream`, which
-    /// the `log_*` (panic / assert-diagnostic) path writes. True for the test
-    /// world and any world importing the stream's interface; false for `--lib`
-    /// and kiln, where the ambient path writes only a stream the program
-    /// imports anyway ([`AmbientStdio`]). Each stream is gated on its own
-    /// interface so a world importing only one is not mis-gated by the other.
-    pub fn provides_ambient_stdio_sink(&self, stream: AmbientStream) -> bool {
-        self.is_test_world() || self.world_imports_interface(stream.interface_name())
-    }
-
-    pub fn ambient_stdio(&self) -> AmbientStdio {
-        self.ambient_stdio
-            .expect("the first DCE decides the ambient streams")
-    }
-
     /// Build the lookup of synthesized value-copy helpers, keyed by
     /// `(module_source, name)` → the type each helper deep-copies. Used by the
     /// `remarks` collector, which reports the copied type.
@@ -918,19 +870,7 @@ impl NirPackage {
             .collect()
     }
 
-    /// Whether the active world declares an `import {interface_name} { … }`
-    /// block. Drives the world-shape decisions in codegen, lowering and DCE that
-    /// once matched on `target_world` strings, so a new generator-shaped world
-    /// needs no new branches. `false` for the synthetic test world and any
-    /// unknown one, neither having a registry entry.
-    pub fn world_imports_interface(&self, interface_name: &str) -> bool {
-        self.world_registry
-            .get(&self.target_world)
-            .is_some_and(|w| w.imports_interface(interface_name))
-    }
-
-    /// Whether the target world is a kiln generator world (imports
-    /// [`crate::world_registry::GENERATOR_HOST_INTERFACE`]).
+    /// Whether the target world is the kiln generator world.
     pub fn is_generator_world(&self) -> bool {
         self.generator_world().is_some()
     }

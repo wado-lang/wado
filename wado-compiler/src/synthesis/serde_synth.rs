@@ -451,7 +451,6 @@ fn field_schema_method_fn(
         visibility: Visibility::Public,
         is_export: false,
         is_cm_export: false,
-        is_ambient: false,
         is_async: false,
         type_params: Vec::new(),
         impl_type_params: Vec::new(),

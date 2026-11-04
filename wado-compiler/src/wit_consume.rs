@@ -15,13 +15,13 @@ use crate::ast::{
     UseDecl, UseItem, UseNameSpelling, VariantCase, VariantDecl, Visibility, cm_function_path,
     cm_import_of,
 };
-use crate::attribute::{CM, CM_EXPORT, CM_HOST_IMPORTS, CM_PARAMS};
+use crate::attribute::{CM, CM_DEMANDED_IMPORTS, CM_EXPORT, CM_HOST_IMPORTS, CM_PARAMS};
 use crate::component_model::SourceInterfaceBatch;
 use crate::hashmap;
 use crate::module_source::ModuleSource;
 use crate::name::{
-    cm_dependency_interface, interface_basename, mangle_local_method, unnamed_interface_name,
-    wado_identifier,
+    cm_dependency_interface, interface_basename, is_wasi_fq, mangle_local_method,
+    unnamed_interface_name, wado_identifier,
 };
 use crate::token::Span;
 use crate::wit_emit::CmShape;
@@ -62,10 +62,20 @@ pub struct ExportedInterface {
 /// The host-leaf import FQs a component-binding module carries in its
 /// [`CM_HOST_IMPORTS`] inner attribute. Empty where it carries none.
 pub fn module_host_leaf_imports(module: &Module) -> Vec<String> {
+    module_strings(module, CM_HOST_IMPORTS).unwrap_or_default()
+}
+
+/// The `wasi:*` imports the component records its exports demand, from the
+/// [`CM_DEMANDED_IMPORTS`] inner attribute. `None` where it records none.
+pub fn module_demanded_imports(module: &Module) -> Option<Vec<String>> {
+    module_strings(module, CM_DEMANDED_IMPORTS)
+}
+
+fn module_strings(module: &Module, attribute: &str) -> Option<Vec<String>> {
     module
         .inner_attributes
         .iter()
-        .find(|a| a.name == CM_HOST_IMPORTS)
+        .find(|a| a.name == attribute)
         .map(|a| {
             a.args
                 .iter()
@@ -78,7 +88,6 @@ pub fn module_host_leaf_imports(module: &Module) -> Vec<String> {
                 })
                 .collect()
         })
-        .unwrap_or_default()
 }
 
 /// The interfaces a component-binding module's dependency exports, each with
@@ -114,6 +123,8 @@ fn interfaces_on(module: &Module, side: Side) -> impl Iterator<Item = (&Interfac
 }
 
 /// Build a Wado AST module from a component's decoded `Resolve` + target world.
+/// `demanded` lists the `wasi:*` imports a caller of its exports must hold,
+/// where the component records them; `None` demands every one.
 ///
 /// # Errors
 /// A message naming each shape the component exports that has no import
@@ -122,6 +133,7 @@ pub fn build_bindings(
     resolve: &Resolve,
     world: WorldId,
     component: &ModuleSource,
+    demanded: Option<&[String]>,
 ) -> Result<ComponentBindings, String> {
     let namespace = component
         .wasm_canonical_namespace()
@@ -145,7 +157,7 @@ pub fn build_bindings(
         .imports
         .values()
         .filter_map(|item| match item {
-            WorldItem::Interface { id, .. } if !interface_fq(resolve, *id).starts_with("wasi:") => {
+            WorldItem::Interface { id, .. } if !is_wasi_fq(&interface_fq(resolve, *id)) => {
                 Some(*id)
             }
             WorldItem::Interface { .. } | WorldItem::Function(_) | WorldItem::Type { .. } => None,
@@ -221,20 +233,24 @@ pub fn build_bindings(
         return Err(unique.into_iter().collect::<Vec<_>>().join("; "));
     }
 
-    // Carry the host-leaf set on the synthesized module so the registration
-    // path (`fold_component_interfaces`) recovers it from the AST alone.
-    let inner_attributes = if host_leaf_imports.is_empty() {
-        Vec::new()
-    } else {
-        vec![InnerAttribute {
-            name: CM_HOST_IMPORTS.to_string(),
-            args: host_leaf_imports
-                .iter()
-                .map(|import| AttrArg::Str(StrLit::new(import.as_str())))
-                .collect(),
-            span: syn(),
-        }]
-    };
+    // Carry both sets on the synthesized module so the registration path
+    // (`fold_component_interfaces`) recovers them from the AST alone. The
+    // demanded set is written even when empty: its presence is the record.
+    let inner_attributes = [
+        Some((CM_HOST_IMPORTS, host_leaf_imports.as_slice())).filter(|(_, fqs)| !fqs.is_empty()),
+        demanded.map(|fqs| (CM_DEMANDED_IMPORTS, fqs)),
+    ]
+    .into_iter()
+    .flatten()
+    .map(|(name, fqs)| InnerAttribute {
+        name: name.to_string(),
+        args: fqs
+            .iter()
+            .map(|fq| AttrArg::Str(StrLit::new(fq.as_str())))
+            .collect(),
+        span: syn(),
+    })
+    .collect();
 
     if b.uses_tree_map {
         let tree_map_use = b.use_item("core:collections", "TreeMap");
@@ -1170,7 +1186,7 @@ mod tests {
     fn builds_catalog_bindings() {
         let (resolve, world) = decode_fixture();
         let component = component();
-        let b = build_bindings(&resolve, world, &component).expect("build bindings");
+        let b = build_bindings(&resolve, world, &component, None).expect("build bindings");
         let catalog_fq = catalog_fq(&resolve);
         // The program imports the interface under a name of this component's.
         let catalog_import = cm_dependency_interface(
@@ -1185,12 +1201,8 @@ mod tests {
         };
         assert_eq!(exported.export, catalog_fq);
         assert_eq!(exported.import, catalog_import);
-        // cm-catalog performs no I/O, so the ambient panic path imports nothing
-        // (`log_stderr` rides an existing stderr import or drops its message —
-        // see `AmbientStdio`). Its one host-leaf import is
-        // `wasi:cli/types`, the shared error-code the future/stream results of
-        // its async exports carry — a genuine capability of the async surface,
-        // not an ambient effect.
+        // Its one host-leaf import is `wasi:cli/types`, the shared error-code
+        // the future/stream results of its async exports carry.
         assert_eq!(
             b.host_leaf_imports,
             vec!["wasi:cli/types@0.3.0".to_string()]
@@ -1269,7 +1281,7 @@ mod tests {
             )
             .unwrap();
         let world = resolve.select_world(&[package], Some("w")).unwrap();
-        let b = build_bindings(&resolve, world, &component()).expect("build bindings");
+        let b = build_bindings(&resolve, world, &component(), None).expect("build bindings");
         let mut names = Vec::new();
         for item in &b.module.items {
             let functions = match item {

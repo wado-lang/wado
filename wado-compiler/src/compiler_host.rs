@@ -213,6 +213,8 @@ pub enum Code {
     ShadowedName,
     /// A trait head says nothing about the effects its impls may declare.
     UndecidedEffects,
+    /// A program hides an effect from its callers with `#[ambient]`.
+    UndeclaredEffects,
     /// A comparison of an expression with itself, which has one answer: `x == x`.
     SelfComparison,
     /// Integer literals alone overflow their type, `200 as u8 + 100`, or a
@@ -365,6 +367,7 @@ impl std::fmt::Display for Code {
             Code::UnusedParameter => "UNUSED_PARAMETER",
             Code::ShadowedName => "SHADOWED_NAME",
             Code::UndecidedEffects => "UNDECIDED_EFFECTS",
+            Code::UndeclaredEffects => "UNDECLARED_EFFECTS",
             Code::SelfComparison => "SELF_COMPARISON",
             Code::ArithmeticOverflow => "ARITHMETIC_OVERFLOW",
             Code::UnconditionalTrap => "UNCONDITIONAL_TRAP",
@@ -646,8 +649,8 @@ pub trait CompilerHost: Send + Sync {
     }
 
     /// Execute a Kiln generator component and return its response. The host
-    /// instantiates `component_wasm` and links `core:kiln/host` so
-    /// `emit-diagnostic` forwards back into itself. The default `Unsupported`
+    /// instantiates `component_wasm` and reports each line it writes to
+    /// stdout or stderr as a diagnostic. The default `Unsupported`
     /// drives consume-only mode, reusing cached outputs and warning on drift;
     /// a host with a Wasm runtime overrides it. Protocol: WEP 2026-04-12.
     fn run_generator(
@@ -944,32 +947,6 @@ impl std::fmt::Display for GeneratorRunnerError {
 
 impl std::error::Error for GeneratorRunnerError {}
 
-/// Severity mirrored from `core:kiln/host::diagnostic-level`.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum GeneratorDiagnosticLevel {
-    Error,
-    Warning,
-    Info,
-    Hint,
-}
-
-/// Span into a file known to the generator. Paths are relayed back to the
-/// compiler's diagnostic renderer, which re-reads the file via `load_source`.
-#[derive(Debug, Clone)]
-pub struct GeneratorSourceSpan {
-    pub path: String,
-    pub byte_start: u32,
-    pub byte_end: u32,
-}
-
-/// A diagnostic produced by a generator via `host::emit-diagnostic`.
-#[derive(Debug, Clone)]
-pub struct GeneratorDiagnostic {
-    pub level: GeneratorDiagnosticLevel,
-    pub span: Option<GeneratorSourceSpan>,
-    pub message: String,
-}
-
 /// The Kiln WIT world, embedded so the compiler can treat its byte identity
 /// as part of every cache key. The single source of truth; `wado-cli` reads
 /// the same file via `wasmtime::component::bindgen!(path = "...")`.
@@ -1114,10 +1091,8 @@ mod tests {
     fn kiln_generator_wit_is_embedded() {
         assert!(KILN_GENERATOR_WIT.contains("package core:kiln"));
         assert!(KILN_GENERATOR_WIT.contains("world generator"));
-        // Revision 3: the world is import-only (each generator synthesizes its own
-        // world with a per-generator typed `generate`), so it carries the
-        // `kiln-host` import and no fixed `generate` export / `raw-request`.
-        assert!(KILN_GENERATOR_WIT.contains("import kiln-host"));
+        // Import-only: each generator synthesizes its own world with a typed
+        // `generate`.
         assert!(!KILN_GENERATOR_WIT.contains("export generate"));
         assert!(!KILN_GENERATOR_WIT.contains("raw-request"));
     }

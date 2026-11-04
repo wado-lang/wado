@@ -29,6 +29,10 @@ does until then:
 > Not yet implemented: a function writes a mutable global without declaring an
 > effect.
 
+A rule adopted for now, until use cases settle it, carries a
+`> Provisional: …` note saying what may change. A program can rely on it today,
+but not on it staying.
+
 ## Behavior Classes
 
 Where the specification leaves behavior open, it says which of three classes

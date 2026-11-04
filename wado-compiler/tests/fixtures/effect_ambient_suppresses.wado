@@ -1,11 +1,11 @@
-// Test: `#[benign(E)]` lets a function perform effect `E` internally without
+// Test: `#[ambient(E)]` lets a function perform effect `E` internally without
 // propagating it to callers. `seeded` asks for a seed its result does not
 // show, so `run` calls it without declaring `with InsecureSeed`.
 
 use { println, Stdout } from "core:cli";
 use { InsecureSeed } from "wasi:random";
 
-#[benign(InsecureSeed)]
+#[ambient(InsecureSeed)]
 fn seeded() -> i32 {
     let [_, _] = InsecureSeed::get_insecure_seed();
     return 7;

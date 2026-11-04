@@ -30,7 +30,7 @@ use crate::nir_arena::{
     BlockId, BlockNode, Body, ExprId, ExprKind, NodeRef, Operand, PatKind, StmtId, StmtKind,
     StmtNode,
 };
-use crate::nir_package::{AmbientStdio, AmbientStream, NirPackage};
+use crate::nir_package::{AmbientStream, NirPackage};
 use crate::nir_value_graph::{ValueId, ValueKind};
 use crate::nir_visitor::{NirRefVisitor, reachable_exprs};
 use crate::optimize::arena_query::{
@@ -418,23 +418,8 @@ fn resolve_imports(project: &mut NirPackage, graph: &AnalysisGraph, reachable: &
         .collect();
     let reaches_intrinsic = |name: &str| reached_intrinsics.iter().any(|reached| reached == name);
 
-    let ambient = if let Some(decided) = project.ambient_stdio {
-        decided
-    } else {
-        let writes = |stream: AmbientStream| {
-            project.provides_ambient_stdio_sink(stream)
-                || used_wasi_functions
-                    .contains(&stream.write_operation(&project.cm_interface_registry))
-        };
-        let decided = AmbientStdio {
-            stdout: writes(AmbientStream::Stdout),
-            stderr: writes(AmbientStream::Stderr),
-        };
-        project.ambient_stdio = Some(decided);
-        decided
-    };
     for stream in AmbientStream::ALL {
-        if ambient.writes(stream) && reaches_intrinsic(stream.write_builtin()) {
+        if reaches_intrinsic(stream.write_builtin()) {
             used_wasi_functions.insert(stream.write_operation(&project.cm_interface_registry));
         }
     }

@@ -17,11 +17,8 @@ is one global read, and `Log::enabled` runs the installed layer stack.
 `enabled(level)` exposes the same ladder for guarding fields too expensive
 to build.
 
-The facade performs `Log` without a `with Log` in a caller's signature. The
-functions that emit or record are `#[benign(Log)]`: what they log is
-outside what the program computes. `enabled`, `span`, `current` and
-`in_span` hand a value back, so they are `#[ambient(Log)]`: `in_span`
-returns what its body computed inside the span it entered. Every operation
+The facade performs `Log` without a `with Log` in a caller's signature:
+every function of it is `#[ambient(Log)]`. Every operation
 carries a default implementation, so a program that installs nothing still
 logs — `Info` and above, one text line per event on stderr. Installing a
 sink replaces that for its scope; `NopSink` is how a program asks for
@@ -81,7 +78,7 @@ if enabled(Level::Debug) {
 
 ### `pub fn event<T: Serialize = NoFields>(level: Level, message: String, fields: T = NoFields {}, target: String = #function, file: String = #file, line: i32 = #line)`
 
-`#[benign(Log)]`
+`#[ambient(Log)]`
 
 Emit an event at a level a caller computes. The level wrappers' three gates
 apply here too; only tier 1 comes out weaker, since a level that is not a
@@ -90,23 +87,23 @@ resolve at the call site.
 
 ### `pub fn trace<T: Serialize = NoFields>(message: String, fields: T = NoFields {}, target: String = #function, file: String = #file, line: i32 = #line)`
 
-`#[benign(Log)]`
+`#[ambient(Log)]`
 
 ### `pub fn debug<T: Serialize = NoFields>(message: String, fields: T = NoFields {}, target: String = #function, file: String = #file, line: i32 = #line)`
 
-`#[benign(Log)]`
+`#[ambient(Log)]`
 
 ### `pub fn info<T: Serialize = NoFields>(message: String, fields: T = NoFields {}, target: String = #function, file: String = #file, line: i32 = #line)`
 
-`#[benign(Log)]`
+`#[ambient(Log)]`
 
 ### `pub fn warn<T: Serialize = NoFields>(message: String, fields: T = NoFields {}, target: String = #function, file: String = #file, line: i32 = #line)`
 
-`#[benign(Log)]`
+`#[ambient(Log)]`
 
 ### `pub fn error<T: Serialize = NoFields>(message: String, fields: T = NoFields {}, target: String = #function, file: String = #file, line: i32 = #line)`
 
-`#[benign(Log)]`
+`#[ambient(Log)]`
 
 ### `pub fn span<T: Serialize = NoFields>(level: Level, name: String, fields: T = NoFields {}, target: String = #function, file: String = #file, line: i32 = #line) -> Span`
 
@@ -235,32 +232,28 @@ _Fields are private._
 
 #### `pub fn record<T: Serialize>(&self, fields: T)`
 
-`#[benign(Log)]`
+`#[ambient(Log)]`
 
 Add fields to an open span.
 
 #### `pub fn follows_from(&self, cause: &Span)`
 
-`#[benign(Log)]`
+`#[ambient(Log)]`
 
 Record a non-parent causal link: this span follows from `cause`.
 
 #### `pub fn close(&self)`
 
-`#[benign(Log)]`
+`#[ambient(Log)]`
 
 Close a span entered by hand. [`in_span`] closes on every exit path, so
 this is only for a span the caller opened without it.
 
 ### `pub struct NoClock {}`
 
-No timestamp, and no `wasi:clocks` import. The default sink's clock, so a
-program that installs nothing logs in any world, `core:kiln/generator`
-included — its linker offers no WASI at all.
-
-This is the conservative end of the trade, not a verdict on what a default
-line should carry. Stamping the worlds that do have a clock is a compatible
-change, and may replace this once a mechanism keeps the guarantee.
+No timestamp, and no `wasi:clocks` import. The default sink's clock: a line
+is the same on every run, and a program that only logs asks its host for no
+clock.
 
 #### `impl Clock for NoClock`
 
@@ -268,13 +261,11 @@ change, and may replace this once a mechanism keeps the guarantee.
 
 ### `pub struct WallClock {}`
 
-Wall-clock stamps with millisecond precision. Installing a sink over this
-adds a `wasi:clocks` import, so it belongs only in a world that has one.
+Wall-clock stamps with millisecond precision. A sink over this imports
+`wasi:clocks/system-clock`, which a Kiln generator's world does not offer.
 
-`#[ambient(SystemClock)]` rather than `#[benign]`: a sink's operations are
-`Log`'s, whose signatures carry no effect, so the clock read cannot be
-declared on them, and the stamp it returns is observable, which `#[benign]`
-forbids.
+`now` is `#[ambient(SystemClock)]`: a sink's operations are `Log`'s, whose
+signatures carry no effect, so the clock read cannot be declared on them.
 
 #### `impl Clock for WallClock`
 

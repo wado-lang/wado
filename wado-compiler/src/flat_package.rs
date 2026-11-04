@@ -81,6 +81,8 @@ pub struct FlatPackage {
     /// The `org.wado-lang.coverage` section payload, under `wado test --coverage`
     /// or `--pgo`.
     pub coverage_section: Option<Vec<u8>>,
+    /// The `org.wado-lang.demanded-imports` section payload, for a library.
+    pub demanded_imports_section: Option<Vec<u8>>,
     /// Fine-grained codegen feature flags from the CLI's `-f <flag>` option.
     pub codegen_flags: CodegenFlags,
     /// When true, skip Wasm validation after code generation.

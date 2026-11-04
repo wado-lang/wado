@@ -1,0 +1,16 @@
+// A generator stamping its log with the wall clock imports
+// `wasi:clocks/system-clock`, though no `with` names it: `WallClock::now` is
+// `#[ambient(SystemClock)]`. The generator world has no clock, so the planned
+// imports refuse it.
+
+use { stamped } from "./sub/kiln/value.schema"
+    with {
+        generator: { module: "./sub/kiln/wall_clock_generator.wado" },
+    };
+
+test {
+    assert stamped();
+}
+
+__DATA__
+{"compile_error": "error: kiln generator imports `wasi:clocks/system-clock@0.3.0`"}

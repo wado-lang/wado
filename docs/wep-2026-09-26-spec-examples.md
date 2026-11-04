@@ -119,7 +119,7 @@ example names the test that holds it.
   the sake of the rule.
 - An example whose claim is that it compiles has no value to assert: the
   fixture's run already shows it. Its reference writes `"assert": false`, as
-  the `#[benign]` example's does. The waiver is allowed only on a fixture the
+  the `#[ambient]` example's does. The waiver is allowed only on a fixture the
   suite runs, the one place the rule applies.
 - A compile-error example quotes a fixture declaring `compile_error` or
   `compile_error_codes`. One fixture expects one report, so each rejected

@@ -1390,8 +1390,7 @@ pub(super) fn synthesize_flatten_value_to_flat_args(
         }
         // Option<T> → discriminant i32 + flatten(T). Delegates to the
         // dedicated option flattener, which conditionally lowers the Some
-        // payload via a Match. Reached for an `Option` field of a CM record
-        // (e.g. `span: Option<SourceSpan>` on the kiln-host Diagnostic).
+        // payload via a Match. Reached for an `Option` field of a CM record.
         Type::Generic(g) if item == Some(CompilerItem::Option) => {
             synthesize_flatten_option_to_flat_args(
                 &g.args[0], value, prefix, next_local, stmts, locals, flat_args, ctx,
