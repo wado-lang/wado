@@ -28,6 +28,7 @@ pub mod component_model;
 pub mod const_eval;
 pub mod constant_arithmetic;
 pub mod coverage;
+mod cut_memo;
 pub mod defs;
 pub(crate) mod demanded_imports;
 pub(crate) mod divergence;

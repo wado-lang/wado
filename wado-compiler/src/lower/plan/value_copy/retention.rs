@@ -21,6 +21,7 @@ use super::is_reference_type;
 use super::place::unwrap_ref;
 use super::reach::ClosureCaptures;
 use crate::compiler_trace;
+use crate::cut_memo::CutMemo;
 use crate::flat_package::FlatPackage;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::lower::plan::value_copy::analyze;
@@ -1016,54 +1017,53 @@ impl<'a> RefCarrying<'a> {
 impl RefCarrying<'_> {
     #[must_use]
     pub fn holds(&self, type_id: TypeId) -> bool {
-        self.walk(type_id, &mut Vec::new()).0
+        self.walk(type_id, &mut Walk::default())
     }
 
-    /// The answer, and whether it was reached through a type still being
-    /// walked. An answer that leans on an open cycle is not memoized: the
-    /// enclosing walk may still find the reference the cycle could not.
-    fn walk(&self, type_id: TypeId, open: &mut Vec<TypeId>) -> (bool, bool) {
+    /// An answer that leans on a type still being walked is memoized only
+    /// within this walk: the enclosing walk may still find the reference the
+    /// cycle could not.
+    fn walk(&self, type_id: TypeId, walk: &mut Walk) -> bool {
         if let Some(&answer) = self.memo.borrow().get(&type_id) {
-            return (answer, false);
+            return answer;
         }
-        if open.contains(&type_id) {
-            return (false, true);
+        if let Some(answer) = walk.memo.get(&type_id) {
+            return answer;
         }
-        open.push(type_id);
-        let (answer, cyclic) = self.members(type_id, open);
-        open.pop();
-        if !cyclic {
+        if let Some(at) = walk.open.iter().position(|&open| open == type_id) {
+            return walk.memo.cut(at);
+        }
+        let depth = walk.memo.depth();
+        let outer_cuts = walk.memo.begin();
+        walk.open.push(type_id);
+        walk.memo.open();
+        let answer = self.members(type_id, walk);
+        walk.memo.close(answer);
+        walk.open.pop();
+        if walk.memo.end(type_id, depth, answer, outer_cuts) {
             self.memo.borrow_mut().insert(type_id, answer);
         }
-        (answer, cyclic)
+        answer
     }
 
-    fn any(&self, types: Vec<TypeId>, open: &mut Vec<TypeId>) -> (bool, bool) {
-        let mut cyclic = false;
-        for t in types {
-            let (answer, saw_cycle) = self.walk(t, open);
-            cyclic |= saw_cycle;
-            if answer {
-                return (true, cyclic);
-            }
-        }
-        (false, cyclic)
+    fn any(&self, types: Vec<TypeId>, walk: &mut Walk) -> bool {
+        types.into_iter().any(|t| self.walk(t, walk))
     }
 
-    fn members(&self, type_id: TypeId, open: &mut Vec<TypeId>) -> (bool, bool) {
+    fn members(&self, type_id: TypeId, walk: &mut Walk) -> bool {
         match self.type_table.get(type_id) {
-            ResolvedType::Ref(_) | ResolvedType::MutRef(_) => (true, false),
+            ResolvedType::Ref(_) | ResolvedType::MutRef(_) => true,
             // What a type parameter stands for is not known here.
             ResolvedType::TypeParam { .. }
             | ResolvedType::AssocParam { .. }
-            | ResolvedType::AssocTypeProjection { .. } => (true, false),
+            | ResolvedType::AssocTypeProjection { .. } => true,
             ResolvedType::BuiltinArray(inner) => {
                 let inner = *inner;
-                self.walk(inner, open)
+                self.walk(inner, walk)
             }
             ResolvedType::Newtype { base_type, .. } => {
                 let base = *base_type;
-                self.walk(base, open)
+                self.walk(base, walk)
             }
             ResolvedType::Struct { def, type_args } => {
                 let (def, type_args) = (*def, type_args.clone());
@@ -1073,14 +1073,14 @@ impl RefCarrying<'_> {
                     .find(|s| s.def == def && s.type_args == type_args)
                     .map(|s| s.fields.iter().map(|f| f.type_id).collect::<Vec<_>>());
                 match fields {
-                    Some(fields) => self.any(fields, open),
+                    Some(fields) => self.any(fields, walk),
                     // A declaration the plan phase cannot see is read as
                     // holding one, which only widens the carrier set.
-                    None => (true, false),
+                    None => true,
                 }
             }
             ResolvedType::GenericInstance { def, .. } if self.type_table.is_resource_def(*def) => {
-                (false, false)
+                false
             }
             ResolvedType::GenericInstance { def, type_args } => {
                 let (def, type_args) = (*def, type_args.clone());
@@ -1095,18 +1095,18 @@ impl RefCarrying<'_> {
                         })
                         .collect()
                 });
-                self.any(payloads.unwrap_or(type_args), open)
+                self.any(payloads.unwrap_or(type_args), walk)
             }
             ResolvedType::Variant { def } => {
                 let def = *def;
                 match self.type_table.variant_template_cases(def) {
                     Some(cases) => {
                         let payloads = cases.iter().map(|(_, _, payload)| *payload).collect();
-                        self.any(payloads, open)
+                        self.any(payloads, walk)
                     }
                     // A declaration the plan phase cannot see is read as
                     // holding one, which only widens the carrier set.
-                    None => (true, false),
+                    None => true,
                 }
             }
             // What the pack stands for is not known here, as a type parameter
@@ -1115,20 +1115,36 @@ impl RefCarrying<'_> {
             | ResolvedType::PackElement { .. }
             | ResolvedType::InferVar(_)
             | ResolvedType::Unknown
-            | ResolvedType::Error => (true, false),
+            | ResolvedType::Error => true,
             // A closure holds what it captured, which its type does not name:
             // whatever any closure of its shape captured. `make_reader(p)`
             // returns a closure holding `p`.
             ResolvedType::Function { .. } => {
                 let captured = self.captures.of(type_id, self.type_table).to_vec();
-                self.any(captured, open)
+                self.any(captured, walk)
             }
             ResolvedType::Primitive(_)
             | ResolvedType::Unit
             | ResolvedType::Never
             | ResolvedType::Enum { .. }
             | ResolvedType::Flags { .. }
-            | ResolvedType::Resource { .. } => (false, false),
+            | ResolvedType::Resource { .. } => false,
+        }
+    }
+}
+
+/// The types a [`RefCarrying`] walk is inside, outermost first, and what it
+/// has answered so far.
+struct Walk {
+    open: Vec<TypeId>,
+    memo: CutMemo<TypeId>,
+}
+
+impl Default for Walk {
+    fn default() -> Self {
+        Self {
+            open: Vec::new(),
+            memo: CutMemo::new(false),
         }
     }
 }
