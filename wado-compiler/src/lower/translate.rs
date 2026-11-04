@@ -1718,7 +1718,8 @@ impl FunctionTranslator<'_, '_> {
                 let effective_type = box_type.unwrap_or(*type_id);
                 let box_wrap_type = box_type.filter(|_| !self.guarded_locals.contains(local_index));
                 let needs_value_copy_wrap = !storage.skips_copy()
-                    && !self.share_eligible_locals.contains(local_index)
+                    && !(self.share_eligible_locals.contains(local_index)
+                        && pass_dump::decides("lower/value_copy/share"))
                     && (*is_mut || !self.source_shares_immutable_storage(*local_index, value))
                     && self.should_wrap_value_copy(value);
                 let value_op = self.convert_operand(value);

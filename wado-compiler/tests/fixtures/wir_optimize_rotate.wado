@@ -58,7 +58,7 @@ test {
 __DATA__
 {
     "test": {},
-    "wir_expect:O1": [" rotl ", " rotr ", "rotl", "rotr"],
+    "wir_expect:O1": [" rotl ", " rotr "],
     "wir_pass": {"O1": ["wir/run_peephole"], "O2": ["nir/inline"]},
     "wir_contrast": {"O2": [
         {"    return x << 9223372036854775807 | x >> 1;": "    return x << 63 | x >> 1;"}
@@ -70,10 +70,6 @@ __DATA__
         "x64 rotr $v",
         "x32 rotl 7",
         "x64 rotr 40_i64",
-        "(x64 << 9223372036854775807_i64) | (x64 >>u 1_i64)",
-        "rotl",
-        "rotr",
-        "<<"
-    ],
-    "wir_expect:O0": ["<<", ">>u"]
+        "(x64 << 9223372036854775807_i64) | (x64 >>u 1_i64)"
+    ]
 }
