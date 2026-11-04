@@ -8,9 +8,10 @@
 //! LOCATOR is `FILE:LINE:COLUMN`, 1-based with the column in bytes as
 //! `rg --column` prints it, or a symbol notation ([`symbol`]). The server is
 //! the `rust-analyzer` rustup resolves in DIR (default: the current
-//! directory), so `rust-toolchain.toml` pins it. It sees only the cfgs its
-//! Cargo workspace enables, so code behind another `cfg` keeps the old name
-//! and `cargo check` says where.
+//! directory), so `rust-toolchain.toml` pins it. Two kinds of site keep the
+//! old name, and `cargo check` says where: code behind a `cfg` the Cargo
+//! workspace does not enable, and a `macro_rules!` body, whose tokens name
+//! nothing until the macro expands.
 //!
 //! An edit outside DIR is refused before anything is written: renaming the
 //! member of a standard library trait's impl would edit the sysroot.
