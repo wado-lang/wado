@@ -1,0 +1,105 @@
+// A call the profile measured hot splices a callee only while the code a
+// splice copies fits the hot threshold: its cold path is copied with it, so it
+// counts there even though the plain price leaves it out.
+use { println, Stdout } from "core:cli";
+
+fn checked(x: i32) -> Result<i32, String> {
+    if x < 0 {
+        let mut h = x;
+        h = h * 31 + builtin::black_box(0);
+        h = h * 33 + builtin::black_box(1);
+        h = h * 35 + builtin::black_box(2);
+        h = h * 37 + builtin::black_box(3);
+        h = h * 39 + builtin::black_box(4);
+        h = h * 41 + builtin::black_box(5);
+        h = h * 43 + builtin::black_box(6);
+        h = h * 45 + builtin::black_box(7);
+        h = h * 47 + builtin::black_box(8);
+        h = h * 49 + builtin::black_box(9);
+        h = h * 51 + builtin::black_box(10);
+        h = h * 53 + builtin::black_box(11);
+        h = h * 55 + builtin::black_box(12);
+        h = h * 57 + builtin::black_box(13);
+        h = h * 59 + builtin::black_box(14);
+        h = h * 61 + builtin::black_box(15);
+        h = h * 63 + builtin::black_box(16);
+        h = h * 65 + builtin::black_box(17);
+        h = h * 67 + builtin::black_box(18);
+        h = h * 69 + builtin::black_box(19);
+        h = h * 71 + builtin::black_box(20);
+        h = h * 73 + builtin::black_box(21);
+        h = h * 75 + builtin::black_box(22);
+        h = h * 77 + builtin::black_box(23);
+        h = h * 79 + builtin::black_box(24);
+        h = h * 81 + builtin::black_box(25);
+        h = h * 83 + builtin::black_box(26);
+        h = h * 85 + builtin::black_box(27);
+        h = h * 87 + builtin::black_box(28);
+        h = h * 89 + builtin::black_box(29);
+        h = h * 91 + builtin::black_box(30);
+        h = h * 93 + builtin::black_box(31);
+        h = h * 95 + builtin::black_box(32);
+        h = h * 97 + builtin::black_box(33);
+        h = h * 99 + builtin::black_box(34);
+        h = h * 101 + builtin::black_box(35);
+        h = h * 103 + builtin::black_box(36);
+        h = h * 105 + builtin::black_box(37);
+        h = h * 107 + builtin::black_box(38);
+        h = h * 109 + builtin::black_box(39);
+        h = h * 111 + builtin::black_box(40);
+        h = h * 113 + builtin::black_box(41);
+        h = h * 115 + builtin::black_box(42);
+        h = h * 117 + builtin::black_box(43);
+        h = h * 119 + builtin::black_box(44);
+        h = h * 121 + builtin::black_box(45);
+        h = h * 123 + builtin::black_box(46);
+        h = h * 125 + builtin::black_box(47);
+        h = h * 127 + builtin::black_box(48);
+        h = h * 129 + builtin::black_box(49);
+        h = h * 131 + builtin::black_box(50);
+        h = h * 133 + builtin::black_box(51);
+        h = h * 135 + builtin::black_box(52);
+        h = h * 137 + builtin::black_box(53);
+        h = h * 139 + builtin::black_box(54);
+        h = h * 141 + builtin::black_box(55);
+        h = h * 143 + builtin::black_box(56);
+        h = h * 145 + builtin::black_box(57);
+        h = h * 147 + builtin::black_box(58);
+        h = h * 149 + builtin::black_box(59);
+        return Err(`negative: ${h}`);
+    }
+    let mut v = x;
+    v = v * 3 + builtin::black_box(1);
+    v = v ^ (v >> 3);
+    v = v * 5 + builtin::black_box(2);
+    v = v ^ (v >> 5);
+    v = v * 7 + builtin::black_box(3);
+    v = v ^ (v >> 7);
+    v = v * 11 + builtin::black_box(4);
+    v = v ^ (v >> 11);
+    return Ok(v);
+}
+
+#[inline("never")]
+fn hot(x: i32) -> Result<i32, String> {
+    return Ok(checked(x)? + 1);
+}
+
+// A second site, so a splice copies the callee rather than moving it.
+#[inline("never")]
+fn other(x: i32) -> Result<i32, String> {
+    return Ok(checked(x)? + 2);
+}
+
+export fn run() with Stdout {
+    let x = builtin::black_box(3);
+    println(`${hot(x).unwrap() - other(x).unwrap()}`);
+}
+
+__DATA__
+{
+  "profile": "testdata/pgo_hot_cold_heavy.pgo",
+  "wir_scope": "pgo_hot_cold_heavy.wado/hot",
+  "wir_expect:O2": ["= \"pgo_hot_cold_heavy.wado/checked"],
+  "stdout": "-1\n"
+}

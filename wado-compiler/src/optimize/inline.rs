@@ -2362,6 +2362,7 @@ pub fn inline_functions(
     let exec = gate.exec().clone();
     let type_table: &TypeTable = &types;
     let functions = &project.functions;
+    let no_cold_runs = RareRuns::none(markers, Rarity::Cold);
     let cold_runs: Vec<RareRuns> = exec.map_indices(functions.len(), |i| {
         let func = functions[i].borrow();
         func.body.as_ref().map_or_else(
@@ -2401,7 +2402,7 @@ pub fn inline_functions(
                 foldable: &foldable,
                 loopy: &loopy,
             });
-        let classify = |threshold: usize| {
+        let classify = |threshold: usize, runs: &RareRuns| {
             classify_callee(
                 &func,
                 view.as_ref(),
@@ -2418,15 +2419,19 @@ pub fn inline_functions(
                 &hopeful_params[i],
             )
         };
-        // The price a verdict reads does not move with the threshold, so only
-        // the reach differs between heats.
-        let verdict = classify(thresholds.plain);
+        // Only the reach differs between heats. A hot site weighs the cold code
+        // too: the plain price leaves it out, but a splice copies it, and at
+        // the hot threshold that let a deserializer grow 42-fold.
+        let verdict = classify(thresholds.plain, runs);
         let reach_at = |heat: Heat| {
-            if *called_at[i].at(heat) {
-                classify(*thresholds.at(heat)).reach
-            } else {
-                verdict.reach
+            if !*called_at[i].at(heat) {
+                return verdict.reach;
             }
+            let runs = match heat {
+                Heat::Hot => &no_cold_runs,
+                Heat::Cold | Heat::Plain => runs,
+            };
+            classify(*thresholds.at(heat), runs).reach
         };
         let reaches = ByHeat {
             cold: reach_at(Heat::Cold),
