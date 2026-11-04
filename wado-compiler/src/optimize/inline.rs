@@ -1604,9 +1604,9 @@ enum Refusal {
 /// What the engine decides about one callee.
 #[derive(Clone, Copy)]
 struct Verdict {
-    /// The hot price the verdict was reached on, or `0` for a callee turned
+    /// The hot price the verdict was reached on, or `None` for a callee turned
     /// down before it was priced at all.
-    hot: usize,
+    hot: Option<usize>,
     /// Why its call sites splice it where they do.
     basis: Basis,
     /// Keep it as a template: splice nothing *into* it.
@@ -1621,8 +1621,12 @@ struct Verdict {
 impl Verdict {
     /// A verdict reached before any price was taken.
     fn unpriced(basis: Basis) -> Self {
+        assert!(
+            basis.reach() == Reach::Nowhere,
+            "a callee splicing admits is priced"
+        );
         Verdict {
-            hot: 0,
+            hot: None,
             basis,
             hold: false,
         }
@@ -1710,19 +1714,23 @@ fn classify_callee(
         return Verdict::unpriced(basis);
     }
 
+    let plain = inline_cost(body, type_table, cold, spliced);
     // #[inline(always)] skips the remaining heuristic checks (but still requires
     // a body and passes `splice_barred`, both checked above)
     if func.inline_hint == InlineHint::Always {
-        return Verdict::unpriced(Basis::Forced);
+        return Verdict {
+            hot: Some(plain),
+            basis: Basis::Forced,
+            hold: false,
+        };
     }
 
     let effective_threshold = effective_threshold(func, inline_threshold);
 
     let params = func.params.len();
-    let plain = inline_cost(body, type_table, cold, spliced);
     if net_cost(plain, params) <= effective_threshold {
         return Verdict {
-            hot: plain,
+            hot: Some(plain),
             basis: Basis::Fits,
             hold: false,
         };
@@ -1777,7 +1785,7 @@ fn classify_callee(
         Basis::Payback { sole: sites == 1 }
     };
     Verdict {
-        hot: plain,
+        hot: Some(plain),
         basis,
         hold: optimistic_loop,
     }
@@ -2521,10 +2529,7 @@ fn inline_round(
         );
         let candidate = (verdict.reach() != Reach::Nowhere).then(|| {
             let body = func.body.as_ref().expect("a candidate has a body");
-            let hot = match func.inline_hint {
-                InlineHint::Always => inline_cost(body, type_table, runs, &spliced),
-                InlineHint::Auto | InlineHint::Hint | InlineHint::Never => verdict.hot,
-            };
+            let hot = verdict.hot.expect("a candidate is priced");
             let shrinks = called_cold[i] && {
                 let written = if pricing {
                     size
@@ -2533,7 +2538,7 @@ fn inline_round(
                 };
                 net_cost(written, func.params.len()) == 0
             };
-            (net_cost(hot, func.params.len()), shrinks, func.clone())
+            (hot, net_cost(hot, func.params.len()), shrinks, func.clone())
         });
         // A function nothing calls has nothing decided about it.
         let logged = logging.is_some_and(|log| call_sites[i] > 0 && log.wants(&func.name));
@@ -2557,7 +2562,7 @@ fn inline_round(
         if let Some(entry) = entry {
             callee_entries.push((id, entry));
         }
-        let Some((net, shrinks, func)) = candidate else {
+        let Some((hot, net, shrinks, func)) = candidate else {
             continue;
         };
         let id = id.expect("func_id assigned at lower");
@@ -2571,7 +2576,7 @@ fn inline_round(
             priced.push(Candidate {
                 id,
                 name: func.name.clone(),
-                hot: verdict.hot,
+                hot,
                 size,
                 sites: call_sites[id.index()],
                 forced: func.inline_hint == InlineHint::Always,
@@ -3473,7 +3478,7 @@ fn try_inline_call_expr(
     if refusal.is_some() {
         return None;
     }
-    let callee = candidate.body.as_ref()?;
+    let callee = candidate.body.as_ref().expect("a candidate has a body");
     let ExprKind::Call { args, .. } = &caller.exprs[call_id].kind else {
         unreachable!("matched a Call above")
     };
@@ -3490,7 +3495,9 @@ fn try_inline_call_expr(
     let (receiver, rest) = args.split();
     let mut bindings: Vec<InlineBinding> = Vec::with_capacity(candidate.params.len());
     if let Some(receiver) = receiver {
-        let self_param = params.next()?;
+        let self_param = params
+            .next()
+            .expect("a method call's callee takes its receiver first");
         let receiver_op = receiver.expr;
         // Bind the receiver to `self`. For `&mut self`, wrap it in a `MutRef` so
         // field mutations write back to the original (the receiver is then an

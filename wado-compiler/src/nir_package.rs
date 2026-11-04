@@ -33,6 +33,7 @@ use crate::nir::{
     NirGlobal, NirImport, NirStruct, NirTest, NirVariantDecl,
 };
 use crate::nir_arena::{Body, ExprKind, NodeRef};
+use crate::optimize::InlineLog;
 use crate::parallel::Executor;
 use crate::tir::{BuiltinDeclaration, BuiltinDeclarations, TypeId};
 use crate::token::Span;
@@ -203,7 +204,7 @@ pub struct NirPackage {
     pub specialization_cap: Option<SpecializationCapHit>,
     /// What the inliner decided each round, where `wado dump --inline-decisions`
     /// asked for it.
-    pub inline_log: Option<crate::optimize::InlineLog>,
+    pub inline_log: Option<InlineLog>,
     /// When true, skip Wasm validation after code generation.
     pub skip_validation: bool,
     /// Target world fully-qualified name (e.g., "wasi:cli/command", "wasi:http/service")

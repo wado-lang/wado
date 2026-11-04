@@ -37,9 +37,19 @@ impl InlineLog {
 
     /// The log as text, each span named by the module whose parse it indexes.
     pub fn render(&self, parses: &ParseModules) -> String {
+        if self.rounds.is_empty() {
+            return "(the inliner does not run at this optimization level)\n".to_string();
+        }
         let mut out = String::new();
         for (i, round) in self.rounds.iter().enumerate() {
             round.render(i + 1, parses, &mut out);
+        }
+        if out.is_empty() {
+            let _ = writeln!(
+                out,
+                "(no decision is about a function whose name holds `{}`)",
+                self.pattern
+            );
         }
         out
     }
@@ -60,7 +70,8 @@ pub(super) struct Round {
 #[derive(Debug)]
 pub(super) struct CalleeEntry {
     pub name: String,
-    pub hot: usize,
+    /// What running one copy costs, where the verdict priced it.
+    pub hot: Option<usize>,
     /// What holding one copy costs, where the round priced it.
     pub size: Option<usize>,
     pub params: usize,
@@ -94,13 +105,16 @@ impl Round {
             let _ = writeln!(out, "  held: {}", self.held.join(", "));
         }
         for c in &self.callees {
-            let _ = write!(out, "  callee `{}`: hot {}", c.name, c.hot);
+            let _ = write!(out, "  callee `{}`:", c.name);
+            if let Some(hot) = c.hot {
+                let _ = write!(out, " hot {hot},");
+            }
             if let Some(size) = c.size {
-                let _ = write!(out, ", size {size}");
+                let _ = write!(out, " size {size},");
             }
             let _ = write!(
                 out,
-                ", {} params, {} sites -> {}",
+                " {} params, {} sites -> {}",
                 c.params,
                 c.sites,
                 basis_text(c.basis)

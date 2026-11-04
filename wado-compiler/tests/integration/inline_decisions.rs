@@ -17,24 +17,32 @@ fn work(n: i32) -> i32 {
     return t;
 }
 
+#[inline(always)]
+fn forced(x: i32) -> i32 { return x * 5 + x / 3; }
+
 export fn run() {
     builtin::black_box(work(builtin::black_box(10)));
+    builtin::black_box(forced(builtin::black_box(2)));
 }
 "#;
 
 fn decisions(pattern: &str, parallelism: usize) -> String {
-    dump(Some(pattern), parallelism)
+    decisions_at(OptLevel::O2, pattern, parallelism)
+}
+
+fn decisions_at(level: OptLevel, pattern: &str, parallelism: usize) -> String {
+    dump(level, Some(pattern), parallelism)
         .inline_decisions_text
         .expect("decisions recorded")
 }
 
-fn dump(pattern: Option<&str>, parallelism: usize) -> wado_compiler::DumpResult {
+fn dump(level: OptLevel, pattern: Option<&str>, parallelism: usize) -> wado_compiler::DumpResult {
     let host = in_memory_host(&[]);
     block_on(dump_with_host_and_world(
         SOURCE,
         &host,
         Some("entry.wado"),
-        OptLevel::O2,
+        level,
         None,
         None,
         wado_compiler::OptOverrides::default(),
@@ -79,6 +87,26 @@ fn the_pattern_keeps_only_the_functions_it_names() {
 }
 
 #[test]
+fn a_forced_callee_is_reported_at_its_price() {
+    let log = decisions("forced", 1);
+    assert!(log.contains("callee `forced`: hot "), "{log}");
+    assert!(!log.contains("hot 0,"), "{log}");
+    assert!(log.contains("-> everywhere: `#[inline(always)]`"), "{log}");
+}
+
+#[test]
+fn an_empty_log_says_why() {
+    assert_eq!(
+        decisions_at(OptLevel::O0, "medium", 1),
+        "(the inliner does not run at this optimization level)\n"
+    );
+    assert_eq!(
+        decisions("no_such_function", 1),
+        "(no decision is about a function whose name holds `no_such_function`)\n"
+    );
+}
+
+#[test]
 fn the_log_is_the_same_on_any_thread_count() {
     assert_eq!(decisions("", 1), decisions("", 4));
 }
@@ -86,7 +114,11 @@ fn the_log_is_the_same_on_any_thread_count() {
 #[test]
 fn recording_changes_nothing_it_records() {
     let wir = |pattern| {
-        wado_compiler::wir_unparse::unparse_wir(&dump(pattern, 1).wir_package.expect("WIR built"))
+        wado_compiler::wir_unparse::unparse_wir(
+            &dump(OptLevel::O2, pattern, 1)
+                .wir_package
+                .expect("WIR built"),
+        )
     };
     assert_eq!(wir(Some("")), wir(None));
 }
