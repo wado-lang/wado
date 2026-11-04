@@ -20,9 +20,13 @@ fn work(n: i32) -> i32 {
 #[inline(always)]
 fn forced(x: i32) -> i32 { return x * 5 + x / 3; }
 
+#[inline(never)]
+fn kept(x: i32) -> i32 { return x + 1; }
+
 export fn run() {
     builtin::black_box(work(builtin::black_box(10)));
     builtin::black_box(forced(builtin::black_box(2)));
+    builtin::black_box(kept(builtin::black_box(3)));
 }
 "#;
 
@@ -81,9 +85,19 @@ fn a_site_names_its_decision_and_why() {
 #[test]
 fn the_pattern_keeps_only_the_functions_it_names() {
     let log = decisions("work", 1);
-    assert!(!log.contains("callee `medium`"), "{log}");
+    assert!(!log.contains("callee `forced`"), "{log}");
     assert!(log.contains("site `work`"), "{log}");
     assert!(log.contains("-> `work`"), "{log}");
+}
+
+#[test]
+fn a_named_caller_shows_the_callees_turned_down_before_any_site() {
+    let log = decisions("run", 1);
+    assert!(
+        log.lines().any(|line| line.starts_with("  callee `kept`:")
+            && line.ends_with("-> nowhere: `#[inline(never)]`")),
+        "{log}"
+    );
 }
 
 #[test]

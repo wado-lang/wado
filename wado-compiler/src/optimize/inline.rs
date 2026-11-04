@@ -2497,6 +2497,19 @@ fn inline_round(
         }
     });
     let logging: Option<&InlineLog> = record.as_ref().map(|(log, _)| *log);
+    // A callee a named caller calls is logged under its own name too: a call
+    // turned down before any site saw it leaves no site entry.
+    let called_by_named: Vec<bool> = logging.map_or_else(Vec::new, |log| {
+        let mut called = vec![false; functions.len()];
+        for (caller, scan) in scans.iter().enumerate() {
+            if log.wants(&functions[caller].borrow().name) {
+                for (callee, _) in &scan.calls {
+                    called[callee.index()] = true;
+                }
+            }
+        }
+        called
+    });
     let classified = exec.map_indices(functions.len(), |i| {
         let func = functions[i].borrow();
         let runs = &cold_runs[i];
@@ -2541,7 +2554,8 @@ fn inline_round(
             (hot, net_cost(hot, func.params.len()), shrinks, func.clone())
         });
         // A function nothing calls has nothing decided about it.
-        let logged = logging.is_some_and(|log| call_sites[i] > 0 && log.wants(&func.name));
+        let logged = logging
+            .is_some_and(|log| call_sites[i] > 0 && (called_by_named[i] || log.wants(&func.name)));
         let entry = logged.then(|| CalleeEntry {
             name: func.name.clone(),
             hot: verdict.hot,
