@@ -118,6 +118,35 @@ export fn run() {
     );
 }
 
+/// `export(Command::run)` provides a world export the library world does not
+/// have, so the `Stderr` it declares is no demand of the library's consumer.
+#[test]
+fn a_function_the_library_does_not_export_demands_nothing() {
+    compile_consumer(
+        r#"
+use { eprintln, Stderr } from "core:cli";
+use { Command } from "wasi:cli";
+
+export fn positive(x: i32) -> i32 {
+    assert x > 0;
+    return x;
+}
+
+export(Command::run) fn main() with Stderr {
+    eprintln("main");
+}
+"#,
+        r#"
+use { positive } from "./lib.wasm" with { type: "wasm" };
+
+export fn run() {
+    positive(7);
+}
+"#,
+    )
+    .expect("the consumer compiles without `Stderr`");
+}
+
 #[test]
 fn an_export_declaring_stderr_demands_it_of_its_consumer() {
     let err = compile_consumer(

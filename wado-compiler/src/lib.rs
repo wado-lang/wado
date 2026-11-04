@@ -1054,6 +1054,31 @@ impl LibSurface {
     }
 }
 
+/// Whether a build records what its exports demand of a consumer, as a
+/// library does in its `org.wado-lang.demanded-imports` section.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Exports {
+    Recorded,
+    Unrecorded,
+}
+
+/// The functions a library exports, each with its module: every `export fn`
+/// under its own name, in the entry module or another module of the package.
+fn lib_export_functions<'a>(
+    entry_source: &'a ModuleSource,
+    modules: &'a hashmap::IndexMap<ModuleSource, ast::Module>,
+) -> impl Iterator<Item = (&'a ModuleSource, &'a ast::Function)> {
+    modules
+        .iter()
+        .filter(move |(source, _)| *source == entry_source || source.is_local())
+        .flat_map(|(source, module)| {
+            module.items.iter().filter_map(move |item| match item {
+                Item::Function(func) if func.exports_own_name() => Some((source, func)),
+                _ => None,
+            })
+        })
+}
+
 fn collect_lib_surface(
     entry_source: &ModuleSource,
     modules: &hashmap::IndexMap<ModuleSource, ast::Module>,
@@ -1657,14 +1682,18 @@ fn provider_directives<H: CompilerHost>(
 /// and its recorded facts) rather than the emitted TIR, so they see every
 /// source function whatever reify emits, and share their logic with the LSP.
 /// Every pipeline runs them before synthesis: a later phase assumes a program
-/// they passed. Answers the `wasi:*` interfaces the program's exports hold.
+/// they passed. Under [`Exports::Recorded`], answers the `wasi:*` interfaces
+/// the library's exports hold.
 fn check_effects_and_moves<H: CompilerHost>(
     sem: &mut semantics::Semantics,
     provided_import_fqs: hashmap::IndexSet<String>,
+    exports: Exports,
     logger: &Logger<'_, H>,
-) -> Result<hashmap::IndexSet<String>, Bail> {
+) -> Result<Option<hashmap::IndexSet<String>>, Bail> {
     let _span = logger.span("effect-check");
-    let diags = effect_check::check_semantics(sem, provided_import_fqs);
+    let library_exports: Option<Vec<_>> = (exports == Exports::Recorded)
+        .then(|| lib_export_functions(&sem.entry_module_source, &sem.modules).collect());
+    let diags = effect_check::check_semantics(sem, provided_import_fqs, library_exports.as_deref());
     let move_errors = affine_move_check::check_affine_moves_semantic(sem);
     let had_error = !diags.is_empty() || !move_errors.is_empty();
     sem.redirect_effect_vars(&diags.rows);
@@ -1792,6 +1821,11 @@ fn compile_after_load<H: CompilerHost>(
         }
     }
 
+    let is_kiln_generator = match (options.target_world.as_deref(), sem.world_registry()) {
+        (Some(tw), Some(reg)) => reg.is_generator_world(tw),
+        _ => false,
+    };
+
     // === Phase 6b: Effect, Purity and Move Checks ===
     let exported_host_interfaces = check_effects_and_moves(
         &mut sem,
@@ -1800,17 +1834,17 @@ fn compile_after_load<H: CompilerHost>(
             .iter()
             .map(|p| p.import_fq.clone())
             .collect(),
+        if options.lib_world.is_some() && !is_kiln_generator {
+            Exports::Recorded
+        } else {
+            Exports::Unrecorded
+        },
         logger,
     )?;
 
     // === Phase 6c: Kiln `Options` descriptor extraction ===
     // An `Options` no descriptor describes fails here: no options table could
     // be validated against it, so the generator would trap on a missing field.
-    let is_kiln_generator = match (options.target_world.as_deref(), sem.world_registry()) {
-        (Some(tw), Some(reg)) => reg.is_generator_world(tw),
-        _ => false,
-    };
-
     let kiln_options_descriptor = if is_kiln_generator {
         let (descriptor, mut diags) =
             match kiln::extract_options_descriptor(&sem, &sem.entry_module_source) {
@@ -2184,13 +2218,12 @@ fn compile_after_load<H: CompilerHost>(
     if let Some(lib_world) = lib_world_info {
         if !is_kiln_generator {
             package.target_world.clone_from(&lib_world.fq_name);
-            // A library's consumer demands only what its exports hold.
-            package.demanded_imports_section = Some(demanded_imports::encode(
-                exported_host_interfaces.iter().map(String::as_str),
-            ));
         }
         package.lib_world_info = Some(lib_world);
     }
+    // A library's consumer demands only what its exports hold.
+    package.demanded_imports_section = exported_host_interfaces
+        .map(|fqs| demanded_imports::encode(fqs.iter().map(String::as_str)));
     package.skip_validation = options.skip_validation;
     package.coverage_section = coverage.map(|map| map.encode());
     package.test_selection = options.test_selection;
@@ -2698,7 +2731,8 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
     );
     // A rejected program reaches no phase after these, as under `compile`.
     let checked = sem.is_complete()
-        && check_effects_and_moves(&mut sem, provided_import_fqs, &logger).is_ok();
+        && check_effects_and_moves(&mut sem, provided_import_fqs, Exports::Unrecorded, &logger)
+            .is_ok();
     let symbols = sem.symbols.clone();
     let interner = sem.interner.clone();
     let entry_module_source_out = sem.entry_module_source.clone();

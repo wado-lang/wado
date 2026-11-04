@@ -406,11 +406,13 @@ pub fn check_effects_semantic(sem: &Semantics) -> Vec<EffectError> {
 
 /// Both Design-B semantic diagnostics, computed in one pass that builds the
 /// shared `OwnedEffectData` once. Used by the batch driver and the LSP so
-/// effect and purity stay in lockstep across both.
+/// effect and purity stay in lockstep across both. `library_exports` are the
+/// functions a library build exports, each with its module.
 #[must_use]
 pub fn check_semantics(
     sem: &Semantics,
     provided_import_fqs: IndexSet<String>,
+    library_exports: Option<&[(&ModuleSource, &Function)]>,
 ) -> SemanticDiagnostics {
     let mut diags = SemanticDiagnostics::default();
     let Some(state) = sem.state.as_ref() else {
@@ -420,7 +422,8 @@ pub fn check_semantics(
     let index = data.index(&sem.types);
     run_effect_checks(sem, &index, &mut diags.effects, &mut diags.rows);
     run_purity_checks(sem, &index, &mut diags.purity);
-    diags.exported_host_interfaces = exported_host_interfaces(sem, &index);
+    diags.exported_host_interfaces =
+        library_exports.map(|exports| exported_host_interfaces(sem, &index, exports));
     diags
 }
 
@@ -431,8 +434,8 @@ pub struct SemanticDiagnostics {
     pub purity: Vec<PurityError>,
     /// What each effect variable the bodies' calls minted was solved to.
     pub rows: EffectRows,
-    /// The `wasi:*` interfaces the program's `export fn`s hold.
-    pub exported_host_interfaces: IndexSet<String>,
+    /// The `wasi:*` interfaces a library's exports hold, for a library build.
+    pub exported_host_interfaces: Option<IndexSet<String>>,
 }
 
 impl SemanticDiagnostics {
@@ -1397,35 +1400,32 @@ fn held_by(
     held_in_body(annotations, index, &scan, current, Body::Block(body))
 }
 
-/// The `wasi:*` interfaces some `export fn` holds by what it declares, which a
-/// caller across the component boundary must hold too. A host import outside
-/// them is one only an `#[ambient]` body reaches.
-fn exported_host_interfaces(sem: &Semantics, index: &EffectIndex) -> IndexSet<String> {
+/// The `wasi:*` interfaces some function of `exports` holds by what it
+/// declares, which a caller across the component boundary must hold too. A
+/// host import outside them is one only an `#[ambient]` body reaches.
+fn exported_host_interfaces(
+    sem: &Semantics,
+    index: &EffectIndex,
+    exports: &[(&ModuleSource, &Function)],
+) -> IndexSet<String> {
     let interface_of: IndexMap<&EffectRef, &str> = index
         .interfaces
         .values()
         .filter_map(|(effect, fq)| Some((effect, fq.as_deref()?)))
         .collect();
     let mut out = IndexSet::default();
-    for (src, module) in &sem.modules {
-        let annotations = module_annotations(sem, src);
-        let exports = module.items.iter().flat_map(|item| match item {
-            Item::Function(func) => std::slice::from_ref(func),
-            Item::Impl(block) => &block.methods[..],
-            _ => &[],
-        });
-        for func in exports.filter(|func| func.is_export) {
-            let Some(body) = &func.body else {
-                continue;
-            };
-            let held = held_by(sem, annotations, index, func, body, []);
-            out.extend(
-                held.iter()
-                    .filter_map(|effect| interface_of.get(effect))
-                    .filter(|fq| fq.starts_with("wasi:"))
-                    .map(|fq| (*fq).to_string()),
-            );
-        }
+    for (src, func) in exports {
+        // The parser admits a bodyless function, which runs nothing.
+        let Some(body) = &func.body else {
+            continue;
+        };
+        let held = held_by(sem, module_annotations(sem, src), index, func, body, []);
+        out.extend(
+            held.iter()
+                .filter_map(|effect| interface_of.get(effect))
+                .filter(|fq| fq.starts_with("wasi:"))
+                .map(|fq| (*fq).to_string()),
+        );
     }
     out
 }
