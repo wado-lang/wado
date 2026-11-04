@@ -32,3 +32,10 @@ from ECMA-262's tables or from an engine, `core:icu` is right.
 ```sh
 wado test package-re
 ```
+
+`tests/generated/` holds what the oracles answered, committed so that CI needs
+neither:
+
+- `mise run oracle-re` asks Node's `RegExp` about each case in
+  `tests/oracle/cases.json`.
+- `mise run test262-re` reads test262's parse-phase negative tests.
