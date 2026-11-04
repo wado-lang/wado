@@ -8,11 +8,15 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use crate::attribute::{AMBIENT, BENIGN};
+use crate::attribute::AMBIENT;
+use crate::demanded_imports;
 use crate::hashmap::{IndexMap, IndexSet};
 
+use crate::component_model::Demand;
 use crate::module_source::ModuleSource;
-use crate::name::{DeclaredHead, FqTraitName, FqTypeName, TypeHead, mangle_local_method};
+use crate::name::{
+    DeclaredHead, FqTraitName, FqTypeName, TypeHead, is_wasi_fq, mangle_local_method,
+};
 use crate::resolve::{Resolution, Resolutions};
 use crate::tir::{
     EffectRef, EffectRows, FunctionRef, ResolvedType, RowFlow, TemplateId, TypeId, solve_row,
@@ -58,6 +62,9 @@ impl EffectKind {
 pub enum EffectFault {
     /// The caller does not hold what its callee requires.
     Missing(EffectKind),
+    /// The caller does not hold an import of the component its callee is in,
+    /// which demands every import for recording none of what it demands.
+    MissingUnrecorded(EffectKind),
     /// A `with` installs a handler whose methods perform what the installing
     /// function does not hold. `callee` names the effect handled.
     MissingForHandler(EffectKind),
@@ -65,8 +72,8 @@ pub enum EffectFault {
     UndeclaredByTrait,
     /// The callee's effects are left open, and the caller forwards none.
     MissingOpen,
-    /// A `#[benign]` argument names no effect in the function's module.
-    UnknownBenign,
+    /// An `#[ambient]` argument names no effect in the function's module.
+    UnknownAmbient,
     /// A function value performs an effect the `fn` type it is moved into
     /// does not declare.
     BeyondExpectedType(EffectKind),
@@ -98,6 +105,18 @@ impl From<EffectError> for Diagnostic {
                     e.callee
                 ),
             ),
+            EffectFault::MissingUnrecorded(kind) => (
+                Code::MissingEffect,
+                format!(
+                    "missing {} '{}' required by '{}': its component records none of what its \
+                     exports demand, so each of its `wasi:*` imports is demanded (a Wado \
+                     library records it in a `{}` section)",
+                    kind.noun(),
+                    e.missing_effect,
+                    e.callee,
+                    demanded_imports::SECTION_NAME,
+                ),
+            ),
             EffectFault::MissingForHandler(kind) => (
                 Code::MissingEffect,
                 format!(
@@ -121,10 +140,10 @@ impl From<EffectError> for Diagnostic {
                     e.callee
                 ),
             ),
-            EffectFault::UnknownBenign => (
+            EffectFault::UnknownAmbient => (
                 Code::UnknownType,
                 format!(
-                    "`#[benign({})]` on '{}' names no effect in scope",
+                    "`#[ambient({})]` on '{}' names no effect in scope",
                     e.missing_effect, e.callee
                 ),
             ),
@@ -371,7 +390,7 @@ fn resource_chain_effects<'a>(
 /// Effect checking over [`Semantics`], run after `annotate_bodies` so it sees
 /// every function, dead or live. Covers free-function, method, and static
 /// dispatch with resource injection, the effect / resource propagation closure,
-/// signature-resource inference, effect-parameter resolution, `#[benign]`,
+/// signature-resource inference, effect-parameter resolution, `#[ambient]`,
 /// handler-scope grants, and closure calls, over user-authored modules.
 #[must_use]
 pub fn check_effects_semantic(sem: &Semantics) -> Vec<EffectError> {
@@ -391,11 +410,13 @@ pub fn check_effects_semantic(sem: &Semantics) -> Vec<EffectError> {
 
 /// Both Design-B semantic diagnostics, computed in one pass that builds the
 /// shared `OwnedEffectData` once. Used by the batch driver and the LSP so
-/// effect and purity stay in lockstep across both.
+/// effect and purity stay in lockstep across both. `library_exports` are the
+/// functions a library build exports, each with its module.
 #[must_use]
 pub fn check_semantics(
     sem: &Semantics,
     provided_import_fqs: IndexSet<String>,
+    library_exports: Option<&[(&ModuleSource, &Function)]>,
 ) -> SemanticDiagnostics {
     let mut diags = SemanticDiagnostics::default();
     let Some(state) = sem.state.as_ref() else {
@@ -405,6 +426,8 @@ pub fn check_semantics(
     let index = data.index(&sem.types);
     run_effect_checks(sem, &index, &mut diags.effects, &mut diags.rows);
     run_purity_checks(sem, &index, &mut diags.purity);
+    diags.exported_host_interfaces =
+        library_exports.map(|exports| exported_host_interfaces(sem, &index, exports));
     diags
 }
 
@@ -415,6 +438,8 @@ pub struct SemanticDiagnostics {
     pub purity: Vec<PurityError>,
     /// What each effect variable the bodies' calls minted was solved to.
     pub rows: EffectRows,
+    /// The `wasi:*` interfaces a library's exports hold, for a library build.
+    pub exported_host_interfaces: Option<IndexSet<String>>,
 }
 
 impl SemanticDiagnostics {
@@ -479,7 +504,7 @@ fn run_effect_checks(
                 // What the initializer performs is the purity check's; only an
                 // unknown name is reported here, as on a function.
                 Item::Global(global) => {
-                    benign_effects(&global.name, &global.attributes, src, index, out);
+                    admitted_effects(&global.name, &global.attributes, src, index, out);
                 }
                 Item::Test(test) => {
                     check_test_effects_sem(sem, src, test, index, out, solved);
@@ -1121,24 +1146,27 @@ fn binding_performed_effects(
     annotations: Option<&TypeAnnotations>,
     index: &EffectIndex,
     binding: &EffectHandlerBinding,
+    rows: &Rows,
 ) -> IndexMap<DeclaredHead, Vec<EffectRef>> {
     let mut performed: IndexMap<DeclaredHead, Vec<EffectRef>> = IndexMap::default();
-    for entry in annotations
+    for facts in annotations
         .into_iter()
         .flat_map(|a| a.all(|f| &f.handler_bindings, binding.id))
-        .flat_map(|facts| &facts.effects)
     {
-        let Some(def) = entry.impl_def else {
-            continue;
-        };
-        let forwarded = index
-            .forwarding_blocks
-            .contains(&def)
-            .then(|| EffectRef::Concrete(entry.effect.clone()));
-        let effects = performed.entry(entry.effect.clone()).or_default();
-        for effect in index.block_effects[&def].iter().cloned().chain(forwarded) {
-            if !effects.contains(&effect) {
-                effects.push(effect);
+        for entry in &facts.effects {
+            let Some(def) = entry.impl_def else {
+                continue;
+            };
+            let forwarded = index
+                .forwarding_blocks
+                .contains(&def)
+                .then(|| EffectRef::Concrete(entry.effect.clone()));
+            let installed = index.installed_effects(def, facts.handler_type, rows);
+            let effects = performed.entry(entry.effect.clone()).or_default();
+            for effect in installed.into_iter().chain(forwarded) {
+                if !effects.contains(&effect) {
+                    effects.push(effect);
+                }
             }
         }
     }
@@ -1193,27 +1221,61 @@ fn operation_requirements(
     index: &EffectIndex,
     owner: Option<DefId>,
 ) -> Vec<EffectRef> {
+    operation_demands(sem, index, owner).all()
+}
+
+/// [`operation_requirements`], split by why each is demanded.
+#[derive(Default)]
+struct OperationDemands {
+    certain: Vec<EffectRef>,
+    /// A `wasi:*` import of a component that records nothing of what its
+    /// exports demand, so every one is.
+    unrecorded: Vec<EffectRef>,
+}
+
+impl OperationDemands {
+    fn all(&self) -> Vec<EffectRef> {
+        self.certain
+            .iter()
+            .chain(&self.unrecorded)
+            .cloned()
+            .collect()
+    }
+}
+
+fn operation_demands(
+    sem: &Semantics,
+    index: &EffectIndex,
+    owner: Option<DefId>,
+) -> OperationDemands {
+    let mut demands = OperationDemands::default();
     let Some((effect, cm_fq)) = owner.and_then(|def| index.interfaces.get(&def)) else {
-        return Vec::new();
+        return demands;
     };
-    let Some(fq) = cm_fq else {
-        return vec![effect.clone()];
-    };
-    if let Some(registry) = sem.cm_interface_registry()
+    if let Some(fq) = cm_fq
+        && let Some(registry) = sem.cm_interface_registry()
         && registry.is_component_interface(fq)
     {
         // Composition-relative: the imported interface is composed away, so its
         // operations demand the dependency's own host-leaf capabilities. A
         // types-only leaf has no operation to perform.
-        return registry
-            .host_leaf_imports_for(fq)
-            .iter()
-            .filter(|leaf| registry.declares_functions(leaf))
-            .filter(|leaf| !index.provided_import_fqs.contains(leaf.as_str()))
-            .filter_map(|leaf| index.effect_by_cm_fq.get(leaf).cloned())
-            .collect();
+        for (leaf, demand) in registry
+            .demanded_imports_for(fq)
+            .filter(|(leaf, _)| registry.declares_functions(leaf))
+            .filter(|(leaf, _)| !index.provided_import_fqs.contains(leaf.as_str()))
+        {
+            let Some(effect) = index.effect_by_cm_fq.get(leaf) else {
+                continue;
+            };
+            match demand {
+                Demand::Certain => demands.certain.push(effect.clone()),
+                Demand::Unrecorded => demands.unrecorded.push(effect.clone()),
+            }
+        }
+        return demands;
     }
-    vec![effect.clone()]
+    demands.certain.push(effect.clone());
+    demands
 }
 
 /// What the elaborator recorded about one `impl` block.
@@ -1281,34 +1343,20 @@ fn check_function_effects_sem(
     out: &mut Vec<EffectError>,
     solved: &mut EffectRows,
 ) {
-    // `#[benign(E)]` admits `E` in the body without a `with E` clause.
-    let benign = benign_effects(&func.name, &func.attrs, module, index, out);
+    let admitted = admitted_effects(&func.name, &func.attrs, module, index, out);
     let Some(body) = &func.body else {
         return;
     };
     let caller_key = func.id;
     let annotations = module_annotations(sem, module);
-
-    // Declared effects, plus resources that appear in the signature so a
-    // `fn f(s: Stream<u8>)` need not repeat `with Stream`.
-    let mut current: IndexSet<EffectRef> = index
-        .fn_effects
-        .get(&caller_key)
-        .cloned()
-        .unwrap_or_default()
-        .into_iter()
-        .collect();
-    let scan = ResourceScan {
-        tt: &sem.types,
-        resolutions: index.resolutions,
-        members: index.members,
-    };
-    if let Some(ann) = annotations {
-        add_signature_resources(ann, caller_key, &scan, &mut current);
-    }
-    current.extend(benign);
-    current.extend(held.iter().cloned());
-    let current = held_in_body(annotations, index, &scan, current, Body::Block(body));
+    let current = held_by(
+        sem,
+        annotations,
+        index,
+        func,
+        body,
+        admitted.into_iter().chain(held.iter().cloned()),
+    );
 
     // Parameter name → type id (aligned with the recorded signature types),
     // for resolving indirect calls through function-typed parameters.
@@ -1324,15 +1372,74 @@ fn check_function_effects_sem(
         current,
         param_types,
         body,
-        holds_every_effect: func.attrs.iter().any(|attr| attr.name == AMBIENT),
+        holds_every_effect: false,
     };
     walk_body_effects(sem, module, annotations, index, walk, out, solved);
 }
 
-/// A test holds every effect, as an `#[ambient]` body does, so nothing it
-/// performs is missing. A function value it moves into a `fn` type is still
-/// bound by that type's row: the callee holding the value performs it without
-/// holding what the test holds.
+/// What `func`'s body holds: its declared effects, the resources its signature
+/// names, so a `fn f(s: Stream<u8>)` need not repeat `with Stream`, and
+/// `granted`, all expanded through the propagation closure.
+fn held_by(
+    sem: &Semantics,
+    annotations: Option<&TypeAnnotations>,
+    index: &EffectIndex,
+    func: &Function,
+    body: &Block,
+    granted: impl IntoIterator<Item = EffectRef>,
+) -> IndexSet<EffectRef> {
+    let mut current: IndexSet<EffectRef> = index
+        .fn_effects
+        .get(&func.id)
+        .cloned()
+        .unwrap_or_default()
+        .into_iter()
+        .collect();
+    let scan = ResourceScan {
+        tt: &sem.types,
+        resolutions: index.resolutions,
+        members: index.members,
+    };
+    if let Some(ann) = annotations {
+        add_signature_resources(ann, func.id, &scan, &mut current);
+    }
+    current.extend(granted);
+    held_in_body(annotations, index, &scan, current, Body::Block(body))
+}
+
+/// The `wasi:*` interfaces some function of `exports` holds by what it
+/// declares, which a caller across the component boundary must hold too. A
+/// host import outside them is one only an `#[ambient]` body reaches.
+fn exported_host_interfaces(
+    sem: &Semantics,
+    index: &EffectIndex,
+    exports: &[(&ModuleSource, &Function)],
+) -> IndexSet<String> {
+    let interface_of: IndexMap<&EffectRef, &str> = index
+        .interfaces
+        .values()
+        .filter_map(|(effect, fq)| Some((effect, fq.as_deref()?)))
+        .collect();
+    let mut out = IndexSet::default();
+    for (src, func) in exports {
+        // The parser admits a bodyless function, which runs nothing.
+        let Some(body) = &func.body else {
+            continue;
+        };
+        let held = held_by(sem, module_annotations(sem, src), index, func, body, []);
+        out.extend(
+            held.iter()
+                .filter_map(|effect| interface_of.get(effect))
+                .filter(|fq| is_wasi_fq(fq))
+                .map(|fq| (*fq).to_string()),
+        );
+    }
+    out
+}
+
+/// A test holds every effect, so nothing it performs is missing. A function
+/// value it moves into a `fn` type is still bound by that type's row: the
+/// callee holding the value performs it without holding what the test holds.
 fn check_test_effects_sem(
     sem: &Semantics,
     module: &ModuleSource,
@@ -1705,43 +1812,38 @@ impl AstVisitor<'_> for TypePatternSites {
     }
 }
 
-/// The effects a `#[benign(E, F)]` on `owner`, a function or a global, admits,
-/// reporting each name that reaches no effect in `module`.
-fn benign_effects(
+/// The effects an `#[ambient(E, F)]` on `owner`, a function or a global,
+/// admits, reporting each name that reaches no effect in `module`.
+fn admitted_effects(
     owner: &str,
     attrs: &[Attribute],
     module: &ModuleSource,
     index: &EffectIndex,
     out: &mut Vec<EffectError>,
 ) -> Vec<EffectRef> {
-    let mut benign = Vec::new();
-    for (name, span) in benign_effect_names(attrs) {
-        match effect_named_in(&name, module, index) {
-            Some(effect) => benign.push(effect),
+    let mut admitted = Vec::new();
+    for (name, span) in ambient_effect_names(attrs) {
+        match effect_named_in(name, module, index) {
+            Some(effect) => admitted.push(effect),
             None => out.push(EffectError {
                 callee: owner.to_string(),
-                missing_effect: name,
-                fault: EffectFault::UnknownBenign,
+                missing_effect: name.to_string(),
+                fault: EffectFault::UnknownAmbient,
                 span,
                 module: module.source_path(),
             }),
         }
     }
-    benign
+    admitted
 }
 
-/// `#[benign(E, F)]` effect names declared on an item, each with its
+/// The effect names `#[ambient(E, F)]` lists on an item, each with the
 /// attribute's span.
-fn benign_effect_names(attrs: &[Attribute]) -> Vec<(String, Span)> {
+fn ambient_effect_names(attrs: &[Attribute]) -> impl Iterator<Item = (&str, Span)> {
     attrs
         .iter()
-        .filter(|attr| attr.name == BENIGN)
-        .flat_map(|attr| {
-            attr.args
-                .iter()
-                .map(|arg| (arg.as_str().to_string(), attr.span))
-        })
-        .collect()
+        .filter(|attr| attr.name == AMBIENT)
+        .flat_map(|attr| attr.args.iter().map(|arg| (arg.as_str(), attr.span)))
 }
 
 /// Best-effort display name for a call's callee, for the diagnostic message.
@@ -1790,7 +1892,9 @@ struct CalleeEffects {
     /// The capability dispatching a host-backed operation demands. It belongs
     /// to the path that names the interface, not to the callee's signature, so a
     /// walk may word the two apart.
-    dispatched: Vec<EffectRef>,
+    dispatched: OperationDemands,
+    /// What a method of a resource demands besides its declaration.
+    resource: OperationDemands,
     /// What each of the callee's effect parameters stood for at the call.
     params: IndexMap<String, IndexSet<EffectRef>>,
     /// The callee's declared return type, which the call's type instantiates.
@@ -1816,7 +1920,8 @@ fn call_site_effects(
     let bare = |name: String, declared: Vec<EffectRef>| CalleeEffects {
         name,
         declared,
-        dispatched: Vec::new(),
+        dispatched: OperationDemands::default(),
+        resource: OperationDemands::default(),
         params: IndexMap::default(),
         returns: None,
     };
@@ -1859,15 +1964,17 @@ fn call_site_effects(
         .map(|(func_ref, self_in_args)| {
             let dispatches_through_path = func_ref.method_info.is_none()
                 && !matches!(func_ref.module_source, ModuleSource::Binding { .. });
-            let resolved = dispatch_effects(sem, index, &func_ref, self_in_args, args, rows);
+            let (resolved, resource) =
+                dispatch_effects(sem, index, &func_ref, self_in_args, args, rows);
             CalleeEffects {
                 name: callee_name(callee).to_string(),
                 declared: resolved.required,
                 dispatched: if dispatches_through_path {
-                    operation_requirements(sem, index, owner)
+                    operation_demands(sem, index, owner)
                 } else {
-                    Vec::new()
+                    OperationDemands::default()
                 },
+                resource,
                 params: resolved.params,
                 returns: index.callee_return(&func_ref),
             }
@@ -1875,9 +1982,11 @@ fn call_site_effects(
         .collect()
 }
 
-/// What a dispatch to `func_ref` with `args` requires. `self_in_args` says a
-/// qualified (UFCS) call spells the receiver as its first argument, so the
-/// arguments align with the callee's full parameter list.
+/// What a dispatch to `func_ref` with `args` requires: what the callee
+/// declares, and what a method of a resource demands besides
+/// ([`EffectIndex::resource_demands`]). `self_in_args` says a qualified (UFCS)
+/// call spells the receiver as its first argument, so the arguments align with
+/// the callee's full parameter list.
 fn dispatch_effects(
     sem: &Semantics,
     index: &EffectIndex<'_>,
@@ -1885,7 +1994,7 @@ fn dispatch_effects(
     self_in_args: bool,
     args: &[Expr],
     rows: &Rows,
-) -> Resolved {
+) -> (Resolved, OperationDemands) {
     // A synthesized template (a derived method) is a method of the type it is
     // derived for, so it takes `self`.
     let has_receiver = match func_ref.template.as_ref().and_then(TemplateId::def) {
@@ -1894,13 +2003,13 @@ fn dispatch_effects(
             .contains(&index.resolutions.defs().ast_id(def)),
         None => func_ref.method_info.is_some(),
     };
-    let effects = index.method_effects(sem, func_ref);
+    let effects = index.method_effects(func_ref);
     let brought = if effects.iter().any(EffectRef::is_param) {
         index.brought_by_dispatch(func_ref, rows)
     } else {
         Brought::default()
     };
-    resolve_effect_params(
+    let resolved = resolve_effect_params(
         sem,
         &effects,
         &index.method_param_types(func_ref),
@@ -1908,7 +2017,8 @@ fn dispatch_effects(
         args,
         &brought,
         rows,
-    )
+    );
+    (resolved, index.resource_demands(sem, func_ref))
 }
 
 /// The effects each closure literal's body performs, by the literal's node,
@@ -1921,12 +2031,12 @@ struct SemEffectWalker<'a> {
     annotations: Option<&'a TypeAnnotations>,
     index: &'a EffectIndex<'a>,
     /// Effects available at the current point: the function's declared +
-    /// signature + benign + propagated set, plus any effects granted by an
-    /// enclosing `with H => … do { … }` handler scope (pushed / popped as the
-    /// walk enters / leaves the do-block body).
+    /// signature + ambient + propagated set, plus any effects granted
+    /// by an enclosing `with H => … do { … }` handler scope (pushed / popped as
+    /// the walk enters / leaves the do-block body).
     current: IndexSet<EffectRef>,
-    /// A `test` or `#[ambient]` body, which holds every effect: nothing it
-    /// performs is missing, whatever `current` lists.
+    /// A `test` body, which holds every effect: nothing it performs is
+    /// missing, whatever `current` lists.
     holds_every_effect: bool,
     /// This function's parameter name → type id, for resolving the callee of an
     /// indirect call through a function-typed parameter (which leaves no
@@ -1968,16 +2078,20 @@ impl EffectIndex<'_> {
             .collect()
     }
 
-    /// Effects a method dispatch requires: the callee's declared effects plus,
-    /// for a direct (non-trait) method on a `resource`, what an operation of the
-    /// resource demands ([`operation_requirements`]).
-    fn method_effects(&self, sem: &Semantics, func_ref: &FunctionRef) -> Vec<EffectRef> {
+    /// Effects a method dispatch's callee declares.
+    fn method_effects(&self, func_ref: &FunctionRef) -> Vec<EffectRef> {
         // A trait method's `with` clause bounds every impl, and a bound
         // dispatch has no impl to read: the declaration is what a call requires.
-        let mut effects = match self.declared_by_trait(func_ref) {
+        match self.declared_by_trait(func_ref) {
             Some(declared) => declared.to_vec(),
             None => self.callee_entry(func_ref, self.fn_effects, self.mangled_index),
-        };
+        }
+    }
+
+    /// What dispatching `func_ref` demands besides its declaration: for a
+    /// direct (non-trait) method on a `resource`, what an operation of the
+    /// resource demands ([`operation_demands`]).
+    fn resource_demands(&self, sem: &Semantics, func_ref: &FunctionRef) -> OperationDemands {
         if let Some(method_info) = &func_ref.method_info
             && method_info.trait_name.is_none()
             && let Some(def) = method_info.receiver().def()
@@ -1987,13 +2101,9 @@ impl EffectIndex<'_> {
                 self.interfaces.contains_key(&def),
                 "a resource is an operation owner"
             );
-            for demanded in operation_requirements(sem, self, Some(def)) {
-                if !effects.contains(&demanded) {
-                    effects.push(demanded);
-                }
-            }
+            return operation_demands(sem, self, Some(def));
         }
-        effects
+        OperationDemands::default()
     }
 
     /// What a dispatch's type arguments bring to the callee's open effect
@@ -2049,7 +2159,7 @@ impl EffectIndex<'_> {
                     .map(|b| &**b)
                     .unwrap_or_default();
                 brought.effects.extend(
-                    self.close_over_args(declared, bounds, &target_args, &receiver_args)
+                    self.close_over_args(declared, bounds, &target_args, &receiver_args, None)
                         .into_iter()
                         .filter(|e| !e.is_param()),
                 );
@@ -2060,6 +2170,7 @@ impl EffectIndex<'_> {
                         &entry.bounds,
                         &entry.target_args,
                         &receiver_args,
+                        None,
                     )),
                     None => brought.open = true,
                 }
@@ -2183,6 +2294,7 @@ impl EffectIndex<'_> {
                         &entry.bounds,
                         &entry.target_args,
                         args,
+                        None,
                     ));
                 }
                 None => match self.blanket_for(*key, arg) {
@@ -2215,13 +2327,16 @@ impl EffectIndex<'_> {
     /// where the impl's `target_args` write the parameter in a function type's
     /// row, which is how an adapter's impl reaches the closure it holds. A
     /// variable in that row is solved where the effects are read. An argument
-    /// that is neither leaves the parameter.
+    /// that is neither leaves the parameter. A blanket impl's receiver, the
+    /// type itself, answers the bound on the impl's target where `receiver`
+    /// spells it; a call leaves that to `blanket_for`.
     fn close_over_args(
         &self,
         declared: &[EffectRef],
         bounds: &[ReceiverBound],
         target_args: &[FqTypeName],
         args: &[FqTypeName],
+        receiver: Option<&[TypeArg<'_>]>,
     ) -> IndexSet<EffectRef> {
         let mut out: IndexSet<EffectRef> = IndexSet::default();
         for effect in declared {
@@ -2235,15 +2350,18 @@ impl EffectIndex<'_> {
             }
             let mut brought = Brought::default();
             for bound in bounds {
-                // The empty path is a blanket impl's receiver, the type
-                // itself, which `blanket_for` answers.
-                if let Some(arg) = bound
-                    .path
-                    .as_deref()
-                    .filter(|path| !path.is_empty())
-                    .and_then(|path| type_arg_at(args, path))
-                {
-                    self.bring(&bound.traits, &[type_arg(arg)], &mut brought);
+                match bound.path.as_deref() {
+                    None => {}
+                    Some([]) => {
+                        if let Some(receiver) = receiver {
+                            self.bring(&bound.traits, receiver, &mut brought);
+                        }
+                    }
+                    Some(path) => {
+                        if let Some(arg) = type_arg_at(args, path) {
+                            self.bring(&bound.traits, &[type_arg(arg)], &mut brought);
+                        }
+                    }
                 }
             }
             out.extend(brought.effects);
@@ -2253,6 +2371,40 @@ impl EffectIndex<'_> {
             }
         }
         out
+    }
+
+    /// What installing impl block `block` for a handler of type `handler`
+    /// performs: what its methods declare, an effect parameter of the impl
+    /// closed over the handler's type arguments as a dispatch to one of the
+    /// methods closes it.
+    fn installed_effects(&self, block: DefId, handler: TypeId, rows: &Rows) -> IndexSet<EffectRef> {
+        let declared: Vec<EffectRef> = self.block_effects[&block].iter().cloned().collect();
+        let defs = self.resolutions.defs();
+        let bounds = defs
+            .members(block)
+            .iter()
+            .find_map(|&method| self.receiver_bounds.get(&defs.ast_id(method)))
+            .map(|bounds| &**bounds)
+            .unwrap_or_default();
+        let target = self
+            .types
+            .fq_type_name_with_rows(self.types.impl_target_whole(block));
+        let spellings = self.spellings(handler, rows);
+        // A blanket impl's target is its own parameter, which no spelling of
+        // the handler names and which has no arguments to fill.
+        let args = spellings
+            .iter()
+            .find(|spelling| spelling.head() == target.head())
+            .map(|spelling| spelling.args().to_vec())
+            .unwrap_or_default();
+        let receiver: Vec<TypeArg<'_>> = spellings.iter().map(type_arg).collect();
+        self.close_over_args(
+            &declared,
+            bounds,
+            &spelled_target_args(self.types, block),
+            &args,
+            Some(&receiver),
+        )
     }
 
     /// The effects the trait method behind a dispatch declares. `None` where
@@ -2673,13 +2825,13 @@ impl AstVisitor<'_> for SemEffectWalker<'_> {
                 .collect();
             for info in &iterators {
                 for func_ref in [&info.into_iter, &info.next] {
-                    let resolved =
+                    let (resolved, resource) =
                         dispatch_effects(self.sem, self.index, func_ref, false, &[], &self.rows);
                     let callee = func_ref
                         .method_info
                         .as_ref()
                         .map_or(func_ref.name.as_str(), |m| m.method_name.as_str());
-                    self.report_missing(&resolved.required, callee, for_of.span);
+                    self.report_resolved(&resolved, &resource, callee, for_of.span);
                 }
             }
         }
@@ -2699,7 +2851,7 @@ impl AstVisitor<'_> for SemEffectWalker<'_> {
                 for binding in &with_handler.handlers {
                     ast::walk_expr(self, &binding.handler);
                     for (handled, effects) in
-                        binding_performed_effects(self.annotations, self.index, binding)
+                        binding_performed_effects(self.annotations, self.index, binding, &self.rows)
                     {
                         let effects: Vec<EffectRef> = effects
                             .into_iter()
@@ -2741,7 +2893,7 @@ impl AstVisitor<'_> for SemEffectWalker<'_> {
             Expr::MethodCall(method_call) => {
                 let sem = self.sem;
                 for dispatch in sem.method_dispatches_at(method_call.id) {
-                    let resolved = dispatch_effects(
+                    let (resolved, resource) = dispatch_effects(
                         sem,
                         self.index,
                         &dispatch.function_ref,
@@ -2751,12 +2903,17 @@ impl AstVisitor<'_> for SemEffectWalker<'_> {
                     );
                     let returns = self.index.callee_return(&dispatch.function_ref);
                     self.solve_rows(returns, method_call.id, &resolved.params);
-                    self.report_missing(&resolved.required, &method_call.method, method_call.span);
+                    self.report_resolved(
+                        &resolved,
+                        &resource,
+                        &method_call.method,
+                        method_call.span,
+                    );
                 }
             }
             Expr::StaticMethodCall(static_call) => {
                 for (func_ref, self_in_args) in dispatches_at(self.annotations, static_call.id) {
-                    let resolved = dispatch_effects(
+                    let (resolved, resource) = dispatch_effects(
                         self.sem,
                         self.index,
                         &func_ref,
@@ -2766,7 +2923,12 @@ impl AstVisitor<'_> for SemEffectWalker<'_> {
                     );
                     let returns = self.index.callee_return(&func_ref);
                     self.solve_rows(returns, static_call.id, &resolved.params);
-                    self.report_missing(&resolved.required, &static_call.method, static_call.span);
+                    self.report_resolved(
+                        &resolved,
+                        &resource,
+                        &static_call.method,
+                        static_call.span,
+                    );
                 }
             }
             _ => {}
@@ -2865,8 +3027,33 @@ impl SemEffectWalker<'_> {
         for site in sites {
             self.solve_rows(site.returns, id, &site.params);
             self.report_missing(&site.declared, &site.name, span);
-            self.report_missing(&site.dispatched, &site.name, span);
+            self.report_dispatched(&site.dispatched, &site.name, span);
+            self.report_dispatched(&site.resource, &site.name, span);
         }
+    }
+
+    /// Report what dispatching a callee demands, saying where its component
+    /// records nothing.
+    fn report_dispatched(&mut self, demands: &OperationDemands, callee: &str, span: Span) {
+        self.report_missing(&demands.certain, callee, span);
+        self.report_missing_as(
+            &demands.unrecorded,
+            callee,
+            span,
+            EffectFault::MissingUnrecorded,
+        );
+    }
+
+    /// Report what a dispatch to one callee requires ([`dispatch_effects`]).
+    fn report_resolved(
+        &mut self,
+        resolved: &Resolved,
+        resource: &OperationDemands,
+        callee: &str,
+        span: Span,
+    ) {
+        self.report_missing(&resolved.required, callee, span);
+        self.report_dispatched(resource, callee, span);
     }
 
     /// Record what each variable a call's type carries out stands for. Where
@@ -3136,9 +3323,8 @@ fn run_purity_checks(sem: &Semantics, index: &EffectIndex, out: &mut Vec<PurityE
                 }
                 Item::Global(global) => {
                     // An unknown name is the effect check's to report.
-                    walker.granted = benign_effect_names(&global.attributes)
-                        .into_iter()
-                        .filter_map(|(name, _)| effect_named_in(&name, src, index))
+                    walker.granted = ambient_effect_names(&global.attributes)
+                        .filter_map(|(name, _)| effect_named_in(name, src, index))
                         .collect();
                     walker.check(PureContext::GlobalInitializer, &global.initializer);
                     walker.granted.clear();
@@ -3341,16 +3527,15 @@ impl<'a> PurityWalker<'a> {
         callee: &str,
         span: Span,
     ) {
-        let effects = dispatch_effects(
+        let (resolved, resource) = dispatch_effects(
             self.sem,
             self.index,
             func_ref,
             self_in_args,
             args,
             &Rows::default(),
-        )
-        .required;
-        if self.unanswered(&effects) {
+        );
+        if self.unanswered(&resolved.required) || self.unanswered(&resource.all()) {
             self.flag(Impurity::Call(callee.to_string()), span);
         }
     }
@@ -3382,7 +3567,7 @@ impl<'a> PurityWalker<'a> {
         // `dispatched` is left to `flag_if_operation`, which asks the owner
         // once per site rather than once per dispatch.
         for site in sites {
-            if self.unanswered(&site.declared) {
+            if self.unanswered(&site.declared) || self.unanswered(&site.resource.all()) {
                 self.flag(Impurity::Call(site.name), span);
             }
         }
@@ -3438,9 +3623,12 @@ impl AstVisitor<'_> for PurityWalker<'_> {
                 }
                 let mut added: Vec<EffectRef> = Vec::new();
                 for binding in &with_handler.handlers {
-                    for (handled, effects) in
-                        binding_performed_effects(self.annotations, self.index, binding)
-                    {
+                    for (handled, effects) in binding_performed_effects(
+                        self.annotations,
+                        self.index,
+                        binding,
+                        &Rows::default(),
+                    ) {
                         if self.unanswered(&effects) {
                             self.flag(
                                 Impurity::Install(handled.name().to_string()),

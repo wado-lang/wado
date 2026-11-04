@@ -38,6 +38,27 @@ fn resolved_modules_of(source: &str) -> Vec<String> {
         &host,
         Some("entry.wado"),
         OptLevel::O2,
+<<<<<<< HEAD
+||||||| c0bdae6df
+        None,
+        None,
+        wado_compiler::OptOverrides::default(),
+        &[],
+        None,
+        &wado_compiler::param_resolution::ParamInputs::default(),
+        wado_compiler::kiln::InvocationIndex::default(),
+        1,
+=======
+        None,
+        None,
+        wado_compiler::OptOverrides::default(),
+        &[],
+        None,
+        &wado_compiler::param_resolution::ParamInputs::default(),
+        wado_compiler::kiln::InvocationIndex::default(),
+        1,
+        None,
+>>>>>>> origin/main
     ))
     .expect("dump succeeds");
     dump.tir_modules

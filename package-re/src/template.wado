@@ -1,0 +1,100 @@
+//! The tags `re` and `rex`, and what a hole may hold.
+
+use { Flag, Modified, Node } from "./ast.wado";
+use { Hole, Syntax } from "./parse.wado";
+use { Regex, build } from "./regex.wado";
+
+/// What a hole holds: text, matched as it is, or a pattern.
+pub variant Part {
+    Text(String),
+    Pattern(Regex),
+}
+
+/// What a value is as a hole of `re` or `rex`.
+pub trait PatternPart with () {
+    fn part(&self) -> Part;
+}
+
+impl PatternPart for String {
+    fn part(&self) -> Part {
+        return Part::Text(*self);
+    }
+}
+
+impl PatternPart for StrSlice {
+    fn part(&self) -> Part {
+        return Part::Text(self.to_string());
+    }
+}
+
+impl PatternPart for char {
+    fn part(&self) -> Part {
+        return Part::Text(`${*self}`);
+    }
+}
+
+impl PatternPart for Regex {
+    fn part(&self) -> Part {
+        return Part::Pattern(*self);
+    }
+}
+
+/// The pattern of a template, its holes in their places.
+struct Template {
+    syntax: Syntax,
+    /// The literal text, which the parser reads.
+    text: String,
+    holes: List<Hole>,
+}
+
+impl Template {
+    fn hole(&mut self, part: Part) {
+        let node = match part {
+            Text(text) => {
+                let mut chars: List<Node> = [];
+                for let c of text.chars() {
+                    chars.push(Node::Char(c as u32));
+                }
+                Node::Concat(chars);
+            },
+            // A pattern keeps its meaning under whatever modifiers enclose
+            // the hole.
+            Pattern(regex) => Node::Modified(Modified {
+                add: Flag::none(),
+                remove: Flag::all(),
+                body: regex.tree,
+            }),
+        };
+        self.holes.push(Hole { offset: self.text.len(), node });
+    }
+
+    fn build(&self) -> Regex {
+        return match build(self.text.as_str_slice(), self.syntax, self.holes) {
+            Ok(regex) => regex,
+            Err(e) => panic(`malformed pattern: ${e}`),
+        };
+    }
+}
+
+fn gather<T: ReflectTemplate<Holes = [..V]>, ..V: PatternPart>(t: &T, syntax: Syntax) -> Regex {
+    let mut template = Template { syntax, text: "", holes: [] };
+    for let h of ReflectTemplate::<T>::members() {
+        template.text.push_str(h.lit(t));
+        template.hole(h.get(t).part());
+    }
+    template.text.push_str(ReflectTemplate::<T>::tail(t));
+    return template.build();
+}
+
+/// The regular expression a template spells. A hole holding text matches that
+/// text; one holding a `Regex` matches what it matches, its groups numbered
+/// where they fall. A malformed pattern panics.
+pub fn re<T: ReflectTemplate<Holes = [..V]>, ..V: PatternPart>(t: T) -> Regex {
+    return gather(&t, Syntax::Plain);
+}
+
+/// `re`, with Perl's `/x`: outside a class, whitespace is ignored and `#`
+/// comments out the rest of the line.
+pub fn rex<T: ReflectTemplate<Holes = [..V]>, ..V: PatternPart>(t: T) -> Regex {
+    return gather(&t, Syntax::Extended);
+}

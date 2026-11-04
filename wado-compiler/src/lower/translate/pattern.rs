@@ -1348,36 +1348,20 @@ impl<'a> PatternLowerer<'a> {
                 TirExpr::new(TirExprKind::Block(block), TypeTable::BOOL, span)
             }
             TirPattern::Or(alternatives) => {
-                let temp_index = self.alloc_local(pattern_type);
-                let temp_name = format!("$or_{temp_index}");
-                let let_stmt = TirStmt::new(
-                    TirStmtKind::Let {
-                        name: temp_name.clone(),
-                        local_index: temp_index,
-                        is_mut: false,
-                        type_id: pattern_type,
-                        value,
-                        storage: LetStorage::Planned,
-                    },
-                    span,
-                );
+                // Every alternative reads the value, so a place is re-read
+                // rather than bound: a temp each alternative binds again is
+                // one the fold moves out of, and so copies the place into.
+                let mut stmts = Vec::new();
+                let base = self.pattern_base(value, span, &mut stmts, type_table);
 
                 // Alternatives are tried in order, first match wins, so each
                 // carries its own copy of the continuation — that is what
                 // re-tests the rest of the pattern per alternative.
                 let mut checks = bool_lit(false, span);
                 for alternative in alternatives.iter().rev() {
-                    let bound = TirExpr::new(
-                        TirExprKind::Local {
-                            index: temp_index,
-                            name: temp_name.clone(),
-                        },
-                        pattern_type,
-                        span,
-                    );
                     let check = self.build_pattern_check(
                         alternative,
-                        bound,
+                        base.clone(),
                         pattern_type,
                         span,
                         type_table,
@@ -1394,10 +1378,8 @@ impl<'a> PatternLowerer<'a> {
                     );
                 }
 
-                let block = TirBlock::new(
-                    vec![let_stmt, TirStmt::new(TirStmtKind::Expr(checks), span)],
-                    span,
-                );
+                stmts.push(TirStmt::new(TirStmtKind::Expr(checks), span));
+                let block = TirBlock::new(stmts, span);
                 TirExpr::new(TirExprKind::Block(block), TypeTable::BOOL, span)
             }
             TirPattern::Range {
@@ -1790,7 +1772,7 @@ impl<'a> PatternLowerer<'a> {
     ) {
         let local_type = type_table.get_local_type(local_index, &self.locals);
         let value = coerce_value_to_binding(value, pattern_type, type_table, span);
-        let value = if type_table.type_key(local_type) == type_table.type_key(pattern_type) {
+        let value = if type_table.same_type(local_type, pattern_type) {
             value
         } else {
             box_literal(value, local_type, type_table, span)

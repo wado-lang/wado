@@ -139,9 +139,9 @@ pub enum InsecureRandom {
     /// against denial of service, so a guest serving untrusted input needs it
     /// unpredictable.
     Host,
-    /// The same on every run, so a metered test's fuel is a function of the
-    /// program: `HashMap::new` hashes under `insecure-seed`, and a seed changes
-    /// how far its probes go.
+    /// The same on every run, so what a test's run measures (fuel, coverage, a
+    /// profile) is a function of the program: `HashMap::new` hashes under
+    /// `insecure-seed`, and a seed changes how far its probes go.
     Fixed,
 }
 
@@ -623,9 +623,8 @@ pub fn create_store(
 /// Like [`create_store`], but the guest's stdout/stderr are captured into
 /// in-memory pipes instead of inherited — used by `wado test` so a
 /// test's own prints can be attributed to its result instead of racing
-/// directly onto the host's real stdout/stderr. A metered test's insecure
-/// randomness is [`InsecureRandom::Fixed`]; only a test, which serves no
-/// untrusted input, may give up its unpredictability.
+/// directly onto the host's real stdout/stderr. Only a test, which serves no
+/// untrusted input, may make its insecure randomness [`InsecureRandom::Fixed`].
 ///
 /// # Errors
 ///
@@ -636,12 +635,8 @@ pub fn create_test_store(
     program: &str,
     eval: EvalSession,
     process: ProcessGrant,
+    insecure_random: InsecureRandom,
 ) -> Result<(Store<WasiState>, MemoryOutputPipe, MemoryOutputPipe)> {
-    let insecure_random = if engine.get_consume_fuel() {
-        InsecureRandom::Fixed
-    } else {
-        InsecureRandom::Host
-    };
     let (state, stdout, stderr) = WasiState::new_capturing_stdio(
         preopened_dirs,
         &[program.to_owned()],

@@ -6,10 +6,10 @@
 
 Kiln stdlib entry point.
 
-Import the user-facing Kiln types and the `KilnHost` effect via
-`use { ... } from "core:kiln"`. This facade re-exports the WIT-generated
-submodules under `lib/core/kiln/` and adds the Wado-only `Request<T>`
-wrapper that generator authors write against.
+Import the user-facing Kiln types via `use { ... } from "core:kiln"`. This
+facade re-exports the WIT-generated submodules under `lib/core/kiln/` and
+adds the Wado-only `Request<T>` wrapper that generator authors write
+against.
 
 See WEP 2026-04-12 (Kiln) §"The generator contract" and §"Options are a
 typed argument in each generator's own world".
@@ -35,31 +35,14 @@ the generator's package under. Generated code imports the generator's
 runtime library by it. `None` where the use site named the generator by a
 path, which names no package.
 
-## Effects
-
-### `pub interface KilnHost`
-
-Host interface exposed to Kiln generators. Deliberately narrow: a
-generator reports diagnostics and nothing else. Its inputs arrive by
-value, so it needs no filesystem, no clocks, no network.
-See WEP 2026-04-12 (Kiln) §"The generator contract".
-
-#### `fn emit_diagnostic(diagnostic: Diagnostic)`
-
-`#[cm("core:kiln/kiln-host@0.1.0#emit-diagnostic")]` `#[cm_params("diagnostic")]`
-
-Report a diagnostic that will be surfaced as a normal compile
-diagnostic. Multiple diagnostics may be reported; they are all
-printed even if the generator eventually returns a successful
-response.
-
 ## Structs
 
 ### `pub struct KilnLogSink {}`
 
-The `core:log` handler a generator runs under. A generator has no stderr
-for the default sink to write to, so the compiler installs this one around
-`generate`'s body.
+The `core:log` handler a generator runs under. Its host reports each stdout
+line as an info and each stderr line as a warning, so the compiler installs
+this one around `generate`'s body, which writes each event to the stream of
+its level.
 
 #### `impl Log for KilnLogSink`
 
@@ -103,26 +86,6 @@ written, or for a path, that path from the package root.
 
 #### `options: T`
 
-### `pub struct SourceSpan`
-
-A span into one of the files the generator received, identified by
-the same path that file carried. The compiler renders the snippet
-by consulting `CompilerHost`.
-
-#### `path: String`
-
-#### `byte_start: u32`
-
-#### `byte_end: u32`
-
-### `pub struct Diagnostic`
-
-#### `level: DiagnosticLevel`
-
-#### `span: Option<SourceSpan>`
-
-#### `message: String`
-
 ### `pub affine struct InputFile`
 
 One schema file the compiler opened for the generator. The set of
@@ -165,15 +128,3 @@ files are referenced from the entry via ordinary Wado `use`.
 #### `Unsupported(String)`
 
 #### `Other(String)`
-
-## Enums
-
-### `pub enum DiagnosticLevel`
-
-#### `Error`
-
-#### `Warning`
-
-#### `Info`
-
-#### `Hint`

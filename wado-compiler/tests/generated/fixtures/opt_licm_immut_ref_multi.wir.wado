@@ -202,6 +202,7 @@ fn "opt_licm_immut_ref_multi.wado/run"() with Stdout {
     let arr: ref Array<u8>;
     let q: u64;
     let tens: i32;
+<<<<<<< HEAD
     used_17 = builtin::array_len(local.tee elements_16(array.new_fixed<ref "opt_licm_immut_ref_multi.wado//Config">(struct.new "opt_licm_immut_ref_multi.wado//Config" { threshold: black_box(10), scale: 2 })));
     used_19 = builtin::array_len(local.tee elements_18(array.new_fixed<ref "opt_licm_immut_ref_multi.wado//Stats">(struct.new "opt_licm_immut_ref_multi.wado//Stats" { count: black_box(5), total: 0 })));
     if @unlikely(0 >= used_17) {
@@ -225,6 +226,27 @@ fn "opt_licm_immut_ref_multi.wado/run"() with Stdout {
             used_17 = used_17 + ($licm_arith_154 * used_19);
             used_19 = used_19 + 1;
             continue l3;
+||||||| c0bdae6df
+    let start_188: i32;
+    sum = 0;
+    i_5 = 0;
+    b0: block {
+        l1: loop {
+            break_if b0 i_5 >= 4;
+            sum = sum + (50 * i_5);
+            i_5 = i_5 + 1;
+            continue l1;
+=======
+    let start_185: i32;
+    sum = 0;
+    i_5 = 0;
+    b0: block {
+        l1: loop {
+            break_if b0 i_5 >= 4;
+            sum = sum + (50 * i_5);
+            i_5 = i_5 + 1;
+            continue l1;
+>>>>>>> origin/main
         };
     };
     out_46 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
@@ -299,15 +321,26 @@ fn "opt_licm_immut_ref_multi.wado/run"() with Stdout {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_46, used_19);
         }
+<<<<<<< HEAD
         $licm_arith_154 = out_46.used;
         out_46.used = used_19;
         builtin::array_set_u8(out_46.repr, $licm_arith_154, 45);
+||||||| c0bdae6df
+        start_188 = out_18.used;
+        out_18.used = i_5;
+        builtin::array_set_u8(out_18.repr, start_188, 45);
+=======
+        start_185 = out_18.used;
+        out_18.used = i_5;
+        builtin::array_set_u8(out_18.repr, start_185, 45);
+>>>>>>> origin/main
     } else {
     }
     if @unlikely(local.tee used_19(out_46.used + used_17) > builtin::array_len(out_46.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_46, used_19);
     }
+<<<<<<< HEAD
     $licm_arith_154 = out_46.used;
     out_46.used = used_19;
     arr = out_46.repr;
@@ -315,6 +348,23 @@ fn "opt_licm_immut_ref_multi.wado/run"() with Stdout {
     b26: block {
         l27: loop {
             break_if b26 (used_17 - $licm_arith_154) < 2;
+||||||| c0bdae6df
+    start_188 = out_18.used;
+    out_18.used = i_5;
+    arr = out_18.repr;
+    sum = start_188 + sum;
+    b24: block {
+        l25: loop {
+            break_if b24 (sum - start_188) < 2;
+=======
+    start_185 = out_18.used;
+    out_18.used = i_5;
+    arr = out_18.repr;
+    sum = start_185 + sum;
+    b24: block {
+        l25: loop {
+            break_if b24 (sum - start_185) < 2;
+>>>>>>> origin/main
             q = x /u 100_i64;
             tens = local.tee used_19(builtin::i32_wrap_i64(x - (q * 100_i64))) / 10;
             builtin::array_set_u8(arr, used_17 - 1, (48 + used_19) - (tens * 10));
@@ -324,17 +374,51 @@ fn "opt_licm_immut_ref_multi.wado/run"() with Stdout {
             continue l27;
         };
     };
+<<<<<<< HEAD
     if used_17 > $licm_arith_154 {
         builtin::array_set_u8(arr, $licm_arith_154, 48 + builtin::i32_wrap_i64(x %u 10_i64));
+||||||| c0bdae6df
+    if sum > start_188 {
+        builtin::array_set_u8(arr, start_188, 48 + builtin::i32_wrap_i64(x %u 10_i64));
+=======
+    if sum > start_185 {
+        builtin::array_set_u8(arr, start_185, 48 + builtin::i32_wrap_i64(x %u 10_i64));
+>>>>>>> origin/main
     }
     $inline_core_prelude_string_wado_String__internal_push_view_48: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_48;
     };
+<<<<<<< HEAD
     used_17 = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
     used_19 = builtin::i32_wrap_i64(x >> 32_i64);
     used_17 = "opt_licm_immut_ref_multi.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(used_17);
     "core:rt/write_string_to_stream$dae[add_newline]"(used_19, out_46.repr, out_46.used);
     "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(used_17);
+||||||| c0bdae6df
+    sum = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
+    i_5 = builtin::i32_wrap_i64(x >> 32_i64);
+    sum = "opt_licm_immut_ref_multi.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(sum);
+    builtin::array_copy<u8>(local.tee arr(builtin::array_new<u8>(local.tee start_188(out_18.used) + 1)), 0, out_18.repr, 0, start_188);
+    builtin::array_set_u8(arr, start_188, 10);
+    drop(block -> "core:prelude/types.wado//enum:CopyResult" {
+        start_188 = start_188 + 1;
+        "core:rt/cm_stream_write_raw_all_u8"(i_5, arr, 0, start_188);
+    });
+    "wasi/stream-drop-writable"(i_5);
+    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(sum);
+=======
+    sum = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
+    i_5 = builtin::i32_wrap_i64(x >> 32_i64);
+    sum = "opt_licm_immut_ref_multi.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(sum);
+    builtin::array_copy<u8>(local.tee arr(builtin::array_new<u8>(local.tee start_185(out_18.used) + 1)), 0, out_18.repr, 0, start_185);
+    builtin::array_set_u8(arr, start_185, 10);
+    drop(block -> "core:prelude/types.wado//enum:CopyResult" {
+        start_185 = start_185 + 1;
+        "core:rt/cm_stream_write_raw_all_u8"(i_5, arr, 0, start_185);
+    });
+    "wasi/stream-drop-writable"(i_5);
+    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(sum);
+>>>>>>> origin/main
 }
 
 fn "opt_licm_immut_ref_multi.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {

@@ -42,18 +42,44 @@ const HOISTED_VALUE: &str = "hoisted_value";
 /// The rule keeps no per-function state: every precondition is re-derived from
 /// the current body on each `apply_block`, since fusion candidates appear and
 /// disappear as neighbouring rewrites land.
-pub(super) struct LabeledBlockFusionRule;
+pub(super) struct LabeledBlockFusionRule<'t> {
+    type_table: &'t TypeTable,
+}
 
 /// Build a [`LabeledBlockFusionRule`] for one function. Mirrors the
 /// `build_ref_elim` / `build_elide_box_local` constructors so the peephole
 /// wiring is uniform; no per-function analysis is needed yet.
-pub(super) fn build_labeled_block_fusion() -> LabeledBlockFusionRule {
-    LabeledBlockFusionRule
+pub(super) fn build_labeled_block_fusion(type_table: &TypeTable) -> LabeledBlockFusionRule<'_> {
+    LabeledBlockFusionRule { type_table }
 }
 
-impl Rule for LabeledBlockFusionRule {
+/// The function's locals, asked whether a payload binding slot is declared
+/// with a payload's type.
+#[derive(Clone, Copy)]
+struct BindingSlots<'a> {
+    locals: &'a [NirLocal],
+    type_table: &'a TypeTable,
+}
+
+impl<'a> BindingSlots<'a> {
+    fn of(engine: &'a Engine, type_table: &'a TypeTable) -> Self {
+        Self {
+            locals: engine.locals(),
+            type_table,
+        }
+    }
+
+    fn holds(self, binding: u32, type_id: TypeId) -> bool {
+        self.locals
+            .get(binding as usize)
+            .is_some_and(|local| self.type_table.same_type(local.type_id, type_id))
+    }
+}
+
+impl Rule for LabeledBlockFusionRule<'_> {
     fn apply_expr(&self, engine: &mut Engine, id: ExprId) -> bool {
-        let Some(plan) = plan_threading(engine.body, id, engine.locals()) else {
+        let slots = BindingSlots::of(engine, self.type_table);
+        let Some(plan) = plan_threading(engine.body, id, slots) else {
             return false;
         };
         perform_threading(engine, id, plan);
@@ -67,8 +93,8 @@ impl Rule for LabeledBlockFusionRule {
         }
         let yields = block_yields_value(engine, block);
         for i in 0..stmts.len() - 1 {
-            let Some(info) =
-                check_fusion_preconditions(engine.body, stmts[i], stmts[i + 1], engine.locals())
+            let slots = BindingSlots::of(engine, self.type_table);
+            let Some(info) = check_fusion_preconditions(engine.body, stmts[i], stmts[i + 1], slots)
             else {
                 continue;
             };
@@ -99,7 +125,7 @@ impl Rule for LabeledBlockFusionRule {
             engine.note_elided_local(temp);
             return true;
         }
-        (0..stmts.len() - 1).any(|i| thread_bound_block(engine, block, &stmts, i))
+        (0..stmts.len() - 1).any(|i| thread_bound_block(engine, block, &stmts, i, self.type_table))
     }
 }
 
@@ -108,7 +134,13 @@ impl Rule for LabeledBlockFusionRule {
 /// above does not take. The consumer is the next statement, its whole value is
 /// the match, and the match evaluates `t` first, so `LB` runs where the `let`
 /// did.
-fn thread_bound_block(engine: &mut Engine, block: BlockId, stmts: &[StmtId], i: usize) -> bool {
+fn thread_bound_block(
+    engine: &mut Engine,
+    block: BlockId,
+    stmts: &[StmtId],
+    i: usize,
+    type_table: &TypeTable,
+) -> bool {
     let StmtKind::Let {
         local_index: temp,
         value: Operand::Expr(lb),
@@ -130,7 +162,8 @@ fn thread_bound_block(engine: &mut Engine, block: BlockId, stmts: &[StmtId], i: 
     if !is_local(engine.body, scrut, temp) || body_uses(engine, temp) != 1 {
         return false;
     }
-    let Some(plan) = plan_threading_of(engine.body, match_id, lb, engine.locals()) else {
+    let slots = BindingSlots::of(engine, type_table);
+    let Some(plan) = plan_threading_of(engine.body, match_id, lb, slots) else {
         return false;
     };
     assert!(engine.redirect_expr(scrut, Operand::Expr(lb)));
@@ -206,10 +239,10 @@ fn check_fusion_preconditions(
     body: &Body,
     let_s: StmtId,
     if_s: StmtId,
-    locals: &[NirLocal],
+    slots: BindingSlots<'_>,
 ) -> Option<FusionInfo> {
     check_fusion_preconditions_if_variant_test(body, let_s, if_s)
-        .or_else(|| check_fusion_preconditions_match(body, let_s, if_s, locals))
+        .or_else(|| check_fusion_preconditions_match(body, let_s, if_s, slots))
         .or_else(|| check_fusion_preconditions_slot_match(body, let_s, if_s))
 }
 
@@ -319,7 +352,7 @@ fn check_fusion_preconditions_match(
     body: &Body,
     let_s: StmtId,
     if_s: StmtId,
-    locals: &[NirLocal],
+    slots: BindingSlots<'_>,
 ) -> Option<FusionInfo> {
     // --- Stmt 1: Let { value: LabeledBlock { label, block } } ---
     let StmtKind::Let {
@@ -395,9 +428,7 @@ fn check_fusion_preconditions_match(
 
     // --- The reused binding slot must already be declared with payload type. ---
     if let Some(binding) = pattern_payload_binding
-        && locals
-            .get(binding as usize)
-            .is_none_or(|local| local.type_id != payload_type)
+        && !slots.holds(binding, payload_type)
     {
         return None;
     }
@@ -1204,14 +1235,15 @@ struct Fusion<'a> {
     yields: bool,
     span: Span,
     value: BoundValue,
+    /// Per arm, the locals each exit selecting it binds afresh:
+    /// [`BoundValue::bound_by`] and what [`renamable_locals`] finds in it.
+    /// None where one exit selects the arm, since its one copy binds each once.
+    renamable: Vec<Vec<u32>>,
 }
 
 impl Fusion<'_> {
     fn selector(&self) -> ArmSelector<'_> {
-        match &self.value {
-            BoundValue::Variant { case_index, .. } => ArmSelector::Case(*case_index),
-            BoundValue::Slots { tags, .. } => ArmSelector::Tags(tags),
-        }
+        self.value.selector()
     }
 }
 
@@ -1229,10 +1261,119 @@ enum BoundValue {
     },
 }
 
+#[derive(Clone, Copy)]
 struct BoundSlot {
     field_index: u32,
     local_index: u32,
     type_id: TypeId,
+}
+
+impl BoundValue {
+    /// The locals an exit selecting `arm` binds for it to read.
+    fn bound_by(&self, arm: usize) -> Vec<u32> {
+        match self {
+            Self::Variant { payload_local, .. } => {
+                if arm == 0 {
+                    vec![*payload_local]
+                } else {
+                    Vec::new()
+                }
+            }
+            Self::Slots {
+                slots, arm_reads, ..
+            } => slots
+                .iter()
+                .filter(|s| arm_reads[arm].contains(&s.field_index))
+                .map(|s| s.local_index)
+                .collect(),
+        }
+    }
+
+    fn selector(&self) -> ArmSelector<'_> {
+        match self {
+            Self::Variant { case_index, .. } => ArmSelector::Case(*case_index),
+            Self::Slots { tags, .. } => ArmSelector::Tags(tags),
+        }
+    }
+
+    /// This value with its locals as one exit binds them.
+    fn renamed(&self, renames: &IndexMap<u32, u32>) -> Self {
+        let rename = |local: u32| renames.get(&local).copied().unwrap_or(local);
+        match self {
+            Self::Variant {
+                case_index,
+                payload_local,
+                payload_type,
+            } => Self::Variant {
+                case_index: *case_index,
+                payload_local: rename(*payload_local),
+                payload_type: *payload_type,
+            },
+            Self::Slots {
+                tags,
+                arm_reads,
+                slots,
+            } => Self::Slots {
+                tags: tags.clone(),
+                arm_reads: arm_reads.clone(),
+                slots: slots
+                    .iter()
+                    .map(|s| BoundSlot {
+                        local_index: rename(s.local_index),
+                        ..*s
+                    })
+                    .collect(),
+            },
+        }
+    }
+}
+
+/// The locals `arm` binds, and `binding` where it is the arm's pattern binding,
+/// that a copy of the arm may bind afresh: every read of one lies in the arm,
+/// in the skeleton, which a copy renames, and nothing else binds it, as
+/// [`Engine::local_bindings`] counts a binding.
+fn renamable_locals(engine: &Engine, arm: BlockId, binding: Option<u32>) -> Vec<u32> {
+    let mut bound: IndexMap<u32, u32> = IndexMap::default();
+    engine
+        .body
+        .for_each_node_under(NodeRef::Block(arm), |node| match node {
+            NodeRef::Stmt(s) => {
+                if let StmtKind::Let { local_index, .. } = engine.body.stmts[s].kind {
+                    *bound.entry(local_index).or_default() += 1;
+                }
+            }
+            NodeRef::Pat(p) => {
+                if let PatKind::Binding { local_index, .. } = engine.body.pats[p].kind {
+                    *bound.entry(local_index).or_default() += 1;
+                }
+            }
+            NodeRef::Expr(_) | NodeRef::Block(_) => {}
+        });
+    // Bound by the consumer's pattern, outside the arm.
+    if let Some(binding) = binding {
+        *bound.entry(binding).or_default() += 1;
+    }
+    let under_arm = |mut node: NodeRef| loop {
+        if node == NodeRef::Block(arm) {
+            return true;
+        }
+        let Some(parent) = engine.parent_of(node) else {
+            return false;
+        };
+        node = parent;
+    };
+    bound
+        .into_iter()
+        .filter(|&(local, lets)| {
+            engine.local_bindings(local) == lets
+                && engine.promoted_read_count(local) == 0
+                && engine
+                    .local_reads(local)
+                    .iter()
+                    .all(|&read| under_arm(NodeRef::Expr(read)))
+        })
+        .map(|(local, _)| local)
+        .collect()
 }
 
 fn perform_fusion(
@@ -1295,7 +1436,44 @@ fn perform_fusion(
         (arms, result_type)
     };
 
+    let pattern_binding = match &info.value {
+        FusedValue::Variant {
+            pattern_payload_binding,
+            ..
+        } => *pattern_payload_binding,
+        FusedValue::Slots { .. } => None,
+    };
     let value = bind_value(engine, info.value);
+    let mut exits_at = vec![0usize; arms.len()];
+    for exit in &info.exits {
+        let selected = value
+            .selector()
+            .select(engine.body, exit_value(engine.body, exit.stmt))
+            .expect("guarded by the fusion preconditions");
+        exits_at[selected] += 1;
+    }
+    let renamable = arms
+        .iter()
+        .enumerate()
+        .map(|(i, arm)| {
+            if exits_at[i] < 2 {
+                return Vec::new();
+            }
+            let mut locals: Vec<u32> = value
+                .bound_by(i)
+                .into_iter()
+                .filter(|&local| Some(local) != pattern_binding)
+                .collect();
+            if let Some(arm) = arm {
+                locals.extend(renamable_locals(
+                    engine,
+                    *arm,
+                    pattern_binding.filter(|_| i == 0),
+                ));
+            }
+            locals
+        })
+        .collect();
     // The fused block encloses the labeled block's body and the arms cloned into it.
     let mut enclosed = vec![NodeRef::Block(lb_block)];
     enclosed.extend(arms.iter().flatten().map(|b| NodeRef::Block(*b)));
@@ -1308,6 +1486,7 @@ fn perform_fusion(
         yields,
         span,
         value,
+        renamable,
     };
     replace_exits(engine, &info.exits, |engine, s| {
         fuse_exit(engine, s, &fusion)
@@ -1456,12 +1635,18 @@ fn let_stmt(
     )
 }
 
-fn emit_variant_payload_let(engine: &mut Engine, vc: ExprId, f: &Fusion, out: &mut Vec<StmtId>) {
+fn emit_variant_payload_let(
+    engine: &mut Engine,
+    vc: ExprId,
+    f: &Fusion,
+    bound: &BoundValue,
+    out: &mut Vec<StmtId>,
+) {
     let BoundValue::Variant {
         payload_local,
         payload_type,
         ..
-    } = f.value
+    } = *bound
     else {
         unreachable!("variant break under a slot fusion")
     };
@@ -1508,11 +1693,12 @@ fn emit_slot_lets(
     elements: &[Operand],
     arm: usize,
     f: &Fusion,
+    bound: &BoundValue,
     out: &mut Vec<StmtId>,
 ) {
     let BoundValue::Slots {
         slots, arm_reads, ..
-    } = &f.value
+    } = bound
     else {
         unreachable!("slot break under a variant fusion")
     };
@@ -1540,10 +1726,15 @@ fn fuse_exit(engine: &mut Engine, s: StmtId, f: &Fusion) -> Vec<StmtId> {
         .selector()
         .select(engine.body, value)
         .expect("guarded by the fusion preconditions");
+    let renames: IndexMap<u32, u32> = f.renamable[arm]
+        .iter()
+        .map(|&local| (local, engine.alloc_local_like(local)))
+        .collect();
+    let bound = f.value.renamed(&renames);
     let mut out = Vec::new();
-    match (&f.value, value.and_then(Operand::as_expr)) {
+    match (&bound, value.and_then(Operand::as_expr)) {
         (BoundValue::Variant { .. }, Some(vc)) if arm == 0 => {
-            emit_variant_payload_let(engine, vc, f, &mut out);
+            emit_variant_payload_let(engine, vc, f, &bound, &mut out);
         }
         (BoundValue::Variant { .. }, _) => emit_untaken_payload(engine, value, f.span, &mut out),
         (BoundValue::Slots { .. }, Some(tuple)) => {
@@ -1551,15 +1742,19 @@ fn fuse_exit(engine: &mut Engine, s: StmtId, f: &Fusion) -> Vec<StmtId> {
                 unreachable!("guarded by check_lb_breaks_are_tagged_tuples")
             };
             let elements = elements.clone();
-            emit_slot_lets(engine, &elements, arm, f, &mut out);
+            emit_slot_lets(engine, &elements, arm, f, &bound, &mut out);
         }
         (BoundValue::Slots { .. }, None) => unreachable!("guarded by the slot preconditions"),
     }
 
     let mut tail = None;
     if let Some(block) = f.arms[arm] {
-        let cloned = engine.clone_block(block);
-        subst_temp_reads_in_block(engine, cloned, f);
+        let cloned = engine.clone_block_renaming(block, renames);
+        let reads = TempReads {
+            temp_local: f.temp_local,
+            value: &bound,
+        };
+        subst_temp_reads_in_block(engine, cloned, &reads);
         let mut stmts = take_stmts(engine, cloned);
         if f.yields {
             let Some(StmtKind::Expr(value)) = stmts.pop().map(|s| &engine.body.stmts[s].kind)
@@ -1616,13 +1811,19 @@ fn split_tail(engine: &mut Engine, mut value: Operand, stmts: &mut Vec<StmtId>) 
 /// so each rewrite updates the use index (the new `Local` mention is
 /// registered, the replaced node's children are orphaned but never queried
 /// again).
-fn subst_temp_reads_in_block(engine: &mut Engine, block: BlockId, f: &Fusion) {
+fn subst_temp_reads_in_block(engine: &mut Engine, block: BlockId, f: &TempReads) {
     for s in engine.body.blocks[block].stmts.clone() {
         subst_temp_reads_in_stmt(engine, s, f);
     }
 }
 
-fn subst_temp_reads_in_stmt(engine: &mut Engine, s: StmtId, f: &Fusion) {
+/// The fused temp, and the locals one exit bound in its place.
+struct TempReads<'v> {
+    temp_local: u32,
+    value: &'v BoundValue,
+}
+
+fn subst_temp_reads_in_stmt(engine: &mut Engine, s: StmtId, f: &TempReads) {
     enum Shape {
         Expr(ExprId),
         ExprAndBlocks(Option<ExprId>, Vec<BlockId>),
@@ -1676,9 +1877,9 @@ fn subst_temp_reads_in_stmt(engine: &mut Engine, s: StmtId, f: &Fusion) {
 
 /// The `Local` that replaces `e`, when `e` is one of the consumer's reads of
 /// the fused temp.
-fn replacement_for(engine: &Engine, e: ExprId, f: &Fusion) -> Option<ExprKind> {
+fn replacement_for(engine: &Engine, e: ExprId, f: &TempReads) -> Option<ExprKind> {
     let body = &*engine.body;
-    match &f.value {
+    match f.value {
         BoundValue::Variant {
             case_index,
             payload_local,
@@ -1720,7 +1921,7 @@ fn replacement_for(engine: &Engine, e: ExprId, f: &Fusion) -> Option<ExprKind> {
     }
 }
 
-fn subst_temp_reads_in_expr(engine: &mut Engine, e: ExprId, f: &Fusion) {
+fn subst_temp_reads_in_expr(engine: &mut Engine, e: ExprId, f: &TempReads) {
     if let Some(kind) = replacement_for(engine, e, f) {
         engine.replace_expr_kind(e, kind);
         return;
@@ -1853,11 +2054,11 @@ struct ThreadPlan {
     exits: Vec<Exit>,
 }
 
-fn plan_threading(body: &Body, id: ExprId, locals: &[NirLocal]) -> Option<ThreadPlan> {
+fn plan_threading(body: &Body, id: ExprId, slots: BindingSlots<'_>) -> Option<ThreadPlan> {
     let ExprKind::Match { expr: scrut, .. } = &body.exprs[id].kind else {
         return None;
     };
-    plan_threading_of(body, id, scrut.as_expr()?, locals)
+    plan_threading_of(body, id, scrut.as_expr()?, slots)
 }
 
 /// [`plan_threading`] for the match `id` with `scrut` as its scrutinee, which
@@ -1866,7 +2067,7 @@ fn plan_threading_of(
     body: &Body,
     id: ExprId,
     scrut: ExprId,
-    locals: &[NirLocal],
+    slots: BindingSlots<'_>,
 ) -> Option<ThreadPlan> {
     let ExprKind::Match { arms, .. } = &body.exprs[id].kind else {
         return None;
@@ -1894,7 +2095,7 @@ fn plan_threading_of(
     let result_type = body.exprs[id].type_id;
     let unit_result = result_type == TypeTable::UNIT;
 
-    let exits = validate_exits_in_block(body, lb_block, &label, &arm_infos, locals)?;
+    let exits = validate_exits_in_block(body, lb_block, &label, &arm_infos, slots)?;
 
     let escapes: Vec<Escapes> = arm_infos
         .iter()
@@ -1966,7 +2167,7 @@ fn selected_arm(body: &Body, exit: StmtId, arms: &[ArmInfo]) -> usize {
 /// selects and checks the arm's payload binding type.
 struct ExitValidator<'a> {
     arms: &'a [ArmInfo],
-    locals: &'a [NirLocal],
+    slots: BindingSlots<'a>,
 }
 
 impl ExitSink for ExitValidator<'_> {
@@ -1991,11 +2192,7 @@ impl ExitSink for ExitValidator<'_> {
             let Some(p) = payload else {
                 return false;
             };
-            if self
-                .locals
-                .get(binding as usize)
-                .is_none_or(|local| local.type_id != body.operand_type(p))
-            {
+            if !self.slots.holds(binding, body.operand_type(p)) {
                 return false;
             }
         }
@@ -2011,9 +2208,9 @@ fn validate_exits_in_block(
     block: BlockId,
     label: &str,
     arms: &[ArmInfo],
-    locals: &[NirLocal],
+    slots: BindingSlots<'_>,
 ) -> Option<Vec<Exit>> {
-    let mut sink = ExitValidator { arms, locals };
+    let mut sink = ExitValidator { arms, slots };
     walk_exits(body, block, label, &mut sink)
 }
 

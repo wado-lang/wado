@@ -15,20 +15,29 @@ use { AtnMode } from "../../package-gale/src/gen_settings.wado";
 global RUST_LEXER: String = #include_str("../../package-gale/tests/grammars/RustLexer.g4");
 global RUST_PARSER: String = #include_str("../../package-gale/tests/grammars/RustParser.g4");
 
-fn gen_rust() -> i32 {
-    let inputs: List<[String, String]> = [
-        ["RustLexer.g4", RUST_LEXER],
-        ["RustParser.g4", RUST_PARSER],
-    ];
-    let mut grammar = match assemble_grammar(&inputs) {
+fn gen(inputs: &List<[String, String]>) -> i32 {
+    let mut grammar = match assemble_grammar(inputs) {
         Ok(g) => g,
-        Err(_) => panic("gale-gen: assemble_grammar failed on the Rust grammar"),
+        Err(_) => panic("gale-gen: assemble_grammar failed"),
     };
     let out = generate(&mut grammar, &GenerateOptions { atn: AtnMode::Never });
     return out.source.len();
 }
 
+fn gen_rust() -> i32 {
+    return gen(&[
+        ["RustLexer.g4", RUST_LEXER],
+        ["RustParser.g4", RUST_PARSER],
+    ]);
+}
+
 #[workload]
+test "workload" {
+    assert gen(&[
+        ["JSON.g4", #include_str("../../package-gale/tests/grammars/JSON.g4")],
+    ]) > 0;
+}
+
 test "fuel" {
     assert measure("gale/generate", || gen_rust()) > 0;
 }

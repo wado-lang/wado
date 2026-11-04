@@ -1,0 +1,443 @@
+//! `Regex` and what a search answers.
+
+use { Node } from "./ast.wado";
+use { Hole, PatternError, Syntax, parse } from "./parse.wado";
+use { Cache, Goal, search } from "./pike.wado";
+use { print } from "./print.wado";
+use { Program, compile } from "./program.wado";
+
+/// A compiled regular expression.
+pub struct Regex {
+    program: Program,
+    /// The name of each group, by index; group 0 has none.
+    names: List<Option<String>>,
+    /// What a template splices where this stands in a hole.
+    internal tree: Node,
+}
+
+/// The pattern in `re`'s syntax, which `Regex::new` reads back to the same
+/// regular expression: a template's text holes escaped, its `Regex` holes as
+/// groups, and `rex`'s whitespace and comments gone.
+impl Display for Regex {
+    fn fmt(&self, f: &mut Formatter) {
+        f.write_str(&print(&self.tree));
+    }
+}
+
+/// Records each named group's name at its index in `names`.
+fn collect_names(node: &Node, names: &mut List<Option<String>>) {
+    match *node {
+        Group(g) => {
+            if let Some(i) = g.index && let Some(name) = g.name {
+                names[i] = Some(name);
+            }
+            collect_names(&g.body, names);
+        },
+        Modified(m) => collect_names(&m.body, names),
+        Repeat(r) => collect_names(&r.body, names),
+        Concat(nodes) | Alternation(nodes) => {
+            for let n of &nodes {
+                collect_names(n, names);
+            }
+        },
+        _ => {
+        },
+    }
+}
+
+internal fn build(pattern: StrSlice, syntax: Syntax, holes: List<Hole> = []) -> Result<Regex, PatternError> {
+    let [tree, groups] = parse(pattern, syntax, holes)?;
+    let mut names: List<Option<String>> = [];
+    for let _i of 0..=groups {
+        names.push(null);
+    }
+    collect_names(&tree, &mut names);
+    return Ok(Regex { program: compile(&tree, groups)?, names, tree });
+}
+
+impl Regex {
+    fn has_names(&self) -> bool {
+        for let n of &self.names {
+            if *n matches { Some(_) } {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /// The regular expression `pattern` spells, or why it spells none.
+    pub fn new<S: AsStrSlice>(pattern: S) -> Result<Regex, PatternError> {
+        return build(pattern.as_str_slice(), Syntax::Plain);
+    }
+
+    /// Whether `text` holds a match.
+    pub fn is_match<S: AsStrSlice>(&self, text: S) -> bool {
+        return search(&self.program, &mut Cache::new(&self.program), text.as_str_slice(), 0, Goal::Any) matches { Some(_) };
+    }
+
+    /// The leftmost match in `text`.
+    pub fn find<S: AsStrSlice>(&self, text: S) -> Option<Match> {
+        return self.find_at(text, 0);
+    }
+
+    /// The leftmost match at or after the byte offset `start`. The text before
+    /// it still counts as context for `^` and `\b`.
+    pub fn find_at<S: AsStrSlice>(&self, text: S, start: i32) -> Option<Match>
+        contract text.as_str_slice().is_char_boundary(start), "start must lie on a character boundary"
+    {
+        let Some(caps) = self.captures_at(text, start) else {
+            return null;
+        };
+        return caps.get(0);
+    }
+
+    /// The groups of the leftmost match in `text`.
+    pub fn captures<S: AsStrSlice>(&self, text: S) -> Option<Captures> {
+        return self.captures_at(text, 0);
+    }
+
+    /// The groups of the leftmost match at or after the byte offset `start`.
+    pub fn captures_at<S: AsStrSlice>(&self, text: S, start: i32) -> Option<Captures>
+        contract text.as_str_slice().is_char_boundary(start), "start must lie on a character boundary"
+    {
+        let view = text.as_str_slice();
+        let Some(slots) = search(&self.program, &mut Cache::new(&self.program), view, start, Goal::Groups) else {
+            return null;
+        };
+        return Some(Captures { text: view, slots, regex: self });
+    }
+
+    /// Each match in `text`, left to right. After an empty match the search
+    /// resumes one character on, and an empty match where the previous match
+    /// ended is skipped: `a*` finds `""`, `"aaa"` and `""` in `"baaac"`, not a
+    /// second `""` before the `c`.
+    pub fn find_iter<S: AsStrSlice>(&self, text: S) -> Matches {
+        return Matches {
+            regex: self,
+            text: text.as_str_slice(),
+            next: 0,
+            last_end: -1,
+            cache: Cache::new(&self.program),
+        };
+    }
+
+    /// The groups of each match in `text`, left to right, resuming as
+    /// `find_iter` does.
+    pub fn captures_iter<S: AsStrSlice>(&self, text: S) -> CaptureMatches {
+        return CaptureMatches { matches: self.find_iter(text) };
+    }
+
+    /// `text` with its leftmost match replaced by what `replacer` writes.
+    pub fn replace<S: AsStrSlice, R: Replacer>(&self, text: S, replacer: R) -> String {
+        return self.replace_matches(text.as_str_slice(), &replacer, false);
+    }
+
+    /// `text` with each match, as `captures_iter` finds them, replaced by what
+    /// `replacer` writes.
+    pub fn replace_all<S: AsStrSlice, R: Replacer>(&self, text: S, replacer: R) -> String {
+        return self.replace_matches(text.as_str_slice(), &replacer, true);
+    }
+
+    fn replace_matches<R: Replacer>(&self, text: StrSlice, replacer: &R, all: bool) -> String {
+        let mut out = "";
+        let mut copied = 0;
+        for let caps of self.captures_iter(text) {
+            out.push_str(text.slice(copied, caps.slots[0]));
+            replacer.append(&caps, &mut out);
+            copied = caps.slots[1];
+            if !all {
+                break;
+            }
+        }
+        out.push_str(text.slice(copied, text.len()));
+        return out;
+    }
+
+    /// The pieces of `text` around the matches `find_iter` finds: one more
+    /// piece than there are matches, so the pieces and the matches between
+    /// them, in turn, spell `text` again.
+    pub fn split<S: AsStrSlice>(&self, text: S) -> Split {
+        return Split { matches: self.find_iter(text), piece: 0, cuts: null, done: false };
+    }
+
+    /// The pieces `split` cuts, at most `n` of them: the last holds the rest
+    /// of `text`, matches included.
+    pub fn splitn<S: AsStrSlice>(&self, text: S, n: i32) -> Split
+        contract n >= 0
+    {
+        return Split {
+            matches: self.find_iter(text),
+            piece: 0,
+            cuts: Some(n - 1),
+            done: n == 0,
+        };
+    }
+}
+
+/// Where a search resumes after a match of `[start, end)` in `text`: past an
+/// empty match by one character, or past the end once none is left.
+fn step_past(text: StrSlice, start: i32, end: i32) -> i32 {
+    if end > start {
+        return end;
+    }
+    if end < text.len() {
+        return end + text.char_at_byte(end).len_utf8();
+    }
+    return end + 1;
+}
+
+/// What `replace` writes in place of each match.
+pub trait Replacer with () {
+    fn append(&self, caps: &Captures, out: &mut String);
+}
+
+/// A replacement template, read as ECMA-262's `GetSubstitution` reads one.
+impl Replacer for String {
+    fn append(&self, caps: &Captures, out: &mut String) {
+        substitute(self.as_str_slice(), caps, out);
+    }
+}
+
+impl Replacer for StrSlice {
+    fn append(&self, caps: &Captures, out: &mut String) {
+        substitute(*self, caps, out);
+    }
+}
+
+/// Inserts what the function returns, as it is.
+impl Replacer for fn(&Captures) -> String {
+    fn append(&self, caps: &Captures, out: &mut String) {
+        out.push_str(&(*self)(caps));
+    }
+}
+
+fn push_group(caps: &Captures, index: i32, out: &mut String) {
+    if let Some(m) = caps.get(index) {
+        out.push_str(m.as_str());
+    }
+}
+
+// GetSubstitution (§22.1.3.19.1): `$$`, `$&`, `$\``, `$'`, `$n`, `$nn` and
+// `$<name>`; any other `$` is itself.
+fn substitute(template: StrSlice, caps: &Captures, out: &mut String) {
+    let text = caps.text;
+    let count = caps.len() - 1;
+    let mut i = 0;
+    while i < template.len() {
+        let c = template.char_at_byte(i);
+        if c != '$' || i + 1 >= template.len() {
+            out.push(c);
+            i += c.len_utf8();
+            continue;
+        }
+        let next = template.byte_at(i + 1);
+        if next == b'$' {
+            out.push('$');
+            i += 2;
+        } else if next == b'&' {
+            out.push_str(text.slice(caps.slots[0], caps.slots[1]));
+            i += 2;
+        } else if next == b'`' {
+            out.push_str(text.slice(0, caps.slots[0]));
+            i += 2;
+        } else if next == b'\'' {
+            out.push_str(text.slice(caps.slots[1], text.len()));
+            i += 2;
+        } else if next.is_ascii_digit() {
+            let one = (next - b'0') as i32;
+            let two = if i + 2 < template.len() && template.byte_at(i + 2).is_ascii_digit() {
+                one * 10 + (template.byte_at(i + 2) - b'0') as i32;
+            } else {
+                -1;
+            };
+            if two >= 1 && two <= count {
+                push_group(caps, two, out);
+                i += 3;
+            } else if one >= 1 && one <= count {
+                push_group(caps, one, out);
+                i += 2;
+            } else {
+                out.push('$');
+                i += 1;
+            }
+        } else if next == b'<' && caps.regex.has_names() && let Some(gt) = template.slice(i, template.len()).find(">") {
+            let name = template.slice(i + 2, i + gt);
+            if let Some(m) = caps.name(name) {
+                out.push_str(m.as_str());
+            }
+            i += gt + 1;
+        } else {
+            out.push('$');
+            i += 1;
+        }
+    }
+}
+
+/// A match: a span of the text searched.
+pub struct Match {
+    text: StrSlice,
+    start: i32,
+    end: i32,
+}
+
+impl Match {
+    /// The byte offset where the match starts.
+    pub fn start(&self) -> i32 {
+        return self.start;
+    }
+
+    /// The byte offset just past the match.
+    pub fn end(&self) -> i32 {
+        return self.end;
+    }
+
+    /// The text matched.
+    pub fn as_str(&self) -> StrSlice {
+        return self.text.slice(self.start, self.end);
+    }
+}
+
+/// The groups of one match. Group 0 is the whole match.
+pub struct Captures {
+    text: StrSlice,
+    slots: List<i32>,
+    regex: &Regex,
+}
+
+impl Captures {
+    /// How many groups the expression has, group 0 included.
+    pub fn len(&self) -> i32 {
+        return self.slots.len() / 2;
+    }
+
+    /// Group `index`, if it took part in the match.
+    pub fn get(&self, index: i32) -> Option<Match>
+        contract index >= 0 && index < self.len(), "no group has this index"
+    {
+        let start = self.slots[2 * index];
+        if start < 0 {
+            return null;
+        }
+        return Some(Match { text: self.text, start, end: self.slots[2 * index + 1] });
+    }
+
+    /// The group named `name`, if it took part in the match.
+    pub fn name<S: AsStrSlice>(&self, name: S) -> Option<Match> {
+        for let i of 1..<self.len() {
+            if let Some(n) = self.regex.names[i] && n == name.as_str_slice() {
+                return self.get(i);
+            }
+        }
+        return null;
+    }
+}
+
+impl IndexValue<i32> for Captures {
+    type Output = Option<Match>;
+
+    fn index_value(&self, index: i32) -> Option<Match> {
+        return self.get(index);
+    }
+}
+
+impl IndexValue<String> for Captures {
+    type Output = Option<Match>;
+
+    fn index_value(&self, name: String) -> Option<Match> {
+        return self.name(name);
+    }
+}
+
+/// The iterator `Regex::find_iter` returns.
+pub struct Matches {
+    regex: &Regex,
+    text: StrSlice,
+    /// Where the next search starts; past the text's end once done.
+    next: i32,
+    /// Where the match found last ended; -1 before the first.
+    last_end: i32,
+    cache: Cache,
+}
+
+impl Matches {
+    fn next_slots(&mut self) -> Option<List<i32>> {
+        loop {
+            if self.next > self.text.len() {
+                return null;
+            }
+            let Some(slots) = search(&self.regex.program, &mut self.cache, self.text, self.next, Goal::Groups) else {
+                self.next = self.text.len() + 1;
+                return null;
+            };
+            let [start, end] = [slots[0], slots[1]];
+            self.next = step_past(self.text, start, end);
+            if start == end && start == self.last_end {
+                continue;
+            }
+            self.last_end = end;
+            return Some(slots);
+        }
+    }
+}
+
+impl Iterator for Matches {
+    type Item = Match;
+
+    fn next(&mut self) -> Option<Match> {
+        let Some(slots) = self.next_slots() else {
+            return null;
+        };
+        return Some(Match { text: self.text, start: slots[0], end: slots[1] });
+    }
+}
+
+/// The iterator `Regex::captures_iter` returns.
+pub struct CaptureMatches {
+    matches: Matches,
+}
+
+impl Iterator for CaptureMatches {
+    type Item = Captures;
+
+    fn next(&mut self) -> Option<Captures> {
+        let Some(slots) = self.matches.next_slots() else {
+            return null;
+        };
+        return Some(Captures { text: self.matches.text, slots, regex: self.matches.regex });
+    }
+}
+
+/// The iterator `Regex::split` returns.
+pub struct Split {
+    matches: Matches,
+    /// Where the piece being cut starts.
+    piece: i32,
+    /// How many more matches may cut, or null for every one.
+    cuts: Option<i32>,
+    done: bool,
+}
+
+impl Iterator for Split {
+    type Item = StrSlice;
+
+    fn next(&mut self) -> Option<StrSlice> {
+        if self.done {
+            return null;
+        }
+        let text = self.matches.text;
+        let may_cut = match self.cuts {
+            Some(n) => n > 0,
+            None => true,
+        };
+        if may_cut && let Some(slots) = self.matches.next_slots() {
+            let piece = text.slice(self.piece, slots[0]);
+            self.piece = slots[1];
+            if let Some(n) = self.cuts {
+                self.cuts = Some(n - 1);
+            }
+            return Some(piece);
+        }
+        self.done = true;
+        return Some(text.slice(self.piece, text.len()));
+    }
+}

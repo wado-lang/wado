@@ -511,6 +511,9 @@ pub enum CompilerItem {
     ListIndexAssign,
     /// `List::from_le_bytes` — a call on a byte literal folds to a constant.
     ListFromLeBytes,
+    /// `List<T>::internal_loaded` — a lifted `list<T>` of numbers, copied out of
+    /// linear memory in one call.
+    ListLoaded,
     /// `Reflect::decl_name` — the declaration's name, for every kind.
     ReflectDeclName,
     /// `Reflect::wire_name_policy` — the declaration's `#[wire(name_policy)]`.
@@ -543,6 +546,8 @@ pub enum CompilerItem {
     ReflectTemplateTail,
     /// `ReflectTemplate::raw_tail` — `tail` with escapes preserved.
     ReflectTemplateRawTail,
+    /// `ReflectTemplate::hashes` — how many `#`s delimit the template.
+    ReflectTemplateHashes,
     /// `Member::name` — the member's source field name.
     MemberName,
     /// `Member::wire_name_override` — the member's raw `#[wire(name)]` value.
@@ -733,6 +738,8 @@ pub enum CompilerItem {
     InspectHandle,
     /// `core:rt::memory_to_gc_string`.
     MemoryToGcString,
+    /// `core:rt::memory_to_byte_list`.
+    MemoryToByteList,
     /// `core:rt::cm_lower_string`.
     CmLowerString,
     /// `core:rt::cm_lower_array_u8`.
@@ -947,6 +954,7 @@ impl CompilerItem {
         Self::ListIndexValue,
         Self::ListIndexAssign,
         Self::ListFromLeBytes,
+        Self::ListLoaded,
         Self::ReflectDeclName,
         Self::ReflectWireNamePolicy,
         Self::TreeMapIndexAssign,
@@ -961,6 +969,7 @@ impl CompilerItem {
         Self::ReflectTemplateMembers,
         Self::ReflectTemplateTail,
         Self::ReflectTemplateRawTail,
+        Self::ReflectTemplateHashes,
         Self::MemberName,
         Self::MemberWireNameOverride,
         Self::ReflectVariantDiscriminant,
@@ -1035,6 +1044,7 @@ impl CompilerItem {
         Self::HandleClass,
         Self::InspectHandle,
         Self::MemoryToGcString,
+        Self::MemoryToByteList,
         Self::CmLowerString,
         Self::CmLowerArrayU8,
         Self::CmCallbackKey,
@@ -1224,6 +1234,7 @@ impl CompilerItem {
             Self::ListIndexValue => "list_index_value",
             Self::ListIndexAssign => "list_index_assign",
             Self::ListFromLeBytes => "list_from_le_bytes",
+            Self::ListLoaded => "list_loaded",
             Self::ReflectDeclName => "reflect_decl_name",
             Self::ReflectWireNamePolicy => "reflect_wire_name_policy",
             Self::TreeMapIndexAssign => "tree_map_index_assign",
@@ -1238,6 +1249,7 @@ impl CompilerItem {
             Self::ReflectTemplateMembers => "reflect_template_members",
             Self::ReflectTemplateTail => "reflect_template_tail",
             Self::ReflectTemplateRawTail => "reflect_template_raw_tail",
+            Self::ReflectTemplateHashes => "reflect_template_hashes",
             Self::MemberName => "member_name",
             Self::MemberWireNameOverride => "member_wire_name_override",
             Self::FormatterNew => "formatter_new",
@@ -1253,6 +1265,7 @@ impl CompilerItem {
             Self::HandleClass => "handle_class",
             Self::InspectHandle => "inspect_handle",
             Self::MemoryToGcString => "memory_to_gc_string",
+            Self::MemoryToByteList => "memory_to_byte_list",
             Self::CmLowerString => "cm_lower_string",
             Self::CmLowerArrayU8 => "cm_lower_array_u8",
             Self::CmCallbackKey => "cm_callback_key",
@@ -1368,6 +1381,7 @@ impl CompilerItem {
             | Self::HandleClass
             | Self::InspectHandle
             | Self::MemoryToGcString
+            | Self::MemoryToByteList
             | Self::CmLowerString
             | Self::CmLowerArrayU8
             | Self::CmCallbackKey
@@ -1480,6 +1494,7 @@ impl CompilerItem {
             | Self::ListIndexValue
             | Self::ListIndexAssign
             | Self::ListFromLeBytes
+            | Self::ListLoaded
             | Self::ReflectDeclName
             | Self::ReflectWireNamePolicy
             | Self::ReflectStructMembers
@@ -1489,6 +1504,7 @@ impl CompilerItem {
             | Self::ReflectTemplateMembers
             | Self::ReflectTemplateTail
             | Self::ReflectTemplateRawTail
+            | Self::ReflectTemplateHashes
             | Self::MemberName
             | Self::MemberWireNameOverride
             | Self::FormatterNew
@@ -1729,6 +1745,7 @@ impl CompilerItem {
             | Self::HandleClass
             | Self::InspectHandle
             | Self::MemoryToGcString
+            | Self::MemoryToByteList
             | Self::CmLowerString
             | Self::CmLowerArrayU8
             | Self::CmCallbackKey
@@ -1862,6 +1879,7 @@ impl CompilerItem {
             | Self::ListIndexValue
             | Self::ListIndexAssign
             | Self::ListFromLeBytes
+            | Self::ListLoaded
             | Self::ReflectDeclName
             | Self::ReflectWireNamePolicy
             | Self::TreeMapIndexAssign
@@ -1876,6 +1894,7 @@ impl CompilerItem {
             | Self::ReflectTemplateMembers
             | Self::ReflectTemplateTail
             | Self::ReflectTemplateRawTail
+            | Self::ReflectTemplateHashes
             | Self::MemberName
             | Self::MemberWireNameOverride
             | Self::ReflectVariantDiscriminant
@@ -2390,20 +2409,6 @@ impl CompilerItems {
         (module.clone(), name.to_string())
     }
 
-    /// Owned `(module, name)` for a struct item, or `None` when the item has
-    /// not been registered yet — for callers that run before the declaring
-    /// stdlib module is elaborated.
-    pub fn struct_owned_opt(&self, item: CompilerItem) -> Option<(ModuleSource, String)> {
-        match self.get(item)? {
-            Resolved::Struct {
-                module_source,
-                name,
-                ..
-            } => Some((module_source.clone(), name.clone())),
-            _ => None,
-        }
-    }
-
     /// Module + variant name of a [`CompilerItemKind::Variant`] item
     /// (`Option`, `Result`).
     pub fn require_variant(&self, item: CompilerItem) -> (&ModuleSource, &str) {
@@ -2414,16 +2419,6 @@ impl CompilerItems {
                 ..
             } => (module_source, name.as_str()),
             other => kind_mismatch_ice(item, "Variant", other),
-        }
-    }
-
-    /// Module-only accessor for a variant. Kept for migration of
-    /// call sites that only need the module path (e.g.
-    /// `TypeTable::make_option`).
-    pub fn variant_module(&self, item: CompilerItem) -> Option<&ModuleSource> {
-        match self.get(item)? {
-            Resolved::Variant { module_source, .. } => Some(module_source),
-            _ => None,
         }
     }
 

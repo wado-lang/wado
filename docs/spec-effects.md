@@ -331,7 +331,7 @@ fn bad() {
 }
 ```
 
-A resource's drop is an operation of its effect too, but a benign one: a
+A resource's drop is an operation of its effect too, but an ambient one: a
 function declares no effect for a drop it performs. Every drop of the resource
 reaches an installed handler, a written `x.drop()` and an implicit one alike
 ([Drop](./spec-affine.md#drop)), so a test double that counts drops sees both. A
@@ -413,7 +413,13 @@ Apart from a narrowing, nothing a body does adds to what its function holds.
 
 ### Ambient Functions
 
-`#[ambient]` on a function exempts its body from effect checking. The body may perform any effect without declaring it, and a call demands only what the function's own `with` clause declares. A function value it hands on is still bound by the function type it is moved into, which holds none of what the body holds. It is for best-effort output that must work from any function: `log_stdout` and `log_stderr` are ambient, and so is the `core:log` facade. Whether a call whose result goes unused runs is [unspecified](./spec-overview.md#behavior-classes), so its output may never appear. In a component that imports no stdout or stderr, as a Kiln generator does not, `log_stdout` or `log_stderr` drops its message rather than trapping.
+`#[ambient(E, …)]` on a function lets its body perform the listed effects without declaring them. A call demands only what the function's own `with` clause declares. Any other effect the body performs is checked as usual. A function value the body hands on is still bound by the function type it is moved into, which holds none of what the attribute lists. On a global, the attribute admits the listed effects in its initializer ([Global Variables](./spec-expressions.md#global-variables)).
+
+An argument names an effect the way a `with` clause does, by the name the function's module gives it, an import alias included. A name that reaches no effect there is an error. An effect of the same name declared in another module is a different effect, and stays required.
+
+Only the declaration is waived, not the capability. A listed effect the host provides is imported wherever a call reaches the body, as a declared one would be, and a host that does not offer it refuses the component. A component boundary keeps the waiver: a call into an imported Wado library demands what the library's exports declare, and the consumer's component forwards the imports only `#[ambient]` code reaches. A Kiln generator's world has no clock, so a generator logging through `core:log`'s `TextSink<WallClock>` is refused.
+
+It is for what must work from any function: output, which `log_stdout` (`#[ambient(Stdout)]`) and `log_stderr` (`#[ambient(Stderr)]`) write, and effects no caller can tell apart from none, such as the seed `HashMap::new` reads. Whether a call whose result goes unused runs is [unspecified](./spec-overview.md#behavior-classes), so its output may never appear.
 
 <!-- {"fixture":"spec_effects_ambient.wado"} -->
 
@@ -430,7 +436,7 @@ test {
 }
 ```
 
-[`#[benign(E)]`](./spec-attributes.md#benigne-) is the narrower form: only the named effects go undeclared, and the rest of the body is checked.
+The attribute is for the standard library. A program writing it is warned under [`undeclared_effects`](./spec-diagnostics.md#the-undeclared_effects-lint), a provisional rule.
 
 ## Generic Effects (Effect Polymorphism)
 
@@ -804,8 +810,9 @@ assert o.lines == ["b"];
 The handler expressions are evaluated before the body, outside the handlers they install.
 
 A handler runs on behalf of the code that installs it, so installing one demands
-what it performs: every effect its methods declare, and `E` itself where the
-block ends in `..forward` (see
+what it performs: every effect its methods declare, a method's `with _` read at
+the handler's type as a call reads it, and `E` itself where the block ends in
+`..forward` (see
 [Operations a Handler Leaves Out](#operations-a-handler-leaves-out)). Bindings on one `with`
 install in source order, each inside the ones before it, so a binding's handler
 also holds the effects the earlier bindings install.

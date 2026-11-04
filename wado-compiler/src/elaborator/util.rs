@@ -966,7 +966,7 @@ fn pattern_literal_mismatch(
             owner: Some(owner), ..
         } => {
             let owner_type = TypeTable::primitive_type_id(*owner);
-            return (type_table.type_key(owner_type) != type_table.type_key(scrutinee))
+            return (!type_table.same_type(owner_type, scrutinee))
                 .then(|| owner.as_str().to_string());
         }
         PatternLiteral::Int { .. }

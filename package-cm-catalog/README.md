@@ -100,5 +100,5 @@ source.
 cd package-cm-catalog && wado wit --lib
 ```
 
-emits the same interface, but wrapped in the library world instead of
-`world command`, so it reads the exports back without producing this file.
+emits the same library world, but with the imports the compiled component makes
+(`wasi:cli/stderr`), so it reads the exports back without producing this file.

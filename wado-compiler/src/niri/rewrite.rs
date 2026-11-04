@@ -306,7 +306,7 @@ impl Interpreter<'_> {
         ty: TypeId,
         span: Span,
     ) -> Option<Operand> {
-        if ty != type_id {
+        if !self.type_table.same_type(ty, type_id) {
             return None;
         }
         let (length, backing_type, live) = backing;
@@ -317,7 +317,7 @@ impl Interpreter<'_> {
             return existing;
         }
         let cut = Value::seq(backing_type, live.to_vec())?;
-        let previous = existing_fields(sink.body(), existing, type_id);
+        let previous = existing_fields(sink.body(), existing, type_id, self.type_table);
         let slot = |index: SeqField| slot_at(&previous, index.index() as usize);
         let backing = self.write_value(sink, slot(SeqField::Backing), &cut, backing_type, span)?;
         let len = self.write_value(sink, slot(SeqField::Len), length, TypeTable::I32, span)?;
@@ -353,7 +353,7 @@ impl Interpreter<'_> {
         ty: TypeId,
         span: Span,
     ) -> Option<Operand> {
-        if ty != type_id {
+        if !self.type_table.same_type(ty, type_id) {
             return None;
         }
         let tuple = self.type_table.as_tuple(type_id);
@@ -366,7 +366,7 @@ impl Interpreter<'_> {
             None => self
                 .facts
                 .shapes?
-                .fields(type_id)?
+                .fields(type_id, self.type_table)?
                 .iter()
                 .map(|f| (f.name.clone(), f.type_id))
                 .collect(),
@@ -377,7 +377,7 @@ impl Interpreter<'_> {
         let previous = if tuple.is_some() {
             existing_elements(sink.body(), existing)
         } else {
-            existing_fields(sink.body(), existing, type_id)
+            existing_fields(sink.body(), existing, type_id, self.type_table)
         };
         let mut written = Vec::with_capacity(names.len());
         for (index, (name, field_type)) in names.into_iter().enumerate() {
@@ -415,7 +415,7 @@ impl Interpreter<'_> {
         ty: TypeId,
         span: Span,
     ) -> Option<Operand> {
-        if ty != type_id {
+        if !self.type_table.same_type(ty, type_id) {
             return None;
         }
         let ResolvedType::BuiltinArray(element_type) = *self.type_table.get(type_id) else {
@@ -462,10 +462,13 @@ impl Interpreter<'_> {
         ty: TypeId,
         span: Span,
     ) -> Option<Operand> {
-        if ty != type_id {
+        if !self.type_table.same_type(ty, type_id) {
             return None;
         }
-        let (case_name, case) = self.facts.shapes?.case_at(type_id, case_index)?;
+        let (case_name, case) = self
+            .facts
+            .shapes?
+            .case_at(type_id, case_index, self.type_table)?;
         let previous = match existing.and_then(Operand::as_expr) {
             Some(e) => match &sink.body().exprs[e].kind {
                 ExprKind::VariantConstruct {
@@ -473,7 +476,9 @@ impl Interpreter<'_> {
                     case_index: held,
                     payload,
                     ..
-                } if *variant_type == type_id && *held == case_index => Some(*payload),
+                } if self.type_table.same_type(*variant_type, type_id) && *held == case_index => {
+                    Some(*payload)
+                }
                 _ => None,
             },
             None => None,
@@ -1357,6 +1362,7 @@ fn existing_fields(
     body: &Body,
     existing: Option<Operand>,
     type_id: TypeId,
+    type_table: &TypeTable,
 ) -> Option<Vec<Option<Operand>>> {
     let ExprKind::StructLiteral {
         struct_type,
@@ -1366,7 +1372,7 @@ fn existing_fields(
     else {
         return None;
     };
-    if *struct_type != type_id {
+    if !type_table.same_type(*struct_type, type_id) {
         return None;
     }
     let mut slots = vec![None; fields.len()];

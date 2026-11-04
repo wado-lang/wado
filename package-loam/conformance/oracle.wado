@@ -2,7 +2,7 @@
 //! and running it, and reading the tensors the ONNX backend test data ships
 //! beside each model, one bare `TensorProto` to a `.pb` file.
 
-use { eval } from "core:eval";
+use { eval, EvalHost } from "core:eval";
 use { emit } from "lib:loam/src/emit.wado";
 use { Graph, Known, Stored } from "lib:loam/src/graph.wado";
 use { infer } from "lib:loam/src/infer.wado";
@@ -30,7 +30,7 @@ pub fn generated(graph: &Graph, fuse: bool = true) -> Result<String, String> {
 
 /// What `program` prints under `eval`, followed, where it does not exit
 /// cleanly, by how it stopped.
-pub fn ran(program: String) -> String {
+pub fn ran(program: String) -> String with EvalHost {
     return match eval(program) {
         Ok(out) => if out.status matches { Exited(0) } {
             out.stdout;

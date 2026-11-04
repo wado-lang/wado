@@ -297,7 +297,15 @@ it has none — with escapes processed.
 
 `#[compiler_item("reflect_template_raw_tail")]`
 
-`tail(t)` with escapes preserved.
+`tail(t)` as written: a cooked template's escapes preserved, a raw
+template's text itself.
+
+#### `fn hashes() -> i32`
+
+`#[compiler_item("reflect_template_hashes")]`
+
+How many `#`s delimit the template on each end: 0 for `` `…` ``, 1 for
+``#`…`#``.
 
 ### `pub trait Ref with ()`
 
@@ -4595,8 +4603,6 @@ _Fields are private._
 
 #### `pub fn new() -> WaitableSet<W>`
 
-`#[benign(RawWaitableSet)]`
-
 #### `pub fn insert(&mut self, member: W)`
 
 Moves `member` into the set. A member is in one set at a time, so
@@ -4604,15 +4610,11 @@ whether the host has an event left for it is settled here.
 
 #### `pub fn wait(&mut self) -> Ready<W>`
 
-`#[benign(RawWaitableSet)]`
-
 Blocks until a member is ready, and moves it out: a copy once it
 settled, a call once it resolved. A member ready without the host comes
 first. Traps on an empty set.
 
 #### `pub fn poll(&mut self) -> Option<Ready<W>>`
-
-`#[benign(RawWaitableSet)]`
 
 The member that is ready, as `wait` means it, moved out, or None where
 none is yet.
@@ -4629,8 +4631,6 @@ race keeps its losers this way, where dropping the set would drop them.
 #### `impl Drop for WaitableSet<W>`
 
 ##### `fn drop(self)`
-
-`#[benign(RawWaitableSet)]`
 
 Drops the members first, each leaving the host's set as it drops: the
 host traps on dropping a set that still has one.
@@ -4687,8 +4687,6 @@ is lifted and dropped, since it may own handles.
 #### `impl Drop for AsyncCall<T>`
 
 ##### `fn drop(self)`
-
-`#[benign(Subtask)]`
 
 Cancels a call nobody waited on, and drops a result the callee
 returned, which owns handles only a lift reaches.
@@ -4959,12 +4957,6 @@ Create a new empty string.
 The tag an untagged template is sugar for: every hole rendered through
 its specifier into one buffer. `` `x=${x}` `` is
 `` String::format`x=${x}` ``. See WEP 2026-01-10.
-
-#### `pub fn raw<T: ReflectTemplate<Holes = [..V]>, affine ..V>(t: T) -> String`
-
-The tag keeping a template's escapes as written: `` String::raw`a\nb` ``
-is `"a\\nb"`, its holes rendered as `String::format` renders them. See
-WEP 2026-01-10.
 
 #### `pub fn with_capacity(capacity: i32) -> String`
 

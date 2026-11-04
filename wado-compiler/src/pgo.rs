@@ -10,8 +10,10 @@
 use std::collections::BTreeMap;
 use std::fmt::{self, Write as _};
 
-use crate::ast::{self, AstId};
-use crate::coverage::{Coverage, PlannedModule, ProbeSite, RegionKind, SourceMarker, plan_module};
+use crate::ast::{self, AstId, AstIdSpace};
+use crate::coverage::{
+    Coverage, PlannedModule, Pos, ProbeSite, RegionKind, SourceMarker, plan_module,
+};
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::rarity::Mark;
@@ -81,23 +83,44 @@ impl Profile {
         self.modules.is_empty()
     }
 
-    /// This profile read under `thresholds`, against its own summary.
+    /// This profile read under `thresholds`, against its own hot line.
     #[must_use]
     pub fn applied(&self, thresholds: Thresholds) -> Applied<'_> {
         Applied {
             profile: self,
             reading: Reading {
-                summary: Summary::of(self, thresholds.hot, thresholds.cold),
-                predictable_branch: thresholds.predictable_branch,
+                thresholds,
+                hot_line: self.count_line(thresholds.hot),
+                // No count inside the share leaves only a region that never
+                // ran at or below it.
+                cold_line: self.count_line(thresholds.cold).unwrap_or(0),
             },
         }
     }
 
-    fn counts(&self) -> impl Iterator<Item = i64> + '_ {
-        self.modules
+    /// The smallest count still inside `cutoff`'s share of all runs, with
+    /// every count sorted from the largest down and the share rounded down, as
+    /// LLVM's `ProfileSummaryBuilder` places its hot and cold lines. `None`
+    /// where the share holds no count.
+    fn count_line(&self, cutoff: Cutoff) -> Option<i64> {
+        let mut counts: Vec<i64> = self
+            .modules
             .values()
             .flatten()
             .flat_map(|function| function.counts.values().copied())
+            .collect();
+        counts.sort_unstable_by(|a, b| b.cmp(a));
+        let total: u128 = counts.iter().map(|&count| count as u128).sum();
+        let share = total * u128::from(cutoff.0) / u128::from(Cutoff::PER_MILLION);
+        let (mut runs, mut line) = (0, None);
+        for &count in &counts {
+            if runs >= share {
+                break;
+            }
+            runs += count as u128;
+            line = Some(count);
+        }
+        line
     }
 }
 
@@ -129,41 +152,79 @@ impl Percent {
     }
 }
 
-/// How a compile reads a profile's counts: the shares that place the summary's
-/// hot and cold lines, and the share of a branch's runs past which the branch
-/// is predictable. The defaults are LLVM's for its options of the same names.
+/// How a compile reads a profile's counts: a region is unlikely past the share
+/// of a branch's runs that makes the branch predictable, cold where it never
+/// ran, and hot at or above the smallest count inside the `hot` share of all
+/// runs. A call site is priced cold at or below the smallest count inside the
+/// `cold` share. The defaults are LLVM's for its options of the same names.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Thresholds {
+    pub predictable_branch: Percent,
     pub hot: Cutoff,
     pub cold: Cutoff,
-    pub predictable_branch: Percent,
 }
 
 impl Default for Thresholds {
     fn default() -> Self {
         Self {
+            predictable_branch: Percent(99),
             hot: Cutoff(990_000),
             cold: Cutoff(999_999),
-            predictable_branch: Percent(99),
         }
     }
 }
 
-/// What a profile's counts mean to a compile: a region is cold by its count
-/// against the summary, and unlikely by its count against the code around it.
+/// What a profile's counts mean to a compile: the thresholds, and the hot and
+/// cold lines they place over the whole profile, wherever a part of it is
+/// applied.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct Reading {
-    summary: Summary,
-    predictable_branch: Percent,
+    thresholds: Thresholds,
+    hot_line: Option<i64>,
+    cold_line: i64,
 }
 
 impl Reading {
-    /// Whether a region the profile ran `runs` times is cold. A region that
-    /// never ran is, whatever the summary's lines, as GCC's
-    /// `probably_never_executed` holds: a profile too small to place them
-    /// rounds both to zero.
-    fn is_cold(self, runs: i64) -> bool {
-        runs == 0 || self.summary.is_cold(runs)
+    /// How a call in a region the profile ran `runs` times is priced, as
+    /// LLVM's `isHotCount` and `isColdCount` read a count.
+    fn heat(self, runs: i64) -> Heat {
+        if runs > 0 && self.hot_line.is_some_and(|line| runs >= line) {
+            Heat::Hot
+        } else if runs <= self.cold_line {
+            Heat::Cold
+        } else {
+            Heat::Plain
+        }
+    }
+}
+
+/// The price a profile sets on a call site: the inliner's hot threshold, its
+/// cold one, or the threshold a site without a profile pays.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Heat {
+    Cold,
+    Plain,
+    Hot,
+}
+
+impl Heat {
+    /// This heat, with a hot one priced plain where `demoted` holds.
+    #[must_use]
+    pub fn plain_where(self, demoted: bool) -> Self {
+        match self {
+            Heat::Hot if demoted => Heat::Plain,
+            heat => heat,
+        }
+    }
+}
+
+impl Thresholds {
+    /// Whether a region the profile ran `runs` times is cold. Only one that
+    /// never ran is, as GCC's `probably_never_executed` holds. The optimizer
+    /// takes every function only cold sites reach as cold, so a region that
+    /// ran, however rarely, may call what runs a million times.
+    fn is_cold(runs: i64) -> bool {
+        runs == 0
     }
 
     /// Whether a region the profile ran `runs` times, where the code around it
@@ -174,52 +235,7 @@ impl Reading {
     }
 }
 
-/// Where a profile's counts turn hot and cold. With every count sorted from
-/// the largest down, a line is the smallest count still inside its cutoff's
-/// share of all runs, the share rounded down as LLVM's `ProfileSummaryBuilder`
-/// rounds it.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) struct Summary {
-    hot: i64,
-    cold: i64,
-}
-
-impl Summary {
-    fn of(profile: &Profile, hot: Cutoff, cold: Cutoff) -> Self {
-        let mut counts: Vec<i64> = profile.counts().collect();
-        counts.sort_unstable_by(|a, b| b.cmp(a));
-        let total: u128 = counts.iter().map(|&count| count as u128).sum();
-        let line = |cutoff: Cutoff| {
-            let share = total * u128::from(cutoff.0) / u128::from(Cutoff::PER_MILLION);
-            let (mut runs, mut line) = (0, 0);
-            for &count in &counts {
-                if runs >= share {
-                    break;
-                }
-                runs += count as u128;
-                line = count;
-            }
-            line
-        };
-        Self {
-            hot: line(hot),
-            cold: line(cold),
-        }
-    }
-
-    fn is_hot(self, count: i64) -> bool {
-        count >= self.hot
-    }
-
-    /// Hot is asked first, as LLVM's inliner does, so a count on both lines
-    /// is hot.
-    fn is_cold(self, count: i64) -> bool {
-        !self.is_hot(count) && count <= self.cold
-    }
-}
-
-/// A profile a compile applies, with how its counts are read. The summary is
-/// the whole profile's, wherever a part of it is applied.
+/// A profile a compile applies, with how its counts are read.
 #[derive(Debug, Clone, Copy)]
 pub struct Applied<'a> {
     pub(crate) profile: &'a Profile,
@@ -327,6 +343,76 @@ pub(crate) struct MarkMap {
     /// Each region marked, as `module:line:column kind mark`.
     marked: Vec<String>,
     remarks: Vec<(Span, String)>,
+    /// The price each measured region sets on a call site, for the inliner.
+    heat: HeatMap,
+}
+
+/// The [`Heat`] a profile found for each region it measured, per parse,
+/// sorted by where a region starts, the outer of two starting together first.
+/// Regions nest, so the innermost holding a position decides.
+#[derive(Debug, Clone, Default)]
+pub struct HeatMap {
+    regions: IndexMap<AstIdSpace, Vec<MeasuredRegion>>,
+    any_hot: bool,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct MeasuredRegion {
+    start: Pos,
+    end: Pos,
+    heat: Heat,
+    /// The index of the innermost region holding this one.
+    enclosing: Option<usize>,
+}
+
+impl HeatMap {
+    /// Whether some region is [`Heat::Hot`].
+    #[must_use]
+    pub fn any_hot(&self) -> bool {
+        self.any_hot
+    }
+
+    fn add(&mut self, space: AstIdSpace, measured: impl IntoIterator<Item = MeasuredRegion>) {
+        let regions = self.regions.entry(space).or_default();
+        regions.extend(measured);
+        self.any_hot |= regions.iter().any(|r| r.heat == Heat::Hot);
+        regions.sort_by_key(|r| (r.start, std::cmp::Reverse(r.end)));
+        let mut open: Vec<usize> = Vec::new();
+        for i in 0..regions.len() {
+            while open
+                .last()
+                .is_some_and(|&o| regions[o].end <= regions[i].start)
+            {
+                open.pop();
+            }
+            let enclosing = open.last().copied();
+            if let Some(o) = enclosing {
+                assert!(regions[i].end <= regions[o].end, "regions must nest");
+            }
+            regions[i].enclosing = enclosing;
+            open.push(i);
+        }
+    }
+
+    /// The heat of the code at `span`: the innermost measured region's that
+    /// holds its start, [`Heat::Plain`] where none does.
+    #[must_use]
+    pub fn heat(&self, span: Span) -> Heat {
+        let Some(regions) = self.regions.get(&span.space) else {
+            return Heat::Plain;
+        };
+        let at = Pos::start(span);
+        // The last region to start before `at` either holds it or is held by
+        // every region that does.
+        let mut next = regions.partition_point(|r| r.start <= at).checked_sub(1);
+        while let Some(i) = next {
+            if at < regions[i].end {
+                return regions[i].heat;
+            }
+            next = regions[i].enclosing;
+        }
+        Heat::Plain
+    }
 }
 
 impl MarkMap {
@@ -349,6 +435,7 @@ impl MarkMap {
             };
             map.apply(
                 plan_module(source, module, rt_unreachable_calls),
+                module.ast_id_space(),
                 functions,
                 applied.reading,
             );
@@ -361,7 +448,14 @@ impl MarkMap {
     /// as `reading` says. A function is matched by its name, the `n`th of a
     /// name to the `n`th recorded, and its counts apply only where its hash is
     /// the recorded one.
-    fn apply(&mut self, planned: PlannedModule, functions: &[ProfiledFunction], reading: Reading) {
+    fn apply(
+        &mut self,
+        planned: PlannedModule,
+        space: AstIdSpace,
+        functions: &[ProfiledFunction],
+        reading: Reading,
+    ) {
+        let thresholds = reading.thresholds;
         let PlannedModule {
             plan,
             sites,
@@ -424,24 +518,10 @@ impl MarkMap {
         // test also runs once per iteration. A function's body and a closure's
         // are entered by a call, not a branch.
         let unlikely = |id: usize| match (counts[id], count_of(parents[id])) {
-            (Some(runs), Some(around)) => reading.is_unlikely(runs, around),
+            (Some(runs), Some(around)) => thresholds.is_unlikely(runs, around),
             _ => false,
         };
-        // Cold, here and in everything under it: a marker covers what follows
-        // it, so one over a hot loop would make the loop cold.
-        let mut cold: Vec<bool> = counts
-            .iter()
-            .map(|count| count.is_some_and(|runs| reading.is_cold(runs)))
-            .collect();
-        for id in (0..cold.len()).rev() {
-            if let Some(parent) = parents[id] {
-                assert!(
-                    (parent as usize) < id,
-                    "a region is numbered after its parent"
-                );
-                cold[parent as usize] &= cold[id];
-            }
-        }
+        let cold = |id: usize| counts[id].is_some_and(Thresholds::is_cold);
         // The region a marker for `id` sits under: a region in an expression
         // has no statement position to mark.
         let markable_parent = |id: usize| {
@@ -453,6 +533,35 @@ impl MarkMap {
             }
             parent
         };
+        // A hot price on the rare side of a branch would grow code that rarely
+        // runs, so an unlikely region pays the plain one, and so does every
+        // region inside it, as the inliner reads the hint a marker writes. A
+        // `?`'s region spans its operand, whose calls run before the failure
+        // path the region counts, so it prices none of them.
+        let under_unlikely = |id: usize| {
+            let mut region = Some(id);
+            while let Some(r) = region {
+                if unlikely(r) {
+                    return true;
+                }
+                region = parents[r].map(|p| p as usize);
+            }
+            false
+        };
+        self.heat.add(
+            space,
+            plan.regions.iter().enumerate().filter_map(|(id, region)| {
+                if region.kind == RegionKind::Try {
+                    return None;
+                }
+                counts[id].map(|runs| MeasuredRegion {
+                    start: region.start,
+                    end: region.end,
+                    heat: reading.heat(runs).plain_where(under_unlikely(id)),
+                    enclosing: None,
+                })
+            }),
+        );
         for (id, region) in plan.regions.iter().enumerate() {
             if counts[id].is_none() || region.kind == RegionKind::Rhs {
                 continue;
@@ -462,8 +571,7 @@ impl MarkMap {
             if count_of(parent) == Some(0) {
                 continue;
             }
-            let outermost_cold = cold[id] && !parent.is_some_and(|p| cold[p as usize]);
-            let Some(mark) = Mark::of(unlikely(id), outermost_cold) else {
+            let Some(mark) = Mark::of(unlikely(id), cold(id)) else {
                 continue;
             };
             self.sites.insert(site_of[&(id as u32)], mark);
@@ -487,16 +595,15 @@ impl MarkMap {
                 continue;
             }
             self.overridden.insert(marker.node());
-            // A path that never ran is unlikely and cold whatever the summary,
-            // which the marker said.
-            if runs == 0 {
+            // A path that never ran is unlikely and cold, which the marker
+            // said; one that ran is not cold.
+            if Thresholds::is_cold(runs) {
                 continue;
             }
-            let verdict = match Mark::of(unlikely(region), cold[region]) {
-                Some(Mark::ColdPath) => continue,
-                Some(Mark::Unlikely) => "unlikely but not cold",
-                Some(Mark::Cold) => "cold but not unlikely",
-                None => "neither unlikely nor cold",
+            let verdict = if unlikely(region) {
+                "unlikely but not cold"
+            } else {
+                "neither unlikely nor cold"
             };
             let subject = match marker {
                 SourceMarker::ColdPath(_) => "`cold_path()` marks this path rare",
@@ -539,6 +646,16 @@ impl MarkMap {
     #[must_use]
     pub(crate) fn marked(&self) -> &[String] {
         &self.marked
+    }
+
+    #[must_use]
+    pub(crate) fn heat_map(&self) -> &HeatMap {
+        &self.heat
+    }
+
+    #[must_use]
+    pub(crate) fn into_heat_map(self) -> HeatMap {
+        self.heat
     }
 
     /// What applying the profile says about its counts: a function's
@@ -636,55 +753,104 @@ mod tests {
         );
     }
 
-    fn summary(counts: &[i64], hot: Cutoff, cold: Cutoff) -> Summary {
-        let mut text = format!("{HEADER}\nmodule a\nfn 00000000000000ab 1 f\n");
-        for (region, count) in counts.iter().enumerate() {
-            let _ = writeln!(text, "{region} {count}");
-        }
-        Summary::of(&parse(&text).expect("it parses"), hot, cold)
-    }
-
-    fn default_summary(counts: &[i64]) -> Summary {
-        let Thresholds { hot, cold, .. } = Thresholds::default();
-        summary(counts, hot, cold)
-    }
-
-    #[test]
-    fn each_line_is_the_smallest_count_inside_its_share() {
-        let lines = summary(&[600, 300, 60, 30, 10], Cutoff(900_000), Cutoff(990_000));
-        assert_eq!(lines, Summary { hot: 300, cold: 30 });
-        assert!(lines.is_hot(300) && !lines.is_cold(300));
-        assert!(!lines.is_hot(60) && !lines.is_cold(60));
-        assert!(lines.is_cold(30) && lines.is_cold(10));
-    }
-
-    /// LLVM rounds the share down: of 4 runs, 99% is 3, so the 3 alone is
-    /// inside it, and the 1 is cold.
-    #[test]
-    fn a_share_is_rounded_down() {
-        let lines = default_summary(&[3, 1]);
-        assert_eq!(lines, Summary { hot: 3, cold: 3 });
-        assert!(lines.is_cold(1));
-    }
-
-    #[test]
-    fn a_count_on_both_lines_is_hot() {
-        let lines = default_summary(&[1, 1, 1]);
-        assert_eq!(lines, Summary { hot: 1, cold: 1 });
-        assert!(lines.is_hot(1) && !lines.is_cold(1));
-    }
-
     /// LLVM's default: a branch is predictable when one side takes 99% of its
     /// runs, so the other side is unlikely at 1% or less.
     #[test]
     fn a_side_is_unlikely_at_the_predictable_branchs_complement() {
-        let reading = Reading {
-            summary: default_summary(&[1]),
-            predictable_branch: Thresholds::default().predictable_branch,
+        let thresholds = Thresholds::default();
+        assert!(thresholds.is_unlikely(10, 1000));
+        assert!(!thresholds.is_unlikely(11, 1000));
+        assert!(thresholds.is_unlikely(0, 1));
+    }
+
+    /// A line is the smallest of the largest counts that, added up, reach the
+    /// cutoff's share of all runs. LLVM's defaults put the hot one at 99% and
+    /// the cold one at 99.9999%.
+    #[test]
+    fn a_count_line_is_the_smallest_count_inside_the_cutoff() {
+        let profile = parse(
+            "wado-pgo 1\n\
+             module src/a.wado\n\
+             fn 0000000000000001 1 f\n\
+             0 900\n\
+             1 90\n\
+             2 10\n",
+        )
+        .expect("it parses");
+        let line = |per_million| profile.count_line(Cutoff::new(per_million).expect("a share"));
+        assert_eq!(line(900_000), Some(900));
+        assert_eq!(line(990_000), Some(90));
+        assert_eq!(line(999_999), Some(10));
+        assert_eq!(line(0), None);
+        let reading = profile.applied(Thresholds::default()).reading;
+        assert_eq!(reading.heat(90), Heat::Hot);
+        assert_eq!(reading.heat(50), Heat::Plain);
+        assert_eq!(reading.heat(10), Heat::Cold);
+    }
+
+    /// A share that holds no count places no line, so nothing is hot.
+    #[test]
+    fn an_empty_hot_share_heats_nothing() {
+        let profile = parse(
+            "wado-pgo 1\n\
+             module src/a.wado\n\
+             fn 0000000000000001 1 f\n\
+             0 900\n\
+             1 10\n",
+        )
+        .expect("it parses");
+        let thresholds = Thresholds {
+            hot: Cutoff::new(0).expect("a share"),
+            ..Thresholds::default()
         };
-        assert!(reading.is_unlikely(10, 1000));
-        assert!(!reading.is_unlikely(11, 1000));
-        assert!(reading.is_unlikely(0, 1));
+        let reading = profile.applied(thresholds).reading;
+        assert_eq!(reading.heat(900), Heat::Plain);
+        assert_eq!(reading.heat(10), Heat::Cold);
+    }
+
+    #[test]
+    fn the_innermost_measured_region_decides_the_heat_of_code() {
+        let space = AstIdSpace::next();
+        let region = |start: [u32; 2], end: [u32; 2], heat| MeasuredRegion {
+            start: Pos {
+                line: start[0],
+                column: start[1],
+            },
+            end: Pos {
+                line: end[0],
+                column: end[1],
+            },
+            heat,
+            enclosing: None,
+        };
+        let mut map = HeatMap::default();
+        map.add(
+            space,
+            [
+                region([3, 5], [5, 6], Heat::Cold),
+                region([6, 1], [7, 1], Heat::Cold),
+                region([10, 1], [11, 1], Heat::Cold),
+                region([1, 1], [9, 2], Heat::Hot),
+            ],
+        );
+        let at = |line, column| Span {
+            line,
+            column,
+            space,
+            ..Span::default()
+        };
+        assert_eq!(map.heat(at(2, 1)), Heat::Hot);
+        assert_eq!(map.heat(at(3, 5)), Heat::Cold);
+        assert_eq!(map.heat(at(5, 5)), Heat::Cold);
+        assert_eq!(map.heat(at(5, 6)), Heat::Hot);
+        assert_eq!(map.heat(at(8, 1)), Heat::Hot);
+        assert_eq!(map.heat(at(9, 2)), Heat::Plain);
+        assert_eq!(map.heat(at(12, 1)), Heat::Plain);
+        let elsewhere = Span {
+            space: AstIdSpace::next(),
+            ..at(2, 1)
+        };
+        assert_eq!(map.heat(elsewhere), Heat::Plain);
     }
 
     #[test]

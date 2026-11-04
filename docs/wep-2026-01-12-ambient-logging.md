@@ -129,6 +129,45 @@ Note: `effect_wait()` is encapsulated inside `log_error()` rather than in `panic
 
 5. **Consistency**: Both stdout (`log`) and stderr (`log_error`) have ambient variants.
 
+### `#[ambient(E, …)]` names its effects
+
+The attribute first exempted a whole body from effect checking. Every function
+that carried it performed a few effects it could name: `Stdout` or `Stderr`,
+`Log` in the `core:log` facade. The
+exemption hid every other effect too, so a facade that called `println` by
+mistake drew no diagnostic. The attribute now lists its effects, and the rest of
+the body is checked.
+
+### `#[benign]` merges into `#[ambient]`, and the import always lands
+
+Ambient effects were optional: where the target world lacked stdout or stderr,
+`log_stdout` or `log_stderr` dropped its message, and the component imported no
+stream. Extending that to every listed effect would have meant skipping any
+ambient body, and returning a value its type supplies in its place. `#[benign]`
+([WEP: Effect System and Randomness in Collections](./wep-2026-01-20-effect-system-randomness.md))
+waived the same declaration but kept the import. The two differed only in
+whether the import could be dropped, and dropping it buys nothing a host cannot
+give more simply. A sandbox stays a sandbox when it links a stdout that writes
+nowhere, and a Kiln generator's host routes its stdout and stderr to the build
+log. Dropping the import cost machinery that decided it per world, and a write
+that silently did nothing where its author expected it to run.
+
+So one attribute remains, `#[ambient(E)]`, on a function or a global, and it
+waives the declaration only. Each listed effect is imported wherever a call
+reaches the body, and a host that does not offer it refuses the component. The
+"unobservable" requirement `#[benign]` stated was never checked, and it goes
+with the name: the attribute is the standard library's to write, which is
+where its uses are audited.
+
+A deterministic host refuses a clock rather than answering one. A Kiln
+generator, or a program `core:eval` runs, that logs through
+`TextSink<WallClock>` is refused, and the default sink, `TextSink<NoClock>`,
+asks for none.
+
+Hiding an effect from every caller is the standard library's business, for now:
+a program writing `#[ambient]` is warned under `undeclared_effects`. The rule is
+provisional, to be revisited as use cases appear.
+
 ## Consequences
 
 ### Positive
@@ -164,22 +203,6 @@ Note: `effect_wait()` is encapsulated inside `log_error()` rather than in `panic
 ```
 
 ## Implementation Notes
-
-### Host Capability Detection
-
-**Current approach**: `log()` and `log_error()` directly call the WASI write-via-stream functions. This works when the world provides stdout/stderr.
-
-**Future enhancement**: Add capability detection so these functions become no-ops when I/O is unavailable:
-
-```wado
-pub fn log_error(message: String) {
-    // Future: explicit capability check
-    // if builtin::has_capability("stderr") {
-    //     ... write to stderr ...
-    // }
-    // For now: always attempt to write
-}
-```
 
 ### Future: Assert Statement
 

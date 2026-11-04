@@ -224,7 +224,7 @@ fn take_compile_worker() -> CompileWorker {
 
 /// Run `f` on a compile worker and hand back what it returned, re-raising a
 /// panic on the calling thread so libtest still attributes it to the test.
-fn on_compile_worker<R: Send + 'static>(f: impl FnOnce() -> R + Send + 'static) -> R {
+pub fn on_compile_worker<R: Send + 'static>(f: impl FnOnce() -> R + Send + 'static) -> R {
     let worker = take_compile_worker();
     let returning = worker.clone();
     let (sender, receiver) = std::sync::mpsc::channel();
@@ -1018,7 +1018,30 @@ pub fn world_surface(host: &impl CompilerHost, source: &str, world_fq: &str) -> 
         source,
         host,
         Some("entry.wado"),
+<<<<<<< HEAD
         options,
+||||||| c0bdae6df
+        OptLevel::O2,
+        Some(world_fq),
+        None,
+        wado_compiler::OptOverrides::default(),
+        &[],
+        None,
+        &wado_compiler::param_resolution::ParamInputs::default(),
+        wado_compiler::kiln::InvocationIndex::default(),
+        1,
+=======
+        OptLevel::O2,
+        Some(world_fq),
+        None,
+        wado_compiler::OptOverrides::default(),
+        &[],
+        None,
+        &wado_compiler::param_resolution::ParamInputs::default(),
+        wado_compiler::kiln::InvocationIndex::default(),
+        1,
+        None,
+>>>>>>> origin/main
     )) {
         Ok(dump) => dump
             .wir_package

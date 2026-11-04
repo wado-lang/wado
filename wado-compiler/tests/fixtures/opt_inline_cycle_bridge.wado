@@ -1,11 +1,8 @@
 // Test: a one-call forwarder on a call cycle is spliced into its callers.
 //
-// `entry` forwards to `scalar`, whose rare paths re-enter `entry`, so all
-// three lie on one cycle. The inliner bars every function on a cycle, which
-// left each hot call through `entry` a call. `entry` is a bridge: splicing it
-// exposes `scalar`, which makes more than one call and stays barred, so the
-// expansion stops after one step. `core:json` reads a quoted number the same
-// way, through `T::deserialize`, and every scalar it read paid that call.
+// `entry` forwards to `scalar`, whose rare paths re-enter `entry`, so all four
+// lie on one cycle. Cutting the cycle at `scalar`, its costliest member, leaves
+// `entry` free to splice, so the expansion stops at the call to `scalar`.
 
 use { println, Stdout } from "core:cli";
 

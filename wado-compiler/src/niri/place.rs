@@ -188,9 +188,13 @@ pub(super) fn place_aliased_by_another(
 ) -> bool {
     places
         .iter()
-        .filter(|(other_root, other_path)| {
-            *other_root == root && (other_path.starts_with(path) || path.starts_with(other_path))
-        })
+        .filter(|(other_root, other_path)| places_overlap((*other_root, other_path), (root, path)))
         .nth(1)
         .is_some()
+}
+
+/// Whether two places name overlapping storage: one root, and one path a
+/// prefix of the other.
+pub(super) fn places_overlap(a: (u32, &[u32]), b: (u32, &[u32])) -> bool {
+    a.0 == b.0 && (a.1.starts_with(b.1) || b.1.starts_with(a.1))
 }

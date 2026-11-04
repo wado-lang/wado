@@ -8,7 +8,7 @@ use wado_lsp::host::discovery::Disk;
 use crate::args::{self, CliExit};
 use crate::compile::{Settled, build_load, entry_profile, load_nearest_manifest};
 use crate::compiler_host::FilesystemCompilerHost;
-use crate::knobs::{CompileKnobOpt, CompileKnobs};
+use crate::knobs::{CompileKnobOpt, CompileKnobs, HostKnobOpt, HostKnobs};
 
 pub struct DumpOptions {
     pub inputs: Vec<String>,
@@ -24,7 +24,10 @@ pub struct DumpOptions {
     pub show_nir_lowered: bool,
     pub show_nir: bool,
     pub show_wir: bool,
+    /// `--inline-decisions <pattern>`: the functions whose inlining to report.
+    pub inline_decisions: Option<String>,
     pub knobs: CompileKnobs,
+    pub host: HostKnobs,
     /// `--world <name>`; `None` selects the default `wasi:cli/command`.
     pub target_world: Option<String>,
 }
@@ -43,6 +46,7 @@ enum Opt {
     NirLowered,
     Nir,
     Wir,
+    InlineDecisions,
     World,
     Help,
 }
@@ -61,6 +65,7 @@ impl Opt {
         Self::NirLowered,
         Self::Nir,
         Self::Wir,
+        Self::InlineDecisions,
         Self::World,
         Self::Help,
     ];
@@ -68,13 +73,15 @@ impl Opt {
     const KNOBS: &[CompileKnobOpt] = &[
         CompileKnobOpt::OptLevel,
         CompileKnobOpt::InlineThreshold,
+        CompileKnobOpt::InlineHotCallsiteThreshold,
+        CompileKnobOpt::InlineColdCallsiteThreshold,
         CompileKnobOpt::InlineGrowth,
         CompileKnobOpt::OptIterations,
         CompileKnobOpt::Specializations,
         CompileKnobOpt::OptThreads,
+        CompileKnobOpt::PredictableBranchThreshold,
         CompileKnobOpt::ProfileSummaryCutoffHot,
         CompileKnobOpt::ProfileSummaryCutoffCold,
-        CompileKnobOpt::PredictableBranchThreshold,
         CompileKnobOpt::LogLevel,
         CompileKnobOpt::Allocator,
         CompileKnobOpt::NoCache,
@@ -95,7 +102,8 @@ impl Opt {
             | Self::CoveragePlan
             | Self::NirLowered
             | Self::Nir
-            | Self::Wir => true,
+            | Self::Wir
+            | Self::InlineDecisions => true,
             Self::World | Self::Help => false,
         }
     }
@@ -174,6 +182,12 @@ impl Opt {
                 value: None,
                 desc: "Show final WIR (after optimization, affected by -Ox) [default]",
             },
+            Self::InlineDecisions => args::OptSpec {
+                long: Some("inline-decisions"),
+                short: None,
+                value: Some("<pattern>"),
+                desc: "Show what the inliner decided, and why, each round, for the callers\nand callees whose name holds <pattern>, and every callee such a caller\ncalls ('' for every function)",
+            },
             Self::World => args::WORLD_SPEC,
             Self::Help => args::HELP_SPEC,
         }
@@ -206,6 +220,7 @@ fn format_usage() -> String {
         args::OptsHelp::default()
             .add(&[Opt::World, Opt::Help], |o| o.spec())
             .add(Opt::KNOBS, |o| o.spec())
+            .add(HostKnobOpt::ALL, |o| o.spec())
             .add(args::ParamOpt::ALL, |o| o.spec())
             .render()
     )
@@ -228,13 +243,17 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<DumpOptions, CliExit> {
     let mut show_nir_lowered = false;
     let mut show_nir = false;
     let mut show_wir = false;
+    let mut inline_decisions: Option<String> = None;
     let mut target_world: Option<String> = None;
     let mut any_phase = false;
     let mut knobs = CompileKnobs::default();
+    let mut host = HostKnobs::default();
 
     while let Some(arg) = args::next_arg(&mut parser)? {
         if let Some(k) = args::match_opt(&arg, Opt::KNOBS, |k| k.spec()) {
             knobs.apply(k, &mut parser)?;
+        } else if let Some(h) = args::match_opt(&arg, HostKnobOpt::ALL, |h| h.spec()) {
+            host.apply(h);
         } else if let Some(p) = args::match_opt(&arg, args::ParamOpt::ALL, |p| p.spec()) {
             args::apply_param_opt(&mut knobs.params, p, &mut parser)?;
         } else if let Some(opt) = args::match_opt(&arg, Opt::ALL, |o| o.spec()) {
@@ -287,6 +306,10 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<DumpOptions, CliExit> {
                     show_wir = true;
                     any_phase = true;
                 }
+                Opt::InlineDecisions => {
+                    inline_decisions = Some(args::require_string(&mut parser)?);
+                    any_phase = true;
+                }
                 Opt::World => target_world = Some(args::require_string(&mut parser)?),
                 Opt::Help => return Err(CliExit::help(usage)),
             }
@@ -318,7 +341,9 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<DumpOptions, CliExit> {
         show_nir_lowered,
         show_nir,
         show_wir,
+        inline_decisions,
         knobs,
+        host,
         target_world,
     })
 }
@@ -365,12 +390,25 @@ async fn run_single(opts: &DumpOptions, input: &str) -> Result<(), CliExit> {
         target_world: opts.target_world.clone(),
         profile,
         invocations,
+<<<<<<< HEAD
         ..knobs.compiler_options()
     };
     // Diagnostics are already emitted by the host; signal silently on failure.
     let result = wado_compiler::dump_with_options(&source, &host, Some(input), options)
         .await
         .map_err(|_bail| CliExit::silent_failure(1))?;
+||||||| c0bdae6df
+        knobs.optimize_threads(),
+    )
+    .await
+    .map_err(|_bail| CliExit::silent_failure(1))?;
+=======
+        knobs.optimize_threads(),
+        opts.inline_decisions.as_deref(),
+    )
+    .await
+    .map_err(|_bail| CliExit::silent_failure(1))?;
+>>>>>>> origin/main
     if opts.show_tokens {
         println!("=== Tokens ===");
         for (i, token) in result.tokens.iter().enumerate() {
@@ -618,6 +656,14 @@ async fn run_single(opts: &DumpOptions, input: &str) -> Result<(), CliExit> {
             println!("(Optimization failed or not available)");
             println!();
         }
+    }
+    if opts.inline_decisions.is_some() {
+        println!("=== Inline Decisions ===");
+        match result.inline_decisions_text {
+            Some(ref text) => print!("{text}"),
+            None => println!("(optimization failed or not available)"),
+        }
+        println!();
     }
     if opts.show_wir {
         if let Some(ref wir_package) = result.wir_package {

@@ -17,23 +17,13 @@
 //! so the body below sees `Request<Options>` unchanged. See WEP
 //! 2026-04-12 §"Authoring a generator".
 
-use {
-    Request,
-    Response,
-    Error,
-    OutputFile,
-    KilnHost,
-    Diagnostic as KilnDiagnostic,
-    DiagnosticLevel,
-    InputFile,
-    read_text,
-} from "core:kiln";
+use { Request, Response, Error, OutputFile, InputFile, read_text } from "core:kiln";
 use { assemble_grammar } from "./g4/parser.wado";
 use { generate as codegen_generate, GenerateOptions } from "./codegen.wado";
 use { parse_highlight_query, HighlightRule } from "./highlight_query.wado";
 use { diagnostic_level } from "./gir.wado";
 export use { AtnMode } from "./gen_settings.wado";
-use { Level } from "core:log";
+use { NoFields, event } from "core:log";
 use { to_snake_case } from "./gen_util.wado";
 use { Deserialize } from "core:serde";
 
@@ -112,7 +102,7 @@ fn read_inputs(
 /// `bind_request` shape during
 /// `kiln::import_check::inject_kiln_request_adapter` (runs before
 /// analyze).
-export fn generate(req: Request<Options>) -> Result<Response, Error> with KilnHost {
+export fn generate(req: Request<Options>) -> Result<Response, Error> {
     // Stamp the real Kiln paths; otherwise the generated header's
     // `sources = [...]` fabricates a nonexistent `<GrammarName>.g4`. A
     // `"tree-sitter-highlights"` input is a highlight query, compiled into the
@@ -163,18 +153,19 @@ export fn generate(req: Request<Options>) -> Result<Response, Error> with KilnHo
         atn: req.options.atn,
     };
     let generated = codegen_generate(&mut grammar, &gen_opts);
-    // Surface Gale's prediction-strategy diagnostics through the Kiln host, at
-    // the level `gir::diagnostic_level` gives each kind — the same level the
-    // `gale gen` CLI emits it at, so a grammar built either way is read the same
-    // way. Gale diagnostics carry no source span yet, so the label leads the text.
+    // Log Gale's prediction-strategy diagnostics at the level
+    // `gir::diagnostic_level` gives each kind — the same level the `gale gen`
+    // CLI logs it at, so a grammar built either way is read the same way. An
+    // `Error` one refuses the grammar, which the returned error says.
     let mut refusals: List<String> = [];
     for let d of &generated.diagnostics {
         if let Some(level) = diagnostic_level(&d.kind) {
-            let message = `gale: ${d.owner.label()}: ${d.message}`;
+            let message = `${d.owner.label()}: ${d.message}`;
             if level matches { Error } {
-                refusals.push(message);
+                refusals.push(`gale: ${message}`);
+            } else {
+                event(level, message, NoFields {}, "gale");
             }
-            KilnHost::emit_diagnostic(KilnDiagnostic { level: kiln_level(level), span: null, message });
         }
     }
     if !refusals.is_empty() {
@@ -197,15 +188,4 @@ export fn generate(req: Request<Options>) -> Result<Response, Error> with KilnHo
         },
     ];
     return Result::Ok(Response { files });
-}
-
-/// Gale's diagnostic level as a Kiln one. Kiln has no `Debug` or `Trace`, so
-/// both land on `Hint`, its quietest.
-fn kiln_level(level: Level) -> DiagnosticLevel {
-    return match level {
-        Error => DiagnosticLevel::Error,
-        Warn => DiagnosticLevel::Warning,
-        Info => DiagnosticLevel::Info,
-        Debug | Trace => DiagnosticLevel::Hint,
-    };
 }

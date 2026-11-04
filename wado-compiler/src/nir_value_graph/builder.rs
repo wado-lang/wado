@@ -530,6 +530,13 @@ struct Builder<'a> {
     block_writes: IndexMap<BlockId, std::rc::Rc<IndexSet<u32>>>,
     fresh_invalidations: IndexSet<u32>,
     mut_escaped_sorted: Vec<u32>,
+    /// The `mut_escaped` locals a call may find holding a value other than a
+    /// fresh invalidation, since the last call took them all: each one read
+    /// or bound since, unless `rebump_all` says any may. A call invalidates
+    /// those alone, so a body of many calls and locals is not walked whole
+    /// at each.
+    rebump: Vec<u32>,
+    rebump_all: bool,
     /// `local_index → current Value` at the current program point. Cloned at
     /// branch entries so each arm walks from the pre-branch snapshot.
     current_value: IndexMap<u32, ValueId>,
@@ -624,6 +631,8 @@ impl<'a> Builder<'a> {
             value_of: IndexMap::default(),
             block_writes: IndexMap::default(),
             fresh_invalidations: IndexSet::default(),
+            rebump: Vec::new(),
+            rebump_all: true,
             current_value: IndexMap::default(),
             heap_state: HeapState::new(),
             field_store: IndexMap::default(),
@@ -978,8 +987,16 @@ impl<'a> Builder<'a> {
         // opaque `ValueId`s and heap versions are handed out in visit order, so
         // this keeps the value graph a deterministic function of the program
         // regardless of how the alias sets were built (#1440).
-        for i in 0..self.mut_escaped_sorted.len() {
-            let l = self.mut_escaped_sorted[i];
+        let locals = if std::mem::take(&mut self.rebump_all) {
+            self.rebump.clear();
+            self.mut_escaped_sorted.clone()
+        } else {
+            let mut noted = std::mem::take(&mut self.rebump);
+            noted.sort_unstable();
+            noted.dedup();
+            noted
+        };
+        for l in locals {
             // A local bound to an aggregate literal keeps its value across the
             // call: the local *is* the storage, so a callee writing through a
             // `&mut` of it changes fields, never which object it names. The
@@ -1148,7 +1165,7 @@ impl<'a> Builder<'a> {
                     // mutates goes Opaque and any field it writes is
                     // invalidated (both below). Else `false && { x = 2; true }`
                     // would commit `x = 2` and forward the never-stored value.
-                    self.fresh_invalidations.clear();
+                    self.forget_fresh_invalidations();
                     let saved_cur = self.current_value.clone();
                     let rhs = self.walk_operand(right);
                     // A local the rhs bound for the first time is as conditional
@@ -1669,7 +1686,9 @@ impl<'a> Builder<'a> {
 
     fn read_local(&mut self, idx: u32) -> ValueId {
         if let Some(&v) = self.current_value.get(&idx) {
-            self.fresh_invalidations.swap_remove(&idx);
+            if self.fresh_invalidations.swap_remove(&idx) {
+                self.note_rebump(idx);
+            }
             v
         } else {
             // Unbound locals shouldn't occur on well-typed NIR; cache a
@@ -1719,7 +1738,7 @@ impl<'a> Builder<'a> {
     /// Capture all flow-sensitive state (`current_value`, `heap_state`,
     /// `ref_targets`) at the current program point as one [`FlowSnapshot`].
     fn flow_snapshot(&mut self) -> FlowSnapshot {
-        self.fresh_invalidations.clear();
+        self.forget_fresh_invalidations();
         FlowSnapshot {
             current_value: self.current_value.clone(),
             heap: self.heap_state.snapshot(),
@@ -1730,7 +1749,7 @@ impl<'a> Builder<'a> {
     /// Reset all flow-sensitive state to a previously captured snapshot. Used
     /// between branch arms so each arm walks from the common pre-branch state.
     fn flow_restore(&mut self, snap: &FlowSnapshot) {
-        self.fresh_invalidations.clear();
+        self.forget_fresh_invalidations();
         self.current_value.clone_from(&snap.current_value);
         self.heap_state.restore(snap.heap.clone());
         self.ref_targets.clone_from(&snap.ref_targets);
@@ -1738,7 +1757,21 @@ impl<'a> Builder<'a> {
 
     fn set_local_value(&mut self, idx: u32, v: ValueId) {
         self.fresh_invalidations.swap_remove(&idx);
+        self.note_rebump(idx);
         self.current_value.insert(idx, v);
+    }
+
+    /// `idx` holds what a call may change, where a call may change it.
+    fn note_rebump(&mut self, idx: u32) {
+        if self.mut_escaped.contains(&idx) {
+            self.rebump.push(idx);
+        }
+    }
+
+    /// Every invalidation counts as observed: a call may change any local.
+    fn forget_fresh_invalidations(&mut self) {
+        self.fresh_invalidations.clear();
+        self.rebump_all = true;
     }
 
     fn invalidate_local_with(&mut self, idx: u32, mint: impl FnOnce(&mut ValuePool) -> ValueId) {
@@ -2033,9 +2066,7 @@ impl<'a> Builder<'a> {
                 self.block_falls_through(*block)
                     || self.body.breaks_to(NodeRef::Block(*block), label)
             }
-            // A `Loop` falls through only via `break`, which we do not
-            // analyse here; treat it as falling through.
-            StmtKind::Loop { .. } => true,
+            StmtKind::Loop { .. } => !self.body.loops_forever(s),
             _ => true,
         }
     }
@@ -2106,7 +2137,7 @@ impl<'a> Builder<'a> {
         let heap_effects = collect_loop_heap_effects(self.body, &self.call_facts(), body_block);
         // Snapshot before the reassigned-local opaques below overwrite the
         // written locals' pre-loop values.
-        self.fresh_invalidations.clear();
+        self.forget_fresh_invalidations();
         self.loop_entry_values
             .insert(body_block, self.current_value.clone());
         // Born-as-operands: give each written local a `LoopPhi { entry, body_iter }`

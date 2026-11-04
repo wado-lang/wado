@@ -29,7 +29,7 @@ use crate::module_source::{CmNamespace, ModuleSource};
 use crate::name::{
     DeclName, DeclPath, RefKind, UNIT_TYPE_NAME, cm_binding_func_name, cm_import_alias,
     cm_lift_func_name, cm_release_args_func_name, cm_world_import_label, cm_wrap_async_func_name,
-    ref_type_name, to_cm_name,
+    is_wasi_fq, ref_type_name, to_cm_name,
 };
 use crate::primitive::PrimitiveType;
 use crate::resolve::Resolutions;
@@ -383,7 +383,7 @@ pub fn cm_payload_type_from_ast(
             if declares(&[CmTypeKind::Resource]) {
                 return Some(CmPayloadType::Resource(declared()?));
             }
-            if src.starts_with("wasi:") || stdlib::is_wit_core_interface(&src) {
+            if is_wasi_fq(&src) || stdlib::is_wit_core_interface(&src) {
                 return None;
             }
             if !declares(&[
@@ -492,7 +492,7 @@ fn wasi_error_code_decl_from_ast(
         return None;
     };
     let source = registry.source_interface(n)?;
-    if !source.starts_with("wasi:") {
+    if !is_wasi_fq(&source) {
         return None;
     }
     if ![CmTypeKind::Enum, CmTypeKind::Variant]
@@ -955,6 +955,16 @@ impl CmInterfaceInfo {
     }
 }
 
+/// Why a caller of a component's exports must hold one of its imports.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Demand {
+    /// The component says its exports demand it, or it is a guest import.
+    Certain,
+    /// The component records nothing of what its exports demand, so every
+    /// `wasi:*` import is demanded.
+    Unrecorded,
+}
+
 /// Registry of WASI imports for code generation
 ///
 /// Collects information from effect definitions and provides:
@@ -1039,11 +1049,17 @@ pub struct CmInterfaceRegistry {
     component_interfaces: IndexSet<String>,
 
     /// Per component-dependency interface FQ, the host-leaf import FQs the
-    /// dependency component itself declares (its WASI capabilities). Effect
-    /// reconstruction unions these into the consumer when the interface is used;
-    /// a purely-computational component maps to an empty set. Every exported
+    /// dependency component itself declares (its WASI capabilities), each of
+    /// which the consumer forwards; reconstruction demands those
+    /// [`Self::demanded_imports_for`] answers. A purely-computational component
+    /// maps to an empty set. Every exported
     /// interface of one component shares the same set (v1 component-level union).
     component_host_leaf_imports: IndexMap<String, Vec<String>>,
+
+    /// Per component-dependency interface FQ, the `wasi:*` imports the
+    /// dependency records its exports demand. Absent where it records none,
+    /// and then every import is demanded.
+    component_demanded_imports: IndexMap<String, Vec<String>>,
 
     /// World-level function imports (Phase 9), by the bodyless function
     /// declaring each -> its key in `functions`.
@@ -2464,6 +2480,7 @@ impl CmInterfaceRegistry {
         interface_fqs: &[String],
         imported_fqs: &[String],
         host_leaf_imports: &[String],
+        demanded_imports: Option<&[String]>,
         module_source: &ModuleSource,
     ) -> Result<(), String> {
         self.register_module_decls(module, &CmDeclScope::Module)?;
@@ -2475,6 +2492,10 @@ impl CmInterfaceRegistry {
             if !host_leaf_imports.is_empty() {
                 self.component_host_leaf_imports
                     .insert(fq.clone(), host_leaf_imports.to_vec());
+            }
+            if let Some(demanded) = demanded_imports {
+                self.component_demanded_imports
+                    .insert(fq.clone(), demanded.to_vec());
             }
         }
         // The bindings declare an imported interface's types too, so each maps
@@ -2493,10 +2514,9 @@ impl CmInterfaceRegistry {
         self.component_interfaces.contains(fq)
     }
 
-    /// The host-leaf import FQs the component owning `fq` declares — the raw
-    /// capabilities effect reconstruction unions into a consumer that uses this
-    /// interface. Empty for a purely-computational component or a non-component
-    /// interface. Ambient filtering is the consumer's responsibility.
+    /// The host-leaf import FQs the component owning `fq` declares, each of
+    /// which its consumer forwards. Empty for a purely-computational component
+    /// or a non-component interface.
     #[must_use]
     pub fn host_leaf_imports_for(&self, fq: &str) -> &[String] {
         self.component_host_leaf_imports
@@ -2504,11 +2524,30 @@ impl CmInterfaceRegistry {
             .map_or(&[], Vec::as_slice)
     }
 
+    /// The host-leaf imports of the component owning `fq` that a caller of its
+    /// exports must hold, each with why: a guest import, which the consumer
+    /// provides, and a `wasi:*` one the component records as demanded, or
+    /// every one where it records none.
+    pub fn demanded_imports_for(&self, fq: &str) -> impl Iterator<Item = (&String, Demand)> {
+        let recorded = self.component_demanded_imports.get(fq);
+        self.host_leaf_imports_for(fq)
+            .iter()
+            .filter_map(move |import| {
+                if !is_wasi_fq(import) {
+                    return Some((import, Demand::Certain));
+                }
+                match recorded {
+                    Some(fqs) => fqs.contains(import).then_some((import, Demand::Certain)),
+                    None => Some((import, Demand::Unrecorded)),
+                }
+            })
+    }
+
     /// Whether `fq` is a guest effect some component dependency imports: an
     /// imported interface outside WASI, which is the host's.
     #[must_use]
     pub fn is_dependency_guest_import(&self, fq: &str) -> bool {
-        !fq.starts_with("wasi:") && self.is_dependency_import(fq)
+        !is_wasi_fq(fq) && self.is_dependency_import(fq)
     }
 
     /// Whether some component dependency imports `fq`.

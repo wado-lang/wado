@@ -48,6 +48,8 @@ finding was:
 - Real → fix the cause. When the reviewer's patch is wrong, fix it anyway; the
   value was in the claim, not the suggestion.
 - Grounded in a project rule the code breaks → fix it, and cite the rule.
+- Real, but on an input no producer or caller supplies → skip, or state it as
+  a contract or an assert. An error path for such an input is never read.
 - Not real, or already recorded as a known gap → skip, and say why.
 - A missing doc comment → skip. A comment is written only for what the code
   cannot say (`AGENTS.md` § General Rules), so its absence is not a defect.
@@ -83,7 +85,8 @@ nothing. It is worse than leaving the test alone: it reads as coverage.
 ## Design decisions go to the user
 
 A finding that changes a public API, a language rule, or a phase's contract is a
-proposal. Put it to the user with a recommendation and wait. Adopting it because
+proposal. So is a fix that invents a convention, such as a naming scheme, or
+widens the branch past what it set out to do. Put it to the user with a recommendation and wait. Adopting it because
 a reviewer asked is how a design drifts without anyone deciding.
 
 ## Then invoke `/distill`

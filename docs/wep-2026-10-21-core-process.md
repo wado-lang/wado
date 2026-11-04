@@ -52,7 +52,7 @@ left out:
 
 ### The host sandbox is the last line of defense
 
-`#[ambient]`, `#[benign(E)]` and a user-written `#[cm("…")]` redeclaration can
+`#[ambient(E)]` and a user-written `#[cm("…")]` redeclaration can
 each reach `Process` without the effect showing in a signature. Wado does not
 close these. The effect makes intent visible; it is not the security boundary.
 

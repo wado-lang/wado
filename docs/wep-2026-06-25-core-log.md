@@ -197,8 +197,7 @@ appends `at file:line` to a text line and `file` / `line` keys to a JSON object.
 A key a switch turns off is absent rather than null.
 
 Both write through the ambient `log_stderr`, so a sink needs no `Stderr` in its
-signature and installs in any world — a world without stderr degrades to a no-op
-instead of a trap, matching the never-fail rule. The timestamp is the one part
+signature and installs in any function. The timestamp is the one part
 needing a capability, and reaches it the same way: `Log`'s operations declare no
 effects, so a sink cannot declare the clock read on them either, and it goes
 through an `#[ambient]` helper.
@@ -210,10 +209,9 @@ Monomorphization drops the instantiation nobody asks for, so a program over
 promise that. The call stays reachable, the import lands, and at `-O0` nothing
 folds it away.
 
-The import is what makes this worth a type parameter, because a world decides
-which imports a program may have. `core:kiln/generator` imports no clock, so a
-generator reaching a stamped sink is a compile error
-(`KILN_GENERATOR_FORBIDDEN_IMPORT`) rather than logging without a clock.
+The import is what makes this worth a type parameter, because a host decides
+which imports a program may have. `core:kiln/generator` offers no clock, so a
+generator over `TextSink<WallClock>` is refused.
 
 ### Runtime filter directives
 
@@ -242,19 +240,28 @@ record ingestion time, drift under buffering, and not every target has a
 collector. A sink that stamps is a sink over `WallClock`, which is why the choice
 is a type parameter rather than a field — see [Output formats](#output-formats).
 
-The default is `NoClock`, so a program that installs nothing logs in every world,
-`core:kiln/generator` included. That is the conservative end of the trade rather
-than a claim about what a default line should carry. A monotonic `seq` counter
-(default on) preserves intra-process order without a clock, and stamping the
-default in worlds that have one is a compatible change, left as open work.
+The default is `NoClock`, for three reasons:
+
+- A default line is the same on every run, so a test, a golden file, or an
+  evaluated program can compare what it captured without opting out first.
+- A program that only logs asks its host for no clock. Over `WallClock`, every
+  command that logs would import `wasi:clocks`, and a host narrower than its
+  world, such as `core:eval`'s, would refuse it.
+- Where a time matters, something else usually supplies it: a collector such as
+  journald or a container runtime stamps what it receives. An application that
+  wants the sink's own stamp installs `TextSink<WallClock>`, one annotation.
+
+A monotonic `seq` counter (default on) preserves intra-process order without a
+clock.
 
 ### Default sink and scoped overrides
 
 `Log` is an ordinary effect, so an inner `with Log => &sink do` overrides the
-outermost handler for a scope. The facade functions are `#[ambient]`, so
-performing `Log` adds no `with Log` to callers — logging is callable anywhere
-without infecting signatures. `Filter` and `Context` pass events on to the next
-handler out, so the function installing one declares `with Log`, as
+outermost handler for a scope. Performing `Log` through the facade adds no
+`with Log` to callers, so logging is callable anywhere without infecting
+signatures: every function of it is `#[ambient(Log)]`. `in_span` returns what
+its body computed inside the span it entered, which `current` can read. `Filter` and
+`Context` pass events on to the next handler out, so the function installing one declares `with Log`, as
 [WEP: A Function Without `with` Performs No Effects](./wep-2026-09-30-effect-free-functions.md)
 requires of every delegating handler.
 
@@ -275,9 +282,11 @@ discarding it when the test passes, which is exactly the attribution a
 `CaptureSink`-under-test default was reaching for. `CaptureSink` stays what it
 should be — the sink a test installs to assert on events.
 
-A Kiln generator is the one entry point that gets a shim. It imports no stderr,
-so the default sink drops every event, and the compiler installs `KilnLogSink`
-around `generate`'s body to send them to the host as diagnostics
+A Kiln generator is the one entry point that gets a shim. Its host turns each
+stdout line into an info and each stderr line into a warning, so the default
+sink would report every event as a warning, and the compiler installs
+`KilnLogSink` around `generate`'s body to write each to the stream its level
+picks
 ([WEP: Kiln](./wep-2026-04-12-kiln.md#the-generator-contract)). The sink lives in
 `core:kiln`, so the policy stays in the library; the compiler only names it.
 
@@ -288,7 +297,8 @@ avoid.
 
 TODO: seed the default threshold from `WADO_LOG` on first use, so a deployment
 retunes it without a recompile (`parse_directives` already reads the syntax).
-Reading the environment ambiently degrades where a world has none.
+Reading the environment ambiently imports `wasi:cli/environment` into every
+program that logs.
 
 ### Error handling and reentrancy
 
@@ -387,9 +397,6 @@ only.
 
 - [ ] Seeding the default threshold from `WADO_LOG` — see
   [Default sink and scoped overrides](#default-sink-and-scoped-overrides).
-- [ ] Stamping the default sink in worlds that have a clock, without costing a
-  clock-free world its guarantee — see
-  [Timestamp and sequence](#timestamp-and-sequence).
 - [ ] Forwarding a local bound to a constant global read.
 - [ ] Sinking pure definitions into the branch that uses them.
 - [ ] Optional: native `with <span> do { … }` sugar.

@@ -34,7 +34,7 @@ pub(super) fn admits_condition(type_table: &TypeTable, type_id: TypeId) -> bool 
     matches!(
         type_id,
         TypeTable::NEVER | TypeTable::UNKNOWN | TypeTable::ERROR
-    ) || type_table.type_key(type_id) == type_table.type_key(TypeTable::BOOL)
+    ) || type_table.same_type(type_id, TypeTable::BOOL)
 }
 
 /// Pure type compatibility check, emitting no errors. Rules apply in order:
@@ -58,7 +58,7 @@ pub(super) fn check_assignable(
 pub(super) fn widens(actual: TypeId, expected: TypeId, type_table: &TypeTable) -> bool {
     type_table.holds_never_arg_by_value(actual)
         && !type_table.is_indefinite(expected)
-        && type_table.type_key(actual) != type_table.type_key(expected)
+        && !type_table.same_type(actual, expected)
         && check_assignable(actual, expected, type_table) == TypeCheckResult::Compatible
 }
 

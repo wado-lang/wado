@@ -16,6 +16,7 @@ use crate::hashmap::{IndexMap, IndexSet};
 use crate::loader::WasmAsset;
 use crate::module_source::{ModuleSource, ModuleSourceInterner};
 use crate::name::FunctionId;
+use crate::pgo::HeatMap;
 use crate::synthesis::effect_dispatch::ResourceWrapperIndex;
 use crate::tir::{
     BuiltinDeclarations, StructDef, TirEnum, TirFlags, TirFunction, TirGlobal, TirStruct, TirTest,
@@ -81,8 +82,12 @@ pub struct FlatPackage {
     /// The `org.wado-lang.coverage` section payload, under `wado test --coverage`
     /// or `--pgo`.
     pub coverage_section: Option<Vec<u8>>,
+    /// The `org.wado-lang.demanded-imports` section payload, for a library.
+    pub demanded_imports_section: Option<Vec<u8>>,
     /// Fine-grained codegen feature flags from the CLI's `-f <flag>` option.
     pub codegen_flags: CodegenFlags,
+    /// The price the applied profile sets on each call site, for the inliner.
+    pub heat_map: HeatMap,
     /// When true, skip Wasm validation after code generation.
     pub skip_validation: bool,
     /// Target world fully-qualified name (e.g., "wasi:cli/command", "wasi:http/service")

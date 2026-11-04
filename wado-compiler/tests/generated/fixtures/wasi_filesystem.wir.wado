@@ -163,11 +163,11 @@ type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::pad
 
 type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>" = fn(ref "core:prelude/format.wado//Formatter", ref "core:prelude/string.wado//String");  // TypeId(59)
 
-type "functype//core:prelude/string.wado/&core:prelude/string.wado/StrSlice^core:prelude/string.wado/AsStrSlice::internal_append_to$sroa[self.value]" = fn(ref "core:prelude/string.wado//StrSlice", ref "core:prelude/string.wado//String");  // TypeId(60)
+type "functype//core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<core:prelude/list.wado/$tmpl$59e16269228f9c88,core:prelude/string.wado/String>::lit$sroa[self.index]" = fn(i32, ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//StrSlice";  // TypeId(60)
 
-type "functype//core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<core:prelude/list.wado/$tmpl$59e16269228f9c88,core:prelude/string.wado/String>::lit$sroa[self.index]" = fn(i32, ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//StrSlice";  // TypeId(61)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::write_char_n$sroa[self.buf]" = fn(ref "core:prelude/string.wado//String", char, i32);  // TypeId(61)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::write_char_n$sroa[self.buf]" = fn(ref "core:prelude/string.wado//String", char, i32);  // TypeId(62)
+type "functype//core:prelude/string.wado/&core:prelude/string.wado/StrSlice^core:prelude/string.wado/AsStrSlice::internal_append_to$sroa[self.value]" = fn(ref "core:prelude/string.wado//StrSlice", ref "core:prelude/string.wado//String");  // TypeId(62)
 
 type "functype//core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(63)
 
@@ -219,18 +219,18 @@ fn "wasi_filesystem.wado/run"() with Stdout, Preopens {
     let dirs: ref null "core:prelude//List<[wasi:filesystem/types.wado/Descriptor,core:prelude/string.wado/String]>";
     let dir_count: i32;
     let out_12: ref "core:prelude/string.wado//String";
-    let repr_41: ref Array<u8>;
     let is_negative_74: bool;
     let digit_count_76: i32;
     let x: i64;
     let q: u64;
     let tens: i32;
-    let start_240: i32;
+    let start_237: i32;
+    let $sroa_view_repr_658: ref Array<u8>;
     dir_count = local.tee dirs("wasi_filesystem.wado/$cm_binding__wasi:filesystem/preopens@0.3.0#get-directories"()).used;
     out_12 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(52), used: 0 };
-    repr_41 = global:wasi_filesystem.wado::$const_obj_5;
+    $sroa_view_repr_658 = global:wasi_filesystem.wado::$const_obj_5;
     out_12.used = 24;
-    builtin::array_copy<u8>(local.tee $load_1(out_12.repr), 0, repr_41, 0, 24);
+    builtin::array_copy<u8>(local.tee $load_1(out_12.repr), 0, $sroa_view_repr_658, 0, 24);
     is_negative_74 = dir_count < 0;
     x = builtin::i64_extend_i32_s(dir_count);
     x = select i64(x < 0_i64, 0_i64 - x, x);
@@ -299,36 +299,36 @@ fn "wasi_filesystem.wado/run"() with Stdout, Preopens {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_12, is_negative_74);
         }
-        start_240 = out_12.used;
+        start_237 = out_12.used;
         out_12.used = is_negative_74;
-        builtin::array_set_u8(out_12.repr, start_240, 45);
+        builtin::array_set_u8(out_12.repr, start_237, 45);
     } else {
     }
     if @unlikely(local.tee is_negative_74(out_12.used + digit_count_76) > builtin::array_len(out_12.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_12, is_negative_74);
     }
-    start_240 = out_12.used;
+    start_237 = out_12.used;
     out_12.used = is_negative_74;
-    repr_41 = out_12.repr;
-    is_negative_74 = start_240 + digit_count_76;
+    $sroa_view_repr_658 = out_12.repr;
+    is_negative_74 = start_237 + digit_count_76;
     b22: block {
         l23: loop {
-            break_if b22 (is_negative_74 - start_240) < 2;
+            break_if b22 (is_negative_74 - start_237) < 2;
             q = x /u 100_i64;
             tens = local.tee digit_count_76(builtin::i32_wrap_i64(x - (q * 100_i64))) / 10;
-            builtin::array_set_u8(repr_41, is_negative_74 - 1, (48 + digit_count_76) - (tens * 10));
-            builtin::array_set_u8(repr_41, is_negative_74 - 2, 48 + tens);
+            builtin::array_set_u8($sroa_view_repr_658, is_negative_74 - 1, (48 + digit_count_76) - (tens * 10));
+            builtin::array_set_u8($sroa_view_repr_658, is_negative_74 - 2, 48 + tens);
             is_negative_74 = is_negative_74 - 2;
             x = q;
             continue l23;
         };
     };
-    if is_negative_74 > start_240 {
-        builtin::array_set_u8(repr_41, start_240, 48 + builtin::i32_wrap_i64(x %u 10_i64));
+    if is_negative_74 > start_237 {
+        builtin::array_set_u8($sroa_view_repr_658, start_237, 48 + builtin::i32_wrap_i64(x %u 10_i64));
     }
     $load_1 = global:wasi_filesystem.wado::$const_obj_4;
-    if @unlikely(local.tee is_negative_74(out_12.used + 12) > builtin::array_len(repr_41)) {
+    if @unlikely(local.tee is_negative_74(out_12.used + 12) > builtin::array_len($sroa_view_repr_658)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_12, is_negative_74);
     }
@@ -349,18 +349,18 @@ fn "wasi_filesystem.wado/run"() with Stdout, Preopens {
         dir_count = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
         is_negative_74 = builtin::i32_wrap_i64(x >> 32_i64);
         dir_count = "wasi_filesystem.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(dir_count);
-        builtin::array_copy<u8>(local.tee repr_41(builtin::array_new<u8>(34)), 0, global:wasi_filesystem.wado::$const_obj_3, 0, 33);
-        builtin::array_set_u8(repr_41, 33, 10);
-        "core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]$dae[return]"(is_negative_74, repr_41);
+        builtin::array_copy<u8>(local.tee $sroa_view_repr_658(builtin::array_new<u8>(34)), 0, global:wasi_filesystem.wado::$const_obj_3, 0, 33);
+        builtin::array_set_u8($sroa_view_repr_658, 33, 10);
+        "core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]$dae[return]"(is_negative_74, $sroa_view_repr_658);
         "wasi/stream-drop-writable"(is_negative_74);
         "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(dir_count);
         if out_12.used >= 0 {
             dir_count = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
             is_negative_74 = builtin::i32_wrap_i64(x >> 32_i64);
             dir_count = "wasi_filesystem.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(dir_count);
-            builtin::array_copy<u8>(local.tee repr_41(builtin::array_new<u8>(37)), 0, global:wasi_filesystem.wado::$const_obj_2, 0, 36);
-            builtin::array_set_u8(repr_41, 36, 10);
-            "core:rt/cm_stream_write_raw_all_u8$spec1$sroa[data.repr]$dae[return]"(is_negative_74, repr_41);
+            builtin::array_copy<u8>(local.tee $sroa_view_repr_658(builtin::array_new<u8>(37)), 0, global:wasi_filesystem.wado::$const_obj_2, 0, 36);
+            builtin::array_set_u8($sroa_view_repr_658, 36, 10);
+            "core:rt/cm_stream_write_raw_all_u8$spec1$sroa[data.repr]$dae[return]"(is_negative_74, $sroa_view_repr_658);
             "wasi/stream-drop-writable"(is_negative_74);
             "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(dir_count);
         }
@@ -368,18 +368,18 @@ fn "wasi_filesystem.wado/run"() with Stdout, Preopens {
         dir_count = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
         is_negative_74 = builtin::i32_wrap_i64(x >> 32_i64);
         dir_count = "wasi_filesystem.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(dir_count);
-        builtin::array_copy<u8>(local.tee repr_41(builtin::array_new<u8>(57)), 0, global:wasi_filesystem.wado::$const_obj_1, 0, 56);
-        builtin::array_set_u8(repr_41, 56, 10);
-        "core:rt/cm_stream_write_raw_all_u8$spec2$sroa[data.repr]$dae[return]"(is_negative_74, repr_41);
+        builtin::array_copy<u8>(local.tee $sroa_view_repr_658(builtin::array_new<u8>(57)), 0, global:wasi_filesystem.wado::$const_obj_1, 0, 56);
+        builtin::array_set_u8($sroa_view_repr_658, 56, 10);
+        "core:rt/cm_stream_write_raw_all_u8$spec2$sroa[data.repr]$dae[return]"(is_negative_74, $sroa_view_repr_658);
         "wasi/stream-drop-writable"(is_negative_74);
         "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(dir_count);
     }
     dir_count = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
     is_negative_74 = builtin::i32_wrap_i64(x >> 32_i64);
     dir_count = "wasi_filesystem.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(dir_count);
-    builtin::array_copy<u8>(local.tee repr_41(builtin::array_new<u8>(28)), 0, global:wasi_filesystem.wado::$const_obj_0, 0, 27);
-    builtin::array_set_u8(repr_41, 27, 10);
-    "core:rt/cm_stream_write_raw_all_u8$spec3$sroa[data.repr]$dae[return]"(is_negative_74, repr_41);
+    builtin::array_copy<u8>(local.tee $sroa_view_repr_658(builtin::array_new<u8>(28)), 0, global:wasi_filesystem.wado::$const_obj_0, 0, 27);
+    builtin::array_set_u8($sroa_view_repr_658, 27, 10);
+    "core:rt/cm_stream_write_raw_all_u8$spec3$sroa[data.repr]$dae[return]"(is_negative_74, $sroa_view_repr_658);
     "wasi/stream-drop-writable"(is_negative_74);
     "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(dir_count);
     if ref.is_null(dirs) == 0 {
@@ -1385,6 +1385,25 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelud
     }
 }
 
+fn "core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<core:prelude/list.wado/$tmpl$59e16269228f9c88,core:prelude/string.wado/String>::lit$sroa[self.index]"(self, $mv$t$s0, $mv$t$r0, $mv$t$s1, $mv$t$r1, $mv$t$s2, $mv$t$r2, $mv$t$s3, $mv$t$r3) {
+    return block -> ref "core:prelude/string.wado//StrSlice" {
+        "core:prelude/string.wado/core:prelude/string.wado/String::internal_view"(local.tee $mv$t$s0("core:prelude/list.wado/$template_segment$core:prelude/list.wado/$tmpl$59e16269228f9c88"($mv$t$s0, $mv$t$r0, $mv$t$s1, $mv$t$r1, $mv$t$s2, $mv$t$r2, $mv$t$s3, $mv$t$r3, 2 * self)).repr, $mv$t$s0.used);
+    };
+}
+
+fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_char_n$sroa[self.buf]"(self, c, n) {
+    let i: i32;
+    i = 0;
+    b174: block {
+        l175: loop {
+            break_if b174 i >= n;
+            "core:prelude/string.wado/core:prelude/string.wado/String::push"(self, c);
+            i = i + 1;
+            continue l175;
+        };
+    };
+}
+
 fn "core:prelude/string.wado/&core:prelude/string.wado/StrSlice^core:prelude/string.wado/AsStrSlice::internal_append_to$sroa[self.value]"(self, out) {
     let n_8: i32;
     let new_used: i32;
@@ -1398,25 +1417,6 @@ fn "core:prelude/string.wado/&core:prelude/string.wado/StrSlice^core:prelude/str
         start_14 = out.used;
         out.used = new_used;
         builtin::array_copy<u8>(out.repr, start_14, self.repr, self.start, n_8);
-    };
-}
-
-fn "core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<core:prelude/list.wado/$tmpl$59e16269228f9c88,core:prelude/string.wado/String>::lit$sroa[self.index]"(self, $mv$t$s0, $mv$t$r0, $mv$t$s1, $mv$t$r1, $mv$t$s2, $mv$t$r2, $mv$t$s3, $mv$t$r3) {
-    return block -> ref "core:prelude/string.wado//StrSlice" {
-        "core:prelude/string.wado/core:prelude/string.wado/String::internal_view"(local.tee $mv$t$s0("core:prelude/list.wado/$template_segment$core:prelude/list.wado/$tmpl$59e16269228f9c88"($mv$t$s0, $mv$t$r0, $mv$t$s1, $mv$t$r1, $mv$t$s2, $mv$t$r2, $mv$t$s3, $mv$t$r3, 2 * self)).repr, $mv$t$s0.used);
-    };
-}
-
-fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_char_n$sroa[self.buf]"(self, c, n) {
-    let i: i32;
-    i = 0;
-    b175: block {
-        l176: loop {
-            break_if b175 i >= n;
-            "core:prelude/string.wado/core:prelude/string.wado/String::push"(self, c);
-            i = i + 1;
-            continue l176;
-        };
     };
 }
 

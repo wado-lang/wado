@@ -6,38 +6,30 @@ enum core:prelude/format.wado//enum:Alignment { Left = 0, Center = 1, Right = 2 
 
 enum core:prelude/types.wado//enum:CopyResult { Completed = 0, Dropped = 1, Cancelled = 2 };  // TypeId(1)
 
-struct core:prelude/types.wado//Box<i32> {  // TypeId(2)
-    mut value: i32,
-}
-
-struct core:prelude/types.wado//Box<variant_qualified_pattern.wado/Op> {  // TypeId(3)
+struct core:prelude/types.wado//Box<variant_qualified_pattern.wado/Op> {  // TypeId(2)
     mut value: ref "variant_qualified_pattern.wado//Op",
 }
 
-struct core:prelude/types.wado//Box<&variant_qualified_pattern.wado/Op> {  // TypeId(4)
-    mut value: ref "core:prelude/types.wado//Box<variant_qualified_pattern.wado/Op>",
-}
-
-struct core:prelude/string.wado//StrSlice {  // TypeId(5)
+struct core:prelude/string.wado//StrSlice {  // TypeId(3)
     mut repr: ref Array<u8>,
     mut start: i32,
     mut end: i32,
 }
 
-struct core:prelude/string.wado//StrCharIter {  // TypeId(6)
+struct core:prelude/string.wado//StrCharIter {  // TypeId(4)
     mut repr: ref Array<u8>,
     mut used: i32,
     mut byte_index: i32,
 }
 
-array Array<u8> (mut u8);  // TypeId(7)
+array Array<u8> (mut u8);  // TypeId(5)
 
-struct core:prelude/string.wado//String {  // TypeId(8)
+struct core:prelude/string.wado//String {  // TypeId(6)
     mut repr: ref Array<u8>,
     mut used: i32,
 }
 
-struct core:prelude/format.wado//Formatter {  // TypeId(9)
+struct core:prelude/format.wado//Formatter {  // TypeId(7)
     mut fill: char,
     mut align: "core:prelude/format.wado//enum:Alignment",
     mut sign_plus: bool,
@@ -49,29 +41,18 @@ struct core:prelude/format.wado//Formatter {  // TypeId(9)
     mut buf: ref "core:prelude/string.wado//String",
 }
 
-struct tuple//[core:prelude/traits.wado/VariantCase<variant_qualified_pattern.wado/Op,()>, core:prelude/traits.wado/VariantCase<variant_qualified_pattern.wado/Op,()>, core:prelude/traits.wado/VariantCase<variant_qualified_pattern.wado/Op,i32>] {  // TypeId(10)
-    mut 0: ref "core:prelude/traits.wado//VariantCase<variant_qualified_pattern.wado/Op,()>",
-    mut 1: ref "core:prelude/traits.wado//VariantCase<variant_qualified_pattern.wado/Op,()>",
-    mut 2: ref "core:prelude/traits.wado//VariantCase<variant_qualified_pattern.wado/Op,i32>",
-}
-
-struct tuple//[core:prelude/traits.wado/VariantCase<variant_qualified_pattern.wado/Maybe<i32>,i32>, core:prelude/traits.wado/VariantCase<variant_qualified_pattern.wado/Maybe<i32>,()>] {  // TypeId(11)
-    mut 0: ref "core:prelude/traits.wado//VariantCase<variant_qualified_pattern.wado/Maybe<i32>,i32>",
-    mut 1: ref "core:prelude/traits.wado//VariantCase<variant_qualified_pattern.wado/Maybe<i32>,()>",
-}
-
-variant variant_qualified_pattern.wado//Op {  // TypeId(12)
+variant variant_qualified_pattern.wado//Op {  // TypeId(8)
     Wildcard,
     Excluded,
     Token(i32),
 }
 
-struct variant_qualified_pattern.wado//Op::Token {  // TypeId(13)
+struct variant_qualified_pattern.wado//Op::Token {  // TypeId(9)
     discriminant: i32,
     payload_0: i32,
 }
 
-struct variant_qualified_pattern.wado//$tmpl$87c44b011a92b1a8 {  // TypeId(14)
+struct variant_qualified_pattern.wado//$tmpl$87c44b011a92b1a8 {  // TypeId(10)
     mut h0: ref "variant_qualified_pattern.wado//Op",
     mut h1: i32,
     mut s0: ref "core:prelude/string.wado//String",
@@ -82,7 +63,7 @@ struct variant_qualified_pattern.wado//$tmpl$87c44b011a92b1a8 {  // TypeId(14)
     mut r2: ref "core:prelude/string.wado//String",
 }
 
-struct variant_qualified_pattern.wado//$tmpl$7f59c856416a06ac {  // TypeId(15)
+struct variant_qualified_pattern.wado//$tmpl$7f59c856416a06ac {  // TypeId(11)
     mut h0: ref "variant_qualified_pattern.wado//Op",
     mut h1: ref "core:prelude/types.wado//Box<variant_qualified_pattern.wado/Op>",
     mut h2: bool,
@@ -96,7 +77,7 @@ struct variant_qualified_pattern.wado//$tmpl$7f59c856416a06ac {  // TypeId(15)
     mut r3: ref "core:prelude/string.wado//String",
 }
 
-struct variant_qualified_pattern.wado//$tmpl$872cb1b344c5b403 {  // TypeId(16)
+struct variant_qualified_pattern.wado//$tmpl$872cb1b344c5b403 {  // TypeId(12)
     mut h0: ref "variant_qualified_pattern.wado//Op",
     mut s0: ref "core:prelude/string.wado//String",
     mut r0: ref "core:prelude/string.wado//String",
@@ -104,7 +85,7 @@ struct variant_qualified_pattern.wado//$tmpl$872cb1b344c5b403 {  // TypeId(16)
     mut r1: ref "core:prelude/string.wado//String",
 }
 
-struct variant_qualified_pattern.wado//$tmpl$b0d9df0ab930be4e {  // TypeId(17)
+struct variant_qualified_pattern.wado//$tmpl$b0d9df0ab930be4e {  // TypeId(13)
     mut h0: ref "variant_qualified_pattern.wado//Maybe<i32>",
     mut h1: i32,
     mut s0: ref "core:prelude/string.wado//String",
@@ -115,238 +96,193 @@ struct variant_qualified_pattern.wado//$tmpl$b0d9df0ab930be4e {  // TypeId(17)
     mut r2: ref "core:prelude/string.wado//String",
 }
 
-struct core:prelude/traits.wado//TemplateHole<variant_qualified_pattern.wado/$tmpl$7f59c856416a06ac,variant_qualified_pattern.wado/Op> {  // TypeId(18)
-    mut index: i32,
-    mut spec: ref null "core:prelude/string.wado//String",
-}
-
-struct core:prelude/traits.wado//TemplateHole<variant_qualified_pattern.wado/$tmpl$7f59c856416a06ac,&variant_qualified_pattern.wado/Op> {  // TypeId(19)
-    mut index: i32,
-    mut spec: ref null "core:prelude/string.wado//String",
-}
-
-struct core:prelude/traits.wado//TemplateHole<variant_qualified_pattern.wado/$tmpl$7f59c856416a06ac,bool> {  // TypeId(20)
-    mut index: i32,
-    mut spec: ref null "core:prelude/string.wado//String",
-}
-
-struct core:prelude/traits.wado//VariantCase<variant_qualified_pattern.wado/Op,()> {  // TypeId(21)
-    mut index: i32,
-    mut case_name: ref "core:prelude/string.wado//String",
-    mut wire_override: ref null "core:prelude/string.wado//String",
-    mut is_unit: bool,
-}
-
-struct core:prelude/traits.wado//VariantCase<variant_qualified_pattern.wado/Op,i32> {  // TypeId(22)
-    mut index: i32,
-    mut case_name: ref "core:prelude/string.wado//String",
-    mut wire_override: ref null "core:prelude/string.wado//String",
-    mut is_unit: bool,
-}
-
-struct core:prelude/traits.wado//VariantCase<variant_qualified_pattern.wado/Maybe<i32>,i32> {  // TypeId(23)
-    mut index: i32,
-    mut case_name: ref "core:prelude/string.wado//String",
-    mut wire_override: ref null "core:prelude/string.wado//String",
-    mut is_unit: bool,
-}
-
-struct core:prelude/traits.wado//VariantCase<variant_qualified_pattern.wado/Maybe<i32>,()> {  // TypeId(24)
-    mut index: i32,
-    mut case_name: ref "core:prelude/string.wado//String",
-    mut wire_override: ref null "core:prelude/string.wado//String",
-    mut is_unit: bool,
-}
-
-variant variant_qualified_pattern.wado//Maybe<i32> {  // TypeId(25)
+variant variant_qualified_pattern.wado//Maybe<i32> {  // TypeId(14)
     Some(i32),
     None,
 }
 
-struct variant_qualified_pattern.wado//Maybe<i32>::Some {  // TypeId(26)
+struct variant_qualified_pattern.wado//Maybe<i32>::Some {  // TypeId(15)
     discriminant: i32,
     payload_0: i32,
 }
 
-type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(27)
+type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(16)
 
-type "functype//wasi/stream-write" = fn(i32, i32, i32) -> i32;  // TypeId(28)
+type "functype//wasi/stream-write" = fn(i32, i32, i32) -> i32;  // TypeId(17)
 
-type "functype//wasi/waitable-join" = fn(i32, i32);  // TypeId(29)
+type "functype//wasi/waitable-join" = fn(i32, i32);  // TypeId(18)
 
-type "functype//wasi/waitable-set-drop" = fn(i32);  // TypeId(30)
+type "functype//wasi/waitable-set-drop" = fn(i32);  // TypeId(19)
 
-type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(31)
+type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(20)
 
-type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(32)
+type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(21)
 
-type "functype//wasi/$wasi:cli/stderr@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(33)
+type "functype//wasi/$wasi:cli/stderr@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(22)
 
-type "functype//variant_qualified_pattern.wado/run" = fn();  // TypeId(34)
+type "functype//variant_qualified_pattern.wado/run" = fn();  // TypeId(23)
 
-type "functype//variant_qualified_pattern.wado/$template_segment$variant_qualified_pattern.wado/$tmpl$872cb1b344c5b403" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", i32) -> ref "core:prelude/string.wado//String";  // TypeId(35)
+type "functype//variant_qualified_pattern.wado/$template_segment$variant_qualified_pattern.wado/$tmpl$872cb1b344c5b403" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", i32) -> ref "core:prelude/string.wado//String";  // TypeId(24)
 
-type "functype//variant_qualified_pattern.wado/$template_segment$variant_qualified_pattern.wado/$tmpl$7f59c856416a06ac" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", i32) -> ref "core:prelude/string.wado//String";  // TypeId(36)
+type "functype//variant_qualified_pattern.wado/$template_segment$variant_qualified_pattern.wado/$tmpl$7f59c856416a06ac" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", i32) -> ref "core:prelude/string.wado//String";  // TypeId(25)
 
-type "functype//variant_qualified_pattern.wado/$template_segment$variant_qualified_pattern.wado/$tmpl$87c44b011a92b1a8" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", i32) -> ref "core:prelude/string.wado//String";  // TypeId(37)
+type "functype//variant_qualified_pattern.wado/$template_segment$variant_qualified_pattern.wado/$tmpl$87c44b011a92b1a8" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", i32) -> ref "core:prelude/string.wado//String";  // TypeId(26)
 
-type "functype//variant_qualified_pattern.wado/$template_segment$variant_qualified_pattern.wado/$tmpl$b0d9df0ab930be4e" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", i32) -> ref "core:prelude/string.wado//String";  // TypeId(38)
+type "functype//variant_qualified_pattern.wado/$template_segment$variant_qualified_pattern.wado/$tmpl$b0d9df0ab930be4e" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", i32) -> ref "core:prelude/string.wado//String";  // TypeId(27)
 
-type "functype//variant_qualified_pattern.wado/$cm_export__run" = fn();  // TypeId(39)
+type "functype//variant_qualified_pattern.wado/$cm_export__run" = fn();  // TypeId(28)
 
-type "functype//variant_qualified_pattern.wado/run$cold6" = fn();  // TypeId(40)
+type "functype//variant_qualified_pattern.wado/run$cold6" = fn();  // TypeId(29)
 
-type "functype//variant_qualified_pattern.wado/run$cold7" = fn();  // TypeId(41)
+type "functype//variant_qualified_pattern.wado/run$cold7" = fn();  // TypeId(30)
 
-type "functype//variant_qualified_pattern.wado/$case_ref$variant_qualified_pattern.wado/Maybe<i32>$i32$sroa[v.value]$spec0$dae[index]" = fn(ref "variant_qualified_pattern.wado//Maybe<i32>") -> ref "core:prelude/types.wado//Box<i32>";  // TypeId(42)
+type "functype//variant_qualified_pattern.wado/$case_ref$variant_qualified_pattern.wado/Maybe<i32>$i32$sroa[v.value]$spec0$dae[index]" = fn(ref "variant_qualified_pattern.wado//Maybe<i32>") -> i32;  // TypeId(31)
 
-type "functype//variant_qualified_pattern.wado/$case_ref$variant_qualified_pattern.wado/Op$i32$sroa[v.value]$spec0$dae[index]" = fn(ref "variant_qualified_pattern.wado//Op") -> ref "core:prelude/types.wado//Box<i32>";  // TypeId(43)
+type "functype//variant_qualified_pattern.wado/$case_ref$variant_qualified_pattern.wado/Op$i32$sroa[v.value]$spec0$dae[index]" = fn(ref "variant_qualified_pattern.wado//Op") -> i32;  // TypeId(32)
 
-type "functype//core:prelude/primitive.wado/write_decimal_digits" = fn(ref Array<u8>, i32, u64, i32);  // TypeId(44)
+type "functype//core:prelude/primitive.wado/write_decimal_digits" = fn(ref Array<u8>, i32, u64, i32);  // TypeId(33)
 
-type "functype//core:prelude/primitive.wado/count_digits_u64" = fn(u64) -> i32;  // TypeId(45)
+type "functype//core:prelude/primitive.wado/count_digits_u64" = fn(u64) -> i32;  // TypeId(34)
 
-type "functype//core:prelude/string.wado/decode_char_at" = fn(ref Array<u8>, i32) -> [u32, i32];  // TypeId(46)
+type "functype//core:prelude/string.wado/decode_char_at" = fn(ref Array<u8>, i32) -> [u32, i32];  // TypeId(35)
 
-type "functype//core:prelude/string.wado/encode_char" = fn(ref Array<u8>, i32, u32) -> i32;  // TypeId(47)
+type "functype//core:prelude/string.wado/encode_char" = fn(ref Array<u8>, i32, u32) -> i32;  // TypeId(36)
 
-type "functype//core:prelude/types.wado/copy_result" = fn(i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(48)
+type "functype//core:prelude/types.wado/copy_result" = fn(i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(37)
 
-type "functype//core:prelude/types.wado/cm_await_copy" = fn(i32) -> i32;  // TypeId(49)
+type "functype//core:prelude/types.wado/cm_await_copy" = fn(i32) -> i32;  // TypeId(38)
 
-type "functype//core:rt/gc_array_to_memory" = fn(ref Array<u8>, i32, i32, i32);  // TypeId(50)
+type "functype//core:rt/gc_array_to_memory" = fn(ref Array<u8>, i32, i32, i32);  // TypeId(39)
 
-type "functype//core:rt/log_stderr" = fn(ref Array<u8>, i32);  // TypeId(51)
+type "functype//core:rt/log_stderr" = fn(ref Array<u8>, i32);  // TypeId(40)
 
-type "functype//core:rt/panic" = fn(ref Array<u8>, i32);  // TypeId(52)
+type "functype//core:rt/panic" = fn(ref Array<u8>, i32);  // TypeId(41)
 
-type "functype//core:rt/unreachable" = fn();  // TypeId(53)
+type "functype//core:rt/unreachable" = fn();  // TypeId(42)
 
-type "functype//core:rt/cm_lower_list_u8" = fn(ref Array<u8>, i32, i32) -> i64;  // TypeId(54)
+type "functype//core:rt/cm_lower_list_u8" = fn(ref Array<u8>, i32, i32) -> i64;  // TypeId(43)
 
-type "functype//core:rt/cm_await_blocked" = fn(i32, i32) -> i32;  // TypeId(55)
+type "functype//core:rt/cm_await_blocked" = fn(i32, i32) -> i32;  // TypeId(44)
 
-type "functype//core:rt/cm_stream_write_once" = fn(i32, i32, i32) -> i32;  // TypeId(56)
+type "functype//core:rt/cm_stream_write_once" = fn(i32, i32, i32) -> i32;  // TypeId(45)
 
-type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(57)
+type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(46)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/leading_sign_byte_len<core:prelude/string.wado/StrSlice>$dae[at]" = fn(ref "core:prelude/string.wado//StrSlice", i32) -> i32;  // TypeId(58)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/leading_sign_byte_len<core:prelude/string.wado/StrSlice>$dae[at]" = fn(ref "core:prelude/string.wado//StrSlice", i32) -> i32;  // TypeId(47)
 
-type "functype//core:rt/panic$cold0" = fn(ref Array<u8>, i32);  // TypeId(59)
+type "functype//core:rt/panic$cold0" = fn(ref Array<u8>, i32);  // TypeId(48)
 
-type "functype//core:prelude/traits.wado/core:prelude/traits.wado/inspect_variant_payload<i32>$sroa[payload.value]" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(60)
+type "functype//core:prelude/traits.wado/core:prelude/traits.wado/inspect_variant_payload<i32>$sroa[payload.value]" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(49)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::new" = fn(ref "core:prelude/string.wado//String") -> ref "core:prelude/format.wado//Formatter";  // TypeId(61)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::new" = fn(ref "core:prelude/string.wado//String") -> ref "core:prelude/format.wado//Formatter";  // TypeId(50)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::write_sign" = fn(ref "core:prelude/format.wado//Formatter", bool);  // TypeId(62)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::write_sign" = fn(ref "core:prelude/format.wado//Formatter", bool);  // TypeId(51)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::write_indent" = fn(ref "core:prelude/format.wado//Formatter");  // TypeId(63)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::write_indent" = fn(ref "core:prelude/format.wado//Formatter");  // TypeId(52)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::write_newline_indent" = fn(ref "core:prelude/format.wado//Formatter");  // TypeId(64)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::write_newline_indent" = fn(ref "core:prelude/format.wado//Formatter");  // TypeId(53)
 
-type "functype//core:prelude/primitive.wado/i64::abs" = fn(i64) -> i64;  // TypeId(65)
+type "functype//core:prelude/primitive.wado/i64::abs" = fn(i64) -> i64;  // TypeId(54)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/StrCharIter^core:prelude/traits.wado/Iterator::next$sroa[return]" = fn(ref "core:prelude/string.wado//StrCharIter") -> [i32, char];  // TypeId(66)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/StrCharIter^core:prelude/traits.wado/Iterator::next$sroa[return]" = fn(ref "core:prelude/string.wado//StrCharIter") -> [i32, char];  // TypeId(55)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/StrCharIter^core:prelude/traits.wado/Iterator::count" = fn(ref "core:prelude/string.wado//StrCharIter") -> i32;  // TypeId(67)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/StrCharIter^core:prelude/traits.wado/Iterator::count" = fn(ref "core:prelude/string.wado//StrCharIter") -> i32;  // TypeId(56)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::internal_view" = fn(ref Array<u8>, i32) -> ref "core:prelude/string.wado//StrSlice";  // TypeId(68)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::internal_view" = fn(ref Array<u8>, i32) -> ref "core:prelude/string.wado//StrSlice";  // TypeId(57)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::realloc_to" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(69)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::realloc_to" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(58)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(70)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(59)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit" = fn(ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(71)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit" = fn(ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(60)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(72)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(61)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::internal_push_view" = fn(ref "core:prelude/string.wado//String", ref Array<u8>, i32, i32);  // TypeId(73)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::internal_push_view" = fn(ref "core:prelude/string.wado//String", ref Array<u8>, i32, i32);  // TypeId(62)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::push" = fn(ref "core:prelude/string.wado//String", char);  // TypeId(74)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::push" = fn(ref "core:prelude/string.wado//String", char);  // TypeId(63)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_byte" = fn(ref "core:prelude/string.wado//String", u8);  // TypeId(75)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_byte" = fn(ref "core:prelude/string.wado//String", u8);  // TypeId(64)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/StrSlice::slice$unchecked" = fn(ref Array<u8>, i32, i32, i32) -> ref "core:prelude/string.wado//StrSlice";  // TypeId(76)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/StrSlice::slice$unchecked" = fn(ref Array<u8>, i32, i32, i32) -> ref "core:prelude/string.wado//StrSlice";  // TypeId(65)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/StrSlice::chars" = fn(ref Array<u8>, i32, i32) -> [ref Array<u8>, i32, i32];  // TypeId(77)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/StrSlice::chars" = fn(ref Array<u8>, i32, i32) -> [ref Array<u8>, i32, i32];  // TypeId(66)
 
-type "functype//variant_qualified_pattern.wado/variant_qualified_pattern.wado/Op^core:prelude/traits.wado/ReflectVariant::members" = fn() -> [ref "core:prelude/traits.wado//VariantCase<variant_qualified_pattern.wado/Op,()>", ref "core:prelude/traits.wado//VariantCase<variant_qualified_pattern.wado/Op,()>", ref "core:prelude/traits.wado//VariantCase<variant_qualified_pattern.wado/Op,i32>"];  // TypeId(78)
+type "functype//variant_qualified_pattern.wado/variant_qualified_pattern.wado/$tmpl$872cb1b344c5b403^core:prelude/traits.wado/ReflectTemplate::tail" = fn(ref "variant_qualified_pattern.wado//$tmpl$872cb1b344c5b403") -> ref "core:prelude/string.wado//StrSlice";  // TypeId(67)
 
-type "functype//variant_qualified_pattern.wado/variant_qualified_pattern.wado/$tmpl$872cb1b344c5b403^core:prelude/traits.wado/ReflectTemplate::tail" = fn(ref "variant_qualified_pattern.wado//$tmpl$872cb1b344c5b403") -> ref "core:prelude/string.wado//StrSlice";  // TypeId(79)
+type "functype//variant_qualified_pattern.wado/variant_qualified_pattern.wado/$tmpl$7f59c856416a06ac^core:prelude/traits.wado/ReflectTemplate::tail" = fn(ref "variant_qualified_pattern.wado//$tmpl$7f59c856416a06ac") -> ref "core:prelude/string.wado//StrSlice";  // TypeId(68)
 
-type "functype//variant_qualified_pattern.wado/variant_qualified_pattern.wado/$tmpl$7f59c856416a06ac^core:prelude/traits.wado/ReflectTemplate::members" = fn() -> [ref "core:prelude/traits.wado//TemplateHole<variant_qualified_pattern.wado/$tmpl$7f59c856416a06ac,variant_qualified_pattern.wado/Op>", ref "core:prelude/traits.wado//TemplateHole<variant_qualified_pattern.wado/$tmpl$7f59c856416a06ac,&variant_qualified_pattern.wado/Op>", ref "core:prelude/traits.wado//TemplateHole<variant_qualified_pattern.wado/$tmpl$7f59c856416a06ac,bool>"];  // TypeId(80)
+type "functype//variant_qualified_pattern.wado/variant_qualified_pattern.wado/$tmpl$87c44b011a92b1a8^core:prelude/traits.wado/ReflectTemplate::tail" = fn(ref "variant_qualified_pattern.wado//$tmpl$87c44b011a92b1a8") -> ref "core:prelude/string.wado//StrSlice";  // TypeId(69)
 
-type "functype//variant_qualified_pattern.wado/variant_qualified_pattern.wado/$tmpl$7f59c856416a06ac^core:prelude/traits.wado/ReflectTemplate::tail" = fn(ref "variant_qualified_pattern.wado//$tmpl$7f59c856416a06ac") -> ref "core:prelude/string.wado//StrSlice";  // TypeId(81)
+type "functype//variant_qualified_pattern.wado/variant_qualified_pattern.wado/$tmpl$b0d9df0ab930be4e^core:prelude/traits.wado/ReflectTemplate::tail" = fn(ref "variant_qualified_pattern.wado//$tmpl$b0d9df0ab930be4e") -> ref "core:prelude/string.wado//StrSlice";  // TypeId(70)
 
-type "functype//variant_qualified_pattern.wado/variant_qualified_pattern.wado/$tmpl$87c44b011a92b1a8^core:prelude/traits.wado/ReflectTemplate::tail" = fn(ref "variant_qualified_pattern.wado//$tmpl$87c44b011a92b1a8") -> ref "core:prelude/string.wado//StrSlice";  // TypeId(82)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::format<variant_qualified_pattern.wado/$tmpl$b0d9df0ab930be4e,[variant_qualified_pattern.wado/Maybe<i32>,i32]>" = fn(ref "variant_qualified_pattern.wado//$tmpl$b0d9df0ab930be4e") -> ref "core:prelude/string.wado//String";  // TypeId(71)
 
-type "functype//variant_qualified_pattern.wado/variant_qualified_pattern.wado/$tmpl$b0d9df0ab930be4e^core:prelude/traits.wado/ReflectTemplate::tail" = fn(ref "variant_qualified_pattern.wado//$tmpl$b0d9df0ab930be4e") -> ref "core:prelude/string.wado//StrSlice";  // TypeId(83)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::format<variant_qualified_pattern.wado/$tmpl$87c44b011a92b1a8,[variant_qualified_pattern.wado/Op,i32]>" = fn(ref "variant_qualified_pattern.wado//$tmpl$87c44b011a92b1a8") -> ref "core:prelude/string.wado//String";  // TypeId(72)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::format<variant_qualified_pattern.wado/$tmpl$b0d9df0ab930be4e,[variant_qualified_pattern.wado/Maybe<i32>,i32]>" = fn(ref "variant_qualified_pattern.wado//$tmpl$b0d9df0ab930be4e") -> ref "core:prelude/string.wado//String";  // TypeId(84)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::format<variant_qualified_pattern.wado/$tmpl$7f59c856416a06ac,[variant_qualified_pattern.wado/Op,&variant_qualified_pattern.wado/Op,bool]>" = fn(ref "variant_qualified_pattern.wado//$tmpl$7f59c856416a06ac") -> ref "core:prelude/string.wado//String";  // TypeId(73)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::format<variant_qualified_pattern.wado/$tmpl$87c44b011a92b1a8,[variant_qualified_pattern.wado/Op,i32]>" = fn(ref "variant_qualified_pattern.wado//$tmpl$87c44b011a92b1a8") -> ref "core:prelude/string.wado//String";  // TypeId(85)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::format<variant_qualified_pattern.wado/$tmpl$872cb1b344c5b403,[variant_qualified_pattern.wado/Op]>" = fn(ref "variant_qualified_pattern.wado//$tmpl$872cb1b344c5b403") -> ref "core:prelude/string.wado//String";  // TypeId(74)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::format<variant_qualified_pattern.wado/$tmpl$7f59c856416a06ac,[variant_qualified_pattern.wado/Op,&variant_qualified_pattern.wado/Op,bool]>" = fn(ref "variant_qualified_pattern.wado//$tmpl$7f59c856416a06ac") -> ref "core:prelude/string.wado//String";  // TypeId(86)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(75)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::format<variant_qualified_pattern.wado/$tmpl$872cb1b344c5b403,[variant_qualified_pattern.wado/Op]>" = fn(ref "variant_qualified_pattern.wado//$tmpl$872cb1b344c5b403") -> ref "core:prelude/string.wado//String";  // TypeId(87)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>" = fn(ref "core:prelude/format.wado//Formatter", ref "core:prelude/string.wado//String");  // TypeId(76)
 
-type "functype//core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<variant_qualified_pattern.wado/$tmpl$7f59c856416a06ac,&variant_qualified_pattern.wado/Op>::lit" = fn(ref "core:prelude/traits.wado//TemplateHole<variant_qualified_pattern.wado/$tmpl$7f59c856416a06ac,&variant_qualified_pattern.wado/Op>", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//StrSlice";  // TypeId(88)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::write_char_n$sroa[self.buf]" = fn(ref "core:prelude/string.wado//String", char, i32);  // TypeId(77)
 
-type "functype//core:prelude/format.wado/&variant_qualified_pattern.wado/Op^core:prelude/traits.wado/Inspect::inspect" = fn(ref "core:prelude/types.wado//Box<&variant_qualified_pattern.wado/Op>", ref "core:prelude/format.wado//Formatter");  // TypeId(89)
+type "functype//core:prelude/traits.wado/variant_qualified_pattern.wado/Maybe<i32>^core:prelude/traits.wado/Inspect::inspect$sroa[self.value]" = fn(ref "variant_qualified_pattern.wado//Maybe<i32>", ref "core:prelude/format.wado//Formatter");  // TypeId(78)
 
-type "functype//variant_qualified_pattern.wado/variant_qualified_pattern.wado/Maybe<i32>^core:prelude/traits.wado/ReflectVariant::members" = fn() -> [ref "core:prelude/traits.wado//VariantCase<variant_qualified_pattern.wado/Maybe<i32>,i32>", ref "core:prelude/traits.wado//VariantCase<variant_qualified_pattern.wado/Maybe<i32>,()>"];  // TypeId(90)
+type "functype//core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<variant_qualified_pattern.wado/$tmpl$872cb1b344c5b403,variant_qualified_pattern.wado/Op>::lit$sroa[self.index]" = fn(i32, ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//StrSlice";  // TypeId(79)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(91)
+type "functype//core:prelude/traits.wado/variant_qualified_pattern.wado/Op^core:prelude/traits.wado/Inspect::inspect$sroa[self.value]" = fn(ref "variant_qualified_pattern.wado//Op", ref "core:prelude/format.wado//Formatter");  // TypeId(80)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>" = fn(ref "core:prelude/format.wado//Formatter", ref "core:prelude/string.wado//String");  // TypeId(92)
+type "functype//core:prelude/primitive.wado/bool::fmt_into$sroa[self.value]" = fn(bool, ref "core:prelude/format.wado//Formatter");  // TypeId(81)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::write_char_n$sroa[self.buf]" = fn(ref "core:prelude/string.wado//String", char, i32);  // TypeId(93)
+type "functype//core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(82)
 
-type "functype//core:prelude/traits.wado/variant_qualified_pattern.wado/Maybe<i32>^core:prelude/traits.wado/Inspect::inspect$sroa[self.value]" = fn(ref "variant_qualified_pattern.wado//Maybe<i32>", ref "core:prelude/format.wado//Formatter");  // TypeId(94)
+type "functype//core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<variant_qualified_pattern.wado/$tmpl$7f59c856416a06ac,variant_qualified_pattern.wado/Op>::lit$sroa[self.index]" = fn(i32, ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//StrSlice";  // TypeId(83)
 
-type "functype//core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<variant_qualified_pattern.wado/$tmpl$87c44b011a92b1a8,variant_qualified_pattern.wado/Op>::lit$sroa[self.index]" = fn(i32, ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//StrSlice";  // TypeId(95)
+type "functype//core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<variant_qualified_pattern.wado/$tmpl$7f59c856416a06ac,&variant_qualified_pattern.wado/Op>::lit$sroa[self.index]" = fn(i32, ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//StrSlice";  // TypeId(84)
 
-type "functype//core:prelude/traits.wado/variant_qualified_pattern.wado/Op^core:prelude/traits.wado/Inspect::inspect$sroa[self.value]" = fn(ref "variant_qualified_pattern.wado//Op", ref "core:prelude/format.wado//Formatter");  // TypeId(96)
+type "functype//core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<variant_qualified_pattern.wado/$tmpl$87c44b011a92b1a8,i32>::lit$sroa[self.index]" = fn(i32, ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//StrSlice";  // TypeId(85)
 
-type "functype//core:prelude/primitive.wado/bool::fmt_into$sroa[self.value]" = fn(bool, ref "core:prelude/format.wado//Formatter");  // TypeId(97)
+type "functype//core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<variant_qualified_pattern.wado/$tmpl$7f59c856416a06ac,bool>::lit$sroa[self.index]" = fn(i32, ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//StrSlice";  // TypeId(86)
 
-type "functype//core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(98)
+type "functype//core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<variant_qualified_pattern.wado/$tmpl$b0d9df0ab930be4e,variant_qualified_pattern.wado/Maybe<i32>>::lit$sroa[self.index]" = fn(i32, ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//StrSlice";  // TypeId(87)
 
-type "functype//core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<variant_qualified_pattern.wado/$tmpl$7f59c856416a06ac,variant_qualified_pattern.wado/Op>::lit$sroa[self.index]" = fn(i32, ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//StrSlice";  // TypeId(99)
+type "functype//core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<variant_qualified_pattern.wado/$tmpl$b0d9df0ab930be4e,i32>::lit$sroa[self.index]" = fn(i32, ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//StrSlice";  // TypeId(88)
 
-type "functype//core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<variant_qualified_pattern.wado/$tmpl$7f59c856416a06ac,bool>::lit$sroa[self.index]" = fn(i32, ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//StrSlice";  // TypeId(100)
+type "functype//core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<variant_qualified_pattern.wado/$tmpl$87c44b011a92b1a8,variant_qualified_pattern.wado/Op>::lit$sroa[self.index]" = fn(i32, ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//StrSlice";  // TypeId(89)
 
-type "functype//core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<variant_qualified_pattern.wado/$tmpl$b0d9df0ab930be4e,variant_qualified_pattern.wado/Maybe<i32>>::lit$sroa[self.index]" = fn(i32, ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//StrSlice";  // TypeId(101)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec0" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(90)
 
-type "functype//core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<variant_qualified_pattern.wado/$tmpl$b0d9df0ab930be4e,i32>::lit$sroa[self.index]" = fn(i32, ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//StrSlice";  // TypeId(102)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec1" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(91)
 
-type "functype//core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<variant_qualified_pattern.wado/$tmpl$87c44b011a92b1a8,i32>::lit$sroa[self.index]" = fn(i32, ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//StrSlice";  // TypeId(103)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::open_brace<core:prelude/string.wado/String>$spec0" = fn(ref "core:prelude/format.wado//Formatter", ref "core:prelude/string.wado//String");  // TypeId(92)
 
-type "functype//core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<variant_qualified_pattern.wado/$tmpl$872cb1b344c5b403,variant_qualified_pattern.wado/Op>::lit$sroa[self.index]" = fn(i32, ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//StrSlice";  // TypeId(104)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::close_brace<core:prelude/string.wado/String>$spec0" = fn(ref "core:prelude/format.wado//Formatter", ref "core:prelude/string.wado//String");  // TypeId(93)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec0" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(105)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/StrSlice::slice$unchecked$spec0$dae[start]" = fn(ref Array<u8>, i32, i32) -> ref "core:prelude/string.wado//StrSlice";  // TypeId(94)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec1" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(106)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec3" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(95)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::open_brace<core:prelude/string.wado/String>$spec0" = fn(ref "core:prelude/format.wado//Formatter", ref "core:prelude/string.wado//String");  // TypeId(107)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec4" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(96)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::close_brace<core:prelude/string.wado/String>$spec0" = fn(ref "core:prelude/format.wado//Formatter", ref "core:prelude/string.wado//String");  // TypeId(108)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec5" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(97)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/StrSlice::slice$unchecked$spec0$dae[start]" = fn(ref Array<u8>, i32, i32) -> ref "core:prelude/string.wado//StrSlice";  // TypeId(109)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/StrSlice::byte_at$unchecked$spec0$dae[index]" = fn(ref Array<u8>, i32) -> u8;  // TypeId(98)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec3" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(110)
+type "functype//core:prelude/format.wado/&variant_qualified_pattern.wado/Op^core:prelude/traits.wado/Inspect::inspect$sroa[self.value.value]" = fn(ref "variant_qualified_pattern.wado//Op", ref "core:prelude/format.wado//Formatter");  // TypeId(99)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/StrSlice::byte_at$unchecked$spec0$dae[index]" = fn(ref Array<u8>, i32) -> u8;  // TypeId(111)
+type "functype//wasi/task-return" = fn(i32);  // TypeId(100)
 
-type "functype//wasi/task-return" = fn(i32);  // TypeId(112)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(101)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(113)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(102)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(114)
+type "functype//wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode" = fn(i32);  // TypeId(103)
 
-type "functype//wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode" = fn(i32);  // TypeId(115)
-
-type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(116)
+type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(104)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -362,23 +298,28 @@ import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode";
 
 global global:core:prelude/format.wado::$const_obj_0: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(32, 32), used: 2 };
-global global:core:prelude/format.wado::$const_obj_5: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(38), used: 1 };
-global global:core:prelude/traits.wado::$const_obj_6: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(58, 58), used: 2 };
-global mut global:core:prelude/traits.wado::$const_obj_8: ref null "tuple//[core:prelude/traits.wado/VariantCase<variant_qualified_pattern.wado/Maybe<i32>,i32>, core:prelude/traits.wado/VariantCase<variant_qualified_pattern.wado/Maybe<i32>,()>]" = ref.null none;
-global mut global:core:prelude/traits.wado::$const_obj_12: ref null "tuple//[core:prelude/traits.wado/VariantCase<variant_qualified_pattern.wado/Op,()>, core:prelude/traits.wado/VariantCase<variant_qualified_pattern.wado/Op,()>, core:prelude/traits.wado/VariantCase<variant_qualified_pattern.wado/Op,i32>]" = ref.null none;
-global global:core:prelude/primitive.wado::$const_obj_13: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
-global global:core:prelude/traits.wado::$const_obj_20: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(41), used: 1 };
-global global:core:prelude/traits.wado::$const_obj_21: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(40), used: 1 };
-global global:core:prelude/traits.wado::$const_obj_23: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(44), used: 1 };
+global global:core:prelude/traits.wado::$const_obj_6: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(78, 111, 110, 101), used: 4 };
+global global:core:prelude/traits.wado::$const_obj_7: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(58, 58), used: 2 };
+global global:core:prelude/traits.wado::$const_obj_8: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(77, 97, 121, 98, 101), used: 5 };
+global global:core:prelude/traits.wado::$const_obj_9: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(83, 111, 109, 101), used: 4 };
+global global:core:prelude/traits.wado::$const_obj_13: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(84, 111, 107, 101, 110), used: 5 };
+global global:core:prelude/traits.wado::$const_obj_15: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(79, 112), used: 2 };
+global global:core:prelude/traits.wado::$const_obj_16: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(69, 120, 99, 108, 117, 100, 101, 100), used: 8 };
+global global:core:prelude/traits.wado::$const_obj_19: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(87, 105, 108, 100, 99, 97, 114, 100), used: 8 };
+global global:core:prelude/primitive.wado::$const_obj_22: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
+global global:core:prelude/traits.wado::$const_obj_29: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(41), used: 1 };
+global global:core:prelude/traits.wado::$const_obj_30: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(40), used: 1 };
+global global:core:prelude/traits.wado::$const_obj_32: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(44), used: 1 };
+global global:core:prelude/format.wado::$const_obj_36: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(38), used: 1 };
 global global:core:builtin::$unit_case$variant_qualified_pattern.wado//Op$1: ref "variant_qualified_pattern.wado//Op" = struct.new "variant_qualified_pattern.wado//Op" { 1 };
 global global:core:builtin::$unit_case$variant_qualified_pattern.wado//Op$0: ref "variant_qualified_pattern.wado//Op" = struct.new "variant_qualified_pattern.wado//Op" { 0 };
 
 fn "variant_qualified_pattern.wado/run"() {
-    let $load_0: i32;
+    let $load_1: i32;
     let $v0_2: ref null "variant_qualified_pattern.wado//Op";
     let $v1_3: ref null "core:prelude/types.wado//Box<variant_qualified_pattern.wado/Op>";
     let $v0_18: ref null "variant_qualified_pattern.wado//Maybe<i32>";
-    let op_47: ref "variant_qualified_pattern.wado//Op";
+    let op_45: ref "variant_qualified_pattern.wado//Op";
     if @unlikely($inline_check_sroa_op_value__1: block -> bool {
         if block -> i32 {
             1;
@@ -405,16 +346,16 @@ fn "variant_qualified_pattern.wado/run"() {
         "variant_qualified_pattern.wado/run$cold6"();
         unreachable;
     }
-    if @unlikely((local.tee $load_0($inline_check_sroa_op_value__7: block -> bool {
-        if (if local.tee $load_0(local.tee op_47(local.tee $v1_3(struct.new "core:prelude/types.wado//Box<variant_qualified_pattern.wado/Op>" { value: ref.as_non_null(local.tee $v0_2(struct.new "variant_qualified_pattern.wado//Op::Token" { discriminant: 2, payload_0: 1 })) }).value).discriminant) == 0 -> i32 {
+    if @unlikely((local.tee $load_1($inline_check_sroa_op_value__7: block -> bool {
+        if (if local.tee $load_1(local.tee op_45(local.tee $v1_3(struct.new "core:prelude/types.wado//Box<variant_qualified_pattern.wado/Op>" { value: ref.as_non_null(local.tee $v0_2(struct.new "variant_qualified_pattern.wado//Op::Token" { discriminant: 2, payload_0: 1 })) }).value).discriminant) == 0 -> i32 {
             1;
         } else {
-            $load_0 == 1;
+            $load_1 == 1;
         }) {
             break $inline_check_sroa_op_value__7: 1;
         } else {
         }
-        if ref.test "variant_qualified_pattern.wado//Op::Token"(op_47) {
+        if ref.test "variant_qualified_pattern.wado//Op::Token"(op_45) {
             break $inline_check_sroa_op_value__7: 0;
         } else {
         }
@@ -422,7 +363,7 @@ fn "variant_qualified_pattern.wado/run"() {
     }) == 0) == 0) {
         cold_path;
         let $mv_arg_1: ref "core:prelude/string.wado//String";
-        "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<variant_qualified_pattern.wado/$tmpl$7f59c856416a06ac,[variant_qualified_pattern.wado/Op,&variant_qualified_pattern.wado/Op,bool]>"(struct.new "variant_qualified_pattern.wado//$tmpl$7f59c856416a06ac" { h0: ref.as_non_null($v0_2), h1: ref.as_non_null($v1_3), h2: $load_0, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in run at variant_qualified_pattern.wado:35
+        "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<variant_qualified_pattern.wado/$tmpl$7f59c856416a06ac,[variant_qualified_pattern.wado/Op,&variant_qualified_pattern.wado/Op,bool]>"(struct.new "variant_qualified_pattern.wado//$tmpl$7f59c856416a06ac" { h0: ref.as_non_null($v0_2), h1: ref.as_non_null($v1_3), h2: $load_1, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in run at variant_qualified_pattern.wado:35
 condition: !check(&Op::Token(1))
 Op::Token(1): "), used: 108 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in run at variant_qualified_pattern.wado:35
 condition: !check(&Op::Token(1))
@@ -433,7 +374,7 @@ check(&Op::Token(1)): "), used: 23 }, r2: struct.new "core:prelude/string.wado//
 check(&Op::Token(1)): "), used: 23 }, s3: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r3: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, $mv_arg_1.used);
         unreachable;
     }
-    if @unlikely(local.tee $load_0($inline_token_value_10: block -> i32 {
+    if @unlikely(local.tee $load_1($inline_token_value_10: block -> i32 {
         if ref.test "variant_qualified_pattern.wado//Op::Token"(local.tee $v0_2(struct.new "variant_qualified_pattern.wado//Op::Token" { discriminant: 2, payload_0: 42 })) {
             break $inline_token_value_10: ref.cast "variant_qualified_pattern.wado//Op::Token"($v0_2).payload_0;
         } else {
@@ -441,7 +382,7 @@ check(&Op::Token(1)): "), used: 23 }, s3: struct.new "core:prelude/string.wado//
         break $inline_token_value_10: -1;
     }) != 42) {
         cold_path;
-        "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<variant_qualified_pattern.wado/$tmpl$87c44b011a92b1a8,[variant_qualified_pattern.wado/Op,i32]>"(struct.new "variant_qualified_pattern.wado//$tmpl$87c44b011a92b1a8" { h0: ref.as_non_null($v0_2), h1: $load_0, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in run at variant_qualified_pattern.wado:36
+        "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<variant_qualified_pattern.wado/$tmpl$87c44b011a92b1a8,[variant_qualified_pattern.wado/Op,i32]>"(struct.new "variant_qualified_pattern.wado//$tmpl$87c44b011a92b1a8" { h0: ref.as_non_null($v0_2), h1: $load_1, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in run at variant_qualified_pattern.wado:36
 condition: token_value(Op::Token(42)) == 42
 Op::Token(42): "), used: 120 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in run at variant_qualified_pattern.wado:36
 condition: token_value(Op::Token(42)) == 42
@@ -450,7 +391,7 @@ token_value(Op::Token(42)): "), used: 29 }, r1: struct.new "core:prelude/string.
 token_value(Op::Token(42)): "), used: 29 }, s2: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r2: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, $mv_arg_1.used);
         unreachable;
     }
-    if @unlikely(local.tee $load_0($inline_maybe_unwrap_11: block -> i32 {
+    if @unlikely(local.tee $load_1($inline_maybe_unwrap_11: block -> i32 {
         if ref.test "variant_qualified_pattern.wado//Maybe<i32>::Some"(local.tee $v0_18(struct.new "variant_qualified_pattern.wado//Maybe<i32>::Some" { discriminant: 0, payload_0: 8 })) {
             break $inline_maybe_unwrap_11: ref.cast "variant_qualified_pattern.wado//Maybe<i32>::Some"($v0_18).payload_0;
         } else {
@@ -460,7 +401,7 @@ token_value(Op::Token(42)): "), used: 29 }, s2: struct.new "core:prelude/string.
         break $inline_maybe_unwrap_11: -2;
     }) != 8) {
         cold_path;
-        "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<variant_qualified_pattern.wado/$tmpl$b0d9df0ab930be4e,[variant_qualified_pattern.wado/Maybe<i32>,i32]>"(struct.new "variant_qualified_pattern.wado//$tmpl$b0d9df0ab930be4e" { h0: ref.as_non_null($v0_18), h1: $load_0, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in run at variant_qualified_pattern.wado:50
+        "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<variant_qualified_pattern.wado/$tmpl$b0d9df0ab930be4e,[variant_qualified_pattern.wado/Maybe<i32>,i32]>"(struct.new "variant_qualified_pattern.wado//$tmpl$b0d9df0ab930be4e" { h0: ref.as_non_null($v0_18), h1: $load_1, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in run at variant_qualified_pattern.wado:50
 condition: maybe_unwrap(Maybe::Some(8)) == 8
 Maybe::Some(8): "), used: 122 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in run at variant_qualified_pattern.wado:50
 condition: maybe_unwrap(Maybe::Some(8)) == 8
@@ -572,14 +513,14 @@ fn "variant_qualified_pattern.wado/$case_ref$variant_qualified_pattern.wado/Mayb
     if @unlikely(v.discriminant != 0) {
         unreachable;
     }
-    return struct.new "core:prelude/types.wado//Box<i32>" { value: ref.cast "variant_qualified_pattern.wado//Maybe<i32>::Some"(v).payload_0 };
+    return ref.cast "variant_qualified_pattern.wado//Maybe<i32>::Some"(v).payload_0;
 }
 
 fn "variant_qualified_pattern.wado/$case_ref$variant_qualified_pattern.wado/Op$i32$sroa[v.value]$spec0$dae[index]"(v) {
     if @unlikely(v.discriminant != 2) {
         unreachable;
     }
-    return struct.new "core:prelude/types.wado//Box<i32>" { value: ref.cast "variant_qualified_pattern.wado//Op::Token"(v).payload_0 };
+    return ref.cast "variant_qualified_pattern.wado//Op::Token"(v).payload_0;
 }
 
 fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, val, digit_count) {
@@ -885,16 +826,16 @@ fn "core:rt/panic$cold0"($mv$message$repr, $mv$message$used) {
 fn "core:prelude/traits.wado/core:prelude/traits.wado/inspect_variant_payload<i32>$sroa[payload.value]"(payload, f) {
     let $load_2: ref "core:prelude/string.wado//String";
     if f.alternate {
-        "core:prelude/format.wado/core:prelude/format.wado/Formatter::open_brace<core:prelude/string.wado/String>$spec0"(f, global:core:prelude/traits.wado::$const_obj_21);
+        "core:prelude/format.wado/core:prelude/format.wado/Formatter::open_brace<core:prelude/string.wado/String>$spec0"(f, global:core:prelude/traits.wado::$const_obj_30);
         "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_newline_indent"(f);
         "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(payload, f);
-        "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec1"(f.buf, global:core:prelude/traits.wado::$const_obj_23);
-        "core:prelude/format.wado/core:prelude/format.wado/Formatter::close_brace<core:prelude/string.wado/String>$spec0"(f, global:core:prelude/traits.wado::$const_obj_20);
+        "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec1"(f.buf, global:core:prelude/traits.wado::$const_obj_32);
+        "core:prelude/format.wado/core:prelude/format.wado/Formatter::close_brace<core:prelude/string.wado/String>$spec0"(f, global:core:prelude/traits.wado::$const_obj_29);
         return;
     }
-    "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec1"(local.tee $load_2(f.buf), global:core:prelude/traits.wado::$const_obj_21);
+    "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec1"(local.tee $load_2(f.buf), global:core:prelude/traits.wado::$const_obj_30);
     "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(payload, f);
-    "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec1"($load_2, global:core:prelude/traits.wado::$const_obj_20);
+    "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec1"($load_2, global:core:prelude/traits.wado::$const_obj_29);
 }
 
 fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"(buf) {
@@ -1042,19 +983,11 @@ fn "core:prelude/string.wado/core:prelude/string.wado/StrSlice::chars"($mv$self$
     return $mv$self$repr, $mv$self$end, $mv$self$start;
 }
 
-fn "variant_qualified_pattern.wado/variant_qualified_pattern.wado/Op^core:prelude/traits.wado/ReflectVariant::members"() {
-    return struct.new "core:prelude/traits.wado//VariantCase<variant_qualified_pattern.wado/Op,()>" { index: 0, case_name: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Wildcard"), used: 8 }, wire_override: ref.null none, is_unit: 1 }, struct.new "core:prelude/traits.wado//VariantCase<variant_qualified_pattern.wado/Op,()>" { index: 1, case_name: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Excluded"), used: 8 }, wire_override: ref.null none, is_unit: 1 }, struct.new "core:prelude/traits.wado//VariantCase<variant_qualified_pattern.wado/Op,i32>" { index: 2, case_name: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Token"), used: 5 }, wire_override: ref.null none, is_unit: 0 };
-}
-
 fn "variant_qualified_pattern.wado/variant_qualified_pattern.wado/$tmpl$872cb1b344c5b403^core:prelude/traits.wado/ReflectTemplate::tail"(t) {
     return block -> ref "core:prelude/string.wado//StrSlice" {
         let $mv_arg_1: ref "core:prelude/string.wado//String";
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_view"(local.tee $mv_arg_1(t.s1).repr, $mv_arg_1.used);
     };
-}
-
-fn "variant_qualified_pattern.wado/variant_qualified_pattern.wado/$tmpl$7f59c856416a06ac^core:prelude/traits.wado/ReflectTemplate::members"() {
-    return struct.new "core:prelude/traits.wado//TemplateHole<variant_qualified_pattern.wado/$tmpl$7f59c856416a06ac,variant_qualified_pattern.wado/Op>" { index: 0, spec: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(63), used: 1 } }, struct.new "core:prelude/traits.wado//TemplateHole<variant_qualified_pattern.wado/$tmpl$7f59c856416a06ac,&variant_qualified_pattern.wado/Op>" { index: 1, spec: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(63), used: 1 } }, struct.new "core:prelude/traits.wado//TemplateHole<variant_qualified_pattern.wado/$tmpl$7f59c856416a06ac,bool>" { index: 2, spec: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(63), used: 1 } };
 }
 
 fn "variant_qualified_pattern.wado/variant_qualified_pattern.wado/$tmpl$7f59c856416a06ac^core:prelude/traits.wado/ReflectTemplate::tail"(t) {
@@ -1135,25 +1068,18 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<variant_qua
     let $load_7: ref "core:prelude/string.wado//String";
     let $load_8: ref "core:prelude/string.wado//String";
     let $load_9: ref "core:prelude/string.wado//String";
-    let capacity_1: i32;
     let out_3: ref "core:prelude/string.wado//String";
     let self_13: ref "core:prelude/string.wado//StrSlice";
     let $temp_inline_core_prelude_traits_wado_TemplateHole_variant_qualified_pattern_wado__tmpl_7f59c856416a06ac_variant_qualified_pattern_wado_Op___fmt_7_0: ref "core:prelude/format.wado//Formatter";
-    capacity_1 = local.tee self_13("variant_qualified_pattern.wado/variant_qualified_pattern.wado/$tmpl$7f59c856416a06ac^core:prelude/traits.wado/ReflectTemplate::tail"(t)).end - self_13.start;
-    let $mv$$tuple_0$0: ref "core:prelude/traits.wado//TemplateHole<variant_qualified_pattern.wado/$tmpl$7f59c856416a06ac,variant_qualified_pattern.wado/Op>";
-    let $mv$$tuple_0$1: ref "core:prelude/traits.wado//TemplateHole<variant_qualified_pattern.wado/$tmpl$7f59c856416a06ac,&variant_qualified_pattern.wado/Op>";
-    let $mv$$tuple_0$2: ref "core:prelude/traits.wado//TemplateHole<variant_qualified_pattern.wado/$tmpl$7f59c856416a06ac,bool>";
-    multivalue_bind [$mv$$tuple_0$0, $mv$$tuple_0$1, $mv$$tuple_0$2] = "variant_qualified_pattern.wado/variant_qualified_pattern.wado/$tmpl$7f59c856416a06ac^core:prelude/traits.wado/ReflectTemplate::members"();
-    out_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(((capacity_1 + (local.tee self_13("core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<variant_qualified_pattern.wado/$tmpl$7f59c856416a06ac,variant_qualified_pattern.wado/Op>::lit$sroa[self.index]"(0, local.tee $load_2(t.s0), local.tee $load_3(t.r0), local.tee $load_4(t.s1), local.tee $load_5(t.r1), local.tee $load_6(t.s2), local.tee $load_7(t.r2), local.tee $load_8(t.s3), local.tee $load_9(t.r3))).end - self_13.start + 16)) + (local.tee self_13("core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<variant_qualified_pattern.wado/$tmpl$7f59c856416a06ac,&variant_qualified_pattern.wado/Op>::lit"($mv$$tuple_0$1, $load_2, $load_3, $load_4, $load_5, $load_6, $load_7, $load_8, $load_9)).end - self_13.start + 16)) + (local.tee self_13("core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<variant_qualified_pattern.wado/$tmpl$7f59c856416a06ac,bool>::lit$sroa[self.index]"(2, $load_2, $load_3, $load_4, $load_5, $load_6, $load_7, $load_8, $load_9)).end - self_13.start + 16)), used: 0 };
-    multivalue_bind [$mv$$tuple_0$0, $mv$$tuple_0$1, $mv$$tuple_0$2] = "variant_qualified_pattern.wado/variant_qualified_pattern.wado/$tmpl$7f59c856416a06ac^core:prelude/traits.wado/ReflectTemplate::members"();
+    out_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>((((local.tee self_13("variant_qualified_pattern.wado/variant_qualified_pattern.wado/$tmpl$7f59c856416a06ac^core:prelude/traits.wado/ReflectTemplate::tail"(t)).end - self_13.start) + (local.tee self_13("core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<variant_qualified_pattern.wado/$tmpl$7f59c856416a06ac,variant_qualified_pattern.wado/Op>::lit$sroa[self.index]"(0, local.tee $load_2(t.s0), local.tee $load_3(t.r0), local.tee $load_4(t.s1), local.tee $load_5(t.r1), local.tee $load_6(t.s2), local.tee $load_7(t.r2), local.tee $load_8(t.s3), local.tee $load_9(t.r3))).end - self_13.start + 16)) + (local.tee self_13("core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<variant_qualified_pattern.wado/$tmpl$7f59c856416a06ac,&variant_qualified_pattern.wado/Op>::lit$sroa[self.index]"(1, $load_2, $load_3, $load_4, $load_5, $load_6, $load_7, $load_8, $load_9)).end - self_13.start + 16)) + (local.tee self_13("core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<variant_qualified_pattern.wado/$tmpl$7f59c856416a06ac,bool>::lit$sroa[self.index]"(2, $load_2, $load_3, $load_4, $load_5, $load_6, $load_7, $load_8, $load_9)).end - self_13.start + 16)), used: 0 };
     self_13 = "core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<variant_qualified_pattern.wado/$tmpl$7f59c856416a06ac,variant_qualified_pattern.wado/Op>::lit$sroa[self.index]"(0, $load_2, $load_3, $load_4, $load_5, $load_6, $load_7, $load_8, $load_9);
     "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_view"(out_3, self_13.repr, self_13.start, self_13.end);
     $temp_inline_core_prelude_traits_wado_TemplateHole_variant_qualified_pattern_wado__tmpl_7f59c856416a06ac_variant_qualified_pattern_wado_Op___fmt_7_0 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"(out_3);
     "core:prelude/traits.wado/variant_qualified_pattern.wado/Op^core:prelude/traits.wado/Inspect::inspect$sroa[self.value]"(t.h0, $temp_inline_core_prelude_traits_wado_TemplateHole_variant_qualified_pattern_wado__tmpl_7f59c856416a06ac_variant_qualified_pattern_wado_Op___fmt_7_0);
-    self_13 = "core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<variant_qualified_pattern.wado/$tmpl$7f59c856416a06ac,&variant_qualified_pattern.wado/Op>::lit"($mv$$tuple_0$1, $load_2, $load_3, $load_4, $load_5, $load_6, $load_7, $load_8, $load_9);
+    self_13 = "core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<variant_qualified_pattern.wado/$tmpl$7f59c856416a06ac,&variant_qualified_pattern.wado/Op>::lit$sroa[self.index]"(1, $load_2, $load_3, $load_4, $load_5, $load_6, $load_7, $load_8, $load_9);
     "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_view"(out_3, self_13.repr, self_13.start, self_13.end);
     $temp_inline_core_prelude_traits_wado_TemplateHole_variant_qualified_pattern_wado__tmpl_7f59c856416a06ac_variant_qualified_pattern_wado_Op___fmt_7_0 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"(out_3);
-    "core:prelude/format.wado/&variant_qualified_pattern.wado/Op^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude/types.wado//Box<&variant_qualified_pattern.wado/Op>" { value: t.h1 }, $temp_inline_core_prelude_traits_wado_TemplateHole_variant_qualified_pattern_wado__tmpl_7f59c856416a06ac_variant_qualified_pattern_wado_Op___fmt_7_0);
+    "core:prelude/format.wado/&variant_qualified_pattern.wado/Op^core:prelude/traits.wado/Inspect::inspect$sroa[self.value.value]"(t.h1.value, $temp_inline_core_prelude_traits_wado_TemplateHole_variant_qualified_pattern_wado__tmpl_7f59c856416a06ac_variant_qualified_pattern_wado_Op___fmt_7_0);
     self_13 = "core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<variant_qualified_pattern.wado/$tmpl$7f59c856416a06ac,bool>::lit$sroa[self.index]"(2, $load_2, $load_3, $load_4, $load_5, $load_6, $load_7, $load_8, $load_9);
     "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_view"(out_3, self_13.repr, self_13.start, self_13.end);
     $temp_inline_core_prelude_traits_wado_TemplateHole_variant_qualified_pattern_wado__tmpl_7f59c856416a06ac_variant_qualified_pattern_wado_Op___fmt_7_0 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"(out_3);
@@ -1179,21 +1105,6 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<variant_qua
     self_9 = "variant_qualified_pattern.wado/variant_qualified_pattern.wado/$tmpl$872cb1b344c5b403^core:prelude/traits.wado/ReflectTemplate::tail"(t);
     "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_view"(out_3, self_9.repr, self_9.start, self_9.end);
     return out_3;
-}
-
-fn "core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<variant_qualified_pattern.wado/$tmpl$7f59c856416a06ac,&variant_qualified_pattern.wado/Op>::lit"(self, $mv$t$s0, $mv$t$r0, $mv$t$s1, $mv$t$r1, $mv$t$s2, $mv$t$r2, $mv$t$s3, $mv$t$r3) {
-    return block -> ref "core:prelude/string.wado//StrSlice" {
-        "core:prelude/string.wado/core:prelude/string.wado/String::internal_view"(local.tee $mv$t$s0("variant_qualified_pattern.wado/$template_segment$variant_qualified_pattern.wado/$tmpl$7f59c856416a06ac"($mv$t$s0, $mv$t$r0, $mv$t$s1, $mv$t$r1, $mv$t$s2, $mv$t$r2, $mv$t$s3, $mv$t$r3, 2 * self.index)).repr, $mv$t$s0.used);
-    };
-}
-
-fn "core:prelude/format.wado/&variant_qualified_pattern.wado/Op^core:prelude/traits.wado/Inspect::inspect"(self, f) {
-    "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec1"(f.buf, global:core:prelude/format.wado::$const_obj_5);
-    "core:prelude/traits.wado/variant_qualified_pattern.wado/Op^core:prelude/traits.wado/Inspect::inspect$sroa[self.value]"(self.value.value, f);
-}
-
-fn "variant_qualified_pattern.wado/variant_qualified_pattern.wado/Maybe<i32>^core:prelude/traits.wado/ReflectVariant::members"() {
-    return struct.new "core:prelude/traits.wado//VariantCase<variant_qualified_pattern.wado/Maybe<i32>,i32>" { index: 0, case_name: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(83, 111, 109, 101), used: 4 }, wire_override: ref.null none, is_unit: 0 }, struct.new "core:prelude/traits.wado//VariantCase<variant_qualified_pattern.wado/Maybe<i32>,()>" { index: 1, case_name: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(78, 111, 110, 101), used: 4 }, wire_override: ref.null none, is_unit: 1 };
 }
 
 fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>"(self, is_negative, alt_prefix, digit_count) {
@@ -1302,12 +1213,12 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelud
 fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_char_n$sroa[self.buf]"(self, c, n) {
     let i: i32;
     i = 0;
-    b123: block {
-        l124: loop {
-            break_if b123 i >= n;
+    b122: block {
+        l123: loop {
+            break_if b122 i >= n;
             "core:prelude/string.wado/core:prelude/string.wado/String::push"(self, c);
             i = i + 1;
-            continue l124;
+            continue l123;
         };
     };
 }
@@ -1315,73 +1226,43 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_char_n$sr
 fn "core:prelude/traits.wado/variant_qualified_pattern.wado/Maybe<i32>^core:prelude/traits.wado/Inspect::inspect$sroa[self.value]"(self, f) {
     let $load_0: i32;
     let $load_1: ref "core:prelude/string.wado//String";
-    let s_10: ref "core:prelude/string.wado//String";
-    if ref.is_null(global:core:prelude/traits.wado::$const_obj_8) {
-        let $mv_0_1: ref "core:prelude/traits.wado//VariantCase<variant_qualified_pattern.wado/Maybe<i32>,i32>";
-        let $mv_1_2: ref "core:prelude/traits.wado//VariantCase<variant_qualified_pattern.wado/Maybe<i32>,()>";
-        multivalue_bind [$mv_0_1, $mv_1_2] = "variant_qualified_pattern.wado/variant_qualified_pattern.wado/Maybe<i32>^core:prelude/traits.wado/ReflectVariant::members"();
-        global:core:prelude/traits.wado::$const_obj_8 = struct.new "tuple//[core:prelude/traits.wado/VariantCase<variant_qualified_pattern.wado/Maybe<i32>,i32>, core:prelude/traits.wado/VariantCase<variant_qualified_pattern.wado/Maybe<i32>,()>]" { 0: $mv_0_1, 1: $mv_1_2 };
-    }
-    $mv_0_1 = global:core:prelude/traits.wado::$const_obj_8.0;
     if local.tee $load_0(self.discriminant) == 0 {
-        s_10 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Maybe"), used: 5 };
-        "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec3"(local.tee $load_1(f.buf), s_10);
-        "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec0"($load_1, global:core:prelude/traits.wado::$const_obj_6);
-        s_10 = $mv_0_1.case_name;
-        "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string"($load_1, s_10);
-        "core:prelude/traits.wado/core:prelude/traits.wado/inspect_variant_payload<i32>$sroa[payload.value]"("variant_qualified_pattern.wado/$case_ref$variant_qualified_pattern.wado/Maybe<i32>$i32$sroa[v.value]$spec0$dae[index]"(self).value, f);
+        "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec3"(local.tee $load_1(f.buf), global:core:prelude/traits.wado::$const_obj_8);
+        "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec0"($load_1, global:core:prelude/traits.wado::$const_obj_7);
+        "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec4"($load_1, global:core:prelude/traits.wado::$const_obj_9);
+        "core:prelude/traits.wado/core:prelude/traits.wado/inspect_variant_payload<i32>$sroa[payload.value]"(let $mv_value_1: i32; multivalue_bind [$mv_value_1] = "variant_qualified_pattern.wado/$case_ref$variant_qualified_pattern.wado/Maybe<i32>$i32$sroa[v.value]$spec0$dae[index]"(self); $mv_value_1, f);
     }
-    $mv_1_2 = global:core:prelude/traits.wado::$const_obj_8.1;
     if $load_0 == 1 {
-        s_10 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Maybe"), used: 5 };
-        "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec3"(local.tee $load_1(f.buf), s_10);
-        "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec0"($load_1, global:core:prelude/traits.wado::$const_obj_6);
-        s_10 = $mv_1_2.case_name;
-        "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string"($load_1, s_10);
+        "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec3"(local.tee $load_1(f.buf), global:core:prelude/traits.wado::$const_obj_8);
+        "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec0"($load_1, global:core:prelude/traits.wado::$const_obj_7);
+        "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec4"($load_1, global:core:prelude/traits.wado::$const_obj_6);
     }
 }
 
-fn "core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<variant_qualified_pattern.wado/$tmpl$87c44b011a92b1a8,variant_qualified_pattern.wado/Op>::lit$sroa[self.index]"(self, $mv$t$s0, $mv$t$r0, $mv$t$s1, $mv$t$r1, $mv$t$s2, $mv$t$r2) {
+fn "core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<variant_qualified_pattern.wado/$tmpl$872cb1b344c5b403,variant_qualified_pattern.wado/Op>::lit$sroa[self.index]"(self, $mv$t$s0, $mv$t$r0, $mv$t$s1, $mv$t$r1) {
     return block -> ref "core:prelude/string.wado//StrSlice" {
-        "core:prelude/string.wado/core:prelude/string.wado/String::internal_view"(local.tee $mv$t$s0("variant_qualified_pattern.wado/$template_segment$variant_qualified_pattern.wado/$tmpl$87c44b011a92b1a8"($mv$t$s0, $mv$t$r0, $mv$t$s1, $mv$t$r1, $mv$t$s2, $mv$t$r2, 2 * self)).repr, $mv$t$s0.used);
+        "core:prelude/string.wado/core:prelude/string.wado/String::internal_view"(local.tee $mv$t$s0("variant_qualified_pattern.wado/$template_segment$variant_qualified_pattern.wado/$tmpl$872cb1b344c5b403"($mv$t$s0, $mv$t$r0, $mv$t$s1, $mv$t$r1, 2 * self)).repr, $mv$t$s0.used);
     };
 }
 
 fn "core:prelude/traits.wado/variant_qualified_pattern.wado/Op^core:prelude/traits.wado/Inspect::inspect$sroa[self.value]"(self, f) {
     let $load_0: i32;
     let $load_1: ref "core:prelude/string.wado//String";
-    let s_11: ref "core:prelude/string.wado//String";
-    if ref.is_null(global:core:prelude/traits.wado::$const_obj_12) {
-        let $mv_0_1: ref "core:prelude/traits.wado//VariantCase<variant_qualified_pattern.wado/Op,()>";
-        let $mv_1_2: ref "core:prelude/traits.wado//VariantCase<variant_qualified_pattern.wado/Op,()>";
-        let $mv_2_3: ref "core:prelude/traits.wado//VariantCase<variant_qualified_pattern.wado/Op,i32>";
-        multivalue_bind [$mv_0_1, $mv_1_2, $mv_2_3] = "variant_qualified_pattern.wado/variant_qualified_pattern.wado/Op^core:prelude/traits.wado/ReflectVariant::members"();
-        global:core:prelude/traits.wado::$const_obj_12 = struct.new "tuple//[core:prelude/traits.wado/VariantCase<variant_qualified_pattern.wado/Op,()>, core:prelude/traits.wado/VariantCase<variant_qualified_pattern.wado/Op,()>, core:prelude/traits.wado/VariantCase<variant_qualified_pattern.wado/Op,i32>]" { 0: $mv_0_1, 1: $mv_1_2, 2: $mv_2_3 };
-    }
-    $mv_0_1 = global:core:prelude/traits.wado::$const_obj_12.0;
     if local.tee $load_0(self.discriminant) == 0 {
-        s_11 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(79, 112), used: 2 };
-        "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec0"(local.tee $load_1(f.buf), s_11);
-        "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec0"($load_1, global:core:prelude/traits.wado::$const_obj_6);
-        s_11 = $mv_0_1.case_name;
-        "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string"($load_1, s_11);
+        "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec0"(local.tee $load_1(f.buf), global:core:prelude/traits.wado::$const_obj_15);
+        "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec0"($load_1, global:core:prelude/traits.wado::$const_obj_7);
+        "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec5"($load_1, global:core:prelude/traits.wado::$const_obj_19);
     }
-    $mv_0_1 = global:core:prelude/traits.wado::$const_obj_12.1;
     if $load_0 == 1 {
-        s_11 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(79, 112), used: 2 };
-        "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec0"(local.tee $load_1(f.buf), s_11);
-        "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec0"($load_1, global:core:prelude/traits.wado::$const_obj_6);
-        s_11 = $mv_0_1.case_name;
-        "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string"($load_1, s_11);
+        "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec0"(local.tee $load_1(f.buf), global:core:prelude/traits.wado::$const_obj_15);
+        "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec0"($load_1, global:core:prelude/traits.wado::$const_obj_7);
+        "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec5"($load_1, global:core:prelude/traits.wado::$const_obj_16);
     }
-    $mv_2_3 = global:core:prelude/traits.wado::$const_obj_12.2;
     if $load_0 == 2 {
-        s_11 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(79, 112), used: 2 };
-        "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec0"(local.tee $load_1(f.buf), s_11);
-        "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec0"($load_1, global:core:prelude/traits.wado::$const_obj_6);
-        s_11 = $mv_2_3.case_name;
-        "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string"($load_1, s_11);
-        "core:prelude/traits.wado/core:prelude/traits.wado/inspect_variant_payload<i32>$sroa[payload.value]"("variant_qualified_pattern.wado/$case_ref$variant_qualified_pattern.wado/Op$i32$sroa[v.value]$spec0$dae[index]"(self).value, f);
+        "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec0"(local.tee $load_1(f.buf), global:core:prelude/traits.wado::$const_obj_15);
+        "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec0"($load_1, global:core:prelude/traits.wado::$const_obj_7);
+        "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec3"($load_1, global:core:prelude/traits.wado::$const_obj_13);
+        "core:prelude/traits.wado/core:prelude/traits.wado/inspect_variant_payload<i32>$sroa[payload.value]"(multivalue_bind [$load_0] = "variant_qualified_pattern.wado/$case_ref$variant_qualified_pattern.wado/Op$i32$sroa[v.value]$spec0$dae[index]"(self); $load_0, f);
     }
 }
 
@@ -1400,13 +1281,25 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(self, f) {
     let abs_val: u64;
     is_negative = self < 0;
     self = "core:prelude/primitive.wado/count_digits_u64"(local.tee abs_val("core:prelude/primitive.wado/i64::abs"(builtin::i64_extend_i32_s(self))));
-    is_negative = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>"(f, is_negative, global:core:prelude/primitive.wado::$const_obj_13, self);
+    is_negative = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>"(f, is_negative, global:core:prelude/primitive.wado::$const_obj_22, self);
     "core:prelude/primitive.wado/write_decimal_digits"(f.buf.repr, is_negative, abs_val, self);
 }
 
 fn "core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<variant_qualified_pattern.wado/$tmpl$7f59c856416a06ac,variant_qualified_pattern.wado/Op>::lit$sroa[self.index]"(self, $mv$t$s0, $mv$t$r0, $mv$t$s1, $mv$t$r1, $mv$t$s2, $mv$t$r2, $mv$t$s3, $mv$t$r3) {
     return block -> ref "core:prelude/string.wado//StrSlice" {
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_view"(local.tee $mv$t$s0("variant_qualified_pattern.wado/$template_segment$variant_qualified_pattern.wado/$tmpl$7f59c856416a06ac"($mv$t$s0, $mv$t$r0, $mv$t$s1, $mv$t$r1, $mv$t$s2, $mv$t$r2, $mv$t$s3, $mv$t$r3, 2 * self)).repr, $mv$t$s0.used);
+    };
+}
+
+fn "core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<variant_qualified_pattern.wado/$tmpl$7f59c856416a06ac,&variant_qualified_pattern.wado/Op>::lit$sroa[self.index]"(self, $mv$t$s0, $mv$t$r0, $mv$t$s1, $mv$t$r1, $mv$t$s2, $mv$t$r2, $mv$t$s3, $mv$t$r3) {
+    return block -> ref "core:prelude/string.wado//StrSlice" {
+        "core:prelude/string.wado/core:prelude/string.wado/String::internal_view"(local.tee $mv$t$s0("variant_qualified_pattern.wado/$template_segment$variant_qualified_pattern.wado/$tmpl$7f59c856416a06ac"($mv$t$s0, $mv$t$r0, $mv$t$s1, $mv$t$r1, $mv$t$s2, $mv$t$r2, $mv$t$s3, $mv$t$r3, 2 * self)).repr, $mv$t$s0.used);
+    };
+}
+
+fn "core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<variant_qualified_pattern.wado/$tmpl$87c44b011a92b1a8,i32>::lit$sroa[self.index]"(self, $mv$t$s0, $mv$t$r0, $mv$t$s1, $mv$t$r1, $mv$t$s2, $mv$t$r2) {
+    return block -> ref "core:prelude/string.wado//StrSlice" {
+        "core:prelude/string.wado/core:prelude/string.wado/String::internal_view"(local.tee $mv$t$s0("variant_qualified_pattern.wado/$template_segment$variant_qualified_pattern.wado/$tmpl$87c44b011a92b1a8"($mv$t$s0, $mv$t$r0, $mv$t$s1, $mv$t$r1, $mv$t$s2, $mv$t$r2, 2 * self)).repr, $mv$t$s0.used);
     };
 }
 
@@ -1428,15 +1321,9 @@ fn "core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<variant_quali
     };
 }
 
-fn "core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<variant_qualified_pattern.wado/$tmpl$87c44b011a92b1a8,i32>::lit$sroa[self.index]"(self, $mv$t$s0, $mv$t$r0, $mv$t$s1, $mv$t$r1, $mv$t$s2, $mv$t$r2) {
+fn "core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<variant_qualified_pattern.wado/$tmpl$87c44b011a92b1a8,variant_qualified_pattern.wado/Op>::lit$sroa[self.index]"(self, $mv$t$s0, $mv$t$r0, $mv$t$s1, $mv$t$r1, $mv$t$s2, $mv$t$r2) {
     return block -> ref "core:prelude/string.wado//StrSlice" {
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_view"(local.tee $mv$t$s0("variant_qualified_pattern.wado/$template_segment$variant_qualified_pattern.wado/$tmpl$87c44b011a92b1a8"($mv$t$s0, $mv$t$r0, $mv$t$s1, $mv$t$r1, $mv$t$s2, $mv$t$r2, 2 * self)).repr, $mv$t$s0.used);
-    };
-}
-
-fn "core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<variant_qualified_pattern.wado/$tmpl$872cb1b344c5b403,variant_qualified_pattern.wado/Op>::lit$sroa[self.index]"(self, $mv$t$s0, $mv$t$r0, $mv$t$s1, $mv$t$r1) {
-    return block -> ref "core:prelude/string.wado//StrSlice" {
-        "core:prelude/string.wado/core:prelude/string.wado/String::internal_view"(local.tee $mv$t$s0("variant_qualified_pattern.wado/$template_segment$variant_qualified_pattern.wado/$tmpl$872cb1b344c5b403"($mv$t$s0, $mv$t$r0, $mv$t$s1, $mv$t$r1, 2 * self)).repr, $mv$t$s0.used);
     };
 }
 
@@ -1473,8 +1360,25 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_stri
     builtin::array_copy<u8>(self.repr, start, other.repr, 0, 5);
 }
 
+fn "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec4"(self, other) {
+    let start: i32;
+    start = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(self, 4);
+    builtin::array_copy<u8>(self.repr, start, other.repr, 0, 4);
+}
+
+fn "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec5"(self, other) {
+    let start: i32;
+    start = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(self, 8);
+    builtin::array_copy<u8>(self.repr, start, other.repr, 0, 8);
+}
+
 fn "core:prelude/string.wado/core:prelude/string.wado/StrSlice::byte_at$unchecked$spec0$dae[index]"($mv$self$repr, $mv$self$start) {
     return builtin::array_get_value<u8>($mv$self$repr, $mv$self$start);
+}
+
+fn "core:prelude/format.wado/&variant_qualified_pattern.wado/Op^core:prelude/traits.wado/Inspect::inspect$sroa[self.value.value]"(self, f) {
+    "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec1"(f.buf, global:core:prelude/format.wado::$const_obj_36);
+    "core:prelude/traits.wado/variant_qualified_pattern.wado/Op^core:prelude/traits.wado/Inspect::inspect$sroa[self.value]"(self, f);
 }
 
 export fn "variant_qualified_pattern.wado/$cm_export__run" as "run"

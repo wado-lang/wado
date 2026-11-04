@@ -10,8 +10,7 @@ use crate::ast::{
     self, AstId, AstVisitor, CompoundAssignOp, Expr, Item, Module, UnaryOp, walk_expr,
 };
 use crate::attribute::{
-    ALLOC, AMBIENT, EXPORT_NAME, INLINE, SECRET, WIRE, wire_name_override, wire_name_policy,
-    wire_value,
+    ALLOC, EXPORT_NAME, INLINE, SECRET, WIRE, wire_name_override, wire_name_policy, wire_value,
 };
 use crate::call_args::CallArgs;
 use crate::const_eval::{format_float_repr, truncate_int};
@@ -22,8 +21,8 @@ use crate::lower::plan::value_copy::place::{is_source_place, source_place_subscr
 use crate::lower::wide_int_literal::{create_literal, method_ref};
 use crate::module_source::ModuleSource;
 use crate::name::{
-    CONTRACT_CLAUSE_INTRINSIC, CONTRACT_SITE_INTRINSIC, FqTypeName, Receiver, contract_owner_name,
-    global_init_function, global_name, unchecked_twin_name,
+    CONTRACT_CLAUSE_INTRINSIC, CONTRACT_SITE_INTRINSIC, FqTypeName, Receiver, TypeHead,
+    contract_owner_name, global_init_function, global_name, unchecked_twin_name,
 };
 use crate::ownership::{self, BodyFacts as _, Modes};
 use crate::symbol::SymbolTable;
@@ -78,7 +77,7 @@ use crate::elaborator::util::{
     settles_literal_patterns,
 };
 use crate::escape::{
-    unescape_byte, unescape_bytes, unescape_char, unescape_string, unescape_template_segment,
+    bytes_value, checked_template_segment, string_value, unescape_byte, unescape_char,
 };
 use crate::format_spec::FormatKind;
 use crate::hashmap;
@@ -105,15 +104,16 @@ use crate::tir::{
     deref_to_layers, hold_hole, to_layers_of, wrapped_reference,
 };
 use crate::tir_visitor::{TirMutVisitor, TirRefVisitor};
-use crate::token::Span;
+use crate::token::{Quote, Span};
 use crate::unparse::{unparse_expr_source, unparse_pattern_source};
 
 /// A template's text and holes as reify assembles it: one segment more than
-/// holes, each segment cooked and raw, and each hole with its specifier as
-/// written.
+/// holes, each segment cooked and raw, each hole with its specifier as
+/// written, and how the raw text is delimited.
 struct TemplatePieces {
     segments: Vec<[String; 2]>,
     holes: Vec<(TirExpr, Option<String>)>,
+    quote: Quote,
 }
 
 impl Default for TemplatePieces {
@@ -121,6 +121,7 @@ impl Default for TemplatePieces {
         Self {
             segments: vec![Default::default()],
             holes: Vec::new(),
+            quote: Quote::Cooked,
         }
     }
 }
@@ -1516,7 +1517,6 @@ impl<'a> Reify<'a> {
             is_cm_binding: false,
             is_dispatch_wrapper: false,
             is_cm_export: false,
-            is_ambient: extract_is_ambient_attr(&func.attrs),
             inline_hint: extract_inline_hint_attr(&func.attrs),
             compiler_item,
             export_name: extract_export_name_attr(&func.attrs),
@@ -1536,26 +1536,14 @@ impl<'a> Reify<'a> {
             return None;
         }
         let facts = self.types.impl_facts.get(&impl_block.id)?;
-
-        // Derive the target's name the way `reify_method` derives it for this
-        // block's methods, so the block and its methods agree on the key the
-        // effect-dispatch handler index is built from.
-        let mut naming = LocalMethodName::of(
-            facts.receiver.clone(),
-            facts.trait_name.clone(),
-            String::new(),
-        );
-        if let Some(owner) = facts.concrete_owner.as_ref() {
-            naming = naming.at_owner(owner);
-        }
-
         Some(TirImpl {
+            def: self.impl_origin(impl_block),
             trait_canonical: facts
                 .trait_name
                 .as_ref()
                 .and_then(|fq| fq.declared_head().cloned()),
             trait_type_args: facts.trait_type_args.clone(),
-            struct_name: naming.struct_name(),
+            is_blanket: matches!(facts.struct_name.head(), TypeHead::Binder { .. }),
             rest: impl_block.rest.map(|r| r.kind),
             span: impl_block.span,
         })
@@ -1728,11 +1716,7 @@ impl<'a> Reify<'a> {
             );
             info.is_ref_impl = facts.is_ref_impl;
             // Carry the impl's trait type args (`impl Future<i32> for …`
-            // → `[i32]`). The effect-dispatch synthesis keys its handler
-            // index on `(struct, effect_module, base_trait, trait_type_args)`;
-            // without the args a generic-effect
-            // handler is keyed `Future<>` and the `Future<i32>` binding
-            // finds no `DispatchPlan`.
+            // → `[i32]`), which the method's mangled trait spells.
             info.trait_type_args.clone_from(&facts.trait_type_args);
             info
         };
@@ -1812,7 +1796,6 @@ impl<'a> Reify<'a> {
             is_cm_binding: false,
             is_dispatch_wrapper: false,
             is_cm_export: false,
-            is_ambient: false,
             inline_hint: InlineHint::Auto,
             compiler_item: None,
             export_name: None,
@@ -1822,7 +1805,7 @@ impl<'a> Reify<'a> {
         };
 
         let tir_test = TirTest {
-            name: test_decl.name.clone(),
+            name: test_decl.name.as_deref().map(str::to_owned),
             function_name,
             line: test_decl.span.line,
             span: test_decl.span,
@@ -2120,35 +2103,33 @@ impl<'a> Reify<'a> {
         self.mark_diverging_stmts(stmts)
     }
 
-    /// Mark a block cold ahead of its first statement that cannot return.
+    /// Mark a block cold ahead of its first statement that traps.
     ///
     /// Marking here rather than at each synthesis site is what gives a
     /// `panic(…)` written in source the same treatment as the ones this file
-    /// builds. A `return` / `break` ends a path too, but a normal exit is not a
-    /// cold one, so it is left alone, and so is a `!` statement that takes one
-    /// on some path: a `let … else` desugars to such a `match`.
-    fn mark_diverging_stmts(&self, stmts: Vec<TirStmt>) -> Vec<TirStmt> {
+    /// builds. A `return` / `break` ends a path too, and a loop no `break`
+    /// leaves never ends one, but neither is a cold path. So a `!` statement
+    /// that takes one on some path is left alone: a `let … else` desugars to
+    /// such a `match`, and marking it made the rest of its block cold to the
+    /// inliner.
+    fn mark_diverging_stmts(&self, mut stmts: Vec<TirStmt>) -> Vec<TirStmt> {
         let tt = self.tysys.type_table.borrow();
-        let diverges = |s: &TirStmt| {
-            matches!(&s.kind, TirStmtKind::Expr(e) if tt.is_never(e.type_id)) && !exits_normally(s)
-        };
-        if !stmts.iter().any(diverges) {
+        let Some(first) = stmts.iter().position(|s| {
+            matches!(&s.kind, TirStmtKind::Expr(e) if tt.is_never(e.type_id)) && traps(s)
+        }) else {
             return stmts;
-        }
-        let mut out: Vec<TirStmt> = Vec::with_capacity(stmts.len() + 1);
+        };
         // A marker makes its whole basic block cold, so one per block is all
         // there is to place, and a synthesis site that placed its own keeps it.
         // A profile's marker stating one half leaves the other to this one.
-        let mut marked = false;
-        for s in stmts {
-            marked = marked || marker_stmt_mark(&s) == Some(Mark::ColdPath);
-            if diverges(&s) && !marked {
-                out.push(known_cold_path_stmt(s.span));
-                marked = true;
-            }
-            out.push(s);
+        if !stmts[..=first]
+            .iter()
+            .any(|s| marker_stmt_mark(s) == Some(Mark::ColdPath))
+        {
+            let span = stmts[first].span;
+            stmts.insert(first, known_cold_path_stmt(span));
         }
-        out
+        stmts
     }
 
     /// Desugar `let PAT = EXPR else { ELSE };` followed by `rest` into a
@@ -4577,12 +4558,15 @@ impl<'a> Reify<'a> {
         template: &ast::TemplateStringExpr,
         ctx: &mut FunctionContext,
     ) -> TirExpr {
-        let mut pieces = TemplatePieces::default();
+        let mut pieces = TemplatePieces {
+            quote: template.quote,
+            ..TemplatePieces::default()
+        };
         for part in &template.parts {
             match part {
                 // Annotate validated every segment's escapes.
                 ast::TemplatePart::String(raw) => {
-                    pieces.text(&unescape_template_segment(raw), raw);
+                    pieces.text(&checked_template_segment(raw, template.quote), raw);
                 }
                 ast::TemplatePart::Interpolation { expr, format, .. } => {
                     let value = self.reify_expr(expr, ctx, None);
@@ -4606,6 +4590,7 @@ impl<'a> Reify<'a> {
         let TemplatePieces {
             mut segments,
             mut holes,
+            quote,
         } = pieces;
         let string_type = self
             .tysys
@@ -4621,7 +4606,7 @@ impl<'a> Reify<'a> {
         let lone_string = {
             let tt = self.tysys.type_table.borrow();
             matches!(holes.as_slice(), [(value, None)]
-                if tt.type_key(value.type_id) == tt.type_key(string_type))
+                if tt.same_type(value.type_id, string_type))
                 && segments
                     .iter()
                     .all(|[cooked, raw]| cooked.is_empty() && raw.is_empty())
@@ -4637,7 +4622,7 @@ impl<'a> Reify<'a> {
                 (value, TemplateHole { ty, spec })
             })
             .unzip();
-        let shape = TemplateShape { holes };
+        let shape = TemplateShape { holes, quote };
         let template_ty = self.reify_template_type(shape, span);
         let (literal, holes) =
             self.reify_template_literal(template_ty, values, &segments, span, ctx);
@@ -4718,7 +4703,7 @@ impl<'a> Reify<'a> {
             .template
             .raw_segments()
             .into_iter()
-            .map(|raw| [unescape_template_segment(&raw), raw])
+            .map(|raw| [checked_template_segment(&raw, tagged.template.quote), raw])
             .collect();
         let (literal, holes) =
             self.reify_template_literal(template_ty, values, &segments, span, ctx);
@@ -6761,6 +6746,7 @@ impl<'a> Reify<'a> {
                     trait_type_args: entry.trait_type_args.clone(),
                     handler: handler.clone(),
                     handler_type: facts.handler_type,
+                    impl_def: entry.impl_def,
                     span: binding.span,
                     bundle_group: facts.bundle_group,
                 });
@@ -8584,19 +8570,19 @@ impl<'a> Reify<'a> {
                 };
                 return self.reify_numeric_literal(&byte.to_string(), byte_type, lit.span);
             }
-            ast::Literal::String(s) => {
+            ast::Literal::String(s, quote) => {
                 // Decode escape sequences (`\"`, `\n`, `\\`, …) the same
                 // way the elaborator does — the AST holds
-                // the raw source text. Without this a literal like
+                // the source text. Without this a literal like
                 // `"{\""` reaches codegen with the backslash intact and
                 // serializes as `{\"` instead of `{"`.
-                let value = unescape_string(s).unwrap_or_default();
+                let value = string_value(s, *quote).unwrap_or_default();
                 TirExprKind::StringLiteral(value)
             }
-            ast::Literal::Bytes(raw) => {
-                // Decode the raw source to bytes and reuse the `#include_bytes`
+            ast::Literal::Bytes(raw, quote) => {
+                // Decode the source to bytes and reuse the `#include_bytes`
                 // lowering (`BytesLiteral` -> byte-buffer data segment).
-                let bytes = unescape_bytes(raw).unwrap_or_default();
+                let bytes = bytes_value(raw, *quote).unwrap_or_default();
                 let byte_list_type = if recorded_type == TypeTable::UNKNOWN {
                     self.tysys.type_table.borrow_mut().make_byte_list()
                 } else {
@@ -8675,13 +8661,13 @@ impl<'a> Reify<'a> {
                     .unwrap_or_default();
                 return TirExpr::new(TirExprKind::StringLiteral(data), string_type, lit.span);
             }
-            ast::Literal::IncludeStr(raw_path) => {
+            ast::Literal::IncludeStr(path) => {
                 let string_type = self
                     .tysys
                     .type_table
                     .borrow_mut()
                     .make_compiler_struct(CompilerItem::String);
-                let key = [self.current_module_source.to_string(), raw_path.clone()];
+                let key = [self.current_module_source.to_string(), path.value.clone()];
                 let value = self
                     .tysys
                     .included_files
@@ -8691,13 +8677,13 @@ impl<'a> Reify<'a> {
                     .unwrap_or_default();
                 return TirExpr::new(TirExprKind::StringLiteral(value), string_type, lit.span);
             }
-            ast::Literal::IncludeBytes(raw_path) => {
+            ast::Literal::IncludeBytes(path) => {
                 let array_u8_type = if recorded_type == TypeTable::UNKNOWN {
                     self.tysys.type_table.borrow_mut().make_byte_list()
                 } else {
                     recorded_type
                 };
-                let key = [self.current_module_source.to_string(), raw_path.clone()];
+                let key = [self.current_module_source.to_string(), path.value.clone()];
                 let bytes = self
                     .tysys
                     .included_files
@@ -9208,8 +9194,8 @@ impl<'a> Reify<'a> {
                 // string literals decode their escapes, and `null` on a
                 // variant scrutinee with a `None` case lowers to that case.
                 let tir_lit = match lit {
-                    ast::Literal::String(raw) => {
-                        TirLiteralPattern::String(unescape_string(raw).unwrap_or_default())
+                    ast::Literal::String(raw, quote) => {
+                        TirLiteralPattern::String(string_value(raw, *quote).unwrap_or_default())
                     }
                     ast::Literal::Null => {
                         if self.scrutinee_has_variant_case(scrutinee_type, "None") {
@@ -9220,7 +9206,7 @@ impl<'a> Reify<'a> {
                     // Not pattern literals in the surface grammar; the parser
                     // rejects them, so reaching here is an invariant violation.
                     ast::Literal::Unit
-                    | ast::Literal::Bytes(_)
+                    | ast::Literal::Bytes(..)
                     | ast::Literal::LocationFile
                     | ast::Literal::LocationLine
                     | ast::Literal::LocationFunction
@@ -9774,7 +9760,7 @@ impl TypeSystem {
     /// on a target that drops it.
     fn ascribed_binding_type(&self, scrutinee_type: TypeId, target: TypeId) -> TypeId {
         let tt = self.type_table.borrow();
-        if tt.type_key(scrutinee_type) == tt.type_key(target) || tt.peel_refs(target) != target {
+        if tt.same_type(scrutinee_type, target) || tt.peel_refs(target) != target {
             return target;
         }
         drop(tt);
@@ -9871,10 +9857,6 @@ impl TypeSystem {
 /// Attribute extractors, reify's own. An attribute is uniquely determined by
 /// the AST alone, which is what the completeness rule lets reify re-derive, so
 /// these need no recorded fact and no elaborator to run.
-fn extract_is_ambient_attr(attrs: &[Attribute]) -> bool {
-    attrs.iter().any(|a| a.name == AMBIENT)
-}
-
 fn extract_inline_hint_attr(attrs: &[Attribute]) -> tir::InlineHint {
     let Some(attr) = attrs.iter().find(|a| a.name == INLINE) else {
         return tir::InlineHint::Auto;
@@ -9928,7 +9910,7 @@ fn adjust_receiver_for_self_kind(
     let target = adjusted_receiver_type(receiver.type_id, self_kind, self_layers, type_table);
     let tt = type_table.borrow();
     let held = tt.ref_depth(target);
-    if tt.type_key(tt.ref_layers(receiver.type_id, held)) == tt.type_key(target) {
+    if tt.same_type(tt.ref_layers(receiver.type_id, held), target) {
         return deref_to_layers(receiver, held, &tt);
     }
     to_layers_of(deref_to_layers(receiver, held - 1, &tt), target, &tt)
@@ -10526,19 +10508,35 @@ fn half_literal(bits: u64, ty: TypeId, span: Span) -> TirExpr {
     )
 }
 
-/// Whether `stmt` holds a `return`, or a `break` / `continue` leaving `stmt`.
-fn exits_normally(stmt: &TirStmt) -> bool {
+/// Whether every path through the `!` statement `stmt` traps: none holds a
+/// `return`, a `break` / `continue` leaving `stmt`, or a loop no `break`
+/// leaves.
+fn traps(stmt: &TirStmt) -> bool {
     let mut finder = ExitFinder {
         scope: ExitScope::default(),
         found: false,
+        breaks_only: false,
     };
     finder.visit_stmt(stmt);
+    !finder.found
+}
+
+/// Whether a `break` in the loop body `body` leaves the loop.
+fn breaks_out(body: &TirBlock) -> bool {
+    let mut finder = ExitFinder {
+        scope: ExitScope::default(),
+        found: false,
+        breaks_only: true,
+    };
+    finder.visit_block(body);
     finder.found
 }
 
 struct ExitFinder {
     scope: ExitScope,
     found: bool,
+    /// Whether only a `break` leaving the region counts.
+    breaks_only: bool,
 }
 
 impl ExitFinder {
@@ -10551,8 +10549,12 @@ impl ExitFinder {
 
 impl TirRefVisitor for ExitFinder {
     fn visit_stmt(&mut self, stmt: &TirStmt) {
-        self.found |= self.scope.exits(&stmt.kind);
+        self.found |= self.scope.exits(&stmt.kind)
+            && (!self.breaks_only || matches!(stmt.kind, TirStmtKind::Break { .. }));
         match &stmt.kind {
+            TirStmtKind::Loop { body } if !self.breaks_only && !breaks_out(body) => {
+                self.found = true;
+            }
             TirStmtKind::Loop { .. } | TirStmtKind::VariadicForOf { .. } => {
                 self.scope.enter_loop();
                 self.walk_stmt(stmt);

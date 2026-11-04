@@ -32,8 +32,14 @@ test "smoke" {
     assert back.search_metadata.count == 0;
 }
 
-// `cbor/` holds three benchmarks, so each label names its dataset.
 #[workload]
+test "workload" {
+    let resp = json_from_bytes::<TwitterResponse, _>(#include_bytes("../json_twitter/twitter_sample.json")).unwrap();
+    let back = cbor_from_bytes::<TwitterResponse, _>(cbor_to_bytes::<TwitterResponse>(&resp).unwrap()).unwrap();
+    assert back.statuses.len() == 5;
+}
+
+// `cbor/` holds three benchmarks, so each label names its dataset.
 test "fuel" {
     let resp = json_from_bytes::<TwitterResponse, _>(#include_bytes("../json_twitter/twitter.json")).unwrap();
     let cbor = cbor_to_bytes::<TwitterResponse>(&resp).unwrap();

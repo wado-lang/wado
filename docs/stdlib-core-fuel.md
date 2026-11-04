@@ -33,10 +33,28 @@ assert sum == 499_500;
 
 ## Functions
 
-### `pub fn measure<T, effect E>(label: String, mut f: fn mut() -> T with E) -> T with E`
-
-`#[benign(FuelHost)]`
+### `pub fn measure<T, effect E>(label: String, mut f: fn mut() -> T with E) -> T with (E, FuelHost)`
 
 Runs `f` and reports the fuel it spent as region `label` of the running
 test. `f`'s result passes through `builtin::black_box`, so the work that
 produces it is never optimized out of the region.
+
+## Effects
+
+### `pub interface FuelHost`
+
+Host interface behind `core:fuel`. Only `wado test` supplies it, and only
+under `--report-fuel` does it meter.
+
+#### `fn spent() -> Option<u64>`
+
+`#[cm("core:fuel/fuel-host@0.1.0#spent")]`
+
+The fuel the running test has spent so far, or none when the run is
+not metered.
+
+#### `fn report(label: String, fuel: u64)`
+
+`#[cm("core:fuel/fuel-host@0.1.0#report")]` `#[cm_params("label", "fuel")]`
+
+Region `label` of the running test spent `fuel`.

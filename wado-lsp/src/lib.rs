@@ -12,6 +12,7 @@ pub mod kiln;
 mod location;
 mod query;
 mod references;
+pub mod scip;
 pub mod semantic_tokens;
 pub mod server;
 #[doc(hidden)]
@@ -134,8 +135,11 @@ impl Snapshot {
         if let Some(cached) = self.semantic.borrow().clone() {
             return cached;
         }
-        let checked =
-            wado_compiler::check_semantics(&self.sem, wado_compiler::hashmap::IndexSet::default());
+        let checked = wado_compiler::check_semantics(
+            &self.sem,
+            wado_compiler::hashmap::IndexSet::default(),
+            None,
+        );
         let mut out: Vec<CompilerDiagnostic> = checked
             .effects
             .into_iter()
@@ -431,16 +435,8 @@ impl Engine {
             .await?;
         let sem = &snapshot.sem;
         let span = def.span.ok_or(SymbolQueryError::NoLocation)?;
-        let entry = &sem.entry_module_source;
-        let def_uri = match sem.symbol_at(def.ast_id) {
-            Some(symbol) => location::symbol_uri(entry, symbol, uri),
-            None => sem
-                .module_of_id(def.ast_id)
-                .and_then(|m| location::module_uri(entry, m, uri)),
-        }
-        .ok_or(SymbolQueryError::NoLocation)?;
         Ok(DefinitionResult {
-            uri: def_uri,
+            uri: location::def_uri(sem, def.ast_id, uri).ok_or(SymbolQueryError::NoLocation)?,
             range: text::span_to_range(&span, None, self.position_encoding),
         })
     }
@@ -506,8 +502,7 @@ impl Engine {
             .resolve_symbol_def(uri, notation, public_only, host)
             .await?;
         let sem = &snapshot.sem;
-        let def_uri = location::module_uri(&sem.entry_module_source, &def.module, uri)
-            .ok_or(SymbolQueryError::NoLocation)?;
+        let def_uri = location::module_uri(&sem.entry_module_source, &def.module, uri);
         let ctx = self.query_ctx_over(&snapshot, uri);
         let highlights = document_highlight::highlights_for_def(&ctx, def.ast_id, &def.module);
         Ok((def_uri, highlights))
@@ -551,6 +546,19 @@ impl Engine {
             references::find_references(ctx, position, include_declaration)
         })
         .await
+    }
+
+    /// The document's declarations and the references its code makes, as a
+    /// SCIP document with paths relative to `root` (a directory URI ending in
+    /// `/`).
+    pub async fn scip_document<H: CompilerHost>(
+        &self,
+        uri: &str,
+        root: &str,
+        host: &H,
+    ) -> Option<scip::ScipDocument> {
+        self.with_query_ctx(uri, host, None, |ctx| Some(scip::document(ctx, root)))
+            .await
     }
 
     /// Find every occurrence of the symbol named at the given position

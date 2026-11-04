@@ -1,6 +1,6 @@
 // A profile marks a region unlikely where its branch takes it 1% of its runs
-// or less, and cold where its count is at most the summary's cold line, here
-// 50. The source's own markers give way to what the profile measured.
+// or less, and cold where it never ran. The source's own markers give way to
+// what the profile measured.
 use { println, Stdout } from "core:cli";
 
 fn digit(c: char) -> Result<i32, String> {
@@ -59,9 +59,6 @@ __DATA__
     "pgo_rarity.wado:7:27 then unlikely",
     "pgo_rarity.wado:14:15 try unlikely cold",
     "pgo_rarity.wado:18:15 try unlikely",
-    "pgo_rarity.wado:22:19 then cold",
-    "pgo_rarity.wado:25:6 else cold",
-    "pgo_rarity.wado:26:5 rest cold",
     "pgo_rarity.wado:44:17 then unlikely"
   ],
   "remarks": {
@@ -74,7 +71,7 @@ __DATA__
       },
       {
         "contains": [
-          "pgo_rarity.wado:23:9 remark: `cold_path()` marks this path rare, but the profile ran it 50 times where the code around it ran 100 times, so it is cold but not unlikely; the profile overrides the marker"
+          "pgo_rarity.wado:23:9 remark: `cold_path()` marks this path rare, but the profile ran it 50 times where the code around it ran 100 times, so it is neither unlikely nor cold; the profile overrides the marker"
         ],
         "count": 1
       },

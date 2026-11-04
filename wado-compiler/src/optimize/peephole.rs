@@ -142,7 +142,8 @@ pub(super) fn run_peephole(
         // One rule, two entry points: `apply_block` fuses the value-discarding
         // if-let shape, `apply_expr` threads the value-producing `match LB`
         // (`?`) shape. Both only exist post-inline.
-        let labeled_block_fusion_rule = (!pre_inline).then(build_labeled_block_fusion);
+        let labeled_block_fusion_rule =
+            (!pre_inline).then(|| build_labeled_block_fusion(type_table));
         // Scalarizes the `[tag, slots…]` temp fusion leaves behind — the
         // value-producing `let x = f()?` consumer it cannot relocate. Ordered
         // after fusion, which produces the better code where it applies and
@@ -220,7 +221,17 @@ pub(super) fn run_peephole(
         // bodies; the extractor reads `prim` from the type table for literal repr.
         engine.set_value_graph_type_table(type_table);
         engine.set_pure_builtin_callees(&pure_builtin_callees);
-        engine.run(&rules)
+        let changed = engine.run(&rules);
+        let copies = engine.copied_locals().to_vec();
+        drop(engine);
+        // A copy of a boxed local is boxed too. Dropping the annotation lets a
+        // read of it forward past a write through the alias.
+        for [of, copy] in copies {
+            if func.address_taken_locals.contains(&of) {
+                func.address_taken_locals.insert(copy);
+            }
+        }
+        changed
     });
     exec.drop_all(callees);
     changed

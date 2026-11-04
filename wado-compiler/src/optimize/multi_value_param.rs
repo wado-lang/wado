@@ -7,7 +7,7 @@ use std::sync::Arc;
 use cranelift_entity::EntityRef;
 
 use crate::hashmap::{IndexMap, IndexSet};
-use crate::nir::{NirFunction, ParamAbi, aggregate_field_info};
+use crate::nir::{NirFunction, ParamAbi, StructDecls, aggregate_field_info};
 use crate::nir_arena::{Body, ExprId, ExprKind, NodeRef, Operand};
 use crate::nir_package::NirPackage;
 use crate::nir_value_graph::{ValueId, ValueKind};
@@ -166,6 +166,7 @@ fn collect_candidates(
     project: &NirPackage,
     type_table: &TypeTable,
 ) -> IndexMap<ParamKey, Candidate> {
+    let structs = StructDecls::new(&project.structs, type_table);
     let mut out = IndexMap::default();
     for (func_idx, func_rc) in project.functions.iter().enumerate() {
         let func = func_rc.borrow();
@@ -185,7 +186,7 @@ fn collect_candidates(
                 _ => (param.type_id, false),
             };
             let Some((all_types, all_names, _)) =
-                aggregate_field_info(aggregate, type_table, &project.structs)
+                aggregate_field_info(aggregate, type_table, &structs)
             else {
                 continue;
             };

@@ -1,6 +1,6 @@
-//! Replace a call to a small function off every call cycle, or a bridge onto
-//! one ([`splice_barred_cycle_members`]), with its body, spliced
-//! into a labeled block so the `return` becomes a `break`.
+//! Replace a call to a small function no call cycle is cut at
+//! ([`cut_call_cycles`]) with its body, spliced into a labeled block so the
+//! `return` becomes a `break`.
 //!
 //! A body carries two prices, parting company where it keeps a cold arm.
 //! `inline_cost` is what running one copy costs and is what the threshold
@@ -17,10 +17,16 @@
 //! halve the body. Such a callee then receives no inlining itself: growing a
 //! body worth more copied than called past the budget destroys it, one-way.
 
+mod decisions;
+
 use std::cell::{Cell, RefCell};
 use std::sync::Mutex;
 
+pub use decisions::InlineLog;
+use decisions::{CalleeEntry, Round, SiteEntry};
+
 use crate::hashmap::{IndexMap, IndexSet};
+use crate::module_source::ModuleSource;
 use crate::name::{inline_block_label, inline_temp_name};
 use crate::nir::{FunctionRef, InlineHint, NirFunction, NirLocal, NirUnaryOp};
 use crate::nir_arena::{
@@ -46,6 +52,7 @@ use crate::optimize::alias::{CallImmutability, call_verdicts, first_param_types}
 use crate::optimize::dce::{DescriptorCache, ReachabilityCache, reachable_function_positions};
 use crate::optimize::mod_ref::SummaryCache;
 use crate::parallel::{Executor, lock};
+use crate::pgo::{Heat, HeatMap};
 use crate::rarity::Rarity;
 use crate::token::Span;
 use crate::trace::filter;
@@ -976,6 +983,9 @@ struct BodyScan {
     cold_callees: IndexSet<FuncId>,
     /// The callees called from at least one site outside every loop.
     unlooped_callees: IndexSet<FuncId>,
+    /// The callees called from at least one site no cold marker covers, by the
+    /// heat the profile set on that site.
+    callees_at: ByHeat<IndexSet<FuncId>>,
     /// Whether the body holds a `loop`.
     loopy: bool,
 }
@@ -987,6 +997,8 @@ pub(super) struct InlineScans {
     bodies: BodyMemo<BodyScan>,
     /// Indexed by store position.
     read: Vec<SweepRead>,
+    /// See [`cut_call_cycles`].
+    cycle_cuts: IndexSet<FuncId>,
 }
 
 /// What a sweep reads about a function that its own body does not decide:
@@ -994,7 +1006,7 @@ pub(super) struct InlineScans {
 /// starts at. Each moves with call sites anywhere in the program.
 #[derive(Clone, Copy, PartialEq, Eq)]
 struct SweepRead {
-    reach: Reach,
+    reach: ByHeat<Reach>,
     shrinks: bool,
     entry: Site,
 }
@@ -1027,7 +1039,7 @@ fn revisit_moved_reads(
     }
 }
 
-fn scan_body(func: &NirFunction, markers: MarkerBuiltins) -> BodyScan {
+fn scan_body(func: &NirFunction, markers: MarkerBuiltins, heat_map: &HeatMap) -> BodyScan {
     // A site's arguments are keyed by position and the callee's writes by
     // local index.
     assert!(
@@ -1042,6 +1054,7 @@ fn scan_body(func: &NirFunction, markers: MarkerBuiltins) -> BodyScan {
         return scan;
     };
     let cold = RareRuns::of(body, markers, Rarity::Cold).exprs(body);
+    let unlikely = unlikely_runs(body, markers, heat_map).exprs(body);
     let looped = looped_exprs(body);
     body.for_each_reachable_node(|node| match node {
         NodeRef::Stmt(st) => match &body.stmts[st].kind {
@@ -1082,6 +1095,10 @@ fn scan_body(func: &NirFunction, markers: MarkerBuiltins) -> BodyScan {
                     scan.cold_callees.insert(*func_id);
                 } else {
                     scan.hot_callees.insert(*func_id);
+                    let heat = heat_map
+                        .heat(body.exprs[e].span)
+                        .plain_where(unlikely.contains(&e));
+                    scan.callees_at.at_mut(heat).insert(*func_id);
                 }
                 if !looped.contains(&e) {
                     scan.unlooped_callees.insert(*func_id);
@@ -1466,6 +1483,43 @@ fn single_bindings(scan: &BodyScan) -> IndexMap<u32, Operand> {
 /// carried an inline hint each.
 const PAYBACK_FACTOR: usize = 4;
 
+/// One value for each [`Heat`] a profile sets on a call site.
+#[derive(Clone, Copy, Default, PartialEq, Eq, Debug)]
+pub struct ByHeat<T> {
+    pub cold: T,
+    pub plain: T,
+    pub hot: T,
+}
+
+impl<T> ByHeat<T> {
+    fn at(&self, heat: Heat) -> &T {
+        match heat {
+            Heat::Cold => &self.cold,
+            Heat::Plain => &self.plain,
+            Heat::Hot => &self.hot,
+        }
+    }
+
+    fn at_mut(&mut self, heat: Heat) -> &mut T {
+        match heat {
+            Heat::Cold => &mut self.cold,
+            Heat::Plain => &mut self.plain,
+            Heat::Hot => &mut self.hot,
+        }
+    }
+
+    fn map<U>(&self, f: impl Fn(&T) -> U) -> ByHeat<U> {
+        ByHeat {
+            cold: f(&self.cold),
+            plain: f(&self.plain),
+            hot: f(&self.hot),
+        }
+    }
+}
+
+/// The inlining threshold at each heat of call site.
+pub type Thresholds = ByHeat<usize>;
+
 /// Which call sites splice a callee.
 #[derive(Clone, Copy, Default, PartialEq, Eq, Debug)]
 enum Reach {
@@ -1487,7 +1541,7 @@ enum Reach {
 }
 
 /// Where a call site sits, as far as the price it may pay goes.
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
 enum Site {
     Plain,
     /// Inside a loop of the caller, or anywhere in a function only loops reach.
@@ -1495,26 +1549,174 @@ enum Site {
     /// In a cold run, or anywhere in a function only such sites
     /// reach: only `#[inline(always)]` and a splice no bigger than the call
     /// happen here, since anything else only bloats code that rarely runs.
-    Cold,
+    Cold(ColdBy),
+    /// [`Site::Plain`] in an unlikely run, which the profile's hot regions do
+    /// not raise: the branch into it is predicted not taken.
+    UnlikelyPlain,
+    /// [`Site::Loop`] in an unlikely run.
+    UnlikelyLoop,
+}
+
+/// What made a [`Site::Cold`] cold.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum ColdBy {
+    /// The statement opening the cold run the site is in, which a marker's
+    /// path passes through.
+    Run(Span),
+    /// Every path into the function passes a cold run.
+    Callers,
 }
 
 impl Site {
     fn entering_loop(self) -> Self {
         match self {
-            Site::Cold => Site::Cold,
+            Site::Cold(by) => Site::Cold(by),
             Site::Plain | Site::Loop => Site::Loop,
+            Site::UnlikelyPlain | Site::UnlikelyLoop => Site::UnlikelyLoop,
+        }
+    }
+
+    fn entering_unlikely(self) -> Self {
+        match self {
+            Site::Plain => Site::UnlikelyPlain,
+            Site::Loop => Site::UnlikelyLoop,
+            Site::Cold(_) | Site::UnlikelyPlain | Site::UnlikelyLoop => self,
+        }
+    }
+
+    /// The site as admission reads it, whatever run it is in.
+    fn admission(self) -> Self {
+        match self {
+            Site::UnlikelyPlain => Site::Plain,
+            Site::UnlikelyLoop => Site::Loop,
+            Site::Cold(_) | Site::Plain | Site::Loop => self,
+        }
+    }
+
+    /// Whether a profile's hot region raises a call here to the hot threshold.
+    fn heats(self) -> bool {
+        matches!(self, Site::Plain | Site::Loop)
+    }
+}
+
+/// `body`'s unlikely runs, which only lower a hot price: none where no site is
+/// hot.
+fn unlikely_runs(body: &Body, markers: MarkerBuiltins, heat_map: &HeatMap) -> RareRuns {
+    if heat_map.any_hot() {
+        RareRuns::of(body, markers, Rarity::Unlikely)
+    } else {
+        RareRuns::none(markers, Rarity::Unlikely)
+    }
+}
+
+/// The runs of one caller's body that move its [`Site`]: cold and unlikely.
+#[derive(Clone)]
+struct SiteRuns([RareRuns; 2]);
+
+impl SiteRuns {
+    /// `body`'s runs, its cold ones `cold`.
+    fn of(cold: RareRuns, body: &Body, markers: MarkerBuiltins, heat_map: &HeatMap) -> Self {
+        Self([cold, unlikely_runs(body, markers, heat_map)])
+    }
+
+    /// Where `block` turns cold and unlikely.
+    fn starts(&self, block: BlockId) -> [Option<usize>; 2] {
+        self.0.each_ref().map(|runs| runs.start(block))
+    }
+
+    fn add_under(&mut self, body: &Body, e: ExprId) {
+        for runs in &mut self.0 {
+            runs.add_under(body, e);
         }
     }
 }
 
+/// Why a callee's [`Reach`] is what it is.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum Basis {
+    NoBody,
+    /// The member a call cycle is cut at, which splicing around the cycle
+    /// would expand without bound.
+    CycleCut,
+    /// `#[inline(never)]`.
+    NeverHint,
+    /// A CM binding, which stays a function of its own.
+    CmBinding,
+    /// It returns `!`: an error path, never hot.
+    Diverges,
+    /// `#[inline(always)]`.
+    Forced,
+    /// Its net price is under the threshold.
+    Fits,
+    /// The constants every caller passes fold it under the threshold.
+    Folds,
+    /// Its net price is over [`PAYBACK_FACTOR`] times the threshold.
+    OverPayback,
+    /// Under the payback bound, but it reaches a safepoint: one site outside a
+    /// loop, where the body holds none, or nowhere.
+    Safepoint {
+        sole_and_loop_free: bool,
+    },
+    /// Under the payback bound: its one site, or its sites in loops.
+    Payback {
+        sole: bool,
+    },
+}
+
+impl Basis {
+    fn reach(self) -> Reach {
+        match self {
+            Basis::NoBody
+            | Basis::CycleCut
+            | Basis::NeverHint
+            | Basis::CmBinding
+            | Basis::Diverges
+            | Basis::OverPayback
+            | Basis::Safepoint {
+                sole_and_loop_free: false,
+            } => Reach::Nowhere,
+            Basis::Forced | Basis::Fits | Basis::Folds => Reach::Everywhere,
+            Basis::Safepoint {
+                sole_and_loop_free: true,
+            } => Reach::SoleOutsideLoops,
+            Basis::Payback { sole: true } => Reach::Sole,
+            Basis::Payback { sole: false } => Reach::Loops,
+        }
+    }
+}
+
+/// Why a site declines a candidate.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum Refusal {
+    /// A cold site takes only an `#[inline(always)]` callee or one that
+    /// shrinks the caller.
+    Cold,
+    /// The caller is CM binding or dispatch glue.
+    Glue,
+    /// A callee admitted at its one site, and this site came with a splice.
+    NotTheSoleSite,
+    /// The compile-time engine may fold the call to its value first.
+    LeftToEngine,
+    /// A callee admitted outside loops only, at a site in one.
+    InLoop,
+    /// A callee admitted in loops only, at a site outside them.
+    OutsideLoop,
+    /// A callee admitted only at sites of another [`Heat`].
+    OtherHeat,
+    /// A callee admitted in loops only, called from several sites of this one.
+    SeveralLoopSites,
+    /// The splice under way has spent what its re-scan may add.
+    RescanSpent,
+}
+
 /// What the engine decides about one callee.
-#[derive(Clone, Copy, Default)]
+#[derive(Clone, Copy)]
 struct Verdict {
-    /// The hot price the verdict was reached on, or `0` for a callee turned
+    /// The hot price the verdict was reached on, or `None` for a callee turned
     /// down before it was priced at all.
-    hot: usize,
-    /// Which of its call sites splice it.
-    reach: Reach,
+    hot: Option<usize>,
+    /// Why its call sites splice it where they do.
+    basis: Basis,
     /// Keep it as a template: splice nothing *into* it.
     ///
     /// A body whose parameters, were they constant, delete a loop from it is
@@ -1524,34 +1726,59 @@ struct Verdict {
     hold: bool,
 }
 
-/// Whether this pass declines `func` outright, before any price is taken. The
+impl Verdict {
+    /// A verdict reached before any price was taken.
+    fn unpriced(basis: Basis) -> Self {
+        assert!(
+            basis.reach() == Reach::Nowhere,
+            "a callee splicing admits is priced"
+        );
+        Verdict {
+            hot: None,
+            basis,
+            hold: false,
+        }
+    }
+
+    fn reach(&self) -> Reach {
+        self.basis.reach()
+    }
+}
+
+/// Why this pass declines `func` outright, before any price is taken. The
 /// `spliced` lookahead table reads it too, so the table cannot charge a caller
 /// for a body that will stay a call.
 fn splice_barred(
     func: &NirFunction,
-    barred_cycle_members: &IndexSet<FuncId>,
+    cycle_cuts: &IndexSet<FuncId>,
     type_table: &TypeTable,
-) -> bool {
-    // Recursion is barred ahead of the `#[inline(always)]` short-circuit in
-    // `never_spliced`: splicing a recursive call only exposes the next one, so a
+) -> Option<Basis> {
+    // A cut is barred ahead of the `#[inline(always)]` short-circuit in
+    // `never_spliced`: splicing around a cycle only exposes the next call, so a
     // force would expand without bound over the fixed point (a compiler stack
-    // overflow at higher iteration counts). A bridge is the exception
-    // `splice_barred_cycle_members` proves bounded. Keyed on `FuncId`, the
-    // identity the set is built on, so a cross-module cycle is not missed.
-    func.id.is_some_and(|id| barred_cycle_members.contains(&id)) || never_spliced(func, type_table)
+    // overflow at higher iteration counts). Keyed on `FuncId`, the identity the
+    // set is built on, so a cross-module cycle is not missed.
+    if func.id.is_some_and(|id| cycle_cuts.contains(&id)) {
+        return Some(Basis::CycleCut);
+    }
+    never_spliced(func, type_table)
 }
 
-/// Whether this pass declines `func` whatever calls it. A call into such a
+/// Why this pass declines `func` whatever calls it. A call into such a
 /// function stays a call, so it closes no cycle splicing could expand.
-fn never_spliced(func: &NirFunction, type_table: &TypeTable) -> bool {
+fn never_spliced(func: &NirFunction, type_table: &TypeTable) -> Option<Basis> {
+    if func.inline_hint == InlineHint::Never {
+        return Some(Basis::NeverHint);
+    }
     // A CM binding is an ABI bridge between Wado GC types and CM linear memory,
     // and has to stay a function of its own.
-    if func.inline_hint == InlineHint::Never || func.is_cm_binding {
-        return true;
+    if func.is_cm_binding {
+        return Some(Basis::CmBinding);
     }
     // A `!`-returning body is an error/abort path: never hot, nothing to gain.
     // `#[inline(always)]` overrides this one, which is why it is not a bare test.
-    func.inline_hint != InlineHint::Always && type_table.is_never(func.return_type)
+    (func.inline_hint != InlineHint::Always && type_table.is_never(func.return_type))
+        .then_some(Basis::Diverges)
 }
 
 /// The threshold `func`'s own hint puts it under. An `#[inline]` hint raises it
@@ -1575,7 +1802,7 @@ fn effective_threshold(func: &NirFunction, inline_threshold: usize) -> usize {
 fn classify_callee(
     func: &NirFunction,
     const_view: Option<&ConstView<'_>>,
-    barred_cycle_members: &IndexSet<FuncId>,
+    cycle_cuts: &IndexSet<FuncId>,
     type_table: &TypeTable,
     inline_threshold: usize,
     cold: &RareRuns,
@@ -1587,21 +1814,21 @@ fn classify_callee(
     spliced: &[usize],
     hopeful: &IndexSet<u32>,
 ) -> Verdict {
-    // Must have a body
     let Some(body) = &func.body else {
-        return Verdict::default();
+        return Verdict::unpriced(Basis::NoBody);
     };
 
-    if splice_barred(func, barred_cycle_members, type_table) {
-        return Verdict::default();
+    if let Some(basis) = splice_barred(func, cycle_cuts, type_table) {
+        return Verdict::unpriced(basis);
     }
 
+    let plain = inline_cost(body, type_table, cold, spliced);
     // #[inline(always)] skips the remaining heuristic checks (but still requires
     // a body and passes `splice_barred`, both checked above)
     if func.inline_hint == InlineHint::Always {
         return Verdict {
-            hot: 0,
-            reach: Reach::Everywhere,
+            hot: Some(plain),
+            basis: Basis::Forced,
             hold: false,
         };
     }
@@ -1609,11 +1836,10 @@ fn classify_callee(
     let effective_threshold = effective_threshold(func, inline_threshold);
 
     let params = func.params.len();
-    let plain = inline_cost(body, type_table, cold, spliced);
     if net_cost(plain, params) <= effective_threshold {
         return Verdict {
-            hot: plain,
-            reach: Reach::Everywhere,
+            hot: Some(plain),
+            basis: Basis::Fits,
             hold: false,
         };
     }
@@ -1655,24 +1881,20 @@ fn classify_callee(
         let (halves, drops_loop) = weigh(view);
         halves || drops_loop
     });
-    let reach = if folds {
-        Reach::Everywhere
+    let basis = if folds {
+        Basis::Folds
     } else if net_cost(plain, params) > effective_threshold * PAYBACK_FACTOR {
-        Reach::Nowhere
+        Basis::OverPayback
     } else if has_safepoint(body, type_table, cold, safepoint_calls, written) {
-        if sites == 1 && !arena_query::block_contains_loop(body, body.root()) {
-            Reach::SoleOutsideLoops
-        } else {
-            Reach::Nowhere
+        Basis::Safepoint {
+            sole_and_loop_free: sites == 1 && !arena_query::block_contains_loop(body, body.root()),
         }
-    } else if sites == 1 {
-        Reach::Sole
     } else {
-        Reach::Loops
+        Basis::Payback { sole: sites == 1 }
     };
     Verdict {
-        hot: plain,
-        reach,
+        hot: Some(plain),
+        basis,
         hold: optimistic_loop,
     }
 }
@@ -1695,25 +1917,68 @@ pub(super) fn body_callees(func: &NirFunction) -> Vec<usize> {
     callee_ids.into_iter().collect()
 }
 
-/// The functions on a call cycle that splicing must leave alone: every member
-/// but a bridge, whose one call site enters a member that makes more than one
-/// call. Splicing a bridge exposes that member, which stays barred, so the
-/// expansion stops there. A bridge is how a cold re-entry closes a cycle
-/// through a hot forwarder: `T::deserialize` reaching a scalar reader whose
-/// quoted form re-reads through `T::deserialize`.
-fn splice_barred_cycle_members(call_graph: &[Vec<usize>]) -> IndexSet<FuncId> {
-    let recursive = recursive_functions(call_graph);
-    let is_bridge = |f: usize| match call_graph[f].as_slice() {
-        &[callee] => {
-            callee != f && recursive.contains(&FuncId::new(callee)) && call_graph[callee].len() != 1
-        }
-        _ => false,
-    };
-    recursive
+/// Settle `cuts` to the functions splicing must leave alone so no call cycle
+/// expands: a call into a cut member stays a call, so every cycle through one
+/// is closed. Each cycle no cut closes yet loses its costliest member by
+/// `price`, the one least worth splicing anyway, and the rest of the cycle
+/// splices. A cut kept while its member is on a cycle is what bounds the
+/// rounds: one that moved could splice what an earlier round left a call.
+///
+/// Barring every member instead left a cycle's hot entry a call: `core:json`'s
+/// `deserialize_i32`, which re-reads a quoted number through `T::deserialize`.
+fn cut_call_cycles(
+    call_graph: &[Vec<usize>],
+    cuts: &mut IndexSet<FuncId>,
+    price: impl Fn(usize) -> usize,
+) {
+    let on_cycle = recursive_scc_members(call_graph);
+    cuts.retain(|f| on_cycle[f.index()]);
+    let mut cut = vec![false; call_graph.len()];
+    for f in cuts.iter() {
+        cut[f.index()] = true;
+    }
+    // Only an edge between two members of one cycle can close another, so each
+    // round walks the cycles the previous one left open, never the whole graph.
+    let mut open: Vec<Vec<usize>> = call_graph
         .iter()
-        .copied()
-        .filter(|f| !is_bridge(f.index()))
-        .collect()
+        .enumerate()
+        .map(|(f, callees)| {
+            if !on_cycle[f] {
+                return Vec::new();
+            }
+            callees.iter().copied().filter(|&c| on_cycle[c]).collect()
+        })
+        .collect();
+    let mut prices: Vec<Option<usize>> = vec![None; call_graph.len()];
+    loop {
+        for callees in &mut open {
+            callees.retain(|&c| !cut[c]);
+        }
+        let components = cycle_components(&open);
+        let mut costliest: IndexMap<usize, (usize, usize)> = IndexMap::default();
+        for (f, &component) in components.iter().enumerate() {
+            let Some(component) = component else {
+                open[f].clear();
+                continue;
+            };
+            let p = *prices[f].get_or_insert_with(|| price(f));
+            costliest
+                .entry(component)
+                .and_modify(|best| {
+                    if p > best.1 {
+                        *best = (f, p);
+                    }
+                })
+                .or_insert((f, p));
+        }
+        if costliest.is_empty() {
+            return;
+        }
+        for &(f, _) in costliest.values() {
+            cut[f] = true;
+            cuts.insert(FuncId::new(f));
+        }
+    }
 }
 
 /// The functions on a call cycle of `call_graph`, which holds each function's
@@ -1730,16 +1995,25 @@ pub(super) fn recursive_functions(call_graph: &[Vec<usize>]) -> IndexSet<FuncId>
         .collect()
 }
 
-/// Iterative Tarjan SCC. Returns one bool per node: `true` when the node lies on
-/// a call cycle (a non-singleton SCC member, or a node with a self-edge).
+/// One bool per node: `true` when the node lies on a call cycle (a
+/// non-singleton SCC member, or a node with a self-edge).
 pub(super) fn recursive_scc_members<E: AsRef<[usize]>>(call_graph: &[E]) -> Vec<bool> {
+    cycle_components(call_graph)
+        .into_iter()
+        .map(|c| c.is_some())
+        .collect()
+}
+
+/// Iterative Tarjan SCC. Per node, the component it shares a call cycle with,
+/// or `None` for a node on no cycle.
+fn cycle_components<E: AsRef<[usize]>>(call_graph: &[E]) -> Vec<Option<usize>> {
     let n = call_graph.len();
     const UNVISITED: usize = usize::MAX;
     let mut index_of = vec![UNVISITED; n];
     let mut lowlink = vec![0usize; n];
     let mut on_stack = vec![false; n];
     let mut scc_stack: Vec<usize> = Vec::new();
-    let mut recursive = vec![false; n];
+    let mut component = vec![None; n];
     let mut next_index = 0usize;
     // Explicit DFS stack: (node, next child position).
     let mut work: Vec<(usize, usize)> = Vec::new();
@@ -1774,7 +2048,7 @@ pub(super) fn recursive_scc_members<E: AsRef<[usize]>>(call_graph: &[E]) -> Vec<
                 loop {
                     let w = scc_stack.pop().unwrap();
                     on_stack[w] = false;
-                    recursive[w] = true;
+                    component[w] = Some(v);
                     size += 1;
                     if w == v {
                         break;
@@ -1782,7 +2056,7 @@ pub(super) fn recursive_scc_members<E: AsRef<[usize]>>(call_graph: &[E]) -> Vec<
                 }
                 // A singleton SCC is only recursive through a self-edge.
                 if size == 1 && !callees.contains(&v) {
-                    recursive[v] = false;
+                    component[v] = None;
                 }
             }
             work.pop();
@@ -1791,7 +2065,7 @@ pub(super) fn recursive_scc_members<E: AsRef<[usize]>>(call_graph: &[E]) -> Vec<
             }
         }
     }
-    recursive
+    component
 }
 
 /// The callee of every `Call` site under `node`, once per site.
@@ -1978,12 +2252,11 @@ impl InlineBudget {
         }
     }
 
-    /// Whether anything reads a round's prices: a cap to spend them against, or
-    /// a trace that reports them. Taking them walks every body in the unit, so
-    /// the default — no cap, no trace — should not pay for it.
+    /// Whether the budget reads a round's prices: a cap to spend them against,
+    /// or the `opt_loop` trace that reports them. Taking them walks every body
+    /// in the unit, so the default — no cap, no trace — should not pay for it.
     pub(super) fn prices_read(&self) -> bool {
-        let trace = filter();
-        self.growth.is_some() || trace.enabled("inline") || trace.enabled("opt_loop")
+        self.growth.is_some() || filter().enabled("opt_loop")
     }
 
     /// What the inliner may still add, given the unit's size right now. Read
@@ -2064,13 +2337,15 @@ fn splice_growth(size: usize, sites: usize) -> usize {
 #[derive(Clone, Copy)]
 struct Candidates<'a> {
     bodies: &'a IndexMap<FuncId, NirFunction>,
-    /// Which sites splice each candidate.
-    reach: &'a IndexMap<FuncId, Reach>,
+    /// Which sites of each heat splice each candidate.
+    reach: &'a IndexMap<FuncId, ByHeat<Reach>>,
+    heat_map: &'a HeatMap,
     /// Per candidate, the call sites a splice of it brings, its own splices'
     /// included: what a loop holding a site of it holds once the round ends.
     carried: &'a IndexMap<FuncId, IndexMap<FuncId, usize>>,
-    /// Each candidate's written price, net of the call site it replaces.
-    net_price: &'a IndexMap<FuncId, usize>,
+    /// Each candidate's written price at a site of each heat, net of the call
+    /// site it replaces.
+    net_price: &'a IndexMap<FuncId, ByHeat<Option<usize>>>,
     /// The candidates a cold site calls that are no bigger than the call they
     /// replace: splicing one shrinks the caller, so [`Site::Cold`] admits it.
     shrinking: &'a IndexSet<FuncId>,
@@ -2090,13 +2365,15 @@ struct Candidates<'a> {
 }
 
 impl<'a> Candidates<'a> {
-    /// Spend `id`'s price from the re-scan under way, if there is one and it
-    /// can pay.
-    fn charge(&self, id: FuncId) -> bool {
+    /// Spend `id`'s price at a site of `heat` from the re-scan under way, if
+    /// there is one and it can pay.
+    fn charge(&self, id: FuncId, heat: Heat) -> bool {
         let Some(left) = self.rescan_left else {
             return true;
         };
-        let price = self.net_price[&id];
+        let price = self.net_price[&id]
+            .at(heat)
+            .expect("a candidate is priced at every heat");
         if price > left.get() {
             return false;
         }
@@ -2117,13 +2394,14 @@ impl<'a> Candidates<'a> {
     }
 }
 
-/// Inline eligible functions at their call sites
+/// Inline eligible functions at their call sites, recording the round in the
+/// package's [`InlineLog`] where it keeps one.
 ///
-/// The `inline_threshold` parameter controls the maximum number of statements
-/// a function can have to be considered for inlining.
+/// `thresholds` bounds the price of a callee a call site splices, by the heat
+/// a profile set on the site.
 pub fn inline_functions(
     project: &mut NirPackage,
-    inline_threshold: usize,
+    thresholds: Thresholds,
     budget: &mut InlineBudget,
     holds: &mut InlineHolds,
     gate: &mut FunctionGate,
@@ -2131,6 +2409,42 @@ pub fn inline_functions(
     mod_ref: &mut SummaryCache,
     scans: &mut InlineScans,
     reachability: &mut ReachabilityCache,
+) -> bool {
+    let mut log = project.inline_log.take();
+    let mut round = log.as_ref().map(|_| Round {
+        threshold: thresholds.plain,
+        ..Round::default()
+    });
+    let changed = inline_round(
+        project,
+        thresholds,
+        budget,
+        holds,
+        gate,
+        descriptor_cache,
+        mod_ref,
+        scans,
+        reachability,
+        log.as_ref().zip(round.as_mut()),
+    );
+    if let (Some(log), Some(round)) = (log.as_mut(), round) {
+        log.push(round);
+    }
+    project.inline_log = log;
+    changed
+}
+
+fn inline_round(
+    project: &mut NirPackage,
+    thresholds: Thresholds,
+    budget: &mut InlineBudget,
+    holds: &mut InlineHolds,
+    gate: &mut FunctionGate,
+    descriptor_cache: &mut DescriptorCache,
+    mod_ref: &mut SummaryCache,
+    scans: &mut InlineScans,
+    reachability: &mut ReachabilityCache,
+    mut record: Option<(&InlineLog, &mut Round)>,
 ) -> bool {
     // Function DCE runs outside the loop, so a branch pruned inside it leaves
     // functions only that branch called. Their sites would price a callee as
@@ -2150,8 +2464,14 @@ pub fn inline_functions(
     // call node's `FunctionRef`. Indexed by `func_id.index()` (== store position).
     let descriptors = descriptor_cache.descriptors(project);
     let markers = MarkerBuiltins::of(project);
-    let InlineScans { bodies, read } = scans;
-    let scans = bodies.refresh(project, gate.exec(), |f| scan_body(f, markers));
+    let InlineScans {
+        bodies,
+        read,
+        cycle_cuts,
+    } = scans;
+    let inline_threshold = thresholds.plain;
+    let heat_map = &project.heat_map;
+    let scans = bodies.refresh(project, gate.exec(), |f| scan_body(f, markers, heat_map));
     let sites = argument_sites(scans, &live);
     // Taken every round, unlike the prices below: a callee's only site is one
     // where its splice pays back.
@@ -2171,6 +2491,16 @@ pub fn inline_functions(
     // its sites pays its call edge on every iteration, as a site in a loop does.
     let looped = unreached_through(project, &call_sites, live_edges(|s| &s.unlooped_callees));
     let called_cold = called_cold(scans, &live, &cold_functions);
+    let mut called_at = vec![ByHeat::<bool>::default(); scans.len()];
+    for (caller, scan) in scans.iter().enumerate() {
+        if live[caller] && !cold_functions[caller] {
+            for heat in [Heat::Cold, Heat::Hot] {
+                for callee in scan.callees_at.at(heat) {
+                    *called_at[callee.index()].at_mut(heat) = true;
+                }
+            }
+        }
+    }
     let never: Vec<bool> = {
         let type_table = project.type_table.borrow();
         project
@@ -2178,7 +2508,7 @@ pub fn inline_functions(
             .iter()
             .map(|f| {
                 let f = f.borrow();
-                f.body.is_some() && never_spliced(&f, &type_table)
+                f.body.is_some() && never_spliced(&f, &type_table).is_some()
             })
             .collect()
     };
@@ -2195,7 +2525,6 @@ pub fn inline_functions(
                 .collect()
         })
         .collect();
-    let barred_cycle_members = splice_barred_cycle_members(&call_graph);
 
     // Collect inline candidates from all modules, keyed by `FuncId` (the
     // function's store position). A call site resolves its candidate by its
@@ -2203,8 +2532,8 @@ pub fn inline_functions(
     // `(module, name)` lookup, no entry-point fallback, no collision between two
     // functions that happen to share a name.
     let mut inline_candidates: IndexMap<FuncId, NirFunction> = IndexMap::default();
-    let mut reach: IndexMap<FuncId, Reach> = IndexMap::default();
-    let mut net_price: IndexMap<FuncId, usize> = IndexMap::default();
+    let mut reach: IndexMap<FuncId, ByHeat<Reach>> = IndexMap::default();
+    let mut net_price: IndexMap<FuncId, ByHeat<Option<usize>>> = IndexMap::default();
     let mut shrinking: IndexSet<FuncId> = IndexSet::default();
 
     // Also collect function_strings for each candidate (to update caller's
@@ -2234,7 +2563,7 @@ pub fn inline_functions(
     // to it. `Candidate::forced` marks the ones the budget may not turn down.
     // Both prices cost a walk over the whole unit per round and no level sets a
     // growth cap, so they are taken only where something reads them.
-    let pricing = budget.prices_read();
+    let pricing = budget.prices_read() || record.is_some();
     let hopeful_params = hopeful_params(project, scans, &sites, gate.exec());
     let mut unit_size = 0usize;
     let mut priced: Vec<Candidate> = Vec::new();
@@ -2260,6 +2589,7 @@ pub fn inline_functions(
     let exec = gate.exec().clone();
     let type_table: &TypeTable = &types;
     let functions = &project.functions;
+    let no_cold_runs = RareRuns::none(markers, Rarity::Cold);
     let cold_runs: Vec<RareRuns> = exec.map_indices(functions.len(), |i| {
         let func = functions[i].borrow();
         func.body.as_ref().map_or_else(
@@ -2267,12 +2597,19 @@ pub fn inline_functions(
             |b| RareRuns::of(b, markers, Rarity::Cold),
         )
     });
+    cut_call_cycles(&call_graph, cycle_cuts, |i| {
+        let func = functions[i].borrow();
+        func.body
+            .as_ref()
+            .map_or(0, |b| inline_cost(b, type_table, &cold_runs[i], &[]))
+    });
+    let cycle_cuts: &IndexSet<FuncId> = cycle_cuts;
     let spliced: Vec<usize> = exec.map_indices(functions.len(), |i| {
         let func = functions[i].borrow();
         let Some(body) = func.body.as_ref() else {
             return 0;
         };
-        if !loopy[i] || splice_barred(&func, &barred_cycle_members, type_table) {
+        if !loopy[i] || splice_barred(&func, cycle_cuts, type_table).is_some() {
             return 0;
         }
         let gross = inline_cost(body, type_table, &cold_runs[i], &[]);
@@ -2283,6 +2620,20 @@ pub fn inline_functions(
         } else {
             0
         }
+    });
+    let logging: Option<&InlineLog> = record.as_ref().map(|(log, _)| *log);
+    // A callee a named caller calls is logged under its own name too: a call
+    // turned down before any site saw it leaves no site entry.
+    let called_by_named: Vec<bool> = logging.map_or_else(Vec::new, |log| {
+        let mut called = vec![false; functions.len()];
+        for (caller, scan) in scans.iter().enumerate() {
+            if live[caller] && log.wants(&functions[caller].borrow().name) {
+                for (callee, _) in &scan.calls {
+                    called[callee.index()] = true;
+                }
+            }
+        }
+        called
     });
     let classified = exec.map_indices(functions.len(), |i| {
         let func = functions[i].borrow();
@@ -2299,36 +2650,49 @@ pub fn inline_functions(
                 foldable: &foldable,
                 loopy: &loopy,
             });
-        let verdict = classify_callee(
-            &func,
-            view.as_ref(),
-            &barred_cycle_members,
-            type_table,
-            inline_threshold,
-            runs,
-            &foldable,
-            &loopy,
-            &safepoint_calls,
-            &scans[i].written,
-            call_sites[i],
-            &spliced,
-            &hopeful_params[i],
-        );
-        compiler_trace!(
-            "inline_verdict",
-            "{}: hot {} for {} params, {} sites -> {:?}",
-            func.name,
-            verdict.hot,
-            func.params.len(),
-            call_sites[i],
-            verdict.reach
-        );
-        let candidate = (verdict.reach != Reach::Nowhere).then(|| {
-            let body = func.body.as_ref().expect("a candidate has a body");
-            let hot = match func.inline_hint {
-                InlineHint::Always => inline_cost(body, type_table, runs, &spliced),
-                InlineHint::Auto | InlineHint::Hint | InlineHint::Never => verdict.hot,
+        let classify = |threshold: usize, runs: &RareRuns| {
+            classify_callee(
+                &func,
+                view.as_ref(),
+                cycle_cuts,
+                type_table,
+                threshold,
+                runs,
+                &foldable,
+                &loopy,
+                &safepoint_calls,
+                &scans[i].written,
+                call_sites[i],
+                &spliced,
+                &hopeful_params[i],
+            )
+        };
+        // Each heat prices the callee at its own threshold. A hot site weighs
+        // the cold code too: the plain price leaves it out, but a splice copies
+        // it, and at the hot threshold that let a deserializer grow 42-fold.
+        let verdict = classify(thresholds.plain, runs);
+        let verdict_at = |heat: Heat| {
+            if !*called_at[i].at(heat) {
+                return verdict;
+            }
+            let runs = match heat {
+                Heat::Hot => &no_cold_runs,
+                Heat::Cold | Heat::Plain => runs,
             };
+            classify(*thresholds.at(heat), runs)
+        };
+        let verdicts = ByHeat {
+            cold: verdict_at(Heat::Cold),
+            plain: verdict,
+            hot: verdict_at(Heat::Hot),
+        };
+        let reaches = verdicts.map(Verdict::reach);
+        let reached = [reaches.cold, reaches.plain, reaches.hot]
+            .iter()
+            .any(|&r| r != Reach::Nowhere);
+        let candidate = reached.then(|| {
+            let body = func.body.as_ref().expect("a candidate has a body");
+            let hot = verdict.hot.expect("a candidate is priced");
             let shrinks = called_cold[i] && {
                 let written = if pricing {
                     size
@@ -2337,20 +2701,39 @@ pub fn inline_functions(
                 };
                 net_cost(written, func.params.len()) == 0
             };
-            (net_cost(hot, func.params.len()), shrinks, func.clone())
+            // What a site of each heat copies, which a re-scan charges.
+            let nets = verdicts.map(|v| v.hot.map(|hot| net_cost(hot, func.params.len())));
+            (hot, nets, shrinks, func.clone())
         });
-        (func.id, size, verdict, candidate)
+        // A function nothing calls has nothing decided about it.
+        let logged = logging
+            .is_some_and(|log| call_sites[i] > 0 && (called_by_named[i] || log.wants(&func.name)));
+        let entry = logged.then(|| CalleeEntry {
+            name: func.name.clone(),
+            module: func.module_source.clone(),
+            hot: verdicts.map(|v| v.hot),
+            size: func.body.as_ref().map(|_| size),
+            params: func.params.len(),
+            sites: call_sites[i],
+            basis: verdicts.map(|v| v.basis),
+            over_budget: false,
+        });
+        (func.id, size, verdict, reaches, candidate, entry)
     });
-    for (id, size, verdict, candidate) in classified {
+    let mut callee_entries: Vec<(Option<FuncId>, CalleeEntry)> = Vec::new();
+    for (id, size, verdict, reaches, candidate, entry) in classified {
         unit_size += size;
         if let Some(id) = id {
             holds.settle(id, verdict.hold, gate);
         }
-        let Some((net, shrinks, func)) = candidate else {
+        if let Some(entry) = entry {
+            callee_entries.push((id, entry));
+        }
+        let Some((hot, nets, shrinks, func)) = candidate else {
             continue;
         };
         let id = id.expect("func_id assigned at lower");
-        reach.insert(id, verdict.reach);
+        reach.insert(id, reaches);
         let string_key = (func.module_source.clone(), func.name.clone());
         // Get the strings used by this function
         if let Some(strings) = project.function_strings.get(&string_key) {
@@ -2360,59 +2743,19 @@ pub fn inline_functions(
             priced.push(Candidate {
                 id,
                 name: func.name.clone(),
-                hot: verdict.hot,
+                hot,
                 size,
                 sites: call_sites[id.index()],
                 forced: func.inline_hint == InlineHint::Always,
             });
         }
-        net_price.insert(id, net);
+        net_price.insert(id, nets);
         if shrinks {
             shrinking.insert(id);
         }
         inline_candidates.insert(id, func);
     }
     drop(types);
-
-    compiler_trace!("inline", "held: [{}]", {
-        holds
-            .held
-            .iter()
-            .map(|id| project.functions[id.index()].borrow().name.clone())
-            .collect::<Vec<_>>()
-            .join(", ")
-    });
-
-    // What this round would add, and which callees dominate it. A candidate the
-    // threshold admitted only because the cold discount put its hot path under
-    // it is flagged `cold`: the two prices disagree about exactly those.
-    compiler_trace!("inline", "{}", {
-        let mut ranked: Vec<&Candidate> = priced.iter().collect();
-        ranked.sort_by_key(|c| std::cmp::Reverse(splice_growth(c.size, c.sites)));
-        let total: usize = ranked.iter().map(|c| splice_growth(c.size, c.sites)).sum();
-        use std::fmt::Write as _;
-        let top = ranked.iter().take(6).fold(String::new(), |mut s, c| {
-            let _ = write!(
-                s,
-                "\n    {:>8}  {} (hot {}, size {} x {} sites){}",
-                splice_growth(c.size, c.sites),
-                c.name,
-                c.hot,
-                c.size,
-                c.sites,
-                if c.hot <= inline_threshold && c.size > inline_threshold {
-                    "  [cold]"
-                } else {
-                    ""
-                }
-            );
-            s
-        });
-        format!(
-            "unit {unit_size}: {} candidates worth {total} of growth{top}",
-            priced.len(),
-        )
-    });
 
     let over_budget = budget.select(&mut priced, unit_size);
     for id in &over_budget {
@@ -2421,6 +2764,25 @@ pub fn inline_functions(
         reach.shift_remove(id);
         net_price.shift_remove(id);
         shrinking.shift_remove(id);
+    }
+    if let Some((log, round)) = record.as_mut() {
+        round.unit_size = Some(unit_size);
+        round.held = holds
+            .held
+            .iter()
+            .map(|id| {
+                let func = project.functions[id.index()].borrow();
+                (func.name.clone(), func.module_source.clone())
+            })
+            .filter(|(name, _)| log.wants(name))
+            .collect();
+        round.callees = callee_entries
+            .into_iter()
+            .map(|(id, entry)| CalleeEntry {
+                over_budget: id.is_some_and(|id| over_budget.contains(&id)),
+                ..entry
+            })
+            .collect();
     }
 
     compiler_trace!(
@@ -2449,15 +2811,16 @@ pub fn inline_functions(
     let held = &holds.held;
     let fold_pending = !holds.released;
     let deferrals: Mutex<Vec<(FuncId, bool)>> = Mutex::new(Vec::new());
+    let site_decisions: Mutex<Vec<(FuncId, Vec<SiteEntry>)>> = Mutex::new(Vec::new());
 
     let now: Vec<SweepRead> = (0..functions.len())
         .map(|i| {
             let id = FuncId::new(i);
             SweepRead {
-                reach: reach.get(&id).copied().unwrap_or(Reach::Nowhere),
+                reach: reach.get(&id).copied().unwrap_or_default(),
                 shrinks: shrinking.contains(&id),
                 entry: if cold_functions[i] {
-                    Site::Cold
+                    Site::Cold(ColdBy::Callers)
                 } else if looped[i] {
                     Site::Loop
                 } else {
@@ -2481,6 +2844,7 @@ pub fn inline_functions(
         let candidates = Candidates {
             bodies: &inline_candidates,
             reach: &reach,
+            heat_map,
             carried: &carried,
             net_price: &net_price,
             shrinking: &shrinking,
@@ -2511,7 +2875,15 @@ pub fn inline_functions(
             loop_calls: Vec::new(),
             original_exprs: func.body.as_ref().expect("checked above").exprs.len(),
             glue,
+            candidate: inline_candidates.contains_key(&fid),
             deferred: false,
+            decisions: logging.map(|log| Decisions {
+                log,
+                caller: func.name.clone(),
+                caller_module: func.module_source.clone(),
+                caller_named: log.wants(&func.name),
+                sites: Vec::new(),
+            }),
         };
         let mut labels = InlineLabels::default();
         // Calls in this body that mutate no caller-reachable state, taken
@@ -2538,7 +2910,7 @@ pub fn inline_functions(
                 frame.loop_calls.push(call_counts(body, root, &carried));
             }
             // Priced on this same body: only this visit writes it.
-            let mut runs = cold_runs[fid.index()].clone();
+            let mut runs = SiteRuns::of(cold_runs[fid.index()].clone(), body, markers, heat_map);
             inline_calls_in_block(
                 body,
                 root,
@@ -2554,6 +2926,9 @@ pub fn inline_functions(
         }
         func.address_taken_locals = frame.address_taken;
         let deferred = frame.deferred;
+        if let Some(decisions) = frame.decisions.filter(|d| !d.sites.is_empty()) {
+            lock(&site_decisions).push((fid, decisions.sites));
+        }
         if inlined_funcs.is_empty() {
             return (deferred, None);
         }
@@ -2589,6 +2964,11 @@ pub fn inline_functions(
     });
     drop(inline_call_immutability);
     drop(inline_type_table);
+    if let Some((_, round)) = record.as_mut() {
+        let mut sites = std::mem::take(&mut *lock(&site_decisions));
+        sites.sort_unstable_by_key(|&(caller, _)| caller);
+        round.sites = sites.into_iter().flat_map(|(_, sites)| sites).collect();
+    }
     // The sweep pushes in thread order; settle in caller order.
     let mut deferrals = std::mem::take(&mut *lock(&deferrals));
     deferrals.sort_unstable_by_key(|&(caller, _)| caller);
@@ -2604,13 +2984,6 @@ pub fn inline_functions(
             let func = project.functions[caller.index()].borrow();
             (func.module_source.clone(), func.name.clone())
         };
-        compiler_trace!("inline_sites", "{func_name} <- [{}]", {
-            inlined_funcs
-                .iter()
-                .map(|id| inline_candidates[id].name.as_str())
-                .collect::<Vec<_>>()
-                .join(", ")
-        });
         // Update function_strings: add strings from inlined functions to the caller
         let mut all_inlined_strings: IndexSet<String> = IndexSet::default();
         for inlined_key in inlined_funcs {
@@ -2662,8 +3035,48 @@ struct CallerFrame<'f> {
     /// whose body `container_sroa` and `const_object_globalization` skip: a
     /// callee moved into one goes without the cleanup it gets where it stands.
     glue: bool,
+    /// The caller may itself be spliced this round. A hot price inside it would
+    /// grow it past what its own sites admit, trading the outer call for the
+    /// inner one, so its hot sites wait until it has moved into its callers.
+    candidate: bool,
     /// A call was left to the compile-time engine this visit.
     deferred: bool,
+    /// What the visit decides at each site, where the package keeps a log.
+    decisions: Option<Decisions<'f>>,
+}
+
+/// One caller's site decisions, kept where the log wants them.
+struct Decisions<'l> {
+    log: &'l InlineLog,
+    caller: String,
+    caller_module: ModuleSource,
+    /// The log wants every site of this caller.
+    caller_named: bool,
+    sites: Vec<SiteEntry>,
+}
+
+impl Decisions<'_> {
+    fn record(
+        &mut self,
+        callee: &NirFunction,
+        span: Span,
+        site: Site,
+        heat: Heat,
+        refusal: Option<Refusal>,
+    ) {
+        if self.caller_named || self.log.wants(&callee.name) {
+            self.sites.push(SiteEntry {
+                caller: self.caller.clone(),
+                caller_module: self.caller_module.clone(),
+                callee: callee.name.clone(),
+                callee_module: callee.module_source.clone(),
+                span,
+                site,
+                heat,
+                refusal,
+            });
+        }
+    }
 }
 
 impl CallerFrame<'_> {
@@ -2710,52 +3123,59 @@ fn add_site(
 
 /// [`Candidates::carried`]: per candidate, its body's call sites with each
 /// candidate among them expanded into the sites it carries in turn. No
-/// candidate reaches itself: the only one on a cycle is a bridge, and the
-/// member it enters is barred.
+/// candidate reaches itself: every cycle passes a cut member, which is never
+/// a candidate.
 fn carried_calls(
     candidates: &IndexMap<FuncId, NirFunction>,
 ) -> IndexMap<FuncId, IndexMap<FuncId, usize>> {
-    fn visit(
-        id: FuncId,
-        candidates: &IndexMap<FuncId, NirFunction>,
-        out: &mut IndexMap<FuncId, IndexMap<FuncId, usize>>,
-    ) {
-        if out.contains_key(&id) {
-            return;
-        }
+    let call_sites = |id: FuncId| {
         let body = candidates[&id]
             .body
             .as_ref()
             .expect("a candidate has a body");
         let mut callees = Vec::new();
         for_each_call_site(body, NodeRef::Block(body.root()), |g| callees.push(g));
-        for &g in &callees {
-            assert_ne!(g, id, "a candidate is never recursive");
-            if candidates.contains_key(&g) {
-                visit(g, candidates, out);
+        assert!(!callees.contains(&id), "a candidate is never recursive");
+        callees
+    };
+    let mut out: IndexMap<FuncId, IndexMap<FuncId, usize>> = IndexMap::default();
+    // An explicit stack: a chain of candidates is as long as the program makes
+    // it. Each entry is a candidate, its call sites, and the next site to
+    // visit; it is finished once every candidate among them is.
+    let mut stack: Vec<(FuncId, Vec<FuncId>, usize)> = Vec::new();
+    for &root in candidates.keys() {
+        if out.contains_key(&root) {
+            continue;
+        }
+        stack.push((root, call_sites(root), 0));
+        while let Some((_, callees, next)) = stack.last_mut() {
+            if let Some(&g) = callees.get(*next) {
+                *next += 1;
+                if candidates.contains_key(&g) && !out.contains_key(&g) {
+                    stack.push((g, call_sites(g), 0));
+                }
+                continue;
             }
+            let (id, callees, _) = stack.pop().expect("the loop holds an entry");
+            let mut sites = IndexMap::default();
+            for g in callees {
+                add_site(&mut sites, g, &out);
+            }
+            out.insert(id, sites);
         }
-        let mut sites = IndexMap::default();
-        for g in callees {
-            add_site(&mut sites, g, out);
-        }
-        out.insert(id, sites);
-    }
-    let mut out = IndexMap::default();
-    for &id in candidates.keys() {
-        visit(id, candidates, &mut out);
     }
     out
 }
 
 /// Inline function calls in a block, each statement processed in place. `site`
 /// is the context the block's calls sit in; the block's cold run is a
-/// [`Site::Cold`], and a loop body is a [`Site::Loop`].
+/// [`Site::Cold`], its unlikely run one the profile does not heat, and a loop
+/// body is a [`Site::Loop`].
 fn inline_calls_in_block(
     body: &mut Body,
     block: BlockId,
     candidates: Candidates<'_>,
-    cold: &mut RareRuns,
+    runs: &mut SiteRuns,
     frame: &mut CallerFrame<'_>,
     type_table: &TypeTable,
     inlined_funcs: &mut Vec<FuncId>,
@@ -2770,10 +3190,13 @@ fn inline_calls_in_block(
         Loop(BlockId),
         None,
     }
-    let start = cold.start(block);
+    let [cold, unlikely] = runs.starts(block);
     for (i, stmt_id) in body.blocks[block].stmts.clone().into_iter().enumerate() {
-        if start == Some(i) {
-            site = Site::Cold;
+        if unlikely == Some(i) {
+            site = site.entering_unlikely();
+        }
+        if cold == Some(i) {
+            site = Site::Cold(ColdBy::Run(body.stmts[stmt_id].span));
         }
         let shape = match &body.stmts[stmt_id].kind {
             StmtKind::Let { value, .. }
@@ -2797,7 +3220,7 @@ fn inline_calls_in_block(
                 body,
                 value,
                 candidates,
-                cold,
+                runs,
                 frame,
                 type_table,
                 inlined_funcs,
@@ -2811,7 +3234,7 @@ fn inline_calls_in_block(
                         body,
                         cond,
                         candidates,
-                        cold,
+                        runs,
                         frame,
                         type_table,
                         inlined_funcs,
@@ -2824,7 +3247,7 @@ fn inline_calls_in_block(
                     body,
                     tb,
                     candidates,
-                    cold,
+                    runs,
                     frame,
                     type_table,
                     inlined_funcs,
@@ -2837,7 +3260,7 @@ fn inline_calls_in_block(
                         body,
                         eb,
                         candidates,
-                        cold,
+                        runs,
                         frame,
                         type_table,
                         inlined_funcs,
@@ -2851,7 +3274,7 @@ fn inline_calls_in_block(
                 body,
                 b,
                 candidates,
-                cold,
+                runs,
                 frame,
                 type_table,
                 inlined_funcs,
@@ -2867,7 +3290,7 @@ fn inline_calls_in_block(
                     body,
                     b,
                     candidates,
-                    cold,
+                    runs,
                     frame,
                     type_table,
                     inlined_funcs,
@@ -3191,48 +3614,66 @@ fn try_inline_call_expr(
     // The call's stamped `func_id` is the exact callee identity; look the
     // candidate up directly (no `(module, name)` resolution).
     let candidate = candidates.bodies.get(&func_id)?;
-    let admitted = match (site, candidates.reach[&func_id]) {
-        (Site::Cold, _) => {
-            candidate.inline_hint == InlineHint::Always || candidates.shrinking.contains(&func_id)
+    let heat = candidates
+        .heat_map
+        .heat(caller.exprs[call_id].span)
+        .plain_where(!site.heats() || frame.candidate);
+    let reach = *candidates.reach[&func_id].at(heat);
+    let sole_site = |frame: &CallerFrame<'_>| {
+        if frame.glue {
+            Some(Refusal::Glue)
+        } else if !frame.original_site(call_id) {
+            Some(Refusal::NotTheSoleSite)
+        } else {
+            None
         }
-        (Site::Plain | Site::Loop, Reach::Everywhere) => true,
-        (Site::Plain | Site::Loop, Reach::Sole) => !frame.glue && frame.original_site(call_id),
+    };
+    let refusal = match (site.admission(), reach) {
+        (Site::UnlikelyPlain | Site::UnlikelyLoop, _) => {
+            unreachable!("admission reads no unlikely site")
+        }
+        (Site::Cold(_), _) => (candidate.inline_hint != InlineHint::Always
+            && !candidates.shrinking.contains(&func_id))
+        .then_some(Refusal::Cold),
+        (Site::Plain | Site::Loop, Reach::Everywhere) => None,
+        (Site::Plain | Site::Loop, Reach::Sole) => sole_site(frame),
         // A call the compile-time engine may run to its value is left to it
         // until the loop converges: spliced, it becomes statements
         // `let_block_flatten` lays into the caller before the fold reaches
         // them. One still standing then is one the engine could not fold.
-        (Site::Plain, Reach::SoleOutsideLoops) => {
-            if frame.glue || !frame.original_site(call_id) {
-                false
-            } else if candidates.fold_pending
+        (Site::Plain, Reach::SoleOutsideLoops) => sole_site(frame).or_else(|| {
+            let left = candidates.fold_pending
                 && folds_to_constant(
                     caller,
                     Operand::Expr(call_id),
                     &IndexSet::default(),
                     Some(candidates.ctfe_eligible),
-                )
-            {
-                frame.deferred = true;
-                false
+                );
+            frame.deferred |= left;
+            left.then_some(Refusal::LeftToEngine)
+        }),
+        (Site::Loop, Reach::SoleOutsideLoops) => Some(Refusal::InLoop),
+        (Site::Loop, Reach::Loops) => {
+            if frame.glue {
+                Some(Refusal::Glue)
+            } else if !frame.sole_loop_site(func_id) {
+                Some(Refusal::SeveralLoopSites)
             } else {
-                true
+                None
             }
         }
-        (Site::Loop, Reach::SoleOutsideLoops) => false,
-        (Site::Loop, Reach::Loops) => !frame.glue && frame.sole_loop_site(func_id),
-        (Site::Plain, Reach::Loops) => false,
-        (Site::Plain | Site::Loop, Reach::Nowhere) => {
-            unreachable!("a candidate is reached somewhere")
-        }
-    };
-    if !admitted {
-        return None;
+        (Site::Plain, Reach::Loops) => Some(Refusal::OutsideLoop),
+        (Site::Plain | Site::Loop, Reach::Nowhere) => Some(Refusal::OtherHeat),
     }
-    if !candidates.charge(func_id) {
-        return None;
-    }
-    let callee = candidate.body.as_ref()?;
+    .or_else(|| (!candidates.charge(func_id, heat)).then_some(Refusal::RescanSpent));
     let call_span = caller.exprs[call_id].span;
+    if let Some(decisions) = frame.decisions.as_mut() {
+        decisions.record(candidate, call_span, site, heat, refusal);
+    }
+    if refusal.is_some() {
+        return None;
+    }
+    let callee = candidate.body.as_ref().expect("a candidate has a body");
     let ExprKind::Call { args, .. } = &caller.exprs[call_id].kind else {
         unreachable!("matched a Call above")
     };
@@ -3249,7 +3690,9 @@ fn try_inline_call_expr(
     let (receiver, rest) = args.split();
     let mut bindings: Vec<InlineBinding> = Vec::with_capacity(candidate.params.len());
     if let Some(receiver) = receiver {
-        let self_param = params.next()?;
+        let self_param = params
+            .next()
+            .expect("a method call's callee takes its receiver first");
         let receiver_op = receiver.expr;
         // Bind the receiver to `self`. For `&mut self`, wrap it in a `MutRef` so
         // field mutations write back to the original (the receiver is then an
@@ -3941,7 +4384,7 @@ fn inline_calls_in_expr(
     body: &mut Body,
     e: ExprId,
     candidates: Candidates<'_>,
-    cold: &mut RareRuns,
+    runs: &mut SiteRuns,
     frame: &mut CallerFrame<'_>,
     type_table: &TypeTable,
     inlined_funcs: &mut Vec<FuncId>,
@@ -3969,13 +4412,13 @@ fn inline_calls_in_expr(
         if !inlined_funcs.contains(&inlined_key) {
             inlined_funcs.push(inlined_key);
         }
-        cold.add_under(body, e);
+        runs.add_under(body, e);
         let left = Cell::new(candidates.rescan_cap);
         inline_calls_in_expr(
             body,
             e,
             candidates.rescanning(&left),
-            cold,
+            runs,
             frame,
             type_table,
             inlined_funcs,
@@ -3991,7 +4434,7 @@ fn inline_calls_in_expr(
             body,
             ex,
             candidates,
-            cold,
+            runs,
             frame,
             type_table,
             inlined_funcs,
@@ -4005,7 +4448,7 @@ fn inline_calls_in_expr(
             body,
             b,
             candidates,
-            cold,
+            runs,
             frame,
             type_table,
             inlined_funcs,

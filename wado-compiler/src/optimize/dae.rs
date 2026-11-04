@@ -118,7 +118,7 @@ pub(super) fn is_dae_sroa_eligible(func: &NirFunction, relax_closure_call: bool)
     if func.body.is_none() {
         return false;
     }
-    if func.is_cm_export || func.is_cm_binding || func.is_dispatch_wrapper || func.is_ambient {
+    if func.is_cm_export || func.is_cm_binding || func.is_dispatch_wrapper {
         return false;
     }
     if !matches!(func.kind, FunctionKind::Regular) {

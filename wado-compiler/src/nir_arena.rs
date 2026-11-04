@@ -21,6 +21,7 @@ use crate::name::minted_name;
 use crate::nir::{FuncId, NirBinaryOp, NirLiteralPattern, NirLocal, NirUnaryOp};
 use crate::nir_value_graph::builder::ValueGraphBuild;
 use crate::nir_value_graph::{ValueId, ValueKind, ValuePool};
+use crate::nir_visitor::NirRefVisitor;
 use crate::primitive::PrimitiveType;
 use crate::tir::TypeId;
 use crate::token::Span;
@@ -1833,6 +1834,14 @@ impl Body {
         !self.walk_breaks_to(node, label, &mut |_| false)
     }
 
+    /// The value of every `break label: v` in `node`'s subtree, or `None` where
+    /// one breaks to `label` without a value.
+    pub fn break_values_to(&self, node: NodeRef, label: &str) -> Option<Vec<Operand>> {
+        let mut values = Vec::new();
+        self.walk_breaks_to(node, label, &mut |v| v.map(|v| values.push(v)).is_some())
+            .then_some(values)
+    }
+
     /// `e` as a block whose value is its tail statement — the shape a pass may
     /// look through. A `break LABEL: v` produces the block's value too, from a
     /// point the tail never reaches, so a block one names is not one of these.
@@ -1870,7 +1879,31 @@ impl Body {
         !self.blocks[block]
             .stmts
             .last()
-            .is_some_and(|s| self.terminates(*s))
+            .is_some_and(|&s| self.terminates(s) || self.loops_forever(s))
+    }
+
+    /// Whether `s` is a `loop` no unlabeled `break` leaves, so only a jump past
+    /// it ends it. A nested loop takes its own unlabeled breaks.
+    pub fn loops_forever(&self, s: StmtId) -> bool {
+        struct Search(bool);
+        impl NirRefVisitor for Search {
+            fn visit_node(&mut self, body: &Body, node: NodeRef) {
+                if let NodeRef::Stmt(s) = node {
+                    match body.stmts[s].kind {
+                        StmtKind::Loop { .. } => return,
+                        StmtKind::Break { label: None, .. } => self.0 = true,
+                        _ => {}
+                    }
+                }
+                self.walk_node(body, node);
+            }
+        }
+        let StmtKind::Loop { body } = self.stmts[s].kind else {
+            return false;
+        };
+        let mut search = Search(false);
+        search.visit_node(self, NodeRef::Block(body));
+        !search.0
     }
 
     /// Whether `block`, jumping nowhere on the way, ends in a call typed `!`

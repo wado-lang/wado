@@ -123,7 +123,9 @@ pub fn translate(flat: FlatPackage, plan: LowerPlan, profiler: &dyn SpanEmitter)
         used_wasi_functions,
         strip_names,
         coverage_section,
+        demanded_imports_section,
         codegen_flags,
+        heat_map,
         skip_validation,
         target_world,
         export_binding_names,
@@ -211,13 +213,15 @@ pub fn translate(flat: FlatPackage, plan: LowerPlan, profiler: &dyn SpanEmitter)
         cm_interface_registry,
         world_registry,
         used_wasi_functions,
-        ambient_stdio: None,
         strip_names,
         coverage_section,
+        demanded_imports_section,
         codegen_flags,
+        heat_map,
         // Conservative default; `optimize` overrides per opt level.
         string_inline_max_bytes: NirPackage::DEFAULT_STRING_INLINE_MAX_BYTES,
         specialization_cap: None,
+        inline_log: None,
         skip_validation,
         target_world,
         export_binding_names,
@@ -377,7 +381,7 @@ impl BoxedLocals {
     ) -> Option<tir::TypeId> {
         let declared = *self.0.get(&local)?;
         let holding = *plan.box_struct_types.get(&ty)?;
-        (type_table.type_key(holding) == type_table.type_key(declared)).then_some(declared)
+        type_table.same_type(holding, declared).then_some(declared)
     }
 }
 
@@ -773,7 +777,6 @@ impl Translator<'_> {
             is_cm_binding: func.is_cm_binding,
             is_dispatch_wrapper: func.is_dispatch_wrapper,
             is_cm_export: func.is_cm_export,
-            is_ambient: func.is_ambient,
             inline_hint: convert_inline_hint(func.inline_hint),
             compiler_item: func.compiler_item,
             export_name: func.export_name.clone(),
@@ -3050,6 +3053,7 @@ fn convert_test(test: &TirTest) -> NirTest {
 
 fn convert_enum(e: &TirEnum) -> NirEnum {
     NirEnum {
+        def: e.def,
         name: e.name.clone(),
         module_source: e.module_source.clone(),
         visibility: e.visibility,

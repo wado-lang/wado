@@ -20,7 +20,7 @@ use { parse_highlight_query } from "./highlight_query.wado";
 use { parse, parse_checked } from "./g4/parser.wado";
 use { count_occurrences } from "../tests/support/text.wado";
 use { lexer_dump } from "../tests/support/fixtures.wado";
-use { eval, Output } from "core:eval";
+use { eval, EvalHost, Output } from "core:eval";
 use { wado } from "lib:wadopoet";
 
 global DEFAULT_OPTIONS: GenerateOptions = GenerateOptions {};
@@ -54,7 +54,7 @@ fn parses<S: AsStrSlice>(
     rule: String,
     inputs: List<String>,
     options: &GenerateOptions = &DEFAULT_OPTIONS,
-) -> String {
+) -> String with EvalHost {
     return parses_each(grammar, inputs.into_iter().map(|input| [rule, input]).collect(), options);
 }
 
@@ -64,7 +64,7 @@ fn parses_each<S: AsStrSlice>(
     grammar: S,
     cases: List<[String, String]>,
     options: &GenerateOptions = &DEFAULT_OPTIONS,
-) -> String {
+) -> String with EvalHost {
     let mut body = String::new();
     for let [rule, input] of cases {
         body.push_str(wado`show("${input}", parse_${rule}("${input}"));\n`);
@@ -75,7 +75,7 @@ fn parses_each<S: AsStrSlice>(
 /// The tokens the lexer generated from `grammar` makes of each input, one line
 /// each: `input => NAME:text ...`, with `error` naming what no rule matched,
 /// then any action output.
-fn lexes<S: AsStrSlice>(grammar: S, inputs: List<String>) -> String {
+fn lexes<S: AsStrSlice>(grammar: S, inputs: List<String>) -> String with EvalHost {
     let mut body = String::new();
     for let input of inputs {
         body.push_str(wado`lex("${input}");\n`);
@@ -85,25 +85,25 @@ fn lexes<S: AsStrSlice>(grammar: S, inputs: List<String>) -> String {
 
 /// Runs `body` beside the parser generated from `grammar` and the `items`
 /// declared with it, and returns what it printed.
-fn printed<S: AsStrSlice>(grammar: S, body: String, items: String = "") -> String {
+fn printed<S: AsStrSlice>(grammar: S, body: String, items: String = "") -> String with EvalHost {
     return run_beside(gen_source(grammar), body, items).stdout;
 }
 
 /// What the traced parser generated from `grammar` logs while `body` runs.
-fn traced<S: AsStrSlice>(grammar: S, body: String) -> String {
+fn traced<S: AsStrSlice>(grammar: S, body: String) -> String with EvalHost {
     let source = gen_with(grammar, &GenerateOptions { trace: true }).source;
     return run_beside(source, `trace_to_stderr(|| ${body});\n`).stderr;
 }
 
 /// Runs `body` beside the parser `source` and the `items` declared with it.
-fn run_beside(source: String, body: String, items: String = "") -> Output {
+fn run_beside(source: String, body: String, items: String = "") -> Output with EvalHost {
     let out = eval_beside(source, body, items);
     assert out.status matches { Exited(0) };
     return out;
 }
 
 /// `run_beside` for a run that may trap.
-fn eval_beside(source: String, body: String, items: String = "") -> Output {
+fn eval_beside(source: String, body: String, items: String = "") -> Output with EvalHost {
     // The generated source opens with inner attributes, which come first.
     return eval(`${source}
 use { println, Stdout } from "core:cli";
@@ -4922,7 +4922,7 @@ use { Log } from "core:log";
 use { Preopens, Descriptor, PathFlags, OpenFlags, DescriptorFlags } from "wasi:filesystem";
 use fs from "core:fs";
 use { TreeMap } from "core:collections";
-use { Request, Response, Error as KilnError, InputFile, KilnHost, Diagnostic as KilnDiagnostic } from "core:kiln";
+use { Request, Response, Error as KilnError, InputFile } from "core:kiln";
 
 global EXPR: String = "grammar Expr;
 expr : expr '*' expr | expr '+' expr | INT ;
@@ -4931,14 +4931,6 @@ WS : [ ]+ -> skip ;
 ";
 
 global EXPR_QUERY: String = "(INT) @number\n";
-
-// `ID` leads both alternatives, so a scan tournament decides between them.
-global OVERLAP: String = "grammar Pick;
-r : ID INT | ID STR ;
-ID : [a-z]+ ;
-INT : [0-9]+ ;
-STR : '\"' ~'\"'* '\"' ;
-";
 
 global SPLIT_LEXER: String = "lexer grammar SplitLexer;
 NUM : [0-9]+ ;
@@ -5074,22 +5066,11 @@ impl Stream<u8> for Inputs {
     ..trap
 }
 
-struct Host {
-    diagnostics: List<String>,
-}
-
-impl KilnHost for Host {
-    fn emit_diagnostic(&mut self, diagnostic: KilnDiagnostic) {
-        assert diagnostic.span matches { None };
-        self.diagnostics.push(`${diagnostic.level}: ${diagnostic.message}`);
-        resume ();
-    }
-}
-
-/// What one Kiln generator run returned, and the diagnostics it emitted.
+/// What one Kiln generator run returned, and the events it logged, each as
+/// `<level>: <message>`.
 struct KilnRun {
     result: Result<Response, KilnError>,
-    diagnostics: List<String>,
+    events: List<String>,
 }
 
 impl KilnRun {
@@ -5117,7 +5098,7 @@ fn kiln(
     supplementary: List<[String, ByteList, Option<String>]>,
     options: Options,
     primary_type: Option<String> = null,
-) -> KilnRun {
+) -> KilnRun with Log {
     let mut inputs = Inputs {};
     let mut files: List<InputFile> = [];
     for let [path, content, type_] of supplementary {
@@ -5129,11 +5110,11 @@ fn kiln(
         module: "lib:gale",
         options,
     };
-    let mut host = Host { diagnostics: [] };
-    let result = with &mut inputs, &mut host do {
+    let mut console = Console {};
+    let result = with &mut inputs, Log => &mut console do {
         kiln_generate(request);
     };
-    return KilnRun { result, diagnostics: host.diagnostics };
+    return KilnRun { result, events: console.events };
 }
 
 fn bytes_of(s: String) -> ByteList {
@@ -5417,7 +5398,7 @@ test "the Kiln generator emits one entry module named after the grammar" {
     assert response.files.len() == 1;
     assert response.files[0].path == "expr.wado";
     assert response.files[0].is_entry;
-    assert built.diagnostics == [];
+    assert built.events == [];
 }
 
 test "a .scm input to the Kiln generator adds the highlighter" {
@@ -5476,10 +5457,10 @@ test "the atn option never refuses a grammar only the simulator can parse" {
     let never = kiln(["Lazy.g4", bytes_of(LAZY)], [], Options { fragment_entries: [], atn: AtnMode::Never });
     let refusal = `gale: rule 'r': ${LAZY_REFUSAL}`;
     assert never.error() == `unsupported: ${refusal}`;
-    assert never.diagnostics == [`Error: ${refusal}`];
+    assert never.events == [], "the returned error alone reports a refusal";
 }
 
-test "Gale's diagnostics reach the Kiln host at their own level" {
+test "Gale's diagnostics are logged at their own level" {
     let warned = kiln(["Expr.g4", bytes_of(EXPR)], [
         [
             "bad.scm",
@@ -5487,19 +5468,14 @@ test "Gale's diagnostics reach the Kiln host at their own level" {
             Option::Some("tree-sitter-highlights"),
         ],
     ], no_options());
-    assert warned.diagnostics == ["Warning: gale: highlight: highlight query: unknown token 'FLOAT'"];
-    let informed = kiln(["Pick.g4", bytes_of(OVERLAP)], [], no_options());
-    assert informed.diagnostics.len() > 0;
-    for let d of &informed.diagnostics {
-        assert d.starts_with("Info: gale: ");
-    }
+    assert warned.events == ["Warn: highlight: highlight query: unknown token 'FLOAT'"];
 }
 
-test "an unknown fragment entry reaches the Kiln host as a warning" {
+test "an unknown fragment entry is logged as a warning" {
     let built = kiln(["Expr.g4", bytes_of(EXPR)], [], Options {
         fragment_entries: ["nope"],
     });
-    assert built.diagnostics == ["Warning: gale: fragment_entries: fragment_entries: unknown parser rule 'nope'"];
+    assert built.events == ["Warn: fragment_entries: fragment_entries: unknown parser rule 'nope'"];
 }
 
 test "a Kiln input that is not UTF-8 is an invalid schema" {

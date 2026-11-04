@@ -1,0 +1,52 @@
+// A turbofish naming `!` instantiates the parameter as any other type does, so
+// a closure passed alongside it returns `Result<i32, !>`. An inferred `!`, a
+// diverging arm's, answers no parameter; a written one does.
+//
+// Three spellings reach that instantiation, one test each.
+
+fn held<Er>(load: fn(i32) -> Result<i32, Er>) -> Result<List<i32>, Er> {
+    let mut out: List<i32> = [];
+    for let at of 0..<3 {
+        out.push(load(at)?);
+    }
+    return Result::Ok(out);
+}
+
+struct Loader {
+    n: i32,
+}
+
+impl Loader {
+    fn held<Er>(&self, load: fn(i32) -> Result<i32, Er>) -> Result<i32, Er> {
+        return load(self.n);
+    }
+
+    fn make<Er>(load: fn(i32) -> Result<i32, Er>) -> Result<i32, Er> {
+        return load(7);
+    }
+}
+
+fn held_open<Er>(load: fn(i32) -> Result<i32, Er> with _) -> Result<i32, Er> with _ {
+    return load(5);
+}
+
+test "a turbofish of `!` types an effect-polymorphic closure's return" {
+    assert held_open::<!>(|at| Result::Ok(at)).unwrap() == 5;
+}
+
+test "a free function's turbofish of `!` types the closure's return" {
+    let r = held::<!>(|at| Result::Ok(at * 2));
+    assert r.unwrap() == [0, 2, 4] as List<i32>;
+}
+
+test "an instance method's turbofish of `!` types the closure's return" {
+    let l = Loader { n: 3 };
+    assert l.held::<!>(|at| Result::Ok(at)).unwrap() == 3;
+}
+
+test "a static method's turbofish of `!` types the closure's return" {
+    assert Loader::make::<!>(|at| Result::Ok(at)).unwrap() == 7;
+}
+
+__DATA__
+{"test": {}}

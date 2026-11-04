@@ -1313,6 +1313,9 @@ impl Semantics {
             sem: self,
             module: module.clone(),
             id: ast_id,
+            on_name: self
+                .name_span_of(ast_id)
+                .is_some_and(|name| name.contains(line, column)),
         })
     }
 }
@@ -1327,6 +1330,9 @@ pub struct Cursor<'a> {
     sem: &'a Semantics,
     module: ModuleSource,
     id: AstId,
+    /// The position is on the declaration's own name, which names it even
+    /// where no symbol-table entry does: a method, a field, an enum case.
+    on_name: bool,
 }
 
 impl<'a> Cursor<'a> {
@@ -1357,7 +1363,7 @@ impl<'a> Cursor<'a> {
         if let Some(def) = self.sem.referenced_symbol(self.id) {
             return Some(def);
         }
-        if self.sem.symbol_at(self.id).is_some() {
+        if self.on_name || self.sem.symbol_at(self.id).is_some() {
             return Some(self.id);
         }
         None
@@ -2101,8 +2107,49 @@ mod tests {
         assert_eq!(markers["run"], [] as [String; 0]);
     }
 
+    /// A hot loop inside an unlikely branch prices its calls plain, as the
+    /// branch's marker has the inliner do where it stands.
+    #[test]
+    fn a_region_under_an_unlikely_one_is_not_hot() {
+        let f = "fn f(x: i32, rare: bool) -> i32 { let mut a = 0; if rare { for let i of 0..<1000 { a = a + g(i); } } return a; }";
+        let source = format!(
+            "fn g(x: i32) -> i32 {{ return x + 1; }}\n{f}\nexport fn run() {{ f(1, false); }}"
+        );
+        let plain = analyzed(&source, Some(CoverageScope::default()), None);
+        let plan = &plain
+            .coverage
+            .as_ref()
+            .expect("the compile measures")
+            .modules[0];
+        let hash = |name: &str| {
+            plan.functions
+                .iter()
+                .find(|f| f.name == name)
+                .expect("planned")
+                .hash
+        };
+        // `f` ran 1000 times, took `rare` once, and looped 1000 times there.
+        let profile = pgo::parse(&format!(
+            "wado-pgo 1\nmodule entry.wado\nfn {:016x} 1 g\n0 1000\n\
+             fn {:016x} 2 f\n0 1000\n1 1\n2 1000\n3 999\n",
+            hash("g"),
+            hash("f")
+        ))
+        .expect("it parses");
+        let sem = analyzed(&source, None, Some(&profile));
+        let heat = sem.marks.as_ref().expect("a profile applies").heat_map();
+        let space = sem.modules[&sem.entry_module_source].ast_id_space();
+        let call = Span {
+            line: 2,
+            column: f.find("g(i)").expect("the call") + 1,
+            space,
+            ..Span::default()
+        };
+        assert_eq!(heat.heat(call), pgo::Heat::Plain);
+    }
+
     /// A profile replaces a `?`'s guess with what it measured: unlikely
-    /// against the branch's runs, cold against the summary.
+    /// against the branch's runs, cold where it never ran.
     #[test]
     fn a_profile_overrides_the_guess_of_a_try() {
         let source = "fn half(x: i32) -> Option<i32> { if x % 2 == 0 { return Option::Some(x / 2); } return null; }
@@ -2122,14 +2169,13 @@ mod tests {
                 .expect("planned")
                 .hash
         };
-        // Region 1 of each caller is its `?`'s failure path, which takes 1% of
-        // its runs or less in both. The hot line is 1000000 and the cold line
-        // 50.
+        // Region 1 of each caller is its `?`'s failure path, which never ran
+        // in `rarely` and took 0.1% of its runs in `often`.
         let profile = pgo::parse(&format!(
             "wado-pgo 1\nmodule entry.wado\n\
-             fn {:016x} 1 rarely\n0 1000000\n1 50\n\
+             fn {:016x} 1 rarely\n0 1000000\n\
              fn {:016x} 2 often\n0 1000000\n1 1000\n\
-             fn {:016x} 3 half\n0 2000000\n1 1998950\n2 1050\n3 1050\n\
+             fn {:016x} 3 half\n0 2000000\n1 1999000\n2 1000\n3 1000\n\
              fn {:016x} 4 run\n0 1\n",
             hash("rarely"),
             hash("often"),
@@ -2141,8 +2187,9 @@ mod tests {
         let markers = markers([&sem.tir_modules[&sem.entry_module_source]]);
         assert_eq!(markers["rarely"], ["$known_cold_path"]);
         assert_eq!(markers["often"], ["unlikely_path"]);
-        // Entered once, below the cold line, and no side of a branch.
-        assert_eq!(markers["run"], ["cold_code"]);
+        // Entered once, so not cold: its calls may reach what ran a million
+        // times.
+        assert_eq!(markers["run"], [] as [String; 0]);
     }
 
     /// The snapshot a compile applying a profile to the stdlib seeds from has
@@ -2218,6 +2265,36 @@ mod tests {
         assert_eq!(markers["guessed"], ["cold_path"]);
         assert_eq!(markers["asserted"], ["$known_cold_path"]);
         assert_eq!(markers["panicked"], ["$known_cold_path"]);
+    }
+
+    /// A `!` statement is cold only where every path through it traps. One
+    /// whose paths break or continue out, or loop forever, leaves the code
+    /// around it hot; a loop a `break` leaves is no such path.
+    #[test]
+    fn only_a_statement_that_traps_is_marked_cold() {
+        let host = InMemoryCompilerHost::new();
+        let sem = block_on(semantics(
+            "fn breaks_out(xs: List<Option<i32>>) -> i32 {
+                 let mut n = 0;
+                 for let o of xs { let Some(v) = o else { break; }; n += v; continue; }
+                 return n;
+             }
+             fn serves(o: Option<i32>) { let Some(_) = o else { loop { builtin::black_box(0); } }; panic(\"b\"); }
+             fn traps_after_a_loop(o: Option<i32>, x: i32) {
+                 let mut i = 0;
+                 let Some(_) = o else { loop { i += 1; if i > x { break; } } panic(\"a\"); };
+                 panic(\"b\");
+             }
+             export fn run() { breaks_out([null]); serves(null); traps_after_a_loop(null, 0); }",
+            &host,
+            Some("entry.wado"),
+        ));
+        let markers = markers([&sem.tir_modules[&sem.entry_module_source]]);
+        assert_eq!(markers["breaks_out"], [] as [String; 0]);
+        // Only the `panic("b")` the `let … else` arm runs.
+        assert_eq!(markers["serves"], ["$known_cold_path"]);
+        // The `let … else` itself, its else block's panic, and its arm's.
+        assert_eq!(markers["traps_after_a_loop"], ["$known_cold_path"; 3]);
     }
 
     /// What an `iter_*` yields is what a point lookup answers, so the entry a

@@ -1970,6 +1970,10 @@ pub struct "Box<core:prelude/types.wado/Option<Array<u8>>>" {
     value: core:prelude/types.wado/Option<Array<u8>>,
 }
 
+pub struct "Box<core:prelude/types.wado/Option<Array<u8>>>" {
+    value: core:prelude/types.wado/Option<Array<u8>>,
+}
+
 pub struct "Box<core:prelude/types.wado/Option<&Array<u8>>>" {
     value: core:prelude/types.wado/Option<&Array<u8>>,
 }
@@ -2410,8 +2414,6 @@ pub fn waitable_set_wait(ws: i32, outptr: i32) -> i32;
 pub fn waitable_set_drop(ws: i32);
 
 pub fn waitable_join(handle: i32, ws: i32);
-
-pub fn ambient_stderr_available() -> bool;
 
 pub fn f64_abs(x: f64) -> f64;
 
@@ -3054,26 +3056,23 @@ fn write_string_to_stream(tx: core:prelude/types.wado/StreamWritable<u8>, messag
 }
 
 pub fn log_stderr(message: core:prelude/string.wado/String) {
-    if !"core:builtin::ambient_stderr_available"() {
-        return;
-    }
-    let $pattern_temp_0: [core:prelude/types.wado/Stream<u8>,core:prelude/types.wado/StreamWritable<u8>] = $block_1: {
+    let $pattern_temp_0: [core:prelude/types.wado/Stream<u8>,core:prelude/types.wado/StreamWritable<u8>] = $block_0: {
         let $cm_pair_7: i64 = cm_raw_call stream-new();
         [$cm_pair_7 as i32 as core:prelude/types.wado/Stream<u8>, ($cm_pair_7 >> 32) as i32 as core:prelude/types.wado/StreamWritable<u8>];
     };
     let rx: core:prelude/types.wado/Stream<u8> = $pattern_temp_0.0;
     let tx: core:prelude/types.wado/StreamWritable<u8> = $pattern_temp_0.1;
-    let written: core:prelude/types.wado/Future<core:prelude/types.wado/Result<(),wasi:cli/types.wado/ErrorCode>> = "core:builtin::core:builtin/call_indirect_stderr_write_via_stream<core:prelude/types.wado/Result<(),wasi:cli/types.wado/ErrorCode>>"($block_2: {
+    let written: core:prelude/types.wado/Future<core:prelude/types.wado/Result<(),wasi:cli/types.wado/ErrorCode>> = "core:builtin::core:builtin/call_indirect_stderr_write_via_stream<core:prelude/types.wado/Result<(),wasi:cli/types.wado/ErrorCode>>"($block_1: {
         let $moved_4: core:prelude/types.wado/Stream<u8> = rx;
         rx = null;
         $moved_4;
     });
-    "core:rt::write_string_to_stream"($block_3: {
+    "core:rt::write_string_to_stream"($block_2: {
         let $moved_5: core:prelude/types.wado/StreamWritable<u8> = tx;
         tx = null;
         $moved_5;
     }, message, true);
-    cm_raw_call future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode($block_4: {
+    cm_raw_call future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode($block_3: {
         let $moved_6: core:prelude/types.wado/Future<core:prelude/types.wado/Result<(),wasi:cli/types.wado/ErrorCode>> = written;
         written = null;
         $moved_6;

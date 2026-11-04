@@ -9,8 +9,8 @@ use std::rc::Rc;
 use crate::defs::DefId;
 use crate::hashmap::IndexMap;
 use crate::tir::{
-    InstantiationKey, ResolvedType, TirExpr, TirExprKind, TirFunction, TirModule, TirPattern,
-    TirStmt, TirStmtKind, TirStruct, TypeId,
+    InstantiationKey, ResolvedType, StructDef, TirExpr, TirExprKind, TirFunction, TirModule,
+    TirPattern, TirStmt, TirStmtKind, TirStruct, TypeId,
 };
 use crate::tir_visitor::TirMutVisitor;
 use crate::type_table::TypeTable;
@@ -195,7 +195,7 @@ impl Monomorphizer {
     /// Substitute type parameters in a type with concrete types, delegating the
     /// leaf cases to [`TypeTable::substitute_type_params`] and handling
     /// containers inline so a `GenericInstance` collapses onto an
-    /// already-monomorphized struct of the same mangled name at every level.
+    /// already-monomorphized struct of the same arguments at every level.
     /// Empty `type_args` resolve through the substitution map itself.
     pub fn substitute_type(
         &self,
@@ -248,8 +248,6 @@ impl Monomorphizer {
                 })
             }
             ResolvedType::GenericInstance { def, type_args } => {
-                let name = type_table.decl_name(def).to_string();
-                let module_source = type_table.def_module(def).clone();
                 if type_args.is_empty() {
                     if !substitution.is_empty() {
                         let mut indexed_args: Vec<(u32, TypeId)> =
@@ -261,10 +259,9 @@ impl Monomorphizer {
                             return tid;
                         }
                     }
-                    if let Some(tid) = type_table.find_struct_by_name(&name, &module_source) {
-                        return tid;
-                    }
-                    return type_id;
+                    return type_table
+                        .find_struct_type(StructDef::Decl(def))
+                        .unwrap_or(type_id);
                 }
 
                 // Tuples need TypePack expansion: splice pack elements

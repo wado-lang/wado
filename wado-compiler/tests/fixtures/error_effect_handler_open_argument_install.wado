@@ -1,0 +1,40 @@
+// An install at an effect argument the enclosing function leaves open is
+// rejected, in either form: dispatch is planned before monomorphization fills
+// `T`, so no plan could serve `Future<T>`.
+
+struct Counter<T> {
+    drops: i32,
+}
+
+impl<T> Future<T> for Counter<T> {
+    fn drop(&mut self, this: &Future<T>) {
+        let _ = this;
+        self.drops += 1;
+        resume ()
+    }
+    ..forward
+}
+
+fn explicit<T>(c: &mut Counter<T>) {
+    with Future<T> => c do {
+        let _ = 0;
+    }
+}
+
+fn bundled<T>(c: &mut Counter<T>) {
+    with c do {
+        let _ = 0;
+    }
+}
+
+export fn run() {
+    let mut c = Counter::<i32> { drops: 0 };
+    explicit(&mut c);
+    bundled(&mut c);
+}
+
+__DATA__
+{
+  "compile_error": ":19:10: analysis error: handler value of type 'Counter<T>' does not implement interface 'Future'",
+  "compile_errors_contains": ["handler value of type 'Counter' does not implement any effect"]
+}

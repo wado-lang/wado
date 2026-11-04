@@ -519,19 +519,6 @@ impl String {
         return out;
     }
 
-    /// The tag keeping a template's escapes as written: `` String::raw`a\nb` ``
-    /// is `"a\\nb"`, its holes rendered as `String::format` renders them. See
-    /// WEP 2026-01-10.
-    pub fn raw<T: ReflectTemplate<Holes = [..V]>, affine ..V>(t: T) -> String {
-        let mut out = "";
-        for let h of ReflectTemplate::<T>::members() {
-            out.push_str(&h.raw(&t));
-            h.fmt(&t, &mut Formatter::new(&mut out));
-        }
-        out.push_str(&ReflectTemplate::<T>::raw_tail(&t));
-        return out;
-    }
-
     /// Create an empty string with space for `capacity` bytes.
     pub fn with_capacity(capacity: i32) -> String {
         return String { repr: builtin::array_new::<u8>(capacity) as ByteArray, used: 0 };

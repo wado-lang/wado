@@ -148,9 +148,9 @@ type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::pad
 
 type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>" = fn(ref "core:prelude/format.wado//Formatter", ref "core:prelude/string.wado//String");  // TypeId(51)
 
-type "functype//core:prelude/string.wado/&core:prelude/string.wado/StrSlice^core:prelude/string.wado/AsStrSlice::internal_append_to$sroa[self.value]" = fn(ref "core:prelude/string.wado//StrSlice", ref "core:prelude/string.wado//String");  // TypeId(52)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::write_char_n$sroa[self.buf]" = fn(ref "core:prelude/string.wado//String", char, i32);  // TypeId(52)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::write_char_n$sroa[self.buf]" = fn(ref "core:prelude/string.wado//String", char, i32);  // TypeId(53)
+type "functype//core:prelude/string.wado/&core:prelude/string.wado/StrSlice^core:prelude/string.wado/AsStrSlice::internal_append_to$sroa[self.value]" = fn(ref "core:prelude/string.wado//StrSlice", ref "core:prelude/string.wado//String");  // TypeId(53)
 
 type "functype//core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(54)
 
@@ -193,68 +193,68 @@ fn "array_bounds_elim_version_fill_wir.wado/run"() with Stdout {
     let out_16: ref "core:prelude/string.wado//String";
     let x: i64;
     let limit: i32;
-    let i_120: i32;
-    let n_122: i32;
+    let i_117: i32;
+    let n_119: i32;
     let arr: ref Array<u8>;
     let q: u64;
     let tens: i32;
     repr_3 = builtin::array_new<i32>(11);
     limit = black_box(10);
-    i_120 = 0;
+    i_117 = 0;
     if limit < 11 {
-        if i_120 <= limit {
-            builtin::array_fill<i32>(repr_3, i_120, 7, (limit + 1) - i_120);
+        if i_117 <= limit {
+            builtin::array_fill<i32>(repr_3, i_117, 7, (limit + 1) - i_117);
         }
     } else {
         b2: block {
             l3: loop {
-                break_if b2 i_120 > limit;
-                if @unlikely(i_120 >=u 11) {
+                break_if b2 i_117 > limit;
+                if @unlikely(i_117 >=u 11) {
                     cold_path;
-                    "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexAssign<i32>::index_assign$cold0$dae[self,value,$v1]"(i_120);
+                    "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexAssign<i32>::index_assign$cold0$dae[self,value,$v1]"(i_117);
                     unreachable;
                 }
-                builtin::array_set<i32>(repr_3, i_120, 7);
-                i_120 = i_120 + 1;
+                builtin::array_set<i32>(repr_3, i_117, 7);
+                i_117 = i_117 + 1;
                 continue l3;
             };
         };
     }
-    i_120 = 0;
-    n_122 = 0;
+    i_117 = 0;
+    n_119 = 0;
     if limit < 11 {
         b6: block {
             l7: loop {
-                break_if b6 (((n_122 > limit) | ((n_122 + 1) > limit)) | (((n_122 + 1) + 1) > limit)) | ((((n_122 + 1) + 1) + 1) > limit);
-                i_120 = i_120 + builtin::array_get_value<i32>(repr_3, n_122);
-                n_122 = n_122 + 1;
-                i_120 = i_120 + builtin::array_get_value<i32>(repr_3, n_122);
-                n_122 = n_122 + 1;
-                i_120 = i_120 + builtin::array_get_value<i32>(repr_3, n_122);
-                n_122 = n_122 + 1;
-                i_120 = i_120 + builtin::array_get_value<i32>(repr_3, n_122);
-                n_122 = n_122 + 1;
+                break_if b6 (((n_119 > limit) | ((n_119 + 1) > limit)) | (((n_119 + 1) + 1) > limit)) | ((((n_119 + 1) + 1) + 1) > limit);
+                i_117 = i_117 + builtin::array_get_value<i32>(repr_3, n_119);
+                n_119 = n_119 + 1;
+                i_117 = i_117 + builtin::array_get_value<i32>(repr_3, n_119);
+                n_119 = n_119 + 1;
+                i_117 = i_117 + builtin::array_get_value<i32>(repr_3, n_119);
+                n_119 = n_119 + 1;
+                i_117 = i_117 + builtin::array_get_value<i32>(repr_3, n_119);
+                n_119 = n_119 + 1;
                 continue l7;
             };
         };
         b8: block {
             l9: loop {
-                break_if b8 n_122 > limit;
-                i_120 = i_120 + builtin::array_get_value<i32>(repr_3, n_122);
-                n_122 = n_122 + 1;
+                break_if b8 n_119 > limit;
+                i_117 = i_117 + builtin::array_get_value<i32>(repr_3, n_119);
+                n_119 = n_119 + 1;
                 continue l9;
             };
         };
     } else {
         b10: block {
             l11: loop {
-                break_if b10 n_122 > limit;
-                i_120 = i_120 + if @unlikely(n_122 >=u 11) {
+                break_if b10 n_119 > limit;
+                i_117 = i_117 + if @unlikely(n_119 >=u 11) {
                     cold_path;
-                    "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(n_122, 11, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("array_bounds_elim_version_fill_wir.wado:16"), used: 42 });
+                    "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(n_119, 11, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("array_bounds_elim_version_fill_wir.wado:16"), used: 42 });
                     unreachable;
-                }; builtin::array_get_value<i32>(repr_3, n_122);
-                n_122 = n_122 + 1;
+                }; builtin::array_get_value<i32>(repr_3, n_119);
+                n_119 = n_119 + 1;
                 continue l11;
             };
         };
@@ -263,10 +263,10 @@ fn "array_bounds_elim_version_fill_wir.wado/run"() with Stdout {
     $inline_core_prelude_string_wado_String__internal_push_view_24: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_24;
     };
-    limit = i_120 < 0;
-    x = builtin::i64_extend_i32_s(i_120);
+    limit = i_117 < 0;
+    x = builtin::i64_extend_i32_s(i_117);
     x = select i64(x < 0_i64, 0_i64 - x, x);
-    i_120 = $inline_count_digits_u64_2: block -> i32 {
+    i_117 = $inline_count_digits_u64_2: block -> i32 {
         if x <u 100000_i64 {
             if x <u 100_i64 {
                 if x <u 10_i64 {
@@ -331,41 +331,41 @@ fn "array_bounds_elim_version_fill_wir.wado/run"() with Stdout {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_16, limit);
         }
-        n_122 = out_16.used;
+        n_119 = out_16.used;
         out_16.used = limit;
-        builtin::array_set_u8(out_16.repr, n_122, 45);
+        builtin::array_set_u8(out_16.repr, n_119, 45);
     } else {
     }
-    if @unlikely(local.tee limit(out_16.used + i_120) > builtin::array_len(out_16.repr)) {
+    if @unlikely(local.tee limit(out_16.used + i_117) > builtin::array_len(out_16.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_16, limit);
     }
-    n_122 = out_16.used;
+    n_119 = out_16.used;
     out_16.used = limit;
     arr = out_16.repr;
-    limit = n_122 + i_120;
+    limit = n_119 + i_117;
     b35: block {
         l36: loop {
-            break_if b35 (limit - n_122) < 2;
+            break_if b35 (limit - n_119) < 2;
             q = x /u 100_i64;
-            tens = local.tee i_120(builtin::i32_wrap_i64(x - (q * 100_i64))) / 10;
-            builtin::array_set_u8(arr, limit - 1, (48 + i_120) - (tens * 10));
+            tens = local.tee i_117(builtin::i32_wrap_i64(x - (q * 100_i64))) / 10;
+            builtin::array_set_u8(arr, limit - 1, (48 + i_117) - (tens * 10));
             builtin::array_set_u8(arr, limit - 2, 48 + tens);
             limit = limit - 2;
             x = q;
             continue l36;
         };
     };
-    if limit > n_122 {
-        builtin::array_set_u8(arr, n_122, 48 + builtin::i32_wrap_i64(x %u 10_i64));
+    if limit > n_119 {
+        builtin::array_set_u8(arr, n_119, 48 + builtin::i32_wrap_i64(x %u 10_i64));
     }
     $inline_core_prelude_string_wado_String__internal_push_view_43: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_43;
     };
     limit = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
-    i_120 = builtin::i32_wrap_i64(x >> 32_i64);
+    i_117 = builtin::i32_wrap_i64(x >> 32_i64);
     limit = "array_bounds_elim_version_fill_wir.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(limit);
-    "core:rt/write_string_to_stream$dae[add_newline]"(i_120, out_16.repr, out_16.used);
+    "core:rt/write_string_to_stream$dae[add_newline]"(i_117, out_16.repr, out_16.used);
     "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(limit);
 }
 
@@ -622,9 +622,9 @@ fn "core:rt/panic$cold0"($mv$message$repr, $mv$message$used) {
 
 fn "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexAssign<i32>::index_assign$cold0$dae[self,value,$v1]"(index) {
     let $mv_arg_1: ref "core:prelude/string.wado//String";
-    "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<core:prelude/list.wado/$tmpl$4432d2d1cbeba55c,[i32,i32]>"(struct.new "core:prelude/list.wado//$tmpl$4432d2d1cbeba55c" { h0: index, h1: 11, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in List::index_assign at core:prelude/list.wado:386
+    "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<core:prelude/list.wado/$tmpl$4432d2d1cbeba55c,[i32,i32]>"(struct.new "core:prelude/list.wado//$tmpl$4432d2d1cbeba55c" { h0: index, h1: 11, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in List::index_assign at core:prelude/list.wado:401
 condition: 0 <= index < self.used
-index: "), used: 110 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in List::index_assign at core:prelude/list.wado:386
+index: "), used: 110 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in List::index_assign at core:prelude/list.wado:401
 condition: 0 <= index < self.used
 index: "), used: 110 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 self.used: "), used: 12 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
@@ -938,6 +938,19 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelud
     }
 }
 
+fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_char_n$sroa[self.buf]"(self, c, n) {
+    let i: i32;
+    i = 0;
+    b110: block {
+        l111: loop {
+            break_if b110 i >= n;
+            "core:prelude/string.wado/core:prelude/string.wado/String::push"(self, c);
+            i = i + 1;
+            continue l111;
+        };
+    };
+}
+
 fn "core:prelude/string.wado/&core:prelude/string.wado/StrSlice^core:prelude/string.wado/AsStrSlice::internal_append_to$sroa[self.value]"(self, out) {
     let n_8: i32;
     let new_used: i32;
@@ -951,19 +964,6 @@ fn "core:prelude/string.wado/&core:prelude/string.wado/StrSlice^core:prelude/str
         start_14 = out.used;
         out.used = new_used;
         builtin::array_copy<u8>(out.repr, start_14, self.repr, self.start, n_8);
-    };
-}
-
-fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_char_n$sroa[self.buf]"(self, c, n) {
-    let i: i32;
-    i = 0;
-    b111: block {
-        l112: loop {
-            break_if b111 i >= n;
-            "core:prelude/string.wado/core:prelude/string.wado/String::push"(self, c);
-            i = i + 1;
-            continue l112;
-        };
     };
 }
 

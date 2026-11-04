@@ -24,6 +24,27 @@ fn dump_registers_a_user_modules_cm_declarations() {
         &host,
         Some("entry.wado"),
         OptLevel::O0,
+<<<<<<< HEAD
+||||||| c0bdae6df
+        None,
+        None,
+        wado_compiler::OptOverrides::default(),
+        &[],
+        None,
+        &wado_compiler::param_resolution::ParamInputs::default(),
+        wado_compiler::kiln::InvocationIndex::default(),
+        1,
+=======
+        None,
+        None,
+        wado_compiler::OptOverrides::default(),
+        &[],
+        None,
+        &wado_compiler::param_resolution::ParamInputs::default(),
+        wado_compiler::kiln::InvocationIndex::default(),
+        1,
+        None,
+>>>>>>> origin/main
     ))
     .expect("dumping a user CM binding succeeds");
 

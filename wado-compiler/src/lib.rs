@@ -29,6 +29,7 @@ pub mod const_eval;
 pub mod constant_arithmetic;
 pub mod coverage;
 pub mod defs;
+pub(crate) mod demanded_imports;
 pub(crate) mod divergence;
 pub mod doc;
 pub mod effect_check;
@@ -132,9 +133,8 @@ pub use codegen::InvalidArtifact;
 pub use codegen_flags::CodegenFlags;
 pub use compiler_host::{
     Code, CompilerHost, DependencyIndex, DependencyManifest, Diagnostic, DiagnosticSpan,
-    GeneratorDiagnostic, GeneratorDiagnosticLevel, GeneratorError, GeneratorInputFile,
-    GeneratorOutputFile, GeneratorRequest, GeneratorResponse, GeneratorRunnerError,
-    GeneratorSourceSpan, KILN_GENERATOR_WIT, LogLevel, ModuleDir, PackageDir, ProbeInput,
+    GeneratorError, GeneratorInputFile, GeneratorOutputFile, GeneratorRequest, GeneratorResponse,
+    GeneratorRunnerError, KILN_GENERATOR_WIT, LogLevel, ModuleDir, PackageDir, ProbeInput,
     ProbeRequest, Severity, SourceError, SourceReader,
 };
 pub use logger::{Bail, Logger};
@@ -422,6 +422,8 @@ pub struct DumpResult {
     pub monomorphized_tir_text: Option<String>,
     /// Lowered TIR snapshot (unparsed text)
     pub lowered_nir_text: Option<String>,
+    /// The inliner's decisions about the functions `inline_decisions` named.
+    pub inline_decisions_text: Option<String>,
     /// Optimized NIR package — the post-`optimize` body IR consumed by
     /// `wir_build` and `codegen`. See WEP `wep-2026-05-11-nir.md`.
     pub optimized_package: Option<nir_package::NirPackage>,
@@ -447,6 +449,11 @@ pub struct ProviderComponent {
     pub bytes: Vec<u8>,
 }
 
+/// The largest inlining threshold an override may set: far past any body's
+/// size, and small enough that the inliner's rescan cap, its square, fits a
+/// 32-bit `usize`.
+pub const MAX_INLINE_THRESHOLD: usize = 1 << 15;
+
 /// What a caller may override in the optimizer, each `None` meaning "whatever
 /// the level decides".
 #[derive(Debug, Clone, Default)]
@@ -455,15 +462,20 @@ pub struct OptOverrides {
     /// pass whose work it checks, and shows that the check fails without it.
     pub skip_passes: Vec<String>,
     pub inline_threshold: Option<usize>,
+    /// The threshold at a call site a profile measured hot.
+    pub inline_hot_callsite_threshold: Option<usize>,
+    /// The threshold at a call site a profile measured cold.
+    pub inline_cold_callsite_threshold: Option<usize>,
     pub inline_growth: Option<u32>,
     pub iterations: Option<u32>,
     /// The clones constant-argument specialization may mint over the module.
     pub specializations: Option<usize>,
-    /// The shares of all runs that place a profile's hot and cold lines.
-    pub profile_summary_cutoff_hot: Option<pgo::Cutoff>,
-    pub profile_summary_cutoff_cold: Option<pgo::Cutoff>,
     /// The share of a branch's runs past which the branch is predictable.
     pub predictable_branch_threshold: Option<pgo::Percent>,
+    /// The share of all runs that places a profile's hot line.
+    pub profile_summary_cutoff_hot: Option<pgo::Cutoff>,
+    /// The share of all runs that places a profile's cold line.
+    pub profile_summary_cutoff_cold: Option<pgo::Cutoff>,
 }
 
 impl OptOverrides {
@@ -472,11 +484,11 @@ impl OptOverrides {
     pub fn profile_thresholds(&self) -> pgo::Thresholds {
         let default = pgo::Thresholds::default();
         pgo::Thresholds {
-            hot: self.profile_summary_cutoff_hot.unwrap_or(default.hot),
-            cold: self.profile_summary_cutoff_cold.unwrap_or(default.cold),
             predictable_branch: self
                 .predictable_branch_threshold
                 .unwrap_or(default.predictable_branch),
+            hot: self.profile_summary_cutoff_hot.unwrap_or(default.hot),
+            cold: self.profile_summary_cutoff_cold.unwrap_or(default.cold),
         }
     }
 }
@@ -867,6 +879,7 @@ pub fn lint_diagnostics(
     }
     let mut out = shadowing_diagnostics(sem, lints);
     out.extend(undecided_effect_diagnostics(sem, lints));
+    out.extend(undeclared_effect_diagnostics(sem, lints));
     out.extend(self_comparison_diagnostics(sem, lints));
     out.extend(constant_arithmetic_diagnostics(sem, lints));
     out.extend(hex_suffix_lookalike_diagnostics(sem, lints));
@@ -953,6 +966,74 @@ fn undecided_effect_diagnostics(sem: &semantics::Semantics, lints: Lints) -> Vec
     out
 }
 
+/// Source-level `UndeclaredEffects` warnings: every `#[ambient]` a program
+/// writes. Hiding an effect from callers is provisionally the standard
+/// library's alone, and a lint never reports there.
+fn undeclared_effect_diagnostics(sem: &semantics::Semantics, lints: Lints) -> Vec<Diagnostic> {
+    let mut out = Vec::new();
+    for (src, module) in lints.modules(&sem.modules) {
+        if inner_attrs_allow(&module.inner_attributes, lint::UNDECLARED_EFFECTS) {
+            continue;
+        }
+        let mut report =
+            |enclosing: &[ast::Attribute], attrs: &[ast::Attribute], name: &str, whose: &str| {
+                if attrs_allow(enclosing, lint::UNDECLARED_EFFECTS)
+                    || attrs_allow(attrs, lint::UNDECLARED_EFFECTS)
+                {
+                    return;
+                }
+                for attr in attrs.iter().filter(|attr| attr.name == attribute::AMBIENT) {
+                    let effects: Vec<&str> = attr.args.iter().map(ast::AttrArg::name).collect();
+                    out.push(Diagnostic {
+                        severity: Severity::Warning,
+                        code: Code::UndeclaredEffects,
+                        message: format!(
+                            "`#[ambient]` hides `{}` from the {whose} of `{name}`, which only the \
+                         standard library is meant to do for now; declare it with `with`, \
+                         or mark it `#[allow(undeclared_effects)]` if that is deliberate",
+                            effects.join("`, `"),
+                        ),
+                        span: Some(DiagnosticSpan::from_span(
+                            &attr.span,
+                            Some(src.source_path().as_str()),
+                        )),
+                    });
+                }
+            };
+        for item in &module.items {
+            let (enclosing, methods): (&[ast::Attribute], &[ast::Function]) = match item {
+                Item::Function(func) => {
+                    report(&[], &func.attrs, &func.name, "callers");
+                    continue;
+                }
+                Item::Global(global) => {
+                    report(&[], &global.attributes, &global.name, "readers");
+                    continue;
+                }
+                Item::Impl(block) => (&block.attrs, &block.methods),
+                Item::Trait(decl) => (&decl.attrs, &decl.methods),
+                Item::Interface(decl) => (&decl.attrs, &decl.methods),
+                Item::Resource(decl) => (&decl.attrs, &decl.methods),
+                Item::Use(_)
+                | Item::Struct(_)
+                | Item::Enum(_)
+                | Item::Variant(_)
+                | Item::Flags(_)
+                | Item::Newtype(_)
+                | Item::TupleTypeDecl(_)
+                | Item::BuiltinTypeDecl(_)
+                | Item::World(_)
+                | Item::Test(_)
+                | Item::Error(_) => continue,
+            };
+            for method in methods {
+                report(enclosing, &method.attrs, &method.name, "callers");
+            }
+        }
+    }
+    out
+}
+
 /// The interface FQ a `core:kiln/generator` component's synthesized world uses
 /// for `generate` and its options record. A generator's
 /// `generate` is grouped into this interface (it references the local `Options`
@@ -988,11 +1069,50 @@ impl LibSurface {
     }
 }
 
+/// Whether a build records what its exports demand of a consumer, as a
+/// library does in its `org.wado-lang.demanded-imports` section.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Exports {
+    Recorded,
+    Unrecorded,
+}
+
+/// The functions a library exports, each with its module: every `export fn`
+/// under its own name, in the entry module or another module of the package.
+fn lib_export_functions<'a>(
+    entry_source: &'a ModuleSource,
+    modules: &'a hashmap::IndexMap<ModuleSource, ast::Module>,
+) -> impl Iterator<Item = (&'a ModuleSource, &'a ast::Function)> {
+    modules
+        .iter()
+        .filter(move |(source, _)| *source == entry_source || source.is_local())
+        .flat_map(|(source, module)| {
+            module.items.iter().filter_map(move |item| match item {
+                Item::Function(func) if func.exports_own_name() => Some((source, func)),
+                _ => None,
+            })
+        })
+}
+
 fn collect_lib_surface(
     entry_source: &ModuleSource,
     modules: &hashmap::IndexMap<ModuleSource, ast::Module>,
 ) -> LibSurface {
-    let mut submodule_exports = Vec::new();
+    let submodule_exports = lib_export_functions(entry_source, modules)
+        .filter(|(source, _)| *source != entry_source)
+        .map(|(source, func)| WorldExportInfo {
+            name: func.name.clone(),
+            is_async: func.is_async,
+            params: func
+                .params
+                .iter()
+                .map(|p| (p.name.clone(), p.ty.clone()))
+                .collect(),
+            return_type: func.return_type.clone(),
+            from_interface_fq: None,
+            reexport_origin: Some((source.clone(), func.name.clone())),
+        })
+        .collect();
     let mut submodule_type_decls = Vec::new();
     let mut submodule_interfaces = Vec::new();
     for (source, module) in modules {
@@ -1006,20 +1126,6 @@ fn collect_lib_surface(
                 // private, internally-handled effect is excluded.
                 Item::Interface(decl) if decl.visibility.is_public() => {
                     submodule_interfaces.push(decl.clone());
-                }
-                Item::Function(func) if func.exports_own_name() => {
-                    submodule_exports.push(WorldExportInfo {
-                        name: func.name.clone(),
-                        is_async: func.is_async,
-                        params: func
-                            .params
-                            .iter()
-                            .map(|p| (p.name.clone(), p.ty.clone()))
-                            .collect(),
-                        return_type: func.return_type.clone(),
-                        from_interface_fq: None,
-                        reexport_origin: Some((source.clone(), func.name.clone())),
-                    });
                 }
                 // Not `is_public`: a lowered type carries its fields whatever
                 // their scope, so an `internal` type reaches the CM interface
@@ -1552,7 +1658,7 @@ fn provider_directives<H: CompilerHost>(
         };
         let guest_fqs: Vec<String> = module_host_leaf_imports(dep_module)
             .into_iter()
-            .filter(|fq| !fq.starts_with("wasi:"))
+            .filter(|fq| !name::is_wasi_fq(fq))
             .collect();
         let fq = match guest_fqs.as_slice() {
             [fq] => fq.clone(),
@@ -1591,14 +1697,18 @@ fn provider_directives<H: CompilerHost>(
 /// and its recorded facts) rather than the emitted TIR, so they see every
 /// source function whatever reify emits, and share their logic with the LSP.
 /// Every pipeline runs them before synthesis: a later phase assumes a program
-/// they passed.
+/// they passed. Under [`Exports::Recorded`], answers the `wasi:*` interfaces
+/// the library's exports hold.
 fn check_effects_and_moves<H: CompilerHost>(
     sem: &mut semantics::Semantics,
     provided_import_fqs: hashmap::IndexSet<String>,
+    exports: Exports,
     logger: &Logger<'_, H>,
-) -> Result<(), Bail> {
+) -> Result<Option<hashmap::IndexSet<String>>, Bail> {
     let _span = logger.span("effect-check");
-    let diags = effect_check::check_semantics(sem, provided_import_fqs);
+    let library_exports: Option<Vec<_>> = (exports == Exports::Recorded)
+        .then(|| lib_export_functions(&sem.entry_module_source, &sem.modules).collect());
+    let diags = effect_check::check_semantics(sem, provided_import_fqs, library_exports.as_deref());
     let move_errors = affine_move_check::check_affine_moves_semantic(sem);
     let had_error = !diags.is_empty() || !move_errors.is_empty();
     sem.redirect_effect_vars(&diags.rows);
@@ -1614,7 +1724,7 @@ fn check_effects_and_moves<H: CompilerHost>(
     if had_error {
         return Err(Bail);
     }
-    Ok(())
+    Ok(diags.exported_host_interfaces)
 }
 
 /// Internal: run compilation phases after module loading.
@@ -1834,20 +1944,47 @@ fn build_after_load<H: CompilerHost>(
         }
     }
 
-    // === Phase 6b: Effect, Purity and Move Checks ===
-    check_effects_and_moves(&mut sem, provided_import_fqs.clone(), logger)?;
-    if let Some(views) = views.as_deref_mut() {
-        views.checked = true;
-    }
-
-    // === Phase 6c: Kiln `Options` descriptor extraction ===
-    // An `Options` no descriptor describes fails here: no options table could
-    // be validated against it, so the generator would trap on a missing field.
     let is_kiln_generator = match (options.target_world.as_deref(), sem.world_registry()) {
         (Some(tw), Some(reg)) => reg.is_generator_world(tw),
         _ => false,
     };
 
+    // === Phase 6b: Effect, Purity and Move Checks ===
+<<<<<<< HEAD
+    check_effects_and_moves(&mut sem, provided_import_fqs.clone(), logger)?;
+    if let Some(views) = views.as_deref_mut() {
+        views.checked = true;
+    }
+||||||| c0bdae6df
+    check_effects_and_moves(
+        &mut sem,
+        options
+            .providers
+            .iter()
+            .map(|p| p.import_fq.clone())
+            .collect(),
+        logger,
+    )?;
+=======
+    let exported_host_interfaces = check_effects_and_moves(
+        &mut sem,
+        options
+            .providers
+            .iter()
+            .map(|p| p.import_fq.clone())
+            .collect(),
+        if options.lib_world.is_some() && !is_kiln_generator {
+            Exports::Recorded
+        } else {
+            Exports::Unrecorded
+        },
+        logger,
+    )?;
+>>>>>>> origin/main
+
+    // === Phase 6c: Kiln `Options` descriptor extraction ===
+    // An `Options` no descriptor describes fails here: no options table could
+    // be validated against it, so the generator would trap on a missing field.
     let kiln_options_descriptor = if is_kiln_generator {
         let (descriptor, mut diags) =
             match kiln::extract_options_descriptor(&sem, &sem.entry_module_source) {
@@ -2123,6 +2260,7 @@ fn build_after_load<H: CompilerHost>(
         interner,
         coverage,
         space_modules,
+        marks,
         ..
     } = sem;
 
@@ -2224,12 +2362,30 @@ fn build_after_load<H: CompilerHost>(
         }
         package.lib_world_info = Some(lib_world);
     }
+    // A library's consumer demands only what its exports hold.
+    package.demanded_imports_section = exported_host_interfaces
+        .map(|fqs| demanded_imports::encode(fqs.iter().map(String::as_str)));
     package.skip_validation = options.skip_validation;
     package.coverage_section = coverage.map(|map| map.encode());
     package.test_selection = options.test_selection;
     package.wasm_assets = wasm_assets;
     package.codegen_flags = codegen_flags;
+<<<<<<< HEAD
     package.provided_import_fqs = provided_import_fqs;
+||||||| c0bdae6df
+    package.provided_import_fqs = options
+        .providers
+        .iter()
+        .map(|p| p.import_fq.clone())
+        .collect();
+=======
+    package.heat_map = marks.map(pgo::MarkMap::into_heat_map).unwrap_or_default();
+    package.provided_import_fqs = options
+        .providers
+        .iter()
+        .map(|p| p.import_fq.clone())
+        .collect();
+>>>>>>> origin/main
 
     select_allocator(&mut package, options.allocator, logger)?;
 
@@ -2572,21 +2728,93 @@ pub async fn dump_with_host<H: CompilerHost>(
 ) -> Result<DumpResult, Bail> {
     let options = CompilerOptions {
         opt_level,
+<<<<<<< HEAD
         ..CompilerOptions::default()
     };
     dump_with_options(source, host, filename, options).await
+||||||| c0bdae6df
+        None,
+        None,
+        OptOverrides::default(),
+        &[],
+        None,
+        &param_resolution::ParamInputs::default(),
+        kiln::InvocationIndex::default(),
+        1,
+    )
+    .await
+=======
+        None,
+        None,
+        OptOverrides::default(),
+        &[],
+        None,
+        &param_resolution::ParamInputs::default(),
+        kiln::InvocationIndex::default(),
+        1,
+        None,
+    )
+    .await
+>>>>>>> origin/main
 }
 
+<<<<<<< HEAD
 /// Dump compiler internal state under `options`, through the pipeline
 /// [`compile_with_options`] runs, so each view shows the program that compile
 /// emits. The caller runs the Kiln pipeline first (see `wado-cli`'s
 /// `maybe_run_pipeline`) and passes its `invocations`. A provider is not
 /// built: its directive alone discharges the import it supplies.
 pub async fn dump_with_options<H: CompilerHost>(
+||||||| c0bdae6df
+/// Dump compiler internal state with an explicit target world.
+///
+/// Like [`dump_with_host`] but allows specifying the target world so that
+/// DCE and other world-aware passes produce the correct output. `invocations`
+/// redirects `use ... from "<schema>" with { generator: ... }` clauses to
+/// their Kiln-generated output, exactly as [`compile_with_options`]'s
+/// `CompilerOptions::invocations` does — the caller is responsible for
+/// running the Kiln pipeline first (see `wado-cli`'s `maybe_run_pipeline`).
+pub async fn dump_with_host_and_world<H: CompilerHost>(
+=======
+/// Dump compiler internal state with an explicit target world.
+///
+/// Like [`dump_with_host`] but allows specifying the target world so that
+/// DCE and other world-aware passes produce the correct output. `invocations`
+/// redirects `use ... from "<schema>" with { generator: ... }` clauses to
+/// their Kiln-generated output, exactly as [`compile_with_options`]'s
+/// `CompilerOptions::invocations` does — the caller is responsible for
+/// running the Kiln pipeline first (see `wado-cli`'s `maybe_run_pipeline`).
+/// `inline_decisions` names the functions whose inlining decisions to record,
+/// by a pattern their names hold.
+pub async fn dump_with_host_and_world<H: CompilerHost>(
+>>>>>>> origin/main
     source: &str,
     host: &H,
     filename: Option<&str>,
+<<<<<<< HEAD
     options: CompilerOptions,
+||||||| c0bdae6df
+    opt_level: OptLevel,
+    target_world: Option<&str>,
+    allocator: Option<&str>,
+    opt: OptOverrides,
+    codegen_flags: &[String],
+    profile: Option<&pgo::Profile>,
+    params: &param_resolution::ParamInputs,
+    invocations: kiln::InvocationIndex,
+    parallelism: usize,
+=======
+    opt_level: OptLevel,
+    target_world: Option<&str>,
+    allocator: Option<&str>,
+    opt: OptOverrides,
+    codegen_flags: &[String],
+    profile: Option<&pgo::Profile>,
+    params: &param_resolution::ParamInputs,
+    invocations: kiln::InvocationIndex,
+    parallelism: usize,
+    inline_decisions: Option<&str>,
+>>>>>>> origin/main
 ) -> Result<DumpResult, Bail> {
     let log_level = options.log_level.unwrap_or_default();
     let logger = Logger::new(host, log_level);
@@ -2664,6 +2892,7 @@ pub async fn dump_with_options<H: CompilerHost>(
         filename,
         Some(&mut views),
     );
+<<<<<<< HEAD
     let (optimized_package, wir_package) = match built {
         Ok(built) => (Some(built.nir), Some(built.wir_package)),
         // Rejected by the checks before synthesis: the views of the analysis
@@ -2674,10 +2903,324 @@ pub async fn dump_with_options<H: CompilerHost>(
     let analysis = views
         .analysis
         .expect("a pipeline past the analysis recorded its views");
+||||||| c0bdae6df
+    // A rejected program reaches no phase after these, as under `compile`.
+    let checked = sem.is_complete()
+        && check_effects_and_moves(&mut sem, provided_import_fqs, &logger).is_ok();
+    let symbols = sem.symbols.clone();
+    let interner = sem.interner.clone();
+    let entry_module_source_out = sem.entry_module_source.clone();
+    // The resolved modules are kept as-is for the `--tir-resolved` view; the
+    // pipeline below runs on its own snapshot, so these stay frozen here.
+    let tir_modules_by_source: Option<IndexMap<ModuleSource, tir::TirModule>> =
+        sem.is_complete().then(|| sem.tir_modules.clone());
+    let assert_plan_text = sem.assert_plan_text();
+    let coverage_plan_text = sem.coverage_plan_text();
+    let export_mappings = sem.export_mappings.clone();
+
+    // === Phase 7b+8+9+10: Build Package and run remaining phases ===
+    // Create Package early so CM binding synthesis runs before monomorphize,
+    // matching the compile_with_options pipeline.
+    let (monomorphized_tir_text, lowered_nir_text, optimized_package, wir_package) =
+        // The pipeline mutates its input in place, so give it an independent
+        // snapshot rather than the frozen dump view.
+        if let Some(resolved_modules) = tir_modules_by_source
+            .as_ref()
+            .filter(|_| checked)
+            .map(snapshot_tir_modules)
+        {
+            let module_name = filename.clone().unwrap_or_else(|| "module".to_string());
+
+            // The registries elaboration produced, not rebuilt ones. `state` is
+            // populated whenever `is_complete()` holds, which guards this block.
+            let state = sem
+                .state
+                .expect("elaborator state present when is_complete");
+            let world_registry = state.world_registry;
+            let tysys = state.tysys;
+            let builtin_registry = std::rc::Rc::try_unwrap(tysys.builtin_registry)
+                .unwrap_or_else(|rc| (*rc).clone());
+
+            let package = Package::new(
+                entry_module_source_out.clone(),
+                resolved_modules,
+                symbols.clone(),
+                TraitEnv::with_solver(
+                    tysys.trait_env,
+                    tysys.solver.expect("elaboration builds the solver"),
+                ),
+                        implicit_modules.clone(),
+                module_name,
+                tysys.cm_interface_registry,
+                world_registry,
+                builtin_registry,
+                interner,
+            );
+
+            // Apply target world override (must be before synthesis)
+            let mut package = package;
+            package.export_mappings = export_mappings;
+            if let Some(world) = target_world {
+                package.target_world = world.to_string();
+            }
+            package.wasm_assets.clone_from(&wasm_assets);
+            package.codegen_flags = parsed_codegen_flags;
+
+            // Validate target world (test world is synthetic, not in registry)
+            if !package.is_test_world()
+                && package.world_registry.get(&package.target_world).is_none()
+            {
+                return Err(bail_with(
+                    &logger,
+                    Code::UnsupportedFeature,
+                    format!("unknown target world: `{}`", package.target_world),
+                ));
+            }
+
+            // Select allocator (must run before synthesis, matching compile).
+            select_allocator(&mut package, allocator.map(String::from), &logger)?;
+
+            // Synthesis (must run before monomorphize)
+            let package = {
+                let _span = logger.span("synthesis");
+                synthesis::synthesize(package)
+                    .map_err(|error| bail_with_synthesis(&logger, error))?
+            };
+
+            // Link
+            let mut flat = link::link(package);
+
+            // Resolve compile-time parameters (`#[param]`)
+            {
+                let _span = logger.span("param-resolution");
+                param_resolution::resolve_params(
+                    &mut flat,
+                    params,
+                    &entry_source.source_path(),
+                    &logger,
+                )?;
+            }
+
+            // Monomorphize, then bind the async primitives whose payload the
+            // instances just made concrete (mirrors `compile_with_options`).
+            {
+                let _span = logger.span("monomorphize");
+                lower::contract_checks::check_marked_calls(&flat);
+                let mut mono = monomorphize(&mut flat);
+                refuse_expanding_instances(&mono, &logger)?;
+                bind_monomorphized(&mut flat, &mut mono, &logger)?;
+                mono.finish(&mut flat);
+                synthesis::traits::synthesize_monomorphized_fn_inspect_stubs(&mut flat);
+            }
+            lower_instance_patterns(&flat, &logger)?;
+
+            // Erase Newtypes and Flags (after monomorphize, before lower)
+            flat.type_table.borrow_mut().erase_newtypes_and_flags();
+
+            // Reflect bridges (after erasure — lowering names the call from the
+            // erased mangle)
+            synthesis::reflect_bridge::synthesize_monomorphized_reflect_bridges(&mut flat);
+            synthesis::widen::expand_widenings(&mut flat);
+
+            // Snapshot monomorphized state (only unparse; Debug format is deferred)
+            let mono_text = Some(unparse::unparse_flat_package(&flat));
+
+            let prelower_reached = prelower_reach::before_lower(&mut flat);
+
+            // Lower (FlatPackage → NirPackage)
+            let nir = {
+                let _span = logger.span("lower");
+                lower(flat, &logger, &logger)?
+            };
+            // Snapshot lowered state (NIR right after lower, before optimize)
+            let lower_text = Some(nir_unparse::unparse_nir_package(&nir));
+
+            // Optimize
+            let nir = {
+                let _span = logger.span("optimize");
+                optimize(nir, opt_level, opt, parallelism, &logger)
+            };
+
+            prelower_reach::audit(prelower_reached.as_ref(), &nir);
+
+            // WIR: Translate optimized NirPackage to WirPackage for inspection.
+            let wir_package = Some({
+                let mut wir = wir_build::build_wir_package(&nir);
+                wir_optimize::optimize_wir(&mut wir, opt_level, &logger);
+                wir
+            });
+
+            (mono_text, lower_text, Some(nir), wir_package)
+        } else {
+            (None, None, None, None)
+        };
+
+=======
+    // A rejected program reaches no phase after these, as under `compile`.
+    let checked = sem.is_complete()
+        && check_effects_and_moves(&mut sem, provided_import_fqs, Exports::Unrecorded, &logger)
+            .is_ok();
+    let symbols = sem.symbols.clone();
+    let interner = sem.interner.clone();
+    let entry_module_source_out = sem.entry_module_source.clone();
+    // The resolved modules are kept as-is for the `--tir-resolved` view; the
+    // pipeline below runs on its own snapshot, so these stay frozen here.
+    let tir_modules_by_source: Option<IndexMap<ModuleSource, tir::TirModule>> =
+        sem.is_complete().then(|| sem.tir_modules.clone());
+    let assert_plan_text = sem.assert_plan_text();
+    let coverage_plan_text = sem.coverage_plan_text();
+    let export_mappings = sem.export_mappings.clone();
+    let heat_map = sem
+        .marks
+        .as_ref()
+        .map(|marks| marks.heat_map().clone())
+        .unwrap_or_default();
+    let parses = sem.space_modules;
+
+    // === Phase 7b+8+9+10: Build Package and run remaining phases ===
+    // Create Package early so CM binding synthesis runs before monomorphize,
+    // matching the compile_with_options pipeline.
+    let (monomorphized_tir_text, lowered_nir_text, optimized_package, wir_package) =
+        // The pipeline mutates its input in place, so give it an independent
+        // snapshot rather than the frozen dump view.
+        if let Some(resolved_modules) = tir_modules_by_source
+            .as_ref()
+            .filter(|_| checked)
+            .map(snapshot_tir_modules)
+        {
+            let module_name = filename.clone().unwrap_or_else(|| "module".to_string());
+
+            // The registries elaboration produced, not rebuilt ones. `state` is
+            // populated whenever `is_complete()` holds, which guards this block.
+            let state = sem
+                .state
+                .expect("elaborator state present when is_complete");
+            let world_registry = state.world_registry;
+            let tysys = state.tysys;
+            let builtin_registry = std::rc::Rc::try_unwrap(tysys.builtin_registry)
+                .unwrap_or_else(|rc| (*rc).clone());
+
+            let package = Package::new(
+                entry_module_source_out.clone(),
+                resolved_modules,
+                symbols.clone(),
+                TraitEnv::with_solver(
+                    tysys.trait_env,
+                    tysys.solver.expect("elaboration builds the solver"),
+                ),
+                        implicit_modules.clone(),
+                module_name,
+                tysys.cm_interface_registry,
+                world_registry,
+                builtin_registry,
+                interner,
+            );
+
+            // Apply target world override (must be before synthesis)
+            let mut package = package;
+            package.export_mappings = export_mappings;
+            if let Some(world) = target_world {
+                package.target_world = world.to_string();
+            }
+            package.wasm_assets.clone_from(&wasm_assets);
+            package.codegen_flags = parsed_codegen_flags;
+            package.heat_map = heat_map;
+
+            // Validate target world (test world is synthetic, not in registry)
+            if !package.is_test_world()
+                && package.world_registry.get(&package.target_world).is_none()
+            {
+                return Err(bail_with(
+                    &logger,
+                    Code::UnsupportedFeature,
+                    format!("unknown target world: `{}`", package.target_world),
+                ));
+            }
+
+            // Select allocator (must run before synthesis, matching compile).
+            select_allocator(&mut package, allocator.map(String::from), &logger)?;
+
+            // Synthesis (must run before monomorphize)
+            let package = {
+                let _span = logger.span("synthesis");
+                synthesis::synthesize(package)
+                    .map_err(|error| bail_with_synthesis(&logger, error))?
+            };
+
+            // Link
+            let mut flat = link::link(package);
+
+            // Resolve compile-time parameters (`#[param]`)
+            {
+                let _span = logger.span("param-resolution");
+                param_resolution::resolve_params(
+                    &mut flat,
+                    params,
+                    &entry_source.source_path(),
+                    &logger,
+                )?;
+            }
+
+            // Monomorphize, then bind the async primitives whose payload the
+            // instances just made concrete (mirrors `compile_with_options`).
+            {
+                let _span = logger.span("monomorphize");
+                lower::contract_checks::check_marked_calls(&flat);
+                let mut mono = monomorphize(&mut flat);
+                refuse_expanding_instances(&mono, &logger)?;
+                bind_monomorphized(&mut flat, &mut mono, &logger)?;
+                mono.finish(&mut flat);
+                synthesis::traits::synthesize_monomorphized_fn_inspect_stubs(&mut flat);
+            }
+            lower_instance_patterns(&flat, &logger)?;
+
+            // Erase Newtypes and Flags (after monomorphize, before lower)
+            flat.type_table.borrow_mut().erase_newtypes_and_flags();
+
+            // Reflect bridges (after erasure — lowering names the call from the
+            // erased mangle)
+            synthesis::reflect_bridge::synthesize_monomorphized_reflect_bridges(&mut flat);
+            synthesis::widen::expand_widenings(&mut flat);
+
+            // Snapshot monomorphized state (only unparse; Debug format is deferred)
+            let mono_text = Some(unparse::unparse_flat_package(&flat));
+
+            let prelower_reached = prelower_reach::before_lower(&mut flat);
+
+            // Lower (FlatPackage → NirPackage)
+            let mut nir = {
+                let _span = logger.span("lower");
+                lower(flat, &logger, &logger)?
+            };
+            // Snapshot lowered state (NIR right after lower, before optimize)
+            let lower_text = Some(nir_unparse::unparse_nir_package(&nir));
+
+            nir.inline_log = inline_decisions.map(optimize::InlineLog::new);
+            let nir = {
+                let _span = logger.span("optimize");
+                optimize(nir, opt_level, opt, parallelism, &logger)
+            };
+
+            prelower_reach::audit(prelower_reached.as_ref(), &nir);
+
+            // WIR: Translate optimized NirPackage to WirPackage for inspection.
+            let wir_package = Some({
+                let mut wir = wir_build::build_wir_package(&nir);
+                wir_optimize::optimize_wir(&mut wir, opt_level, &logger);
+                wir
+            });
+
+            (mono_text, lower_text, Some(nir), wir_package)
+        } else {
+            (None, None, None, None)
+        };
+
+>>>>>>> origin/main
     Ok(DumpResult {
         source: source.to_string(),
         tokens: tokens_for_dump,
         ast,
+<<<<<<< HEAD
         symbols: analysis.symbols,
         loaded_modules,
         implicit_modules,
@@ -2687,6 +3230,31 @@ pub async fn dump_with_options<H: CompilerHost>(
         coverage_plan_text: analysis.coverage_plan_text,
         monomorphized_tir_text: views.monomorphized_tir_text,
         lowered_nir_text: views.lowered_nir_text,
+||||||| c0bdae6df
+        symbols,
+        loaded_modules: loaded_module_sources,
+        implicit_modules: implicit_modules.into_iter().collect(),
+        entry_module_source: entry_module_source_out,
+        tir_modules: tir_modules_by_source,
+        assert_plan_text,
+        coverage_plan_text,
+        monomorphized_tir_text,
+        lowered_nir_text,
+=======
+        symbols,
+        loaded_modules: loaded_module_sources,
+        implicit_modules: implicit_modules.into_iter().collect(),
+        entry_module_source: entry_module_source_out,
+        tir_modules: tir_modules_by_source,
+        assert_plan_text,
+        coverage_plan_text,
+        monomorphized_tir_text,
+        lowered_nir_text,
+        inline_decisions_text: optimized_package
+            .as_ref()
+            .and_then(|nir| nir.inline_log.as_ref())
+            .map(|log| log.render(&parses)),
+>>>>>>> origin/main
         optimized_package,
         wir_package,
         trivia,

@@ -127,9 +127,9 @@ naming the passes still reporting changes. From there:
    change. The tail of that list is the culprit set.
 2. `WADO_TRACE=const_fold` names each function `const_fold` changed, so a
    pass that keeps reporting a change points at the body it keeps rewriting.
-   `WADO_TRACE=inline_sites` names, per round, the callees spliced into each
-   caller: a late round splicing small helpers is a callee that only shrank
-   under the threshold once its own callees were spliced.
+   `wado dump --inline-decisions ''` names, per round, the callees spliced
+   into each caller: a late round splicing small helpers is a callee that only
+   shrank under the threshold once its own callees were spliced.
 3. `WADO_DUMP_PASS_BEFORE`/`_AFTER=<pass>` around a late round, diffed, says
    which of three it is: nothing rewritten at all (the pass reports a change it
    did not make), a rewrite a later pass deletes (two passes fighting), or real
@@ -144,12 +144,12 @@ convergence once it is small.
 
 1. Sweep `--optimize-inline-threshold`. A cliff rather than a curve means one
    callee crossed the budget and is now copied at every call site.
-2. `WADO_TRACE=inline` reports, per round, the unit size and how many
-   candidates the threshold admitted **only** because the cold discount put
-   them under it — with what those are worth in growth. A handful of callees
-   accounting for most of a round's growth is that pattern.
-   `WADO_TRACE=inline_verdict` gives each callee's verdict: its hot cost, its
-   call sites, and which of them it reaches.
+2. `wado dump --inline-decisions ''` reports, per round, the unit size and each
+   callee's verdict: its hot price, its size, its call sites, which of them it
+   reaches and why. A callee whose hot price sits under the threshold and its
+   size far over it is one the cold discount admitted, and it grows the unit
+   by its size times its sites less one. A handful of such callees accounting
+   for most of a round's growth is that pattern.
 3. `WADO_TRACE=cold_outline` says why such a callee was not split: control
    leaving the region, or a local the call cannot hand over.
 4. `--optimize-inline-growth <pct>` caps unit growth, and `--log-level debug`

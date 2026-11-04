@@ -62,7 +62,7 @@ pub(crate) fn is_building() -> bool {
 
 /// What a profiled snapshot was built for: the coverage it measures the
 /// stdlib with, the stdlib part of the profile it applied, and how it read the
-/// counts, against the summary of the whole profile.
+/// counts, against the hot line of the whole profile.
 type ProfiledKey = (Option<CoverageScope>, Profile, Reading);
 
 /// Return the current thread's stdlib [`Semantics`] snapshot for a compile

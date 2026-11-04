@@ -84,11 +84,11 @@ fn "opt_bce_guard_narrower_offset_wrap.wado/g"(arr, i) with Stdout {
     let $load_0: i32;
     let $load_1: ref Array<u8>;
     let out_16: ref "core:prelude/string.wado//String";
-    let repr_45: ref Array<u8>;
     let x: i64;
     let q: u64;
     let tens: i32;
-    let start_167: i32;
+    let start_164: i32;
+    let $sroa_view_repr_529: ref Array<u8>;
     if @unlikely((i + 1) >= local.tee $load_0(arr.used)) {
         cold_path;
         "core:rt/panic"(array.new_data<u8>("offset guard"), 12);
@@ -100,9 +100,9 @@ fn "opt_bce_guard_narrower_offset_wrap.wado/g"(arr, i) with Stdout {
         unreachable;
     }
     out_16 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(19), used: 0 };
-    repr_45 = global:opt_bce_guard_narrower_offset_wrap.wado::$const_obj_0;
+    $sroa_view_repr_529 = global:opt_bce_guard_narrower_offset_wrap.wado::$const_obj_0;
     out_16.used = 3;
-    builtin::array_copy<u8>(local.tee $load_1(out_16.repr), 0, repr_45, 0, 3);
+    builtin::array_copy<u8>(local.tee $load_1(out_16.repr), 0, $sroa_view_repr_529, 0, 3);
     $load_0 = i < 0;
     x = builtin::i64_extend_i32_s(i);
     x = select i64(x < 0_i64, 0_i64 - x, x);
@@ -171,33 +171,33 @@ fn "opt_bce_guard_narrower_offset_wrap.wado/g"(arr, i) with Stdout {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_16, $load_0);
         }
-        start_167 = out_16.used;
+        start_164 = out_16.used;
         out_16.used = $load_0;
-        builtin::array_set_u8(out_16.repr, start_167, 45);
+        builtin::array_set_u8(out_16.repr, start_164, 45);
     } else {
     }
     if @unlikely(local.tee $load_0(out_16.used + i) > builtin::array_len(out_16.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_16, $load_0);
     }
-    start_167 = out_16.used;
+    start_164 = out_16.used;
     out_16.used = $load_0;
-    repr_45 = out_16.repr;
-    i = start_167 + i;
+    $sroa_view_repr_529 = out_16.repr;
+    i = start_164 + i;
     b24: block {
         l25: loop {
-            break_if b24 (i - start_167) < 2;
+            break_if b24 (i - start_164) < 2;
             q = x /u 100_i64;
             tens = local.tee $load_0(builtin::i32_wrap_i64(x - (q * 100_i64))) / 10;
-            builtin::array_set_u8(repr_45, i - 1, (48 + $load_0) - (tens * 10));
-            builtin::array_set_u8(repr_45, i - 2, 48 + tens);
+            builtin::array_set_u8($sroa_view_repr_529, i - 1, (48 + $load_0) - (tens * 10));
+            builtin::array_set_u8($sroa_view_repr_529, i - 2, 48 + tens);
             i = i - 2;
             x = q;
             continue l25;
         };
     };
-    if i > start_167 {
-        builtin::array_set_u8(repr_45, start_167, 48 + builtin::i32_wrap_i64(x %u 10_i64));
+    if i > start_164 {
+        builtin::array_set_u8($sroa_view_repr_529, start_164, 48 + builtin::i32_wrap_i64(x %u 10_i64));
     }
     $inline_core_prelude_string_wado_String__internal_push_view_43: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_43;

@@ -63,7 +63,6 @@ fn is_eligible(func: &NirFunction, type_table: &TypeTable) -> bool {
         || func.is_cm_export
         || func.is_cm_binding
         || func.is_dispatch_wrapper
-        || func.is_ambient
         || func.is_async
         || func.compiler_item.is_some()
     {

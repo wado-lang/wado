@@ -43,7 +43,7 @@ use crate::elaborator::expr::MemberOwner;
 use crate::elaborator::sem::types::DesugarKind;
 use crate::elaborator::trait_env::ImplMethodEntry;
 use crate::elaborator::types::{ImplMemberKind, RealTypeParams, VariantCaseData, VariantInfo};
-use crate::escape::unescape_bytes;
+use crate::escape::bytes_value;
 use crate::marker::WRAP_IN_CASE;
 use crate::primitive::PrimitiveType;
 use crate::{Span, token};
@@ -88,6 +88,9 @@ pub(super) struct CalleeSignature {
     param_types: Vec<TypeId>,
     /// The slots the types mention, for the call site to instantiate.
     slots: Vec<TypeId>,
+    /// How many of `slots` the declaring block's are, ahead of the method's
+    /// own, which a turbofish names.
+    declaring: usize,
     /// `None` when the declaration declares no return type.
     return_type: Option<TypeId>,
 }
@@ -97,7 +100,15 @@ impl CalleeSignature {
         Self {
             param_types: decl.param_types.clone(),
             slots: decl.type_param_ids(),
+            declaring: 0,
             return_type: decl.return_type,
+        }
+    }
+
+    fn of_method(sig: &MethodSig) -> Self {
+        Self {
+            declaring: sig.declaring_type_params().len(),
+            ..Self::of(&sig.decl)
         }
     }
 }
@@ -1279,7 +1290,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 && tt
                     .nominal_type_args(receiver)
                     .is_none_or(|args| args.is_empty());
-            if tt.type_key(arg) == tt.type_key(receiver) || bare_generic_of_arg {
+            if tt.same_type(arg, receiver) || bare_generic_of_arg {
                 (DesugarKind::NewtypeFromCollapse, arg)
             } else if tt.newtype_chain_holds(arg, receiver) {
                 (DesugarKind::NewtypeFromUnwrap, receiver)
@@ -1391,9 +1402,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return ByteLiteral::Not;
         };
         let len = match &lit.value {
-            ast::Literal::Bytes(raw) => unescape_bytes(raw).ok().map(|b| b.len()),
-            ast::Literal::IncludeBytes(raw_path) => {
-                let key = [self.home_module(lit.id).to_string(), raw_path.clone()];
+            ast::Literal::Bytes(raw, quote) => bytes_value(raw, *quote).ok().map(|b| b.len()),
+            ast::Literal::IncludeBytes(path) => {
+                let key = [self.home_module(lit.id).to_string(), path.value.clone()];
                 self.tysys.included_files.get(&key).map(Vec::len)
             }
             _ => return ByteLiteral::Not,
@@ -1673,6 +1684,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let CalleeSignature {
             mut param_types,
             slots: callee_slots,
+            declaring,
             return_type: declared_return,
         } = signature.unwrap_or_default();
         // The declaration's own frame, before instantiation replaces its slots
@@ -1683,6 +1695,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Read before the instantiation below, which answers a named slot with
         // it. A `_` resolves to UNKNOWN.
         let mut type_args: Vec<TypeId> = self.resolve_turbofish_args(&call.type_args);
+        // The turbofish names the method's own slots, after the declaring
+        // block's, which the arguments answer.
+        let slot_args: Vec<TypeId> = if type_args.is_empty() {
+            Vec::new()
+        } else {
+            std::iter::repeat_n(TypeTable::UNKNOWN, declaring)
+                .chain(type_args.iter().copied())
+                .collect()
+        };
 
         // Instantiate the callee's slots before an argument is resolved
         // against one of its parameter types. A rigid slot is the callee's
@@ -1696,7 +1717,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     kind: InstanceKind::Function,
                     name: effective_name,
                     span: call.span,
-                    type_args: &type_args,
+                    type_args: &slot_args,
                     self_binding: None,
                     impl_args: &[],
                 },
@@ -1966,6 +1987,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     &mut substituted,
                 );
                 self.recoerce_literal_args(&call.args, &mut args, &substituted);
+                self.record_call_param_types(call.id, substituted.clone());
                 // Per-argument checking alone passes a call of the wrong length:
                 // the loop below reaches neither a missing argument nor a
                 // surplus one, and the call reaches codegen as an invalid
@@ -2758,6 +2780,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return Some(CalleeSignature {
                 param_types: decl.param_types.clone(),
                 slots: Vec::new(),
+                declaring: 0,
                 return_type: decl.return_type,
             });
         }
@@ -2776,7 +2799,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // branches below to answer, rather than ending the lookup: an
             // expected type is what makes a sequence literal coerce.
             if let Some(sig) = self.unique_qualified_method_sig(prefix, suffix) {
-                return Some(CalleeSignature::of(&sig.decl));
+                return Some(CalleeSignature::of_method(&sig));
             }
             let key = self.impl_target(prefix);
             if let Some(sig) = self.derived_method_signature(&key, suffix) {
@@ -2817,7 +2840,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     {
                         return Some(CalleeSignature {
                             param_types: sig.value_param_types(),
-                            ..CalleeSignature::of(&sig.decl)
+                            ..CalleeSignature::of_method(&sig)
                         });
                     }
                     if let Some(sig) = self.derived_method_signature(&ns_key, method_name) {
@@ -2858,13 +2881,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .type_table
             .borrow_mut()
             .intern(ResolvedType::Ref(receiver));
+        let slots = self
+            .type_lookup()
+            .declared_type_param_ids(def)
+            .unwrap_or_default()
+            .to_vec();
         Some(CalleeSignature {
             param_types: vec![receiver_ref, receiver_ref],
-            slots: self
-                .type_lookup()
-                .declared_type_param_ids(def)
-                .unwrap_or_default()
-                .to_vec(),
+            declaring: slots.len(),
+            slots,
             return_type: Some(return_type),
         })
     }
@@ -3457,7 +3482,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// [`Self::infer_type_args_from_assoc_bounds`] over a declared parameter
-    /// list, for a static method (`String::raw<T: ReflectTemplate<Holes =
+    /// list, for a static method (`String::format<T: ReflectTemplate<Holes =
     /// [..V]>, ..V>`), whose params come from its impl rather than a callee.
     pub(super) fn project_assoc_bound_args(
         &mut self,
@@ -4266,7 +4291,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // the method's own slot count says nothing about.
         let expected_args =
             self.expected_receiver_args(callee.type_name, callee.receiver_key, expected_type);
-        let own_slots = self
+        let [declaring_slots, own_slots] = self
             .static_call_sig(
                 callee.type_name,
                 callee.method_name,
@@ -4274,23 +4299,32 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 SigChoice::Any,
                 &expected_args,
             )
-            .map_or(0, |sig| sig.own_type_params().len());
-        let (impl_args, mut method_args) =
-            if !written.is_empty() && !turbofish_leaves_slot(&written, own_slots) {
-                (Vec::new(), written)
-            } else {
-                let (impl_args, inferred) = self.infer_static_call_type_args(
-                    callee.type_name,
-                    callee.method_name,
-                    raw_args,
-                    args,
-                    expected_type,
-                    span,
-                    callee.receiver_key,
-                );
+            .map_or([0, 0], |sig| {
+                [
+                    sig.declaring_type_params().len(),
+                    sig.own_type_params().len(),
+                ]
+            });
+        let names_own = !written.is_empty() && !turbofish_leaves_slot(&written, own_slots);
+        // A turbofish names only the method's own slots, so the receiver's are
+        // inferred wherever it declares any.
+        let (impl_args, mut method_args) = if names_own && declaring_slots == 0 {
+            (Vec::new(), written)
+        } else {
+            let (impl_args, inferred) = self.infer_static_call_type_args(
+                callee.type_name,
+                callee.method_name,
+                raw_args,
+                args,
+                expected_type,
+                span,
+                callee.receiver_key,
+            );
+            if !names_own {
                 merge_turbofish_type_args(&mut written, &inferred);
-                (impl_args, written)
-            };
+            }
+            (impl_args, written)
+        };
         // A method-level parameter bound only through another's associated
         // type (`..V` off `Holes`) is projected once the owner is inferred, as
         // the free-function path does; the bound check then sees it concrete.

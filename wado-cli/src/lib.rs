@@ -26,6 +26,7 @@ mod fingerprint;
 pub mod format;
 pub mod fuel_host;
 pub mod git;
+pub mod host_memory;
 pub mod http_hooks;
 pub mod init;
 mod input_cache;

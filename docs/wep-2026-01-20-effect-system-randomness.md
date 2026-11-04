@@ -153,18 +153,13 @@ fn process() {            // no `with InsecureSeed` needed
 
 This keeps WASI's capability-based security model intact: the dependency on `InsecureSeed` stays visible at the component boundary. Only the effect-row noise that would otherwise propagate through every caller in the call graph is elided. A deterministic environment can still supply a constant `InsecureSeed` implementation (or omit the import and use `TreeMap`).
 
-#### `#[benign]` is not `ambient`
+#### Merged into `#[ambient]`
 
-`#[benign]` and the `ambient` facility (`log_stdout` / `log_stderr`, see `wep-2026-01-12-ambient-logging.md`) both suppress effect propagation, but they are distinct concepts justified by different principles:
-
-|                    | `ambient` (logging)                                                                         | `#[benign(E)]`                     |
-| ------------------ | ------------------------------------------------------------------------------------------- | ---------------------------------- |
-| World import       | not required                                                                                | required                           |
-| `with` propagation | none                                                                                        | none                               |
-| The effect itself  | observable (output is visible) but best-effort / unreliable, so callers cannot depend on it | unobservable through the interface |
-| Justification      | ambient authority + best-effort                                                             | observational purity               |
-
-`ambient` grants authority with no capability at all (ambient authority). `#[benign]` keeps the capability and only hides the propagation. They are nearly orthogonal — one is "observable but unreliable and capability-free," the other is "unobservable but capability-bound" — so they remain separate attributes rather than one shared name.
+`#[benign(E)]` is now spelled `#[ambient(E)]`. The two attributes differed only
+in whether the world import could be dropped, and `#[ambient]` stopped dropping
+it ([WEP: Ambient Logging Functions](./wep-2026-01-12-ambient-logging.md)). The
+trust boundary below still applies to every use that hides an effect a caller
+could otherwise observe.
 
 #### `#[benign]` is a trust boundary
 
@@ -246,7 +241,7 @@ Because `DEFAULT_HASH_SEED` is `#[benign(InsecureSeed)]`, the coercion does not 
 
 #### Alternative: make `InsecureSeed` `ambient`
 
-- Rejected: `ambient` would also drop the world import, hiding a real capability. `#[benign]` keeps the capability visible at the boundary and only elides propagation. See "The `#[benign(...)]` Attribute" above.
+- Rejected: `ambient` would also drop the world import, hiding a real capability. `#[benign]` keeps the capability visible at the boundary and only elides propagation. See "The `#[benign(...)]` Attribute" above. `ambient` has since stopped dropping the import, and `#[benign]` merged into it.
 
 #### Alternative: HashMap with a fixed seed (no effect, no import)
 
@@ -403,5 +398,5 @@ Deterministic test environments can:
 - WASI P3 `wasi:random/insecure-seed` specification
 - WASI Key-Value specification: https://github.com/WebAssembly/wasi-keyvalue
 - wasmtime_wasi_keyvalue documentation: https://docs.wasmtime.dev/api/wasmtime_wasi_keyvalue/
-- wep-2026-01-12-ambient-logging.md (the `ambient` facility, contrasted with `#[benign]`)
+- wep-2026-01-12-ambient-logging.md (the `ambient` facility, which `#[benign]` merged into)
 - wep-2026-08-24-literal-from-array.md

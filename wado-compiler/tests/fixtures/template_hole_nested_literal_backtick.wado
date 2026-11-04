@@ -1,0 +1,13 @@
+// A hole may hold a template whose own hole holds a lone backtick, in a string
+// or a raw literal: the hole ends at its own `}`, not at that backtick.
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    println(`<${ `x${"`"}y` }>`);
+    println(`<${ `x${#"`"#}y` }>`);
+    println(`<${ `x${##`a`b`##}y` }>`);
+    println(`<${ `x${'`'}y` }>`);
+}
+
+__DATA__
+{"stdout": "<x`y>\n<x`y>\n<xa`by>\n<x`y>\n"}

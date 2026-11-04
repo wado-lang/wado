@@ -136,7 +136,7 @@ pub struct Pos {
 }
 
 impl Pos {
-    fn start(span: Span) -> Self {
+    pub(crate) fn start(span: Span) -> Self {
         Self {
             line: span.line as u32,
             column: span.column as u32,
