@@ -168,12 +168,8 @@ impl Parser {
         });
     }
 
-    /// The body of a group, spliced one level deeper.
     fn splice_inside(&mut self, body: &Node, at: i32) -> Result<Node, PatternError> {
-        self.enter(at)?;
-        let node = self.splice(body, at)?;
-        self.depth -= 1;
-        return Ok(node);
+        return self.inside(at, |p| p.splice(body, at));
     }
 
     fn splice_all(&mut self, nodes: &List<Node>, at: i32) -> Result<List<Node>, PatternError> {
@@ -263,13 +259,15 @@ impl Parser {
         return Ok(());
     }
 
-    /// One group deeper, for a group that opens at `at`.
-    fn enter(&mut self, at: i32) -> Result<(), PatternError> {
+    /// What `read` reads inside a group that opens at `at`.
+    fn inside(&mut self, at: i32, read: fn(&mut Parser) -> Result<Node, PatternError>) -> Result<Node, PatternError> {
         self.depth += 1;
         if self.depth > MAX_NESTING {
             return Err(self.error_at(at, `groups may nest at most ${MAX_NESTING} deep`));
         }
-        return Ok(());
+        let node = read(self)?;
+        self.depth -= 1;
+        return Ok(node);
     }
 
     // Disjunction :: Alternative ( `|` Disjunction )?
@@ -373,10 +371,7 @@ impl Parser {
 
     fn group(&mut self, start: i32) -> Result<Node, PatternError> {
         let at = self.pos;
-        self.enter(at)?;
-        let node = self.group_body(start)?;
-        self.depth -= 1;
-        return Ok(node);
+        return self.inside(at, |p| p.group_body(start));
     }
 
     fn group_body(&mut self, start: i32) -> Result<Node, PatternError> {
