@@ -236,6 +236,7 @@ wado dump --tir-resolved file.wado       # show TIR after type resolution
 wado dump --tir-monomorphized file.wado  # show TIR after monomorphization
 wado dump --nir-lowered file.wado        # show NIR right after lowering (before optimize)
 wado dump --assert-plan file.wado        # show which operands each `assert` captures
+wado dump -O2 --inline-decisions next file.wado  # what the inliner decided, and why, for names holding `next`
 ```
 
 ## Query

@@ -35,6 +35,7 @@ fn byte_literal_at_int128_reifies_to_the_constructor_call() {
         &wado_compiler::param_resolution::ParamInputs::default(),
         wado_compiler::kiln::InvocationIndex::default(),
         1,
+        None,
     ))
     .expect("dump succeeds");
 

@@ -1,0 +1,39 @@
+// A closure passed to a static method takes its return type from the
+// parameter, so a `?` in its body converts into the parameter's error type.
+
+struct Loader {
+    n: i32,
+}
+
+struct Holder<T> {
+    v: T,
+}
+
+fn parse(at: i32) -> Result<i32, String> {
+    return if at >= 0 { Result::Ok(at) } else { Result::Err("negative") };
+}
+
+impl Loader {
+    fn run(load: fn(i32) -> Result<i32, String>) -> Result<i32, String> {
+        return load(7);
+    }
+}
+
+impl<T> Holder<T> {
+    fn held<Er>(v: T, load: fn(i32) -> Result<i32, Er>) -> Result<Holder<T>, Er> {
+        let _ = load(-1)?;
+        return Result::Ok(Holder { v });
+    }
+}
+
+test "a static method's closure argument returns through `?`" {
+    assert Loader::run(|at| Result::Ok(parse(at)?)).unwrap() == 7;
+}
+
+test "a generic receiver's static method's closure argument returns through `?`" {
+    let r = Holder::held::<String>(3, |at| Result::Ok(parse(at)?));
+    assert r.is_err();
+}
+
+__DATA__
+{"test": {}}

@@ -1,0 +1,34 @@
+// A static method of a generic type, its receiver's arguments left to the
+// arguments: the turbofish names the method's own parameters, not the type's,
+// so a closure passed alongside sees the named type and a literal still
+// answers the type's.
+
+struct Holder<T> {
+    v: T,
+}
+
+impl<T> Holder<T> {
+    fn make<Er>(v: T, load: fn(i32) -> Result<i32, Er>) -> Result<Holder<T>, Er> {
+        let _ = load(1)?;
+        return Result::Ok(Holder { v });
+    }
+
+    fn plain<Er>(v: T, e: Er) -> Holder<T> {
+        return Holder { v };
+    }
+}
+
+test "the turbofish types the closure, the literal the receiver" {
+    assert Holder::make::<String>(3, |at| Result::Ok(at)).unwrap().v == 3;
+}
+
+test "a turbofish of `!` types the closure" {
+    assert Holder::make::<!>(4, |at| Result::Ok(at)).unwrap().v == 4;
+}
+
+test "a literal answers the receiver beside a full turbofish" {
+    assert Holder::plain::<String>(5, "x").v == 5;
+}
+
+__DATA__
+{"test": {}}
