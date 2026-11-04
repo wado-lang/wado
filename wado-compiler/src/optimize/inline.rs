@@ -2618,8 +2618,11 @@ fn inline_round(
         round.held = holds
             .held
             .iter()
-            .map(|id| project.functions[id.index()].borrow().name.clone())
-            .filter(|name| log.wants(name))
+            .map(|id| {
+                let func = project.functions[id.index()].borrow();
+                (func.name.clone(), func.module_source.clone())
+            })
+            .filter(|(name, _)| log.wants(name))
             .collect();
         round.callees = callee_entries
             .into_iter()

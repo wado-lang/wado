@@ -62,7 +62,7 @@ pub(super) struct Round {
     /// What the unit holds as the round starts, or `None` where nothing
     /// priced it.
     pub unit_size: Option<usize>,
-    pub held: Vec<String>,
+    pub held: Vec<(String, ModuleSource)>,
     pub callees: Vec<CalleeEntry>,
     pub sites: Vec<SiteEntry>,
 }
@@ -104,10 +104,15 @@ impl Round {
         }
         out.push('\n');
         if !self.held.is_empty() {
-            let _ = writeln!(out, "  held: {}", self.held.join(", "));
+            let held: Vec<String> = self
+                .held
+                .iter()
+                .map(|(name, module)| function(name, module))
+                .collect();
+            let _ = writeln!(out, "  held: {}", held.join(", "));
         }
         for c in &self.callees {
-            let _ = write!(out, "  callee `{}` in {}:", c.name, c.module);
+            let _ = write!(out, "  callee {}:", function(&c.name, &c.module));
             if let Some(hot) = c.hot {
                 let _ = write!(out, " hot {hot},");
             }
@@ -130,11 +135,10 @@ impl Round {
             let at = location(s.span, &s.caller_module, parses);
             let _ = write!(
                 out,
-                "  site `{}` {at} ({}) -> `{}` in {}: ",
-                s.caller,
+                "  site {} at {at} ({}) -> {}: ",
+                function(&s.caller, &s.caller_module),
                 site_text(s.site, &s.caller_module, parses),
-                s.callee,
-                s.callee_module
+                function(&s.callee, &s.callee_module)
             );
             match s.refusal {
                 None => out.push_str("spliced"),
@@ -145,6 +149,11 @@ impl Round {
             out.push('\n');
         }
     }
+}
+
+/// A function's name, which only its module tells from another of that name.
+fn function(name: &str, module: &ModuleSource) -> String {
+    format!("`{name}` in {module}")
 }
 
 fn location(span: Span, holder: &ModuleSource, parses: &ParseModules) -> String {

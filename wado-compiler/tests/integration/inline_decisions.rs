@@ -70,14 +70,17 @@ fn a_site_names_its_decision_and_why() {
         "{log}"
     );
     assert!(
-        log.contains("site `work` entry.wado:5:17 (plain) -> `medium` in entry.wado: spliced"),
+        log.contains(
+            "site `work` in entry.wado at entry.wado:5:17 (plain) -> `medium` in entry.wado: \
+             spliced"
+        ),
         "{log}"
     );
     assert!(
         log.contains(
-            "site `work` entry.wado:8:14 (cold, in the run from entry.wado:7:9) -> `medium` in \
-             entry.wado: declined, a cold site takes only `#[inline(always)]` or a callee that \
-             shrinks it"
+            "site `work` in entry.wado at entry.wado:8:14 (cold, in the run from entry.wado:7:9) \
+             -> `medium` in entry.wado: declined, a cold site takes only `#[inline(always)]` or a \
+             callee that shrinks it"
         ),
         "{log}"
     );
@@ -87,7 +90,9 @@ fn a_site_names_its_decision_and_why() {
 fn a_synthesized_call_names_no_position() {
     let log = decisions("", 1);
     assert!(
-        log.contains("site `$cm_export__run` (synthesized) (plain) -> `run` in entry.wado"),
+        log.contains(
+            "site `$cm_export__run` in entry.wado at (synthesized) (plain) -> `run` in entry.wado"
+        ),
         "{log}"
     );
 }
