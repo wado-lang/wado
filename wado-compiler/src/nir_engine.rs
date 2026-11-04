@@ -1254,8 +1254,8 @@ impl<'a> Engine<'a> {
 
     /// Edit API: rewrite an expression node's kind in place. The id is stable,
     /// so parent links and worklist entries survive. Keeps the use index
-    /// coherent (if the node was / becomes a `Local`), re-parents the new
-    /// kind's id children, and re-enqueues the affected neighbourhood — the
+    /// coherent (if the node was / becomes a `Local`), detaches the old kind's
+    /// id children and re-parents the new kind's, and re-enqueues the affected neighbourhood — the
     /// node's parent (its context may now reduce) and the new children.
     pub fn replace_expr_kind(&mut self, id: ExprId, new_kind: ExprKind) {
         // Drop the old `Local` mention, if any, from the use index.
