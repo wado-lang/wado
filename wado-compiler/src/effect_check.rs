@@ -1217,12 +1217,7 @@ fn operation_requirements(
     index: &EffectIndex,
     owner: Option<DefId>,
 ) -> Vec<EffectRef> {
-    let demands = operation_demands(sem, index, owner);
-    demands
-        .certain
-        .into_iter()
-        .chain(demands.unrecorded)
-        .collect()
+    operation_demands(sem, index, owner).all()
 }
 
 /// [`operation_requirements`], split by why each is demanded.
@@ -1232,6 +1227,16 @@ struct OperationDemands {
     /// A `wasi:*` import of a component that records nothing of what its
     /// exports demand, so every one is.
     unrecorded: Vec<EffectRef>,
+}
+
+impl OperationDemands {
+    fn all(&self) -> Vec<EffectRef> {
+        self.certain
+            .iter()
+            .chain(&self.unrecorded)
+            .cloned()
+            .collect()
+    }
 }
 
 fn operation_demands(
@@ -1886,6 +1891,8 @@ struct CalleeEffects {
     /// to the path that names the interface, not to the callee's signature, so a
     /// walk may word the two apart.
     dispatched: OperationDemands,
+    /// What a method of a resource demands besides its declaration.
+    resource: OperationDemands,
     /// What each of the callee's effect parameters stood for at the call.
     params: IndexMap<String, IndexSet<EffectRef>>,
     /// The callee's declared return type, which the call's type instantiates.
@@ -1912,6 +1919,7 @@ fn call_site_effects(
         name,
         declared,
         dispatched: OperationDemands::default(),
+        resource: OperationDemands::default(),
         params: IndexMap::default(),
         returns: None,
     };
@@ -1963,6 +1971,7 @@ fn call_site_effects(
                 } else {
                     OperationDemands::default()
                 },
+                resource: resolved.dispatched,
                 params: resolved.params,
                 returns: index.callee_return(&func_ref),
             }
@@ -1989,21 +1998,24 @@ fn dispatch_effects(
             .contains(&index.resolutions.defs().ast_id(def)),
         None => func_ref.method_info.is_some(),
     };
-    let effects = index.method_effects(sem, func_ref);
+    let effects = index.method_effects(func_ref);
     let brought = if effects.iter().any(EffectRef::is_param) {
         index.brought_by_dispatch(func_ref, rows)
     } else {
         Brought::default()
     };
-    resolve_effect_params(
-        sem,
-        &effects,
-        &index.method_param_types(func_ref),
-        has_receiver && !self_in_args,
-        args,
-        &brought,
-        rows,
-    )
+    Resolved {
+        dispatched: index.resource_demands(sem, func_ref),
+        ..resolve_effect_params(
+            sem,
+            &effects,
+            &index.method_param_types(func_ref),
+            has_receiver && !self_in_args,
+            args,
+            &brought,
+            rows,
+        )
+    }
 }
 
 /// The effects each closure literal's body performs, by the literal's node,
@@ -2063,32 +2075,36 @@ impl EffectIndex<'_> {
             .collect()
     }
 
-    /// Effects a method dispatch requires: the callee's declared effects plus,
-    /// for a direct (non-trait) method on a `resource`, what an operation of the
-    /// resource demands ([`operation_requirements`]).
-    fn method_effects(&self, sem: &Semantics, func_ref: &FunctionRef) -> Vec<EffectRef> {
+    /// Effects a method dispatch's callee declares.
+    fn method_effects(&self, func_ref: &FunctionRef) -> Vec<EffectRef> {
         // A trait method's `with` clause bounds every impl, and a bound
         // dispatch has no impl to read: the declaration is what a call requires.
-        let mut effects = match self.declared_by_trait(func_ref) {
+        match self.declared_by_trait(func_ref) {
             Some(declared) => declared.to_vec(),
             None => self.callee_entry(func_ref, self.fn_effects, self.mangled_index),
-        };
-        if let Some(method_info) = &func_ref.method_info
-            && method_info.trait_name.is_none()
-            && let Some(def) = method_info.receiver().def()
-            && self.resolutions.defs().kind(def) == DefKind::Resource
-        {
-            assert!(
-                self.interfaces.contains_key(&def),
-                "a resource is an operation owner"
-            );
-            for demanded in operation_requirements(sem, self, Some(def)) {
-                if !effects.contains(&demanded) {
-                    effects.push(demanded);
-                }
-            }
         }
-        effects
+    }
+
+    /// What dispatching `func_ref` demands besides its declaration: for a
+    /// direct (non-trait) method on a `resource`, what an operation of the
+    /// resource demands ([`operation_demands`]).
+    fn resource_demands(&self, sem: &Semantics, func_ref: &FunctionRef) -> OperationDemands {
+        let Some(method_info) = &func_ref.method_info else {
+            return OperationDemands::default();
+        };
+        match method_info.receiver().def() {
+            Some(def)
+                if method_info.trait_name.is_none()
+                    && self.resolutions.defs().kind(def) == DefKind::Resource =>
+            {
+                assert!(
+                    self.interfaces.contains_key(&def),
+                    "a resource is an operation owner"
+                );
+                operation_demands(sem, self, Some(def))
+            }
+            _ => OperationDemands::default(),
+        }
     }
 
     /// What a dispatch's type arguments bring to the callee's open effect
@@ -2477,6 +2493,7 @@ fn resolve_effect_params(
     if param_names.is_empty() {
         return Resolved {
             required: callee_effects.to_vec(),
+            dispatched: OperationDemands::default(),
             params: IndexMap::default(),
         };
     }
@@ -2574,6 +2591,7 @@ fn resolve_effect_params(
     }
     Resolved {
         required: resolved,
+        dispatched: OperationDemands::default(),
         params,
     }
 }
@@ -2581,7 +2599,10 @@ fn resolve_effect_params(
 /// What a call to one callee requires, and what each of its effect parameters
 /// stood for there.
 struct Resolved {
+    /// What the callee declares.
     required: Vec<EffectRef>,
+    /// What dispatching it demands besides, as a resource method does.
+    dispatched: OperationDemands,
     params: IndexMap<String, IndexSet<EffectRef>>,
 }
 
@@ -2816,7 +2837,7 @@ impl AstVisitor<'_> for SemEffectWalker<'_> {
                         .method_info
                         .as_ref()
                         .map_or(func_ref.name.as_str(), |m| m.method_name.as_str());
-                    self.report_missing(&resolved.required, callee, for_of.span);
+                    self.report_resolved(&resolved, callee, for_of.span);
                 }
             }
         }
@@ -2888,7 +2909,7 @@ impl AstVisitor<'_> for SemEffectWalker<'_> {
                     );
                     let returns = self.index.callee_return(&dispatch.function_ref);
                     self.solve_rows(returns, method_call.id, &resolved.params);
-                    self.report_missing(&resolved.required, &method_call.method, method_call.span);
+                    self.report_resolved(&resolved, &method_call.method, method_call.span);
                 }
             }
             Expr::StaticMethodCall(static_call) => {
@@ -2903,7 +2924,7 @@ impl AstVisitor<'_> for SemEffectWalker<'_> {
                     );
                     let returns = self.index.callee_return(&func_ref);
                     self.solve_rows(returns, static_call.id, &resolved.params);
-                    self.report_missing(&resolved.required, &static_call.method, static_call.span);
+                    self.report_resolved(&resolved, &static_call.method, static_call.span);
                 }
             }
             _ => {}
@@ -3002,14 +3023,27 @@ impl SemEffectWalker<'_> {
         for site in sites {
             self.solve_rows(site.returns, id, &site.params);
             self.report_missing(&site.declared, &site.name, span);
-            self.report_missing(&site.dispatched.certain, &site.name, span);
-            self.report_missing_as(
-                &site.dispatched.unrecorded,
-                &site.name,
-                span,
-                EffectFault::MissingUnrecorded,
-            );
+            self.report_dispatched(&site.dispatched, &site.name, span);
+            self.report_dispatched(&site.resource, &site.name, span);
         }
+    }
+
+    /// Report what dispatching a callee demands, saying where its component
+    /// records nothing.
+    fn report_dispatched(&mut self, demands: &OperationDemands, callee: &str, span: Span) {
+        self.report_missing(&demands.certain, callee, span);
+        self.report_missing_as(
+            &demands.unrecorded,
+            callee,
+            span,
+            EffectFault::MissingUnrecorded,
+        );
+    }
+
+    /// Report what a dispatch to one callee requires.
+    fn report_resolved(&mut self, resolved: &Resolved, callee: &str, span: Span) {
+        self.report_missing(&resolved.required, callee, span);
+        self.report_dispatched(&resolved.dispatched, callee, span);
     }
 
     /// Record what each variable a call's type carries out stands for. Where
@@ -3483,16 +3517,15 @@ impl<'a> PurityWalker<'a> {
         callee: &str,
         span: Span,
     ) {
-        let effects = dispatch_effects(
+        let resolved = dispatch_effects(
             self.sem,
             self.index,
             func_ref,
             self_in_args,
             args,
             &Rows::default(),
-        )
-        .required;
-        if self.unanswered(&effects) {
+        );
+        if self.unanswered(&resolved.required) || self.unanswered(&resolved.dispatched.all()) {
             self.flag(Impurity::Call(callee.to_string()), span);
         }
     }
@@ -3524,7 +3557,7 @@ impl<'a> PurityWalker<'a> {
         // `dispatched` is left to `flag_if_operation`, which asks the owner
         // once per site rather than once per dispatch.
         for site in sites {
-            if self.unanswered(&site.declared) {
+            if self.unanswered(&site.declared) || self.unanswered(&site.resource.all()) {
                 self.flag(Impurity::Call(site.name), span);
             }
         }

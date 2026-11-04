@@ -83,76 +83,121 @@ impl WasiView for KilnHostState {
 }
 
 /// What a generator writes to stdout and stderr across the instances of one
-/// call, each line a diagnostic the moment it ends: stdout's an `Info` and
-/// stderr's a `Warning`, as `core:kiln`'s `KilnLogSink` writes `core:log`
-/// events at those levels. The two share one list, so the lines keep the order
-/// the generator wrote them in.
+/// call, each non-empty line a diagnostic the moment it ends: stdout's an
+/// `Info` and stderr's a `Warning`, as `core:kiln`'s `KilnLogSink` writes
+/// `core:log` events at those levels. The two streams share one list, so the
+/// lines keep the order the generator wrote them in.
+#[derive(Default)]
 struct Stdio {
-    stdout: LineSink,
-    stderr: LineSink,
-    diagnostics: Arc<Mutex<Vec<Diagnostic>>>,
+    lines: Arc<Mutex<Lines>>,
 }
 
 impl Stdio {
-    fn new() -> Self {
-        let diagnostics = Arc::new(Mutex::new(Vec::new()));
-        Self {
-            stdout: LineSink::new(Severity::Info, &diagnostics),
-            stderr: LineSink::new(Severity::Warning, &diagnostics),
-            diagnostics,
+    fn sink(&self, stream: StdStream) -> LineSink {
+        LineSink {
+            stream,
+            lines: Arc::clone(&self.lines),
         }
+    }
+
+    /// Ends the line each stream left unended, as an instance does when it
+    /// returns.
+    fn end_lines(&self) {
+        lock(&self.lines).end_lines();
     }
 
     /// Every line written, a last one left unended among them.
     fn finish(self) -> Vec<Diagnostic> {
-        self.stdout.end_line();
-        self.stderr.end_line();
-        std::mem::take(&mut *lock(&self.diagnostics))
+        let mut lines = lock(&self.lines);
+        lines.end_lines();
+        std::mem::take(&mut lines.diagnostics)
     }
 }
 
-/// One stdio stream of a generator. Every handle the guest opens on it shares
-/// the line it has not ended yet.
-#[derive(Clone)]
-struct LineSink {
-    severity: Severity,
-    diagnostics: Arc<Mutex<Vec<Diagnostic>>>,
-    unended: Arc<Mutex<Vec<u8>>>,
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum StdStream {
+    Stdout,
+    Stderr,
 }
 
-impl LineSink {
-    fn new(severity: Severity, diagnostics: &Arc<Mutex<Vec<Diagnostic>>>) -> Self {
-        Self {
-            severity,
-            diagnostics: Arc::clone(diagnostics),
-            unended: Arc::default(),
+impl StdStream {
+    const ALL: [Self; 2] = [Self::Stdout, Self::Stderr];
+
+    fn severity(self) -> Severity {
+        match self {
+            Self::Stdout => Severity::Info,
+            Self::Stderr => Severity::Warning,
+        }
+    }
+}
+
+#[derive(Default)]
+struct Lines {
+    diagnostics: Vec<Diagnostic>,
+    /// Each stream's line not ended yet, by [`StdStream`].
+    unended: [Unended; 2],
+    /// How many writes arrived, which orders two unended lines.
+    writes: u64,
+}
+
+#[derive(Default)]
+struct Unended {
+    bytes: Vec<u8>,
+    begun_at: u64,
+}
+
+impl Lines {
+    fn write(&mut self, stream: StdStream, bytes: &[u8]) {
+        self.writes += 1;
+        let unended = &mut self.unended[stream as usize];
+        if unended.bytes.is_empty() {
+            unended.begun_at = self.writes;
+        }
+        unended.bytes.extend_from_slice(bytes);
+        let Some(last_end) = unended.bytes.iter().rposition(|&b| b == b'\n') else {
+            return;
+        };
+        let ended: Vec<u8> = unended.bytes.drain(..=last_end).collect();
+        unended.begun_at = self.writes;
+        for line in ended[..last_end].split(|&b| b == b'\n') {
+            self.emit(stream, line);
         }
     }
 
-    fn write(&self, bytes: &[u8]) {
-        let mut unended = lock(&self.unended);
-        unended.extend_from_slice(bytes);
-        while let Some(end) = unended.iter().position(|&b| b == b'\n') {
-            let line: Vec<u8> = unended.drain(..=end).collect();
-            self.emit(&line[..end]);
+    /// Ends both streams' lines, the one begun first first.
+    fn end_lines(&mut self) {
+        let mut streams = StdStream::ALL;
+        streams.sort_by_key(|&stream| self.unended[stream as usize].begun_at);
+        for stream in streams {
+            let line = std::mem::take(&mut self.unended[stream as usize].bytes);
+            self.emit(stream, &line);
         }
     }
 
-    fn end_line(&self) {
-        let line = std::mem::take(&mut *lock(&self.unended));
-        self.emit(&line);
-    }
-
-    fn emit(&self, line: &[u8]) {
+    fn emit(&mut self, stream: StdStream, line: &[u8]) {
         if line.is_empty() {
             return;
         }
-        lock(&self.diagnostics).push(Diagnostic {
-            severity: self.severity,
+        self.diagnostics.push(Diagnostic {
+            severity: stream.severity(),
             code: Code::Log,
             message: String::from_utf8_lossy(line).into_owned(),
             span: None,
         });
+    }
+}
+
+/// One stdio stream of a generator, which every handle the guest opens on it
+/// writes through.
+#[derive(Clone)]
+struct LineSink {
+    stream: StdStream,
+    lines: Arc<Mutex<Lines>>,
+}
+
+impl LineSink {
+    fn write(&self, bytes: &[u8]) {
+        lock(&self.lines).write(self.stream, bytes);
     }
 }
 
@@ -243,8 +288,8 @@ async fn instantiate(
 
     let mut builder = WasiCtx::builder();
     random::fixed_seed(&mut builder);
-    builder.stdout(stdio.stdout.clone());
-    builder.stderr(stdio.stderr.clone());
+    builder.stdout(stdio.sink(StdStream::Stdout));
+    builder.stderr(stdio.sink(StdStream::Stderr));
     let mut store = Store::new(
         engine,
         KilnHostState {
@@ -631,7 +676,7 @@ pub async fn run_generator(
     // Diagnostics are drained on both the success and the failure path, so a
     // failing generator cannot swallow the ones explaining why. Printing them
     // is the caller's job — see `FilesystemCompilerHost::run_generator`.
-    let stdio = Stdio::new();
+    let stdio = Stdio::default();
     let stdio_inner = &stdio;
     let outcome: Result<GeneratorResponse, GeneratorRunnerError> = async move {
         let (mut store, instance) = instantiate(engine, component, policy, stdio_inner).await?;
@@ -708,7 +753,7 @@ async fn run_probe(
     Result<Vec<Option<u64>>, GeneratorRunnerError>,
     Vec<Diagnostic>,
 ) {
-    let stdio = Stdio::new();
+    let stdio = Stdio::default();
     let stdio_inner = &stdio;
 
     let outcome: Result<Vec<Option<u64>>, GeneratorRunnerError> = async move {
@@ -744,6 +789,7 @@ async fn run_probe(
                 .call_async(&mut store, &args, &mut results)
                 .await
                 .map_err(|e| GeneratorRunnerError::Host(format!("probe call: {e:#}")))?;
+            stdio_inner.end_lines();
 
             let [result] = results;
             match result {
@@ -846,26 +892,52 @@ mod tests {
         }
     }
 
-    #[test]
-    fn stdio_lines_keep_the_order_written_and_the_unended_tail() {
-        let stdio = Stdio::new();
-        stdio.stdout.write(b"one\ntw");
-        stdio.stderr.write(b"warned\n\n");
-        stdio.stdout.write(b"o\nthree");
-        let lines: Vec<(Severity, String)> = stdio
+    fn lines_of(stdio: Stdio) -> Vec<(Severity, String)> {
+        stdio
             .finish()
             .into_iter()
             .map(|d| (d.severity, d.message))
-            .collect();
+            .collect()
+    }
+
+    fn info(message: &str) -> (Severity, String) {
+        (Severity::Info, message.to_string())
+    }
+
+    fn warning(message: &str) -> (Severity, String) {
+        (Severity::Warning, message.to_string())
+    }
+
+    #[test]
+    fn stdio_lines_keep_the_order_written_and_the_unended_tail() {
+        let stdio = Stdio::default();
+        let [stdout, stderr] = StdStream::ALL.map(|stream| stdio.sink(stream));
+        stdout.write(b"one\ntw");
+        stderr.write(b"warned\n\n");
+        stdout.write(b"o\nthree");
         assert_eq!(
-            lines,
-            [
-                (Severity::Info, "one".to_string()),
-                (Severity::Warning, "warned".to_string()),
-                (Severity::Info, "two".to_string()),
-                (Severity::Info, "three".to_string()),
-            ]
+            lines_of(stdio),
+            [info("one"), warning("warned"), info("two"), info("three")]
         );
+    }
+
+    #[test]
+    fn unended_lines_end_in_the_order_they_began() {
+        let stdio = Stdio::default();
+        let [stdout, stderr] = StdStream::ALL.map(|stream| stdio.sink(stream));
+        stderr.write(b"progress");
+        stdout.write(b"done");
+        assert_eq!(lines_of(stdio), [warning("progress"), info("done")]);
+    }
+
+    #[test]
+    fn an_instance_ends_its_own_lines() {
+        let stdio = Stdio::default();
+        let stdout = stdio.sink(StdStream::Stdout);
+        stdout.write(b"a: partial");
+        stdio.end_lines();
+        stdout.write(b"b: ok\n");
+        assert_eq!(lines_of(stdio), [info("a: partial"), info("b: ok")]);
     }
 
     #[test]

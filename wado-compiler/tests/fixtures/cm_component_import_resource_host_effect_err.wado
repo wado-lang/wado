@@ -1,5 +1,6 @@
 // A resource's operations require what its component's host imports map to,
-// as its interface's do: here the component reads `wasi:clocks`.
+// as its interface's do: here the component reads `wasi:clocks`. A method says
+// why, as a constructor does: the component records none of its demands.
 use { Ticks } from "./sub/wasm_import_cm_resource_clock.wat" with { type: "wat" };
 
 fn read_one() -> u32 {
@@ -12,4 +13,4 @@ export fn run() {
 }
 
 __DATA__
-{"compile_error": "missing effect 'MonotonicClock'"}
+{"compile_error": "missing effect 'MonotonicClock' required by 'read': its component carries no `org.wado-lang.demanded-imports` section"}
