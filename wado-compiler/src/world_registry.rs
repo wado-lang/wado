@@ -570,7 +570,7 @@ mod tests {
             kiln.imports_interface("KilnHost"),
             "kiln Generator imports KilnHost — expected by step-2c codegen gating"
         );
-        assert!(!kiln.imports_interface("Stdout"));
+        assert!(!kiln.imports_interface("SystemClock"));
 
         let cli = world_registry
             .get("wasi:cli/command")

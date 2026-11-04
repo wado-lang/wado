@@ -92,7 +92,6 @@ impl WasiView for KilnHostState {
 /// What a generator writes to stdout and stderr across the instances of one
 /// call. Each line becomes a diagnostic, stdout's an `Info` and stderr's a
 /// `Warning`, as a `core:log` event at those levels does.
-#[derive(Clone)]
 struct CapturedStdio {
     stdout: MemoryOutputPipe,
     stderr: MemoryOutputPipe,
@@ -599,10 +598,10 @@ pub async fn run_generator(
     // is the caller's job — see `FilesystemCompilerHost::run_generator`.
     let diagnostics_inner = diagnostics.clone();
     let stdio = CapturedStdio::new();
-    let stdio_inner = stdio.clone();
+    let stdio_inner = &stdio;
     let outcome: Result<GeneratorResponse, GeneratorRunnerError> = async move {
         let (mut store, instance) =
-            instantiate(engine, component, policy, diagnostics_inner, &stdio_inner).await?;
+            instantiate(engine, component, policy, diagnostics_inner, stdio_inner).await?;
 
         let generate = find_export(component, engine, &instance, &mut store, "generate")
             .ok_or_else(|| {
@@ -690,7 +689,7 @@ async fn run_probe(
     let diagnostics = Arc::new(Mutex::new(Vec::<GeneratorDiagnostic>::new()));
     let diagnostics_inner = diagnostics.clone();
     let stdio = CapturedStdio::new();
-    let stdio_inner = stdio.clone();
+    let stdio_inner = &stdio;
 
     let outcome: Result<Vec<Option<u64>>, GeneratorRunnerError> = async move {
         let mut extents = Vec::with_capacity(request.files.len());
@@ -700,7 +699,7 @@ async fn run_probe(
                 component,
                 policy,
                 diagnostics_inner.clone(),
-                &stdio_inner,
+                stdio_inner,
             )
             .await?;
 

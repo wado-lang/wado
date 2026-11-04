@@ -1286,7 +1286,6 @@ fn check_function_effects_sem(
     out: &mut Vec<EffectError>,
     solved: &mut EffectRows,
 ) {
-    // `#[ambient(E)]` admits `E` in the body without a `with E` clause.
     let admitted = admitted_effects(&func.name, &func.attrs, module, index, out);
     let Some(body) = &func.body else {
         return;

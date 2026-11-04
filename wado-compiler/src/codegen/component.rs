@@ -22,8 +22,8 @@ use crate::component_model::{
     cm_instance_key, cm_return_needs_outptr, emit_cm_defined, one_per_cm_name, parse_resource_func,
 };
 use crate::coverage;
-use crate::demanded_imports;
 use crate::defs::DefId;
+use crate::demanded_imports;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::kiln::import_check::KILN_TYPES_INTERFACE;
 use crate::loader::WasmAsset;

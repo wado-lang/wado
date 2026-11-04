@@ -13,9 +13,9 @@ pub const ALLOW: &str = "allow";
 pub const AMBIENT: &str = "ambient";
 pub const CANONICAL: &str = "canonical";
 pub const CM: &str = "cm";
+pub const CM_AMBIENT_IMPORTS: &str = "cm_ambient_imports";
 pub const CM_EXPORT: &str = "cm_export";
 pub const CM_HOST_IMPORTS: &str = "cm_host_imports";
-pub const CM_AMBIENT_IMPORTS: &str = "cm_ambient_imports";
 pub const CM_PARAMS: &str = "cm_params";
 pub const COMPILER_ITEM: &str = "compiler_item";
 pub const COVERAGE: &str = "coverage";
@@ -341,6 +341,14 @@ pub const ATTRIBUTES: &[AttributeSchema] = &[
         bodyless: None,
     },
     AttributeSchema {
+        name: CM_AMBIENT_IMPORTS,
+        targets: MODULE_TARGET,
+        args: AttrArgs::Strings,
+        summary: "the imports of an imported component that only its ambient code reaches",
+        stdlib_only: false,
+        bodyless: None,
+    },
+    AttributeSchema {
         name: CM_EXPORT,
         targets: &[AttrTarget::Interface],
         args: AttrArgs::OneString,
@@ -353,14 +361,6 @@ pub const ATTRIBUTES: &[AttributeSchema] = &[
         targets: MODULE_TARGET,
         args: AttrArgs::Strings,
         summary: "the host capabilities an imported component itself imports",
-        stdlib_only: false,
-        bodyless: None,
-    },
-    AttributeSchema {
-        name: CM_AMBIENT_IMPORTS,
-        targets: MODULE_TARGET,
-        args: AttrArgs::Strings,
-        summary: "the imports of an imported component that only its ambient code reaches",
         stdlib_only: false,
         bodyless: None,
     },

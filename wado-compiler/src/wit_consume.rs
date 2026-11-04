@@ -244,7 +244,10 @@ pub fn build_bindings(
     // Carry both sets on the synthesized module so the registration path
     // (`fold_component_interfaces`) recovers them from the AST alone.
     let inner_attributes = [
-        (CM_HOST_IMPORTS, host_leaf_imports.iter().collect::<Vec<_>>()),
+        (
+            CM_HOST_IMPORTS,
+            host_leaf_imports.iter().collect::<Vec<_>>(),
+        ),
         (CM_AMBIENT_IMPORTS, ambient_imports),
     ]
     .into_iter()
