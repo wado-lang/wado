@@ -9,14 +9,9 @@
 
 use { println, Stdout } from "core:cli";
 
-#[inline(never)]
-fn opaque_i(x: i32) -> i32 {
-    return x;
-}
-
 export fn run() with Stdout {
-    let denom = opaque_i(0);
-    let num = opaque_i(100);
+    let denom = builtin::black_box(0);
+    let num = builtin::black_box(100);
 
     // Division guard: must NOT become a `select` — that would trap
     // when denom == 0.
@@ -41,5 +36,8 @@ export fn run() with Stdout {
 __DATA__
 {
     "stdout": "0 0\n",
-    "wir_not_expect:O2": ["select i32(denom != 0, "]
+    "wir_not_expect:O2": ["select i32(denom != 0, "],
+    "wir_contrast": {"O2": [
+        {"        num / denom;": "        num + denom;", "        num % denom;": "        num - denom;"}
+    ]}
 }

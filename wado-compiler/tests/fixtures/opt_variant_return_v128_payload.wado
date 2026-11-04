@@ -40,5 +40,8 @@ export fn run() {
 __DATA__
 {
     "stdout": "",
-    "wir_expect:O2": ["/make\" = fn(i32) -> ref \"core:prelude/types.wado//Option<v128>\""]
+    "wir_expect:O2": ["/make\" = fn(i32) -> ref \"core:prelude/types.wado//Option<v128>\""],
+    "wir_contrast": {"O2": [
+        {"fn make(n: i32) -> Option<i32x4> {": "fn make(n: i32) -> Option<i32> {", "    return Option::<i32x4>::Some(i32x4::splat(n));": "    return Option::<i32>::Some(n);", "        return v.extract_lane(0);": "        return v;"}
+    ]}
 }

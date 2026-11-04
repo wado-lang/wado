@@ -5,9 +5,9 @@
 // multi-value-return signature an unwrapped `ref Pair` and produce invalid
 // Wasm.
 //
-// This fixture documents that the labelled-block return is never classified
-// (no `[i32, i32]` signature emitted at the call site) regardless of whether
-// the inner break carries a literal or a call result. The functional
+// This fixture documents that the labelled-block return breaking with an
+// opaque call result is not classified (no `[i32, i32]` signature emitted at
+// the call site), where one breaking with a literal is. The functional
 // behaviour is unchanged — `make_pair_break` still returns a `Pair` via the
 // heap-struct ABI.
 
@@ -25,7 +25,7 @@ fn make_pair_call(a: i32, b: i32) -> Pair {
 fn make_pair_break(cond: bool) -> Pair {
     return mk: {
         if cond {
-            break mk: make_pair_call(1, 2);
+            break mk: make_pair_call(builtin::black_box(1), 2);
         }
         Pair { a: 3, b: 4 }
     };
@@ -38,12 +38,15 @@ fn use_pair_break(cond: bool) -> i32 {
 }
 
 export fn run() {
-    assert use_pair_break(true) == 3;
-    assert use_pair_break(false) == 7;
+    assert use_pair_break(builtin::black_box(true)) == 3;
+    assert use_pair_break(builtin::black_box(false)) == 7;
 }
 
 __DATA__
 {
     "stdout": "",
-    "wir_not_expect:O2": ["make_pair_break\" = fn(bool) -> [i32, i32]"]
+    "wir_not_expect:O2": ["make_pair_break\" = fn(bool) -> [i32, i32]"],
+    "wir_contrast": {"O2": [
+        {"break mk: make_pair_call(builtin::black_box(1), 2);": "break mk: Pair { a: 1, b: 2 };"}
+    ]}
 }
