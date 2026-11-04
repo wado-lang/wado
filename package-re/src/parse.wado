@@ -79,7 +79,15 @@ struct Parser {
     blocked: bool,
 }
 
-internal fn is_syntax_char(c: char) -> bool {
+/// Whether `c` takes a `\` to stand for itself outside a class, which is
+/// also what an identity escape may escape: a SyntaxCharacter, or in `rex`
+/// whitespace and `#`.
+internal fn needs_escape(c: char, syntax: Syntax) -> bool {
+    return is_syntax_char(c)
+        || syntax == Syntax::Extended && (c == '#' || contains(BinaryProperty::PatternWhiteSpace, c));
+}
+
+fn is_syntax_char(c: char) -> bool {
     return match c {
         '^' | '$' | '\\' | '.' | '*' | '+' | '?' | '(' | ')' | '[' | ']' | '{' | '}' | '|' => true,
         _ => false,
@@ -571,9 +579,7 @@ impl Parser {
             'u' => self.unicode_escape(start),
             '/' => Ok('/' as u32),
             _ => {
-                let rex_literal = self.syntax == Syntax::Extended
-                    && (c == '#' || contains(BinaryProperty::PatternWhiteSpace, c));
-                if is_syntax_char(c) || rex_literal {
+                if needs_escape(c, self.syntax) {
                     return Ok(c as u32);
                 }
                 Err(self.error_at(start, `\`\\${c}\` is not an escape in Unicode mode`));

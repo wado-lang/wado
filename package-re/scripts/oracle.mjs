@@ -8,6 +8,7 @@
 // Run from the repository root: mise run oracle-re
 
 import { readFileSync, writeFileSync } from "node:fs";
+import { wadoLiteral as literal } from "./wado-literal.mjs";
 
 const root = new URL("..", import.meta.url);
 const cases = JSON.parse(readFileSync(new URL("tests/oracle/cases.json", root), "utf8"));
@@ -43,21 +44,6 @@ function spans(pattern, text) {
     found.push(m.indices.map((span) => (span ? `${bytes(text, span[0])}..${bytes(text, span[1])}` : "-")).join(","));
   }
   return found.join(" ");
-}
-
-function literal(text) {
-  let out = '"';
-  for (const c of text) {
-    const code = c.codePointAt(0);
-    if (c === '"' || c === "\\") {
-      out += `\\${c}`;
-    } else if (code >= 0x20 && code < 0x7f) {
-      out += c;
-    } else {
-      out += `\\u{${code.toString(16).toUpperCase()}}`;
-    }
-  }
-  return `${out}"`;
 }
 
 const lines = [

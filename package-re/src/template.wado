@@ -1,8 +1,7 @@
 //! The tags `re` and `rex`, and what a hole may hold.
 
-use { BinaryProperty, contains } from "core:icu";
 use { Flag, Modified, Node } from "./ast.wado";
-use { Hole, Syntax, is_syntax_char } from "./parse.wado";
+use { Hole, Syntax, needs_escape } from "./parse.wado";
 use { Regex, build } from "./regex.wado";
 
 /// What a hole holds: text, matched as it is, or a pattern.
@@ -81,8 +80,7 @@ impl Template {
     }
 
     fn escape(&mut self, c: char) {
-        let trivia = self.syntax == Syntax::Extended && (c == '#' || contains(BinaryProperty::PatternWhiteSpace, c));
-        if is_syntax_char(c) || trivia {
+        if needs_escape(c, self.syntax) {
             self.source.push('\\');
         }
         self.source.push(c);
