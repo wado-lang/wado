@@ -160,7 +160,7 @@ fn "list_of_unit.wado/run"() with Stdout {
     let count: i32;
     let $cm_pair_7: i64;
     let new_repr: ref Array<u8>;
-    let $sroa_$iter_4_index_128: i32;
+    let $sroa_$iter_4_index_127: i32;
     units = struct.new "core:prelude//List<()>" { repr: array.new_fixed<()>(), used: 0 };
     if @unlikely(0 >= builtin::array_len(units.repr)) {
         cold_path;
@@ -177,12 +177,12 @@ fn "list_of_unit.wado/run"() with Stdout {
     builtin::array_set<()>($load_1, 1, nop);
     builtin::array_get_value<()>($load_1, 0);
     count = 0;
-    $sroa_$iter_4_index_128 = 0;
+    $sroa_$iter_4_index_127 = 0;
     b2: block {
         l3: loop {
-            break_if b2 $sroa_$iter_4_index_128 >= 2;
-            builtin::array_get_value<()>($load_1, $sroa_$iter_4_index_128);
-            $sroa_$iter_4_index_128 = $sroa_$iter_4_index_128 + 1;
+            break_if b2 $sroa_$iter_4_index_127 >= 2;
+            builtin::array_get_value<()>($load_1, $sroa_$iter_4_index_127);
+            $sroa_$iter_4_index_127 = $sroa_$iter_4_index_127 + 1;
             count = count + 1;
             continue l3;
         };
@@ -207,12 +207,12 @@ fn "list_of_unit.wado/run"() with Stdout {
     builtin::array_copy<()>(units.repr, units.used, $load_1, 0, 4);
     units.used = 8;
     count = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
-    $sroa_$iter_4_index_128 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
+    $sroa_$iter_4_index_127 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
     count = "list_of_unit.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(count);
     builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>(3)), 0, global:list_of_unit.wado::$const_obj_0, 0, 2);
     builtin::array_set_u8(new_repr, 2, 10);
-    "core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]$dae[return]"($sroa_$iter_4_index_128, new_repr);
-    "wasi/stream-drop-writable"($sroa_$iter_4_index_128);
+    "core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]$dae[return]"($sroa_$iter_4_index_127, new_repr);
+    "wasi/stream-drop-writable"($sroa_$iter_4_index_127);
     "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(count);
 }
 

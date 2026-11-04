@@ -162,52 +162,52 @@ fn "opt_sroa_intraprocedural.wado/mutable_field_write"(seed) {
 }
 
 fn "opt_sroa_intraprocedural.wado/whole_write_reads_self"(n) {
-    let $sroa_p_x_15: i32;
-    let $sroa_p_y_16: i32;
-    let $sroa_$iter_0_start_19: i32;
-    let $sroa_next_22: i32;
-    $sroa_p_x_15 = n;
-    $sroa_p_y_16 = 1;
-    $sroa_$iter_0_start_19 = 0;
+    let $sroa_p_x_12: i32;
+    let $sroa_p_y_13: i32;
+    let $sroa_$iter_0_start_16: i32;
+    let $sroa_next_19: i32;
+    $sroa_p_x_12 = n;
+    $sroa_p_y_13 = 1;
+    $sroa_$iter_0_start_16 = 0;
     b0: block {
         l1: loop {
-            break_if b0 $sroa_$iter_0_start_19 >= n;
-            $sroa_$iter_0_start_19 = $sroa_$iter_0_start_19 + 1;
-            $sroa_next_22 = $sroa_p_x_15 + $sroa_p_y_16;
-            $sroa_p_x_15 = $sroa_p_y_16;
-            $sroa_p_y_16 = $sroa_next_22;
+            break_if b0 $sroa_$iter_0_start_16 >= n;
+            $sroa_$iter_0_start_16 = $sroa_$iter_0_start_16 + 1;
+            $sroa_next_19 = $sroa_p_x_12 + $sroa_p_y_13;
+            $sroa_p_x_12 = $sroa_p_y_13;
+            $sroa_p_y_13 = $sroa_next_19;
             continue l1;
         };
     };
-    return $sroa_p_x_15;
+    return $sroa_p_x_12;
 }
 
 fn "opt_sroa_intraprocedural.wado/whole_write_continues"(n) {
     let current: i32;
-    let $sroa_p_x_20: i32;
-    let $sroa_p_y_21: i32;
-    let $sroa_$iter_0_start_24: i32;
-    let $sroa_next_26: i32;
-    let $licm_arith_28: i32;
-    $sroa_p_x_20 = 0;
-    $sroa_p_y_21 = 0;
-    $sroa_$iter_0_start_24 = 0;
-    $licm_arith_28 = n - 1;
+    let $sroa_p_x_14: i32;
+    let $sroa_p_y_15: i32;
+    let $sroa_$iter_0_start_18: i32;
+    let $sroa_next_20: i32;
+    let $licm_arith_22: i32;
+    $sroa_p_x_14 = 0;
+    $sroa_p_y_15 = 0;
+    $sroa_$iter_0_start_18 = 0;
+    $licm_arith_22 = n - 1;
     b2: block {
         l3: loop {
-            break_if b2 $sroa_$iter_0_start_24 >= n;
-            $sroa_$iter_0_start_24 = local.tee current($sroa_$iter_0_start_24) + 1;
-            $sroa_next_26 = current + 10;
-            $sroa_p_y_21 = (if current == $licm_arith_28 -> i32 {
+            break_if b2 $sroa_$iter_0_start_18 >= n;
+            $sroa_$iter_0_start_18 = local.tee current($sroa_$iter_0_start_18) + 1;
+            $sroa_next_20 = current + 10;
+            $sroa_p_y_15 = (if current == $licm_arith_22 -> i32 {
                 continue l3;
             } else {
                 current;
             });
-            $sroa_p_x_20 = $sroa_next_26;
+            $sroa_p_x_14 = $sroa_next_20;
             continue l3;
         };
     };
-    return ($sroa_p_x_20 * 100) + $sroa_p_y_21;
+    return ($sroa_p_x_14 * 100) + $sroa_p_y_15;
 }
 
 fn "opt_sroa_intraprocedural.wado/run"() {

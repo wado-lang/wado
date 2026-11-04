@@ -1350,6 +1350,7 @@ fn "spec_control_flow_errors.wado/$test_3"() {
     let e_1: ref null "core:fs//FsError";
     let e_2: ref null "core:prelude/intparse.wado//ParseIntError";
     let $qm_e_10: ref "spec_control_flow_errors.wado//ConfigError";
+    let $qm_v_12: ref "spec_control_flow_errors.wado//Config";
     let $rebox_9: ref "tuple//[i32, core:prelude/types.wado/Option<core:prelude/string.wado/String>, core:prelude/types.wado/Option<core:fs/FsError>]";
     let self_18: ref "core:prelude/types.wado//Result<core:prelude/string.wado/String,core:fs/FsError>";
     let $qm_e_26: ref "core:prelude/intparse.wado//ParseIntError";
@@ -1358,50 +1359,49 @@ fn "spec_control_flow_errors.wado/$test_3"() {
     let $vc_payload_3: ref "wasi:filesystem/types.wado//ErrorCode";
     let message_280: ref "core:prelude/string.wado//String";
     let start_296: i32;
-    let $qm_v_332: ref "spec_control_flow_errors.wado//Config";
-    let $sroa_slot_339: ref null "spec_control_flow_errors.wado//Config";
+    let $sroa_slot_332: ref null "spec_control_flow_errors.wado//Config";
+    let e_354: ref "core:prelude/string.wado//Utf8Error";
     let prefix: i32;
-    let out_381: ref Array<u8>;
-    let $e_34: ref "core:prelude/string.wado//Utf8Error";
-    let $sroa_slot_396: ref null "core:prelude/string.wado//String";
-    let $sroa_slot_397: ref null "spec_control_flow_errors.wado//ConfigError";
-    let $sroa_slice_repr_398: ref Array<u8>;
-    let path_452: ref "core:prelude/string.wado//String";
-    let $qm_e_454: ref "core:fs//FsError";
+    let out_374: ref Array<u8>;
+    let $sroa_slot_382: ref null "core:prelude/string.wado//String";
+    let $sroa_slot_383: ref null "spec_control_flow_errors.wado//ConfigError";
+    let $sroa_slice_repr_384: ref Array<u8>;
+    let path_438: ref "core:prelude/string.wado//String";
+    let $qm_e_440: ref "core:fs//FsError";
     let stream: ref null "core:prelude//$Resource";
-    let done_456: ref null "core:prelude//$Resource";
-    let bytes_458: ref "core:prelude//List<u8>";
+    let done_442: ref null "core:prelude//$Resource";
+    let bytes_444: ref "core:prelude//List<u8>";
     let $drop_spill_14: ref "tuple//[i32, core:prelude/types.wado/Option<core:prelude/list.wado/List<u8>>, core:prelude/types.wado/Option<core:fs/FsError>]";
     let $local_15: ref null "tuple//[core:prelude/types.wado/Stream<u8>, core:prelude/types.wado/Future<core:prelude/types.wado/Result<(),wasi:filesystem/types.wado/ErrorCode>>, i32]";
     let $vr_17: ref null "tuple//[i32, core:prelude/types.wado/Option<[core:prelude/types.wado/Stream<u8>,core:prelude/types.wado/Future<core:prelude/types.wado/Result<(),wasi:filesystem/types.wado/ErrorCode>>,i32]>, core:prelude/types.wado/Option<core:fs/FsError>]";
     let finished: ref "core:prelude/types.wado//Option<core:prelude/types.wado/Result<(),wasi:filesystem/types.wado/ErrorCode>>";
-    let e_473: ref null "wasi:filesystem/types.wado//ErrorCode";
+    let e_459: ref null "wasi:filesystem/types.wado//ErrorCode";
     let $local_7: ref null "wasi:filesystem/types.wado//ErrorCode";
     let kind: ref "core:fs//FsErrorKind";
     $inline_read_config_sroa_return__0: block {
         $rebox_9 = $inline_core_fs_read_to_string_core_prelude_string_wado_String__sroa_return__0: block -> ref "tuple//[i32, core:prelude/types.wado/Option<core:prelude/string.wado/String>, core:prelude/types.wado/Option<core:fs/FsError>]" {
-            bytes_458 = (if local.tee $match_scrut_0(local.tee $drop_spill_14($inline_core_fs_read_core_prelude_string_wado_String__sroa_return__0: block -> ref "tuple//[i32, core:prelude/types.wado/Option<core:prelude/list.wado/List<u8>>, core:prelude/types.wado/Option<core:fs/FsError>]" {
-                $vr_17 = "core:fs/core:fs/open_read<core:prelude/string.wado/String>$sroa[return]"(local.tee path_452(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("missing.toml"), used: 12 }));
+            bytes_444 = (if local.tee $match_scrut_0(local.tee $drop_spill_14($inline_core_fs_read_core_prelude_string_wado_String__sroa_return__0: block -> ref "tuple//[i32, core:prelude/types.wado/Option<core:prelude/list.wado/List<u8>>, core:prelude/types.wado/Option<core:fs/FsError>]" {
+                $vr_17 = "core:fs/core:fs/open_read<core:prelude/string.wado/String>$sroa[return]"(local.tee path_438(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("missing.toml"), used: 12 }));
                 let $match_scrut_0: i32;
                 stream = local.tee $local_15((if local.tee $match_scrut_0($vr_17.0) == 0 -> ref null "tuple//[core:prelude/types.wado/Stream<u8>, core:prelude/types.wado/Future<core:prelude/types.wado/Result<(),wasi:filesystem/types.wado/ErrorCode>>, i32]" {
                     ref.as_non_null(ref.cast "core:prelude/types.wado//Option<[core:prelude/types.wado/Stream<u8>,core:prelude/types.wado/Future<core:prelude/types.wado/Result<(),wasi:filesystem/types.wado/ErrorCode>>,i32]>::Some"($vr_17.1).payload_0);
                 } else if @unlikely($match_scrut_0 == 1) -> ref null "tuple//[core:prelude/types.wado/Stream<u8>, core:prelude/types.wado/Future<core:prelude/types.wado/Result<(),wasi:filesystem/types.wado/ErrorCode>>, i32]" {
                     cold_path;
-                    $qm_e_454 = ref.as_non_null($vr_17.2);
+                    $qm_e_440 = ref.as_non_null($vr_17.2);
                     cold_path;
-                    break $inline_core_fs_read_core_prelude_string_wado_String__sroa_return__0: struct.new "tuple//[i32, core:prelude/types.wado/Option<core:prelude/list.wado/List<u8>>, core:prelude/types.wado/Option<core:fs/FsError>]" { 0: 1, 1: ref.null none, 2: $qm_e_454 };
+                    break $inline_core_fs_read_core_prelude_string_wado_String__sroa_return__0: struct.new "tuple//[i32, core:prelude/types.wado/Option<core:prelude/list.wado/List<u8>>, core:prelude/types.wado/Option<core:fs/FsError>]" { 0: 1, 1: ref.null none, 2: $qm_e_440 };
                 } else {
                     unreachable;
                 })).0;
-                done_456 = $local_15.1;
-                bytes_458 = "core:prelude/types.wado/core:prelude/types.wado/Stream<u8>::read_to_end_sized"(stream, $local_15.2);
+                done_442 = $local_15.1;
+                bytes_444 = "core:prelude/types.wado/core:prelude/types.wado/Stream<u8>::read_to_end_sized"(stream, $local_15.2);
                 "wasi/stream-drop-readable"(stream.value);
                 $inline_core_fs_read_core_prelude_string_wado_String__sroa_return__0__$thread_$inline_core_fs_finish_core_prelude_string_wado_String__0: block {
-                    stream = done_456;
-                    done_456 = ref.null none;
+                    stream = done_442;
+                    done_442 = ref.null none;
                     if @unlikely((if ref.test "core:prelude/types.wado//Option<core:prelude/types.wado/Result<(),wasi:filesystem/types.wado/ErrorCode>>::Some"(local.tee finished("spec_control_flow_errors.wado/$cm_future_read_core:prelude/types.wado/Result<(),wasi:filesystem/types.wado/ErrorCode>"(stream.value))) -> i32 {
                         if ref.is_null(local.tee $local_7(ref.cast "core:prelude/types.wado//Option<core:prelude/types.wado/Result<(),wasi:filesystem/types.wado/ErrorCode>>::Some"(finished).payload_0)) == 0 -> i32 {
-                            e_473 = "spec_control_flow_errors.wado/$value_copy$wasi:filesystem/types.wado/ErrorCode"(ref.as_non_null($local_7));
+                            e_459 = "spec_control_flow_errors.wado/$value_copy$wasi:filesystem/types.wado/ErrorCode"(ref.as_non_null($local_7));
                             1;
                         } else {
                             0;
@@ -1410,54 +1410,54 @@ fn "spec_control_flow_errors.wado/$test_3"() {
                         0;
                     })) {
                         cold_path;
-                        kind = (if e_473.discriminant == 19 -> ref "core:fs//FsErrorKind" {
+                        kind = (if e_459.discriminant == 19 -> ref "core:fs//FsErrorKind" {
                             global:core:builtin::$unit_case$core:fs//FsErrorKind$1;
                         } else {
-                            struct.new "core:fs//FsErrorKind::Io" { discriminant: 3, payload_0: ref.as_non_null(e_473) };
+                            struct.new "core:fs//FsErrorKind::Io" { discriminant: 3, payload_0: ref.as_non_null(e_459) };
                         });
-                        $qm_e_454 = struct.new "core:fs//FsError" { path: path_452, kind: kind };
+                        $qm_e_440 = struct.new "core:fs//FsError" { path: path_438, kind: kind };
                         cold_path;
-                        break $inline_core_fs_read_core_prelude_string_wado_String__sroa_return__0: struct.new "tuple//[i32, core:prelude/types.wado/Option<core:prelude/list.wado/List<u8>>, core:prelude/types.wado/Option<core:fs/FsError>]" { 0: 1, 1: ref.null none, 2: $qm_e_454 };
+                        break $inline_core_fs_read_core_prelude_string_wado_String__sroa_return__0: struct.new "tuple//[i32, core:prelude/types.wado/Option<core:prelude/list.wado/List<u8>>, core:prelude/types.wado/Option<core:fs/FsError>]" { 0: 1, 1: ref.null none, 2: $qm_e_440 };
                     } else {
                     }
                     break $inline_core_fs_read_core_prelude_string_wado_String__sroa_return__0__$thread_$inline_core_fs_finish_core_prelude_string_wado_String__0;
                 };
-                $drop_spill_14 = struct.new "tuple//[i32, core:prelude/types.wado/Option<core:prelude/list.wado/List<u8>>, core:prelude/types.wado/Option<core:fs/FsError>]" { 0: 0, 1: bytes_458, 2: ref.null none };
-                if ref.is_null(done_456) == 0 {
-                    "wasi/future-drop-readable:transmission-wasi:filesystem/types.wado#ErrorCode"(done_456.value);
+                $drop_spill_14 = struct.new "tuple//[i32, core:prelude/types.wado/Option<core:prelude/list.wado/List<u8>>, core:prelude/types.wado/Option<core:fs/FsError>]" { 0: 0, 1: bytes_444, 2: ref.null none };
+                if ref.is_null(done_442) == 0 {
+                    "wasi/future-drop-readable:transmission-wasi:filesystem/types.wado#ErrorCode"(done_442.value);
                 }
                 break $inline_core_fs_read_core_prelude_string_wado_String__sroa_return__0: $drop_spill_14;
             }).0) == 0 -> ref "core:prelude//List<u8>" {
                 ref.as_non_null($drop_spill_14.1);
             } else if @unlikely($match_scrut_0 == 1) -> ref "core:prelude//List<u8>" {
                 cold_path;
-                $qm_e_454 = ref.as_non_null($drop_spill_14.2);
+                $qm_e_440 = ref.as_non_null($drop_spill_14.2);
                 cold_path;
-                break $inline_core_fs_read_to_string_core_prelude_string_wado_String__sroa_return__0: struct.new "tuple//[i32, core:prelude/types.wado/Option<core:prelude/string.wado/String>, core:prelude/types.wado/Option<core:fs/FsError>]" { 0: 1, 1: ref.null none, 2: $qm_e_454 };
+                break $inline_core_fs_read_to_string_core_prelude_string_wado_String__sroa_return__0: struct.new "tuple//[i32, core:prelude/types.wado/Option<core:prelude/string.wado/String>, core:prelude/types.wado/Option<core:fs/FsError>]" { 0: 1, 1: ref.null none, 2: $qm_e_440 };
             } else {
                 unreachable;
             });
             $inline_core_fs_read_to_string_core_prelude_string_wado_String__sroa_return__0__$fused_$inline_core_prelude_string_wado_String__try_from_utf8_core_prelude_bytes_wado_ByteList__sroa_return__1: block -> ref "tuple//[i32, core:prelude/types.wado/Option<core:prelude/string.wado/String>, core:prelude/types.wado/Option<core:fs/FsError>]" {
-                $match_scrut_0 = bytes_458.used;
-                $sroa_slice_repr_398 = bytes_458.repr;
+                $match_scrut_0 = bytes_444.used;
+                $sroa_slice_repr_384 = bytes_444.repr;
                 if @unlikely(local.tee prefix(block -> i32 {
-                    "core:prelude/string.wado/core:prelude/string.wado/String::utf8_valid_prefix$spec0"($sroa_slice_repr_398, $match_scrut_0);
+                    "core:prelude/string.wado/core:prelude/string.wado/String::utf8_valid_prefix$spec0"($sroa_slice_repr_384, $match_scrut_0);
                 }) != $match_scrut_0) {
                     cold_path;
-                    $e_34 = block -> ref "core:prelude/string.wado//Utf8Error" {
+                    e_354 = block -> ref "core:prelude/string.wado//Utf8Error" {
                         if @unlikely(prefix == $match_scrut_0) {
                             cold_path;
                             "core:prelude/string.wado/core:prelude/string.wado/String::try_from_utf8<core:prelude/bytes.wado/ByteList>$cold0$dae[bytes]"(prefix, $match_scrut_0);
                             unreachable;
                         }
-                        "core:prelude/string.wado/core:prelude/string.wado/String::utf8_error_at$unchecked"($sroa_slice_repr_398, 0, $match_scrut_0, prefix);
+                        "core:prelude/string.wado/core:prelude/string.wado/String::utf8_error_at$unchecked"($sroa_slice_repr_384, 0, $match_scrut_0, prefix);
                     };
-                    break $inline_core_fs_read_to_string_core_prelude_string_wado_String__sroa_return__0__$fused_$inline_core_prelude_string_wado_String__try_from_utf8_core_prelude_bytes_wado_ByteList__sroa_return__1: struct.new "tuple//[i32, core:prelude/types.wado/Option<core:prelude/string.wado/String>, core:prelude/types.wado/Option<core:fs/FsError>]" { 0: 1, 1: ref.null none, 2: struct.new "core:fs//FsError" { path: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("missing.toml"), used: 12 }, kind: struct.new "core:fs//FsErrorKind::NotUtf8" { discriminant: 2, payload_0: $e_34 } } };
+                    break $inline_core_fs_read_to_string_core_prelude_string_wado_String__sroa_return__0__$fused_$inline_core_prelude_string_wado_String__try_from_utf8_core_prelude_bytes_wado_ByteList__sroa_return__1: struct.new "tuple//[i32, core:prelude/types.wado/Option<core:prelude/string.wado/String>, core:prelude/types.wado/Option<core:fs/FsError>]" { 0: 1, 1: ref.null none, 2: struct.new "core:fs//FsError" { path: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("missing.toml"), used: 12 }, kind: struct.new "core:fs//FsErrorKind::NotUtf8" { discriminant: 2, payload_0: e_354 } } };
                 }
-                path_452 = struct.new "core:prelude/string.wado//String" { repr: out_381 = builtin::array_new<u8>(select i32($match_scrut_0 > 0, $match_scrut_0, 0)); if $match_scrut_0 > 0 {
-                    builtin::array_copy<u8>(out_381, 0, $sroa_slice_repr_398, 0, $match_scrut_0);
-                }; out_381, used: $match_scrut_0 };
-                break $inline_core_fs_read_to_string_core_prelude_string_wado_String__sroa_return__0__$fused_$inline_core_prelude_string_wado_String__try_from_utf8_core_prelude_bytes_wado_ByteList__sroa_return__1: struct.new "tuple//[i32, core:prelude/types.wado/Option<core:prelude/string.wado/String>, core:prelude/types.wado/Option<core:fs/FsError>]" { 0: 0, 1: path_452, 2: ref.null none };
+                path_438 = struct.new "core:prelude/string.wado//String" { repr: out_374 = builtin::array_new<u8>(select i32($match_scrut_0 > 0, $match_scrut_0, 0)); if $match_scrut_0 > 0 {
+                    builtin::array_copy<u8>(out_374, 0, $sroa_slice_repr_384, 0, $match_scrut_0);
+                }; out_374, used: $match_scrut_0 };
+                break $inline_core_fs_read_to_string_core_prelude_string_wado_String__sroa_return__0__$fused_$inline_core_prelude_string_wado_String__try_from_utf8_core_prelude_bytes_wado_ByteList__sroa_return__1: struct.new "tuple//[i32, core:prelude/types.wado/Option<core:prelude/string.wado/String>, core:prelude/types.wado/Option<core:fs/FsError>]" { 0: 0, 1: path_438, 2: ref.null none };
             };
             break $inline_core_fs_read_to_string_core_prelude_string_wado_String__sroa_return__0;
         };
@@ -1466,31 +1466,31 @@ fn "spec_control_flow_errors.wado/$test_3"() {
         } else {
             struct.new "core:prelude/types.wado//Result<core:prelude/string.wado/String,core:fs/FsError>::Err" { discriminant: 1, payload_0: ref.as_non_null($rebox_9.2) };
         }))) {
-            path_452 = ref.cast "core:prelude/types.wado//Result<core:prelude/string.wado/String,core:fs/FsError>::Ok"(self_18).payload_0;
+            path_438 = ref.cast "core:prelude/types.wado//Result<core:prelude/string.wado/String,core:fs/FsError>::Ok"(self_18).payload_0;
             $match_scrut_0 = 0;
-            $sroa_slot_396 = path_452;
-            $sroa_slot_397 = ref.null none;
+            $sroa_slot_382 = path_438;
+            $sroa_slot_383 = ref.null none;
         } else {
-            $qm_e_454 = ref.cast "core:prelude/types.wado//Result<core:prelude/string.wado/String,core:fs/FsError>::Err"(self_18).payload_0;
+            $qm_e_440 = ref.cast "core:prelude/types.wado//Result<core:prelude/string.wado/String,core:fs/FsError>::Err"(self_18).payload_0;
             $match_scrut_0 = 1;
-            $sroa_slot_396 = ref.null none;
-            $sroa_slot_397 = struct.new "spec_control_flow_errors.wado//ConfigError::Io" { discriminant: 0, payload_0: $qm_e_454 };
+            $sroa_slot_382 = ref.null none;
+            $sroa_slot_383 = struct.new "spec_control_flow_errors.wado//ConfigError::Io" { discriminant: 0, payload_0: $qm_e_440 };
         }
-        $qm_v_332 = struct.new "spec_control_flow_errors.wado//Config" { port: self_29 = struct.new "core:prelude/string.wado//StrSlice" { repr: local.tee path_452((if $match_scrut_0 == 0 -> ref "core:prelude/string.wado//String" {
-            ref.as_non_null($sroa_slot_396);
+        $qm_v_12 = struct.new "spec_control_flow_errors.wado//Config" { port: self_29 = struct.new "core:prelude/string.wado//StrSlice" { repr: local.tee path_438((if $match_scrut_0 == 0 -> ref "core:prelude/string.wado//String" {
+            ref.as_non_null($sroa_slot_382);
         } else if @unlikely($match_scrut_0 == 1) -> ref "core:prelude/string.wado//String" {
             cold_path;
-            $qm_e_10 = ref.as_non_null($sroa_slot_397);
+            $qm_e_10 = ref.as_non_null($sroa_slot_383);
             cold_path;
             $match_scrut_0 = 1;
-            $sroa_slot_339 = ref.null none;
-            break $inline_read_config_sroa_return__0: $sroa_slot_397 = $qm_e_10;
+            $sroa_slot_332 = ref.null none;
+            break $inline_read_config_sroa_return__0: $sroa_slot_383 = $qm_e_10;
         } else {
             unreachable;
-        })).repr, start: 0, end: path_452.used }; let $mv$$vr_3$2: ref null "core:prelude/intparse.wado//ParseIntError"; multivalue_bind [$match_scrut_0, prefix, $mv$$vr_3$2] = "core:prelude/primitive.wado/i32^core:prelude/traits.wado/FromStr::from_str<core:prelude/string.wado/StrSlice>$sroa[return]"(block -> ref "core:prelude/string.wado//StrSlice" {
-            multivalue_bind [$sroa_slice_repr_398, $match_scrut_0, prefix] = "core:prelude/string.wado/core:prelude/string.wado/StrSlice::trim_start"(self_29.repr, 0, self_29.end);
-            multivalue_bind [$sroa_slice_repr_398, $match_scrut_0, prefix] = "core:prelude/string.wado/core:prelude/string.wado/StrSlice::trim_end"($sroa_slice_repr_398, $match_scrut_0, prefix);
-            struct.new "core:prelude/string.wado//StrSlice" { repr: $sroa_slice_repr_398, start: $match_scrut_0, end: prefix };
+        })).repr, start: 0, end: path_438.used }; let $mv$$vr_3$2: ref null "core:prelude/intparse.wado//ParseIntError"; multivalue_bind [$match_scrut_0, prefix, $mv$$vr_3$2] = "core:prelude/primitive.wado/i32^core:prelude/traits.wado/FromStr::from_str<core:prelude/string.wado/StrSlice>$sroa[return]"(block -> ref "core:prelude/string.wado//StrSlice" {
+            multivalue_bind [$sroa_slice_repr_384, $match_scrut_0, prefix] = "core:prelude/string.wado/core:prelude/string.wado/StrSlice::trim_start"(self_29.repr, 0, self_29.end);
+            multivalue_bind [$sroa_slice_repr_384, $match_scrut_0, prefix] = "core:prelude/string.wado/core:prelude/string.wado/StrSlice::trim_end"($sroa_slice_repr_384, $match_scrut_0, prefix);
+            struct.new "core:prelude/string.wado//StrSlice" { repr: $sroa_slice_repr_384, start: $match_scrut_0, end: prefix };
         }); (if $match_scrut_0 == 0 -> i32 {
             prefix;
         } else if @unlikely($match_scrut_0 == 1) -> i32 {
@@ -1499,39 +1499,39 @@ fn "spec_control_flow_errors.wado/$test_3"() {
             cold_path;
             cold_path;
             $match_scrut_0 = 1;
-            $sroa_slot_339 = ref.null none;
-            break $inline_read_config_sroa_return__0: $sroa_slot_397 = struct.new "spec_control_flow_errors.wado//ConfigError::Parse" { discriminant: 1, payload_0: $qm_e_26 };
+            $sroa_slot_332 = ref.null none;
+            break $inline_read_config_sroa_return__0: $sroa_slot_383 = struct.new "spec_control_flow_errors.wado//ConfigError::Parse" { discriminant: 1, payload_0: $qm_e_26 };
         } else {
             unreachable;
         }) };
         $match_scrut_0 = 0;
-        $sroa_slot_339 = $qm_v_332;
-        $sroa_slot_397 = ref.null none;
+        $sroa_slot_332 = $qm_v_12;
+        $sroa_slot_383 = ref.null none;
         break $inline_read_config_sroa_return__0;
     };
-    $sroa_slice_repr_398 = local.tee path_452((if $match_scrut_0 == 0 -> ref "core:prelude/string.wado//String" {
-        $match_scrut_0 = $sroa_slot_339.port;
-        path_452 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
-        $sroa_slice_repr_398 = global:spec_control_flow_errors.wado::$const_obj_3;
-        path_452.used = 5;
-        builtin::array_copy<u8>(path_452.repr, 0, $sroa_slice_repr_398, 0, 5);
+    $sroa_slice_repr_384 = local.tee path_438((if $match_scrut_0 == 0 -> ref "core:prelude/string.wado//String" {
+        $match_scrut_0 = $sroa_slot_332.port;
+        path_438 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
+        $sroa_slice_repr_384 = global:spec_control_flow_errors.wado::$const_obj_3;
+        path_438.used = 5;
+        builtin::array_copy<u8>(path_438.repr, 0, $sroa_slice_repr_384, 0, 5);
         prefix = $match_scrut_0 < 0;
         $match_scrut_0 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x(x = builtin::i64_extend_i32_s($match_scrut_0); select i64(x < 0_i64, 0_i64 - x, x)));
-        prefix = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"(path_452, prefix, $match_scrut_0);
-        "core:prelude/primitive.wado/write_decimal_digits"(path_452.repr, prefix, x, $match_scrut_0);
+        prefix = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"(path_438, prefix, $match_scrut_0);
+        "core:prelude/primitive.wado/write_decimal_digits"(path_438.repr, prefix, x, $match_scrut_0);
         $inline_core_prelude_string_wado_String__internal_push_view_50: block {
             break $inline_core_prelude_string_wado_String__internal_push_view_50;
         };
-        path_452;
+        path_438;
     } else if (if $match_scrut_0 == 1 -> i32 {
-        if ref.test "spec_control_flow_errors.wado//ConfigError::Io"(local.tee $qm_e_10(ref.as_non_null($sroa_slot_397))) -> i32 {
-            e_1 = struct.new "core:fs//FsError" { path: struct.new "core:prelude/string.wado//String" { repr: $sroa_slice_repr_398 = local.tee path_452(local.tee $qm_e_454(ref.cast "spec_control_flow_errors.wado//ConfigError::Io"($qm_e_10).payload_0).path).repr; builtin::array_copy<u8>(local.tee out_381(builtin::array_new<u8>(local.tee prefix(path_452.used))), 0, $sroa_slice_repr_398, 0, prefix); out_381, used: prefix }, kind: (if local.tee prefix(local.tee kind($qm_e_454.kind).discriminant) == 0 -> ref "core:fs//FsErrorKind" {
+        if ref.test "spec_control_flow_errors.wado//ConfigError::Io"(local.tee $qm_e_10(ref.as_non_null($sroa_slot_383))) -> i32 {
+            e_1 = struct.new "core:fs//FsError" { path: struct.new "core:prelude/string.wado//String" { repr: $sroa_slice_repr_384 = local.tee path_438(local.tee $qm_e_440(ref.cast "spec_control_flow_errors.wado//ConfigError::Io"($qm_e_10).payload_0).path).repr; builtin::array_copy<u8>(local.tee out_374(builtin::array_new<u8>(local.tee prefix(path_438.used))), 0, $sroa_slice_repr_384, 0, prefix); out_374, used: prefix }, kind: (if local.tee prefix(local.tee kind($qm_e_440.kind).discriminant) == 0 -> ref "core:fs//FsErrorKind" {
                 kind;
             } else if prefix == 1 -> ref "core:fs//FsErrorKind" {
                 kind;
             } else if ref.test "core:fs//FsErrorKind::NotUtf8"(kind) -> ref "core:fs//FsErrorKind" {
-                $e_34 = ref.cast "core:fs//FsErrorKind::NotUtf8"(kind).payload_0;
-                struct.new "core:fs//FsErrorKind::NotUtf8" { discriminant: 2, payload_0: struct.new "core:prelude/string.wado//Utf8Error" { valid_up_to: $e_34.valid_up_to, error_len: $e_34.error_len } };
+                e_354 = ref.cast "core:fs//FsErrorKind::NotUtf8"(kind).payload_0;
+                struct.new "core:fs//FsErrorKind::NotUtf8" { discriminant: 2, payload_0: struct.new "core:prelude/string.wado//Utf8Error" { valid_up_to: e_354.valid_up_to, error_len: e_354.error_len } };
             } else {
                 $vc_payload_3 = ref.cast "core:fs//FsErrorKind::Io"(kind).payload_0;
                 struct.new "core:fs//FsErrorKind::Io" { discriminant: 3, payload_0: "spec_control_flow_errors.wado/$value_copy$wasi:filesystem/types.wado/ErrorCode"($vc_payload_3) };
@@ -1543,19 +1543,19 @@ fn "spec_control_flow_errors.wado/$test_3"() {
     } else {
         0;
     }) -> ref "core:prelude/string.wado//String" {
-        drop(ref.as_non_null($sroa_slot_397));
-        $qm_e_454 = ref.as_non_null(e_1);
-        path_452 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(29), used: 0 };
-        $sroa_slice_repr_398 = global:spec_control_flow_errors.wado::$const_obj_2;
-        path_452.used = 13;
-        builtin::array_copy<u8>(path_452.repr, 0, $sroa_slice_repr_398, 0, 13);
-        "core:fs/core:fs/FsError^core:prelude/traits.wado/Display::fmt$sroa[f.buf]"($qm_e_454.path, $qm_e_454.kind, path_452);
+        drop(ref.as_non_null($sroa_slot_383));
+        $qm_e_440 = ref.as_non_null(e_1);
+        path_438 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(29), used: 0 };
+        $sroa_slice_repr_384 = global:spec_control_flow_errors.wado::$const_obj_2;
+        path_438.used = 13;
+        builtin::array_copy<u8>(path_438.repr, 0, $sroa_slice_repr_384, 0, 13);
+        "core:fs/core:fs/FsError^core:prelude/traits.wado/Display::fmt$sroa[f.buf]"($qm_e_440.path, $qm_e_440.kind, path_438);
         $inline_core_prelude_string_wado_String__internal_push_view_93: block {
             break $inline_core_prelude_string_wado_String__internal_push_view_93;
         };
-        path_452;
+        path_438;
     } else if @likely((if $match_scrut_0 == 1 -> i32 {
-        if ref.test "spec_control_flow_errors.wado//ConfigError::Parse"(local.tee $qm_e_10(ref.as_non_null($sroa_slot_397))) -> i32 {
+        if ref.test "spec_control_flow_errors.wado//ConfigError::Parse"(local.tee $qm_e_10(ref.as_non_null($sroa_slot_383))) -> i32 {
             e_2 = struct.new "core:prelude/intparse.wado//ParseIntError" { kind: ref.cast "spec_control_flow_errors.wado//ConfigError::Parse"($qm_e_10).payload_0.kind };
             1;
         } else {
@@ -1564,12 +1564,12 @@ fn "spec_control_flow_errors.wado/$test_3"() {
     } else {
         0;
     })) -> ref "core:prelude/string.wado//String" {
-        drop(ref.as_non_null($sroa_slot_397));
+        drop(ref.as_non_null($sroa_slot_383));
         $qm_e_26 = ref.as_non_null(e_2);
-        path_452 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(26), used: 0 };
-        $sroa_slice_repr_398 = global:spec_control_flow_errors.wado::$const_obj_1;
-        path_452.used = 10;
-        builtin::array_copy<u8>(path_452.repr, 0, $sroa_slice_repr_398, 0, 10);
+        path_438 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(26), used: 0 };
+        $sroa_slice_repr_384 = global:spec_control_flow_errors.wado::$const_obj_1;
+        path_438.used = 10;
+        builtin::array_copy<u8>(path_438.repr, 0, $sroa_slice_repr_384, 0, 10);
         message_280 = (if local.tee $match_scrut_0($qm_e_26.kind) == 0 -> ref "core:prelude/string.wado//String" {
             struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("cannot parse integer from empty string"), used: 38 };
         } else if $match_scrut_0 == 1 -> ref "core:prelude/string.wado//String" {
@@ -1583,22 +1583,22 @@ fn "spec_control_flow_errors.wado/$test_3"() {
             break_if $inline_core_prelude_string_wado_String__internal_push_string_131 local.tee $match_scrut_0(message_280.used) == 0;
             if @unlikely(local.tee prefix(10 + $match_scrut_0) > 26) {
                 cold_path;
-                "core:prelude/string.wado/core:prelude/string.wado/String::grow"(path_452, prefix);
+                "core:prelude/string.wado/core:prelude/string.wado/String::grow"(path_438, prefix);
             }
-            start_296 = path_452.used;
-            path_452.used = prefix;
-            builtin::array_copy<u8>(path_452.repr, start_296, message_280.repr, 0, $match_scrut_0);
+            start_296 = path_438.used;
+            path_438.used = prefix;
+            builtin::array_copy<u8>(path_438.repr, start_296, message_280.repr, 0, $match_scrut_0);
         };
         $inline_core_prelude_string_wado_String__internal_push_view_141: block {
             break $inline_core_prelude_string_wado_String__internal_push_view_141;
         };
-        path_452;
+        path_438;
     } else {
         unreachable;
     })).repr;
-    $match_scrut_0 = path_452.used;
+    $match_scrut_0 = path_438.used;
     if @unlikely($inline_core_prelude_string_wado_StrSlice__starts_with_core_prelude_string_wado_String__spec0_spec0_1: block -> bool {
-        out_381 = global:spec_control_flow_errors.wado::$const_obj_0;
+        out_374 = global:spec_control_flow_errors.wado::$const_obj_0;
         if 11 > $match_scrut_0 {
             break $inline_core_prelude_string_wado_StrSlice__starts_with_core_prelude_string_wado_String__spec0_spec0_1: 0;
         }
@@ -1607,19 +1607,19 @@ fn "spec_control_flow_errors.wado/$test_3"() {
             b37: block {
                 l38: loop {
                     break_if b37 ((($match_scrut_0 >= 11) | (($match_scrut_0 + 1) >= 11)) | ((($match_scrut_0 + 1) + 1) >= 11)) | (((($match_scrut_0 + 1) + 1) + 1) >= 11);
-                    if builtin::array_get_value<u8>($sroa_slice_repr_398, $match_scrut_0) != builtin::array_get_value<u8>(out_381, $match_scrut_0) {
+                    if builtin::array_get_value<u8>($sroa_slice_repr_384, $match_scrut_0) != builtin::array_get_value<u8>(out_374, $match_scrut_0) {
                         break $inline_core_prelude_string_wado_StrSlice__starts_with_core_prelude_string_wado_String__spec0_spec0_1__$inline_bytes_match_at_5: 0;
                     }
                     $match_scrut_0 = $match_scrut_0 + 1;
-                    if builtin::array_get_value<u8>($sroa_slice_repr_398, $match_scrut_0) != builtin::array_get_value<u8>(out_381, $match_scrut_0) {
+                    if builtin::array_get_value<u8>($sroa_slice_repr_384, $match_scrut_0) != builtin::array_get_value<u8>(out_374, $match_scrut_0) {
                         break $inline_core_prelude_string_wado_StrSlice__starts_with_core_prelude_string_wado_String__spec0_spec0_1__$inline_bytes_match_at_5: 0;
                     }
                     $match_scrut_0 = $match_scrut_0 + 1;
-                    if builtin::array_get_value<u8>($sroa_slice_repr_398, $match_scrut_0) != builtin::array_get_value<u8>(out_381, $match_scrut_0) {
+                    if builtin::array_get_value<u8>($sroa_slice_repr_384, $match_scrut_0) != builtin::array_get_value<u8>(out_374, $match_scrut_0) {
                         break $inline_core_prelude_string_wado_StrSlice__starts_with_core_prelude_string_wado_String__spec0_spec0_1__$inline_bytes_match_at_5: 0;
                     }
                     $match_scrut_0 = $match_scrut_0 + 1;
-                    if builtin::array_get_value<u8>($sroa_slice_repr_398, $match_scrut_0) != builtin::array_get_value<u8>(out_381, $match_scrut_0) {
+                    if builtin::array_get_value<u8>($sroa_slice_repr_384, $match_scrut_0) != builtin::array_get_value<u8>(out_374, $match_scrut_0) {
                         break $inline_core_prelude_string_wado_StrSlice__starts_with_core_prelude_string_wado_String__spec0_spec0_1__$inline_bytes_match_at_5: 0;
                     }
                     $match_scrut_0 = $match_scrut_0 + 1;
@@ -1629,7 +1629,7 @@ fn "spec_control_flow_errors.wado/$test_3"() {
             b43: block {
                 l44: loop {
                     break_if b43 $match_scrut_0 >= 11;
-                    if builtin::array_get_value<u8>($sroa_slice_repr_398, $match_scrut_0) != builtin::array_get_value<u8>(out_381, $match_scrut_0) {
+                    if builtin::array_get_value<u8>($sroa_slice_repr_384, $match_scrut_0) != builtin::array_get_value<u8>(out_374, $match_scrut_0) {
                         break $inline_core_prelude_string_wado_StrSlice__starts_with_core_prelude_string_wado_String__spec0_spec0_1__$inline_bytes_match_at_5: 0;
                     }
                     $match_scrut_0 = $match_scrut_0 + 1;
@@ -8599,23 +8599,23 @@ fn "core:prelude/types.wado/core:prelude/types.wado/WaitableSet<core:prelude/typ
     let at: i32;
     let end: i32;
     let ref_val: ref null "core:prelude//$Resource";
-    let $sroa_$iter_0_repr_19: ref null "Array<core:prelude/types.wado/Subtask>";
-    let $sroa_$iter_0_index_20: i32;
+    let $sroa_$iter_0_repr_17: ref null "Array<core:prelude/types.wado/Subtask>";
+    let $sroa_$iter_0_index_18: i32;
     at = 0;
     end = self.used;
-    $sroa_$iter_0_repr_19 = self.repr;
-    $sroa_$iter_0_index_20 = 0;
+    $sroa_$iter_0_repr_17 = self.repr;
+    $sroa_$iter_0_index_18 = 0;
     b1240: block {
         l1241: loop {
-            break_if b1240 $sroa_$iter_0_index_20 >= end;
-            ref_val = builtin::array_get_value<ref null "core:prelude//$Resource">($sroa_$iter_0_repr_19, $sroa_$iter_0_index_20);
-            $sroa_$iter_0_index_20 = $sroa_$iter_0_index_20 + 1;
-            let $mv$$vr_7_15$0: i32;
-            let $mv$$vr_7_15$1: ref null "core:prelude/types.wado//ResourceId";
-            let $mv$$vr_7_15$2: ref null "core:prelude/types.wado//ReadyEvent";
-            multivalue_bind [$mv$$vr_7_15$0, $mv$$vr_7_15$1, $mv$$vr_7_15$2] = "core:prelude/types.wado/core:prelude/types.wado/Subtask^core:prelude/types.wado/Waitable::wait_on$sroa[return]"(ref_val);
-            if (if $mv$$vr_7_15$0 == 0 -> bool {
-                $mv$$vr_7_15$1.handle == handle;
+            break_if b1240 $sroa_$iter_0_index_18 >= end;
+            ref_val = builtin::array_get_value<ref null "core:prelude//$Resource">($sroa_$iter_0_repr_17, $sroa_$iter_0_index_18);
+            $sroa_$iter_0_index_18 = $sroa_$iter_0_index_18 + 1;
+            let $mv$$vr_7$0: i32;
+            let $mv$$vr_7$1: ref null "core:prelude/types.wado//ResourceId";
+            let $mv$$vr_7$2: ref null "core:prelude/types.wado//ReadyEvent";
+            multivalue_bind [$mv$$vr_7$0, $mv$$vr_7$1, $mv$$vr_7$2] = "core:prelude/types.wado/core:prelude/types.wado/Subtask^core:prelude/types.wado/Waitable::wait_on$sroa[return]"(ref_val);
+            if (if $mv$$vr_7$0 == 0 -> bool {
+                $mv$$vr_7$1.handle == handle;
             } else {
                 0;
             }) {

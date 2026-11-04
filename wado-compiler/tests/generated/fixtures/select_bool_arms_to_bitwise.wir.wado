@@ -80,33 +80,33 @@ fn "select_bool_arms_to_bitwise.wado/run"() with Stdout {
     let out: ref "core:prelude/string.wado//String";
     let item: u8;
     let $cm_pair_7: i64;
-    let self_41: i32;
-    let $sroa_$iter_0_repr_50: ref Array<u8>;
-    let $sroa_$iter_0_index_51: i32;
+    let self_38: i32;
+    let $sroa_$iter_0_repr_47: ref Array<u8>;
+    let $sroa_$iter_0_index_48: i32;
     out = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
-    $sroa_$iter_0_repr_50 = global:select_bool_arms_to_bitwise.wado::$const_obj_0;
-    $sroa_$iter_0_index_51 = 0;
+    $sroa_$iter_0_repr_47 = global:select_bool_arms_to_bitwise.wado::$const_obj_0;
+    $sroa_$iter_0_index_48 = 0;
     b0: block {
         l1: loop {
-            break_if b0 $sroa_$iter_0_index_51 >= 6;
-            item = builtin::array_get_value<u8>($sroa_$iter_0_repr_50, $sroa_$iter_0_index_51);
-            $sroa_$iter_0_index_51 = $sroa_$iter_0_index_51 + 1;
+            break_if b0 $sroa_$iter_0_index_48 >= 6;
+            item = builtin::array_get_value<u8>($sroa_$iter_0_repr_47, $sroa_$iter_0_index_48);
+            $sroa_$iter_0_index_48 = $sroa_$iter_0_index_48 + 1;
             "core:prelude/string.wado/core:prelude/string.wado/String::push"(out, select char("select_bool_arms_to_bitwise.wado/plain"(item), 112, 45));
             "core:prelude/string.wado/core:prelude/string.wado/String::push"(out, select char("select_bool_arms_to_bitwise.wado/stop"(item), 115, 45));
             continue l1;
         };
     };
-    $sroa_$iter_0_index_51 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
+    $sroa_$iter_0_index_48 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
     item = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
-    $sroa_$iter_0_index_51 = "select_bool_arms_to_bitwise.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$iter_0_index_51);
-    builtin::array_copy<u8>(local.tee $sroa_$iter_0_repr_50(builtin::array_new<u8>(local.tee self_41(out.used) + 1)), 0, out.repr, 0, self_41);
-    builtin::array_set_u8($sroa_$iter_0_repr_50, self_41, 10);
+    $sroa_$iter_0_index_48 = "select_bool_arms_to_bitwise.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$iter_0_index_48);
+    builtin::array_copy<u8>(local.tee $sroa_$iter_0_repr_47(builtin::array_new<u8>(local.tee self_38(out.used) + 1)), 0, out.repr, 0, self_38);
+    builtin::array_set_u8($sroa_$iter_0_repr_47, self_38, 10);
     drop(block -> "core:prelude/types.wado//enum:CopyResult" {
-        self_41 = self_41 + 1;
-        "core:rt/cm_stream_write_raw_all_u8"(item, $sroa_$iter_0_repr_50, 0, self_41);
+        self_38 = self_38 + 1;
+        "core:rt/cm_stream_write_raw_all_u8"(item, $sroa_$iter_0_repr_47, 0, self_38);
     });
     "wasi/stream-drop-writable"(item);
-    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_$iter_0_index_51);
+    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_$iter_0_index_48);
 }
 
 fn "select_bool_arms_to_bitwise.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {

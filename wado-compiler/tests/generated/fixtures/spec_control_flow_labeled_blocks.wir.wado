@@ -414,32 +414,32 @@ global global:core:prelude/primitive.wado::$const_obj_18: ref "core:prelude/stri
 
 fn "spec_control_flow_labeled_blocks.wado/$test_1_a_labeled_block_leaves_a_loop_nest"() {
     let hit: ref null "tuple//[i32, i32]";
+    let $v1_19: i32;
     let current_33: i32;
+    let current_48: i32;
+    let self_52: ref "core:prelude//List<i32>";
     let self_72: ref "tuple//[i32, i32]";
-    let $current_120: i32;
-    let $self_97_126: ref "core:prelude//List<i32>";
-    let $v1_104_133: i32;
-    let $sroa_$iter_0_start_143: i32;
-    let $sroa_$v_113_end_146: i32;
-    let $sroa_$iter_1_start_147: i32;
+    let $sroa_$iter_0_start_93: i32;
+    let $sroa_v_end_96: i32;
+    let $sroa_$iter_1_start_97: i32;
     search: block {
-        $sroa_$iter_0_start_143 = 0;
+        $sroa_$iter_0_start_93 = 0;
         b0: block {
             l1: loop {
-                break_if b0 $sroa_$iter_0_start_143 >= 2;
-                $sroa_$iter_0_start_143 = local.tee current_33($sroa_$iter_0_start_143) + 1;
-                $sroa_$v_113_end_146 = builtin::array_get_value<ref "core:prelude//List<i32>">(global:spec_control_flow_labeled_blocks.wado::$const_obj_1, current_33).used;
-                $sroa_$iter_1_start_147 = 0;
+                break_if b0 $sroa_$iter_0_start_93 >= 2;
+                $sroa_$iter_0_start_93 = local.tee current_33($sroa_$iter_0_start_93) + 1;
+                $sroa_v_end_96 = builtin::array_get_value<ref "core:prelude//List<i32>">(global:spec_control_flow_labeled_blocks.wado::$const_obj_1, current_33).used;
+                $sroa_$iter_1_start_97 = 0;
                 b2: block {
                     l3: loop {
-                        break_if b2 $sroa_$iter_1_start_147 >= $sroa_$v_113_end_146;
-                        $sroa_$iter_1_start_147 = local.tee $current_120($sroa_$iter_1_start_147) + 1;
-                        if $self_97_126 = builtin::array_get_value<ref "core:prelude//List<i32>">(global:spec_control_flow_labeled_blocks.wado::$const_obj_1, current_33); $v1_104_133 = builtin::array_get_value<ref "core:prelude//List<i32>">(global:spec_control_flow_labeled_blocks.wado::$const_obj_1, current_33).used; if @unlikely($current_120 >= $v1_104_133) {
+                        break_if b2 $sroa_$iter_1_start_97 >= $sroa_v_end_96;
+                        $sroa_$iter_1_start_97 = local.tee current_48($sroa_$iter_1_start_97) + 1;
+                        if self_52 = builtin::array_get_value<ref "core:prelude//List<i32>">(global:spec_control_flow_labeled_blocks.wado::$const_obj_1, current_33); $v1_19 = builtin::array_get_value<ref "core:prelude//List<i32>">(global:spec_control_flow_labeled_blocks.wado::$const_obj_1, current_33).used; if @unlikely(current_48 >= $v1_19) {
                             cold_path;
-                            "spec_control_flow_labeled_blocks.wado/$test_1_a_labeled_block_leaves_a_loop_nest$cold0"($current_120, $v1_104_133);
+                            "spec_control_flow_labeled_blocks.wado/$test_1_a_labeled_block_leaves_a_loop_nest$cold0"(current_48, $v1_19);
                             unreachable;
-                        }; builtin::array_get_value<i32>($self_97_126.repr, $current_120) == 3 {
-                            hit = struct.new "tuple//[i32, i32]" { 0: current_33, 1: $current_120 };
+                        }; builtin::array_get_value<i32>(self_52.repr, current_48) == 3 {
+                            hit = struct.new "tuple//[i32, i32]" { 0: current_33, 1: current_48 };
                             break search;
                         }
                         continue l3;
@@ -451,9 +451,9 @@ fn "spec_control_flow_labeled_blocks.wado/$test_1_a_labeled_block_leaves_a_loop_
         hit = struct.new "tuple//[i32, i32]" { 0: -1, 1: -1 };
     };
     if @unlikely($inline__i32_i32__core_prelude_traits_wado_Eq__eq_20: block -> bool {
-        $sroa_$iter_0_start_143 = local.tee self_72(ref.as_non_null(hit)).0;
+        $sroa_$iter_0_start_93 = local.tee self_72(ref.as_non_null(hit)).0;
         current_33 = self_72.1;
-        if $sroa_$iter_0_start_143 != 1 {
+        if $sroa_$iter_0_start_93 != 1 {
             break $inline__i32_i32__core_prelude_traits_wado_Eq__eq_20: 0;
         }
         if (current_33 == 0) == 0 {

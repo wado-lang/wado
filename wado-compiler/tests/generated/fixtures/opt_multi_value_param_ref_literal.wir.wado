@@ -233,25 +233,25 @@ global global:core:prelude/primitive.wado::$const_obj_1: ref "core:prelude/strin
 fn "opt_multi_value_param_ref_literal.wado/digit_sum"($mv$v$data, $mv$v$start, $mv$v$end) {
     let sum: i32;
     let current: i32;
-    let $sroa_$iter_0_start_43: i32;
-    let $licm_used_47: i32;
-    let $licm_repr_48: ref Array<u8>;
+    let $sroa_$iter_0_start_29: i32;
+    let $licm_used_33: i32;
+    let $licm_repr_34: ref Array<u8>;
     if local.tee $mv$v$end($mv$v$end - $mv$v$start) == 0 {
         return -1;
     }
     sum = 0;
-    $sroa_$iter_0_start_43 = 0;
-    $licm_used_47 = $mv$v$data.used;
-    $licm_repr_48 = $mv$v$data.repr;
+    $sroa_$iter_0_start_29 = 0;
+    $licm_used_33 = $mv$v$data.used;
+    $licm_repr_34 = $mv$v$data.repr;
     b1: block {
         l2: loop {
-            break_if b1 $sroa_$iter_0_start_43 >= $mv$v$end;
-            $sroa_$iter_0_start_43 = local.tee current($sroa_$iter_0_start_43) + 1;
-            sum = sum + ((if @unlikely(local.tee sum($mv$v$start + current) >=u $licm_used_47) {
+            break_if b1 $sroa_$iter_0_start_29 >= $mv$v$end;
+            $sroa_$iter_0_start_29 = local.tee current($sroa_$iter_0_start_29) + 1;
+            sum = sum + ((if @unlikely(local.tee sum($mv$v$start + current) >=u $licm_used_33) {
                 cold_path;
-                "opt_multi_value_param_ref_literal.wado/digit_sum$cold0$dae[v]"(sum, $licm_used_47);
+                "opt_multi_value_param_ref_literal.wado/digit_sum$cold0$dae[v]"(sum, $licm_used_33);
                 unreachable;
-            }; builtin::array_get_value<u8>($licm_repr_48, sum) - 48) & 255);
+            }; builtin::array_get_value<u8>($licm_repr_34, sum) - 48) & 255);
             continue l2;
         };
     };

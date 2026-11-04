@@ -470,18 +470,18 @@ fn "core:json/integral_digits$sroa[return]"($mv$n$neg, $mv$n$int_digits, $mv$n$e
     let significant: i64;
     let k: i64;
     let start_28: i32;
-    let $licm_arith_101: i64;
+    let $licm_arith_81: i64;
     mantissa_len = builtin::i64_extend_i32_s(($mv$n$mantissa_end - $mv$n$mantissa_start) - (($mv$n$mantissa_end - $mv$n$mantissa_start) > $mv$n$int_digits));
     $mv$n$exp = $mv$n$exp - (mantissa_len - builtin::i64_extend_i32_s($mv$n$int_digits));
     kept = select i64($mv$n$exp < 0_i64, mantissa_len + $mv$n$exp, mantissa_len);
     digits = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
     significant = 0_i64;
     k = 0_i64;
-    $licm_arith_101 = builtin::i64_extend_i32_s($mv$n$int_digits);
+    $licm_arith_81 = builtin::i64_extend_i32_s($mv$n$int_digits);
     b12: block {
         l13: loop {
             break_if b12 k >= mantissa_len;
-            $mv$n$int_digits = builtin::array_get_value<u8>($mv$input$repr, $mv$input$start + (($mv$n$mantissa_start + builtin::i32_wrap_i64(k)) + (k >= $licm_arith_101)));
+            $mv$n$int_digits = builtin::array_get_value<u8>($mv$input$repr, $mv$input$start + (($mv$n$mantissa_start + builtin::i32_wrap_i64(k)) + (k >= $licm_arith_81)));
             if k >= kept {
                 if @unlikely($mv$n$int_digits != 48) {
                     cold_path;
@@ -2334,7 +2334,7 @@ fn "core:prelude/primitive.wado/i32^core:prelude/traits.wado/FromStr::from_str<&
     let i: i32;
     let d64: u64;
     let b: u8;
-    let $sroa_slot_113: u64;
+    let $sroa_slot_108: u64;
     return 0, builtin::i32_wrap_i64((if local.tee $mv$s$used(local.tee $vr_17($inline_parse_i64_radix_unchecked_sroa_return__0: block -> ref "tuple//[i32, i64, core:prelude/types.wado/Option<core:prelude/intparse.wado/ParseIntError>]" {
         if $mv$s$used == 0 {
             break $inline_parse_i64_radix_unchecked_sroa_return__0: struct.new "tuple//[i32, i64, core:prelude/types.wado/Option<core:prelude/intparse.wado/ParseIntError>]" { 0: 1, 1: 0_i64, 2: struct.new "core:prelude/intparse.wado//ParseIntError" { kind: 0 } };
@@ -2348,11 +2348,11 @@ fn "core:prelude/primitive.wado/i32^core:prelude/traits.wado/FromStr::from_str<&
         $inline_parse_u64_digits_unchecked_sroa_return__1: block {
             if local.tee $mv$s$used($mv$s$used - first) == 0 {
                 $mv$s$used = 1;
-                $sroa_slot_113 = 0_i64;
+                $sroa_slot_108 = 0_i64;
                 first = 0;
                 break $inline_parse_u64_digits_unchecked_sroa_return__1;
             }
-            $sroa_slot_113 = 0_i64;
+            $sroa_slot_108 = 0_i64;
             i = 0;
             b338: block {
                 l339: loop {
@@ -2371,22 +2371,22 @@ fn "core:prelude/primitive.wado/i32^core:prelude/traits.wado/FromStr::from_str<&
                     };
                     if 10 <=u b {
                         $mv$s$used = 1;
-                        $sroa_slot_113 = 0_i64;
+                        $sroa_slot_108 = 0_i64;
                         first = 1;
                         break $inline_parse_u64_digits_unchecked_sroa_return__1;
                     }
                     d64 = builtin::i64_extend_i32_s(b);
-                    if (if $sroa_slot_113 >u 1844674407370955161_i64 -> i32 {
+                    if (if $sroa_slot_108 >u 1844674407370955161_i64 -> i32 {
                         1;
                     } else {
-                        ($sroa_slot_113 == 1844674407370955161_i64) & (d64 >u 5_i64);
+                        ($sroa_slot_108 == 1844674407370955161_i64) & (d64 >u 5_i64);
                     }) {
                         $mv$s$used = 1;
-                        $sroa_slot_113 = 0_i64;
+                        $sroa_slot_108 = 0_i64;
                         first = 2;
                         break $inline_parse_u64_digits_unchecked_sroa_return__1;
                     }
-                    $sroa_slot_113 = ($sroa_slot_113 * 10_i64) + d64;
+                    $sroa_slot_108 = ($sroa_slot_108 * 10_i64) + d64;
                     i = i + 1;
                     b = $inline_parse_u64_digits_unchecked_sroa_return__1__$inline_digit_value_1: block -> i32 {
                         if (local.tee b(builtin::array_get_value<u8>($mv$s$repr, first + i)) >= 48) & (b <= 57) {
@@ -2402,22 +2402,22 @@ fn "core:prelude/primitive.wado/i32^core:prelude/traits.wado/FromStr::from_str<&
                     };
                     if 10 <=u b {
                         $mv$s$used = 1;
-                        $sroa_slot_113 = 0_i64;
+                        $sroa_slot_108 = 0_i64;
                         first = 1;
                         break $inline_parse_u64_digits_unchecked_sroa_return__1;
                     }
                     d64 = builtin::i64_extend_i32_s(b);
-                    if (if $sroa_slot_113 >u 1844674407370955161_i64 -> i32 {
+                    if (if $sroa_slot_108 >u 1844674407370955161_i64 -> i32 {
                         1;
                     } else {
-                        ($sroa_slot_113 == 1844674407370955161_i64) & (d64 >u 5_i64);
+                        ($sroa_slot_108 == 1844674407370955161_i64) & (d64 >u 5_i64);
                     }) {
                         $mv$s$used = 1;
-                        $sroa_slot_113 = 0_i64;
+                        $sroa_slot_108 = 0_i64;
                         first = 2;
                         break $inline_parse_u64_digits_unchecked_sroa_return__1;
                     }
-                    $sroa_slot_113 = ($sroa_slot_113 * 10_i64) + d64;
+                    $sroa_slot_108 = ($sroa_slot_108 * 10_i64) + d64;
                     i = i + 1;
                     continue l339;
                 };
@@ -2439,22 +2439,22 @@ fn "core:prelude/primitive.wado/i32^core:prelude/traits.wado/FromStr::from_str<&
                     };
                     if 10 <=u b {
                         $mv$s$used = 1;
-                        $sroa_slot_113 = 0_i64;
+                        $sroa_slot_108 = 0_i64;
                         first = 1;
                         break $inline_parse_u64_digits_unchecked_sroa_return__1;
                     }
                     d64 = builtin::i64_extend_i32_s(b);
-                    if (if $sroa_slot_113 >u 1844674407370955161_i64 -> i32 {
+                    if (if $sroa_slot_108 >u 1844674407370955161_i64 -> i32 {
                         1;
                     } else {
-                        ($sroa_slot_113 == 1844674407370955161_i64) & (d64 >u 5_i64);
+                        ($sroa_slot_108 == 1844674407370955161_i64) & (d64 >u 5_i64);
                     }) {
                         $mv$s$used = 1;
-                        $sroa_slot_113 = 0_i64;
+                        $sroa_slot_108 = 0_i64;
                         first = 2;
                         break $inline_parse_u64_digits_unchecked_sroa_return__1;
                     }
-                    $sroa_slot_113 = ($sroa_slot_113 * 10_i64) + d64;
+                    $sroa_slot_108 = ($sroa_slot_108 * 10_i64) + d64;
                     i = i + 1;
                     continue l353;
                 };
@@ -2465,15 +2465,15 @@ fn "core:prelude/primitive.wado/i32^core:prelude/traits.wado/FromStr::from_str<&
         };
         if $mv$s$used == 0 -> ref "tuple//[i32, i64, core:prelude/types.wado/Option<core:prelude/intparse.wado/ParseIntError>]" {
             if is_negative_48 -> ref "tuple//[i32, i64, core:prelude/types.wado/Option<core:prelude/intparse.wado/ParseIntError>]" {
-                if $sroa_slot_113 >u 2147483648_i64 -> ref "tuple//[i32, i64, core:prelude/types.wado/Option<core:prelude/intparse.wado/ParseIntError>]" {
+                if $sroa_slot_108 >u 2147483648_i64 -> ref "tuple//[i32, i64, core:prelude/types.wado/Option<core:prelude/intparse.wado/ParseIntError>]" {
                     struct.new "tuple//[i32, i64, core:prelude/types.wado/Option<core:prelude/intparse.wado/ParseIntError>]" { 0: 1, 1: 0_i64, 2: struct.new "core:prelude/intparse.wado//ParseIntError" { kind: 3 } };
                 } else {
-                    struct.new "tuple//[i32, i64, core:prelude/types.wado/Option<core:prelude/intparse.wado/ParseIntError>]" { 0: 0, 1: 0_i64 - $sroa_slot_113, 2: ref.null none };
+                    struct.new "tuple//[i32, i64, core:prelude/types.wado/Option<core:prelude/intparse.wado/ParseIntError>]" { 0: 0, 1: 0_i64 - $sroa_slot_108, 2: ref.null none };
                 }
-            } else if $sroa_slot_113 >u 2147483647_i64 -> ref "tuple//[i32, i64, core:prelude/types.wado/Option<core:prelude/intparse.wado/ParseIntError>]" {
+            } else if $sroa_slot_108 >u 2147483647_i64 -> ref "tuple//[i32, i64, core:prelude/types.wado/Option<core:prelude/intparse.wado/ParseIntError>]" {
                 struct.new "tuple//[i32, i64, core:prelude/types.wado/Option<core:prelude/intparse.wado/ParseIntError>]" { 0: 1, 1: 0_i64, 2: struct.new "core:prelude/intparse.wado//ParseIntError" { kind: 2 } };
             } else {
-                struct.new "tuple//[i32, i64, core:prelude/types.wado/Option<core:prelude/intparse.wado/ParseIntError>]" { 0: 0, 1: $sroa_slot_113, 2: ref.null none };
+                struct.new "tuple//[i32, i64, core:prelude/types.wado/Option<core:prelude/intparse.wado/ParseIntError>]" { 0: 0, 1: $sroa_slot_108, 2: ref.null none };
             }
         } else if @likely($mv$s$used == 1) -> ref "tuple//[i32, i64, core:prelude/types.wado/Option<core:prelude/intparse.wado/ParseIntError>]" {
             $mv$s$used = (if select i32(is_negative_48, first == 2, 0) -> "core:prelude/intparse.wado//enum:IntErrorKind" {

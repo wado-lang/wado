@@ -281,8 +281,8 @@ fn "linear_array_drop_frees.wado/run"() with Stdout {
     let $load_1: ref null "core:linear//Block";
     let current: i32;
     let out_26: ref "core:prelude/string.wado//String";
-    let $sroa_$iter_0_start_128: i32;
-    let array_553: ref null "core:linear//LinearArray<u64>";
+    let $sroa_$iter_0_start_122: i32;
+    let array_547: ref null "core:linear//LinearArray<u64>";
     let $drop_spill_2: u64;
     let $v3: i32;
     $v3 = 2147483647 / 8;
@@ -291,32 +291,32 @@ fn "linear_array_drop_frees.wado/run"() with Stdout {
         "linear_array_drop_frees.wado/round_trip$cold1$dae[round,$contract_arg_0]"(8, $v3);
         unreachable;
     }
-    $v3 = local.tee array_553("core:linear/core:linear/LinearArray<u64>::filled$unchecked$dae[len]$spec0$dae[value]"()).len;
+    $v3 = local.tee array_547("core:linear/core:linear/LinearArray<u64>::filled$unchecked$dae[len]$spec0$dae[value]"()).len;
     if @unlikely(0 >= $v3) {
         cold_path;
         "linear_array_drop_frees.wado/round_trip$cold0"(0, $v3);
         unreachable;
     }
-    $drop_spill_2 = builtin::load_i64(local.tee $load_1(array_553.block).ptr + (0 * 8));
-    if ref.is_null(array_553) == 0 {
+    $drop_spill_2 = builtin::load_i64(local.tee $load_1(array_547.block).ptr + (0 * 8));
+    if ref.is_null(array_547) == 0 {
         if ref.is_null($load_1) == 0 {
             drop("mem/realloc"($load_1.ptr, $load_1.bytes, 16, 0));
         }
-        array_553.block = ref.null none;
+        array_547.block = ref.null none;
     }
     $v3 = builtin::memory_size();
-    $sroa_$iter_0_start_128 = 1;
+    $sroa_$iter_0_start_122 = 1;
     b8: block {
         l9: loop {
-            break_if b8 $sroa_$iter_0_start_128 >= 50;
-            $sroa_$iter_0_start_128 = local.tee current($sroa_$iter_0_start_128) + 1;
+            break_if b8 $sroa_$iter_0_start_122 >= 50;
+            $sroa_$iter_0_start_122 = local.tee current($sroa_$iter_0_start_122) + 1;
             $drop_spill_2 = $drop_spill_2 + "linear_array_drop_frees.wado/round_trip"(current);
             continue l9;
         };
     };
-    if @unlikely(local.tee $sroa_$iter_0_start_128(builtin::memory_size()) != $v3) {
+    if @unlikely(local.tee $sroa_$iter_0_start_122(builtin::memory_size()) != $v3) {
         cold_path;
-        "linear_array_drop_frees.wado/run$cold0"($v3, $sroa_$iter_0_start_128);
+        "linear_array_drop_frees.wado/run$cold0"($v3, $sroa_$iter_0_start_122);
         unreachable;
     }
     out_26 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
@@ -324,20 +324,20 @@ fn "linear_array_drop_frees.wado/run"() with Stdout {
         break $inline_core_prelude_string_wado_String__internal_push_view_27;
     };
     $v3 = "core:prelude/primitive.wado/count_digits_u64"($drop_spill_2);
-    if @unlikely(local.tee $sroa_$iter_0_start_128(0 + $v3) > builtin::array_len(out_26.repr)) {
+    if @unlikely(local.tee $sroa_$iter_0_start_122(0 + $v3) > builtin::array_len(out_26.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_26, $sroa_$iter_0_start_128);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_26, $sroa_$iter_0_start_122);
     }
     current = out_26.used;
-    out_26.used = $sroa_$iter_0_start_128;
+    out_26.used = $sroa_$iter_0_start_122;
     "core:prelude/primitive.wado/write_decimal_digits"(out_26.repr, current, $drop_spill_2, $v3);
     $inline_core_prelude_string_wado_String__internal_push_view_45: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_45;
     };
     $v3 = builtin::i32_wrap_i64(local.tee $drop_spill_2("wasi/stream-new"()));
-    $sroa_$iter_0_start_128 = builtin::i32_wrap_i64($drop_spill_2 >> 32_i64);
+    $sroa_$iter_0_start_122 = builtin::i32_wrap_i64($drop_spill_2 >> 32_i64);
     $v3 = "linear_array_drop_frees.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($v3);
-    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$iter_0_start_128, out_26.repr, out_26.used);
+    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$iter_0_start_122, out_26.repr, out_26.used);
     "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($v3);
 }
 
@@ -1192,16 +1192,16 @@ fn "core:linear/core:linear/LinearArray<u64>::filled$unchecked$dae[len]"(value) 
     let array: ref null "core:linear//LinearArray<u64>";
     let bytes: i32;
     let current: i32;
-    let $licm_ptr_56: i32;
+    let $licm_ptr_47: i32;
     bytes = 32768 * 8;
     array = struct.new "core:linear//LinearArray<u64>" { block: struct.new "core:linear//Block" { ptr: "mem/realloc"(0, 0, 16, bytes), bytes: bytes }, len: 32768 };
     bytes = 0;
-    $licm_ptr_56 = array.block.ptr;
+    $licm_ptr_47 = array.block.ptr;
     b163: block {
         l164: loop {
             break_if b163 bytes >= 32768;
             bytes = local.tee current(bytes) + 1;
-            builtin::store_i64($licm_ptr_56 + (current * 8), value);
+            builtin::store_i64($licm_ptr_47 + (current * 8), value);
             continue l164;
         };
     };
@@ -1664,16 +1664,16 @@ fn "core:linear/core:linear/LinearArray<u64>::filled$unchecked$dae[len]$spec0$da
     let array: ref null "core:linear//LinearArray<u64>";
     let bytes: i32;
     let current: i32;
-    let $licm_ptr_56: i32;
+    let $licm_ptr_47: i32;
     bytes = 32768 * 8;
     array = struct.new "core:linear//LinearArray<u64>" { block: struct.new "core:linear//Block" { ptr: "mem/realloc"(0, 0, 16, bytes), bytes: bytes }, len: 32768 };
     bytes = 0;
-    $licm_ptr_56 = array.block.ptr;
+    $licm_ptr_47 = array.block.ptr;
     b237: block {
         l238: loop {
             break_if b237 bytes >= 32768;
             bytes = local.tee current(bytes) + 1;
-            builtin::store_i64($licm_ptr_56 + (current * 8), 0_i64);
+            builtin::store_i64($licm_ptr_47 + (current * 8), 0_i64);
             continue l238;
         };
     };

@@ -456,59 +456,59 @@ fn "scalar_read_before_move.wado/$test_0_a_scalar_read_before_a_move_leaves_the_
     let out: ref "core:prelude//List<scalar_read_before_move.wado/S>";
     let v_41: ref "scalar_read_before_move.wado//S";
     let v_42: ref "core:prelude//List<i32>";
-    let $sroa_$iter_0_repr_106: ref "Array<scalar_read_before_move.wado/S>";
-    let $sroa_$iter_0_index_107: i32;
-    let $av_109: i32;
+    let $sroa_$iter_0_repr_92: ref "Array<scalar_read_before_move.wado/S>";
+    let $sroa_$iter_0_index_93: i32;
+    let $av_95: i32;
     tags = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(), used: 0 };
     out = struct.new "core:prelude//List<scalar_read_before_move.wado/S>" { repr: array.new_fixed<ref "scalar_read_before_move.wado//S">(), used: 0 };
-    $sroa_$iter_0_repr_106 = global:scalar_read_before_move.wado::$const_obj_0;
-    $sroa_$iter_0_index_107 = 0;
+    $sroa_$iter_0_repr_92 = global:scalar_read_before_move.wado::$const_obj_0;
+    $sroa_$iter_0_index_93 = 0;
     b0: block {
         l1: loop {
-            break_if b0 $sroa_$iter_0_index_107 >= 1;
-            $av_109 = local.tee v_41(builtin::array_get_value<ref "scalar_read_before_move.wado//S">($sroa_$iter_0_repr_106, $sroa_$iter_0_index_107)).tag;
-            v_41 = struct.new "scalar_read_before_move.wado//S" { items: v_42 = v_41.items; struct.new "core:prelude//List<i32>" { repr: let $array_clone_src_1: ref Array<i32>; $array_clone_src_1 = v_42.repr; $load_3 = v_42.used; let $array_clone_dst_2: ref Array<i32>; builtin::array_copy<i32>(local.tee $array_clone_dst_2(builtin::array_new<i32>($load_3)), 0, $array_clone_src_1, 0, $load_3); $array_clone_dst_2, used: $load_3 }, tag: $av_109 };
-            $sroa_$iter_0_index_107 = $sroa_$iter_0_index_107 + 1;
-            if $av_109 == -1 {
+            break_if b0 $sroa_$iter_0_index_93 >= 1;
+            $av_95 = local.tee v_41(builtin::array_get_value<ref "scalar_read_before_move.wado//S">($sroa_$iter_0_repr_92, $sroa_$iter_0_index_93)).tag;
+            v_41 = struct.new "scalar_read_before_move.wado//S" { items: v_42 = v_41.items; struct.new "core:prelude//List<i32>" { repr: let $array_clone_src_1: ref Array<i32>; $array_clone_src_1 = v_42.repr; $load_3 = v_42.used; let $array_clone_dst_2: ref Array<i32>; builtin::array_copy<i32>(local.tee $array_clone_dst_2(builtin::array_new<i32>($load_3)), 0, $array_clone_src_1, 0, $load_3); $array_clone_dst_2, used: $load_3 }, tag: $av_95 };
+            $sroa_$iter_0_index_93 = $sroa_$iter_0_index_93 + 1;
+            if $av_95 == -1 {
                 if @unlikely(local.tee $load_3(tags.used) >= builtin::array_len(tags.repr)) {
                     cold_path;
                     "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(tags);
                 }
-                builtin::array_set<i32>(tags.repr, $load_3, $av_109);
+                builtin::array_set<i32>(tags.repr, $load_3, $av_95);
                 tags.used = $load_3 + 1;
             } else {
-                if @unlikely(local.tee $av_109(out.used) >= builtin::array_len(out.repr)) {
+                if @unlikely(local.tee $av_95(out.used) >= builtin::array_len(out.repr)) {
                     cold_path;
                     "core:prelude/list.wado/core:prelude/list.wado/List<scalar_read_before_move.wado/S>::grow"(out);
                 }
-                builtin::array_set<ref "scalar_read_before_move.wado//S">(out.repr, $av_109, v_41);
-                out.used = $av_109 + 1;
+                builtin::array_set<ref "scalar_read_before_move.wado//S">(out.repr, $av_95, v_41);
+                out.used = $av_95 + 1;
             }
             continue l1;
         };
     };
-    if @unlikely(local.tee $sroa_$iter_0_index_107(local.tee v_42($sroa_$iter_0_index_107 = out.used; if @unlikely(0 >= $sroa_$iter_0_index_107) {
+    if @unlikely(local.tee $sroa_$iter_0_index_93(local.tee v_42($sroa_$iter_0_index_93 = out.used; if @unlikely(0 >= $sroa_$iter_0_index_93) {
         cold_path;
-        "scalar_read_before_move.wado/$test_0_a_scalar_read_before_a_move_leaves_the_source_untouched$cold5$dae[$contract_arg_0]"($sroa_$iter_0_index_107);
+        "scalar_read_before_move.wado/$test_0_a_scalar_read_before_a_move_leaves_the_source_untouched$cold5$dae[$contract_arg_0]"($sroa_$iter_0_index_93);
         unreachable;
     }; builtin::array_get_value<ref "scalar_read_before_move.wado//S">(out.repr, 0).items).used) >= builtin::array_len(v_42.repr)) {
         cold_path;
         "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(v_42);
     }
-    builtin::array_set<i32>(v_42.repr, $sroa_$iter_0_index_107, 2);
-    v_42.used = $sroa_$iter_0_index_107 + 1;
-    if @unlikely(local.tee $sroa_$iter_0_index_107($sroa_$iter_0_index_107 = out.used; if @unlikely(0 >= $sroa_$iter_0_index_107) {
+    builtin::array_set<i32>(v_42.repr, $sroa_$iter_0_index_93, 2);
+    v_42.used = $sroa_$iter_0_index_93 + 1;
+    if @unlikely(local.tee $sroa_$iter_0_index_93($sroa_$iter_0_index_93 = out.used; if @unlikely(0 >= $sroa_$iter_0_index_93) {
         cold_path;
-        "scalar_read_before_move.wado/$test_0_a_scalar_read_before_a_move_leaves_the_source_untouched$cold2$dae[$contract_arg_2]"($sroa_$iter_0_index_107);
+        "scalar_read_before_move.wado/$test_0_a_scalar_read_before_a_move_leaves_the_source_untouched$cold2$dae[$contract_arg_2]"($sroa_$iter_0_index_93);
         unreachable;
     }; builtin::array_get_value<ref "scalar_read_before_move.wado//S">(out.repr, 0).items.used) != 2) {
         cold_path;
-        "scalar_read_before_move.wado/$test_0_a_scalar_read_before_a_move_leaves_the_source_untouched$cold1"($sroa_$iter_0_index_107);
+        "scalar_read_before_move.wado/$test_0_a_scalar_read_before_a_move_leaves_the_source_untouched$cold1"($sroa_$iter_0_index_93);
         unreachable;
     }
-    if @unlikely((local.tee $sroa_$iter_0_index_107(tags.used) == 0) == 0) {
+    if @unlikely((local.tee $sroa_$iter_0_index_93(tags.used) == 0) == 0) {
         cold_path;
-        "scalar_read_before_move.wado/$test_0_a_scalar_read_before_a_move_leaves_the_source_untouched$cold0"($sroa_$iter_0_index_107);
+        "scalar_read_before_move.wado/$test_0_a_scalar_read_before_a_move_leaves_the_source_untouched$cold0"($sroa_$iter_0_index_93);
         unreachable;
     }
 }
@@ -519,34 +519,34 @@ fn "scalar_read_before_move.wado/$test_1_a_binding_read_whole_twice_gives_each_r
     let b: ref "core:prelude//List<scalar_read_before_move.wado/S>";
     let v_31: ref "scalar_read_before_move.wado//S";
     let v_32: ref "core:prelude//List<i32>";
-    let $used_77: i32;
-    let $sroa_$iter_0_repr_95: ref "Array<scalar_read_before_move.wado/S>";
-    let $sroa_$iter_0_index_96: i32;
-    let $sroa_item_tag_99: i32;
+    let used_35: i32;
+    let $sroa_$iter_0_repr_77: ref "Array<scalar_read_before_move.wado/S>";
+    let $sroa_$iter_0_index_78: i32;
+    let $sroa_item_tag_81: i32;
     a = struct.new "core:prelude//List<scalar_read_before_move.wado/S>" { repr: array.new_fixed<ref "scalar_read_before_move.wado//S">(), used: 0 };
     b = struct.new "core:prelude//List<scalar_read_before_move.wado/S>" { repr: array.new_fixed<ref "scalar_read_before_move.wado//S">(), used: 0 };
-    $sroa_$iter_0_repr_95 = global:scalar_read_before_move.wado::$const_obj_0;
-    $sroa_$iter_0_index_96 = 0;
+    $sroa_$iter_0_repr_77 = global:scalar_read_before_move.wado::$const_obj_0;
+    $sroa_$iter_0_index_78 = 0;
     b10: block {
         l11: loop {
-            break_if b10 $sroa_$iter_0_index_96 >= 1;
-            v_32 = local.tee v_31(builtin::array_get_value<ref "scalar_read_before_move.wado//S">($sroa_$iter_0_repr_95, $sroa_$iter_0_index_96)).items;
+            break_if b10 $sroa_$iter_0_index_78 >= 1;
+            v_32 = local.tee v_31(builtin::array_get_value<ref "scalar_read_before_move.wado//S">($sroa_$iter_0_repr_77, $sroa_$iter_0_index_78)).items;
             let $array_clone_src_1: ref Array<i32>;
             $array_clone_src_1 = v_32.repr;
             $load_2 = v_32.used;
             let $array_clone_dst_2: ref Array<i32>;
             builtin::array_copy<i32>(local.tee $array_clone_dst_2(builtin::array_new<i32>($load_2)), 0, $array_clone_src_1, 0, $load_2);
-            $sroa_item_tag_99 = v_31.tag;
-            $sroa_$iter_0_index_96 = $sroa_$iter_0_index_96 + 1;
-            if $sroa_item_tag_99 == 0 {
-                v_31 = struct.new "scalar_read_before_move.wado//S" { items: struct.new "core:prelude//List<i32>" { repr: builtin::array_copy<i32>(local.tee $array_clone_src_1(builtin::array_new<i32>($load_2)), 0, $array_clone_dst_2, 0, $load_2); $array_clone_src_1, used: $load_2 }, tag: $sroa_item_tag_99 };
-                if @unlikely(local.tee $used_77(a.used) >= builtin::array_len(a.repr)) {
+            $sroa_item_tag_81 = v_31.tag;
+            $sroa_$iter_0_index_78 = $sroa_$iter_0_index_78 + 1;
+            if $sroa_item_tag_81 == 0 {
+                v_31 = struct.new "scalar_read_before_move.wado//S" { items: struct.new "core:prelude//List<i32>" { repr: builtin::array_copy<i32>(local.tee $array_clone_src_1(builtin::array_new<i32>($load_2)), 0, $array_clone_dst_2, 0, $load_2); $array_clone_src_1, used: $load_2 }, tag: $sroa_item_tag_81 };
+                if @unlikely(local.tee used_35(a.used) >= builtin::array_len(a.repr)) {
                     cold_path;
                     "core:prelude/list.wado/core:prelude/list.wado/List<scalar_read_before_move.wado/S>::grow"(a);
                 }
-                builtin::array_set<ref "scalar_read_before_move.wado//S">(a.repr, $used_77, v_31);
-                a.used = $used_77 + 1;
-                v_31 = struct.new "scalar_read_before_move.wado//S" { items: struct.new "core:prelude//List<i32>" { repr: builtin::array_copy<i32>(local.tee $array_clone_src_1(builtin::array_new<i32>($load_2)), 0, $array_clone_dst_2, 0, $load_2); $array_clone_src_1, used: $load_2 }, tag: $sroa_item_tag_99 };
+                builtin::array_set<ref "scalar_read_before_move.wado//S">(a.repr, used_35, v_31);
+                a.used = used_35 + 1;
+                v_31 = struct.new "scalar_read_before_move.wado//S" { items: struct.new "core:prelude//List<i32>" { repr: builtin::array_copy<i32>(local.tee $array_clone_src_1(builtin::array_new<i32>($load_2)), 0, $array_clone_dst_2, 0, $load_2); $array_clone_src_1, used: $load_2 }, tag: $sroa_item_tag_81 };
                 if @unlikely(local.tee $load_2(b.used) >= builtin::array_len(b.repr)) {
                     cold_path;
                     "core:prelude/list.wado/core:prelude/list.wado/List<scalar_read_before_move.wado/S>::grow"(b);
@@ -557,23 +557,23 @@ fn "scalar_read_before_move.wado/$test_1_a_binding_read_whole_twice_gives_each_r
             continue l11;
         };
     };
-    if @unlikely(local.tee $sroa_$iter_0_index_96(local.tee v_32($sroa_$iter_0_index_96 = a.used; if @unlikely(0 >= $sroa_$iter_0_index_96) {
+    if @unlikely(local.tee $sroa_$iter_0_index_78(local.tee v_32($sroa_$iter_0_index_78 = a.used; if @unlikely(0 >= $sroa_$iter_0_index_78) {
         cold_path;
-        "scalar_read_before_move.wado/$test_1_a_binding_read_whole_twice_gives_each_reader_its_own_copy$cold2$dae[$contract_arg_0]"($sroa_$iter_0_index_96);
+        "scalar_read_before_move.wado/$test_1_a_binding_read_whole_twice_gives_each_reader_its_own_copy$cold2$dae[$contract_arg_0]"($sroa_$iter_0_index_78);
         unreachable;
     }; builtin::array_get_value<ref "scalar_read_before_move.wado//S">(a.repr, 0).items).used) >= builtin::array_len(v_32.repr)) {
         cold_path;
         "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(v_32);
     }
-    builtin::array_set<i32>(v_32.repr, $sroa_$iter_0_index_96, 2);
-    v_32.used = $sroa_$iter_0_index_96 + 1;
-    if @unlikely(local.tee $sroa_$iter_0_index_96($sroa_$iter_0_index_96 = b.used; if @unlikely(0 >= $sroa_$iter_0_index_96) {
+    builtin::array_set<i32>(v_32.repr, $sroa_$iter_0_index_78, 2);
+    v_32.used = $sroa_$iter_0_index_78 + 1;
+    if @unlikely(local.tee $sroa_$iter_0_index_78($sroa_$iter_0_index_78 = b.used; if @unlikely(0 >= $sroa_$iter_0_index_78) {
         cold_path;
-        "scalar_read_before_move.wado/$test_1_a_binding_read_whole_twice_gives_each_reader_its_own_copy$cold1$dae[$contract_arg_1]"($sroa_$iter_0_index_96);
+        "scalar_read_before_move.wado/$test_1_a_binding_read_whole_twice_gives_each_reader_its_own_copy$cold1$dae[$contract_arg_1]"($sroa_$iter_0_index_78);
         unreachable;
     }; builtin::array_get_value<ref "scalar_read_before_move.wado//S">(b.repr, 0).items.used) != 1) {
         cold_path;
-        "scalar_read_before_move.wado/$test_1_a_binding_read_whole_twice_gives_each_reader_its_own_copy$cold0"($sroa_$iter_0_index_96);
+        "scalar_read_before_move.wado/$test_1_a_binding_read_whole_twice_gives_each_reader_its_own_copy$cold0"($sroa_$iter_0_index_78);
         unreachable;
     }
 }
@@ -584,45 +584,45 @@ fn "scalar_read_before_move.wado/$test_2_a_scalar_read_after_the_whole_read_stil
     let total: i32;
     let v_31: ref "scalar_read_before_move.wado//S";
     let v_32: ref "core:prelude//List<i32>";
-    let $sroa_$iter_0_repr_77: ref "Array<scalar_read_before_move.wado/S>";
-    let $sroa_$iter_0_index_78: i32;
-    let $sroa_item_tag_81: i32;
+    let $sroa_$iter_0_repr_68: ref "Array<scalar_read_before_move.wado/S>";
+    let $sroa_$iter_0_index_69: i32;
+    let $sroa_item_tag_72: i32;
     out = struct.new "core:prelude//List<scalar_read_before_move.wado/S>" { repr: array.new_fixed<ref "scalar_read_before_move.wado//S">(), used: 0 };
     total = 0;
-    $sroa_$iter_0_repr_77 = global:scalar_read_before_move.wado::$const_obj_0;
-    $sroa_$iter_0_index_78 = 0;
+    $sroa_$iter_0_repr_68 = global:scalar_read_before_move.wado::$const_obj_0;
+    $sroa_$iter_0_index_69 = 0;
     b19: block {
         l20: loop {
-            break_if b19 $sroa_$iter_0_index_78 >= 1;
-            v_32 = local.tee v_31(builtin::array_get_value<ref "scalar_read_before_move.wado//S">($sroa_$iter_0_repr_77, $sroa_$iter_0_index_78)).items;
+            break_if b19 $sroa_$iter_0_index_69 >= 1;
+            v_32 = local.tee v_31(builtin::array_get_value<ref "scalar_read_before_move.wado//S">($sroa_$iter_0_repr_68, $sroa_$iter_0_index_69)).items;
             let $array_clone_src_1: ref Array<i32>;
             $array_clone_src_1 = v_32.repr;
             $load_2 = v_32.used;
             let $array_clone_dst_2: ref Array<i32>;
             builtin::array_copy<i32>(local.tee $array_clone_dst_2(builtin::array_new<i32>($load_2)), 0, $array_clone_src_1, 0, $load_2);
-            $sroa_item_tag_81 = v_31.tag;
-            $sroa_$iter_0_index_78 = $sroa_$iter_0_index_78 + 1;
-            v_31 = struct.new "scalar_read_before_move.wado//S" { items: struct.new "core:prelude//List<i32>" { repr: builtin::array_copy<i32>(local.tee $array_clone_src_1(builtin::array_new<i32>($load_2)), 0, $array_clone_dst_2, 0, $load_2); $array_clone_src_1, used: $load_2 }, tag: $sroa_item_tag_81 };
+            $sroa_item_tag_72 = v_31.tag;
+            $sroa_$iter_0_index_69 = $sroa_$iter_0_index_69 + 1;
+            v_31 = struct.new "scalar_read_before_move.wado//S" { items: struct.new "core:prelude//List<i32>" { repr: builtin::array_copy<i32>(local.tee $array_clone_src_1(builtin::array_new<i32>($load_2)), 0, $array_clone_dst_2, 0, $load_2); $array_clone_src_1, used: $load_2 }, tag: $sroa_item_tag_72 };
             if @unlikely(local.tee $load_2(out.used) >= builtin::array_len(out.repr)) {
                 cold_path;
                 "core:prelude/list.wado/core:prelude/list.wado/List<scalar_read_before_move.wado/S>::grow"(out);
             }
             builtin::array_set<ref "scalar_read_before_move.wado//S">(out.repr, $load_2, v_31);
             out.used = $load_2 + 1;
-            total = total + $sroa_item_tag_81;
+            total = total + $sroa_item_tag_72;
             continue l20;
         };
     };
-    if @unlikely(local.tee $sroa_$iter_0_index_78(local.tee v_32($sroa_$iter_0_index_78 = out.used; if @unlikely(0 >= $sroa_$iter_0_index_78) {
+    if @unlikely(local.tee $sroa_$iter_0_index_69(local.tee v_32($sroa_$iter_0_index_69 = out.used; if @unlikely(0 >= $sroa_$iter_0_index_69) {
         cold_path;
-        "scalar_read_before_move.wado/$test_2_a_scalar_read_after_the_whole_read_still_reads_the_binding$cold3$dae[$contract_arg_0]"($sroa_$iter_0_index_78);
+        "scalar_read_before_move.wado/$test_2_a_scalar_read_after_the_whole_read_still_reads_the_binding$cold3$dae[$contract_arg_0]"($sroa_$iter_0_index_69);
         unreachable;
     }; builtin::array_get_value<ref "scalar_read_before_move.wado//S">(out.repr, 0).items).used) >= builtin::array_len(v_32.repr)) {
         cold_path;
         "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(v_32);
     }
-    builtin::array_set<i32>(v_32.repr, $sroa_$iter_0_index_78, 2);
-    v_32.used = $sroa_$iter_0_index_78 + 1;
+    builtin::array_set<i32>(v_32.repr, $sroa_$iter_0_index_69, 2);
+    v_32.used = $sroa_$iter_0_index_69 + 1;
     if @unlikely((total == 0) == 0) {
         cold_path;
         "scalar_read_before_move.wado/$test_2_a_scalar_read_after_the_whole_read_still_reads_the_binding$cold0"(total);
@@ -664,16 +664,16 @@ fn "scalar_read_before_move.wado/$test_4_a_scalar_element_read_before_a_move"() 
     let out: ref "core:prelude//List<scalar_read_before_move.wado/S>";
     let v_41: ref "scalar_read_before_move.wado//S";
     let v_42: ref "core:prelude//List<i32>";
-    let $sroa_$iter_0_repr_104: ref "Array<scalar_read_before_move.wado/S>";
-    let $sroa_$iter_0_index_105: i32;
+    let $sroa_$iter_0_repr_91: ref "Array<scalar_read_before_move.wado/S>";
+    let $sroa_$iter_0_index_92: i32;
     out = struct.new "core:prelude//List<scalar_read_before_move.wado/S>" { repr: array.new_fixed<ref "scalar_read_before_move.wado//S">(), used: 0 };
-    $sroa_$iter_0_repr_104 = global:scalar_read_before_move.wado::$const_obj_0;
-    $sroa_$iter_0_index_105 = 0;
+    $sroa_$iter_0_repr_91 = global:scalar_read_before_move.wado::$const_obj_0;
+    $sroa_$iter_0_index_92 = 0;
     b29: block {
         l30: loop {
-            break_if b29 $sroa_$iter_0_index_105 >= 1;
-            v_41 = struct.new "scalar_read_before_move.wado//S" { items: v_42 = local.tee v_41(builtin::array_get_value<ref "scalar_read_before_move.wado//S">($sroa_$iter_0_repr_104, $sroa_$iter_0_index_105)).items; struct.new "core:prelude//List<i32>" { repr: let $array_clone_src_1: ref Array<i32>; $array_clone_src_1 = v_42.repr; $load_2 = v_42.used; let $array_clone_dst_2: ref Array<i32>; builtin::array_copy<i32>(local.tee $array_clone_dst_2(builtin::array_new<i32>($load_2)), 0, $array_clone_src_1, 0, $load_2); $array_clone_dst_2, used: $load_2 }, tag: v_41.tag };
-            $sroa_$iter_0_index_105 = $sroa_$iter_0_index_105 + 1;
+            break_if b29 $sroa_$iter_0_index_92 >= 1;
+            v_41 = struct.new "scalar_read_before_move.wado//S" { items: v_42 = local.tee v_41(builtin::array_get_value<ref "scalar_read_before_move.wado//S">($sroa_$iter_0_repr_91, $sroa_$iter_0_index_92)).items; struct.new "core:prelude//List<i32>" { repr: let $array_clone_src_1: ref Array<i32>; $array_clone_src_1 = v_42.repr; $load_2 = v_42.used; let $array_clone_dst_2: ref Array<i32>; builtin::array_copy<i32>(local.tee $array_clone_dst_2(builtin::array_new<i32>($load_2)), 0, $array_clone_src_1, 0, $load_2); $array_clone_dst_2, used: $load_2 }, tag: v_41.tag };
+            $sroa_$iter_0_index_92 = $sroa_$iter_0_index_92 + 1;
             if $load_2 = local.tee v_42(v_41.items).used; if @unlikely(0 >= $load_2) {
                 cold_path;
                 "scalar_read_before_move.wado/$test_4_a_scalar_element_read_before_a_move$cold5$dae[$contract_arg_0]"($load_2);
@@ -689,23 +689,23 @@ fn "scalar_read_before_move.wado/$test_4_a_scalar_element_read_before_a_move"() 
             continue l30;
         };
     };
-    if @unlikely(local.tee $sroa_$iter_0_index_105(local.tee v_42($sroa_$iter_0_index_105 = out.used; if @unlikely(0 >= $sroa_$iter_0_index_105) {
+    if @unlikely(local.tee $sroa_$iter_0_index_92(local.tee v_42($sroa_$iter_0_index_92 = out.used; if @unlikely(0 >= $sroa_$iter_0_index_92) {
         cold_path;
-        "scalar_read_before_move.wado/$test_4_a_scalar_element_read_before_a_move$cold4$dae[$contract_arg_1]"($sroa_$iter_0_index_105);
+        "scalar_read_before_move.wado/$test_4_a_scalar_element_read_before_a_move$cold4$dae[$contract_arg_1]"($sroa_$iter_0_index_92);
         unreachable;
     }; builtin::array_get_value<ref "scalar_read_before_move.wado//S">(out.repr, 0).items).used) >= builtin::array_len(v_42.repr)) {
         cold_path;
         "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(v_42);
     }
-    builtin::array_set<i32>(v_42.repr, $sroa_$iter_0_index_105, 2);
-    v_42.used = $sroa_$iter_0_index_105 + 1;
-    if @unlikely(local.tee $sroa_$iter_0_index_105($sroa_$iter_0_index_105 = out.used; if @unlikely(0 >= $sroa_$iter_0_index_105) {
+    builtin::array_set<i32>(v_42.repr, $sroa_$iter_0_index_92, 2);
+    v_42.used = $sroa_$iter_0_index_92 + 1;
+    if @unlikely(local.tee $sroa_$iter_0_index_92($sroa_$iter_0_index_92 = out.used; if @unlikely(0 >= $sroa_$iter_0_index_92) {
         cold_path;
-        "scalar_read_before_move.wado/$test_4_a_scalar_element_read_before_a_move$cold1$dae[$contract_arg_3]"($sroa_$iter_0_index_105);
+        "scalar_read_before_move.wado/$test_4_a_scalar_element_read_before_a_move$cold1$dae[$contract_arg_3]"($sroa_$iter_0_index_92);
         unreachable;
     }; builtin::array_get_value<ref "scalar_read_before_move.wado//S">(out.repr, 0).items.used) != 2) {
         cold_path;
-        "scalar_read_before_move.wado/$test_4_a_scalar_element_read_before_a_move$cold0"($sroa_$iter_0_index_105);
+        "scalar_read_before_move.wado/$test_4_a_scalar_element_read_before_a_move$cold0"($sroa_$iter_0_index_92);
         unreachable;
     }
 }
