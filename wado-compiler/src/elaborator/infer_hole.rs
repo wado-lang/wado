@@ -406,6 +406,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
+    /// [`Self::solve_infer_var`] by a type the source wrote for `var`. A
+    /// written `!` answers it, where an inferred one, a diverging arm's, says
+    /// nothing.
+    pub(super) fn solve_infer_var_as_written(&mut self, var: TypeId, written: TypeId) {
+        if written != TypeTable::NEVER {
+            self.solve_infer_var(var, written);
+        } else if let Some(slot @ None) = self.infer_holes.solutions.get_mut(&var) {
+            *slot = Some(written);
+        }
+    }
+
     /// Record `answer` as the solution of the unsolved `var` even where it
     /// still names other variables, which then answer for `var` once solved.
     /// Refused where `answer` reaches `var` itself, which no type satisfies.

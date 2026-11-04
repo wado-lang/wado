@@ -148,7 +148,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             vars.push(var);
             // Answered here, so an argument meets what the source wrote.
             if let Some(named) = named {
-                self.solve_infer_var(var, named);
+                self.solve_infer_var_as_written(var, named);
                 diags.push(None);
                 continue;
             }
