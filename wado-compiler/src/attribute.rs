@@ -13,7 +13,7 @@ pub const ALLOW: &str = "allow";
 pub const AMBIENT: &str = "ambient";
 pub const CANONICAL: &str = "canonical";
 pub const CM: &str = "cm";
-pub const CM_AMBIENT_IMPORTS: &str = "cm_ambient_imports";
+pub const CM_DEMANDED_IMPORTS: &str = "cm_demanded_imports";
 pub const CM_EXPORT: &str = "cm_export";
 pub const CM_HOST_IMPORTS: &str = "cm_host_imports";
 pub const CM_PARAMS: &str = "cm_params";
@@ -341,10 +341,10 @@ pub const ATTRIBUTES: &[AttributeSchema] = &[
         bodyless: None,
     },
     AttributeSchema {
-        name: CM_AMBIENT_IMPORTS,
+        name: CM_DEMANDED_IMPORTS,
         targets: MODULE_TARGET,
-        args: AttrArgs::Strings,
-        summary: "the imports of an imported component that only its ambient code reaches",
+        args: AttrArgs::OptionalStrings,
+        summary: "the host imports an imported component records its exports demand",
         stdlib_only: false,
         bodyless: None,
     },

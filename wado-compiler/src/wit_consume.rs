@@ -15,7 +15,7 @@ use crate::ast::{
     UseDecl, UseItem, UseNameSpelling, VariantCase, VariantDecl, Visibility, cm_function_path,
     cm_import_of,
 };
-use crate::attribute::{CM, CM_AMBIENT_IMPORTS, CM_EXPORT, CM_HOST_IMPORTS, CM_PARAMS};
+use crate::attribute::{CM, CM_DEMANDED_IMPORTS, CM_EXPORT, CM_HOST_IMPORTS, CM_PARAMS};
 use crate::component_model::SourceInterfaceBatch;
 use crate::hashmap;
 use crate::module_source::ModuleSource;
@@ -62,16 +62,16 @@ pub struct ExportedInterface {
 /// The host-leaf import FQs a component-binding module carries in its
 /// [`CM_HOST_IMPORTS`] inner attribute. Empty where it carries none.
 pub fn module_host_leaf_imports(module: &Module) -> Vec<String> {
-    module_strings(module, CM_HOST_IMPORTS)
+    module_strings(module, CM_HOST_IMPORTS).unwrap_or_default()
 }
 
-/// The host-leaf imports only the component's `#[ambient]` code reaches, from
-/// the [`CM_AMBIENT_IMPORTS`] inner attribute.
-pub fn module_ambient_imports(module: &Module) -> Vec<String> {
-    module_strings(module, CM_AMBIENT_IMPORTS)
+/// The `wasi:*` imports the component records its exports demand, from the
+/// [`CM_DEMANDED_IMPORTS`] inner attribute. `None` where it records none.
+pub fn module_demanded_imports(module: &Module) -> Option<Vec<String>> {
+    module_strings(module, CM_DEMANDED_IMPORTS)
 }
 
-fn module_strings(module: &Module, attribute: &str) -> Vec<String> {
+fn module_strings(module: &Module, attribute: &str) -> Option<Vec<String>> {
     module
         .inner_attributes
         .iter()
@@ -88,7 +88,6 @@ fn module_strings(module: &Module, attribute: &str) -> Vec<String> {
                 })
                 .collect()
         })
-        .unwrap_or_default()
 }
 
 /// The interfaces a component-binding module's dependency exports, each with
@@ -234,28 +233,19 @@ pub fn build_bindings(
         return Err(unique.into_iter().collect::<Vec<_>>().join("; "));
     }
 
-    // A guest import is always demanded: the consumer provides it.
-    let ambient_imports: Vec<&String> = demanded.map_or_else(Vec::new, |demanded| {
-        host_leaf_imports
-            .iter()
-            .filter(|fq| fq.starts_with("wasi:") && !demanded.contains(fq))
-            .collect()
-    });
     // Carry both sets on the synthesized module so the registration path
-    // (`fold_component_interfaces`) recovers them from the AST alone.
+    // (`fold_component_interfaces`) recovers them from the AST alone. The
+    // demanded set is written even when empty: its presence is the record.
     let inner_attributes = [
-        (
-            CM_HOST_IMPORTS,
-            host_leaf_imports.iter().collect::<Vec<_>>(),
-        ),
-        (CM_AMBIENT_IMPORTS, ambient_imports),
+        Some((CM_HOST_IMPORTS, host_leaf_imports.as_slice())).filter(|(_, fqs)| !fqs.is_empty()),
+        demanded.map(|fqs| (CM_DEMANDED_IMPORTS, fqs)),
     ]
     .into_iter()
-    .filter(|(_, fqs)| !fqs.is_empty())
+    .flatten()
     .map(|(name, fqs)| InnerAttribute {
         name: name.to_string(),
         args: fqs
-            .into_iter()
+            .iter()
             .map(|fq| AttrArg::Str(StrLit::new(fq.as_str())))
             .collect(),
         span: syn(),

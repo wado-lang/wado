@@ -77,7 +77,7 @@ use crate::tir::{StructDef, TirFunction, TraitRef};
 use crate::token::Span;
 use crate::unparse::unparse_type_into;
 use crate::wit_consume::{
-    exported_interfaces, imported_interfaces, module_ambient_imports, module_host_leaf_imports,
+    exported_interfaces, imported_interfaces, module_demanded_imports, module_host_leaf_imports,
 };
 
 /// What every trait bound a module writes, wherever it stands, gets wrong: a
@@ -2457,7 +2457,7 @@ pub(crate) fn fold_component_interfaces(
                 &interface_fqs,
                 &imported_fqs,
                 &host_leaf_imports,
-                &module_ambient_imports(module),
+                module_demanded_imports(module).as_deref(),
                 ms,
             )?;
         }

@@ -33,8 +33,12 @@ fn compile_lib(source: &str) -> Vec<u8> {
 
 /// Compile `consumer` against `lib` compiled as `./lib.wasm`.
 fn compile_consumer(lib: &str, consumer: &str) -> Result<Vec<u8>, String> {
+    compile_consumer_of(compile_lib(lib), consumer)
+}
+
+fn compile_consumer_of(lib_wasm: Vec<u8>, consumer: &str) -> Result<Vec<u8>, String> {
     let dir = tempfile::tempdir().expect("tempdir");
-    std::fs::write(dir.path().join("lib.wasm"), compile_lib(lib)).expect("write lib.wasm");
+    std::fs::write(dir.path().join("lib.wasm"), lib_wasm).expect("write lib.wasm");
     compile_source_with_compiler_options(
         &dir.path().join("main.wado"),
         consumer,
@@ -80,6 +84,38 @@ export fn run() with Stdout {
     let result = run_wasm(wasm).expect("the composed component runs");
     assert!(!result.trapped, "trapped: {result:?}");
     assert_eq!(result.stdout, "7\n");
+}
+
+/// A tool that strips custom sections leaves a component that records nothing,
+/// which demands every import, and the error says why.
+#[test]
+fn a_component_without_the_record_demands_its_imports_and_says_so() {
+    const SECTION: &[u8] = b"org.wado-lang.demanded-imports";
+    let mut lib = compile_lib(ASSERTING_LIB);
+    let at = lib
+        .windows(SECTION.len())
+        .position(|window| window == SECTION)
+        .expect("the library carries the section");
+    // Renamed in place, the section keeps its length and stops being the one.
+    lib[at..at + SECTION.len()].copy_from_slice(b"org.wado-lang.stripped-imports");
+    let err = compile_consumer_of(
+        lib,
+        r#"
+use { positive } from "./lib.wasm" with { type: "wasm" };
+
+export fn run() {
+    positive(7);
+}
+"#,
+    )
+    .expect_err("the consumer must hold `Stderr`");
+    assert!(
+        err.contains(
+            "missing effect 'Stderr' required by 'positive': its component carries no \
+             `org.wado-lang.demanded-imports` section"
+        ),
+        "{err}"
+    );
 }
 
 #[test]

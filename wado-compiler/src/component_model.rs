@@ -1045,10 +1045,10 @@ pub struct CmInterfaceRegistry {
     /// interface of one component shares the same set (v1 component-level union).
     component_host_leaf_imports: IndexMap<String, Vec<String>>,
 
-    /// Per component-dependency interface FQ, the subset of its host-leaf
-    /// imports that only the dependency's `#[ambient]` code reaches, which
-    /// reconstruction leaves out of the consumer's effects.
-    component_ambient_imports: IndexMap<String, Vec<String>>,
+    /// Per component-dependency interface FQ, the `wasi:*` imports the
+    /// dependency records its exports demand. Absent where it records none,
+    /// and then every import is demanded.
+    component_demanded_imports: IndexMap<String, Vec<String>>,
 
     /// World-level function imports (Phase 9), by the bodyless function
     /// declaring each -> its key in `functions`.
@@ -2469,7 +2469,7 @@ impl CmInterfaceRegistry {
         interface_fqs: &[String],
         imported_fqs: &[String],
         host_leaf_imports: &[String],
-        ambient_imports: &[String],
+        demanded_imports: Option<&[String]>,
         module_source: &ModuleSource,
     ) -> Result<(), String> {
         self.register_module_decls(module, &CmDeclScope::Module)?;
@@ -2482,9 +2482,9 @@ impl CmInterfaceRegistry {
                 self.component_host_leaf_imports
                     .insert(fq.clone(), host_leaf_imports.to_vec());
             }
-            if !ambient_imports.is_empty() {
-                self.component_ambient_imports
-                    .insert(fq.clone(), ambient_imports.to_vec());
+            if let Some(demanded) = demanded_imports {
+                self.component_demanded_imports
+                    .insert(fq.clone(), demanded.to_vec());
             }
         }
         // The bindings declare an imported interface's types too, so each maps
@@ -2514,16 +2514,20 @@ impl CmInterfaceRegistry {
     }
 
     /// The host-leaf imports of the component owning `fq` that a caller of its
-    /// exports must hold: all of them but those only its `#[ambient]` code
-    /// reaches.
+    /// exports must hold: a guest import, which the consumer provides, and a
+    /// `wasi:*` one the component records as demanded, or every one where it
+    /// records none.
     pub fn demanded_imports_for(&self, fq: &str) -> impl Iterator<Item = &String> {
-        let ambient = self
-            .component_ambient_imports
-            .get(fq)
-            .map_or(&[][..], Vec::as_slice);
-        self.host_leaf_imports_for(fq)
-            .iter()
-            .filter(move |import| !ambient.contains(import))
+        let recorded = self.component_demanded_imports.get(fq);
+        self.host_leaf_imports_for(fq).iter().filter(move |import| {
+            !import.starts_with("wasi:") || recorded.is_none_or(|fqs| fqs.contains(import))
+        })
+    }
+
+    /// Whether the component owning `fq` records what its exports demand.
+    #[must_use]
+    pub fn records_demanded_imports(&self, fq: &str) -> bool {
+        self.component_demanded_imports.contains_key(fq)
     }
 
     /// Whether `fq` is a guest effect some component dependency imports: an

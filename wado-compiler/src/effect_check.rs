@@ -9,6 +9,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use crate::attribute::AMBIENT;
+use crate::demanded_imports;
 use crate::hashmap::{IndexMap, IndexSet};
 
 use crate::module_source::ModuleSource;
@@ -58,6 +59,9 @@ impl EffectKind {
 pub enum EffectFault {
     /// The caller does not hold what its callee requires.
     Missing(EffectKind),
+    /// The caller does not hold an import of the component its callee is in,
+    /// which demands every import for recording none of what it demands.
+    MissingUnrecorded(EffectKind),
     /// A `with` installs a handler whose methods perform what the installing
     /// function does not hold. `callee` names the effect handled.
     MissingForHandler(EffectKind),
@@ -96,6 +100,17 @@ impl From<EffectError> for Diagnostic {
                     kind.noun(),
                     e.missing_effect,
                     e.callee
+                ),
+            ),
+            EffectFault::MissingUnrecorded(kind) => (
+                Code::MissingEffect,
+                format!(
+                    "missing {} '{}' required by '{}': its component carries no `{}` section \
+                     this compiler reads, so each of its `wasi:*` imports is demanded",
+                    kind.noun(),
+                    e.missing_effect,
+                    e.callee,
+                    demanded_imports::SECTION_NAME,
                 ),
             ),
             EffectFault::MissingForHandler(kind) => (
@@ -1199,26 +1214,54 @@ fn operation_requirements(
     index: &EffectIndex,
     owner: Option<DefId>,
 ) -> Vec<EffectRef> {
+    let demands = operation_demands(sem, index, owner);
+    demands.certain.into_iter().chain(demands.unrecorded).collect()
+}
+
+/// [`operation_requirements`], split by why each is demanded.
+#[derive(Default)]
+struct OperationDemands {
+    certain: Vec<EffectRef>,
+    /// A `wasi:*` import of a component that records nothing of what its
+    /// exports demand, so every one is.
+    unrecorded: Vec<EffectRef>,
+}
+
+fn operation_demands(
+    sem: &Semantics,
+    index: &EffectIndex,
+    owner: Option<DefId>,
+) -> OperationDemands {
+    let mut demands = OperationDemands::default();
     let Some((effect, cm_fq)) = owner.and_then(|def| index.interfaces.get(&def)) else {
-        return Vec::new();
+        return demands;
     };
-    let Some(fq) = cm_fq else {
-        return vec![effect.clone()];
-    };
-    if let Some(registry) = sem.cm_interface_registry()
+    if let Some(fq) = cm_fq
+        && let Some(registry) = sem.cm_interface_registry()
         && registry.is_component_interface(fq)
     {
         // Composition-relative: the imported interface is composed away, so its
         // operations demand the dependency's own host-leaf capabilities. A
         // types-only leaf has no operation to perform.
-        return registry
+        let recorded = registry.records_demanded_imports(fq);
+        for leaf in registry
             .demanded_imports_for(fq)
             .filter(|leaf| registry.declares_functions(leaf))
             .filter(|leaf| !index.provided_import_fqs.contains(leaf.as_str()))
-            .filter_map(|leaf| index.effect_by_cm_fq.get(leaf).cloned())
-            .collect();
+        {
+            let Some(effect) = index.effect_by_cm_fq.get(leaf) else {
+                continue;
+            };
+            if recorded || !leaf.starts_with("wasi:") {
+                demands.certain.push(effect.clone());
+            } else {
+                demands.unrecorded.push(effect.clone());
+            }
+        }
+        return demands;
     }
-    vec![effect.clone()]
+    demands.certain.push(effect.clone());
+    demands
 }
 
 /// What the elaborator recorded about one `impl` block.
@@ -1838,7 +1881,7 @@ struct CalleeEffects {
     /// The capability dispatching a host-backed operation demands. It belongs
     /// to the path that names the interface, not to the callee's signature, so a
     /// walk may word the two apart.
-    dispatched: Vec<EffectRef>,
+    dispatched: OperationDemands,
     /// What each of the callee's effect parameters stood for at the call.
     params: IndexMap<String, IndexSet<EffectRef>>,
     /// The callee's declared return type, which the call's type instantiates.
@@ -1864,7 +1907,7 @@ fn call_site_effects(
     let bare = |name: String, declared: Vec<EffectRef>| CalleeEffects {
         name,
         declared,
-        dispatched: Vec::new(),
+        dispatched: OperationDemands::default(),
         params: IndexMap::default(),
         returns: None,
     };
@@ -1912,9 +1955,9 @@ fn call_site_effects(
                 name: callee_name(callee).to_string(),
                 declared: resolved.required,
                 dispatched: if dispatches_through_path {
-                    operation_requirements(sem, index, owner)
+                    operation_demands(sem, index, owner)
                 } else {
-                    Vec::new()
+                    OperationDemands::default()
                 },
                 params: resolved.params,
                 returns: index.callee_return(&func_ref),
@@ -2955,7 +2998,13 @@ impl SemEffectWalker<'_> {
         for site in sites {
             self.solve_rows(site.returns, id, &site.params);
             self.report_missing(&site.declared, &site.name, span);
-            self.report_missing(&site.dispatched, &site.name, span);
+            self.report_missing(&site.dispatched.certain, &site.name, span);
+            self.report_missing_as(
+                &site.dispatched.unrecorded,
+                &site.name,
+                span,
+                EffectFault::MissingUnrecorded,
+            );
         }
     }
 

@@ -73,7 +73,10 @@ of a caller. A Wado library lists in its custom section
 `org.wado-lang.demanded-imports` the `wasi:*` interfaces some `export fn` holds
 by what it declares, and reconstruction leaves out the `wasi:*` imports the list
 does not name. The consumer still forwards every import, so the host answers it.
-A component without the section, one not built by Wado, demands every import.
+The payload's first line is its format version. A component without a section
+of the version the compiler reads, one not built by Wado or stripped of custom
+sections, demands every import, and a missing-effect error that this causes
+says so.
 
 The substitution unit moves with the rule: a consumer mocks the underlying
 capabilities a dependency uses (`MonotonicClock`), not "Marl". A pure component
