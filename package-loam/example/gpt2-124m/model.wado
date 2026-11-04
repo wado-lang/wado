@@ -1,7 +1,7 @@
 //! GPT-2 (124M) as a library: its tokenizer, and the model that picks the next
 //! token greedily, keeping the attention cache between calls.
 
-use { Backend, CheckpointBytes, Holds, LoadError, Tensor } from "lib:loam";
+use { Backend, CheckpointBytes, Graph, Holds, LoadError, Tensor } from "lib:loam";
 /// GPT-2's byte-level BPE, with `<|endoftext|>` as its one special token.
 pub use { Tokenizer } from "./tokenizer.json"
     with {
@@ -52,10 +52,9 @@ impl<affine Bk: Backend> Model<Bk> {
         return &self.backend;
     }
 
-    /// How many positions the model reads: one per row of `wpe`, which the
-    /// graph's causal mask covers. `forward` refuses a longer sequence.
+    /// How many positions the model reads. `forward` refuses a longer sequence.
     pub fn positions(&self) -> i32 {
-        return gpt2::TransformerWpeWeightMerged00::EXTENT;
+        return positions();
     }
 
     /// Empties the cache, so the next call reads its ids from the start.
@@ -68,12 +67,8 @@ impl<affine Bk: Backend> Model<Bk> {
     /// ids of the last call, only the new ones run, against the cached keys
     /// and values of the rest.
     pub fn next_token(&mut self, ids: &List<i32>) -> i32 with _ {
-        assert 1 <= ids.len() <= self.positions(), "the model reads 1 to positions() tokens";
-        let vocab = gpt2::TransformerWteWeightMerged00::EXTENT;
-        for let id of ids {
-            assert 0 <= *id < vocab, "every token id is in the vocabulary";
-        }
-        if !self.extends(ids) {
+        assert_readable(ids);
+        if !extends(&self.seen, ids) {
             self.forget();
         }
         let fresh: List<i64> = ids.into_iter().skip(self.seen.len()).map(|id| id as i64).collect();
@@ -107,17 +102,95 @@ impl<affine Bk: Backend> Model<Bk> {
         self.seen = *ids;
         return best;
     }
+}
 
-    /// Whether `ids` starts with the ids the cache holds, and adds some.
-    fn extends(&self, ids: &List<i32>) -> bool {
-        if ids.len() <= self.seen.len() {
+/// GPT-2 as the graph `build` adds to, computed where `Bk` runs each operation
+/// as it is built, from inputs padded to capacities and a cache of fixed
+/// capacity.
+pub struct Built<affine Bk: Graph> {
+    backend: Bk,
+    model: gpt2::Model<Bk>,
+    seen: List<i32>,
+    cache: gpt2::Cache<Bk>,
+}
+
+impl<affine Bk: Graph> Built<Bk> {
+    /// Loads the weights onto `backend` from `model`, as `Model::load` does.
+    pub fn load<affine Ck: CheckpointBytes>(backend: Bk, model: &Ck) -> Result<Built<Bk>, LoadError> with _ {
+        let mut on = backend;
+        let held = gpt2::Model::new(gpt2::Params::load(&mut on, model)?);
+        let cache = gpt2::Cache::empty(&mut on);
+        return Ok(Built { backend: on, model: held, seen: [], cache });
+    }
+
+    /// The backend the model runs on.
+    pub fn backend(&self) -> &Bk {
+        return &self.backend;
+    }
+
+    /// Empties the cache, so the next call reads its ids from the start.
+    pub fn forget(&mut self) with _ {
+        self.seen = [];
+        self.cache = gpt2::Cache::empty(&mut self.backend);
+    }
+
+    /// The token the model ranks first after `ids`, as `Model::next_token`
+    /// picks it.
+    pub fn next_token(&mut self, ids: &List<i32>) -> i32 with _ {
+        assert_readable(ids);
+        if !extends(&self.seen, ids) {
+            self.forget();
+        }
+        let fresh: List<i64> = ids.into_iter().skip(self.seen.len()).map(|id| id as i64).collect();
+        let input_ids = Tensor::<i64, [gpt2::BatchSize, gpt2::SequenceLength]> {
+            data: fresh,
+            extents: [gpt2::BatchSize::EXTENT, fresh.len()],
+        };
+        let mask = Tensor::<i64, [gpt2::BatchSize, gpt2::SequenceLength]> {
+            data: List::<i64>::filled(ids.len(), 1),
+            extents: [gpt2::BatchSize::EXTENT, ids.len()],
+        };
+        let use_cache_branch = Tensor::<bool, [gpt2::UseCacheBranch0]> {
+            data: [!self.seen.is_empty()],
+            extents: [1],
+        };
+        let passed = gpt2::compute(
+            &mut self.backend,
+            &input_ids,
+            &mask,
+            &use_cache_branch,
+            &self.cache,
+            &mut self.model,
+        );
+        self.cache = passed.cache;
+        self.seen = *ids;
+        return passed.logits.data[0] as i32;
+    }
+}
+
+/// How many positions the model reads: one per row of `wpe`, which the graph's
+/// causal mask covers.
+fn positions() -> i32 {
+    return gpt2::TransformerWpeWeightMerged00::EXTENT;
+}
+
+fn assert_readable(ids: &List<i32>) {
+    assert 1 <= ids.len() <= positions(), "the model reads 1 to positions() tokens";
+    for let id of ids {
+        assert 0 <= *id < gpt2::TransformerWteWeightMerged00::EXTENT, "every token id is in the vocabulary";
+    }
+}
+
+/// Whether `ids` starts with the ids `seen`, those the cache holds, and adds
+/// some.
+fn extends(seen: &List<i32>, ids: &List<i32>) -> bool {
+    if ids.len() <= seen.len() {
+        return false;
+    }
+    for let i of 0..<seen.len() {
+        if ids[i] != seen[i] {
             return false;
         }
-        for let i of 0..<self.seen.len() {
-            if ids[i] != self.seen[i] {
-                return false;
-            }
-        }
-        return true;
     }
+    return true;
 }
