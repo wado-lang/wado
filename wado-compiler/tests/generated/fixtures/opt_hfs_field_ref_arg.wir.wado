@@ -208,13 +208,13 @@ type "functype//core:prelude/primitive.wado/i32::div_ceil$sroa[self.value]" = fn
 
 type "functype//core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(78)
 
-type "functype//core:prelude/primitive.wado/u64::fmt_base$sroa[self.value]" = fn(u64, ref "core:prelude/format.wado//Formatter", i32, bool, ref "core:prelude/string.wado//String");  // TypeId(79)
+type "functype//core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<opt_hfs_field_ref_arg.wado/$tmpl$f86a99973c5f619d,core:prelude/string.wado/String>::lit$sroa[self.index]" = fn(i32, ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//StrSlice";  // TypeId(79)
 
-type "functype//core:prelude/primitive.wado/i32^core:prelude/traits.wado/LowerHex::fmt_lower_hex$sroa[self.value]" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(80)
+type "functype//core:prelude/primitive.wado/u64::fmt_base$sroa[self.value]" = fn(u64, ref "core:prelude/format.wado//Formatter", i32, bool, ref "core:prelude/string.wado//String");  // TypeId(80)
 
-type "functype//core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<core:prelude/format.wado/$tmpl$47518b5dd822a983,i32>::lit$sroa[self.index]" = fn(i32, ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//StrSlice";  // TypeId(81)
+type "functype//core:prelude/primitive.wado/i32^core:prelude/traits.wado/LowerHex::fmt_lower_hex$sroa[self.value]" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(81)
 
-type "functype//core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<opt_hfs_field_ref_arg.wado/$tmpl$f86a99973c5f619d,core:prelude/string.wado/String>::lit$sroa[self.index]" = fn(i32, ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//StrSlice";  // TypeId(82)
+type "functype//core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<core:prelude/format.wado/$tmpl$47518b5dd822a983,i32>::lit$sroa[self.index]" = fn(i32, ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//StrSlice";  // TypeId(82)
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec0" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(83)
 
@@ -266,21 +266,20 @@ fn "opt_hfs_field_ref_arg.wado/run"() {
     let b_0: ref "opt_hfs_field_ref_arg.wado//Buf";
     let total: i32;
     let i_2: i32;
-    let a: ref Array<u8>;
-    let b_13: ref Array<u8>;
-    let $hfs_s_18: ref "core:prelude/string.wado//String";
+    let $licm_repr_18: ref Array<u8>;
+    let $hfs_s_19: ref "core:prelude/string.wado//String";
     b_0 = struct.new "opt_hfs_field_ref_arg.wado//Buf" { s: ref.as_non_null(black_box(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(122), used: 1 })), n: black_box(0) };
     total = 0;
     i_2 = 0;
-    $hfs_s_18 = b_0.s;
+    $hfs_s_19 = b_0.s;
     b0: block {
         l1: loop {
             break_if b0 i_2 >= 2;
-            "opt_hfs_field_ref_arg.wado/swap_out"($hfs_s_18);
-            total = (((total + "opt_hfs_field_ref_arg.wado/field_len$sroa[b.s.used]"($hfs_s_18.used)) + "opt_hfs_field_ref_arg.wado/both"(b_0)) + local.tee total(b_0.s.used)) + total;
-            $hfs_s_18 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(122), used: 1 };
+            "opt_hfs_field_ref_arg.wado/swap_out"($hfs_s_19);
+            total = (((total + "opt_hfs_field_ref_arg.wado/field_len$sroa[b.s.used]"($hfs_s_19.used)) + "opt_hfs_field_ref_arg.wado/both"(b_0)) + local.tee total(b_0.s.used)) + total;
+            $hfs_s_19 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(122), used: 1 };
             i_2 = i_2 + 1;
-            b_0.s = $hfs_s_18;
+            b_0.s = $hfs_s_19;
             continue l1;
         };
     };
@@ -289,31 +288,29 @@ fn "opt_hfs_field_ref_arg.wado/run"() {
         "opt_hfs_field_ref_arg.wado/run$cold0"(total);
         unreachable;
     }
-    $hfs_s_18 = b_0.s;
+    $hfs_s_19 = b_0.s;
     if @unlikely($inline_core_prelude_array_wado_seq_eq_u8__4: block -> bool {
-        a = $hfs_s_18.repr;
-        total = $hfs_s_18.used;
-        b_13 = global:opt_hfs_field_ref_arg.wado::$const_obj_0;
-        if total != 1 {
+        if local.tee total($hfs_s_19.used) != 1 {
             break $inline_core_prelude_array_wado_seq_eq_u8__4: 0;
         }
         i_2 = 0;
+        $licm_repr_18 = $hfs_s_19.repr;
         b5: block {
             l6: loop {
                 break_if b5 (((i_2 >= total) | ((i_2 + 1) >= total)) | (((i_2 + 1) + 1) >= total)) | ((((i_2 + 1) + 1) + 1) >= total);
-                if builtin::array_get_value<u8>(a, i_2) != builtin::array_get_value<u8>(b_13, i_2) {
+                if builtin::array_get_value<u8>($licm_repr_18, i_2) != builtin::array_get_value<u8>(global:opt_hfs_field_ref_arg.wado::$const_obj_0, i_2) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__4: 0;
                 }
                 i_2 = i_2 + 1;
-                if builtin::array_get_value<u8>(a, i_2) != builtin::array_get_value<u8>(b_13, i_2) {
+                if builtin::array_get_value<u8>($licm_repr_18, i_2) != builtin::array_get_value<u8>(global:opt_hfs_field_ref_arg.wado::$const_obj_0, i_2) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__4: 0;
                 }
                 i_2 = i_2 + 1;
-                if builtin::array_get_value<u8>(a, i_2) != builtin::array_get_value<u8>(b_13, i_2) {
+                if builtin::array_get_value<u8>($licm_repr_18, i_2) != builtin::array_get_value<u8>(global:opt_hfs_field_ref_arg.wado::$const_obj_0, i_2) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__4: 0;
                 }
                 i_2 = i_2 + 1;
-                if builtin::array_get_value<u8>(a, i_2) != builtin::array_get_value<u8>(b_13, i_2) {
+                if builtin::array_get_value<u8>($licm_repr_18, i_2) != builtin::array_get_value<u8>(global:opt_hfs_field_ref_arg.wado::$const_obj_0, i_2) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__4: 0;
                 }
                 i_2 = i_2 + 1;
@@ -323,7 +320,7 @@ fn "opt_hfs_field_ref_arg.wado/run"() {
         b11: block {
             l12: loop {
                 break_if b11 i_2 >= total;
-                if builtin::array_get_value<u8>(a, i_2) != builtin::array_get_value<u8>(b_13, i_2) {
+                if builtin::array_get_value<u8>($licm_repr_18, i_2) != builtin::array_get_value<u8>(global:opt_hfs_field_ref_arg.wado::$const_obj_0, i_2) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__4: 0;
                 }
                 i_2 = i_2 + 1;
@@ -333,11 +330,11 @@ fn "opt_hfs_field_ref_arg.wado/run"() {
         break $inline_core_prelude_array_wado_seq_eq_u8__4: 1;
     } == 0) {
         cold_path;
-        "core:rt/panic"(local.tee $hfs_s_18("core:prelude/string.wado/core:prelude/string.wado/String::format<opt_hfs_field_ref_arg.wado/$tmpl$0a6f357a930e0d85,[core:prelude/string.wado/String,core:prelude/string.wado/String]>"(struct.new "opt_hfs_field_ref_arg.wado//$tmpl$0a6f357a930e0d85" { h0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("expected z, got {b.s}"), used: 21 }, h1: $hfs_s_18, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in run at opt_hfs_field_ref_arg.wado:44: "), used: 58 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in run at opt_hfs_field_ref_arg.wado:44: "), used: 58 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
+        "core:rt/panic"(local.tee $hfs_s_19("core:prelude/string.wado/core:prelude/string.wado/String::format<opt_hfs_field_ref_arg.wado/$tmpl$0a6f357a930e0d85,[core:prelude/string.wado/String,core:prelude/string.wado/String]>"(struct.new "opt_hfs_field_ref_arg.wado//$tmpl$0a6f357a930e0d85" { h0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("expected z, got {b.s}"), used: 21 }, h1: $hfs_s_19, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in run at opt_hfs_field_ref_arg.wado:44: "), used: 58 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in run at opt_hfs_field_ref_arg.wado:44: "), used: 58 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: b.s == \"z\"
 b.s: "), used: 28 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: b.s == \"z\"
-b.s: "), used: 28 }, s2: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r2: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, $hfs_s_18.used);
+b.s: "), used: 28 }, s2: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r2: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, $hfs_s_19.used);
         unreachable;
     }
 }
@@ -1254,6 +1251,12 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(self, f) {
     "core:prelude/primitive.wado/write_decimal_digits"(f.buf.repr, is_negative, abs_val, self);
 }
 
+fn "core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<opt_hfs_field_ref_arg.wado/$tmpl$f86a99973c5f619d,core:prelude/string.wado/String>::lit$sroa[self.index]"(self, $mv$t$s0, $mv$t$r0, $mv$t$s1, $mv$t$r1, $mv$t$s2, $mv$t$r2) {
+    return block -> ref "core:prelude/string.wado//StrSlice" {
+        "core:prelude/string.wado/core:prelude/string.wado/String::internal_view"(local.tee $mv$t$s0("opt_hfs_field_ref_arg.wado/$template_segment$opt_hfs_field_ref_arg.wado/$tmpl$f86a99973c5f619d"($mv$t$s0, $mv$t$r0, $mv$t$s1, $mv$t$r1, $mv$t$s2, $mv$t$r2, 2 * self)).repr, $mv$t$s0.used);
+    };
+}
+
 fn "core:prelude/primitive.wado/u64::fmt_base$sroa[self.value]"(self, f, base, upper, alt_prefix) {
     let bits_per_digit: i32;
     let digit_count: i32;
@@ -1276,12 +1279,6 @@ fn "core:prelude/primitive.wado/i32^core:prelude/traits.wado/LowerHex::fmt_lower
 fn "core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<core:prelude/format.wado/$tmpl$47518b5dd822a983,i32>::lit$sroa[self.index]"(self, $mv$t$s0, $mv$t$r0, $mv$t$s1, $mv$t$r1) {
     return block -> ref "core:prelude/string.wado//StrSlice" {
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_view"(local.tee $mv$t$s0("core:prelude/format.wado/$template_segment$core:prelude/format.wado/$tmpl$47518b5dd822a983"($mv$t$s0, $mv$t$r0, $mv$t$s1, $mv$t$r1, 2 * self)).repr, $mv$t$s0.used);
-    };
-}
-
-fn "core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<opt_hfs_field_ref_arg.wado/$tmpl$f86a99973c5f619d,core:prelude/string.wado/String>::lit$sroa[self.index]"(self, $mv$t$s0, $mv$t$r0, $mv$t$s1, $mv$t$r1, $mv$t$s2, $mv$t$r2) {
-    return block -> ref "core:prelude/string.wado//StrSlice" {
-        "core:prelude/string.wado/core:prelude/string.wado/String::internal_view"(local.tee $mv$t$s0("opt_hfs_field_ref_arg.wado/$template_segment$opt_hfs_field_ref_arg.wado/$tmpl$f86a99973c5f619d"($mv$t$s0, $mv$t$r0, $mv$t$s1, $mv$t$r1, $mv$t$s2, $mv$t$r2, 2 * self)).repr, $mv$t$s0.used);
     };
 }
 

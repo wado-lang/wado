@@ -150,9 +150,9 @@ type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::pre
 
 type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::write_char_n$sroa[self.buf]" = fn(ref "core:prelude/string.wado//String", char, i32);  // TypeId(54)
 
-type "functype//core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(55)
+type "functype//core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<inline_sole_site.wado/$tmpl$1e035ea808af4c89,&Array<u8>>::lit$sroa[self.index]" = fn(i32, ref "inline_sole_site.wado//$tmpl$1e035ea808af4c89") -> ref "core:prelude/string.wado//StrSlice";  // TypeId(55)
 
-type "functype//core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<inline_sole_site.wado/$tmpl$1e035ea808af4c89,&Array<u8>>::lit$sroa[self.index]" = fn(i32, ref "inline_sole_site.wado//$tmpl$1e035ea808af4c89") -> ref "core:prelude/string.wado//StrSlice";  // TypeId(56)
+type "functype//core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(56)
 
 type "functype//core:prelude/format.wado/&Array<u8>^core:prelude/traits.wado/Inspect::inspect$sroa[self.value]" = fn(ref Array<u8>, ref "core:prelude/format.wado//Formatter");  // TypeId(57)
 
@@ -1106,6 +1106,13 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_char_n$sr
     };
 }
 
+fn "core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<inline_sole_site.wado/$tmpl$1e035ea808af4c89,&Array<u8>>::lit$sroa[self.index]"(self, t) {
+    return block -> ref "core:prelude/string.wado//StrSlice" {
+        let $mv_arg_1: ref "core:prelude/string.wado//String";
+        "core:prelude/string.wado/core:prelude/string.wado/String::internal_view"(local.tee $mv_arg_1("inline_sole_site.wado/$template_segment$inline_sole_site.wado/$tmpl$1e035ea808af4c89"(t, 2 * self)).repr, $mv_arg_1.used);
+    };
+}
+
 fn "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(self, f) {
     let is_negative: bool;
     let abs_val: u64;
@@ -1113,13 +1120,6 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(self, f) {
     self = "core:prelude/primitive.wado/count_digits_u64"(local.tee abs_val("core:prelude/primitive.wado/i64::abs"(builtin::i64_extend_i32_s(self))));
     is_negative = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>"(f, is_negative, global:core:prelude/primitive.wado::$const_obj_8, self);
     "core:prelude/primitive.wado/write_decimal_digits"(f.buf.repr, is_negative, abs_val, self);
-}
-
-fn "core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<inline_sole_site.wado/$tmpl$1e035ea808af4c89,&Array<u8>>::lit$sroa[self.index]"(self, t) {
-    return block -> ref "core:prelude/string.wado//StrSlice" {
-        let $mv_arg_1: ref "core:prelude/string.wado//String";
-        "core:prelude/string.wado/core:prelude/string.wado/String::internal_view"(local.tee $mv_arg_1("inline_sole_site.wado/$template_segment$inline_sole_site.wado/$tmpl$1e035ea808af4c89"(t, 2 * self)).repr, $mv_arg_1.used);
-    };
 }
 
 fn "core:prelude/format.wado/&Array<u8>^core:prelude/traits.wado/Inspect::inspect$sroa[self.value]"(self, f) {

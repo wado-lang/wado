@@ -40,7 +40,7 @@ impl ProvidedInterface<'_> {
     fn is_named_by(&self, package: CmPackage<'_>, name: &str, spelling: &UseNameSpelling) -> bool {
         match spelling {
             UseNameSpelling::Ident => self.package == package && self.name == name,
-            UseNameSpelling::InterfaceName(wanted) => self.full_name.is_named_by(wanted),
+            UseNameSpelling::InterfaceName(wanted, _) => self.full_name.is_named_by(wanted),
         }
     }
 }
@@ -143,8 +143,9 @@ fn provided_wasi_interfaces(world: &WorldInfo) -> Vec<ProvidedInterface<'_>> {
 /// `options`, and the body opens with `let req: Request<T> = Request { primary,
 /// … };`, which same-scope shadowing keeps looking like the author's `req`. A
 /// `NoOptions` generator omits `options`, an empty record having no CM form.
-/// The author's body then runs under `core:kiln`'s `KilnLogSink`, since a
-/// generator has no stderr for `core:log`'s default sink. What the rewrite
+/// The author's body then runs under `core:kiln`'s `KilnLogSink`, which keeps
+/// an event's level as a diagnostic's, where `core:log`'s default sink would
+/// write every event to stderr, each line a warning. What the rewrite
 /// names of `core:kiln` it reaches through [`KILN_ADAPTER_NAMESPACE`].
 pub fn inject_kiln_request_adapter(
     target_world: Option<&str>,
@@ -249,6 +250,7 @@ pub fn inject_kiln_request_adapter(
     // `NoOptions {}` for a no-options generator).
     let ident_field = |module: &mut Module, name: &str| StructLiteralField {
         name: name.to_string(),
+        quoted: None,
         name_id: module.alloc_ast_id(),
         name_span: span,
         value: Expr::Ident(IdentExpr {
@@ -270,6 +272,7 @@ pub fn inject_kiln_request_adapter(
     } else {
         StructLiteralField {
             name: "options".to_string(),
+            quoted: None,
             name_id: module.alloc_ast_id(),
             name_span: span,
             value: empty_struct_literal(module, "NoOptions", span),
@@ -585,7 +588,8 @@ mod tests {
         assert!(seed.is_named_by(random, "InsecureSeed", &UseNameSpelling::Ident));
         assert!(!seed.is_named_by(random, "Insecure", &UseNameSpelling::Ident));
         let named_by_full_name = |name: &str| {
-            let spelling = UseNameSpelling::InterfaceName(CmImport::parse(name).unwrap());
+            let spelling =
+                UseNameSpelling::InterfaceName(CmImport::parse(name).unwrap(), StrLit::new(name));
             seed.is_named_by(random, name, &spelling)
         };
         assert!(named_by_full_name("wasi:random/insecure-seed"));
@@ -608,7 +612,6 @@ mod tests {
         let provided = provided();
         let provided = provided.as_slice();
         assert!(forbid_reason("core:kiln", provided).is_none());
-        assert!(forbid_reason("core:kiln/kiln_host.wado", provided).is_none());
         assert!(forbid_reason("core:prelude", provided).is_none());
         assert!(forbid_reason("core:json", provided).is_none());
         assert!(forbid_reason("core:cbor", provided).is_none());

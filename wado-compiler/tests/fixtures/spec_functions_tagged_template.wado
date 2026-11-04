@@ -32,7 +32,7 @@ test "a tagged template calls its tag" {
     let user = User { name: "ann" };
     let dir = "C:";
     let q = sql`SELECT * FROM users WHERE id = ${id} AND name = ${user.name}`;
-    let s = String::raw`${dir}\bin\run.exe`;   // backslashes kept
+    let s = #`${dir}\bin\run.exe`#;   // backslashes kept
     assert q.query == "SELECT * FROM users WHERE id = ? AND name = ?";
     assert s == "C:\\bin\\run.exe";
 }

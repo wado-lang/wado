@@ -1,7 +1,12 @@
 use std::cmp::Reverse;
 use std::collections::BTreeMap;
 use std::fs;
+use std::num::NonZero;
 use std::path::Path;
+use std::sync::Arc;
+
+use tokio::sync::Semaphore;
+use tokio::task::JoinSet;
 
 use serde_json::json;
 use wado_lsp::host::discovery::Disk;
@@ -33,9 +38,15 @@ struct PreparedQuery {
 }
 
 async fn prepare_query(filename: &str) -> Result<PreparedQuery, CliExit> {
+    load_query(filename).await.map_err(CliExit::error)
+}
+
+/// What [`prepare_query`] does, failing with the bare reason, for a caller
+/// that words the failure itself.
+async fn load_query(filename: &str) -> Result<PreparedQuery, String> {
     let path = Path::new(filename);
-    let source = fs::read_to_string(path)
-        .map_err(|e| CliExit::error(format!("reading '{}': {e}", path.display())))?;
+    let source =
+        fs::read_to_string(path).map_err(|e| format!("reading '{}': {e}", path.display()))?;
 
     // Derive every entry-relative fact — host base, manifest root, the kiln
     // pipeline's entry, and the loader's `decl_file` (via `Uri::to_filename`
@@ -48,7 +59,7 @@ async fn prepare_query(filename: &str) -> Result<PreparedQuery, CliExit> {
         .parent()
         .map(std::path::Path::to_path_buf)
         .unwrap_or_default();
-    let manifest_pair = load_nearest_manifest(&canonical, &Disk).map_err(CliExit::error)?;
+    let manifest_pair = load_nearest_manifest(&canonical, &Disk).map_err(|e| e.to_string())?;
     let host = attach_manifest_and_component_deps(
         FilesystemCompilerHost::silent(base.clone()),
         manifest_pair.as_ref(),
@@ -56,8 +67,7 @@ async fn prepare_query(filename: &str) -> Result<PreparedQuery, CliExit> {
         &[&source],
         Acquisition::Analysis,
     )
-    .await
-    .map_err(CliExit::error)?;
+    .await?;
     let uri = wado_lsp::Uri::from_file_path(&canonical)
         .as_str()
         .to_string();
@@ -122,6 +132,86 @@ fn position_from_one_based(line: u32, column: u32) -> Position {
         line: line.saturating_sub(1),
         character: column.saturating_sub(1),
     }
+}
+
+/// Write a SCIP index of every `.wado` file under `dir` to `output`. Each file
+/// is analyzed as an entry of its own, so the references a file makes are
+/// found whether or not anything imports it. Unfiltered by `[test]` /
+/// `[format]`, as `references` is: only `excludes`, globs relative to `dir`,
+/// leave a file out. They match after the walk, so one glob reaches across
+/// the packages under `dir`.
+pub async fn run_scip(dir: &str, output: &str, excludes: &[String]) -> Result<(), CliExit> {
+    let root =
+        fs::canonicalize(dir).map_err(|e| CliExit::error(format!("reading '{dir}': {e}")))?;
+    let mut root_uri = wado_lsp::Uri::from_file_path(&root).as_str().to_string();
+    // `/` already ends in the separator a child's URI follows the root with.
+    if !root_uri.ends_with('/') {
+        root_uri.push('/');
+    }
+    let excludes = discover::ExcludeSet::compile(excludes).map_err(CliExit::error)?;
+    let mut files: Vec<_> = discover::discover_tree(&root, &discover::no_filters)?
+        .into_iter()
+        .flat_map(|pkg| pkg.files)
+        .filter(|file| {
+            !excludes.matches(
+                file.strip_prefix(&root)
+                    .expect("discovery stays under its root"),
+            )
+        })
+        .collect();
+    files.sort();
+    let cores = std::thread::available_parallelism().map_or(1, NonZero::get);
+    let slots = Arc::new(Semaphore::new(cores));
+    let mut analyses = JoinSet::new();
+    for (order, file) in files.into_iter().enumerate() {
+        let slot = Arc::clone(&slots)
+            .acquire_owned()
+            .await
+            .expect("the scip semaphore is never closed");
+        let root_uri = root_uri.clone();
+        // Each file is its own analysis, the stdlib included, so they run a
+        // core each; an engine is not `Send`, so each gets a runtime of its own.
+        analyses.spawn_blocking(move || {
+            let _slot = slot;
+            let document = tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .map_err(|e| CliExit::error(format!("unable to create a scip runtime: {e}")))?
+                .block_on(scip_document_of(&file, &root_uri));
+            Ok::<_, CliExit>((order, document))
+        });
+    }
+    let mut documents = Vec::new();
+    while let Some(joined) = analyses.join_next().await {
+        if let (order, Some(document)) = joined.expect("a scip analysis panicked")? {
+            documents.push((order, document));
+        }
+    }
+    documents.sort_by_key(|(order, _)| *order);
+    let documents: Vec<_> = documents
+        .into_iter()
+        .map(|(_, document)| document)
+        .collect();
+    let index = wado_lsp::scip::encode_index(&root_uri, env!("CARGO_PKG_VERSION"), &documents);
+    fs::write(output, index).map_err(|e| CliExit::error(format!("writing '{output}': {e}")))
+}
+
+/// One file that cannot load (a malformed manifest, say) costs its own
+/// document, not the index.
+async fn scip_document_of(file: &Path, root_uri: &str) -> Option<wado_lsp::scip::ScipDocument> {
+    let prepared = match load_query(&file.to_string_lossy()).await {
+        Ok(prepared) => prepared,
+        Err(reason) => {
+            eprintln!("warning: skipping '{}': {reason}", file.display());
+            return None;
+        }
+    };
+    let document = prepared
+        .engine
+        .scip_document(&prepared.uri, root_uri, &prepared.host)
+        .await
+        .expect("the document was just opened");
+    Some(document)
 }
 
 pub async fn run_diagnostics(filename: &str, json_output: bool) -> Result<(), CliExit> {

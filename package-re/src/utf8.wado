@@ -1,0 +1,84 @@
+//! A range of code points as the UTF-8 byte sequences that encode it.
+
+/// The sequences encoding `[lo, hi]`, surrogates left out since UTF-8 encodes
+/// none, appended to `out` in ascending order. A sequence holds one byte range
+/// per byte.
+internal fn sequences(lo: u32, hi: u32, out: &mut List<List<[u8, u8]>>) {
+    if lo > hi {
+        return;
+    }
+    if lo <= 0xDFFF && hi >= 0xD800 {
+        if lo < 0xD800 {
+            sequences(lo, 0xD7FF, out);
+        }
+        if hi > 0xDFFF {
+            sequences(0xE000, hi, out);
+        }
+        return;
+    }
+    // Split where the encoded length changes.
+    for let top of [0x7F, 0x7FF, 0xFFFF] as List<u32> {
+        if lo <= top && hi > top {
+            sequences(lo, top, out);
+            sequences(top + 1, hi, out);
+            return;
+        }
+    }
+    let n = encoded_len(lo);
+    // Split until each byte position ranges independently: the bits below a
+    // continuation byte must span all of 0..=0x3F wherever a higher byte varies.
+    for let i of 1..<n {
+        let m: u32 = (1 as u32 << (6 * i) as u32) - 1;
+        if lo & ~m != hi & ~m {
+            if lo & m != 0 {
+                sequences(lo, lo | m, out);
+                sequences((lo | m) + 1, hi, out);
+                return;
+            }
+            if hi & m != m {
+                sequences(lo, (hi & ~m) - 1, out);
+                sequences(hi & ~m, hi, out);
+                return;
+            }
+        }
+    }
+    let a = encode(lo);
+    let b = encode(hi);
+    let mut seq: List<[u8, u8]> = [];
+    for let k of 0..<n {
+        seq.push([a[k], b[k]]);
+    }
+    out.push(seq);
+}
+
+fn encoded_len(c: u32) -> i32 {
+    if c < 0x80 {
+        return 1;
+    }
+    if c < 0x800 {
+        return 2;
+    }
+    if c < 0x10000 {
+        return 3;
+    }
+    return 4;
+}
+
+fn encode(c: u32) -> List<u8> {
+    let cont = |shift: u32| (0x80 | c >> shift & 0x3F) as u8;
+    return match encoded_len(c) {
+        1 => [c as u8],
+        2 => [(0xC0 | c >> 6) as u8, cont(0)],
+        3 => [
+            (0xE0 | c >> 12) as u8,
+            cont(6),
+            cont(0),
+        ],
+        _ => [
+            (0xF0 | c >> 18) as u8,
+            cont(12),
+            cont(6),
+            cont(0),
+        ],
+    };
+}

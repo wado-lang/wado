@@ -1,0 +1,39 @@
+// `#[ambient]` hides an effect from every caller, which only the standard
+// library is meant to do: a program writing it is warned, on a function or a
+// global, unless `#[allow(undeclared_effects)]` keeps it.
+
+use { println, Stdout } from "core:cli";
+use { InsecureSeed } from "wasi:random";
+
+fn draw() -> i32 with InsecureSeed {
+    let [_, _] = InsecureSeed::get_insecure_seed();
+    return 1;
+}
+
+#[ambient(InsecureSeed)]
+fn seeded() -> i32 {
+    return draw() + 6;
+}
+
+#[ambient(InsecureSeed)]
+global SEED: i32 = draw();
+
+#[allow(undeclared_effects)]
+#[ambient(InsecureSeed)]
+fn kept() -> i32 {
+    return draw() + 1;
+}
+
+export fn run() with Stdout {
+    println(`${seeded() + SEED + kept()}`);
+}
+
+__DATA__
+{
+    "stdout": "10\n",
+    "warnings_contains": [
+        "`#[ambient]` hides `InsecureSeed` from the callers of `seeded`",
+        "`#[ambient]` hides `InsecureSeed` from the readers of `SEED`"
+    ],
+    "warnings_not_contains": ["`kept`"]
+}

@@ -256,13 +256,11 @@ fn "cm_component_import_args_freed.wado/$cm_binding__wado:test-dependency081a2c6
 fn "cm_component_import_args_freed.wado/$cm_binding__wado:test-dependency081a2c66d224332f/lists@0.1.0#length"(text) with Lists {
     let $text_packed: i64;
     let $raw_result: u32;
-    let bytes: ref Array<u8>;
     let ptr_10: i32;
     let self_11: i32;
     self_11 = text.used;
-    bytes = text.repr;
     ptr_10 = "mem/realloc"(0, 0, 1, self_11);
-    "core:rt/gc_array_to_memory$spec0$dae[src_start]"(bytes, ptr_10, self_11);
+    "core:rt/gc_array_to_memory$spec0$dae[src_start]"(text.repr, ptr_10, self_11);
     self_11 = builtin::i32_wrap_i64(local.tee $text_packed(builtin::i64_extend_i32_u(ptr_10) | (builtin::i64_extend_i32_s(self_11) << 32_i64)));
     ptr_10 = builtin::i32_wrap_i64($text_packed >> 32_i64);
     $raw_result = "wasi/$wado:test-dependency081a2c66d224332f/lists@0.1.0#length"(self_11, ptr_10);

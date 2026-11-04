@@ -285,7 +285,7 @@ fn run_directory_mode(
 
             // Write per-interface file. WIT kebab-case interface names
             // are converted to Wado's snake_case filename convention
-            // (e.g. `kiln-host` -> `kiln_host.wado`).
+            // (e.g. `insecure-seed` -> `insecure_seed.wado`).
             let file_stem = to_snake_case(iface_name);
             module.stdlib_identity = stdlib_identity_for(
                 &pkg.name.namespace,

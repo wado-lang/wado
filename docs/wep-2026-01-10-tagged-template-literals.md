@@ -48,7 +48,7 @@ what makes a tagged template cost what the untagged one costs.
 
 ```wado
 let q = sql`SELECT * FROM users WHERE id = ${id} AND name = ${user.name}`;
-let s = String::raw`${dir}\bin\run.exe`;
+let s = String::format`${dir}/bin/run`;
 ```
 
 A tag is a path expression — a function name or a static method path — written
@@ -72,8 +72,8 @@ type it takes, since the template's own type is one no source spells.
 ### The template type
 
 Each template literal that carries a tag denotes a value of a compiler-synthesized
-struct type, unique to that template's shape. The shape is the list of its
-holes, each a type and a specifier. Two templates with the same shape denote the
+struct type, unique to that template's shape. The shape is its delimiters and
+the list of its holes, each a type and a specifier. Two templates with the same shape denote the
 same type and share every instantiation of the tag, whatever their literal text,
 so `` tag`a=${a}` `` and `` tag`b: ${b}` `` are one type where `a` and `b`
 share one. The type is anonymous — nothing in the source can name it — and is
@@ -124,6 +124,9 @@ pub trait ReflectTemplate: Reflect {
 
     /// `tail(t)` with escapes preserved.
     fn raw_tail(t: &Self) -> StrSlice;
+
+    /// How many `#`s delimit the template on each end: 0 for `` `…` ``.
+    fn hashes() -> i32;
 }
 ```
 
@@ -180,13 +183,22 @@ rejects specifiers reads `has_spec()`.
 The literal segments are the same string in two spellings, both fields of the
 value, and the one a tag never reads is a field nothing passes. That is the
 whole cooked-versus-raw mechanism: no mode, no marker type, and no inspection
-of the tag's signature. `String::raw` is a tag that reads `raw(t)` and
-`raw_tail(t)`. A raw segment is
-still a template segment, so it spells only the escapes the language has:
-`` String::raw`a\nb` `` is `a\nb` as written, and `\p` is the error it is in
-any template.
+of the tag's signature. A raw segment of a cooked template is still a template
+segment, so it spells only the escapes the language has, and `\p` is an error.
+A text full of backslashes, such as a regular expression, is a raw template,
+``#`…`#``, which takes every backslash as itself, so both of its spellings are
+the text as written ([WEP: Re](./wep-2026-11-02-re.md)).
 
-A template value inspects as the template it was written as: the raw segments,
+The prelude has no counterpart of JavaScript's `String.raw` tag. A raw
+template already renders its text as written with no tag, and a tag over a
+cooked template could only keep the escapes the lexer accepts.
+The `#` count is part of the shape, which `hashes()` answers as a constant. A
+runtime field on every template value was the alternative: it keeps a cooked and
+a raw template of the same holes one type, at the cost of a field in every
+`String::format` call, raw or not.
+
+A template value inspects as the template it was written as: its delimiters,
+the raw segments,
 and each hole's value inspected and followed by its specifier. The form is a
 blanket `impl Inspect` over `ReflectTemplate` in the prelude, as every other
 kind's is, reading the holes through `get_ref` so that an affine hole renders
@@ -313,8 +325,7 @@ that cannot name the bound passes its tag a concrete value instead.
 An untagged template is sugar for a call of the `String::format` tag, which a
 program may also call by name. It names the prelude's `String` wherever it
 stands, even where an import takes the name or the module has no prelude.
-The tag is a static method rather than a prelude function, as `String::raw` is,
-so it leaves the name `format` free for a program's own items:
+The tag is a static method rather than a prelude function, so it leaves the name `format` free for a program's own items:
 
 ```wado
 impl String {
@@ -456,7 +467,7 @@ introduces a mechanism; each item names the existing one it extends.
 ### Type table (`tir.rs`)
 
 - `AnonShape::Template(TemplateShape)` beside `Fields` and `Synthetic`.
-  `TemplateShape { holes: Vec<TemplateHole> }`, each hole
+  `TemplateShape { holes: Vec<TemplateHole>, quote: Quote }`, each hole
   `{ ty, spec: Option<String> }`. The shape is the interning key, so two sites
   of one shape reach one `AnonStructId` through `intern_shape`, as struct
   literals do.
@@ -493,8 +504,7 @@ introduces a mechanism; each item names the existing one it extends.
   re-exports it with the other member handles.
 - `compiler_item.rs` gains `ReflectTemplate`, `ReflectTemplateHole` and the
   three method items, in `ALL`, `attr_name`, `expected_kind`, `is_required`.
-- `String::format` and `String::raw` in the string module, written as the tags
-  above.
+- `String::format` in the string module, written as the tag above.
 
 ### Parser and AST
 
@@ -640,7 +650,6 @@ things the optimizer gains here.
   default, filled at the site.
 - `tagged_template_format_equiv.wado`: `String::format` against the untagged form over
   the specifier matrix.
-- `tagged_template_string_raw.wado`: `String::raw` keeps escapes verbatim.
 - `tagged_template_decl_name.wado`: the reader's name, specifiers and the cut
   included.
 - `tagged_template_inspect.wado`: a value inspects as the template it was

@@ -12,6 +12,7 @@ use crate::ast::{
     Attribute, CmImport, Type, WorldDecl, WorldExport, WorldExportFn, WorldImport, cm_import_of,
 };
 use crate::defs::DefId;
+use crate::kiln::GENERATOR_WORLD_FQ;
 use crate::module_source::ModuleSource;
 use crate::tir::TirFunction;
 
@@ -22,11 +23,6 @@ use crate::tir::TirFunction;
 /// that is not registered in the `WorldRegistry` (its exports are derived
 /// dynamically from the entry module's `TirTest` declarations).
 pub const TEST_WORLD: &str = "test";
-
-/// The interface whose import marks a world as a kiln generator world.
-/// The one place the name is spelled; generator-world checks go through
-/// [`WorldRegistry::generator_world`], never a scattered string literal.
-pub const GENERATOR_HOST_INTERFACE: &str = "KilnHost";
 
 /// The interface every [`CallbackExport`] belongs to.
 pub const CALLBACK_INTERFACE: &str = "wado:callback/callback";
@@ -146,7 +142,7 @@ pub struct InterfaceExportMethod {
 /// known.
 #[derive(Debug, Clone)]
 pub struct WorldImportInfo {
-    /// Imported interface name (e.g., `"Stdout"`, `"KilnHost"`).
+    /// Imported interface name (e.g., `"Stdout"`).
     pub interface_name: String,
     /// CM FQ name resolved from the referenced interface declaration, when
     /// known. `None` while the interface has not been registered.
@@ -175,20 +171,6 @@ pub struct WorldInfo {
 }
 
 impl WorldInfo {
-    /// True when this world has an `import {interface_name} { ... }` block.
-    ///
-    /// The check is by locally-bound interface name (the identifier written in
-    /// the world declaration), which is unique within a world's imports.
-    /// Codegen uses this to drive world-shape decisions from data — e.g.
-    /// `imports_interface("KilnHost")` is true for the kiln generator world and
-    /// any future world that imports the same interface, replacing string
-    /// matches against `target_world == "core:kiln/generator"`.
-    pub fn imports_interface(&self, interface_name: &str) -> bool {
-        self.imports
-            .iter()
-            .any(|i| i.interface_name == interface_name)
-    }
-
     /// True when this world imports the interface whose CM FQ is `fq`
     /// (`wasi:random/random@0.3.0`).
     pub fn imports_cm_interface(&self, fq: &str) -> bool {
@@ -394,14 +376,11 @@ impl WorldRegistry {
         self.worlds.contains_key(fq_name)
     }
 
-    /// `world`, when it is a kiln generator world. Structural: any world that
-    /// imports [`GENERATOR_HOST_INTERFACE`] qualifies, so a future generator
-    /// world with a different FQ is detected without new branches. The single
-    /// predicate behind kiln-generator detection, so the frontend, `cm_binding`,
-    /// and codegen all agree on what counts as a generator world.
+    /// `world`, when it is the kiln generator world. The single predicate
+    /// behind kiln-generator detection, so the frontend, `cm_binding`, and
+    /// codegen all agree on what counts as a generator world.
     pub fn generator_world(&self, world: &str) -> Option<&WorldInfo> {
-        self.get(world)
-            .filter(|w| w.imports_interface(GENERATOR_HOST_INTERFACE))
+        self.get(world).filter(|_| world == GENERATOR_WORLD_FQ)
     }
 
     pub fn is_generator_world(&self, world: &str) -> bool {
@@ -442,6 +421,7 @@ mod tests {
         let world = WorldDecl {
             id: AstId::fresh(),
             name: "Command".to_string(),
+            name_span: Span::default(),
             visibility: Visibility::Private,
             attrs: vec![Attribute {
                 name: CM.to_string(),
@@ -516,18 +496,16 @@ mod tests {
             world_registry.has_world("core:kiln/generator"),
             "core:kiln/generator world should be registered"
         );
-        // Revision 3: the static world is an import-only template — each generator
+        // The static world is an import-only template: each generator
         // synthesizes its own world with a typed `generate` (its `options`
         // shape is per-generator), so the static world carries no `generate`
-        // export. It exists to hold the `KilnHost` import and anchor the
+        // export. It exists to hold the shared imports and anchor the
         // `core:kiln/generator` identity that detection keys on.
         let world = world_registry
             .get("core:kiln/generator")
             .expect("world registered");
-        assert!(
-            world.imports_interface("KilnHost"),
-            "the generator world imports KilnHost"
-        );
+        assert!(world_registry.is_generator_world("core:kiln/generator"));
+        assert!(!world_registry.is_generator_world("wasi:cli/command"));
         assert!(
             world.exports.is_empty(),
             "the static generator world declares no exports"
@@ -557,25 +535,20 @@ mod tests {
 
     #[test]
     fn test_imports_populated_from_stdlib() {
-        // Real-world check: the kiln Generator world declares
-        // `import KilnHost { ... }` in `lib/core/kiln/worlds.wado`, so the
-        // populated registry must surface that import. The cli Command world
-        // imports several effects (Stdout, Stdin, Environment, ...).
         let (_registry, world_registry) = CmInterfaceRegistry::build_from_stdlib();
-
-        let kiln = world_registry
-            .get("core:kiln/generator")
-            .expect("kiln world registered");
-        assert!(
-            kiln.imports_interface("KilnHost"),
-            "kiln Generator imports KilnHost — expected by step-2c codegen gating"
+        let imports = |world: &str| -> Vec<String> {
+            world_registry
+                .get(world)
+                .expect("world registered")
+                .imports
+                .iter()
+                .map(|i| i.interface_name.clone())
+                .collect()
+        };
+        assert_eq!(
+            imports("core:kiln/generator"),
+            ["Insecure", "InsecureSeed", "Stdout", "Stderr"]
         );
-        assert!(!kiln.imports_interface("Stdout"));
-
-        let cli = world_registry
-            .get("wasi:cli/command")
-            .expect("cli world registered");
-        assert!(cli.imports_interface("Stdout"));
-        assert!(!cli.imports_interface("KilnHost"));
+        assert!(imports("wasi:cli/command").contains(&"Stdout".to_string()));
     }
 }

@@ -193,7 +193,7 @@ plan an import of it gets, since the plan depends on the source text alone.
 
 `coverage_probe` writes a mutable global and calls a host import, so the
 optimizer sees it as it sees any other call with a side effect. It declares the
-`CoverageHost` effect `#[benign]`, so a pure function keeps its signature once
+`CoverageHost` effect `#[ambient]`, so a pure function keeps its signature once
 probed. No pass that preserves program behavior can then remove a probe that
 could run:
 

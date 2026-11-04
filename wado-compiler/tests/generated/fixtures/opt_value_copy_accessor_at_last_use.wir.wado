@@ -76,11 +76,11 @@ fn "opt_value_copy_accessor_at_last_use.wado/run"() with Stdout {
     let $load_0: ref Array<u8>;
     let repr_3: ref Array<i32>;
     let value_6: i32;
-    let start_191: i32;
+    let start_188: i32;
     let out_559: ref "core:prelude/string.wado//String";
     let is_negative_626: bool;
     let x_630: i64;
-    let repr_649: ref Array<u8>;
+    let $sroa_view_repr_203: ref Array<u8>;
     repr_3 = builtin::array_new<i32>(2);
     value_6 = black_box(7);
     builtin::array_set<i32>(repr_3, 0, value_6);
@@ -93,14 +93,14 @@ fn "opt_value_copy_accessor_at_last_use.wado/run"() with Stdout {
     value_6 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_630(x_630 = builtin::i64_extend_i32_s(value_6); select i64(x_630 < 0_i64, 0_i64 - x_630, x_630)));
     is_negative_626 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"(out_559, is_negative_626, value_6);
     "core:prelude/primitive.wado/write_decimal_digits"(local.tee $load_0(out_559.repr), is_negative_626, x_630, value_6);
-    repr_649 = global:opt_value_copy_accessor_at_last_use.wado::$const_obj_0;
+    $sroa_view_repr_203 = global:opt_value_copy_accessor_at_last_use.wado::$const_obj_0;
     if @unlikely(local.tee value_6(out_559.used + 1) > builtin::array_len($load_0)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_559, value_6);
     }
     is_negative_626 = out_559.used;
     out_559.used = value_6;
-    builtin::array_copy<u8>(out_559.repr, is_negative_626, repr_649, 0, 1);
+    builtin::array_copy<u8>(out_559.repr, is_negative_626, $sroa_view_repr_203, 0, 1);
     value_6 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"(out_559, 0, 1);
     "core:prelude/primitive.wado/write_decimal_digits"(out_559.repr, value_6, 1_i64, 1);
     $inline_core_prelude_string_wado_String__format_opt_value_copy_accessor_at_last_use_wado__tmpl_8db8629cb9c7db93__i32_i32___spec0_spec0_sroa_t_h0__0__$inline_core_prelude_string_wado_String__internal_push_view_70: block {
@@ -130,18 +130,18 @@ fn "opt_value_copy_accessor_at_last_use.wado/run"() with Stdout {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_559, is_negative_626);
         }
-        start_191 = out_559.used;
+        start_188 = out_559.used;
         out_559.used = is_negative_626;
-        builtin::array_set_u8(out_559.repr, start_191, 45);
+        builtin::array_set_u8(out_559.repr, start_188, 45);
     } else {
     }
     if @unlikely(local.tee is_negative_626(out_559.used + value_6) > builtin::array_len(out_559.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_559, is_negative_626);
     }
-    start_191 = out_559.used;
+    start_188 = out_559.used;
     out_559.used = is_negative_626;
-    "core:prelude/primitive.wado/write_decimal_digits"(out_559.repr, start_191, x_630, value_6);
+    "core:prelude/primitive.wado/write_decimal_digits"(out_559.repr, start_188, x_630, value_6);
     $inline_core_prelude_string_wado_String__format_opt_value_copy_accessor_at_last_use_wado__tmpl_fb51c04d54491732__i32___spec0_spec0_sroa_t_h0__0__$inline_core_prelude_string_wado_String__internal_push_view_39: block {
         break $inline_core_prelude_string_wado_String__format_opt_value_copy_accessor_at_last_use_wado__tmpl_fb51c04d54491732__i32___spec0_spec0_sroa_t_h0__0__$inline_core_prelude_string_wado_String__internal_push_view_39;
     };

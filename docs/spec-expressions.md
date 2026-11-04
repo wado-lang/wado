@@ -309,7 +309,7 @@ test {
 A global may have any type. Its initializer declares no `with` clause and has
 nowhere to declare one. So calling a function that declares an effect is an
 error, as is dispatching an operation, except for the effects a
-[`#[benign(E, ...)]`](./spec-attributes.md#benigne-) on the global lists.
+[`#[ambient(E, ...)]`](./spec-effects.md#ambient-functions) on the global lists.
 
 An initializer runs outside every handler, those installed where the global is
 first read included. Unless it installs a handler of its own, an operation it
@@ -323,7 +323,7 @@ handler that performs nothing can be installed here.
 Whether an initializer runs, and when, is unspecified, except that it runs at
 most once and has run before the global is read. An initializer that traps may
 trap the program at start, at the first read, or never, if nothing reads the
-global. A `#[benign]` global is no exception.
+global. An `#[ambient]` global is no exception.
 
 ### Mutability
 

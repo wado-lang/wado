@@ -12,11 +12,13 @@ use crate::nir_arena::{
     StmtNode,
 };
 use crate::nir_visitor::NirRefVisitor;
+use crate::tir::ResolvedType;
 use crate::type_table::TypeTable;
 
 use super::callee::{CallSite, CalleeKey};
 use super::place::{
-    named_local, place_aliased_by_another, place_of, referenced_place_operand, write_root_local,
+    named_local, place_aliased_by_another, place_of, places_overlap, referenced_place_operand,
+    write_root_local,
 };
 use super::region::{block_shape, region_needs, region_shape, value_block_shape};
 use super::rewrite::is_discardable_operand;
@@ -236,23 +238,30 @@ fn aliased_write_targets(targets: &[(u32, u32, Vec<u32>)], places: &[(u32, Vec<u
 ///
 /// [`clobbered_locals`]: super::trackability::clobbered_locals
 fn locals_written_under(body: &Body, e: ExprId) -> IndexSet<u32> {
-    let mut written = IndexSet::default();
-    body.find_in_nodes_under(NodeRef::Expr(e), |node| {
+    write_targets_under(body, NodeRef::Expr(e))
+        .into_iter()
+        .filter_map(|target| write_root_local(body, target))
+        .collect()
+}
+
+/// The operands something under `node` writes through: an assignment's
+/// target, a `&mut`'s operand, an argument reaching storage.
+fn write_targets_under(body: &Body, node: NodeRef) -> Vec<Operand> {
+    let mut targets = Vec::new();
+    body.find_in_nodes_under(node, |node| {
         let NodeRef::Expr(e) = node else {
             return None::<()>;
         };
         match &body.exprs[e].kind {
-            ExprKind::Assign { target, .. } => {
-                written.extend(write_root_local(body, (*target).into()));
-            }
+            ExprKind::Assign { target, .. } => targets.push((*target).into()),
             ExprKind::Unary {
                 op: NirUnaryOp::MutRef,
                 expr,
-            } => written.extend(write_root_local(body, *expr)),
+            } => targets.push(*expr),
             ExprKind::Call { args, .. } => {
                 for (arg, reaches_storage) in args.with_storage_reach(true) {
                     if reaches_storage {
-                        written.extend(write_root_local(body, arg.expr));
+                        targets.push(arg.expr);
                     }
                 }
             }
@@ -260,7 +269,7 @@ fn locals_written_under(body: &Body, e: ExprId) -> IndexSet<u32> {
         }
         None
     });
-    written
+    targets
 }
 
 /// Every local `e` names, read or written.
@@ -307,12 +316,9 @@ impl Interpreter<'_> {
         self.step_budget -= 1;
         match &body.stmts[s].kind {
             StmtKind::Let {
-                local_index,
-                is_mut,
-                value,
-                ..
+                local_index, value, ..
             } => {
-                let (index, is_mut, value) = (*local_index, *is_mut, *value);
+                let (index, value) = (*local_index, *value);
                 // A fresh binding forks the local's storage; an alias taken
                 // over the same index would keep pointing at the old one.
                 if self
@@ -324,10 +330,13 @@ impl Interpreter<'_> {
                 {
                     return Flow::Bail;
                 }
-                // What makes an immutable binding of a reference an alias is that
-                // nothing displaces it, which is equally true of a mutable
-                // local nothing reassigns.
-                if !is_mut || !self.frame.reassigned.contains(index) {
+                if self.binds_written_array_handle(body, index, value) {
+                    return Flow::Bail;
+                }
+                // What makes a binding of a reference an alias is that nothing
+                // displaces it. `mut` does not say so: scalarizing leaves an
+                // immutable `let` that is assigned later.
+                if !self.frame.reassigned.contains(index) {
                     if let Some(named) = self.aliased_operand(body, value) {
                         return match self.record_place_alias(body, index, named) {
                             Some(()) => Flow::Fallthrough(Lattice::Unevaluated),
@@ -659,7 +668,6 @@ impl Interpreter<'_> {
             | CtfeBuiltin::FloatIsNan
             | CtfeBuiltin::Ieee754Comparison(_)
             | CtfeBuiltin::HeapBase(_)
-            | CtfeBuiltin::AmbientStdio(_)
             | CtfeBuiltin::IsMoved
             | CtfeBuiltin::BitCount(_) => None,
         }
@@ -781,22 +789,63 @@ impl Interpreter<'_> {
     }
 
     /// The operand a `let` binds as a place rather than a value: a reference names
-    /// the place it was taken over, and a bare local already naming one rebinds
-    /// the same place. Nothing else qualifies — a projection out of an alias
-    /// reads *through* it — hence matching the RHS as a local. Boxing rewrites
-    /// `&x` into a bare read, so the type test accepts any reference shape.
+    /// the place it was taken over, and a bare local or a place field already
+    /// naming one rebinds the same place. Any other projection out of an alias
+    /// reads *through* it. Boxing rewrites `&x` into a bare read, so the type
+    /// test accepts any reference shape.
     fn aliased_operand(&self, body: &Body, value: Operand) -> Option<Operand> {
         if let Some((_, referenced)) = referenced_place_operand(body, value) {
             return Some(referenced);
         }
-        let index = named_local(body, value)?;
-        if self.frame.place_aliases.contains_key(&index) {
+        let index = named_local(body, value);
+        if index.is_some_and(|index| self.frame.place_aliases.contains_key(&index)) {
             return Some(value);
         }
+        // `place_of` drops a deref, so `*h.f` names the place field `h.f` does;
+        // only the reference itself rebinds.
         let type_id = body.exprs[value.as_expr()?].type_id;
-        self.type_table
-            .is_reference_shaped(type_id)
+        if !self.type_table.is_reference_shaped(type_id) {
+            return None;
+        }
+        if index.is_some() {
+            return Some(value);
+        }
+        let place = self.aliased_place_of(body, value)?;
+        self.frame
+            .place_fields
+            .contains_key(&place)
             .then_some(value)
+    }
+
+    /// Whether `let index = value` binds a second handle to an array that the
+    /// body writes through either handle. An array is one object every handle
+    /// shares, and the frame holds it by value, so the copy the `let` makes
+    /// would miss those writes.
+    fn binds_written_array_handle(&self, body: &Body, index: u32, value: Operand) -> bool {
+        if !matches!(
+            self.type_table.get(body.operand_type(value)),
+            ResolvedType::BuiltinArray(_)
+        ) {
+            return false;
+        }
+        let Some(source_root) = write_root_local(body, value) else {
+            return false;
+        };
+        let source = self.frame_place_of(body, value);
+        write_targets_under(body, NodeRef::Block(body.root()))
+            .into_iter()
+            .any(|target| {
+                let target_root = write_root_local(body, target);
+                if target_root == Some(index) {
+                    return true;
+                }
+                match (self.frame_place_of(body, target), &source) {
+                    (Some((root, path)), Some((source_root, source_path))) => {
+                        places_overlap((root, &path), (*source_root, source_path))
+                    }
+                    _ => target_root == Some(source_root),
+                }
+            })
     }
 
     /// Resolve `index` to the place `inner` refers to, so later reads and writes

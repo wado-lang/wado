@@ -42,18 +42,44 @@ const HOISTED_VALUE: &str = "hoisted_value";
 /// The rule keeps no per-function state: every precondition is re-derived from
 /// the current body on each `apply_block`, since fusion candidates appear and
 /// disappear as neighbouring rewrites land.
-pub(super) struct LabeledBlockFusionRule;
+pub(super) struct LabeledBlockFusionRule<'t> {
+    type_table: &'t TypeTable,
+}
 
 /// Build a [`LabeledBlockFusionRule`] for one function. Mirrors the
 /// `build_ref_elim` / `build_elide_box_local` constructors so the peephole
 /// wiring is uniform; no per-function analysis is needed yet.
-pub(super) fn build_labeled_block_fusion() -> LabeledBlockFusionRule {
-    LabeledBlockFusionRule
+pub(super) fn build_labeled_block_fusion(type_table: &TypeTable) -> LabeledBlockFusionRule<'_> {
+    LabeledBlockFusionRule { type_table }
 }
 
-impl Rule for LabeledBlockFusionRule {
+/// The function's locals, asked whether a payload binding slot is declared
+/// with a payload's type.
+#[derive(Clone, Copy)]
+struct BindingSlots<'a> {
+    locals: &'a [NirLocal],
+    type_table: &'a TypeTable,
+}
+
+impl<'a> BindingSlots<'a> {
+    fn of(engine: &'a Engine, type_table: &'a TypeTable) -> Self {
+        Self {
+            locals: engine.locals(),
+            type_table,
+        }
+    }
+
+    fn holds(self, binding: u32, type_id: TypeId) -> bool {
+        self.locals
+            .get(binding as usize)
+            .is_some_and(|local| self.type_table.same_type(local.type_id, type_id))
+    }
+}
+
+impl Rule for LabeledBlockFusionRule<'_> {
     fn apply_expr(&self, engine: &mut Engine, id: ExprId) -> bool {
-        let Some(plan) = plan_threading(engine.body, id, engine.locals()) else {
+        let slots = BindingSlots::of(engine, self.type_table);
+        let Some(plan) = plan_threading(engine.body, id, slots) else {
             return false;
         };
         perform_threading(engine, id, plan);
@@ -67,8 +93,8 @@ impl Rule for LabeledBlockFusionRule {
         }
         let yields = block_yields_value(engine, block);
         for i in 0..stmts.len() - 1 {
-            let Some(info) =
-                check_fusion_preconditions(engine.body, stmts[i], stmts[i + 1], engine.locals())
+            let slots = BindingSlots::of(engine, self.type_table);
+            let Some(info) = check_fusion_preconditions(engine.body, stmts[i], stmts[i + 1], slots)
             else {
                 continue;
             };
@@ -99,7 +125,7 @@ impl Rule for LabeledBlockFusionRule {
             engine.note_elided_local(temp);
             return true;
         }
-        (0..stmts.len() - 1).any(|i| thread_bound_block(engine, block, &stmts, i))
+        (0..stmts.len() - 1).any(|i| thread_bound_block(engine, block, &stmts, i, self.type_table))
     }
 }
 
@@ -108,7 +134,13 @@ impl Rule for LabeledBlockFusionRule {
 /// above does not take. The consumer is the next statement, its whole value is
 /// the match, and the match evaluates `t` first, so `LB` runs where the `let`
 /// did.
-fn thread_bound_block(engine: &mut Engine, block: BlockId, stmts: &[StmtId], i: usize) -> bool {
+fn thread_bound_block(
+    engine: &mut Engine,
+    block: BlockId,
+    stmts: &[StmtId],
+    i: usize,
+    type_table: &TypeTable,
+) -> bool {
     let StmtKind::Let {
         local_index: temp,
         value: Operand::Expr(lb),
@@ -130,7 +162,8 @@ fn thread_bound_block(engine: &mut Engine, block: BlockId, stmts: &[StmtId], i: 
     if !is_local(engine.body, scrut, temp) || body_uses(engine, temp) != 1 {
         return false;
     }
-    let Some(plan) = plan_threading_of(engine.body, match_id, lb, engine.locals()) else {
+    let slots = BindingSlots::of(engine, type_table);
+    let Some(plan) = plan_threading_of(engine.body, match_id, lb, slots) else {
         return false;
     };
     assert!(engine.redirect_expr(scrut, Operand::Expr(lb)));
@@ -206,10 +239,10 @@ fn check_fusion_preconditions(
     body: &Body,
     let_s: StmtId,
     if_s: StmtId,
-    locals: &[NirLocal],
+    slots: BindingSlots<'_>,
 ) -> Option<FusionInfo> {
     check_fusion_preconditions_if_variant_test(body, let_s, if_s)
-        .or_else(|| check_fusion_preconditions_match(body, let_s, if_s, locals))
+        .or_else(|| check_fusion_preconditions_match(body, let_s, if_s, slots))
         .or_else(|| check_fusion_preconditions_slot_match(body, let_s, if_s))
 }
 
@@ -319,7 +352,7 @@ fn check_fusion_preconditions_match(
     body: &Body,
     let_s: StmtId,
     if_s: StmtId,
-    locals: &[NirLocal],
+    slots: BindingSlots<'_>,
 ) -> Option<FusionInfo> {
     // --- Stmt 1: Let { value: LabeledBlock { label, block } } ---
     let StmtKind::Let {
@@ -395,9 +428,7 @@ fn check_fusion_preconditions_match(
 
     // --- The reused binding slot must already be declared with payload type. ---
     if let Some(binding) = pattern_payload_binding
-        && locals
-            .get(binding as usize)
-            .is_none_or(|local| local.type_id != payload_type)
+        && !slots.holds(binding, payload_type)
     {
         return None;
     }
@@ -2021,11 +2052,11 @@ struct ThreadPlan {
     exits: Vec<Exit>,
 }
 
-fn plan_threading(body: &Body, id: ExprId, locals: &[NirLocal]) -> Option<ThreadPlan> {
+fn plan_threading(body: &Body, id: ExprId, slots: BindingSlots<'_>) -> Option<ThreadPlan> {
     let ExprKind::Match { expr: scrut, .. } = &body.exprs[id].kind else {
         return None;
     };
-    plan_threading_of(body, id, scrut.as_expr()?, locals)
+    plan_threading_of(body, id, scrut.as_expr()?, slots)
 }
 
 /// [`plan_threading`] for the match `id` with `scrut` as its scrutinee, which
@@ -2034,7 +2065,7 @@ fn plan_threading_of(
     body: &Body,
     id: ExprId,
     scrut: ExprId,
-    locals: &[NirLocal],
+    slots: BindingSlots<'_>,
 ) -> Option<ThreadPlan> {
     let ExprKind::Match { arms, .. } = &body.exprs[id].kind else {
         return None;
@@ -2062,7 +2093,7 @@ fn plan_threading_of(
     let result_type = body.exprs[id].type_id;
     let unit_result = result_type == TypeTable::UNIT;
 
-    let exits = validate_exits_in_block(body, lb_block, &label, &arm_infos, locals)?;
+    let exits = validate_exits_in_block(body, lb_block, &label, &arm_infos, slots)?;
 
     let escapes: Vec<Escapes> = arm_infos
         .iter()
@@ -2134,7 +2165,7 @@ fn selected_arm(body: &Body, exit: StmtId, arms: &[ArmInfo]) -> usize {
 /// selects and checks the arm's payload binding type.
 struct ExitValidator<'a> {
     arms: &'a [ArmInfo],
-    locals: &'a [NirLocal],
+    slots: BindingSlots<'a>,
 }
 
 impl ExitSink for ExitValidator<'_> {
@@ -2159,11 +2190,7 @@ impl ExitSink for ExitValidator<'_> {
             let Some(p) = payload else {
                 return false;
             };
-            if self
-                .locals
-                .get(binding as usize)
-                .is_none_or(|local| local.type_id != body.operand_type(p))
-            {
+            if !self.slots.holds(binding, body.operand_type(p)) {
                 return false;
             }
         }
@@ -2179,9 +2206,9 @@ fn validate_exits_in_block(
     block: BlockId,
     label: &str,
     arms: &[ArmInfo],
-    locals: &[NirLocal],
+    slots: BindingSlots<'_>,
 ) -> Option<Vec<Exit>> {
-    let mut sink = ExitValidator { arms, locals };
+    let mut sink = ExitValidator { arms, slots };
     walk_exits(body, block, label, &mut sink)
 }
 

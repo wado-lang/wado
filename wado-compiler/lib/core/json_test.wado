@@ -1592,7 +1592,7 @@ test "a skipped member is held to the same syntax as a read one" {
 }
 
 test "every short escape decodes" {
-    let r: Result<String, DeserializeError> = from_string(String::raw`"\"\\\/\b\f\n\r\t"`);
+    let r: Result<String, DeserializeError> = from_string(#""\"\\\/\b\f\n\r\t""#);
     assert r == Result::Ok("\"\\/\u{8}\u{c}\n\r\t");
 }
 

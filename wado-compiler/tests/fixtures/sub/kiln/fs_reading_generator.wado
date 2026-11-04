@@ -1,0 +1,11 @@
+// A Kiln generator reading a file through `core:fs`, which names no `wasi:`
+// import: `Preopens` comes re-exported from `core:fs`.
+
+use { Request, Response, Error } from "core:kiln";
+use fs from "core:fs";
+use { Preopens } from "core:fs";
+
+export fn generate(req: Request) -> Result<Response, Error> with Preopens {
+    let _ = fs::read_to_string(req.primary.path);
+    return Result::Ok(Response { files: [] });
+}

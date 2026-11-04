@@ -15,8 +15,7 @@ use cranelift_entity::SecondaryMap;
 use crate::compiler_item::CompilerItem;
 use crate::graph::DisjointSets;
 use crate::hashmap::{IndexMap, IndexSet};
-use crate::module_source::ModuleSource;
-use crate::nir::{FuncId, NirLocal, NirUnaryOp};
+use crate::nir::{FuncId, NirLocal, NirUnaryOp, StructFieldTypes};
 use crate::nir_arena::{
     ArenaCallArg, Body, ExprId, ExprKind, LocalSet, NodeRef, Operand, PatId, PatKind, StmtKind,
 };
@@ -356,7 +355,7 @@ fn build_mut_escaped(
 /// pass-by-value, so no callee reaches the fields the `ValueGraph` forwards.
 pub(super) struct CallImmutability<'a> {
     type_table: &'a TypeTable,
-    struct_fields: IndexMap<(String, ModuleSource), Vec<TypeId>>,
+    struct_fields: StructFieldTypes,
     /// Filled by whichever visit asks first; a verdict depends only on the
     /// type, so the order changes nothing.
     memo: Mutex<IndexMap<TypeId, bool>>,
@@ -377,16 +376,7 @@ pub(super) struct CallImmutability<'a> {
 
 impl<'a> CallImmutability<'a> {
     pub(super) fn new(project: &NirPackage, type_table: &'a TypeTable, exec: &Executor) -> Self {
-        let struct_fields = project
-            .structs
-            .iter()
-            .map(|s| {
-                (
-                    (s.name.clone(), s.module_source.clone()),
-                    s.fields.iter().map(|f| f.type_id).collect(),
-                )
-            })
-            .collect();
+        let struct_fields = StructFieldTypes::new(&project.structs, type_table);
         let first_param_types = first_param_types(project);
         let (receiver_mutating, has_body) =
             compute_receiver_mutating(project, type_table, &first_param_types, exec);
@@ -436,27 +426,16 @@ impl<'a> CallImmutability<'a> {
                 let base = *base_type;
                 self.walk(base, stack)
             }
-            ResolvedType::Struct { def, type_args } => {
-                let module_source = &self.type_table.struct_head_module(*def).clone();
-                if is_box_or_list(type_id, self.type_table) {
-                    false
-                } else {
-                    // `struct_fields` is keyed by the NIR struct's mangled
-                    // name, so an instantiation must be spelled with its args.
-                    let key = (
-                        self.type_table.struct_mangled_name(*def, type_args),
-                        module_source.clone(),
-                    );
-                    match self.struct_fields.get(&key) {
-                        Some(fields) => fields.iter().all(|&f| self.walk(f, stack)),
+            _ if self.type_table.struct_parts(type_id).is_some() => {
+                !is_box_or_list(type_id, self.type_table)
+                    && self
+                        .struct_fields
+                        .of_type(type_id, self.type_table)
                         // Unknown layout (not in the registry) — conservative.
-                        None => false,
-                    }
-                }
+                        .is_some_and(|fields| fields.iter().all(|&f| self.walk(f, stack)))
             }
-            // `&mut T`, `Box`/`List` (as `GenericInstance`), raw arrays,
-            // resources, variants, generics, type params, and
-            // unknowns may all carry shared mutable state — conservative.
+            // `&mut T`, raw arrays, resources, variants, generics, type params,
+            // and unknowns may all carry shared mutable state — conservative.
             _ => false,
         };
         stack.pop();

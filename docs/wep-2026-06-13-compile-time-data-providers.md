@@ -117,8 +117,8 @@ A provider reads its own package and nothing else. It cannot see the consuming
 program's source, its dependencies, or any path on the machine. It learns which
 of its own symbols were used — names from its own API — and nothing further about
 the program that used them. Nothing resolves a path in the consumer's tree — a
-data provider has no business there — so the two host interfaces stay disjoint
-and `core:kiln/kiln-host`, which grants only diagnostics, is left untouched.
+data provider has no business there — so a Kiln generator's world, which grants
+no file access at all, is left untouched.
 
 A provider is a pure function. No clocks, no randomness, no network, no sockets,
 no environment. Violating that would require exporting a different world, which
@@ -282,8 +282,7 @@ capability only its authors can use is not one.
 
 ## Implementation
 
-- [ ] The `data-provider` world and `provider-host`, with the shared diagnostic
-  types hoisted out of `core:kiln/kiln-host` so both hosts use one shape.
+- [ ] The `data-provider` world and `provider-host`.
 - [ ] The declaration surface and its manifest schema.
 - [ ] The provisioning phase: aggregate live symbols and options off `liveness`,
   invoke the provider, embed each blob into its component, compose, and cache

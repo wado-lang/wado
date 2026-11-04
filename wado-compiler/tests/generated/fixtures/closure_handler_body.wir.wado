@@ -126,7 +126,7 @@ fn "closure_handler_body.wado/run"() with Stdout {
     let $local_2_35: ref "closure_handler_body.wado//$Dispatch_closure_handler_body.wado/Log";
     let is_negative_116: bool;
     let x_120: i64;
-    let repr_139: ref Array<u8>;
+    let $sroa_view_repr_203: ref Array<u8>;
     let $sroa_t_h0_270: i32;
     let $sroa_t_h1_271: i32;
     parenthesized = struct.new "closure_handler_body.wado//Sink" { lines: struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: array.new_fixed<ref "core:prelude/string.wado//String">(), used: 0 } };
@@ -179,14 +179,14 @@ fn "closure_handler_body.wado/run"() with Stdout {
     $sroa_t_h0_270 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_120(x_120 = builtin::i64_extend_i32_s($sroa_t_h0_270); select i64(x_120 < 0_i64, 0_i64 - x_120, x_120)));
     is_negative_116 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"(message_33, is_negative_116, $sroa_t_h0_270);
     "core:prelude/primitive.wado/write_decimal_digits"(local.tee $load_22(message_33.repr), is_negative_116, x_120, $sroa_t_h0_270);
-    repr_139 = global:closure_handler_body.wado::$const_obj_0;
+    $sroa_view_repr_203 = global:closure_handler_body.wado::$const_obj_0;
     if @unlikely(local.tee $sroa_t_h0_270(message_33.used + 1) > builtin::array_len($load_22)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(message_33, $sroa_t_h0_270);
     }
     is_negative_116 = message_33.used;
     message_33.used = $sroa_t_h0_270;
-    builtin::array_copy<u8>(message_33.repr, is_negative_116, repr_139, 0, 1);
+    builtin::array_copy<u8>(message_33.repr, is_negative_116, $sroa_view_repr_203, 0, 1);
     $sroa_t_h0_270 = $sroa_t_h1_271 < 0;
     $sroa_t_h1_271 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_120(x_120 = builtin::i64_extend_i32_s($sroa_t_h1_271); select i64(x_120 < 0_i64, 0_i64 - x_120, x_120)));
     $sroa_t_h0_270 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"(message_33, $sroa_t_h0_270, $sroa_t_h1_271);

@@ -49,15 +49,13 @@ fn "cm_record_param.wado/$cm_binding__wasi:demo/gfx@0.1.0#[method]device.configu
     let $options_f0_inner1: i32;
     let $local_7: ref "core:prelude/string.wado//String";
     let $local_8: i64;
-    let bytes: ref Array<u8>;
     $options_f0_disc = ref.is_null(local.tee $options_f0_optval(options.label)) == 0;
     $options_f0_inner0 = 0;
     $options_f0_inner1 = 0;
     if ref.is_null($options_f0_optval) == 0 {
         $options_f0_inner0 = local.tee $local_7(ref.as_non_null($options_f0_optval)).used;
-        bytes = $local_7.repr;
         $options_f0_inner1 = "mem/realloc"(0, 0, 1, $options_f0_inner0);
-        "core:rt/gc_array_to_memory$dae[src_start]"(bytes, $options_f0_inner1, $options_f0_inner0);
+        "core:rt/gc_array_to_memory$dae[src_start]"($local_7.repr, $options_f0_inner1, $options_f0_inner0);
         $options_f0_inner0 = builtin::i32_wrap_i64(local.tee $local_8(builtin::i64_extend_i32_u($options_f0_inner1) | (builtin::i64_extend_i32_s($options_f0_inner0) << 32_i64)));
         $options_f0_inner1 = builtin::i32_wrap_i64($local_8 >> 32_i64);
     } else {

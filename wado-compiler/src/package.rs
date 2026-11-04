@@ -57,6 +57,8 @@ pub struct Package {
     /// The `org.wado-lang.coverage` section payload, under `wado test --coverage`
     /// or `--pgo`.
     pub coverage_section: Option<Vec<u8>>,
+    /// The `org.wado-lang.demanded-imports` section payload, for a library.
+    pub demanded_imports_section: Option<Vec<u8>>,
     /// Fine-grained codegen feature flags from the CLI's `-f <flag>` option.
     /// Threaded unchanged through to the WIR emitter, which consults them to
     /// pick alternative lowerings (e.g. native `array.copy`).
@@ -192,6 +194,7 @@ impl Package {
             // Codegen options
             strip_names: false,
             coverage_section: None,
+            demanded_imports_section: None,
             codegen_flags: CodegenFlags::default(),
             heat_map: HeatMap::default(),
             skip_validation: false,

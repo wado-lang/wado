@@ -77,9 +77,9 @@ fn rewrite_frame(
                     // A capture typed apart from its binding holds the box a
                     // `&mut` capture made of it, which already sees each write.
                     complete
-                        && locals.local(*local).is_some_and(|(_, binding)| {
-                            type_table.type_key(binding) == type_table.type_key(*type_id)
-                        })
+                        && locals
+                            .local(*local)
+                            .is_some_and(|(_, binding)| type_table.same_type(binding, *type_id))
                         && type_table.is_boxed_reference_target(*type_id)
                         && (address_taken.contains(local) || scan.written_after(*local, site))
                 })

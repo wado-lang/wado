@@ -158,9 +158,9 @@ type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::pad
 
 type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>" = fn(ref "core:prelude/format.wado//Formatter", ref "core:prelude/string.wado//String");  // TypeId(59)
 
-type "functype//core:prelude/string.wado/&core:prelude/string.wado/StrSlice^core:prelude/string.wado/AsStrSlice::internal_append_to$sroa[self.value]" = fn(ref "core:prelude/string.wado//StrSlice", ref "core:prelude/string.wado//String");  // TypeId(60)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::write_char_n$sroa[self.buf]" = fn(ref "core:prelude/string.wado//String", char, i32);  // TypeId(60)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::write_char_n$sroa[self.buf]" = fn(ref "core:prelude/string.wado//String", char, i32);  // TypeId(61)
+type "functype//core:prelude/string.wado/&core:prelude/string.wado/StrSlice^core:prelude/string.wado/AsStrSlice::internal_append_to$sroa[self.value]" = fn(ref "core:prelude/string.wado//StrSlice", ref "core:prelude/string.wado//String");  // TypeId(61)
 
 type "functype//core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(62)
 
@@ -220,7 +220,7 @@ fn "generic_call_nested_literal_answers_last.wado/run"() with Stdout {
     let $sroa_$pattern_temp_0_1_14_62: i32;
     let new_repr_216: ref Array<u8>;
     let out_375: ref "core:prelude/string.wado//String";
-    let start_618: i32;
+    let start_615: i32;
     let $sroa_slot_178: "core:prelude/fpfmt.wado//enum:SpecialKind";
     $sroa_$pattern_temp_0_0_13_61 = builtin::i32_wrap_i64(local.tee $cm_pair_7_55("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_14_62 = builtin::i32_wrap_i64($cm_pair_7_55 >> 32_i64);
@@ -331,9 +331,9 @@ fn "generic_call_nested_literal_answers_last.wado/run"() with Stdout {
                 cold_path;
                 "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_375, $sroa_$pattern_temp_0_1_14_62);
             }
-            start_618 = out_375.used;
+            start_615 = out_375.used;
             out_375.used = $sroa_$pattern_temp_0_1_14_62;
-            builtin::array_copy<u8>(out_375.repr, start_618, global:generic_call_nested_literal_answers_last.wado::$const_obj_3, 0, 1);
+            builtin::array_copy<u8>(out_375.repr, start_615, global:generic_call_nested_literal_answers_last.wado::$const_obj_3, 0, 1);
         } else {
         }
         "core:prelude/fpfmt.wado/write_decimal"(out_375, $cm_pair_7_55, $sroa_$pattern_temp_0_0_13_61, $sroa_slot_178);
@@ -1451,6 +1451,19 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelud
     }
 }
 
+fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_char_n$sroa[self.buf]"(self, c, n) {
+    let i: i32;
+    i = 0;
+    b165: block {
+        l166: loop {
+            break_if b165 i >= n;
+            "core:prelude/string.wado/core:prelude/string.wado/String::push"(self, c);
+            i = i + 1;
+            continue l166;
+        };
+    };
+}
+
 fn "core:prelude/string.wado/&core:prelude/string.wado/StrSlice^core:prelude/string.wado/AsStrSlice::internal_append_to$sroa[self.value]"(self, out) {
     let n_8: i32;
     let new_used: i32;
@@ -1464,19 +1477,6 @@ fn "core:prelude/string.wado/&core:prelude/string.wado/StrSlice^core:prelude/str
         start_14 = out.used;
         out.used = new_used;
         builtin::array_copy<u8>(out.repr, start_14, self.repr, self.start, n_8);
-    };
-}
-
-fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_char_n$sroa[self.buf]"(self, c, n) {
-    let i: i32;
-    i = 0;
-    b166: block {
-        l167: loop {
-            break_if b166 i >= n;
-            "core:prelude/string.wado/core:prelude/string.wado/String::push"(self, c);
-            i = i + 1;
-            continue l167;
-        };
     };
 }
 

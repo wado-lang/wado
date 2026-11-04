@@ -132,11 +132,11 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/String::format
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::format<opt_multi_value_one_field.wado/$tmpl$4432d2d1cbeba55c,[i32,i32]>" = fn(ref "opt_multi_value_one_field.wado//$tmpl$4432d2d1cbeba55c") -> ref "core:prelude/string.wado//String";  // TypeId(47)
 
-type "functype//core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(48)
+type "functype//core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<opt_multi_value_one_field.wado/$tmpl$ebaa20f4a908b504,i32>::lit$sroa[self.index]" = fn(i32, ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String") -> [ref Array<u8>, i32, i32];  // TypeId(48)
 
-type "functype//core:prelude/string.wado/&core:prelude/string.wado/StrSlice^core:prelude/string.wado/AsStrSlice::internal_append_to$sroa[self.value]" = fn(ref "core:prelude/string.wado//StrSlice", ref "core:prelude/string.wado//String");  // TypeId(49)
+type "functype//core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(49)
 
-type "functype//core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<opt_multi_value_one_field.wado/$tmpl$ebaa20f4a908b504,i32>::lit$sroa[self.index]" = fn(i32, ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String") -> [ref Array<u8>, i32, i32];  // TypeId(50)
+type "functype//core:prelude/string.wado/&core:prelude/string.wado/StrSlice^core:prelude/string.wado/AsStrSlice::internal_append_to$sroa[self.value]" = fn(ref "core:prelude/string.wado//StrSlice", ref "core:prelude/string.wado//String");  // TypeId(50)
 
 type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$dae[alt_prefix]" = fn(ref "core:prelude/format.wado//Formatter", bool, i32) -> i32;  // TypeId(51)
 
@@ -182,14 +182,14 @@ fn "opt_multi_value_one_field.wado/single"(v) {
 fn "opt_multi_value_one_field.wado/maybe"(v) {
     let $load_0: ref Array<u8>;
     let out_4: ref "core:prelude/string.wado//String";
-    let repr_33: ref Array<u8>;
     let is_negative_66: bool;
     let x: i64;
     let q: u64;
     let tens: i32;
-    let start_149: i32;
+    let start_146: i32;
+    let $sroa_view_repr_511: ref Array<u8>;
     if v > 0 {
-        return out_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(17), used: 0 }; repr_33 = global:opt_multi_value_one_field.wado::$const_obj_0; out_4.used = 1; builtin::array_copy<u8>(local.tee $load_0(out_4.repr), 0, repr_33, 0, 1); is_negative_66 = v < 0; x = builtin::i64_extend_i32_s(v); x = select i64(x < 0_i64, 0_i64 - x, x); v = $inline_count_digits_u64_0: block -> i32 {
+        return out_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(17), used: 0 }; $sroa_view_repr_511 = global:opt_multi_value_one_field.wado::$const_obj_0; out_4.used = 1; builtin::array_copy<u8>(local.tee $load_0(out_4.repr), 0, $sroa_view_repr_511, 0, 1); is_negative_66 = v < 0; x = builtin::i64_extend_i32_s(v); x = select i64(x < 0_i64, 0_i64 - x, x); v = $inline_count_digits_u64_0: block -> i32 {
             if x <u 100000_i64 {
                 if x <u 100_i64 {
                     if x <u 10_i64 {
@@ -253,26 +253,26 @@ fn "opt_multi_value_one_field.wado/maybe"(v) {
                 cold_path;
                 "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_4, is_negative_66);
             }
-            start_149 = out_4.used;
+            start_146 = out_4.used;
             out_4.used = is_negative_66;
-            builtin::array_set_u8(out_4.repr, start_149, 45);
+            builtin::array_set_u8(out_4.repr, start_146, 45);
         } else {
         }; if @unlikely(local.tee is_negative_66(out_4.used + v) > builtin::array_len(out_4.repr)) {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_4, is_negative_66);
-        }; start_149 = out_4.used; out_4.used = is_negative_66; repr_33 = out_4.repr; v = start_149 + v; b23: block {
+        }; start_146 = out_4.used; out_4.used = is_negative_66; $sroa_view_repr_511 = out_4.repr; v = start_146 + v; b23: block {
             l24: loop {
-                break_if b23 (v - start_149) < 2;
+                break_if b23 (v - start_146) < 2;
                 q = x /u 100_i64;
                 tens = local.tee is_negative_66(builtin::i32_wrap_i64(x - (q * 100_i64))) / 10;
-                builtin::array_set_u8(repr_33, v - 1, (48 + is_negative_66) - (tens * 10));
-                builtin::array_set_u8(repr_33, v - 2, 48 + tens);
+                builtin::array_set_u8($sroa_view_repr_511, v - 1, (48 + is_negative_66) - (tens * 10));
+                builtin::array_set_u8($sroa_view_repr_511, v - 2, 48 + tens);
                 v = v - 2;
                 x = q;
                 continue l24;
             };
-        }; if v > start_149 {
-            builtin::array_set_u8(repr_33, start_149, 48 + builtin::i32_wrap_i64(x %u 10_i64));
+        }; if v > start_146 {
+            builtin::array_set_u8($sroa_view_repr_511, start_146, 48 + builtin::i32_wrap_i64(x %u 10_i64));
         }; $inline_core_prelude_string_wado_String__internal_push_view_40: block {
             break $inline_core_prelude_string_wado_String__internal_push_view_40;
         }; out_4;
@@ -671,6 +671,10 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<opt_multi_v
     return $mv_arg_4;
 }
 
+fn "core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<opt_multi_value_one_field.wado/$tmpl$ebaa20f4a908b504,i32>::lit$sroa[self.index]"(self, $mv$t$s0, $mv$t$r0, $mv$t$s1, $mv$t$r1) {
+    return "core:prelude/string.wado/core:prelude/string.wado/String::internal_view"(local.tee $mv$t$s0("opt_multi_value_one_field.wado/$template_segment$opt_multi_value_one_field.wado/$tmpl$ebaa20f4a908b504"($mv$t$s0, $mv$t$r0, $mv$t$s1, $mv$t$r1, 2 * self)).repr, $mv$t$s0.used);
+}
+
 fn "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(self, f) {
     let is_negative: bool;
     let x: i64;
@@ -775,10 +779,6 @@ fn "core:prelude/string.wado/&core:prelude/string.wado/StrSlice^core:prelude/str
         out.used = new_used;
         builtin::array_copy<u8>(out.repr, start_14, self.repr, self.start, n_8);
     };
-}
-
-fn "core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<opt_multi_value_one_field.wado/$tmpl$ebaa20f4a908b504,i32>::lit$sroa[self.index]"(self, $mv$t$s0, $mv$t$r0, $mv$t$s1, $mv$t$r1) {
-    return "core:prelude/string.wado/core:prelude/string.wado/String::internal_view"(local.tee $mv$t$s0("opt_multi_value_one_field.wado/$template_segment$opt_multi_value_one_field.wado/$tmpl$ebaa20f4a908b504"($mv$t$s0, $mv$t$r0, $mv$t$s1, $mv$t$r1, 2 * self)).repr, $mv$t$s0.used);
 }
 
 fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$dae[alt_prefix]"(self, is_negative, digit_count) {

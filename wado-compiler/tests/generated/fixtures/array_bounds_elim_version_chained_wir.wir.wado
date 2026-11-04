@@ -77,54 +77,54 @@ fn "array_bounds_elim_version_chained_wir.wado/run"() with Stdout {
     let x: i64;
     let used: i32;
     let limit: i32;
-    let i_118: i32;
+    let i_115: i32;
     let arr: ref Array<u8>;
     let q: u64;
     let tens: i32;
     xs_0 = builtin::array_new<i32>(11);
     used = black_box(11);
     limit = black_box(10);
-    i_118 = 0;
+    i_115 = 0;
     if limit < used {
-        if i_118 <= limit {
-            builtin::array_fill<i32>(xs_0, i_118, 7, (limit + 1) - i_118);
+        if i_115 <= limit {
+            builtin::array_fill<i32>(xs_0, i_115, 7, (limit + 1) - i_115);
         }
     } else {
         b2: block {
             l3: loop {
-                break_if b2 i_118 > limit;
-                if @unlikely(((0 <= i_118) & (i_118 < used)) == 0) {
+                break_if b2 i_115 > limit;
+                if @unlikely(((0 <= i_115) & (i_115 < used)) == 0) {
                     cold_path;
                     "core:rt/panic"(array.new_data<u8>("index out of range"), 18);
                     unreachable;
                 }
-                builtin::array_set<i32>(xs_0, i_118, 7);
-                i_118 = i_118 + 1;
+                builtin::array_set<i32>(xs_0, i_115, 7);
+                i_115 = i_115 + 1;
                 continue l3;
             };
         };
     }
     used = 0;
-    i_118 = 0;
+    i_115 = 0;
     b5: block {
         l6: loop {
-            break_if b5 (((i_118 > limit) | ((i_118 + 1) > limit)) | (((i_118 + 1) + 1) > limit)) | ((((i_118 + 1) + 1) + 1) > limit);
-            used = used + builtin::array_get_value<i32>(xs_0, i_118);
-            i_118 = i_118 + 1;
-            used = used + builtin::array_get_value<i32>(xs_0, i_118);
-            i_118 = i_118 + 1;
-            used = used + builtin::array_get_value<i32>(xs_0, i_118);
-            i_118 = i_118 + 1;
-            used = used + builtin::array_get_value<i32>(xs_0, i_118);
-            i_118 = i_118 + 1;
+            break_if b5 (((i_115 > limit) | ((i_115 + 1) > limit)) | (((i_115 + 1) + 1) > limit)) | ((((i_115 + 1) + 1) + 1) > limit);
+            used = used + builtin::array_get_value<i32>(xs_0, i_115);
+            i_115 = i_115 + 1;
+            used = used + builtin::array_get_value<i32>(xs_0, i_115);
+            i_115 = i_115 + 1;
+            used = used + builtin::array_get_value<i32>(xs_0, i_115);
+            i_115 = i_115 + 1;
+            used = used + builtin::array_get_value<i32>(xs_0, i_115);
+            i_115 = i_115 + 1;
             continue l6;
         };
     };
     b7: block {
         l8: loop {
-            break_if b7 i_118 > limit;
-            used = used + builtin::array_get_value<i32>(xs_0, i_118);
-            i_118 = i_118 + 1;
+            break_if b7 i_115 > limit;
+            used = used + builtin::array_get_value<i32>(xs_0, i_115);
+            i_115 = i_115 + 1;
             continue l8;
         };
     };
@@ -200,22 +200,22 @@ fn "array_bounds_elim_version_chained_wir.wado/run"() with Stdout {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_13, limit);
         }
-        i_118 = out_13.used;
+        i_115 = out_13.used;
         out_13.used = limit;
-        builtin::array_set_u8(out_13.repr, i_118, 45);
+        builtin::array_set_u8(out_13.repr, i_115, 45);
     } else {
     }
     if @unlikely(local.tee limit(out_13.used + used) > builtin::array_len(out_13.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_13, limit);
     }
-    i_118 = out_13.used;
+    i_115 = out_13.used;
     out_13.used = limit;
     arr = out_13.repr;
-    used = i_118 + used;
+    used = i_115 + used;
     b31: block {
         l32: loop {
-            break_if b31 (used - i_118) < 2;
+            break_if b31 (used - i_115) < 2;
             q = x /u 100_i64;
             tens = local.tee limit(builtin::i32_wrap_i64(x - (q * 100_i64))) / 10;
             builtin::array_set_u8(arr, used - 1, (48 + limit) - (tens * 10));
@@ -225,8 +225,8 @@ fn "array_bounds_elim_version_chained_wir.wado/run"() with Stdout {
             continue l32;
         };
     };
-    if used > i_118 {
-        builtin::array_set_u8(arr, i_118, 48 + builtin::i32_wrap_i64(x %u 10_i64));
+    if used > i_115 {
+        builtin::array_set_u8(arr, i_115, 48 + builtin::i32_wrap_i64(x %u 10_i64));
     }
     $inline_core_prelude_string_wado_String__internal_push_view_42: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_42;

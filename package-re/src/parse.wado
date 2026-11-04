@@ -1,0 +1,742 @@
+//! Reads an ECMA-262 `Pattern` (§22.2.1) as the `u` flag reads it, into the
+//! tree of `ast.wado`. Rules cite `vendor/ecma262/spec.html`.
+
+use { HashSet } from "core:collections";
+use { BinaryProperty, GeneralCategoryGroup, Property, contains, ranges } from "core:icu";
+use { CharSet, ClassItem, Flag, Group, Modified, NamedProperty, NamedSet, Node, Repeat, SetKind } from "./ast.wado";
+use { MAX_CODE_POINT, complement, normalize } from "./charset.wado";
+
+/// How deep groups may nest, so that a pattern read at run time cannot
+/// exhaust the stack.
+internal global MAX_NESTING: i32 = 256;
+
+/// Why a pattern was refused, and the byte of the pattern where it went wrong:
+/// 0 for one too large to compile, which no one byte makes so.
+pub struct PatternError {
+    pub offset: i32,
+    pub message: String,
+}
+
+impl Display for PatternError {
+    fn fmt(&self, f: &mut Formatter) {
+        f.write_str(`${self.message} (at byte ${self.offset})`);
+    }
+}
+
+impl Error for PatternError {
+}
+
+/// `Extended` is `rex`'s syntax: outside a class, Pattern_White_Space is
+/// ignored and `#` comments out the rest of the line.
+internal enum Syntax {
+    Plain,
+    Extended,
+}
+
+/// A template's hole: a tree standing as one atom at a byte offset of the
+/// pattern, ahead of any character there.
+internal struct Hole {
+    internal offset: i32,
+    internal node: Node,
+}
+
+/// The tree of `pattern` with `holes` in their places, ordered by offset, and
+/// how many capturing groups it holds.
+internal fn parse(pattern: StrSlice, syntax: Syntax, holes: List<Hole> = []) -> Result<[Node, i32], PatternError> {
+    let mut p = Parser {
+        src: pattern,
+        pos: 0,
+        syntax,
+        depth: 0,
+        groups: 0,
+        names: HashSet::new(),
+        holes,
+        next_hole: 0,
+        blocked: false,
+    };
+    let parsed = p.disjunction();
+    if parsed matches { Err(_) } && p.blocked {
+        return Err(p.misplaced_hole());
+    }
+    let node = parsed?;
+    if p.pos < p.src.len() {
+        // Only an unmatched `)` stops a top-level disjunction early.
+        return Err(p.error_here("unmatched `)`"));
+    }
+    assert p.next_hole == p.holes.len(), "a parse that reaches the end takes every hole";
+    return Ok([node, p.groups]);
+}
+
+struct Parser {
+    src: StrSlice,
+    pos: i32,
+    syntax: Syntax,
+    depth: i32,
+    groups: i32,
+    names: HashSet<String>,
+    holes: List<Hole>,
+    /// The first hole not taken yet.
+    next_hole: i32,
+    /// Whether a read found that hole in its way, so that a failure there is
+    /// the hole's: one stands only where an atom may.
+    blocked: bool,
+}
+
+/// Whether an identity escape may escape `c`: a SyntaxCharacter, or in
+/// `rex` whitespace and `#`.
+fn escapes_itself(c: char, syntax: Syntax) -> bool {
+    return is_syntax_char(c)
+        || syntax == Syntax::Extended && (c == '#' || contains(BinaryProperty::PatternWhiteSpace, c));
+}
+
+internal fn is_syntax_char(c: char) -> bool {
+    return match c {
+        '^' | '$' | '\\' | '.' | '*' | '+' | '?' | '(' | ')' | '[' | ']' | '{' | '}' | '|' => true,
+        _ => false,
+    };
+}
+
+/// The one node, or `wrap` around several.
+fn collapse(mut nodes: List<Node>, wrap: fn(List<Node>) -> Node) -> Node {
+    if nodes.len() == 1 {
+        return nodes.pop().unwrap();
+    }
+    return wrap(nodes);
+}
+
+fn single(set: NamedSet) -> Node {
+    return Node::Set(CharSet {
+        negated: false,
+        items: [ClassItem::Named(set)],
+    });
+}
+
+impl Parser {
+    fn error_at(&self, offset: i32, message: String) -> PatternError {
+        return PatternError { offset, message };
+    }
+
+    fn error_here(&self, message: String) -> PatternError {
+        return self.error_at(self.pos, message);
+    }
+
+    fn at_hole(&self) -> bool {
+        return self.next_hole < self.holes.len() && self.holes[self.next_hole].offset == self.pos;
+    }
+
+    fn misplaced_hole(&self) -> PatternError {
+        return self.error_at(self.holes[self.next_hole].offset, "a hole may stand only where an atom may");
+    }
+
+    /// Whether no character can be read here: at the pattern's end, or at a
+    /// hole.
+    fn at_end(&mut self) -> bool {
+        if self.at_hole() {
+            self.blocked = true;
+            return true;
+        }
+        return self.pos >= self.src.len();
+    }
+
+    fn take_hole(&mut self) -> Result<Node, PatternError> {
+        let hole = self.holes[self.next_hole];
+        self.next_hole += 1;
+        self.blocked = false;
+        return self.splice(&hole.node, hole.offset);
+    }
+
+    /// `node` renumbered to follow the groups read so far, its names checked
+    /// against theirs and its groups' nesting against the groups around it.
+    fn splice(&mut self, node: &Node, at: i32) -> Result<Node, PatternError> {
+        return Ok(match *node {
+            Group(g) => {
+                let mut index: Option<i32> = null;
+                if g.index matches { Some(_) } {
+                    self.groups += 1;
+                    index = Some(self.groups);
+                }
+                if let Some(name) = g.name {
+                    self.claim(name, at)?;
+                }
+                Node::Group(Group { index, name: g.name, body: self.splice_inside(&g.body, at)? });
+            },
+            Modified(m) => Node::Modified(Modified { ..m, body: self.splice_inside(&m.body, at)? }),
+            Repeat(r) => Node::Repeat(Repeat { ..r, body: self.splice(&r.body, at)? }),
+            Concat(nodes) => Node::Concat(self.splice_all(&nodes, at)?),
+            Alternation(nodes) => Node::Alternation(self.splice_all(&nodes, at)?),
+            _ => *node,
+        });
+    }
+
+    fn splice_inside(&mut self, body: &Node, at: i32) -> Result<Node, PatternError> {
+        return self.inside(at, |p| p.splice(body, at));
+    }
+
+    fn splice_all(&mut self, nodes: &List<Node>, at: i32) -> Result<List<Node>, PatternError> {
+        let mut out: List<Node> = [];
+        for let n of nodes {
+            out.push(self.splice(n, at)?);
+        }
+        return Ok(out);
+    }
+
+    fn claim(&mut self, name: String, at: i32) -> Result<(), PatternError> {
+        if !self.names.insert(name) {
+            return Err(self.error_at(at, `two groups are named \`${name}\``));
+        }
+        return Ok(());
+    }
+
+    fn peek(&mut self) -> Option<char> {
+        if self.at_end() {
+            return null;
+        }
+        return Some(self.src.char_at_byte(self.pos));
+    }
+
+    fn peek_hex(&mut self) -> Option<u32> {
+        if let Some(c) = self.peek() && c.is_hexdigit() {
+            return Some(c.hex_digit_value() as u32);
+        }
+        return null;
+    }
+
+    fn peek_is(&mut self, c: char) -> bool {
+        return self.peek() == Some(c);
+    }
+
+    fn looking_at(&mut self, text: String) -> bool {
+        let end = self.pos + text.len();
+        if self.next_hole < self.holes.len() && self.holes[self.next_hole].offset < end {
+            self.blocked = true;
+            return false;
+        }
+        return end <= self.src.len() && self.src.is_char_boundary(end) && self.src.slice(self.pos, end) == text;
+    }
+
+    fn bump(&mut self) -> char {
+        let c = self.src.char_at_byte(self.pos);
+        self.pos += c.len_utf8();
+        return c;
+    }
+
+    fn eat(&mut self, c: char) -> bool {
+        if self.peek_is(c) {
+            self.pos += c.len_utf8();
+            return true;
+        }
+        return false;
+    }
+
+    fn expect(&mut self, c: char, what: String) -> Result<(), PatternError> {
+        if self.eat(c) {
+            return Ok(());
+        }
+        return Err(self.error_here(what));
+    }
+
+    /// `rex` skips whitespace and comments between tokens, outside a class.
+    fn skip_trivia(&mut self) -> Result<(), PatternError> {
+        if self.syntax != Syntax::Extended {
+            return Ok(());
+        }
+        while let Some(c) = self.peek() {
+            if c == '#' {
+                while self.pos < self.src.len() && !is_line_terminator(self.src.char_at_byte(self.pos) as u32) {
+                    self.bump();
+                }
+                // A hole up to the line's end, that end included, is in the
+                // comment.
+                if self.next_hole < self.holes.len() && self.holes[self.next_hole].offset <= self.pos {
+                    return Err(self.misplaced_hole());
+                }
+            } else if contains(BinaryProperty::PatternWhiteSpace, c) {
+                self.bump();
+            } else {
+                break;
+            }
+        }
+        return Ok(());
+    }
+
+    /// What `read` reads inside a group that opens at `at`.
+    fn inside(&mut self, at: i32, read: fn(&mut Parser) -> Result<Node, PatternError>) -> Result<Node, PatternError> {
+        self.depth += 1;
+        if self.depth > MAX_NESTING {
+            return Err(self.error_at(at, `groups may nest at most ${MAX_NESTING} deep`));
+        }
+        let node = read(self)?;
+        self.depth -= 1;
+        return Ok(node);
+    }
+
+    // Disjunction :: Alternative ( `|` Disjunction )?
+    fn disjunction(&mut self) -> Result<Node, PatternError> {
+        let mut alternatives: List<Node> = [self.alternative()?];
+        while self.eat('|') {
+            alternatives.push(self.alternative()?);
+        }
+        return Ok(collapse(alternatives, |nodes| Node::Alternation(nodes)));
+    }
+
+    // Alternative :: Term*
+    fn alternative(&mut self) -> Result<Node, PatternError> {
+        let mut terms: List<Node> = [];
+        loop {
+            self.skip_trivia()?;
+            if self.at_end() && !self.at_hole() || self.peek_is('|') || self.peek_is(')') {
+                return Ok(collapse(terms, |nodes| Node::Concat(nodes)));
+            }
+            terms.push(self.term()?);
+        }
+    }
+
+    // Term :: Assertion | Atom Quantifier?
+    fn term(&mut self) -> Result<Node, PatternError> {
+        let start = self.pos;
+        let [atom, quantifiable] = self.atom()?;
+        self.skip_trivia()?;
+        let Some([min, max]) = self.quantifier_prefix()? else {
+            return Ok(atom);
+        };
+        if !quantifiable {
+            return Err(self.error_at(start, "an assertion cannot be repeated"));
+        }
+        let greedy = !self.eat('?');
+        return Ok(Node::Repeat(Repeat { min, max, greedy, body: atom }));
+    }
+
+    fn quantifier_prefix(&mut self) -> Result<Option<[u32, Option<u32>]>, PatternError> {
+        let start = self.pos;
+        if self.eat('*') {
+            return Ok(Some([0, null]));
+        }
+        if self.eat('+') {
+            return Ok(Some([1, null]));
+        }
+        if self.eat('?') {
+            return Ok(Some([0, Some(1)]));
+        }
+        if !self.eat('{') {
+            return Ok(null);
+        }
+        // `{` is a SyntaxCharacter, so in Unicode mode one that does not open
+        // a valid QuantifierPrefix is an error rather than a literal.
+        let min = self.decimal(start)?;
+        let mut max: Option<u32> = Some(min);
+        if self.eat(',') {
+            max = if self.peek_is('}') { null } else { Some(self.decimal(start)?) };
+        }
+        self.expect('}', "`{` must close a count such as `{2}`, `{2,}` or `{2,5}`")?;
+        if let Some(m) = max && m < min {
+            return Err(self.error_at(start, "the count's maximum is below its minimum"));
+        }
+        return Ok(Some([min, max]));
+    }
+
+    fn decimal(&mut self, start: i32) -> Result<u32, PatternError> {
+        let from = self.pos;
+        while let Some(c) = self.peek() && c.is_ascii_digit() {
+            self.bump();
+        }
+        if from == self.pos {
+            return Err(self.error_at(start, "a count needs a number, as in `{2}`"));
+        }
+        return u32::from_str(self.src.slice(from, self.pos)).map_err(|_e| self.error_at(
+            from,
+            `a count may be at most ${u32::MAX}`,
+        ));
+    }
+
+    /// The atom, and whether a quantifier may follow it.
+    fn atom(&mut self) -> Result<[Node, bool], PatternError> {
+        if self.at_hole() {
+            return Ok([self.take_hole()?, true]);
+        }
+        let start = self.pos;
+        let c = self.bump();
+        return match c {
+            '^' => Ok([Node::Start, false]),
+            '$' => Ok([Node::End, false]),
+            '.' => Ok([Node::Any, true]),
+            '(' => Ok([self.group(start)?, true]),
+            '[' => Ok([Node::Set(self.class(start)?), true]),
+            '\\' => self.atom_escape(start),
+            '*' | '+' | '?' => Err(self.error_at(start, "nothing to repeat")),
+            '{' => Err(self.error_at(start, "nothing to repeat; write `\\{` for a literal `{`")),
+            '}' | ']' => Err(self.error_at(start, `unmatched \`${c}\`; write \`\\${c}\` for a literal one`)),
+            _ => Ok([Node::Char(c as u32), true]),
+        };
+    }
+
+    fn group(&mut self, start: i32) -> Result<Node, PatternError> {
+        let at = self.pos;
+        return self.inside(at, |p| p.group_body(start));
+    }
+
+    fn group_body(&mut self, start: i32) -> Result<Node, PatternError> {
+        if !self.eat('?') {
+            self.groups += 1;
+            let index = self.groups;
+            let body = self.disjunction()?;
+            self.close_group(start)?;
+            return Ok(Node::Group(Group { index: Some(index), name: null, body }));
+        }
+        if self.looking_at("=") || self.looking_at("!") {
+            return Err(self.error_at(start, "lookahead `(?=` `(?!` cannot be matched in linear time"));
+        }
+        if self.looking_at("<=") || self.looking_at("<!") {
+            return Err(self.error_at(start, "lookbehind `(?<=` `(?<!` cannot be matched in linear time"));
+        }
+        if self.eat('<') {
+            self.groups += 1;
+            let index = self.groups;
+            let name = self.group_name()?;
+            self.claim(name, start)?;
+            let body = self.disjunction()?;
+            self.close_group(start)?;
+            return Ok(Node::Group(Group {
+                index: Some(index),
+                name: Some(name),
+                body,
+            }));
+        }
+        let add = self.modifiers()?;
+        let mut remove = Flag::none();
+        let dash = self.pos;
+        if self.eat('-') {
+            remove = self.modifiers()?;
+            if add == Flag::none() && remove == Flag::none() {
+                return Err(self.error_at(dash, "`(?-:` must name a modifier to remove"));
+            }
+            if add & remove != Flag::none() {
+                return Err(self.error_at(dash, "a modifier cannot be both added and removed"));
+            }
+        }
+        self.expect(':', "`(?` must be followed by `:`, `<name>`, or modifiers `ims` and `:`")?;
+        if add & Flag::IgnoreCase != Flag::none() {
+            let at = start + 2 + self.src.slice(start + 2, dash).find("i").unwrap();
+            return Err(self.error_at(
+                at,
+                "the `i` modifier needs simple case folding, which core:icu does not offer yet",
+            ));
+        }
+        let body = self.disjunction()?;
+        self.close_group(start)?;
+        if add == Flag::none() && remove == Flag::none() {
+            return Ok(Node::Group(Group { index: null, name: null, body }));
+        }
+        return Ok(Node::Modified(Modified { add, remove, body }));
+    }
+
+    fn close_group(&mut self, start: i32) -> Result<(), PatternError> {
+        if self.eat(')') {
+            return Ok(());
+        }
+        return Err(self.error_at(start, "unclosed group"));
+    }
+
+    // RegularExpressionModifiers :: one of `i` `m` `s`, each at most once.
+    fn modifiers(&mut self) -> Result<Flag, PatternError> {
+        let mut flags = Flag::none();
+        loop {
+            let at = self.pos;
+            let flag = match self.peek() {
+                Some('i') => Flag::IgnoreCase,
+                Some('m') => Flag::Multiline,
+                Some('s') => Flag::DotAll,
+                _ => {
+                    return Ok(flags);
+                },
+            };
+            self.bump();
+            if flags & flag != Flag::none() {
+                return Err(self.error_at(at, "a modifier may be written once"));
+            }
+            flags = flags | flag;
+        }
+    }
+
+    // GroupName :: `<` RegExpIdentifierName `>`
+    fn group_name(&mut self) -> Result<String, PatternError> {
+        let mut name = "";
+        loop {
+            let at = self.pos;
+            if self.eat('>') {
+                if name.is_empty() {
+                    return Err(self.error_at(at, "a group name cannot be empty"));
+                }
+                return Ok(name);
+            }
+            if self.at_end() {
+                return Err(self.error_here("unclosed group name; expected `>`"));
+            }
+            let code = if self.eat('\\') {
+                if !self.eat('u') {
+                    return Err(self.error_at(at, "a group name may escape only `\\u`"));
+                }
+                self.unicode_escape(at)?;
+            } else {
+                self.bump() as u32;
+            };
+            let Ok(c) = char::try_from(code) else {
+                return Err(self.error_at(at, "a group name cannot hold a lone surrogate"));
+            };
+            let valid = if name.is_empty() { is_identifier_start(c) } else { is_identifier_part(c) };
+            if !valid {
+                return Err(self.error_at(at, `\`${c}\` cannot appear in a group name here`));
+            }
+            name.push(c);
+        }
+    }
+
+    fn atom_escape(&mut self, start: i32) -> Result<[Node, bool], PatternError> {
+        let Some(c) = self.peek() else {
+            return Err(self.error_at(start, "a pattern cannot end in `\\`"));
+        };
+        return match c {
+            'b' => {
+                self.bump();
+                Ok([Node::WordBoundary, false]);
+            },
+            'B' => {
+                self.bump();
+                Ok([Node::NotWordBoundary, false]);
+            },
+            '1'..='9' => Err(self.error_at(start, "a backreference cannot be matched in linear time")),
+            'k' => Err(self.error_at(start, "a backreference `\\k<name>` cannot be matched in linear time")),
+            _ => {
+                if let Some(set) = self.class_escape(start)? {
+                    return Ok([single(set), true]);
+                }
+                Ok([Node::Char(self.character_escape(start)?), true]);
+            },
+        };
+    }
+
+    // CharacterClassEscape :: d D s S w W p{…} P{…}
+    fn class_escape(&mut self, start: i32) -> Result<Option<NamedSet>, PatternError> {
+        let Some(c) = self.peek() else {
+            return Ok(null);
+        };
+        let kind = match c {
+            'd' | 'D' => SetKind::Digit,
+            's' | 'S' => SetKind::Space,
+            'w' | 'W' => SetKind::Word,
+            'p' | 'P' => {
+                self.bump();
+                return Ok(Some(NamedSet { kind: SetKind::Property(self.property(start)?), negated: c == 'P' }));
+            },
+            _ => {
+                return Ok(null);
+            },
+        };
+        self.bump();
+        return Ok(Some(NamedSet { kind, negated: c.is_ascii_uppercase() }));
+    }
+
+    // `\p{` UnicodePropertyValueExpression `}`: ECMA-262's own `Any`, `ASCII`
+    // and `Assigned` (table-binary-unicode-properties), then the names
+    // `core:icu` knows.
+    fn property(&mut self, start: i32) -> Result<NamedProperty, PatternError> {
+        self.expect('{', "`\\p` must be followed by `{`")?;
+        let from = self.pos;
+        while let Some(c) = self.peek() && c != '}' {
+            self.bump();
+        }
+        let text = self.src.slice(from, self.pos);
+        self.expect('}', "unclosed `\\p{`")?;
+        let Some(points) = property_ranges(text) else {
+            return Err(self.error_at(start, `unknown Unicode property \`${text}\``));
+        };
+        return Ok(NamedProperty { name: text.to_string(), ranges: points });
+    }
+
+    // CharacterEscape[+UnicodeMode], with `rex`'s `\ ` and `\#`.
+    fn character_escape(&mut self, start: i32) -> Result<u32, PatternError> {
+        let c = self.bump();
+        return match c {
+            'f' => Ok(0x0C),
+            'n' => Ok(0x0A),
+            'r' => Ok(0x0D),
+            't' => Ok(0x09),
+            'v' => Ok(0x0B),
+            'c' => {
+                if let Some(letter) = self.peek() && letter.is_ascii_alphabetic() {
+                    self.bump();
+                    return Ok(letter as u32 % 32);
+                }
+                Err(self.error_at(start, "`\\c` must be followed by an ASCII letter"));
+            },
+            '0' => {
+                if let Some(d) = self.peek() && d.is_ascii_digit() {
+                    return Err(self.error_at(start, "an octal escape is not allowed in Unicode mode"));
+                }
+                Ok(0);
+            },
+            'x' => {
+                let Some(hi) = self.peek_hex() else {
+                    return Err(self.error_at(start, "`\\x` must be followed by two hex digits"));
+                };
+                self.bump();
+                let Some(lo) = self.peek_hex() else {
+                    return Err(self.error_at(start, "`\\x` must be followed by two hex digits"));
+                };
+                self.bump();
+                Ok(hi * 16 + lo);
+            },
+            'u' => self.unicode_escape(start),
+            '/' => Ok('/' as u32),
+            _ => {
+                if escapes_itself(c, self.syntax) {
+                    return Ok(c as u32);
+                }
+                Err(self.error_at(start, `\`\\${c}\` is not an escape in Unicode mode`));
+            },
+        };
+    }
+
+    // RegExpUnicodeEscapeSequence[+UnicodeMode], after its `\u`.
+    fn unicode_escape(&mut self, start: i32) -> Result<u32, PatternError> {
+        if self.eat('{') {
+            let from = self.pos;
+            let mut value: u32 = 0;
+            while let Some(d) = self.peek_hex() {
+                self.bump();
+                if value > 0x10FFFF {
+                    break;
+                }
+                value = value * 16 + d;
+            }
+            if from == self.pos || !self.eat('}') || value > 0x10FFFF {
+                return Err(self.error_at(start, "`\\u{…}` must hold a code point up to 10FFFF"));
+            }
+            return Ok(value);
+        }
+        let lead = self.hex4(start)?;
+        // A lead surrogate followed by `\u` and a trail one is one code point.
+        if lead >= 0xD800 && lead <= 0xDBFF && self.looking_at("\\u") {
+            let after_lead = self.pos;
+            self.pos += 2;
+            if let Ok(trail) = self.hex4(start) && trail >= 0xDC00 && trail <= 0xDFFF {
+                return Ok(0x10000 + (lead - 0xD800) * 0x400 + (trail - 0xDC00));
+            }
+            self.pos = after_lead;
+        }
+        return Ok(lead);
+    }
+
+    fn hex4(&mut self, start: i32) -> Result<u32, PatternError> {
+        let mut value: u32 = 0;
+        for let _i of 0..<4 {
+            let Some(d) = self.peek_hex() else {
+                return Err(self.error_at(start, "`\\u` must be followed by four hex digits or `{…}`"));
+            };
+            self.bump();
+            value = value * 16 + d;
+        }
+        return Ok(value);
+    }
+
+    // CharacterClass, after its `[`.
+    fn class(&mut self, start: i32) -> Result<CharSet, PatternError> {
+        let negated = self.eat('^');
+        let mut items: List<ClassItem> = [];
+        loop {
+            if self.eat(']') {
+                return Ok(CharSet { negated, items });
+            }
+            if self.at_end() {
+                return Err(self.error_at(start, "unclosed class"));
+            }
+            let from = self.pos;
+            let low = self.class_atom()?;
+            if !self.looking_at("-") || self.looking_at("-]") {
+                items.push(low);
+                continue;
+            }
+            self.bump();
+            if self.at_end() {
+                return Err(self.error_at(start, "unclosed class"));
+            }
+            let high = self.class_atom()?;
+            let ClassItem::Range([lo, _]) = low else {
+                return Err(self.error_at(from, "a class range cannot start at a set such as `\\d`"));
+            };
+            let ClassItem::Range([hi, _]) = high else {
+                return Err(self.error_at(from, "a class range cannot end at a set such as `\\d`"));
+            };
+            if lo > hi {
+                return Err(self.error_at(from, "a class range runs from a higher code point to a lower one"));
+            }
+            items.push(ClassItem::Range([lo, hi]));
+        }
+    }
+
+    // ClassAtom[+UnicodeMode]
+    fn class_atom(&mut self) -> Result<ClassItem, PatternError> {
+        let start = self.pos;
+        let c = self.bump();
+        if c != '\\' {
+            return Ok(ClassItem::Range([c as u32, c as u32]));
+        }
+        if self.at_end() {
+            return Err(self.error_at(start, "a pattern cannot end in `\\`"));
+        }
+        if self.eat('b') {
+            return Ok(ClassItem::Range([0x08, 0x08]));
+        }
+        if self.eat('-') {
+            return Ok(ClassItem::Range([0x2D, 0x2D]));
+        }
+        if let Some(set) = self.class_escape(start)? {
+            return Ok(ClassItem::Named(set));
+        }
+        if let Some(d) = self.peek() && d.is_ascii_digit() && d != '0' {
+            return Err(self.error_at(start, "a backreference cannot stand in a class"));
+        }
+        let code = self.character_escape(start)?;
+        return Ok(ClassItem::Range([code, code]));
+    }
+}
+
+fn property_ranges(text: StrSlice) -> Option<List<[u32, u32]>> {
+    if text == "Any" {
+        return Some([
+            [0, MAX_CODE_POINT],
+        ]);
+    }
+    if text == "ASCII" {
+        return Some([
+            [0, 0x7F],
+        ]);
+    }
+    if text == "Assigned" {
+        return Some(complement(&normalize(ranges(GeneralCategoryGroup::Unassigned))));
+    }
+    if text.contains("=") {
+        if let Ok(property) = Property::from_str(text) {
+            return Some(normalize(ranges(property)));
+        }
+    } else if let Ok(binary) = BinaryProperty::from_str(text) {
+        return Some(normalize(ranges(binary)));
+    } else if let Ok(category) = GeneralCategoryGroup::from_str(text) {
+        return Some(normalize(ranges(category)));
+    }
+    return null;
+}
+
+// LineTerminator: LF, CR, LS, PS.
+internal fn is_line_terminator(code: u32) -> bool {
+    return code == 0x0A || code == 0x0D || code == 0x2028 || code == 0x2029;
+}
+
+// IdentifierStartChar :: UnicodeIDStart | `$` | `_`
+fn is_identifier_start(c: char) -> bool {
+    return c == '$' || c == '_' || contains(BinaryProperty::IdStart, c);
+}
+
+// IdentifierPartChar :: UnicodeIDContinue | `$` | ZWNJ | ZWJ
+fn is_identifier_part(c: char) -> bool {
+    return c == '$' || c == '\u{200C}' || c == '\u{200D}' || contains(BinaryProperty::IdContinue, c);
+}

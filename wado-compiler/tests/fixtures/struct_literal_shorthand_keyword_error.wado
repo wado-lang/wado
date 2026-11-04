@@ -1,0 +1,10 @@
+// A shorthand field reads the variable of the field's name, so the name must be
+// one a variable can take. `true` names a field but no variable.
+struct Flagged { true: i32 }
+
+export fn run() {
+    let _ = Flagged { true };
+}
+
+__DATA__
+{"compile_error": ":6:23: parse error: a shorthand field must name a variable, and `true` cannot; write `true: value`"}

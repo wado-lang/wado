@@ -14,7 +14,7 @@ use crate::escape::escape_string;
 use crate::hashmap::IndexMap;
 use crate::lexer::WILDCARD;
 use crate::name::{UNIT_TYPE_NAME, repeated_element};
-use crate::token::Span;
+use crate::token::{Delimiter, Quote, Span};
 
 /// Identity of one `AstId` allocation space — one per parse. Each top-level
 /// [`crate::parser::Parser`] draws a fresh one from a process-global counter and
@@ -357,40 +357,6 @@ impl Module {
         finder.result
     }
 
-    /// Find the [`AstId`] of the smallest id-bearing AST node whose span
-    /// contains the given 1-based `(line, column)` position. Returns `None`
-    /// if no id-bearing node contains the position.
-    pub fn ast_id_at(&self, line: usize, column: usize) -> Option<AstId> {
-        struct Finder {
-            line: usize,
-            column: usize,
-            best: Option<(AstId, Span)>,
-        }
-        impl AstVisitor<'_> for Finder {
-            fn visit_id(&mut self, id: AstId, span: Span) {
-                if !span_contains(span, self.line, self.column) {
-                    return;
-                }
-                match self.best {
-                    None => self.best = Some((id, span)),
-                    Some((_, current)) if span_byte_len(span) <= span_byte_len(current) => {
-                        self.best = Some((id, span));
-                    }
-                    _ => {}
-                }
-            }
-        }
-        let mut finder = Finder {
-            line,
-            column,
-            best: None,
-        };
-        for item in &self.items {
-            finder.visit_item(item);
-        }
-        finder.best.map(|(id, _)| id)
-    }
-
     /// Find the top-level [`Item`] whose own `AstId` (i.e. [`Item::id`])
     /// equals `id`.
     ///
@@ -402,24 +368,6 @@ impl Module {
     pub fn item_by_id(&self, id: AstId) -> Option<&Item> {
         self.items.iter().find(|item| item.id() == id)
     }
-}
-
-/// Returns true if `(line, column)` lies in `[span.line:column, span.end_line:end_column)`.
-fn span_contains(span: Span, line: usize, column: usize) -> bool {
-    if line < span.line || line > span.end_line {
-        return false;
-    }
-    if line == span.line && column < span.column {
-        return false;
-    }
-    if line == span.end_line && column >= span.end_column {
-        return false;
-    }
-    true
-}
-
-fn span_byte_len(span: Span) -> usize {
-    span.end.saturating_sub(span.start)
 }
 
 /// Structural AST visitor, for id-based queries (LSP position lookup, density
@@ -1554,11 +1502,11 @@ impl Item {
             Item::Interface(d) => d.name_span,
             Item::Global(d) => d.name_span,
             Item::BuiltinTypeDecl(d) => d.name_span,
-            Item::Resource(_)
-            | Item::TupleTypeDecl(_)
+            Item::Resource(d) => d.name_span,
+            Item::World(d) => d.name_span,
+            Item::TupleTypeDecl(_)
             | Item::Use(_)
             | Item::Impl(_)
-            | Item::World(_)
             | Item::Test(_)
             | Item::Error(_) => self.span(),
         }
@@ -1611,8 +1559,8 @@ pub struct TestDecl {
     pub id: AstId,
     /// Attributes applied to this test (e.g., `#[expect_trap]`).
     pub attributes: Vec<Attribute>,
-    /// Optional test name (string literal). If None, identified by <file:line>.
-    pub name: Option<String>,
+    /// Optional test name. If None, identified by <file:line>.
+    pub name: Option<StrLit>,
     pub body: Block,
     pub span: Span,
 }
@@ -1700,8 +1648,9 @@ pub struct GlobalDecl {
 #[derive(Debug, Clone, Eq)]
 pub struct StrLit {
     pub value: String,
-    /// As written between the quotes, escapes unresolved.
+    /// As written between the delimiters, escapes unresolved.
     pub raw: String,
+    pub quote: Quote,
 }
 
 impl StrLit {
@@ -1711,7 +1660,11 @@ impl StrLit {
     pub fn new(value: impl Into<String>) -> Self {
         let value = value.into();
         let raw = escape_string(&value);
-        Self { value, raw }
+        Self {
+            value,
+            raw,
+            quote: Quote::Cooked,
+        }
     }
 
     #[must_use]
@@ -1722,7 +1675,7 @@ impl StrLit {
     /// The literal as written, quotes included.
     #[must_use]
     pub fn as_written(&self) -> String {
-        format!("\"{}\"", self.raw)
+        self.quote.write("", Delimiter::Quote, &self.raw)
     }
 }
 
@@ -1904,6 +1857,8 @@ pub mod lint {
     pub const UNUSED_VARIABLES: &str = "unused_variables";
     /// A trait head that says nothing about what its impls may do.
     pub const UNDECIDED_EFFECTS: &str = "undecided_effects";
+    /// An `#[ambient]` outside the standard library.
+    pub const UNDECLARED_EFFECTS: &str = "undeclared_effects";
     /// A comparison of an expression with itself: `x == x`.
     pub const SELF_COMPARISON: &str = "self_comparison";
     /// Integer literals alone overflowing their type, `200 as u8 + 100`, or a
@@ -2279,6 +2234,7 @@ impl CmImport {
 pub struct ResourceDecl {
     pub id: AstId,
     pub name: String,
+    pub name_span: Span,
     pub visibility: Visibility,
     /// Generic type parameters: `resource Future<T> { ... }`
     pub type_params: Vec<GenericParam>,
@@ -2306,6 +2262,7 @@ pub struct ResourceDecl {
 pub struct WorldDecl {
     pub id: AstId,
     pub name: String,
+    pub name_span: Span,
     pub visibility: Visibility,
     pub attrs: Vec<Attribute>,
     pub imports: Vec<WorldImport>,
@@ -2405,8 +2362,9 @@ pub enum UseItem {
 pub enum UseNameSpelling {
     Ident,
     /// A full interface name as a string (`"wasi:cli/stdout"`), which always
-    /// takes `as`, since a string is no identifier to bind.
-    InterfaceName(CmImport),
+    /// takes `as`, since a string is no identifier to bind. The literal is
+    /// kept for printing it back.
+    InterfaceName(CmImport, StrLit),
 }
 
 /// Simple use item (used within effect function imports)
@@ -3687,6 +3645,8 @@ impl StructLiteralExpr {
 #[derive(Debug, Clone)]
 pub struct StructLiteralField {
     pub name: String,
+    /// The string literal that spelled `name`, where one did.
+    pub quoted: Option<StrLit>,
     /// `AstId` of the field name, for cursor-based navigation (jump-to-def).
     pub name_id: AstId,
     /// Span of just the field name token.
@@ -3840,11 +3800,12 @@ pub enum Literal {
     /// Numeric literal: raw source text (e.g. `"42"`, `"0xFF"`, `"3.14"`). Its
     /// type comes from its context.
     Number(String),
-    /// String literal: raw source text between quotes (escape sequences not interpreted).
-    String(String),
-    /// Byte-string literal `b"..."`: raw source text between quotes (escape
-    /// sequences not interpreted). Lowers to a constant `List<u8>`.
-    Bytes(String),
+    /// String literal: its text as written (escape sequences not interpreted),
+    /// and how the source quoted it, which says how to read the text.
+    String(String, Quote),
+    /// Byte-string literal `b"..."`, held as a string literal is. Lowers to a
+    /// constant `List<u8>`.
+    Bytes(String, Quote),
     /// Byte literal `b'x'`: raw source between quotes. Lowers to a `u8`.
     Byte(String),
     /// Char literal: raw source text between quotes (escape sequences not interpreted).
@@ -3861,9 +3822,9 @@ pub enum Literal {
     /// Compile-time data section literal: `#data`
     DataSection,
     /// Compile-time file include as string: `#include_str("path")`
-    IncludeStr(String),
+    IncludeStr(StrLit),
     /// Compile-time file include as bytes: `#include_bytes("path")`
-    IncludeBytes(String),
+    IncludeBytes(StrLit),
 }
 
 #[derive(Debug, Clone)]
@@ -4209,6 +4170,8 @@ pub struct StructPatternField {
     /// The node's own id, whose [`AstIdSpace`] names the module that wrote it.
     pub id: AstId,
     pub field_name: String,
+    /// The string literal that spelled `field_name`, where one did.
+    pub quoted: Option<StrLit>,
     pub pattern: Pattern,
     pub span: Span,
 }
@@ -4240,7 +4203,9 @@ pub struct ClosureParam {
 #[derive(Debug, Clone)]
 pub struct TemplateStringExpr {
     pub id: AstId,
+    /// Text as written, read as `quote` says.
     pub parts: Vec<TemplatePart>,
+    pub quote: Quote,
     pub span: Span,
 }
 
@@ -5034,6 +4999,7 @@ pub struct BuiltinTypeDecl {
 pub struct AssociatedTypeDecl {
     pub id: AstId,
     pub name: String,
+    pub name_span: Span,
     /// `affine type Item;`: an impl may bind an affine type.
     pub is_affine: bool,
     /// The associated type's own parameters (`E` in `type Buf<E>;`), which a
@@ -5051,6 +5017,7 @@ pub struct AssociatedTypeBinding {
     pub id: AstId,
     pub attrs: Vec<Attribute>,
     pub name: String,
+    pub name_span: Span,
     /// The parameters the trait declares the associated type with, in scope in `ty`.
     pub type_params: Vec<GenericParam>,
     pub ty: Type,
@@ -5064,6 +5031,7 @@ pub struct AssociatedConst {
     pub id: AstId,
     pub attrs: Vec<Attribute>,
     pub name: String,
+    pub name_span: Span,
     pub visibility: Visibility,
     pub ty: Type,
     pub value: Expr,
@@ -5238,6 +5206,7 @@ mod visibility_tests {
 #[cfg(test)]
 mod ast_id_tests {
     use super::*;
+    use crate::ast_index::AstIndex;
     use crate::hashmap::IndexSet;
     use crate::lexer::lex;
     use crate::parser::Parser;
@@ -5442,18 +5411,19 @@ test "addition" {
         assert_eq!(field_ids.len(), 2);
 
         // Position inside the `x: i32` field span returns the field id, not the struct.
-        let at_field = m.ast_id_at(2, 5);
+        let index = AstIndex::build(&m);
+        let at_field = index.ast_id_at(2, 5);
         assert_eq!(at_field, Some(field_ids[0]));
 
         // Position inside the struct but outside any field (e.g. the struct name).
-        let at_struct_name = m.ast_id_at(1, 9);
+        let at_struct_name = index.ast_id_at(1, 9);
         assert_eq!(at_struct_name, struct_id);
     }
 
     #[test]
     fn ast_id_at_outside_returns_none() {
         let m = parse("fn add(a: i32, b: i32) -> i32 { return a + b; }\n");
-        assert_eq!(m.ast_id_at(42, 1), None);
+        assert_eq!(AstIndex::build(&m).ast_id_at(42, 1), None);
     }
 
     const SAMPLE_WITH_BODIES: &str = r"
@@ -5525,7 +5495,7 @@ struct Point { x: i32, y: i32 }
                 _ => None,
             })
             .expect("let x pattern id");
-        let at_pat = m.ast_id_at(2, 9);
+        let at_pat = AstIndex::build(&m).ast_id_at(2, 9);
         assert_eq!(at_pat, Some(pat_id));
     }
 }

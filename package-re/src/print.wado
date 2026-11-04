@@ -1,0 +1,168 @@
+//! A tree back to a pattern in `re`'s syntax, one that parses to the same
+//! tree: what `Display` shows, whichever syntax and holes built the tree.
+
+use { CharSet, Flag, NamedSet, Node, Repeat } from "./ast.wado";
+use { is_syntax_char } from "./parse.wado";
+
+internal fn print(node: &Node) -> String {
+    let mut out = "";
+    node_to(node, &mut out);
+    return out;
+}
+
+fn node_to(node: &Node, out: &mut String) {
+    match *node {
+        Char(c) => char_to(c, out, false),
+        Any => out.push('.'),
+        Start => out.push('^'),
+        End => out.push('$'),
+        WordBoundary => out.push_str(#"\b"#),
+        NotWordBoundary => out.push_str(#"\B"#),
+        Set(set) => set_to(&set, out),
+        Group(g) => {
+            match g.index {
+                Some(_) => match g.name {
+                    Some(name) => out.push_str(`(?<${name}>`),
+                    None => out.push('('),
+                },
+                None => out.push_str("(?:"),
+            }
+            node_to(&g.body, out);
+            out.push(')');
+        },
+        Modified(m) => {
+            out.push_str("(?");
+            flags_to(m.add, out);
+            if m.remove != Flag::none() {
+                out.push('-');
+                flags_to(m.remove, out);
+            }
+            out.push(':');
+            node_to(&m.body, out);
+            out.push(')');
+        },
+        Repeat(r) => repeat_to(&r, out),
+        Concat(nodes) => {
+            for let n of &nodes {
+                if n matches { Alternation(_) } {
+                    grouped_to(n, out);
+                } else {
+                    node_to(n, out);
+                }
+            }
+        },
+        Alternation(nodes) => {
+            for let i of 0..<nodes.len() {
+                if i > 0 {
+                    out.push('|');
+                }
+                node_to(&nodes[i], out);
+            }
+        },
+    }
+}
+
+fn grouped_to(node: &Node, out: &mut String) {
+    out.push_str("(?:");
+    node_to(node, out);
+    out.push(')');
+}
+
+fn repeat_to(r: &Repeat, out: &mut String) {
+    // Only an atom takes a quantifier.
+    let atom = match r.body {
+        Char(_) | Any | Set(_) | Group(_) | Modified(_) => true,
+        _ => false,
+    };
+    if atom {
+        node_to(&r.body, out);
+    } else {
+        grouped_to(&r.body, out);
+    }
+    match [r.min, r.max] {
+        [0, None] => out.push('*'),
+        [1, None] => out.push('+'),
+        [0, Some(1)] => out.push('?'),
+        [min, None] => out.push_str(`{${min},}`),
+        [min, Some(max)] => {
+            if min == max {
+                out.push_str(`{${min}}`);
+            } else {
+                out.push_str(`{${min},${max}}`);
+            }
+        },
+    }
+    if !r.greedy {
+        out.push('?');
+    }
+}
+
+fn flags_to(flags: Flag, out: &mut String) {
+    if flags & Flag::IgnoreCase != Flag::none() {
+        out.push('i');
+    }
+    if flags & Flag::Multiline != Flag::none() {
+        out.push('m');
+    }
+    if flags & Flag::DotAll != Flag::none() {
+        out.push('s');
+    }
+}
+
+fn set_to(set: &CharSet, out: &mut String) {
+    // `\d` alone parses to a set of the one escape.
+    if !set.negated && set.items.len() == 1 && let Named(named) = set.items[0] {
+        named_to(&named, out);
+        return;
+    }
+    out.push('[');
+    if set.negated {
+        out.push('^');
+    }
+    for let item of &set.items {
+        match *item {
+            Range([lo, hi]) => {
+                char_to(lo, out, true);
+                if hi != lo {
+                    out.push('-');
+                    char_to(hi, out, true);
+                }
+            },
+            Named(named) => named_to(&named, out),
+        }
+    }
+    out.push(']');
+}
+
+fn named_to(named: &NamedSet, out: &mut String) {
+    out.push('\\');
+    let [lower, upper] = match named.kind {
+        Digit => ['d', 'D'],
+        Word => ['w', 'W'],
+        Space => ['s', 'S'],
+        Property(_) => ['p', 'P'],
+    };
+    out.push(if named.negated { upper } else { lower });
+    if let Property(p) = named.kind {
+        out.push_str(`{${p.name}}`);
+    }
+}
+
+/// `code` as an atom, or as a class atom where `in_class`: a character that
+/// means something there escaped, and a control character or a lone
+/// surrogate as `\u{…}`.
+fn char_to(code: u32, out: &mut String, in_class: bool) {
+    let Ok(c) = char::try_from(code) else {
+        out.push_str(`\\u{${code:X}}`);
+        return;
+    };
+    // General_Category Cc.
+    if code < 0x20 || code >= 0x7F && code < 0xA0 {
+        out.push_str(`\\u{${code:X}}`);
+        return;
+    }
+    if is_syntax_char(c) || in_class && c == '-' {
+        out.push('\\');
+    }
+    out.push(c);
+}

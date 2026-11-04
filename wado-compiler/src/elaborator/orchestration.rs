@@ -76,7 +76,9 @@ use crate::symbol::SymbolKind;
 use crate::tir::{StructDef, TirFunction, TraitRef};
 use crate::token::Span;
 use crate::unparse::unparse_type_into;
-use crate::wit_consume::{exported_interfaces, imported_interfaces, module_host_leaf_imports};
+use crate::wit_consume::{
+    exported_interfaces, imported_interfaces, module_demanded_imports, module_host_leaf_imports,
+};
 
 /// What every trait bound a module writes, wherever it stands, gets wrong: a
 /// type argument past its trait's parameters, or an associated type its trait
@@ -1196,7 +1198,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         // one a user module calls.
         let unavailable = collect_unavailable(modules, resolutions.defs());
 
-        // Intern every declaration in the TypeTable so `find_decl_type_by_name`
+        // Intern every declaration in the TypeTable so `find_named_type_by_def`
         // (used by `register_symbol_key_type_indices` below) resolves for every
         // symbol, including types that aren't referenced as a field anywhere.
         // Without this, decl-only types (e.g., a standalone `struct Unused {}`)
@@ -1885,8 +1887,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 continue;
             }
             let key = symbol.defined_at;
-            let decl_module = symbol.module_source();
-            if let Some(type_id) = tt.find_decl_type_by_name(&symbol.name, decl_module) {
+            if let Some(def) = tt.defs().of_ast_id(key)
+                && let Some(type_id) = tt.find_named_type_by_def(def)
+            {
                 tt.register_decl_type(key, type_id);
             }
         }
@@ -2455,6 +2458,7 @@ pub(crate) fn fold_component_interfaces(
                 &interface_fqs,
                 &imported_fqs,
                 &host_leaf_imports,
+                module_demanded_imports(module).as_deref(),
                 ms,
             )?;
         }

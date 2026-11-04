@@ -1,0 +1,37 @@
+// A raw string, `#"…"#`, takes a backslash as itself and opens no hole. More
+// `#`s on both ends let the text hold a quote and the shorter closer. It goes
+// wherever a string literal does: a `use` path, a pattern, an attribute, a
+// byte string (`b#"…"#`).
+use { println, Stdout } from #"core:cli"#;
+
+#[unavailable(#"use \`fine\` instead"#)]
+fn gone();
+
+fn kind(s: String) -> i32 {
+    return match s {
+        #"\d"# => 1,
+        "\\w" => 2,
+        _ => 0,
+    };
+}
+
+export fn run() with Stdout {
+    assert #"\d+\w\b"# == "\\d+\\w\\b";
+    assert #"C:\Users\${name}"# == "C:\\Users\\${name}";
+    assert #"\n"#.len() == 2;
+    assert #"trailing \"# == "trailing \\";
+    assert ##"a"b"#c"## == "a\"b\"#c";
+    assert #"a `tick`"# == "a `tick`";
+    assert #"line one
+line two"# == "line one\nline two";
+    assert kind(#"\d"#) == 1;
+    assert kind(#"\w"#) == 2;
+    assert `${#"\t"#}|${#"}"#}` == "\\t|}";
+    let bytes = b#"\x00"#;
+    assert bytes.len() == 4;
+    assert bytes[0] == b'\\';
+    println(#"\u{1F600} stays as written"#);
+}
+
+__DATA__
+{"stdout": "\\u{1F600} stays as written\n"}

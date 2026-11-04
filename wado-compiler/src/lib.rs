@@ -29,6 +29,7 @@ pub mod const_eval;
 pub mod constant_arithmetic;
 pub mod coverage;
 pub mod defs;
+pub(crate) mod demanded_imports;
 pub(crate) mod divergence;
 pub mod doc;
 pub mod effect_check;
@@ -132,9 +133,8 @@ pub use codegen::InvalidArtifact;
 pub use codegen_flags::CodegenFlags;
 pub use compiler_host::{
     Code, CompilerHost, DependencyIndex, DependencyManifest, Diagnostic, DiagnosticSpan,
-    GeneratorDiagnostic, GeneratorDiagnosticLevel, GeneratorError, GeneratorInputFile,
-    GeneratorOutputFile, GeneratorRequest, GeneratorResponse, GeneratorRunnerError,
-    GeneratorSourceSpan, KILN_GENERATOR_WIT, LogLevel, ModuleDir, PackageDir, ProbeInput,
+    GeneratorError, GeneratorInputFile, GeneratorOutputFile, GeneratorRequest, GeneratorResponse,
+    GeneratorRunnerError, KILN_GENERATOR_WIT, LogLevel, ModuleDir, PackageDir, ProbeInput,
     ProbeRequest, Severity, SourceError, SourceReader,
 };
 pub use logger::{Bail, Logger};
@@ -873,6 +873,7 @@ pub fn lint_diagnostics(
     }
     let mut out = shadowing_diagnostics(sem, lints);
     out.extend(undecided_effect_diagnostics(sem, lints));
+    out.extend(undeclared_effect_diagnostics(sem, lints));
     out.extend(self_comparison_diagnostics(sem, lints));
     out.extend(constant_arithmetic_diagnostics(sem, lints));
     out.extend(hex_suffix_lookalike_diagnostics(sem, lints));
@@ -959,6 +960,74 @@ fn undecided_effect_diagnostics(sem: &semantics::Semantics, lints: Lints) -> Vec
     out
 }
 
+/// Source-level `UndeclaredEffects` warnings: every `#[ambient]` a program
+/// writes. Hiding an effect from callers is provisionally the standard
+/// library's alone, and a lint never reports there.
+fn undeclared_effect_diagnostics(sem: &semantics::Semantics, lints: Lints) -> Vec<Diagnostic> {
+    let mut out = Vec::new();
+    for (src, module) in lints.modules(&sem.modules) {
+        if inner_attrs_allow(&module.inner_attributes, lint::UNDECLARED_EFFECTS) {
+            continue;
+        }
+        let mut report =
+            |enclosing: &[ast::Attribute], attrs: &[ast::Attribute], name: &str, whose: &str| {
+                if attrs_allow(enclosing, lint::UNDECLARED_EFFECTS)
+                    || attrs_allow(attrs, lint::UNDECLARED_EFFECTS)
+                {
+                    return;
+                }
+                for attr in attrs.iter().filter(|attr| attr.name == attribute::AMBIENT) {
+                    let effects: Vec<&str> = attr.args.iter().map(ast::AttrArg::name).collect();
+                    out.push(Diagnostic {
+                        severity: Severity::Warning,
+                        code: Code::UndeclaredEffects,
+                        message: format!(
+                            "`#[ambient]` hides `{}` from the {whose} of `{name}`, which only the \
+                         standard library is meant to do for now; declare it with `with`, \
+                         or mark it `#[allow(undeclared_effects)]` if that is deliberate",
+                            effects.join("`, `"),
+                        ),
+                        span: Some(DiagnosticSpan::from_span(
+                            &attr.span,
+                            Some(src.source_path().as_str()),
+                        )),
+                    });
+                }
+            };
+        for item in &module.items {
+            let (enclosing, methods): (&[ast::Attribute], &[ast::Function]) = match item {
+                Item::Function(func) => {
+                    report(&[], &func.attrs, &func.name, "callers");
+                    continue;
+                }
+                Item::Global(global) => {
+                    report(&[], &global.attributes, &global.name, "readers");
+                    continue;
+                }
+                Item::Impl(block) => (&block.attrs, &block.methods),
+                Item::Trait(decl) => (&decl.attrs, &decl.methods),
+                Item::Interface(decl) => (&decl.attrs, &decl.methods),
+                Item::Resource(decl) => (&decl.attrs, &decl.methods),
+                Item::Use(_)
+                | Item::Struct(_)
+                | Item::Enum(_)
+                | Item::Variant(_)
+                | Item::Flags(_)
+                | Item::Newtype(_)
+                | Item::TupleTypeDecl(_)
+                | Item::BuiltinTypeDecl(_)
+                | Item::World(_)
+                | Item::Test(_)
+                | Item::Error(_) => continue,
+            };
+            for method in methods {
+                report(enclosing, &method.attrs, &method.name, "callers");
+            }
+        }
+    }
+    out
+}
+
 /// The interface FQ a `core:kiln/generator` component's synthesized world uses
 /// for `generate` and its options record. A generator's
 /// `generate` is grouped into this interface (it references the local `Options`
@@ -994,11 +1063,50 @@ impl LibSurface {
     }
 }
 
+/// Whether a build records what its exports demand of a consumer, as a
+/// library does in its `org.wado-lang.demanded-imports` section.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Exports {
+    Recorded,
+    Unrecorded,
+}
+
+/// The functions a library exports, each with its module: every `export fn`
+/// under its own name, in the entry module or another module of the package.
+fn lib_export_functions<'a>(
+    entry_source: &'a ModuleSource,
+    modules: &'a hashmap::IndexMap<ModuleSource, ast::Module>,
+) -> impl Iterator<Item = (&'a ModuleSource, &'a ast::Function)> {
+    modules
+        .iter()
+        .filter(move |(source, _)| *source == entry_source || source.is_local())
+        .flat_map(|(source, module)| {
+            module.items.iter().filter_map(move |item| match item {
+                Item::Function(func) if func.exports_own_name() => Some((source, func)),
+                _ => None,
+            })
+        })
+}
+
 fn collect_lib_surface(
     entry_source: &ModuleSource,
     modules: &hashmap::IndexMap<ModuleSource, ast::Module>,
 ) -> LibSurface {
-    let mut submodule_exports = Vec::new();
+    let submodule_exports = lib_export_functions(entry_source, modules)
+        .filter(|(source, _)| *source != entry_source)
+        .map(|(source, func)| WorldExportInfo {
+            name: func.name.clone(),
+            is_async: func.is_async,
+            params: func
+                .params
+                .iter()
+                .map(|p| (p.name.clone(), p.ty.clone()))
+                .collect(),
+            return_type: func.return_type.clone(),
+            from_interface_fq: None,
+            reexport_origin: Some((source.clone(), func.name.clone())),
+        })
+        .collect();
     let mut submodule_type_decls = Vec::new();
     let mut submodule_interfaces = Vec::new();
     for (source, module) in modules {
@@ -1012,20 +1120,6 @@ fn collect_lib_surface(
                 // private, internally-handled effect is excluded.
                 Item::Interface(decl) if decl.visibility.is_public() => {
                     submodule_interfaces.push(decl.clone());
-                }
-                Item::Function(func) if func.exports_own_name() => {
-                    submodule_exports.push(WorldExportInfo {
-                        name: func.name.clone(),
-                        is_async: func.is_async,
-                        params: func
-                            .params
-                            .iter()
-                            .map(|p| (p.name.clone(), p.ty.clone()))
-                            .collect(),
-                        return_type: func.return_type.clone(),
-                        from_interface_fq: None,
-                        reexport_origin: Some((source.clone(), func.name.clone())),
-                    });
                 }
                 // Not `is_public`: a lowered type carries its fields whatever
                 // their scope, so an `internal` type reaches the CM interface
@@ -1558,7 +1652,7 @@ fn provider_directives<H: CompilerHost>(
         };
         let guest_fqs: Vec<String> = module_host_leaf_imports(dep_module)
             .into_iter()
-            .filter(|fq| !fq.starts_with("wasi:"))
+            .filter(|fq| !name::is_wasi_fq(fq))
             .collect();
         let fq = match guest_fqs.as_slice() {
             [fq] => fq.clone(),
@@ -1597,14 +1691,18 @@ fn provider_directives<H: CompilerHost>(
 /// and its recorded facts) rather than the emitted TIR, so they see every
 /// source function whatever reify emits, and share their logic with the LSP.
 /// Every pipeline runs them before synthesis: a later phase assumes a program
-/// they passed.
+/// they passed. Under [`Exports::Recorded`], answers the `wasi:*` interfaces
+/// the library's exports hold.
 fn check_effects_and_moves<H: CompilerHost>(
     sem: &mut semantics::Semantics,
     provided_import_fqs: hashmap::IndexSet<String>,
+    exports: Exports,
     logger: &Logger<'_, H>,
-) -> Result<(), Bail> {
+) -> Result<Option<hashmap::IndexSet<String>>, Bail> {
     let _span = logger.span("effect-check");
-    let diags = effect_check::check_semantics(sem, provided_import_fqs);
+    let library_exports: Option<Vec<_>> = (exports == Exports::Recorded)
+        .then(|| lib_export_functions(&sem.entry_module_source, &sem.modules).collect());
+    let diags = effect_check::check_semantics(sem, provided_import_fqs, library_exports.as_deref());
     let move_errors = affine_move_check::check_affine_moves_semantic(sem);
     let had_error = !diags.is_empty() || !move_errors.is_empty();
     sem.redirect_effect_vars(&diags.rows);
@@ -1620,7 +1718,7 @@ fn check_effects_and_moves<H: CompilerHost>(
     if had_error {
         return Err(Bail);
     }
-    Ok(())
+    Ok(diags.exported_host_interfaces)
 }
 
 /// Internal: run compilation phases after module loading.
@@ -1732,25 +1830,30 @@ fn compile_after_load<H: CompilerHost>(
         }
     }
 
+    let is_kiln_generator = match (options.target_world.as_deref(), sem.world_registry()) {
+        (Some(tw), Some(reg)) => reg.is_generator_world(tw),
+        _ => false,
+    };
+
     // === Phase 6b: Effect, Purity and Move Checks ===
-    check_effects_and_moves(
+    let exported_host_interfaces = check_effects_and_moves(
         &mut sem,
         options
             .providers
             .iter()
             .map(|p| p.import_fq.clone())
             .collect(),
+        if options.lib_world.is_some() && !is_kiln_generator {
+            Exports::Recorded
+        } else {
+            Exports::Unrecorded
+        },
         logger,
     )?;
 
     // === Phase 6c: Kiln `Options` descriptor extraction ===
     // An `Options` no descriptor describes fails here: no options table could
     // be validated against it, so the generator would trap on a missing field.
-    let is_kiln_generator = match (options.target_world.as_deref(), sem.world_registry()) {
-        (Some(tw), Some(reg)) => reg.is_generator_world(tw),
-        _ => false,
-    };
-
     let kiln_options_descriptor = if is_kiln_generator {
         let (descriptor, mut diags) =
             match kiln::extract_options_descriptor(&sem, &sem.entry_module_source) {
@@ -2128,6 +2231,9 @@ fn compile_after_load<H: CompilerHost>(
         }
         package.lib_world_info = Some(lib_world);
     }
+    // A library's consumer demands only what its exports hold.
+    package.demanded_imports_section = exported_host_interfaces
+        .map(|fqs| demanded_imports::encode(fqs.iter().map(String::as_str)));
     package.skip_validation = options.skip_validation;
     package.coverage_section = coverage.map(|map| map.encode());
     package.test_selection = options.test_selection;
@@ -2636,7 +2742,8 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
     );
     // A rejected program reaches no phase after these, as under `compile`.
     let checked = sem.is_complete()
-        && check_effects_and_moves(&mut sem, provided_import_fqs, &logger).is_ok();
+        && check_effects_and_moves(&mut sem, provided_import_fqs, Exports::Unrecorded, &logger)
+            .is_ok();
     let symbols = sem.symbols.clone();
     let interner = sem.interner.clone();
     let entry_module_source_out = sem.entry_module_source.clone();

@@ -4,8 +4,8 @@ use { Workspace } from "./tools.wado";
 
 test "Read numbers the lines of the range it reads" {
     let ws = Workspace { root: "src" };
-    let out = ws.call(&"Read", &tool_input(`{"file_path": "/tools.wado", "offset": 2, "limit": 2}`)).unwrap();
-    assert out == "     2\t//! as Claude Code's, over one checked-out tree. Grep and Glob run ripgrep.\n     3\t\n";
+    let out = ws.call(&"Read", &tool_input(`{"file_path": "/testdata/shapes.rs", "offset": 2, "limit": 2}`)).unwrap();
+    assert out == "     2\t    pub radius: f64,\n     3\t}\n";
     assert ws.call(&"Read", &tool_input(`{"file_path": "."}`)).unwrap_err().contains("is a directory");
 }
 

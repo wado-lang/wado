@@ -10,8 +10,7 @@ use crate::ast::{
     self, AstId, AstVisitor, CompoundAssignOp, Expr, Item, Module, UnaryOp, walk_expr,
 };
 use crate::attribute::{
-    ALLOC, AMBIENT, EXPORT_NAME, INLINE, SECRET, WIRE, wire_name_override, wire_name_policy,
-    wire_value,
+    ALLOC, EXPORT_NAME, INLINE, SECRET, WIRE, wire_name_override, wire_name_policy, wire_value,
 };
 use crate::call_args::CallArgs;
 use crate::const_eval::{format_float_repr, truncate_int};
@@ -78,7 +77,7 @@ use crate::elaborator::util::{
     settles_literal_patterns,
 };
 use crate::escape::{
-    unescape_byte, unescape_bytes, unescape_char, unescape_string, unescape_template_segment,
+    bytes_value, checked_template_segment, string_value, unescape_byte, unescape_char,
 };
 use crate::format_spec::FormatKind;
 use crate::hashmap;
@@ -105,15 +104,16 @@ use crate::tir::{
     deref_to_layers, hold_hole, to_layers_of, wrapped_reference,
 };
 use crate::tir_visitor::{TirMutVisitor, TirRefVisitor};
-use crate::token::Span;
+use crate::token::{Quote, Span};
 use crate::unparse::{unparse_expr_source, unparse_pattern_source};
 
 /// A template's text and holes as reify assembles it: one segment more than
-/// holes, each segment cooked and raw, and each hole with its specifier as
-/// written.
+/// holes, each segment cooked and raw, each hole with its specifier as
+/// written, and how the raw text is delimited.
 struct TemplatePieces {
     segments: Vec<[String; 2]>,
     holes: Vec<(TirExpr, Option<String>)>,
+    quote: Quote,
 }
 
 impl Default for TemplatePieces {
@@ -121,6 +121,7 @@ impl Default for TemplatePieces {
         Self {
             segments: vec![Default::default()],
             holes: Vec::new(),
+            quote: Quote::Cooked,
         }
     }
 }
@@ -1516,7 +1517,6 @@ impl<'a> Reify<'a> {
             is_cm_binding: false,
             is_dispatch_wrapper: false,
             is_cm_export: false,
-            is_ambient: extract_is_ambient_attr(&func.attrs),
             inline_hint: extract_inline_hint_attr(&func.attrs),
             compiler_item,
             export_name: extract_export_name_attr(&func.attrs),
@@ -1796,7 +1796,6 @@ impl<'a> Reify<'a> {
             is_cm_binding: false,
             is_dispatch_wrapper: false,
             is_cm_export: false,
-            is_ambient: false,
             inline_hint: InlineHint::Auto,
             compiler_item: None,
             export_name: None,
@@ -1806,7 +1805,7 @@ impl<'a> Reify<'a> {
         };
 
         let tir_test = TirTest {
-            name: test_decl.name.clone(),
+            name: test_decl.name.as_deref().map(str::to_owned),
             function_name,
             line: test_decl.span.line,
             span: test_decl.span,
@@ -4561,12 +4560,15 @@ impl<'a> Reify<'a> {
         template: &ast::TemplateStringExpr,
         ctx: &mut FunctionContext,
     ) -> TirExpr {
-        let mut pieces = TemplatePieces::default();
+        let mut pieces = TemplatePieces {
+            quote: template.quote,
+            ..TemplatePieces::default()
+        };
         for part in &template.parts {
             match part {
                 // Annotate validated every segment's escapes.
                 ast::TemplatePart::String(raw) => {
-                    pieces.text(&unescape_template_segment(raw), raw);
+                    pieces.text(&checked_template_segment(raw, template.quote), raw);
                 }
                 ast::TemplatePart::Interpolation { expr, format, .. } => {
                     let value = self.reify_expr(expr, ctx, None);
@@ -4590,6 +4592,7 @@ impl<'a> Reify<'a> {
         let TemplatePieces {
             mut segments,
             mut holes,
+            quote,
         } = pieces;
         let string_type = self
             .tysys
@@ -4605,7 +4608,7 @@ impl<'a> Reify<'a> {
         let lone_string = {
             let tt = self.tysys.type_table.borrow();
             matches!(holes.as_slice(), [(value, None)]
-                if tt.type_key(value.type_id) == tt.type_key(string_type))
+                if tt.same_type(value.type_id, string_type))
                 && segments
                     .iter()
                     .all(|[cooked, raw]| cooked.is_empty() && raw.is_empty())
@@ -4621,7 +4624,7 @@ impl<'a> Reify<'a> {
                 (value, TemplateHole { ty, spec })
             })
             .unzip();
-        let shape = TemplateShape { holes };
+        let shape = TemplateShape { holes, quote };
         let template_ty = self.reify_template_type(shape, span);
         let (literal, holes) =
             self.reify_template_literal(template_ty, values, &segments, span, ctx);
@@ -4702,7 +4705,7 @@ impl<'a> Reify<'a> {
             .template
             .raw_segments()
             .into_iter()
-            .map(|raw| [unescape_template_segment(&raw), raw])
+            .map(|raw| [checked_template_segment(&raw, tagged.template.quote), raw])
             .collect();
         let (literal, holes) =
             self.reify_template_literal(template_ty, values, &segments, span, ctx);
@@ -8569,19 +8572,19 @@ impl<'a> Reify<'a> {
                 };
                 return self.reify_numeric_literal(&byte.to_string(), byte_type, lit.span);
             }
-            ast::Literal::String(s) => {
+            ast::Literal::String(s, quote) => {
                 // Decode escape sequences (`\"`, `\n`, `\\`, …) the same
                 // way the elaborator does — the AST holds
-                // the raw source text. Without this a literal like
+                // the source text. Without this a literal like
                 // `"{\""` reaches codegen with the backslash intact and
                 // serializes as `{\"` instead of `{"`.
-                let value = unescape_string(s).unwrap_or_default();
+                let value = string_value(s, *quote).unwrap_or_default();
                 TirExprKind::StringLiteral(value)
             }
-            ast::Literal::Bytes(raw) => {
-                // Decode the raw source to bytes and reuse the `#include_bytes`
+            ast::Literal::Bytes(raw, quote) => {
+                // Decode the source to bytes and reuse the `#include_bytes`
                 // lowering (`BytesLiteral` -> byte-buffer data segment).
-                let bytes = unescape_bytes(raw).unwrap_or_default();
+                let bytes = bytes_value(raw, *quote).unwrap_or_default();
                 let byte_list_type = if recorded_type == TypeTable::UNKNOWN {
                     self.tysys.type_table.borrow_mut().make_byte_list()
                 } else {
@@ -8660,13 +8663,13 @@ impl<'a> Reify<'a> {
                     .unwrap_or_default();
                 return TirExpr::new(TirExprKind::StringLiteral(data), string_type, lit.span);
             }
-            ast::Literal::IncludeStr(raw_path) => {
+            ast::Literal::IncludeStr(path) => {
                 let string_type = self
                     .tysys
                     .type_table
                     .borrow_mut()
                     .make_compiler_struct(CompilerItem::String);
-                let key = [self.current_module_source.to_string(), raw_path.clone()];
+                let key = [self.current_module_source.to_string(), path.value.clone()];
                 let value = self
                     .tysys
                     .included_files
@@ -8676,13 +8679,13 @@ impl<'a> Reify<'a> {
                     .unwrap_or_default();
                 return TirExpr::new(TirExprKind::StringLiteral(value), string_type, lit.span);
             }
-            ast::Literal::IncludeBytes(raw_path) => {
+            ast::Literal::IncludeBytes(path) => {
                 let array_u8_type = if recorded_type == TypeTable::UNKNOWN {
                     self.tysys.type_table.borrow_mut().make_byte_list()
                 } else {
                     recorded_type
                 };
-                let key = [self.current_module_source.to_string(), raw_path.clone()];
+                let key = [self.current_module_source.to_string(), path.value.clone()];
                 let bytes = self
                     .tysys
                     .included_files
@@ -9193,8 +9196,8 @@ impl<'a> Reify<'a> {
                 // string literals decode their escapes, and `null` on a
                 // variant scrutinee with a `None` case lowers to that case.
                 let tir_lit = match lit {
-                    ast::Literal::String(raw) => {
-                        TirLiteralPattern::String(unescape_string(raw).unwrap_or_default())
+                    ast::Literal::String(raw, quote) => {
+                        TirLiteralPattern::String(string_value(raw, *quote).unwrap_or_default())
                     }
                     ast::Literal::Null => {
                         if self.scrutinee_has_variant_case(scrutinee_type, "None") {
@@ -9205,7 +9208,7 @@ impl<'a> Reify<'a> {
                     // Not pattern literals in the surface grammar; the parser
                     // rejects them, so reaching here is an invariant violation.
                     ast::Literal::Unit
-                    | ast::Literal::Bytes(_)
+                    | ast::Literal::Bytes(..)
                     | ast::Literal::LocationFile
                     | ast::Literal::LocationLine
                     | ast::Literal::LocationFunction
@@ -9759,7 +9762,7 @@ impl TypeSystem {
     /// on a target that drops it.
     fn ascribed_binding_type(&self, scrutinee_type: TypeId, target: TypeId) -> TypeId {
         let tt = self.type_table.borrow();
-        if tt.type_key(scrutinee_type) == tt.type_key(target) || tt.peel_refs(target) != target {
+        if tt.same_type(scrutinee_type, target) || tt.peel_refs(target) != target {
             return target;
         }
         drop(tt);
@@ -9856,10 +9859,6 @@ impl TypeSystem {
 /// Attribute extractors, reify's own. An attribute is uniquely determined by
 /// the AST alone, which is what the completeness rule lets reify re-derive, so
 /// these need no recorded fact and no elaborator to run.
-fn extract_is_ambient_attr(attrs: &[Attribute]) -> bool {
-    attrs.iter().any(|a| a.name == AMBIENT)
-}
-
 fn extract_inline_hint_attr(attrs: &[Attribute]) -> tir::InlineHint {
     let Some(attr) = attrs.iter().find(|a| a.name == INLINE) else {
         return tir::InlineHint::Auto;
@@ -9913,7 +9912,7 @@ fn adjust_receiver_for_self_kind(
     let target = adjusted_receiver_type(receiver.type_id, self_kind, self_layers, type_table);
     let tt = type_table.borrow();
     let held = tt.ref_depth(target);
-    if tt.type_key(tt.ref_layers(receiver.type_id, held)) == tt.type_key(target) {
+    if tt.same_type(tt.ref_layers(receiver.type_id, held), target) {
         return deref_to_layers(receiver, held, &tt);
     }
     to_layers_of(deref_to_layers(receiver, held - 1, &tt), target, &tt)

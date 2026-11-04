@@ -327,8 +327,18 @@ fn generate_textmate_grammar(def: &SyntaxDefinition) -> serde_json::Value {
             "strings": {
                 "patterns": [
                     {
+                        "name": "string.quoted.double.byte.raw.wado",
+                        "begin": "\\bb(#+)\"",
+                        "end": "\"\\1"
+                    },
+                    {
+                        "name": "string.quoted.double.raw.wado",
+                        "begin": "(#+)\"",
+                        "end": "\"\\1"
+                    },
+                    {
                         "name": "string.quoted.double.byte.wado",
-                        "begin": "b\"",
+                        "begin": "\\bb\"",
                         "end": "\"",
                         "patterns": [
                             { "include": "#string-escapes" }
@@ -343,27 +353,36 @@ fn generate_textmate_grammar(def: &SyntaxDefinition) -> serde_json::Value {
                         ]
                     },
                     {
+                        "name": "string.interpolated.raw.wado",
+                        "begin": "(#+)`",
+                        "end": "`\\1",
+                        "patterns": [
+                            { "include": "#template-interpolation" }
+                        ]
+                    },
+                    {
                         "name": "string.interpolated.wado",
                         "begin": "`",
                         "end": "`",
                         "patterns": [
                             { "include": "#string-escapes" },
-                            {
-                                "name": "meta.interpolation.wado",
-                                "begin": "\\$\\{",
-                                "end": "\\}",
-                                "beginCaptures": {
-                                    "0": { "name": "punctuation.definition.interpolation.begin.wado" }
-                                },
-                                "endCaptures": {
-                                    "0": { "name": "punctuation.definition.interpolation.end.wado" }
-                                },
-                                "patterns": [
-                                    { "include": "$self" }
-                                ]
-                            }
+                            { "include": "#template-interpolation" }
                         ]
                     }
+                ]
+            },
+            "template-interpolation": {
+                "name": "meta.interpolation.wado",
+                "begin": "\\$\\{",
+                "end": "\\}",
+                "beginCaptures": {
+                    "0": { "name": "punctuation.definition.interpolation.begin.wado" }
+                },
+                "endCaptures": {
+                    "0": { "name": "punctuation.definition.interpolation.end.wado" }
+                },
+                "patterns": [
+                    { "include": "$self" }
                 ]
             },
             "string-escapes": {

@@ -893,19 +893,7 @@ impl FunctionTranslator<'_, '_> {
                 Some(self.zero_handle(resource))
             }
 
-            _ if let Some(stream) = AmbientStream::of_availability_builtin(builtin_name) => {
-                let writes = self.ctx.package.ambient_stdio().writes(stream);
-                Some(WirInstr::I32Const(i32::from(writes)))
-            }
-
             _ if let Some(stream) = AmbientStream::of_write_builtin(builtin_name) => {
-                // `log_std{out,err}` calls this only past
-                // `ambient_std{out,err}_available`, so a stream the component
-                // does not write is left unimported: a purely-computational
-                // component stays free of `wasi:cli/stderr`.
-                if !self.ctx.package.ambient_stdio().writes(stream) {
-                    return Some(WirInstr::Unreachable);
-                }
                 let write = stream.write_operation(&self.ctx.package.cm_interface_registry);
                 let key = MangledName::wasi_import(&cm_import_alias(&write));
                 let func_id = self.ctx.func_map.get(&key).cloned().expect(

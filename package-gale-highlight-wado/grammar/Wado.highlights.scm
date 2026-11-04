@@ -18,6 +18,8 @@
 ; tail is formatting metadata, so it mutes.
 (TEMPLATE_TEXT) @string
 (BACKTICK) @string
+(RAW_OPEN) @string
+(RAW_CLOSE) @string
 (INTERP_OPEN) @string
 (interpolationEnd "}" @string)
 

@@ -219,15 +219,15 @@ type "functype//core:prelude/primitive.wado/i32::div_ceil$sroa[self.value]" = fn
 
 type "functype//core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(78)
 
-type "functype//core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<opt_sroa_variant_per_case.wado/$tmpl$11a6514d948fae35,core:prelude/string.wado/String>::lit$sroa[self.index]" = fn(i32, ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//StrSlice";  // TypeId(79)
+type "functype//core:prelude/primitive.wado/u64::fmt_base$sroa[self.value]" = fn(u64, ref "core:prelude/format.wado//Formatter", i32, bool, ref "core:prelude/string.wado//String");  // TypeId(79)
 
-type "functype//core:prelude/primitive.wado/u64::fmt_base$sroa[self.value]" = fn(u64, ref "core:prelude/format.wado//Formatter", i32, bool, ref "core:prelude/string.wado//String");  // TypeId(80)
+type "functype//core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<opt_sroa_variant_per_case.wado/$tmpl$11a6514d948fae35,i32>::lit$sroa[self.index]" = fn(i32, ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//StrSlice";  // TypeId(80)
 
 type "functype//core:prelude/primitive.wado/i32^core:prelude/traits.wado/LowerHex::fmt_lower_hex$sroa[self.value]" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(81)
 
 type "functype//core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<core:prelude/format.wado/$tmpl$47518b5dd822a983,i32>::lit$sroa[self.index]" = fn(i32, ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//StrSlice";  // TypeId(82)
 
-type "functype//core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<opt_sroa_variant_per_case.wado/$tmpl$11a6514d948fae35,i32>::lit$sroa[self.index]" = fn(i32, ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//StrSlice";  // TypeId(83)
+type "functype//core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<opt_sroa_variant_per_case.wado/$tmpl$11a6514d948fae35,core:prelude/string.wado/String>::lit$sroa[self.index]" = fn(i32, ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//StrSlice";  // TypeId(83)
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec0" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(84)
 
@@ -312,8 +312,7 @@ fn "opt_sroa_variant_per_case.wado/run"() {
     let $v1_1: i32;
     let $v2_2: i32;
     let $v1_22: ref "core:prelude/string.wado//String";
-    let a_29: ref Array<u8>;
-    let b_32: ref Array<u8>;
+    let $licm_repr_47: ref Array<u8>;
     if @unlikely(local.tee $v2_2("opt_sroa_variant_per_case.wado/try_divide"(local.tee $v0_0(black_box(10)), local.tee $v1_1(black_box(2)))) != 5) {
         cold_path;
         "opt_sroa_variant_per_case.wado/run$cold5"($v0_0, $v1_1, $v2_2);
@@ -346,29 +345,27 @@ fn "opt_sroa_variant_per_case.wado/run"() {
     }
     $v1_22 = "opt_sroa_variant_per_case.wado/use_err_branch"(local.tee $v0_0(black_box(-1)));
     if @unlikely($inline_core_prelude_array_wado_seq_eq_u8__2: block -> bool {
-        a_29 = $v1_22.repr;
-        $v1_1 = $v1_22.used;
-        b_32 = global:opt_sroa_variant_per_case.wado::$const_obj_1;
-        if $v1_1 != 8 {
+        if local.tee $v1_1($v1_22.used) != 8 {
             break $inline_core_prelude_array_wado_seq_eq_u8__2: 0;
         }
         $v2_2 = 0;
+        $licm_repr_47 = $v1_22.repr;
         b13: block {
             l14: loop {
                 break_if b13 ((($v2_2 >= $v1_1) | (($v2_2 + 1) >= $v1_1)) | ((($v2_2 + 1) + 1) >= $v1_1)) | (((($v2_2 + 1) + 1) + 1) >= $v1_1);
-                if builtin::array_get_value<u8>(a_29, $v2_2) != builtin::array_get_value<u8>(b_32, $v2_2) {
+                if builtin::array_get_value<u8>($licm_repr_47, $v2_2) != builtin::array_get_value<u8>(global:opt_sroa_variant_per_case.wado::$const_obj_1, $v2_2) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__2: 0;
                 }
                 $v2_2 = $v2_2 + 1;
-                if builtin::array_get_value<u8>(a_29, $v2_2) != builtin::array_get_value<u8>(b_32, $v2_2) {
+                if builtin::array_get_value<u8>($licm_repr_47, $v2_2) != builtin::array_get_value<u8>(global:opt_sroa_variant_per_case.wado::$const_obj_1, $v2_2) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__2: 0;
                 }
                 $v2_2 = $v2_2 + 1;
-                if builtin::array_get_value<u8>(a_29, $v2_2) != builtin::array_get_value<u8>(b_32, $v2_2) {
+                if builtin::array_get_value<u8>($licm_repr_47, $v2_2) != builtin::array_get_value<u8>(global:opt_sroa_variant_per_case.wado::$const_obj_1, $v2_2) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__2: 0;
                 }
                 $v2_2 = $v2_2 + 1;
-                if builtin::array_get_value<u8>(a_29, $v2_2) != builtin::array_get_value<u8>(b_32, $v2_2) {
+                if builtin::array_get_value<u8>($licm_repr_47, $v2_2) != builtin::array_get_value<u8>(global:opt_sroa_variant_per_case.wado::$const_obj_1, $v2_2) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__2: 0;
                 }
                 $v2_2 = $v2_2 + 1;
@@ -378,7 +375,7 @@ fn "opt_sroa_variant_per_case.wado/run"() {
         b19: block {
             l20: loop {
                 break_if b19 $v2_2 >= $v1_1;
-                if builtin::array_get_value<u8>(a_29, $v2_2) != builtin::array_get_value<u8>(b_32, $v2_2) {
+                if builtin::array_get_value<u8>($licm_repr_47, $v2_2) != builtin::array_get_value<u8>(global:opt_sroa_variant_per_case.wado::$const_obj_1, $v2_2) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__2: 0;
                 }
                 $v2_2 = $v2_2 + 1;
@@ -399,29 +396,27 @@ use_err_branch(builtin::black_box(-1)): "), used: 41 }, s2: struct.new "core:pre
     }
     $v1_22 = "opt_sroa_variant_per_case.wado/use_err_branch"(local.tee $v0_0(black_box(5)));
     if @unlikely($inline_core_prelude_array_wado_seq_eq_u8__4: block -> bool {
-        a_29 = $v1_22.repr;
-        $v1_1 = $v1_22.used;
-        b_32 = global:opt_sroa_variant_per_case.wado::$const_obj_0;
-        if $v1_1 != 2 {
+        if local.tee $v1_1($v1_22.used) != 2 {
             break $inline_core_prelude_array_wado_seq_eq_u8__4: 0;
         }
         $v2_2 = 0;
+        $licm_repr_47 = $v1_22.repr;
         b24: block {
             l25: loop {
                 break_if b24 ((($v2_2 >= $v1_1) | (($v2_2 + 1) >= $v1_1)) | ((($v2_2 + 1) + 1) >= $v1_1)) | (((($v2_2 + 1) + 1) + 1) >= $v1_1);
-                if builtin::array_get_value<u8>(a_29, $v2_2) != builtin::array_get_value<u8>(b_32, $v2_2) {
+                if builtin::array_get_value<u8>($licm_repr_47, $v2_2) != builtin::array_get_value<u8>(global:opt_sroa_variant_per_case.wado::$const_obj_0, $v2_2) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__4: 0;
                 }
                 $v2_2 = $v2_2 + 1;
-                if builtin::array_get_value<u8>(a_29, $v2_2) != builtin::array_get_value<u8>(b_32, $v2_2) {
+                if builtin::array_get_value<u8>($licm_repr_47, $v2_2) != builtin::array_get_value<u8>(global:opt_sroa_variant_per_case.wado::$const_obj_0, $v2_2) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__4: 0;
                 }
                 $v2_2 = $v2_2 + 1;
-                if builtin::array_get_value<u8>(a_29, $v2_2) != builtin::array_get_value<u8>(b_32, $v2_2) {
+                if builtin::array_get_value<u8>($licm_repr_47, $v2_2) != builtin::array_get_value<u8>(global:opt_sroa_variant_per_case.wado::$const_obj_0, $v2_2) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__4: 0;
                 }
                 $v2_2 = $v2_2 + 1;
-                if builtin::array_get_value<u8>(a_29, $v2_2) != builtin::array_get_value<u8>(b_32, $v2_2) {
+                if builtin::array_get_value<u8>($licm_repr_47, $v2_2) != builtin::array_get_value<u8>(global:opt_sroa_variant_per_case.wado::$const_obj_0, $v2_2) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__4: 0;
                 }
                 $v2_2 = $v2_2 + 1;
@@ -431,7 +426,7 @@ use_err_branch(builtin::black_box(-1)): "), used: 41 }, s2: struct.new "core:pre
         b30: block {
             l31: loop {
                 break_if b30 $v2_2 >= $v1_1;
-                if builtin::array_get_value<u8>(a_29, $v2_2) != builtin::array_get_value<u8>(b_32, $v2_2) {
+                if builtin::array_get_value<u8>($licm_repr_47, $v2_2) != builtin::array_get_value<u8>(global:opt_sroa_variant_per_case.wado::$const_obj_0, $v2_2) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__4: 0;
                 }
                 $v2_2 = $v2_2 + 1;
@@ -1289,12 +1284,6 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(self, f) {
     "core:prelude/primitive.wado/write_decimal_digits"(f.buf.repr, is_negative, abs_val, self);
 }
 
-fn "core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<opt_sroa_variant_per_case.wado/$tmpl$11a6514d948fae35,core:prelude/string.wado/String>::lit$sroa[self.index]"(self, $mv$t$s0, $mv$t$r0, $mv$t$s1, $mv$t$r1, $mv$t$s2, $mv$t$r2) {
-    return block -> ref "core:prelude/string.wado//StrSlice" {
-        "core:prelude/string.wado/core:prelude/string.wado/String::internal_view"(local.tee $mv$t$s0("opt_sroa_variant_per_case.wado/$template_segment$opt_sroa_variant_per_case.wado/$tmpl$11a6514d948fae35"($mv$t$s0, $mv$t$r0, $mv$t$s1, $mv$t$r1, $mv$t$s2, $mv$t$r2, 2 * self)).repr, $mv$t$s0.used);
-    };
-}
-
 fn "core:prelude/primitive.wado/u64::fmt_base$sroa[self.value]"(self, f, base, upper, alt_prefix) {
     let bits_per_digit: i32;
     let digit_count: i32;
@@ -1310,6 +1299,12 @@ fn "core:prelude/primitive.wado/u64::fmt_base$sroa[self.value]"(self, f, base, u
     "core:prelude/primitive.wado/write_u64_base_digits"(f.buf.repr, offset, self, digit_count, bits_per_digit, base, upper);
 }
 
+fn "core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<opt_sroa_variant_per_case.wado/$tmpl$11a6514d948fae35,i32>::lit$sroa[self.index]"(self, $mv$t$s0, $mv$t$r0, $mv$t$s1, $mv$t$r1, $mv$t$s2, $mv$t$r2) {
+    return block -> ref "core:prelude/string.wado//StrSlice" {
+        "core:prelude/string.wado/core:prelude/string.wado/String::internal_view"(local.tee $mv$t$s0("opt_sroa_variant_per_case.wado/$template_segment$opt_sroa_variant_per_case.wado/$tmpl$11a6514d948fae35"($mv$t$s0, $mv$t$r0, $mv$t$s1, $mv$t$r1, $mv$t$s2, $mv$t$r2, 2 * self)).repr, $mv$t$s0.used);
+    };
+}
+
 fn "core:prelude/primitive.wado/i32^core:prelude/traits.wado/LowerHex::fmt_lower_hex$sroa[self.value]"(self, f) {
     "core:prelude/primitive.wado/u64::fmt_base$sroa[self.value]"(builtin::i64_extend_i32_u(self), f, 16, 0, global:core:prelude/primitive.wado::$const_obj_5);
 }
@@ -1320,7 +1315,7 @@ fn "core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<core:prelude/
     };
 }
 
-fn "core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<opt_sroa_variant_per_case.wado/$tmpl$11a6514d948fae35,i32>::lit$sroa[self.index]"(self, $mv$t$s0, $mv$t$r0, $mv$t$s1, $mv$t$r1, $mv$t$s2, $mv$t$r2) {
+fn "core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<opt_sroa_variant_per_case.wado/$tmpl$11a6514d948fae35,core:prelude/string.wado/String>::lit$sroa[self.index]"(self, $mv$t$s0, $mv$t$r0, $mv$t$s1, $mv$t$r1, $mv$t$s2, $mv$t$r2) {
     return block -> ref "core:prelude/string.wado//StrSlice" {
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_view"(local.tee $mv$t$s0("opt_sroa_variant_per_case.wado/$template_segment$opt_sroa_variant_per_case.wado/$tmpl$11a6514d948fae35"($mv$t$s0, $mv$t$r0, $mv$t$s1, $mv$t$r1, $mv$t$s2, $mv$t$r2, 2 * self)).repr, $mv$t$s0.used);
     };
