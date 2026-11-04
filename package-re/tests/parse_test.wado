@@ -52,8 +52,8 @@ fn show(node: &Node) -> String {
         Any => ".",
         Start => "^",
         End => "$",
-        WordBoundary => "\\b",
-        NotWordBoundary => "\\B",
+        WordBoundary => #"\b"#,
+        NotWordBoundary => #"\B"#,
         Set(set) => {
             let mut parts: List<String> = [];
             for let i of &set.items {
@@ -129,124 +129,126 @@ fn holed_error(pattern: String, offsets: List<i32>, syntax: Syntax = Syntax::Pla
 }
 
 test "a hole is an atom, its groups numbered where it stands" {
-    assert holed_tree("a*", [1]) == "1 (cat a {0, (1 H)})";
-    assert holed_tree("(x)", [0, 3, 3]) == "4 (cat (1 H) (2 x) (3 H) (4 H))";
-    assert holed_tree("|", [1]) == "1 (alt (cat ) (1 H))";
+    assert holed_tree(#"a*"#, [1]) == "1 (cat a {0, (1 H)})";
+    assert holed_tree(#"(x)"#, [0, 3, 3]) == "4 (cat (1 H) (2 x) (3 H) (4 H))";
+    assert holed_tree(#"|"#, [1]) == "1 (alt (cat ) (1 H))";
     // A hole parts the halves of a surrogate pair.
-    assert holed_tree("\\uD800\\uDC00", [6]) == "1 (cat U+D800 (1 H) U+DC00)";
+    assert holed_tree(#"\uD800\uDC00"#, [6]) == "1 (cat U+D800 (1 H) U+DC00)";
 }
 
 test "a hole stands only where an atom may" {
     let message = "a hole may stand only where an atom may";
-    assert holed_error("[]", [1]) == `${message} (at byte 1)`;
-    assert holed_error("\\", [1]) == `${message} (at byte 1)`;
-    assert holed_error("a{}", [2]) == `${message} (at byte 2)`;
-    assert holed_error("(?<>a)", [3]) == `${message} (at byte 3)`;
-    assert holed_error("(?:)", [2]) == `${message} (at byte 2)`;
-    assert holed_error("x # c", [5], Syntax::Extended) == `${message} (at byte 5)`;
+    assert holed_error(#"[]"#, [1]) == `${message} (at byte 1)`;
+    assert holed_error(#"\"#, [1]) == `${message} (at byte 1)`;
+    assert holed_error(#"a{}"#, [2]) == `${message} (at byte 2)`;
+    assert holed_error(#"(?<>a)"#, [3]) == `${message} (at byte 3)`;
+    assert holed_error(#"(?:)"#, [2]) == `${message} (at byte 2)`;
+    assert holed_error(#"x # c"#, [5], Syntax::Extended) == `${message} (at byte 5)`;
+    // A raw string cannot end the line the comment needs ended.
     assert holed_error("x # c\n", [5], Syntax::Extended) == `${message} (at byte 5)`;
 }
 
 test "a hole's group names are checked against the pattern's" {
-    assert holed_error("(?<h>a)", [7], Syntax::Plain, true) == "two groups are named `h` (at byte 7)";
-    assert holed_error("(?<h>a)", [0], Syntax::Plain, true) == "two groups are named `h` (at byte 0)";
-    assert holed_error("", [0, 0], Syntax::Plain, true) == "two groups are named `h` (at byte 0)";
+    assert holed_error(#"(?<h>a)"#, [7], Syntax::Plain, true) == "two groups are named `h` (at byte 7)";
+    assert holed_error(#"(?<h>a)"#, [0], Syntax::Plain, true) == "two groups are named `h` (at byte 0)";
+    assert holed_error(#""#, [0, 0], Syntax::Plain, true) == "two groups are named `h` (at byte 0)";
 }
 
 test "a sequence, an alternation and the empty pattern" {
-    assert tree("abc") == "(cat a b c)";
-    assert tree("a|bc|") == "(alt a (cat b c) (cat ))";
-    assert tree("") == "(cat )";
+    assert tree(#"abc"#) == "(cat a b c)";
+    assert tree(#"a|bc|"#) == "(alt a (cat b c) (cat ))";
+    assert tree(#""#) == "(cat )";
 }
 
 test "quantifiers" {
-    assert tree("a*b+?c?") == "(cat {0, a} {1,? b} {0,1 c})";
-    assert tree("a{2}b{2,}c{2,5}?") == "(cat {2,2 a} {2, b} {2,5? c})";
-    assert tree("a{4294967295}") == "{4294967295,4294967295 a}";
+    assert tree(#"a*b+?c?"#) == "(cat {0, a} {1,? b} {0,1 c})";
+    assert tree(#"a{2}b{2,}c{2,5}?"#) == "(cat {2,2 a} {2, b} {2,5? c})";
+    assert tree(#"a{4294967295}"#) == "{4294967295,4294967295 a}";
 }
 
 test "groups count their opening parentheses" {
-    assert tree("(a(b))(?<n>c)(?:d)") == "(cat (1 (cat a (2 b))) (3<n> c) (?: d))";
-    assert parse("(a)(?:b)((c))".as_str_slice(), Syntax::Plain).unwrap().1 == 3;
-    assert tree("(?<$_ab1\\u0063>x)") == "(1<$_ab1c> x)";
+    assert tree(#"(a(b))(?<n>c)(?:d)"#) == "(cat (1 (cat a (2 b))) (3<n> c) (?: d))";
+    assert parse(#"(a)(?:b)((c))"#.as_str_slice(), Syntax::Plain).unwrap().1 == 3;
+    assert tree(#"(?<$_ab1\u0063>x)"#) == "(1<$_ab1c> x)";
 }
 
 test "modifiers" {
-    assert tree("(?i:a)(?-ms:b)(?s-i:c)") == "(cat (?i- a) (?-ms b) (?s-i c))";
+    assert tree(#"(?i:a)(?-ms:b)(?s-i:c)"#) == "(cat (?i- a) (?-ms b) (?s-i c))";
 }
 
 test "assertions and the dot" {
-    assert tree("^.\\b\\B$") == "(cat ^ . \\b \\B $)";
+    assert tree(#"^.\b\B$"#) == #"(cat ^ . \b \B $)"#;
 }
 
 test "classes" {
-    assert tree("[a-z0_]") == "[a-z 0 _]";
-    assert tree("[^-a-]") == "[^- a -]";
-    assert tree("[]") == "[]";
-    assert tree("[α-ω]") == "[U+03B1-U+03C9]";
-    assert tree("[\\d\\W\\b\\-\\]]") == "[\\d \\W U+0008 - ]]";
-    assert tree("\\d\\S") == "(cat [\\d] [\\S])";
+    assert tree(#"[a-z0_]"#) == "[a-z 0 _]";
+    assert tree(#"[^-a-]"#) == "[^- a -]";
+    assert tree(#"[]"#) == "[]";
+    assert tree(#"[α-ω]"#) == "[U+03B1-U+03C9]";
+    assert tree(#"[\d\W\b\-\]]"#) == #"[\d \W U+0008 - ]]"#;
+    assert tree(#"\d\S"#) == #"(cat [\d] [\S])"#;
 }
 
 test "escapes" {
-    assert tree("\\n\\t\\f\\v\\r\\0") == "(cat U+000A U+0009 U+000C U+000B U+000D U+0000)";
-    assert tree("\\x41\\u0042\\u{1F600}\\cJ\\/\\.\\$") == "(cat A B U+1F600 U+000A / . $)";
-    assert tree("\\uD83D\\uDE00") == "U+1F600";
-    assert tree("\\uD83D") == "U+D83D";
+    assert tree(#"\n\t\f\v\r\0"#) == "(cat U+000A U+0009 U+000C U+000B U+000D U+0000)";
+    assert tree(#"\x41\u0042\u{1F600}\cJ\/\.\$"#) == "(cat A B U+1F600 U+000A / . $)";
+    assert tree(#"\uD83D\uDE00"#) == "U+1F600";
+    assert tree(#"\uD83D"#) == "U+D83D";
 }
 
 test "Unicode properties read core:icu's names" {
-    assert tree("\\p{L}") == "[\\p{Property::GeneralCategoryGroup(GeneralCategoryGroup::Letter)}]";
-    assert tree("\\P{Lu}") == "[\\P{Property::GeneralCategoryGroup(GeneralCategoryGroup::UppercaseLetter)}]";
-    assert tree("\\p{White_Space}") == "[\\p{Property::BinaryProperty(BinaryProperty::WhiteSpace)}]";
-    assert tree("\\p{sc=Hiragana}") == "[\\p{Property::Script(Script::Hiragana)}]";
-    assert tree("[\\p{gc=Nd}]") == "[\\p{Property::GeneralCategoryGroup(GeneralCategoryGroup::DecimalNumber)}]";
+    assert tree(#"\p{L}"#) == #"[\p{Property::GeneralCategoryGroup(GeneralCategoryGroup::Letter)}]"#;
+    assert tree(#"\P{Lu}"#) == #"[\P{Property::GeneralCategoryGroup(GeneralCategoryGroup::UppercaseLetter)}]"#;
+    assert tree(#"\p{White_Space}"#) == #"[\p{Property::BinaryProperty(BinaryProperty::WhiteSpace)}]"#;
+    assert tree(#"\p{sc=Hiragana}"#) == #"[\p{Property::Script(Script::Hiragana)}]"#;
+    assert tree(#"[\p{gc=Nd}]"#) == #"[\p{Property::GeneralCategoryGroup(GeneralCategoryGroup::DecimalNumber)}]"#;
 }
 
 test "rex ignores whitespace and comments outside a class" {
+    // A raw string cannot hold the newline that ends the comment.
     assert ext("a b # c\n  d") == "(cat a b d)";
-    assert ext("\\d +") == "{1, [\\d]}";
-    assert ext("[ #]") == "[U+0020 #]";
-    assert ext("\\ \\#") == "(cat U+0020 #)";
+    assert ext(#"\d +"#) == #"{1, [\d]}"#;
+    assert ext(#"[ #]"#) == "[U+0020 #]";
+    assert ext(#"\ \#"#) == "(cat U+0020 #)";
 }
 
 test "lookaround and backreferences name why they are refused" {
-    assert error("a(?=b)") == "lookahead `(?=` `(?!` cannot be matched in linear time (at byte 1)";
-    assert error("(?!b)") == "lookahead `(?=` `(?!` cannot be matched in linear time (at byte 0)";
-    assert error("(?<=b)") == "lookbehind `(?<=` `(?<!` cannot be matched in linear time (at byte 0)";
-    assert error("(?<!b)") == "lookbehind `(?<=` `(?<!` cannot be matched in linear time (at byte 0)";
-    assert error("(a)\\1") == "a backreference cannot be matched in linear time (at byte 3)";
-    assert error("(?<n>a)\\k<n>") == "a backreference `\\k<name>` cannot be matched in linear time (at byte 7)";
+    assert error(#"a(?=b)"#) == "lookahead `(?=` `(?!` cannot be matched in linear time (at byte 1)";
+    assert error(#"(?!b)"#) == "lookahead `(?=` `(?!` cannot be matched in linear time (at byte 0)";
+    assert error(#"(?<=b)"#) == "lookbehind `(?<=` `(?<!` cannot be matched in linear time (at byte 0)";
+    assert error(#"(?<!b)"#) == "lookbehind `(?<=` `(?<!` cannot be matched in linear time (at byte 0)";
+    assert error(#"(a)\1"#) == "a backreference cannot be matched in linear time (at byte 3)";
+    assert error(#"(?<n>a)\k<n>"#) == #"a backreference `\k<name>` cannot be matched in linear time (at byte 7)"#;
 }
 
 test "syntax errors point at the offending character" {
-    assert error("a**") == "nothing to repeat (at byte 2)";
-    assert error("^*") == "an assertion cannot be repeated (at byte 0)";
-    assert error("(a") == "unclosed group (at byte 0)";
-    assert error("a)") == "unmatched `)` (at byte 1)";
-    assert error("]") == "unmatched `]`; write `\\]` for a literal one (at byte 0)";
-    assert error("{") == "nothing to repeat; write `\\{` for a literal `{` (at byte 0)";
-    assert error("a{2,1}") == "the count's maximum is below its minimum (at byte 1)";
-    assert error("a{x}") == "a count needs a number, as in `{2}` (at byte 1)";
-    assert error("a{4294967296}") == "a count may be at most 4294967295 (at byte 2)";
-    assert error("[a") == "unclosed class (at byte 0)";
-    assert error("[z-a]") == "a class range runs from a higher code point to a lower one (at byte 1)";
-    assert error("[\\d-z]") == "a class range cannot start at a set such as `\\d` (at byte 1)";
-    assert error("\\q") == "`\\q` is not an escape in Unicode mode (at byte 0)";
-    assert error("\\00") == "an octal escape is not allowed in Unicode mode (at byte 0)";
-    assert error("\\u{110000}") == "`\\u{…}` must hold a code point up to 10FFFF (at byte 0)";
-    assert error("\\p{Nope}") == "unknown Unicode property `Nope` (at byte 0)";
-    assert error("a\\") == "a pattern cannot end in `\\` (at byte 1)";
+    assert error(#"a**"#) == "nothing to repeat (at byte 2)";
+    assert error(#"^*"#) == "an assertion cannot be repeated (at byte 0)";
+    assert error(#"(a"#) == "unclosed group (at byte 0)";
+    assert error(#"a)"#) == "unmatched `)` (at byte 1)";
+    assert error(#"]"#) == #"unmatched `]`; write `\]` for a literal one (at byte 0)"#;
+    assert error(#"{"#) == #"nothing to repeat; write `\{` for a literal `{` (at byte 0)"#;
+    assert error(#"a{2,1}"#) == "the count's maximum is below its minimum (at byte 1)";
+    assert error(#"a{x}"#) == "a count needs a number, as in `{2}` (at byte 1)";
+    assert error(#"a{4294967296}"#) == "a count may be at most 4294967295 (at byte 2)";
+    assert error(#"[a"#) == "unclosed class (at byte 0)";
+    assert error(#"[z-a]"#) == "a class range runs from a higher code point to a lower one (at byte 1)";
+    assert error(#"[\d-z]"#) == #"a class range cannot start at a set such as `\d` (at byte 1)"#;
+    assert error(#"\q"#) == #"`\q` is not an escape in Unicode mode (at byte 0)"#;
+    assert error(#"\00"#) == "an octal escape is not allowed in Unicode mode (at byte 0)";
+    assert error(#"\u{110000}"#) == #"`\u{…}` must hold a code point up to 10FFFF (at byte 0)"#;
+    assert error(#"\p{Nope}"#) == "unknown Unicode property `Nope` (at byte 0)";
+    assert error(#"a\"#) == #"a pattern cannot end in `\` (at byte 1)"#;
 }
 
 test "group names and modifiers follow the early errors" {
-    assert error("(?<a>x)(?<a>y)") == "two groups are named `a` (at byte 7)";
-    assert error("(?<>x)") == "a group name cannot be empty (at byte 3)";
-    assert error("(?<1a>x)") == "`1` cannot appear in a group name here (at byte 3)";
-    assert error("(?ii:x)") == "a modifier may be written once (at byte 3)";
-    assert error("(?-:x)") == "`(?-:` must name a modifier to remove (at byte 2)";
-    assert error("(?i-i:x)") == "a modifier cannot be both added and removed (at byte 3)";
-    assert error("(?x)") == "`(?` must be followed by `:`, `<name>`, or modifiers `ims` and `:` (at byte 2)";
+    assert error(#"(?<a>x)(?<a>y)"#) == "two groups are named `a` (at byte 7)";
+    assert error(#"(?<>x)"#) == "a group name cannot be empty (at byte 3)";
+    assert error(#"(?<1a>x)"#) == "`1` cannot appear in a group name here (at byte 3)";
+    assert error(#"(?ii:x)"#) == "a modifier may be written once (at byte 3)";
+    assert error(#"(?-:x)"#) == "`(?-:` must name a modifier to remove (at byte 2)";
+    assert error(#"(?i-i:x)"#) == "a modifier cannot be both added and removed (at byte 3)";
+    assert error(#"(?x)"#) == "`(?` must be followed by `:`, `<name>`, or modifiers `ims` and `:` (at byte 2)";
 }
 
 test "nesting is bounded" {

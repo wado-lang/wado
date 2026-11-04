@@ -11,7 +11,7 @@
 
 import { readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import { join, relative } from "node:path";
-import { wadoLiteral as wado } from "./wado-literal.mjs";
+import { wadoLiteral as wado, wadoPattern } from "./wado-literal.mjs";
 
 const root = new URL("..", import.meta.url).pathname;
 const corpus = join(root, "../vendor/test262");
@@ -43,7 +43,10 @@ function literal(source) {
   if (lines.length !== 1) {
     return null;
   }
-  const m = /^\/(.+)\/([dgimsuy]*);?$/.exec(lines[0].trim());
+  // Some tests mark the literal with a comment after it: `/(?M:a)//*{ … }*/;`
+  // or `/(?\u0069:a)/u /* i */;`.
+  const line = lines[0].replace(/\/\*.*\*\/;?\s*$/, "").trim();
+  const m = /^\/(.+)\/([dgimsuy]*);?$/.exec(line);
   return m === null ? null : m[1];
 }
 
@@ -92,9 +95,9 @@ for (const dir of dirs) {
     }
     const name = relative(corpus, path);
     if (knownToIcu(name)) {
-      lines.push("", `// core:icu knows the property, so Re accepts it.`, `test ${wado(name)} {`, `    assert Regex::new(${wado(pattern)}).is_ok();`, "}");
+      lines.push("", `// core:icu knows the property, so Re accepts it.`, `test ${wado(name)} {`, `    assert Regex::new(${wadoPattern(pattern)}).is_ok();`, "}");
     } else {
-      lines.push("", `test ${wado(name)} {`, `    assert Regex::new(${wado(pattern)}).is_err();`, "}");
+      lines.push("", `test ${wado(name)} {`, `    assert Regex::new(${wadoPattern(pattern)}).is_err();`, "}");
     }
   }
 }

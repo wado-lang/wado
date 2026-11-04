@@ -27,6 +27,12 @@ from ECMA-262's tables or from an engine, `core:icu` is right.
 - `src/regex.wado` — `Regex`, its searches, `replace` and `split`.
 - `src/template.wado` — the tags `re` and `rex`, and `PatternPart`.
 
+## Tests
+
+A test writes a pattern as a raw string, `#"\d+"#`, so that it reads as the
+pattern it is. A cooked one needs a reason, such as a newline ending a `rex`
+comment. A program uses `re` and `rex`, whose templates are raw already.
+
 ## Running tests
 
 ```sh

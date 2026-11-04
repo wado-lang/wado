@@ -6,1260 +6,1260 @@
 use { Regex } from "../../src/lib.wado";
 
 test "test/language/literals/regexp/S7.8.5_A1.2_T1.js" {
-    assert Regex::new("*").is_err();
+    assert Regex::new(#"*"#).is_err();
 }
 
 test "test/language/literals/regexp/S7.8.5_A1.2_T2.js" {
-    assert Regex::new("\\").is_err();
+    assert Regex::new(#"\"#).is_err();
 }
 
 test "test/language/literals/regexp/S7.8.5_A2.2_T1.js" {
-    assert Regex::new("a\\").is_err();
+    assert Regex::new(#"a\"#).is_err();
 }
 
 test "test/language/literals/regexp/early-err-arithmetic-modifiers-add-remove-i.js" {
-    assert Regex::new("(?i-i:a)//*{ global-modifiers }*").is_err();
+    assert Regex::new(#"(?i-i:a)"#).is_err();
 }
 
 test "test/language/literals/regexp/early-err-arithmetic-modifiers-add-remove-m.js" {
-    assert Regex::new("(?m-m:a)//*{ global-modifiers }*").is_err();
+    assert Regex::new(#"(?m-m:a)"#).is_err();
 }
 
 test "test/language/literals/regexp/early-err-arithmetic-modifiers-add-remove-multi-duplicate.js" {
-    assert Regex::new("(?ims-m:a)//*{ global-modifiers }*").is_err();
+    assert Regex::new(#"(?ims-m:a)"#).is_err();
 }
 
 test "test/language/literals/regexp/early-err-arithmetic-modifiers-add-remove-s-escape.js" {
-    assert Regex::new("(?\\u{0073}-s:a)//*{ global-modifiers }*").is_err();
+    assert Regex::new(#"(?\u{0073}-s:a)"#).is_err();
 }
 
 test "test/language/literals/regexp/early-err-arithmetic-modifiers-add-remove-s.js" {
-    assert Regex::new("(?s-s:a)//*{ global-modifiers }*").is_err();
+    assert Regex::new(#"(?s-s:a)"#).is_err();
 }
 
 test "test/language/literals/regexp/early-err-arithmetic-modifiers-both-empty.js" {
-    assert Regex::new("(?-:a)//*{ global-modifiers }*").is_err();
+    assert Regex::new(#"(?-:a)"#).is_err();
 }
 
 test "test/language/literals/regexp/early-err-arithmetic-modifiers-code-point-repeat-i-1.js" {
-    assert Regex::new("(?-ii:a)//*{ global-modifiers }*").is_err();
+    assert Regex::new(#"(?-ii:a)"#).is_err();
 }
 
 test "test/language/literals/regexp/early-err-arithmetic-modifiers-code-point-repeat-i-2.js" {
-    assert Regex::new("(?-imsi:a)//*{ global-modifiers }*").is_err();
+    assert Regex::new(#"(?-imsi:a)"#).is_err();
 }
 
 test "test/language/literals/regexp/early-err-arithmetic-modifiers-no-colon-1.js" {
-    assert Regex::new("(?ms-i)").is_err();
+    assert Regex::new(#"(?ms-i)"#).is_err();
 }
 
 test "test/language/literals/regexp/early-err-arithmetic-modifiers-no-colon-2.js" {
-    assert Regex::new("(?-s)").is_err();
+    assert Regex::new(#"(?-s)"#).is_err();
 }
 
 test "test/language/literals/regexp/early-err-arithmetic-modifiers-no-colon-3.js" {
-    assert Regex::new("(?i-)").is_err();
+    assert Regex::new(#"(?i-)"#).is_err();
 }
 
 test "test/language/literals/regexp/early-err-arithmetic-modifiers-other-code-point-arbitrary.js" {
-    assert Regex::new("(?-1:a)//*{ global-modifiers }*").is_err();
+    assert Regex::new(#"(?-1:a)"#).is_err();
 }
 
 test "test/language/literals/regexp/early-err-arithmetic-modifiers-other-code-point-combining-i.js" {
-    assert Regex::new("(?-i\u{365}:a)//*{ global-modifiers }*").is_err();
+    assert Regex::new(#"(?-iͥ:a)"#).is_err();
 }
 
 test "test/language/literals/regexp/early-err-arithmetic-modifiers-other-code-point-combining-m.js" {
-    assert Regex::new("(?-m\u{36B}:a)//*{ global-modifiers }*").is_err();
+    assert Regex::new(#"(?-mͫ:a)"#).is_err();
 }
 
 test "test/language/literals/regexp/early-err-arithmetic-modifiers-other-code-point-combining-s.js" {
-    assert Regex::new("(?-s\u{300}:a)//*{ global-modifiers }*").is_err();
+    assert Regex::new(#"(?-s̀:a)"#).is_err();
 }
 
 test "test/language/literals/regexp/early-err-arithmetic-modifiers-other-code-point-d.js" {
-    assert Regex::new("(?-d:a)//*{ global-modifiers }*").is_err();
+    assert Regex::new(#"(?-d:a)"#).is_err();
 }
 
 test "test/language/literals/regexp/early-err-arithmetic-modifiers-other-code-point-g.js" {
-    assert Regex::new("(?-g:a)//*{ global-modifiers }*").is_err();
+    assert Regex::new(#"(?-g:a)"#).is_err();
 }
 
 test "test/language/literals/regexp/early-err-arithmetic-modifiers-other-code-point-non-display-1.js" {
-    assert Regex::new("(?-s\u{0}:a)//*{ global-modifiers }*").is_err();
+    assert Regex::new("(?-s\u{0}:a)").is_err();
 }
 
 test "test/language/literals/regexp/early-err-arithmetic-modifiers-other-code-point-non-display-2.js" {
-    assert Regex::new("(?-s\u{200E}:a)//*{ global-modifiers }*").is_err();
+    assert Regex::new(#"(?-s‎:a)"#).is_err();
 }
 
 test "test/language/literals/regexp/early-err-arithmetic-modifiers-other-code-point-non-flag.js" {
-    assert Regex::new("(?-Q:a)//*{ global-modifiers }*").is_err();
+    assert Regex::new(#"(?-Q:a)"#).is_err();
 }
 
 test "test/language/literals/regexp/early-err-arithmetic-modifiers-other-code-point-u.js" {
-    assert Regex::new("(?-u:a)//*{ global-modifiers }*").is_err();
+    assert Regex::new(#"(?-u:a)"#).is_err();
 }
 
 test "test/language/literals/regexp/early-err-arithmetic-modifiers-other-code-point-uppercase-I.js" {
-    assert Regex::new("(?-I:a)//*{ global-modifiers }*").is_err();
+    assert Regex::new(#"(?-I:a)"#).is_err();
 }
 
 test "test/language/literals/regexp/early-err-arithmetic-modifiers-other-code-point-y.js" {
-    assert Regex::new("(?-y:a)//*{ global-modifiers }*").is_err();
+    assert Regex::new(#"(?-y:a)"#).is_err();
 }
 
 test "test/language/literals/regexp/early-err-arithmetic-modifiers-other-code-point-zwj.js" {
-    assert Regex::new("(?-s\u{200D}:a)//*{ global-modifiers }*").is_err();
+    assert Regex::new(#"(?-s‍:a)"#).is_err();
 }
 
 test "test/language/literals/regexp/early-err-arithmetic-modifiers-other-code-point-zwnbsp.js" {
-    assert Regex::new("(?-s\u{FEFF}:a)//*{ global-modifiers }*").is_err();
+    assert Regex::new(#"(?-s﻿:a)"#).is_err();
 }
 
 test "test/language/literals/regexp/early-err-arithmetic-modifiers-other-code-point-zwnj.js" {
-    assert Regex::new("(?-s\u{200C}:a)//*{ global-modifiers }*").is_err();
+    assert Regex::new(#"(?-s‌:a)"#).is_err();
 }
 
 test "test/language/literals/regexp/early-err-arithmetic-modifiers-reverse-add-remove-i.js" {
-    assert Regex::new("(?i-i:a)//*{ global-modifiers }*").is_err();
+    assert Regex::new(#"(?i-i:a)"#).is_err();
 }
 
 test "test/language/literals/regexp/early-err-arithmetic-modifiers-reverse-add-remove-m.js" {
-    assert Regex::new("(?m-m:a)//*{ global-modifiers }*").is_err();
+    assert Regex::new(#"(?m-m:a)"#).is_err();
 }
 
 test "test/language/literals/regexp/early-err-arithmetic-modifiers-reverse-add-remove-multi-duplicate.js" {
-    assert Regex::new("(?m-ims:a)//*{ global-modifiers }*").is_err();
+    assert Regex::new(#"(?m-ims:a)"#).is_err();
 }
 
 test "test/language/literals/regexp/early-err-arithmetic-modifiers-reverse-add-remove-s-escape.js" {
-    assert Regex::new("(?s-\\u{0073}:a)//*{ global-modifiers }*").is_err();
+    assert Regex::new(#"(?s-\u{0073}:a)"#).is_err();
 }
 
 test "test/language/literals/regexp/early-err-arithmetic-modifiers-reverse-add-remove-s.js" {
-    assert Regex::new("(?s-s:a)//*{ global-modifiers }*").is_err();
+    assert Regex::new(#"(?s-s:a)"#).is_err();
 }
 
 test "test/language/literals/regexp/early-err-arithmetic-modifiers-reverse-code-point-repeat-i-1.js" {
-    assert Regex::new("(?ii-:a)//*{ global-modifiers }*").is_err();
+    assert Regex::new(#"(?ii-:a)"#).is_err();
 }
 
 test "test/language/literals/regexp/early-err-arithmetic-modifiers-reverse-code-point-repeat-i-2.js" {
-    assert Regex::new("(?imsi-:a)//*{ global-modifiers }*").is_err();
+    assert Regex::new(#"(?imsi-:a)"#).is_err();
 }
 
 test "test/language/literals/regexp/early-err-arithmetic-modifiers-reverse-other-code-point-arbitrary.js" {
-    assert Regex::new("(?1-:a)//*{ global-modifiers }*").is_err();
+    assert Regex::new(#"(?1-:a)"#).is_err();
 }
 
 test "test/language/literals/regexp/early-err-arithmetic-modifiers-reverse-other-code-point-combining-i.js" {
-    assert Regex::new("(?i\u{365}-:a)//*{ global-modifiers }*").is_err();
+    assert Regex::new(#"(?iͥ-:a)"#).is_err();
 }
 
 test "test/language/literals/regexp/early-err-arithmetic-modifiers-reverse-other-code-point-combining-m.js" {
-    assert Regex::new("(?m\u{36B}-:a)//*{ global-modifiers }*").is_err();
+    assert Regex::new(#"(?mͫ-:a)"#).is_err();
 }
 
 test "test/language/literals/regexp/early-err-arithmetic-modifiers-reverse-other-code-point-combining-s.js" {
-    assert Regex::new("(?s\u{300}-:a)//*{ global-modifiers }*").is_err();
+    assert Regex::new(#"(?s̀-:a)"#).is_err();
 }
 
 test "test/language/literals/regexp/early-err-arithmetic-modifiers-reverse-other-code-point-d.js" {
-    assert Regex::new("(?d-:a)//*{ global-modifiers }*").is_err();
+    assert Regex::new(#"(?d-:a)"#).is_err();
 }
 
 test "test/language/literals/regexp/early-err-arithmetic-modifiers-reverse-other-code-point-g.js" {
-    assert Regex::new("(?g-:a)//*{ global-modifiers }*").is_err();
+    assert Regex::new(#"(?g-:a)"#).is_err();
 }
 
 test "test/language/literals/regexp/early-err-arithmetic-modifiers-reverse-other-code-point-non-display-1.js" {
-    assert Regex::new("(?s\u{0}-:a)//*{ global-modifiers }*").is_err();
+    assert Regex::new("(?s\u{0}-:a)").is_err();
 }
 
 test "test/language/literals/regexp/early-err-arithmetic-modifiers-reverse-other-code-point-non-display-2.js" {
-    assert Regex::new("(?s\u{200E}-:a)//*{ global-modifiers }*").is_err();
+    assert Regex::new(#"(?s‎-:a)"#).is_err();
 }
 
 test "test/language/literals/regexp/early-err-arithmetic-modifiers-reverse-other-code-point-non-flag.js" {
-    assert Regex::new("(?Q-:a)//*{ global-modifiers }*").is_err();
+    assert Regex::new(#"(?Q-:a)"#).is_err();
 }
 
 test "test/language/literals/regexp/early-err-arithmetic-modifiers-reverse-other-code-point-u.js" {
-    assert Regex::new("(?u-:a)//*{ global-modifiers }*").is_err();
+    assert Regex::new(#"(?u-:a)"#).is_err();
 }
 
 test "test/language/literals/regexp/early-err-arithmetic-modifiers-reverse-other-code-point-uppercase-I.js" {
-    assert Regex::new("(?I-:a)//*{ global-modifiers }*").is_err();
+    assert Regex::new(#"(?I-:a)"#).is_err();
 }
 
 test "test/language/literals/regexp/early-err-arithmetic-modifiers-reverse-other-code-point-y.js" {
-    assert Regex::new("(?y-:a)//*{ global-modifiers }*").is_err();
+    assert Regex::new(#"(?y-:a)"#).is_err();
 }
 
 test "test/language/literals/regexp/early-err-arithmetic-modifiers-reverse-other-code-point-zwj.js" {
-    assert Regex::new("(?s\u{200D}-:a)//*{ global-modifiers }*").is_err();
+    assert Regex::new(#"(?s‍-:a)"#).is_err();
 }
 
 test "test/language/literals/regexp/early-err-arithmetic-modifiers-reverse-other-code-point-zwnbsp.js" {
-    assert Regex::new("(?s\u{FEFF}-:a)//*{ global-modifiers }*").is_err();
+    assert Regex::new(#"(?s﻿-:a)"#).is_err();
 }
 
 test "test/language/literals/regexp/early-err-arithmetic-modifiers-reverse-other-code-point-zwnj.js" {
-    assert Regex::new("(?s\u{200C}-:a)//*{ global-modifiers }*").is_err();
+    assert Regex::new(#"(?s‌-:a)"#).is_err();
 }
 
 test "test/language/literals/regexp/early-err-arithmetic-modifiers-reverse-should-not-case-fold-i.js" {
-    assert Regex::new("(?I-:a)//*{ global-modifiers }*").is_err();
+    assert Regex::new(#"(?I-:a)"#).is_err();
 }
 
 test "test/language/literals/regexp/early-err-arithmetic-modifiers-reverse-should-not-case-fold-m.js" {
-    assert Regex::new("(?M-:a)//*{ global-modifiers }*").is_err();
+    assert Regex::new(#"(?M-:a)"#).is_err();
 }
 
 test "test/language/literals/regexp/early-err-arithmetic-modifiers-reverse-should-not-case-fold-s.js" {
-    assert Regex::new("(?S-:a)//*{ global-modifiers }*").is_err();
+    assert Regex::new(#"(?S-:a)"#).is_err();
 }
 
 test "test/language/literals/regexp/early-err-arithmetic-modifiers-reverse-should-not-unicode-case-fold-i.js" {
-    assert Regex::new("(?\u{130}-:a)//*{ global-modifiers }*").is_err();
+    assert Regex::new(#"(?İ-:a)"#).is_err();
 }
 
 test "test/language/literals/regexp/early-err-arithmetic-modifiers-reverse-should-not-unicode-case-fold-s.js" {
-    assert Regex::new("(?\u{17F}-:a)//*{ global-modifiers }*").is_err();
+    assert Regex::new(#"(?ſ-:a)"#).is_err();
 }
 
 test "test/language/literals/regexp/early-err-arithmetic-modifiers-should-not-case-fold-i.js" {
-    assert Regex::new("(?-I:a)//*{ global-modifiers }*").is_err();
+    assert Regex::new(#"(?-I:a)"#).is_err();
 }
 
 test "test/language/literals/regexp/early-err-arithmetic-modifiers-should-not-case-fold-m.js" {
-    assert Regex::new("(?-M:a)//*{ global-modifiers }*").is_err();
+    assert Regex::new(#"(?-M:a)"#).is_err();
 }
 
 test "test/language/literals/regexp/early-err-arithmetic-modifiers-should-not-case-fold-s.js" {
-    assert Regex::new("(?-S:a)//*{ global-modifiers }*").is_err();
+    assert Regex::new(#"(?-S:a)"#).is_err();
 }
 
 test "test/language/literals/regexp/early-err-arithmetic-modifiers-should-not-unicode-case-fold-i.js" {
-    assert Regex::new("(?-\u{130}:a)//*{ global-modifiers }*").is_err();
+    assert Regex::new(#"(?-İ:a)"#).is_err();
 }
 
 test "test/language/literals/regexp/early-err-arithmetic-modifiers-should-not-unicode-case-fold-s.js" {
-    assert Regex::new("(?-\u{17F}:a)//*{ global-modifiers }*").is_err();
+    assert Regex::new(#"(?-ſ:a)"#).is_err();
 }
 
 test "test/language/literals/regexp/early-err-modifiers-code-point-repeat-i-1.js" {
-    assert Regex::new("(?ii:a)//*{ global-modifiers }*").is_err();
+    assert Regex::new(#"(?ii:a)"#).is_err();
 }
 
 test "test/language/literals/regexp/early-err-modifiers-code-point-repeat-i-2.js" {
-    assert Regex::new("(?imsi:a)//*{ global-modifiers }*").is_err();
+    assert Regex::new(#"(?imsi:a)"#).is_err();
 }
 
 test "test/language/literals/regexp/early-err-modifiers-other-code-point-arbitrary.js" {
-    assert Regex::new("(?1:a)//*{ global-modifiers }*").is_err();
+    assert Regex::new(#"(?1:a)"#).is_err();
 }
 
 test "test/language/literals/regexp/early-err-modifiers-other-code-point-combining-i.js" {
-    assert Regex::new("(?i\u{365}:a)//*{ global-modifiers }*").is_err();
+    assert Regex::new(#"(?iͥ:a)"#).is_err();
 }
 
 test "test/language/literals/regexp/early-err-modifiers-other-code-point-combining-m.js" {
-    assert Regex::new("(?m\u{36B}:a)//*{ global-modifiers }*").is_err();
+    assert Regex::new(#"(?mͫ:a)"#).is_err();
 }
 
 test "test/language/literals/regexp/early-err-modifiers-other-code-point-combining-s.js" {
-    assert Regex::new("(?s\u{300}:a)//*{ global-modifiers }*").is_err();
+    assert Regex::new(#"(?s̀:a)"#).is_err();
 }
 
 test "test/language/literals/regexp/early-err-modifiers-other-code-point-d.js" {
-    assert Regex::new("(?d:a)//*{ global-modifiers }*").is_err();
+    assert Regex::new(#"(?d:a)"#).is_err();
 }
 
 test "test/language/literals/regexp/early-err-modifiers-other-code-point-g.js" {
-    assert Regex::new("(?g:a)//*{ global-modifiers }*").is_err();
+    assert Regex::new(#"(?g:a)"#).is_err();
 }
 
 test "test/language/literals/regexp/early-err-modifiers-other-code-point-non-display-1.js" {
-    assert Regex::new("(?s\u{0}:a)//*{ global-modifiers }*").is_err();
+    assert Regex::new("(?s\u{0}:a)").is_err();
 }
 
 test "test/language/literals/regexp/early-err-modifiers-other-code-point-non-display-2.js" {
-    assert Regex::new("(?s\u{200E}:a)//*{ global-modifiers }*").is_err();
+    assert Regex::new(#"(?s‎:a)"#).is_err();
 }
 
 test "test/language/literals/regexp/early-err-modifiers-other-code-point-non-flag.js" {
-    assert Regex::new("(?Q:a)//*{ global-modifiers }*").is_err();
+    assert Regex::new(#"(?Q:a)"#).is_err();
 }
 
 test "test/language/literals/regexp/early-err-modifiers-other-code-point-u.js" {
-    assert Regex::new("(?u:a)//*{ global-modifiers }*").is_err();
+    assert Regex::new(#"(?u:a)"#).is_err();
 }
 
 test "test/language/literals/regexp/early-err-modifiers-other-code-point-uppercase-I.js" {
-    assert Regex::new("(?I:a)//*{ global-modifiers }*").is_err();
+    assert Regex::new(#"(?I:a)"#).is_err();
 }
 
 test "test/language/literals/regexp/early-err-modifiers-other-code-point-y.js" {
-    assert Regex::new("(?y:a)//*{ global-modifiers }*").is_err();
+    assert Regex::new(#"(?y:a)"#).is_err();
 }
 
 test "test/language/literals/regexp/early-err-modifiers-other-code-point-zwj.js" {
-    assert Regex::new("(?s\u{200D}:a)//*{ global-modifiers }*").is_err();
+    assert Regex::new(#"(?s‍:a)"#).is_err();
 }
 
 test "test/language/literals/regexp/early-err-modifiers-other-code-point-zwnbsp.js" {
-    assert Regex::new("(?s\u{FEFF}:a)//*{ global-modifiers }*").is_err();
+    assert Regex::new(#"(?s﻿:a)"#).is_err();
 }
 
 test "test/language/literals/regexp/early-err-modifiers-other-code-point-zwnj.js" {
-    assert Regex::new("(?s\u{200C}:a)//*{ global-modifiers }*").is_err();
+    assert Regex::new(#"(?s‌:a)"#).is_err();
 }
 
 test "test/language/literals/regexp/early-err-modifiers-should-not-case-fold-i.js" {
-    assert Regex::new("(?I:a)//*{ global-modifiers }*").is_err();
+    assert Regex::new(#"(?I:a)"#).is_err();
 }
 
 test "test/language/literals/regexp/early-err-modifiers-should-not-case-fold-m.js" {
-    assert Regex::new("(?M:a)//*{ global-modifiers }*").is_err();
+    assert Regex::new(#"(?M:a)"#).is_err();
 }
 
 test "test/language/literals/regexp/early-err-modifiers-should-not-case-fold-s.js" {
-    assert Regex::new("(?S:a)//*{ global-modifiers }*").is_err();
+    assert Regex::new(#"(?S:a)"#).is_err();
 }
 
 test "test/language/literals/regexp/early-err-modifiers-should-not-unicode-case-fold-i.js" {
-    assert Regex::new("(?\u{130}:a)//*{ global-modifiers }*").is_err();
+    assert Regex::new(#"(?İ:a)"#).is_err();
 }
 
 test "test/language/literals/regexp/early-err-modifiers-should-not-unicode-case-fold-s.js" {
-    assert Regex::new("(?\u{17F}:a)//*{ global-modifiers }*").is_err();
+    assert Regex::new(#"(?ſ:a)"#).is_err();
 }
 
 test "test/language/literals/regexp/early-err-modifiers-should-not-unicode-escape-i.js" {
-    assert Regex::new("(?\\u0069:a)/u /* i *").is_err();
+    assert Regex::new(#"(?\u0069:a)"#).is_err();
 }
 
 test "test/language/literals/regexp/early-err-modifiers-should-not-unicode-escape-m.js" {
-    assert Regex::new("(?\\u006D:a)/u /* m *").is_err();
+    assert Regex::new(#"(?\u006D:a)"#).is_err();
 }
 
 test "test/language/literals/regexp/early-err-modifiers-should-not-unicode-escape-s.js" {
-    assert Regex::new("(?\\u0073:a)/u /* s *").is_err();
+    assert Regex::new(#"(?\u0073:a)"#).is_err();
 }
 
 test "test/language/literals/regexp/early-err-pattern.js" {
-    assert Regex::new("?").is_err();
+    assert Regex::new(#"?"#).is_err();
 }
 
 test "test/language/literals/regexp/invalid-braced-quantifier-exact.js" {
-    assert Regex::new("{2}").is_err();
+    assert Regex::new(#"{2}"#).is_err();
 }
 
 test "test/language/literals/regexp/invalid-braced-quantifier-lower.js" {
-    assert Regex::new("{2,}").is_err();
+    assert Regex::new(#"{2,}"#).is_err();
 }
 
 test "test/language/literals/regexp/invalid-braced-quantifier-range.js" {
-    assert Regex::new("{2,3}").is_err();
+    assert Regex::new(#"{2,3}"#).is_err();
 }
 
 test "test/language/literals/regexp/invalid-optional-lookbehind.js" {
-    assert Regex::new(".(?<=.)?").is_err();
+    assert Regex::new(#".(?<=.)?"#).is_err();
 }
 
 test "test/language/literals/regexp/invalid-optional-negative-lookbehind.js" {
-    assert Regex::new(".(?<!.)?").is_err();
+    assert Regex::new(#".(?<!.)?"#).is_err();
 }
 
 test "test/language/literals/regexp/invalid-quantifier-out-of-order.js" {
-    assert Regex::new("a{2,1}").is_err();
+    assert Regex::new(#"a{2,1}"#).is_err();
 }
 
 test "test/language/literals/regexp/invalid-range-lookbehind.js" {
-    assert Regex::new(".(?<=.){2,3}").is_err();
+    assert Regex::new(#".(?<=.){2,3}"#).is_err();
 }
 
 test "test/language/literals/regexp/invalid-range-negative-lookbehind.js" {
-    assert Regex::new(".(?<!.){2,3}").is_err();
+    assert Regex::new(#".(?<!.){2,3}"#).is_err();
 }
 
 test "test/language/literals/regexp/named-groups/invalid-dangling-groupname-2-u.js" {
-    assert Regex::new("(?<a>a)\\k<ab>").is_err();
+    assert Regex::new(#"(?<a>a)\k<ab>"#).is_err();
 }
 
 test "test/language/literals/regexp/named-groups/invalid-dangling-groupname-2.js" {
-    assert Regex::new("(?<a>a)\\k<ab>").is_err();
+    assert Regex::new(#"(?<a>a)\k<ab>"#).is_err();
 }
 
 test "test/language/literals/regexp/named-groups/invalid-dangling-groupname-3-u.js" {
-    assert Regex::new("(?<ab>a)\\k<a>").is_err();
+    assert Regex::new(#"(?<ab>a)\k<a>"#).is_err();
 }
 
 test "test/language/literals/regexp/named-groups/invalid-dangling-groupname-3.js" {
-    assert Regex::new("(?<ab>a)\\k<a>").is_err();
+    assert Regex::new(#"(?<ab>a)\k<a>"#).is_err();
 }
 
 test "test/language/literals/regexp/named-groups/invalid-dangling-groupname-4-u.js" {
-    assert Regex::new("\\k<a>(?<ab>a)").is_err();
+    assert Regex::new(#"\k<a>(?<ab>a)"#).is_err();
 }
 
 test "test/language/literals/regexp/named-groups/invalid-dangling-groupname-4.js" {
-    assert Regex::new("\\k<a>(?<ab>a)").is_err();
+    assert Regex::new(#"\k<a>(?<ab>a)"#).is_err();
 }
 
 test "test/language/literals/regexp/named-groups/invalid-dangling-groupname-5.js" {
-    assert Regex::new("\\k<a>(?<b>x)").is_err();
+    assert Regex::new(#"\k<a>(?<b>x)"#).is_err();
 }
 
 test "test/language/literals/regexp/named-groups/invalid-dangling-groupname-u.js" {
-    assert Regex::new("(?<a>.)\\k<b>").is_err();
+    assert Regex::new(#"(?<a>.)\k<b>"#).is_err();
 }
 
 test "test/language/literals/regexp/named-groups/invalid-dangling-groupname-without-group-u.js" {
-    assert Regex::new("\\k<a>").is_err();
+    assert Regex::new(#"\k<a>"#).is_err();
 }
 
 test "test/language/literals/regexp/named-groups/invalid-dangling-groupname.js" {
-    assert Regex::new("(?<a>.)\\k<b>").is_err();
+    assert Regex::new(#"(?<a>.)\k<b>"#).is_err();
 }
 
 test "test/language/literals/regexp/named-groups/invalid-duplicate-groupspecifier-2-u.js" {
-    assert Regex::new("(?<a>a)(?<b>b)(?<a>a)").is_err();
+    assert Regex::new(#"(?<a>a)(?<b>b)(?<a>a)"#).is_err();
 }
 
 test "test/language/literals/regexp/named-groups/invalid-duplicate-groupspecifier-2.js" {
-    assert Regex::new("(?<a>a)(?<b>b)(?<a>a)").is_err();
+    assert Regex::new(#"(?<a>a)(?<b>b)(?<a>a)"#).is_err();
 }
 
 test "test/language/literals/regexp/named-groups/invalid-duplicate-groupspecifier-u.js" {
-    assert Regex::new("(?<a>a)(?<a>a)").is_err();
+    assert Regex::new(#"(?<a>a)(?<a>a)"#).is_err();
 }
 
 test "test/language/literals/regexp/named-groups/invalid-duplicate-groupspecifier.js" {
-    assert Regex::new("(?<a>a)(?<a>a)").is_err();
+    assert Regex::new(#"(?<a>a)(?<a>a)"#).is_err();
 }
 
 test "test/language/literals/regexp/named-groups/invalid-empty-groupspecifier-u.js" {
-    assert Regex::new("(?<>a)").is_err();
+    assert Regex::new(#"(?<>a)"#).is_err();
 }
 
 test "test/language/literals/regexp/named-groups/invalid-empty-groupspecifier.js" {
-    assert Regex::new("(?<>a)").is_err();
+    assert Regex::new(#"(?<>a)"#).is_err();
 }
 
 test "test/language/literals/regexp/named-groups/invalid-identity-escape-in-capture-u.js" {
-    assert Regex::new("(?<a>\\a)").is_err();
+    assert Regex::new(#"(?<a>\a)"#).is_err();
 }
 
 test "test/language/literals/regexp/named-groups/invalid-incomplete-groupname-2-u.js" {
-    assert Regex::new("(?<a>.)\\k<a").is_err();
+    assert Regex::new(#"(?<a>.)\k<a"#).is_err();
 }
 
 test "test/language/literals/regexp/named-groups/invalid-incomplete-groupname-2.js" {
-    assert Regex::new("(?<a>.)\\k<a").is_err();
+    assert Regex::new(#"(?<a>.)\k<a"#).is_err();
 }
 
 test "test/language/literals/regexp/named-groups/invalid-incomplete-groupname-3-u.js" {
-    assert Regex::new("(?<a>.)\\k<>").is_err();
+    assert Regex::new(#"(?<a>.)\k<>"#).is_err();
 }
 
 test "test/language/literals/regexp/named-groups/invalid-incomplete-groupname-3.js" {
-    assert Regex::new("(?<a>.)\\k<>").is_err();
+    assert Regex::new(#"(?<a>.)\k<>"#).is_err();
 }
 
 test "test/language/literals/regexp/named-groups/invalid-incomplete-groupname-4.js" {
-    assert Regex::new("\\k<a(?<a>a)").is_err();
+    assert Regex::new(#"\k<a(?<a>a)"#).is_err();
 }
 
 test "test/language/literals/regexp/named-groups/invalid-incomplete-groupname-5.js" {
-    assert Regex::new("\\k<a(?<a>.)").is_err();
+    assert Regex::new(#"\k<a(?<a>.)"#).is_err();
 }
 
 test "test/language/literals/regexp/named-groups/invalid-incomplete-groupname-6.js" {
-    assert Regex::new("\\k(?<a>.)").is_err();
+    assert Regex::new(#"\k(?<a>.)"#).is_err();
 }
 
 test "test/language/literals/regexp/named-groups/invalid-incomplete-groupname-u.js" {
-    assert Regex::new("(?<a>.)\\k").is_err();
+    assert Regex::new(#"(?<a>.)\k"#).is_err();
 }
 
 test "test/language/literals/regexp/named-groups/invalid-incomplete-groupname-without-group-2-u.js" {
-    assert Regex::new("\\k<>").is_err();
+    assert Regex::new(#"\k<>"#).is_err();
 }
 
 test "test/language/literals/regexp/named-groups/invalid-incomplete-groupname-without-group-3-u.js" {
-    assert Regex::new("\\k").is_err();
+    assert Regex::new(#"\k"#).is_err();
 }
 
 test "test/language/literals/regexp/named-groups/invalid-incomplete-groupname-without-group-u.js" {
-    assert Regex::new("\\k<a").is_err();
+    assert Regex::new(#"\k<a"#).is_err();
 }
 
 test "test/language/literals/regexp/named-groups/invalid-incomplete-groupname.js" {
-    assert Regex::new("(?<a>.)\\k").is_err();
+    assert Regex::new(#"(?<a>.)\k"#).is_err();
 }
 
 test "test/language/literals/regexp/named-groups/invalid-non-id-continue-groupspecifier-4-u.js" {
-    assert Regex::new("(?<a\\>.)").is_err();
+    assert Regex::new(#"(?<a\>.)"#).is_err();
 }
 
 test "test/language/literals/regexp/named-groups/invalid-non-id-continue-groupspecifier-4.js" {
-    assert Regex::new("(?<a\\>.)").is_err();
+    assert Regex::new(#"(?<a\>.)"#).is_err();
 }
 
 test "test/language/literals/regexp/named-groups/invalid-non-id-continue-groupspecifier.js" {
-    assert Regex::new("(?<$\u{275E}>a)").is_err();
+    assert Regex::new(#"(?<$❞>a)"#).is_err();
 }
 
 test "test/language/literals/regexp/named-groups/invalid-non-id-start-groupspecifier-2-u.js" {
-    assert Regex::new("(?<\u{104A4}>a)").is_err();
+    assert Regex::new(#"(?<𐒤>a)"#).is_err();
 }
 
 test "test/language/literals/regexp/named-groups/invalid-non-id-start-groupspecifier-2.js" {
-    assert Regex::new("(?<\u{104A4}>a)").is_err();
+    assert Regex::new(#"(?<𐒤>a)"#).is_err();
 }
 
 test "test/language/literals/regexp/named-groups/invalid-non-id-start-groupspecifier-3.js" {
-    assert Regex::new("(?<a\\uD83D\\uDF12>.)").is_err();
+    assert Regex::new(#"(?<a\uD83D\uDF12>.)"#).is_err();
 }
 
 test "test/language/literals/regexp/named-groups/invalid-non-id-start-groupspecifier-4-u.js" {
-    assert Regex::new("(?<a\\uD801>.)").is_err();
+    assert Regex::new(#"(?<a\uD801>.)"#).is_err();
 }
 
 test "test/language/literals/regexp/named-groups/invalid-non-id-start-groupspecifier-4.js" {
-    assert Regex::new("(?<a\\uD801>.)").is_err();
+    assert Regex::new(#"(?<a\uD801>.)"#).is_err();
 }
 
 test "test/language/literals/regexp/named-groups/invalid-non-id-start-groupspecifier-5-u.js" {
-    assert Regex::new("(?<a\\uDCA4>.)").is_err();
+    assert Regex::new(#"(?<a\uDCA4>.)"#).is_err();
 }
 
 test "test/language/literals/regexp/named-groups/invalid-non-id-start-groupspecifier-5.js" {
-    assert Regex::new("(?<a\\uDCA4>.)").is_err();
+    assert Regex::new(#"(?<a\uDCA4>.)"#).is_err();
 }
 
 test "test/language/literals/regexp/named-groups/invalid-non-id-start-groupspecifier-6.js" {
-    assert Regex::new("(?<a\\u{1F08B}>.)").is_err();
+    assert Regex::new(#"(?<a\u{1F08B}>.)"#).is_err();
 }
 
 test "test/language/literals/regexp/named-groups/invalid-non-id-start-groupspecifier-7.js" {
-    assert Regex::new("(?<a\\u{10FFFF}>.)").is_err();
+    assert Regex::new(#"(?<a\u{10FFFF}>.)"#).is_err();
 }
 
 test "test/language/literals/regexp/named-groups/invalid-non-id-start-groupspecifier-8-u.js" {
-    assert Regex::new("(?<\\>.)").is_err();
+    assert Regex::new(#"(?<\>.)"#).is_err();
 }
 
 test "test/language/literals/regexp/named-groups/invalid-non-id-start-groupspecifier-8.js" {
-    assert Regex::new("(?<\\>.)").is_err();
+    assert Regex::new(#"(?<\>.)"#).is_err();
 }
 
 test "test/language/literals/regexp/named-groups/invalid-non-id-start-groupspecifier-9-u.js" {
-    assert Regex::new("(?<a\\u{110000}>.)").is_err();
+    assert Regex::new(#"(?<a\u{110000}>.)"#).is_err();
 }
 
 test "test/language/literals/regexp/named-groups/invalid-non-id-start-groupspecifier-u.js" {
-    assert Regex::new("(?<\u{2764}>a)").is_err();
+    assert Regex::new(#"(?<❤>a)"#).is_err();
 }
 
 test "test/language/literals/regexp/named-groups/invalid-non-id-start-groupspecifier.js" {
-    assert Regex::new("(?<\u{2764}>a)").is_err();
+    assert Regex::new(#"(?<❤>a)"#).is_err();
 }
 
 test "test/language/literals/regexp/named-groups/invalid-numeric-groupspecifier-u.js" {
-    assert Regex::new("(?<42a>a)").is_err();
+    assert Regex::new(#"(?<42a>a)"#).is_err();
 }
 
 test "test/language/literals/regexp/named-groups/invalid-numeric-groupspecifier.js" {
-    assert Regex::new("(?<42a>a)").is_err();
+    assert Regex::new(#"(?<42a>a)"#).is_err();
 }
 
 test "test/language/literals/regexp/named-groups/invalid-punctuator-starting-groupspecifier-u.js" {
-    assert Regex::new("(?<:a>a)").is_err();
+    assert Regex::new(#"(?<:a>a)"#).is_err();
 }
 
 test "test/language/literals/regexp/named-groups/invalid-punctuator-starting-groupspecifier.js" {
-    assert Regex::new("(?<:a>a)").is_err();
+    assert Regex::new(#"(?<:a>a)"#).is_err();
 }
 
 test "test/language/literals/regexp/named-groups/invalid-punctuator-within-groupspecifier-u.js" {
-    assert Regex::new("(?<a:>a)").is_err();
+    assert Regex::new(#"(?<a:>a)"#).is_err();
 }
 
 test "test/language/literals/regexp/named-groups/invalid-punctuator-within-groupspecifier.js" {
-    assert Regex::new("(?<a:>a)").is_err();
+    assert Regex::new(#"(?<a:>a)"#).is_err();
 }
 
 test "test/language/literals/regexp/named-groups/invalid-unterminated-groupspecifier-u.js" {
-    assert Regex::new("(?<aa)").is_err();
+    assert Regex::new(#"(?<aa)"#).is_err();
 }
 
 test "test/language/literals/regexp/named-groups/invalid-unterminated-groupspecifier.js" {
-    assert Regex::new("(?<aa)").is_err();
+    assert Regex::new(#"(?<aa)"#).is_err();
 }
 
 test "test/language/literals/regexp/u-invalid-class-escape.js" {
-    assert Regex::new("\\c0").is_err();
+    assert Regex::new(#"\c0"#).is_err();
 }
 
 test "test/language/literals/regexp/u-invalid-extended-pattern-char.js" {
-    assert Regex::new("{").is_err();
+    assert Regex::new(#"{"#).is_err();
 }
 
 test "test/language/literals/regexp/u-invalid-identity-escape.js" {
-    assert Regex::new("\\M").is_err();
+    assert Regex::new(#"\M"#).is_err();
 }
 
 test "test/language/literals/regexp/u-invalid-legacy-octal-escape.js" {
-    assert Regex::new("\\1").is_err();
+    assert Regex::new(#"\1"#).is_err();
 }
 
 test "test/language/literals/regexp/u-invalid-non-empty-class-ranges-no-dash-a.js" {
-    assert Regex::new("[\\d-a]").is_err();
+    assert Regex::new(#"[\d-a]"#).is_err();
 }
 
 test "test/language/literals/regexp/u-invalid-non-empty-class-ranges-no-dash-ab.js" {
-    assert Regex::new("[\\s-\\d]").is_err();
+    assert Regex::new(#"[\s-\d]"#).is_err();
 }
 
 test "test/language/literals/regexp/u-invalid-non-empty-class-ranges-no-dash-b.js" {
-    assert Regex::new("[%-\\d]").is_err();
+    assert Regex::new(#"[%-\d]"#).is_err();
 }
 
 test "test/language/literals/regexp/u-invalid-non-empty-class-ranges.js" {
-    assert Regex::new("[--\\d]").is_err();
+    assert Regex::new(#"[--\d]"#).is_err();
 }
 
 test "test/language/literals/regexp/u-invalid-oob-decimal-escape.js" {
-    assert Regex::new("\\8").is_err();
+    assert Regex::new(#"\8"#).is_err();
 }
 
 test "test/language/literals/regexp/u-invalid-optional-lookahead.js" {
-    assert Regex::new(".(?=.)?").is_err();
+    assert Regex::new(#".(?=.)?"#).is_err();
 }
 
 test "test/language/literals/regexp/u-invalid-optional-lookbehind.js" {
-    assert Regex::new(".(?<=.)?").is_err();
+    assert Regex::new(#".(?<=.)?"#).is_err();
 }
 
 test "test/language/literals/regexp/u-invalid-optional-negative-lookahead.js" {
-    assert Regex::new(".(?!.)?").is_err();
+    assert Regex::new(#".(?!.)?"#).is_err();
 }
 
 test "test/language/literals/regexp/u-invalid-optional-negative-lookbehind.js" {
-    assert Regex::new(".(?<!.)?").is_err();
+    assert Regex::new(#".(?<!.)?"#).is_err();
 }
 
 test "test/language/literals/regexp/u-invalid-quantifier-out-of-order.js" {
-    assert Regex::new("a{2,1}").is_err();
+    assert Regex::new(#"a{2,1}"#).is_err();
 }
 
 test "test/language/literals/regexp/u-invalid-range-lookahead.js" {
-    assert Regex::new(".(?=.){2,3}").is_err();
+    assert Regex::new(#".(?=.){2,3}"#).is_err();
 }
 
 test "test/language/literals/regexp/u-invalid-range-lookbehind.js" {
-    assert Regex::new(".(?<=.){2,3}").is_err();
+    assert Regex::new(#".(?<=.){2,3}"#).is_err();
 }
 
 test "test/language/literals/regexp/u-invalid-range-negative-lookahead.js" {
-    assert Regex::new(".(?!.){2,3}").is_err();
+    assert Regex::new(#".(?!.){2,3}"#).is_err();
 }
 
 test "test/language/literals/regexp/u-invalid-range-negative-lookbehind.js" {
-    assert Regex::new(".(?<!.){2,3}").is_err();
+    assert Regex::new(#".(?<!.){2,3}"#).is_err();
 }
 
 test "test/language/literals/regexp/u-unicode-esc-bounds.js" {
-    assert Regex::new("\\u{110000}").is_err();
+    assert Regex::new(#"\u{110000}"#).is_err();
 }
 
 test "test/language/literals/regexp/u-unicode-esc-non-hex.js" {
-    assert Regex::new("\\u{1,}").is_err();
+    assert Regex::new(#"\u{1,}"#).is_err();
 }
 
 test "test/language/literals/regexp/unicode-escape-nls-err.js" {
-    assert Regex::new("\\u{1F_639}").is_err();
+    assert Regex::new(#"\u{1F_639}"#).is_err();
 }
 
 test "test/built-ins/RegExp/property-escapes/binary-property-with-value-ASCII_-_F-negated.js" {
-    assert Regex::new("\\P{ASCII=F}").is_err();
+    assert Regex::new(#"\P{ASCII=F}"#).is_err();
 }
 
 test "test/built-ins/RegExp/property-escapes/binary-property-with-value-ASCII_-_F.js" {
-    assert Regex::new("\\p{ASCII=F}").is_err();
+    assert Regex::new(#"\p{ASCII=F}"#).is_err();
 }
 
 test "test/built-ins/RegExp/property-escapes/binary-property-with-value-ASCII_-_Invalid-negated.js" {
-    assert Regex::new("\\P{ASCII=Invalid}").is_err();
+    assert Regex::new(#"\P{ASCII=Invalid}"#).is_err();
 }
 
 test "test/built-ins/RegExp/property-escapes/binary-property-with-value-ASCII_-_Invalid.js" {
-    assert Regex::new("\\p{ASCII=Invalid}").is_err();
+    assert Regex::new(#"\p{ASCII=Invalid}"#).is_err();
 }
 
 test "test/built-ins/RegExp/property-escapes/binary-property-with-value-ASCII_-_N-negated.js" {
-    assert Regex::new("\\P{ASCII=N}").is_err();
+    assert Regex::new(#"\P{ASCII=N}"#).is_err();
 }
 
 test "test/built-ins/RegExp/property-escapes/binary-property-with-value-ASCII_-_N.js" {
-    assert Regex::new("\\p{ASCII=N}").is_err();
+    assert Regex::new(#"\p{ASCII=N}"#).is_err();
 }
 
 test "test/built-ins/RegExp/property-escapes/binary-property-with-value-ASCII_-_No-negated.js" {
-    assert Regex::new("\\P{ASCII=No}").is_err();
+    assert Regex::new(#"\P{ASCII=No}"#).is_err();
 }
 
 test "test/built-ins/RegExp/property-escapes/binary-property-with-value-ASCII_-_No.js" {
-    assert Regex::new("\\p{ASCII=No}").is_err();
+    assert Regex::new(#"\p{ASCII=No}"#).is_err();
 }
 
 test "test/built-ins/RegExp/property-escapes/binary-property-with-value-ASCII_-_T-negated.js" {
-    assert Regex::new("\\P{ASCII=T}").is_err();
+    assert Regex::new(#"\P{ASCII=T}"#).is_err();
 }
 
 test "test/built-ins/RegExp/property-escapes/binary-property-with-value-ASCII_-_T.js" {
-    assert Regex::new("\\p{ASCII=T}").is_err();
+    assert Regex::new(#"\p{ASCII=T}"#).is_err();
 }
 
 test "test/built-ins/RegExp/property-escapes/binary-property-with-value-ASCII_-_Y-negated.js" {
-    assert Regex::new("\\P{ASCII=Y}").is_err();
+    assert Regex::new(#"\P{ASCII=Y}"#).is_err();
 }
 
 test "test/built-ins/RegExp/property-escapes/binary-property-with-value-ASCII_-_Y.js" {
-    assert Regex::new("\\p{ASCII=Y}").is_err();
+    assert Regex::new(#"\p{ASCII=Y}"#).is_err();
 }
 
 test "test/built-ins/RegExp/property-escapes/binary-property-with-value-ASCII_-_Yes-negated.js" {
-    assert Regex::new("\\P{ASCII=Yes}").is_err();
+    assert Regex::new(#"\P{ASCII=Yes}"#).is_err();
 }
 
 test "test/built-ins/RegExp/property-escapes/binary-property-with-value-ASCII_-_Yes.js" {
-    assert Regex::new("\\p{ASCII=Yes}").is_err();
+    assert Regex::new(#"\p{ASCII=Yes}"#).is_err();
 }
 
 test "test/built-ins/RegExp/property-escapes/character-class-range-end.js" {
-    assert Regex::new("[--\\p{Hex}]").is_err();
+    assert Regex::new(#"[--\p{Hex}]"#).is_err();
 }
 
 test "test/built-ins/RegExp/property-escapes/character-class-range-no-dash-end.js" {
-    assert Regex::new("[\\uFFFF-\\p{Hex}]").is_err();
+    assert Regex::new(#"[\uFFFF-\p{Hex}]"#).is_err();
 }
 
 test "test/built-ins/RegExp/property-escapes/character-class-range-no-dash-start.js" {
-    assert Regex::new("[\\p{Hex}-\\uFFFF]").is_err();
+    assert Regex::new(#"[\p{Hex}-\uFFFF]"#).is_err();
 }
 
 test "test/built-ins/RegExp/property-escapes/character-class-range-start.js" {
-    assert Regex::new("[\\p{Hex}--]").is_err();
+    assert Regex::new(#"[\p{Hex}--]"#).is_err();
 }
 
 test "test/built-ins/RegExp/property-escapes/grammar-extension-In-prefix-Block-implicit-negated.js" {
-    assert Regex::new("\\P{InAdlam}").is_err();
+    assert Regex::new(#"\P{InAdlam}"#).is_err();
 }
 
 test "test/built-ins/RegExp/property-escapes/grammar-extension-In-prefix-Block-implicit.js" {
-    assert Regex::new("\\p{InAdlam}").is_err();
+    assert Regex::new(#"\p{InAdlam}"#).is_err();
 }
 
 test "test/built-ins/RegExp/property-escapes/grammar-extension-In-prefix-Script-implicit-negated.js" {
-    assert Regex::new("\\P{InAdlam}").is_err();
+    assert Regex::new(#"\P{InAdlam}"#).is_err();
 }
 
 test "test/built-ins/RegExp/property-escapes/grammar-extension-In-prefix-Script-implicit.js" {
-    assert Regex::new("\\p{InAdlam}").is_err();
+    assert Regex::new(#"\p{InAdlam}"#).is_err();
 }
 
 test "test/built-ins/RegExp/property-escapes/grammar-extension-In-prefix-Script-negated.js" {
-    assert Regex::new("\\P{InScript=Adlam}").is_err();
+    assert Regex::new(#"\P{InScript=Adlam}"#).is_err();
 }
 
 test "test/built-ins/RegExp/property-escapes/grammar-extension-In-prefix-Script.js" {
-    assert Regex::new("\\p{InScript=Adlam}").is_err();
+    assert Regex::new(#"\p{InScript=Adlam}"#).is_err();
 }
 
 test "test/built-ins/RegExp/property-escapes/grammar-extension-Is-prefix-Script-negated.js" {
-    assert Regex::new("\\P{IsScript=Adlam}").is_err();
+    assert Regex::new(#"\P{IsScript=Adlam}"#).is_err();
 }
 
 test "test/built-ins/RegExp/property-escapes/grammar-extension-Is-prefix-Script.js" {
-    assert Regex::new("\\p{IsScript=Adlam}").is_err();
+    assert Regex::new(#"\p{IsScript=Adlam}"#).is_err();
 }
 
 test "test/built-ins/RegExp/property-escapes/grammar-extension-circumflex-negation-negated.js" {
-    assert Regex::new("\\P{^General_Category=Letter}").is_err();
+    assert Regex::new(#"\P{^General_Category=Letter}"#).is_err();
 }
 
 test "test/built-ins/RegExp/property-escapes/grammar-extension-circumflex-negation.js" {
-    assert Regex::new("\\p{^General_Category=Letter}").is_err();
+    assert Regex::new(#"\p{^General_Category=Letter}"#).is_err();
 }
 
 test "test/built-ins/RegExp/property-escapes/grammar-extension-empty-negated.js" {
-    assert Regex::new("[\\p{}]").is_err();
+    assert Regex::new(#"[\p{}]"#).is_err();
 }
 
 test "test/built-ins/RegExp/property-escapes/grammar-extension-empty.js" {
-    assert Regex::new("[\\P{}]").is_err();
+    assert Regex::new(#"[\P{}]"#).is_err();
 }
 
 test "test/built-ins/RegExp/property-escapes/grammar-extension-invalid-negated.js" {
-    assert Regex::new("[\\P{invalid}]").is_err();
+    assert Regex::new(#"[\P{invalid}]"#).is_err();
 }
 
 test "test/built-ins/RegExp/property-escapes/grammar-extension-invalid.js" {
-    assert Regex::new("[\\p{invalid}]").is_err();
+    assert Regex::new(#"[\p{invalid}]"#).is_err();
 }
 
 test "test/built-ins/RegExp/property-escapes/grammar-extension-no-braces-negated.js" {
-    assert Regex::new("\\P").is_err();
+    assert Regex::new(#"\P"#).is_err();
 }
 
 test "test/built-ins/RegExp/property-escapes/grammar-extension-no-braces-value-negated.js" {
-    assert Regex::new("\\PL").is_err();
+    assert Regex::new(#"\PL"#).is_err();
 }
 
 test "test/built-ins/RegExp/property-escapes/grammar-extension-no-braces-value.js" {
-    assert Regex::new("\\pL").is_err();
+    assert Regex::new(#"\pL"#).is_err();
 }
 
 test "test/built-ins/RegExp/property-escapes/grammar-extension-no-braces.js" {
-    assert Regex::new("\\p").is_err();
+    assert Regex::new(#"\p"#).is_err();
 }
 
 test "test/built-ins/RegExp/property-escapes/grammar-extension-separator-and-value-only-negated.js" {
-    assert Regex::new("\\P{=Letter}").is_err();
+    assert Regex::new(#"\P{=Letter}"#).is_err();
 }
 
 test "test/built-ins/RegExp/property-escapes/grammar-extension-separator-and-value-only.js" {
-    assert Regex::new("\\p{=Letter}").is_err();
+    assert Regex::new(#"\p{=Letter}"#).is_err();
 }
 
 test "test/built-ins/RegExp/property-escapes/grammar-extension-separator-negated.js" {
-    assert Regex::new("\\P{General_Category:Letter}").is_err();
+    assert Regex::new(#"\P{General_Category:Letter}"#).is_err();
 }
 
 test "test/built-ins/RegExp/property-escapes/grammar-extension-separator-only-negated.js" {
-    assert Regex::new("\\P{=}").is_err();
+    assert Regex::new(#"\P{=}"#).is_err();
 }
 
 test "test/built-ins/RegExp/property-escapes/grammar-extension-separator-only.js" {
-    assert Regex::new("\\p{=}").is_err();
+    assert Regex::new(#"\p{=}"#).is_err();
 }
 
 test "test/built-ins/RegExp/property-escapes/grammar-extension-separator.js" {
-    assert Regex::new("\\p{General_Category:Letter}").is_err();
+    assert Regex::new(#"\p{General_Category:Letter}"#).is_err();
 }
 
 test "test/built-ins/RegExp/property-escapes/grammar-extension-unclosed-negated.js" {
-    assert Regex::new("\\P{").is_err();
+    assert Regex::new(#"\P{"#).is_err();
 }
 
 test "test/built-ins/RegExp/property-escapes/grammar-extension-unclosed.js" {
-    assert Regex::new("\\p{").is_err();
+    assert Regex::new(#"\p{"#).is_err();
 }
 
 test "test/built-ins/RegExp/property-escapes/grammar-extension-unopened-negated.js" {
-    assert Regex::new("\\P}").is_err();
+    assert Regex::new(#"\P}"#).is_err();
 }
 
 test "test/built-ins/RegExp/property-escapes/grammar-extension-unopened.js" {
-    assert Regex::new("\\p}").is_err();
+    assert Regex::new(#"\p}"#).is_err();
 }
 
 test "test/built-ins/RegExp/property-escapes/loose-matching-01-negated.js" {
-    assert Regex::new("\\P{ General_Category=Uppercase_Letter }").is_err();
+    assert Regex::new(#"\P{ General_Category=Uppercase_Letter }"#).is_err();
 }
 
 test "test/built-ins/RegExp/property-escapes/loose-matching-01.js" {
-    assert Regex::new("\\p{ General_Category=Uppercase_Letter }").is_err();
+    assert Regex::new(#"\p{ General_Category=Uppercase_Letter }"#).is_err();
 }
 
 test "test/built-ins/RegExp/property-escapes/loose-matching-02-negated.js" {
-    assert Regex::new("\\P{ Lowercase }").is_err();
+    assert Regex::new(#"\P{ Lowercase }"#).is_err();
 }
 
 test "test/built-ins/RegExp/property-escapes/loose-matching-02.js" {
-    assert Regex::new("\\p{ Lowercase }").is_err();
+    assert Regex::new(#"\p{ Lowercase }"#).is_err();
 }
 
 test "test/built-ins/RegExp/property-escapes/loose-matching-03-negated.js" {
-    assert Regex::new("\\P{ANY}").is_err();
+    assert Regex::new(#"\P{ANY}"#).is_err();
 }
 
 test "test/built-ins/RegExp/property-escapes/loose-matching-03.js" {
-    assert Regex::new("\\p{ANY}").is_err();
+    assert Regex::new(#"\p{ANY}"#).is_err();
 }
 
 test "test/built-ins/RegExp/property-escapes/loose-matching-04-negated.js" {
-    assert Regex::new("\\P{ASSIGNED}").is_err();
+    assert Regex::new(#"\P{ASSIGNED}"#).is_err();
 }
 
 test "test/built-ins/RegExp/property-escapes/loose-matching-04.js" {
-    assert Regex::new("\\p{ASSIGNED}").is_err();
+    assert Regex::new(#"\p{ASSIGNED}"#).is_err();
 }
 
 test "test/built-ins/RegExp/property-escapes/loose-matching-05-negated.js" {
-    assert Regex::new("\\P{Ascii}").is_err();
+    assert Regex::new(#"\P{Ascii}"#).is_err();
 }
 
 test "test/built-ins/RegExp/property-escapes/loose-matching-05.js" {
-    assert Regex::new("\\p{Ascii}").is_err();
+    assert Regex::new(#"\p{Ascii}"#).is_err();
 }
 
 test "test/built-ins/RegExp/property-escapes/loose-matching-06-negated.js" {
-    assert Regex::new("\\P{General_Category = Uppercase_Letter}").is_err();
+    assert Regex::new(#"\P{General_Category = Uppercase_Letter}"#).is_err();
 }
 
 test "test/built-ins/RegExp/property-escapes/loose-matching-06.js" {
-    assert Regex::new("\\p{General_Category = Uppercase_Letter}").is_err();
+    assert Regex::new(#"\p{General_Category = Uppercase_Letter}"#).is_err();
 }
 
 test "test/built-ins/RegExp/property-escapes/loose-matching-07-negated.js" {
-    assert Regex::new("\\P{_-_lOwEr_C-A_S-E_-_}").is_err();
+    assert Regex::new(#"\P{_-_lOwEr_C-A_S-E_-_}"#).is_err();
 }
 
 test "test/built-ins/RegExp/property-escapes/loose-matching-07.js" {
-    assert Regex::new("\\p{_-_lOwEr_C-A_S-E_-_}").is_err();
+    assert Regex::new(#"\p{_-_lOwEr_C-A_S-E_-_}"#).is_err();
 }
 
 test "test/built-ins/RegExp/property-escapes/loose-matching-08-negated.js" {
-    assert Regex::new("\\P{any}").is_err();
+    assert Regex::new(#"\P{any}"#).is_err();
 }
 
 test "test/built-ins/RegExp/property-escapes/loose-matching-08.js" {
-    assert Regex::new("\\p{any}").is_err();
+    assert Regex::new(#"\p{any}"#).is_err();
 }
 
 test "test/built-ins/RegExp/property-escapes/loose-matching-09-negated.js" {
-    assert Regex::new("\\P{ascii}").is_err();
+    assert Regex::new(#"\P{ascii}"#).is_err();
 }
 
 test "test/built-ins/RegExp/property-escapes/loose-matching-09.js" {
-    assert Regex::new("\\p{ascii}").is_err();
+    assert Regex::new(#"\p{ascii}"#).is_err();
 }
 
 test "test/built-ins/RegExp/property-escapes/loose-matching-10-negated.js" {
-    assert Regex::new("\\P{assigned}").is_err();
+    assert Regex::new(#"\P{assigned}"#).is_err();
 }
 
 test "test/built-ins/RegExp/property-escapes/loose-matching-10.js" {
-    assert Regex::new("\\p{assigned}").is_err();
+    assert Regex::new(#"\p{assigned}"#).is_err();
 }
 
 test "test/built-ins/RegExp/property-escapes/loose-matching-11-negated.js" {
-    assert Regex::new("\\P{gC=uppercase_letter}").is_err();
+    assert Regex::new(#"\P{gC=uppercase_letter}"#).is_err();
 }
 
 test "test/built-ins/RegExp/property-escapes/loose-matching-11.js" {
-    assert Regex::new("\\p{gC=uppercase_letter}").is_err();
+    assert Regex::new(#"\p{gC=uppercase_letter}"#).is_err();
 }
 
 test "test/built-ins/RegExp/property-escapes/loose-matching-12-negated.js" {
-    assert Regex::new("\\P{gc=uppercaseletter}").is_err();
+    assert Regex::new(#"\P{gc=uppercaseletter}"#).is_err();
 }
 
 test "test/built-ins/RegExp/property-escapes/loose-matching-12.js" {
-    assert Regex::new("\\p{gc=uppercaseletter}").is_err();
+    assert Regex::new(#"\p{gc=uppercaseletter}"#).is_err();
 }
 
 test "test/built-ins/RegExp/property-escapes/loose-matching-13-negated.js" {
-    assert Regex::new("\\P{lowercase}").is_err();
+    assert Regex::new(#"\P{lowercase}"#).is_err();
 }
 
 test "test/built-ins/RegExp/property-escapes/loose-matching-13.js" {
-    assert Regex::new("\\p{lowercase}").is_err();
+    assert Regex::new(#"\p{lowercase}"#).is_err();
 }
 
 test "test/built-ins/RegExp/property-escapes/loose-matching-14-negated.js" {
-    assert Regex::new("\\P{lowercase}").is_err();
+    assert Regex::new(#"\P{lowercase}"#).is_err();
 }
 
 test "test/built-ins/RegExp/property-escapes/loose-matching-14.js" {
-    assert Regex::new("\\p{lowercase}").is_err();
+    assert Regex::new(#"\p{lowercase}"#).is_err();
 }
 
 test "test/built-ins/RegExp/property-escapes/non-binary-property-without-value-General_Category-equals-negated.js" {
-    assert Regex::new("\\P{General_Category=}").is_err();
+    assert Regex::new(#"\P{General_Category=}"#).is_err();
 }
 
 test "test/built-ins/RegExp/property-escapes/non-binary-property-without-value-General_Category-equals.js" {
-    assert Regex::new("\\p{General_Category=}").is_err();
+    assert Regex::new(#"\p{General_Category=}"#).is_err();
 }
 
 test "test/built-ins/RegExp/property-escapes/non-binary-property-without-value-General_Category-negated.js" {
-    assert Regex::new("\\P{General_Category}").is_err();
+    assert Regex::new(#"\P{General_Category}"#).is_err();
 }
 
 test "test/built-ins/RegExp/property-escapes/non-binary-property-without-value-General_Category.js" {
-    assert Regex::new("\\p{General_Category}").is_err();
+    assert Regex::new(#"\p{General_Category}"#).is_err();
 }
 
 test "test/built-ins/RegExp/property-escapes/non-binary-property-without-value-Script-equals-negated.js" {
-    assert Regex::new("\\P{Script=}").is_err();
+    assert Regex::new(#"\P{Script=}"#).is_err();
 }
 
 test "test/built-ins/RegExp/property-escapes/non-binary-property-without-value-Script-equals.js" {
-    assert Regex::new("\\p{Script=}").is_err();
+    assert Regex::new(#"\p{Script=}"#).is_err();
 }
 
 test "test/built-ins/RegExp/property-escapes/non-binary-property-without-value-Script-negated.js" {
-    assert Regex::new("\\P{Script}").is_err();
+    assert Regex::new(#"\P{Script}"#).is_err();
 }
 
 test "test/built-ins/RegExp/property-escapes/non-binary-property-without-value-Script.js" {
-    assert Regex::new("\\p{Script}").is_err();
+    assert Regex::new(#"\p{Script}"#).is_err();
 }
 
 test "test/built-ins/RegExp/property-escapes/non-binary-property-without-value-Script_Extensions-equals-negated.js" {
-    assert Regex::new("\\P{Script_Extensions=}").is_err();
+    assert Regex::new(#"\P{Script_Extensions=}"#).is_err();
 }
 
 test "test/built-ins/RegExp/property-escapes/non-binary-property-without-value-Script_Extensions-equals.js" {
-    assert Regex::new("\\p{Script_Extensions=}").is_err();
+    assert Regex::new(#"\p{Script_Extensions=}"#).is_err();
 }
 
 test "test/built-ins/RegExp/property-escapes/non-binary-property-without-value-Script_Extensions-negated.js" {
-    assert Regex::new("\\P{Script_Extensions}").is_err();
+    assert Regex::new(#"\P{Script_Extensions}"#).is_err();
 }
 
 test "test/built-ins/RegExp/property-escapes/non-binary-property-without-value-Script_Extensions.js" {
-    assert Regex::new("\\p{Script_Extensions}").is_err();
+    assert Regex::new(#"\p{Script_Extensions}"#).is_err();
 }
 
 test "test/built-ins/RegExp/property-escapes/non-existent-binary-property-negated.js" {
-    assert Regex::new("\\P{UnknownBinaryProperty}").is_err();
+    assert Regex::new(#"\P{UnknownBinaryProperty}"#).is_err();
 }
 
 test "test/built-ins/RegExp/property-escapes/non-existent-binary-property.js" {
-    assert Regex::new("\\p{UnknownBinaryProperty}").is_err();
+    assert Regex::new(#"\p{UnknownBinaryProperty}"#).is_err();
 }
 
 test "test/built-ins/RegExp/property-escapes/non-existent-property-and-value-negated.js" {
-    assert Regex::new("\\P{Line_Breakz=WAT}").is_err();
+    assert Regex::new(#"\P{Line_Breakz=WAT}"#).is_err();
 }
 
 test "test/built-ins/RegExp/property-escapes/non-existent-property-and-value.js" {
-    assert Regex::new("\\p{Line_Breakz=WAT}").is_err();
+    assert Regex::new(#"\p{Line_Breakz=WAT}"#).is_err();
 }
 
 test "test/built-ins/RegExp/property-escapes/non-existent-property-existing-value-negated.js" {
-    assert Regex::new("\\P{Line_Breakz=Alphabetic}").is_err();
+    assert Regex::new(#"\P{Line_Breakz=Alphabetic}"#).is_err();
 }
 
 test "test/built-ins/RegExp/property-escapes/non-existent-property-existing-value.js" {
-    assert Regex::new("\\p{Line_Breakz=Alphabetic}").is_err();
+    assert Regex::new(#"\p{Line_Breakz=Alphabetic}"#).is_err();
 }
 
 test "test/built-ins/RegExp/property-escapes/non-existent-property-value-General_Category-negated.js" {
-    assert Regex::new("\\\\P{General_Category=WAT}").is_err();
+    assert Regex::new(#"\\P{General_Category=WAT}"#).is_err();
 }
 
 test "test/built-ins/RegExp/property-escapes/non-existent-property-value-Script-negated.js" {
-    assert Regex::new("\\\\P{Script=FooBarBazInvalid}").is_err();
+    assert Regex::new(#"\\P{Script=FooBarBazInvalid}"#).is_err();
 }
 
 test "test/built-ins/RegExp/property-escapes/non-existent-property-value-Script.js" {
-    assert Regex::new("\\\\p{Script=FooBarBazInvalid}").is_err();
+    assert Regex::new(#"\\p{Script=FooBarBazInvalid}"#).is_err();
 }
 
 test "test/built-ins/RegExp/property-escapes/non-existent-property-value-Script_Extensions-negated.js" {
-    assert Regex::new("\\\\P{Script_Extensions=H_e_h}").is_err();
+    assert Regex::new(#"\\P{Script_Extensions=H_e_h}"#).is_err();
 }
 
 test "test/built-ins/RegExp/property-escapes/non-existent-property-value-Script_Extensions.js" {
-    assert Regex::new("\\\\p{Script_Extensions=H_e_h}").is_err();
+    assert Regex::new(#"\\p{Script_Extensions=H_e_h}"#).is_err();
 }
 
 test "test/built-ins/RegExp/property-escapes/non-existent-property-value-general-category.js" {
-    assert Regex::new("\\\\p{General_Category=WAT}").is_err();
+    assert Regex::new(#"\\p{General_Category=WAT}"#).is_err();
 }
 
 test "test/built-ins/RegExp/property-escapes/unsupported-binary-property-Composition_Exclusion-negated.js" {
-    assert Regex::new("\\P{Composition_Exclusion}").is_err();
+    assert Regex::new(#"\P{Composition_Exclusion}"#).is_err();
 }
 
 test "test/built-ins/RegExp/property-escapes/unsupported-binary-property-Composition_Exclusion.js" {
-    assert Regex::new("\\p{Composition_Exclusion}").is_err();
+    assert Regex::new(#"\p{Composition_Exclusion}"#).is_err();
 }
 
 test "test/built-ins/RegExp/property-escapes/unsupported-binary-property-Expands_On_NFC-negated.js" {
-    assert Regex::new("\\P{Expands_On_NFC}").is_err();
+    assert Regex::new(#"\P{Expands_On_NFC}"#).is_err();
 }
 
 test "test/built-ins/RegExp/property-escapes/unsupported-binary-property-Expands_On_NFC.js" {
-    assert Regex::new("\\p{Expands_On_NFC}").is_err();
+    assert Regex::new(#"\p{Expands_On_NFC}"#).is_err();
 }
 
 test "test/built-ins/RegExp/property-escapes/unsupported-binary-property-Expands_On_NFD-negated.js" {
-    assert Regex::new("\\P{Expands_On_NFD}").is_err();
+    assert Regex::new(#"\P{Expands_On_NFD}"#).is_err();
 }
 
 test "test/built-ins/RegExp/property-escapes/unsupported-binary-property-Expands_On_NFD.js" {
-    assert Regex::new("\\p{Expands_On_NFD}").is_err();
+    assert Regex::new(#"\p{Expands_On_NFD}"#).is_err();
 }
 
 test "test/built-ins/RegExp/property-escapes/unsupported-binary-property-Expands_On_NFKC-negated.js" {
-    assert Regex::new("\\P{Expands_On_NFKC}").is_err();
+    assert Regex::new(#"\P{Expands_On_NFKC}"#).is_err();
 }
 
 test "test/built-ins/RegExp/property-escapes/unsupported-binary-property-Expands_On_NFKC.js" {
-    assert Regex::new("\\p{Expands_On_NFKC}").is_err();
+    assert Regex::new(#"\p{Expands_On_NFKC}"#).is_err();
 }
 
 test "test/built-ins/RegExp/property-escapes/unsupported-binary-property-Expands_On_NFKD-negated.js" {
-    assert Regex::new("\\P{Expands_On_NFKD}").is_err();
+    assert Regex::new(#"\P{Expands_On_NFKD}"#).is_err();
 }
 
 test "test/built-ins/RegExp/property-escapes/unsupported-binary-property-Expands_On_NFKD.js" {
-    assert Regex::new("\\p{Expands_On_NFKD}").is_err();
+    assert Regex::new(#"\p{Expands_On_NFKD}"#).is_err();
 }
 
 test "test/built-ins/RegExp/property-escapes/unsupported-binary-property-FC_NFKC_Closure-negated.js" {
-    assert Regex::new("\\P{FC_NFKC_Closure}").is_err();
+    assert Regex::new(#"\P{FC_NFKC_Closure}"#).is_err();
 }
 
 test "test/built-ins/RegExp/property-escapes/unsupported-binary-property-FC_NFKC_Closure.js" {
-    assert Regex::new("\\p{FC_NFKC_Closure}").is_err();
+    assert Regex::new(#"\p{FC_NFKC_Closure}"#).is_err();
 }
 
 // core:icu knows the property, so Re accepts it.
 test "test/built-ins/RegExp/property-escapes/unsupported-binary-property-Full_Composition_Exclusion-negated.js" {
-    assert Regex::new("\\P{Full_Composition_Exclusion}").is_ok();
+    assert Regex::new(#"\P{Full_Composition_Exclusion}"#).is_ok();
 }
 
 // core:icu knows the property, so Re accepts it.
 test "test/built-ins/RegExp/property-escapes/unsupported-binary-property-Full_Composition_Exclusion.js" {
-    assert Regex::new("\\p{Full_Composition_Exclusion}").is_ok();
+    assert Regex::new(#"\p{Full_Composition_Exclusion}"#).is_ok();
 }
 
 // core:icu knows the property, so Re accepts it.
 test "test/built-ins/RegExp/property-escapes/unsupported-binary-property-Grapheme_Link-negated.js" {
-    assert Regex::new("\\P{Grapheme_Link}").is_ok();
+    assert Regex::new(#"\P{Grapheme_Link}"#).is_ok();
 }
 
 // core:icu knows the property, so Re accepts it.
 test "test/built-ins/RegExp/property-escapes/unsupported-binary-property-Grapheme_Link.js" {
-    assert Regex::new("\\p{Grapheme_Link}").is_ok();
+    assert Regex::new(#"\p{Grapheme_Link}"#).is_ok();
 }
 
 // core:icu knows the property, so Re accepts it.
 test "test/built-ins/RegExp/property-escapes/unsupported-binary-property-Hyphen-negated.js" {
-    assert Regex::new("\\P{Hyphen}").is_ok();
+    assert Regex::new(#"\P{Hyphen}"#).is_ok();
 }
 
 // core:icu knows the property, so Re accepts it.
 test "test/built-ins/RegExp/property-escapes/unsupported-binary-property-Hyphen.js" {
-    assert Regex::new("\\p{Hyphen}").is_ok();
+    assert Regex::new(#"\p{Hyphen}"#).is_ok();
 }
 
 test "test/built-ins/RegExp/property-escapes/unsupported-binary-property-Other_Alphabetic-negated.js" {
-    assert Regex::new("\\P{Other_Alphabetic}").is_err();
+    assert Regex::new(#"\P{Other_Alphabetic}"#).is_err();
 }
 
 test "test/built-ins/RegExp/property-escapes/unsupported-binary-property-Other_Alphabetic.js" {
-    assert Regex::new("\\p{Other_Alphabetic}").is_err();
+    assert Regex::new(#"\p{Other_Alphabetic}"#).is_err();
 }
 
 test "test/built-ins/RegExp/property-escapes/unsupported-binary-property-Other_Default_Ignorable_Code_Point-negated.js" {
-    assert Regex::new("\\P{Other_Default_Ignorable_Code_Point}").is_err();
+    assert Regex::new(#"\P{Other_Default_Ignorable_Code_Point}"#).is_err();
 }
 
 test "test/built-ins/RegExp/property-escapes/unsupported-binary-property-Other_Default_Ignorable_Code_Point.js" {
-    assert Regex::new("\\p{Other_Default_Ignorable_Code_Point}").is_err();
+    assert Regex::new(#"\p{Other_Default_Ignorable_Code_Point}"#).is_err();
 }
 
 test "test/built-ins/RegExp/property-escapes/unsupported-binary-property-Other_Grapheme_Extend-negated.js" {
-    assert Regex::new("\\P{Other_Grapheme_Extend}").is_err();
+    assert Regex::new(#"\P{Other_Grapheme_Extend}"#).is_err();
 }
 
 test "test/built-ins/RegExp/property-escapes/unsupported-binary-property-Other_Grapheme_Extend.js" {
-    assert Regex::new("\\p{Other_Grapheme_Extend}").is_err();
+    assert Regex::new(#"\p{Other_Grapheme_Extend}"#).is_err();
 }
 
 test "test/built-ins/RegExp/property-escapes/unsupported-binary-property-Other_ID_Continue-negated.js" {
-    assert Regex::new("\\P{Other_ID_Continue}").is_err();
+    assert Regex::new(#"\P{Other_ID_Continue}"#).is_err();
 }
 
 test "test/built-ins/RegExp/property-escapes/unsupported-binary-property-Other_ID_Continue.js" {
-    assert Regex::new("\\p{Other_ID_Continue}").is_err();
+    assert Regex::new(#"\p{Other_ID_Continue}"#).is_err();
 }
 
 test "test/built-ins/RegExp/property-escapes/unsupported-binary-property-Other_ID_Start-negated.js" {
-    assert Regex::new("\\P{Other_ID_Start}").is_err();
+    assert Regex::new(#"\P{Other_ID_Start}"#).is_err();
 }
 
 test "test/built-ins/RegExp/property-escapes/unsupported-binary-property-Other_ID_Start.js" {
-    assert Regex::new("\\p{Other_ID_Start}").is_err();
+    assert Regex::new(#"\p{Other_ID_Start}"#).is_err();
 }
 
 test "test/built-ins/RegExp/property-escapes/unsupported-binary-property-Other_Lowercase-negated.js" {
-    assert Regex::new("\\P{Other_Lowercase}").is_err();
+    assert Regex::new(#"\P{Other_Lowercase}"#).is_err();
 }
 
 test "test/built-ins/RegExp/property-escapes/unsupported-binary-property-Other_Lowercase.js" {
-    assert Regex::new("\\p{Other_Lowercase}").is_err();
+    assert Regex::new(#"\p{Other_Lowercase}"#).is_err();
 }
 
 test "test/built-ins/RegExp/property-escapes/unsupported-binary-property-Other_Math-negated.js" {
-    assert Regex::new("\\P{Other_Math}").is_err();
+    assert Regex::new(#"\P{Other_Math}"#).is_err();
 }
 
 test "test/built-ins/RegExp/property-escapes/unsupported-binary-property-Other_Math.js" {
-    assert Regex::new("\\p{Other_Math}").is_err();
+    assert Regex::new(#"\p{Other_Math}"#).is_err();
 }
 
 test "test/built-ins/RegExp/property-escapes/unsupported-binary-property-Other_Uppercase-negated.js" {
-    assert Regex::new("\\P{Other_Uppercase}").is_err();
+    assert Regex::new(#"\P{Other_Uppercase}"#).is_err();
 }
 
 test "test/built-ins/RegExp/property-escapes/unsupported-binary-property-Other_Uppercase.js" {
-    assert Regex::new("\\p{Other_Uppercase}").is_err();
+    assert Regex::new(#"\p{Other_Uppercase}"#).is_err();
 }
 
 // core:icu knows the property, so Re accepts it.
 test "test/built-ins/RegExp/property-escapes/unsupported-binary-property-Prepended_Concatenation_Mark-negated.js" {
-    assert Regex::new("\\P{Prepended_Concatenation_Mark}").is_ok();
+    assert Regex::new(#"\P{Prepended_Concatenation_Mark}"#).is_ok();
 }
 
 // core:icu knows the property, so Re accepts it.
 test "test/built-ins/RegExp/property-escapes/unsupported-binary-property-Prepended_Concatenation_Mark.js" {
-    assert Regex::new("\\p{Prepended_Concatenation_Mark}").is_ok();
+    assert Regex::new(#"\p{Prepended_Concatenation_Mark}"#).is_ok();
 }
 
 test "test/built-ins/RegExp/property-escapes/unsupported-property-Block-with-value-negated.js" {
-    assert Regex::new("\\P{Block=Adlam}").is_err();
+    assert Regex::new(#"\P{Block=Adlam}"#).is_err();
 }
 
 test "test/built-ins/RegExp/property-escapes/unsupported-property-Block-with-value.js" {
-    assert Regex::new("\\p{Block=Adlam}").is_err();
+    assert Regex::new(#"\p{Block=Adlam}"#).is_err();
 }
 
 test "test/built-ins/RegExp/property-escapes/unsupported-property-FC_NFKC_Closure-negated.js" {
-    assert Regex::new("\\P{FC_NFKC_Closure}").is_err();
+    assert Regex::new(#"\P{FC_NFKC_Closure}"#).is_err();
 }
 
 test "test/built-ins/RegExp/property-escapes/unsupported-property-FC_NFKC_Closure.js" {
-    assert Regex::new("\\p{FC_NFKC_Closure}").is_err();
+    assert Regex::new(#"\p{FC_NFKC_Closure}"#).is_err();
 }
 
 // core:icu knows the property, so Re accepts it.
 test "test/built-ins/RegExp/property-escapes/unsupported-property-Line_Break-negated.js" {
-    assert Regex::new("\\P{Line_Break=Alphabetic}").is_ok();
+    assert Regex::new(#"\P{Line_Break=Alphabetic}"#).is_ok();
 }
 
 // core:icu knows the property, so Re accepts it.
 test "test/built-ins/RegExp/property-escapes/unsupported-property-Line_Break-with-value-negated.js" {
-    assert Regex::new("\\P{Line_Break=Alphabetic}").is_ok();
+    assert Regex::new(#"\P{Line_Break=Alphabetic}"#).is_ok();
 }
 
 // core:icu knows the property, so Re accepts it.
 test "test/built-ins/RegExp/property-escapes/unsupported-property-Line_Break-with-value.js" {
-    assert Regex::new("\\p{Line_Break=Alphabetic}").is_ok();
+    assert Regex::new(#"\p{Line_Break=Alphabetic}"#).is_ok();
 }
 
 test "test/built-ins/RegExp/property-escapes/unsupported-property-Line_Break.js" {
-    assert Regex::new("\\p{Line_Break}").is_err();
+    assert Regex::new(#"\p{Line_Break}"#).is_err();
 }

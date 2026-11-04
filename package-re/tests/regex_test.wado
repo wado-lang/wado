@@ -36,88 +36,88 @@ fn all(pattern: String, text: String) -> String {
 }
 
 test "literals, classes and the dot" {
-    assert found("b", "abc") == "1..2 b";
-    assert found("x", "abc") == "none";
-    assert found("[b-c]+", "abcd") == "1..3 bc";
-    assert found("[^a]", "aab") == "2..3 b";
-    assert found("a.c", "a\nc abc") == "4..7 abc";
-    assert found("(?s:a.c)", "a\nc") == "0..3 a\nc";
-    assert found("\\d+", "ab123c") == "2..5 123";
-    assert found("\\w+", "  foo_1!") == "2..7 foo_1";
-    assert found("\\s", "a\u{3000}b") == "1..4 \u{3000}";
+    assert found(#"b"#, "abc") == "1..2 b";
+    assert found(#"x"#, "abc") == "none";
+    assert found(#"[b-c]+"#, "abcd") == "1..3 bc";
+    assert found(#"[^a]"#, "aab") == "2..3 b";
+    assert found(#"a.c"#, "a\nc abc") == "4..7 abc";
+    assert found(#"(?s:a.c)"#, "a\nc") == "0..3 a\nc";
+    assert found(#"\d+"#, "ab123c") == "2..5 123";
+    assert found(#"\w+"#, "  foo_1!") == "2..7 foo_1";
+    assert found(#"\s"#, "a\u{3000}b") == "1..4 \u{3000}";
 }
 
 test "code points beyond ASCII match whole, at byte offsets" {
-    assert found(".", "é") == "0..2 é";
-    assert found("[α-ω]+", "abγδε") == "2..8 γδε";
-    assert found("\\u{1F600}", "x😀") == "1..5 😀";
-    assert found("\\p{sc=Hiragana}+", "カタあいう") == "6..15 あいう";
-    assert found("\\P{L}", "aé1") == "3..4 1";
-    assert found("[^x]", "😀") == "0..4 😀";
-    assert found("\\uD800", "\u{FFFD}") == "none";
+    assert found(#"."#, "é") == "0..2 é";
+    assert found(#"[α-ω]+"#, "abγδε") == "2..8 γδε";
+    assert found(#"\u{1F600}"#, "x😀") == "1..5 😀";
+    assert found(#"\p{sc=Hiragana}+"#, "カタあいう") == "6..15 あいう";
+    assert found(#"\P{L}"#, "aé1") == "3..4 1";
+    assert found(#"[^x]"#, "😀") == "0..4 😀";
+    assert found(#"\uD800"#, "\u{FFFD}") == "none";
 }
 
 test "the leftmost match wins, then the priority of alternatives" {
-    assert found("b|ab", "xab") == "1..3 ab";
-    assert found("a|ab", "ab") == "0..1 a";
-    assert found("ab|a", "ab") == "0..2 ab";
-    assert found("a*", "baa") == "0..0 ";
-    assert found("a+?", "aaa") == "0..1 a";
-    assert found("a{2,3}", "aaaa") == "0..3 aaa";
-    assert found("a{2,3}?", "aaaa") == "0..2 aa";
-    assert found("x{0}y", "xy") == "1..2 y";
+    assert found(#"b|ab"#, "xab") == "1..3 ab";
+    assert found(#"a|ab"#, "ab") == "0..1 a";
+    assert found(#"ab|a"#, "ab") == "0..2 ab";
+    assert found(#"a*"#, "baa") == "0..0 ";
+    assert found(#"a+?"#, "aaa") == "0..1 a";
+    assert found(#"a{2,3}"#, "aaaa") == "0..3 aaa";
+    assert found(#"a{2,3}?"#, "aaaa") == "0..2 aa";
+    assert found(#"x{0}y"#, "xy") == "1..2 y";
 }
 
 test "anchors and word boundaries" {
-    assert found("^b", "ab") == "none";
-    assert found("(?m:^b)", "a\nb") == "2..3 b";
-    assert found("(?m:a$)", "a\u{2028}") == "0..1 a";
-    assert found("a$", "a\nb") == "none";
-    assert found("\\bfoo\\b", "afoo foo") == "5..8 foo";
-    assert found("\\Boo", "foo") == "1..3 oo";
-    assert found("(?m:^)", "é\u{2029}x") == "0..0 ";
+    assert found(#"^b"#, "ab") == "none";
+    assert found(#"(?m:^b)"#, "a\nb") == "2..3 b";
+    assert found(#"(?m:a$)"#, "a\u{2028}") == "0..1 a";
+    assert found(#"a$"#, "a\nb") == "none";
+    assert found(#"\bfoo\b"#, "afoo foo") == "5..8 foo";
+    assert found(#"\Boo"#, "foo") == "1..3 oo";
+    assert found(#"(?m:^)"#, "é\u{2029}x") == "0..0 ";
 }
 
 test "groups capture the last iteration, and each iteration starts unset" {
-    assert groups("(a)(b)?", "a") == "a,a,-";
-    assert groups("(?<y>\\d{4})-(?<m>\\d\\d)", "on 2026-11") == "2026-11,2026,11";
-    assert groups("(a|b)+", "abba") == "abba,a";
-    assert groups("(?:(a)|b)+", "ab") == "ab,-";
-    assert groups("(a*)+", "b") == ",";
+    assert groups(#"(a)(b)?"#, "a") == "a,a,-";
+    assert groups(#"(?<y>\d{4})-(?<m>\d\d)"#, "on 2026-11") == "2026-11,2026,11";
+    assert groups(#"(a|b)+"#, "abba") == "abba,a";
+    assert groups(#"(?:(a)|b)+"#, "ab") == "ab,-";
+    assert groups(#"(a*)+"#, "b") == ",";
 }
 
 test "named groups" {
-    let caps = re("(?<y>\\d+)-(?<m>\\d+)").captures("1-2").unwrap();
+    let caps = re(#"(?<y>\d+)-(?<m>\d+)"#).captures("1-2").unwrap();
     assert caps["y"].unwrap().as_str() == "1";
     assert caps.name("m").unwrap().as_str() == "2";
     assert caps["d"] matches { None };
 }
 
 test "find_at keeps the text before start as context" {
-    let r = re("\\bb");
+    let r = re(#"\bb"#);
     assert r.find_at("ab b", 1).unwrap().start() == 3;
-    assert re("^a").find_at("aa", 1) matches { None };
-    assert re("a").find_at("aa", 1).unwrap().start() == 1;
+    assert re(#"^a"#).find_at("aa", 1) matches { None };
+    assert re(#"a"#).find_at("aa", 1).unwrap().start() == 1;
 }
 
 test "an iterator steps past an empty match by one character" {
-    assert all("a*", "baa") == "0: 1:aa";
-    assert all("a*", "baaac") == "0: 1:aaa 5:";
-    assert all("", "é") == "0: 2:";
-    assert all("\\d", "a1b22") == "1:1 3:2 4:2";
+    assert all(#"a*"#, "baa") == "0: 1:aa";
+    assert all(#"a*"#, "baaac") == "0: 1:aaa 5:";
+    assert all(#""#, "é") == "0: 2:";
+    assert all(#"\d"#, "a1b22") == "1:1 3:2 4:2";
 }
 
 test "captures_iter" {
     let mut years: List<String> = [];
-    for let caps of re("(\\d+)y").captures_iter("1y 22y 333y") {
+    for let caps of re(#"(\d+)y"#).captures_iter("1y 22y 333y") {
         years.push(`${caps[1].unwrap().as_str()}`);
     }
     assert years.join(",") == "1,22,333";
 }
 
 test "is_match" {
-    assert re("^\\d+$").is_match("2026");
-    assert !re("^\\d+$").is_match("20x6");
+    assert re(#"^\d+$"#).is_match("2026");
+    assert !re(#"^\d+$"#).is_match("20x6");
 }
 
 test "the match takes time linear in the text" {
@@ -125,30 +125,30 @@ test "the match takes time linear in the text" {
     for let _i of 0..<5000 {
         text.push('a');
     }
-    assert !re("(a*)*b").is_match(&text);
-    assert !re("(a|aa)+$c").is_match(&text);
+    assert !re(#"(a*)*b"#).is_match(&text);
+    assert !re(#"(a|aa)+$c"#).is_match(&text);
 }
 
 test "a program too large is refused" {
-    assert `${Regex::new("(?:a{1000}){1001}").unwrap_err()}` == "the pattern compiles to more than 1000000 instructions (at byte 0)";
+    assert `${Regex::new(#"(?:a{1000}){1001}"#).unwrap_err()}` == "the pattern compiles to more than 1000000 instructions (at byte 0)";
 }
 
 test "replace reads a template as GetSubstitution does" {
-    let r = re("(\\d+)-(\\d+)");
+    let r = re(#"(\d+)-(\d+)"#);
     assert r.replace("a 1-22 b 333-4", "$2-$1") == "a 22-1 b 333-4";
     assert r.replace_all("a 1-22 b 333-4", "$2-$1") == "a 22-1 b 4-333";
     assert r.replace("a 1-22 b", "[$&|$`|$'|$$|$3|$01|$10|$]") == "a [1-22|a | b|$|$3|1|10|$] b";
-    assert re("(?<y>\\d+)").replace("x 7", "<$<y>|$<z>|$<y>") == "x <7||7";
-    assert re("(\\d)").replace("x 7", "<$<y>>") == "x <$<y>>";
-    assert re("a*").replace_all("baaac", "-") == "-b-c-";
-    assert re("x").replace("abc", "-") == "abc";
+    assert re(#"(?<y>\d+)"#).replace("x 7", "<$<y>|$<z>|$<y>") == "x <7||7";
+    assert re(#"(\d)"#).replace("x 7", "<$<y>>") == "x <$<y>>";
+    assert re(#"a*"#).replace_all("baaac", "-") == "-b-c-";
+    assert re(#"x"#).replace("abc", "-") == "abc";
 }
 
 test "replace takes a view or a function" {
     let template: String = "[$&]";
-    assert re("b").replace_all("abcb", template.as_str_slice()) == "a[b]c[b]";
+    assert re(#"b"#).replace_all("abcb", template.as_str_slice()) == "a[b]c[b]";
     let shout: fn(&Captures) -> String = |caps| `${caps.get(0).unwrap().as_str()}!`;
-    assert re("\\d+").replace_all("1 22", shout) == "1! 22!";
+    assert re(#"\d+"#).replace_all("1 22", shout) == "1! 22!";
 }
 
 fn show(split: Split) -> String {
@@ -164,20 +164,20 @@ fn pieces(pattern: String, text: String) -> String {
 }
 
 test "split cuts around each match find_iter finds" {
-    assert pieces(",", "a,b,,c") == "<a><b><><c>";
-    assert pieces(",", ",a,") == "<><a><>";
-    assert pieces("", "abc") == "<><a><b><c><>";
-    assert pieces("(?:)", "é漢") == "<><é><漢><>";
-    assert pieces("x*", "axbxx") == "<><a><b><>";
-    assert pieces("\\b", "hi there") == "<><hi>< ><there><>";
-    assert pieces("a", "a") == "<><>";
-    assert pieces("a?", "") == "<><>";
-    assert pieces("b", "") == "<>";
+    assert pieces(#","#, "a,b,,c") == "<a><b><><c>";
+    assert pieces(#","#, ",a,") == "<><a><>";
+    assert pieces(#""#, "abc") == "<><a><b><c><>";
+    assert pieces(#"(?:)"#, "é漢") == "<><é><漢><>";
+    assert pieces(#"x*"#, "axbxx") == "<><a><b><>";
+    assert pieces(#"\b"#, "hi there") == "<><hi>< ><there><>";
+    assert pieces(#"a"#, "a") == "<><>";
+    assert pieces(#"a?"#, "") == "<><>";
+    assert pieces(#"b"#, "") == "<>";
 }
 
 test "the pieces and the matches spell the text again" {
     let texts: List<String> = ["", "baaac", "a,b,,c", "é漢x"];
-    for let pattern of ["a*", ",", "", "x?", "\\b"] as List<String> {
+    for let pattern of [#"a*"#, #","#, #""#, #"x?"#, #"\b"#] as List<String> {
         let r = re(pattern);
         for let text of &texts {
             let mut spelled = "";
@@ -195,7 +195,7 @@ test "the pieces and the matches spell the text again" {
 }
 
 test "splitn keeps the rest in its last piece" {
-    let r = re(",");
+    let r = re(#","#);
     assert show(r.splitn("a,b,c", 0)) == "";
     assert show(r.splitn("a,b,c", 1)) == "<a,b,c>";
     assert show(r.splitn("a,b,c", 2)) == "<a><b,c>";
@@ -203,5 +203,5 @@ test "splitn keeps the rest in its last piece" {
 }
 
 test "i waits for simple case folding" {
-    assert Regex::new("(?i:a)").is_err();
+    assert Regex::new(#"(?i:a)"#).is_err();
 }
