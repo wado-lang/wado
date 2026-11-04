@@ -783,6 +783,7 @@ impl Builder {
                 self.items.push(Item::Resource(ResourceDecl {
                     id,
                     name: wado_name,
+                    name_span: syn(),
                     visibility: Visibility::Public,
                     type_params: Vec::new(),
                     parent: None,

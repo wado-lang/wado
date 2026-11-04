@@ -1694,6 +1694,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         // forms).
         self.sem.decls.associated_constants.clear();
         type AssocConstInput = (
+            AstId,
             String,
             String,
             ast::Type,
@@ -1718,6 +1719,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     .iter()
                     .map(move |assoc_const| {
                         (
+                            assoc_const.id,
                             type_name.clone(),
                             assoc_const.name.clone(),
                             assoc_const.ty.clone(),
@@ -1728,7 +1730,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     .collect::<Vec<_>>()
             })
             .collect();
-        for (type_name, const_name, ty, value, inherent_visibility) in assoc_const_inputs {
+        for (decl, type_name, const_name, ty, value, inherent_visibility) in assoc_const_inputs {
             let type_id = self.resolve_type(&ty);
             let Some(owner) = self.decl_key_or_local(&type_name) else {
                 continue;
@@ -1736,6 +1738,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             self.sem.decls.associated_constants.insert(
                 (owner, const_name),
                 sig::AssocConstSig {
+                    decl,
                     module: module_source.clone(),
                     ty: type_id,
                     value,

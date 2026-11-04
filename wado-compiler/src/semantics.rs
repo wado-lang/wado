@@ -1313,6 +1313,9 @@ impl Semantics {
             sem: self,
             module: module.clone(),
             id: ast_id,
+            on_name: self
+                .name_span_of(ast_id)
+                .is_some_and(|name| name.contains(line, column)),
         })
     }
 }
@@ -1327,6 +1330,9 @@ pub struct Cursor<'a> {
     sem: &'a Semantics,
     module: ModuleSource,
     id: AstId,
+    /// The position is on the declaration's own name, which names it even
+    /// where no symbol-table entry does: a method, a field, an enum case.
+    on_name: bool,
 }
 
 impl<'a> Cursor<'a> {
@@ -1357,7 +1363,7 @@ impl<'a> Cursor<'a> {
         if let Some(def) = self.sem.referenced_symbol(self.id) {
             return Some(def);
         }
-        if self.sem.symbol_at(self.id).is_some() {
+        if self.on_name || self.sem.symbol_at(self.id).is_some() {
             return Some(self.id);
         }
         None

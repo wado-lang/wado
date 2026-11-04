@@ -1534,6 +1534,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         Some(*name_id),
                         *span,
                     );
+                    self.record_constant_path(variant_qualifier.as_ref(), *name_id, assoc.decl);
                     self.resolve_associated_const_body(&assoc, ctx);
                     return Some(PatternConstant {
                         shown,
@@ -1809,6 +1810,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     // A float type's limit is the one value it holds.
                     if let Some(point) = util::float_limit_pattern(pattern, &self.tysys.resolutions)
                     {
+                        self.record_limit_reference(pattern);
                         self.resolve_instance_pattern(&point, scrutinee_type, ctx, *span, site);
                         return Vec::new();
                     }
@@ -2465,7 +2467,38 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
             None => return self.resolve_constant_range([start, end], scrutinee_type, ctx, span),
         };
+        self.record_limit_reference(start);
+        self.record_limit_reference(end);
         self.resolve_instance_pattern(&pattern, scrutinee_type, ctx, span, site);
+    }
+
+    /// Record the use of the primitive's limit `pattern` names, if any
+    /// (`i32::MAX`), which a pattern reads as the value it holds rather than
+    /// through [`Self::resolve_pattern_constant`].
+    fn record_limit_reference(&mut self, pattern: &Pattern) {
+        if let Pattern::Variant {
+            variant_name,
+            variant_qualifier,
+            name_id,
+            ..
+        } = pattern
+            && let Some(assoc) = self
+                .tysys
+                .associated_constant_qualified(variant_qualifier.as_ref(), variant_name)
+        {
+            self.record_constant_path(variant_qualifier.as_ref(), *name_id, assoc.decl);
+        }
+    }
+
+    /// Record the uses an associated constant's pattern path makes: its
+    /// owner type, then the constant.
+    fn record_constant_path(&mut self, qualifier: Option<&Type>, name_id: AstId, decl: AstId) {
+        match qualifier {
+            Some(Type::Named(t)) => self.record_type_name_reference(t.id, &t.name),
+            Some(Type::Generic(t)) => self.record_type_name_reference(t.id, &t.name),
+            Some(_) | None => {}
+        }
+        self.record_reference_to_def(name_id, decl);
     }
 
     /// A range with a bound naming a constant other than a primitive's limit.

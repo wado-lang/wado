@@ -482,6 +482,19 @@ impl Span {
         format!("{}:{}", self.line, self.column)
     }
 
+    /// Whether the 1-based `(line, column)` lies in
+    /// `[line:column, end_line:end_column)`.
+    #[must_use]
+    pub fn contains(&self, line: usize, column: usize) -> bool {
+        (self.line, self.column) <= (line, column)
+            && (line, column) < (self.end_line, self.end_column)
+    }
+
+    #[must_use]
+    pub fn byte_len(&self) -> usize {
+        self.end.saturating_sub(self.start)
+    }
+
     /// The positions this span runs between — the inverse of
     /// [`Position::span_to`].
     #[must_use]

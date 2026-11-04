@@ -144,7 +144,7 @@ impl Uri {
 /// character spread over several escapes (`%E3%81%82`) round-trips. A
 /// malformed escape or non-UTF-8 result leaves the input untouched: a path we
 /// cannot decode is better handed to the filesystem verbatim than mangled.
-fn percent_decode(s: &str) -> String {
+pub(crate) fn percent_decode(s: &str) -> String {
     if !s.contains('%') {
         return s.to_owned();
     }

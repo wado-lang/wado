@@ -10,6 +10,7 @@ exchanging opinions. It is not implemented yet.
   from work published since August 2026.
 - [Tools](./docs/tools.md): what a reviewer agent reads and checks a change
   with, built and wanted.
+- [TODO](./TODO.md): open work that is not a direction, such as performance.
 
 ## Directions
 
