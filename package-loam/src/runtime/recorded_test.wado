@@ -54,7 +54,7 @@ test "an arg max records as one node, which a run computes as the backend's kern
     };
     let mut r = Recorder::new();
     let rx = r.parameter::<f32, [A, B]>(x.extents);
-    let ranked = r.index_of_max(&rx, 1);
+    let ranked = r.arg_max(&rx, 1);
     let recorded = r.finished([ranked.id]);
     assert recorded.nodes.len() == 2;
     assert run(&mut Cpu {}, &recorded, &[host_of(&x)]) == [

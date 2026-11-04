@@ -1,7 +1,7 @@
 //! The WebGPU backend: the kernels over `wasi:webgpu`, beside `Cpu`.
 //!
 //! An f32 tensor lives on the device from the kernel, `upload` or `keep` that
-//! writes it there until `forward` downloads it, and so does a `bool` one, as
+//! writes it there until `compute` downloads it, and so does a `bool` one, as
 //! 1.0 and 0.0. An `i64` tensor stays on the host, since WGSL stores none, and
 //! a gather writes its indices to the device as `u32` when it runs. A weight
 //! kept for products alone is held in bf16 where that loses nothing, which
@@ -10,32 +10,25 @@
 
 use {
     Attention,
-    Backend,
     BinaryOp,
     Holds,
     Cpu,
     Element,
     Epilogue,
     Expr,
-    Paired,
     Prologue,
     Read,
     RowOp,
     Tensor,
     UnaryOp,
-    Window,
+    arg_max,
     broadcast_extents,
     element_count,
     fused,
     fused_rows,
-    group_query_attention,
+    matmul_broadcast,
     operand,
-    optional,
-    paired_by_parts,
-    prologue_tensor,
-    reduced_count,
     row_extents,
-    slices_within,
 } from "./tensor.wado";
 use { HashMap, HashSet, TreeMap } from "core:collections";
 use { LinearArray } from "core:linear";
@@ -717,12 +710,6 @@ impl WebGpuBackend {
         return self.replays;
     }
 
-    /// How many shaders have been compiled: one for each kernel that differs
-    /// in more than the views it reads and its parameters.
-    pub fn shaders(&self) -> i32 {
-        return self.pipelines.len();
-    }
-
     /// The buffer at `slot`: a held one where it is negative, one of the pass
     /// otherwise.
     fn buffer(&self, slot: i32) -> &GpuBuffer {
@@ -1227,17 +1214,6 @@ impl WebGpuBackend {
             Device(d) => *d,
             Host(h) => self.placed(h, false),
         };
-    }
-
-    /// `host` over an optional operand.
-    fn host_of<E: Element, Axes>(
-        &mut self,
-        t: Option<&Placed<E, Axes>>,
-    ) -> Option<Tensor<E, Axes>> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
-        let Some(placed) = t else {
-            return null;
-        };
-        return Option::Some(self.host(placed));
     }
 
     internal fn host<E: Element, Axes>(
@@ -1882,8 +1858,10 @@ impl WebGpuBackend {
     }
 
     /// [`Self::product`], or where `paired`, the products by the two matrices `b`
-    /// interleaves as `Paired` says, joined by `then` as
-    /// [`Backend::matmul_rhs_paired`] joins them. A paired product runs as
+    /// interleaves as `Paired` says, joined by `then`: it reads the product by
+    /// the first as `operand(0)`, by the second as `operand(1)`, and its own
+    /// operands from `operand(2)`, as a gated layer's two products of one input
+    /// meet. A paired product runs as
     /// one narrow dispatch reading `b` along its inner axis, or not at all:
     /// `None` where it cannot.
     internal fn product_kernel<A, B, Out>(
@@ -2144,7 +2122,7 @@ impl WebGpuBackend {
         b: &Placed<f32, B>,
         then: &Option<Epilogue<PlacedRead<Out>>>,
     ) -> Placed<f32, Out> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
-        let product = self.cpu.matmul_broadcast::<A, B, Out>(&self.host(a), &self.host(b), null);
+        let product = matmul_broadcast::<A, B, Out>(&self.host(a), &self.host(b), &null);
         let computed = self.placed(&product, false);
         return self.finished(computed, then);
     }
@@ -2370,8 +2348,8 @@ impl WebGpuBackend {
             null;
         };
         if let Some(cache) = appending
-            && let Some(k) = key
-            && let Some(result) = self.replayed_as(k, &reads, &heads_of, &grids) {
+            && let Some(replay) = key
+            && let Some(result) = self.replayed_as(replay, &reads, &heads_of, &grids) {
             self.filled[cache] = Filled { positions: total, capacity };
             let [present_k, present_v] = present(cache);
             return Option::Some([result, present_k, present_v]);
@@ -2447,12 +2425,12 @@ impl WebGpuBackend {
         let joined = [contiguous(parts, 0, [attended])] as List<DeviceTensor>;
         self.dispatch_bound(&joined, out, rows * d, heads_of[2], |bindings| ShaderKey::AttendJoin(bindings), grids[2]);
         let result = contiguous(out, 0, [batch, s, heads * d]);
-        if let Some(k) = key {
+        if let Some(replay) = key {
             let mut lengths: List<i32> = [];
             for let h of &heads_of {
                 lengths.push(h.len());
             }
-            self.taped(k, &reads, Option::Some(&result), lengths);
+            self.taped(replay, &reads, Option::Some(&result), lengths);
         }
         return Option::Some([result, present_k, present_v]);
     }
@@ -2790,556 +2768,10 @@ impl Holds for WebGpuBackend {
     }
 }
 
-impl Backend for WebGpuBackend {
-    type Operand<Axes> = PlacedRead<Axes>;
-    /// A matrix kept column by column where one binding holds it, of bf16
-    /// elements where those hold every value: see `kept_matrix`.
-    type Rhs<K, N> = Placed<f32, [K, N]>;
-
-    fn keep_rhs<K, N>(&mut self, t: &Tensor<f32, [K, N]>) -> Placed<f32, [K, N]> with (GpuDevice, GpuQueue, GpuBuffer) {
-        let [k, n] = [t.extents[0], t.extents[1]];
-        let data = &t.data;
-        return self.kept_matrix(k, n, data, |r, c| data[r * n + c]);
-    }
-
-    fn keep_rhs_transposed<K, N>(
-        &mut self,
-        t: &Tensor<f32, [N, K]>,
-    ) -> Placed<f32, [K, N]> with (GpuDevice, GpuQueue, GpuBuffer) {
-        let k = t.extents[1];
-        let data = &t.data;
-        return self.kept_matrix(k, t.extents[0], data, |r, c| data[c * k + r]);
-    }
-
-    fn filled<E: Element, Axes>(&mut self, extents: List<i32>, value: E) -> Placed<E, Axes> {
-        return Placed::Host(self.cpu.filled(extents, value));
-    }
-
-    fn range_i64<A>(&mut self, start: i64, count: i32, delta: i64) -> Placed<i64, [A]> {
-        return Placed::Host(self.cpu.range_i64(start, count, delta));
-    }
-
-    fn read<Axes>(&mut self, t: &Placed<f32, Axes>) -> PlacedRead<Axes> with (GpuDevice, GpuQueue, GpuBuffer) {
-        return PlacedRead { view: self.device_view(t) };
-    }
-
-    fn read_suffix<..Pre, ..Suf>(
-        &mut self,
-        t: &Placed<f32, [..Suf]>,
-    ) -> PlacedRead<[..Pre, ..Suf]> with (GpuDevice, GpuQueue, GpuBuffer) {
-        return PlacedRead { view: self.device_view(t) };
-    }
-
-    fn read_at<..Pre, ..Mid, ..Post>(
-        &mut self,
-        t: &Placed<f32, [..Mid]>,
-        trailing: i32,
-    ) -> PlacedRead<[..Pre, ..Mid, ..Post]> with (GpuDevice, GpuQueue, GpuBuffer) {
-        let mut view = self.device_view(t);
-        for let _ of 0..<trailing {
-            view.extents.push(1);
-            view.strides.push(0);
-        }
-        return PlacedRead { view };
-    }
-
-    fn read_condition<Axes>(&mut self, t: &Placed<bool, Axes>) -> PlacedRead<Axes> with (GpuDevice, GpuQueue, GpuBuffer) {
-        return PlacedRead { view: self.device_view(t) };
-    }
-
-    fn fused<Axes>(
-        &mut self,
-        operands: List<PlacedRead<Axes>>,
-        op: &Expr,
-    ) -> Placed<f32, Axes> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
-        return self.fused_on(&operand_views(&operands), op);
-    }
-
-    fn rows<In, Out>(
-        &mut self,
-        operands: List<PlacedRead<In>>,
-        op: &Expr,
-        row_axes: i32,
-        reduced: bool,
-    ) -> Placed<f32, Out> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
-        let all = operand_views(&operands);
-        return self.rows_over::<In, Out>(&all, broadcast_all(&all), op, row_axes, reduced);
-    }
-
-    fn cast<A: Element, B: Element, Axes>(
-        &mut self,
-        t: &Placed<A, Axes>,
-    ) -> Placed<B, Axes> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
-        // A device holds a bool as the f32 it casts to.
-        if A::exact_in_f32() && B::is_f32() && let Device(d) = t {
-            return Placed::Device(*d);
-        }
-        return Placed::Host(self.cpu.cast::<A, B, Axes>(&self.host(t)));
-    }
-
-    fn select<E: Element, Axes>(
-        &mut self,
-        cond: &Placed<bool, Axes>,
-        x: &Placed<E, Axes>,
-        y: &Placed<E, Axes>,
-    ) -> Placed<E, Axes> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
-        if !E::is_f32() {
-            return Placed::Host(self.cpu.select(&self.host(cond), &self.host(x), &self.host(y)));
-        }
-        let operands = [
-            self.device_view(cond),
-            self.device_view(x),
-            self.device_view(y),
-        ] as List<DeviceTensor>;
-        let picked = self.fused_on::<Axes>(&operands, &operand(0).select(&operand(1), &operand(2)));
-        return match picked {
-            Device(d) => Placed::Device(d),
-            Host(h) => Placed::Host(self.cpu.cast::<f32, E, Axes>(&h)),
-        };
-    }
-
-    fn matmul<..Bs, M, K, N>(
-        &mut self,
-        a: &Placed<f32, [..Bs, M, K]>,
-        b: &Placed<f32, [..Bs, K, N]>,
-        then: Option<Epilogue<PlacedRead<[..Bs, M, N]>>>,
-    ) -> Placed<f32, [..Bs, M, N]> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
-        return self.product::<[..Bs, M, K], [..Bs, K, N], [..Bs, M, N]>(a, b, &then);
-    }
-
-    fn matmul_shared<..Bs, M, K, N>(
-        &mut self,
-        a: &Placed<f32, [..Bs, M, K]>,
-        b: &Placed<f32, [K, N]>,
-        then: Option<Epilogue<PlacedRead<[..Bs, M, N]>>>,
-    ) -> Placed<f32, [..Bs, M, N]> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
-        return self.product::<[..Bs, M, K], [K, N], [..Bs, M, N]>(a, b, &then);
-    }
-
-    /// The product over the transpose as a view, which strides say.
-    fn matmul_by_transposed<..Bs, M, K, N>(
-        &mut self,
-        a: &Placed<f32, [..Bs, M, K]>,
-        b: &Placed<f32, [N, K]>,
-        then: Option<Epilogue<PlacedRead<[..Bs, M, N]>>>,
-    ) -> Placed<f32, [..Bs, M, N]> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
-        let transposed = self.transpose2(b);
-        return self.product::<[..Bs, M, K], [K, N], [..Bs, M, N]>(a, &transposed, &then);
-    }
-
-    fn matmul_by_rhs_transposed<..Bs, M, K, N>(
-        &mut self,
-        a: &Placed<f32, [..Bs, M, K]>,
-        b: &Placed<f32, [N, K]>,
-        then: Option<Epilogue<PlacedRead<[..Bs, M, N]>>>,
-    ) -> Placed<f32, [..Bs, M, N]> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
-        return self.matmul_by_transposed(a, b, then);
-    }
-
-    fn gather_rhs_rows<Row, Col, ..Ix>(
-        &mut self,
-        rows: &Placed<f32, [Row, Col]>,
-        indices: &Placed<i64, [..Ix]>,
-    ) -> Placed<f32, [..Ix, Col]> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
-        return self.gather_rows::<f32, Row, [Col], [..Ix]>(rows, indices);
-    }
-
-    fn matmul_broadcast<A, B, Out>(
-        &mut self,
-        a: &Placed<f32, A>,
-        b: &Placed<f32, B>,
-        then: Option<Epilogue<PlacedRead<Out>>>,
-    ) -> Placed<f32, Out> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
-        return self.product::<A, B, Out>(a, b, &then);
-    }
-
-    fn matmul_rhs<..Bs, M, K, N>(
-        &mut self,
-        a: &Placed<f32, [..Bs, M, K]>,
-        b: &Placed<f32, [K, N]>,
-        then: Option<Epilogue<PlacedRead<[..Bs, M, N]>>>,
-    ) -> Placed<f32, [..Bs, M, N]> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
-        return self.matmul_shared(a, b, then);
-    }
-
-    fn matmul_rhs_paired<..Bs, M, K, N>(
-        &mut self,
-        a: &Placed<f32, [..Bs, M, K]>,
-        bc: &Placed<f32, [K, Paired<N>]>,
-        then: Epilogue<PlacedRead<[..Bs, M, N]>>,
-    ) -> Placed<f32, [..Bs, M, N]> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
-        let joined = Option::Some(then);
-        // Written to the device once, for the parts too.
-        let a = Placed::<f32, [..Bs, M, K]>::Device(self.device_view(a));
-        if let Some(out) = self.product_kernel::<[..Bs, M, K], [K, Paired<N>], [..Bs, M, N]>(&a, bc, &joined, true) {
-            return out;
-        }
-        return paired_by_parts::<WebGpuBackend, [..Bs], M, K, N>(self, &a, bc, joined.unwrap());
-    }
-
-    fn matmul_rhs_from<..Bs, M, K, N>(
-        &mut self,
-        a: Prologue<PlacedRead<[..Bs, M, K]>>,
-        b: &Placed<f32, [K, N]>,
-        then: Option<Epilogue<PlacedRead<[..Bs, M, N]>>>,
-    ) -> Placed<f32, [..Bs, M, N]> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
-        if let Some(out) = self.staged_product::<[..Bs, M, K], [K, N], [..Bs, M, N]>(&a, b, &then, false) {
-            return out;
-        }
-        let lhs = prologue_tensor::<WebGpuBackend, [..Bs, M, K]>(self, a);
-        return self.matmul_rhs(&lhs, b, then);
-    }
-
-    fn matmul_rhs_paired_from<..Bs, M, K, N>(
-        &mut self,
-        a: Prologue<PlacedRead<[..Bs, M, K]>>,
-        bc: &Placed<f32, [K, Paired<N>]>,
-        then: Epilogue<PlacedRead<[..Bs, M, N]>>,
-    ) -> Placed<f32, [..Bs, M, N]> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
-        let joined = Option::Some(then);
-        if let Some(out) = self.staged_product::<[..Bs, M, K], [K, Paired<N>], [..Bs, M, N]>(&a, bc, &joined, true) {
-            return out;
-        }
-        let lhs = prologue_tensor::<WebGpuBackend, [..Bs, M, K]>(self, a);
-        return self.matmul_rhs_paired(&lhs, bc, joined.unwrap());
-    }
-
-    fn gather_rows<E: Element, Row, ..Rest, ..Ix>(
-        &mut self,
-        data: &Placed<E, [Row, ..Rest]>,
-        indices: &Placed<i64, [..Ix]>,
-    ) -> Placed<E, [..Ix, ..Rest]> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
-        if E::is_f32() {
-            let view = self.device_view(data);
-            if let Some(out) = self.gathered(&view, &self.host(indices), 0) {
-                return Placed::Device(out);
-            }
-        }
-        return Placed::Host(self.cpu.gather_rows::<E, Row, [..Rest], [..Ix]>(&self.host(data), &self.host(indices)));
-    }
-
-    fn gather<E: Element, ..Pre, Along, ..Post, ..Ix>(
-        &mut self,
-        data: &Placed<E, [..Pre, Along, ..Post]>,
-        indices: &Placed<i64, [..Ix]>,
-        axis: i32,
-    ) -> Placed<E, [..Pre, ..Ix, ..Post]> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
-        if E::is_f32() {
-            let view = self.device_view(data);
-            if let Some(out) = self.gathered(&view, &self.host(indices), axis) {
-                return Placed::Device(out);
-            }
-        }
-        return Placed::Host(
-            self.cpu.gather::<E, [..Pre], Along, [..Post], [..Ix]>(&self.host(data), &self.host(indices), axis),
-        );
-    }
-
-    fn slice_axis<E: Element, ..Pre, In, Out, ..Post>(
-        &mut self,
-        t: &Placed<E, [..Pre, In, ..Post]>,
-        axis: i32,
-        start: i64,
-        length: i32,
-        step: i64,
-    ) -> Placed<E, [..Pre, Out, ..Post]> {
-        let Device(d) = t else {
-            return Placed::Host(self.cpu.slice_axis::<E, [..Pre], In, Out, [..Post]>(
-                &self.host_only(t),
-                axis,
-                start,
-                length,
-                step,
-            ));
-        };
-        assert slices_within(d.extents[axis], start, length, step);
-        let mut view = sliced(d, axis, start as i32, length);
-        view.strides[axis] *= step as i32;
-        return Placed::Device(view);
-    }
-
-    fn concat<E: Element, ..Pre, A, B, Out, ..Post>(
-        &mut self,
-        a: &Placed<E, [..Pre, A, ..Post]>,
-        b: &Placed<E, [..Pre, B, ..Post]>,
-        axis: i32,
-    ) -> Placed<E, [..Pre, Out, ..Post]> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
-        if !E::is_f32() {
-            return Placed::Host(self.cpu.concat::<E, [..Pre], A, B, Out, [..Post]>(&self.host(a), &self.host(b), axis));
-        }
-        return Placed::Device(self.joined(&self.device_view(a), &self.device_view(b), axis));
-    }
-
-    fn lift<E: Element, In, Out>(&mut self, t: &Placed<E, In>, rank: i32) -> Placed<E, Out> {
-        let Device(d) = t else {
-            return Placed::Host(self.cpu.lift::<E, In, Out>(&self.host_only(t), rank));
-        };
-        assert rank >= d.extents.len();
-        let mut extents = List::<i32>::filled(rank - d.extents.len(), 1);
-        let mut strides = List::<i32>::filled(rank - d.extents.len(), 0);
-        extents.extend(&d.extents);
-        strides.extend(&d.strides);
-        return Placed::Device(DeviceTensor { ..*d, extents, strides });
-    }
-
-    /// A view: each stretched axis reads its one element through a stride of 0.
-    fn expand<E: Element, In, Out>(&mut self, t: &Placed<E, In>, extents: List<i32>) -> Placed<E, Out> {
-        let Device(d) = t else {
-            return Placed::Host(self.cpu.expand::<E, In, Out>(&self.host_only(t), extents));
-        };
-        assert broadcast_extents(&d.extents, &extents) == Option::Some(extents), "the operand broadcasts to the extents";
-        let lead = extents.len() - d.extents.len();
-        let mut strides = List::<i32>::filled(lead, 0);
-        for let a of 0..<d.extents.len() {
-            strides.push(if d.extents[a] == 1 { 0 } else { d.strides[a] });
-        }
-        return Placed::Device(DeviceTensor { ..*d, extents, strides });
-    }
-
-    fn reshape<E: Element, In, Out>(
-        &mut self,
-        t: &Placed<E, In>,
-        extents: List<i32>,
-    ) -> Placed<E, Out> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
-        let Device(d) = t else {
-            return Placed::Host(self.cpu.reshape::<E, In, Out>(&self.host_only(t), extents));
-        };
-        return Placed::Device(self.reshaped(d, &extents));
-    }
-
-    fn transpose2<E: Element, A, B>(&mut self, t: &Placed<E, [A, B]>) -> Placed<E, [B, A]> {
-        let Device(d) = t else {
-            return Placed::Host(self.cpu.transpose2(&self.host_only(t)));
-        };
-        return Placed::Device(permuted(d, &([1, 0] as List<i32>)));
-    }
-
-    fn permute<E: Element, In, Out>(&mut self, t: &Placed<E, In>, perm: List<i32>) -> Placed<E, Out> {
-        let Device(d) = t else {
-            return Placed::Host(self.cpu.permute::<E, In, Out>(&self.host_only(t), perm));
-        };
-        return Placed::Device(permuted(d, &perm));
-    }
-
-    fn max_pool<N, C, ..In, ..Out>(
-        &mut self,
-        x: &Placed<f32, [N, C, ..In]>,
-        window: &Window,
-    ) -> Placed<f32, [N, C, ..Out]> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
-        return Placed::Host(self.cpu.max_pool::<N, C, [..In], [..Out]>(&self.host(x), window));
-    }
-
-    fn group_query_attention<B, S, Q, K, H, P, T, D, Pos, Half, BB, BH>(
-        &mut self,
-        q: &Placed<f32, [B, S, Q]>,
-        k: &Placed<f32, [B, S, K]>,
-        v: &Placed<f32, [B, S, K]>,
-        past_k: &Placed<f32, [B, H, P, D]>,
-        past_v: &Placed<f32, [B, H, P, D]>,
-        cos: Option<&Placed<f32, [Pos, Half]>>,
-        sin: Option<&Placed<f32, [Pos, Half]>>,
-        bias: Option<&Placed<f32, [BB, BH, S, T]>>,
-        options: &Attention,
-    ) -> [Placed<f32, [B, S, Q]>, Placed<f32, [B, H, T, D]>, Placed<f32, [B, H, T, D]>] with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
-        let rotary = match [cos, sin] {
-            [Some(c), Some(s)] => Option::Some([
-                self.device_view(c),
-                self.device_view(s),
-            ]),
-            _ => null,
-        };
-        let bias_view = match bias {
-            Some(b) => Option::Some(self.device_view(b)),
-            None => null,
-        };
-        if let Some([out, present_k, present_v]) = self.attended(
-            &self.device_view(q),
-            &self.device_view(k),
-            &self.device_view(v),
-            &self.device_view(past_k),
-            &self.device_view(past_v),
-            self.extents_of(past_k)[2],
-            false,
-            &rotary,
-            &bias_view,
-            options,
-        ) {
-            return [
-                Placed::Device(out),
-                Placed::Device(present_k),
-                Placed::Device(present_v),
-            ];
-        }
-        let cos_host = self.host_of(cos);
-        let sin_host = self.host_of(sin);
-        let bias_host = self.host_of(bias);
-        let [out, present_k, present_v] = group_query_attention(
-            &self.host(q),
-            &self.host(k),
-            &self.host(v),
-            &self.host(past_k),
-            &self.host(past_v),
-            optional(&cos_host),
-            optional(&sin_host),
-            optional(&bias_host),
-            options,
-        );
-        return [
-            Placed::Host(out),
-            Placed::Host(present_k),
-            Placed::Host(present_v),
-        ];
-    }
-
-    fn conv<N, Ci, Co, ..In, ..K, ..Out>(
-        &mut self,
-        x: &Placed<f32, [N, Ci, ..In]>,
-        w: &Placed<f32, [Co, Ci, ..K]>,
-        window: &Window,
-        then: Option<Epilogue<PlacedRead<[N, Co, ..Out]>>>,
-    ) -> Placed<f32, [N, Co, ..Out]> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
-        let computed = self.cpu.conv::<N, Ci, Co, [..In], [..K], [..Out]>(&self.host(x), &self.host(w), window, null);
-        let placed = self.placed(&computed, false);
-        return self.finished(placed, &then);
-    }
-
-    fn conv_bias<N, Ci, Co, ..In, ..K, ..Out>(
-        &mut self,
-        x: &Placed<f32, [N, Ci, ..In]>,
-        w: &Placed<f32, [Co, Ci, ..K]>,
-        b: &Placed<f32, [Co]>,
-        window: &Window,
-        then: Option<Epilogue<PlacedRead<[N, Co, ..Out]>>>,
-    ) -> Placed<f32, [N, Co, ..Out]> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
-        let computed = self.cpu.conv_bias::<N, Ci, Co, [..In], [..K], [..Out]>(
-            &self.host(x),
-            &self.host(w),
-            &self.host(b),
-            window,
-            null,
-        );
-        let placed = self.placed(&computed, false);
-        return self.finished(placed, &then);
-    }
-
-    fn conv_grouped<N, Ci, Cg, Co, ..In, ..K, ..Out>(
-        &mut self,
-        x: &Placed<f32, [N, Ci, ..In]>,
-        w: &Placed<f32, [Co, Cg, ..K]>,
-        group: i32,
-        window: &Window,
-        then: Option<Epilogue<PlacedRead<[N, Co, ..Out]>>>,
-    ) -> Placed<f32, [N, Co, ..Out]> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
-        let computed = self.cpu.conv_grouped::<N, Ci, Cg, Co, [..In], [..K], [..Out]>(
-            &self.host(x),
-            &self.host(w),
-            group,
-            window,
-            null,
-        );
-        let placed = self.placed(&computed, false);
-        return self.finished(placed, &then);
-    }
-
-    fn conv_grouped_bias<N, Ci, Cg, Co, ..In, ..K, ..Out>(
-        &mut self,
-        x: &Placed<f32, [N, Ci, ..In]>,
-        w: &Placed<f32, [Co, Cg, ..K]>,
-        b: &Placed<f32, [Co]>,
-        group: i32,
-        window: &Window,
-        then: Option<Epilogue<PlacedRead<[N, Co, ..Out]>>>,
-    ) -> Placed<f32, [N, Co, ..Out]> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
-        let computed = self.cpu.conv_grouped_bias::<N, Ci, Cg, Co, [..In], [..K], [..Out]>(
-            &self.host(x),
-            &self.host(w),
-            &self.host(b),
-            group,
-            window,
-            null,
-        );
-        let placed = self.placed(&computed, false);
-        return self.finished(placed, &then);
-    }
-
-    fn softmax<Axes>(
-        &mut self,
-        t: &Placed<f32, Axes>,
-        axis: i32,
-    ) -> Placed<f32, Axes> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
-        let view = self.device_view(t);
-        let perm = moved_last(view.extents.len(), &([axis] as List<i32>));
-        let moved = permuted(&view, &perm);
-        let Some(out) = self.row_kernel(
-            &([moved] as List<DeviceTensor>),
-            moved.extents,
-            &operand(0).row_softmax(),
-            1,
-            false,
-        ) else {
-            return Placed::Host(self.cpu.softmax(&self.host(t), axis));
-        };
-        return Placed::Device(permuted(&out, &inverse(&perm)));
-    }
-
-    fn softmax_flattened<Axes>(
-        &mut self,
-        t: &Placed<f32, Axes>,
-        axis: i32,
-    ) -> Placed<f32, Axes> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
-        let view = self.device_view(t);
-        let row_axes = view.extents.len() - axis;
-        let Some(out) = self.row_kernel(
-            &([view] as List<DeviceTensor>),
-            view.extents,
-            &operand(0).row_softmax(),
-            row_axes,
-            false,
-        ) else {
-            return Placed::Host(self.cpu.softmax_flattened(&self.host(t), axis));
-        };
-        return Placed::Device(out);
-    }
-
-    fn reduce_sum<Axes>(
-        &mut self,
-        t: &Placed<f32, Axes>,
-        axes: List<i32>,
-    ) -> Placed<f32, Axes> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
-        let view = self.device_view(t);
-        let Some(out) = self.reduced(&view, &axes, &operand(0).row_sum(null)) else {
-            return Placed::Host(self.cpu.reduce_sum(&self.host(t), axes));
-        };
-        return Placed::Device(out);
-    }
-
-    fn reduce_mean<Axes>(
-        &mut self,
-        t: &Placed<f32, Axes>,
-        axes: List<i32>,
-    ) -> Placed<f32, Axes> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
-        let view = self.device_view(t);
-        let count = reduced_count(&view.extents, &axes);
-        let Some(out) = self.reduced(&view, &axes, &operand(0).row_sum(Option::Some(count))) else {
-            return Placed::Host(self.cpu.reduce_mean(&self.host(t), axes));
-        };
-        return Placed::Device(out);
-    }
-
-    fn arg_max<Axes>(
-        &mut self,
-        t: &Placed<f32, Axes>,
-        axis: i32,
-    ) -> Placed<i64, Axes> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
-        return self.arg_max_kernel(t, axis);
-    }
-}
-
 impl WebGpuBackend {
-    /// `Backend::arg_max` and `Graph::index_of_max`: one workgroup per part
-    /// of a lane, then one per lane over the parts' winners, each index read
-    /// back as an f32, which holds it exactly: an `i64` tensor lives on the
-    /// host.
+    /// `Graph::arg_max`: one workgroup per part of a lane, then one per
+    /// lane over the parts' winners, each index read back as an f32, which
+    /// holds it exactly: an `i64` tensor lives on the host.
     internal fn arg_max_kernel<Axes>(
         &mut self,
         t: &Placed<f32, Axes>,
@@ -3351,12 +2783,12 @@ impl WebGpuBackend {
         let lane = view.extents[axis];
         // An empty axis breaks the contract the Cpu kernel states.
         if lane == 0 {
-            return Placed::Host(self.cpu.arg_max(&self.host(t), axis));
+            return Placed::Host(arg_max(&self.host(t), axis));
         }
         let lanes = element_count(&view.extents) / lane;
         let operands = [moved] as List<DeviceTensor>;
         if lane > 1 << 24 || lanes > self.max_binding || !self.binds(&operands) {
-            return Placed::Host(self.cpu.arg_max(&self.host(t), axis));
+            return Placed::Host(arg_max(&self.host(t), axis));
         }
         let out = self.allocated(lanes, false);
         let parts = lane.div_ceil(ARG_MAX_PART);
@@ -3408,10 +2840,6 @@ fn moved_last(rank: i32, axes: &List<i32>) -> List<i32> {
     }
     perm.extend(&axes.sorted());
     return perm;
-}
-
-fn operand_views<Axes>(operands: &List<PlacedRead<Axes>>) -> List<DeviceTensor> {
-    return operands.into_iter().map(|o| o.view).collect();
 }
 
 /// The spans an operand list binds, which binding each operand reads, and the

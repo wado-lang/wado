@@ -1,6 +1,6 @@
-//! The WebGPU backend's `group_query_attention` computes what `Cpu`'s does.
-//! Each case prints how far the attended rows and the present keys and values
-//! sit from `Cpu`'s. `wado test` cannot reach a device, so `wado-run-webgpu`'s
+//! The WebGPU graph's attention kernels compute what `Cpu`'s decomposition of
+//! `group_query_attention` does. Each case prints how far the attended rows
+//! and the present keys and values sit from `Cpu`'s. `wado test` cannot reach a device, so `wado-run-webgpu`'s
 //! tests run it:
 //!
 //!     wado run-webgpu package-loam/conformance/webgpu_attention.wado
@@ -23,7 +23,7 @@ use {
     GpuSupportedLimits,
     RecordOptionGpuSize64,
 } from "wasi:webgpu";
-use { Attention, Backend, Cpu, Holds, Placed, Tensor, WebGpuBackend, element_count } from "lib:loam";
+use { Attention, Cpu, Graph, Holds, Placed, Tensor, WebGpuBackend, element_count } from "lib:loam";
 use { deviation, noise } from "lib:loam/example/webgpu/compare.wado";
 
 struct Batch {
@@ -212,6 +212,7 @@ fn attended(
         &v,
         &past_k,
         &past_v,
+        null,
         if turned { Option::Some(&cos) } else { null },
         if turned { Option::Some(&sin) } else { null },
         if c.biased { Option::Some(&bias) } else { null },
@@ -234,6 +235,7 @@ fn attended(
         &gv,
         &gpk,
         &gpv,
+        null,
         if turned { Option::Some(&gcos) } else { null },
         if turned { Option::Some(&gsin) } else { null },
         if c.biased { Option::Some(&gbias) } else { null },
@@ -280,6 +282,7 @@ fn step(
         &v,
         &before.on_cpu.0,
         &before.on_cpu.1,
+        null,
         Option::Some(cos),
         Option::Some(sin),
         null,
@@ -307,6 +310,7 @@ fn step(
         &gv,
         &past_k,
         &past_v,
+        null,
         Option::Some(&gcos),
         Option::Some(&gsin),
         null,

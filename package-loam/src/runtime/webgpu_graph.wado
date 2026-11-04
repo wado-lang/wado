@@ -532,7 +532,7 @@ impl Graph for WebGpuBackend {
         return Placed::Device(view);
     }
 
-    fn index_of_max<Axes>(
+    fn arg_max<Axes>(
         &mut self,
         x: &Placed<f32, Axes>,
         axis: i32,
@@ -904,9 +904,9 @@ fn kernel_signature(recorded: &Recorded, k: &Kernel) -> List<i32> {
         s.push(c);
         s.push(d);
     }
-    let list = |s: &mut List<i32>, l: &List<i32>| {
-        s.push(l.len());
-        s.extend(l);
+    let list = |into: &mut List<i32>, l: &List<i32>| {
+        into.push(l.len());
+        into.extend(l);
     };
     s.push(k.operands.len());
     for let o of &k.operands {

@@ -21,7 +21,7 @@ use {
     softmax,
     strided_gather,
 } from "./hlo.wado";
-use { Attention, Cpu, Tensor, group_query_attention } from "./tensor.wado";
+use { Attention, Cpu, Tensor } from "./tensor.wado";
 
 struct A {
 }
@@ -52,6 +52,15 @@ test "reverse reads each named axis back to front" {
     };
     assert g.reverse(&x, [1]).data == [3, 2, 1, 6, 5, 4] as List<i64>;
     assert g.reverse(&x, [0, 1]).data == [6, 5, 4, 3, 2, 1] as List<i64>;
+}
+
+test "convert casts as ONNX's Cast does" {
+    let g = &mut Cpu {};
+    let floats = t::<f32>([0.0, -2.5, f32::NAN], [3]);
+    let bools = g.convert::<f32, bool, [A]>(&floats);
+    assert bools.data == [false, true, true] as List<bool>;
+    assert g.convert::<bool, i64, [A]>(&bools).data == [0, 1, 1] as List<i64>;
+    assert g.convert::<f32, i64, [A]>(&floats).data[1] == -2;
 }
 
 test "softmax normalizes along its axis" {
@@ -500,10 +509,126 @@ struct Pos {
 struct Half {
 }
 
-/// The composite's decomposition against the kernel it replaces, with rotation
-/// of the whole head or of its first columns only, a past, grouped heads, a
-/// window, a cap and no causal mask.
-test "the attention composite decomposes to what the kernel computes" {
+/// onnxruntime's `GroupQueryAttention` (its `docs/ContribOperators.md`)
+/// computed directly, position by position, for the decomposition to be
+/// checked against. Each key head serves `heads / kv_heads` query heads. Where
+/// `cos` and `sin` are given, a query or key at position `p` turns its halves
+/// `(a, b)` by `(a cos − b sin, b cos + a sin)` of row `p`. Each score is
+/// scaled, capped, and biased by the row of `bias` a batch's and head's extent
+/// of 1 repeats, then masked by `options`.
+fn attended_directly<B, S, Q, K, H, P, T, D, Pos, Half, BB, BH>(
+    q: &Tensor<f32, [B, S, Q]>,
+    k: &Tensor<f32, [B, S, K]>,
+    v: &Tensor<f32, [B, S, K]>,
+    past_k: &Tensor<f32, [B, H, P, D]>,
+    past_v: &Tensor<f32, [B, H, P, D]>,
+    cos: Option<&Tensor<f32, [Pos, Half]>>,
+    sin: Option<&Tensor<f32, [Pos, Half]>>,
+    bias: Option<&Tensor<f32, [BB, BH, S, T]>>,
+    options: &Attention,
+) -> [Tensor<f32, [B, S, Q]>, Tensor<f32, [B, H, T, D]>, Tensor<f32, [B, H, T, D]>] {
+    let [batch, s, kv, past, d] = [q.extents[0], q.extents[1], options.kv_heads, past_k.extents[2], past_k.extents[3]];
+    let heads = options.heads;
+    let total = past + s;
+    let group = heads / kv;
+    let turn = |row: &mut List<f32>, at: i32, position: i32| {
+        let [Some(c), Some(n)] = [cos, sin] else {
+            return;
+        };
+        let half = c.extents[1];
+        for let i of 0..<half {
+            let [cv, sv] = [c.data[position * half + i], n.data[position * half + i]];
+            let [a, b] = [row[at + i], row[at + i + half]];
+            row[at + i] = a * cv - b * sv;
+            row[at + i + half] = b * cv + a * sv;
+        }
+    };
+    let cached = |old: &Tensor<f32, [B, H, P, D]>, new: &Tensor<f32, [B, S, K]>, turned: bool| -> Tensor<f32, [B, H, T, D]> {
+        let mut data = List::<f32>::with_capacity(batch * kv * total * d);
+        for let bi of 0..<batch {
+            for let h of 0..<kv {
+                let from = (bi * kv + h) * past * d;
+                data.extend_from_slice(old.data[from..<from + past * d]);
+                for let i of 0..<s {
+                    let at = data.len();
+                    let row = ((bi * s + i) * kv + h) * d;
+                    data.extend_from_slice(new.data[row..<row + d]);
+                    if turned {
+                        turn(&mut data, at, past + i);
+                    }
+                }
+            }
+        }
+        return Tensor {
+            data,
+            extents: [batch, kv, total, d],
+        };
+    };
+    let present_k = cached(past_k, k, true);
+    let present_v = cached(past_v, v, false);
+    let mut out = List::<f32>::filled(batch * s * heads * d, 0.0);
+    let mut query = List::<f32>::filled(d, 0.0);
+    let mut weights = List::<f32>::filled(total, 0.0);
+    for let bi of 0..<batch {
+        for let i of 0..<s {
+            let position = past + i;
+            for let h of 0..<heads {
+                let row = ((bi * s + i) * heads + h) * d;
+                for let e of 0..<d {
+                    query[e] = q.data[row + e];
+                }
+                turn(&mut query, 0, position);
+                let keys = (bi * kv + h / group) * total * d;
+                let mut top = f32::NEG_INFINITY;
+                for let j of 0..<total {
+                    let masked = options.causal && j > position || options.window > 0 && position - j >= options.window;
+                    if masked {
+                        weights[j] = f32::NEG_INFINITY;
+                        continue;
+                    }
+                    let mut score: f32 = 0.0;
+                    for let e of 0..<d {
+                        score += query[e] * present_k.data[keys + j * d + e];
+                    }
+                    score *= options.scale;
+                    if options.softcap > 0.0 {
+                        score = options.softcap * f32::tanh(score / options.softcap);
+                    }
+                    if let Some(b) = bias {
+                        let [bb, bh] = [if b.extents[0] == 1 { 0 } else { bi }, if b.extents[1] == 1 { 0 } else { h }];
+                        score += b.data[((bb * b.extents[1] + bh) * s + i) * total + j];
+                    }
+                    weights[j] = score;
+                    top = f32::ieee754_max(top, score);
+                }
+                let mut sum: f32 = 0.0;
+                for let j of 0..<total {
+                    weights[j] = if weights[j] == f32::NEG_INFINITY { 0.0 } else { f32::exp(weights[j] - top) };
+                    sum += weights[j];
+                }
+                for let j of 0..<total {
+                    let w = weights[j] / sum;
+                    if w == 0.0 {
+                        continue;
+                    }
+                    for let e of 0..<d {
+                        out[row + e] += w * present_v.data[keys + j * d + e];
+                    }
+                }
+            }
+        }
+    }
+    return [
+        Tensor { data: out, extents: q.extents },
+        present_k,
+        present_v,
+    ];
+}
+
+/// The composite's decomposition against the attention computed directly,
+/// with rotation of the whole head or of its first columns only, a past,
+/// grouped heads, a window, a cap and no causal mask.
+test "the attention composite decomposes to what the direct attention computes" {
     let [batch, s, heads, kv, past, d, positions] = [2, 3, 4, 2, 2, 4, 8];
     let q = Tensor::<f32, [Bt, St, Qt]> {
         data: noise(batch * s * heads * d, 1),
@@ -547,7 +672,7 @@ test "the attention composite decomposes to what the kernel computes" {
             data: noise(positions * half, 7),
             extents: [positions, half],
         };
-        let want = group_query_attention::<Bt, St, Qt, Kt, Ht, Pt, Tt, Dt, Pos, Half, Bt, Ht>(
+        let want = attended_directly::<Bt, St, Qt, Kt, Ht, Pt, Tt, Dt, Pos, Half, Bt, Ht>(
             &q,
             &k,
             &v,

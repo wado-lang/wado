@@ -273,9 +273,15 @@ pub affine trait Graph: Holds with _ {
     }
 
     /// onnxruntime's `GroupQueryAttention` (its `docs/ContribOperators.md`),
-    /// as `group_query_attention` in the kernels computes it, decomposed into
-    /// the operations above. Returns the attended queries, then the past key
-    /// and value with the new (turned) positions after them. Where
+    /// decomposed into the operations above, over `[batch, sequence, heads ×
+    /// head]` queries, keys and values, the `S` new positions after the `P` a
+    /// past of `[batch, key heads, P, head]` caches. Each key head serves
+    /// `heads / kv_heads` query heads. Where `cos` and `sin` are given, a query
+    /// or key at position `p` turns its halves `(a, b)` by
+    /// `(a cos − b sin, b cos + a sin)` of row `p`. Each score is scaled,
+    /// capped, and biased by the row of `bias` a batch's and head's extent of 1
+    /// repeats, then masked by `options`. Returns the attended queries, then the
+    /// past key and value with the new (turned) positions after them. Where
     /// `past_length` is given, the past is a buffer of fixed capacity holding
     /// that many positions, and the present is the same buffer, the new
     /// positions written from there: onnxruntime's shared buffer. The buffer
@@ -313,9 +319,9 @@ pub affine trait Graph: Holds with _ {
         );
     }
 
-    /// ONNX's `ArgMax` keeping its axis, as `Backend::arg_max` ranks it. Named
-    /// apart from it, so a call on a type that is both is not ambiguous.
-    fn index_of_max<Axes>(&mut self, x: &Self::Tensor<f32, Axes>, axis: i32) -> Self::Tensor<i64, Axes> with _;
+    /// ONNX's `ArgMax` keeping its axis: the index of each lane's first
+    /// greatest element, a NaN greatest of all.
+    fn arg_max<Axes>(&mut self, x: &Self::Tensor<f32, Axes>, axis: i32) -> Self::Tensor<i64, Axes> with _;
 }
 
 /// `Graph::group_query_attention`'s decomposition, which a graph that runs
@@ -859,7 +865,7 @@ impl Graph for Cpu {
         return Tensor { data, extents: x.extents };
     }
 
-    fn index_of_max<Axes>(&mut self, x: &Tensor<f32, Axes>, axis: i32) -> Tensor<i64, Axes> {
+    fn arg_max<Axes>(&mut self, x: &Tensor<f32, Axes>, axis: i32) -> Tensor<i64, Axes> {
         return arg_max(x, axis);
     }
 

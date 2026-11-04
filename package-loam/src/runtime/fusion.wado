@@ -600,7 +600,7 @@ fn same_dims(recorded: &Recorded, launch: &Launch, k: &Kernel) -> bool {
         Joined(ks) => &ks[0],
         _ => unreachable(),
     };
-    let dims_of = |k: &Kernel| match recorded.nodes[k.product.unwrap()].op {
+    let dims_of = |kernel: &Kernel| match recorded.nodes[kernel.product.unwrap()].op {
         DotGeneral(dims) => dims,
         _ => unreachable(),
     };

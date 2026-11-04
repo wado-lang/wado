@@ -2589,7 +2589,7 @@ fn built_call(
         let x = shapes[node.inputs[0]];
         let axis = settled(arg_max_axis(node, x.rank()));
         let a = masked_along(operand(0), &x, axis, float_literal(f32::NEG_INFINITY), symbols)?;
-        return ranked(node, checked, `backend.index_of_max(${a}, ${axis})`, symbols);
+        return ranked(node, checked, `backend.arg_max(${a}, ${axis})`, symbols);
     }
     if op == "Concat" {
         return built_concat(node, checked, exprs, symbols);
