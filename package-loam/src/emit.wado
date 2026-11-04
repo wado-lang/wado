@@ -206,7 +206,8 @@ pub fn emit(
     let scalars = scalar_literals(checked);
     let literals = kernel_literals(graph, checked, &scalars);
     let built = graph_literals(graph, checked);
-    let carriers = symbol_carriers(graph, shapes);
+    let crossing = Crossing::of(graph, cache_pairs(graph));
+    let carriers = symbol_carriers(graph, shapes, &crossing.cached);
     let mut spelled = literals.spelled;
     spelled.extend(&built.spelled);
     let names = Names::of(graph, checked, &spelled, &axes, &carriers, imports_map)?;
@@ -227,8 +228,7 @@ pub fn emit(
     let decided = plan(graph, checked, fuse);
     let rhs = decided.rhs;
     let together = Together::of(graph, &decided);
-    let crossing = Crossing::of(graph, cache_pairs(graph));
-    let grown = grown_lengths(checked, &crossing);
+    let grown = grown_lengths(checked, &crossing, &carriers);
     emit_weights(&mut w, graph, checked, &names, &held, &kept, &rhs, &together, &placement, grown matches { Some(_) });
     let exprs = Operands {
         values: HashMap::<String, String>::new(),
@@ -1119,19 +1119,28 @@ impl Symbols {
         self.order.push(*symbol);
     }
 
-    /// Each grown symbol bound to the length the graph owes it, as `owed` says.
-    fn derive_owed(&mut self, owed: &List<[Grown, Poly]>) {
+    /// Each grown symbol bound to the length the graph owes it, where `owed`
+    /// gives one.
+    fn derive_owed(&mut self, owed: &List<[Grown, Option<Poly>]>) {
         for let [g, length] of *owed {
-            self.derive(&g.symbol, &length);
+            if let Some(l) = length {
+                self.derive(&g.symbol, &l);
+            }
         }
     }
 
     /// The symbols as `build` reads them where `padded` names a symbol: its
     /// extent the capacity, and its value `lengths`'s field of the symbol's name.
     /// A grown one's past holds the present's capacity, so its extent is what
-    /// `owed` leaves of that beside the other lengths. Each of `conditions` is
-    /// read from `chosen`.
-    fn padded(&self, padded: &List<String>, owed: &List<[Grown, Poly]>, conditions: &List<String>, names: &Names) -> Symbols {
+    /// `owed` leaves of that beside the other lengths, where an input outside
+    /// the cache does not carry it. Each of `conditions` is read from `chosen`.
+    fn padded(
+        &self,
+        padded: &List<String>,
+        owed: &List<[Grown, Option<Poly>]>,
+        conditions: &List<String>,
+        names: &Names,
+    ) -> Symbols {
         let mut symbols = *self;
         for let c of *conditions {
             symbols.chosen[c] = `chosen.${names.get(&c)}`;
@@ -1139,12 +1148,11 @@ impl Symbols {
         for let symbol of *padded {
             symbols.lengths[symbol] = `lengths.${self.idents[symbol]}`;
         }
-        for let [g, length] of *owed {
-            if padded.contains(&g.symbol) {
-                symbols.derive(&g.symbol, &length);
-                symbols.grown.insert(g.symbol);
-            }
+        let grown: List<[Grown, Option<Poly>]> = owed.into_iter().filter(|o| padded.contains(&o.0.symbol)).map(|o| *o).collect();
+        for let [g, _] of &grown {
+            symbols.grown.insert(g.symbol);
         }
+        symbols.derive_owed(&grown);
         return symbols;
     }
 
@@ -1298,19 +1306,30 @@ struct Carrier {
     axis: i32,
 }
 
-fn symbol_carriers(graph: &Graph, shapes: &HashMap<String, Shape>) -> List<Carrier> {
-    let mut extents: List<Extent> = [];
-    let mut sites: List<[String, i32]> = [];
-    for let vi of &graph.inputs {
-        for let [axis, a] of shapes.get(vi.name).unwrap().axes.into_iter().enumerate() {
-            extents.push(a.extent);
-            sites.push([vi.name, axis]);
+/// Each symbol an input's axis carries, read off an input outside the cache
+/// where one carries it: a cache `compute` holds is at a capacity.
+fn symbol_carriers(graph: &Graph, shapes: &HashMap<String, Shape>, cached: &HashSet<String>) -> List<Carrier> {
+    let mut found: List<Carrier> = [];
+    let mut read = HashSet::<String>::new();
+    for let from_cache of [false, true] {
+        let mut extents: List<Extent> = [];
+        let mut sites: List<[String, i32]> = [];
+        for let vi of &graph.inputs {
+            if cached.contains(vi.name) != from_cache {
+                continue;
+            }
+            for let [axis, a] of shapes.get(vi.name).unwrap().axes.into_iter().enumerate() {
+                extents.push(a.extent);
+                sites.push([vi.name, axis]);
+            }
+        }
+        for let s of solved(&extents, &read) {
+            read.insert(s.symbol);
+            let [input, axis] = sites[s.at];
+            found.push(Carrier { solved: s, input, axis });
         }
     }
-    return solved(&extents).into_iter().map(|s| {
-        let [input, axis] = sites[s.at];
-        return Carrier { solved: s, input, axis };
-    }).collect();
+    return found;
 }
 
 impl Operands {
@@ -1515,7 +1534,7 @@ fn emit_compute(
     read: &List<String>,
     kept: &List<String>,
     crossing: &Crossing,
-    owed: &List<[Grown, Poly]>,
+    owed: &List<[Grown, Option<Poly>]>,
     conditions: &List<String>,
 ) -> Result<(), EmitError> {
     let shapes = &checked.shapes;
@@ -1529,7 +1548,8 @@ fn emit_compute(
     let mut lines: List<String> = [];
     let taken: List<ValueInfo> = graph.inputs.into_iter().filter(|vi| !crossing.cached.contains(vi.name)).collect();
     // Every symbolic axis is its symbols' arithmetic over the lengths, but for
-    // the axis a symbol is read from.
+    // the axis a symbol is read from as itself. One spelling arithmetic over it
+    // may hold no length the arithmetic gives.
     for let vi of &taken {
         let ident = names.get(&vi.name);
         compute.add_param(ident, `&${tensor_type(checked, held, &vi.name)}`);
@@ -1537,7 +1557,8 @@ fn emit_compute(
             let Symbolic(length) = axis.extent else {
                 continue;
             };
-            if carriers.into_iter().any(|c| c.input == vi.name && c.axis == i) {
+            let carries = carriers.into_iter().any(|c| c.input == vi.name && c.axis == i);
+            if carries && axis.extent.lone_symbol() matches { Some(_) } {
                 continue;
             }
             lines.push(
@@ -1559,10 +1580,13 @@ fn emit_compute(
         let fields: List<String> = chosen.into_iter().map(|c| `${c}: Option::Some(${c}.data[0])`).collect();
         lines.push(`let chosen = ${CHOSEN} { ${fields.join(", ")} };`);
     }
+    let mut nonnegative = HashSet::<String>::new();
     for let [g, _] of *owed {
         let past = symbols.spell(&Poly::symbol(&g.symbol))?;
         let held_extent = `backend.extents_of(&cache.${names.get(&g.past)})[${g.axis}] as i64`;
-        lines.push(wado`refuse(unmet(${past}, "${g.symbol} must not be negative"));`);
+        if nonnegative.insert(g.symbol) {
+            lines.push(wado`refuse(unmet(${past}, "${g.symbol} must not be negative"));`);
+        }
         lines.push(wado`refuse(unmet(${held_extent} - ${past}, "${g.past} holds fewer positions than ${g.symbol}"));`);
     }
     let mut capacities = at_capacities(&mut symbols, &mut lines, padded, owed, names)?;
@@ -1725,7 +1749,7 @@ fn emit_least_extents(
     checked: &Checked,
     carriers: &List<Carrier>,
     names: &Names,
-    owed: &List<[Grown, Poly]>,
+    owed: &List<[Grown, Option<Poly>]>,
     padded: &List<String>,
     taken: &List<ProgramArgument>,
 ) -> Result<(), EmitError> {
@@ -1797,23 +1821,32 @@ fn emit_held(
 
 /// `symbols` with each padded length's capacity standing for it in every
 /// extent, each bound by a line `lines` takes. A grown past's holds the present
-/// too, which the pass writes into it.
+/// too, which the pass writes into it, so where the present is the past and
+/// more, the past's capacity is what the present's leaves of it.
 fn at_capacities(
     symbols: &mut Symbols,
     lines: &mut List<String>,
     padded: &List<String>,
-    owed: &List<[Grown, Poly]>,
+    owed: &List<[Grown, Option<Poly>]>,
     names: &Names,
 ) -> Result<Symbols, EmitError> {
     let mut capacities = *symbols;
-    for let symbol of *padded {
-        let reach = match owed.into_iter().find(|o| o.0.symbol == symbol) {
-            Some([g, _]) => g.present,
-            None => Poly::symbol(&symbol),
-        };
-        let length = symbols.spell(&reach)?;
+    let grows = |symbol: &String| owed.into_iter().find(|o| o.0.symbol == *symbol);
+    // The rest of a present is spelled at the capacities of the lengths it reads.
+    let mut ordered: List<String> = padded.into_iter().filter(|s| grows(s) matches { None }).map(|s| *s).collect();
+    ordered.extend(&padded.into_iter().filter(|s| grows(s) matches { Some(_) }).map(|s| *s).collect());
+    for let symbol of ordered {
         let capacity = names.get(&capacity_key(&symbol));
-        lines.push(`let ${capacity} = capacity_of(to_extent(${length})) as i64;`);
+        let Some([g, _]) = grows(&symbol) else {
+            lines.push(`let ${capacity} = capacity_of(to_extent(${symbols.spell(&Poly::symbol(&symbol))?})) as i64;`);
+            capacities.idents[symbol] = capacity;
+            continue;
+        };
+        let present = `capacity_of(to_extent(${symbols.spell(&g.present)?})) as i64`;
+        lines.push(match g.present.linear_in(&symbol) {
+            Some([1, rest]) => `let ${capacity} = ${present} - (${capacities.spell(&rest)?});`,
+            _ => `let ${capacity} = ${present};`,
+        });
         capacities.idents[symbol] = capacity;
     }
     return Result::Ok(capacities);
@@ -2001,13 +2034,15 @@ fn grown_axes(checked: &Checked, crossing: &Crossing) -> List<Grown> {
     return grown;
 }
 
-/// Each axis a pass grows, and the length the graph owes its past to be; `None`
-/// where it owes one none, and no `compute` runs the graph.
-fn grown_lengths(checked: &Checked, crossing: &Crossing) -> Option<List<[Grown, Poly]>> {
+/// Each axis a pass grows, and the length the graph owes its past to be, or
+/// none where an input outside the cache carries it; `None` where neither
+/// gives it, and no `compute` runs the graph.
+fn grown_lengths(checked: &Checked, crossing: &Crossing, carriers: &List<Carrier>) -> Option<List<[Grown, Option<Poly>]>> {
     let grown = grown_axes(checked, crossing);
-    let mut owed: List<[Grown, Poly]> = [];
+    let mut owed: List<[Grown, Option<Poly>]> = [];
     for let g of grown {
-        owed.push([g, owed_value(checked, &g.symbol, &grown)?]);
+        let carried = carriers.into_iter().any(|c| c.solved.symbol == g.symbol && !crossing.cached.contains(c.input));
+        owed.push([g, if carried { null } else { Option::Some(owed_value(checked, &g.symbol, &grown)?) }]);
     }
     return Option::Some(owed);
 }
@@ -2060,12 +2095,12 @@ fn solved_in(owed: &List<Condition>, symbol: &String, grown: &List<Grown>) -> Op
 }
 
 /// `Cache { .. }` of the fields of `cache`, each grown axis whose length is
-/// padded fitted to its capacity.
+/// padded fitted to its present's capacity.
 fn fitted_at_capacities(
     checked: &Checked,
     names: &Names,
     crossing: &Crossing,
-    owed: &List<[Grown, Poly]>,
+    owed: &List<[Grown, Option<Poly>]>,
     padded: &List<String>,
     capacities: &mut Symbols,
 ) -> Result<String, EmitError> {
@@ -2078,7 +2113,7 @@ fn fitted_at_capacities(
             if g.past != past || !padded.contains(&g.symbol) {
                 continue;
             }
-            let capacity = capacities.spell_extent(&Poly::symbol(&g.symbol))?;
+            let capacity = capacities.spell_extent(&g.present)?;
             field = `fitted::<${BACKEND_PARAM}, ${typed}>(backend, &${field}, ${g.axis}, ${capacity})`;
         }
         fields.push(`${ident}: ${field}`);

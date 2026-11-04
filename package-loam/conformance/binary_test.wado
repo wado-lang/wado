@@ -8,8 +8,9 @@ use {
     Axis01,
     Axis02,
     Axis03,
-    Weights,
-    forward,
+    Model,
+    Params,
+    compute,
 } from "../tests/onnx/pytorch-operator/test_operator_pow/model.onnx"
     with {
         type: "onnx",
@@ -27,11 +28,11 @@ test "Pow reproduces the output ONNX ships" {
         #include_bytes("../tests/onnx/pytorch-operator/test_operator_pow/test_data_set_0/output_0.pb"),
     );
 
-    let got = forward(
+    let got = compute(
         &mut Cpu {},
         &Tensor::<f32, [Axis00, Axis01, Axis02, Axis03]> { data: x, extents: x_extents },
         &Tensor::<f32, [Axis00, Axis01, Axis02, Axis03]> { data: y, extents: y_extents },
-        &Weights {}.prepare(&mut Cpu {}),
+        &mut Model::new(Params::embedded(&mut Cpu {})),
     );
 
     assert got.extents == want_extents;

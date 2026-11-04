@@ -1,7 +1,7 @@
 //! GPT-2 (124M) as a library: its tokenizer, and the model that picks the next
 //! token greedily, keeping the attention cache between calls.
 
-use { Backend, CheckpointBytes, Graph, Holds, LoadError, Tensor } from "lib:loam";
+use { CheckpointBytes, Graph, LoadError, Tensor } from "lib:loam";
 /// GPT-2's byte-level BPE, with `<|endoftext|>` as its one special token.
 pub use { Tokenizer } from "./tokenizer.json"
     with {
@@ -28,23 +28,25 @@ use gpt2 from "https://huggingface.co/openai-community/gpt2/resolve/607a30d783df
         },
     };
 
-/// GPT-2 with its weights loaded where `Bk` runs the kernels.
-pub struct Model<affine Bk: Backend> {
+/// GPT-2 with its weights loaded where `Bk` runs each operation of the graph
+/// `build` adds to, computed from inputs padded to capacities and a cache of
+/// fixed capacity.
+pub struct Model<affine Bk: Graph> {
     backend: Bk,
-    weights: gpt2::Prepared<Bk>,
+    model: gpt2::Model<Bk>,
     /// The ids the cache holds the keys and values of.
     seen: List<i32>,
     cache: gpt2::Cache<Bk>,
 }
 
-impl<affine Bk: Backend> Model<Bk> {
+impl<affine Bk: Graph> Model<Bk> {
     /// Loads the weights onto `backend` from `model`, the bytes of the
     /// `decoder_model_merged.onnx` the build read.
     pub fn load<affine Ck: CheckpointBytes>(backend: Bk, model: &Ck) -> Result<Model<Bk>, LoadError> with _ {
         let mut on = backend;
-        let weights = gpt2::Prepared::load(&mut on, model)?;
+        let held = gpt2::Model::new(gpt2::Params::load(&mut on, model)?);
         let cache = gpt2::Cache::empty(&mut on);
-        return Ok(Model { backend: on, weights, seen: [], cache });
+        return Ok(Model { backend: on, model: held, seen: [], cache });
     }
 
     /// The backend the model runs on.
@@ -52,7 +54,8 @@ impl<affine Bk: Backend> Model<Bk> {
         return &self.backend;
     }
 
-    /// How many positions the model reads. `forward` refuses a longer sequence.
+    /// How many positions the model reads. `next_token` refuses a longer
+    /// sequence.
     pub fn positions(&self) -> i32 {
         return positions();
     }
@@ -66,76 +69,6 @@ impl<affine Bk: Backend> Model<Bk> {
     /// The token the model ranks first after `ids`. Where `ids` extends the
     /// ids of the last call, only the new ones run, against the cached keys
     /// and values of the rest.
-    pub fn next_token(&mut self, ids: &List<i32>) -> i32 with _ {
-        assert_readable(ids);
-        if !extends(&self.seen, ids) {
-            self.forget();
-        }
-        let fresh: List<i64> = ids.into_iter().skip(self.seen.len()).map(|id| id as i64).collect();
-        let total = ids.len();
-        // The cache still held lives through this pass. Retained here rather
-        // than as the last pass wrote it, a forgotten cache is released.
-        self.cache.retain(&mut self.backend);
-        self.backend.begin();
-        let input_ids = self.backend.upload(&Tensor::<i64, [gpt2::BatchSize, gpt2::SequenceLength]> {
-            data: fresh,
-            extents: [gpt2::BatchSize::EXTENT, fresh.len()],
-        });
-        let mask = self.backend.upload(&Tensor::<i64, [gpt2::BatchSize, gpt2::SequenceLength]> {
-            data: List::<i64>::filled(total, 1),
-            extents: [gpt2::BatchSize::EXTENT, total],
-        });
-        let use_cache_branch = self.backend.upload(&Tensor::<bool, [gpt2::UseCacheBranch0]> {
-            data: [!self.seen.is_empty()],
-            extents: [1],
-        });
-        let passed = gpt2::pass(
-            &mut self.backend,
-            &input_ids,
-            &mask,
-            &use_cache_branch,
-            &self.cache,
-            &self.weights,
-        );
-        let best = self.backend.download(&passed.logits).data[0] as i32;
-        self.cache = passed.cache;
-        self.seen = *ids;
-        return best;
-    }
-}
-
-/// GPT-2 as the graph `build` adds to, computed where `Bk` runs each operation
-/// as it is built, from inputs padded to capacities and a cache of fixed
-/// capacity.
-pub struct Built<affine Bk: Graph> {
-    backend: Bk,
-    model: gpt2::Model<Bk>,
-    seen: List<i32>,
-    cache: gpt2::Cache<Bk>,
-}
-
-impl<affine Bk: Graph> Built<Bk> {
-    /// Loads the weights onto `backend` from `model`, as `Model::load` does.
-    pub fn load<affine Ck: CheckpointBytes>(backend: Bk, model: &Ck) -> Result<Built<Bk>, LoadError> with _ {
-        let mut on = backend;
-        let held = gpt2::Model::new(gpt2::Params::load(&mut on, model)?);
-        let cache = gpt2::Cache::empty(&mut on);
-        return Ok(Built { backend: on, model: held, seen: [], cache });
-    }
-
-    /// The backend the model runs on.
-    pub fn backend(&self) -> &Bk {
-        return &self.backend;
-    }
-
-    /// Empties the cache, so the next call reads its ids from the start.
-    pub fn forget(&mut self) with _ {
-        self.seen = [];
-        self.cache = gpt2::Cache::empty(&mut self.backend);
-    }
-
-    /// The token the model ranks first after `ids`, as `Model::next_token`
-    /// picks it.
     pub fn next_token(&mut self, ids: &List<i32>) -> i32 with _ {
         assert_readable(ids);
         if !extends(&self.seen, ids) {

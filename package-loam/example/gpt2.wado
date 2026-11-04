@@ -60,11 +60,11 @@ fn decode(
     tokens: &List<i32>,
     past_length: i32,
     cache: &gpt2::Cache<Cpu>,
-    weights: &gpt2::Prepared<Cpu>,
+    model: &mut gpt2::Model<Cpu>,
 ) -> [i32, gpt2::Cache<Cpu>] {
     let length = past_length + tokens.len();
     let ids: List<i64> = tokens.into_iter().map(|id| id as i64).collect();
-    let o = gpt2::forward(
+    let o = gpt2::compute(
         &mut Cpu {},
         &Tensor::<i64, [gpt2::BatchSize, gpt2::SequenceLength]> {
             data: ids,
@@ -79,20 +79,20 @@ fn decode(
             extents: [1],
         },
         cache,
-        weights,
+        model,
     );
     return [best(&o.logits), o.cache];
 }
 
 /// `prompt` extended by `steps` tokens, each the one the model ranks first.
-fn greedy(prompt: &List<i32>, steps: i32, weights: &gpt2::Prepared<Cpu>) -> List<i32> {
+fn greedy(prompt: &List<i32>, steps: i32, model: &mut gpt2::Model<Cpu>) -> List<i32> {
     assert 1 <= prompt.len() <= longest_prompt(steps);
     let mut ids = *prompt;
-    let [first, prefilled] = decode(prompt, 0, &gpt2::Cache::empty(&mut Cpu {}), weights);
+    let [first, prefilled] = decode(prompt, 0, &gpt2::Cache::empty(&mut Cpu {}), model);
     ids.push(first);
     let mut cache = prefilled;
     for let _ of 1..<steps {
-        let [next, grown] = decode(&[ids[ids.len() - 1]], ids.len() - 1, &cache, weights);
+        let [next, grown] = decode(&[ids[ids.len() - 1]], ids.len() - 1, &cache, model);
         ids.push(next);
         cache = grown;
     }
@@ -105,13 +105,16 @@ export fn run() with (Stdout, Stderr, Environment) {
         prompt = "Hello, my name is";
     }
     let ids = Tokenizer::encode(&prompt);
-    let weights = gpt2::Prepared::embedded(&mut Cpu {});
     let longest = longest_prompt(STEPS);
     if !(1 <= ids.len() <= longest) {
         eprintln(`the prompt is ${ids.len()} tokens, and must be 1 to ${longest}`);
         return;
     }
-    println(Tokenizer::decode(&greedy(&ids, STEPS, &weights)));
+    println(Tokenizer::decode(&greedy(&ids, STEPS, &mut embedded())));
+}
+
+fn embedded() -> gpt2::Model<Cpu> {
+    return gpt2::Model::new(gpt2::Params::embedded(&mut Cpu {}));
 }
 
 struct Generated {
@@ -127,13 +130,13 @@ struct Oracle {
 
 #[timeout_ms(30000)]
 test "each prompt continues with the tokens onnxruntime picks greedily" {
-    let weights = gpt2::Prepared::embedded(&mut Cpu {});
+    let mut model = embedded();
     let oracle = from_string::<Oracle>(#include_str("../tests/models/tiny-gpt2/generate.json")).unwrap();
     for let case of oracle.generate {
         assert Tokenizer::encode(&case.prompt) == case.ids;
         let mut want = case.ids;
         want.extend(&case.generated);
-        let got = greedy(&case.ids, case.generated.len(), &weights);
+        let got = greedy(&case.ids, case.generated.len(), &mut model);
         assert got == want;
         assert Tokenizer::decode(&got) == case.text;
     }
@@ -141,7 +144,6 @@ test "each prompt continues with the tokens onnxruntime picks greedily" {
 
 #[timeout_ms(30000)]
 test "the longest prompt fills every position the model reads" {
-    let weights = gpt2::Prepared::embedded(&mut Cpu {});
     let prompt = List::<i32>::filled(longest_prompt(2), 0);
-    assert greedy(&prompt, 2, &weights).len() == positions() + 1;
+    assert greedy(&prompt, 2, &mut embedded()).len() == positions() + 1;
 }

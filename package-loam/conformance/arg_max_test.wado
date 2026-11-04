@@ -1,8 +1,8 @@
-//! The `arg_max` option: `forward` and `compute` return the index of each
-//! lane's greatest element, here at the last position `last` keeps.
+//! The `arg_max` option: `compute` returns the index of each lane's greatest
+//! element, here at the last position `last` keeps.
 
 use { Cpu, Tensor } from "lib:loam";
-use { N, S, W1, X2, Model, Params, Weights, compute, forward } from "./ranked.onnxtext"
+use { N, S, W1, X2, Model, Params, compute } from "./ranked.onnxtext"
     with {
         type: "onnxtext",
         generator: {
@@ -68,13 +68,7 @@ test "the ranked axis keeps the extent the weight fixes" {
     assert W1::EXTENT == 3;
 }
 
-test "forward returns the index of each lane's greatest element" {
-    let got = forward(&mut Cpu {}, &x(3), &w(), &Weights {}.prepare(&mut Cpu {}));
-    assert got.extents == [2, 1, 1];
-    assert got.data == ranked_by_hand(3);
-}
-
-test "compute returns what forward does" {
+test "compute returns the index of each lane's greatest element" {
     let mut cpu = Cpu {};
     let mut model = Model::new(Params::embedded(&mut cpu));
     let got = compute(&mut cpu, &x(3), &w(), &mut model);

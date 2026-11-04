@@ -1,6 +1,4 @@
-//! Times MNIST-12's forward pass on the CPU, its kernels fused as the generator
-//! fuses them. Set `fuse: false` below for the time each kernel writing its
-//! output takes; WEP 2026-09-20 records both.
+//! Times MNIST-12's `compute` on the CPU.
 //!
 //!     wado run package-loam/example/mnist_bench.wado
 
@@ -11,14 +9,11 @@ use { Cpu, Tensor } from "lib:loam";
 use mnist from "../tests/models/mnist-12/model.onnx"
     with {
         type: "onnx",
-        generator: {
-            module: "lib:loam",
-            options: { fuse: true },
-        },
+        generator: { module: "lib:loam" },
     };
 
-/// A digit-sized image of a fixed gradient: what the pass computes is not what
-/// it times.
+/// A digit-sized image of a fixed gradient: what the model computes is not
+/// what it times.
 fn image() -> Tensor<f32, [mnist::Input30, mnist::Input31, mnist::Input32, mnist::Input33]> {
     let mut data: List<f32> = [];
     for let i of 0..<784 {
@@ -30,14 +25,18 @@ fn image() -> Tensor<f32, [mnist::Input30, mnist::Input31, mnist::Input32, mnist
     };
 }
 
+fn embedded() -> mnist::Model<Cpu> {
+    return mnist::Model::new(mnist::Params::embedded(&mut Cpu {}));
+}
+
 test "smoke" {
-    let logits = mnist::forward(&mut Cpu {}, &image(), &mnist::Prepared::embedded(&mut Cpu {}));
+    let logits = mnist::compute(&mut Cpu {}, &image(), &mut embedded());
     assert logits.extents == [1, 10] as List<i32>;
 }
 
 export fn run() with (Stdout, MonotonicClock) {
-    let weights = mnist::Prepared::embedded(&mut Cpu {});
+    let mut model = embedded();
     let x = image();
-    let mut b = Benchmark { name: "MNIST-12 forward on the CPU", work_per_iter: Option::Some(1.0), unit: "images" };
-    b.run("", || mnist::forward(&mut Cpu {}, &x, &weights).data[0]);
+    let mut b = Benchmark { name: "MNIST-12 compute on the CPU", work_per_iter: Option::Some(1.0), unit: "images" };
+    b.run("", || mnist::compute(&mut Cpu {}, &x, &mut model).data[0]);
 }

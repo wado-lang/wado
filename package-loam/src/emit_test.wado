@@ -1354,9 +1354,12 @@ test "compute holds a cache at the capacity of the total, its past's length what
     let computed = out.substr_bytes(out.find("pub fn compute").unwrap(), out.len());
     assert computed.contains("cache: &Cache<Bk>, model: &mut Model<Bk>) -> Outputs<Bk>");
     assert computed.contains("let dim_P = -dim_S + dim_T;");
-    assert computed.contains("let capacity_P = capacity_of(to_extent(dim_P + dim_S)) as i64;");
+    // The cache holds the present at its capacity, so the past's is what that
+    // leaves beside the sequence's.
+    assert computed.contains("let capacity_P = capacity_of(to_extent(dim_P + dim_S)) as i64 - (capacity_S);");
+    assert computed.split("\"P must not be negative\"").count() == 2;
     assert computed.contains(
-        "fitted::<Bk, f32, [Q0, PastKeyValues0Key1, P, PastKeyValues0Key3]>(backend, &cache.past_key_values_0_key, 2, to_extent(capacity_P))",
+        "fitted::<Bk, f32, [Q0, PastKeyValues0Key1, P, PastKeyValues0Key3]>(backend, &cache.past_key_values_0_key, 2, to_extent(capacity_P + capacity_S))",
     );
     // A device releases the pass before at `begin`, but for the cache it retains.
     let begun = computed.find("backend.begin();").unwrap();

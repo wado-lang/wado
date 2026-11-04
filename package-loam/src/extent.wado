@@ -104,10 +104,11 @@ pub struct Solved {
 
 /// The symbols the run can read back from `extents`, each from the first
 /// extent that is it alone, then each left from the first extent linear in it
-/// once those before it are solved, in the order the run solves them.
-pub fn solved(extents: &List<Extent>) -> List<Solved> {
+/// once those before it are solved, in the order the run solves them. A symbol
+/// `read` holds is solved already.
+pub fn solved(extents: &List<Extent>, read: &HashSet<String>) -> List<Solved> {
     let mut found: List<Solved> = [];
-    let mut known = HashSet::<String>::new();
+    let mut known = *read;
     for let alone of [true, false] {
         let mut more = true;
         while more {

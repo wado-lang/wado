@@ -504,7 +504,7 @@ fn unspell_unbound(graph: &Graph, shapes: &mut HashMap<String, Shape>) {
     for let vi of &graph.inputs {
         extents.extend(&shapes[vi.name].extents());
     }
-    let bound: List<String> = solved(&extents).into_iter().map(|s| s.symbol).collect();
+    let bound: List<String> = solved(&extents, &HashSet::new()).into_iter().map(|s| s.symbol).collect();
     for let vi of &graph.inputs {
         let Dims(dims) = vi.rank else {
             continue;

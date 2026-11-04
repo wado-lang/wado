@@ -2,20 +2,20 @@
 //! literal tensor.
 
 use { Cpu, Tensor } from "lib:loam";
-use { Ids0, Ids1, Prepared, Y2, forward } from "./embedding.onnxtext"
+use { Ids0, Ids1, Model, Params, Y2, compute } from "./embedding.onnxtext"
     with {
         type: "onnxtext",
         generator: { module: "lib:loam" },
     };
 
 test "each token's row adds its position's row, and -1 names the last token" {
-    let got: Tensor<f32, [Ids0, Ids1, Y2]> = forward(
+    let got: Tensor<f32, [Ids0, Ids1, Y2]> = compute(
         &mut Cpu {},
         &Tensor::<i64, [Ids0, Ids1]> {
             data: [3, 0, -1],
             extents: [1, 3],
         },
-        &Prepared::embedded(&mut Cpu {}),
+        &mut Model::new(Params::embedded(&mut Cpu {})),
     );
     assert got.extents == [1, 3, 2];
     assert got.data == [13.0, 23.5, 30.0, 40.5, 53.0, 63.5];

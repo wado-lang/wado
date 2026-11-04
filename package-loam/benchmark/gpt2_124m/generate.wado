@@ -2,31 +2,13 @@
 //! prompt, and each one after it only itself against the attention cache.
 //! `onnxruntime.cpp` is the same program over onnxruntime.
 
-use { Backend, Graph } from "lib:loam";
+use { Graph } from "lib:loam";
 use { Generator } from "../generate.wado";
-use { Built, Model, Tokenizer } from "../../example/gpt2-124m/model.wado";
+use { Model, Tokenizer } from "../../example/gpt2-124m/model.wado";
 
 pub use { timed } from "../generate.wado";
 
-impl<affine Bk: Backend> Generator for Model<Bk> {
-    fn reset(&mut self) with _ {
-        self.forget();
-    }
-
-    fn step(&mut self, ids: &List<i32>) -> i32 with _ {
-        return self.next_token(ids);
-    }
-
-    fn encode(text: &String) -> List<i32> {
-        return Tokenizer::encode(text);
-    }
-
-    fn decode(ids: &List<i32>) -> String {
-        return Tokenizer::decode(ids);
-    }
-}
-
-impl<affine Bk: Graph> Generator for Built<Bk> {
+impl<affine Bk: Graph> Generator for Model<Bk> {
     fn reset(&mut self) with _ {
         self.forget();
     }

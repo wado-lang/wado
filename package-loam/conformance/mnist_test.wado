@@ -14,10 +14,10 @@ test "MNIST-12 reproduces the logits the Model Zoo ships" {
     let [x, x_extents] = tensor_of(#include_bytes("../tests/models/mnist-12/test_data_set_0/input_0.pb"));
     let [want, want_extents] = tensor_of(#include_bytes("../tests/models/mnist-12/test_data_set_0/output_0.pb"));
 
-    let got = mnist::forward(
+    let got = mnist::compute(
         &mut Cpu {},
         &Tensor::<f32, [mnist::Input30, mnist::Input31, mnist::Input32, mnist::Input33]> { data: x, extents: x_extents },
-        &mnist::Prepared::embedded(&mut Cpu {}),
+        &mut mnist::Model::new(mnist::Params::embedded(&mut Cpu {})),
     );
 
     assert got.extents == want_extents;
