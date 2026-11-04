@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1793762352115,
+  "lastUpdate": 1793770269591,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -74241,6 +74241,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/edf55c989fadd1602e90d8647b8f86bac75eda49"
         },
         "date": 1793762350945,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3099,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7303,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21996,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 377139,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "cdcf9f52adb85b05705b6169ed1f1a3e84c1de98",
+          "message": "Merge pull request #2541 from wado-lang/claude/peaceful-volta-u08hot\n\nfix(scip): a stdlib definition shares its symbol with its importers",
+          "timestamp": "2026-11-04T14:18:37+09:00",
+          "tree_id": "c249a0366233781a21af1442d67544db47aec609",
+          "url": "https://github.com/wado-lang/wado/commit/cdcf9f52adb85b05705b6169ed1f1a3e84c1de98"
+        },
+        "date": 1793770269198,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
