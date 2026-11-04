@@ -23,27 +23,6 @@ fn plan_imports(source: &str) -> BTreeSet<String> {
         &host,
         Some("entry.wado"),
         OptLevel::O2,
-<<<<<<< HEAD
-||||||| c0bdae6df
-        None,
-        None,
-        wado_compiler::OptOverrides::default(),
-        &[],
-        None,
-        &wado_compiler::param_resolution::ParamInputs::default(),
-        wado_compiler::kiln::InvocationIndex::default(),
-        1,
-=======
-        None,
-        None,
-        wado_compiler::OptOverrides::default(),
-        &[],
-        None,
-        &wado_compiler::param_resolution::ParamInputs::default(),
-        wado_compiler::kiln::InvocationIndex::default(),
-        1,
-        None,
->>>>>>> origin/main
     ))
     .expect("dump succeeds");
     let pkg = dump.wir_package.expect("wir package present after dump");
@@ -159,30 +138,8 @@ fn plan_matches_component_for_http_service_with_resources() {
             &source,
             &host,
             Some("entry.wado"),
-<<<<<<< HEAD
             options,
-||||||| c0bdae6df
-            OptLevel::O2,
-            Some(world),
             None,
-            wado_compiler::OptOverrides::default(),
-            &[],
-            None,
-            &wado_compiler::param_resolution::ParamInputs::default(),
-            wado_compiler::kiln::InvocationIndex::default(),
-            1,
-=======
-            OptLevel::O2,
-            Some(world),
-            None,
-            wado_compiler::OptOverrides::default(),
-            &[],
-            None,
-            &wado_compiler::param_resolution::ParamInputs::default(),
-            wado_compiler::kiln::InvocationIndex::default(),
-            1,
-            None,
->>>>>>> origin/main
         ))
         .expect("dump succeeds");
         dump.wir_package
@@ -258,27 +215,6 @@ fn component_plan_and_actual(source: &str) -> (BTreeSet<String>, BTreeSet<String
             &host,
             Some("entry.wado"),
             OptLevel::O2,
-<<<<<<< HEAD
-||||||| c0bdae6df
-            None,
-            None,
-            wado_compiler::OptOverrides::default(),
-            &[],
-            None,
-            &wado_compiler::param_resolution::ParamInputs::default(),
-            wado_compiler::kiln::InvocationIndex::default(),
-            1,
-=======
-            None,
-            None,
-            wado_compiler::OptOverrides::default(),
-            &[],
-            None,
-            &wado_compiler::param_resolution::ParamInputs::default(),
-            wado_compiler::kiln::InvocationIndex::default(),
-            1,
-            None,
->>>>>>> origin/main
         ))
         .expect("dump succeeds");
         dump.wir_package

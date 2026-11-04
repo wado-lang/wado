@@ -1018,30 +1018,8 @@ pub fn world_surface(host: &impl CompilerHost, source: &str, world_fq: &str) -> 
         source,
         host,
         Some("entry.wado"),
-<<<<<<< HEAD
         options,
-||||||| c0bdae6df
-        OptLevel::O2,
-        Some(world_fq),
         None,
-        wado_compiler::OptOverrides::default(),
-        &[],
-        None,
-        &wado_compiler::param_resolution::ParamInputs::default(),
-        wado_compiler::kiln::InvocationIndex::default(),
-        1,
-=======
-        OptLevel::O2,
-        Some(world_fq),
-        None,
-        wado_compiler::OptOverrides::default(),
-        &[],
-        None,
-        &wado_compiler::param_resolution::ParamInputs::default(),
-        wado_compiler::kiln::InvocationIndex::default(),
-        1,
-        None,
->>>>>>> origin/main
     )) {
         Ok(dump) => dump
             .wir_package

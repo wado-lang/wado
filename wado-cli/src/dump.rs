@@ -390,25 +390,18 @@ async fn run_single(opts: &DumpOptions, input: &str) -> Result<(), CliExit> {
         target_world: opts.target_world.clone(),
         profile,
         invocations,
-<<<<<<< HEAD
         ..knobs.compiler_options()
     };
     // Diagnostics are already emitted by the host; signal silently on failure.
-    let result = wado_compiler::dump_with_options(&source, &host, Some(input), options)
-        .await
-        .map_err(|_bail| CliExit::silent_failure(1))?;
-||||||| c0bdae6df
-        knobs.optimize_threads(),
-    )
-    .await
-    .map_err(|_bail| CliExit::silent_failure(1))?;
-=======
-        knobs.optimize_threads(),
+    let result = wado_compiler::dump_with_options(
+        &source,
+        &host,
+        Some(input),
+        options,
         opts.inline_decisions.as_deref(),
     )
     .await
     .map_err(|_bail| CliExit::silent_failure(1))?;
->>>>>>> origin/main
     if opts.show_tokens {
         println!("=== Tokens ===");
         for (i, token) in result.tokens.iter().enumerate() {

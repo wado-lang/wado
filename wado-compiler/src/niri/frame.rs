@@ -17,14 +17,8 @@ use crate::type_table::TypeTable;
 
 use super::callee::{CallSite, CalleeKey};
 use super::place::{
-<<<<<<< HEAD
-    is_array_place, named_local, place_aliased_by_another, place_of, referenced_place_operand,
-||||||| c0bdae6df
-    named_local, place_aliased_by_another, place_of, referenced_place_operand, write_root_local,
-=======
-    named_local, place_aliased_by_another, place_of, places_overlap, referenced_place_operand,
->>>>>>> origin/main
-    write_root_local,
+    is_array_place, named_local, place_aliased_by_another, place_of, places_overlap,
+    referenced_place_operand, write_root_local,
 };
 use super::region::{block_shape, region_needs, region_shape, value_block_shape};
 use super::rewrite::is_discardable_operand;
@@ -827,39 +821,20 @@ impl Interpreter<'_> {
     }
 
     /// The operand a `let` binds as a place rather than a value: a reference names
-<<<<<<< HEAD
-    /// the place it was taken over, an array read from a place names that place,
-    /// and a bare local already naming one rebinds the same place. Any other
-    /// projection out of an alias reads *through* it. Boxing rewrites `&x` into a bare read, so the type test
-    /// accepts any reference shape.
-||||||| c0bdae6df
-    /// the place it was taken over, and a bare local already naming one rebinds
-    /// the same place. Nothing else qualifies — a projection out of an alias
-    /// reads *through* it — hence matching the RHS as a local. Boxing rewrites
-    /// `&x` into a bare read, so the type test accepts any reference shape.
-=======
-    /// the place it was taken over, and a bare local or a place field already
-    /// naming one rebinds the same place. Any other projection out of an alias
-    /// reads *through* it. Boxing rewrites `&x` into a bare read, so the type
-    /// test accepts any reference shape.
->>>>>>> origin/main
+    /// the place it was taken over, an array read from a place names that
+    /// place, and a bare local or a place field already naming one rebinds the
+    /// same place. Any other projection out of an alias reads *through* it.
+    /// Boxing rewrites `&x` into a bare read, so the type test accepts any
+    /// reference shape.
     fn aliased_operand(&self, body: &Body, value: Operand) -> Option<Operand> {
         if let Some((_, referenced)) = referenced_place_operand(body, value) {
             return Some(referenced);
         }
-<<<<<<< HEAD
         if is_array_place(body, value, self.type_table) {
             return Some(value);
         }
-        let index = named_local(body, value)?;
-        if self.frame.place_aliases.contains_key(&index) {
-||||||| c0bdae6df
-        let index = named_local(body, value)?;
-        if self.frame.place_aliases.contains_key(&index) {
-=======
         let index = named_local(body, value);
         if index.is_some_and(|index| self.frame.place_aliases.contains_key(&index)) {
->>>>>>> origin/main
             return Some(value);
         }
         // `place_of` drops a deref, so `*h.f` names the place field `h.f` does;

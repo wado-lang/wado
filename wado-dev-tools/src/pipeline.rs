@@ -539,7 +539,6 @@ async fn render_phases(
             invocations,
             // More than one, so a golden that depends on the thread count
             // drifts from the one committed.
-<<<<<<< HEAD
             parallelism: 2,
             ..wado_compiler::CompilerOptions::default()
         },
@@ -548,19 +547,14 @@ async fn render_phases(
 
     if needs_dump {
         let host = StubHost::new(base_path.clone()).with_stubs(inputs.host_stubs());
-        let dumped =
-            wado_compiler::dump_with_options(source, &host, Some(input_path), options.clone())
-                .await;
-||||||| c0bdae6df
-            2,
-        )
-        .await;
-=======
-            2,
+        let dumped = wado_compiler::dump_with_options(
+            source,
+            &host,
+            Some(input_path),
+            options.clone(),
             None,
         )
         .await;
->>>>>>> origin/main
 
         match dumped {
             Err(_) => {

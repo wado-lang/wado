@@ -649,11 +649,6 @@ impl MarkMap {
     }
 
     #[must_use]
-    pub(crate) fn heat_map(&self) -> &HeatMap {
-        &self.heat
-    }
-
-    #[must_use]
     pub(crate) fn into_heat_map(self) -> HeatMap {
         self.heat
     }
