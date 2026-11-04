@@ -2101,6 +2101,47 @@ mod tests {
         assert_eq!(markers["run"], [] as [String; 0]);
     }
 
+    /// A hot loop inside an unlikely branch prices its calls plain, as the
+    /// branch's marker has the inliner do where it stands.
+    #[test]
+    fn a_region_under_an_unlikely_one_is_not_hot() {
+        let f = "fn f(x: i32, rare: bool) -> i32 { let mut a = 0; if rare { for let i of 0..<1000 { a = a + g(i); } } return a; }";
+        let source = format!(
+            "fn g(x: i32) -> i32 {{ return x + 1; }}\n{f}\nexport fn run() {{ f(1, false); }}"
+        );
+        let plain = analyzed(&source, Some(CoverageScope::default()), None);
+        let plan = &plain
+            .coverage
+            .as_ref()
+            .expect("the compile measures")
+            .modules[0];
+        let hash = |name: &str| {
+            plan.functions
+                .iter()
+                .find(|f| f.name == name)
+                .expect("planned")
+                .hash
+        };
+        // `f` ran 1000 times, took `rare` once, and looped 1000 times there.
+        let profile = pgo::parse(&format!(
+            "wado-pgo 1\nmodule entry.wado\nfn {:016x} 1 g\n0 1000\n\
+             fn {:016x} 2 f\n0 1000\n1 1\n2 1000\n3 999\n",
+            hash("g"),
+            hash("f")
+        ))
+        .expect("it parses");
+        let sem = analyzed(&source, None, Some(&profile));
+        let heat = sem.marks.as_ref().expect("a profile applies").heat_map();
+        let space = sem.modules[&sem.entry_module_source].ast_id_space();
+        let call = Span {
+            line: 2,
+            column: f.find("g(i)").expect("the call") + 1,
+            space,
+            ..Span::default()
+        };
+        assert_eq!(heat.heat(call), pgo::Heat::Plain);
+    }
+
     /// A profile replaces a `?`'s guess with what it measured: unlikely
     /// against the branch's runs, cold where it never ran.
     #[test]

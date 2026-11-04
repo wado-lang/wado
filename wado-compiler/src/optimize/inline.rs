@@ -1046,7 +1046,7 @@ fn scan_body(func: &NirFunction, markers: MarkerBuiltins, heat_map: &HeatMap) ->
         return scan;
     };
     let cold = RareRuns::of(body, markers, Rarity::Cold).exprs(body);
-    let unlikely = RareRuns::of(body, markers, Rarity::Unlikely).exprs(body);
+    let unlikely = unlikely_runs(body, markers, heat_map).exprs(body);
     let looped = looped_exprs(body);
     body.for_each_reachable_node(|node| match node {
         NodeRef::Stmt(st) => match &body.stmts[st].kind {
@@ -1574,14 +1574,24 @@ impl Site {
     }
 }
 
+/// `body`'s unlikely runs, which only lower a hot price: none where no site is
+/// hot.
+fn unlikely_runs(body: &Body, markers: MarkerBuiltins, heat_map: &HeatMap) -> RareRuns {
+    if heat_map.is_empty() {
+        RareRuns::none(markers, Rarity::Unlikely)
+    } else {
+        RareRuns::of(body, markers, Rarity::Unlikely)
+    }
+}
+
 /// The runs of one caller's body that move its [`Site`]: cold and unlikely.
 #[derive(Clone)]
 struct SiteRuns([RareRuns; 2]);
 
 impl SiteRuns {
     /// `body`'s runs, its cold ones `cold`.
-    fn of(cold: RareRuns, body: &Body, markers: MarkerBuiltins) -> Self {
-        Self([cold, RareRuns::of(body, markers, Rarity::Unlikely)])
+    fn of(cold: RareRuns, body: &Body, markers: MarkerBuiltins, heat_map: &HeatMap) -> Self {
+        Self([cold, unlikely_runs(body, markers, heat_map)])
     }
 
     /// Where `block` turns cold and unlikely.
@@ -2667,7 +2677,7 @@ pub fn inline_functions(
                 frame.loop_calls.push(call_counts(body, root, &carried));
             }
             // Priced on this same body: only this visit writes it.
-            let mut runs = SiteRuns::of(cold_runs[fid.index()].clone(), body, markers);
+            let mut runs = SiteRuns::of(cold_runs[fid.index()].clone(), body, markers, heat_map);
             inline_calls_in_block(
                 body,
                 root,

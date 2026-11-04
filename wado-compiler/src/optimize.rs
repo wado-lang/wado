@@ -192,6 +192,7 @@ pub fn optimize(
     // least.
     let thresholds = |level: usize| {
         let plain = inline_threshold.unwrap_or(level);
+        assert!(plain <= crate::MAX_INLINE_THRESHOLD);
         inline::Thresholds {
             cold: inline_cold_callsite_threshold.unwrap_or(plain / 4),
             plain,

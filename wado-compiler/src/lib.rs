@@ -449,6 +449,10 @@ pub struct ProviderComponent {
 
 /// What a caller may override in the optimizer, each `None` meaning "whatever
 /// the level decides".
+/// The largest inlining threshold an override may set: far past any body's
+/// size, and small enough that a multiple of it never overflows.
+pub const MAX_INLINE_THRESHOLD: usize = 1 << 20;
+
 #[derive(Debug, Clone, Copy, Default)]
 pub struct OptOverrides {
     pub inline_threshold: Option<usize>,

@@ -333,7 +333,14 @@ pub fn parse_log_level_arg(parser: &mut Parser) -> Result<LogLevel, CliExit> {
 pub fn parse_inline_threshold_arg(opt: &str, parser: &mut Parser) -> Result<usize, CliExit> {
     let s = require_string(parser)?;
     s.parse::<usize>()
-        .map_err(|_| CliExit::error(format!("{opt} requires a non-negative integer, got '{s}'")))
+        .ok()
+        .filter(|&n| n <= wado_compiler::MAX_INLINE_THRESHOLD)
+        .ok_or_else(|| {
+            CliExit::error(format!(
+                "{opt} requires an integer from 0 to {}, got '{s}'",
+                wado_compiler::MAX_INLINE_THRESHOLD
+            ))
+        })
 }
 
 pub fn parse_u32_arg(opt: &str, parser: &mut Parser) -> Result<u32, CliExit> {

@@ -1203,18 +1203,16 @@ struct Fusion<'a> {
     /// leaves the fused block with the value of the arm it selects.
     yields: bool,
     span: Span,
-    /// The locals each exit binds afresh: [`BoundValue::locals`], and per arm
-    /// what [`renamable_locals`] finds in it.
     value: BoundValue,
+    /// Per arm, the locals each exit selecting it binds afresh:
+    /// [`BoundValue::bound_by`] and what [`renamable_locals`] finds in it.
+    /// None where one exit selects the arm, since its one copy binds each once.
     renamable: Vec<Vec<u32>>,
 }
 
 impl Fusion<'_> {
     fn selector(&self) -> ArmSelector<'_> {
-        match &self.value {
-            BoundValue::Variant { case_index, .. } => ArmSelector::Case(*case_index),
-            BoundValue::Slots { tags, .. } => ArmSelector::Tags(tags),
-        }
+        self.value.selector()
     }
 }
 
@@ -1240,11 +1238,30 @@ struct BoundSlot {
 }
 
 impl BoundValue {
-    /// The locals an exit binds for the arm it selects to read.
-    fn locals(&self) -> Vec<u32> {
+    /// The locals an exit selecting `arm` binds for it to read.
+    fn bound_by(&self, arm: usize) -> Vec<u32> {
         match self {
-            Self::Variant { payload_local, .. } => vec![*payload_local],
-            Self::Slots { slots, .. } => slots.iter().map(|s| s.local_index).collect(),
+            Self::Variant { payload_local, .. } => {
+                if arm == 0 {
+                    vec![*payload_local]
+                } else {
+                    Vec::new()
+                }
+            }
+            Self::Slots {
+                slots, arm_reads, ..
+            } => slots
+                .iter()
+                .filter(|s| arm_reads[arm].contains(&s.field_index))
+                .map(|s| s.local_index)
+                .collect(),
+        }
+    }
+
+    fn selector(&self) -> ArmSelector<'_> {
+        match self {
+            Self::Variant { case_index, .. } => ArmSelector::Case(*case_index),
+            Self::Slots { tags, .. } => ArmSelector::Tags(tags),
         }
     }
 
@@ -1394,16 +1411,26 @@ fn perform_fusion(
         FusedValue::Slots { .. } => None,
     };
     let value = bind_value(engine, info.value);
-    let minted: Vec<u32> = value
-        .locals()
-        .into_iter()
-        .filter(|&local| Some(local) != pattern_binding)
-        .collect();
+    let mut exits_at = vec![0usize; arms.len()];
+    for exit in &info.exits {
+        let selected = value
+            .selector()
+            .select(engine.body, exit_value(engine.body, exit.stmt))
+            .expect("guarded by the fusion preconditions");
+        exits_at[selected] += 1;
+    }
     let renamable = arms
         .iter()
         .enumerate()
         .map(|(i, arm)| {
-            let mut locals = minted.clone();
+            if exits_at[i] < 2 {
+                return Vec::new();
+            }
+            let mut locals: Vec<u32> = value
+                .bound_by(i)
+                .into_iter()
+                .filter(|&local| Some(local) != pattern_binding)
+                .collect();
             if let Some(arm) = arm {
                 locals.extend(renamable_locals(
                     engine,

@@ -345,6 +345,9 @@ pub struct Engine<'a> {
     /// The locals a clone under way binds afresh: see
     /// [`Engine::clone_block_renaming`].
     clone_renames: IndexMap<u32, u32>,
+    /// Each local [`Engine::alloc_local_like`] minted, after the one it copies:
+    /// what the owner of the function's per-local annotations must carry over.
+    copied_locals: Vec<[u32; 2]>,
     /// Calls that mutate no caller local; the build skips their per-call
     /// `mut_escaped` bump. Empty is conservative.
     pure_calls: IndexSet<ExprId>,
@@ -406,6 +409,7 @@ impl<'a> Engine<'a> {
             params: params.iter().map(|p| p.local_index).collect(),
             seeds_params: false,
             clone_renames: IndexMap::default(),
+            copied_locals: Vec::new(),
             pure_calls: IndexSet::default(),
             receiver_immutable_calls: IndexSet::default(),
             call_writes: IndexMap::default(),
@@ -1544,7 +1548,14 @@ impl<'a> Engine<'a> {
             type_id,
             is_mut,
         } = self.locals[of as usize].clone();
-        self.alloc_minted_local(copied_local_what(&name), type_id, is_mut)
+        let fresh = self.alloc_minted_local(copied_local_what(&name), type_id, is_mut);
+        self.copied_locals.push([of, fresh]);
+        fresh
+    }
+
+    /// Each `[original, copy]` [`Engine::alloc_local_like`] minted.
+    pub fn copied_locals(&self) -> &[[u32; 2]] {
+        &self.copied_locals
     }
 
     /// `local` and its name as the clone under way spells them.

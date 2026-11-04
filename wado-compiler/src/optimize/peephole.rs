@@ -209,7 +209,17 @@ pub(super) fn run_peephole(
         // bodies; the extractor reads `prim` from the type table for literal repr.
         engine.set_value_graph_type_table(type_table);
         engine.set_pure_builtin_callees(&pure_builtin_callees);
-        engine.run(&rules)
+        let changed = engine.run(&rules);
+        let copies = engine.copied_locals().to_vec();
+        drop(engine);
+        // A copy of a boxed local is boxed too. Dropping the annotation lets a
+        // read of it forward past a write through the alias.
+        for [of, copy] in copies {
+            if func.address_taken_locals.contains(&of) {
+                func.address_taken_locals.insert(copy);
+            }
+        }
+        changed
     });
     exec.drop_all(callees);
     changed

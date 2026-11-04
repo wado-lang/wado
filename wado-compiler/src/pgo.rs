@@ -351,6 +351,12 @@ struct MeasuredRegion {
 }
 
 impl HeatMap {
+    /// Whether no region was measured, so every site is [`Heat::Plain`].
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.regions.is_empty()
+    }
+
     fn add(&mut self, space: AstIdSpace, measured: impl IntoIterator<Item = MeasuredRegion>) {
         let regions = self.regions.entry(space).or_default();
         regions.extend(measured);
@@ -379,10 +385,7 @@ impl HeatMap {
         let Some(regions) = self.regions.get(&span.space) else {
             return Heat::Plain;
         };
-        let at = Pos {
-            line: span.line as u32,
-            column: span.column as u32,
-        };
+        let at = Pos::start(span);
         // The last region to start before `at` either holds it or is held by
         // every region that does.
         let mut next = regions.partition_point(|r| r.start <= at).checked_sub(1);
@@ -515,9 +518,20 @@ impl MarkMap {
             parent
         };
         // A hot price on the rare side of a branch would grow code that rarely
-        // runs, so an unlikely region pays the plain one. A `?`'s region spans
-        // its operand, whose calls run before the failure path the region
-        // counts, so it prices none of them.
+        // runs, so an unlikely region pays the plain one, and so does every
+        // region inside it, as the inliner reads the hint a marker writes. A
+        // `?`'s region spans its operand, whose calls run before the failure
+        // path the region counts, so it prices none of them.
+        let under_unlikely = |id: usize| {
+            let mut region = Some(id);
+            while let Some(r) = region {
+                if unlikely(r) {
+                    return true;
+                }
+                region = parents[r].map(|p| p as usize);
+            }
+            false
+        };
         self.heat.add(
             space,
             plan.regions.iter().enumerate().filter_map(|(id, region)| {
@@ -528,7 +542,7 @@ impl MarkMap {
                     start: region.start,
                     end: region.end,
                     heat: match reading.heat(runs) {
-                        Heat::Hot if unlikely(id) => Heat::Plain,
+                        Heat::Hot if under_unlikely(id) => Heat::Plain,
                         heat => heat,
                     },
                     enclosing: None,
