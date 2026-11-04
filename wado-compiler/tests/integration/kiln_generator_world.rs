@@ -374,16 +374,19 @@ export fn generate(req: Request) -> Result<Response, Error> {
 
 #[test]
 fn generator_hashing_under_the_default_seed_imports_insecure_seed() {
-    let imports = wasi_imports_of(DEFAULT_SEED_MAP_GENERATOR, "default-seed generator");
-    assert!(
-        function_bearing(&imports).contains(&"wasi:random/insecure-seed@0.3.0"),
-        "imports: {imports:?}"
-    );
+    let default = wasi_imports_of(DEFAULT_SEED_MAP_GENERATOR, "default-seed generator");
+    let fixed = wasi_imports_of(FIXED_SEED_MAP_GENERATOR, "fixed-seed generator");
+    let fixed = function_bearing(&fixed);
+    let added: Vec<&str> = function_bearing(&default)
+        .into_iter()
+        .filter(|fq| !fixed.contains(fq))
+        .collect();
+    assert_eq!(added, ["wasi:random/insecure-seed@0.3.0"]);
 }
 
 /// A map under a fixed seed leaves `DEFAULT_HASH_SEED` unread, so its
 /// initializer goes, and `insecure-seed`, which only it reached, goes with it,
-/// at every optimization level.
+/// at every optimization level. What stays is the stdio a panic writes.
 const FIXED_SEED_MAP_GENERATOR: &str = r#"
 use { Request, Response, Error } from "core:kiln";
 use { HashMap, HashSeed } from "core:collections";
@@ -396,12 +399,14 @@ export fn generate(req: Request) -> Result<Response, Error> {
 "#;
 
 #[test]
-fn generator_hashing_under_a_fixed_seed_imports_no_seed() {
+fn generator_hashing_under_a_fixed_seed_imports_only_stdio() {
     for opt_level in [OptLevel::O0, OptLevel::O2] {
         let imports = wasi_imports_at(FIXED_SEED_MAP_GENERATOR, "fixed-seed generator", opt_level);
         let provided = function_bearing(&imports);
         assert!(
-            !provided.contains(&"wasi:random/insecure-seed@0.3.0"),
+            provided
+                .iter()
+                .all(|fq| ["wasi:cli/stdout@0.3.0", "wasi:cli/stderr@0.3.0"].contains(fq)),
             "a fixed-seed map imported {provided:?} at {opt_level:?}"
         );
     }

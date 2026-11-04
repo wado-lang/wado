@@ -29,27 +29,37 @@ pub fn encode<'a>(fqs: impl IntoIterator<Item = &'a str>) -> Vec<u8> {
 /// nested in it, which says what that one demands. `None` where it carries
 /// none, or one of another format version or not UTF-8, which demands every
 /// import.
-pub fn read_from_component(bytes: &[u8]) -> Option<Vec<String>> {
-    let mut depth = 0usize;
-    for payload in wasmparser::Parser::new(0).parse_all(bytes) {
-        match payload.ok()? {
-            wasmparser::Payload::ModuleSection { .. }
-            | wasmparser::Payload::ComponentSection { .. } => depth += 1,
-            wasmparser::Payload::End(_) if depth == 0 => break,
-            wasmparser::Payload::End(_) => depth -= 1,
-            wasmparser::Payload::CustomSection(reader)
-                if depth == 0 && reader.name() == SECTION_NAME =>
-            {
+pub fn read_from_component(mut bytes: &[u8]) -> Option<Vec<String>> {
+    use wasmparser::{Chunk, Payload};
+    let mut parser = wasmparser::Parser::new(0);
+    loop {
+        let Chunk::Parsed { consumed, payload } = parser.parse(bytes, true).ok()? else {
+            unreachable!("a parse at the end of its input needs no more data");
+        };
+        bytes = &bytes[consumed..];
+        match payload {
+            // The parser stepped over a nested section, so its bytes are
+            // skipped here unread.
+            Payload::ModuleSection {
+                unchecked_range, ..
+            }
+            | Payload::ComponentSection {
+                unchecked_range, ..
+            } => {
+                let len = usize::try_from(unchecked_range.end - unchecked_range.start).ok()?;
+                bytes = bytes.get(len..)?;
+            }
+            Payload::CustomSection(reader) if reader.name() == SECTION_NAME => {
                 let mut lines = std::str::from_utf8(reader.data()).ok()?.split('\n');
                 if lines.next() != Some(FORMAT_VERSION) {
                     return None;
                 }
                 return Some(lines.map(str::to_string).collect());
             }
+            Payload::End(_) => return None,
             _ => {}
         }
     }
-    None
 }
 
 #[cfg(test)]
@@ -106,5 +116,12 @@ mod tests {
         let mut outer = wasm_encoder::Component::new();
         outer.section(&wasm_encoder::NestedComponentSection(&inner));
         assert_eq!(read_from_component(&outer.finish()), None);
+        outer = wasm_encoder::Component::new();
+        outer.section(&wasm_encoder::NestedComponentSection(&inner));
+        outer.section(&wasm_encoder::CustomSection {
+            name: SECTION_NAME.into(),
+            data: encode([]).into(),
+        });
+        assert_eq!(read_from_component(&outer.finish()), Some(Vec::new()));
     }
 }
