@@ -445,7 +445,7 @@ fn "cm_import_byte_list_newtype.wado/run"() with Stdout, Fields {
     let bytes_41: ref "core:prelude//List<u8>";
     let prefix: i32;
     let out: ref Array<u8>;
-    let $sroa_slice_repr_85: ref Array<u8>;
+    let $sroa_slice_repr_75: ref Array<u8>;
     fields = "cm_import_byte_list_newtype.wado/$cm_binding__wasi:http/types@0.3.0#[constructor]fields"();
     if @unlikely(ref.is_null("cm_import_byte_list_newtype.wado/$cm_binding__wasi:http/types@0.3.0#[method]fields.append$spec0"(fields, global:cm_import_byte_list_newtype.wado::$const_obj_0, global:cm_import_byte_list_newtype.wado::$const_obj_2)) == 0) {
         cold_path;
@@ -461,9 +461,9 @@ fn "cm_import_byte_list_newtype.wado/run"() with Stdout, Fields {
             unreachable;
         }
         $v1_7 = local.tee bytes_41(builtin::array_get_value<ref "core:prelude//List<u8>">(got.repr, 0)).used;
-        $sroa_slice_repr_85 = bytes_41.repr;
+        $sroa_slice_repr_75 = bytes_41.repr;
         if @unlikely(local.tee prefix(block -> i32 {
-            "core:prelude/string.wado/core:prelude/string.wado/String::utf8_valid_prefix$spec0"($sroa_slice_repr_85, $v1_7);
+            "core:prelude/string.wado/core:prelude/string.wado/String::utf8_valid_prefix$spec0"($sroa_slice_repr_75, $v1_7);
         }) != $v1_7) {
             cold_path;
             e = block -> ref "core:prelude/string.wado//Utf8Error" {
@@ -472,14 +472,14 @@ fn "cm_import_byte_list_newtype.wado/run"() with Stdout, Fields {
                     "core:prelude/string.wado/core:prelude/string.wado/String::try_from_utf8<wasi:http/types.wado/FieldValue>$cold0$dae[bytes]"(prefix, $v1_7);
                     unreachable;
                 }
-                "core:prelude/string.wado/core:prelude/string.wado/String::utf8_error_at$unchecked"($sroa_slice_repr_85, 0, prefix);
+                "core:prelude/string.wado/core:prelude/string.wado/String::utf8_error_at$unchecked"($sroa_slice_repr_75, 0, prefix);
             };
             "core:prelude/types.wado/core:prelude/types.wado/unwrap_failed<core:prelude/string.wado/Utf8Error>"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("called Result::unwrap() on an Err value"), used: 39 }, e);
             unreachable;
             break $thread_$inline_core_prelude_string_wado_String__try_from_utf8_wasi_http_types_wado_FieldValue__12;
         }
         break $thread_$inline_core_prelude_string_wado_String__try_from_utf8_wasi_http_types_wado_FieldValue__12: struct.new "core:prelude/string.wado//String" { repr: out = builtin::array_new<u8>(select i32($v1_7 > 0, $v1_7, 0)); if $v1_7 > 0 {
-            builtin::array_copy<u8>(out, 0, $sroa_slice_repr_85, 0, $v1_7);
+            builtin::array_copy<u8>(out, 0, $sroa_slice_repr_75, 0, $v1_7);
         }; out, used: $v1_7 };
     };
     $v1_7 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));

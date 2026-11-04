@@ -184,15 +184,15 @@ fn "affine_future_writable_unwritten_trap.wado/$cm_future_write_i32"(handle, val
 }
 
 fn "affine_future_writable_unwritten_trap.wado/produce$sroa[return]$spec0"($mv$text$repr, $mv$text$used) {
+    let $qm_e: ref "core:prelude/string.wado//String";
+    let $drop_spill_6: ref null "tuple//[i32, core:prelude/types.wado/Option<core:prelude/types.wado/Future<i32>>, core:prelude/types.wado/Option<core:prelude/string.wado/String>]";
     let $cm_pair_10: i64;
     let b: ref Array<u8>;
     let i: i32;
-    let $qm_e_28: ref "core:prelude/string.wado//String";
-    let $drop_spill_6_29: ref null "tuple//[i32, core:prelude/types.wado/Option<core:prelude/types.wado/Future<i32>>, core:prelude/types.wado/Option<core:prelude/string.wado/String>]";
-    let $sroa_$pattern_temp_0_0_33: ref null "core:prelude//$Resource";
-    let $sroa_$pattern_temp_0_1_34: i32;
-    $sroa_$pattern_temp_0_0_33 = struct.new "core:prelude//$Resource" { value: builtin::i32_wrap_i64(local.tee $cm_pair_10("wasi/future-new:s32"())) };
-    $sroa_$pattern_temp_0_1_34 = builtin::i32_wrap_i64($cm_pair_10 >> 32_i64);
+    let $sroa_$pattern_temp_0_0_26: ref null "core:prelude//$Resource";
+    let $sroa_$pattern_temp_0_1_27: i32;
+    $sroa_$pattern_temp_0_0_26 = struct.new "core:prelude//$Resource" { value: builtin::i32_wrap_i64(local.tee $cm_pair_10("wasi/future-new:s32"())) };
+    $sroa_$pattern_temp_0_1_27 = builtin::i32_wrap_i64($cm_pair_10 >> 32_i64);
     if @unlikely($inline_core_prelude_array_wado_seq_eq_u8__2: block -> bool {
         b = global:affine_future_writable_unwritten_trap.wado::$const_obj_0;
         i = 0;
@@ -209,20 +209,20 @@ fn "affine_future_writable_unwritten_trap.wado/produce$sroa[return]$spec0"($mv$t
         break $inline_core_prelude_array_wado_seq_eq_u8__2: 1;
     }) {
         cold_path;
-        $qm_e_28 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("not a number"), used: 12 };
+        $qm_e = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("not a number"), used: 12 };
         cold_path;
-        $drop_spill_6_29 = struct.new "tuple//[i32, core:prelude/types.wado/Option<core:prelude/types.wado/Future<i32>>, core:prelude/types.wado/Option<core:prelude/string.wado/String>]" { 0: 1, 1: global:core:builtin::$unit_case$core:prelude/types.wado//Option<core:prelude/types.wado/Future<i32>>$0, 2: $qm_e_28 };
-        if @unlikely(($sroa_$pattern_temp_0_1_34 == 0) == 0) {
+        $drop_spill_6 = struct.new "tuple//[i32, core:prelude/types.wado/Option<core:prelude/types.wado/Future<i32>>, core:prelude/types.wado/Option<core:prelude/string.wado/String>]" { 0: 1, 1: global:core:builtin::$unit_case$core:prelude/types.wado//Option<core:prelude/types.wado/Future<i32>>$0, 2: $qm_e };
+        if @unlikely(($sroa_$pattern_temp_0_1_27 == 0) == 0) {
             "core:rt/panic"(array.new_data<u8>("`FutureWritable<i32>` dropped before its write: its reader would wait forever"), 77);
             unreachable;
         }
-        if ref.is_null($sroa_$pattern_temp_0_0_33) == 0 {
-            "wasi/future-drop-readable:s32"($sroa_$pattern_temp_0_0_33.value);
+        if ref.is_null($sroa_$pattern_temp_0_0_26) == 0 {
+            "wasi/future-drop-readable:s32"($sroa_$pattern_temp_0_0_26.value);
         }
-        return $drop_spill_6_29;
+        return $drop_spill_6;
     }
-    drop("affine_future_writable_unwritten_trap.wado/$cm_future_write_i32"($sroa_$pattern_temp_0_1_34, 1));
-    return struct.new "tuple//[i32, core:prelude/types.wado/Option<core:prelude/types.wado/Future<i32>>, core:prelude/types.wado/Option<core:prelude/string.wado/String>]" { 0: 0, 1: struct.new "core:prelude/types.wado//Option<core:prelude/types.wado/Future<i32>>::Some" { discriminant: 1, payload_0: $sroa_$pattern_temp_0_0_33 }, 2: ref.null none };
+    drop("affine_future_writable_unwritten_trap.wado/$cm_future_write_i32"($sroa_$pattern_temp_0_1_27, 1));
+    return struct.new "tuple//[i32, core:prelude/types.wado/Option<core:prelude/types.wado/Future<i32>>, core:prelude/types.wado/Option<core:prelude/string.wado/String>]" { 0: 0, 1: struct.new "core:prelude/types.wado//Option<core:prelude/types.wado/Future<i32>>::Some" { discriminant: 1, payload_0: $sroa_$pattern_temp_0_0_26 }, 2: ref.null none };
 }
 
 fn "core:prelude/types.wado/copy_result"(packed) {

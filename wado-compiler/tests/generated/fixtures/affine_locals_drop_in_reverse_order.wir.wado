@@ -166,29 +166,29 @@ fn "affine_locals_drop_in_reverse_order.wado/returns_early"(flag) {
 }
 
 fn "affine_locals_drop_in_reverse_order.wado/each_iteration"() {
+    let a: i32;
     let current: i32;
-    let $a_22: i32;
-    let $sroa_$iter_0_start_28: i32;
-    let message_30: ref "core:prelude/string.wado//String";
-    let $cm_pair_7_37: i64;
-    let $sroa_$pattern_temp_0_1_10_40: i32;
-    $sroa_$iter_0_start_28 = 0;
+    let $sroa_$iter_0_start_18: i32;
+    let message_20: ref "core:prelude/string.wado//String";
+    let $cm_pair_7_27: i64;
+    let $sroa_$pattern_temp_0_1_10_30: i32;
+    $sroa_$iter_0_start_18 = 0;
     b1: block {
         l2: loop {
-            break_if b1 $sroa_$iter_0_start_28 >= 2;
-            $sroa_$iter_0_start_28 = local.tee current($sroa_$iter_0_start_28) + 1;
-            $a_22 = (current * 10) + 1;
-            message_30 = "core:prelude/string.wado/core:prelude/string.wado/String::format<affine_locals_drop_in_reverse_order.wado/$tmpl$fb51c04d54491732,[i32]>$spec0$spec0$sroa[t.h0]"((current * 10) + 2);
-            current = builtin::i32_wrap_i64(local.tee $cm_pair_7_37("wasi/stream-new"()));
-            $sroa_$pattern_temp_0_1_10_40 = builtin::i32_wrap_i64($cm_pair_7_37 >> 32_i64);
+            break_if b1 $sroa_$iter_0_start_18 >= 2;
+            $sroa_$iter_0_start_18 = local.tee current($sroa_$iter_0_start_18) + 1;
+            a = (current * 10) + 1;
+            message_20 = "core:prelude/string.wado/core:prelude/string.wado/String::format<affine_locals_drop_in_reverse_order.wado/$tmpl$fb51c04d54491732,[i32]>$spec0$spec0$sroa[t.h0]"((current * 10) + 2);
+            current = builtin::i32_wrap_i64(local.tee $cm_pair_7_27("wasi/stream-new"()));
+            $sroa_$pattern_temp_0_1_10_30 = builtin::i32_wrap_i64($cm_pair_7_27 >> 32_i64);
             current = "wasi/$wasi:cli/stdout@0.3.0#write-via-stream"(current);
-            "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_10_40, message_30.repr, message_30.used);
+            "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_10_30, message_20.repr, message_20.used);
             "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(current);
-            message_30 = "core:prelude/string.wado/core:prelude/string.wado/String::format<affine_locals_drop_in_reverse_order.wado/$tmpl$fb51c04d54491732,[i32]>$spec0$spec0$sroa[t.h0]"($a_22);
-            current = builtin::i32_wrap_i64(local.tee $cm_pair_7_37("wasi/stream-new"()));
-            $a_22 = builtin::i32_wrap_i64($cm_pair_7_37 >> 32_i64);
+            message_20 = "core:prelude/string.wado/core:prelude/string.wado/String::format<affine_locals_drop_in_reverse_order.wado/$tmpl$fb51c04d54491732,[i32]>$spec0$spec0$sroa[t.h0]"(a);
+            current = builtin::i32_wrap_i64(local.tee $cm_pair_7_27("wasi/stream-new"()));
+            a = builtin::i32_wrap_i64($cm_pair_7_27 >> 32_i64);
             current = "wasi/$wasi:cli/stdout@0.3.0#write-via-stream"(current);
-            "core:rt/write_string_to_stream$dae[add_newline]"($a_22, message_30.repr, message_30.used);
+            "core:rt/write_string_to_stream$dae[add_newline]"(a, message_20.repr, message_20.used);
             "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(current);
             continue l2;
         };

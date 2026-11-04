@@ -648,10 +648,10 @@ fn "cm_async_import_args_freed.wado/run"() with Stdout, Preopens {
     let $temp_9: ref null "tuple//[wasi:filesystem/types.wado/Descriptor, core:prelude/string.wado/String]";
     let $moved_10: ref null "core:prelude//$Resource";
     let $v1_15: i32;
-    let $new_used_87: i32;
-    let $start_89: i32;
-    let x_195: i64;
-    let repr_214: ref Array<u8>;
+    let new_used_35: i32;
+    let start_36: i32;
+    let x_169: i64;
+    let repr_188: ref Array<u8>;
     $inline__initialize_modules_0: block {
         break_if $inline__initialize_modules_0 @likely(global:cm_async_import_args_freed.wado::$modules_initialized);
         cold_path;
@@ -675,64 +675,64 @@ fn "cm_async_import_args_freed.wado/run"() with Stdout, Preopens {
         l4: loop {
             break_if b3 $v1_15 >= 65536;
             $v1_15 = $v1_15 + 1;
-            if @unlikely(local.tee $new_used_87(path.used + 1) > builtin::array_len(path.repr)) {
+            if @unlikely(local.tee new_used_35(path.used + 1) > builtin::array_len(path.repr)) {
                 cold_path;
-                "core:prelude/string.wado/core:prelude/string.wado/String::grow"(path, $new_used_87);
+                "core:prelude/string.wado/core:prelude/string.wado/String::grow"(path, new_used_35);
             }
-            $start_89 = path.used;
-            path.used = $new_used_87;
-            builtin::array_set_u8(path.repr, $start_89, 97);
+            start_36 = path.used;
+            path.used = new_used_35;
+            builtin::array_set_u8(path.repr, start_36, 97);
             continue l4;
         };
     };
     $v1_15 = 0;
-    $new_used_87 = 0;
+    new_used_35 = 0;
     b6: block {
         l7: loop {
-            break_if b6 $new_used_87 >= 2;
-            $new_used_87 = $new_used_87 + 1;
+            break_if b6 new_used_35 >= 2;
+            new_used_35 = new_used_35 + 1;
             $v1_15 = ($v1_15 + ref.test "core:prelude/types.wado//Result<wasi:filesystem/types.wado/DescriptorStat,wasi:filesystem/types.wado/ErrorCode>::Err"("core:prelude/types.wado/core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<wasi:filesystem/types.wado/DescriptorStat,wasi:filesystem/types.wado/ErrorCode>>::wait"("cm_async_import_args_freed.wado/$cm_binding__wasi:filesystem/types@0.3.0#[method]descriptor.stat-at"($moved_10, 0, path)))) + ref.is_null("core:prelude/types.wado/core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<(),wasi:filesystem/types.wado/ErrorCode>>::wait"("cm_async_import_args_freed.wado/$cm_binding__wasi:filesystem/types@0.3.0#[method]descriptor.symlink-at"($moved_10, path, path))) == 0;
             continue l7;
         };
     };
-    $new_used_87 = builtin::memory_size();
-    $start_89 = 0;
+    new_used_35 = builtin::memory_size();
+    start_36 = 0;
     b8: block {
         l9: loop {
-            break_if b8 $start_89 >= 8;
-            $start_89 = $start_89 + 1;
+            break_if b8 start_36 >= 8;
+            start_36 = start_36 + 1;
             $v1_15 = ($v1_15 + ref.test "core:prelude/types.wado//Result<wasi:filesystem/types.wado/DescriptorStat,wasi:filesystem/types.wado/ErrorCode>::Err"("core:prelude/types.wado/core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<wasi:filesystem/types.wado/DescriptorStat,wasi:filesystem/types.wado/ErrorCode>>::wait"("cm_async_import_args_freed.wado/$cm_binding__wasi:filesystem/types@0.3.0#[method]descriptor.stat-at"($moved_10, 0, path)))) + ref.is_null("core:prelude/types.wado/core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<(),wasi:filesystem/types.wado/ErrorCode>>::wait"("cm_async_import_args_freed.wado/$cm_binding__wasi:filesystem/types@0.3.0#[method]descriptor.symlink-at"($moved_10, path, path))) == 0;
             continue l9;
         };
     };
-    $new_used_87 = builtin::memory_size() - $new_used_87;
+    new_used_35 = builtin::memory_size() - new_used_35;
     path = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 };
     $inline_core_prelude_string_wado_String__format_cm_async_import_args_freed_wado__tmpl_8db8629cb9c7db93__i32_i32___spec0_spec0_0__$inline_core_prelude_string_wado_String__internal_push_view_22: block {
         break $inline_core_prelude_string_wado_String__format_cm_async_import_args_freed_wado__tmpl_8db8629cb9c7db93__i32_i32___spec0_spec0_0__$inline_core_prelude_string_wado_String__internal_push_view_22;
     };
-    $start_89 = $v1_15 < 0;
-    $v1_15 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_195(x_195 = builtin::i64_extend_i32_s($v1_15); select i64(x_195 < 0_i64, 0_i64 - x_195, x_195)));
-    $start_89 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"(path, $start_89, $v1_15);
-    "core:prelude/primitive.wado/write_decimal_digits"(local.tee $load_6(path.repr), $start_89, x_195, $v1_15);
-    repr_214 = global:cm_async_import_args_freed.wado::$const_obj_0;
+    start_36 = $v1_15 < 0;
+    $v1_15 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_169(x_169 = builtin::i64_extend_i32_s($v1_15); select i64(x_169 < 0_i64, 0_i64 - x_169, x_169)));
+    start_36 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"(path, start_36, $v1_15);
+    "core:prelude/primitive.wado/write_decimal_digits"(local.tee $load_6(path.repr), start_36, x_169, $v1_15);
+    repr_188 = global:cm_async_import_args_freed.wado::$const_obj_0;
     if @unlikely(local.tee $v1_15(path.used + 1) > builtin::array_len($load_6)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(path, $v1_15);
     }
-    $start_89 = path.used;
+    start_36 = path.used;
     path.used = $v1_15;
-    builtin::array_copy<u8>(path.repr, $start_89, repr_214, 0, 1);
-    $v1_15 = $new_used_87 < 0;
-    $new_used_87 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_195(x_195 = builtin::i64_extend_i32_s($new_used_87); select i64(x_195 < 0_i64, 0_i64 - x_195, x_195)));
-    $v1_15 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"(path, $v1_15, $new_used_87);
-    "core:prelude/primitive.wado/write_decimal_digits"(path.repr, $v1_15, x_195, $new_used_87);
+    builtin::array_copy<u8>(path.repr, start_36, repr_188, 0, 1);
+    $v1_15 = new_used_35 < 0;
+    new_used_35 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_169(x_169 = builtin::i64_extend_i32_s(new_used_35); select i64(x_169 < 0_i64, 0_i64 - x_169, x_169)));
+    $v1_15 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"(path, $v1_15, new_used_35);
+    "core:prelude/primitive.wado/write_decimal_digits"(path.repr, $v1_15, x_169, new_used_35);
     $inline_core_prelude_string_wado_String__format_cm_async_import_args_freed_wado__tmpl_8db8629cb9c7db93__i32_i32___spec0_spec0_0__$inline_core_prelude_string_wado_String__internal_push_view_70: block {
         break $inline_core_prelude_string_wado_String__format_cm_async_import_args_freed_wado__tmpl_8db8629cb9c7db93__i32_i32___spec0_spec0_0__$inline_core_prelude_string_wado_String__internal_push_view_70;
     };
-    $v1_15 = builtin::i32_wrap_i64(local.tee x_195("wasi/stream-new"()));
-    $new_used_87 = builtin::i32_wrap_i64(x_195 >> 32_i64);
+    $v1_15 = builtin::i32_wrap_i64(local.tee x_169("wasi/stream-new"()));
+    new_used_35 = builtin::i32_wrap_i64(x_169 >> 32_i64);
     $v1_15 = "cm_async_import_args_freed.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($v1_15);
-    "core:rt/write_string_to_stream$dae[add_newline]"($new_used_87, path.repr, path.used);
+    "core:rt/write_string_to_stream$dae[add_newline]"(new_used_35, path.repr, path.used);
     "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($v1_15);
     if ref.is_null($moved_10) == 0 {
         $v1_15 = $moved_10.value;
@@ -3129,23 +3129,23 @@ fn "core:prelude/types.wado/core:prelude/types.wado/WaitableSet<core:prelude/typ
     let at: i32;
     let end: i32;
     let ref_val: ref null "core:prelude//$Resource";
-    let $sroa_$iter_0_repr_19: ref null "Array<core:prelude/types.wado/Subtask>";
-    let $sroa_$iter_0_index_20: i32;
+    let $sroa_$iter_0_repr_17: ref null "Array<core:prelude/types.wado/Subtask>";
+    let $sroa_$iter_0_index_18: i32;
     at = 0;
     end = self.used;
-    $sroa_$iter_0_repr_19 = self.repr;
-    $sroa_$iter_0_index_20 = 0;
+    $sroa_$iter_0_repr_17 = self.repr;
+    $sroa_$iter_0_index_18 = 0;
     b425: block {
         l426: loop {
-            break_if b425 $sroa_$iter_0_index_20 >= end;
-            ref_val = builtin::array_get_value<ref null "core:prelude//$Resource">($sroa_$iter_0_repr_19, $sroa_$iter_0_index_20);
-            $sroa_$iter_0_index_20 = $sroa_$iter_0_index_20 + 1;
-            let $mv$$vr_7_15$0: i32;
-            let $mv$$vr_7_15$1: ref null "core:prelude/types.wado//ResourceId";
-            let $mv$$vr_7_15$2: ref null "core:prelude/types.wado//ReadyEvent";
-            multivalue_bind [$mv$$vr_7_15$0, $mv$$vr_7_15$1, $mv$$vr_7_15$2] = "core:prelude/types.wado/core:prelude/types.wado/Subtask^core:prelude/types.wado/Waitable::wait_on$sroa[return]"(ref_val);
-            if (if $mv$$vr_7_15$0 == 0 -> bool {
-                $mv$$vr_7_15$1.handle == handle;
+            break_if b425 $sroa_$iter_0_index_18 >= end;
+            ref_val = builtin::array_get_value<ref null "core:prelude//$Resource">($sroa_$iter_0_repr_17, $sroa_$iter_0_index_18);
+            $sroa_$iter_0_index_18 = $sroa_$iter_0_index_18 + 1;
+            let $mv$$vr_7$0: i32;
+            let $mv$$vr_7$1: ref null "core:prelude/types.wado//ResourceId";
+            let $mv$$vr_7$2: ref null "core:prelude/types.wado//ReadyEvent";
+            multivalue_bind [$mv$$vr_7$0, $mv$$vr_7$1, $mv$$vr_7$2] = "core:prelude/types.wado/core:prelude/types.wado/Subtask^core:prelude/types.wado/Waitable::wait_on$sroa[return]"(ref_val);
+            if (if $mv$$vr_7$0 == 0 -> bool {
+                $mv$$vr_7$1.handle == handle;
             } else {
                 0;
             }) {

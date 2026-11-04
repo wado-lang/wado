@@ -201,36 +201,36 @@ global global:allocator_freelist_align.wado::$const_obj_1: ref Array<i32> = arra
 global global:core:prelude/primitive.wado::$const_obj_2: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
 
 fn "allocator_freelist_align.wado/run"() with Stdout {
+    let p: i32;
+    let $v1: i32;
     let item: i32;
     let $cm_pair_7: i64;
-    let $p_32: i32;
-    let $v1_33: i32;
     let new_repr: ref Array<u8>;
-    let $sroa_$iter_0_repr_56: ref Array<i32>;
-    let $sroa_$iter_0_index_57: i32;
-    $sroa_$iter_0_repr_56 = global:allocator_freelist_align.wado::$const_obj_1;
-    $sroa_$iter_0_index_57 = 0;
+    let $sroa_$iter_0_repr_50: ref Array<i32>;
+    let $sroa_$iter_0_index_51: i32;
+    $sroa_$iter_0_repr_50 = global:allocator_freelist_align.wado::$const_obj_1;
+    $sroa_$iter_0_index_51 = 0;
     b0: block {
         l1: loop {
-            break_if b0 $sroa_$iter_0_index_57 >= 7;
-            item = builtin::array_get_value<i32>($sroa_$iter_0_repr_56, $sroa_$iter_0_index_57);
-            $sroa_$iter_0_index_57 = $sroa_$iter_0_index_57 + 1;
-            if @unlikely((local.tee $v1_33(local.tee $p_32("mem/realloc"(0, 0, 16, item)) & 15) == 0) == 0) {
+            break_if b0 $sroa_$iter_0_index_51 >= 7;
+            item = builtin::array_get_value<i32>($sroa_$iter_0_repr_50, $sroa_$iter_0_index_51);
+            $sroa_$iter_0_index_51 = $sroa_$iter_0_index_51 + 1;
+            if @unlikely((local.tee $v1(local.tee p("mem/realloc"(0, 0, 16, item)) & 15) == 0) == 0) {
                 cold_path;
-                "allocator_freelist_align.wado/run$cold0"(item, $p_32, $v1_33);
+                "allocator_freelist_align.wado/run$cold0"(item, p, $v1);
                 unreachable;
             }
             continue l1;
         };
     };
-    $sroa_$iter_0_index_57 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
+    $sroa_$iter_0_index_51 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
     item = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
-    $sroa_$iter_0_index_57 = "allocator_freelist_align.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$iter_0_index_57);
+    $sroa_$iter_0_index_51 = "allocator_freelist_align.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$iter_0_index_51);
     builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>(3)), 0, global:allocator_freelist_align.wado::$const_obj_0, 0, 2);
     builtin::array_set_u8(new_repr, 2, 10);
     "core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]$dae[return]"(item, new_repr);
     "wasi/stream-drop-writable"(item);
-    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_$iter_0_index_57);
+    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_$iter_0_index_51);
 }
 
 fn "allocator_freelist_align.wado/$template_segment$allocator_freelist_align.wado/$tmpl$59e16269228f9c88"($mv$v$s0, $mv$v$r0, $mv$v$s1, $mv$v$r1, $mv$v$s2, $mv$v$r2, $mv$v$s3, $mv$v$r3, index) {
