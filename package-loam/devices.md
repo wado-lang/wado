@@ -577,9 +577,9 @@ release builds, `compute` beside the kernel pass's last time.
 ### Gemma 3's device memory
 
 The memory `nvidia-smi` reports in use while `example/gemma3-270m/webgpu.wado`
-runs, above what it reports before the run. The peak was sampled every 250 ms
-on the device above, and its split between weights, tensors and the driver is
-not measured:
+runs on the RTX 4060 Ti, above what it reports before the run, sampled every
+250 ms. The peak's split between weights, tensors and the driver is not
+measured:
 
 | Entry                   | MiB |
 | ----------------------- | --- |
@@ -607,8 +607,8 @@ not measured:
 - No kernel has a variant for a device's features. `WebGpuBackend` requests
   none, so it uses neither `shader-f16` nor subgroups, and `WORKGROUP_BYTES` is
   WebGPU's default limit rather than the device's. It waits for a device or a
-  model that a variant would serve; a half graph's `shader-f16` is
-  [roadmap item 17](./TODO.md#roadmap).
+  model that a variant would serve. A half graph's `shader-f16` is the roadmap's
+  [A half graph keeps its type](./TODO.md#roadmap).
 - An `If` on a value on WebGPU reads its condition back, one synchronization an
   `If`. Indirect dispatches would spare that: a kernel writes each branch's
   workgroup counts from the condition, none for the branch not taken, and both
