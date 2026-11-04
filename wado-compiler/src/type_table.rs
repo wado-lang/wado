@@ -5128,38 +5128,24 @@ impl TypeTable {
         }
     }
 
-    /// Redirect each type holding an effect variable to the type with each
-    /// variable replaced by what `solved` says it stands for, and one nothing
-    /// solved by the empty row, once the effect check has solved them.
-    pub fn redirect_effect_vars(&mut self, solved: &EffectRows) {
+    /// What each effect variable stands for once the effect check has solved
+    /// them: what `solved` says, and the empty row for one nothing solved. No
+    /// row it answers names a variable, and no variable is minted from here on.
+    pub fn close_effect_rows(&mut self, solved: &EffectRows) -> EffectRows {
         self.effect_vars_solved = true;
-        let ids: Vec<TypeId> = self.iter_type_ids().collect();
         let mut rows = solved.clone();
-        for &id in &ids {
+        for id in self.iter_type_ids() {
             self.unsolved_vars_in(id, &mut rows);
-        }
-        if rows.is_empty() {
-            return;
         }
         // A solution may name another variable, which stands for what that one
         // is solved to, or for nothing where it is solved nowhere.
-        let rows: EffectRows = rows
-            .iter()
+        rows.iter()
             .map(|(var, solution)| {
                 let mut solved = solve_row(solution, &rows, &mut |_| {});
                 solved.retain(|effect| !effect.is_var());
                 (var.clone(), solved)
             })
-            .collect();
-        for id in ids {
-            if self.redirects.get(id).is_some() {
-                continue;
-            }
-            let solved_type = self.substitute_effect_rows(id, &rows);
-            if solved_type != id {
-                self.redirects.set_growing(id, solved_type);
-            }
-        }
+            .collect()
     }
 
     /// Note each effect variable in `id`'s rows that `rows` holds no solution

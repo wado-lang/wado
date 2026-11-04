@@ -37,6 +37,7 @@ use crate::stdlib_snapshot::{get_or_init_snapshot, reparsed_snapshot_module, std
 use crate::symbol::{Symbol, SymbolTable};
 use crate::symbol_notation::SymbolNotation;
 use crate::tir::{EffectRows, ResolvedType, TemplateId, TirModule, TypeId};
+use crate::tir_visitor::TirMutVisitor;
 use crate::token::Span;
 use crate::type_table::TypeTable;
 use crate::unparse::unparse_contract_clause_renamed;
@@ -189,17 +190,48 @@ pub(crate) struct WriteTarget<'e> {
     pub indexes: bool,
 }
 
+/// Rewrites each type the TIR holds with every effect variable replaced by its
+/// solved row.
+struct EffectRowWriter<'t> {
+    table: &'t mut TypeTable,
+    rows: &'t EffectRows,
+    written: IndexMap<TypeId, TypeId>,
+}
+
+impl TirMutVisitor for EffectRowWriter<'_> {
+    fn visit_type_id(&mut self, type_id: &mut TypeId) {
+        *type_id = *self
+            .written
+            .entry(*type_id)
+            .or_insert_with(|| self.table.substitute_effect_rows(*type_id, self.rows));
+    }
+}
+
 impl Semantics {
-    /// Point every effect variable at the row the effect check solved it to,
-    /// in the snapshot and in the table the TIR reads alike.
-    pub fn redirect_effect_vars(&mut self, solved: &EffectRows) {
-        self.types.redirect_effect_vars(solved);
-        if let Some(state) = &self.state {
-            state
-                .tysys
-                .type_table
-                .borrow_mut()
-                .redirect_effect_vars(solved);
+    /// Write the row the effect check solved each effect variable to into every
+    /// type the TIR holds, so no TIR type names a variable from here on.
+    pub fn write_back_effect_rows(&mut self, solved: &EffectRows) {
+        self.types.close_effect_rows(solved);
+        let Some(state) = &self.state else {
+            return;
+        };
+        let mut table = state.tysys.type_table.borrow_mut();
+        let rows = table.close_effect_rows(solved);
+        if rows.is_empty() {
+            return;
+        }
+        let mut writer = EffectRowWriter {
+            table: &mut table,
+            rows: &rows,
+            written: IndexMap::default(),
+        };
+        for module in self.tir_modules.values_mut() {
+            for func in &module.functions {
+                writer.walk_function(&mut func.borrow_mut());
+            }
+            for global in &mut module.globals {
+                writer.walk_global(global);
+            }
         }
     }
 
