@@ -133,6 +133,10 @@ fn start_server(root: &Path) -> Client {
         },
         "workspace": {
             "workspaceEdit": { "documentChanges": true, "resourceOperations": ["rename"] },
+            // Without it rust-analyzer watches the files itself, warning on
+            // every watched path that does not exist. A session reads each file
+            // once, so the client accepts the registration and watches nothing.
+            "didChangeWatchedFiles": { "dynamicRegistration": true },
         },
         "experimental": { "serverStatusNotification": true },
     });
@@ -140,9 +144,6 @@ fn start_server(root: &Path) -> Client {
         "workspace": { "symbol": { "search": { "kind": "all_symbols", "limit": SYMBOL_SEARCH_LIMIT } } },
         // Priming indexes every crate up front; a rename asks for only what it reaches.
         "cachePriming": { "enable": false },
-        // A session reads each file once; the client watches nothing, so
-        // nothing does.
-        "files": { "watcher": "client" },
     });
     let client = Client::start("rust-analyzer", root, capabilities, options);
     assert_eq!(
