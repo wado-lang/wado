@@ -2761,16 +2761,12 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
     let assert_plan_text = sem.assert_plan_text();
     let coverage_plan_text = sem.coverage_plan_text();
     let export_mappings = sem.export_mappings.clone();
-<<<<<<< HEAD
     let heat_map = sem
         .marks
         .as_ref()
         .map(|marks| marks.heat_map().clone())
         .unwrap_or_default();
-||||||| 8525641e0
-=======
     let parses = sem.space_modules;
->>>>>>> origin/main
 
     // === Phase 7b+8+9+10: Build Package and run remaining phases ===
     // Create Package early so CM binding synthesis runs before monomorphize,

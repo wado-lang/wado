@@ -7,6 +7,7 @@
 use std::fmt::Write as _;
 
 use super::{Basis, ColdBy, Refusal, Site};
+use crate::pgo::Heat;
 use crate::module_source::{ModuleSource, ParseModules};
 use crate::token::Span;
 
@@ -90,6 +91,8 @@ pub(super) struct SiteEntry {
     pub callee_module: ModuleSource,
     pub span: Span,
     pub site: Site,
+    /// The heat the site was priced at.
+    pub heat: Heat,
     pub refusal: Option<Refusal>,
 }
 
@@ -135,9 +138,10 @@ impl Round {
             let at = location(s.span, &s.caller_module, parses);
             let _ = write!(
                 out,
-                "  site {} at {at} ({}) -> {}: ",
+                "  site {} at {at} ({}{}) -> {}: ",
                 function(&s.caller, &s.caller_module),
                 site_text(s.site, &s.caller_module, parses),
+                heat_text(s.heat),
                 function(&s.callee, &s.callee_module)
             );
             match s.refusal {
@@ -173,6 +177,17 @@ fn site_text(site: Site, holder: &ModuleSource, parses: &ParseModules) -> String
         Site::Plain => "plain".to_string(),
         Site::Loop => "loop".to_string(),
         Site::Cold(by) => format!("cold, {}", cold_text(by, holder, parses)),
+        Site::UnlikelyPlain => "plain, unlikely".to_string(),
+        Site::UnlikelyLoop => "loop, unlikely".to_string(),
+    }
+}
+
+/// The profile's heat, where it moved the site's price.
+fn heat_text(heat: Heat) -> &'static str {
+    match heat {
+        Heat::Plain => "",
+        Heat::Hot => ", profiled hot",
+        Heat::Cold => ", profiled cold",
     }
 }
 
@@ -215,6 +230,7 @@ fn refusal_text(refusal: Refusal) -> &'static str {
         Refusal::LeftToEngine => "left to the compile-time engine to fold",
         Refusal::InLoop => "admitted outside loops only",
         Refusal::OutsideLoop => "admitted in loops only",
+        Refusal::OtherHeat => "admitted only at sites the profile heats otherwise",
         Refusal::SeveralLoopSites => "called from several sites of this loop",
         Refusal::RescanSpent => "the splice under way spent what its re-scan may add",
     }

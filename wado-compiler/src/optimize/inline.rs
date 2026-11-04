@@ -1542,17 +1542,12 @@ enum Site {
     /// In a cold run, or anywhere in a function only such sites
     /// reach: only `#[inline(always)]` and a splice no bigger than the call
     /// happen here, since anything else only bloats code that rarely runs.
-<<<<<<< HEAD
-    Cold,
+    Cold(ColdBy),
     /// [`Site::Plain`] in an unlikely run, which the profile's hot regions do
     /// not raise: the branch into it is predicted not taken.
     UnlikelyPlain,
     /// [`Site::Loop`] in an unlikely run.
     UnlikelyLoop,
-||||||| 8525641e0
-    Cold,
-=======
-    Cold(ColdBy),
 }
 
 /// What made a [`Site::Cold`] cold.
@@ -1563,7 +1558,6 @@ enum ColdBy {
     Run(Span),
     /// Every path into the function passes a cold run.
     Callers,
->>>>>>> origin/main
 }
 
 impl Site {
@@ -1579,7 +1573,7 @@ impl Site {
         match self {
             Site::Plain => Site::UnlikelyPlain,
             Site::Loop => Site::UnlikelyLoop,
-            Site::Cold | Site::UnlikelyPlain | Site::UnlikelyLoop => self,
+            Site::Cold(_) | Site::UnlikelyPlain | Site::UnlikelyLoop => self,
         }
     }
 
@@ -1588,7 +1582,7 @@ impl Site {
         match self {
             Site::UnlikelyPlain => Site::Plain,
             Site::UnlikelyLoop => Site::Loop,
-            Site::Cold | Site::Plain | Site::Loop => self,
+            Site::Cold(_) | Site::Plain | Site::Loop => self,
         }
     }
 
@@ -1700,6 +1694,8 @@ enum Refusal {
     InLoop,
     /// A callee admitted in loops only, at a site outside them.
     OutsideLoop,
+    /// A callee admitted only at sites of another [`Heat`].
+    OtherHeat,
     /// A callee admitted in loops only, called from several sites of this one.
     SeveralLoopSites,
     /// The splice under way has spent what its re-scan may add.
@@ -2406,12 +2402,12 @@ pub fn inline_functions(
 ) -> bool {
     let mut log = project.inline_log.take();
     let mut round = log.as_ref().map(|_| Round {
-        threshold: inline_threshold,
+        threshold: thresholds.plain,
         ..Round::default()
     });
     let changed = inline_round(
         project,
-        inline_threshold,
+        thresholds,
         budget,
         holds,
         gate,
@@ -2430,7 +2426,7 @@ pub fn inline_functions(
 
 fn inline_round(
     project: &mut NirPackage,
-    inline_threshold: usize,
+    thresholds: Thresholds,
     budget: &mut InlineBudget,
     holds: &mut InlineHolds,
     gate: &mut FunctionGate,
@@ -2644,7 +2640,6 @@ fn inline_round(
                 foldable: &foldable,
                 loopy: &loopy,
             });
-<<<<<<< HEAD
         let classify = |threshold: usize, runs: &RareRuns| {
             classify_callee(
                 &func,
@@ -2668,76 +2663,23 @@ fn inline_round(
         let verdict = classify(thresholds.plain, runs);
         let reach_at = |heat: Heat| {
             if !*called_at[i].at(heat) {
-                return verdict.reach;
+                return verdict.reach();
             }
             let runs = match heat {
                 Heat::Hot => &no_cold_runs,
                 Heat::Cold | Heat::Plain => runs,
             };
-            classify(*thresholds.at(heat), runs).reach
+            classify(*thresholds.at(heat), runs).reach()
         };
         let reaches = ByHeat {
             cold: reach_at(Heat::Cold),
-            plain: verdict.reach,
+            plain: verdict.reach(),
             hot: reach_at(Heat::Hot),
         };
-        compiler_trace!(
-            "inline_verdict",
-            "{}: hot {} for {} params, {} sites -> {:?}",
-            func.name,
-            verdict.hot,
-            func.params.len(),
-            call_sites[i],
-            reaches
-        );
         let reached = [reaches.cold, reaches.plain, reaches.hot]
             .iter()
             .any(|&r| r != Reach::Nowhere);
         let candidate = reached.then(|| {
-||||||| 8525641e0
-        let verdict = classify_callee(
-            &func,
-            view.as_ref(),
-            cycle_cuts,
-            type_table,
-            inline_threshold,
-            runs,
-            &foldable,
-            &loopy,
-            &safepoint_calls,
-            &scans[i].written,
-            call_sites[i],
-            &spliced,
-            &hopeful_params[i],
-        );
-        compiler_trace!(
-            "inline_verdict",
-            "{}: hot {} for {} params, {} sites -> {:?}",
-            func.name,
-            verdict.hot,
-            func.params.len(),
-            call_sites[i],
-            verdict.reach
-        );
-        let candidate = (verdict.reach != Reach::Nowhere).then(|| {
-=======
-        let verdict = classify_callee(
-            &func,
-            view.as_ref(),
-            cycle_cuts,
-            type_table,
-            inline_threshold,
-            runs,
-            &foldable,
-            &loopy,
-            &safepoint_calls,
-            &scans[i].written,
-            call_sites[i],
-            &spliced,
-            &hopeful_params[i],
-        );
-        let candidate = (verdict.reach() != Reach::Nowhere).then(|| {
->>>>>>> origin/main
             let body = func.body.as_ref().expect("a candidate has a body");
             let hot = verdict.hot.expect("a candidate is priced");
             let shrinks = called_cold[i] && {
@@ -2750,11 +2692,6 @@ fn inline_round(
             };
             (hot, net_cost(hot, func.params.len()), shrinks, func.clone())
         });
-<<<<<<< HEAD
-        (func.id, size, verdict, reaches, candidate)
-||||||| 8525641e0
-        (func.id, size, verdict, candidate)
-=======
         // A function nothing calls has nothing decided about it.
         let logged = logging
             .is_some_and(|log| call_sites[i] > 0 && (called_by_named[i] || log.wants(&func.name)));
@@ -2768,17 +2705,10 @@ fn inline_round(
             basis: verdict.basis,
             over_budget: false,
         });
-        (func.id, size, verdict, candidate, entry)
->>>>>>> origin/main
+        (func.id, size, verdict, reaches, candidate, entry)
     });
-<<<<<<< HEAD
-    for (id, size, verdict, reaches, candidate) in classified {
-||||||| 8525641e0
-    for (id, size, verdict, candidate) in classified {
-=======
     let mut callee_entries: Vec<(Option<FuncId>, CalleeEntry)> = Vec::new();
-    for (id, size, verdict, candidate, entry) in classified {
->>>>>>> origin/main
+    for (id, size, verdict, reaches, candidate, entry) in classified {
         unit_size += size;
         if let Some(id) = id {
             holds.settle(id, verdict.hold, gate);
@@ -2790,13 +2720,7 @@ fn inline_round(
             continue;
         };
         let id = id.expect("func_id assigned at lower");
-<<<<<<< HEAD
         reach.insert(id, reaches);
-||||||| 8525641e0
-        reach.insert(id, verdict.reach);
-=======
-        reach.insert(id, verdict.reach());
->>>>>>> origin/main
         let string_key = (func.module_source.clone(), func.name.clone());
         // Get the strings used by this function
         if let Some(strings) = project.function_strings.get(&string_key) {
@@ -3119,7 +3043,14 @@ struct Decisions<'l> {
 }
 
 impl Decisions<'_> {
-    fn record(&mut self, callee: &NirFunction, span: Span, site: Site, refusal: Option<Refusal>) {
+    fn record(
+        &mut self,
+        callee: &NirFunction,
+        span: Span,
+        site: Site,
+        heat: Heat,
+        refusal: Option<Refusal>,
+    ) {
         if self.caller_named || self.log.wants(&callee.name) {
             self.sites.push(SiteEntry {
                 caller: self.caller.clone(),
@@ -3128,6 +3059,7 @@ impl Decisions<'_> {
                 callee_module: callee.module_source.clone(),
                 span,
                 site,
+                heat,
                 refusal,
             });
         }
@@ -3247,19 +3179,11 @@ fn inline_calls_in_block(
     }
     let [cold, unlikely] = runs.starts(block);
     for (i, stmt_id) in body.blocks[block].stmts.clone().into_iter().enumerate() {
-<<<<<<< HEAD
         if unlikely == Some(i) {
             site = site.entering_unlikely();
         }
         if cold == Some(i) {
-            site = Site::Cold;
-||||||| 8525641e0
-        if start == Some(i) {
-            site = Site::Cold;
-=======
-        if start == Some(i) {
             site = Site::Cold(ColdBy::Run(body.stmts[stmt_id].span));
->>>>>>> origin/main
         }
         let shape = match &body.stmts[stmt_id].kind {
             StmtKind::Let { value, .. }
@@ -3677,23 +3601,11 @@ fn try_inline_call_expr(
     // The call's stamped `func_id` is the exact callee identity; look the
     // candidate up directly (no `(module, name)` resolution).
     let candidate = candidates.bodies.get(&func_id)?;
-<<<<<<< HEAD
     let heat = match candidates.heat_map.heat(caller.exprs[call_id].span) {
         Heat::Hot if !site.heats() || frame.candidate => Heat::Plain,
         heat => heat,
     };
     let reach = *candidates.reach[&func_id].at(heat);
-    let admitted = match (site.admission(), reach) {
-        (Site::UnlikelyPlain | Site::UnlikelyLoop, _) => {
-            unreachable!("admission reads no unlikely site")
-        }
-        (Site::Cold, _) => {
-            candidate.inline_hint == InlineHint::Always || candidates.shrinking.contains(&func_id)
-||||||| 8525641e0
-    let admitted = match (site, candidates.reach[&func_id]) {
-        (Site::Cold, _) => {
-            candidate.inline_hint == InlineHint::Always || candidates.shrinking.contains(&func_id)
-=======
     let sole_site = |frame: &CallerFrame<'_>| {
         if frame.glue {
             Some(Refusal::Glue)
@@ -3701,10 +3613,12 @@ fn try_inline_call_expr(
             Some(Refusal::NotTheSoleSite)
         } else {
             None
->>>>>>> origin/main
         }
     };
-    let refusal = match (site, candidates.reach[&func_id]) {
+    let refusal = match (site.admission(), reach) {
+        (Site::UnlikelyPlain | Site::UnlikelyLoop, _) => {
+            unreachable!("admission reads no unlikely site")
+        }
         (Site::Cold(_), _) => (candidate.inline_hint != InlineHint::Always
             && !candidates.shrinking.contains(&func_id))
         .then_some(Refusal::Cold),
@@ -3735,36 +3649,13 @@ fn try_inline_call_expr(
                 None
             }
         }
-<<<<<<< HEAD
-        (Site::Loop, Reach::SoleOutsideLoops) => false,
-        (Site::Loop, Reach::Loops) => !frame.glue && frame.sole_loop_site(func_id),
-        (Site::Plain, Reach::Loops) => false,
-        // Spliced only at the other kind of site, hot or not.
-        (Site::Plain | Site::Loop, Reach::Nowhere) => false,
-    };
-    if !admitted {
-        return None;
-||||||| 8525641e0
-        (Site::Loop, Reach::SoleOutsideLoops) => false,
-        (Site::Loop, Reach::Loops) => !frame.glue && frame.sole_loop_site(func_id),
-        (Site::Plain, Reach::Loops) => false,
-        (Site::Plain | Site::Loop, Reach::Nowhere) => {
-            unreachable!("a candidate is reached somewhere")
-        }
-    };
-    if !admitted {
-        return None;
-=======
         (Site::Plain, Reach::Loops) => Some(Refusal::OutsideLoop),
-        (Site::Plain | Site::Loop, Reach::Nowhere) => {
-            unreachable!("a candidate is reached somewhere")
-        }
->>>>>>> origin/main
+        (Site::Plain | Site::Loop, Reach::Nowhere) => Some(Refusal::OtherHeat),
     }
     .or_else(|| (!candidates.charge(func_id)).then_some(Refusal::RescanSpent));
     let call_span = caller.exprs[call_id].span;
     if let Some(decisions) = frame.decisions.as_mut() {
-        decisions.record(candidate, call_span, site, refusal);
+        decisions.record(candidate, call_span, site, heat, refusal);
     }
     if refusal.is_some() {
         return None;
