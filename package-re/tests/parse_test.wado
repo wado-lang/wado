@@ -290,3 +290,16 @@ test "nesting is bounded" {
     }
     assert error(deep) == "groups may nest at most 256 deep (at byte 257)";
 }
+
+test "a hole's groups count toward the nesting around it" {
+    let mut open = "";
+    let mut close = "";
+    for let _i of 0..<255 {
+        open.push('(');
+        close.push(')');
+    }
+    assert holed(`${open}${close}`, [255]) matches { Ok(_) };
+    open.push('(');
+    close.push(')');
+    assert holed_error(`${open}${close}`, [256]) == "groups may nest at most 256 deep (at byte 256)";
+}

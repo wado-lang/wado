@@ -3,8 +3,9 @@
 
 import { readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 
-export const root = new URL("..", import.meta.url).pathname;
+export const root = fileURLToPath(new URL("..", import.meta.url));
 export const corpus = join(root, "../vendor/test262");
 
 // Each test under `dir`, in vendor/test262. The generated property tests list

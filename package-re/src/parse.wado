@@ -1,6 +1,7 @@
 //! Reads an ECMA-262 `Pattern` (§22.2.1) as the `u` flag reads it, into the
 //! tree of `ast.wado`. Rules cite `vendor/ecma262/spec.html`.
 
+use { HashSet } from "core:collections";
 use { BinaryProperty, GeneralCategoryGroup, Property, contains, ranges } from "core:icu";
 use { CharSet, ClassItem, Flag, Group, Modified, NamedProperty, NamedSet, Node, Repeat, SetKind } from "./ast.wado";
 use { MAX_CODE_POINT, complement, normalize } from "./charset.wado";
@@ -48,7 +49,7 @@ internal fn parse(pattern: StrSlice, syntax: Syntax, holes: List<Hole> = []) -> 
         syntax,
         depth: 0,
         groups: 0,
-        names: [],
+        names: HashSet::new(),
         holes,
         next_hole: 0,
         blocked: false,
@@ -72,7 +73,7 @@ struct Parser {
     syntax: Syntax,
     depth: i32,
     groups: i32,
-    names: List<String>,
+    names: HashSet<String>,
     holes: List<Hole>,
     /// The first hole not taken yet.
     next_hole: i32,
@@ -145,7 +146,7 @@ impl Parser {
     }
 
     /// `node` renumbered to follow the groups read so far, its names checked
-    /// against theirs.
+    /// against theirs and its groups' nesting against the groups around it.
     fn splice(&mut self, node: &Node, at: i32) -> Result<Node, PatternError> {
         return Ok(match *node {
             Group(g) => {
@@ -157,14 +158,22 @@ impl Parser {
                 if let Some(name) = g.name {
                     self.claim(name, at)?;
                 }
-                Node::Group(Group { index, name: g.name, body: self.splice(&g.body, at)? });
+                Node::Group(Group { index, name: g.name, body: self.splice_inside(&g.body, at)? });
             },
-            Modified(m) => Node::Modified(Modified { ..m, body: self.splice(&m.body, at)? }),
+            Modified(m) => Node::Modified(Modified { ..m, body: self.splice_inside(&m.body, at)? }),
             Repeat(r) => Node::Repeat(Repeat { ..r, body: self.splice(&r.body, at)? }),
             Concat(nodes) => Node::Concat(self.splice_all(&nodes, at)?),
             Alternation(nodes) => Node::Alternation(self.splice_all(&nodes, at)?),
             _ => *node,
         });
+    }
+
+    /// The body of a group, spliced one level deeper.
+    fn splice_inside(&mut self, body: &Node, at: i32) -> Result<Node, PatternError> {
+        self.enter(at)?;
+        let node = self.splice(body, at)?;
+        self.depth -= 1;
+        return Ok(node);
     }
 
     fn splice_all(&mut self, nodes: &List<Node>, at: i32) -> Result<List<Node>, PatternError> {
@@ -176,10 +185,9 @@ impl Parser {
     }
 
     fn claim(&mut self, name: String, at: i32) -> Result<(), PatternError> {
-        if self.names.contains_str(&name) {
+        if !self.names.insert(name) {
             return Err(self.error_at(at, `two groups are named \`${name}\``));
         }
-        self.names.push(name);
         return Ok(());
     }
 
@@ -255,10 +263,11 @@ impl Parser {
         return Ok(());
     }
 
-    fn enter(&mut self) -> Result<(), PatternError> {
+    /// One group deeper, for a group that opens at `at`.
+    fn enter(&mut self, at: i32) -> Result<(), PatternError> {
         self.depth += 1;
         if self.depth > MAX_NESTING {
-            return Err(self.error_here(`groups may nest at most ${MAX_NESTING} deep`));
+            return Err(self.error_at(at, `groups may nest at most ${MAX_NESTING} deep`));
         }
         return Ok(());
     }
@@ -363,7 +372,8 @@ impl Parser {
     }
 
     fn group(&mut self, start: i32) -> Result<Node, PatternError> {
-        self.enter()?;
+        let at = self.pos;
+        self.enter(at)?;
         let node = self.group_body(start)?;
         self.depth -= 1;
         return Ok(node);
