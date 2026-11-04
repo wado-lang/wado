@@ -401,7 +401,18 @@ impl Graph for WebGpuBackend {
         if let Device(d) = x && let Some(widened) = self.widened_cache(d, axis, extent) {
             return Placed::Device(widened);
         }
-        return padded_with_zeros::<WebGpuBackend, E, Axes>(self, x, axis, extent);
+        if !E::exact_in_f32() {
+            return padded_with_zeros::<WebGpuBackend, E, Axes>(self, x, axis, extent);
+        }
+        let mut extents = self.extents_of(x);
+        let own = extents[axis];
+        extents[axis] = extent;
+        let to = contiguous(self.allocated(element_count(&extents), false), 0, extents);
+        if element_count(&self.extents_of(x)) > 0 {
+            let from = self.device_view(x);
+            self.copy(&from, &sliced(&to, axis, 0, own));
+        }
+        return Placed::Device(to);
     }
 
     /// The row kernel where `init` is the fold's identity, so the fold from it
