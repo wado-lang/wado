@@ -754,6 +754,7 @@ fn put_packed(out: &mut Vec<u8>, field: u32, values: &[i32]) {
 mod tests {
     use super::*;
     use crate::query::test_ctx::with_ctx;
+    use crate::test_support::in_memory_host;
     use crate::text::PositionEncoding;
 
     async fn doc(source: &str) -> ScipDocument {
@@ -765,7 +766,7 @@ mod tests {
 
     /// The document of `source` at `path`, indexed from `root`.
     async fn doc_at(path: &str, source: &str, root: &str) -> ScipDocument {
-        let host = crate::test_support::in_memory_host(&[(path, source)]);
+        let host = in_memory_host(&[(path, source)]);
         let sem = wado_compiler::semantics(source, &host, Some(path)).await;
         let uri = format!("file://{path}");
         document(
