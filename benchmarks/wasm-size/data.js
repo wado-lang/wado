@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1793753118242,
+  "lastUpdate": 1793762352115,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -74197,6 +74197,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/751b7b19e10c52ebc2d7d97598102c48575dc5d8"
         },
         "date": 1793753117024,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3099,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7303,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21996,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 377139,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "edf55c989fadd1602e90d8647b8f86bac75eda49",
+          "message": "Merge pull request #2540 from wado-lang/claude/happy-gates-iszpmu\n\nfeat(re): linear-time regular expressions in ECMA-262's syntax",
+          "timestamp": "2026-11-04T12:05:47+09:00",
+          "tree_id": "b284f276270217d5fcf433780284882b7ec5d0a6",
+          "url": "https://github.com/wado-lang/wado/commit/edf55c989fadd1602e90d8647b8f86bac75eda49"
+        },
+        "date": 1793762350945,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
