@@ -698,11 +698,11 @@ pub mod pass_dump {
     }
 
     /// While it lives, the passes and decisions
-    /// [`crate::OptOverrides::skip_passes`] names are skipped on this thread. A
-    /// thread is enough: a compile calls every pass and makes every decision
-    /// from the thread that entered it, whatever threads a pass fans its work
-    /// out to. A compile nested inside another (a Kiln generator's) skips its
-    /// own list, and the outer one's comes back when it ends.
+    /// [`crate::OptOverrides::skip_passes`] names are skipped on this thread,
+    /// and on the threads [`crate::parallel::Executor`] fans its work out to,
+    /// since a decision can be made inside a visit. A compile nested inside
+    /// another (a Kiln generator's) skips its own list, and the outer one's
+    /// comes back when it ends.
     pub struct SkipScope {
         outer: Vec<String>,
     }
@@ -711,6 +711,11 @@ pub mod pass_dump {
         pub fn enter(passes: &[String]) -> Self {
             let outer = SKIPPED.replace(passes.to_vec());
             Self { outer }
+        }
+
+        /// What this thread skips, for a visit on another thread to enter.
+        pub fn current() -> Vec<String> {
+            SKIPPED.with_borrow(Clone::clone)
         }
     }
 

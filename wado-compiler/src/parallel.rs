@@ -13,6 +13,20 @@ use std::sync::{Mutex, MutexGuard, PoisonError};
 #[cfg(not(target_arch = "wasm32"))]
 use rayon::prelude::*;
 
+#[cfg(not(target_arch = "wasm32"))]
+use crate::optimize::pass_dump::SkipScope;
+
+/// `f`, entering on whichever thread runs it the skip list of the thread that
+/// handed it out.
+#[cfg(not(target_arch = "wasm32"))]
+fn carrying_skips<A, R>(f: impl Fn(A) -> R + Sync + Send) -> impl Fn(A) -> R + Sync + Send {
+    let skips = SkipScope::current();
+    move |a| {
+        let _scope = SkipScope::enter(&skips);
+        f(a)
+    }
+}
+
 /// The stack of every thread that compiles, the optimizer's included: the
 /// compiler recurses as deep as the source nests.
 pub const STACK_SIZE: usize = 64 * 1024 * 1024;
@@ -74,7 +88,7 @@ impl Executor {
     pub fn map<T: Sync, R: Send>(&self, items: &[T], f: impl Fn(&T) -> R + Sync + Send) -> Vec<R> {
         #[cfg(not(target_arch = "wasm32"))]
         if let Some(pool) = self.pool_for(items.len()) {
-            return pool.install(|| items.par_iter().map(f).collect());
+            return pool.install(|| items.par_iter().map(carrying_skips(f)).collect());
         }
         items.iter().map(f).collect()
     }
@@ -90,7 +104,18 @@ impl Executor {
     ) -> Vec<R> {
         #[cfg(not(target_arch = "wasm32"))]
         if let Some(pool) = self.pool_for(items.len()) {
-            return pool.install(|| items.par_iter().map_init(init, f).collect());
+            return {
+                let skips = SkipScope::current();
+                pool.install(|| {
+                    items
+                        .par_iter()
+                        .map_init(init, |state, item| {
+                            let _scope = SkipScope::enter(&skips);
+                            f(state, item)
+                        })
+                        .collect()
+                })
+            };
         }
         let mut state = init();
         items.iter().map(|item| f(&mut state, item)).collect()
@@ -100,7 +125,7 @@ impl Executor {
     pub fn map_indices<R: Send>(&self, len: usize, f: impl Fn(usize) -> R + Sync + Send) -> Vec<R> {
         #[cfg(not(target_arch = "wasm32"))]
         if let Some(pool) = self.pool_for(len) {
-            return pool.install(|| (0..len).into_par_iter().map(f).collect());
+            return pool.install(|| (0..len).into_par_iter().map(carrying_skips(f)).collect());
         }
         (0..len).map(f).collect()
     }
@@ -113,7 +138,7 @@ impl Executor {
     ) -> Vec<R> {
         #[cfg(not(target_arch = "wasm32"))]
         if let Some(pool) = self.pool_for(items.len()) {
-            return pool.install(|| items.par_iter().filter_map(f).collect());
+            return pool.install(|| items.par_iter().filter_map(carrying_skips(f)).collect());
         }
         items.iter().filter_map(f).collect()
     }
@@ -126,7 +151,12 @@ impl Executor {
     ) -> Vec<R> {
         #[cfg(not(target_arch = "wasm32"))]
         if let Some(pool) = self.pool_for(len) {
-            return pool.install(|| (0..len).into_par_iter().filter_map(f).collect());
+            return pool.install(|| {
+                (0..len)
+                    .into_par_iter()
+                    .filter_map(carrying_skips(f))
+                    .collect()
+            });
         }
         (0..len).filter_map(f).collect()
     }
@@ -135,7 +165,7 @@ impl Executor {
     pub fn for_each<T: Sync>(&self, items: &[T], f: impl Fn(&T) + Sync + Send) {
         #[cfg(not(target_arch = "wasm32"))]
         if let Some(pool) = self.pool_for(items.len()) {
-            pool.install(|| items.par_iter().for_each(f));
+            pool.install(|| items.par_iter().for_each(carrying_skips(f)));
             return;
         }
         items.iter().for_each(f);
@@ -145,7 +175,7 @@ impl Executor {
     pub fn for_each_index(&self, len: usize, f: impl Fn(usize) + Sync + Send) {
         #[cfg(not(target_arch = "wasm32"))]
         if let Some(pool) = self.pool_for(len) {
-            pool.install(|| (0..len).into_par_iter().for_each(f));
+            pool.install(|| (0..len).into_par_iter().for_each(carrying_skips(f)));
             return;
         }
         (0..len).for_each(f);
