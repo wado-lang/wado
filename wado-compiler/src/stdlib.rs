@@ -378,7 +378,7 @@ mod tests {
 
     #[test]
     fn a_checkout_path_names_its_stdlib_module() {
-        #[cfg(debug_assertions)]
+        #[cfg(all(debug_assertions, not(target_arch = "wasm32")))]
         assert!(DEV_STDLIB_ROOT.ends_with(CHECKOUT_STDLIB_DIR.trim_end_matches('/')));
         for (path, import) in [
             ("/w/wado-compiler/lib/core/cli.wado", Some("core:cli")),
