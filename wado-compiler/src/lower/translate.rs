@@ -899,7 +899,8 @@ impl FunctionTranslator<'_, '_> {
         // storage to a new — possibly mutable — owner, and a write through that
         // owner is one the source observes. Either end being moved keeps the
         // copy.
-        if self.moved_roots.contains(&local_index) || !pass_dump::decides("lower/value_copy/share") {
+        if self.moved_roots.contains(&local_index) || !pass_dump::decides("lower/value_copy/share")
+        {
             return false;
         }
         let type_table = self.base.type_table.borrow();

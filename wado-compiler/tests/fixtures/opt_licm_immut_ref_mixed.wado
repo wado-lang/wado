@@ -47,5 +47,8 @@ __DATA__
     "wir_scope": "opt_licm_immut_ref_mixed.wado/run",
     "wir_pass": {"O2": ["nir/licm"]},
     "wir_expect:O2": ["$licm_threshold"],
-    "wir_not_expect:O2": ["$licm_value"]
+    "wir_not_expect:O2": ["$licm_arith_{} = cr.threshold + counter.value;"],
+    "wir_contrast": {"O2": [
+        {"    ctr.value = ctr.value + 1;": "    ctr.limit = ctr.limit + 1;", "Counter { value: 0,": "Counter { value: builtin::black_box(0),"}
+    ]}
 }

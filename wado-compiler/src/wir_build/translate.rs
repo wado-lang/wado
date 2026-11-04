@@ -6,9 +6,9 @@
 use crate::compiler_item::SeqField;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
-use crate::optimize::pass_dump;
 use crate::name::global_name;
 use crate::nir::{CallParamSource, FuncId, NirBinaryOp, NirFunction, NirParam, NirUnaryOp};
+use crate::optimize::pass_dump;
 use crate::primitive::PrimitiveType;
 use crate::tir::{ResolvedType, TypeId};
 use crate::type_table::TypeTable;
@@ -2382,9 +2382,7 @@ impl FunctionTranslator<'_, '_> {
     /// lets a `never`-typed sub-expression sit in any value position.
     pub(super) fn translate_expr(&mut self, expr_id: ExprId) -> WirInstr {
         let instr = self.translate_expr_inner(expr_id);
-        if self.type_table.is_never(self.body.exprs[expr_id].type_id)
-            && !ends_diverged(&instr)
-        {
+        if self.type_table.is_never(self.body.exprs[expr_id].type_id) && !ends_diverged(&instr) {
             WirInstr::Seq(vec![instr, WirInstr::Unreachable])
         } else {
             instr

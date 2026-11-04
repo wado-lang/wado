@@ -63,10 +63,9 @@ __DATA__
 {
     "stdout": "ok\n",
     "wir_pass": {"O2": ["lower/value_copy/owned"]},
-    "wir_not_expect:O2": [
-        "array.new_fixed<ref \"core:prelude/string.wado//String\">(",
-        "List<String>::push\"($local_",
-        "List<i32>::push\"("
-    ],
+    "wir_contrast": {"O2": [
+        {"    let b = [100, 200] as List<i32>;": "    let mut b: List<i32> = [];\n    b.push(builtin::black_box(100));\n    b.push(200);"}
+    ]},
+    "wir_not_expect:O2": ["array.new_fixed<ref \"core:prelude/string.wado//String\">("],
     "wir_expect:O2": ["array.new_fixed<i32>(100, 200)"]
 }

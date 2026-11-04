@@ -983,7 +983,9 @@ impl ReloadGain<'_> {
                 then_block,
                 else_block,
             } => {
-                let own = condition.as_expr().map_or(0, |e| self.flat(NodeRef::Expr(e)))
+                let own = condition
+                    .as_expr()
+                    .map_or(0, |e| self.flat(NodeRef::Expr(e)))
                     - self.reloads_after(NodeRef::Stmt(s));
                 let then_paths = self.of_block(*then_block, depth);
                 let else_paths =
@@ -1032,7 +1034,15 @@ impl ReloadGain<'_> {
         let reads: usize = self
             .readers
             .iter()
-            .map(|&r| count_genuine_field_reads(self.body, node, r, self.field_index, &self.ctx.hoist_locals))
+            .map(|&r| {
+                count_genuine_field_reads(
+                    self.body,
+                    node,
+                    r,
+                    self.field_index,
+                    &self.ctx.hoist_locals,
+                )
+            })
             .sum();
         let mut reloads = 0;
         self.count_reload_sites(node, &mut reloads);
@@ -1288,7 +1298,9 @@ fn collect_block_labels(body: &Body, node: NodeRef, out: &mut IndexSet<String>) 
 
 /// The number of loops `node` opens: one for a `loop` statement.
 fn loops_opened(body: &Body, node: NodeRef) -> usize {
-    usize::from(matches!(node, NodeRef::Stmt(s) if matches!(body.stmts[s].kind, StmtKind::Loop { .. })))
+    usize::from(
+        matches!(node, NodeRef::Stmt(s) if matches!(body.stmts[s].kind, StmtKind::Loop { .. })),
+    )
 }
 
 /// [`reload_skipped_by_jump`] under `node`, `depth` loops inside the loop body.
@@ -1328,7 +1340,9 @@ fn jumps_within_loop(
     if let NodeRef::Stmt(s) = node {
         match &body.stmts[s].kind {
             StmtKind::Continue => return true,
-            StmtKind::Break { label: Some(label), .. } if inner_labels.contains(label) => {
+            StmtKind::Break {
+                label: Some(label), ..
+            } if inner_labels.contains(label) => {
                 return true;
             }
             StmtKind::Break { label: None, .. } if depth > 0 => return true,
