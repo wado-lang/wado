@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1793799326693,
+  "lastUpdate": 1793800230861,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -74373,6 +74373,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/871fd1ff5aecb4e878b690c23454ae9e54e978dc"
         },
         "date": 1793799326223,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3099,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7303,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21996,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 377139,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "409d8f971c450d51a243fae46c109159d6a5aaae",
+          "message": "Merge pull request #2545 from wado-lang/ccr-19ef8864-l39mxp\n\nfeat(dev-tools): rename Rust symbols by their resolution with rust-rename",
+          "timestamp": "2026-11-04T22:22:00+09:00",
+          "tree_id": "5d8dfc0f478420b0d345109e94200d34703e0536",
+          "url": "https://github.com/wado-lang/wado/commit/409d8f971c450d51a243fae46c109159d6a5aaae"
+        },
+        "date": 1793800230299,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
