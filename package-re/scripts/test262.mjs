@@ -10,7 +10,7 @@
 // mise run test262-re
 
 import { readFileSync, writeFileSync } from "node:fs";
-import { join, relative } from "node:path";
+import { basename, join, relative } from "node:path";
 import { acceptsUnderU, corpus, files, root } from "./test262-corpus.mjs";
 import { wadoLiteral as wado, wadoPattern } from "./wado-literal.mjs";
 
@@ -47,7 +47,7 @@ const icuProperties = [
 ].flatMap((stem) => [`${stem}.js`, `${stem}-negated.js`]).concat(["unsupported-property-Line_Break-negated.js"]);
 
 function knownToIcu(path) {
-  return icuProperties.includes(path.split("/").pop());
+  return icuProperties.includes(basename(path));
 }
 
 

@@ -1,4 +1,4 @@
-use { ClassItem, Flag, Group, Node } from "../src/ast.wado";
+use { ClassItem, Flag, Group, Modified, Node } from "../src/ast.wado";
 use { Hole, PatternError, Syntax, parse } from "../src/parse.wado";
 
 fn code(c: u32) -> String {
@@ -302,4 +302,19 @@ test "a hole's groups count toward the nesting around it" {
     open.push('(');
     close.push(')');
     assert holed_error(`${open}${close}`, [256]) == "groups may nest at most 256 deep (at byte 256)";
+}
+
+test "a hole's modifier groups count toward the nesting around it" {
+    let mut node = Node::Char('a' as u32);
+    for let _i of 0..<257 {
+        node = Node::Modified(Modified {
+            add: Flag::none(),
+            remove: Flag::none(),
+            body: node,
+        });
+    }
+    let holes: List<Hole> = [
+        Hole { offset: 0, node },
+    ];
+    assert `${parse(#""#.as_str_slice(), Syntax::Plain, holes).unwrap_err()}` == "groups may nest at most 256 deep (at byte 0)";
 }

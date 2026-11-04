@@ -226,7 +226,8 @@ test "Display reads back to the same regular expression" {
     }
     assert `${re(#"\t\uD800"#)}` == #"\u{9}\u{D800}"#;
     assert `${re(#"[\-a]"#)}` == #"[\-a]"#;
-    assert !re(`${re(#"a(b|c)d"#)}`).is_match("abcd");
+    let reprinted = re(`${re(#"a(b|c)d"#)}`);
+    assert reprinted.is_match("abd") && reprinted.is_match("acd") && !reprinted.is_match("abcd");
 }
 
 test "i waits for simple case folding" {
