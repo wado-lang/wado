@@ -20,8 +20,8 @@ use crate::component_model::SourceInterfaceBatch;
 use crate::hashmap;
 use crate::module_source::ModuleSource;
 use crate::name::{
-    cm_dependency_interface, interface_basename, mangle_local_method, unnamed_interface_name,
-    wado_identifier,
+    cm_dependency_interface, interface_basename, is_wasi_fq, mangle_local_method,
+    unnamed_interface_name, wado_identifier,
 };
 use crate::token::Span;
 use crate::wit_emit::CmShape;
@@ -157,7 +157,7 @@ pub fn build_bindings(
         .imports
         .values()
         .filter_map(|item| match item {
-            WorldItem::Interface { id, .. } if !interface_fq(resolve, *id).starts_with("wasi:") => {
+            WorldItem::Interface { id, .. } if !is_wasi_fq(&interface_fq(resolve, *id)) => {
                 Some(*id)
             }
             WorldItem::Interface { .. } | WorldItem::Function(_) | WorldItem::Type { .. } => None,

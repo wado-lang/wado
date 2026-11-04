@@ -86,7 +86,7 @@ impl WasiView for KilnHostState {
 /// call, each non-empty line a diagnostic the moment it ends: stdout's an
 /// `Info` and stderr's a `Warning`, as `core:kiln`'s `KilnLogSink` writes
 /// `core:log` events at those levels. The two streams share one list, so the
-/// lines keep the order the generator wrote them in.
+/// lines come in the order they ended.
 #[derive(Default)]
 struct Stdio {
     lines: Arc<Mutex<Lines>>,

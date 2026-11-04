@@ -617,9 +617,9 @@ A generator reports to the build by writing to stdout and stderr:
 
 - Each non-empty line written to stdout becomes an info diagnostic, and each one
   written to stderr, a panic's message included, a warning.
-- A line is reported the moment it ends, and the lines of both streams keep the
-  order they were written in. A line left unended is reported when the call
-  returns, and of two, the one begun first is reported first.
+- A line is reported the moment it ends, so the lines of both streams come in
+  the order they ended. A line left unended is reported when the call returns,
+  and of two, the one begun first is reported first.
 - Every line is reported, whether the run then succeeds or fails.
 - A diagnostic carries no span.
 

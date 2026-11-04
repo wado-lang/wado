@@ -111,8 +111,8 @@ export fn run() {
     .expect_err("the consumer must hold `Stderr`");
     assert!(
         err.contains(
-            "missing effect 'Stderr' required by 'positive': its component carries no \
-             `org.wado-lang.demanded-imports` section"
+            "missing effect 'Stderr' required by 'positive': its component records none of \
+             what its exports demand"
         ),
         "{err}"
     );

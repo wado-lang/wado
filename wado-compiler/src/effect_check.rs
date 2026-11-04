@@ -12,8 +12,11 @@ use crate::attribute::AMBIENT;
 use crate::demanded_imports;
 use crate::hashmap::{IndexMap, IndexSet};
 
+use crate::component_model::Demand;
 use crate::module_source::ModuleSource;
-use crate::name::{DeclaredHead, FqTraitName, FqTypeName, TypeHead, mangle_local_method};
+use crate::name::{
+    DeclaredHead, FqTraitName, FqTypeName, TypeHead, is_wasi_fq, mangle_local_method,
+};
 use crate::resolve::{Resolution, Resolutions};
 use crate::tir::{
     EffectRef, EffectRows, FunctionRef, ResolvedType, RowFlow, TemplateId, TypeId, solve_row,
@@ -105,8 +108,9 @@ impl From<EffectError> for Diagnostic {
             EffectFault::MissingUnrecorded(kind) => (
                 Code::MissingEffect,
                 format!(
-                    "missing {} '{}' required by '{}': its component carries no `{}` section \
-                     this compiler reads, so each of its `wasi:*` imports is demanded",
+                    "missing {} '{}' required by '{}': its component records none of what its \
+                     exports demand, so each of its `wasi:*` imports is demanded (a Wado \
+                     library records it in a `{}` section)",
                     kind.noun(),
                     e.missing_effect,
                     e.callee,
@@ -1255,19 +1259,17 @@ fn operation_demands(
         // Composition-relative: the imported interface is composed away, so its
         // operations demand the dependency's own host-leaf capabilities. A
         // types-only leaf has no operation to perform.
-        let recorded = registry.records_demanded_imports(fq);
-        for leaf in registry
+        for (leaf, demand) in registry
             .demanded_imports_for(fq)
-            .filter(|leaf| registry.declares_functions(leaf))
-            .filter(|leaf| !index.provided_import_fqs.contains(leaf.as_str()))
+            .filter(|(leaf, _)| registry.declares_functions(leaf))
+            .filter(|(leaf, _)| !index.provided_import_fqs.contains(leaf.as_str()))
         {
             let Some(effect) = index.effect_by_cm_fq.get(leaf) else {
                 continue;
             };
-            if recorded || !leaf.starts_with("wasi:") {
-                demands.certain.push(effect.clone());
-            } else {
-                demands.unrecorded.push(effect.clone());
+            match demand {
+                Demand::Certain => demands.certain.push(effect.clone()),
+                Demand::Unrecorded => demands.unrecorded.push(effect.clone()),
             }
         }
         return demands;
@@ -1428,7 +1430,7 @@ fn exported_host_interfaces(
         out.extend(
             held.iter()
                 .filter_map(|effect| interface_of.get(effect))
-                .filter(|fq| fq.starts_with("wasi:"))
+                .filter(|fq| is_wasi_fq(fq))
                 .map(|fq| (*fq).to_string()),
         );
     }
@@ -1962,7 +1964,8 @@ fn call_site_effects(
         .map(|(func_ref, self_in_args)| {
             let dispatches_through_path = func_ref.method_info.is_none()
                 && !matches!(func_ref.module_source, ModuleSource::Binding { .. });
-            let resolved = dispatch_effects(sem, index, &func_ref, self_in_args, args, rows);
+            let (resolved, resource) =
+                dispatch_effects(sem, index, &func_ref, self_in_args, args, rows);
             CalleeEffects {
                 name: callee_name(callee).to_string(),
                 declared: resolved.required,
@@ -1971,7 +1974,7 @@ fn call_site_effects(
                 } else {
                     OperationDemands::default()
                 },
-                resource: resolved.resource,
+                resource,
                 params: resolved.params,
                 returns: index.callee_return(&func_ref),
             }
@@ -1979,9 +1982,11 @@ fn call_site_effects(
         .collect()
 }
 
-/// What a dispatch to `func_ref` with `args` requires. `self_in_args` says a
-/// qualified (UFCS) call spells the receiver as its first argument, so the
-/// arguments align with the callee's full parameter list.
+/// What a dispatch to `func_ref` with `args` requires: what the callee
+/// declares, and what a method of a resource demands besides
+/// ([`EffectIndex::resource_demands`]). `self_in_args` says a qualified (UFCS)
+/// call spells the receiver as its first argument, so the arguments align with
+/// the callee's full parameter list.
 fn dispatch_effects(
     sem: &Semantics,
     index: &EffectIndex<'_>,
@@ -1989,7 +1994,7 @@ fn dispatch_effects(
     self_in_args: bool,
     args: &[Expr],
     rows: &Rows,
-) -> Resolved {
+) -> (Resolved, OperationDemands) {
     // A synthesized template (a derived method) is a method of the type it is
     // derived for, so it takes `self`.
     let has_receiver = match func_ref.template.as_ref().and_then(TemplateId::def) {
@@ -2004,18 +2009,16 @@ fn dispatch_effects(
     } else {
         Brought::default()
     };
-    Resolved {
-        resource: index.resource_demands(sem, func_ref),
-        ..resolve_effect_params(
-            sem,
-            &effects,
-            &index.method_param_types(func_ref),
-            has_receiver && !self_in_args,
-            args,
-            &brought,
-            rows,
-        )
-    }
+    let resolved = resolve_effect_params(
+        sem,
+        &effects,
+        &index.method_param_types(func_ref),
+        has_receiver && !self_in_args,
+        args,
+        &brought,
+        rows,
+    );
+    (resolved, index.resource_demands(sem, func_ref))
 }
 
 /// The effects each closure literal's body performs, by the literal's node,
@@ -2089,22 +2092,18 @@ impl EffectIndex<'_> {
     /// direct (non-trait) method on a `resource`, what an operation of the
     /// resource demands ([`operation_demands`]).
     fn resource_demands(&self, sem: &Semantics, func_ref: &FunctionRef) -> OperationDemands {
-        let Some(method_info) = &func_ref.method_info else {
-            return OperationDemands::default();
-        };
-        match method_info.receiver().def() {
-            Some(def)
-                if method_info.trait_name.is_none()
-                    && self.resolutions.defs().kind(def) == DefKind::Resource =>
-            {
-                assert!(
-                    self.interfaces.contains_key(&def),
-                    "a resource is an operation owner"
-                );
-                operation_demands(sem, self, Some(def))
-            }
-            _ => OperationDemands::default(),
+        if let Some(method_info) = &func_ref.method_info
+            && method_info.trait_name.is_none()
+            && let Some(def) = method_info.receiver().def()
+            && self.resolutions.defs().kind(def) == DefKind::Resource
+        {
+            assert!(
+                self.interfaces.contains_key(&def),
+                "a resource is an operation owner"
+            );
+            return operation_demands(sem, self, Some(def));
         }
+        OperationDemands::default()
     }
 
     /// What a dispatch's type arguments bring to the callee's open effect
@@ -2493,7 +2492,6 @@ fn resolve_effect_params(
     if param_names.is_empty() {
         return Resolved {
             required: callee_effects.to_vec(),
-            resource: OperationDemands::default(),
             params: IndexMap::default(),
         };
     }
@@ -2591,7 +2589,6 @@ fn resolve_effect_params(
     }
     Resolved {
         required: resolved,
-        resource: OperationDemands::default(),
         params,
     }
 }
@@ -2599,10 +2596,7 @@ fn resolve_effect_params(
 /// What a call to one callee requires, and what each of its effect parameters
 /// stood for there.
 struct Resolved {
-    /// What the callee declares.
     required: Vec<EffectRef>,
-    /// What a method of a resource demands besides its declaration.
-    resource: OperationDemands,
     params: IndexMap<String, IndexSet<EffectRef>>,
 }
 
@@ -2831,13 +2825,13 @@ impl AstVisitor<'_> for SemEffectWalker<'_> {
                 .collect();
             for info in &iterators {
                 for func_ref in [&info.into_iter, &info.next] {
-                    let resolved =
+                    let (resolved, resource) =
                         dispatch_effects(self.sem, self.index, func_ref, false, &[], &self.rows);
                     let callee = func_ref
                         .method_info
                         .as_ref()
                         .map_or(func_ref.name.as_str(), |m| m.method_name.as_str());
-                    self.report_resolved(&resolved, callee, for_of.span);
+                    self.report_resolved(&resolved, &resource, callee, for_of.span);
                 }
             }
         }
@@ -2899,7 +2893,7 @@ impl AstVisitor<'_> for SemEffectWalker<'_> {
             Expr::MethodCall(method_call) => {
                 let sem = self.sem;
                 for dispatch in sem.method_dispatches_at(method_call.id) {
-                    let resolved = dispatch_effects(
+                    let (resolved, resource) = dispatch_effects(
                         sem,
                         self.index,
                         &dispatch.function_ref,
@@ -2909,12 +2903,17 @@ impl AstVisitor<'_> for SemEffectWalker<'_> {
                     );
                     let returns = self.index.callee_return(&dispatch.function_ref);
                     self.solve_rows(returns, method_call.id, &resolved.params);
-                    self.report_resolved(&resolved, &method_call.method, method_call.span);
+                    self.report_resolved(
+                        &resolved,
+                        &resource,
+                        &method_call.method,
+                        method_call.span,
+                    );
                 }
             }
             Expr::StaticMethodCall(static_call) => {
                 for (func_ref, self_in_args) in dispatches_at(self.annotations, static_call.id) {
-                    let resolved = dispatch_effects(
+                    let (resolved, resource) = dispatch_effects(
                         self.sem,
                         self.index,
                         &func_ref,
@@ -2924,7 +2923,12 @@ impl AstVisitor<'_> for SemEffectWalker<'_> {
                     );
                     let returns = self.index.callee_return(&func_ref);
                     self.solve_rows(returns, static_call.id, &resolved.params);
-                    self.report_resolved(&resolved, &static_call.method, static_call.span);
+                    self.report_resolved(
+                        &resolved,
+                        &resource,
+                        &static_call.method,
+                        static_call.span,
+                    );
                 }
             }
             _ => {}
@@ -3040,10 +3044,16 @@ impl SemEffectWalker<'_> {
         );
     }
 
-    /// Report what a dispatch to one callee requires.
-    fn report_resolved(&mut self, resolved: &Resolved, callee: &str, span: Span) {
+    /// Report what a dispatch to one callee requires ([`dispatch_effects`]).
+    fn report_resolved(
+        &mut self,
+        resolved: &Resolved,
+        resource: &OperationDemands,
+        callee: &str,
+        span: Span,
+    ) {
         self.report_missing(&resolved.required, callee, span);
-        self.report_dispatched(&resolved.resource, callee, span);
+        self.report_dispatched(resource, callee, span);
     }
 
     /// Record what each variable a call's type carries out stands for. Where
@@ -3517,7 +3527,7 @@ impl<'a> PurityWalker<'a> {
         callee: &str,
         span: Span,
     ) {
-        let resolved = dispatch_effects(
+        let (resolved, resource) = dispatch_effects(
             self.sem,
             self.index,
             func_ref,
@@ -3525,7 +3535,7 @@ impl<'a> PurityWalker<'a> {
             args,
             &Rows::default(),
         );
-        if self.unanswered(&resolved.required) || self.unanswered(&resolved.resource.all()) {
+        if self.unanswered(&resolved.required) || self.unanswered(&resource.all()) {
             self.flag(Impurity::Call(callee.to_string()), span);
         }
     }

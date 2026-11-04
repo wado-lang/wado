@@ -29,7 +29,7 @@ use crate::module_source::{CmNamespace, ModuleSource};
 use crate::name::{
     DeclName, DeclPath, RefKind, UNIT_TYPE_NAME, cm_binding_func_name, cm_import_alias,
     cm_lift_func_name, cm_release_args_func_name, cm_world_import_label, cm_wrap_async_func_name,
-    ref_type_name, to_cm_name,
+    is_wasi_fq, ref_type_name, to_cm_name,
 };
 use crate::primitive::PrimitiveType;
 use crate::resolve::Resolutions;
@@ -383,7 +383,7 @@ pub fn cm_payload_type_from_ast(
             if declares(&[CmTypeKind::Resource]) {
                 return Some(CmPayloadType::Resource(declared()?));
             }
-            if src.starts_with("wasi:") || stdlib::is_wit_core_interface(&src) {
+            if is_wasi_fq(&src) || stdlib::is_wit_core_interface(&src) {
                 return None;
             }
             if !declares(&[
@@ -492,7 +492,7 @@ fn wasi_error_code_decl_from_ast(
         return None;
     };
     let source = registry.source_interface(n)?;
-    if !source.starts_with("wasi:") {
+    if !is_wasi_fq(&source) {
         return None;
     }
     if ![CmTypeKind::Enum, CmTypeKind::Variant]
@@ -953,6 +953,16 @@ impl CmInterfaceInfo {
     pub fn instance_key(&self) -> String {
         cm_instance_key(&self.package, &self.interface)
     }
+}
+
+/// Why a caller of a component's exports must hold one of its imports.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Demand {
+    /// The component says its exports demand it, or it is a guest import.
+    Certain,
+    /// The component records nothing of what its exports demand, so every
+    /// `wasi:*` import is demanded.
+    Unrecorded,
 }
 
 /// Registry of WASI imports for code generation
@@ -2515,27 +2525,29 @@ impl CmInterfaceRegistry {
     }
 
     /// The host-leaf imports of the component owning `fq` that a caller of its
-    /// exports must hold: a guest import, which the consumer provides, and a
-    /// `wasi:*` one the component records as demanded, or every one where it
-    /// records none.
-    pub fn demanded_imports_for(&self, fq: &str) -> impl Iterator<Item = &String> {
+    /// exports must hold, each with why: a guest import, which the consumer
+    /// provides, and a `wasi:*` one the component records as demanded, or
+    /// every one where it records none.
+    pub fn demanded_imports_for(&self, fq: &str) -> impl Iterator<Item = (&String, Demand)> {
         let recorded = self.component_demanded_imports.get(fq);
-        self.host_leaf_imports_for(fq).iter().filter(move |import| {
-            !import.starts_with("wasi:") || recorded.is_none_or(|fqs| fqs.contains(import))
-        })
-    }
-
-    /// Whether the component owning `fq` records what its exports demand.
-    #[must_use]
-    pub fn records_demanded_imports(&self, fq: &str) -> bool {
-        self.component_demanded_imports.contains_key(fq)
+        self.host_leaf_imports_for(fq)
+            .iter()
+            .filter_map(move |import| {
+                if !is_wasi_fq(import) {
+                    return Some((import, Demand::Certain));
+                }
+                match recorded {
+                    Some(fqs) => fqs.contains(import).then_some((import, Demand::Certain)),
+                    None => Some((import, Demand::Unrecorded)),
+                }
+            })
     }
 
     /// Whether `fq` is a guest effect some component dependency imports: an
     /// imported interface outside WASI, which is the host's.
     #[must_use]
     pub fn is_dependency_guest_import(&self, fq: &str) -> bool {
-        !fq.starts_with("wasi:") && self.is_dependency_import(fq)
+        !is_wasi_fq(fq) && self.is_dependency_import(fq)
     }
 
     /// Whether some component dependency imports `fq`.

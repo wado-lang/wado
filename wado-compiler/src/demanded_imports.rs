@@ -2,12 +2,14 @@
 //! the `wasi:*` interfaces its exports demand of a caller. A host import
 //! outside it is one only an `#[ambient]` body reaches, which a consumer
 //! forwards without demanding its effect, as it would if it had the library as
-//! source. A component without a section this module reads demands every
-//! import it has.
+//! source. A component without a section this module reads, one Wado did not
+//! build among them, demands every import it has.
 //!
 //! The payload is lines: the format version, then the interface FQs. Writer
 //! and reader both depend on this module, so the wire format lives in one
 //! place.
+
+use wasmparser::{Chunk, Parser, Payload};
 
 /// Name of the custom section a library component carries.
 pub const SECTION_NAME: &str = "org.wado-lang.demanded-imports";
@@ -30,8 +32,7 @@ pub fn encode<'a>(fqs: impl IntoIterator<Item = &'a str>) -> Vec<u8> {
 /// none, or one of another format version or not UTF-8, which demands every
 /// import.
 pub fn read_from_component(mut bytes: &[u8]) -> Option<Vec<String>> {
-    use wasmparser::{Chunk, Payload};
-    let mut parser = wasmparser::Parser::new(0);
+    let mut parser = Parser::new(0);
     loop {
         let Chunk::Parsed { consumed, payload } = parser.parse(bytes, true).ok()? else {
             unreachable!("a parse at the end of its input needs no more data");

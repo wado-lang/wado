@@ -1643,7 +1643,7 @@ fn provider_directives<H: CompilerHost>(
         };
         let guest_fqs: Vec<String> = module_host_leaf_imports(dep_module)
             .into_iter()
-            .filter(|fq| !fq.starts_with("wasi:"))
+            .filter(|fq| !name::is_wasi_fq(fq))
             .collect();
         let fq = match guest_fqs.as_slice() {
             [fq] => fq.clone(),

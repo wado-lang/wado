@@ -12,6 +12,7 @@ use crate::ast::{
     Attribute, CmImport, Type, WorldDecl, WorldExport, WorldExportFn, WorldImport, cm_import_of,
 };
 use crate::defs::DefId;
+use crate::kiln::GENERATOR_WORLD_FQ;
 use crate::module_source::ModuleSource;
 use crate::tir::TirFunction;
 
@@ -379,8 +380,7 @@ impl WorldRegistry {
     /// behind kiln-generator detection, so the frontend, `cm_binding`, and
     /// codegen all agree on what counts as a generator world.
     pub fn generator_world(&self, world: &str) -> Option<&WorldInfo> {
-        self.get(world)
-            .filter(|_| world == crate::kiln::GENERATOR_WORLD_FQ)
+        self.get(world).filter(|_| world == GENERATOR_WORLD_FQ)
     }
 
     pub fn is_generator_world(&self, world: &str) -> bool {

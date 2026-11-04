@@ -624,6 +624,12 @@ pub fn is_variant_payload_field(field_name: &str) -> bool {
     field_name.starts_with("payload_")
 }
 
+/// Whether the CM interface or function `fq` is WASI's, which the host answers,
+/// rather than a guest's.
+pub fn is_wasi_fq(fq: &str) -> bool {
+    fq.starts_with("wasi:")
+}
+
 /// The core function of a world export `name`'s binding.
 pub fn cm_export_func_name(name: &str) -> String {
     format!("{INTERNAL_PREFIX}cm_export__{name}")
