@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1793780197430,
+  "lastUpdate": 1793799326693,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -74329,6 +74329,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/8525641e0f320ff9f2fabc1988140da48473b19a"
         },
         "date": 1793780196542,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3099,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7303,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21996,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 377139,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "871fd1ff5aecb4e878b690c23454ae9e54e978dc",
+          "message": "Merge pull request #2544 from wado-lang/compiler/from-loam-webgpu\n\nperf(compiler): optimize a long straight-line body in time linear in its statements",
+          "timestamp": "2026-11-04T22:20:11+09:00",
+          "tree_id": "4dc37a77bb3ef66cc00bd734f59ca622a82024e3",
+          "url": "https://github.com/wado-lang/wado/commit/871fd1ff5aecb4e878b690c23454ae9e54e978dc"
+        },
+        "date": 1793799326223,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
