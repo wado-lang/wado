@@ -3438,21 +3438,21 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<core:prelud
 }
 
 fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_all"(self, data) {
-    let $load_0: i32;
     let ptr_18: i32;
     let i: i32;
     let w: i64;
     let $licm_arith_39: i32;
     let $moved_2: ref null "core:prelude/types.wado//StartedWrite<u8>";
     let $drop_spill_3: ref "core:prelude/types.wado//StreamWrite<u8>";
-    if local.tee $load_0(data.used) == 0 {
+    let $av_46: i32;
+    if local.tee $av_46(data.used) == 0 {
         return 0;
     }
-    data = struct.new "core:prelude//List<u8>" { repr: let $array_clone_src_1: ref Array<u8>; $array_clone_src_1 = data.repr; let $array_clone_dst_2: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>($load_0)), 0, $array_clone_src_1, 0, $load_0); $array_clone_dst_2, used: $load_0 };
+    data = struct.new "core:prelude//List<u8>" { repr: let $array_clone_src_1: ref Array<u8>; $array_clone_src_1 = data.repr; let $array_clone_dst_2: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>($av_46)), 0, $array_clone_src_1, 0, $av_46); $array_clone_dst_2, used: $av_46 };
     block {
         l426: loop {
-            $load_0 = data.used;
-            ptr_18 = builtin::i32_wrap_i64(ptr_18 = "mem/realloc"(0, 0, 1, $load_0); $array_clone_src_1 = data.repr; i = 0; $licm_arith_39 = $load_0 - 8; b427: block {
+            $av_46 = data.used;
+            ptr_18 = builtin::i32_wrap_i64(ptr_18 = "mem/realloc"(0, 0, 1, $av_46); $array_clone_src_1 = data.repr; i = 0; $licm_arith_39 = $av_46 - 8; b427: block {
                 l428: loop {
                     break_if b427 (i > $licm_arith_39) | ((i + 8) > $licm_arith_39);
                     w = ((((((builtin::i64_extend_i32_u(builtin::array_get_value_u8($array_clone_src_1, i)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($array_clone_src_1, i + 1)) << 8_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($array_clone_src_1, i + 2)) << 16_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($array_clone_src_1, i + 3)) << 24_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($array_clone_src_1, i + 4)) << 32_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($array_clone_src_1, i + 5)) << 40_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($array_clone_src_1, i + 6)) << 48_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($array_clone_src_1, i + 7)) << 56_i64);
@@ -3473,7 +3473,7 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_al
                 };
             }; b431: block {
                 l432: loop {
-                    break_if b431 (((i >= $load_0) | ((i + 1) >= $load_0)) | (((i + 1) + 1) >= $load_0)) | ((((i + 1) + 1) + 1) >= $load_0);
+                    break_if b431 (((i >= $av_46) | ((i + 1) >= $av_46)) | (((i + 1) + 1) >= $av_46)) | ((((i + 1) + 1) + 1) >= $av_46);
                     builtin::store_u8(ptr_18 + i, builtin::array_get_value_u8($array_clone_src_1, i));
                     i = i + 1;
                     builtin::store_u8(ptr_18 + i, builtin::array_get_value_u8($array_clone_src_1, i));
@@ -3486,22 +3486,22 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_al
                 };
             }; b433: block {
                 l434: loop {
-                    break_if b433 i >= $load_0;
+                    break_if b433 i >= $av_46;
                     builtin::store_u8(ptr_18 + i, builtin::array_get_value_u8($array_clone_src_1, i));
                     i = i + 1;
                     continue l434;
                 };
-            }; builtin::i64_extend_i32_u(ptr_18) | (builtin::i64_extend_i32_s($load_0) << 32_i64));
-            i = "wasi/stream-write"(self, ptr_18, select i32($load_0 < 268435455, $load_0, 268435455));
-            $drop_spill_3 = "core:prelude/types.wado/core:prelude/types.wado/take_written<u8>"(local.tee $moved_2(struct.new "core:prelude/types.wado//StartedWrite<u8>" { buffer: struct.new "core:prelude/types.wado//CopyBuffer" { handle: self, packed: i, ptr: ptr_18, size: $load_0, align: 1 }, data: struct.new "core:prelude//List<u8>" { repr: $array_clone_src_1 = data.repr; builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>(local.tee ptr_18(data.used))), 0, $array_clone_src_1, 0, ptr_18); $array_clone_dst_2, used: ptr_18 } }).buffer, $moved_2.data);
+            }; builtin::i64_extend_i32_u(ptr_18) | (builtin::i64_extend_i32_s($av_46) << 32_i64));
+            i = "wasi/stream-write"(self, ptr_18, select i32($av_46 < 268435455, $av_46, 268435455));
+            $drop_spill_3 = "core:prelude/types.wado/core:prelude/types.wado/take_written<u8>"(local.tee $moved_2(struct.new "core:prelude/types.wado//StartedWrite<u8>" { buffer: struct.new "core:prelude/types.wado//CopyBuffer" { handle: self, packed: i, ptr: ptr_18, size: $av_46, align: 1 }, data: struct.new "core:prelude//List<u8>" { repr: $array_clone_src_1 = data.repr; builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>(local.tee ptr_18(data.used))), 0, $array_clone_src_1, 0, ptr_18); $array_clone_dst_2, used: ptr_18 } }).buffer, $moved_2.data);
             if ref.is_null($moved_2) == 0 {
                 "core:prelude/types.wado/core:prelude/types.wado/StartedWrite<u8>^core:prelude/traits.wado/Drop::drop"($moved_2);
             }
-            ptr_18 = $load_0 - local.tee $load_0(local.tee data($drop_spill_3.rest).used);
-            if (local.tee i($drop_spill_3.result) != 0) | (ptr_18 <= 0) | ($load_0 == 0) {
+            ptr_18 = $av_46 - local.tee $av_46(local.tee data($drop_spill_3.rest).used);
+            if (local.tee i($drop_spill_3.result) != 0) | (ptr_18 <= 0) | ($av_46 == 0) {
                 return i;
             }
-            data = struct.new "core:prelude//List<u8>" { repr: $array_clone_src_1 = data.repr; builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>(local.tee $load_0(data.used))), 0, $array_clone_src_1, 0, $load_0); $array_clone_dst_2, used: $load_0 };
+            data = struct.new "core:prelude//List<u8>" { repr: $array_clone_src_1 = data.repr; builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>(local.tee $av_46(data.used))), 0, $array_clone_src_1, 0, $av_46); $array_clone_dst_2, used: $av_46 };
             continue l426;
         };
     };
@@ -3577,11 +3577,12 @@ fn "core:prelude/types.wado/core:prelude/types.wado/WaitableSet<core:prelude/typ
 
 fn "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/types.wado/CopySettlement>::remove$unchecked"(self, index) {
     let $load_0: ref "Array<core:prelude/types.wado/CopySettlement>";
-    let $load_3: i32;
     let v: ref "core:prelude/types.wado//CopySettlement";
+    let $av_10: i32;
     v = struct.new "core:prelude/types.wado//CopySettlement" { handle: local.tee v(builtin::array_get_value<ref "core:prelude/types.wado//CopySettlement">(local.tee $load_0(self.repr), index)).handle, packed: v.packed };
-    builtin::array_copy<ref "core:prelude/types.wado//CopySettlement">($load_0, index, $load_0, index + 1, (local.tee $load_3(self.used) - 1) - index);
-    self.used = $load_3 - 1;
+    $av_10 = self.used;
+    builtin::array_copy<ref "core:prelude/types.wado//CopySettlement">($load_0, index, $load_0, index + 1, ($av_10 - 1) - index);
+    self.used = $av_10 - 1;
     builtin::array_set<ref "core:prelude/types.wado//CopySettlement">($load_0, self.used, ref.null none);
     return v;
 }

@@ -2069,6 +2069,7 @@ fn "effect_handler_stream_forwarded_write_drop.wado/effect_handler_stream_forwar
     let len_17: i32;
     let packed: i32;
     let ptr_24: i32;
+    let $av_32: i32;
     self_2 = self.$capture_0;
     return $inline__effect_dispatch__core_prelude_types_wado_StreamWritable_u8___begin_write_1: block -> ref null "core:prelude/types.wado//StartedWrite<u8>" {
         self_5 = $inline_effect_handler_stream_forwarded_write_drop_wado_Proxy__inner_2: block -> ref null "core:prelude//$Resource" {
@@ -2095,7 +2096,8 @@ fn "effect_handler_stream_forwarded_write_drop.wado/effect_handler_stream_forwar
             len_17 = data.used;
             ptr_24 = builtin::i32_wrap_i64(ptr_24 = "mem/realloc"(0, 0, 1, len_17); "core:rt/gc_array_to_memory$spec0$dae[src_start]"(data.repr, ptr_24, len_17); builtin::i64_extend_i32_u(ptr_24) | (builtin::i64_extend_i32_s(len_17) << 32_i64));
             packed = "wasi/stream-write"(handle, ptr_24, select i32(len_17 < 268435455, len_17, 268435455));
-            break $inline__effect_dispatch__core_prelude_types_wado_StreamWritable_u8___begin_write_1: struct.new "core:prelude/types.wado//StartedWrite<u8>" { buffer: struct.new "core:prelude/types.wado//CopyBuffer" { handle: handle, packed: packed, ptr: ptr_24, size: len_17, align: 1 }, data: struct.new "core:prelude//List<u8>" { repr: let $array_clone_src_1: ref Array<u8>; $array_clone_src_1 = data.repr; handle = data.used; let $array_clone_dst_2: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>(handle)), 0, $array_clone_src_1, 0, handle); $array_clone_dst_2, used: handle } };
+            $av_32 = data.used;
+            break $inline__effect_dispatch__core_prelude_types_wado_StreamWritable_u8___begin_write_1: struct.new "core:prelude/types.wado//StartedWrite<u8>" { buffer: struct.new "core:prelude/types.wado//CopyBuffer" { handle: handle, packed: packed, ptr: ptr_24, size: len_17, align: 1 }, data: struct.new "core:prelude//List<u8>" { repr: let $array_clone_src_1: ref Array<u8>; $array_clone_src_1 = data.repr; let $array_clone_dst_2: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>($av_32)), 0, $array_clone_src_1, 0, $av_32); $array_clone_dst_2, used: $av_32 } };
         }
         unreachable;
     };

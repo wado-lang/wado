@@ -1645,11 +1645,12 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StartedWrite<u8>^core:prelud
 
 fn "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/types.wado/CopySettlement>::remove$unchecked"(self, index) {
     let $load_0: ref "Array<core:prelude/types.wado/CopySettlement>";
-    let $load_3: i32;
     let v: ref "core:prelude/types.wado//CopySettlement";
+    let $av_10: i32;
     v = struct.new "core:prelude/types.wado//CopySettlement" { handle: local.tee v(builtin::array_get_value<ref "core:prelude/types.wado//CopySettlement">(local.tee $load_0(self.repr), index)).handle, packed: v.packed };
-    builtin::array_copy<ref "core:prelude/types.wado//CopySettlement">($load_0, index, $load_0, index + 1, (local.tee $load_3(self.used) - 1) - index);
-    self.used = $load_3 - 1;
+    $av_10 = self.used;
+    builtin::array_copy<ref "core:prelude/types.wado//CopySettlement">($load_0, index, $load_0, index + 1, ($av_10 - 1) - index);
+    self.used = $av_10 - 1;
     builtin::array_set<ref "core:prelude/types.wado//CopySettlement">($load_0, self.used, ref.null none);
     return v;
 }
@@ -1890,13 +1891,15 @@ fn "effect_handler_resource_stream_stdlib_wrapper.wado/effect_handler_resource_s
     let self_2: ref "core:prelude//List<u8>";
     let other_len: i32;
     let new_used: i32;
+    let $av_13: i32;
     return self_2 = self.$capture_0.log, $inline_core_prelude_list_wado_List_u8___extend_from_slice_0: block {
-        break_if $inline_core_prelude_list_wado_List_u8___extend_from_slice_0 local.tee other_len(data.end - data.start) == 0;
+        $av_13 = data.start;
+        break_if $inline_core_prelude_list_wado_List_u8___extend_from_slice_0 local.tee other_len(data.end - $av_13) == 0;
         if @unlikely(local.tee new_used(self_2.used + other_len) > builtin::array_len(self_2.repr)) {
             cold_path;
             "core:prelude/list.wado/core:prelude/list.wado/List<u8>::grow_to"(self_2, new_used);
         }
-        builtin::array_copy<u8>(self_2.repr, self_2.used, data.repr, data.start, other_len);
+        builtin::array_copy<u8>(self_2.repr, self_2.used, data.repr, $av_13, other_len);
         self_2.used = new_used;
     }, 0;
 }

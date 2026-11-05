@@ -94,13 +94,14 @@ import fn wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode f
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
 fn "array_bounds_widen_user_panic.wado/guarded$dae[return]"(xs, i) with Stdout {
-    let $load_0: i32;
-    if @unlikely(i >= local.tee $load_0(xs.used)) {
+    let $av_4: i32;
+    $av_4 = xs.used;
+    if @unlikely(i >= $av_4) {
         cold_path;
         "core:rt/panic"(array.new_fixed<u8>(65), 1);
         unreachable;
     }
-    if @unlikely((i + 1) >= $load_0) {
+    if @unlikely((i + 1) >= $av_4) {
         cold_path;
         "array_bounds_widen_user_panic.wado/guarded$cold0$dae[xs,i]"();
         unreachable;

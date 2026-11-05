@@ -89,17 +89,17 @@ type "functype//wasi/$wasi:cli/stderr@0.3.0#write-via-stream" = fn(i32) -> i32; 
 
 type "functype//wasi/$wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(17)
 
-type "functype//const_object_globalization_let_value_arg.wado/head_len" = fn(ref "core:prelude//List<u8>", i32) -> i32;  // TypeId(18)
+type "functype//const_object_globalization_let_value_arg.wado/bump_first" = fn(ref "core:prelude//List<u8>", i32) -> i32;  // TypeId(18)
 
-type "functype//const_object_globalization_let_value_arg.wado/bump_first" = fn(ref "core:prelude//List<u8>", i32) -> i32;  // TypeId(19)
+type "functype//const_object_globalization_let_value_arg.wado/measure" = fn(i32) -> i32;  // TypeId(19)
 
-type "functype//const_object_globalization_let_value_arg.wado/measure" = fn(i32) -> i32;  // TypeId(20)
+type "functype//const_object_globalization_let_value_arg.wado/bump" = fn(i32) -> i32;  // TypeId(20)
 
-type "functype//const_object_globalization_let_value_arg.wado/bump" = fn(i32) -> i32;  // TypeId(21)
+type "functype//const_object_globalization_let_value_arg.wado/run" = fn();  // TypeId(21)
 
-type "functype//const_object_globalization_let_value_arg.wado/run" = fn();  // TypeId(22)
+type "functype//const_object_globalization_let_value_arg.wado/$cm_export__run" = fn();  // TypeId(22)
 
-type "functype//const_object_globalization_let_value_arg.wado/$cm_export__run" = fn();  // TypeId(23)
+type "functype//const_object_globalization_let_value_arg.wado/head_len$spec0$dae[s]" = fn(i32) -> i32;  // TypeId(23)
 
 type "functype//core:prelude/list.wado/$template_segment$core:prelude/list.wado/$tmpl$59e16269228f9c88" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", i32) -> ref "core:prelude/string.wado//String";  // TypeId(24)
 
@@ -207,12 +207,6 @@ import fn wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode f
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
-global global:const_object_globalization_let_value_arg.wado::$const_obj_0: ref "core:prelude//List<u8>" = struct.new "core:prelude//List<u8>" { repr: array.new_fixed<u8>(104, 101, 108, 108, 111), used: 5 };
-
-fn "const_object_globalization_let_value_arg.wado/head_len"(s, bias) {
-    return s.used + bias;
-}
-
 fn "const_object_globalization_let_value_arg.wado/bump_first"(v, bias) {
     let $load_0: i32;
     let $load_1: ref Array<u8>;
@@ -232,9 +226,9 @@ fn "const_object_globalization_let_value_arg.wado/bump_first"(v, bias) {
 
 fn "const_object_globalization_let_value_arg.wado/measure"(bias) {
     if bias > 100 {
-        return "const_object_globalization_let_value_arg.wado/head_len"(global:const_object_globalization_let_value_arg.wado::$const_obj_0, bias);
+        return "const_object_globalization_let_value_arg.wado/head_len$spec0$dae[s]"(bias);
     }
-    return "const_object_globalization_let_value_arg.wado/head_len"(global:const_object_globalization_let_value_arg.wado::$const_obj_0, bias) * 10;
+    return "const_object_globalization_let_value_arg.wado/head_len$spec0$dae[s]"(bias) * 10;
 }
 
 fn "const_object_globalization_let_value_arg.wado/bump"(bias) {
@@ -266,6 +260,10 @@ fn "const_object_globalization_let_value_arg.wado/$cm_binding__wasi:cli/stdout@0
 fn "const_object_globalization_let_value_arg.wado/$cm_export__run"() {
     "const_object_globalization_let_value_arg.wado/run"();
     "wasi/task-return"(0);
+}
+
+fn "const_object_globalization_let_value_arg.wado/head_len$spec0$dae[s]"(bias) {
+    return 5 + bias;
 }
 
 fn "core:prelude/list.wado/$template_segment$core:prelude/list.wado/$tmpl$59e16269228f9c88"($mv$v$s0, $mv$v$r0, $mv$v$s1, $mv$v$r1, $mv$v$s2, $mv$v$r2, $mv$v$s3, $mv$v$r3, index) {

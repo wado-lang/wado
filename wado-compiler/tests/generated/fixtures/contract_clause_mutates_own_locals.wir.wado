@@ -217,7 +217,8 @@ fn "contract_clause_mutates_own_locals.wado/total"(xs) {
             continue l3;
         };
     };
-    if @unlikely(local.tee $load_0(local.tee copy_4(struct.new "core:prelude//List<i32>" { repr: let $array_clone_dst_2: ref Array<i32>; builtin::array_copy<i32>(local.tee $array_clone_dst_2(builtin::array_new<i32>($load_0)), 0, $load_1, 0, $load_0); $array_clone_dst_2, used: $load_0 }).used) >= builtin::array_len(copy_4.repr)) {
+    copy_4 = struct.new "core:prelude//List<i32>" { repr: let $array_clone_dst_2: ref Array<i32>; builtin::array_copy<i32>(local.tee $array_clone_dst_2(builtin::array_new<i32>($load_0)), 0, $load_1, 0, $load_0); $array_clone_dst_2, used: $load_0 };
+    if @unlikely($load_0 >= builtin::array_len(copy_4.repr)) {
         cold_path;
         "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(copy_4);
     }

@@ -816,8 +816,9 @@ condition: orig == \"hello\"
 orig: "), used: 132 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, $match_mut_lift_12.used);
         unreachable;
     }
-    $match_mut_lift_13 = ref.as_non_null(local.tee opt_arr(struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(1, 2, 3), used: 3 }));
-    if @unlikely(local.tee $av_64(local.tee $match_mut_lift_13(struct.new "core:prelude//List<i32>" { repr: let $array_clone_src_6: ref Array<i32>; $array_clone_src_6 = $match_mut_lift_13.repr; $av_64 = $match_mut_lift_13.used; let $array_clone_dst_7: ref Array<i32>; builtin::array_copy<i32>(local.tee $array_clone_dst_7(builtin::array_new<i32>($av_64)), 0, $array_clone_src_6, 0, $av_64); $array_clone_dst_7, used: $av_64 }).used) >= builtin::array_len($match_mut_lift_13.repr)) {
+    $av_64 = local.tee $match_mut_lift_13(ref.as_non_null(local.tee opt_arr(struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(1, 2, 3), used: 3 }))).used;
+    $match_mut_lift_13 = struct.new "core:prelude//List<i32>" { repr: let $array_clone_src_6: ref Array<i32>; $array_clone_src_6 = $match_mut_lift_13.repr; let $array_clone_dst_7: ref Array<i32>; builtin::array_copy<i32>(local.tee $array_clone_dst_7(builtin::array_new<i32>($av_64)), 0, $array_clone_src_6, 0, $av_64); $array_clone_dst_7, used: $av_64 };
+    if @unlikely($av_64 >= builtin::array_len($match_mut_lift_13.repr)) {
         cold_path;
         "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"($match_mut_lift_13);
     }

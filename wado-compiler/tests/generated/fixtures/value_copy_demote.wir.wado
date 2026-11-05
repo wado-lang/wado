@@ -153,7 +153,6 @@ global global:value_copy_demote.wado::$const_obj_1: ref "core:prelude/string.wad
 global global:core:prelude/string.wado::$const_obj_2: ref Array<u8> = array.new_fixed<u8>(32);
 
 fn "value_copy_demote.wado/distinct_count"(tokens) {
-    let $load_1: i32;
     let i_3: i32;
     let $contract_arg_0: i32;
     let self_16: ref "core:prelude/string.wado//String";
@@ -162,8 +161,10 @@ fn "value_copy_demote.wado/distinct_count"(tokens) {
     let $licm_used_40: i32;
     let $licm_repr_42: ref Array<u8>;
     let $licm_repr_43: ref Array<u8>;
-    "value_copy_demote.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>::sort_by$$Closure_0$dae[cmp]"(local.tee tokens(struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: let $array_clone_src_1: ref "Array<core:prelude/string.wado/String>"; $array_clone_src_1 = tokens.repr; $load_1 = tokens.used; let $array_clone_dst_2: ref "Array<core:prelude/string.wado/String>"; builtin::array_copy<ref "core:prelude/string.wado//String">(local.tee $array_clone_dst_2(builtin::array_new<ref "core:prelude/string.wado//String">($load_1)), 0, $array_clone_src_1, 0, $load_1); $array_clone_dst_2, used: $load_1 }));
-    $load_1 = 0;
+    let $av_44: i32;
+    $av_44 = tokens.used;
+    "value_copy_demote.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>::sort_by$$Closure_0$dae[cmp]"(local.tee tokens(struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: let $array_clone_src_1: ref "Array<core:prelude/string.wado/String>"; $array_clone_src_1 = tokens.repr; let $array_clone_dst_2: ref "Array<core:prelude/string.wado/String>"; builtin::array_copy<ref "core:prelude/string.wado//String">(local.tee $array_clone_dst_2(builtin::array_new<ref "core:prelude/string.wado//String">($av_44)), 0, $array_clone_src_1, 0, $av_44); $array_clone_dst_2, used: $av_44 }));
+    $av_44 = 0;
     i_3 = 0;
     $licm_used_40 = tokens.used;
     $array_clone_src_1 = tokens.repr;
@@ -219,13 +220,13 @@ fn "value_copy_demote.wado/distinct_count"(tokens) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__8: 1;
                 } == 0;
             }) {
-                $load_1 = $load_1 + 1;
+                $av_44 = $av_44 + 1;
             }
             i_3 = i_3 + 1;
             continue l1;
         };
     };
-    return $load_1;
+    return $av_44;
 }
 
 fn "value_copy_demote.wado/run"() with Stdout {

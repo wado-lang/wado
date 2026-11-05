@@ -108,12 +108,12 @@ import fn wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode f
 global global:core:builtin::$unit_case$core:prelude/types.wado//Option<resource_move_in_while_let.wado/Holder>$0: ref "core:prelude/types.wado//Option<resource_move_in_while_let.wado/Holder>" = struct.new "core:prelude/types.wado//Option<resource_move_in_while_let.wado/Holder>" { 0 };
 
 fn "resource_move_in_while_let.wado/sift_if_let$dae[keep]"(from) {
-    let $load_2: i32;
     let kept: ref null "core:prelude//List<resource_move_in_while_let.wado/Holder>";
     let h: ref null "resource_move_in_while_let.wado//Holder";
     let $sroa_v_end_29: i32;
     let $sroa_$iter_0_start_30: i32;
     let $licm_repr_32: ref null "Array<resource_move_in_while_let.wado/Holder>";
+    let $av_32: i32;
     kept = struct.new "core:prelude//List<resource_move_in_while_let.wado/Holder>" { repr: array.new_fixed<ref null "resource_move_in_while_let.wado//Holder">(), used: 0 };
     $sroa_v_end_29 = from.used;
     $sroa_$iter_0_start_30 = 0;
@@ -123,16 +123,16 @@ fn "resource_move_in_while_let.wado/sift_if_let$dae[keep]"(from) {
             break_if b0 $sroa_$iter_0_start_30 >= $sroa_v_end_29;
             $sroa_$iter_0_start_30 = $sroa_$iter_0_start_30 + 1;
             $fused_$inline_core_prelude_list_wado_List_resource_move_in_while_let_wado_Holder___pop_6: block {
-                break_if $fused_$inline_core_prelude_list_wado_List_resource_move_in_while_let_wado_Holder___pop_6 local.tee $load_2(from.used) == 0;
-                from.used = $load_2 - 1;
+                break_if $fused_$inline_core_prelude_list_wado_List_resource_move_in_while_let_wado_Holder___pop_6 local.tee $av_32(from.used) == 0;
+                from.used = $av_32 - 1;
                 if local.tee h(builtin::array_get_value<ref null "resource_move_in_while_let.wado//Holder">($licm_repr_32, from.used)).id == 1 {
-                    if @unlikely(local.tee $load_2(kept.used) >= builtin::array_len(kept.repr)) {
+                    if @unlikely(local.tee $av_32(kept.used) >= builtin::array_len(kept.repr)) {
                         cold_path;
                         "core:prelude/list.wado/core:prelude/list.wado/List<resource_move_in_while_let.wado/Holder>::grow"(kept);
                         $licm_repr_32 = from.repr;
                     }
-                    builtin::array_set<ref null "resource_move_in_while_let.wado//Holder">(kept.repr, $load_2, h);
-                    kept.used = $load_2 + 1;
+                    builtin::array_set<ref null "resource_move_in_while_let.wado//Holder">(kept.repr, $av_32, h);
+                    kept.used = $av_32 + 1;
                 }
                 break $fused_$inline_core_prelude_list_wado_List_resource_move_in_while_let_wado_Holder___pop_6;
             };

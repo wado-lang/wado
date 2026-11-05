@@ -255,35 +255,34 @@ global global:core:prelude/primitive.wado::$const_obj_8: ref "core:prelude/strin
 global global:core:prelude/format.wado::$const_obj_9: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(38), used: 1 };
 
 fn "opt_split_and_condition.wado/run"() {
-    let $load_1: i32;
     let bytes_0: ref "core:prelude//List<u8>";
     let v: ref "core:prelude//List<u8>";
+    let n: i32;
     let i: i32;
-    let $licm_used_29: i32;
-    v = black_box(local.tee bytes_0(struct.new "core:prelude//List<u8>" { repr: array.new_data<u8>(0xe3, 0x81, 0x82, 0x41, 0xe3, 0x41), used: 6 }));
-    v = struct.new "core:prelude//List<u8>" { repr: let $array_clone_src_1: ref Array<u8>; $array_clone_src_1 = v.repr; $load_1 = v.used; let $array_clone_dst_2: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>($load_1)), 0, $array_clone_src_1, 0, $load_1); $array_clone_dst_2, used: $load_1 };
-    $load_1 = 0;
+    let $av_39: i32;
+    $av_39 = local.tee v(black_box(local.tee bytes_0(struct.new "core:prelude//List<u8>" { repr: array.new_data<u8>(0xe3, 0x81, 0x82, 0x41, 0xe3, 0x41), used: 6 }))).used;
+    v = struct.new "core:prelude//List<u8>" { repr: let $array_clone_src_1: ref Array<u8>; $array_clone_src_1 = v.repr; let $array_clone_dst_2: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>($av_39)), 0, $array_clone_src_1, 0, $av_39); $array_clone_dst_2, used: $av_39 };
+    n = 0;
     i = 0;
-    $licm_used_29 = v.used;
     $array_clone_src_1 = v.repr;
-    if ($licm_used_29 >= 1) & ($licm_used_29 <= ($licm_used_29 - 1)) {
+    if ($av_39 >= 1) & ($av_39 <= ($av_39 - 1)) {
         b1: block {
             l2: loop {
-                break_if b1 (((i >= $licm_used_29) | ((i + 1) >= $licm_used_29)) | (((i + 1) + 1) >= $licm_used_29)) | ((((i + 1) + 1) + 1) >= $licm_used_29);
-                if (builtin::array_get_value<u8>($array_clone_src_1, i) >=u 225) & ((i + 2) < $licm_used_29) {
-                    $load_1 = $load_1 + ((($load_1 = i + 1; builtin::array_get_value<u8>($array_clone_src_1, $load_1) ^ 128) & 255) <u 64);
+                break_if b1 (((i >= $av_39) | ((i + 1) >= $av_39)) | (((i + 1) + 1) >= $av_39)) | ((((i + 1) + 1) + 1) >= $av_39);
+                if (builtin::array_get_value<u8>($array_clone_src_1, i) >=u 225) & ((i + 2) < $av_39) {
+                    n = n + (((n = i + 1; builtin::array_get_value<u8>($array_clone_src_1, n) ^ 128) & 255) <u 64);
                 }
                 i = i + 1;
-                if (builtin::array_get_value<u8>($array_clone_src_1, i) >=u 225) & ((i + 2) < $licm_used_29) {
-                    $load_1 = $load_1 + ((($load_1 = i + 1; builtin::array_get_value<u8>($array_clone_src_1, $load_1) ^ 128) & 255) <u 64);
+                if (builtin::array_get_value<u8>($array_clone_src_1, i) >=u 225) & ((i + 2) < $av_39) {
+                    n = n + (((n = i + 1; builtin::array_get_value<u8>($array_clone_src_1, n) ^ 128) & 255) <u 64);
                 }
                 i = i + 1;
-                if (builtin::array_get_value<u8>($array_clone_src_1, i) >=u 225) & ((i + 2) < $licm_used_29) {
-                    $load_1 = $load_1 + ((($load_1 = i + 1; builtin::array_get_value<u8>($array_clone_src_1, $load_1) ^ 128) & 255) <u 64);
+                if (builtin::array_get_value<u8>($array_clone_src_1, i) >=u 225) & ((i + 2) < $av_39) {
+                    n = n + (((n = i + 1; builtin::array_get_value<u8>($array_clone_src_1, n) ^ 128) & 255) <u 64);
                 }
                 i = i + 1;
-                if (builtin::array_get_value<u8>($array_clone_src_1, i) >=u 225) & ((i + 2) < $licm_used_29) {
-                    $load_1 = $load_1 + ((($load_1 = i + 1; builtin::array_get_value<u8>($array_clone_src_1, $load_1) ^ 128) & 255) <u 64);
+                if (builtin::array_get_value<u8>($array_clone_src_1, i) >=u 225) & ((i + 2) < $av_39) {
+                    n = n + (((n = i + 1; builtin::array_get_value<u8>($array_clone_src_1, n) ^ 128) & 255) <u 64);
                 }
                 i = i + 1;
                 continue l2;
@@ -291,9 +290,9 @@ fn "opt_split_and_condition.wado/run"() {
         };
         b7: block {
             l8: loop {
-                break_if b7 i >= $licm_used_29;
-                if (builtin::array_get_value<u8>($array_clone_src_1, i) >=u 225) & ((i + 2) < $licm_used_29) {
-                    $load_1 = $load_1 + ((($load_1 = i + 1; builtin::array_get_value<u8>($array_clone_src_1, $load_1) ^ 128) & 255) <u 64);
+                break_if b7 i >= $av_39;
+                if (builtin::array_get_value<u8>($array_clone_src_1, i) >=u 225) & ((i + 2) < $av_39) {
+                    n = n + (((n = i + 1; builtin::array_get_value<u8>($array_clone_src_1, n) ^ 128) & 255) <u 64);
                 }
                 i = i + 1;
                 continue l8;
@@ -302,23 +301,23 @@ fn "opt_split_and_condition.wado/run"() {
     } else {
         b10: block {
             l11: loop {
-                break_if b10 i >= $licm_used_29;
-                if (builtin::array_get_value<u8>($array_clone_src_1, i) >=u 225) & ((i + 2) < $licm_used_29) {
-                    $load_1 = $load_1 + (((if @unlikely(local.tee $load_1(i + 1) >= $licm_used_29) {
+                break_if b10 i >= $av_39;
+                if (builtin::array_get_value<u8>($array_clone_src_1, i) >=u 225) & ((i + 2) < $av_39) {
+                    n = n + (((if @unlikely(local.tee n(i + 1) >= $av_39) {
                         cold_path;
-                        "opt_split_and_condition.wado/count_triples$cold0$dae[bytes]"($load_1, $licm_used_29);
+                        "opt_split_and_condition.wado/count_triples$cold0$dae[bytes]"(n, $av_39);
                         unreachable;
-                    }; builtin::array_get_value<u8>($array_clone_src_1, $load_1) ^ 128) & 255) <u 64);
+                    }; builtin::array_get_value<u8>($array_clone_src_1, n) ^ 128) & 255) <u 64);
                 }
                 i = i + 1;
                 continue l11;
             };
         };
     }
-    if @unlikely($load_1 != 1) {
+    if @unlikely(n != 1) {
         cold_path;
         let $mv_arg_4: ref "core:prelude/string.wado//String";
-        "core:rt/panic"(local.tee $mv_arg_4("core:prelude/string.wado/core:prelude/string.wado/String::format<opt_split_and_condition.wado/$tmpl$b923f31b94a5175e,[core:prelude/list.wado/List<u8>,core:prelude/list.wado/List<u8>,&core:prelude/list.wado/List<u8>,i32]>"(struct.new "opt_split_and_condition.wado//$tmpl$b923f31b94a5175e" { h0: bytes_0, h1: v, h2: v, h3: $load_1, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in run at opt_split_and_condition.wado:23
+        "core:rt/panic"(local.tee $mv_arg_4("core:prelude/string.wado/core:prelude/string.wado/String::format<opt_split_and_condition.wado/$tmpl$b923f31b94a5175e,[core:prelude/list.wado/List<u8>,core:prelude/list.wado/List<u8>,&core:prelude/list.wado/List<u8>,i32]>"(struct.new "opt_split_and_condition.wado//$tmpl$b923f31b94a5175e" { h0: bytes_0, h1: v, h2: v, h3: n, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in run at opt_split_and_condition.wado:23
 condition: count_triples(&builtin::black_box(bytes)) == 1
 bytes: "), used: 124 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in run at opt_split_and_condition.wado:23
 condition: count_triples(&builtin::black_box(bytes)) == 1

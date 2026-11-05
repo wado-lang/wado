@@ -5030,11 +5030,12 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<core:prelud
 
 fn "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/types.wado/CopySettlement>::remove$unchecked"(self, index) {
     let $load_0: ref "Array<core:prelude/types.wado/CopySettlement>";
-    let $load_3: i32;
     let v: ref "core:prelude/types.wado//CopySettlement";
+    let $av_10: i32;
     v = struct.new "core:prelude/types.wado//CopySettlement" { handle: local.tee v(builtin::array_get_value<ref "core:prelude/types.wado//CopySettlement">(local.tee $load_0(self.repr), index)).handle, packed: v.packed };
-    builtin::array_copy<ref "core:prelude/types.wado//CopySettlement">($load_0, index, $load_0, index + 1, (local.tee $load_3(self.used) - 1) - index);
-    self.used = $load_3 - 1;
+    $av_10 = self.used;
+    builtin::array_copy<ref "core:prelude/types.wado//CopySettlement">($load_0, index, $load_0, index + 1, ($av_10 - 1) - index);
+    self.used = $av_10 - 1;
     builtin::array_set<ref "core:prelude/types.wado//CopySettlement">($load_0, self.used, ref.null none);
     return v;
 }
@@ -6373,16 +6374,16 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<core:prelud
 
 fn "core:prelude/list.wado/core:prelude/list.wado/List<[wasi:filesystem/types.wado/Descriptor,core:prelude/string.wado/String]>::remove$unchecked"(self, index) {
     let $load_0: ref "Array<[wasi:filesystem/types.wado/Descriptor,core:prelude/string.wado/String]>";
-    let $load_1: i32;
     let $load_3: ref null "core:prelude//$Resource";
     let $taken_9: ref null "tuple//[wasi:filesystem/types.wado/Descriptor, core:prelude/string.wado/String]";
     let $arg_13: i32;
     let $arg_14: i32;
     let $slot_20: ref null "tuple//[wasi:filesystem/types.wado/Descriptor, core:prelude/string.wado/String]";
+    let $av_23: i32;
     $taken_9 = builtin::array_get_value<ref null "tuple//[wasi:filesystem/types.wado/Descriptor, core:prelude/string.wado/String]">(local.tee $load_0(self.repr), index);
     builtin::array_set<ref null "tuple//[wasi:filesystem/types.wado/Descriptor, core:prelude/string.wado/String]">($load_0, index, ref.null none);
     $arg_13 = index + 1;
-    $arg_14 = (local.tee $load_1(self.used) - 1) - index;
+    $arg_14 = (local.tee $av_23(self.used) - 1) - index;
     builtin::array_copy<ref null "tuple//[wasi:filesystem/types.wado/Descriptor, core:prelude/string.wado/String]">($load_0, index, $load_0, $arg_13, $arg_14);
     if ref.eq($load_0, $load_0) {
         if index > $arg_13 {
@@ -6393,13 +6394,13 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<[wasi:filesystem/types.wa
     } else {
         builtin::array_fill<ref null "tuple//[wasi:filesystem/types.wado/Descriptor, core:prelude/string.wado/String]">($load_0, $arg_13, ref.null none, $arg_14);
     }
-    self.used = $load_1 - 1;
+    self.used = $av_23 - 1;
     $arg_13 = local.tee index(self.used) + 1;
-    $load_1 = index;
+    $av_23 = index;
     b903: block {
         l904: loop {
-            break_if b903 $load_1 >= $arg_13;
-            if ref.is_null(local.tee $slot_20(builtin::array_get_value<ref null "tuple//[wasi:filesystem/types.wado/Descriptor, core:prelude/string.wado/String]">($load_0, $load_1))) == 0 {
+            break_if b903 $av_23 >= $arg_13;
+            if ref.is_null(local.tee $slot_20(builtin::array_get_value<ref null "tuple//[wasi:filesystem/types.wado/Descriptor, core:prelude/string.wado/String]">($load_0, $av_23))) == 0 {
                 if ref.is_null(local.tee $load_3($slot_20.0)) == 0 {
                     $arg_14 = $load_3.value;
                     $load_3.value = 0;
@@ -6407,7 +6408,7 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<[wasi:filesystem/types.wa
                 }
                 $slot_20.0 = ref.null none;
             }
-            $load_1 = $load_1 + 1;
+            $av_23 = $av_23 + 1;
             continue l904;
         };
     };

@@ -1054,17 +1054,19 @@ impl FunctionTranslator<'_, '_> {
     /// written through: a plain struct's from `struct_fields_map`, a `List<T>`'s
     /// `{repr, used}` from `SeqField`, and a tuple's positional ones.
     fn aggregate_fields(&self, ty: tir::TypeId) -> Vec<(String, u32, tir::TypeId)> {
+        let (list_elem, tuple_elems) = {
+            let tt = self.base.type_table.borrow();
+            (tt.list_element(ty), tt.as_tuple(ty))
+        };
         let resolved = self.base.type_table.borrow().get(ty).clone();
-        if let ResolvedType::Struct { def, type_args } = resolved {
+        if list_elem.is_none()
+            && let ResolvedType::Struct { def, type_args } = resolved
+        {
             return self.base.struct_fields_map[&(def, type_args)]
                 .iter()
                 .map(|f| (f.name.clone(), f.index, f.type_id))
                 .collect();
         }
-        let (list_elem, tuple_elems) = {
-            let tt = self.base.type_table.borrow();
-            (tt.list_element(ty), tt.as_tuple(ty))
-        };
         if let Some(elem) = list_elem {
             let repr_ty = self.base.type_table.borrow_mut().make_builtin_array(elem);
             return [

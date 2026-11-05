@@ -1787,16 +1787,18 @@ fn "core:prelude/string.wado/core:prelude/string.wado/StrSlice::chars"($mv$self$
 
 fn "core:prelude/list.wado/core:prelude/list.wado/List<f32>::from_le_bytes$unchecked<core:prelude/bytes.wado/ByteList>$dae[return]"(bytes) {
     let view: ref "core:prelude/slice.wado//Slice<u8>";
-    let n: i32;
     let out: ref "core:prelude//List<f32>";
     let i: i32;
     let value_19: f32;
     let used: i32;
-    out = struct.new "core:prelude//List<f32>" { repr: builtin::array_new<f32>(local.tee n(local.tee view(struct.new "core:prelude/slice.wado//Slice<u8>" { repr: bytes.repr, start: 0, end: bytes.used }).end / 4)), used: 0 };
+    let $av_25: i32;
+    $av_25 = bytes.used;
+    view = struct.new "core:prelude/slice.wado//Slice<u8>" { repr: bytes.repr, start: 0, end: $av_25 };
+    out = struct.new "core:prelude//List<f32>" { repr: builtin::array_new<f32>(local.tee $av_25($av_25 / 4)), used: 0 };
     i = 0;
     b295: block {
         l296: loop {
-            break_if b295 i >= n;
+            break_if b295 i >= $av_25;
             value_19 = "core:prelude/bytes.wado/f32^core:prelude/bytes.wado/FromLeBytes::from_le_at$spec0"(view.repr, view.end, i * 4);
             if @unlikely(local.tee used(out.used) >= builtin::array_len(out.repr)) {
                 cold_path;

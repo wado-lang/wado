@@ -154,19 +154,19 @@ struct tuple//[core:prelude/types.wado/Stream<u8>, core:prelude/types.wado/Strea
     mut 1: ref null "core:prelude//$Resource",
 }
 
-struct tuple//[core:prelude/types.wado/Stream<u8>, core:prelude/types.wado/StartedRead<u8>] {  // TypeId(25)
+struct tuple//[core:prelude/types.wado/Stream<u8>, core:prelude/types.wado/StreamChunk<u8>] {  // TypeId(25)
+    mut 0: ref null "core:prelude//$Resource",
+    mut 1: ref "core:prelude/types.wado//StreamChunk<u8>",
+}
+
+struct tuple//[core:prelude/types.wado/Stream<u8>, core:prelude/types.wado/StartedRead<u8>] {  // TypeId(26)
     mut 0: ref null "core:prelude//$Resource",
     mut 1: ref null "core:prelude/types.wado//StartedRead<u8>",
 }
 
-struct tuple//[core:prelude/types.wado/StreamWritable<u8>, core:prelude/types.wado/StartedWrite<u8>] {  // TypeId(26)
+struct tuple//[core:prelude/types.wado/StreamWritable<u8>, core:prelude/types.wado/StartedWrite<u8>] {  // TypeId(27)
     mut 0: ref null "core:prelude//$Resource",
     mut 1: ref null "core:prelude/types.wado//StartedWrite<u8>",
-}
-
-struct tuple//[core:prelude/types.wado/Stream<u8>, core:prelude/types.wado/StreamChunk<u8>] {  // TypeId(27)
-    mut 0: ref null "core:prelude//$Resource",
-    mut 1: ref "core:prelude/types.wado//StreamChunk<u8>",
 }
 
 struct tuple//[i32, core:prelude/types.wado/Option<core:prelude/types.wado/ResourceId>, core:prelude/types.wado/Option<core:prelude/types.wado/ReadyEvent>] {  // TypeId(28)
@@ -220,9 +220,9 @@ array Array<core:prelude/types.wado/CopySettlement> (mut ref "core:prelude/types
 
 array Array<core:prelude/types.wado/Resolution> (mut ref "core:prelude/types.wado//Resolution");  // TypeId(41)
 
-array Array<core:prelude/types.wado/Ready<core:prelude/types.wado/ReadCopy<u8>>> (mut ref null "core:prelude/types.wado//Ready<core:prelude/types.wado/ReadCopy<u8>>");  // TypeId(42)
+array Array<core:prelude/types.wado/ReadCopy<u8>> (mut ref null "core:prelude/types.wado//ReadCopy<u8>");  // TypeId(42)
 
-array Array<core:prelude/types.wado/ReadCopy<u8>> (mut ref null "core:prelude/types.wado//ReadCopy<u8>");  // TypeId(43)
+array Array<core:prelude/types.wado/Ready<core:prelude/types.wado/ReadCopy<u8>>> (mut ref null "core:prelude/types.wado//Ready<core:prelude/types.wado/ReadCopy<u8>>");  // TypeId(43)
 
 struct core:prelude/types.wado//StartedWrite<u8> {  // TypeId(44)
     mut buffer: ref null "core:prelude/types.wado//CopyBuffer",
@@ -314,13 +314,13 @@ struct core:prelude//List<core:prelude/types.wado/Resolution> {  // TypeId(61)
     mut used: i32,
 }
 
-struct core:prelude//List<core:prelude/types.wado/Ready<core:prelude/types.wado/ReadCopy<u8>>> {  // TypeId(62)
-    mut repr: ref "Array<core:prelude/types.wado/Ready<core:prelude/types.wado/ReadCopy<u8>>>",
+struct core:prelude//List<core:prelude/types.wado/ReadCopy<u8>> {  // TypeId(62)
+    mut repr: ref "Array<core:prelude/types.wado/ReadCopy<u8>>",
     mut used: i32,
 }
 
-struct core:prelude//List<core:prelude/types.wado/ReadCopy<u8>> {  // TypeId(63)
-    mut repr: ref "Array<core:prelude/types.wado/ReadCopy<u8>>",
+struct core:prelude//List<core:prelude/types.wado/Ready<core:prelude/types.wado/ReadCopy<u8>>> {  // TypeId(63)
+    mut repr: ref "Array<core:prelude/types.wado/Ready<core:prelude/types.wado/ReadCopy<u8>>>",
     mut used: i32,
 }
 
@@ -2716,16 +2716,16 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<u8>::grow_to"(self, min_c
 
 fn "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/types.wado/Ready<core:prelude/types.wado/ReadCopy<u8>>>::remove$unchecked"(self, index) {
     let $load_0: ref "Array<core:prelude/types.wado/Ready<core:prelude/types.wado/ReadCopy<u8>>>";
-    let $load_1: i32;
     let $load_3: ref null "core:prelude/types.wado//ReadCopy<u8>";
     let $taken_9: ref null "core:prelude/types.wado//Ready<core:prelude/types.wado/ReadCopy<u8>>";
     let $arg_13: i32;
     let $arg_14: i32;
     let $slot_20: ref null "core:prelude/types.wado//Ready<core:prelude/types.wado/ReadCopy<u8>>";
+    let $av_25: i32;
     $taken_9 = builtin::array_get_value<ref null "core:prelude/types.wado//Ready<core:prelude/types.wado/ReadCopy<u8>>">(local.tee $load_0(self.repr), index);
     builtin::array_set<ref null "core:prelude/types.wado//Ready<core:prelude/types.wado/ReadCopy<u8>>">($load_0, index, ref.null none);
     $arg_13 = index + 1;
-    $arg_14 = (local.tee $load_1(self.used) - 1) - index;
+    $arg_14 = (local.tee $av_25(self.used) - 1) - index;
     builtin::array_copy<ref null "core:prelude/types.wado//Ready<core:prelude/types.wado/ReadCopy<u8>>">($load_0, index, $load_0, $arg_13, $arg_14);
     if ref.eq($load_0, $load_0) {
         if index > $arg_13 {
@@ -2736,19 +2736,19 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/types.wado/R
     } else {
         builtin::array_fill<ref null "core:prelude/types.wado//Ready<core:prelude/types.wado/ReadCopy<u8>>">($load_0, $arg_13, ref.null none, $arg_14);
     }
-    self.used = $load_1 - 1;
+    self.used = $av_25 - 1;
     $arg_13 = local.tee index(self.used) + 1;
-    $load_1 = index;
+    $av_25 = index;
     b295: block {
         l296: loop {
-            break_if b295 $load_1 >= $arg_13;
-            if ref.is_null(local.tee $slot_20(builtin::array_get_value<ref null "core:prelude/types.wado//Ready<core:prelude/types.wado/ReadCopy<u8>>">($load_0, $load_1))) == 0 {
+            break_if b295 $av_25 >= $arg_13;
+            if ref.is_null(local.tee $slot_20(builtin::array_get_value<ref null "core:prelude/types.wado//Ready<core:prelude/types.wado/ReadCopy<u8>>">($load_0, $av_25))) == 0 {
                 if ref.is_null(local.tee $load_3($slot_20.member)) == 0 {
                     "core:prelude/types.wado/core:prelude/types.wado/ReadCopy<u8>^core:prelude/traits.wado/Drop::drop"($load_3);
                 }
                 $slot_20.member = ref.null none;
             }
-            $load_1 = $load_1 + 1;
+            $av_25 = $av_25 + 1;
             continue l296;
         };
     };
@@ -2896,15 +2896,15 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/types.wado/C
 
 fn "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/types.wado/ReadCopy<u8>>::remove$unchecked"(self, index) {
     let $load_0: ref "Array<core:prelude/types.wado/ReadCopy<u8>>";
-    let $load_1: i32;
     let $taken_9: ref null "core:prelude/types.wado//ReadCopy<u8>";
     let $arg_13: i32;
     let $arg_14: i32;
     let $slot_20: ref null "core:prelude/types.wado//ReadCopy<u8>";
+    let $av_25: i32;
     $taken_9 = builtin::array_get_value<ref null "core:prelude/types.wado//ReadCopy<u8>">(local.tee $load_0(self.repr), index);
     builtin::array_set<ref null "core:prelude/types.wado//ReadCopy<u8>">($load_0, index, ref.null none);
     $arg_13 = index + 1;
-    $arg_14 = (local.tee $load_1(self.used) - 1) - index;
+    $arg_14 = (local.tee $av_25(self.used) - 1) - index;
     builtin::array_copy<ref null "core:prelude/types.wado//ReadCopy<u8>">($load_0, index, $load_0, $arg_13, $arg_14);
     if ref.eq($load_0, $load_0) {
         if index > $arg_13 {
@@ -2915,16 +2915,16 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/types.wado/R
     } else {
         builtin::array_fill<ref null "core:prelude/types.wado//ReadCopy<u8>">($load_0, $arg_13, ref.null none, $arg_14);
     }
-    self.used = $load_1 - 1;
+    self.used = $av_25 - 1;
     $arg_13 = local.tee index(self.used) + 1;
-    $load_1 = index;
+    $av_25 = index;
     b314: block {
         l315: loop {
-            break_if b314 $load_1 >= $arg_13;
-            if ref.is_null(local.tee $slot_20(builtin::array_get_value<ref null "core:prelude/types.wado//ReadCopy<u8>">($load_0, $load_1))) == 0 {
+            break_if b314 $av_25 >= $arg_13;
+            if ref.is_null(local.tee $slot_20(builtin::array_get_value<ref null "core:prelude/types.wado//ReadCopy<u8>">($load_0, $av_25))) == 0 {
                 "core:prelude/types.wado/core:prelude/types.wado/ReadCopy<u8>^core:prelude/traits.wado/Drop::drop"($slot_20);
             }
-            $load_1 = $load_1 + 1;
+            $av_25 = $av_25 + 1;
             continue l315;
         };
     };

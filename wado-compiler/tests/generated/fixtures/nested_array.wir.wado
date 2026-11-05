@@ -439,8 +439,7 @@ fn "nested_array.wado/nested_array_method_test"() with Stdout {
 }
 
 fn "nested_array.wado/nested_array_mutate_test"() with Stdout {
-    let $load_2: i32;
-    let $load_9: ref "Array<core:prelude/list.wado/List<i32>>";
+    let $load_8: ref "Array<core:prelude/list.wado/List<i32>>";
     let matrix: ref "core:prelude//List<core:prelude/list.wado/List<i32>>";
     let v_14: ref "core:prelude//List<i32>";
     let out_32: ref "core:prelude/string.wado//String";
@@ -448,13 +447,15 @@ fn "nested_array.wado/nested_array_mutate_test"() with Stdout {
     let $cm_pair_7_222: i64;
     let $sroa_$pattern_temp_0_1_14_229: i32;
     let new_repr: ref Array<u8>;
-    v_14 = builtin::array_get_value<ref "core:prelude//List<i32>">(local.tee matrix(struct.new "core:prelude//List<core:prelude/list.wado/List<i32>>" { repr: array.new_fixed<ref "core:prelude//List<i32>">(struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(1, 2), used: 2 }, struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(3, 4), used: 2 }), used: 2 }).repr, 0);
-    if @unlikely(local.tee $load_2(local.tee v_14(struct.new "core:prelude//List<i32>" { repr: let $array_clone_src_1: ref Array<i32>; $array_clone_src_1 = v_14.repr; $load_2 = v_14.used; let $array_clone_dst_2: ref Array<i32>; builtin::array_copy<i32>(local.tee $array_clone_dst_2(builtin::array_new<i32>($load_2)), 0, $array_clone_src_1, 0, $load_2); $array_clone_dst_2, used: $load_2 }).used) >= builtin::array_len(v_14.repr)) {
+    let $av_318: i32;
+    $av_318 = local.tee v_14(builtin::array_get_value<ref "core:prelude//List<i32>">(local.tee matrix(struct.new "core:prelude//List<core:prelude/list.wado/List<i32>>" { repr: array.new_fixed<ref "core:prelude//List<i32>">(struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(1, 2), used: 2 }, struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(3, 4), used: 2 }), used: 2 }).repr, 0)).used;
+    v_14 = struct.new "core:prelude//List<i32>" { repr: let $array_clone_src_1: ref Array<i32>; $array_clone_src_1 = v_14.repr; let $array_clone_dst_2: ref Array<i32>; builtin::array_copy<i32>(local.tee $array_clone_dst_2(builtin::array_new<i32>($av_318)), 0, $array_clone_src_1, 0, $av_318); $array_clone_dst_2, used: $av_318 };
+    if @unlikely($av_318 >= builtin::array_len(v_14.repr)) {
         cold_path;
         "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(v_14);
     }
-    builtin::array_set<i32>(local.tee $array_clone_src_1(v_14.repr), $load_2, 99);
-    v_14.used = $load_2 + 1;
+    builtin::array_set<i32>(local.tee $array_clone_src_1(v_14.repr), $av_318, 99);
+    v_14.used = $av_318 + 1;
     out_32 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
     $inline_core_prelude_string_wado_String__internal_push_view_30: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_30;
@@ -464,36 +465,36 @@ fn "nested_array.wado/nested_array_mutate_test"() with Stdout {
     $inline_core_prelude_string_wado_String__internal_push_view_46: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_46;
     };
-    $load_2 = builtin::i32_wrap_i64(local.tee $cm_pair_7_222("wasi/stream-new"()));
+    $av_318 = builtin::i32_wrap_i64(local.tee $cm_pair_7_222("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_14_229 = builtin::i32_wrap_i64($cm_pair_7_222 >> 32_i64);
-    $load_2 = "nested_array.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($load_2);
+    $av_318 = "nested_array.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($av_318);
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_14_229, out_32.repr, out_32.used);
-    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($load_2);
+    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($av_318);
     block {
     };
-    builtin::array_set<ref "core:prelude//List<i32>">(local.tee $load_9(matrix.repr), 0, struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(10, 20, 30), used: 3 });
+    builtin::array_set<ref "core:prelude//List<i32>">(local.tee $load_8(matrix.repr), 0, struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(10, 20, 30), used: 3 });
     out_32 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
     $inline_core_prelude_string_wado_String__internal_push_view_74: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_74;
     };
     $temp_inline_core_prelude_traits_wado_TemplateHole_nested_array_wado__tmpl_7ab51489603b688b_core_prelude_list_wado_List_i32____fmt_34_0 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: out_32 };
-    "core:prelude/array.wado/core:prelude/array.wado/write_seq_inspect<core:prelude/list.wado/List<i32>>$dae[start,marker]$spec0"($load_9, 2, $temp_inline_core_prelude_traits_wado_TemplateHole_nested_array_wado__tmpl_7ab51489603b688b_core_prelude_list_wado_List_i32____fmt_34_0, 256);
+    "core:prelude/array.wado/core:prelude/array.wado/write_seq_inspect<core:prelude/list.wado/List<i32>>$dae[start,marker]$spec0"($load_8, 2, $temp_inline_core_prelude_traits_wado_TemplateHole_nested_array_wado__tmpl_7ab51489603b688b_core_prelude_list_wado_List_i32____fmt_34_0, 256);
     $inline_core_prelude_string_wado_String__internal_push_view_90: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_90;
     };
-    $load_2 = builtin::i32_wrap_i64(local.tee $cm_pair_7_222("wasi/stream-new"()));
+    $av_318 = builtin::i32_wrap_i64(local.tee $cm_pair_7_222("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_14_229 = builtin::i32_wrap_i64($cm_pair_7_222 >> 32_i64);
-    $load_2 = "nested_array.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($load_2);
+    $av_318 = "nested_array.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($av_318);
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_14_229, out_32.repr, out_32.used);
-    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($load_2);
-    $load_2 = builtin::i32_wrap_i64(local.tee $cm_pair_7_222("wasi/stream-new"()));
+    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($av_318);
+    $av_318 = builtin::i32_wrap_i64(local.tee $cm_pair_7_222("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_14_229 = builtin::i32_wrap_i64($cm_pair_7_222 >> 32_i64);
-    $load_2 = "nested_array.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($load_2);
+    $av_318 = "nested_array.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($av_318);
     builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>(3)), 0, global:nested_array.wado::$const_obj_0, 0, 2);
     builtin::array_set_u8(new_repr, 2, 10);
     "core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]$dae[return]"($sroa_$pattern_temp_0_1_14_229, new_repr);
     "wasi/stream-drop-writable"($sroa_$pattern_temp_0_1_14_229);
-    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($load_2);
+    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($av_318);
 }
 
 fn "nested_array.wado/nested_array_option_access_test"() with Stdout {
@@ -568,8 +569,9 @@ fn "nested_array.wado/$cm_export__run"() {
 }
 
 fn "nested_array.wado/$value_copy$core:prelude/list.wado/List<i32>"(v) {
-    let $load_1: i32;
-    return struct.new "core:prelude//List<i32>" { repr: let $array_clone_src_1: ref Array<i32>; $array_clone_src_1 = v.repr; $load_1 = v.used; let $array_clone_dst_2: ref Array<i32>; builtin::array_copy<i32>(local.tee $array_clone_dst_2(builtin::array_new<i32>($load_1)), 0, $array_clone_src_1, 0, $load_1); $array_clone_dst_2, used: $load_1 };
+    let $av_1: i32;
+    $av_1 = v.used;
+    return struct.new "core:prelude//List<i32>" { repr: let $array_clone_src_1: ref Array<i32>; $array_clone_src_1 = v.repr; let $array_clone_dst_2: ref Array<i32>; builtin::array_copy<i32>(local.tee $array_clone_dst_2(builtin::array_new<i32>($av_1)), 0, $array_clone_src_1, 0, $av_1); $array_clone_dst_2, used: $av_1 };
 }
 
 fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, val, digit_count) {

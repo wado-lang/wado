@@ -74,11 +74,11 @@ type "functype//wasi/$wasi:cli/stderr@0.3.0#write-via-stream" = fn(i32) -> i32; 
 
 type "functype//wasi/$wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(17)
 
-type "functype//tir_optimize_early_exit_guard.wado/safe_get" = fn(ref "core:prelude//List<char>", i32) -> char;  // TypeId(18)
+type "functype//tir_optimize_early_exit_guard.wado/run" = fn();  // TypeId(18)
 
-type "functype//tir_optimize_early_exit_guard.wado/run" = fn();  // TypeId(19)
+type "functype//tir_optimize_early_exit_guard.wado/$cm_export__run" = fn();  // TypeId(19)
 
-type "functype//tir_optimize_early_exit_guard.wado/$cm_export__run" = fn();  // TypeId(20)
+type "functype//tir_optimize_early_exit_guard.wado/safe_get$spec0" = fn(ref "core:prelude//List<char>", i32) -> char;  // TypeId(20)
 
 type "functype//core:prelude/list.wado/$template_segment$core:prelude/list.wado/$tmpl$59e16269228f9c88" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", i32) -> ref "core:prelude/string.wado//String";  // TypeId(21)
 
@@ -183,25 +183,12 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 global global:tir_optimize_early_exit_guard.wado::$const_obj_0: ref "core:prelude//List<char>" = struct.new "core:prelude//List<char>" { repr: array.new_fixed<char>(97, 98, 99), used: 3 };
 global global:core:prelude/primitive.wado::$const_obj_1: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
 
-fn "tir_optimize_early_exit_guard.wado/safe_get"(arr, pos) {
-    let $load_0: i32;
-    if pos >= local.tee $load_0(arr.used) {
-        return 63;
-    }
-    if @unlikely(0 > pos) {
-        cold_path;
-        "core:prelude/list.wado/core:prelude/list.wado/List<char>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(pos, $load_0, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("tir_optimize_early_exit_guard.wado:15"), used: 37 });
-        unreachable;
-    }
-    return builtin::array_get_value<char>(arr.repr, pos);
-}
-
 fn "tir_optimize_early_exit_guard.wado/run"() with Stdout {
     let $cm_pair_7_10: i64;
     let $sroa_$pattern_temp_0_1_14_17: i32;
     let t_33: char;
     let out_36: ref "core:prelude/string.wado//String";
-    t_33 = "tir_optimize_early_exit_guard.wado/safe_get"(global:tir_optimize_early_exit_guard.wado::$const_obj_0, black_box(1));
+    t_33 = "tir_optimize_early_exit_guard.wado/safe_get$spec0"(global:tir_optimize_early_exit_guard.wado::$const_obj_0, black_box(1));
     out_36 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
     $inline_core_prelude_string_wado_String__format_tir_optimize_early_exit_guard_wado__tmpl_f4fb5950b15c9edb__char___spec0_spec0_sroa_t_h0__0__$inline_core_prelude_string_wado_String__internal_push_view_20: block {
         break $inline_core_prelude_string_wado_String__format_tir_optimize_early_exit_guard_wado__tmpl_f4fb5950b15c9edb__char___spec0_spec0_sroa_t_h0__0__$inline_core_prelude_string_wado_String__internal_push_view_20;
@@ -215,7 +202,7 @@ fn "tir_optimize_early_exit_guard.wado/run"() with Stdout {
     t_33 = "tir_optimize_early_exit_guard.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(t_33);
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_14_17, out_36.repr, out_36.used);
     "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(t_33);
-    t_33 = "tir_optimize_early_exit_guard.wado/safe_get"(global:tir_optimize_early_exit_guard.wado::$const_obj_0, black_box(10));
+    t_33 = "tir_optimize_early_exit_guard.wado/safe_get$spec0"(global:tir_optimize_early_exit_guard.wado::$const_obj_0, black_box(10));
     out_36 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
     $inline_core_prelude_string_wado_String__format_tir_optimize_early_exit_guard_wado__tmpl_f4fb5950b15c9edb__char___spec0_spec0_sroa_t_h0__1__$inline_core_prelude_string_wado_String__internal_push_view_20: block {
         break $inline_core_prelude_string_wado_String__format_tir_optimize_early_exit_guard_wado__tmpl_f4fb5950b15c9edb__char___spec0_spec0_sroa_t_h0__1__$inline_core_prelude_string_wado_String__internal_push_view_20;
@@ -238,6 +225,18 @@ fn "tir_optimize_early_exit_guard.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-
 fn "tir_optimize_early_exit_guard.wado/$cm_export__run"() {
     "tir_optimize_early_exit_guard.wado/run"();
     "wasi/task-return"(0);
+}
+
+fn "tir_optimize_early_exit_guard.wado/safe_get$spec0"(arr, pos) {
+    if pos >= 3 {
+        return 63;
+    }
+    if @unlikely(0 > pos) {
+        cold_path;
+        "core:prelude/list.wado/core:prelude/list.wado/List<char>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(pos, 3, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("tir_optimize_early_exit_guard.wado:15"), used: 37 });
+        unreachable;
+    }
+    return builtin::array_get_value<char>(arr.repr, pos);
 }
 
 fn "core:prelude/list.wado/$template_segment$core:prelude/list.wado/$tmpl$59e16269228f9c88"($mv$v$s0, $mv$v$r0, $mv$v$s1, $mv$v$r1, $mv$v$s2, $mv$v$r2, $mv$v$s3, $mv$v$r3, index) {

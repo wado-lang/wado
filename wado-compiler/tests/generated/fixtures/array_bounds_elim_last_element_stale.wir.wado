@@ -196,19 +196,19 @@ import fn wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode f
 global global:core:prelude/primitive.wado::$const_obj_0: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
 
 fn "array_bounds_elim_last_element_stale.wado/last_after_pop"(arr) {
-    let $load_0: i32;
     let idx: i32;
-    idx = local.tee $load_0(arr.used) - 1;
+    let $av_17: i32;
+    idx = local.tee $av_17(arr.used) - 1;
     $inline_core_prelude_list_wado_List_i32___pop_1: block {
-        break_if $inline_core_prelude_list_wado_List_i32___pop_1 $load_0 == 0;
-        arr.used = $load_0 - 1;
+        break_if $inline_core_prelude_list_wado_List_i32___pop_1 $av_17 == 0;
+        arr.used = $av_17 - 1;
         drop(builtin::array_get_value<i32>(arr.repr, arr.used));
         break $inline_core_prelude_list_wado_List_i32___pop_1;
     };
-    $load_0 = arr.used;
-    if @unlikely(idx >=u $load_0) {
+    $av_17 = arr.used;
+    if @unlikely(idx >=u $av_17) {
         cold_path;
-        "array_bounds_elim_last_element_stale.wado/last_after_pop$cold0$dae[arr]"(idx, $load_0);
+        "array_bounds_elim_last_element_stale.wado/last_after_pop$cold0$dae[arr]"(idx, $av_17);
         unreachable;
     }
     return builtin::array_get_value<i32>(arr.repr, idx);

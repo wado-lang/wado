@@ -32,11 +32,11 @@ type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(10)
 
 type "functype//wasi/$wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(11)
 
-type "functype//array_bounds_elim_range_guard_wir.wado/at_or_zero" = fn(ref "core:prelude//List<i32>", i32) -> i32;  // TypeId(12)
+type "functype//array_bounds_elim_range_guard_wir.wado/run" = fn();  // TypeId(12)
 
-type "functype//array_bounds_elim_range_guard_wir.wado/run" = fn();  // TypeId(13)
+type "functype//array_bounds_elim_range_guard_wir.wado/$cm_export__run" = fn();  // TypeId(13)
 
-type "functype//array_bounds_elim_range_guard_wir.wado/$cm_export__run" = fn();  // TypeId(14)
+type "functype//array_bounds_elim_range_guard_wir.wado/at_or_zero$spec0" = fn(ref "core:prelude//List<i32>", i32) -> i32;  // TypeId(14)
 
 type "functype//core:prelude/primitive.wado/write_decimal_digits" = fn(ref Array<u8>, i32, u64, i32);  // TypeId(15)
 
@@ -80,24 +80,17 @@ import fn wasi/task-return from "wasi/task-return";
 global global:array_bounds_elim_range_guard_wir.wado::$const_obj_0: ref "core:prelude//List<i32>" = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(10, 20, 30), used: 3 };
 global global:core:prelude/string.wado::$const_obj_1: ref Array<u8> = array.new_fixed<u8>(32);
 
-fn "array_bounds_elim_range_guard_wir.wado/at_or_zero"(xs, i) {
-    if i <u xs.used {
-        return builtin::array_get_value<i32>(xs.repr, i);
-    }
-    return 0;
-}
-
 fn "array_bounds_elim_range_guard_wir.wado/run"() with Stdout {
     let message_3: ref "core:prelude/string.wado//String";
     let $cm_pair_7: i64;
     let new_repr: ref Array<u8>;
     message_3 = block -> ref "core:prelude/string.wado//String" {
         let $mv_field_1: i32;
-        $mv_field_1 = "array_bounds_elim_range_guard_wir.wado/at_or_zero"(global:array_bounds_elim_range_guard_wir.wado::$const_obj_0, black_box(1));
+        $mv_field_1 = "array_bounds_elim_range_guard_wir.wado/at_or_zero$spec0"(global:array_bounds_elim_range_guard_wir.wado::$const_obj_0, black_box(1));
         let $mv_field_2: i32;
-        $mv_field_2 = "array_bounds_elim_range_guard_wir.wado/at_or_zero"(global:array_bounds_elim_range_guard_wir.wado::$const_obj_0, black_box(-1));
+        $mv_field_2 = "array_bounds_elim_range_guard_wir.wado/at_or_zero$spec0"(global:array_bounds_elim_range_guard_wir.wado::$const_obj_0, black_box(-1));
         let $mv_field_3: i32;
-        $mv_field_3 = "array_bounds_elim_range_guard_wir.wado/at_or_zero"(global:array_bounds_elim_range_guard_wir.wado::$const_obj_0, black_box(3));
+        $mv_field_3 = "array_bounds_elim_range_guard_wir.wado/at_or_zero$spec0"(global:array_bounds_elim_range_guard_wir.wado::$const_obj_0, black_box(3));
         "core:prelude/string.wado/core:prelude/string.wado/String::format<array_bounds_elim_range_guard_wir.wado/$tmpl$b31438d91a1e3c14,[i32,i32,i32]>$spec0$spec0"($mv_field_1, $mv_field_2, $mv_field_3);
     };
     $mv_field_1 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
@@ -120,6 +113,13 @@ fn "array_bounds_elim_range_guard_wir.wado/$cm_binding__wasi:cli/stdout@0.3.0#wr
 fn "array_bounds_elim_range_guard_wir.wado/$cm_export__run"() {
     "array_bounds_elim_range_guard_wir.wado/run"();
     "wasi/task-return"(0);
+}
+
+fn "array_bounds_elim_range_guard_wir.wado/at_or_zero$spec0"(xs, i) {
+    if i <u 3 {
+        return builtin::array_get_value<i32>(xs.repr, i);
+    }
+    return 0;
 }
 
 fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, val, digit_count) {

@@ -150,9 +150,9 @@ array Array<waitable_set_delivered_call.wado/Timer> (mut ref null "core:prelude/
 
 array Array<core:prelude/types.wado/Ready<waitable_set_delivered_call.wado/Timer>> (mut ref null "core:prelude/types.wado//Ready<waitable_set_delivered_call.wado/Timer>");  // TypeId(30)
 
-array Array<core:prelude/types.wado/Ready<core:prelude/types.wado/AsyncCall<()>>> (mut ref null "core:prelude/types.wado//Ready<core:prelude/types.wado/AsyncCall<()>>");  // TypeId(31)
+array Array<core:prelude/types.wado/AsyncCall<()>> (mut ref null "core:prelude/types.wado//AsyncCall<()>");  // TypeId(31)
 
-array Array<core:prelude/types.wado/AsyncCall<()>> (mut ref null "core:prelude/types.wado//AsyncCall<()>");  // TypeId(32)
+array Array<core:prelude/types.wado/Ready<core:prelude/types.wado/AsyncCall<()>>> (mut ref null "core:prelude/types.wado//Ready<core:prelude/types.wado/AsyncCall<()>>");  // TypeId(32)
 
 array Array<core:prelude/types.wado/Subtask> (mut ref null "core:prelude//$Resource");  // TypeId(33)
 
@@ -268,33 +268,33 @@ struct core:prelude//List<core:prelude/types.wado/Resolution> {  // TypeId(55)
     mut used: i32,
 }
 
-struct core:prelude//List<waitable_set_delivered_call.wado/Timer> {  // TypeId(56)
-    mut repr: ref "Array<waitable_set_delivered_call.wado/Timer>",
+struct core:prelude//List<core:prelude/types.wado/AsyncCall<()>> {  // TypeId(56)
+    mut repr: ref "Array<core:prelude/types.wado/AsyncCall<()>>",
     mut used: i32,
 }
 
-struct core:prelude//List<core:prelude/types.wado/Ready<waitable_set_delivered_call.wado/Timer>> {  // TypeId(57)
-    mut repr: ref "Array<core:prelude/types.wado/Ready<waitable_set_delivered_call.wado/Timer>>",
-    mut used: i32,
-}
-
-struct core:prelude//List<core:prelude/types.wado/Ready<core:prelude/types.wado/AsyncCall<()>>> {  // TypeId(58)
+struct core:prelude//List<core:prelude/types.wado/Ready<core:prelude/types.wado/AsyncCall<()>>> {  // TypeId(57)
     mut repr: ref "Array<core:prelude/types.wado/Ready<core:prelude/types.wado/AsyncCall<()>>>",
     mut used: i32,
 }
 
-struct core:prelude//List<core:prelude/types.wado/Subtask> {  // TypeId(59)
+struct core:prelude//List<waitable_set_delivered_call.wado/Timer> {  // TypeId(58)
+    mut repr: ref "Array<waitable_set_delivered_call.wado/Timer>",
+    mut used: i32,
+}
+
+struct core:prelude//List<core:prelude/types.wado/Ready<waitable_set_delivered_call.wado/Timer>> {  // TypeId(59)
+    mut repr: ref "Array<core:prelude/types.wado/Ready<waitable_set_delivered_call.wado/Timer>>",
+    mut used: i32,
+}
+
+struct core:prelude//List<core:prelude/types.wado/Subtask> {  // TypeId(60)
     mut repr: ref "Array<core:prelude/types.wado/Subtask>",
     mut used: i32,
 }
 
-struct core:prelude//List<core:prelude/types.wado/Ready<core:prelude/types.wado/Subtask>> {  // TypeId(60)
+struct core:prelude//List<core:prelude/types.wado/Ready<core:prelude/types.wado/Subtask>> {  // TypeId(61)
     mut repr: ref "Array<core:prelude/types.wado/Ready<core:prelude/types.wado/Subtask>>",
-    mut used: i32,
-}
-
-struct core:prelude//List<core:prelude/types.wado/AsyncCall<()>> {  // TypeId(61)
-    mut repr: ref "Array<core:prelude/types.wado/AsyncCall<()>>",
     mut used: i32,
 }
 
@@ -2673,16 +2673,16 @@ fn "core:prelude/types.wado/core:prelude/types.wado/AsyncCall<()>^core:prelude/t
 
 fn "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/types.wado/Ready<waitable_set_delivered_call.wado/Timer>>::remove$unchecked"(self, index) {
     let $load_0: ref "Array<core:prelude/types.wado/Ready<waitable_set_delivered_call.wado/Timer>>";
-    let $load_1: i32;
     let $load_3: ref null "core:prelude/types.wado//Box<waitable_set_delivered_call.wado/Timer>";
     let $taken_9: ref null "core:prelude/types.wado//Ready<waitable_set_delivered_call.wado/Timer>";
     let $arg_13: i32;
     let $arg_14: i32;
     let $slot_20: ref null "core:prelude/types.wado//Ready<waitable_set_delivered_call.wado/Timer>";
+    let $av_27: i32;
     $taken_9 = builtin::array_get_value<ref null "core:prelude/types.wado//Ready<waitable_set_delivered_call.wado/Timer>">(local.tee $load_0(self.repr), index);
     builtin::array_set<ref null "core:prelude/types.wado//Ready<waitable_set_delivered_call.wado/Timer>">($load_0, index, ref.null none);
     $arg_13 = index + 1;
-    $arg_14 = (local.tee $load_1(self.used) - 1) - index;
+    $arg_14 = (local.tee $av_27(self.used) - 1) - index;
     builtin::array_copy<ref null "core:prelude/types.wado//Ready<waitable_set_delivered_call.wado/Timer>">($load_0, index, $load_0, $arg_13, $arg_14);
     if ref.eq($load_0, $load_0) {
         if index > $arg_13 {
@@ -2693,13 +2693,13 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/types.wado/R
     } else {
         builtin::array_fill<ref null "core:prelude/types.wado//Ready<waitable_set_delivered_call.wado/Timer>">($load_0, $arg_13, ref.null none, $arg_14);
     }
-    self.used = $load_1 - 1;
+    self.used = $av_27 - 1;
     $arg_13 = local.tee index(self.used) + 1;
-    $load_1 = index;
+    $av_27 = index;
     b320: block {
         l321: loop {
-            break_if b320 $load_1 >= $arg_13;
-            if ref.is_null(local.tee $slot_20(builtin::array_get_value<ref null "core:prelude/types.wado//Ready<waitable_set_delivered_call.wado/Timer>">($load_0, $load_1))) == 0 {
+            break_if b320 $av_27 >= $arg_13;
+            if ref.is_null(local.tee $slot_20(builtin::array_get_value<ref null "core:prelude/types.wado//Ready<waitable_set_delivered_call.wado/Timer>">($load_0, $av_27))) == 0 {
                 if ref.is_null((if ref.is_null(local.tee $load_3($slot_20.member)) -> ref null "waitable_set_delivered_call.wado//Timer" {
                     ref.null none;
                 } else {
@@ -2717,7 +2717,7 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/types.wado/R
                     $load_3.value = ref.null none;
                 }
             }
-            $load_1 = $load_1 + 1;
+            $av_27 = $av_27 + 1;
             continue l321;
         };
     };
@@ -2755,16 +2755,16 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/types.wado/R
 
 fn "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/types.wado/Ready<core:prelude/types.wado/AsyncCall<()>>>::remove$unchecked"(self, index) {
     let $load_0: ref "Array<core:prelude/types.wado/Ready<core:prelude/types.wado/AsyncCall<()>>>";
-    let $load_1: i32;
     let $load_3: ref null "core:prelude/types.wado//AsyncCall<()>";
     let $taken_9: ref null "core:prelude/types.wado//Ready<core:prelude/types.wado/AsyncCall<()>>";
     let $arg_13: i32;
     let $arg_14: i32;
     let $slot_20: ref null "core:prelude/types.wado//Ready<core:prelude/types.wado/AsyncCall<()>>";
+    let $av_25: i32;
     $taken_9 = builtin::array_get_value<ref null "core:prelude/types.wado//Ready<core:prelude/types.wado/AsyncCall<()>>">(local.tee $load_0(self.repr), index);
     builtin::array_set<ref null "core:prelude/types.wado//Ready<core:prelude/types.wado/AsyncCall<()>>">($load_0, index, ref.null none);
     $arg_13 = index + 1;
-    $arg_14 = (local.tee $load_1(self.used) - 1) - index;
+    $arg_14 = (local.tee $av_25(self.used) - 1) - index;
     builtin::array_copy<ref null "core:prelude/types.wado//Ready<core:prelude/types.wado/AsyncCall<()>>">($load_0, index, $load_0, $arg_13, $arg_14);
     if ref.eq($load_0, $load_0) {
         if index > $arg_13 {
@@ -2775,19 +2775,19 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/types.wado/R
     } else {
         builtin::array_fill<ref null "core:prelude/types.wado//Ready<core:prelude/types.wado/AsyncCall<()>>">($load_0, $arg_13, ref.null none, $arg_14);
     }
-    self.used = $load_1 - 1;
+    self.used = $av_25 - 1;
     $arg_13 = local.tee index(self.used) + 1;
-    $load_1 = index;
+    $av_25 = index;
     b332: block {
         l333: loop {
-            break_if b332 $load_1 >= $arg_13;
-            if ref.is_null(local.tee $slot_20(builtin::array_get_value<ref null "core:prelude/types.wado//Ready<core:prelude/types.wado/AsyncCall<()>>">($load_0, $load_1))) == 0 {
+            break_if b332 $av_25 >= $arg_13;
+            if ref.is_null(local.tee $slot_20(builtin::array_get_value<ref null "core:prelude/types.wado//Ready<core:prelude/types.wado/AsyncCall<()>>">($load_0, $av_25))) == 0 {
                 if ref.is_null(local.tee $load_3($slot_20.member)) == 0 {
                     "core:prelude/types.wado/core:prelude/types.wado/AsyncCall<()>^core:prelude/traits.wado/Drop::drop"($load_3);
                 }
                 $slot_20.member = ref.null none;
             }
-            $load_1 = $load_1 + 1;
+            $av_25 = $av_25 + 1;
             continue l333;
         };
     };
@@ -2993,15 +2993,15 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/types.wado/C
 
 fn "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/types.wado/AsyncCall<()>>::remove$unchecked"(self, index) {
     let $load_0: ref "Array<core:prelude/types.wado/AsyncCall<()>>";
-    let $load_1: i32;
     let $taken_9: ref null "core:prelude/types.wado//AsyncCall<()>";
     let $arg_13: i32;
     let $arg_14: i32;
     let $slot_20: ref null "core:prelude/types.wado//AsyncCall<()>";
+    let $av_25: i32;
     $taken_9 = builtin::array_get_value<ref null "core:prelude/types.wado//AsyncCall<()>">(local.tee $load_0(self.repr), index);
     builtin::array_set<ref null "core:prelude/types.wado//AsyncCall<()>">($load_0, index, ref.null none);
     $arg_13 = index + 1;
-    $arg_14 = (local.tee $load_1(self.used) - 1) - index;
+    $arg_14 = (local.tee $av_25(self.used) - 1) - index;
     builtin::array_copy<ref null "core:prelude/types.wado//AsyncCall<()>">($load_0, index, $load_0, $arg_13, $arg_14);
     if ref.eq($load_0, $load_0) {
         if index > $arg_13 {
@@ -3012,16 +3012,16 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/types.wado/A
     } else {
         builtin::array_fill<ref null "core:prelude/types.wado//AsyncCall<()>">($load_0, $arg_13, ref.null none, $arg_14);
     }
-    self.used = $load_1 - 1;
+    self.used = $av_25 - 1;
     $arg_13 = local.tee index(self.used) + 1;
-    $load_1 = index;
+    $av_25 = index;
     b357: block {
         l358: loop {
-            break_if b357 $load_1 >= $arg_13;
-            if ref.is_null(local.tee $slot_20(builtin::array_get_value<ref null "core:prelude/types.wado//AsyncCall<()>">($load_0, $load_1))) == 0 {
+            break_if b357 $av_25 >= $arg_13;
+            if ref.is_null(local.tee $slot_20(builtin::array_get_value<ref null "core:prelude/types.wado//AsyncCall<()>">($load_0, $av_25))) == 0 {
                 "core:prelude/types.wado/core:prelude/types.wado/AsyncCall<()>^core:prelude/traits.wado/Drop::drop"($slot_20);
             }
-            $load_1 = $load_1 + 1;
+            $av_25 = $av_25 + 1;
             continue l358;
         };
     };
@@ -3031,11 +3031,11 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/types.wado/A
 
 fn "core:prelude/list.wado/core:prelude/list.wado/List<waitable_set_delivered_call.wado/Timer>::remove$unchecked"(self, index) {
     let $load_0: ref "Array<waitable_set_delivered_call.wado/Timer>";
-    let $load_2: i32;
     let $taken_9: ref null "waitable_set_delivered_call.wado//Timer";
     let $arg_13: i32;
     let $arg_14: i32;
     let $slot_20: ref null "waitable_set_delivered_call.wado//Timer";
+    let $av_27: i32;
     $load_0 = self.repr;
     let $slot_box_1: ref null "core:prelude/types.wado//Box<waitable_set_delivered_call.wado/Timer>";
     $taken_9 = (if ref.is_null(local.tee $slot_box_1(builtin::array_get_value<ref null "core:prelude/types.wado//Box<waitable_set_delivered_call.wado/Timer>">($load_0, index))) -> ref null "waitable_set_delivered_call.wado//Timer" {
@@ -3045,7 +3045,7 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<waitable_set_delivered_ca
     });
     builtin::array_set<ref null "core:prelude/types.wado//Box<waitable_set_delivered_call.wado/Timer>">($load_0, index, ref.null none);
     $arg_13 = index + 1;
-    $arg_14 = (local.tee $load_2(self.used) - 1) - index;
+    $arg_14 = (local.tee $av_27(self.used) - 1) - index;
     builtin::array_copy<ref null "core:prelude/types.wado//Box<waitable_set_delivered_call.wado/Timer>">($load_0, index, $load_0, $arg_13, $arg_14);
     if ref.eq($load_0, $load_0) {
         if index > $arg_13 {
@@ -3056,20 +3056,20 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<waitable_set_delivered_ca
     } else {
         builtin::array_fill<ref null "core:prelude/types.wado//Box<waitable_set_delivered_call.wado/Timer>">($load_0, $arg_13, ref.null none, $arg_14);
     }
-    self.used = $load_2 - 1;
+    self.used = $av_27 - 1;
     $arg_13 = local.tee index(self.used) + 1;
-    $load_2 = index;
+    $av_27 = index;
     b364: block {
         l365: loop {
-            break_if b364 $load_2 >= $arg_13;
-            if ref.is_null(local.tee $slot_20((if ref.is_null(local.tee $slot_box_1(builtin::array_get_value<ref null "core:prelude/types.wado//Box<waitable_set_delivered_call.wado/Timer>">($load_0, $load_2))) -> ref null "waitable_set_delivered_call.wado//Timer" {
+            break_if b364 $av_27 >= $arg_13;
+            if ref.is_null(local.tee $slot_20((if ref.is_null(local.tee $slot_box_1(builtin::array_get_value<ref null "core:prelude/types.wado//Box<waitable_set_delivered_call.wado/Timer>">($load_0, $av_27))) -> ref null "waitable_set_delivered_call.wado//Timer" {
                 ref.null none;
             } else {
                 $slot_box_1.value;
             }))) == 0 {
                 "core:prelude/types.wado/core:prelude/types.wado/AsyncCall<()>^core:prelude/traits.wado/Drop::drop"(ref.cast "waitable_set_delivered_call.wado//Timer::Only"($slot_20).payload_0);
             }
-            $load_2 = $load_2 + 1;
+            $av_27 = $av_27 + 1;
             continue l365;
         };
     };
