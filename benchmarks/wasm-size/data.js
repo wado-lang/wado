@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1793833321428,
+  "lastUpdate": 1793845968017,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -74505,6 +74505,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/8f8d1fdd0f6d279786c350660675245f3d62dfba"
         },
         "date": 1793833320535,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3099,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7303,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21996,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 377139,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "380290903ede5b5d73da5ba6d787b12ee7551760",
+          "message": "Merge pull request #2549 from wado-lang/claude/peaceful-volta-u08hot\n\nfix(compiler): keep recursive type walks linear when types share members",
+          "timestamp": "2026-11-05T11:16:48+09:00",
+          "tree_id": "7233412f9bc430cbe9ed3c1b56b349d9d5d76182",
+          "url": "https://github.com/wado-lang/wado/commit/380290903ede5b5d73da5ba6d787b12ee7551760"
+        },
+        "date": 1793845966830,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
