@@ -59,8 +59,8 @@ always wins, so a `wado-run` on `PATH` is never run; `--list` marks it.
 
 The repository's `run-webgpu` and `run-pjrt` take every option `wado run` takes,
 and add `--gpu-adapter` and `--plugin`. They build through
-`wado run --emit-component <path>`, which writes the component `wado run` would
-have run and prints its entry.
+`wado build --embed-entry -o - [<file.wado>]`, which writes the component
+`wado run` would have run to stdout, its entry in the `wado:entry` custom section.
 
 ## Target World
 

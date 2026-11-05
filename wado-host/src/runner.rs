@@ -2,8 +2,8 @@
 //! the same under all of them: the command line, the compile, the engine and
 //! the guest profile. [`crate::guest`] holds what the guest reaches. A runner
 //! adds the interface it serves. It compiles nothing itself: `WADO` names the
-//! binary that dispatched it, and `wado run --emit-component` builds what
-//! `wado run` would have run.
+//! binary that dispatched it, and `wado build -o -` builds what `wado run` would
+//! have run.
 
 use std::ffi::{OsStr, OsString};
 use std::fs::File;
@@ -17,7 +17,6 @@ use std::time::{Duration, Instant};
 use anyhow::{Context as _, Result, bail};
 use lexopt::Arg::{Long, Short, Value};
 use lexopt::Parser;
-use tempfile::tempdir;
 use wasmtime::component::{Component, Linker};
 use wasmtime::{Engine, GuestProfiler, Store, UpdateDeadline};
 use wasmtime_wasi::I32Exit;
@@ -439,8 +438,13 @@ pub struct Program {
     pub wasm: Vec<u8>,
 }
 
-/// The component the input names, built by `wado run --emit-component` unless it
-/// already is one.
+/// The custom section `wado build --embed-entry` names the entry in, so a runner
+/// reads it from the bytes it runs.
+pub const ENTRY_SECTION: &str = "wado:entry";
+
+/// The component the input names, built by `wado build` unless it already is
+/// one. It comes back on stdout rather than through a file, which something
+/// else could replace before the runner read it.
 ///
 /// # Errors
 ///
@@ -456,13 +460,13 @@ pub fn program_for(options: &RunOptions) -> Result<Program, CliExit> {
         });
     }
 
-    let dir = tempdir().map_err(CliExit::error)?;
-    let path = dir.path().join("program.wasm");
     let wado = wado_binary();
     let mut build = Process::new(&wado);
     build
-        .args(["run", "--emit-component"])
-        .arg(&path)
+        .args(["build", "--world", "wasi:cli/command", "--embed-entry"])
+        .args(["-o", "-"])
+        // `wado build` defaults to another level than `wado run`.
+        .arg(options.opt_level.flag())
         .args(&options.compile_args)
         .stderr(Stdio::inherit());
     if let Some(input) = input {
@@ -475,14 +479,33 @@ pub fn program_for(options: &RunOptions) -> Result<Program, CliExit> {
         return Err(CliExit::silent_failure(built.status.code().unwrap_or(1)));
     }
 
+    let Some(entry) = embedded_entry(&built.stdout) else {
+        return Err(CliExit::error(format!(
+            "'{}' built a component that names no entry; is it older than this runner?",
+            wado.display()
+        )));
+    };
     Ok(Program {
-        entry: String::from_utf8_lossy(&built.stdout).trim_end().to_owned(),
-        wasm: read_program(&path)?,
+        entry,
+        wasm: built.stdout,
     })
 }
 
 fn read_program(path: &Path) -> Result<Vec<u8>, CliExit> {
     std::fs::read(path).map_err(|e| CliExit::error(format!("{}: {e}", path.display())))
+}
+
+/// The entry `wado build --embed-entry` named in `wasm`.
+#[must_use]
+pub fn embedded_entry(wasm: &[u8]) -> Option<String> {
+    wasmparser::Parser::new(0)
+        .parse_all(wasm)
+        .find_map(|payload| match payload {
+            Ok(wasmparser::Payload::CustomSection(section)) if section.name() == ENTRY_SECTION => {
+                Some(String::from_utf8_lossy(section.data()).into_owned())
+            }
+            _ => None,
+        })
 }
 
 /// `WADO` is the binary that dispatched this subcommand, so a child compiles

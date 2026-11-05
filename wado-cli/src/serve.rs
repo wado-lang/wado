@@ -34,7 +34,6 @@ use wasmtime_wasi_http::p3::bindings::{Service, ServicePre};
 
 use crate::args::{self, CliExit};
 use crate::build::build_for_driver;
-use crate::compile::CompileFlags;
 use crate::host_memory::FreedMemory;
 use crate::knobs::{
     CompileKnobOpt, CompileKnobs, HostKnobOpt, HostKnobs, RuntimeKnobOpt, RuntimeKnobs,
@@ -1253,16 +1252,16 @@ async fn run_http_server(
 
 pub async fn run(opts: ServeOptions) -> Result<(), CliExit> {
     let cranelift_opt = opts.knobs.opt_level.to_wasmtime();
-    let flags = CompileFlags {
-        knobs: opts.knobs,
-        target_world: Some("wasi:http/service".to_string()),
-        ..CompileFlags::default()
-    };
     // `serve` is a driver on the build tier: in a project it builds the
     // http/service world through the shared build core (metadata embedded,
     // written to build/), then serves it; a bare file with no project stays on
     // the in-memory compile primitive.
-    let wasm = Box::pin(build_for_driver(&opts.input, "wasi:http/service", &flags)).await?;
+    let wasm = Box::pin(build_for_driver(
+        &opts.input,
+        manifest::EntryPointKind::Service,
+        opts.knobs,
+    ))
+    .await?;
 
     let timeout = Duration::from_secs(opts.timeout_secs);
     // An explicit `--workers` is already validated against an explicit

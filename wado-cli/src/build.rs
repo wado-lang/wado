@@ -1,7 +1,9 @@
 //! `wado build` — the project orchestrator. Reads `wado.toml`, builds each
 //! declared world (`[package].lib` plus every `[world]` entry) through the
 //! `compile` primitive with `[package]` metadata embedded, and writes each
-//! component to `<root>/build/<world>.wasm`.
+//! component to `<root>/build/<world>.wasm`. With `-o -` or a named input it
+//! builds instead the one component a driver would run, for a `wado run-*`
+//! subcommand to host.
 //!
 //! Dependency resolution, locking, and caching belong here (see the
 //! CLI-subcommands WEP, Command Tiers); `compile` never resolves. Wiring the
@@ -9,32 +11,49 @@
 //! path deps from the nearest manifest itself.
 
 use std::fmt::Write as _;
+use std::io::Write as _;
 use std::num::NonZero;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
+use lexopt::Arg::Value;
 use sha2::{Digest, Sha256};
 use tokio::sync::Semaphore;
 use tokio::task::JoinSet;
 use wado_lsp::host::discovery::Disk;
+use wado_manifest::MetadataSection;
 
 use crate::args::{self, CliExit};
 use crate::compile::{self, Artifact, CompileFlags, CompileOptions};
 use crate::fingerprint::Input;
 use crate::input_cache::{InputCache, Slot};
 use crate::kiln_provider::hex32;
-use crate::knobs::{CompileKnobOpt, CompileKnobs, EmbedOpt, EmbedOptions, HostKnobOpt, HostKnobs};
-use crate::manifest::{self, openable_dir};
+use crate::knobs::{
+    CompileKnobOpt, CompileKnobs, EmbedOpt, EmbedOptions, EmbedPolicy, HostKnobOpt, HostKnobs,
+};
+use crate::manifest::{self, EntryPointKind, openable_dir};
+use crate::metadata_embed::embed_metadata_sections;
 use wado_host::atomic_write::write_atomic;
+use wado_host::runner::ENTRY_SECTION;
 use wado_host::sync::joined;
 
+/// The `-o` that writes the component to stdout.
+const STDOUT: &str = "-";
+
 pub struct BuildOptions {
+    /// The one file to build, in place of the manifest's worlds.
+    input: Option<String>,
     /// `--world <fq>`: build only this hosted world. Mutually exclusive with `lib`.
     world: Option<String>,
     /// `--lib`: build only the library world. Mutually exclusive with `world`.
     lib: bool,
     /// `-o`: output path; valid only when a single world is selected.
     output: Option<String>,
+    /// Whether this builds what a driver of this kind would run, and not the
+    /// manifest's worlds: an input is named, or the output is stdout.
+    driver: Option<EntryPointKind>,
+    /// `--embed-entry`: name the entry in the component.
+    embed_entry: bool,
     knobs: CompileKnobs,
     pub host: HostKnobs,
     embed: EmbedOptions,
@@ -45,11 +64,18 @@ enum Opt {
     World,
     Lib,
     Output,
+    EmbedEntry,
     Help,
 }
 
 impl Opt {
-    const ALL: &[Self] = &[Self::World, Self::Lib, Self::Output, Self::Help];
+    const ALL: &[Self] = &[
+        Self::World,
+        Self::Lib,
+        Self::Output,
+        Self::EmbedEntry,
+        Self::Help,
+    ];
 
     const KNOBS: &[CompileKnobOpt] = &[
         CompileKnobOpt::OptLevel,
@@ -91,7 +117,13 @@ impl Opt {
                 long: None,
                 short: Some('o'),
                 value: Some("<file>"),
-                desc: "Output path (only with a single --world / --lib; default: build/<world>.wasm)",
+                desc: "Output path (only with a single --world / --lib; default: build/<world>.wasm)\n`-` writes the component `wado run` or `wado serve` would run to stdout",
+            },
+            Self::EmbedEntry => args::OptSpec {
+                long: Some("embed-entry"),
+                short: None,
+                value: None,
+                desc: "Name the entry in the component, in the `wado:entry` custom section\n(only with -o - or a named input)",
             },
             Self::Help => args::HELP_SPEC,
         }
@@ -100,11 +132,16 @@ impl Opt {
 
 fn format_usage() -> String {
     let mut buf = String::new();
-    writeln!(buf, "Usage: wado build [options]").unwrap();
+    writeln!(buf, "Usage: wado build [options] [<file.wado>]").unwrap();
     writeln!(buf).unwrap();
     writeln!(
         buf,
         "Build the project's declared worlds from wado.toml into build/<world>.wasm."
+    )
+    .unwrap();
+    writeln!(
+        buf,
+        "A named input, which needs -o, builds that file as `wado run` would."
     )
     .unwrap();
     writeln!(buf).unwrap();
@@ -126,9 +163,11 @@ fn format_usage() -> String {
 
 pub fn parse_args(mut parser: lexopt::Parser) -> Result<BuildOptions, CliExit> {
     let usage = format_usage();
+    let mut input: Option<String> = None;
     let mut world: Option<String> = None;
     let mut lib = false;
     let mut output: Option<String> = None;
+    let mut embed_entry = false;
     let mut knobs = CompileKnobs::default();
     let mut host = HostKnobs::default();
     let mut embed = EmbedOptions::default();
@@ -147,8 +186,12 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<BuildOptions, CliExit> {
                 Opt::World => world = Some(args::require_string(&mut parser)?),
                 Opt::Lib => lib = true,
                 Opt::Output => output = Some(args::require_string(&mut parser)?),
+                Opt::EmbedEntry => embed_entry = true,
                 Opt::Help => return Err(CliExit::help(usage)),
             }
+        } else if let Value(val) = arg {
+            args::reject_multiple_inputs(&input)?;
+            input = Some(val.to_string_lossy().into_owned());
         } else {
             return Err(args::unexpected_arg(arg, &usage));
         }
@@ -159,15 +202,70 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<BuildOptions, CliExit> {
             "`--lib` and `--world` are mutually exclusive",
         ));
     }
+    let driver = if input.is_some() || output.as_deref() == Some(STDOUT) {
+        Some(driver_kind(
+            input.as_deref(),
+            output.as_deref(),
+            world.as_deref(),
+            lib,
+            embed,
+        )?)
+    } else if embed_entry {
+        return Err(CliExit::error(
+            "`--embed-entry` takes `-o -` or a named input",
+        ));
+    } else {
+        None
+    };
 
     Ok(BuildOptions {
+        input,
         world,
         lib,
         output,
+        driver,
+        embed_entry,
         knobs,
         host,
         embed,
     })
+}
+
+/// The driver whose component a build for `-o -` or a named input makes, and
+/// which takes only what that driver takes.
+fn driver_kind(
+    input: Option<&str>,
+    output: Option<&str>,
+    world: Option<&str>,
+    lib: bool,
+    embed: EmbedOptions,
+) -> Result<EntryPointKind, CliExit> {
+    if input.is_some() && output.is_none() {
+        return Err(CliExit::error("a named input needs `-o`"));
+    }
+    if lib {
+        return Err(CliExit::error(
+            "`--lib` takes no named input and no `-o -`: no driver runs a library",
+        ));
+    }
+    if embed.wit != EmbedPolicy::Auto || embed.metadata != EmbedPolicy::Auto {
+        return Err(CliExit::error(
+            "`--embed-wit` and `--embed-metadata` take no named input and no `-o -`: \
+             a driver's component embeds at the defaults",
+        ));
+    }
+    let Some(world) = world else {
+        return Ok(EntryPointKind::Command);
+    };
+    [EntryPointKind::Command, EntryPointKind::Service]
+        .into_iter()
+        .find(|kind| kind.world_fq() == Some(world))
+        .ok_or_else(|| {
+            CliExit::error(format!(
+                "no driver runs the world `{world}`; `-o -` and a named input take \
+                 wasi:cli/command or wasi:http/service"
+            ))
+        })
 }
 
 /// One world to build: its entry module, the `build/<segment>.wasm` output, and
@@ -260,6 +358,9 @@ fn select_targets(
 }
 
 pub async fn run(opts: BuildOptions) -> Result<(), CliExit> {
+    if let Some(kind) = opts.driver {
+        return Box::pin(emit_driver_component(opts, kind)).await;
+    }
     let project = project_here(
         "no wado.toml found; run from a project directory \
          (use `wado compile <file>` to compile a single file)",
@@ -280,6 +381,32 @@ pub async fn run(opts: BuildOptions) -> Result<(), CliExit> {
         targets[0].output = PathBuf::from(path);
     }
     build_world_components(targets, &opts.knobs, opts.embed).await
+}
+
+/// Write the component a driver of `kind` would run, which is how a `wado run-*`
+/// subcommand compiles. The entry section goes on here, past the cache, so what
+/// `wado run` keeps and runs is unchanged by it.
+async fn emit_driver_component(opts: BuildOptions, kind: EntryPointKind) -> Result<(), CliExit> {
+    let output = opts.output.expect("`driver_kind` requires an output");
+    let entry = manifest::resolve_input(opts.input, kind, &format_usage())?;
+    let wasm = Box::pin(build_for_driver(&entry, kind, opts.knobs)).await?;
+    let wasm = if opts.embed_entry {
+        let section = MetadataSection {
+            name: ENTRY_SECTION.to_owned(),
+            value: entry,
+        };
+        embed_metadata_sections(wasm, &[section])
+    } else {
+        wasm
+    };
+    if output == STDOUT {
+        std::io::stdout()
+            .write_all(&wasm)
+            .map_err(|e| CliExit::error(format!("writing the component to stdout: {e}")))
+    } else {
+        write_atomic(Path::new(&output), &wasm)
+            .map_err(|e| CliExit::error(format!("writing {output}: {e}")))
+    }
 }
 
 /// Build every target concurrently, announcing each artifact and printing each
@@ -354,24 +481,30 @@ pub async fn build_world_component(
 /// (a nearby `wado.toml`), build the world through the shared core — metadata
 /// embedded, written to `build/<world segment>.wasm`, matching `wado build`.
 /// With no project, fall back to the standalone compile primitive (in-memory,
-/// no artifact on disk). `flags` supplies the build knobs and the fallback
-/// world. Metadata and WIT embed at their defaults, matching `wado build`, so a
-/// run/serve artifact is identical to a built one.
+/// no artifact on disk). Metadata and WIT embed at their defaults, matching
+/// `wado build`, so a run/serve artifact is identical to a built one.
 ///
 /// A component built before, from sources unchanged since and with the same
 /// metadata to embed, is taken from the cache instead, and nothing is written.
 pub async fn build_for_driver(
     entry: &str,
-    target_world: &str,
-    flags: &CompileFlags,
+    kind: EntryPointKind,
+    knobs: CompileKnobs,
 ) -> Result<Vec<u8>, CliExit> {
+    let target_world = kind.world_fq().expect("a driver runs a hosted world");
+    let flags = CompileFlags {
+        // The compiler picks the cli/command world by default.
+        target_world: (kind != EntryPointKind::Command).then(|| target_world.to_owned()),
+        knobs,
+        ..CompileFlags::default()
+    };
     let entry_path = Path::new(entry);
     let project = compile::load_nearest_manifest(entry_path, &Disk).map_err(CliExit::error)?;
     let metadata = project.as_ref().map_or_else(String::new, |project| {
         let sections = compile::package_metadata(project, EmbedOptions::default(), &flags.knobs);
         sha256_hex(format!("{sections:?}").as_bytes())
     });
-    let cache = InputCache::new("run", flags, target_world);
+    let cache = InputCache::new("run", &flags, target_world);
     let slot = cache.slot(entry_path);
     if let Some(wasm) = slot
         .as_ref()
@@ -391,7 +524,7 @@ pub async fn build_for_driver(
             build_world_component(&target, &flags.knobs, EmbedOptions::default()).await?;
         (artifact.bytes, artifact.reads)
     } else {
-        let (result, reads) = compile::compile_recording_reads(entry, flags).await?;
+        let (result, reads) = compile::compile_recording_reads(entry, &flags).await?;
         (result.wasm, reads)
     };
     if let (Some(reads), Some(slot)) = (reads, &slot) {

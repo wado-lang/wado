@@ -153,6 +153,36 @@ fn build_embed_metadata_flags_mutually_exclusive() {
 }
 
 #[test]
+fn build_named_input_needs_an_output() {
+    let parser = Parser::from_args(&["main.wado"]);
+    assert_err(build::parse_args(parser), "`-o`");
+}
+
+#[test]
+fn build_embed_entry_needs_a_driver_build() {
+    let parser = Parser::from_args(&["--embed-entry"]);
+    assert_err(build::parse_args(parser), "`--embed-entry`");
+}
+
+#[test]
+fn build_to_stdout_builds_no_library() {
+    let parser = Parser::from_args(&["--lib", "-o", "-"]);
+    assert_err(build::parse_args(parser), "`--lib`");
+}
+
+#[test]
+fn build_to_stdout_embeds_as_wado_run_does() {
+    let parser = Parser::from_args(&["--no-embed-wit", "-o", "-"]);
+    assert_err(build::parse_args(parser), "`--embed-wit`");
+}
+
+#[test]
+fn build_to_stdout_builds_a_world_wado_runs() {
+    let parser = Parser::from_args(&["--world", "acme:app/custom", "-o", "-"]);
+    assert_err(build::parse_args(parser), "acme:app/custom");
+}
+
+#[test]
 fn compile_requires_a_file() {
     // `compile` is the file primitive; no argument is an error pointing at build.
     let parser = Parser::from_args(&[] as &[&str]);

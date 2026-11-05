@@ -1,12 +1,10 @@
 use std::fmt::Write as _;
-use std::path::PathBuf;
 
-use wado_host::options::{CliExit, OptSpec};
+use wado_host::options::CliExit;
 use wado_host::runner::{self, CompileOpt, OwnOption, Parsed, RunEngine, run_options_help};
 
-use crate::args::{self, require_string};
+use crate::args;
 use crate::build::build_for_driver;
-use crate::compile::CompileFlags;
 use crate::knobs::{CompileKnobs, HostKnobs, RuntimeKnobs};
 use crate::manifest;
 use crate::runtime::{ProfileMode, WasiState};
@@ -21,16 +19,7 @@ pub struct RunOptions {
     /// The guest's arguments, which `get-arguments` answers after the program name.
     pub program_args: Vec<String>,
     pub runtime: RuntimeKnobs,
-    /// `--emit-component`: where to write the component instead of running it.
-    pub emit_component: Option<PathBuf>,
 }
-
-const EMIT_COMPONENT_SPEC: OptSpec = OptSpec {
-    long: Some("emit-component"),
-    short: None,
-    value: Some("<path>"),
-    desc: "Write the component to <path> and print the entry it was built from,\ninstead of running it. A `wado run-*` subcommand compiles this way",
-};
 
 fn format_usage() -> String {
     let mut buf = String::new();
@@ -43,7 +32,7 @@ fn format_usage() -> String {
     .unwrap();
     writeln!(buf).unwrap();
     writeln!(buf, "Options:").unwrap();
-    write!(buf, "{}", run_options_help(&[EMIT_COMPONENT_SPEC])).unwrap();
+    write!(buf, "{}", run_options_help(&[])).unwrap();
     writeln!(buf).unwrap();
     writeln!(
         buf,
@@ -80,7 +69,6 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<RunOptions, CliExit> {
     let usage = format_usage();
     let mut knobs = CompileKnobs::compile_and_run();
     let mut host = HostKnobs::default();
-    let mut emit_component = None;
 
     let parsed = runner::parse_run_command(
         &mut parser,
@@ -93,13 +81,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<RunOptions, CliExit> {
                 Ok(())
             }
         },
-        |name, parser| {
-            if EMIT_COMPONENT_SPEC.long == Some(name) {
-                emit_component = Some(PathBuf::from(require_string(parser)?));
-                return Ok(OwnOption::Taken);
-            }
-            Ok(OwnOption::Unknown)
-        },
+        |_, _| Ok(OwnOption::Unknown),
     )?;
     let Parsed::Run(command) = parsed else {
         return Err(CliExit::help(usage));
@@ -113,28 +95,21 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<RunOptions, CliExit> {
         preopened_dirs: command.preopened_dirs,
         program_args: command.program_args,
         runtime: command.runtime,
-        emit_component,
     })
 }
 
 pub async fn run(opts: RunOptions) -> Result<(), CliExit> {
     let opt_level = opts.knobs.opt_level.to_wasmtime();
-    // Leave `target_world` unset so the compiler picks the cli/command default.
-    let flags = CompileFlags {
-        knobs: opts.knobs,
-        ..CompileFlags::default()
-    };
     // `run` is a driver on the build tier (like `cargo run`): in a project it
     // builds the cli/command world through the shared build core (metadata
     // embedded, written to build/), then executes it; a bare file with no
     // project stays on the in-memory compile primitive.
-    let wasm = Box::pin(build_for_driver(&opts.input, "wasi:cli/command", &flags)).await?;
-    if let Some(path) = opts.emit_component {
-        std::fs::write(&path, &wasm)
-            .map_err(|e| CliExit::error(format!("{}: {e}", path.display())))?;
-        println!("{}", opts.input);
-        return Ok(());
-    }
+    let wasm = Box::pin(build_for_driver(
+        &opts.input,
+        manifest::EntryPointKind::Command,
+        opts.knobs,
+    ))
+    .await?;
 
     let guest = runner::guest_state(
         &opts.input,

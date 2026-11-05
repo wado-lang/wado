@@ -6,6 +6,7 @@
 use std::time::Duration;
 
 use predicates::prelude::*;
+use wado_host::runner::embedded_entry;
 #[cfg(unix)]
 use wado_host::sandbox;
 
@@ -45,10 +46,10 @@ fn test_compile_project_under_path_with_space() {
     assert!(out.exists(), "expected out.wasm to be written");
 }
 
-/// `wado run --emit-component` builds what `wado run` would run and leaves it
-/// unrun, for a runner to host.
+/// `wado build -o -` hands a runner what `wado run` would run, on stdout, and
+/// `--embed-entry` names the entry inside it.
 #[test]
-fn test_emit_component_writes_it_and_names_its_entry() {
+fn test_build_to_stdout_can_carry_its_entry() {
     let tmp = tempfile::tempdir().unwrap();
     let main = tmp.path().join("main.wado");
     std::fs::write(
@@ -57,25 +58,58 @@ fn test_emit_component_writes_it_and_names_its_entry() {
          export fn run() with Stdout { println(\"ran\"); }\n",
     )
     .unwrap();
-    let out = tmp.path().join("out.wasm");
+    let build = |extra: &[&str]| {
+        wado()
+            .arg("build")
+            .args(extra)
+            .args(["-o", "-"])
+            .arg(&main)
+            .assert()
+            .success()
+            .stderr(predicate::str::is_empty())
+            .get_output()
+            .stdout
+            .clone()
+    };
 
-    wado()
-        .args(["run", "--emit-component"])
-        .arg(&out)
-        .arg(&main)
+    let carrying = build(&["--embed-entry"]);
+    assert!(carrying.starts_with(b"\0asm"));
+    assert_eq!(
+        embedded_entry(&carrying),
+        Some(main.display().to_string()),
+        "the entry should be in the component"
+    );
+    assert_eq!(embedded_entry(&build(&[])), None);
+}
+
+/// With no input, the entry comes from the manifest, as under `wado run`.
+#[test]
+fn test_build_to_stdout_takes_its_entry_from_the_manifest() {
+    let tmp = tempfile::tempdir().unwrap();
+    std::fs::write(
+        tmp.path().join("wado.toml"),
+        "[package]\nname = \"app\"\nversion = \"0.1.0\"\n\n\
+         [world]\n\"wasi:cli/command\" = \"main.wado\"\n",
+    )
+    .unwrap();
+    std::fs::write(tmp.path().join("main.wado"), "export fn run() { }\n").unwrap();
+
+    let built = wado()
+        .current_dir(tmp.path())
+        .args(["build", "--embed-entry", "-o", "-"])
         .assert()
         .success()
-        .stdout(format!("{}\n", main.display()))
-        .stderr(predicate::str::is_empty());
-    assert!(
-        std::fs::metadata(&out).unwrap().len() > 0,
-        "expected the component to be written"
-    );
+        .get_output()
+        .stdout
+        .clone();
+
+    let entry = embedded_entry(&built).expect("the entry should be in the component");
+    assert!(entry.ends_with("main.wado"), "entry: {entry}");
 }
 
 /// A compile that succeeds prints nothing, and says what it wrote only at
-/// `--log-level debug`. A runner that compiles through `wado compile` leaves
-/// its program's stderr alone because of this.
+/// `--log-level debug`. A runner's build leaves its program's stderr alone
+/// because of this.
 #[test]
 fn test_compile_names_its_output_only_at_debug() {
     let tmp = tempfile::tempdir().unwrap();

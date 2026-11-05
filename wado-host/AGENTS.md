@@ -64,7 +64,7 @@ The native host pieces that `wado-cli`, `wado-dev-tools`, the runners, and
   the field to `guest_views!`.
 - `runner.rs` — what `wado run` and each `wado run-*` subcommand share, so a
   program behaves the same under all of them: the command line, the compile
-  (`wado run --emit-component`), the run and the guest profile.
+  (`wado build -o -`), the run and the guest profile.
 - `fuel.rs` — the price of each Wasm operator in fuel, which every metered
   engine takes. See
   [WEP: Fuel Benchmarks](../docs/wep-2026-10-25-fuel-benchmarks.md).
