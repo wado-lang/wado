@@ -460,7 +460,7 @@ fn an_index_past_the_last_adapter_is_refused_with_the_adapters_there_are() {
     );
 }
 
-/// The runner reads the level itself and hands it to `wado compile`, so the
+/// The runner reads the level itself and hands it to `wado build`, so the
 /// two must accept the same spellings.
 #[test]
 fn the_log_level_spellings_are_the_ones_wado_takes() {

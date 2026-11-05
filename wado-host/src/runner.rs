@@ -456,7 +456,7 @@ pub fn program_for(options: &RunOptions) -> Result<Program, CliExit> {
     {
         return Ok(Program {
             entry: entry.to_owned(),
-            wasm: read_program(Path::new(entry))?,
+            wasm: std::fs::read(entry).map_err(|e| CliExit::error(format!("{entry}: {e}")))?,
         });
     }
 
@@ -489,10 +489,6 @@ pub fn program_for(options: &RunOptions) -> Result<Program, CliExit> {
         entry,
         wasm: built.stdout,
     })
-}
-
-fn read_program(path: &Path) -> Result<Vec<u8>, CliExit> {
-    std::fs::read(path).map_err(|e| CliExit::error(format!("{}: {e}", path.display())))
 }
 
 /// The entry `wado build --embed-entry` named in `wasm`.

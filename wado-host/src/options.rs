@@ -1,7 +1,7 @@
 //! The command-line options `wado` and its `run-*` subcommands share: how an
 //! option is declared, how it reaches a parser and a help text, and the knobs
 //! themselves. Each knob is declared once here. `wado-cli` applies a compile
-//! knob to the compiler's own types, and a runner hands it to `wado compile`.
+//! knob to the compiler's own types, and a runner hands it to `wado build`.
 
 use std::ffi::OsString;
 use std::fmt::{self, Write as _};
@@ -335,7 +335,7 @@ impl OptLevel {
         }
     }
 
-    /// The `-O` flag that passes this level to `wado compile`.
+    /// The `-O` flag that passes this level to `wado build`.
     #[must_use]
     pub fn flag(self) -> &'static str {
         match self {
@@ -400,7 +400,7 @@ impl LogLevel {
         }
     }
 
-    /// The value that passes this level to `wado compile --log-level`.
+    /// The value that passes this level to `wado build --log-level`.
     #[must_use]
     pub fn flag_value(self) -> &'static str {
         match self {

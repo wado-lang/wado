@@ -224,11 +224,11 @@ pub(crate) fn workspace_member_dirs(root_dir: &Path, members: &[String]) -> Vec<
 /// The kind of entry point to resolve, identified by the CM world it targets.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum EntryPointKind {
-    /// `wasi:cli/command` — for `wado run` and `wado compile` (default).
+    /// `wasi:cli/command` — for `wado run` and `wado build -o -` (default).
     Command,
     /// `wasi:http/service` — for `wado serve`.
     Service,
-    /// The library world — for `wado compile --lib`. Its entry comes from
+    /// The library world — for `wado wit --lib`. Its entry comes from
     /// `[package].lib` (not the `[world]` table) and the world FQ is derived
     /// from `[package]` identity rather than being a fixed WASI world.
     Lib,
