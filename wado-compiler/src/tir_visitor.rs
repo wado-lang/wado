@@ -462,7 +462,6 @@ pub trait TirMutVisitor {
                 functor_id: _,
                 address_taken_locals: _,
                 body_locals,
-                declared_effects: _,
             } => {
                 for (_, type_id) in params {
                     self.visit_type_id(type_id);

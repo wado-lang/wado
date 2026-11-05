@@ -211,7 +211,6 @@ impl Semantics {
     /// Write the row the effect check solved each effect variable to into every
     /// type the TIR holds, so no TIR type names a variable from here on.
     pub fn write_back_effect_rows(&mut self, solved: &EffectRows) {
-        self.types.close_effect_rows(solved);
         let Some(state) = &self.state else {
             return;
         };

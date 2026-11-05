@@ -1356,13 +1356,6 @@ pub enum TirExprKind {
         /// lowering can seed a closure-scoped allocator without re-walking the
         /// body. Empty for the synthetic closures `synthesis/` creates.
         body_locals: Vec<TirLocal>,
-        /// Effects the closure type was annotated with at the use site (let
-        /// annotation, function-typed parameter, etc.). `Some` only when the
-        /// annotation provides a concrete effect set; the effect checker swaps
-        /// to these when entering the body so e.g. `let f: fn() = ||{println}`
-        /// rejects the Stdout leak. `None` means "unannotated, inherit outer
-        /// effects" (preserves the original behaviour for free closures).
-        declared_effects: Option<Vec<EffectRef>>,
     },
 
     /// Indirect call through a callable value (closure or funcref)
