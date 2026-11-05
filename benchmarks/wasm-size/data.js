@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1793849171955,
+  "lastUpdate": 1793853763616,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -74593,6 +74593,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/c021379081524fc716bbd02463ab35ae4b764d96"
         },
         "date": 1793849170998,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3099,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7303,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21965,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 375776,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "7c1577959a399eb9eed95c168829ac811f46a4cc",
+          "message": "Merge pull request #2551 from wado-lang/claude/typeid-typekey-naming-ysw38w\n\nrefactor(effect-check): solved effect rows live in the TIR, not in table redirects",
+          "timestamp": "2026-11-05T13:29:25+09:00",
+          "tree_id": "72ef0ecac885b61063a83beac08a265927b5e90f",
+          "url": "https://github.com/wado-lang/wado/commit/7c1577959a399eb9eed95c168829ac811f46a4cc"
+        },
+        "date": 1793853763205,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
