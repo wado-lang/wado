@@ -1,0 +1,30 @@
+// Loop-versioned BCE under an in-body guard `i + 2 < n`, where the guard's sum
+// wraps negative at `i = i32::MAX - 1`. The guard then passes while `i + 1` is
+// not under `n`, so the residual `n <= i32::MAX - 1` must refuse the fast arm
+// and the checked loop fail the assertion.
+
+#[inline(never)]
+fn probe(n: i32, from: i32) -> i32 {
+    let mut hits = 0;
+    for let mut i = from; i < n; i += 1 {
+        if i + 2 < n {
+            assert i + 1 < n;
+            hits += 1;
+        }
+    }
+    return hits;
+}
+
+export fn run() {
+    let n = builtin::black_box(i32::MAX);
+    assert probe(n, n - 1) == 0;
+}
+
+__DATA__
+{
+    "stderr_contains": [
+        "Assertion failed in probe",
+        "i: 2147483646"
+    ],
+    "trapped": true
+}
