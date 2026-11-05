@@ -51,8 +51,6 @@ Filename: `docs/wep-YYYY-MM-DD-{feature-name}.md`
 - Decision: What was decided and why
 - Roadmap (optional): What will be done, in order
 - Known gaps (optional): What is missing, whether or not it will be closed
-- Dead ends (optional): What was built or tried and lost, and what it lost to
-
 Once a design settles, its rules move to the specification, and the WEP stops
 being where a reader looks a rule up. Where a WEP and the specification
 disagree, the specification holds.
