@@ -1,0 +1,55 @@
+// A short-circuit's right operand takes a marker of its own. `rare`'s right
+// operand never ran, so the profile marks it and nothing inside it. In `even`
+// it ran on every other call, so the profile overrides the author's marker.
+use { println, Stdout } from "core:cli";
+
+#[inline("never")]
+fn g(x: i32) -> i32 {
+    return x * 3 + builtin::black_box(1);
+}
+
+#[inline("never")]
+fn rare(a: bool, b: i32) -> bool {
+    return a && (g(b) > 3 || g(b + 1) > 5);
+}
+
+#[inline("never")]
+fn even(a: bool, b: i32) -> bool {
+    return a || checked: {
+        builtin::cold_path();
+        g(b) > 0
+    };
+}
+
+export fn run() with Stdout {
+    let mut n = 0;
+    for let i of 0..<1000 {
+        if rare(builtin::black_box(false), i) { n += 1; }
+        if even(i % 2 == 0, i) { n += 2; }
+    }
+    println(`${n}`);
+}
+
+__DATA__
+{
+  "profile": "testdata/pgo_rhs_regions.pgo",
+  "marked_regions": [
+    "pgo_rhs_regions.wado:13:17 rhs unlikely cold",
+    "pgo_rhs_regions.wado:27:47 then unlikely cold",
+    "pgo_rhs_regions.wado:28:43 else unlikely cold"
+  ],
+  "remarks": {
+    "O2": [
+      {
+        "contains": [
+          "pgo_rhs_regions.wado:19:9 remark: `cold_path()` marks this path rare, but the profile ran it 500 times where the code around it ran 1000 times, so it is neither unlikely nor cold; the profile overrides the marker"
+        ],
+        "count": 1
+      }
+    ]
+  },
+  "wir_scope": "pgo_rhs_regions.wado/rare",
+  "wir_expect:O2": ["if @unlikely(a)"],
+  "wir_contrast": {"O2": [{"g(b) > 3": "g(b) > 4"}]},
+  "stdout": "2000\n"
+}

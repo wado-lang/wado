@@ -492,12 +492,6 @@ output at every level. It is a nightly campaign, not a gate.
 
 ## Known gaps
 
-- [ ] An author's `cold_path()`, or a `?`, in the right operand of `&&` or
-  `||` keeps its marker when the profile measured it, since the profile has no
-  statement position there for a marker of its own.
-- [ ] A region that starts in an expression, the right operand of `&&` or
-  `||`, has no statement position for a marker, so the regions inside one that
-  never ran are marked in its place.
 - [ ] A region is measured once for all of a generic function's
   instantiations, so an instantiation the workload never ran shares the counts
   of one it ran.

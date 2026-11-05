@@ -523,17 +523,6 @@ impl MarkMap {
             _ => false,
         };
         let cold = |id: usize| counts[id].is_some_and(Thresholds::is_cold);
-        // The region a marker for `id` sits under: a region in an expression
-        // has no statement position to mark.
-        let markable_parent = |id: usize| {
-            let mut parent = parents[id];
-            while let Some(p) = parent
-                && plan.regions[p as usize].kind == RegionKind::Rhs
-            {
-                parent = parents[p as usize];
-            }
-            parent
-        };
         // A hot price on the rare side of a branch would grow code that rarely
         // runs, so an unlikely region pays the plain one, and so does every
         // region inside it, as the inliner reads the hint a marker writes. A
@@ -564,12 +553,11 @@ impl MarkMap {
             }),
         );
         for (id, region) in plan.regions.iter().enumerate() {
-            if counts[id].is_none() || region.kind == RegionKind::Rhs {
+            if counts[id].is_none() {
                 continue;
             }
-            let parent = markable_parent(id);
             // Under a region that never ran, whose marker covers this one.
-            if count_of(parent) == Some(0) {
+            if count_of(parents[id]) == Some(0) {
                 continue;
             }
             let Some(mark) = Mark::of(unlikely(id), cold(id)) else {
@@ -587,14 +575,10 @@ impl MarkMap {
         }
         for (marker, span, region) in markers {
             let region = region as usize;
-            // Where the profile has no count, or cannot place a marker of its
-            // own, the source's stays.
+            // Where the profile has no count, the source's marker stays.
             let Some(runs) = counts[region] else {
                 continue;
             };
-            if plan.regions[region].kind == RegionKind::Rhs {
-                continue;
-            }
             self.overridden.insert(marker.node());
             // A path that never ran is unlikely and cold, which the marker
             // said; one that ran is not cold.

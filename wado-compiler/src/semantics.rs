@@ -1872,7 +1872,6 @@ mod tests {
 
     use super::*;
     use crate::compiler_host::InMemoryCompilerHost;
-    use crate::coverage::RegionKind;
     use crate::hashmap;
     use crate::pgo;
     use crate::rarity::Mark;
@@ -2241,11 +2240,7 @@ mod tests {
                     plan.functions
                         .iter()
                         .zip(&regions)
-                        .find_map(|(function, ids)| {
-                            (ids.len() == 2
-                                && plan.regions[ids[1] as usize].kind != RegionKind::Rhs)
-                                .then_some(function)
-                        })?;
+                        .find_map(|(function, ids)| (ids.len() == 2).then_some(function))?;
                 Some((plan, function))
             })
             .expect("the stdlib has a function with one branch");
