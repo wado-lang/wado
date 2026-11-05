@@ -1,4 +1,4 @@
-//! Spawning on a POSIX host, where `wado_host::sandbox` confines the child.
+//! Spawning on a POSIX host, where [`crate::sandbox`] confines the child.
 
 use std::collections::BTreeSet;
 use std::ffi::OsString;
@@ -26,12 +26,11 @@ use wasmtime_wasi::filesystem::Descriptor;
 use wasmtime_wasi::p2::OutputStream;
 use wasmtime_wasi::p2::pipe::MemoryOutputPipe;
 
-use wado_host::sandbox::{self, Access as Reach, Child, Network, Policy, Stdio, Trace};
-use wado_host::sync::{join, lock};
-
 use super::types::{ExitStatus, Input, Output};
 use super::{Command, ErrorCode, GuestStdio, ProcessHost, ProcessView, Spawned, Spawning};
-use crate::external::{find_program, is_executable};
+use crate::path_search::{find_program, is_executable};
+use crate::sandbox::{self, Access as Reach, Child, Network, Policy, Stdio, Trace};
+use crate::sync::{join, lock};
 use crate::user_config::{config_path, user_config};
 
 const PIPE_BUFFER: usize = 8192;

@@ -9,10 +9,9 @@ use wado_compiler::pgo::{Cutoff, Percent};
 
 use crate::args::{self, CliExit, OptSpec};
 use crate::host_memory::{FreedMemory, set_freed_memory};
-use crate::process_host::ProcessGrant;
 use crate::runtime::{parse_collector, parse_gc_heap_size};
 use wado_host::engine::{DEFAULT_COLLECTOR, DEFAULT_GC_HEAP_INITIAL_SIZE};
-use wado_host::sandbox::Trace;
+use wado_host::process_host::{ProcessGrant, Trace};
 
 pub use wado_host::runner::OptLevel;
 

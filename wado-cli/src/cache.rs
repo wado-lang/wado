@@ -20,10 +20,9 @@
 
 use crate::build_dep::GENERATOR_WORLD_SEGMENT;
 use crate::compile::build_dir;
-use crate::user_config::user_config;
 use std::path::{Path, PathBuf};
 use std::{fs, io};
-use wado_lsp::host::discovery::home_dir;
+use wado_host::user_config::{user_config, xdg_base_dir};
 
 /// The dependency cache root: `$WADO_ROOT`, else `~/wado`. Shares the resolver
 /// with the language server so both agree on where the cache lives.
@@ -79,19 +78,6 @@ pub fn init_root_from_config() {
 /// needs rather than what any build can recreate.
 pub fn user_cache_dir() -> Option<PathBuf> {
     xdg_base_dir("XDG_CACHE_HOME", ".cache").map(|dir| dir.join("wado"))
-}
-
-/// The XDG base directory `var` names, else `~/<default>`. A relative value is
-/// ignored, as the XDG spec requires: it would name a different directory from
-/// every working directory.
-pub fn xdg_base_dir(var: &str, default: &str) -> Option<PathBuf> {
-    if let Some(dir) = std::env::var_os(var)
-        .map(PathBuf::from)
-        .filter(|dir| dir.is_absolute())
-    {
-        return Some(dir);
-    }
-    home_dir().map(|home| home.join(default))
 }
 
 /// The directory for the `kind` cache of a file in the package at

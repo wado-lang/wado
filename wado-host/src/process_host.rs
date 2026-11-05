@@ -1,5 +1,5 @@
-//! The `wado` host for `core:process`: spawning a child confined to the
-//! guest's grants plus a fixed baseline, through `wado_host::sandbox`.
+//! The host for `core:process`: spawning a child confined to the guest's grants
+//! plus a fixed baseline, through [`crate::sandbox`].
 //!
 //! See WEP 2026-10-21 (`core:process`).
 
@@ -10,7 +10,6 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
 use anyhow::Result;
-use wado_host::sandbox::Trace;
 use wasmtime::component::{Access, HasData, Resource, ResourceTable};
 use wasmtime_wasi::filesystem::Descriptor;
 use wasmtime_wasi::p2::pipe::MemoryOutputPipe;
@@ -97,6 +96,18 @@ struct Grant {
     dir: Arc<File>,
 }
 
+/// What the host watches a child do, beyond the calls the filter refuses. Here
+/// rather than in `sandbox`, which exists on Unix alone, since every host parses
+/// `--process-trace`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Trace {
+    Off,
+    /// Each call that names a path the sandbox mediates, recording a path the
+    /// policy does not grant as a `Refusal::Path`. Every such call waits on the
+    /// host, so a child runs slower. Linux alone watches.
+    Files,
+}
+
 /// Whether `--deny-process` turned spawning off, the paths `--process-read`
 /// opens to every child, and whether `--process-trace` watches their files.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -155,9 +166,9 @@ fn answer(preopened_dirs: &[(String, String)], grant: ProcessGrant) -> Result<An
 
 #[cfg(unix)]
 fn unsupported_reason() -> Option<String> {
-    match wado_host::sandbox::availability() {
-        wado_host::sandbox::Availability::Available => None,
-        wado_host::sandbox::Availability::Unsupported(reason) => Some(reason),
+    match crate::sandbox::availability() {
+        crate::sandbox::Availability::Available => None,
+        crate::sandbox::Availability::Unsupported(reason) => Some(reason),
     }
 }
 

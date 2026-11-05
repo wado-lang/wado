@@ -21,14 +21,14 @@ use crate::args::CliExit;
 use crate::coverage_host::add_to_linker as add_coverage_to_linker;
 use crate::eval_host::{EvalSession, add_to_linker as add_eval_to_linker};
 use crate::fuel_host::{FuelRegion, add_to_linker as add_fuel_to_linker};
-use crate::http_hooks::WadoHttpHooks;
 use crate::knobs::RuntimeKnobs;
-use crate::process_host::{
+use wado_host::engine::{default_config, guest_store};
+use wado_host::fuel::meter_fuel;
+use wado_host::http_hooks::WadoHttpHooks;
+use wado_host::process_host::{
     GuestStdio, ProcessCtx, ProcessGrant, ProcessView, Spawning,
     add_to_linker as add_process_to_linker,
 };
-use wado_host::engine::{default_config, guest_store};
-use wado_host::fuel::meter_fuel;
 use wado_host::random;
 use wado_host::runner::{GuestProfile, grant_host_network};
 use wado_host::timezone::add_to_linker;
