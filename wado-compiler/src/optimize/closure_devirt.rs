@@ -329,10 +329,10 @@ impl Rule for ClosureDevirtRule {
         let Some((canonical, target)) = self.dispatched_wrapper(engine, id) else {
             return false;
         };
-        let ExprKind::IndirectCall { args, .. } = &engine.body.exprs[id].kind else {
+        let ExprKind::IndirectCall { args, ceiling, .. } = &engine.body.exprs[id].kind else {
             unreachable!("`dispatched_wrapper` matched an IndirectCall");
         };
-        let args = args.clone();
+        let (args, ceiling) = (args.clone(), *ceiling);
         let span = engine.body.exprs[id].span;
         let receiver = if target.takes_env() {
             let Some((local, name)) = functor_local(engine, canonical) else {
@@ -363,11 +363,7 @@ impl Rule for ClosureDevirtRule {
             ),
             None => CallArgs::free(passed.collect()),
         };
-        let call = ExprKind::Call {
-            func_id: target.func_id,
-            type_args: Vec::new(),
-            args,
-        };
+        let call = ExprKind::call(target.func_id, Vec::new(), args).under(ceiling);
         engine.replace_expr_kind(id, call);
         true
     }

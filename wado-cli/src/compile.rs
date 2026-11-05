@@ -9,7 +9,9 @@ use lexopt::Arg::Value;
 use wado_compiler::codegen_flags::Pgo;
 use wado_compiler::pgo::{self, Profile};
 use wado_compiler::world_registry::TEST_WORLD;
-use wado_compiler::{CodegenFlags, CompilerHost as _, Diagnostic, Logger, Severity, wit_bundle};
+use wado_compiler::{
+    CodegenFlags, CompilerHost as _, Diagnostic, LogLevel, Logger, Severity, wit_bundle,
+};
 use wado_lsp::host::discovery::{Disk, PackageFiles, normalize_path};
 use wado_lsp::host::{PackageWalk, dependency_key};
 
@@ -438,11 +440,7 @@ pub(crate) fn entry_profile(
     host: &FilesystemCompilerHost,
 ) -> Result<Option<Arc<Profile>>, String> {
     let test_world = target_world == Some(TEST_WORLD);
-    let parsed = CodegenFlags::parse(
-        &knobs.codegen_flags,
-        knobs.opt_level.to_compiler(),
-        test_world,
-    );
+    let parsed = CodegenFlags::parse(&knobs.codegen_flags, knobs.compiler_opt_level(), test_world);
     // An unknown flag is the compile's to report.
     let Ok(CodegenFlags { pgo, .. }) = parsed else {
         return Ok(None);
@@ -1455,29 +1453,18 @@ fn read_license_text(
         .map_err(|e| format!("cannot read license-file {}: {e}", path.display()))
 }
 
-/// A finished build: the emitted component, and where it was written.
-/// `--wat-to-stdout` writes no file, so `output_path` is `None` there.
+/// A finished build: the emitted component.
 pub struct Artifact {
     pub bytes: Vec<u8>,
-    pub output_path: Option<PathBuf>,
     /// What the compile read, where none of it is untracked.
     pub(crate) reads: Option<Vec<Input>>,
 }
 
-/// Report a written file. A command that exists to produce one says so; a
-/// `run` / `serve` driver, which only builds on the way through, stays quiet.
-pub fn announce_artifact(output: impl AsRef<Path>) {
-    eprintln!("Generated: {}", output.as_ref().display());
-}
-
 pub async fn run(opts: CompileOptions) -> Result<(), CliExit> {
-    if let Some(output) = compile_to_artifact(opts).await?.output_path {
-        announce_artifact(output);
-    }
-    Ok(())
+    compile_to_artifact(opts).await.map(|_| ())
 }
 
-/// Like [`run`], but silent and handing back the [`Artifact`]. A run / serve
+/// Like [`run`], but handing back the [`Artifact`]. A run / serve
 /// driver uses its own compilation directly instead of reading the artifact
 /// back from `build/`, where a concurrent build could leave it torn or serve a
 /// different world's bytes.
@@ -1521,7 +1508,6 @@ pub async fn compile_to_artifact(opts: CompileOptions) -> Result<Artifact, CliEx
         print!("{wat}");
         return Ok(Artifact {
             bytes: Vec::new(),
-            output_path: None,
             reads: None,
         });
     }
@@ -1557,11 +1543,10 @@ pub async fn compile_to_artifact(opts: CompileOptions) -> Result<Artifact, CliEx
     }
     fs::write(&output_path, &bytes)
         .map_err(|e| CliExit::error(format!("writing output file: {e}")))?;
-    Ok(Artifact {
-        bytes,
-        output_path: Some(output_path),
-        reads,
-    })
+    if opts.knobs.log_level == LogLevel::Debug {
+        eprintln!("Generated: {}", output_path.display());
+    }
+    Ok(Artifact { bytes, reads })
 }
 
 /// The `<root>/build/<segment>.wasm` artifact path for a publish build, where

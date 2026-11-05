@@ -34,14 +34,15 @@ use wasmtime_wasi_http::p3::bindings::{Service, ServicePre};
 
 use crate::args::{self, CliExit};
 use crate::build::build_for_driver;
-use crate::compile::CompileFlags;
 use crate::host_memory::FreedMemory;
 use crate::knobs::{
     CompileKnobOpt, CompileKnobs, HostKnobOpt, HostKnobs, RuntimeKnobOpt, RuntimeKnobs,
 };
 use crate::manifest;
-use crate::runtime::{self, Preopens, ProfileMode, Ticker, WasiState};
+use crate::runtime::{self, Preopens, ProfileMode, WasiState};
+use wado_host::runner::write_guest_profile;
 use wado_host::sync::{joined, lock, next_joined};
+use wado_host::ticker::Ticker;
 
 /// First-byte timeout cuts off guests stuck in the host; the epoch
 /// deadline (see `worker_loop`) catches runaway pure-wasm loops.
@@ -61,6 +62,11 @@ const DEFAULT_RECYCLE_REQUESTS: u64 = 200;
 /// GC walks on every collection, so throughput peaks over a 16–32 plateau
 /// and a worker left to run the whole backlog loses a third of it by 200.
 const DEFAULT_MAX_CONCURRENCY_PER_WORKER: usize = 32;
+
+/// What one host call may copy out of a guest, wasmtime's default. A worker
+/// keeps it where a program run by hand lifts it: requests reach this guest, and
+/// many of them share the host's memory.
+const HOSTCALL_FUEL: usize = 128 << 20;
 
 pub struct ServeOptions {
     pub input: String,
@@ -290,7 +296,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<ServeOptions, CliExit> {
                 Opt::Profile => {
                     let spec = args::require_string(&mut parser)?;
                     profile = runtime::parse_profile(&spec)?;
-                    if !matches!(profile, ProfileMode::Guest { .. }) {
+                    if !matches!(profile, ProfileMode::Guest(_)) {
                         return Err(CliExit::error(
                             "wado serve supports only --profile guest".to_string(),
                         ));
@@ -813,6 +819,7 @@ async fn worker_loop(
         // here — once per generation, not once per request.
         let state = WasiState::new_no_inherit_env_with_preopens(&preopens, &argv);
         let mut store = runtime::new_store(&engine, state);
+        store.set_hostcall_fuel(HOSTCALL_FUEL);
         // Arm the epoch deadline. The dispatch loop refreshes it every
         // turn (see below), so a healthy worker never trips it; a guest
         // that runs away in pure wasm does.
@@ -983,12 +990,8 @@ async fn run_http_server(
     let stack_pool = max_concurrency_u32
         .saturating_mul(2)
         .saturating_add(workers_u32.saturating_mul(8));
-    let engine = runtime::create_serve_engine(
-        cranelift_opt,
-        max_instances,
-        stack_pool,
-        runtime_knobs.clone(),
-    )?;
+    let engine =
+        runtime::create_serve_engine(cranelift_opt, max_instances, stack_pool, &runtime_knobs)?;
     let component = Component::new(&engine, &wasm)?;
     let linker = runtime::create_linker(&component)?;
     // Open preopens once at startup; they are attached to every worker
@@ -1002,18 +1005,17 @@ async fn run_http_server(
     // Set up the guest profiler before the component handle is dropped.
     // The profiler is component-scoped; each worker store re-registers the
     // sampling callback (see `worker_loop`).
-    let profiler_handle = if let ProfileMode::Guest { interval_ms, .. } = &profile {
-        let interval = Duration::from_millis(*interval_ms);
+    let profiler_handle = if let ProfileMode::Guest(guest) = &profile {
         let profiler = GuestProfiler::new_component(
             &engine,
             "wado",
-            interval,
+            guest.interval,
             component.clone(),
             std::iter::empty::<(String, wasmtime::Module)>(),
         )?;
         Some(GuestProfilerHandle {
             profiler: Arc::new(Mutex::new(Some(profiler))),
-            interval,
+            interval: guest.interval,
         })
     } else {
         None
@@ -1077,7 +1079,7 @@ async fn run_http_server(
     // polling it, which on a single-core host is the only one, so a tokio
     // ticker would be starved by the guest it exists to trap.
     let epoch_tick = match &profile {
-        ProfileMode::Guest { interval_ms, .. } => Duration::from_millis(*interval_ms),
+        ProfileMode::Guest(guest) => guest.interval,
         _ => Duration::from_millis(EPOCH_TICK_MS),
     };
     let epoch_ticker = Ticker::start(epoch_tick, {
@@ -1226,11 +1228,12 @@ async fn run_http_server(
 
     // Every worker has stopped, so no further samples can land: finish the
     // guest profile and write it out.
-    if let (Some(handle), ProfileMode::Guest { path, .. }) = (profiler_handle, &profile)
+    if let (Some(handle), ProfileMode::Guest(guest)) = (profiler_handle, &profile)
         && let Some(profiler) = lock(&handle.profiler).take()
     {
-        match std::fs::File::create(path) {
-            Ok(file) => match runtime::write_guest_profile(profiler, file) {
+        let path = guest.path.display();
+        match std::fs::File::create(&guest.path) {
+            Ok(file) => match write_guest_profile(profiler, file) {
                 Ok(()) => {
                     eprintln!("Profile written to {path}");
                     eprintln!("View at https://profiler.firefox.com/");
@@ -1249,16 +1252,16 @@ async fn run_http_server(
 
 pub async fn run(opts: ServeOptions) -> Result<(), CliExit> {
     let cranelift_opt = opts.knobs.opt_level.to_wasmtime();
-    let flags = CompileFlags {
-        knobs: opts.knobs,
-        target_world: Some("wasi:http/service".to_string()),
-        ..CompileFlags::default()
-    };
-    // `serve` is a driver on the build tier: in a project it builds the
-    // http/service world through the shared build core (metadata embedded,
-    // written to build/), then serves it; a bare file with no project stays on
-    // the in-memory compile primitive.
-    let wasm = Box::pin(build_for_driver(&opts.input, "wasi:http/service", &flags)).await?;
+    // `serve` is a driver on the build tier: a project's declared entry builds
+    // the http/service world through the shared build core (metadata embedded,
+    // written to build/), then serves it; any other file stays on the in-memory
+    // compile primitive.
+    let wasm = Box::pin(build_for_driver(
+        &opts.input,
+        manifest::EntryPointKind::Service,
+        opts.knobs,
+    ))
+    .await?;
 
     let timeout = Duration::from_secs(opts.timeout_secs);
     // An explicit `--workers` is already validated against an explicit
@@ -1274,7 +1277,7 @@ pub async fn run(opts: ServeOptions) -> Result<(), CliExit> {
     }
     // Guest profiling samples one worker store; more than one worker would
     // conflate independent stores into a single profile.
-    if matches!(opts.profile, ProfileMode::Guest { .. }) && workers != 1 {
+    if matches!(opts.profile, ProfileMode::Guest(_)) && workers != 1 {
         eprintln!("Profiling: forcing --workers 1");
         workers = 1;
     }

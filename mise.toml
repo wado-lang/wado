@@ -301,6 +301,18 @@ n=$(nproc); threads=$(( n > 1 ? n - 1 : 1 ))
 ./scripts/exclusive.sh test cargo test -- --test-threads="$threads"
 """
 
+[tasks.test-pjrt]
+description = "Run wado-run-pjrt's programs on XLA's CPU plugin and compile them for a TPU, both plugins fetched and pinned"
+run = """
+#!/usr/bin/env bash
+set -xe -o pipefail
+WADO=$(scripts/dev-bin.sh --path wado)
+WADO_PJRT_PLUGIN=$(scripts/fetch-pjrt-plugin.sh)
+WADO_PJRT_TPU_PLUGIN=$(scripts/fetch-pjrt-plugin.sh tpu)
+export WADO WADO_PJRT_PLUGIN WADO_PJRT_TPU_PLUGIN
+cargo test --locked -p wado-run-pjrt -- --ignored
+"""
+
 [tasks.test-e2e]
 description = "Run the compiler's e2e fixtures at O2: the check for a compiler change"
 run = """
@@ -598,7 +610,7 @@ set -xe -o pipefail
 CORE_MODULES="core:prelude core:cli core:collections core:fs core:base64 core:zlib \
   core:serde core:json core:jsonc core:args core:value core:cbor core:simd core:url core:kiln \
   core:benchmark core:router core:digest core:prng core:secure_random core:uuid core:temporal core:log core:jwt \
-  core:icu core:eval core:fuel core:process core:linear"
+  core:icu core:eval core:fuel core:pjrt core:process core:linear"
 WASI_MODULES="wasi:cli wasi:filesystem wasi:http wasi:clocks wasi:random wasi:sockets wasi:tls"
 
 scripts/dev-bin.sh wado doc --format markdown -o 'docs/stdlib-{module}.md' \
@@ -779,13 +791,13 @@ cargo run -p wado-from-idl -- \
 """
 
 [tasks.update-stdlib-core-wit]
-description = "Regenerate the core:* stdlib submodules generated from WIT (core:kiln, core:eval, core:coverage, core:fuel, core:process; facades are hand-written)"
+description = "Regenerate the core:* stdlib submodules generated from WIT (core:kiln, core:eval, core:coverage, core:fuel, core:pjrt, core:process; facades are hand-written)"
 run = """
 #!/usr/bin/env bash
 set -xe -o pipefail
 # Submodules only — each facade `lib/core/<package>.wado` is hand-written.
 # `--package` leaves out the `deps/` a world includes, which `wasi:*` covers.
-for package in kiln eval coverage fuel process; do
+for package in kiln eval coverage fuel process pjrt; do
     rm -f "wado-compiler/lib/core/$package/"*.wado
     cargo run -p wado-from-idl -- \
         --wit-dir "wado-compiler/lib/core/$package" \

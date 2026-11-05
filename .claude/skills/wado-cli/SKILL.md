@@ -57,6 +57,11 @@ receives the rest of the command line unparsed and owns the exit status, and
 Only `PATH` is searched, and never an entry that is empty or relative. A builtin
 always wins, so a `wado-run` on `PATH` is never run; `--list` marks it.
 
+The repository's `run-webgpu` and `run-pjrt` take every option `wado run` takes,
+and add `--gpu-adapter` and `--plugin`. They build through
+`wado build --embed-entry -o - [<file.wado>]`, which writes the component
+`wado run` would have run to stdout, its entry in the `wado:entry` custom section.
+
 ## Target World
 
 A Wado program targets a Wasm _world_: the CLI command (`wasi:cli/command`, the
@@ -99,7 +104,7 @@ wado compile --wat-to-stdout file.wado # output WAT to stdout
 ```
 
 Optimization levels: `-O0` (none), `-O1` (development; the default of `run`,
-`serve` and `test`), `-O2` (production; the default elsewhere), `-O3`
+`serve`, `test` and each `run-*`), `-O2` (production; the default elsewhere), `-O3`
 (aggressive), `-Os` (`-O2` + strip symbols). Below `-O2`, a call marked `unchecked` has its
 contract checked, so pass `-O2` to measure what ships.
 

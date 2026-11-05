@@ -1,0 +1,140 @@
+//! Counts the findings a review's own runs reproduced. A grader reads each
+//! finding against what the review's Run calls output, and a finding is
+//! reproduced when a run shows the wrong behaviour it describes. The known
+//! defect is only one of a change's defects, so a review is credited for every
+//! defect it shows, not only that one.
+//!
+//! Run it from the repository root:
+//!
+//! ```sh
+//! CLAUDE_API_KEY=... wado run package-eddy/tools/confirm.wado -- \
+//!     package-eddy/eval/run.json out.json
+//! ```
+
+use { args, env, eprintln, Stderr, Environment } from "core:cli";
+use fs from "core:fs";
+use { Preopens } from "core:fs";
+use { Client } from "wasi:http";
+use { to_bytes_pretty, to_string, from_string } from "core:json";
+use { TreeSet } from "core:collections";
+use { ask_json, Baseline, Finding, Run } from "./eval.wado";
+
+#[param(name = "grader")]
+global GRADER: String = "claude-opus-5-5";
+
+global CONFIRM: String = "You check which findings of a code review its own runs reproduced.
+The reviewer wrote tests and programs into the repository at the reviewed change and ran them with cargo. You get the findings it reported and every run's command and output.
+A finding is reproduced when a run shows the wrong behaviour it describes, such as a failing assertion that names it or printed output that shows it. A run that failed to build, or failed on something else, reproduces nothing, and neither does the reviewer's own claim.
+Answer with one JSON object and nothing else:
+{\"findings\": [{\"finding\": <its index>, \"reproduced\": bool, \"reason\": \"<one sentence citing the output>\"}]}";
+
+struct Confirmation {
+    finding: i32,
+    reproduced: bool,
+    reason: String,
+}
+
+struct Confirmations {
+    findings: List<Confirmation>,
+}
+
+struct ConfirmedRun {
+    fix: i32,
+    run: i32,
+    findings: List<Finding>,
+    /// The index of the finding that hit the known defect, or -1.
+    hit: i32,
+    confirmations: List<Confirmation> = [],
+    error: Option<String> = null,
+}
+
+struct Confirmed {
+    grader: String,
+    runs: List<ConfirmedRun>,
+}
+
+export fn run() with (Stderr, Environment, Preopens, Client) {
+    let arguments = args();
+    assert arguments.len() == 2, "usage: confirm.wado <reviews.json> <out.json>";
+    let Some(api_key) = env("CLAUDE_API_KEY") else {
+        panic("CLAUDE_API_KEY is not set");
+    };
+    let reviews = from_string::<Baseline, String>(fs::read_to_string(&arguments[0]).unwrap()).unwrap();
+    let out_path = arguments[1];
+    let mut out = Confirmed { grader: GRADER, runs: [] };
+    for let e of &reviews.entries {
+        for let [i, r] of e.runs.into_iter().enumerate() {
+            let runs = run_outputs(&r);
+            if runs.is_empty() {
+                continue;
+            }
+            let hit = match &r.grade {
+                Some(g) && g.hit => g.finding,
+                _ => -1,
+            };
+            let mut confirmed = ConfirmedRun { fix: e.fix, run: i, findings: r.findings, hit };
+            let prompt = `<findings>\n${to_string(&r.findings).unwrap()}\n</findings>\n${runs}`;
+            match ask_json::<Confirmations>(&api_key, GRADER, CONFIRM, prompt, 16_000) {
+                Ok(c) && !judges_each_once(&c.findings, r.findings.len()) => confirmed.error = Some(
+                    "the grader did not judge each finding exactly once",
+                ),
+
+
+                Ok(c) => confirmed.confirmations = c.findings,
+                Err(error) => confirmed.error = Some(error),
+            }
+            out.runs.push(confirmed);
+            fs::write(&out_path, &to_bytes_pretty(&out).unwrap()).unwrap();
+            eprintln(`#${e.fix} run ${i + 1}`);
+        }
+    }
+    report(&out);
+}
+
+fn judges_each_once(judged: &List<Confirmation>, count: i32) -> bool {
+    let mut seen = TreeSet::<i32>::new();
+    for let c of judged {
+        if !(0 <= c.finding < count) || !seen.insert(c.finding) {
+            return false;
+        }
+    }
+    return seen.len() == count;
+}
+
+/// Each Run call of `r` with what it output, or empty when it ran nothing.
+fn run_outputs(r: &Run) -> String {
+    let mut text = "";
+    for let c of &r.calls {
+        if let Some(output) = &c.output {
+            text.push_str(`<run input=${to_string(&c.input).unwrap()}>\n${*output}\n</run>\n`);
+        }
+    }
+    return text;
+}
+
+/// The totals over the runs graded. A run whose grading failed is left out and
+/// counted apart.
+fn report(out: &Confirmed) with Stderr {
+    let [mut findings, mut reproduced, mut hits, mut hits_reproduced, mut errors] = [0, 0, 0, 0, 0];
+    for let r of &out.runs {
+        if r.error matches { Some(_) } {
+            errors += 1;
+            continue;
+        }
+        findings += r.findings.len();
+        if r.hit >= 0 {
+            hits += 1;
+        }
+        for let c of &r.confirmations {
+            if c.reproduced {
+                reproduced += 1;
+                if c.finding == r.hit {
+                    hits_reproduced += 1;
+                }
+            }
+        }
+    }
+    eprintln(
+        `findings: ${findings}; reproduced: ${reproduced}; known-defect hits: ${hits}, ${hits_reproduced} of them reproduced; runs not graded: ${errors}`,
+    );
+}

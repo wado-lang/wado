@@ -11,9 +11,24 @@ use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 
 use serde::Deserialize;
-use wado_lsp::host::discovery::home_dir;
 
-use crate::cache::xdg_base_dir;
+fn home_dir() -> Option<PathBuf> {
+    std::env::home_dir().filter(|home| home.is_absolute())
+}
+
+/// The XDG base directory `var` names, else `~/<default>`. A relative value is
+/// ignored, as the XDG spec requires: it would name a different directory from
+/// every working directory.
+#[must_use]
+pub fn xdg_base_dir(var: &str, default: &str) -> Option<PathBuf> {
+    if let Some(dir) = std::env::var_os(var)
+        .map(PathBuf::from)
+        .filter(|dir| dir.is_absolute())
+    {
+        return Some(dir);
+    }
+    home_dir().map(|home| home.join(default))
+}
 
 #[derive(Default)]
 pub struct UserConfig {

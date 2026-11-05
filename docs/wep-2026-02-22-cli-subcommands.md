@@ -61,8 +61,13 @@ still sees dependencies and builds real files; it just never does the resolving.
   the resolved index, embed `[package]` metadata, and write `build/<world>.wasm`.
   All dependency, lock, and cache machinery lives here — one home.
 - `run` / `serve` / `test` / `publish` share the `build` core in project mode.
-  A bare-file argument (`wado run file.wado`) routes through the standalone
-  `compile` path instead.
+  A file the manifest does not declare for the world, `wado run file.wado` in or
+  out of a project, routes through the standalone `compile` path instead, so
+  `build/<world>.wasm` always holds the declared world.
+- `wado build -o - [<file>]` builds the one component a driver would run,
+  through that same path, and writes it to stdout. A driver outside this binary,
+  such as `wado run-webgpu`, compiles this way. `--embed-entry` names the entry
+  in the `wado:entry` custom section, so the driver reads both from one stream.
 - `run` and `serve` keep the component they built, keyed by the `wado`
   binary, the options, the `WADO_*` environment and the entry file, and reuse
   it while every file and environment variable its compile read is unchanged.

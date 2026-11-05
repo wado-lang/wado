@@ -21,6 +21,17 @@ wado run package-loam dump --type onnx --options options.json model.onnx
 `--type` takes the words a use site's `type` does, and `--options` names a
 JSON file holding what its `generator.options` holds.
 
+## Testing
+
+Test outward from the change:
+
+1. The test beside the file changed, such as `src/runtime/recorded_test.wado`.
+2. `cargo test --test compute loam` in `wado-run-webgpu/`, for a change
+   `WebGpuBackend` runs. It checks each result against `Cpu`'s.
+3. `mise run test-pjrt`, for a change `PjrtBackend` or the StableHLO writer
+   runs. It does the same on XLA's CPU plugin, and compiles for a TPU.
+4. `wado test package-loam`.
+
 ## Oracles
 
 Two suites take their expectations from onnxruntime.

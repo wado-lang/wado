@@ -1,0 +1,1057 @@
+{
+  "reviewer": "claude-opus-5-5",
+  "grader": "claude-opus-5-5",
+  "tools": true,
+  "symbols": false,
+  "run": true,
+  "max_turns": 40,
+  "diff_limit": 2000000,
+  "entries": [
+    {
+      "fix": 1697,
+      "culprit": 1396,
+      "defect": "The op-only walker (gen_repeat_body) emitted every greedy/non-greedy Optional as a plain one-token first-set check, so it ignored the lowered strategy (lookahead, scan guard, shape lookahead, `??` ATN). Optionals inside LR-suffix bodies were therefore mis-decided.",
+      "runs": [
+        {
+          "findings": [
+            {
+              "file": "package-gale/src/parser_gen.wado",
+              "summary": "A required group inside a repeat whose alternatives share a first token no longer reports an error when no alternative matches, so an invalid input parses as clean.",
+              "detail": "`gen_consume_group_store_op` and `gen_general_group_store_op` no longer emit the old check after the overlap dispatch: `if let None = opt { p.fail(...)? }`, which became unreachable once the accumulator went away. The dispatch built by `gen_simplecst_overlap_loop` / `gen_general_overlap_loop` is an `if grp_kind in FIRST(...) {...}` chain with no `else`. So when the current token matches no alternative, the group takes no branch, records nothing and adds no diagnostic. For `+` repeats the first iteration runs without a guard. Reproduced with `r : (a | b)+ EOF ; a : X Y ; b : X Z ;` (a and b share first token X): `parse(\"\")` returns `ok() == true` with tree `(r)`, though `+` requires at least one a or b. Before this change the generated parser returned Err (\"expected A\")."
+            },
+            {
+              "file": "package-gale/src/parser_gen.wado",
+              "summary": "A rule that matches no tokens now gets a node whose span is reversed (end < start), because the rule wrapper closes nodes with an unclamped `p.last_end()`.",
+              "detail": "`gen_rule_entry_wrapper` opens each node at `p.peek_start()` and closes it with `p.b.finish_node(p.last_end())`. `tree_build_node` builds `Span::new(start, end)` from those values as-is. When a rule (or the whole input) matches nothing, `last_end()` is the end of the previous token, or 0 at the start of input, which is before `peek_start()`. The old emitter clamped this case on purpose with `Span::new(start, i32::max(start, p.last_end()))`, and the removed `gen_clamped_span_field` documented why. Reproduced with `opt_sep_list.g4`: `parse(\"   \")` returns `ok()` but `root.span` is `3..0`. Anything that uses spans (LSP, highlighting ranges, `Span::len`) gets negative lengths."
+            }
+          ],
+          "turns": 17,
+          "calls": [
+            {
+              "name": "Grep",
+              "input": {
+                "pattern": "p\\.pos = |_saved|restore",
+                "path": "package-gale/src/parser_gen.wado",
+                "output_mode": "content"
+              },
+              "is_error": false,
+              "output": null
+            },
+            {
+              "name": "Read",
+              "input": {
+                "file_path": "package-gale/src/parser_gen.wado",
+                "offset": 5670,
+                "limit": 110
+              },
+              "is_error": false,
+              "output": null
+            },
+            {
+              "name": "Read",
+              "input": {
+                "file_path": "package-gale/src/parser_gen.wado",
+                "offset": 5600,
+                "limit": 70
+              },
+              "is_error": false,
+              "output": null
+            },
+            {
+              "name": "Grep",
+              "input": {
+                "pattern": "^fn alt_has_scan|^fn scannable_prefix_len|^fn alt_scan_is_full|^fn is_scannable_element",
+                "path": "package-gale/src",
+                "output_mode": "content",
+                "-A": 25
+              },
+              "is_error": false,
+              "output": null
+            },
+            {
+              "name": "Grep",
+              "input": {
+                "pattern": "pub fn is_element_scannable",
+                "path": "package-gale/src/gen_context.wado",
+                "output_mode": "content",
+                "-A": 60
+              },
+              "is_error": false,
+              "output": null
+            },
+            {
+              "name": "Grep",
+              "input": {
+                "pattern": "fn is_rule_scannable",
+                "path": "package-gale/src/gen_context.wado",
+                "output_mode": "content",
+                "-A": 40
+              },
+              "is_error": false,
+              "output": null
+            },
+            {
+              "name": "Grep",
+              "input": {
+                "pattern": "pub fn new\\(start|fn last_end|fn peek_start",
+                "path": "package-gale/src",
+                "output_mode": "content",
+                "-A": 8
+              },
+              "is_error": false,
+              "output": null
+            },
+            {
+              "name": "Grep",
+              "input": {
+                "pattern": "last_end|peek_start",
+                "path": "package-gale/src/parser_gen.wado",
+                "output_mode": "content",
+                "-A": 6,
+                "head_limit": 60
+              },
+              "is_error": false,
+              "output": null
+            },
+            {
+              "name": "Grep",
+              "input": {
+                "pattern": "package-gale",
+                "glob": "{Makefile,justfile,*.toml,mise.toml}",
+                "output_mode": "content",
+                "head_limit": 20
+              },
+              "is_error": false,
+              "output": null
+            },
+            {
+              "name": "Grep",
+              "input": {
+                "pattern": "gen_consume_group_store_op\\(|gen_general_group_store_op\\(|gen_consume_group_store_optional_op\\(|gen_general_group_store_optional_op\\(",
+                "path": "package-gale/src/parser_gen.wado",
+                "output_mode": "content",
+                "-B": 6
+              },
+              "is_error": false,
+              "output": null
+            },
+            {
+              "name": "Read",
+              "input": {
+                "file_path": "package-gale/src/parser_gen.wado",
+                "offset": 4590,
+                "limit": 25
+              },
+              "is_error": false,
+              "output": null
+            },
+            {
+              "name": "Read",
+              "input": {
+                "file_path": "package-gale/src/parser_gen.wado",
+                "offset": 4574,
+                "limit": 18
+              },
+              "is_error": false,
+              "output": null
+            },
+            {
+              "name": "Read",
+              "input": {
+                "file_path": "package-gale/src/parser_gen.wado",
+                "offset": 4940,
+                "limit": 85
+              },
+              "is_error": false,
+              "output": null
+            },
+            {
+              "name": "Write",
+              "input": {
+                "file_path": "package-gale/tests/grammars/zz_plus_overlap.g4",
+                "content": "grammar ZzPlusOverlap;\n\nr : (a | b)+ EOF ;\na : X Y ;\nb : X Z ;\n\nX : 'x' ;\nY : 'y' ;\nZ : 'z' ;\nWS : [ \\t]+ -> skip ;\n"
+              },
+              "is_error": false,
+              "output": null
+            },
+            {
+              "name": "Write",
+              "input": {
+                "file_path": "package-gale/tests/zz_review_test.wado",
+                "content": "use g from \"./grammars/zz_plus_overlap.g4\"\n    with {\n        generator: {\n            module: \"../src/generator.wado\",\n            options: { highlight: false },\n            output_dir: \"tests/generated/zz_plus_overlap\",\n        },\n    };\nuse osl from \"./grammars/opt_sep_list.g4\"\n    with {\n        generator: {\n            module: \"../src/generator.wado\",\n            options: { highlight: false },\n            output_dir: \"tests/generated/zz_opt_sep_list\",\n        },\n    };\n\ntest \"zz: plus overlap valid\" {\n    let r = g::parse(&\"x y x z\");\n    assert r.ok(), \"valid input should parse\";\n}\n\ntest \"zz: plus overlap empty input must fail\" {\n    let r = g::parse(&\"\");\n    let t = g::to_string_tree(&r);\n    assert !r.ok(), `empty input accepted for (a|b)+; tree: {t}`;\n}\n\ntest \"zz: empty rule span not reversed\" {\n    let r = osl::parse(&\"   \");\n    assert r.ok();\n    let s = r.root.span;\n    assert s.start <= s.end, `root span reversed: {s.start}..{s.end}`;\n}\n"
+              },
+              "is_error": false,
+              "output": null
+            },
+            {
+              "name": "Run",
+              "input": {
+                "args": [
+                  "run",
+                  "-p",
+                  "wado-cli",
+                  "--",
+                  "test",
+                  "package-gale/tests/zz_review_test.wado"
+                ],
+                "timeout": 1800
+              },
+              "is_error": false,
+              "output": "exit code 1\n<stderr>\n   Compiling proc-macro2 v1.0.106\n   Compiling unicode-ident v1.0.24\n   Compiling quote v1.0.45\n   Compiling serde_core v1.0.228\n   Compiling foldhash v0.2.0\n   Compiling libc v0.2.186\n   Compiling serde v1.0.228\n   Compiling equivalent v1.0.2\n   Compiling anyhow v1.0.102\n   Compiling find-msvc-tools v0.1.9\n   Compiling syn v2.0.117\n   Compiling shlex v2.0.1\n   Compiling bitflags v2.13.0\n   Compiling jobserver v0.1.34\n   Compiling log v0.4.32\n   Compiling cfg-if v1.0.4\n   Compiling cc v1.2.64\n   Compiling libm v0.2.16\n   Compiling hashbrown v0.17.1\n   Compiling memchr v2.8.2\n   Compiling indexmap v2.14.0\n   Compiling version_check v0.9.5\n   Compiling semver v1.0.28\n   Compiling wasmtime-internal-core v46.0.0 (/home/user/wado/vendor/wasmtime/crates/core)\n   Compiling generic-array v0.14.7\n   Compiling typenum v1.20.1\n   Compiling heck v0.5.0\n   Compiling itoa v1.0.18\n   Compiling allocator-api2 v0.2.21\n   Compiling hashbrown v0.16.1\n   Compiling stable_deref_trait v1.2.1\n   Compiling once_cell v1.21.4\n   Compiling rustix v1.1.4\n   Compiling bumpalo v3.20.3\n   Compiling synstructure v0.13.2\n   Compiling leb128fmt v0.1.0\n   Compiling fnv v1.0.7\n   Compiling target-lexicon v0.13.5\n   Compiling linux-raw-sys v0.12.1\n   Compiling cranelift-srcgen v0.133.0 (/home/user/wado/vendor/wasmtime/cranelift/srcgen)\n   Compiling zmij v1.0.21\n   Compiling serde_derive v1.0.228\n   Compiling thiserror-impl v2.0.18\n   Compiling pin-project-lite v0.2.17\n   Compiling zerofrom-derive v0.1.7\n   Compiling cranelift-assembler-x64-meta v0.133.0 (/home/user/wado/vendor/wasmtime/cranelift/assembler-x64/meta)\n   Compiling rustc-hash v2.1.2\n   Compiling serde_json v1.0.150\n   Compiling zerofrom v0.1.8\n   Compiling pulley-macros v46.0.0 (/home/user/wado/vendor/wasmtime/pulley/macros)\n   Compiling smallvec v1.15.2\n   Compiling wasmparser v0.251.0\n   Compiling cranelift-bitset v0.133.0 (/home/user/wado/vendor/wasmtime/cranelift/bitset)\n   Compiling cranelift-entity v0.133.0 (/home/user/wado/vendor/wasmtime/cranelift/entity)\n   Compiling yoke-derive v0.8.2\n   Compiling cpufeatures v0.2.17\n   Compiling futures-core v0.3.32\n   Compiling yoke v0.8.3\n   Compiling wasmtime-internal-versioned-export-macros v46.0.0 (/home/user/wado/vendor/wasmtime/crates/versioned-export-macros)\n   Compiling gimli v0.33.0\n   Compiling crc32fast v1.5.0\n   Compiling cranelift-isle v0.133.0 (/home/user/wado/vendor/wasmtime/cranelift/isle/isle)\n   Compiling bytes v1.11.1\n   Compiling futures-sink v0.3.32\n   Compiling thiserror v2.0.18\n   Compiling cranelift-bforest v0.133.0 (/home/user/wado/vendor/wasmtime/cranelift/bforest)\n   Compiling pulley-interpreter v46.0.0 (/home/user/wado/vendor/wasmtime/pulley)\n   Compiling zerovec-derive v0.11.3\n   Compiling cranelift-codegen-shared v0.133.0 (/home/user/wado/vendor/wasmtime/cranelift/codegen/shared)\n   Compiling object v0.39.1\n   Compiling termcolor v1.4.1\n   Compiling wasm-encoder v0.251.0\n   Compiling cranelift-codegen-meta v0.133.0 (/home/user/wado/vendor/wasmtime/cranelift/codegen/meta)\n   Compiling wasmprinter v0.251.0\n   Compiling zerovec v0.11.6\n   Compiling crypto-common v0.1.7\n   Compiling block-buffer v0.10.4\n   Compiling cranelift-assembler-x64 v0.133.0 (/home/user/wado/vendor/wasmtime/cranelift/assembler-x64)\n   Compiling displaydoc v0.2.6\n   Compiling slab v0.4.12\n   Compiling pkg-config v0.3.33\n   Compiling unicode-width v0.2.2\n   Compiling unicode-xid v0.2.6\n   Compiling cpp_demangle v0.4.5\n   Compiling zstd-sys v2.0.16+zstd.1.5.7\n   Compiling digest v0.10.7\n   Compiling cobs v0.3.0\n   Compiling futures-channel v0.3.32\n   Compiling io-lifetimes v2.0.4\n   Compiling cranelift-codegen v0.133.0 (/home/user/wado/vendor/wasmtime/cranelift/codegen)\n   Compiling arbitrary v1.4.2\n   Compiling wasmtime-internal-component-util v46.0.0 (/home/user/wado/vendor/wasmtime/crates/component-util)\n   Compiling winnow v1.0.3\n   Compiling crossbeam-utils v0.8.21\n   Compiling toml_parser v1.1.2+spec-1.1.0\n   Compiling cranelift-control v0.133.0 (/home/user/wado/vendor/wasmtime/cranelift/control)\n   Compiling postcard v1.1.3\n   Compiling sha2 v0.10.9\n   Compiling regalloc2 v0.15.1\n   Compiling serde_spanned v1.1.1\n   Compiling id-arena v2.3.0\n   Compiling leb128 v0.2.6\n   Compiling rustc-demangle v0.1.27\n   Compiling toml_writer v1.1.1+spec-1.1.0\n   Compiling wasmtime-environ v46.0.0 (/home/user/wado/vendor/wasmtime/crates/environ)\n   Compiling wast v251.0.0\n   Compiling tinystr v0.8.3\n   Compiling futures-macro v0.3.32\n   Compiling errno v0.3.14\n   Compiling writeable v0.6.3\n   Compiling rand_core v0.10.1\n   Compiling io-extras v0.18.4\n   Compiling litemap v0.8.2\n   Compiling getrandom v0.4.2\n   Compiling futures-task v0.3.32\n   Compiling zstd-safe v7.2.4\n   Compiling futures-io v0.3.32\n   Compiling futures-util v0.3.32\n   Compiling icu_locale_core v2.2.0\n   Compiling wat v1.251.0\n   Compiling signal-hook-registry v1.4.8\n   Compiling crossbeam-epoch v0.9.18\n   Compiling wit-parser v0.251.0\n   Compiling zerotrie v0.2.4\n   Compiling potential_utf v0.1.5\n   Compiling tracing-attributes v0.1.31\n   Compiling tracing-core v0.1.36\n   Compiling ittapi-sys v0.4.0\n   Compiling socket2 v0.6.4\n   Compiling mio v1.2.1\n   Compiling thiserror v1.0.69\n   Compiling icu_normalizer_data v2.2.0\n   Compiling icu_properties_data v2.2.0\n   Compiling either v1.16.0\n   Compiling cap-primitives v3.4.5\n   Compiling rayon-core v1.13.0\n   Compiling zeroize v1.8.2\n   Compiling wasmtime-internal-unwinder v46.0.0 (/home/user/wado/vendor/wasmtime/crates/unwinder)\n   Compiling utf8_iter v1.0.4\n   Compiling icu_collections v2.2.0\n   Compiling rustls-pki-types v1.14.1\n   Compiling tokio v1.52.3\n   Compiling tracing v0.1.44\n   Compiling icu_provider v2.2.0\n   Compiling crossbeam-deque v0.8.6\n   Compiling futures-executor v0.3.32\n   Compiling fs-set-times v0.20.3\n   Compiling rustix-linux-procfs v0.1.1\n   Compiling wasmtime-internal-jit-debug v46.0.0 (/home/user/wado/vendor/wasmtime/crates/jit-debug)\n   Compiling wasmtime-internal-fiber v46.0.0 (/home/user/wado/vendor/wasmtime/crates/fiber)\n   Compiling thiserror-impl v1.0.69\n   Compiling ring v0.17.14\n   Compiling toml_datetime v0.7.5+spec-1.1.0\n   Compiling dirs-sys-next v0.1.2\n   Compiling ambient-authority v0.0.2\n   Compiling ipnet v2.12.0\n   Compiling cpufeatures v0.3.0\n   Compiling maybe-owned v0.3.4\n   Compiling wasmtime-internal-cache v46.0.0 (/home/user/wado/vendor/wasmtime/crates/cache)\n   Compiling uuid v1.23.3\n   Compiling fixedbitset v0.4.2\n   Compiling winnow v0.7.15\n   Compiling wasmtime-internal-cranelift v46.0.0 (/home/user/wado/vendor/wasmtime/crates/cranelift)\n   Compiling wasmtime-internal-component-macro v46.0.0 (/home/user/wado/vendor/wasmtime/crates/component-macro)\n   Compiling petgraph v0.6.5\n   Compiling debugid v0.8.0\n   Compiling directories-next v2.0.0\n   Compiling toml v0.9.12+spec-1.1.0\n   Compiling futures v0.3.32\n   Compiling zstd v0.13.3\n   Compiling wasmtime-internal-wit-bindgen v46.0.0 (/home/user/wado/vendor/wasmtime/crates/wit-bindgen)\n   Compiling itertools v0.14.0\n   Compiling wast v35.0.2\n   Compiling wasmtime v46.0.0 (/home/user/wado/vendor/wasmtime/crates/wasmtime)\n   Compiling fastrand v2.4.1\n   Compiling base64 v0.22.1\n   Compiling cap-std v3.4.5\n   Compiling tempfile v3.27.0\n   Compiling witx v0.9.1\n   Compiling icu_properties v2.2.0\n   Compiling icu_normalizer v2.2.0\n   Compiling ittapi v0.4.0\n   Compiling rayon v1.12.0\n   Compiling wasm-compose v0.251.0\n   Compiling fxprof-processed-profile v0.8.1\n   Compiling addr2line v0.26.1\n   Compiling http v1.4.2\n   Compiling memfd v0.6.5\n   Compiling wasmtime-internal-jit-icache-coherence v46.0.0 (/home/user/wado/vendor/wasmtime/crates/jit-icache-coherence)\n   Compiling async-trait v0.1.89\n   Compiling hybrid-array v0.4.12\n   Compiling getrandom v0.2.17\n   Compiling encoding_rs v0.8.35\n   Compiling untrusted v0.9.0\n   Compiling wiggle-macro v46.0.0 (/home/user/wado/vendor/wasmtime/crates/wiggle/macro)\n   Compiling wiggle-generate v46.0.0 (/home/user/wado/vendor/wasmtime/crates/wiggle/generate)\n   Compiling idna_adapter v1.2.2\n   Compiling cap-fs-ext v3.4.5\n   Compiling rustls v0.23.40\n   Compiling httparse v1.10.1\n   Compiling ref-cast v1.0.25\n   Compiling percent-encoding v2.3.2\n   Compiling form_urlencoded v1.2.2\n   Compiling rustls-webpki v0.103.13\n   Compiling idna v1.1.0\n   Compiling block-buffer v0.12.1\n   Compiling crypto-common v0.2.2\n   Compiling cranelift-frontend v0.133.0 (/home/user/wado/vendor/wasmtime/cranelift/frontend)\n   Compiling cranelift-native v0.133.0 (/home/user/wado/vendor/wasmtime/cranelift/native)\n   Compiling http-body v1.0.1\n   Compiling chacha20 v0.10.0\n   Compiling tokio-util v0.7.18\n   Compiling ref-cast-impl v1.0.25\n   Compiling syn v1.0.109\n   Compiling iana-time-zone v0.1.65\n   Compiling fallible-iterator v0.3.0\n   Compiling atomic-waker v1.1.2\n   Compiling try-lock v0.2.5\n   Compiling subtle v2.6.1\n   Compiling diff v0.1.13\n   Compiling yansi v1.0.1\n   Compiling pretty_assertions v1.4.1\n   Compiling gimli v0.32.3\n   Compiling want v0.3.1\n   Compiling h2 v0.4.14\n   Compiling cap-time-ext v3.4.5\n   Compiling rand v0.10.1\n   Compiling digest v0.11.3\n   Compiling url v2.5.8\n   Compiling cap-net-ext v3.4.5\n   Compiling webpki-roots v1.0.7\n   Compiling wasmparser v0.245.1\n   Compiling walrus-macro v0.26.0\n   Compiling wasm-encoder v0.245.1\n   Compiling aho-corasick v1.1.4\n   Compiling libmimalloc-sys v0.1.49\n   Compiling toml_datetime v1.1.1+spec-1.1.0\n   Compiling pulldown-cmark v0.11.3\n   Compiling regex-syntax v0.8.11\n   Compiling httpdate v1.0.3\n   Compiling foldhash v0.1.5\n   Compiling borrow-or-share v0.2.4\n   Compiling fluent-uri v0.4.1\n   Compiling hashbrown v0.15.5\n   Compiling hyper v1.10.1\n   Compiling regex-automata v0.4.14\n   Compiling walrus v0.26.4\n   Compiling toml v1.1.2+spec-1.1.0\n   Compiling webpki-roots v0.26.11\n   Compiling sha2 v0.11.0\n   Compiling wiggle v46.0.0 (/home/user/wado/vendor/wasmtime/crates/wiggle)\n   Compiling wasmtime-wasi-io v46.0.0 (/home/user/wado/vendor/wasmtime/crates/wasi-io)\n   Compiling wasmtime-wasi v46.0.0 (/home/user/wado/vendor/wasmtime/crates/wasi)\n   Compiling tokio-rustls v0.26.4\n   Compiling wit-encoder v0.251.0\n   Compiling unicase v2.9.0\n   Compiling wado-compiler v0.0.7 (/home/user/wado/wado-compiler)\n   Compiling dprint-core-macros v0.1.0\n   Compiling wado-manifest v0.0.7 (/home/user/wado/wado-manifest)\n   Compiling regex v1.12.4\n   Compiling dprint-core v0.67.4\n   Compiling http-body-util v0.1.3\n   Compiling unicode-width v0.1.14\n   Compiling dprint-plugin-markdown v0.22.1\n   Compiling mimalloc v0.1.52\n   Compiling hyper-util v0.1.20\n   Compiling rustls-pemfile v2.2.0\n   Compiling glob v0.3.3\n   Compiling lexopt v0.3.2\n   Compiling wasmtime-wasi-tls v46.0.0 (/home/user/wado/vendor/wasmtime/crates/wasi-tls)\n   Compiling wasmtime-wasi-http v46.0.0 (/home/user/wado/vendor/wasmtime/crates/wasi-http)\n   Compiling wado-lsp v0.0.7 (/home/user/wado/wado-lsp)\n   Compiling wado-cli v0.0.7 (/home/user/wado/wado-cli)\n    Finished `dev` profile [unoptimized + debuginfo] target(s) in 3m 26s\n     Running `/home/user/wado/scratchpad/eddy-target/debug/wado test package-gale/tests/zz_review_test.wado`\n  [kiln generator compile] ./atn.wado:224:8: warning: function `build_atn` is never used\n  [kiln generator compile] ./atn.wado:649:4: warning: function `state_kind_name` is never used\n  [kiln generator compile] ./atn.wado:680:4: warning: function `trans_kind_name` is never used\n  [kiln generator compile] ./atn.wado:703:8: warning: function `dump_atn` is never used\n[00:00:15.6387] warning: gale: SimpleCst group: alts 0, 1 share lookahead {TK_X}; resolved by longest-match scan tournament, not a token-led branch\n\nthread 'tokio-rt-worker' (6593) panicked at wado-compiler/src/codegen.rs:49:9:\nInternal compiler error: WIR pipeline generated invalid core Wasm module\nEntry module: package-gale/tests/zz_review_test.wado\nOffending function: func #18 package-gale/tests/zz_review_test.wado/$value_copy$T600\nValidation error: type mismatch: expected (ref $type), found (ref $type) (at offset 0x168e)\nnote: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\n[16.86s] FAILED to compile package-gale/tests/zz_review_test.wado (16.19s): panicked: Internal compiler error: WIR pipeline generated invalid core Wasm module\nEntry module: package-gale/tests/zz_review_test.wado\nOffending function: func #18 package-gale/tests/zz_review_test.wado/$value_copy$T600\nValidation error: type mismatch: expected (ref $type), found (ref $type) (at offset 0x168e)\n</stderr>\n<stdout>\n\ncompile failures:\n    package-gale/tests/zz_review_test.wado\n\ncompile: 0 ok, 1 failed  [cpu: 16.19s]\ntest:    0 passed, 0 failed\n(wall: 17.67s)\n</stdout>"
+            },
+            {
+              "name": "Write",
+              "input": {
+                "file_path": "package-gale/tests/zz_review_test.wado",
+                "content": "use g from \"./grammars/zz_plus_overlap.g4\"\n    with {\n        generator: {\n            module: \"../src/generator.wado\",\n            options: { highlight: false },\n            output_dir: \"tests/generated/zz_plus_overlap\",\n        },\n    };\n\ntest \"zz: plus overlap valid\" {\n    let r = g::parse(&\"x y x z\");\n    assert r.ok(), \"valid input should parse\";\n}\n\ntest \"zz: plus overlap empty input must fail\" {\n    let r = g::parse(&\"\");\n    let t = g::to_string_tree(&r);\n    assert !r.ok(), `empty input accepted for (a|b)+; tree: {t}`;\n}\n"
+              },
+              "is_error": false,
+              "output": null
+            },
+            {
+              "name": "Write",
+              "input": {
+                "file_path": "package-gale/tests/zz_review2_test.wado",
+                "content": "use osl from \"./grammars/opt_sep_list.g4\"\n    with {\n        generator: {\n            module: \"../src/generator.wado\",\n            options: { highlight: false },\n            output_dir: \"tests/generated/zz_opt_sep_list\",\n        },\n    };\n\ntest \"zz: empty rule span not reversed\" {\n    let r = osl::parse(&\"   \");\n    assert r.ok();\n    let s = r.root.span;\n    assert s.start <= s.end, `root span reversed: {s.start}..{s.end}`;\n}\n"
+              },
+              "is_error": false,
+              "output": null
+            },
+            {
+              "name": "Run",
+              "input": {
+                "args": [
+                  "run",
+                  "-p",
+                  "wado-cli",
+                  "--",
+                  "test",
+                  "package-gale/tests/zz_review_test.wado",
+                  "package-gale/tests/zz_review2_test.wado"
+                ],
+                "timeout": 1800
+              },
+              "is_error": false,
+              "output": "exit code 1\n<stderr>\n    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.21s\n     Running `/home/user/wado/scratchpad/eddy-target/debug/wado test package-gale/tests/zz_review_test.wado package-gale/tests/zz_review2_test.wado`\nAssertion failed in __test_0_zz__empty_rule_span_not_reversed at package-gale/tests/zz_review2_test.wado:14: root span reversed: 3..0\ncondition: s.start <= s.end\ns.start: 3\ns.end: 0\n\nAssertion failed in __test_1_zz__plus_overlap_empty_input_must_fail at package-gale/tests/zz_review_test.wado:18: empty input accepted for (a|b)+; tree: (r)\ncondition: !r.ok()\nr.ok(): true\n\n</stderr>\n<stdout>\n[1.29s] Compiled package-gale/tests/zz_review_test.wado (556ms)\n[1.32s] Compiled package-gale/tests/zz_review2_test.wado (586ms)\n[1.41s] Loaded package-gale/tests/zz_review2_test.wado (93ms)\n[1.42s] Loaded package-gale/tests/zz_review_test.wado (129ms)\nRunning tests in package-gale/tests/zz_review_test.wado...\n  ok   zz: plus overlap valid (45ms)\n  \u001b[31mFAILED\u001b[0m zz: plus overlap empty input must fail (46ms)\nRunning tests in package-gale/tests/zz_review2_test.wado...\n  \u001b[31mFAILED\u001b[0m zz: empty rule span not reversed (48ms)\n\nfailures:\n\n---- zz: plus overlap empty input must fail (package-gale/tests/zz_review_test.wado) ----\nerror while executing at wasm backtrace:\n    0:   0x1245 - package-gale/tests/zz_review_test.wado!core:internal/panic\n    1:   0x100b - package-gale/tests/zz_review_test.wado!package-gale/tests/zz_review_test.wado/__test_1_zz__plus_overlap_empty_input_must_fail\n    2:   0x1020 - package-gale/tests/zz_review_test.wado!package-gale/tests/zz_review_test.wado/__cm_export____test_1_zz__plus_overlap_empty_input_must_fail\n\n---- zz: empty rule span not reversed (package-gale/tests/zz_review2_test.wado) ----\nerror while executing at wasm backtrace:\n    0:   0x129f - package-gale/tests/zz_review2_test.wado!core:internal/panic\n    1:   0x1070 - package-gale/tests/zz_review2_test.wado!package-gale/tests/zz_review2_test.wado/__test_0_zz__empty_rule_span_not_reversed\n    2:   0x107a - package-gale/tests/zz_review2_test.wado!package-gale/tests/zz_review2_test.wado/__cm_export____test_0_zz__empty_rule_span_not_reversed\n\nfailures:\n    zz: plus overlap empty input must fail (package-gale/tests/zz_review_test.wado)\n    zz: empty rule span not reversed (package-gale/tests/zz_review2_test.wado)\n\ncompile: 2 ok, 0 failed  [cpu: 1.14s]\nload:    2 ok, 0 failed  [cpu: 222ms]\ntest:    1 passed, 2 failed  [cpu: 138ms]\n(wall: 1.73s)\n</stdout>"
+            },
+            {
+              "name": "Write",
+              "input": {
+                "file_path": "package-gale/tests/zz_review3_test.wado",
+                "content": "use { make_a, sum_a, Node as NodeA, Child as ChildA } from \"../../wado-compiler/tests/fixtures/sub/cross_module_recursive_variant_a.wado\";\nuse { make_b, sum_b, Node as NodeB, Child as ChildB } from \"../../wado-compiler/tests/fixtures/sub/cross_module_recursive_variant_b.wado\";\n\nfn copy_a(n: &NodeA) -> NodeA {\n    return *n;\n}\nfn copy_b(n: &NodeB) -> NodeB {\n    return *n;\n}\n\ntest \"zz: copy same-name recursive variants from two modules\" {\n    let a = make_a();\n    let b = make_b();\n    let a2 = copy_a(&a);\n    let b2 = copy_b(&b);\n    let ca = a.children[1];\n    let cb = b.children[0];\n    assert sum_a(&a2) == 3;\n    assert sum_b(&b2) == 12;\n    if let Node(n) = ca {\n        assert n.kind == 2;\n    }\n    if let Node(n) = cb {\n        assert n.kind == 7;\n    }\n}\n"
+              },
+              "is_error": false,
+              "output": null
+            },
+            {
+              "name": "Run",
+              "input": {
+                "args": [
+                  "run",
+                  "-p",
+                  "wado-cli",
+                  "--",
+                  "test",
+                  "package-gale/tests/zz_review3_test.wado"
+                ],
+                "timeout": 900
+              },
+              "is_error": false,
+              "output": "exit code 1\n<stderr>\n    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.21s\n     Running `/home/user/wado/scratchpad/eddy-target/debug/wado test package-gale/tests/zz_review3_test.wado`\n\nthread 'tokio-rt-worker' (6653) panicked at wado-compiler/src/codegen.rs:49:9:\nInternal compiler error: WIR pipeline generated invalid core Wasm module\nEntry module: package-gale/tests/zz_review3_test.wado\nOffending function: func #13 package-gale/tests/zz_review3_test.wado/__test_0_zz__copy_same_name_recursive_variants_from_two_modules\nValidation error: type mismatch: expected (ref $type), found (ref $type) (at offset 0x84f)\nnote: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\n[963ms] FAILED to compile package-gale/tests/zz_review3_test.wado (343ms): panicked: Internal compiler error: WIR pipeline generated invalid core Wasm module\nEntry module: package-gale/tests/zz_review3_test.wado\nOffending function: func #13 package-gale/tests/zz_review3_test.wado/__test_0_zz__copy_same_name_recursive_variants_from_two_modules\nValidation error: type mismatch: expected (ref $type), found (ref $type) (at offset 0x84f)\n</stderr>\n<stdout>\n\ncompile failures:\n    package-gale/tests/zz_review3_test.wado\n\ncompile: 0 ok, 1 failed  [cpu: 343ms]\ntest:    0 passed, 0 failed\n(wall: 1.62s)\n</stdout>"
+            },
+            {
+              "name": "Grep",
+              "input": {
+                "pattern": "mangle_generic_name\\(\"Box\"",
+                "path": "wado-compiler/src",
+                "output_mode": "content",
+                "-B": 3
+              },
+              "is_error": false,
+              "output": null
+            }
+          ],
+          "usage": {
+            "input_tokens": 36,
+            "output_tokens": 12945,
+            "cache_creation_input_tokens": 419283,
+            "cache_read_input_tokens": 6432767
+          },
+          "grade": {
+            "hit": false,
+            "finding": -1,
+            "reason": "Neither finding is about the op-only walker emitting Optionals as plain first-set checks and ignoring the lowered strategy; they cover missing group errors and reversed spans."
+          },
+          "error": null
+        },
+        {
+          "findings": [
+            {
+              "file": "package-gale/src/parser_gen.wado",
+              "summary": "A mandatory `(a | b)+` repetition whose alternatives share a first token now matches zero iterations without any diagnostic, so input that is missing the required element parses cleanly.",
+              "detail": "`gen_simplecst_overlap_loop` (SimpleCst groups) and `gen_general_overlap_loop` (General groups) used to emit `if let None = acc { p.fail(...)? }` after the overlap dispatch; this PR removes that check. The new comment says a repeat guard always confirms a match before the group is entered, but that is not true for the first iteration of a `+` loop. In `gen_op_repeat_star_plus_storable` the first `+` iteration runs unconditionally: the scan guard is skipped while `_plus_first` is true, and the non-scannable `while _plus_first || ...` branch skips it too. If the next token is in none of the alternatives' first sets, no `if/else if` arm fires, nothing is consumed, and no error is raised. Reproduced with `r : (a | b)+ EOF ; a : X Y ; b : X Z ;` and `s : (X Y | X Z)+ EOF ;`: both `parse_r(\"\")` and `parse_s(\"\")` return `ok() == true` with trees `(r)` and `(s)`, where they should report an error."
+            },
+            {
+              "file": "package-gale/src/parser_gen.wado",
+              "summary": "Rule nodes that match no tokens get reversed spans (start > end) because the zero-width clamp was dropped.",
+              "detail": "`gen_rule_entry_wrapper` now opens each node at `p.peek_start()` and closes it at `p.last_end()`. `tree_build_node` uses the `Close` offset as the end as given. The old code built spans as `Span::new(start, i32::max(start, p.last_end()))` to stop exactly this reversal. When a rule matches nothing, or the whole input is whitespace, `peek_start` is the start of the next token while `last_end` is the end of the previous token (or 0 at position 0). Reproduced with `q : lst EOF ; lst : X* ;` on input `\"   \"`: the root `q` node gets span 3..0, and the `lst` child is reversed the same way. Any consumer that uses `CstNode.span` (LSP ranges, slicing) gets an invalid range. The same pattern produces the empty `(sql_stmt)` node in SQLite input with trailing whitespace."
+            }
+          ],
+          "turns": 20,
+          "calls": [
+            {
+              "name": "Grep",
+              "input": {
+                "pattern": "reify_pad_args_with_defaults|fn lookup_free_func_params",
+                "path": "wado-compiler/src/elaborator/reify.rs",
+                "output_mode": "content"
+              },
+              "is_error": false,
+              "output": null
+            },
+            {
+              "name": "Read",
+              "input": {
+                "file_path": "wado-compiler/src/elaborator/reify.rs",
+                "offset": 6320,
+                "limit": 80
+              },
+              "is_error": false,
+              "output": null
+            },
+            {
+              "name": "Read",
+              "input": {
+                "file_path": "wado-compiler/src/elaborator/reify.rs",
+                "offset": 6600,
+                "limit": 80
+              },
+              "is_error": false,
+              "output": null
+            },
+            {
+              "name": "Grep",
+              "input": {
+                "pattern": "p\\.pos = |_saved|trace_try|checkpoint|truncate",
+                "path": "package-gale/src/parser_gen.wado",
+                "output_mode": "content"
+              },
+              "is_error": false,
+              "output": null
+            },
+            {
+              "name": "Read",
+              "input": {
+                "file_path": "package-gale/src/parser_gen.wado",
+                "offset": 5640,
+                "limit": 160
+              },
+              "is_error": false,
+              "output": null
+            },
+            {
+              "name": "Read",
+              "input": {
+                "file_path": "package-gale/src/parser_gen.wado",
+                "offset": 5590,
+                "limit": 55
+              },
+              "is_error": false,
+              "output": null
+            },
+            {
+              "name": "Grep",
+              "input": {
+                "pattern": "fn alt_has_scan|fn scannable_prefix_len|fn is_scannable_element|fn element_is_scannable",
+                "path": "package-gale/src",
+                "output_mode": "content",
+                "-A": 30
+              },
+              "is_error": false,
+              "output": null
+            },
+            {
+              "name": "Grep",
+              "input": {
+                "pattern": "fn is_element_scannable",
+                "path": "package-gale/src/gen_context.wado",
+                "output_mode": "content",
+                "-A": 60
+              },
+              "is_error": false,
+              "output": null
+            },
+            {
+              "name": "Grep",
+              "input": {
+                "pattern": "fn is_rule_scannable",
+                "path": "package-gale/src/gen_context.wado",
+                "output_mode": "content",
+                "-A": 40
+              },
+              "is_error": false,
+              "output": null
+            },
+            {
+              "name": "Read",
+              "input": {
+                "file_path": "package-gale/src/gen_context.wado",
+                "offset": 905,
+                "limit": 12
+              },
+              "is_error": false,
+              "output": null
+            },
+            {
+              "name": "Read",
+              "input": {
+                "file_path": "package-gale/src/parser_gen.wado",
+                "offset": 680,
+                "limit": 170
+              },
+              "is_error": false,
+              "output": null
+            },
+            {
+              "name": "Grep",
+              "input": {
+                "pattern": "fn add_follow_param",
+                "path": "package-gale/src",
+                "output_mode": "content",
+                "-A": 12
+              },
+              "is_error": false,
+              "output": null
+            },
+            {
+              "name": "Grep",
+              "input": {
+                "pattern": "fn last_end|fn peek_start",
+                "path": "package-gale/src/parser_gen.wado",
+                "output_mode": "content",
+                "-A": 14
+              },
+              "is_error": false,
+              "output": null
+            },
+            {
+              "name": "Grep",
+              "input": {
+                "pattern": "last_end|peek_start",
+                "path": "package-gale/src/parser_gen.wado",
+                "output_mode": "content",
+                "-A": 8,
+                "head_limit": 60
+              },
+              "is_error": false,
+              "output": null
+            },
+            {
+              "name": "Read",
+              "input": {
+                "file_path": "package-gale/src/parser_gen.wado",
+                "offset": 4968,
+                "limit": 90
+              },
+              "is_error": false,
+              "output": null
+            },
+            {
+              "name": "Grep",
+              "input": {
+                "pattern": "gen_consume_group_store_op\\(|gen_general_group_store_op\\(",
+                "path": "package-gale/src/parser_gen.wado",
+                "output_mode": "content",
+                "-B": 6
+              },
+              "is_error": false,
+              "output": null
+            },
+            {
+              "name": "Read",
+              "input": {
+                "file_path": "package-gale/src/parser_gen.wado",
+                "offset": 3180,
+                "limit": 40
+              },
+              "is_error": false,
+              "output": null
+            },
+            {
+              "name": "Read",
+              "input": {
+                "file_path": "package-gale/src/parser_gen.wado",
+                "offset": 3715,
+                "limit": 70
+              },
+              "is_error": false,
+              "output": null
+            },
+            {
+              "name": "Read",
+              "input": {
+                "file_path": "package-gale/src/parser_gen.wado",
+                "offset": 4576,
+                "limit": 36
+              },
+              "is_error": false,
+              "output": null
+            },
+            {
+              "name": "Write",
+              "input": {
+                "file_path": "package-gale/tests/grammars/zz_overlap_plus.g4",
+                "content": "grammar ZzOverlapPlus;\n\nr : (a | b)+ EOF ;\ns : (X Y | X Z)+ EOF ;\nq : lst EOF ;\nlst : X* ;\na : X Y ;\nb : X Z ;\n\nX : 'x' ;\nY : 'y' ;\nZ : 'z' ;\nWS : [ \\t]+ -> skip ;\n"
+              },
+              "is_error": false,
+              "output": null
+            },
+            {
+              "name": "Write",
+              "input": {
+                "file_path": "package-gale/tests/zz_review_test.wado",
+                "content": "use g from \"./grammars/zz_overlap_plus.g4\"\n    with {\n        generator: {\n            module: \"../src/generator.wado\",\n            options: { highlight: false },\n            output_dir: \"tests/generated/zz_overlap_plus\",\n        },\n    };\n\ntest \"sanity: r accepts x y\" {\n    assert g::parse_r(&\"x y\").ok();\n}\n\ntest \"plus simplecst overlap: empty input must fail\" {\n    let res = g::parse_r(&\"\");\n    assert !res.ok(), `accepted empty input: {g::to_string_tree(&res)}`;\n}\n\ntest \"plus general overlap: empty input must fail\" {\n    let res = g::parse_s(&\"\");\n    assert !res.ok(), `accepted empty input: {g::to_string_tree(&res)}`;\n}\n\ntest \"empty rule span not reversed\" {\n    let res = g::parse_q(&\"x   \");\n    assert res.ok();\n    let root = &res.root;\n    assert root.span.start <= root.span.end, `root span {root.span.start}..{root.span.end}`;\n    if let Node(n) = root.children[0] {\n        assert n.span.start <= n.span.end, `lst span {n.span.start}..{n.span.end}`;\n    }\n}\n\ntest \"empty list span not reversed\" {\n    let res = g::parse_q(&\"   \");\n    assert res.ok();\n    let root = &res.root;\n    assert root.span.start <= root.span.end, `root span {root.span.start}..{root.span.end}`;\n    if let Node(n) = root.children[0] {\n        assert n.span.start <= n.span.end, `lst span {n.span.start}..{n.span.end}`;\n    }\n}\n"
+              },
+              "is_error": false,
+              "output": null
+            },
+            {
+              "name": "Run",
+              "input": {
+                "args": [
+                  "run",
+                  "--release",
+                  "--bin",
+                  "wado",
+                  "--",
+                  "test",
+                  "package-gale/tests/zz_review_test.wado"
+                ],
+                "timeout": 1800
+              },
+              "is_error": false,
+              "output": "exit code 1\n<stderr>\n   Compiling proc-macro2 v1.0.106\n   Compiling unicode-ident v1.0.24\n   Compiling quote v1.0.45\n   Compiling serde_core v1.0.228\n   Compiling libc v0.2.186\n   Compiling foldhash v0.2.0\n   Compiling serde v1.0.228\n   Compiling equivalent v1.0.2\n   Compiling anyhow v1.0.102\n   Compiling bitflags v2.13.0\n   Compiling find-msvc-tools v0.1.9\n   Compiling syn v2.0.117\n   Compiling libm v0.2.16\n   Compiling shlex v2.0.1\n   Compiling jobserver v0.1.34\n   Compiling cc v1.2.64\n   Compiling hashbrown v0.17.1\n   Compiling cfg-if v1.0.4\n   Compiling indexmap v2.14.0\n   Compiling memchr v2.8.2\n   Compiling version_check v0.9.5\n   Compiling generic-array v0.14.7\n   Compiling log v0.4.32\n   Compiling semver v1.0.28\n   Compiling typenum v1.20.1\n   Compiling wasmtime-internal-core v46.0.0 (/home/user/wado/vendor/wasmtime/crates/core)\n   Compiling heck v0.5.0\n   Compiling serde_derive v1.0.228\n   Compiling allocator-api2 v0.2.21\n   Compiling target-lexicon v0.13.5\n   Compiling thiserror-impl v2.0.18\n   Compiling hashbrown v0.16.1\n   Compiling once_cell v1.21.4\n   Compiling zmij v1.0.21\n   Compiling stable_deref_trait v1.2.1\n   Compiling rustix v1.1.4\n   Compiling bumpalo v3.20.3\n   Compiling synstructure v0.13.2\n   Compiling fnv v1.0.7\n   Compiling leb128fmt v0.1.0\n   Compiling linux-raw-sys v0.12.1\n   Compiling cranelift-srcgen v0.133.0 (/home/user/wado/vendor/wasmtime/cranelift/srcgen)\n   Compiling pin-project-lite v0.2.17\n   Compiling serde_json v1.0.150\n   Compiling itoa v1.0.18\n   Compiling cranelift-assembler-x64-meta v0.133.0 (/home/user/wado/vendor/wasmtime/cranelift/assembler-x64/meta)\n   Compiling zerofrom-derive v0.1.7\n   Compiling smallvec v1.15.2\n   Compiling wasmparser v0.251.0\n   Compiling cranelift-bitset v0.133.0 (/home/user/wado/vendor/wasmtime/cranelift/bitset)\n   Compiling rustc-hash v2.1.2\n   Compiling cranelift-entity v0.133.0 (/home/user/wado/vendor/wasmtime/cranelift/entity)\n   Compiling zerofrom v0.1.8\n   Compiling yoke-derive v0.8.2\n   Compiling pulley-macros v46.0.0 (/home/user/wado/vendor/wasmtime/pulley/macros)\n   Compiling futures-core v0.3.32\n   Compiling yoke v0.8.3\n   Compiling gimli v0.33.0\n   Compiling wasmtime-internal-versioned-export-macros v46.0.0 (/home/user/wado/vendor/wasmtime/crates/versioned-export-macros)\n   Compiling cranelift-isle v0.133.0 (/home/user/wado/vendor/wasmtime/cranelift/isle/isle)\n   Compiling futures-sink v0.3.32\n   Compiling thiserror v2.0.18\n   Compiling crc32fast v1.5.0\n   Compiling bytes v1.11.1\n   Compiling pulley-interpreter v46.0.0 (/home/user/wado/vendor/wasmtime/pulley)\n   Compiling cranelift-bforest v0.133.0 (/home/user/wado/vendor/wasmtime/cranelift/bforest)\n   Compiling zerovec-derive v0.11.3\n   Compiling termcolor v1.4.1\n   Compiling object v0.39.1\n   Compiling wasm-encoder v0.251.0\n   Compiling cranelift-codegen-shared v0.133.0 (/home/user/wado/vendor/wasmtime/cranelift/codegen/shared)\n   Compiling cranelift-codegen-meta v0.133.0 (/home/user/wado/vendor/wasmtime/cranelift/codegen/meta)\n   Compiling wasmprinter v0.251.0\n   Compiling zerovec v0.11.6\n   Compiling block-buffer v0.10.4\n   Compiling crypto-common v0.1.7\n   Compiling cranelift-assembler-x64 v0.133.0 (/home/user/wado/vendor/wasmtime/cranelift/assembler-x64)\n   Compiling displaydoc v0.2.6\n   Compiling pkg-config v0.3.33\n   Compiling unicode-width v0.2.2\n   Compiling cpp_demangle v0.4.5\n   Compiling slab v0.4.12\n   Compiling cranelift-codegen v0.133.0 (/home/user/wado/vendor/wasmtime/cranelift/codegen)\n   Compiling zstd-sys v2.0.16+zstd.1.5.7\n   Compiling digest v0.10.7\n   Compiling cobs v0.3.0\n   Compiling futures-channel v0.3.32\n   Compiling io-lifetimes v2.0.4\n   Compiling crossbeam-utils v0.8.21\n   Compiling winnow v1.0.3\n   Compiling cpufeatures v0.2.17\n   Compiling arbitrary v1.4.2\n   Compiling cranelift-control v0.133.0 (/home/user/wado/vendor/wasmtime/cranelift/control)\n   Compiling sha2 v0.10.9\n   Compiling toml_parser v1.1.2+spec-1.1.0\n   Compiling postcard v1.1.3\n   Compiling regalloc2 v0.15.1\n   Compiling serde_spanned v1.1.1\n   Compiling rustc-demangle v0.1.27\n   Compiling toml_writer v1.1.1+spec-1.1.0\n   Compiling id-arena v2.3.0\n   Compiling wasmtime-internal-component-util v46.0.0 (/home/user/wado/vendor/wasmtime/crates/component-util)\n   Compiling wasmtime-environ v46.0.0 (/home/user/wado/vendor/wasmtime/crates/environ)\n   Compiling wast v251.0.0\n   Compiling tinystr v0.8.3\n   Compiling futures-macro v0.3.32\n   Compiling errno v0.3.14\n   Compiling rand_core v0.10.1\n   Compiling writeable v0.6.3\n   Compiling futures-task v0.3.32\n   Compiling zstd-safe v7.2.4\n   Compiling getrandom v0.4.2\n   Compiling unicode-xid v0.2.6\n   Compiling litemap v0.8.2\n   Compiling futures-io v0.3.32\n   Compiling io-extras v0.18.4\n   Compiling icu_locale_core v2.2.0\n   Compiling futures-util v0.3.32\n   Compiling wit-parser v0.251.0\n   Compiling signal-hook-registry v1.4.8\n   Compiling wat v1.251.0\n   Compiling crossbeam-epoch v0.9.18\n   Compiling zerotrie v0.2.4\n   Compiling potential_utf v0.1.5\n   Compiling tracing-core v0.1.36\n   Compiling tracing-attributes v0.1.31\n   Compiling socket2 v0.6.4\n   Compiling mio v1.2.1\n   Compiling ittapi-sys v0.4.0\n   Compiling icu_properties_data v2.2.0\n   Compiling cap-primitives v3.4.5\n   Compiling wasmtime-internal-unwinder v46.0.0 (/home/user/wado/vendor/wasmtime/crates/unwinder)\n   Compiling zeroize v1.8.2\n   Compiling thiserror v1.0.69\n   Compiling icu_normalizer_data v2.2.0\n   Compiling utf8_iter v1.0.4\n   Compiling rayon-core v1.13.0\n   Compiling either v1.16.0\n   Compiling icu_collections v2.2.0\n   Compiling rustls-pki-types v1.14.1\n   Compiling tokio v1.52.3\n   Compiling tracing v0.1.44\n   Compiling futures-executor v0.3.32\n   Compiling icu_provider v2.2.0\n   Compiling crossbeam-deque v0.8.6\n   Compiling fs-set-times v0.20.3\n   Compiling rustix-linux-procfs v0.1.1\n   Compiling wasmtime-internal-fiber v46.0.0 (/home/user/wado/vendor/wasmtime/crates/fiber)\n   Compiling wasmtime-internal-jit-debug v46.0.0 (/home/user/wado/vendor/wasmtime/crates/jit-debug)\n   Compiling thiserror-impl v1.0.69\n   Compiling dirs-sys-next v0.1.2\n   Compiling ring v0.17.14\n   Compiling toml_datetime v0.7.5+spec-1.1.0\n   Compiling wasmtime-internal-cache v46.0.0 (/home/user/wado/vendor/wasmtime/crates/cache)\n   Compiling leb128 v0.2.6\n   Compiling winnow v0.7.15\n   Compiling cpufeatures v0.3.0\n   Compiling wasmtime-internal-cranelift v46.0.0 (/home/user/wado/vendor/wasmtime/crates/cranelift)\n   Compiling ipnet v2.12.0\n   Compiling maybe-owned v0.3.4\n   Compiling ambient-authority v0.0.2\n   Compiling uuid v1.23.3\n   Compiling fixedbitset v0.4.2\n   Compiling wasmtime-internal-component-macro v46.0.0 (/home/user/wado/vendor/wasmtime/crates/component-macro)\n   Compiling cranelift-frontend v0.133.0 (/home/user/wado/vendor/wasmtime/cranelift/frontend)\n   Compiling toml v0.9.12+spec-1.1.0\n   Compiling cranelift-native v0.133.0 (/home/user/wado/vendor/wasmtime/cranelift/native)\n   Compiling petgraph v0.6.5\n   Compiling debugid v0.8.0\n   Compiling wast v35.0.2\n   Compiling directories-next v2.0.0\n   Compiling zstd v0.13.3\n   Compiling futures v0.3.32\n   Compiling wasmtime-internal-wit-bindgen v46.0.0 (/home/user/wado/vendor/wasmtime/crates/wit-bindgen)\n   Compiling itertools v0.14.0\n   Compiling wasmtime v46.0.0 (/home/user/wado/vendor/wasmtime/crates/wasmtime)\n   Compiling cap-std v3.4.5\n   Compiling base64 v0.22.1\n   Compiling fastrand v2.4.1\n   Compiling tempfile v3.27.0\n   Compiling wasm-compose v0.251.0\n   Compiling icu_normalizer v2.2.0\n   Compiling icu_properties v2.2.0\n   Compiling ittapi v0.4.0\n   Compiling rayon v1.12.0\n   Compiling witx v0.9.1\n   Compiling fxprof-processed-profile v0.8.1\n   Compiling addr2line v0.26.1\n   Compiling memfd v0.6.5\n   Compiling http v1.4.2\n   Compiling wasmtime-internal-jit-icache-coherence v46.0.0 (/home/user/wado/vendor/wasmtime/crates/jit-icache-coherence)\n   Compiling async-trait v0.1.89\n   Compiling hybrid-array v0.4.12\n   Compiling getrandom v0.2.17\n   Compiling encoding_rs v0.8.35\n   Compiling untrusted v0.9.0\n   Compiling wiggle-macro v46.0.0 (/home/user/wado/vendor/wasmtime/crates/wiggle/macro)\n   Compiling wiggle-generate v46.0.0 (/home/user/wado/vendor/wasmtime/crates/wiggle/generate)\n   Compiling idna_adapter v1.2.2\n   Compiling percent-encoding v2.3.2\n   Compiling cap-fs-ext v3.4.5\n   Compiling rustls v0.23.40\n   Compiling httparse v1.10.1\n   Compiling ref-cast v1.0.25\n   Compiling form_urlencoded v1.2.2\n   Compiling idna v1.1.0\n   Compiling rustls-webpki v0.103.13\n   Compiling block-buffer v0.12.1\n   Compiling crypto-common v0.2.2\n   Compiling http-body v1.0.1\n   Compiling chacha20 v0.10.0\n   Compiling tokio-util v0.7.18\n   Compiling ref-cast-impl v1.0.25\n   Compiling subtle v2.6.1\n   Compiling yansi v1.0.1\n   Compiling try-lock v0.2.5\n   Compiling syn v1.0.109\n   Compiling iana-time-zone v0.1.65\n   Compiling atomic-waker v1.1.2\n   Compiling fallible-iterator v0.3.0\n   Compiling diff v0.1.13\n   Compiling gimli v0.32.3\n   Compiling pretty_assertions v1.4.1\n   Compiling h2 v0.4.14\n   Compiling cap-time-ext v3.4.5\n   Compiling want v0.3.1\n   Compiling rand v0.10.1\n   Compiling digest v0.11.3\n   Compiling url v2.5.8\n   Compiling cap-net-ext v3.4.5\n   Compiling webpki-roots v1.0.7\n   Compiling wasmparser v0.245.1\n   Compiling wiggle v46.0.0 (/home/user/wado/vendor/wasmtime/crates/wiggle)\n   Compiling wasmtime-wasi-io v46.0.0 (/home/user/wado/vendor/wasmtime/crates/wasi-io)\n   Compiling wasm-encoder v0.245.1\n   Compiling walrus-macro v0.26.0\n   Compiling aho-corasick v1.1.4\n   Compiling libmimalloc-sys v0.1.49\n   Compiling toml_datetime v1.1.1+spec-1.1.0\n   Compiling foldhash v0.1.5\n   Compiling pulldown-cmark v0.11.3\n   Compiling httpdate v1.0.3\n   Compiling borrow-or-share v0.2.4\n   Compiling regex-syntax v0.8.11\n   Compiling walrus v0.26.4\n   Compiling regex-automata v0.4.14\n   Compiling fluent-uri v0.4.1\n   Compiling hyper v1.10.1\n   Compiling hashbrown v0.15.5\n   Compiling toml v1.1.2+spec-1.1.0\n   Compiling wasmtime-wasi v46.0.0 (/home/user/wado/vendor/wasmtime/crates/wasi)\n   Compiling tokio-rustls v0.26.4\n   Compiling webpki-roots v0.26.11\n   Compiling sha2 v0.11.0\n   Compiling wit-encoder v0.251.0\n   Compiling unicase v2.9.0\n   Compiling dprint-core-macros v0.1.0\n   Compiling wado-compiler v0.0.7 (/home/user/wado/wado-compiler)\n   Compiling wado-manifest v0.0.7 (/home/user/wado/wado-manifest)\n   Compiling dprint-core v0.67.4\n   Compiling regex v1.12.4\n   Compiling http-body-util v0.1.3\n   Compiling unicode-width v0.1.14\n   Compiling mimalloc v0.1.52\n   Compiling hyper-util v0.1.20\n   Compiling dprint-plugin-markdown v0.22.1\n   Compiling rustls-pemfile v2.2.0\n   Compiling glob v0.3.3\n   Compiling lexopt v0.3.2\n   Compiling wasmtime-wasi-http v46.0.0 (/home/user/wado/vendor/wasmtime/crates/wasi-http)\n   Compiling wasmtime-wasi-tls v46.0.0 (/home/user/wado/vendor/wasmtime/crates/wasi-tls)\n   Compiling wado-lsp v0.0.7 (/home/user/wado/wado-lsp)\n   Compiling wado-cli v0.0.7 (/home/user/wado/wado-cli)\n    Finished `release` profile [optimized] target(s) in 6m 41s\n     Running `/home/user/wado/scratchpad/eddy-target/release/wado test package-gale/tests/zz_review_test.wado`\n  [kiln generator compile] ./atn.wado:224:8: warning: function `build_atn` is never used\n  [kiln generator compile] ./atn.wado:649:4: warning: function `state_kind_name` is never used\n  [kiln generator compile] ./atn.wado:680:4: warning: function `trans_kind_name` is never used\n  [kiln generator compile] ./atn.wado:703:8: warning: function `dump_atn` is never used\n[00:00:05.7398] warning: gale: SimpleCst group: alts 0, 1 share lookahead {TK_X}; resolved by longest-match scan tournament, not a token-led branch\n[00:00:05.7398] warning: gale: General group sGroup0: alts 0, 1 share lookahead {TK_X}; resolved by longest-match scan tournament, not a token-led branch\nAssertion failed in __test_2_plus_general_overlap__empty_input_must_fail at package-gale/tests/zz_review_test.wado:21: accepted empty input: (s)\ncondition: !res.ok()\nres.ok(): true\n\nAssertion failed in __test_1_plus_simplecst_overlap__empty_input_must_fail at package-gale/tests/zz_review_test.wado:16: accepted empty input: (r)\ncondition: !res.ok()\nres.ok(): true\n\nAssertion failed in __test_4_empty_list_span_not_reversed at package-gale/tests/zz_review_test.wado:38: root span 3..0\ncondition: root.span.start <= root.span.end\nroot.span.start: 3\nroot.span.end: 0\n\n</stderr>\n<stdout>\n[6.23s] Compiled package-gale/tests/zz_review_test.wado (5.86s)\n[6.27s] Loaded package-gale/tests/zz_review_test.wado (27ms)\nRunning tests in package-gale/tests/zz_review_test.wado...\n  ok   sanity: r accepts x y (8ms)\n  \u001b[31mFAILED\u001b[0m plus simplecst overlap: empty input must fail (8ms)\n  \u001b[31mFAILED\u001b[0m plus general overlap: empty input must fail (8ms)\n  ok   empty rule span not reversed (8ms)\n  \u001b[31mFAILED\u001b[0m empty list span not reversed (0ms)\n\nfailures:\n\n---- plus simplecst overlap: empty input must fail (package-gale/tests/zz_review_test.wado) ----\nerror while executing at wasm backtrace:\n    0:   0x1fa2 - package-gale/tests/zz_review_test.wado!core:internal/panic\n    1:   0x1255 - package-gale/tests/zz_review_test.wado!package-gale/tests/zz_review_test.wado/__test_1_plus_simplecst_overlap__empty_input_must_fail\n    2:   0x1d5c - package-gale/tests/zz_review_test.wado!package-gale/tests/zz_review_test.wado/__cm_export____test_1_plus_simplecst_overlap__empty_input_must_fail\n\n---- plus general overlap: empty input must fail (package-gale/tests/zz_review_test.wado) ----\nerror while executing at wasm backtrace:\n    0:   0x1fa2 - package-gale/tests/zz_review_test.wado!core:internal/panic\n    1:   0x13a6 - package-gale/tests/zz_review_test.wado!package-gale/tests/zz_review_test.wado/__test_2_plus_general_overlap__empty_input_must_fail\n    2:   0x1d67 - package-gale/tests/zz_review_test.wado!package-gale/tests/zz_review_test.wado/__cm_export____test_2_plus_general_overlap__empty_input_must_fail\n\n---- empty list span not reversed (package-gale/tests/zz_review_test.wado) ----\nerror while executing at wasm backtrace:\n    0:   0x1fa2 - package-gale/tests/zz_review_test.wado!core:internal/panic\n    1:   0x1b6e - package-gale/tests/zz_review_test.wado!package-gale/tests/zz_review_test.wado/__test_4_empty_list_span_not_reversed\n    2:   0x1d7d - package-gale/tests/zz_review_test.wado!package-gale/tests/zz_review_test.wado/__cm_export____test_4_empty_list_span_not_reversed\n\nfailures:\n    plus simplecst overlap: empty input must fail (package-gale/tests/zz_review_test.wado)\n    plus general overlap: empty input must fail (package-gale/tests/zz_review_test.wado)\n    empty list span not reversed (package-gale/tests/zz_review_test.wado)\n\ncompile: 1 ok, 0 failed  [cpu: 5.86s]\nload:    1 ok, 0 failed  [cpu: 27ms]\ntest:    2 passed, 3 failed  [cpu: 32ms]\n(wall: 6.38s)\n</stdout>"
+            }
+          ],
+          "usage": {
+            "input_tokens": 42,
+            "output_tokens": 11140,
+            "cache_creation_input_tokens": 846189,
+            "cache_read_input_tokens": 7251307
+          },
+          "grade": {
+            "hit": false,
+            "finding": -1,
+            "reason": "Neither finding addresses the op-only walker (gen_repeat_body) deciding Optionals with a plain first-set check instead of the lowered strategy; the findings concern a dropped `+` loop failure check and reversed spans."
+          },
+          "error": null
+        },
+        {
+          "findings": [
+            {
+              "file": "package-gale/src/parser_gen.wado",
+              "summary": "Rule nodes that match zero tokens now get a reversed span (end < start), because the clamp the old code applied to the end offset was dropped.",
+              "detail": "The rule wrapper (`gen_rule_entry_wrapper`) and the left-recursive path (`gen_lr_fn` / `emit_lr_branch_body`) open a node at `p.peek_start()` and close it with `p.b.finish_node(p.last_end())`. `TreeBuilder::finish` / `tree_build_node` then use that end offset as the node's span end without checking it. The old typed emitter clamped it on purpose (`gen_clamped_span_field`: `Span::new(start, i32::max(start, p.last_end()))`), because when a rule consumes no tokens, `last_end()` is the end of the previous token (or 0 at the start of input) while `peek_start()` is the start of the next token, after any whitespace. That clamp was deleted. Result: any empty or nullable rule node, and even the root (since `expect(TK_EOF)` does not advance), gets a span where end < start whenever trivia sits before the next token. Reproduced: `parse(\"   \")` with `opt_sep_list.g4` gives root span 3..0 and an empty `list` child span 3..0. The same happens with SQLite's trailing empty `sql_stmt` when the input has trailing whitespace. Code that slices source text or checks positions using `CstNode.span` (LSP, highlighting, diagnostics) gets invalid ranges."
+            }
+          ],
+          "turns": 17,
+          "calls": [
+            {
+              "name": "Grep",
+              "input": {
+                "pattern": "fn gen_simplecst_overlap_loop|fn gen_general_overlap_loop",
+                "path": "package-gale/src/parser_gen.wado",
+                "output_mode": "content"
+              },
+              "is_error": false,
+              "output": null
+            },
+            {
+              "name": "Read",
+              "input": {
+                "file_path": "package-gale/src/parser_gen.wado",
+                "offset": 4971,
+                "limit": 330
+              },
+              "is_error": false,
+              "output": null
+            },
+            {
+              "name": "Grep",
+              "input": {
+                "pattern": "gen_consume_group_store_op\\(|gen_general_group_store_op\\(",
+                "path": "package-gale/src/parser_gen.wado",
+                "output_mode": "content",
+                "-B": 8
+              },
+              "is_error": false,
+              "output": null
+            },
+            {
+              "name": "Read",
+              "input": {
+                "file_path": "package-gale/src/parser_gen.wado",
+                "offset": 3720,
+                "limit": 70
+              },
+              "is_error": false,
+              "output": null
+            },
+            {
+              "name": "Grep",
+              "input": {
+                "pattern": "fn last_end|fn peek_start",
+                "path": "package-gale/src/parser_gen.wado",
+                "output_mode": "content",
+                "-A": 12
+              },
+              "is_error": false,
+              "output": null
+            },
+            {
+              "name": "Grep",
+              "input": {
+                "pattern": "last_end",
+                "path": "package-gale/src/parser_gen.wado",
+                "output_mode": "content",
+                "-A": 8,
+                "head_limit": 30
+              },
+              "is_error": false,
+              "output": null
+            },
+            {
+              "name": "Read",
+              "input": {
+                "file_path": "package-gale/tests/grammars/ll_lr_atom.g4"
+              },
+              "is_error": false,
+              "output": null
+            },
+            {
+              "name": "Grep",
+              "input": {
+                "pattern": "reify_pad_args_with_defaults",
+                "path": "wado-compiler/src/elaborator/reify.rs",
+                "output_mode": "content",
+                "-B": 3
+              },
+              "is_error": false,
+              "output": null
+            },
+            {
+              "name": "Write",
+              "input": {
+                "file_path": "package-gale/tests/driver_cst_zz_span_test.wado",
+                "content": "use g from \"./grammars/opt_sep_list.g4\"\n    with {\n        generator: {\n            module: \"../src/generator.wado\",\n            options: { highlight: false },\n            output_dir: \"tests/generated/cst_zz_span\",\n        },\n    };\n\ntest \"empty rule node span is not reversed\" {\n    let r = g::parse(&\"   \");\n    assert r.ok();\n    let root = &r.root;\n    assert root.span.start <= root.span.end, `root span {root.span.start}..{root.span.end}`;\n}\n\ntest \"empty child rule span is not reversed\" {\n    let r = g::parse(&\"   \");\n    if let Node(n) = r.root.children[0] {\n        assert n.span.start <= n.span.end, `list span {n.span.start}..{n.span.end}`;\n    } else {\n        panic(\"no node\");\n    }\n}\n"
+              },
+              "is_error": false,
+              "output": null
+            },
+            {
+              "name": "Run",
+              "input": {
+                "args": [
+                  "run",
+                  "--release",
+                  "--bin",
+                  "wado",
+                  "--",
+                  "test",
+                  "package-gale/tests/driver_cst_zz_span_test.wado"
+                ],
+                "timeout": 1800
+              },
+              "is_error": false,
+              "output": "exit code 1\n<stderr>\n   Compiling wado-manifest v0.0.7 (/home/user/wado/wado-manifest)\n   Compiling wado-lsp v0.0.7 (/home/user/wado/wado-lsp)\n   Compiling wado-cli v0.0.7 (/home/user/wado/wado-cli)\n    Finished `release` profile [optimized] target(s) in 4m 19s\n     Running `/home/user/wado/scratchpad/eddy-target/release/wado test package-gale/tests/driver_cst_zz_span_test.wado`\n  [kiln generator compile] ./atn.wado:224:8: warning: function `build_atn` is never used\n  [kiln generator compile] ./atn.wado:649:4: warning: function `state_kind_name` is never used\n  [kiln generator compile] ./atn.wado:680:4: warning: function `trans_kind_name` is never used\n  [kiln generator compile] ./atn.wado:703:8: warning: function `dump_atn` is never used\nAssertion failed in __test_1_empty_child_rule_span_is_not_reversed at package-gale/tests/driver_cst_zz_span_test.wado:20: list span 3..0\ncondition: n.span.start <= n.span.end\nn.span.start: 3\nn.span.end: 0\n\nAssertion failed in __test_0_empty_rule_node_span_is_not_reversed at package-gale/tests/driver_cst_zz_span_test.wado:14: root span 3..0\ncondition: root.span.start <= root.span.end\nroot.span.start: 3\nroot.span.end: 0\n\n</stderr>\n<stdout>\n[6.59s] Compiled package-gale/tests/driver_cst_zz_span_test.wado (6.16s)\n[6.62s] Loaded package-gale/tests/driver_cst_zz_span_test.wado (22ms)\nRunning tests in package-gale/tests/driver_cst_zz_span_test.wado...\n  \u001b[31mFAILED\u001b[0m empty rule node span is not reversed (11ms)\n  \u001b[31mFAILED\u001b[0m empty child rule span is not reversed (13ms)\n\nfailures:\n\n---- empty rule node span is not reversed (package-gale/tests/driver_cst_zz_span_test.wado) ----\nerror while executing at wasm backtrace:\n    0:   0x1538 - package-gale/tests/driver_cst_zz_span_test.wado!core:internal/panic\n    1:   0x10d5 - package-gale/tests/driver_cst_zz_span_test.wado!package-gale/tests/driver_cst_zz_span_test.wado/__test_0_empty_rule_node_span_is_not_reversed\n    2:   0x1308 - package-gale/tests/driver_cst_zz_span_test.wado!package-gale/tests/driver_cst_zz_span_test.wado/__cm_export____test_0_empty_rule_node_span_is_not_reversed\n\n---- empty child rule span is not reversed (package-gale/tests/driver_cst_zz_span_test.wado) ----\nerror while executing at wasm backtrace:\n    0:   0x1538 - package-gale/tests/driver_cst_zz_span_test.wado!core:internal/panic\n    1:   0x12eb - package-gale/tests/driver_cst_zz_span_test.wado!package-gale/tests/driver_cst_zz_span_test.wado/__test_1_empty_child_rule_span_is_not_reversed\n    2:   0x1313 - package-gale/tests/driver_cst_zz_span_test.wado!package-gale/tests/driver_cst_zz_span_test.wado/__cm_export____test_1_empty_child_rule_span_is_not_reversed\n\nfailures:\n    empty rule node span is not reversed (package-gale/tests/driver_cst_zz_span_test.wado)\n    empty child rule span is not reversed (package-gale/tests/driver_cst_zz_span_test.wado)\n\ncompile: 1 ok, 0 failed  [cpu: 6.16s]\nload:    1 ok, 0 failed  [cpu: 22ms]\ntest:    0 passed, 2 failed  [cpu: 24ms]\n(wall: 7.43s)\n</stdout>"
+            },
+            {
+              "name": "Grep",
+              "input": {
+                "pattern": "_lr_\\{.*\\}\\(tokens|fn scan_.*_lr_|`scan_\\{.*\\}_lr_",
+                "path": "package-gale/src/parser_gen.wado",
+                "output_mode": "content"
+              },
+              "is_error": false,
+              "output": null
+            },
+            {
+              "name": "Grep",
+              "input": {
+                "pattern": "_lr_\\{",
+                "path": "package-gale/src/parser_gen.wado",
+                "output_mode": "content",
+                "-A": 6
+              },
+              "is_error": false,
+              "output": null
+            },
+            {
+              "name": "Read",
+              "input": {
+                "file_path": "package-gale/src/parser_gen.wado",
+                "offset": 780,
+                "limit": 30
+              },
+              "is_error": false,
+              "output": null
+            },
+            {
+              "name": "Grep",
+              "input": {
+                "pattern": "fn add_follow_param",
+                "path": "package-gale/src/parser_gen.wado",
+                "output_mode": "content",
+                "-A": 10
+              },
+              "is_error": false,
+              "output": null
+            },
+            {
+              "name": "Grep",
+              "input": {
+                "pattern": "fn rule_takes_min_prec",
+                "path": "package-gale/src/parser_gen.wado",
+                "output_mode": "content",
+                "-A": 20
+              },
+              "is_error": false,
+              "output": null
+            },
+            {
+              "name": "Grep",
+              "input": {
+                "pattern": "pub fn gen_token_constants",
+                "path": "package-gale/src/lexer_gen.wado",
+                "output_mode": "content",
+                "-A": 40
+              },
+              "is_error": false,
+              "output": null
+            }
+          ],
+          "usage": {
+            "input_tokens": 36,
+            "output_tokens": 9925,
+            "cache_creation_input_tokens": 409357,
+            "cache_read_input_tokens": 6396470
+          },
+          "grade": {
+            "hit": false,
+            "finding": -1,
+            "reason": "The only finding concerns reversed spans on zero-token rule nodes after the end-offset clamp was dropped, not the op-only walker deciding Optionals with a plain first-set check while ignoring the lowered strategy."
+          },
+          "error": null
+        }
+      ]
+    },
+    {
+      "fix": 1680,
+      "culprit": 897,
+      "defect": "walk_and_delete propagated NotFound errors from read_dir, the directory entries, file_type and remove_file, so a file or directory removed concurrently during output reconcile aborted the whole pipeline with an I/O error.",
+      "runs": [
+        {
+          "findings": [
+            {
+              "file": "wado-cli/src/kiln_driver.rs",
+              "summary": "Output paths with `.` segments (e.g. `./lib.wado`) are recorded un-normalized, so `reconcile_outputs` deletes the file the generator just wrote.",
+              "detail": "`validate_rel_output_path` accepts `Component::CurDir`, and `execute` builds the recorded path as `InvocationPath::normalize(\"{output_dir}/{rel}\")`. `normalize` only strips a leading `./`, so the kept path becomes `build/kiln/g/./lib.wado`. `walk_and_delete` compares against the real on-disk path `build/kiln/g/lib.wado`, finds no match, sees the `#![generated]` marker and deletes the fresh output. The lockfile still lists it, so every later run is a cache miss that again generates and deletes the file. Reproduced with a generator returning `./lib.wado`: after `run_pipeline` the outcome had deleted=[\"build/kiln/g/lib.wado\"] and the file was gone."
+            },
+            {
+              "file": "wado-cli/src/kiln_driver.rs",
+              "summary": "When one invocation's output dir contains another's, reconciling the outer dir deletes the inner invocation's freshly generated files.",
+              "detail": "`run_pipeline` keeps a separate kept-list for each output dir, but `reconcile_outputs` walks each dir recursively and only checks that dir's own list. With `output-dir = \"gen\"` for one invocation and `\"gen/inner\"` for another, reconciling `gen` deletes `gen/inner/b.wado` because it is not in the outer list. The same happens with `output-dir = \".\"`, which normalizes to the project root and wipes every other generator's outputs. Reproduced: the outcome had deleted=[\"gen/inner/b.wado\"] and the file was missing while the lockfile still recorded it."
+            },
+            {
+              "file": "wado-cli/src/kiln_driver.rs",
+              "summary": "`cache_matches` ignores the generator identity, so changing `module = \"ns:proto@1.0.0\"` to `@1.1.0` still counts as a cache hit and the new generator never runs.",
+              "detail": "`run_pipeline` only compares `options_hash`, and `cache_matches` only compares primary, inputs, reads and outputs. Neither checks `entry.generator` against `generator_identity(&invocation.module)`, and `compose_cache_key`, which does include the identity, is never used. After a generator version bump, stale outputs from the old generator are reused and the lockfile keeps `generator = \"ns:proto@1.0.0\"`. Reproduced: on the second run with the 1.1.0 manifest the outcome was cached=[\"g\"] with 0 generator runs."
+            },
+            {
+              "file": "wado-cli/src/kiln_runtime.rs",
+              "summary": "The host `read-file` import lets a sandboxed generator read any file on the host (absolute paths or `..`), not just files in the project.",
+              "detail": "`KilnHostState::read_file` passes the path the generator chose straight to `FilesystemCompilerHost::load_source`, which does `base_path.join(path)`. A path such as `/etc/passwd` or `../../.ssh/id_rsa` escapes the project, so a third-party build-dependency generator can read secrets and embed them in generated output. That breaks the isolation the module docs promise (\"only the two host imports… determinism guarantee\"). Not reproduced: it needs a compiled Wasm generator component, which I could not build within this review. The code path is direct, though: `wado_lsp::FilesystemCompilerHost::load_source` is a bare `std::fs::read(base_path.join(path))`."
+            }
+          ],
+          "turns": 3,
+          "calls": [
+            {
+              "name": "Grep",
+              "input": {
+                "pattern": "async fn load_source",
+                "path": "wado-lsp/src",
+                "output_mode": "content",
+                "-A": 25
+              },
+              "is_error": false,
+              "output": null
+            },
+            {
+              "name": "Write",
+              "input": {
+                "file_path": "wado-cli/tests/kiln_review.rs",
+                "content": "use std::sync::Mutex;\n\nuse wado_cli::kiln_driver::{GeneratorProvider, ProviderError, run_pipeline};\nuse wado_compiler::compiler_host::{\n    CompilerHost, Diagnostic, GeneratorOutputFile, GeneratorRequest, GeneratorResponse,\n    GeneratorRunnerError, SourceError,\n};\nuse wado_compiler::kiln::GeneratorModule;\nuse wado_manifest::Manifest;\n\nstruct P;\nimpl GeneratorProvider for P {\n    async fn get_component(&self, _: &GeneratorModule) -> Result<Vec<u8>, ProviderError> {\n        Ok(b\"c\".to_vec())\n    }\n}\n\nstruct H {\n    resp: Mutex<Vec<(String, GeneratorResponse)>>,\n    runs: Mutex<u32>,\n}\nimpl CompilerHost for H {\n    async fn load_source(&self, path: &str) -> Result<Vec<u8>, SourceError> {\n        Ok(format!(\"content of {path}\").into_bytes())\n    }\n    fn emit_diagnostic(&self, _d: Diagnostic) {}\n    async fn run_generator(\n        &self,\n        _w: &[u8],\n        req: GeneratorRequest,\n    ) -> Result<GeneratorResponse, GeneratorRunnerError> {\n        *self.runs.lock().unwrap() += 1;\n        let v = self.resp.lock().unwrap();\n        Ok(v.iter().find(|(k, _)| *k == req.primary.path).unwrap().1.clone())\n    }\n}\n\nfn resp(path: &str) -> GeneratorResponse {\n    GeneratorResponse {\n        files: vec![GeneratorOutputFile {\n            path: path.to_string(),\n            content: \"pub fn x() {}\\n\".to_string(),\n            is_entry: true,\n        }],\n        reads: vec![],\n    }\n}\n\nfn host(r: Vec<(&str, GeneratorResponse)>) -> H {\n    H {\n        resp: Mutex::new(r.into_iter().map(|(k, v)| (k.to_string(), v)).collect()),\n        runs: Mutex::new(0),\n    }\n}\n\nfn rt() -> tokio::runtime::Runtime {\n    tokio::runtime::Builder::new_current_thread().enable_all().build().unwrap()\n}\n\n#[test]\nfn dot_slash_output_is_deleted_by_reconcile() {\n    let tmp = tempfile::tempdir().unwrap();\n    let m: Manifest = r#\"\n[package]\nname = \"h\"\nversion = \"0.1.0\"\n[registries]\ndefault = \"https://wa.dev\"\n[build-dependencies]\nproto = { package = \"ns:proto\", version = \"^1.0.0\" }\n[build.generators.g]\nmodule = \"ns:proto@1.0.0\"\nfrom = \"s.proto\"\n\"#\n    .parse()\n    .unwrap();\n    let h = host(vec![(\"s.proto\", resp(\"./lib.wado\"))]);\n    let out = rt().block_on(run_pipeline(&m, tmp.path(), &h, &P)).unwrap();\n    println!(\"outcome = {out:?}\");\n    assert!(\n        tmp.path().join(\"build/kiln/g/lib.wado\").exists(),\n        \"freshly generated file was deleted: {:?}\",\n        out.deleted\n    );\n}\n\n#[test]\nfn nested_output_dir_deletes_other_invocation_outputs() {\n    let tmp = tempfile::tempdir().unwrap();\n    let m: Manifest = r#\"\n[package]\nname = \"h\"\nversion = \"0.1.0\"\n[registries]\ndefault = \"https://wa.dev\"\n[build-dependencies]\nproto = { package = \"ns:proto\", version = \"^1.0.0\" }\n[build.generators.outer]\nmodule = \"ns:proto@1.0.0\"\nfrom = \"a.proto\"\noutput-dir = \"gen\"\n[build.generators.inner]\nmodule = \"ns:proto@1.0.0\"\nfrom = \"b.proto\"\noutput-dir = \"gen/inner\"\n\"#\n    .parse()\n    .unwrap();\n    let h = host(vec![(\"a.proto\", resp(\"a.wado\")), (\"b.proto\", resp(\"b.wado\"))]);\n    let out = rt().block_on(run_pipeline(&m, tmp.path(), &h, &P)).unwrap();\n    println!(\"outcome = {out:?}\");\n    assert!(\n        tmp.path().join(\"gen/inner/b.wado\").exists(),\n        \"inner output deleted: {:?}\",\n        out.deleted\n    );\n}\n\n#[test]\nfn changing_generator_version_hits_stale_cache() {\n    let tmp = tempfile::tempdir().unwrap();\n    let mk = |v: &str| -> Manifest {\n        format!(\n            r#\"\n[package]\nname = \"h\"\nversion = \"0.1.0\"\n[registries]\ndefault = \"https://wa.dev\"\n[build-dependencies]\nproto = {{ package = \"ns:proto\", version = \"^1.0.0\" }}\n[build.generators.g]\nmodule = \"ns:proto@{v}\"\nfrom = \"s.proto\"\n\"#\n        )\n        .parse()\n        .unwrap()\n    };\n    let h = host(vec![(\"s.proto\", resp(\"lib.wado\"))]);\n    rt().block_on(run_pipeline(&mk(\"1.0.0\"), tmp.path(), &h, &P)).unwrap();\n    let h2 = host(vec![(\"s.proto\", resp(\"lib.wado\"))]);\n    let out = rt().block_on(run_pipeline(&mk(\"1.1.0\"), tmp.path(), &h2, &P)).unwrap();\n    println!(\"outcome = {out:?}\");\n    let lock = std::fs::read_to_string(tmp.path().join(\"wado.lock\")).unwrap();\n    println!(\"{lock}\");\n    assert_eq!(*h2.runs.lock().unwrap(), 1, \"generator not rerun after version change\");\n}\n"
+              },
+              "is_error": false,
+              "output": null
+            },
+            {
+              "name": "Run",
+              "input": {
+                "args": [
+                  "test",
+                  "-p",
+                  "wado-cli",
+                  "--test",
+                  "kiln_review",
+                  "--",
+                  "--nocapture"
+                ],
+                "timeout": 1800
+              },
+              "is_error": false,
+              "output": "exit code 101\n<stderr>\n   Compiling proc-macro2 v1.0.106\n   Compiling unicode-ident v1.0.24\n   Compiling quote v1.0.45\n   Compiling serde_core v1.0.228\n   Compiling libc v0.2.185\n   Compiling equivalent v1.0.2\n   Compiling serde v1.0.228\n   Compiling foldhash v0.2.0\n   Compiling shlex v1.3.0\n   Compiling find-msvc-tools v0.1.9\n   Compiling cfg-if v1.0.4\n   Compiling syn v2.0.117\n   Compiling hashbrown v0.17.0\n   Compiling jobserver v0.1.34\n   Compiling cc v1.2.60\n   Compiling allocator-api2 v0.2.21\n   Compiling memchr v2.8.0\n   Compiling log v0.4.29\n   Compiling indexmap v2.14.0\n   Compiling anyhow v1.0.102\n   Compiling version_check v0.9.5\n   Compiling bitflags v2.11.1\n   Compiling hashbrown v0.16.1\n   Compiling libm v0.2.16\n   Compiling typenum v1.19.0\n   Compiling once_cell v1.21.4\n   Compiling itoa v1.0.18\n   Compiling generic-array v0.14.7\n   Compiling pin-project-lite v0.2.17\n   Compiling wasmtime-internal-core v43.0.1\n   Compiling heck v0.5.0\n   Compiling fnv v1.0.7\n   Compiling stable_deref_trait v1.2.1\n   Compiling futures-core v0.3.32\n   Compiling synstructure v0.13.2\n   Compiling bytes v1.11.1\n   Compiling rustix v1.1.4\n   Compiling block-buffer v0.10.4\n   Compiling futures-sink v0.3.32\n   Compiling linux-raw-sys v0.12.1\n   Compiling leb128fmt v0.1.0\n   Compiling serde_derive v1.0.228\n   Compiling thiserror-impl v2.0.18\n   Compiling zerofrom-derive v0.1.7\n   Compiling target-lexicon v0.13.5\n   Compiling zerofrom v0.1.7\n   Compiling yoke-derive v0.8.2\n   Compiling semver v1.0.28\n   Compiling cranelift-srcgen v0.130.1\n   Compiling cpufeatures v0.2.17\n   Compiling zmij v1.0.21\n   Compiling slab v0.4.12\n   Compiling cranelift-assembler-x64-meta v0.130.1\n   Compiling yoke v0.8.2\n   Compiling smallvec v1.15.1\n   Compiling cranelift-bitset v0.130.1\n   Compiling wasmparser v0.245.1\n   Compiling futures-channel v0.3.32\n   Compiling bumpalo v3.20.2\n   Compiling getrandom v0.2.17\n   Compiling zeroize v1.8.2\n   Compiling serde_json v1.0.149\n   Compiling zerovec-derive v0.11.3\n   Compiling futures-macro v0.3.32\n   Compiling pulley-macros v43.0.1\n   Compiling futures-task v0.3.32\n   Compiling futures-io v0.3.32\n   Compiling futures-util v0.3.32\n   Compiling zerovec v0.11.6\n   Compiling rustls-pki-types v1.14.0\n   Compiling cranelift-entity v0.130.1\n   Compiling displaydoc v0.2.5\n   Compiling wasmtime-internal-versioned-export-macros v43.0.1\n   Compiling crypto-common v0.1.7\n   Compiling gimli v0.33.0\n   Compiling mio v1.2.0\n   Compiling socket2 v0.6.3\n   Compiling thiserror v2.0.18\n   Compiling cranelift-isle v0.130.1\n   Compiling crc32fast v1.5.0\n   Compiling rustc-hash v2.1.2\n   Compiling tokio v1.52.1\n   Compiling digest v0.10.7\n   Compiling cranelift-bforest v0.130.1\n   Compiling pulley-interpreter v43.0.1\n   Compiling wasm-encoder v0.245.1\n   Compiling object v0.38.1\n   Compiling termcolor v1.4.1\n   Compiling cranelift-codegen-shared v0.130.1\n   Compiling cranelift-codegen-meta v0.130.1\n   Compiling wasmprinter v0.245.1\n   Compiling sha2 v0.10.9\n   Compiling cranelift-assembler-x64 v0.130.1\n   Compiling autocfg v1.5.0\n   Compiling untrusted v0.9.0\n   Compiling pkg-config v0.3.33\n   Compiling io-lifetimes v2.0.4\n   Compiling ipnet v2.12.0\n   Compiling cpp_demangle v0.4.5\n   Compiling zstd-sys v2.0.16+zstd.1.5.7\n   Compiling num-traits v0.2.19\n   Compiling cobs v0.3.0\n   Compiling tinystr v0.8.3\n   Compiling rand_core v0.6.4\n   Compiling tracing-attributes v0.1.31\n   Compiling cranelift-codegen v0.130.1\n   Compiling tracing-core v0.1.36\n   Compiling cmake v0.1.58\n   Compiling crossbeam-utils v0.8.21\n   Compiling fs_extra v1.3.0\n   Compiling dunce v1.0.5\n   Compiling writeable v0.6.3\n   Compiling wasmtime-internal-component-util v43.0.1\n   Compiling zerocopy v0.8.48\n   Compiling arbitrary v1.4.2\n   Compiling litemap v0.8.2\n   Compiling icu_locale_core v2.2.0\n   Compiling cranelift-control v0.130.1\n   Compiling aws-lc-sys v0.40.0\n   Compiling tracing v0.1.44\n   Compiling postcard v1.1.3\n   Compiling regalloc2 v0.15.1\n   Compiling zerotrie v0.2.4\n   Compiling potential_utf v0.1.5\n   Compiling wasm-encoder v0.246.2\n   Compiling http v1.4.0\n   Compiling icu_normalizer_data v2.2.0\n   Compiling utf8_iter v1.0.4\n   Compiling winnow v1.0.1\n   Compiling icu_properties_data v2.2.0\n   Compiling leb128 v0.2.5\n   Compiling base64 v0.22.1\n   Compiling rustc-demangle v0.1.27\n   Compiling io-extras v0.18.4\n   Compiling unicode-width v0.2.2\n   Compiling wasmtime-environ v43.0.1\n   Compiling wast v246.0.2\n   Compiling toml_parser v1.1.2+spec-1.1.0\n   Compiling icu_collections v2.2.0\n   Compiling icu_provider v2.2.0\n   Compiling serde_spanned v1.1.1\n   Compiling percent-encoding v2.3.2\n   Compiling toml_writer v1.1.1+spec-1.1.0\n   Compiling subtle v2.6.1\n   Compiling cap-primitives v3.4.5\n   Compiling zstd-safe v7.2.4\n   Compiling ambient-authority v0.0.2\n   Compiling crossbeam-epoch v0.9.18\n   Compiling wat v1.246.2\n   Compiling http-body v1.0.1\n   Compiling fs-set-times v0.20.3\n   Compiling rustix-linux-procfs v0.1.1\n   Compiling bitmaps v2.1.0\n   Compiling im-rc v15.1.0\n   Compiling ittapi-sys v0.4.0\n   Compiling maybe-owned v0.3.4\n   Compiling httparse v1.10.1\n   Compiling either v1.15.0\n   Compiling wasmtime-internal-unwinder v43.0.1\n   Compiling aws-lc-rs v1.16.3\n   Compiling thiserror v1.0.69\n   Compiling rayon-core v1.13.0\n   Compiling getrandom v0.4.2\n   Compiling id-arena v2.3.0\n   Compiling unicode-xid v0.2.6\n   Compiling wit-parser v0.245.1\n   Compiling sized-chunks v0.6.5\n   Compiling icu_properties v2.2.0\n   Compiling icu_normalizer v2.2.0\n   Compiling crossbeam-deque v0.8.6\n   Compiling rand_xoshiro v0.6.0\n   Compiling tokio-util v0.7.18\n   Compiling futures-executor v0.3.32\n   Compiling wasmtime-internal-jit-debug v43.0.1\n   Compiling wasmtime-internal-fiber v43.0.1\n   Compiling thiserror-impl v1.0.69\n   Compiling ring v0.17.14\n   Compiling toml_datetime v0.7.5+spec-1.1.0\n   Compiling dirs-sys-next v0.1.2\n   Compiling try-lock v0.2.5\n   Compiling winnow v0.7.15\n   Compiling uuid v1.23.1\n   Compiling atomic-waker v1.1.2\n   Compiling wasmtime-internal-component-macro v43.0.1\n   Compiling ryu v1.0.23\n   Compiling wasmtime-internal-cache v43.0.1\n   Compiling cap-std v3.4.5\n   Compiling fixedbitset v0.4.2\n   Compiling ref-cast v1.0.25\n   Compiling unsafe-libyaml v0.2.11\n   Compiling toml v0.9.12+spec-1.1.0\n   Compiling serde_yaml v0.9.34+deprecated\n   Compiling petgraph v0.6.5\n   Compiling cranelift-frontend v0.130.1\n   Compiling cranelift-native v0.130.1\n   Compiling h2 v0.4.13\n   Compiling debugid v0.8.0\n   Compiling directories-next v2.0.0\n   Compiling want v0.3.1\n   Compiling futures v0.3.32\n   Compiling idna_adapter v1.2.1\n   Compiling wasmtime-internal-wit-bindgen v43.0.1\n   Compiling zstd v0.13.3\n   Compiling itertools v0.14.0\n   Compiling wast v35.0.2\n   Compiling wasmtime v43.0.1\n   Compiling ref-cast-impl v1.0.25\n   Compiling tower-service v0.3.3\n   Compiling httpdate v1.0.3\n   Compiling fastrand v2.4.1\n   Compiling tempfile v3.27.0\n   Compiling hyper v1.9.0\n   Compiling witx v0.9.1\n   Compiling wasmtime-internal-cranelift v43.0.1\n   Compiling ittapi v0.4.0\n   Compiling idna v1.1.0\n   Compiling rayon v1.12.0\n   Compiling wasm-compose v0.245.1\n   Compiling fxprof-processed-profile v0.8.1\n   Compiling form_urlencoded v1.2.2\n   Compiling ppv-lite86 v0.2.21\n   Compiling addr2line v0.26.1\n   Compiling memfd v0.6.5\n   Compiling wasmtime-internal-jit-icache-coherence v43.0.1\n   Compiling async-trait v0.1.89\n   Compiling aho-corasick v1.1.4\n   Compiling encoding_rs v0.8.35\n   Compiling borrow-or-share v0.2.4\n   Compiling wiggle-macro v43.0.1\n   Compiling rustix v0.38.44\n   Compiling regex-syntax v0.8.10\n   Compiling rustls v0.23.38\n   Compiling fluent-uri v0.4.1\n   Compiling regex-automata v0.4.14\n   Compiling rand_chacha v0.3.1\n   Compiling url v2.5.8\n   Compiling wiggle-generate v43.0.1\n   Compiling num-integer v0.1.46\n   Compiling rustls v0.22.4\n   Compiling cap-fs-ext v3.4.5\n   Compiling linux-raw-sys v0.4.15\n   Compiling fallible-iterator v0.3.0\n   Compiling system-interface v0.27.3\n   Compiling gimli v0.32.3\n   Compiling rustls-webpki v0.103.12\n   Compiling rustls-webpki v0.102.8\n   Compiling rand v0.8.6\n   Compiling hyper-util v0.1.20\n   Compiling http-body-util v0.1.3\n   Compiling walrus-macro v0.26.0\n   Compiling parking_lot_core v0.9.12\n   Compiling getrandom v0.3.4\n   Compiling iana-time-zone v0.1.65\n   Compiling cap-time-ext v3.4.5\n   Compiling walrus v0.26.1\n   Compiling cap-rand v3.4.5\n   Compiling wiggle v43.0.1\n   Compiling wasmtime-wasi-io v43.0.1\n   Compiling num-bigint v0.4.6\n   Compiling cap-net-ext v3.4.5\n   Compiling webpki-roots v1.0.7\n   Compiling sync_wrapper v1.0.2\n   Compiling ahash v0.8.12\n   Compiling toml_datetime v1.1.1+spec-1.1.0\n   Compiling scopeguard v1.2.0\n   Compiling openssl-probe v0.2.1\n   Compiling tower-layer v0.3.3\n   Compiling rustls-native-certs v0.8.3\n   Compiling tower v0.5.3\n   Compiling toml v1.1.2+spec-1.1.0\n   Compiling lock_api v0.4.14\n   Compiling num-rational v0.4.2\n   Compiling wasmtime-wasi v43.0.1\n   Compiling webpki-roots v0.26.11\n   Compiling tokio-rustls v0.25.0\n   Compiling wado-compiler v0.1.0 (/home/user/wado/wado-compiler)\n   Compiling tokio-rustls v0.26.4\n   Compiling num-iter v0.1.45\n   Compiling regex v1.12.3\n   Compiling num-complex v0.4.6\n   Compiling unicode-general-category v1.1.0\n   Compiling bit-vec v0.8.0\n   Compiling predicates-core v1.0.10\n   Compiling iri-string v0.7.12\n   Compiling tower-http v0.6.8\n   Compiling bit-set v0.8.0\n   Compiling num v0.4.3\n   Compiling hyper-rustls v0.27.9\n   Compiling parking_lot v0.12.5\n   Compiling wado-manifest v0.1.0 (/home/user/wado/wado-manifest)\n   Compiling rustls-platform-verifier v0.6.2\n   Compiling float-cmp v0.10.0\n   Compiling difflib v0.4.0\n   Compiling normalize-line-endings v0.3.0\n   Compiling glob v0.3.3\n   Compiling termtree v0.5.1\n   Compiling lexopt v0.3.2\n   Compiling anstyle v1.0.14\n   Compiling lazy_static v1.5.0\n   Compiling vsimd v0.8.0\n   Compiling outref v0.5.2\n   Compiling assert_cmd v2.2.0\n   Compiling uuid-simd v0.8.0\n   Compiling fraction v0.15.3\n   Compiling predicates v3.1.4\n   Compiling predicates-tree v1.0.13\n   Compiling reqwest v0.13.2\n   Compiling wado-lsp v0.1.0 (/home/user/wado/wado-lsp)\n   Compiling wasmtime-wasi-http v43.0.1\n   Compiling referencing v0.45.1\n   Compiling fancy-regex v0.17.0\n   Compiling wado-cli v0.1.0 (/home/user/wado/wado-cli)\n   Compiling bstr v1.12.1\n   Compiling email_address v0.2.9\n   Compiling wait-timeout v0.2.1\n   Compiling num-cmp v0.1.0\n   Compiling bytecount v0.6.9\n   Compiling data-encoding v2.10.0\n   Compiling jsonschema v0.45.1\n    Finished `test` profile [unoptimized + debuginfo] target(s) in 3m 00s\n     Running tests/kiln_review.rs (/home/user/wado/scratchpad/eddy-target/debug/deps/kiln_review-f8cb145aa668cdb6)\n\nthread 'dot_slash_output_is_deleted_by_reconcile' (16273) panicked at wado-cli/tests/kiln_review.rs:80:5:\nfreshly generated file was deleted: [\"build/kiln/g/lib.wado\"]\nnote: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\n\nthread 'nested_output_dir_deletes_other_invocation_outputs' (16274) panicked at wado-cli/tests/kiln_review.rs:112:5:\ninner output deleted: [\"gen/inner/b.wado\"]\n\nthread 'changing_generator_version_hits_stale_cache' (16272) panicked at wado-cli/tests/kiln_review.rs:147:5:\nassertion `left == right` failed: generator not rerun after version change\n  left: 0\n right: 1\nerror: test failed, to rerun pass `-p wado-cli --test kiln_review`\n</stderr>\n<stdout>\n\nrunning 3 tests\noutcome = PipelineOutcome { cached: [], executed: [\"g\"], deleted: [\"build/kiln/g/lib.wado\"] }\noutcome = PipelineOutcome { cached: [], executed: [\"outer\", \"inner\"], deleted: [\"gen/inner/b.wado\"] }\noutcome = PipelineOutcome { cached: [\"g\"], executed: [], deleted: [] }\n# This file is auto-generated by wado. Do not edit manually.\nversion = 1\ndeps-hash = \"\"\n\n[[generator-cache]]\ninvocation = \"g\"\ngenerator = \"ns:proto@1.0.0\"\nprimary = { path = \"s.proto\", hash = \"ed7df698437cf06dfdf8c1433a07f729e900eac5708d9219afb546af7a99af03\" }\noptions-hash = \"6c449f91c1adbf3945ad078f5f875c0c1f133f246c4588668faffbe23a3c195f\"\ninputs = []\nreads = []\noutputs = [\n    { path = \"build/kiln/g/lib.wado\", hash = \"24899b9d337846bedbaa133099cf7ed9f901cdbcd14f1929707a0cbe63420c30\", entry = true },\n]\n\ntest nested_output_dir_deletes_other_invocation_outputs ... FAILED\ntest dot_slash_output_is_deleted_by_reconcile ... FAILED\ntest changing_generator_version_hits_stale_cache ... FAILED\n\nfailures:\n\nfailures:\n    changing_generator_version_hits_stale_cache\n    dot_slash_output_is_deleted_by_reconcile\n    nested_output_dir_deletes_other_invocation_outputs\n\ntest result: FAILED. 0 passed; 3 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.24s\n\n</stdout>"
+            }
+          ],
+          "usage": {
+            "input_tokens": 8,
+            "output_tokens": 6099,
+            "cache_creation_input_tokens": 101574,
+            "cache_read_input_tokens": 178845
+          },
+          "grade": {
+            "hit": false,
+            "finding": -1,
+            "reason": "No finding addresses NotFound errors from concurrent removal in walk_and_delete; the findings cover path normalization, nested output dirs, cache identity, and sandbox escape instead."
+          },
+          "error": null
+        },
+        {
+          "findings": [
+            {
+              "file": "wado-cli/src/kiln_driver.rs",
+              "summary": "When one invocation's output directory sits inside another's, reconcile deletes the inner invocation's freshly generated files on every run.",
+              "detail": "`run_pipeline` groups the files to keep by the exact `output_dir` string, then calls `reconcile_outputs` on each directory. `walk_and_delete` walks into subdirectories, so cleaning `gen` also visits `gen/b`. Any `#![generated]` file there is deleted because it is not in `gen`'s keep list. Reproduced with generator `a` (output-dir = \"gen\") and generator `b` (output-dir = \"gen/b\"): after one run `outcome.deleted == [\"gen/b/b.wado\"]` and `b`'s output is gone. The lockfile still lists that file, so the next run misses the cache, regenerates it and deletes it again."
+            },
+            {
+              "file": "wado-cli/src/kiln_driver.rs",
+              "summary": "`cache_matches` never checks the generator identity, so changing the generator version reuses stale cached outputs.",
+              "detail": "The cache check compares the options hash, primary file, inputs, reads and outputs, but never compares `entry.generator` with `generator_identity(&invocation.module)`. The generator's source hash is not checked either. Reproduced: run the pipeline with `module = \"ns:proto@1.0.0\"`, change it to `@1.1.0`, run again. The result is `cached: [\"a\"]`, so the new generator never runs and the outputs from the old version are kept."
+            },
+            {
+              "file": "wado-cli/src/kiln_driver.rs",
+              "summary": "After `output-dir` changes, the cache still hits and the new output directory is never populated.",
+              "detail": "`cache_matches` hashes the recorded output paths, which are still in the old directory, and never checks that they lie under `invocation.output_dir`. Reproduced: run with output-dir = \"gen1\", change it to \"gen2\", run again. The result is `cached: [\"a\"]` and `gen2/a.wado` does not exist. Code that reads from the configured directory finds nothing, and the old files are never cleaned up."
+            },
+            {
+              "file": "wado-cli/src/kiln_driver.rs",
+              "summary": "A generator read of an absolute path is stored in a mangled form, so that invocation misses the cache on every run.",
+              "detail": "`build_cache_entry` and `cache_matches` pass read paths through `InvocationPath::normalize`. That drops empty segments, so \"/abs/inc.proto\" becomes \"abs/inc.proto\". On the next run `load_source` is called with the mangled relative path, which fails, so the check returns false. Reproduced: two identical runs where the generator reports a read of \"/abs/inc.proto\". The second run executes again (`executed: [\"a\"]`) instead of hitting the cache."
+            },
+            {
+              "file": "wado-cli/src/kiln_runtime.rs",
+              "summary": "`read-file` from the generator is passed unchecked to `FilesystemCompilerHost::load_source`, so a generator can read any host file and never gets `not-found`.",
+              "detail": "`KilnHostState::read_file` forwards the guest-supplied path straight to `load_source`, which does `base_path.join(path)`. Absolute paths and `..` segments therefore reach any file on the host (e.g. `/etc/passwd` or `~/.ssh`), even though the runtime is described as a sandbox. That CLI host also turns every failure, including a missing file, into `SourceError::IoError`, so the `HostError::NotFound` branch is never taken and generators get `io(...)` for missing files. Not reproduced: it needs a compiled generator component. The behaviour follows directly from wado-lsp/src/host.rs:55-60."
+            }
+          ],
+          "turns": 4,
+          "calls": [
+            {
+              "name": "Read",
+              "input": {
+                "file_path": "wado-cli/src/runtime.rs",
+                "limit": 150
+              },
+              "is_error": false,
+              "output": null
+            },
+            {
+              "name": "Grep",
+              "input": {
+                "pattern": "async fn load_source",
+                "path": "wado-lsp/src",
+                "output_mode": "content",
+                "-A": 30
+              },
+              "is_error": false,
+              "output": null
+            },
+            {
+              "name": "Grep",
+              "input": {
+                "pattern": "async_support|instantiate_async",
+                "path": "wado-cli/src",
+                "output_mode": "content"
+              },
+              "is_error": false,
+              "output": null
+            },
+            {
+              "name": "Write",
+              "input": {
+                "file_path": "wado-cli/tests/kiln_review_check.rs",
+                "content": "use std::sync::Mutex;\n\nuse indexmap::IndexMap;\nuse wado_cli::kiln_driver::{GeneratorProvider, ProviderError, run_pipeline};\nuse wado_compiler::compiler_host::{\n    CompilerHost, Diagnostic, GeneratorOutputFile, GeneratorReadRecord, GeneratorRequest,\n    GeneratorResponse, GeneratorRunnerError, SourceError,\n};\nuse wado_compiler::kiln::GeneratorModule;\nuse wado_manifest::Manifest;\n\nstruct P;\nimpl GeneratorProvider for P {\n    async fn get_component(&self, _: &GeneratorModule) -> Result<Vec<u8>, ProviderError> {\n        Ok(vec![1])\n    }\n}\n\nstruct H {\n    sources: IndexMap<String, Vec<u8>>,\n    responses: Mutex<IndexMap<String, GeneratorResponse>>,\n}\nimpl H {\n    fn new(sources: &[(&str, &[u8])], responses: Vec<(&str, GeneratorResponse)>) -> Self {\n        Self {\n            sources: sources.iter().map(|(k, v)| (k.to_string(), v.to_vec())).collect(),\n            responses: Mutex::new(responses.into_iter().map(|(k, v)| (k.to_string(), v)).collect()),\n        }\n    }\n}\nimpl CompilerHost for H {\n    async fn load_source(&self, path: &str) -> Result<Vec<u8>, SourceError> {\n        self.sources.get(path).cloned().ok_or_else(|| SourceError::NotFound { path: path.to_string() })\n    }\n    fn emit_diagnostic(&self, _d: Diagnostic) {}\n    async fn run_generator(\n        &self,\n        _wasm: &[u8],\n        request: GeneratorRequest,\n    ) -> Result<GeneratorResponse, GeneratorRunnerError> {\n        self.responses\n            .lock()\n            .unwrap()\n            .shift_remove(&request.primary.path)\n            .ok_or_else(|| GeneratorRunnerError::Host(\"no response\".into()))\n    }\n}\n\nfn resp(path: &str, reads: Vec<GeneratorReadRecord>) -> GeneratorResponse {\n    GeneratorResponse {\n        files: vec![GeneratorOutputFile { path: path.into(), content: \"x\\n\".into(), is_entry: true }],\n        reads,\n    }\n}\n\nfn rt() -> tokio::runtime::Runtime {\n    tokio::runtime::Builder::new_current_thread().enable_all().build().unwrap()\n}\n\n#[test]\nfn nested_output_dirs() {\n    let tmp = tempfile::tempdir().unwrap();\n    let m: Manifest = r#\"\n[package]\nname = \"host\"\nversion = \"0.1.0\"\n[registries]\ndefault = \"https://wa.dev\"\n[build-dependencies]\nproto = { package = \"ns:proto\", version = \"^1.0.0\" }\n[build.generators.a]\nmodule = \"ns:proto@1.0.0\"\nfrom = \"./a.proto\"\noutput-dir = \"gen\"\n[build.generators.b]\nmodule = \"ns:proto@1.0.0\"\nfrom = \"./b.proto\"\noutput-dir = \"gen/b\"\n\"#\n    .parse()\n    .unwrap();\n    let h = H::new(\n        &[(\"a.proto\", b\"a\"), (\"b.proto\", b\"b\")],\n        vec![(\"a.proto\", resp(\"a.wado\", vec![])), (\"b.proto\", resp(\"b.wado\", vec![]))],\n    );\n    let out = rt().block_on(run_pipeline(&m, tmp.path(), &h, &P)).unwrap();\n    println!(\"deleted = {:?}\", out.deleted);\n    assert!(tmp.path().join(\"gen/b/b.wado\").exists(), \"b's output was deleted: {:?}\", out.deleted);\n}\n\n#[test]\nfn generator_version_change_hits_stale_cache() {\n    let tmp = tempfile::tempdir().unwrap();\n    let mk = |v: &str| -> Manifest {\n        format!(\n            r#\"\n[package]\nname = \"host\"\nversion = \"0.1.0\"\n[registries]\ndefault = \"https://wa.dev\"\n[build-dependencies]\nproto = {{ package = \"ns:proto\", version = \"^1.0.0\" }}\n[build.generators.a]\nmodule = \"ns:proto@{v}\"\nfrom = \"./a.proto\"\n\"#\n        )\n        .parse()\n        .unwrap()\n    };\n    let h = H::new(&[(\"a.proto\", b\"a\")], vec![(\"a.proto\", resp(\"a.wado\", vec![]))]);\n    rt().block_on(run_pipeline(&mk(\"1.0.0\"), tmp.path(), &h, &P)).unwrap();\n    let h2 = H::new(&[(\"a.proto\", b\"a\")], vec![(\"a.proto\", resp(\"a.wado\", vec![]))]);\n    let out = rt().block_on(run_pipeline(&mk(\"1.1.0\"), tmp.path(), &h2, &P)).unwrap();\n    assert!(out.cached.is_empty(), \"generator changed but cache hit: {:?}\", out);\n}\n\n#[test]\nfn output_dir_change_hits_stale_cache() {\n    let tmp = tempfile::tempdir().unwrap();\n    let mk = |d: &str| -> Manifest {\n        format!(\n            r#\"\n[package]\nname = \"host\"\nversion = \"0.1.0\"\n[registries]\ndefault = \"https://wa.dev\"\n[build-dependencies]\nproto = {{ package = \"ns:proto\", version = \"^1.0.0\" }}\n[build.generators.a]\nmodule = \"ns:proto@1.0.0\"\nfrom = \"./a.proto\"\noutput-dir = \"{d}\"\n\"#\n        )\n        .parse()\n        .unwrap()\n    };\n    let h = H::new(&[(\"a.proto\", b\"a\")], vec![(\"a.proto\", resp(\"a.wado\", vec![]))]);\n    rt().block_on(run_pipeline(&mk(\"gen1\"), tmp.path(), &h, &P)).unwrap();\n    let h2 = H::new(&[(\"a.proto\", b\"a\")], vec![(\"a.proto\", resp(\"a.wado\", vec![]))]);\n    let out = rt().block_on(run_pipeline(&mk(\"gen2\"), tmp.path(), &h2, &P)).unwrap();\n    assert!(\n        tmp.path().join(\"gen2/a.wado\").exists(),\n        \"new output dir not populated: {:?}\",\n        out\n    );\n}\n\n#[test]\nfn absolute_read_path_never_caches() {\n    let tmp = tempfile::tempdir().unwrap();\n    let m: Manifest = r#\"\n[package]\nname = \"host\"\nversion = \"0.1.0\"\n[registries]\ndefault = \"https://wa.dev\"\n[build-dependencies]\nproto = { package = \"ns:proto\", version = \"^1.0.0\" }\n[build.generators.a]\nmodule = \"ns:proto@1.0.0\"\nfrom = \"./a.proto\"\n\"#\n    .parse()\n    .unwrap();\n    let hash = wado_compiler::kiln::content_hash(b\"inc\");\n    let read = || vec![GeneratorReadRecord { path: \"/abs/inc.proto\".into(), content_hash: hash }];\n    let srcs: &[(&str, &[u8])] = &[(\"a.proto\", b\"a\"), (\"/abs/inc.proto\", b\"inc\")];\n    let h = H::new(srcs, vec![(\"a.proto\", resp(\"a.wado\", read()))]);\n    rt().block_on(run_pipeline(&m, tmp.path(), &h, &P)).unwrap();\n    let h2 = H::new(srcs, vec![(\"a.proto\", resp(\"a.wado\", read()))]);\n    let out = rt().block_on(run_pipeline(&m, tmp.path(), &h2, &P)).unwrap();\n    assert_eq!(out.cached, vec![\"a\".to_string()], \"{:?}\", out);\n}\n"
+              },
+              "is_error": false,
+              "output": null
+            },
+            {
+              "name": "Run",
+              "input": {
+                "args": [
+                  "test",
+                  "-p",
+                  "wado-cli",
+                  "--test",
+                  "kiln_review_check"
+                ],
+                "timeout": 1800
+              },
+              "is_error": false,
+              "output": "exit code 101\n<stderr>\n   Compiling wado-cli v0.1.0 (/home/user/wado/wado-cli)\n    Finished `test` profile [unoptimized + debuginfo] target(s) in 2.31s\n     Running tests/kiln_review_check.rs (/home/user/wado/scratchpad/eddy-target/debug/deps/kiln_review_check-00f4e7e5ae8cb11d)\nerror: test failed, to rerun pass `-p wado-cli --test kiln_review_check`\n</stderr>\n<stdout>\n\nrunning 4 tests\ntest nested_output_dirs ... FAILED\ntest output_dir_change_hits_stale_cache ... FAILED\ntest generator_version_change_hits_stale_cache ... FAILED\ntest absolute_read_path_never_caches ... FAILED\n\nfailures:\n\n---- nested_output_dirs stdout ----\ndeleted = [\"gen/b/b.wado\"]\n\nthread 'nested_output_dirs' (21598) panicked at wado-cli/tests/kiln_review_check.rs:88:5:\nb's output was deleted: [\"gen/b/b.wado\"]\nnote: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\n\n---- output_dir_change_hits_stale_cache stdout ----\n\nthread 'output_dir_change_hits_stale_cache' (21599) panicked at wado-cli/tests/kiln_review_check.rs:145:5:\nnew output dir not populated: PipelineOutcome { cached: [\"a\"], executed: [], deleted: [] }\n\n---- generator_version_change_hits_stale_cache stdout ----\n\nthread 'generator_version_change_hits_stale_cache' (21597) panicked at wado-cli/tests/kiln_review_check.rs:116:5:\ngenerator changed but cache hit: PipelineOutcome { cached: [\"a\"], executed: [], deleted: [] }\n\n---- absolute_read_path_never_caches stdout ----\n\nthread 'absolute_read_path_never_caches' (21596) panicked at wado-cli/tests/kiln_review_check.rs:176:5:\nassertion `left == right` failed: PipelineOutcome { cached: [], executed: [\"a\"], deleted: [] }\n  left: []\n right: [\"a\"]\n\n\nfailures:\n    absolute_read_path_never_caches\n    generator_version_change_hits_stale_cache\n    nested_output_dirs\n    output_dir_change_hits_stale_cache\n\ntest result: FAILED. 0 passed; 4 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s\n\n</stdout>"
+            }
+          ],
+          "usage": {
+            "input_tokens": 10,
+            "output_tokens": 7562,
+            "cache_creation_input_tokens": 13912,
+            "cache_read_input_tokens": 365201
+          },
+          "grade": {
+            "hit": false,
+            "finding": -1,
+            "reason": "No finding covers NotFound errors from concurrent removal aborting walk_and_delete. Finding 0 is about walk_and_delete, but it describes nested output dirs causing wrong deletions, which is a different root cause."
+          },
+          "error": null
+        },
+        {
+          "findings": [
+            {
+              "file": "wado-cli/src/kiln_driver.rs",
+              "summary": "A cached result is reused after the generator module changes, because the cache check never compares the recorded `generator` identity.",
+              "detail": "`run_pipeline` finds a prior entry by invocation name and `options_hash` only. `cache_matches` then checks the primary file, the inputs, the reads and the outputs, but never compares `entry.generator` with `generator_identity(&invocation.module)`. If a user changes `module = \"ns:proto@1.0.0\"` to `@2.0.0` and leaves the schema alone, the build reports the invocation as cached and keeps the output from the old generator. The lockfile also keeps saying the old generator made it. Reproduced: running again with the module changed to 2.0.0 gave `cached: [\"g\"], executed: []`."
+            },
+            {
+              "file": "wado-cli/src/kiln_driver.rs",
+              "summary": "After `output-dir` changes, the cache still hits, so nothing is written to the new directory.",
+              "detail": "`cache_matches` re-hashes the output paths recorded in the lockfile (still under the old directory). It never checks that they sit under the invocation's current `output_dir`. When the user changes `output-dir`, the old files still match, so the invocation counts as cached. The new directory stays empty, and code that imports from it breaks. The prior entry is written back unchanged, so the lockfile keeps pointing at the old directory. Reproduced: changing `output-dir` to `gen/new` gave `cached: [\"g\"]` and no `gen/new/a.wado`."
+            },
+            {
+              "file": "wado-cli/src/kiln_driver.rs",
+              "summary": "When one invocation's output directory is nested inside another's, cleanup deletes the inner invocation's freshly generated files.",
+              "detail": "Cleanup runs once per directory and walks it recursively. Each directory's kept list holds only the outputs of invocations whose `output_dir` is exactly that directory. With `output-dir = \"gen\"` and `output-dir = \"gen/inner\"`, the walk of `gen` goes into `gen/inner` and deletes the inner generator's output, which is not on `gen`'s kept list. The lockfile still records that file, so every build regenerates it and deletes it again. Reproduced: `deleted: [\"gen/inner/b.wado\"]` right after it was generated."
+            },
+            {
+              "file": "wado-cli/src/compiler_host.rs",
+              "summary": "Generators get file reads that are not limited to the project: `read-file(\"../x\")` or an absolute path reads any file on the machine.",
+              "detail": "`run_generator` hands the plain `wado_lsp::FilesystemCompilerHost` to the kiln runtime. `read_file` passes the path straight to `load_source`, which just does `base_path.join(path)`. Absolute paths and `..` segments therefore reach any file the user can read. A third-party generator from a registry can read secrets such as `~/.ssh` keys or `.env` files and copy them into its generated output. Reproduced: `load_source(\"../secret.txt\")` from the project root returned the file's contents."
+            },
+            {
+              "file": "wado-cli/src/kiln_runtime.rs",
+              "summary": "On the real CLI host, a missing file reaches the generator as `io(...)` instead of `not-found`.",
+              "detail": "`read_file` returns `HostError::NotFound` only for `SourceError::NotFound`. The CLI's filesystem host never produces that variant: every failure, including a missing file, comes back as `SourceError::IoError`. Generators therefore cannot tell an optional include that is absent from a real I/O failure, and treat an absent file as a hard error. Reproduced: loading a missing file returned `Err(IoError { ..., \"No such file or directory\" })`."
+            },
+            {
+              "file": "wado-cli/src/kiln_driver.rs",
+              "summary": "If a generator reads a file by absolute path, its cache never hits again.",
+              "detail": "`build_cache_entry` and `cache_matches` pass read paths through `InvocationPath::normalize`, which drops empty path segments and so removes the leading `/`. `/abs/x.proto` is stored as `abs/x.proto`. The next build loads that relative path, the load fails, and the generator re-runs on every build. Reproduced: the lockfile recorded `path = \"abs/x.proto\"` and the second run executed again instead of hitting the cache."
+            }
+          ],
+          "turns": 7,
+          "calls": [
+            {
+              "name": "Grep",
+              "input": {
+                "pattern": "async_support|fn create_config|consume_fuel|epoch",
+                "path": "wado-cli/src/runtime.rs",
+                "output_mode": "content"
+              },
+              "is_error": false,
+              "output": null
+            },
+            {
+              "name": "Grep",
+              "input": {
+                "pattern": "async fn load_source",
+                "path": "wado-lsp/src",
+                "output_mode": "content",
+                "-A": 25
+              },
+              "is_error": false,
+              "output": null
+            },
+            {
+              "name": "Read",
+              "input": {
+                "file_path": "wado-cli/src/runtime.rs",
+                "offset": 70,
+                "limit": 60
+              },
+              "is_error": false,
+              "output": null
+            },
+            {
+              "name": "Grep",
+              "input": {
+                "pattern": "^name = \"wasmtime\"\\nversion = .*",
+                "path": "Cargo.lock",
+                "multiline": true,
+                "output_mode": "content"
+              },
+              "is_error": false,
+              "output": null
+            },
+            {
+              "name": "Grep",
+              "input": {
+                "pattern": "pub mod|pub use",
+                "path": "wado-cli/src/lib.rs",
+                "output_mode": "content"
+              },
+              "is_error": false,
+              "output": null
+            },
+            {
+              "name": "Write",
+              "input": {
+                "file_path": "wado-cli/tests/kiln_review.rs",
+                "content": "use std::path::Path;\nuse std::sync::Mutex;\n\nuse indexmap::IndexMap;\nuse wado_cli::kiln_driver::{GeneratorProvider, PipelineOutcome, ProviderError, run_pipeline};\nuse wado_compiler::compiler_host::{\n    CompilerHost, Diagnostic, GeneratorOutputFile, GeneratorReadRecord, GeneratorRequest,\n    GeneratorResponse, GeneratorRunnerError, SourceError,\n};\nuse wado_compiler::kiln::GeneratorModule;\nuse wado_manifest::Manifest;\n\nstruct P;\nimpl GeneratorProvider for P {\n    async fn get_component(&self, _: &GeneratorModule) -> Result<Vec<u8>, ProviderError> {\n        Ok(b\"c\".to_vec())\n    }\n}\n\nstruct H {\n    sources: IndexMap<String, Vec<u8>>,\n    responses: Mutex<IndexMap<String, GeneratorResponse>>,\n}\nimpl H {\n    fn new(sources: &[(&str, &[u8])], responses: Vec<(&str, GeneratorResponse)>) -> Self {\n        Self {\n            sources: sources.iter().map(|(k, v)| (k.to_string(), v.to_vec())).collect(),\n            responses: Mutex::new(responses.into_iter().map(|(k, v)| (k.to_string(), v)).collect()),\n        }\n    }\n}\nimpl CompilerHost for H {\n    async fn load_source(&self, path: &str) -> Result<Vec<u8>, SourceError> {\n        self.sources.get(path).cloned().ok_or_else(|| SourceError::NotFound { path: path.to_string() })\n    }\n    fn emit_diagnostic(&self, _d: Diagnostic) {}\n    async fn run_generator(\n        &self,\n        _wasm: &[u8],\n        request: GeneratorRequest,\n    ) -> Result<GeneratorResponse, GeneratorRunnerError> {\n        self.responses\n            .lock()\n            .unwrap()\n            .shift_remove(&request.primary.path)\n            .ok_or_else(|| GeneratorRunnerError::Host(\"no response\".into()))\n    }\n}\n\nfn run(m: &Manifest, root: &Path, h: &H) -> PipelineOutcome {\n    tokio::runtime::Builder::new_current_thread()\n        .enable_all()\n        .build()\n        .unwrap()\n        .block_on(async { run_pipeline(m, root, h, &P).await })\n        .unwrap()\n}\n\nfn resp(path: &str, reads: Vec<GeneratorReadRecord>) -> GeneratorResponse {\n    GeneratorResponse {\n        files: vec![GeneratorOutputFile {\n            path: path.to_string(),\n            content: \"pub fn x() {}\\n\".to_string(),\n            is_entry: true,\n        }],\n        reads,\n    }\n}\n\nfn manifest(version: &str, out: Option<&str>) -> Manifest {\n    let out_line = out.map(|o| format!(\"output-dir = \\\"{o}\\\"\\n\")).unwrap_or_default();\n    format!(\n        r#\"\n[package]\nname = \"host\"\nversion = \"0.1.0\"\n\n[registries]\ndefault = \"https://wa.dev\"\n\n[build-dependencies]\nproto = {{ package = \"ns:proto\", version = \"^1.0.0\" }}\n\n[build.generators.g]\nmodule = \"ns:proto@{version}\"\nfrom = \"./s.proto\"\n{out_line}\"#\n    )\n    .parse()\n    .unwrap()\n}\n\n#[test]\nfn generator_version_change_still_cache_hits() {\n    let tmp = tempfile::tempdir().unwrap();\n    let h1 = H::new(&[(\"s.proto\", b\"s\")], vec![(\"s.proto\", resp(\"a.wado\", vec![]))]);\n    run(&manifest(\"1.0.0\", None), tmp.path(), &h1);\n    let h2 = H::new(&[(\"s.proto\", b\"s\")], vec![(\"s.proto\", resp(\"a.wado\", vec![]))]);\n    let o = run(&manifest(\"2.0.0\", None), tmp.path(), &h2);\n    assert_eq!(o.executed, vec![\"g\".to_string()], \"outcome: {o:?}\");\n}\n\n#[test]\nfn output_dir_change_still_cache_hits() {\n    let tmp = tempfile::tempdir().unwrap();\n    let h1 = H::new(&[(\"s.proto\", b\"s\")], vec![(\"s.proto\", resp(\"a.wado\", vec![]))]);\n    run(&manifest(\"1.0.0\", None), tmp.path(), &h1);\n    let h2 = H::new(&[(\"s.proto\", b\"s\")], vec![(\"s.proto\", resp(\"a.wado\", vec![]))]);\n    let o = run(&manifest(\"1.0.0\", Some(\"gen/new\")), tmp.path(), &h2);\n    let exists = tmp.path().join(\"gen/new/a.wado\").exists();\n    assert!(exists, \"new output dir empty; outcome: {o:?}\");\n}\n\n#[test]\nfn nested_output_dirs_delete_each_other() {\n    let tmp = tempfile::tempdir().unwrap();\n    let m: Manifest = r#\"\n[package]\nname = \"host\"\nversion = \"0.1.0\"\n\n[registries]\ndefault = \"https://wa.dev\"\n\n[build-dependencies]\nproto = { package = \"ns:proto\", version = \"^1.0.0\" }\n\n[build.generators.outer]\nmodule = \"ns:proto@1.0.0\"\nfrom = \"./a.proto\"\noutput-dir = \"gen\"\n\n[build.generators.inner]\nmodule = \"ns:proto@1.0.0\"\nfrom = \"./b.proto\"\noutput-dir = \"gen/inner\"\n\"#\n    .parse()\n    .unwrap();\n    let h = H::new(\n        &[(\"a.proto\", b\"a\"), (\"b.proto\", b\"b\")],\n        vec![(\"a.proto\", resp(\"a.wado\", vec![])), (\"b.proto\", resp(\"b.wado\", vec![]))],\n    );\n    let o = run(&m, tmp.path(), &h);\n    assert!(tmp.path().join(\"gen/inner/b.wado\").exists(), \"deleted: {:?}\", o.deleted);\n}\n\n#[test]\nfn absolute_read_path_never_cache_hits() {\n    let tmp = tempfile::tempdir().unwrap();\n    let rec = GeneratorReadRecord {\n        path: \"/abs/x.proto\".to_string(),\n        content_hash: wado_compiler::kiln::content_hash(b\"x\"),\n    };\n    let srcs: &[(&str, &[u8])] = &[(\"s.proto\", b\"s\"), (\"/abs/x.proto\", b\"x\")];\n    let h1 = H::new(srcs, vec![(\"s.proto\", resp(\"a.wado\", vec![rec.clone()]))]);\n    run(&manifest(\"1.0.0\", None), tmp.path(), &h1);\n    let h2 = H::new(srcs, vec![(\"s.proto\", resp(\"a.wado\", vec![rec]))]);\n    let o = run(&manifest(\"1.0.0\", None), tmp.path(), &h2);\n    let lock = std::fs::read_to_string(tmp.path().join(\"wado.lock\")).unwrap();\n    assert_eq!(o.cached, vec![\"g\".to_string()], \"outcome {o:?}\\n{lock}\");\n}\n\n#[test]\nfn filesystem_host_escapes_root_and_reports_io_not_notfound() {\n    let tmp = tempfile::tempdir().unwrap();\n    let root = tmp.path().join(\"proj\");\n    std::fs::create_dir_all(&root).unwrap();\n    std::fs::write(tmp.path().join(\"secret.txt\"), b\"SECRET\").unwrap();\n    let host = wado_cli::FilesystemCompilerHost::silent(root);\n    let rt = tokio::runtime::Builder::new_current_thread().build().unwrap();\n    let outside = rt.block_on(host.load_source(\"../secret.txt\"));\n    let missing = rt.block_on(host.load_source(\"nope.proto\"));\n    println!(\"outside = {:?}\", outside.as_ref().map(|b| String::from_utf8_lossy(b).to_string()));\n    println!(\"missing = {missing:?}\");\n    assert!(outside.is_err(), \"read escaped project root\");\n}\n"
+              },
+              "is_error": false,
+              "output": null
+            },
+            {
+              "name": "Run",
+              "input": {
+                "args": [
+                  "test",
+                  "-p",
+                  "wado-cli",
+                  "--test",
+                  "kiln_review",
+                  "--",
+                  "--nocapture"
+                ],
+                "timeout": 1800
+              },
+              "is_error": false,
+              "output": "exit code 101\n<stderr>\n   Compiling wado-cli v0.1.0 (/home/user/wado/wado-cli)\n    Finished `test` profile [unoptimized + debuginfo] target(s) in 2.38s\n     Running tests/kiln_review.rs (/home/user/wado/scratchpad/eddy-target/debug/deps/kiln_review-f8cb145aa668cdb6)\n\nthread 'filesystem_host_escapes_root_and_reports_io_not_notfound' (21956) panicked at wado-cli/tests/kiln_review.rs:176:5:\nread escaped project root\nnote: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\n\nthread 'nested_output_dirs_delete_each_other' (21958) panicked at wado-cli/tests/kiln_review.rs:145:5:\ndeleted: [\"gen/inner/b.wado\"]\n\nthread 'absolute_read_path_never_cache_hits' (21955) panicked at wado-cli/tests/kiln_review.rs:161:5:\nassertion `left == right` failed: outcome PipelineOutcome { cached: [], executed: [\"g\"], deleted: [] }\n# This file is auto-generated by wado. Do not edit manually.\nversion = 1\ndeps-hash = \"\"\n\n[[generator-cache]]\ninvocation = \"g\"\ngenerator = \"ns:proto@1.0.0\"\nprimary = { path = \"s.proto\", hash = \"043a718774c572bd8a25adbeb1bfcd5c0256ae11cecf9f9c3f925d0e52beaf89\" }\noptions-hash = \"6c449f91c1adbf3945ad078f5f875c0c1f133f246c4588668faffbe23a3c195f\"\ninputs = []\nreads = [\n    { path = \"abs/x.proto\", hash = \"2d711642b726b04401627ca9fbac32f5c8530fb1903cc4db02258717921a4881\" },\n]\noutputs = [\n    { path = \"build/kiln/g/a.wado\", hash = \"24899b9d337846bedbaa133099cf7ed9f901cdbcd14f1929707a0cbe63420c30\", entry = true },\n]\n\n  left: []\n right: [\"g\"]\n\nthread 'generator_version_change_still_cache_hits' (21957) panicked at wado-cli/tests/kiln_review.rs:100:5:\nassertion `left == right` failed: outcome: PipelineOutcome { cached: [\"g\"], executed: [], deleted: [] }\n  left: []\n right: [\"g\"]\n\nthread 'output_dir_change_still_cache_hits' (21959) panicked at wado-cli/tests/kiln_review.rs:111:5:\nnew output dir empty; outcome: PipelineOutcome { cached: [\"g\"], executed: [], deleted: [] }\nerror: test failed, to rerun pass `-p wado-cli --test kiln_review`\n</stderr>\n<stdout>\n\nrunning 5 tests\noutside = Ok(\"SECRET\")\nmissing = Err(IoError { path: \"/tmp/wado-process-bCkgNS/tmp/.tmp1x3vqN/proj/nope.proto\", message: \"No such file or directory (os error 2)\" })\ntest filesystem_host_escapes_root_and_reports_io_not_notfound ... FAILED\ntest nested_output_dirs_delete_each_other ... FAILED\ntest generator_version_change_still_cache_hits ... FAILED\ntest absolute_read_path_never_cache_hits ... FAILED\ntest output_dir_change_still_cache_hits ... FAILED\n\nfailures:\n\nfailures:\n    absolute_read_path_never_cache_hits\n    filesystem_host_escapes_root_and_reports_io_not_notfound\n    generator_version_change_still_cache_hits\n    nested_output_dirs_delete_each_other\n    output_dir_change_still_cache_hits\n\ntest result: FAILED. 0 passed; 5 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s\n\n</stdout>"
+            }
+          ],
+          "usage": {
+            "input_tokens": 16,
+            "output_tokens": 7925,
+            "cache_creation_input_tokens": 16459,
+            "cache_read_input_tokens": 656030
+          },
+          "grade": {
+            "hit": false,
+            "finding": -1,
+            "reason": "None of the findings say that walk_and_delete aborts on NotFound errors when files or directories are removed concurrently; finding 2 is about the same cleanup walk but blames nested output directories."
+          },
+          "error": null
+        }
+      ]
+    }
+  ]
+}

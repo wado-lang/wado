@@ -3003,6 +3003,7 @@ impl FunctionTranslator<'_, '_> {
                 func_id,
                 args,
                 type_args,
+                ceiling: _,
             } => {
                 // The callee descriptor comes from the function record by
                 // `func_id` (Phase 5); the call node carries no `FunctionRef`.
@@ -3387,7 +3388,7 @@ impl FunctionTranslator<'_, '_> {
                 }
             }
 
-            ExprKind::IndirectCall { callee, args } => {
+            ExprKind::IndirectCall { callee, args, .. } => {
                 self.translate_indirect_call(*callee, args, expr.type_id)
             }
             ExprKind::ClosureToCanonical {

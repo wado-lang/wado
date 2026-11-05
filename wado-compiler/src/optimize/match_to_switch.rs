@@ -347,11 +347,7 @@ fn build_switch(
         // matching the other compiler-synthesized cold branches.
         let mut call_stmt = |func_id, type_id| {
             let call = engine.alloc_expr(
-                ExprKind::Call {
-                    func_id,
-                    args: CallArgs::free(vec![]),
-                    type_args: vec![],
-                },
+                ExprKind::call(func_id, vec![], CallArgs::free(vec![])),
                 type_id,
                 span,
             );

@@ -1,0 +1,11 @@
+use { println, Stdout } from "core:cli";
+use { Webgpu } from "wasi:webgpu";
+
+fn unserved() with Webgpu {
+    let _gpu = Webgpu::get_gpu();
+}
+
+export fn run() with (Stdout, Webgpu) {
+    println("instantiated");
+    unserved();
+}

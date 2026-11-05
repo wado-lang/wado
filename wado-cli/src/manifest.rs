@@ -224,11 +224,11 @@ pub(crate) fn workspace_member_dirs(root_dir: &Path, members: &[String]) -> Vec<
 /// The kind of entry point to resolve, identified by the CM world it targets.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum EntryPointKind {
-    /// `wasi:cli/command` — for `wado run` and `wado compile` (default).
+    /// `wasi:cli/command` — for `wado run` and `wado build -o -` (default).
     Command,
     /// `wasi:http/service` — for `wado serve`.
     Service,
-    /// The library world — for `wado compile --lib`. Its entry comes from
+    /// The library world — for `wado wit --lib`. Its entry comes from
     /// `[package].lib` (not the `[world]` table) and the world FQ is derived
     /// from `[package]` identity rather than being a fixed WASI world.
     Lib,
@@ -383,6 +383,17 @@ pub fn world_declaring(project: &ProjectManifest, path: &Path) -> Option<String>
         .iter()
         .find(|(_, entry)| absolutize(&project.root.join(&entry.entry)) == target)
         .map(|(world, _)| world.clone())
+}
+
+/// Whether `path` is the entry `project` declares for `world`, in the frame
+/// [`world_declaring`] compares in. One file may enter several worlds.
+#[must_use]
+pub fn declares_entry(project: &ProjectManifest, world: &str, path: &Path) -> bool {
+    project
+        .manifest
+        .world
+        .get(world)
+        .is_some_and(|entry| absolutize(&project.root.join(&entry.entry)) == absolutize(path))
 }
 
 /// Load a `wado.toml` directly from `dir` (does not walk parents).

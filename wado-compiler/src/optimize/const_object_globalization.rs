@@ -2340,7 +2340,7 @@ fn expr_readonly(body: &Body, expr: ExprId, idx: u32, gate: &Gate<'_>) -> bool {
             rest.iter()
                 .all(|&(arg, arg_use)| call_arg_readonly_operand(body, arg, idx, gate, arg_use))
         }
-        ExprKind::IndirectCall { callee, args } => {
+        ExprKind::IndirectCall { callee, args, .. } => {
             let callee = *callee;
             let args = args.clone();
             expr_readonly_operand(body, callee, idx, gate)
@@ -2762,14 +2762,14 @@ fn guard_set_on_uninit(
         span,
     });
     let cond = body.exprs.push(ExprNode {
-        kind: ExprKind::Call {
-            func_id: is_uninitialized,
-            type_args: vec![ty],
-            args: CallArgs::free(vec![ArenaCallArg {
+        kind: ExprKind::call(
+            is_uninitialized,
+            vec![ty],
+            CallArgs::free(vec![ArenaCallArg {
                 expr: global_get.into(),
                 is_mut: false,
             }]),
-        },
+        ),
         type_id: TypeTable::BOOL,
         span,
     });

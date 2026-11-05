@@ -6,6 +6,8 @@ use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+use wado_host::path_search::{is_executable, search_dirs};
+
 use crate::args::CliExit;
 
 /// What a subcommand's binary is named with.
@@ -56,15 +58,6 @@ pub fn find(name: &str) -> Option<PathBuf> {
     search_dirs()
         .into_iter()
         .find_map(|dir| resolve_in(&dir, name))
-}
-
-/// The first executable `name` on `PATH`, by the rule subcommands follow.
-#[must_use]
-pub fn find_program(name: &str) -> Option<PathBuf> {
-    search_dirs().into_iter().find_map(|dir| {
-        let path = dir.join(name);
-        is_executable(&path).then_some(path)
-    })
 }
 
 /// The `wado-<name>` one directory offers, taking the extensions in the order
@@ -118,21 +111,6 @@ where
     }
 }
 
-/// The directories a subcommand may come from.
-fn search_dirs() -> Vec<PathBuf> {
-    dirs_in(&std::env::var_os("PATH").unwrap_or_default())
-}
-
-/// An entry that is empty or relative is skipped: the operating system's own
-/// search reads an empty entry as the current directory and resolves a
-/// relative one against it, so either would let the directory a user stands in
-/// decide what `wado foo` runs.
-fn dirs_in(path: &OsStr) -> Vec<PathBuf> {
-    std::env::split_paths(path)
-        .filter(|dir| dir.is_absolute())
-        .collect()
-}
-
 /// A subcommand is spelled the way a builtin is, so a file named `wado-..` or
 /// `wado-Run` on `PATH` is not one.
 fn is_subcommand_name(name: &str) -> bool {
@@ -156,29 +134,6 @@ fn candidates(dir: &Path, name: &str) -> Vec<PathBuf> {
 #[cfg(unix)]
 fn strip_executable_extension(file: &str) -> Option<&str> {
     Some(file)
-}
-
-/// Whether this user can run it, not merely whether someone can: a file with
-/// an execute bit for another user is one the `PATH` search must walk past.
-#[cfg(unix)]
-pub(crate) fn is_executable(path: &Path) -> bool {
-    use std::os::unix::ffi::OsStrExt as _;
-
-    if !std::fs::metadata(path).is_ok_and(|m| m.is_file()) {
-        return false;
-    }
-    let Ok(c_path) = std::ffi::CString::new(path.as_os_str().as_bytes()) else {
-        return false;
-    };
-    // SAFETY: `c_path` is a valid NUL-terminated string for the call's duration.
-    unsafe {
-        libc::faccessat(
-            libc::AT_FDCWD,
-            c_path.as_ptr(),
-            libc::X_OK,
-            libc::AT_EACCESS,
-        ) == 0
-    }
 }
 
 /// Windows decides executability by extension, so `PATHEXT` both names the
@@ -213,14 +168,10 @@ fn strip_executable_extension(file: &str) -> Option<&str> {
     })
 }
 
-#[cfg(not(unix))]
-fn is_executable(path: &Path) -> bool {
-    path.is_file()
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use wado_host::path_search::dirs_in;
 
     /// What an executable is named, and where an absolute path starts: both
     /// differ by platform, and the code under test reads both.

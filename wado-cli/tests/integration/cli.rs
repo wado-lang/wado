@@ -6,6 +6,7 @@
 use std::time::Duration;
 
 use predicates::prelude::*;
+use wado_host::runner::embedded_entry;
 #[cfg(unix)]
 use wado_host::sandbox;
 
@@ -43,6 +44,151 @@ fn test_compile_project_under_path_with_space() {
         .assert()
         .success();
     assert!(out.exists(), "expected out.wasm to be written");
+}
+
+/// `wado build -o -` hands a runner what `wado run` would run, on stdout, and
+/// `--embed-entry` names the entry inside it.
+#[test]
+fn test_build_to_stdout_can_carry_its_entry() {
+    let tmp = tempfile::tempdir().unwrap();
+    let main = tmp.path().join("main.wado");
+    std::fs::write(
+        &main,
+        "use { println, Stdout } from \"core:cli\";\n\
+         export fn run() with Stdout { println(\"ran\"); }\n",
+    )
+    .unwrap();
+    let build = |extra: &[&str]| {
+        wado()
+            .arg("build")
+            .args(extra)
+            .args(["-o", "-"])
+            .arg(&main)
+            .assert()
+            .success()
+            .stderr(predicate::str::is_empty())
+            .get_output()
+            .stdout
+            .clone()
+    };
+
+    let carrying = build(&["--embed-entry"]);
+    assert!(carrying.starts_with(b"\0asm"));
+    assert_eq!(
+        embedded_entry(&carrying),
+        Some(main.display().to_string()),
+        "the entry should be in the component"
+    );
+    assert_eq!(embedded_entry(&build(&[])), None);
+}
+
+/// With no input, the entry comes from the manifest, as under `wado run`.
+#[test]
+fn test_build_to_stdout_takes_its_entry_from_the_manifest() {
+    let tmp = tempfile::tempdir().unwrap();
+    std::fs::write(
+        tmp.path().join("wado.toml"),
+        "[package]\nname = \"app\"\nversion = \"0.1.0\"\n\n\
+         [world]\n\"wasi:cli/command\" = \"main.wado\"\n",
+    )
+    .unwrap();
+    std::fs::write(tmp.path().join("main.wado"), "export fn run() { }\n").unwrap();
+
+    let built = wado()
+        .current_dir(tmp.path())
+        .args(["build", "--embed-entry", "-o", "-"])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+
+    let entry = embedded_entry(&built).expect("the entry should be in the component");
+    assert!(entry.ends_with("main.wado"), "entry: {entry}");
+}
+
+/// A relative `HOME` names another directory from every working directory, so
+/// a checkout could otherwise supply the user's own config.
+#[test]
+fn test_a_relative_home_reads_no_config_from_the_current_directory() {
+    let tmp = tempfile::tempdir().unwrap();
+    let config = tmp.path().join(".home/.config/wado");
+    std::fs::create_dir_all(&config).unwrap();
+    std::fs::write(config.join("config.toml"), "not toml [[[\n").unwrap();
+    std::fs::write(tmp.path().join("main.wado"), "export fn run() { }\n").unwrap();
+
+    wado_in(tmp.path())
+        .env("HOME", ".home")
+        .env_remove("XDG_CONFIG_HOME")
+        .args(["run", "main.wado"])
+        .assert()
+        .success()
+        .stderr(predicate::str::contains("config.toml").not());
+}
+
+/// `build/<world>.wasm` is the world the manifest declares: a driver given
+/// another file runs it without taking that path.
+#[test]
+fn test_run_of_an_undeclared_file_leaves_the_worlds_artifact_alone() {
+    let tmp = tempfile::tempdir().unwrap();
+    std::fs::write(
+        tmp.path().join("wado.toml"),
+        "[package]\nname = \"app\"\nversion = \"0.1.0\"\n\n\
+         [world]\n\"wasi:cli/command\" = \"main.wado\"\n",
+    )
+    .unwrap();
+    std::fs::write(tmp.path().join("main.wado"), "export fn run() { }\n").unwrap();
+    std::fs::write(tmp.path().join("tool.wado"), "export fn run() { }\n").unwrap();
+    let artifact = tmp.path().join("build/wasi-cli-command.wasm");
+
+    wado_in(tmp.path())
+        .args(["run", "tool.wado"])
+        .assert()
+        .success();
+    assert!(
+        !artifact.exists(),
+        "tool.wado took the declared world's path"
+    );
+
+    wado_in(tmp.path())
+        .args(["run", "main.wado"])
+        .assert()
+        .success();
+    assert!(
+        artifact.exists(),
+        "the declared entry should build its world"
+    );
+}
+
+/// A compile that succeeds prints nothing, and says what it wrote only at
+/// `--log-level debug`. A runner's build leaves its program's stderr alone
+/// because of this.
+#[test]
+fn test_compile_names_its_output_only_at_debug() {
+    let tmp = tempfile::tempdir().unwrap();
+    let main = tmp.path().join("main.wado");
+    std::fs::write(
+        &main,
+        "use { println, Stdout } from \"core:cli\";\n\
+         export fn run() with Stdout { println(\"hi\"); }\n",
+    )
+    .unwrap();
+    let out = tmp.path().join("out.wasm");
+    let compile = |extra: &[&str]| {
+        wado()
+            .arg("compile")
+            .args(extra)
+            .arg("-o")
+            .arg(&out)
+            .arg(&main)
+            .assert()
+            .success()
+    };
+    compile(&[]).stderr(predicate::str::is_empty());
+    compile(&["--log-level", "debug"]).stderr(predicate::str::contains(format!(
+        "Generated: {}",
+        out.display()
+    )));
 }
 
 /// Constant-argument specialization stops at `--optimize-specializations`

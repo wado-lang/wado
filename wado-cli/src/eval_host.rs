@@ -36,8 +36,8 @@ use crate::fingerprint::{Input, compiler_digest, hash_field, write_entry};
 use crate::kiln_provider::hex32;
 use crate::knobs::CompileKnobs;
 use crate::run_cache::ReadLog;
-use crate::runtime::CAPTURED_STDIO_CAPACITY;
 use wado_host::engine::{DEFAULT_GC_HEAP_INITIAL_SIZE, fuel_engine};
+use wado_host::guest::CAPTURED_STDIO_CAPACITY;
 use wado_host::random;
 use wado_host::sync::{join_in_drop, joined, lock};
 
@@ -274,7 +274,7 @@ impl EvalHost {
         deps: Arc<Dependencies>,
     ) -> (Compiled, Option<Vec<Input>>) {
         let options = CompilerOptions {
-            opt_level: self.knobs.opt_level.to_compiler(),
+            opt_level: self.knobs.compiler_opt_level(),
             codegen_flags: self.knobs.codegen_flags.clone(),
             ..CompilerOptions::default()
         };

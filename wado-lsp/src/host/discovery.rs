@@ -391,10 +391,12 @@ pub fn cache_root() -> Option<PathBuf> {
 }
 
 /// The user's home directory, as the platform names it (`%USERPROFILE%` on
-/// Windows, where `HOME` is normally unset). An empty `HOME` names none.
+/// Windows, where `HOME` is normally unset). An empty or relative `HOME` names
+/// none: a relative one would be a different directory from every working
+/// directory, so a checkout could supply it.
 #[must_use]
 pub fn home_dir() -> Option<PathBuf> {
-    std::env::home_dir().filter(|home| !home.as_os_str().is_empty())
+    std::env::home_dir().filter(|home| home.is_absolute())
 }
 
 /// The entry module of a source dependency: the file itself for a path naming

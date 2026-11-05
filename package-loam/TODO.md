@@ -12,7 +12,7 @@ leaves this file, and `design.md` states what it built.
 ## Roadmap
 
 1. [ ] TPU and WebGPU at their best speed. A pass is a graph built once per
-   shape class and compiled for each device: StableHLO through `wado:pjrt` for
+   shape class and compiled for each device: StableHLO through `core:pjrt` for
    a TPU, Loam's own compiler for WebGPU. See
    [Loam on TPU and WebGPU](./devices.md), whose plan lists the steps, a TPU
    run and many requests at once among them. Finished when every step of that
@@ -344,10 +344,9 @@ makes of it.
 
 A buffer crosses the component boundary as a `list<u8>`, which the guest
 converts from or to f32 one element at a time, so crossing costs more than the
-device's own copy. Under `wado run-webgpu`, whose wasmtime is a generation
-behind `wado run`'s, a loop allocating per element (`map` and `collect`) runs
-twenty times slower than under `wado run`. The backend writes its own loops for
-that reason.
+device's own copy. Under `wado run-webgpu`, a loop allocating per element (`map`
+and `collect`) ran twenty times slower than under `wado run`, on a wasmtime a
+generation behind it. The backend writes its own loops for that reason.
 
 Gemma 3 (270M) generates about 2% slower on `WebGpuBackend` than at
 `73611c2bfc0`, where the `loam-cpu-perf` branch began, while it loads in half

@@ -1,0 +1,1780 @@
+{
+  "reviewer": "claude-opus-5-5",
+  "grader": "claude-opus-5-5",
+  "tools": true,
+  "symbols": false,
+  "run": true,
+  "max_turns": 40,
+  "diff_limit": 2000000,
+  "entries": [
+    {
+      "fix": 1915,
+      "culprit": 1202,
+      "defect": "For path-form method calls like `Scale::scaled(&p, 2, 3)`, the receiver is passed as `args[0]`, but self params were filtered from the parameter-name list, so every label shifted one argument left (`factor:` on `&p`, `bias:` on `2`).",
+      "runs": [
+        {
+          "findings": [
+            {
+              "file": "wado-lsp/src/inlay_hints.rs",
+              "summary": "When a method that takes `self` is called in path form (`Type::method(&obj, x)`), the self parameter is dropped from the name list, so every parameter-name hint moves one argument to the left and the receiver gets the wrong label.",
+              "detail": "`hint_static_method_call_args` uses `method_param_names`, which calls `filter_non_self_param_names` and removes `&self`/`&mut self`. That is correct for `obj.method(x)`, but in a static-path call the receiver is passed as the first positional argument. `emit_arg_param_hints` then pairs the names with the arguments in order. I ran `impl P { fn sum(&self, k: i32) ... }` with the call `P::sum(&p, 2)`: the hint `k:` landed on `&p` (character 52), and the real `k` argument `2` got no hint."
+            },
+            {
+              "file": "wado-compiler/src/elaborator.rs",
+              "summary": "`local_types` stores one TypeId per binding and each new elaboration overwrites it, so locals in trait default method bodies show the concrete type from whichever impl was elaborated last, not the generic type.",
+              "detail": "A trait default method body is elaborated again for each implementing impl, with the trait's type parameters bound to that impl's concrete arguments. Each pass calls `record_local_symbol` with the same binding `AstId`, and `local_types.insert` replaces the earlier entry. I ran `trait Maker<T> { fn twice(&self) -> T { let v = self.make(); return v; } }` with impls `Maker<i32> for A` and `Maker<String> for B`: the hint on `v` was `: String` instead of `: T`. This is wrong for every implementor except the last one."
+            }
+          ],
+          "turns": 16,
+          "calls": [
+            {
+              "name": "Grep",
+              "input": {
+                "pattern": "pub struct (LetStmt|ForOfStmt|ClosureExpr) \\{",
+                "path": "wado-compiler/src/ast.rs",
+                "output_mode": "content",
+                "-A": 25
+              },
+              "is_error": false,
+              "output": null
+            },
+            {
+              "name": "Grep",
+              "input": {
+                "pattern": "pub enum Pattern \\{",
+                "path": "wado-compiler/src/ast.rs",
+                "output_mode": "content",
+                "-A": 60
+              },
+              "is_error": false,
+              "output": null
+            },
+            {
+              "name": "Read",
+              "input": {
+                "file_path": "wado-compiler/src/synthesis/cm_binding.rs",
+                "offset": 200,
+                "limit": 260
+              },
+              "is_error": false,
+              "output": null
+            },
+            {
+              "name": "Grep",
+              "input": {
+                "pattern": "params:",
+                "path": "wado-compiler/src/symbol.rs",
+                "output_mode": "content",
+                "-B": 5
+              },
+              "is_error": false,
+              "output": null
+            },
+            {
+              "name": "Grep",
+              "input": {
+                "pattern": "FunctionSymbol \\{",
+                "path": "wado-compiler/src",
+                "output_mode": "content",
+                "-A": 6
+              },
+              "is_error": false,
+              "output": null
+            },
+            {
+              "name": "Grep",
+              "input": {
+                "pattern": "record_local_symbol\\(",
+                "path": "wado-compiler/src",
+                "output_mode": "content"
+              },
+              "is_error": false,
+              "output": null
+            },
+            {
+              "name": "Read",
+              "input": {
+                "file_path": "wado-compiler/src/elaborator/stmt.rs",
+                "offset": 300,
+                "limit": 100
+              },
+              "is_error": false,
+              "output": null
+            },
+            {
+              "name": "Grep",
+              "input": {
+                "pattern": "fn (elaborate_function|elaborate_method|build_function)\\w*",
+                "path": "wado-compiler/src/elaborator",
+                "output_mode": "content"
+              },
+              "is_error": false,
+              "output": null
+            },
+            {
+              "name": "Read",
+              "input": {
+                "file_path": "wado-compiler/src/elaborator/item.rs",
+                "offset": 1600,
+                "limit": 90
+              },
+              "is_error": false,
+              "output": null
+            },
+            {
+              "name": "Grep",
+              "input": {
+                "pattern": "default method",
+                "path": "wado-compiler/src/elaborator",
+                "output_mode": "content",
+                "-i": true,
+                "head_limit": 30
+              },
+              "is_error": false,
+              "output": null
+            },
+            {
+              "name": "Read",
+              "input": {
+                "file_path": "wado-compiler/src/elaborator/item.rs",
+                "offset": 1460,
+                "limit": 60
+              },
+              "is_error": false,
+              "output": null
+            },
+            {
+              "name": "Read",
+              "input": {
+                "file_path": "wado-compiler/src/elaborator/call.rs",
+                "offset": 160,
+                "limit": 30
+              },
+              "is_error": false,
+              "output": null
+            },
+            {
+              "name": "Grep",
+              "input": {
+                "pattern": "default_method|default methods",
+                "path": "wado-compiler/src/elaborator/orchestration.rs",
+                "output_mode": "content",
+                "-n": true
+              },
+              "is_error": false,
+              "output": null
+            },
+            {
+              "name": "Grep",
+              "input": {
+                "pattern": "t\\.methods|trait_decl\\.methods|\\.body\\.is_some\\(\\)",
+                "path": "wado-compiler/src/elaborator",
+                "output_mode": "content",
+                "head_limit": 30
+              },
+              "is_error": false,
+              "output": null
+            },
+            {
+              "name": "Read",
+              "input": {
+                "file_path": "wado-compiler/src/elaborator/orchestration.rs",
+                "offset": 1490,
+                "limit": 50
+              },
+              "is_error": false,
+              "output": null
+            },
+            {
+              "name": "Write",
+              "input": {
+                "file_path": "wado-lsp/tests/inlay_probe.rs",
+                "content": "use wado_lsp::test_support::MapHost;\nuse wado_lsp::{Engine, InlayHint, Position, Range};\n\nasync fn hints(source: &str) -> Vec<InlayHint> {\n    let path = \"/test.wado\";\n    let uri = format!(\"file://{path}\");\n    let host = MapHost::single(path, source);\n    let mut engine = Engine::new();\n    engine.open_document(&uri, source.to_string());\n    let range = Range {\n        start: Position { line: 0, character: 0 },\n        end: Position { line: u32::MAX, character: u32::MAX },\n    };\n    engine.inlay_hints(&uri, range, &host).await\n}\n\n#[test]\nfn probe() {\n    futures::executor::block_on(async {\n        let srcs = [\n            concat!(\n                \"trait Maker<T> {\\n\",\n                \"    fn make(&self) -> T;\\n\",\n                \"    fn twice(&self) -> T { let v = self.make(); return v; }\\n\",\n                \"}\\n\",\n                \"struct A {}\\n\",\n                \"struct B {}\\n\",\n                \"impl Maker<i32> for A { fn make(&self) -> i32 { return 1; } }\\n\",\n                \"impl Maker<String> for B { fn make(&self) -> String { return \\\"a\\\"; } }\\n\",\n                \"fn run() -> i32 { let a = A {}; let b = B {}; let s = b.twice(); return a.twice(); }\\n\",\n            ),\n            concat!(\n                \"fn id<T>(x: T) -> T { let y = x; return y; }\\n\",\n                \"fn run() -> i32 { let s = id(\\\"a\\\"); return id(1); }\\n\",\n            ),\n            concat!(\n                \"struct P { x: i32 }\\n\",\n                \"impl P { fn sum(&self, k: i32) -> i32 { return self.x + k; } }\\n\",\n                \"fn run() -> i32 { let p = P { x: 1 }; return P::sum(&p, 2); }\\n\",\n            ),\n            concat!(\n                \"fn run() -> i32 { let items: Array<i32> = [1, 2]; let mut t: i32 = 0; for let [a, b] of [[1,2]] { t = t + a; } return t; }\\n\",\n            ),\n        ];\n        for s in srcs {\n            let h = hints(s).await;\n            eprintln!(\"=== {s}\\n{h:#?}\");\n        }\n    });\n}\n"
+              },
+              "is_error": false,
+              "output": null
+            },
+            {
+              "name": "Run",
+              "input": {
+                "args": [
+                  "test",
+                  "-p",
+                  "wado-lsp",
+                  "--test",
+                  "inlay_probe",
+                  "--",
+                  "--nocapture"
+                ]
+              },
+              "is_error": false,
+              "output": null
+            }
+          ],
+          "usage": {
+            "input_tokens": 34,
+            "output_tokens": 6956,
+            "cache_creation_input_tokens": 59117,
+            "cache_read_input_tokens": 726031
+          },
+          "grade": {
+            "hit": true,
+            "finding": 0,
+            "reason": "Finding 0 identifies the same root cause: for path-form method calls, filter_non_self_param_names drops the self param, so labels shift one argument left onto the receiver."
+          },
+          "error": null
+        },
+        {
+          "findings": [
+            {
+              "file": "wado-lsp/src/inlay_hints.rs",
+              "summary": "When a `&self` method is called with static-call syntax (`Type::method(&recv, arg)`), every parameter-name hint is shifted by one, so the receiver argument gets the first real parameter's name.",
+              "detail": "`hint_static_method_call_args` uses `filter_non_self_param_names`, which removes the `self` parameter, then zips the remaining names with *all* call arguments. With static-call syntax the receiver is written out as the first argument. For `impl Counter { fn add(&self, by: i32) }`, the call `Counter::add(&c, 5)` gets the hint `by:` on `&c` (I reproduced this at line 6, character 24), and the real `by` argument `5` gets no hint. For methods with more parameters, every hint is wrong."
+            },
+            {
+              "file": "wado-compiler/src/elaborator/stmt.rs",
+              "summary": "The type stored in `local_types` is the binding's type at the moment the local is declared, before later inference fills it in, so the hints show unfinished types such as `: []` and `: fn(unknown) -> unknown`.",
+              "detail": "`record_local_symbol(..., type_id)` keeps the `TypeId` passed to `add_local` and never updates it after the body is unified. I reproduced two cases. `let mut a = []; a.push(1);` shows the hint `: []` instead of `Array<i32>`. `let f = |x| x + 1; let y: i32 = f(2);` shows `: fn(unknown) -> unknown` on `f` and `: unknown` on the closure parameter `x` (the same happens in closure.rs when no expected type exists yet). The user sees wrong or meaningless type hints for these common inferred bindings."
+            },
+            {
+              "file": "wado-lsp/src/inlay_hints.rs",
+              "summary": "Tuple-destructuring lets such as `let (p, q) = pair();` get no type hints, even though the module says tuple patterns recurse into their leaves.",
+              "detail": "`hint_pattern_bindings` recurses into `Pattern::Tuple`, but the elaborator's tuple-let path never calls `record_local_symbol` for the leaf bindings. `local_type_name` therefore returns None and nothing is shown. I reproduced this with both `let (p, q) = (1, 2);` and `let (p, q) = pair();`: the hint list was empty. This is a missing result for a pattern shape the change says it supports."
+            }
+          ],
+          "turns": 14,
+          "calls": [
+            {
+              "name": "Grep",
+              "input": {
+                "pattern": "fn synthesize_general_export_binding|is_async_export|user_returns_result|ResolvedType::GenericInstance \\{ name",
+                "path": "wado-compiler/src/synthesis/cm_binding.rs",
+                "output_mode": "content"
+              },
+              "is_error": false,
+              "output": null
+            },
+            {
+              "name": "Read",
+              "input": {
+                "file_path": "wado-compiler/src/synthesis/cm_binding.rs",
+                "offset": 200,
+                "limit": 300
+              },
+              "is_error": false,
+              "output": null
+            },
+            {
+              "name": "Grep",
+              "input": {
+                "pattern": "pub enum Pattern|pub struct StaticMethodCallExpr|pub struct MethodCallExpr|pub struct CallExpr|pub enum SelfKind|pub struct FunctionSymbol",
+                "path": "wado-compiler/src",
+                "output_mode": "content",
+                "-A": 25
+              },
+              "is_error": false,
+              "output": null
+            },
+            {
+              "name": "Grep",
+              "input": {
+                "pattern": "SelfKind::(None|Ref|MutRef)",
+                "path": "wado-compiler/src/parser.rs",
+                "output_mode": "content",
+                "-B": 4
+              },
+              "is_error": false,
+              "output": null
+            },
+            {
+              "name": "Read",
+              "input": {
+                "file_path": "wado-compiler/src/parser.rs",
+                "offset": 1305,
+                "limit": 100
+              },
+              "is_error": false,
+              "output": null
+            },
+            {
+              "name": "Grep",
+              "input": {
+                "pattern": "fn record_reference|record_reference\\(",
+                "path": "wado-compiler/src/elaborator",
+                "output_mode": "content",
+                "head_limit": 40
+              },
+              "is_error": false,
+              "output": null
+            },
+            {
+              "name": "Grep",
+              "input": {
+                "pattern": "references\\s*\\.borrow_mut\\(\\)",
+                "path": "wado-compiler/src",
+                "output_mode": "content",
+                "head_limit": 40
+              },
+              "is_error": false,
+              "output": null
+            },
+            {
+              "name": "Read",
+              "input": {
+                "file_path": "wado-compiler/src/elaborator.rs",
+                "offset": 400,
+                "limit": 160
+              },
+              "is_error": false,
+              "output": null
+            },
+            {
+              "name": "Grep",
+              "input": {
+                "pattern": "FunctionSymbol \\{",
+                "path": "wado-compiler/src",
+                "output_mode": "content",
+                "-A": 8
+              },
+              "is_error": false,
+              "output": null
+            },
+            {
+              "name": "Read",
+              "input": {
+                "file_path": "wado-compiler/src/analyze.rs",
+                "offset": 420,
+                "limit": 60
+              },
+              "is_error": false,
+              "output": null
+            },
+            {
+              "name": "Write",
+              "input": {
+                "file_path": "wado-lsp/tests/zz_inlay_probe.rs",
+                "content": "use wado_lsp::test_support::MapHost;\nuse wado_lsp::{Engine, InlayHint, Position, Range};\n\nasync fn hints(source: &str) -> Vec<InlayHint> {\n    let path = \"/test.wado\";\n    let uri = format!(\"file://{path}\");\n    let host = MapHost::single(path, source);\n    let mut engine = Engine::new();\n    engine.open_document(&uri, source.to_string());\n    let range = Range {\n        start: Position { line: 0, character: 0 },\n        end: Position { line: u32::MAX, character: u32::MAX },\n    };\n    engine.inlay_hints(&uri, range, &host).await\n}\n\n#[test]\nfn probe_ufcs() {\n    futures::executor::block_on(async {\n        let source = concat!(\n            \"struct Counter { value: i32 }\\n\",\n            \"impl Counter {\\n\",\n            \"    fn add(&self, by: i32) -> i32 { return self.value + by; }\\n\",\n            \"}\\n\",\n            \"fn run() -> i32 {\\n\",\n            \"    let c = Counter { value: 0 };\\n\",\n            \"    return Counter::add(&c, 5);\\n\",\n            \"}\\n\",\n        );\n        let h = hints(source).await;\n        eprintln!(\"UFCS: {h:#?}\");\n    });\n}\n\n#[test]\nfn probe_misc() {\n    futures::executor::block_on(async {\n        let source = concat!(\n            \"fn run() -> i32 {\\n\",\n            \"    let a = [1, 2];\\n\",\n            \"    let s = `x {a[0]}`;\\n\",\n            \"    let o: Option<i32> = Some(3);\\n\",\n            \"    if let Some(v) = o { return v; }\\n\",\n            \"    let (p, q) = (1, \\\"x\\\");\\n\",\n            \"    let f = |x| x * 2;\\n\",\n            \"    return f(1);\\n\",\n            \"}\\n\",\n        );\n        let h = hints(source).await;\n        eprintln!(\"MISC: {h:#?}\");\n    });\n}\n"
+              },
+              "is_error": false,
+              "output": null
+            },
+            {
+              "name": "Run",
+              "input": {
+                "args": [
+                  "test",
+                  "-p",
+                  "wado-lsp",
+                  "--test",
+                  "zz_inlay_probe",
+                  "--",
+                  "--nocapture"
+                ],
+                "timeout": 1800
+              },
+              "is_error": false,
+              "output": "exit code 0\n<stderr>\n   Compiling wado-compiler v0.0.6 (/home/user/wado/wado-compiler)\n   Compiling wado-lsp v0.0.6 (/home/user/wado/wado-lsp)\n    Finished `test` profile [unoptimized + debuginfo] target(s) in 1m 05s\n     Running tests/zz_inlay_probe.rs (/home/user/wado/scratchpad/eddy-target/debug/deps/zz_inlay_probe-bcdb02ff64a5b970)\nMISC: []\nUFCS: [\n    InlayHint {\n        position: Position {\n            line: 5,\n            character: 9,\n        },\n        label: \": Counter\",\n        kind: Type,\n        padding_left: None,\n        padding_right: None,\n    },\n    InlayHint {\n        position: Position {\n            line: 6,\n            character: 24,\n        },\n        label: \"by:\",\n        kind: Parameter,\n        padding_left: None,\n        padding_right: Some(\n            true,\n        ),\n    },\n]\n</stderr>\n<stdout>\n\nrunning 2 tests\ntest probe_misc ... ok\ntest probe_ufcs ... ok\n\ntest result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.41s\n\n</stdout>"
+            },
+            {
+              "name": "Write",
+              "input": {
+                "file_path": "wado-lsp/tests/zz_inlay_probe.rs",
+                "content": "use wado_lsp::test_support::MapHost;\nuse wado_lsp::{Engine, InlayHint, Position, Range};\n\nasync fn hints(source: &str) -> Vec<InlayHint> {\n    let path = \"/test.wado\";\n    let uri = format!(\"file://{path}\");\n    let host = MapHost::single(path, source);\n    let mut engine = Engine::new();\n    engine.open_document(&uri, source.to_string());\n    let range = Range {\n        start: Position { line: 0, character: 0 },\n        end: Position { line: u32::MAX, character: u32::MAX },\n    };\n    engine.inlay_hints(&uri, range, &host).await\n}\n\nfn show(name: &str, h: &[InlayHint]) {\n    let v: Vec<_> = h.iter().map(|h| (h.position.line, h.position.character, h.label.clone())).collect();\n    eprintln!(\"{name}: {v:?}\");\n}\n\n#[test]\nfn probe_misc() {\n    futures::executor::block_on(async {\n        show(\"tuple\", &hints(\"fn run() -> i32 {\\n    let (p, q) = (1, 2);\\n    return p + q;\\n}\\n\").await);\n        show(\"closure\", &hints(\"fn run() -> i32 {\\n    let f = |x| x * 2;\\n    return f(1);\\n}\\n\").await);\n        show(\"iflet\", &hints(\"fn run() -> i32 {\\n    let o: Option<i32> = Some(3);\\n    if let Some(v) = o { return v; }\\n    return 0;\\n}\\n\").await);\n        show(\"letmut\", &hints(\"fn run() -> i32 {\\n    let mut zz = 1;\\n    zz = 2;\\n    return zz;\\n}\\n\").await);\n        show(\"ref\", &hints(\"fn run() -> i32 {\\n    let a: Array<i32> = [1];\\n    let r = &a;\\n    return r[0];\\n}\\n\").await);\n        show(\"stdlib\", &hints(\"fn run() -> i32 {\\n    let mut a: Array<i32> = [];\\n    a.push(1);\\n    return a.len();\\n}\\n\").await);\n        show(\"or\", &hints(\"variant E { A(i32), B(i32) }\\nfn run(e: E) -> i32 {\\n    let x = match e { A(v) | B(v) => v };\\n    return x;\\n}\\n\").await);\n    });\n}\n"
+              },
+              "is_error": false,
+              "output": null
+            },
+            {
+              "name": "Run",
+              "input": {
+                "args": [
+                  "test",
+                  "-p",
+                  "wado-lsp",
+                  "--test",
+                  "zz_inlay_probe",
+                  "--",
+                  "--nocapture"
+                ],
+                "timeout": 1800
+              },
+              "is_error": false,
+              "output": "exit code 0\n<stderr>\n   Compiling wado-lsp v0.0.6 (/home/user/wado/wado-lsp)\n    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.07s\n     Running tests/zz_inlay_probe.rs (/home/user/wado/scratchpad/eddy-target/debug/deps/zz_inlay_probe-bcdb02ff64a5b970)\ntuple: []\nclosure: [(1, 9, \": fn(unknown) -> unknown\"), (1, 14, \": unknown\")]\niflet: []\nletmut: [(1, 14, \": i32\")]\nref: [(2, 9, \": &Array<i32>\")]\nstdlib: [(2, 11, \"value:\")]\nor: [(2, 9, \": i32\")]\n</stderr>\n<stdout>\n\nrunning 1 test\ntest probe_misc ... ok\n\ntest result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.64s\n\n</stdout>"
+            },
+            {
+              "name": "Write",
+              "input": {
+                "file_path": "wado-lsp/tests/zz_inlay_probe.rs",
+                "content": "use wado_lsp::test_support::MapHost;\nuse wado_lsp::{Engine, InlayHint, Position, Range};\n\nasync fn hints(source: &str) -> Vec<InlayHint> {\n    let path = \"/test.wado\";\n    let uri = format!(\"file://{path}\");\n    let host = MapHost::single(path, source);\n    let mut engine = Engine::new();\n    engine.open_document(&uri, source.to_string());\n    let range = Range {\n        start: Position { line: 0, character: 0 },\n        end: Position { line: u32::MAX, character: u32::MAX },\n    };\n    engine.inlay_hints(&uri, range, &host).await\n}\n\nfn show(name: &str, h: &[InlayHint]) {\n    let v: Vec<_> = h.iter().map(|h| (h.position.line, h.position.character, h.label.clone())).collect();\n    eprintln!(\"{name}: {v:?}\");\n}\n\n#[test]\nfn probe_misc() {\n    futures::executor::block_on(async {\n        show(\"emptyarr\", &hints(\"fn run() -> i32 {\\n    let mut a = [];\\n    a.push(1);\\n    return a[0];\\n}\\n\").await);\n        show(\"closure_ctx\", &hints(\"fn apply(f: fn(i32) -> i32) -> i32 { return f(1); }\\nfn run() -> i32 {\\n    return apply(|x| x * 2);\\n}\\n\").await);\n        show(\"closure_use\", &hints(\"fn run() -> i32 {\\n    let f = |x| x + 1;\\n    let y: i32 = f(2);\\n    return y;\\n}\\n\").await);\n        show(\"tuple2\", &hints(\"fn pair() -> (i32, i32) { return (1, 2); }\\nfn run() -> i32 {\\n    let (p, q) = pair();\\n    return p + q;\\n}\\n\").await);\n    });\n}\n"
+              },
+              "is_error": false,
+              "output": null
+            },
+            {
+              "name": "Run",
+              "input": {
+                "args": [
+                  "test",
+                  "-p",
+                  "wado-lsp",
+                  "--test",
+                  "zz_inlay_probe",
+                  "--",
+                  "--nocapture"
+                ],
+                "timeout": 1800
+              },
+              "is_error": false,
+              "output": "exit code 0\n<stderr>\n   Compiling wado-lsp v0.0.6 (/home/user/wado/wado-lsp)\n    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.66s\n     Running tests/zz_inlay_probe.rs (/home/user/wado/scratchpad/eddy-target/debug/deps/zz_inlay_probe-bcdb02ff64a5b970)\nemptyarr: [(1, 13, \": []\")]\nclosure_ctx: [(2, 17, \"f:\"), (2, 19, \": i32\")]\nclosure_use: [(1, 9, \": fn(unknown) -> unknown\"), (1, 14, \": unknown\")]\ntuple2: []\n</stderr>\n<stdout>\n\nrunning 1 test\ntest probe_misc ... ok\n\ntest result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.49s\n\n</stdout>"
+            }
+          ],
+          "usage": {
+            "input_tokens": 30,
+            "output_tokens": 8985,
+            "cache_creation_input_tokens": 61389,
+            "cache_read_input_tokens": 640611
+          },
+          "grade": {
+            "hit": true,
+            "finding": 0,
+            "reason": "Finding 0 describes the same root cause: in static/path-form method calls the self param is filtered out, so every parameter-name label shifts one argument left onto the receiver."
+          },
+          "error": null
+        },
+        {
+          "findings": [
+            {
+              "file": "wado-lsp/src/inlay_hints.rs",
+              "summary": "When an impl method that takes `&self` is called in static form (`Type::method(recv, arg)`), every parameter-name hint lands one argument too early, so the receiver is labelled with the first non-self parameter's name.",
+              "detail": "`method_param_names` reads names through `filter_non_self_param_names`, which drops the `&self` / `&mut self` parameter, and the call-site arguments are then paired with those names from the first argument. For `MethodCallExpr` the receiver is not in `args`, so this is correct. For `StaticMethodCallExpr`, though, the receiver is the first entry in `args`. I reproduced this with `impl P { fn dist(&self, other: &P) ... }` and `P::dist(&a, &b)`: the hint `other:` was placed on `&a`, the receiver, and `&b` got no hint."
+            },
+            {
+              "file": "wado-compiler/src/elaborator.rs",
+              "summary": "A trait default method's body is elaborated again for each implementing type, so the single `local_types` entry per binding keeps the type from whichever impl ran last, and the hint shows that concrete type.",
+              "detail": "`record_local_symbol` writes `local_types.insert(key, type_id)` keyed only on (module, AstId). A default method body inside a `trait` is elaborated once for each impl, and each pass overwrites the previous entry. I reproduced this with `trait Desc { fn describe(&self) -> i32 { let me = self; ... } }` implemented for `A` and `B`: the hint on `me` reads `: &B`. It should be the generic `&Self`, and the result depends on which impl was elaborated last. Parameters and closure parameters inside such bodies are affected in the same way."
+            },
+            {
+              "file": "wado-lsp/src/inlay_hints.rs",
+              "summary": "When a closure's parameter types are not settled at the point the binding is recorded, the hints show `: unknown` and `: fn(unknown) -> unknown` instead of being left out or showing the inferred type.",
+              "detail": "`push_type_hint` prints whatever `TypeId` the elaborator recorded, including `TypeTable::UNKNOWN` and function types that contain it. `closure_param_type` records UNKNOWN when there is no expected type, and the `for` destructuring path records `unwrap_or(TypeTable::UNKNOWN)`. I reproduced this: `let f = |q| q + a; return f(b);` produced `f: fn(unknown) -> unknown` and `q: unknown`, and `let g = |x| x;` did the same. These hints are wrong or useless, because the closure is later called with `i32`. Hints whose type contains UNKNOWN should be skipped."
+            }
+          ],
+          "turns": 22,
+          "calls": [
+            {
+              "name": "Read",
+              "input": {
+                "file_path": "/wado-compiler/src/synthesis/cm_binding.rs",
+                "offset": 240,
+                "limit": 200
+              },
+              "is_error": false,
+              "output": null
+            },
+            {
+              "name": "Grep",
+              "input": {
+                "pattern": "pub enum Pattern",
+                "path": "wado-compiler/src/ast.rs",
+                "output_mode": "content",
+                "-A": 60
+              },
+              "is_error": false,
+              "output": null
+            },
+            {
+              "name": "Grep",
+              "input": {
+                "pattern": "fn elaborate_generic|instantiate_generic_function|monomorph",
+                "path": "wado-compiler/src/elaborator",
+                "output_mode": "content",
+                "head_limit": 30
+              },
+              "is_error": false,
+              "output": null
+            },
+            {
+              "name": "Grep",
+              "input": {
+                "pattern": "params: .*\\.params|params: Vec<String>|params,",
+                "path": "wado-compiler/src/symbol.rs",
+                "output_mode": "content",
+                "-C": 3
+              },
+              "is_error": false,
+              "output": null
+            },
+            {
+              "name": "Grep",
+              "input": {
+                "pattern": "FunctionSymbol \\{",
+                "output_mode": "content",
+                "-A": 8,
+                "path": "wado-compiler/src"
+              },
+              "is_error": false,
+              "output": null
+            },
+            {
+              "name": "Read",
+              "input": {
+                "file_path": "/wado-compiler/src/analyze.rs",
+                "offset": 425,
+                "limit": 50
+              },
+              "is_error": false,
+              "output": null
+            },
+            {
+              "name": "Grep",
+              "input": {
+                "pattern": "(?i)ufcs|fully.qualified (method )?call|Type::method\\(self",
+                "path": "wado-compiler/src/elaborator",
+                "output_mode": "content",
+                "head_limit": 20
+              },
+              "is_error": false,
+              "output": null
+            },
+            {
+              "name": "Grep",
+              "input": {
+                "pattern": "[A-Z][a-z]+::[a-z_]+\\(&?[a-z]+, ",
+                "glob": "wado-compiler/tests/fixtures/*.wado",
+                "output_mode": "content",
+                "head_limit": 20
+              },
+              "is_error": false,
+              "output": null
+            },
+            {
+              "name": "Grep",
+              "input": {
+                "pattern": "[A-Z]\\w*::[a-z_]+\\(&(mut )?\\w+",
+                "glob": "**/*.wado",
+                "output_mode": "content",
+                "head_limit": 10
+              },
+              "is_error": false,
+              "output": null
+            },
+            {
+              "name": "Grep",
+              "input": {
+                "pattern": "pub struct CallExpr|NamedArg|pub struct MethodCallExpr|pub struct StaticMethodCallExpr",
+                "path": "wado-compiler/src/ast.rs",
+                "output_mode": "content",
+                "-A": 14
+              },
+              "is_error": false,
+              "output": null
+            },
+            {
+              "name": "Grep",
+              "input": {
+                "pattern": "pub enum SelfKind",
+                "path": "wado-compiler/src/ast.rs",
+                "output_mode": "content",
+                "-A": 12
+              },
+              "is_error": false,
+              "output": null
+            },
+            {
+              "name": "Grep",
+              "input": {
+                "pattern": "SelfKind::None",
+                "path": "wado-compiler/src/parser.rs",
+                "output_mode": "content",
+                "-B": 8
+              },
+              "is_error": false,
+              "output": null
+            },
+            {
+              "name": "Grep",
+              "input": {
+                "pattern": "SelfKind::",
+                "path": "wado-compiler/src",
+                "output_mode": "content",
+                "head_limit": 40
+              },
+              "is_error": false,
+              "output": null
+            },
+            {
+              "name": "Read",
+              "input": {
+                "file_path": "/wado-compiler/src/doc.rs",
+                "offset": 608,
+                "limit": 20
+              },
+              "is_error": false,
+              "output": null
+            },
+            {
+              "name": "Read",
+              "input": {
+                "file_path": "/wado-compiler/src/elaborator/item.rs",
+                "offset": 1640,
+                "limit": 40
+              },
+              "is_error": false,
+              "output": null
+            },
+            {
+              "name": "Grep",
+              "input": {
+                "pattern": "Token::SelfLower|SelfValue|\"self\"",
+                "path": "wado-compiler/src/parser.rs",
+                "output_mode": "content",
+                "-C": 3,
+                "head_limit": 60
+              },
+              "is_error": false,
+              "output": null
+            },
+            {
+              "name": "Grep",
+              "input": {
+                "pattern": "pub struct LetStmt",
+                "path": "wado-compiler/src/ast.rs",
+                "output_mode": "content",
+                "-A": 16
+              },
+              "is_error": false,
+              "output": null
+            },
+            {
+              "name": "Read",
+              "input": {
+                "file_path": "/wado-compiler/src/elaborator/stmt.rs",
+                "offset": 470,
+                "limit": 50
+              },
+              "is_error": false,
+              "output": null
+            },
+            {
+              "name": "Read",
+              "input": {
+                "file_path": "/wado-compiler/src/elaborator/stmt.rs",
+                "offset": 300,
+                "limit": 90
+              },
+              "is_error": false,
+              "output": null
+            },
+            {
+              "name": "Read",
+              "input": {
+                "file_path": "/wado-compiler/src/elaborator/orchestration.rs",
+                "offset": 740,
+                "limit": 50
+              },
+              "is_error": false,
+              "output": null
+            },
+            {
+              "name": "Read",
+              "input": {
+                "file_path": "/wado-compiler/src/semantics.rs",
+                "offset": 590,
+                "limit": 160
+              },
+              "is_error": false,
+              "output": null
+            },
+            {
+              "name": "Read",
+              "input": {
+                "file_path": "/wado-compiler/src/elaborator/orchestration.rs",
+                "offset": 960,
+                "limit": 80
+              },
+              "is_error": false,
+              "output": null
+            },
+            {
+              "name": "Write",
+              "input": {
+                "file_path": "/wado-lsp/tests/zz_inlay_probe.rs",
+                "content": "use wado_lsp::test_support::MapHost;\nuse wado_lsp::{Engine, InlayHint, Position, Range};\n\nasync fn hints(source: &str) -> Vec<InlayHint> {\n    let path = \"/test.wado\";\n    let uri = format!(\"file://{path}\");\n    let host = MapHost::single(path, source);\n    let mut engine = Engine::new();\n    engine.open_document(&uri, source.to_string());\n    let range = Range {\n        start: Position { line: 0, character: 0 },\n        end: Position { line: u32::MAX, character: u32::MAX },\n    };\n    engine.inlay_hints(&uri, range, &host).await\n}\n\nfn dump(src: &str) {\n    let h = futures::executor::block_on(hints(src));\n    eprintln!(\"=== SRC ===\\n{src}\");\n    for x in &h {\n        eprintln!(\"  {}:{} {:?} {}\", x.position.line, x.position.character, x.kind, x.label);\n    }\n}\n\n#[test]\nfn probe() {\n    dump(concat!(\n        \"trait Desc {\\n\",\n        \"    fn id(&self) -> i32;\\n\",\n        \"    fn describe(&self) -> i32 { let me = self; return me.id(); }\\n\",\n        \"}\\n\",\n        \"struct A { v: i32 }\\n\",\n        \"struct B { v: i64 }\\n\",\n        \"impl Desc for A { fn id(&self) -> i32 { return 1; } }\\n\",\n        \"impl Desc for B { fn id(&self) -> i32 { return 2; } }\\n\",\n        \"fn run() -> i32 { let a = A { v: 1 }; return a.describe(); }\\n\",\n    ));\n    dump(concat!(\n        \"fn id<T>(x: T) -> T { let y = x; return y; }\\n\",\n        \"fn run() -> i32 { let s = id(\\\"a\\\"); return id(3); }\\n\",\n    ));\n    dump(concat!(\n        \"fn add(a: i32, b: i32 = 5) -> i32 { let f = |q| q + a; return f(b); }\\n\",\n        \"fn run() -> i32 { let [p, q] = [1, 2]; let t = add(1); return t + p + q; }\\n\",\n    ));\n    dump(concat!(\n        \"fn run() -> i32 {\\n\",\n        \"  let mut arr: Array<i32> = [];\\n\",\n        \"  arr.push(3);\\n\",\n        \"  let v = arr[0];\\n\",\n        \"  let g = |x| x;\\n\",\n        \"  let o: Option<i32> = Option::<i32>::Some(1);\\n\",\n        \"  return v;\\n\",\n        \"}\\n\",\n    ));\n    dump(concat!(\n        \"struct P { x: i32 }\\n\",\n        \"impl P { fn dist(&self, other: &P) -> i32 { return self.x - other.x; } }\\n\",\n        \"fn run() -> i32 { let a = P { x: 1 }; let b = P { x: 2 }; return P::dist(&a, &b); }\\n\",\n    ));\n    dump(concat!(\n        \"fn helper(x: i32) -> i32 { return x; }\\n\",\n        \"fn run() -> i32 { let n = 3 |> helper(); return n; }\\n\",\n    ));\n}\n"
+              },
+              "is_error": false,
+              "output": null
+            },
+            {
+              "name": "Run",
+              "input": {
+                "args": [
+                  "test",
+                  "-p",
+                  "wado-lsp",
+                  "--test",
+                  "zz_inlay_probe",
+                  "--",
+                  "--nocapture"
+                ],
+                "timeout": 1800
+              },
+              "is_error": false,
+              "output": "exit code 0\n<stderr>\n   Compiling wado-lsp v0.0.6 (/home/user/wado/wado-lsp)\n    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.02s\n     Running tests/zz_inlay_probe.rs (/home/user/wado/scratchpad/eddy-target/debug/deps/zz_inlay_probe-bcdb02ff64a5b970)\n=== SRC ===\ntrait Desc {\n    fn id(&self) -> i32;\n    fn describe(&self) -> i32 { let me = self; return me.id(); }\n}\nstruct A { v: i32 }\nstruct B { v: i64 }\nimpl Desc for A { fn id(&self) -> i32 { return 1; } }\nimpl Desc for B { fn id(&self) -> i32 { return 2; } }\nfn run() -> i32 { let a = A { v: 1 }; return a.describe(); }\n\n  2:38 Type : &B\n  8:23 Type : A\n=== SRC ===\nfn id<T>(x: T) -> T { let y = x; return y; }\nfn run() -> i32 { let s = id(\"a\"); return id(3); }\n\n  0:27 Type : T\n  1:23 Type : String\n  1:29 Parameter x:\n  1:45 Parameter x:\n=== SRC ===\nfn add(a: i32, b: i32 = 5) -> i32 { let f = |q| q + a; return f(b); }\nfn run() -> i32 { let [p, q] = [1, 2]; let t = add(1); return t + p + q; }\n\n  0:41 Type : fn(unknown) -> unknown\n  0:46 Type : unknown\n  1:24 Type : i32\n  1:27 Type : i32\n  1:44 Type : i32\n  1:51 Parameter a:\n=== SRC ===\nfn run() -> i32 {\n  let mut arr: Array<i32> = [];\n  arr.push(3);\n  let v = arr[0];\n  let g = |x| x;\n  let o: Option<i32> = Option::<i32>::Some(1);\n  return v;\n}\n\n  2:11 Parameter value:\n  3:7 Type : i32\n  4:7 Type : fn(unknown) -> unknown\n  4:12 Type : unknown\n=== SRC ===\nstruct P { x: i32 }\nimpl P { fn dist(&self, other: &P) -> i32 { return self.x - other.x; } }\nfn run() -> i32 { let a = P { x: 1 }; let b = P { x: 2 }; return P::dist(&a, &b); }\n\n  2:23 Type : P\n  2:43 Type : P\n  2:73 Parameter other:\n=== SRC ===\nfn helper(x: i32) -> i32 { return x; }\nfn run() -> i32 { let n = 3 |> helper(); return n; }\n\n</stderr>\n<stdout>\n\nrunning 1 test\ntest probe ... ok\n\ntest result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.57s\n\n</stdout>"
+            }
+          ],
+          "usage": {
+            "input_tokens": 46,
+            "output_tokens": 11395,
+            "cache_creation_input_tokens": 33553,
+            "cache_read_input_tokens": 1118968
+          },
+          "grade": {
+            "hit": true,
+            "finding": 0,
+            "reason": "Finding 0 points to the same root cause: self params are filtered out for StaticMethodCallExpr even though the receiver is args[0], which shifts every label one argument left."
+          },
+          "error": null
+        }
+      ]
+    },
+    {
+      "fix": 1697,
+      "culprit": 1396,
+      "defect": "The op-only walker (gen_repeat_body) emitted every greedy/non-greedy Optional as a plain one-token first-set check, so it ignored the lowered strategy (lookahead, scan guard, shape lookahead, `??` ATN). Optionals inside LR-suffix bodies were therefore mis-decided.",
+      "runs": [
+        {
+          "findings": [
+            {
+              "file": "package-gale/src/parser_gen.wado",
+              "summary": "A required group with overlapping first sets inside a non-scannable `+` loop no longer reports an error when no alternative matches, so invalid input parses as valid.",
+              "detail": "`gen_simplecst_overlap_loop` and `gen_general_overlap_loop` now emit an `if grp_kind in group0 … else if …` chain with no final `else`. The old post-loop `if let None = opt { p.fail(...)? }` in `gen_consume_group_store_op` and `gen_general_group_store_op` was deleted. The comment says the repeat guard already checked for a match, but that is false for the first iteration of a non-scannable `+`: `gen_op_repeat_star_plus_storable` emits `while _plus_first || first_check`, so that iteration runs without checking the next token. If the token is not in any alternative's first set, no branch runs, nothing is consumed, no `Err` is raised, and the loop then exits. A mandatory `(a b | a c)+` therefore accepts zero iterations without a diagnostic. Before this change the parse failed."
+            },
+            {
+              "file": "package-gale/src/runtime/tree.wado",
+              "summary": "Rule nodes that match no tokens get a reversed span (end < start), because the old clamp was dropped.",
+              "detail": "The old code built every node's span as `Span::new(start, i32::max(start, p.last_end()))`, which kept a zero-token alternative from producing a reversed span. Now the rule wrapper calls `p.b.start_node(rk, p.peek_start())` and then `p.b.finish_node(p.last_end())`. In `tree_build_node`, `Close(e)` sets `end = e` with no clamp, and it overrides even an end raised by child spans. For an empty rule (for example the trailing empty `(sql_stmt)` after `;`), `last_end()` is the end of the previous token, which is before `peek_start()` whenever whitespace separates them. The node gets `span.end < span.start` and `Span::len()` is negative, which breaks any consumer that slices source text or maps positions from the span."
+            },
+            {
+              "file": "package-gale/src/cst_gen.wado",
+              "summary": "Node-kind constants are made by uppercasing the rule name, so two legal rule names that differ only in case produce duplicate globals and the generated parser does not compile.",
+              "detail": "`gen_node_kinds` emits `global RK_{uppercase(rule)}` and `parser_gen::rule_kind_const` refers to the same name. ANTLR rule names are case-sensitive, so a grammar with both `fooBar` and `foobar` (or `exprList` and `exprlist`) emits `RK_FOOBAR` twice and the generated module fails to compile. The old typed-CST naming kept the original case (`FooBarNode` vs `FoobarNode`), so such grammars used to build."
+            },
+            {
+              "file": "package-gale/src/runtime/tree.wado",
+              "summary": "`TreeBuilder::start_node_at` inserts into the middle of the event list on every left-recursive loop iteration, so long operator chains take quadratic time.",
+              "detail": "The left-recursive loop (`gen_lr_fn` / `emit_lr_branch_body`) calls `p.b.start_node_at(_cp, …)` for every suffix iteration. That does `self.events.insert(checkpoint, …)` at a fixed early checkpoint, shifting every event recorded since it. An expression with k binary operators therefore costs O(k²) in event shifts. This is a performance regression on inputs like the long `X1 and X2 and …` chains in the Performance compat tests and on large SQL in the sqlite benchmark. The old typed path built nested structs with no shifting."
+            }
+          ],
+          "turns": 19,
+          "calls": [
+            {
+              "name": "Grep",
+              "input": {
+                "pattern": "mangle_generic_name\\(\"Box\"|\"Box<",
+                "path": "wado-compiler/src",
+                "output_mode": "content"
+              },
+              "is_error": false,
+              "output": null
+            },
+            {
+              "name": "Grep",
+              "input": {
+                "pattern": "reify_pad_args_with_defaults",
+                "path": "wado-compiler/src",
+                "output_mode": "content",
+                "-n": true
+              },
+              "is_error": false,
+              "output": null
+            },
+            {
+              "name": "Read",
+              "input": {
+                "file_path": "wado-compiler/src/wir_build/context.rs",
+                "offset": 755,
+                "limit": 40
+              },
+              "is_error": false,
+              "output": null
+            },
+            {
+              "name": "Read",
+              "input": {
+                "file_path": "wado-compiler/src/wir_build/types.rs",
+                "offset": 510,
+                "limit": 40
+              },
+              "is_error": false,
+              "output": null
+            },
+            {
+              "name": "Read",
+              "input": {
+                "file_path": "wado-compiler/src/elaborator/reify.rs",
+                "offset": 6355,
+                "limit": 70
+              },
+              "is_error": false,
+              "output": null
+            },
+            {
+              "name": "Read",
+              "input": {
+                "file_path": "wado-compiler/src/elaborator/reify.rs",
+                "offset": 6620,
+                "limit": 60
+              },
+              "is_error": false,
+              "output": null
+            },
+            {
+              "name": "Read",
+              "input": {
+                "file_path": "wado-compiler/src/elaborator/reify.rs",
+                "offset": 6860,
+                "limit": 80
+              },
+              "is_error": false,
+              "output": null
+            },
+            {
+              "name": "Read",
+              "input": {
+                "file_path": "wado-compiler/src/elaborator/reify.rs",
+                "offset": 6320,
+                "limit": 40
+              },
+              "is_error": false,
+              "output": null
+            },
+            {
+              "name": "Read",
+              "input": {
+                "file_path": "wado-compiler/src/elaborator/reify.rs",
+                "offset": 6800,
+                "limit": 62
+              },
+              "is_error": false,
+              "output": null
+            },
+            {
+              "name": "Grep",
+              "input": {
+                "pattern": "fn new\\(start|fn last_end|fn peek_start",
+                "path": "package-gale/src",
+                "output_mode": "content",
+                "-A": 6
+              },
+              "is_error": false,
+              "output": null
+            },
+            {
+              "name": "Grep",
+              "input": {
+                "pattern": "last_end|peek_start",
+                "path": "package-gale/src/parser_gen.wado",
+                "output_mode": "content",
+                "-n": true,
+                "head_limit": 30
+              },
+              "is_error": false,
+              "output": null
+            },
+            {
+              "name": "Read",
+              "input": {
+                "file_path": "package-gale/src/parser_gen.wado",
+                "offset": 300,
+                "limit": 70
+              },
+              "is_error": false,
+              "output": null
+            },
+            {
+              "name": "Grep",
+              "input": {
+                "pattern": "p\\.advance\\(\\)|\\.advance\\(\\);",
+                "path": "package-gale/src",
+                "output_mode": "content",
+                "-n": true
+              },
+              "is_error": false,
+              "output": null
+            },
+            {
+              "name": "Grep",
+              "input": {
+                "pattern": "pub fn gen_token_constants",
+                "path": "package-gale/src/lexer_gen.wado",
+                "output_mode": "content",
+                "-A": 50
+              },
+              "is_error": false,
+              "output": null
+            },
+            {
+              "name": "Grep",
+              "input": {
+                "pattern": "gen_consume_group_store_op\\(|gen_general_group_store_op\\(|gen_consume_group_store_optional_op\\(|gen_general_group_store_optional_op\\(",
+                "path": "package-gale/src/parser_gen.wado",
+                "output_mode": "content",
+                "-n": true,
+                "-B": 3
+              },
+              "is_error": false,
+              "output": null
+            },
+            {
+              "name": "Read",
+              "input": {
+                "file_path": "package-gale/src/parser_gen.wado",
+                "offset": 3175,
+                "limit": 50
+              },
+              "is_error": false,
+              "output": null
+            },
+            {
+              "name": "Read",
+              "input": {
+                "file_path": "package-gale/src/parser_gen.wado",
+                "offset": 3715,
+                "limit": 60
+              },
+              "is_error": false,
+              "output": null
+            },
+            {
+              "name": "Read",
+              "input": {
+                "file_path": "package-gale/src/parser_gen.wado",
+                "offset": 4870,
+                "limit": 160
+              },
+              "is_error": false,
+              "output": null
+            },
+            {
+              "name": "Read",
+              "input": {
+                "file_path": "package-gale/src/parser_gen.wado",
+                "offset": 4590,
+                "limit": 30
+              },
+              "is_error": false,
+              "output": null
+            },
+            {
+              "name": "Grep",
+              "input": {
+                "pattern": "TokenStream \\{|triv_chans: ",
+                "path": "package-gale/src",
+                "output_mode": "content",
+                "-n": true
+              },
+              "is_error": false,
+              "output": null
+            },
+            {
+              "name": "Grep",
+              "input": {
+                "pattern": "kinds\\.push|starts\\.push|\\.kinds\\.pop|kinds\\.truncate",
+                "path": "package-gale/src",
+                "output_mode": "content",
+                "-n": true
+              },
+              "is_error": false,
+              "output": null
+            },
+            {
+              "name": "Read",
+              "input": {
+                "file_path": "package-gale/src/parser_gen.wado",
+                "offset": 4632,
+                "limit": 100
+              },
+              "is_error": false,
+              "output": null
+            },
+            {
+              "name": "Grep",
+              "input": {
+                "pattern": "gen_scan_functions\\(|gen_scan_lr_functions\\(|fn gen_scan_function\\b",
+                "path": "package-gale/src/parser_gen.wado",
+                "output_mode": "content",
+                "-n": true,
+                "-B": 4,
+                "-A": 4
+              },
+              "is_error": false,
+              "output": null
+            }
+          ],
+          "usage": {
+            "input_tokens": 40,
+            "output_tokens": 15861,
+            "cache_creation_input_tokens": 423759,
+            "cache_read_input_tokens": 7298997
+          },
+          "grade": {
+            "hit": false,
+            "finding": -1,
+            "reason": "None of the findings concern Optional handling in gen_repeat_body's op-only walker ignoring the lowered strategy; they cover overlap loops, spans, naming, and performance."
+          },
+          "error": null
+        },
+        {
+          "findings": [
+            {
+              "file": "package-gale/src/parser_gen.wado",
+              "summary": "When a multi-alt rule tries an alternative, fails, and moves on, it rewinds the token position but leaves that alternative's tree-builder events in place, so the final tree is wrong.",
+              "detail": "Under the new design every `expect` / `match_*` call and every nested rule wrapper writes directly into `p.b` (the `TreeBuilder`). The Ambiguous dispatch in `gen_prediction_node` was not changed: in the partial-scan path and the 'Fallback: save-and-rewind' path it runs `let r_N = _alt_N(p); if let Err(_) = r_N { p.pos = saved; }` and then tries the next alternative. The failed alternative's events (tokens and closed sub-rule nodes) are never removed. The only rollback in the PR is the checkpoint/truncate pair in `gen_rep_break_with_recovery`. So when a later alternative succeeds, the tree holds the leftover partial subtree followed by the real parse: tokens appear twice and nodes are wrong. `to_string_tree`, highlighting and every consumer see this corrupted tree even though no diagnostic is reported."
+            },
+            {
+              "file": "package-gale/src/parser_gen.wado",
+              "summary": "Required overlapping groups inside a repetition no longer report a syntax error when no alternative matches, so a mandatory `+` iteration can match nothing without any diagnostic.",
+              "detail": "`gen_consume_group_store_op` (SimpleCst shape, overlap branch) and `gen_general_group_store_op` (overlap branch) used to emit `if let None = {opt} { p.fail(...)? }` after the overlap dispatch. That check is removed. `gen_simplecst_overlap_loop` / `gen_general_overlap_loop` emit an `if/else if` chain with no final `else`, so a lookahead outside every first set takes no branch and the parser carries on. These helpers are reached from `gen_op_storable_group_inner`. In the non-scannable `+` path, the first iteration is mandatory and runs with no first-set check, so `(a b | a c)+` given a non-matching token consumes nothing and succeeds. The old code raised a parse error here. The comment saying 'the repeat-guard already verified a match' is not true for that mandatory first iteration."
+            },
+            {
+              "file": "package-gale/src/parser_gen.wado",
+              "summary": "Left-recursive rule functions open builder nodes and return early with `?` before closing them, so after an error the partial tree's Open/Close events no longer pair up.",
+              "detail": "`gen_lr_fn` emits `p.b.start_node(...)` followed by `{fn}_atom(p)?;`, and `emit_lr_branch_body` emits `start_node_at(...)`, the suffix ops (each using `?`), and only then `finish_node`. Unlike the non-LR wrapper (`let r = call; finish_node`), a failure here skips `finish_node`. Because LR rules skip the wrapper's start/finish pair, nothing closes the node. Each enclosing wrapper's `finish_node` then closes the wrong (inner) node, and the outermost node ends up with no Close at all. `tree_build_node` tolerates the missing Close, but the returned partial tree has wrong nesting and wrong spans. That breaks the 'partial tree folded closed' guarantee for any parse error inside a left-recursive rule."
+            },
+            {
+              "file": "package-gale/src/parser_gen.wado",
+              "summary": "Nodes for rules that match no tokens now get reversed spans (end < start), because the old clamp on the span end was dropped.",
+              "detail": "The typed emitter built spans with `Span::new(start, i32::max(start, p.last_end()))` (`gen_clamped_span_field`, now deleted). The wrapper and LR code now call `p.b.start_node(rk, p.peek_start())` and `p.b.finish_node(p.last_end())`. For a rule that matches zero tokens (an empty alternative or all-optional body, e.g. the `(sql_stmt)` / `(acClass)` nodes in the tests), `last_end()` is the end of the previous token, which is before `peek_start()`. `tree_build_node` uses the Close offset as the end and `Span::new` does not clamp, so `CstNode.span.end < span.start`. Any consumer computing `span.len()` or slicing source text by span gets a negative length."
+            }
+          ],
+          "turns": 9,
+          "calls": [
+            {
+              "name": "Grep",
+              "input": {
+                "pattern": "gen_consume_group_store_op\\(|gen_general_group_store_op\\(|p\\.pos = |pub fn new\\(start",
+                "path": "package-gale/src",
+                "output_mode": "content"
+              },
+              "is_error": false,
+              "output": null
+            },
+            {
+              "name": "Read",
+              "input": {
+                "file_path": "package-gale/src/parser_gen.wado",
+                "offset": 5680,
+                "limit": 110
+              },
+              "is_error": false,
+              "output": null
+            },
+            {
+              "name": "Read",
+              "input": {
+                "file_path": "package-gale/src/parser_gen.wado",
+                "offset": 3180,
+                "limit": 60
+              },
+              "is_error": false,
+              "output": null
+            },
+            {
+              "name": "Read",
+              "input": {
+                "file_path": "package-gale/src/parser_gen.wado",
+                "offset": 3725,
+                "limit": 70
+              },
+              "is_error": false,
+              "output": null
+            },
+            {
+              "name": "Grep",
+              "input": {
+                "pattern": "mangle_generic_name\\(\"Box\"",
+                "path": "wado-compiler/src",
+                "output_mode": "content",
+                "-n": true
+              },
+              "is_error": false,
+              "output": null
+            },
+            {
+              "name": "Read",
+              "input": {
+                "file_path": "wado-compiler/src/wir_build/types.rs",
+                "offset": 505,
+                "limit": 50
+              },
+              "is_error": false,
+              "output": null
+            },
+            {
+              "name": "Read",
+              "input": {
+                "file_path": "package-gale/src/runtime/lex.wado",
+                "offset": 8,
+                "limit": 15
+              },
+              "is_error": false,
+              "output": null
+            },
+            {
+              "name": "Read",
+              "input": {
+                "file_path": "package-gale/src/parser_gen.wado",
+                "offset": 4985,
+                "limit": 40
+              },
+              "is_error": false,
+              "output": null
+            }
+          ],
+          "usage": {
+            "input_tokens": 20,
+            "output_tokens": 7502,
+            "cache_creation_input_tokens": 13122,
+            "cache_read_input_tokens": 3536909
+          },
+          "grade": {
+            "hit": false,
+            "finding": -1,
+            "reason": "None of the findings concern the op-only walker (gen_repeat_body) emitting Optionals as plain first-set checks while ignoring the lowered strategy (lookahead, scan guard, shape lookahead, non-greedy ATN)."
+          },
+          "error": null
+        },
+        {
+          "findings": [
+            {
+              "file": "package-gale/src/parser_gen.wado",
+              "summary": "A required `+` repetition over a group of alternatives that share a first token now accepts input where the group is absent, with no diagnostic.",
+              "detail": "`gen_consume_group_store_op` and `gen_general_group_store_op` no longer emit the old `if let None = opt { p.fail(...)? }` check after their overlap dispatch. `gen_simplecst_overlap_loop` and `gen_general_overlap_loop` have no final `else`, so when the next token is not in any alternative's first set, no branch runs and nothing is consumed. Both `Plus` paths in `gen_op_repeat_star_plus_storable` run the first iteration with no guard (`while _plus_first || ...` and `if !_plus_first { scan }`). So the mandatory iteration can match nothing, and the loop then exits through the scan or first-set check. Example: `r : (A B | A C)+ X ;` now parses the input `X` cleanly, where the old code reported an error. The comment says the repeat guard already checked for a match, but that is false for the first `+` iteration."
+            },
+            {
+              "file": "package-gale/src/parser_gen.wado",
+              "summary": "A rule node that consumes no tokens gets a reversed span (end before start).",
+              "detail": "The rule wrapper opens a node at `p.peek_start()` and closes it at `p.last_end()`; `gen_lr_fn` and `emit_lr_branch_body` do the same. When a rule matches the empty string, `last_end()` is the end of the previous token, which is before `peek_start()`. `TreeBuilder::tree_build_node` uses the `Close` offset as-is and only extends it from child spans, and `Span::new` does not clamp. The old emitter clamped with `Span::new(start, i32::max(start, p.last_end()))` (`gen_clamped_span_field`, removed in this PR). So nodes like the empty `(sql_stmt)` after `;` in the SQLite tests now have `span.end < span.start` and a negative `len()`, which misleads span consumers such as an LSP or range queries."
+            },
+            {
+              "file": "package-gale/src/parser_gen.wado",
+              "summary": "Repeats inside left-recursive suffixes are now emitted by `gen_repeat_body`, which ignores the lowered `RepeatStrategy`, so a non-greedy `??` there becomes greedy and the optional lookahead strategies are lost.",
+              "detail": "`gen_lr_fn` emits suffix ops through `gen_ops`, `gen_op` and `gen_repeat_body`. That function only special-cases `NonGreedy`; every other `Optional` becomes a plain `if first_check`. A non-greedy `??` lowers to a `Plain` strategy, and the old path recognised it from the surface element (`rep.non_greedy && ctx.needs_atn()`, then `atn_optional_enter_cond`). That check is never reached now, so the decision the ATN simulator should make is taken greedily. `OptionalLookahead`, `OptionalShapeLookahead` and `OptionalScanGuard` are dropped the same way. The old `gen_lr_suffix_helpers` sent suffix Repeats through `gen_op_repeat`, which honoured all of these, so a left-recursive suffix containing such a repeat can now be parsed with the wrong tree or rejected."
+            },
+            {
+              "file": "package-gale/src/cst_gen.wado",
+              "summary": "Node-kind constant names are built by uppercasing the rule name, so two rules that differ only in letter case produce the same global and the generated parser does not compile.",
+              "detail": "Both `gen_node_kinds`/`rule_const` and `parser_gen::rule_kind_const` emit `RK_<UPPERCASE(name)>`. ANTLR rule names are case-sensitive, so a grammar with, for example, `typeList` and `typelist` gets two `global RK_TYPELIST` declarations, which is a duplicate-definition compile error. The removed typed emitter used distinct names (`TypeListNode` and `TypelistNode`) and accepted such grammars."
+            }
+          ],
+          "turns": 26,
+          "calls": [
+            {
+              "name": "Grep",
+              "input": {
+                "pattern": "fn gen_general_group_store_op|gen_general_group_store_op\\(|fn gen_consume_group_store_op|gen_consume_group_store_op\\(",
+                "path": "package-gale/src/parser_gen.wado",
+                "output_mode": "content"
+              },
+              "is_error": false,
+              "output": null
+            },
+            {
+              "name": "Grep",
+              "input": {
+                "pattern": "reify_pad_args_with_defaults|fn lookup_free_func_params",
+                "path": "wado-compiler/src/elaborator/reify.rs",
+                "output_mode": "content"
+              },
+              "is_error": false,
+              "output": null
+            },
+            {
+              "name": "Read",
+              "input": {
+                "file_path": "wado-compiler/src/elaborator/reify.rs",
+                "offset": 6320,
+                "limit": 80
+              },
+              "is_error": false,
+              "output": null
+            },
+            {
+              "name": "Read",
+              "input": {
+                "file_path": "wado-compiler/src/elaborator/reify.rs",
+                "offset": 6620,
+                "limit": 60
+              },
+              "is_error": false,
+              "output": null
+            },
+            {
+              "name": "Grep",
+              "input": {
+                "pattern": "fn pad_args_with_defaults",
+                "path": "wado-compiler/src",
+                "output_mode": "content",
+                "-A": 40
+              },
+              "is_error": false,
+              "output": null
+            },
+            {
+              "name": "Grep",
+              "input": {
+                "pattern": "fn lookup_function_param_defaults",
+                "path": "wado-compiler/src",
+                "output_mode": "content",
+                "-A": 50
+              },
+              "is_error": false,
+              "output": null
+            },
+            {
+              "name": "Read",
+              "input": {
+                "file_path": "wado-compiler/src/elaborator/reify.rs",
+                "offset": 6880,
+                "limit": 90
+              },
+              "is_error": false,
+              "output": null
+            },
+            {
+              "name": "Grep",
+              "input": {
+                "pattern": "struct StaticMethodDispatch|static_method_dispatch\\.insert|StaticMethodDispatch \\{",
+                "path": "wado-compiler/src",
+                "output_mode": "content",
+                "-A": 8
+              },
+              "is_error": false,
+              "output": null
+            },
+            {
+              "name": "Read",
+              "input": {
+                "file_path": "wado-compiler/src/elaborator/call.rs",
+                "offset": 820,
+                "limit": 70
+              },
+              "is_error": false,
+              "output": null
+            },
+            {
+              "name": "Read",
+              "input": {
+                "file_path": "package-gale/src/parser_gen.wado",
+                "offset": 3170,
+                "limit": 70
+              },
+              "is_error": false,
+              "output": null
+            },
+            {
+              "name": "Grep",
+              "input": {
+                "pattern": "gen_consume_group_store_optional_op\\(|gen_general_group_store_optional_op\\(",
+                "path": "package-gale/src/parser_gen.wado",
+                "output_mode": "content",
+                "-B": 3
+              },
+              "is_error": false,
+              "output": null
+            },
+            {
+              "name": "Read",
+              "input": {
+                "file_path": "package-gale/src/parser_gen.wado",
+                "offset": 4860,
+                "limit": 120
+              },
+              "is_error": false,
+              "output": null
+            },
+            {
+              "name": "Read",
+              "input": {
+                "file_path": "package-gale/src/parser_gen.wado",
+                "offset": 4980,
+                "limit": 45
+              },
+              "is_error": false,
+              "output": null
+            },
+            {
+              "name": "Read",
+              "input": {
+                "file_path": "package-gale/src/parser_gen.wado",
+                "offset": 4577,
+                "limit": 35
+              },
+              "is_error": false,
+              "output": null
+            },
+            {
+              "name": "Grep",
+              "input": {
+                "pattern": "pub fn gen_token_constants|fn token_slot_order|is_fragment",
+                "path": "package-gale/src/lexer_gen.wado",
+                "output_mode": "content",
+                "-A": 3
+              },
+              "is_error": false,
+              "output": null
+            },
+            {
+              "name": "Read",
+              "input": {
+                "file_path": "package-gale/src/lexer_gen.wado",
+                "offset": 187,
+                "limit": 70
+              },
+              "is_error": false,
+              "output": null
+            },
+            {
+              "name": "Read",
+              "input": {
+                "file_path": "package-gale/src/lexer_gen.wado",
+                "offset": 2160,
+                "limit": 40
+              },
+              "is_error": false,
+              "output": null
+            },
+            {
+              "name": "Grep",
+              "input": {
+                "pattern": "pub fn new\\(start|fn last_end|fn peek_start",
+                "path": "package-gale/src",
+                "output_mode": "content",
+                "-A": 8
+              },
+              "is_error": false,
+              "output": null
+            },
+            {
+              "name": "Grep",
+              "input": {
+                "pattern": "last_end|peek_start",
+                "path": "package-gale/src/parser_gen.wado",
+                "output_mode": "content",
+                "-A": 6,
+                "head_limit": 40
+              },
+              "is_error": false,
+              "output": null
+            },
+            {
+              "name": "Grep",
+              "input": {
+                "pattern": "mangle_generic_name\\(\"Box\"|\"Box<\"",
+                "path": "wado-compiler/src",
+                "output_mode": "content"
+              },
+              "is_error": false,
+              "output": null
+            },
+            {
+              "name": "Read",
+              "input": {
+                "file_path": "wado-compiler/src/wir_build/types.rs",
+                "offset": 505,
+                "limit": 50
+              },
+              "is_error": false,
+              "output": null
+            },
+            {
+              "name": "Grep",
+              "input": {
+                "pattern": "_lr_\\{|scan_\\{.*\\}_lr_",
+                "path": "package-gale/src/parser_gen.wado",
+                "output_mode": "content"
+              },
+              "is_error": false,
+              "output": null
+            },
+            {
+              "name": "Read",
+              "input": {
+                "file_path": "package-gale/src/parser_gen.wado",
+                "offset": 780,
+                "limit": 130
+              },
+              "is_error": false,
+              "output": null
+            },
+            {
+              "name": "Grep",
+              "input": {
+                "pattern": "fn gen_lr_call_with_prec",
+                "path": "package-gale/src/parser_gen.wado",
+                "output_mode": "content",
+                "-A": 30
+              },
+              "is_error": false,
+              "output": null
+            },
+            {
+              "name": "Grep",
+              "input": {
+                "pattern": "fn project_lr_dispatch",
+                "path": "package-gale/src/parser_gen.wado",
+                "output_mode": "content",
+                "-A": 30
+              },
+              "is_error": false,
+              "output": null
+            },
+            {
+              "name": "Read",
+              "input": {
+                "file_path": "package-gale/src/parser_gen.wado",
+                "offset": 3348,
+                "limit": 30
+              },
+              "is_error": false,
+              "output": null
+            },
+            {
+              "name": "Read",
+              "input": {
+                "file_path": "package-gale/src/parser_gen.wado",
+                "offset": 2619,
+                "limit": 35
+              },
+              "is_error": false,
+              "output": null
+            },
+            {
+              "name": "Read",
+              "input": {
+                "file_path": "wado-compiler/src/lower/plan/boxing.rs",
+                "offset": 185,
+                "limit": 70
+              },
+              "is_error": false,
+              "output": null
+            }
+          ],
+          "usage": {
+            "input_tokens": 54,
+            "output_tokens": 16748,
+            "cache_creation_input_tokens": 43858,
+            "cache_read_input_tokens": 10654943
+          },
+          "grade": {
+            "hit": true,
+            "finding": 2,
+            "reason": "Finding 2 identifies that gen_repeat_body emits Optionals in LR suffixes as a plain first-set check, so it ignores the lowered strategy (non-greedy ATN, lookahead, shape lookahead, scan guard). That is exactly the known defect."
+          },
+          "error": null
+        }
+      ]
+    },
+    {
+      "fix": 1680,
+      "culprit": 897,
+      "defect": "walk_and_delete propagated NotFound errors from read_dir, the directory entries, file_type and remove_file, so a file or directory removed concurrently during output reconcile aborted the whole pipeline with an I/O error.",
+      "runs": [
+        {
+          "findings": [
+            {
+              "file": "wado-cli/src/kiln_driver.rs",
+              "summary": "Stale-output cleanup deletes another invocation's fresh outputs when one output directory sits inside another (or is the project root).",
+              "detail": "`run_pipeline` groups kept paths by each invocation's own `output_dir`. `reconcile_outputs` then walks that directory recursively and deletes every `#![generated]` file not on that one list. `output-dir` is never validated. Say invocation A has `output-dir = \"gen\"` and B has `output-dir = \"gen/b\"`: reconciling `gen` reaches `gen/b` and deletes the files B just generated. With `output-dir = \".\"` or `\"./\"`, every generated file in the project that belongs to another generator is deleted. The lockfile still lists those deleted outputs, so the next run misses the cache and the cycle repeats."
+            },
+            {
+              "file": "wado-cli/src/kiln_driver.rs",
+              "summary": "`cache_matches` ignores the generator identity, so changing `module` (for example bumping the generator version) reuses stale outputs.",
+              "detail": "The cached entry stores `generator`, but `cache_matches` and `run_pipeline` only compare options_hash, primary, inputs, reads and outputs. If a user changes `module = \"ns:proto@1.0.0\"` to `@2.0.0`, or the generator component bytes change, it still counts as a cache hit. The old generator's output is kept, and the lockfile goes on recording the old generator string."
+            },
+            {
+              "file": "wado-cli/src/kiln_driver.rs",
+              "summary": "Changing `output-dir` still hits the cache, so nothing is written to the new directory.",
+              "detail": "`cache_matches` re-hashes the recorded output paths, which are under the old directory. It never checks that they lie under `invocation.output_dir`. After `output-dir` changes, the old files still exist and match, so the generator is skipped and the new directory stays empty. Any `use` that resolves to the new location breaks. The old outputs are never cleaned up either, because reconcile only walks the new directory."
+            },
+            {
+              "file": "wado-cli/src/kiln_runtime.rs",
+              "summary": "A generator's `read-file` can read any file on the host, outside the project, through absolute or `..` paths.",
+              "detail": "`read_file` passes the guest-supplied path straight to `FilesystemCompilerHost::load_source`, which does `base_path.join(path)`. An absolute path replaces the base, and `..` climbs out of it. A third-party generator from a registry can therefore read arbitrary user files such as `~/.ssh` keys, and its outputs can leak them into the build. Recorded reads are also normalized with the leading `/` stripped, so on the next run absolute reads are re-hashed against a different, project-relative file."
+            },
+            {
+              "file": "wado-cli/src/kiln_driver.rs",
+              "summary": "Generators can write files outside the project because `output-dir` may contain `..` segments.",
+              "detail": "`validate_rel_output_path` checks the generator-supplied file path, but the manifest `output-dir` is only passed through `InvocationPath::normalize`, which keeps `..`. With `output-dir = \"../../somewhere\"`, `execute` creates directories and writes files outside `manifest_root`. Reconcile then skips those files because `strip_prefix` fails, so they are never cleaned up."
+            },
+            {
+              "file": "wado-cli/src/kiln_runtime.rs",
+              "summary": "A missing file is never reported to the generator as `not-found`; the filesystem host always produces `io(...)`.",
+              "detail": "`read_file` returns `HostError::NotFound` only for `SourceError::NotFound`. `wado_lsp::FilesystemCompilerHost::load_source`, which the CLI uses, turns every failure, including ENOENT, into `SourceError::IoError`. A generator that probes optional imports and handles `not-found` gently instead receives an I/O error, and will probably abort the run."
+            }
+          ],
+          "turns": 5,
+          "calls": [
+            {
+              "name": "Grep",
+              "input": {
+                "pattern": "fn create_config|async_support|epoch_interruption|consume_fuel",
+                "path": "wado-cli/src/runtime.rs",
+                "output_mode": "content",
+                "-A": 3
+              },
+              "is_error": false,
+              "output": null
+            },
+            {
+              "name": "Grep",
+              "input": {
+                "pattern": "async fn load_source",
+                "path": "wado-lsp/src",
+                "output_mode": "content",
+                "-A": 25
+              },
+              "is_error": false,
+              "output": null
+            },
+            {
+              "name": "Read",
+              "input": {
+                "file_path": "wado-cli/src/runtime.rs",
+                "offset": 70,
+                "limit": 45
+              },
+              "is_error": false,
+              "output": null
+            },
+            {
+              "name": "Grep",
+              "input": {
+                "pattern": "^name = \"wasmtime\"\\nversion = .*",
+                "path": "Cargo.lock",
+                "multiline": true,
+                "output_mode": "content"
+              },
+              "is_error": false,
+              "output": null
+            },
+            {
+              "name": "Grep",
+              "input": {
+                "pattern": "async_support",
+                "path": "wado-cli/src",
+                "output_mode": "content"
+              },
+              "is_error": false,
+              "output": null
+            },
+            {
+              "name": "Grep",
+              "input": {
+                "pattern": "generator_cache|build_dependencies:",
+                "glob": "!**/kiln_driver.rs",
+                "output_mode": "content"
+              },
+              "is_error": false,
+              "output": null
+            }
+          ],
+          "usage": {
+            "input_tokens": 12,
+            "output_tokens": 5076,
+            "cache_creation_input_tokens": 99014,
+            "cache_read_input_tokens": 368687
+          },
+          "grade": {
+            "hit": false,
+            "finding": -1,
+            "reason": "None of the findings concern NotFound errors from concurrent removal aborting walk_and_delete; finding 0 is about overlapping output directories, which is a different issue."
+          },
+          "error": null
+        },
+        {
+          "findings": [
+            {
+              "file": "wado-cli/src/kiln_driver.rs",
+              "summary": "When one invocation's output directory contains another's, reconcile_outputs deletes the other invocation's freshly generated files.",
+              "detail": "run_pipeline groups kept paths by each invocation's exact output_dir string, then runs reconcile_outputs on each directory. walk_and_delete recurses into every subdirectory and deletes any `#![generated]` file missing from that directory's own kept list. Example: invocation A has `output-dir = \"gen\"` and invocation B has `output-dir = \"gen/b\"`, or A uses `build/kiln` while B uses the default `build/kiln/<name>`. Reconciling A's directory deletes all of B's outputs right after they were written, and the lockfile still records them as present. An `output-dir` of \"\" or \".\" makes the walk cover the whole project root. Nothing rejects overlapping or `..` output directories, so the walk can also reach outside the project."
+            },
+            {
+              "file": "wado-cli/src/kiln_driver.rs",
+              "summary": "The cache check ignores the generator identity, so changing the module version still counts as a cache hit and the old generator's output stays.",
+              "detail": "run_pipeline only checks that options_hash matches before calling cache_matches. cache_matches compares the primary, inputs, reads and on-disk outputs, but never compares `entry.generator` with `generator_identity(&invocation.module)`. If the user changes `module = \"ns:proto@1.0.0\"` to `@2.0.0` and leaves the schema alone, the stale entry is a hit, the new generator never runs, and the old code stays in use. (compose_cache_key would include the identity, but the driver never calls it.)"
+            },
+            {
+              "file": "wado-cli/src/kiln_driver.rs",
+              "summary": "The cache check ignores a change of output_dir, so the new output directory is never populated.",
+              "detail": "cache_matches checks recorded outputs at their old paths, such as `build/kiln/x/...`. If the user changes `output-dir`, the old files still exist and their hashes match, so the entry is a cache hit. The generator does not run, nothing is written to the new directory, and the reused entry still lists the old paths. Code that consumes the new location finds no files."
+            },
+            {
+              "file": "wado-cli/src/compiler_host.rs",
+              "summary": "Generators can read any file on the host, including absolute paths and paths with `..`, through `host::read-file`.",
+              "detail": "run_generator passes `self.inner` (wado_lsp::FilesystemCompilerHost) as the host for read-file. Its load_source just does `base_path.join(path)` followed by `std::fs::read`. A generator, which is third-party code from a registry, can call read-file(\"/home/user/.ssh/id_rsa\") or \"../../secret\". The file contents come back, and the generator can embed them in its generated output. This defeats the sandbox the module docs claim. The requested path is never confined to the project root."
+            },
+            {
+              "file": "wado-cli/src/compiler_host.rs",
+              "summary": "Generator diagnostics go to the inner LSP host, so the CLI never prints them.",
+              "detail": "kiln_runtime::run_generator relays generator diagnostics with `relay_diagnostic(host.as_ref(), ...)`, and the host it receives is `self.inner`, the wado_lsp host. That host only collects diagnostics into a vector that nobody reads. The CLI's own emit_diagnostic, which prints to stderr and applies log levels, is bypassed. Every error or warning a generator emits through `host::emit-diagnostic` is silently dropped in `wado` CLI runs."
+            },
+            {
+              "file": "wado-cli/src/kiln_runtime.rs",
+              "summary": "read-file never returns `not-found` for a missing file with the real CLI host; it always returns `io(...)`.",
+              "detail": "read_file maps only `SourceError::NotFound` to `HostError::NotFound`. wado_lsp::FilesystemCompilerHost::load_source turns every std::fs error, missing files included, into `SourceError::IoError`. So a generator using the WIT `not-found` case to probe optional include paths gets a generic I/O error instead, and may abort with an error where it should have fallen back."
+            },
+            {
+              "file": "wado-cli/src/kiln_runtime.rs",
+              "summary": "Failed read-file calls are not recorded, so a probed file that appears later does not invalidate the cache.",
+              "detail": "Only successful reads are pushed to `reads`. If a generator searches include paths and a file is missing during the run, nothing in the lockfile mentions that path. When the user later creates that file, which would change the generator's output, cache_matches still returns true and stale output is reused."
+            },
+            {
+              "file": "wado-manifest/src/lockfile.rs",
+              "summary": "Cache entries are written with Rust `{:?}` formatting, which can produce invalid TOML and leave wado.lock unparseable.",
+              "detail": "write_generator_cache_entry formats generator-supplied read paths (and other strings) with Rust Debug escaping. For control or non-printable characters this produces sequences like `\\u{1b}`, which TOML does not accept. A read path or output path containing such a character makes the saved wado.lock fail to parse. Every later run_pipeline then fails with LockParse until the user edits the file by hand."
+            }
+          ],
+          "turns": 3,
+          "calls": [
+            {
+              "name": "Grep",
+              "input": {
+                "pattern": "fn create_config|epoch_interruption|consume_fuel",
+                "path": "wado-cli/src/runtime.rs",
+                "output_mode": "content",
+                "-A": 25
+              },
+              "is_error": false,
+              "output": null
+            },
+            {
+              "name": "Grep",
+              "input": {
+                "pattern": "async fn load_source",
+                "path": "wado-lsp/src",
+                "output_mode": "content",
+                "-A": 30
+              },
+              "is_error": false,
+              "output": null
+            },
+            {
+              "name": "Grep",
+              "input": {
+                "pattern": "generator_cache|build_dependencies:",
+                "glob": "!**/kiln_driver.rs",
+                "output_mode": "content"
+              },
+              "is_error": false,
+              "output": null
+            }
+          ],
+          "usage": {
+            "input_tokens": 8,
+            "output_tokens": 5905,
+            "cache_creation_input_tokens": 9797,
+            "cache_read_input_tokens": 266813
+          },
+          "grade": {
+            "hit": false,
+            "finding": -1,
+            "reason": "No finding addresses NotFound errors from concurrent removal aborting walk_and_delete; finding 0 concerns overlapping output directories deleting other invocations' files, which is a different root cause."
+          },
+          "error": null
+        },
+        {
+          "findings": [
+            {
+              "file": "wado-cli/src/kiln_driver.rs",
+              "summary": "A generator output path that starts with `./` gets written and then deleted straight away by reconcile_outputs, and every later run misses the cache.",
+              "detail": "validate_rel_output_path accepts `./lib.wado` because `CurDir` components are allowed. The kept path is built as `InvocationPath::normalize(\"build/kiln/proto/./lib.wado\")`. normalize only strips a leading `./` and only drops empty segments, so the kept path keeps the `/./` segment. read_dir in walk_and_delete yields `build/kiln/proto/lib.wado`, which is not in `kept`. The file has the `#![generated]` marker, so it is removed in the same pipeline run that wrote it. The lockfile still records the file as an output, so the next run sees it missing, re-runs the generator, and deletes the file again. A middle `a/./b.wado` hits the same problem."
+            },
+            {
+              "file": "wado-cli/src/kiln_driver.rs",
+              "summary": "When one invocation's output_dir is inside another's, reconciling the outer directory deletes the inner invocation's freshly generated files.",
+              "detail": "run_pipeline groups kept paths by the exact output_dir string and calls reconcile_outputs once per directory. walk_and_delete recurses into every subdirectory. Take invocation A with `output-dir = \"gen\"` and B with `output-dir = \"gen/b\"`. Reconciling `gen` only keeps A's outputs, so it removes every `#![generated]` file under `gen/b`, which are B's outputs written in this same run. The lockfile still lists them as outputs, so every build loses B's code and the cache never hits."
+            },
+            {
+              "file": "wado-cli/src/kiln_driver.rs",
+              "summary": "The cache check ignores the generator module identity, the generator bytes and the output_dir, so changing the generator or the output dir reuses stale outputs.",
+              "detail": "run_pipeline only compares options_hash, and cache_matches only checks the primary, the inputs, the reads and the hashes of the recorded output files. entry.generator is never compared with generator_identity(&invocation.module). compose_cache_key, which includes the generator identity and source hash, is never called. So bumping `module = \"ns:proto@1.0.0\"` to `@2.0.0` with the same schema gives a cache hit and the old generator's code is kept. If `output-dir` changes, the old entry still matches because its outputs exist at the old paths. Nothing is generated into the new directory, and the stale entry is persisted again."
+            },
+            {
+              "file": "wado-cli/src/kiln_runtime.rs",
+              "summary": "host::read-file lets a generator read any file on the host, including absolute paths and paths that use `..` to leave the project.",
+              "detail": "read_file passes the generator-supplied path straight to FilesystemCompilerHost::load_source, which does `base_path.join(path)`. An absolute path replaces the base, and `../` segments are not rejected. Generator components come from third-party build dependencies, yet they can read e.g. `/home/user/.ssh/id_rsa` or `../../secrets` and embed the contents in generated source. This breaks the sandbox that the module documentation claims, where only the two host imports are linked."
+            },
+            {
+              "file": "wado-cli/src/kiln_runtime.rs",
+              "summary": "Failed read-file calls are not recorded and a missing file comes back as `io` instead of `not-found`, so creating a probed file later never invalidates the cache.",
+              "detail": "Only successful loads are pushed to `reads`. A generator that searches include paths and probes non-existent files leaves no trace of those probes. If one of them is created later, which changes what the generator would produce, cache_matches still reports a hit. Also, FilesystemCompilerHost::load_source maps every failure, including ENOENT, to SourceError::IoError. The `SourceError::NotFound` arm therefore never fires on the CLI host, and generators get `host-error::io` for a missing file. Generators that treat `not-found` as 'optional file absent' will fail."
+            },
+            {
+              "file": "wado-compiler/src/kiln/invocation.rs",
+              "summary": "InvocationPath::normalize quietly turns absolute paths into relative ones, so absolute read paths always miss the cache and absolute `from` paths resolve to the wrong file.",
+              "detail": "normalize splits on '/' and drops empty segments, so `/abs/schema.proto` becomes `abs/schema.proto`. build_cache_entry normalizes each recorded read path, and cache_matches then loads `<root>/abs/...`, which does not exist. Any generator that reads a file by absolute path re-runs on every build. In the same way, a manifest `from = \"/abs/schema.proto\"` is loaded relative to the project root instead of from the absolute location."
+            }
+          ],
+          "turns": 4,
+          "calls": [
+            {
+              "name": "Grep",
+              "input": {
+                "pattern": "epoch_interruption|fn create_config",
+                "path": "wado-cli/src/runtime.rs",
+                "output_mode": "content",
+                "-A": 3
+              },
+              "is_error": false,
+              "output": null
+            },
+            {
+              "name": "Read",
+              "input": {
+                "file_path": "wado-cli/src/runtime.rs",
+                "offset": 75,
+                "limit": 30
+              },
+              "is_error": false,
+              "output": null
+            },
+            {
+              "name": "Grep",
+              "input": {
+                "pattern": "^wasmtime",
+                "path": "Cargo.toml",
+                "output_mode": "content"
+              },
+              "is_error": false,
+              "output": null
+            },
+            {
+              "name": "Grep",
+              "input": {
+                "pattern": "async fn load_source",
+                "path": "wado-lsp/src",
+                "output_mode": "content",
+                "-A": 25
+              },
+              "is_error": false,
+              "output": null
+            }
+          ],
+          "usage": {
+            "input_tokens": 10,
+            "output_tokens": 5197,
+            "cache_creation_input_tokens": 7409,
+            "cache_read_input_tokens": 350827
+          },
+          "grade": {
+            "hit": false,
+            "finding": -1,
+            "reason": "None of the findings mention walk_and_delete propagating NotFound errors when files or directories are removed concurrently during reconcile; the findings about walk_and_delete cover wrong deletions caused by path normalization and nested output directories."
+          },
+          "error": null
+        }
+      ]
+    }
+  ]
+}

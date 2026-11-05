@@ -2,30 +2,51 @@
 name = "wado-host"
 version = { workspace = true }
 edition = "2024"
-description = "Native host pieces shared by the Wado CLI, its dev tools, and the compiler's tests"
+description = "Native host pieces shared by the Wado CLI, its dev tools, its runners, and the compiler's tests"
 license = { workspace = true }
 
+[features]
+default = ["toolchain"]
+# What needs the compiler. A runner calls `wado` as a program and turns this
+# off: `wado-run-webgpu`, a workspace of its own, would otherwise build it.
+toolchain = [
+    "dep:wado-compiler",
+    "dep:wado-lsp",
+    "dep:wado-manifest",
+    "dep:serde_json",
+]
+
 [dependencies]
-wado-compiler = { path = "../wado-compiler" }
-wado-lsp = { path = "../wado-lsp" }
-wado-manifest = { path = "../wado-manifest" }
+wado-compiler = { path = "../wado-compiler", optional = true }
+wado-lsp = { path = "../wado-lsp", optional = true }
+wado-manifest = { path = "../wado-manifest", optional = true }
 anyhow = { workspace = true }
+bytes = { workspace = true }
+futures = { workspace = true }
+http = { workspace = true }
+http-body = { workspace = true }
+http-body-util = { workspace = true }
+hyper = { workspace = true, features = ["client"] }
+hyper-util = { workspace = true }
 iana-time-zone = { workspace = true }
 indexmap = { workspace = true }
+lexopt = { workspace = true }
 libc = { workspace = true }
 rand = { workspace = true }
 rustls = { workspace = true }
 rustls-webpki = { workspace = true }
 serde = { workspace = true }
-serde_json = { workspace = true }
-tokio = { workspace = true }
+serde_json = { workspace = true, optional = true }
+tempfile = { workspace = true }
+tokio = { workspace = true, features = ["net", "time", "signal"] }
+tokio-rustls = { workspace = true }
+toml = { workspace = true }
 webpki-roots = { workspace = true }
 wasmtime = { workspace = true }
 wasmtime-wasi = { workspace = true }
+wasmtime-wasi-http = { workspace = true }
+wasmtime-wasi-tls = { workspace = true }
 wasmparser = { workspace = true }
-
-[dev-dependencies]
-tempfile = { workspace = true }
 
 [lints]
 workspace = true

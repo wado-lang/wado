@@ -1879,7 +1879,7 @@ fn collect_modified_vars_in_expr(
             }
         }
         // A closure's captures ride the callee, the heap summary's parameter 0.
-        ExprKind::IndirectCall { callee, args } => {
+        ExprKind::IndirectCall { callee, args, .. } => {
             modified.call_sites.push(e);
             let operands: Vec<Operand> = std::iter::once(*callee).chain(args.clone()).collect();
             for a in operands {

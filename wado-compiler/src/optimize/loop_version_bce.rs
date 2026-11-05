@@ -1717,10 +1717,10 @@ fn try_fill_idiom(
     let count = alloc_binary(engine, upper_for_len, NirBinaryOp::Sub, i_read, ty, span);
     let offset = local_read(engine, var, span);
     let fill_call = engine.alloc_expr(
-        ExprKind::Call {
-            func_id: fill_id,
-            type_args: Vec::new(),
-            args: CallArgs::free(vec![
+        ExprKind::call(
+            fill_id,
+            Vec::new(),
+            CallArgs::free(vec![
                 ArenaCallArg {
                     expr: arr_op,
                     is_mut: arr_is_mut,
@@ -1738,7 +1738,7 @@ fn try_fill_idiom(
                     is_mut: false,
                 },
             ]),
-        },
+        ),
         TypeTable::UNIT,
         span,
     );

@@ -1,0 +1,265 @@
+{
+  "grader": "claude-opus-5-5",
+  "runs": [
+    {
+      "fix": 1697,
+      "run": 0,
+      "findings": [
+        {
+          "file": "package-gale/src/parser_gen.wado",
+          "summary": "A required group inside a repeat whose alternatives share a first token no longer reports an error when no alternative matches, so an invalid input parses as clean.",
+          "detail": "`gen_consume_group_store_op` and `gen_general_group_store_op` no longer emit the old check after the overlap dispatch: `if let None = opt { p.fail(...)? }`, which became unreachable once the accumulator went away. The dispatch built by `gen_simplecst_overlap_loop` / `gen_general_overlap_loop` is an `if grp_kind in FIRST(...) {...}` chain with no `else`. So when the current token matches no alternative, the group takes no branch, records nothing and adds no diagnostic. For `+` repeats the first iteration runs without a guard. Reproduced with `r : (a | b)+ EOF ; a : X Y ; b : X Z ;` (a and b share first token X): `parse(\"\")` returns `ok() == true` with tree `(r)`, though `+` requires at least one a or b. Before this change the generated parser returned Err (\"expected A\")."
+        },
+        {
+          "file": "package-gale/src/parser_gen.wado",
+          "summary": "A rule that matches no tokens now gets a node whose span is reversed (end < start), because the rule wrapper closes nodes with an unclamped `p.last_end()`.",
+          "detail": "`gen_rule_entry_wrapper` opens each node at `p.peek_start()` and closes it with `p.b.finish_node(p.last_end())`. `tree_build_node` builds `Span::new(start, end)` from those values as-is. When a rule (or the whole input) matches nothing, `last_end()` is the end of the previous token, or 0 at the start of input, which is before `peek_start()`. The old emitter clamped this case on purpose with `Span::new(start, i32::max(start, p.last_end()))`, and the removed `gen_clamped_span_field` documented why. Reproduced with `opt_sep_list.g4`: `parse(\"   \")` returns `ok()` but `root.span` is `3..0`. Anything that uses spans (LSP, highlighting ranges, `Span::len`) gets negative lengths."
+        }
+      ],
+      "hit": -1,
+      "confirmations": [
+        {
+          "finding": 0,
+          "reproduced": true,
+          "reason": "In the second run, test `zz: plus overlap empty input must fail` failed with \"empty input accepted for (a|b)+; tree: (r)\" and `r.ok(): true`, which shows the empty input parsing as clean."
+        },
+        {
+          "finding": 1,
+          "reproduced": true,
+          "reason": "In the second run, test `zz: empty rule span not reversed` failed with \"root span reversed: 3..0\" (s.start: 3, s.end: 0), which shows the reversed span."
+        }
+      ],
+      "error": null
+    },
+    {
+      "fix": 1697,
+      "run": 1,
+      "findings": [
+        {
+          "file": "package-gale/src/parser_gen.wado",
+          "summary": "A mandatory `(a | b)+` repetition whose alternatives share a first token now matches zero iterations without any diagnostic, so input that is missing the required element parses cleanly.",
+          "detail": "`gen_simplecst_overlap_loop` (SimpleCst groups) and `gen_general_overlap_loop` (General groups) used to emit `if let None = acc { p.fail(...)? }` after the overlap dispatch; this PR removes that check. The new comment says a repeat guard always confirms a match before the group is entered, but that is not true for the first iteration of a `+` loop. In `gen_op_repeat_star_plus_storable` the first `+` iteration runs unconditionally: the scan guard is skipped while `_plus_first` is true, and the non-scannable `while _plus_first || ...` branch skips it too. If the next token is in none of the alternatives' first sets, no `if/else if` arm fires, nothing is consumed, and no error is raised. Reproduced with `r : (a | b)+ EOF ; a : X Y ; b : X Z ;` and `s : (X Y | X Z)+ EOF ;`: both `parse_r(\"\")` and `parse_s(\"\")` return `ok() == true` with trees `(r)` and `(s)`, where they should report an error."
+        },
+        {
+          "file": "package-gale/src/parser_gen.wado",
+          "summary": "Rule nodes that match no tokens get reversed spans (start > end) because the zero-width clamp was dropped.",
+          "detail": "`gen_rule_entry_wrapper` now opens each node at `p.peek_start()` and closes it at `p.last_end()`. `tree_build_node` uses the `Close` offset as the end as given. The old code built spans as `Span::new(start, i32::max(start, p.last_end()))` to stop exactly this reversal. When a rule matches nothing, or the whole input is whitespace, `peek_start` is the start of the next token while `last_end` is the end of the previous token (or 0 at position 0). Reproduced with `q : lst EOF ; lst : X* ;` on input `\"   \"`: the root `q` node gets span 3..0, and the `lst` child is reversed the same way. Any consumer that uses `CstNode.span` (LSP ranges, slicing) gets an invalid range. The same pattern produces the empty `(sql_stmt)` node in SQLite input with trailing whitespace."
+        }
+      ],
+      "hit": -1,
+      "confirmations": [
+        {
+          "finding": 0,
+          "reproduced": true,
+          "reason": "The tests \"plus simplecst overlap\" and \"plus general overlap: empty input must fail\" both failed with `res.ok(): true`, accepting empty input as `(r)` and `(s)`."
+        },
+        {
+          "finding": 1,
+          "reproduced": true,
+          "reason": "The test \"empty list span not reversed\" failed with `root span 3..0`, showing `root.span.start: 3` greater than `root.span.end: 0`."
+        }
+      ],
+      "error": null
+    },
+    {
+      "fix": 1697,
+      "run": 2,
+      "findings": [
+        {
+          "file": "package-gale/src/parser_gen.wado",
+          "summary": "Rule nodes that match zero tokens now get a reversed span (end < start), because the clamp the old code applied to the end offset was dropped.",
+          "detail": "The rule wrapper (`gen_rule_entry_wrapper`) and the left-recursive path (`gen_lr_fn` / `emit_lr_branch_body`) open a node at `p.peek_start()` and close it with `p.b.finish_node(p.last_end())`. `TreeBuilder::finish` / `tree_build_node` then use that end offset as the node's span end without checking it. The old typed emitter clamped it on purpose (`gen_clamped_span_field`: `Span::new(start, i32::max(start, p.last_end()))`), because when a rule consumes no tokens, `last_end()` is the end of the previous token (or 0 at the start of input) while `peek_start()` is the start of the next token, after any whitespace. That clamp was deleted. Result: any empty or nullable rule node, and even the root (since `expect(TK_EOF)` does not advance), gets a span where end < start whenever trivia sits before the next token. Reproduced: `parse(\"   \")` with `opt_sep_list.g4` gives root span 3..0 and an empty `list` child span 3..0. The same happens with SQLite's trailing empty `sql_stmt` when the input has trailing whitespace. Code that slices source text or checks positions using `CstNode.span` (LSP, highlighting, diagnostics) gets invalid ranges."
+        }
+      ],
+      "hit": -1,
+      "confirmations": [
+        {
+          "finding": 0,
+          "reproduced": true,
+          "reason": "Both span tests fail their assertions with reversed spans: the root reports `root.span.start: 3`, `root.span.end: 0` and the list child reports `list span 3..0`, which is the end < start behaviour the finding describes."
+        }
+      ],
+      "error": null
+    },
+    {
+      "fix": 1680,
+      "run": 0,
+      "findings": [
+        {
+          "file": "wado-cli/src/kiln_driver.rs",
+          "summary": "Output paths with `.` segments (e.g. `./lib.wado`) are recorded un-normalized, so `reconcile_outputs` deletes the file the generator just wrote.",
+          "detail": "`validate_rel_output_path` accepts `Component::CurDir`, and `execute` builds the recorded path as `InvocationPath::normalize(\"{output_dir}/{rel}\")`. `normalize` only strips a leading `./`, so the kept path becomes `build/kiln/g/./lib.wado`. `walk_and_delete` compares against the real on-disk path `build/kiln/g/lib.wado`, finds no match, sees the `#![generated]` marker and deletes the fresh output. The lockfile still lists it, so every later run is a cache miss that again generates and deletes the file. Reproduced with a generator returning `./lib.wado`: after `run_pipeline` the outcome had deleted=[\"build/kiln/g/lib.wado\"] and the file was gone."
+        },
+        {
+          "file": "wado-cli/src/kiln_driver.rs",
+          "summary": "When one invocation's output dir contains another's, reconciling the outer dir deletes the inner invocation's freshly generated files.",
+          "detail": "`run_pipeline` keeps a separate kept-list for each output dir, but `reconcile_outputs` walks each dir recursively and only checks that dir's own list. With `output-dir = \"gen\"` for one invocation and `\"gen/inner\"` for another, reconciling `gen` deletes `gen/inner/b.wado` because it is not in the outer list. The same happens with `output-dir = \".\"`, which normalizes to the project root and wipes every other generator's outputs. Reproduced: the outcome had deleted=[\"gen/inner/b.wado\"] and the file was missing while the lockfile still recorded it."
+        },
+        {
+          "file": "wado-cli/src/kiln_driver.rs",
+          "summary": "`cache_matches` ignores the generator identity, so changing `module = \"ns:proto@1.0.0\"` to `@1.1.0` still counts as a cache hit and the new generator never runs.",
+          "detail": "`run_pipeline` only compares `options_hash`, and `cache_matches` only compares primary, inputs, reads and outputs. Neither checks `entry.generator` against `generator_identity(&invocation.module)`, and `compose_cache_key`, which does include the identity, is never used. After a generator version bump, stale outputs from the old generator are reused and the lockfile keeps `generator = \"ns:proto@1.0.0\"`. Reproduced: on the second run with the 1.1.0 manifest the outcome was cached=[\"g\"] with 0 generator runs."
+        },
+        {
+          "file": "wado-cli/src/kiln_runtime.rs",
+          "summary": "The host `read-file` import lets a sandboxed generator read any file on the host (absolute paths or `..`), not just files in the project.",
+          "detail": "`KilnHostState::read_file` passes the path the generator chose straight to `FilesystemCompilerHost::load_source`, which does `base_path.join(path)`. A path such as `/etc/passwd` or `../../.ssh/id_rsa` escapes the project, so a third-party build-dependency generator can read secrets and embed them in generated output. That breaks the isolation the module docs promise (\"only the two host imports… determinism guarantee\"). Not reproduced: it needs a compiled Wasm generator component, which I could not build within this review. The code path is direct, though: `wado_lsp::FilesystemCompilerHost::load_source` is a bare `std::fs::read(base_path.join(path))`."
+        }
+      ],
+      "hit": -1,
+      "confirmations": [
+        {
+          "finding": 0,
+          "reproduced": true,
+          "reason": "Test `dot_slash_output_is_deleted_by_reconcile` panicked with \"freshly generated file was deleted: [\"build/kiln/g/lib.wado\"]\", and the outcome printed deleted: [\"build/kiln/g/lib.wado\"]."
+        },
+        {
+          "finding": 1,
+          "reproduced": true,
+          "reason": "Test `nested_output_dir_deletes_other_invocation_outputs` panicked with \"inner output deleted: [\"gen/inner/b.wado\"]\", and the outcome showed executed [\"outer\", \"inner\"] with deleted: [\"gen/inner/b.wado\"]."
+        },
+        {
+          "finding": 2,
+          "reproduced": true,
+          "reason": "Test `changing_generator_version_hits_stale_cache` failed \"generator not rerun after version change\" (left: 0, right: 1); the outcome was cached: [\"g\"], executed: [], and the lockfile still shows generator = \"ns:proto@1.0.0\"."
+        },
+        {
+          "finding": 3,
+          "reproduced": false,
+          "reason": "None of the runs exercised `read-file` or a Wasm generator, and the reviewer says it could not build one."
+        }
+      ],
+      "error": null
+    },
+    {
+      "fix": 1680,
+      "run": 1,
+      "findings": [
+        {
+          "file": "wado-cli/src/kiln_driver.rs",
+          "summary": "When one invocation's output directory sits inside another's, reconcile deletes the inner invocation's freshly generated files on every run.",
+          "detail": "`run_pipeline` groups the files to keep by the exact `output_dir` string, then calls `reconcile_outputs` on each directory. `walk_and_delete` walks into subdirectories, so cleaning `gen` also visits `gen/b`. Any `#![generated]` file there is deleted because it is not in `gen`'s keep list. Reproduced with generator `a` (output-dir = \"gen\") and generator `b` (output-dir = \"gen/b\"): after one run `outcome.deleted == [\"gen/b/b.wado\"]` and `b`'s output is gone. The lockfile still lists that file, so the next run misses the cache, regenerates it and deletes it again."
+        },
+        {
+          "file": "wado-cli/src/kiln_driver.rs",
+          "summary": "`cache_matches` never checks the generator identity, so changing the generator version reuses stale cached outputs.",
+          "detail": "The cache check compares the options hash, primary file, inputs, reads and outputs, but never compares `entry.generator` with `generator_identity(&invocation.module)`. The generator's source hash is not checked either. Reproduced: run the pipeline with `module = \"ns:proto@1.0.0\"`, change it to `@1.1.0`, run again. The result is `cached: [\"a\"]`, so the new generator never runs and the outputs from the old version are kept."
+        },
+        {
+          "file": "wado-cli/src/kiln_driver.rs",
+          "summary": "After `output-dir` changes, the cache still hits and the new output directory is never populated.",
+          "detail": "`cache_matches` hashes the recorded output paths, which are still in the old directory, and never checks that they lie under `invocation.output_dir`. Reproduced: run with output-dir = \"gen1\", change it to \"gen2\", run again. The result is `cached: [\"a\"]` and `gen2/a.wado` does not exist. Code that reads from the configured directory finds nothing, and the old files are never cleaned up."
+        },
+        {
+          "file": "wado-cli/src/kiln_driver.rs",
+          "summary": "A generator read of an absolute path is stored in a mangled form, so that invocation misses the cache on every run.",
+          "detail": "`build_cache_entry` and `cache_matches` pass read paths through `InvocationPath::normalize`. That drops empty segments, so \"/abs/inc.proto\" becomes \"abs/inc.proto\". On the next run `load_source` is called with the mangled relative path, which fails, so the check returns false. Reproduced: two identical runs where the generator reports a read of \"/abs/inc.proto\". The second run executes again (`executed: [\"a\"]`) instead of hitting the cache."
+        },
+        {
+          "file": "wado-cli/src/kiln_runtime.rs",
+          "summary": "`read-file` from the generator is passed unchecked to `FilesystemCompilerHost::load_source`, so a generator can read any host file and never gets `not-found`.",
+          "detail": "`KilnHostState::read_file` forwards the guest-supplied path straight to `load_source`, which does `base_path.join(path)`. Absolute paths and `..` segments therefore reach any file on the host (e.g. `/etc/passwd` or `~/.ssh`), even though the runtime is described as a sandbox. That CLI host also turns every failure, including a missing file, into `SourceError::IoError`, so the `HostError::NotFound` branch is never taken and generators get `io(...)` for missing files. Not reproduced: it needs a compiled generator component. The behaviour follows directly from wado-lsp/src/host.rs:55-60."
+        }
+      ],
+      "hit": -1,
+      "confirmations": [
+        {
+          "finding": 0,
+          "reproduced": true,
+          "reason": "The `nested_output_dirs` test printed `deleted = [\"gen/b/b.wado\"]` and panicked with \"b's output was deleted\", so reconcile removed the inner directory's fresh output."
+        },
+        {
+          "finding": 1,
+          "reproduced": true,
+          "reason": "After the generator version changed, `generator_version_change_hits_stale_cache` panicked showing `PipelineOutcome { cached: [\"a\"], executed: [] }`, so the stale cache was reused."
+        },
+        {
+          "finding": 2,
+          "reproduced": true,
+          "reason": "After output-dir changed, `output_dir_change_hits_stale_cache` panicked with \"new output dir not populated\" and `cached: [\"a\"], executed: []`, so the cache hit and the new directory stayed empty."
+        },
+        {
+          "finding": 3,
+          "reproduced": true,
+          "reason": "On the second identical run `absolute_read_path_never_caches` got `cached: [], executed: [\"a\"]` (assertion left `[]` vs right `[\"a\"]`), so the absolute-read invocation missed the cache."
+        },
+        {
+          "finding": 4,
+          "reproduced": false,
+          "reason": "None of the runs exercised `read_file`, and the reviewer states it was not reproduced because it needs a compiled generator component."
+        }
+      ],
+      "error": null
+    },
+    {
+      "fix": 1680,
+      "run": 2,
+      "findings": [
+        {
+          "file": "wado-cli/src/kiln_driver.rs",
+          "summary": "A cached result is reused after the generator module changes, because the cache check never compares the recorded `generator` identity.",
+          "detail": "`run_pipeline` finds a prior entry by invocation name and `options_hash` only. `cache_matches` then checks the primary file, the inputs, the reads and the outputs, but never compares `entry.generator` with `generator_identity(&invocation.module)`. If a user changes `module = \"ns:proto@1.0.0\"` to `@2.0.0` and leaves the schema alone, the build reports the invocation as cached and keeps the output from the old generator. The lockfile also keeps saying the old generator made it. Reproduced: running again with the module changed to 2.0.0 gave `cached: [\"g\"], executed: []`."
+        },
+        {
+          "file": "wado-cli/src/kiln_driver.rs",
+          "summary": "After `output-dir` changes, the cache still hits, so nothing is written to the new directory.",
+          "detail": "`cache_matches` re-hashes the output paths recorded in the lockfile (still under the old directory). It never checks that they sit under the invocation's current `output_dir`. When the user changes `output-dir`, the old files still match, so the invocation counts as cached. The new directory stays empty, and code that imports from it breaks. The prior entry is written back unchanged, so the lockfile keeps pointing at the old directory. Reproduced: changing `output-dir` to `gen/new` gave `cached: [\"g\"]` and no `gen/new/a.wado`."
+        },
+        {
+          "file": "wado-cli/src/kiln_driver.rs",
+          "summary": "When one invocation's output directory is nested inside another's, cleanup deletes the inner invocation's freshly generated files.",
+          "detail": "Cleanup runs once per directory and walks it recursively. Each directory's kept list holds only the outputs of invocations whose `output_dir` is exactly that directory. With `output-dir = \"gen\"` and `output-dir = \"gen/inner\"`, the walk of `gen` goes into `gen/inner` and deletes the inner generator's output, which is not on `gen`'s kept list. The lockfile still records that file, so every build regenerates it and deletes it again. Reproduced: `deleted: [\"gen/inner/b.wado\"]` right after it was generated."
+        },
+        {
+          "file": "wado-cli/src/compiler_host.rs",
+          "summary": "Generators get file reads that are not limited to the project: `read-file(\"../x\")` or an absolute path reads any file on the machine.",
+          "detail": "`run_generator` hands the plain `wado_lsp::FilesystemCompilerHost` to the kiln runtime. `read_file` passes the path straight to `load_source`, which just does `base_path.join(path)`. Absolute paths and `..` segments therefore reach any file the user can read. A third-party generator from a registry can read secrets such as `~/.ssh` keys or `.env` files and copy them into its generated output. Reproduced: `load_source(\"../secret.txt\")` from the project root returned the file's contents."
+        },
+        {
+          "file": "wado-cli/src/kiln_runtime.rs",
+          "summary": "On the real CLI host, a missing file reaches the generator as `io(...)` instead of `not-found`.",
+          "detail": "`read_file` returns `HostError::NotFound` only for `SourceError::NotFound`. The CLI's filesystem host never produces that variant: every failure, including a missing file, comes back as `SourceError::IoError`. Generators therefore cannot tell an optional include that is absent from a real I/O failure, and treat an absent file as a hard error. Reproduced: loading a missing file returned `Err(IoError { ..., \"No such file or directory\" })`."
+        },
+        {
+          "file": "wado-cli/src/kiln_driver.rs",
+          "summary": "If a generator reads a file by absolute path, its cache never hits again.",
+          "detail": "`build_cache_entry` and `cache_matches` pass read paths through `InvocationPath::normalize`, which drops empty path segments and so removes the leading `/`. `/abs/x.proto` is stored as `abs/x.proto`. The next build loads that relative path, the load fails, and the generator re-runs on every build. Reproduced: the lockfile recorded `path = \"abs/x.proto\"` and the second run executed again instead of hitting the cache."
+        }
+      ],
+      "hit": -1,
+      "confirmations": [
+        {
+          "finding": 0,
+          "reproduced": true,
+          "reason": "The test generator_version_change_still_cache_hits failed with `outcome: PipelineOutcome { cached: [\"g\"], executed: [], deleted: [] }` after the generator module version was changed."
+        },
+        {
+          "finding": 1,
+          "reproduced": true,
+          "reason": "The test output_dir_change_still_cache_hits panicked with \"new output dir empty; outcome: PipelineOutcome { cached: [\"g\"], executed: [], deleted: [] }\"."
+        },
+        {
+          "finding": 2,
+          "reproduced": true,
+          "reason": "The test nested_output_dirs_delete_each_other panicked with `deleted: [\"gen/inner/b.wado\"]`, so cleanup of `gen` removed the inner generator's output."
+        },
+        {
+          "finding": 3,
+          "reproduced": true,
+          "reason": "The run printed `outside = Ok(\"SECRET\")` and panicked with \"read escaped project root\", so a file outside the project was read."
+        },
+        {
+          "finding": 4,
+          "reproduced": true,
+          "reason": "The run printed `missing = Err(IoError { path: \".../proj/nope.proto\", message: \"No such file or directory (os error 2)\" })`, so a missing file came back as IoError instead of NotFound."
+        },
+        {
+          "finding": 5,
+          "reproduced": true,
+          "reason": "The test absolute_read_path_never_cache_hits showed the lockfile recording `path = \"abs/x.proto\"`, and the second run reported `cached: [], executed: [\"g\"]` instead of a cache hit."
+        }
+      ],
+      "error": null
+    }
+  ]
+}

@@ -832,7 +832,7 @@ impl ElementClean<'_, '_> {
                     }
                 }
             }
-            ExprKind::IndirectCall { callee, args } => {
+            ExprKind::IndirectCall { callee, args, .. } => {
                 let callee = *callee;
                 let args = args.clone();
                 if let Some(ce) = callee.as_expr() {
@@ -1227,7 +1227,7 @@ impl ElementImmutable<'_, '_, '_> {
                     }
                 }
             }
-            ExprKind::IndirectCall { callee, args } => {
+            ExprKind::IndirectCall { callee, args, .. } => {
                 // Invoking a closure that captured a self-derived value runs
                 // its (unverified) body with access to `self`'s elements.
                 let callee = *callee;

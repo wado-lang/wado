@@ -1524,7 +1524,7 @@ impl<'a> Builder<'a> {
                 self.heap_state.bump_all();
                 None
             }
-            ExprKind::IndirectCall { callee, args } => {
+            ExprKind::IndirectCall { callee, args, .. } => {
                 self.walk_operand(callee);
                 for a in args {
                     self.walk_operand(a);
@@ -2642,11 +2642,7 @@ mod tests {
         };
         *b.locals = vec![mut_local("a"), mut_local("b")];
         let call = b.exprs.push(ExprNode {
-            kind: ExprKind::Call {
-                func_id: FuncId::from_u32(0),
-                type_args: vec![],
-                args: CallArgs::free(vec![]),
-            },
+            kind: ExprKind::call(FuncId::from_u32(0), vec![], CallArgs::free(vec![])),
             type_id: TypeTable::I32,
             span,
         });

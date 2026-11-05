@@ -452,7 +452,7 @@ fn walk_expr_shape(body: &Body, expr: ExprId, site: &UseSite<'_>) -> LeftmostWal
         ExprKind::Call { args, .. } => {
             walk_children_observable(body, args.iter().map(|a| a.expr), site)
         }
-        ExprKind::IndirectCall { callee, args } => walk_children_observable(
+        ExprKind::IndirectCall { callee, args, .. } => walk_children_observable(
             body,
             std::iter::once(*callee).chain(args.iter().copied()),
             site,

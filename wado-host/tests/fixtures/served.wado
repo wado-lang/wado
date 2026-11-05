@@ -1,0 +1,18 @@
+//! What a guest reaches on every host. A runner's test compares what this prints
+//! there with what it prints under `wado run`.
+
+use { println, program_name, Environment, Stdout } from "core:cli";
+use { availability, Availability, Process } from "core:process";
+use { Timezone } from "wasi:clocks";
+use { Fields } from "wasi:http";
+
+#[param]
+global ANSWER: i32 = 0;
+
+export fn run() with (Environment, Fields, Process, Stdout, Timezone) {
+    println(`${program_name():?}`);
+    println(`${ANSWER}`);
+    println(`${availability() == Availability::Available}`);
+    println(`${Timezone::iana_id():?}`);
+    let _fields = Fields::new();
+}

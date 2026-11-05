@@ -70,6 +70,8 @@ pub fn clean_git_revision(dir: &Path) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
+    use wado_host::runner::{ENTRY_SECTION, embedded_entry};
+
     use super::*;
 
     /// A minimal valid empty component (just the preamble).
@@ -111,6 +113,26 @@ mod tests {
                 ),
             ]
         );
+    }
+
+    #[test]
+    fn the_entry_is_the_outer_components_not_a_nested_ones() {
+        let entry = |value: &str| {
+            [MetadataSection {
+                name: ENTRY_SECTION.to_string(),
+                value: value.to_string(),
+            }]
+        };
+        let dependency = embed_metadata_sections(empty_component(), &entry("dependency.wado"));
+        let mut outer = wasm_encoder::Component::new();
+        outer.section(&wasm_encoder::RawSection {
+            id: wasm_encoder::ComponentSectionId::Component.into(),
+            data: &dependency,
+        });
+
+        let out = embed_metadata_sections(outer.finish(), &entry("main.wado"));
+
+        assert_eq!(embedded_entry(&out).as_deref(), Some("main.wado"));
     }
 
     #[test]
