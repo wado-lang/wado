@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1793845968017,
+  "lastUpdate": 1793849171955,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -74569,6 +74569,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 377139,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "c021379081524fc716bbd02463ab35ae4b764d96",
+          "message": "Merge pull request #2550 from wado-lang/ccr-894be894-0gbauy\n\nfeat(e2e): prove every WIR check fails without the work it states",
+          "timestamp": "2026-11-05T12:10:23+09:00",
+          "tree_id": "887dc83812e3a30d8999284bfe5f669b002bf321",
+          "url": "https://github.com/wado-lang/wado/commit/c021379081524fc716bbd02463ab35ae4b764d96"
+        },
+        "date": 1793849170998,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3099,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7303,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21965,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 375776,
             "unit": "bytes"
           }
         ]
