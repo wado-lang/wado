@@ -153,6 +153,40 @@ pub fn snapshot(sha: &String) -> String with Process {
     return root;
 }
 
+/// Checks out in the snapshot at `root` the submodules its `Cargo.toml` builds
+/// from, at the commits the tree records, so `cargo` builds it. Each is a
+/// worktree of the repository's own checkout of that submodule, which fetches
+/// a commit it lacks.
+pub fn add_build_submodules(root: &String) with (Process, Preopens) {
+    for let [path, sha] of build_submodules(root) {
+        if try_git(["-C", path, "cat-file", "-e", `${sha}^{commit}`]) matches { None } {
+            git(["-C", path, "fetch", "--quiet", "--depth", "1", "origin", sha]);
+        }
+        git(["-C", path, "worktree", "add", "--force", "--detach", from_submodule(&path, root), sha]);
+    }
+}
+
+/// The submodules `root`'s `Cargo.toml` names by path, as path and commit.
+fn build_submodules(root: &String) -> List<[String, String]> with (Process, Preopens) {
+    let manifest = fs::read_to_string(fs::join(*root, "Cargo.toml")).unwrap();
+    let mut found: List<[String, String]> = [];
+    // A line is a status flag, the commit, and the path: `-<sha> vendor/x`.
+    for let line of git(["-C", *root, "submodule", "status"]).lines() {
+        let fields = line.slice(1, line.len()).split(" ").collect();
+        let path = fields[1].to_string();
+        if manifest.contains(&path) {
+            found.push([path, fields[0].to_string()]);
+        }
+    }
+    return found;
+}
+
+/// `path` under `root`, as a path from the submodule checkout at `path`.
+fn from_submodule(path: &String, root: &String) -> String {
+    let up = "../".repeat(path.split("/").count());
+    return `${up}${*root}/${*path}`;
+}
+
 /// The snapshot at `root` with what a reviewer wrote into it undone.
 pub fn reset_snapshot(root: &String) with Process {
     git(["-C", *root, "reset", "--hard", "--quiet"]);
@@ -160,6 +194,9 @@ pub fn reset_snapshot(root: &String) with Process {
 }
 
 pub fn drop_snapshot(root: &String) with (Process, Preopens) {
+    for let [path, _] of build_submodules(root) {
+        try_git(["-C", path, "worktree", "remove", "--force", from_submodule(&path, root)]);
+    }
     git(["worktree", "remove", "--force", *root]);
     fs::remove_dir_all(index_dir(root)).unwrap();
 }

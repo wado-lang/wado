@@ -20,6 +20,9 @@ pub struct Call {
     pub name: String,
     pub input: Value,
     pub is_error: bool,
+    /// What a Run returned: what the reviewer observed, which the tree alone
+    /// cannot show again. Other tools' output can be read again from the tree.
+    pub output: Option<String> = null,
 }
 
 struct TextBlock {
@@ -84,7 +87,8 @@ pub fn run_agent(
                 Ok(out) => [out, false],
                 Err(e) => [e, true],
             };
-            calls.push(Call { name, input: b.input, is_error });
+            let output: Option<String> = if name == "Run" { Some(content) } else { null };
+            calls.push(Call { name, input: b.input, is_error, output });
             results.push(message(&ToolResult { tool_use_id: b.id.unwrap(), content, is_error }));
         }
         if turns + 1 == max_turns {

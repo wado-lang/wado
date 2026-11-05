@@ -39,6 +39,7 @@ use {
     json_object,
     merge_title,
     snapshot,
+    add_build_submodules,
     reset_snapshot,
     drop_snapshot,
     index,
@@ -232,11 +233,15 @@ ${fix_diff}
 fn workspace(sha: &String) -> Workspace with (Process, Preopens, Environment) {
     let root = snapshot(sha);
     let symbols: Option<SymbolIndex> = if SYMBOLS { Some(load(&index(&root, &WADO)).unwrap()) } else { null };
-    let runner: Option<Runner> = if RUN { Some(runner()) } else { null };
+    let mut runner: Option<Runner> = null;
+    if RUN {
+        add_build_submodules(&root);
+        runner = Some(runner_for_home());
+    }
     return Workspace { root, symbols, runner };
 }
 
-fn runner() -> Runner with Environment {
+fn runner_for_home() -> Runner with Environment {
     let home = env("HOME").expect("rustup's default homes are under HOME");
     return Runner {
         target_dir: "scratchpad/eddy-target",
