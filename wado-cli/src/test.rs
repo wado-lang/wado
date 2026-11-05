@@ -43,6 +43,7 @@ use crate::test_report::{
     CompileEvent, HeartbeatReporter, LoadEvent, PackageDoneArgs, TapReporter, TestReporter,
     VerboseReporter,
 };
+use wado_host::runner::write_guest_profile;
 use wado_host::sync::{joined, lock};
 
 const DEFAULT_TIMEOUT_MS: u64 = 5000;
@@ -2525,7 +2526,7 @@ fn write_profile(
     };
     let write = |e: &dyn std::fmt::Display| CliExit::error(format!("failed to write {path}: {e}"));
     let file = std::fs::File::create(path).map_err(|e| write(&e))?;
-    runtime::write_guest_profile(profiler, file).map_err(|e| write(&e))?;
+    write_guest_profile(profiler, file).map_err(|e| write(&e))?;
     eprintln!("Profile written to {path}");
     eprintln!("View at https://profiler.firefox.com/");
     Ok(())

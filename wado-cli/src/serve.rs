@@ -41,6 +41,7 @@ use crate::knobs::{
 };
 use crate::manifest;
 use crate::runtime::{self, Preopens, ProfileMode, Ticker, WasiState};
+use wado_host::runner::write_guest_profile;
 use wado_host::sync::{joined, lock, next_joined};
 
 /// First-byte timeout cuts off guests stuck in the host; the epoch
@@ -1230,7 +1231,7 @@ async fn run_http_server(
         && let Some(profiler) = lock(&handle.profiler).take()
     {
         match std::fs::File::create(path) {
-            Ok(file) => match runtime::write_guest_profile(profiler, file) {
+            Ok(file) => match write_guest_profile(profiler, file) {
                 Ok(()) => {
                     eprintln!("Profile written to {path}");
                     eprintln!("View at https://profiler.firefox.com/");

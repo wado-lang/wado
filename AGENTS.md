@@ -148,7 +148,7 @@ hand-authored layout. Naming a file bypasses the exclusion, so never
 
 - `wado-compiler/` — the compiler: frontend, IR pipeline, optimizer, codegen. The Wado standard library (`core:*`, `wasi:*`) lives in `wado-compiler/lib/`. Internals: `docs/compiler.md`, `docs/optimizer.md`.
 - `wado-cli/` — the `wado` binary.
-- `wado-host/` — the native host pieces `wado-cli`, `wado-dev-tools` and the compiler's tests share.
+- `wado-host/` — the native host pieces `wado-cli`, `wado-dev-tools`, the runners and the compiler's tests share.
 - `wado-run-webgpu/` — the `wado run-webgpu` subcommand, a Cargo workspace of its own that no command at the repository root builds or lints. A change that reaches every crate, such as a toolchain upgrade, runs `cargo clippy --all-targets` in `wado-run-webgpu/` too.
 - `wado-lsp/` — the language service engine, also compiled to Wasm for the browser.
 - `wado-vscode/` — the VS Code extension.

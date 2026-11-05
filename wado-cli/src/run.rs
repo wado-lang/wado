@@ -1,13 +1,12 @@
 use std::ffi::OsStr;
 use std::fmt::Write as _;
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex};
+use std::path::Path;
 use std::time::Duration;
 
-use anyhow::{Context, Result, bail};
+use anyhow::{Result, bail};
 use lexopt::Arg::Value;
+use wado_host::runner::Sampling;
 use wasmtime::component::Component;
-use wasmtime::{GuestProfiler, UpdateDeadline};
 
 use crate::args::{self, CliExit};
 use crate::build::build_for_driver;
@@ -16,8 +15,7 @@ use crate::knobs::{
     CompileKnobOpt, CompileKnobs, HostKnobOpt, HostKnobs, RuntimeKnobOpt, RuntimeKnobs,
 };
 use crate::manifest;
-use crate::runtime::{self, ProfileMode, Ticker};
-use wado_host::sync::lock;
+use crate::runtime::{self, ProfileMode};
 
 pub struct RunOptions {
     pub input: String,
@@ -220,52 +218,15 @@ async fn run_cli_component(
     let linker = runtime::create_linker(&component)?;
     let mut store = runtime::create_store(&engine, preopened_dirs, argv, runtime_knobs.process)?;
 
-    let profiler = if let ProfileMode::Guest { interval_ms, path } = profile {
-        let interval = Duration::from_millis(*interval_ms);
-        let max_secs = profile_budget_secs()?;
-        // Created before the run, so a path that cannot be written fails here
-        // rather than in place of what the run itself reports.
-        let file = std::fs::File::create(path)
-            .with_context(|| format!("cannot write the profile to {path}"))?;
-        let profiler = GuestProfiler::new_component(
-            &engine,
+    let sampling = if let ProfileMode::Guest { interval_ms, path } = profile {
+        Some(Sampling::start(
             "wado",
-            interval,
-            component.clone(),
-            std::iter::empty::<(String, wasmtime::Module)>(),
-        )?;
-        let profiler = Arc::new(Mutex::new(Some(profiler)));
-
-        let deadline = Arc::new(AtomicBool::new(false));
-        let deadline_cb = deadline.clone();
-        let profiler_for_cb = profiler.clone();
-        store.epoch_deadline_callback(move |store_ctx| {
-            if let Some(ref mut p) = *lock(&profiler_for_cb) {
-                p.sample(&store_ctx, interval);
-            }
-            if deadline_cb.load(Ordering::Relaxed) {
-                return Err(wasmtime::Error::msg(
-                    "profile time budget reached (WADO_PROFILE_MAX_SECS)",
-                ));
-            }
-            Ok(UpdateDeadline::Continue(1))
-        });
-        store.set_epoch_deadline(1);
-
-        let start = std::time::Instant::now();
-        let ticker = Ticker::start(interval, {
-            let engine = engine.clone();
-            move || {
-                if let Some(secs) = max_secs
-                    && start.elapsed().as_secs() >= secs
-                {
-                    deadline.store(true, Ordering::Relaxed);
-                }
-                engine.increment_epoch();
-            }
-        });
-
-        Some((profiler, ticker, file))
+            &engine,
+            &component,
+            &mut store,
+            Path::new(path),
+            Duration::from_millis(*interval_ms),
+        )?)
     } else {
         None
     };
@@ -293,18 +254,7 @@ async fn run_cli_component(
         Err(()) => bail!("Component returned error"),
     })();
 
-    let mut profiled = Ok(());
-    if let Some((profiler_arc, ticker, file)) = profiler {
-        drop(ticker);
-
-        if let ProfileMode::Guest { path, .. } = profile {
-            let guest_profiler = lock(&profiler_arc).take().unwrap();
-            profiled = runtime::write_guest_profile(guest_profiler, file).map(|()| {
-                eprintln!("Profile written to {path}");
-                eprintln!("View at https://profiler.firefox.com/");
-            });
-        }
-    }
+    let profiled = sampling.map_or(Ok(()), Sampling::finish);
 
     // What the run reported comes first; a profile it could not write is
     // only the error where the run itself succeeded.
@@ -315,19 +265,6 @@ async fn run_cli_component(
         }
         (outcome, profiled) => outcome.and(profiled),
     }
-}
-
-/// How many seconds `WADO_PROFILE_MAX_SECS` lets a profiled run go on;
-/// unset, as long as it takes.
-fn profile_budget_secs() -> Result<Option<u64>> {
-    let Some(value) = std::env::var_os("WADO_PROFILE_MAX_SECS") else {
-        return Ok(None);
-    };
-    let value = value.to_string_lossy();
-    let Ok(secs) = value.parse::<u64>() else {
-        bail!("WADO_PROFILE_MAX_SECS takes a whole number of seconds, not '{value}'");
-    };
-    Ok(Some(secs))
 }
 
 pub async fn run(opts: RunOptions) -> Result<(), CliExit> {

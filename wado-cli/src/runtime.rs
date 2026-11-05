@@ -1,7 +1,5 @@
 use anyhow::Result;
-use std::fs::File;
 use std::future::Future;
-use std::io::{BufWriter, Write};
 use std::pin::Pin;
 use std::sync::{Arc, Condvar, LazyLock, Mutex, PoisonError};
 use std::thread::JoinHandle;
@@ -9,7 +7,7 @@ use std::time::Duration;
 use wado_compiler::coverage::TestReport;
 use wasmtime::component::{Component, Linker, ResourceTable};
 use wasmtime::{
-    AsContext, Collector, Config, Engine, GuestProfiler, InstanceAllocationStrategy, OptLevel,
+    AsContext, Collector, Config, Engine, InstanceAllocationStrategy, OptLevel,
     PoolingAllocationConfig, ProfilingStrategy, Store,
 };
 use wasmtime_wasi::filesystem::WasiFilesystemCtx;
@@ -390,16 +388,6 @@ pub enum ProfileMode {
         /// Sampling interval in milliseconds.
         interval_ms: u64,
     },
-}
-
-/// `profiler`'s samples written to `file`. Flushed here: a `BufWriter` dropped
-/// with its last block unwritten reports no error, so a profile that never
-/// reached the disk would read as written.
-pub fn write_guest_profile(profiler: GuestProfiler, file: File) -> Result<()> {
-    let mut out = BufWriter::new(file);
-    profiler.finish(&mut out)?;
-    out.flush()?;
-    Ok(())
 }
 
 /// Parse a `--profile` argument value. Shared by `run` and `serve`.
