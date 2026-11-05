@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1793892623258,
+  "lastUpdate": 1793893640748,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -74857,6 +74857,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/8488e1c2b98323c7e6675a4c3bd743b8a5be9428"
         },
         "date": 1793892622555,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3099,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7303,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21965,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 375776,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "acf18acea98ae3330aec4faa72ac9062911b8ddf",
+          "message": "Merge pull request #2555 from wado-lang/cli/quiet-artifact\n\nfeat(host): `wado run-*` runs a program as `wado run` does",
+          "timestamp": "2026-11-06T00:33:33+09:00",
+          "tree_id": "a35bb27631b1cae41a6071ab8a8eba05639fa672",
+          "url": "https://github.com/wado-lang/wado/commit/acf18acea98ae3330aec4faa72ac9062911b8ddf"
+        },
+        "date": 1793893639899,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
