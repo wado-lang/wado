@@ -58,6 +58,8 @@ program with no Wasm trap and no message.
   come back as an error.
 - Guard: none. The overflow ends the process without corrupting anything, and
   Loam's programs nest a region per `If`, far short of this.
+- Upstream: LLVM 23.1.5's `mlir-opt` overflows the same way at 2,500 levels on
+  an 8 MiB stack. llvm/llvm-project#63146 fixed only the verifier.
 
 ## Never observed
 
