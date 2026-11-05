@@ -22,7 +22,8 @@ use {
     windowed_input,
 } from "./graph_cases.wado";
 use { Any, Recorder, host_of, run } from "./recorded.wado";
-use { Cpu, Holds } from "./tensor.wado";
+use { Graph } from "./hlo.wado";
+use { Cpu, Holds, Tensor } from "./tensor.wado";
 
 test "a recorded graph run on the CPU computes what the CPU computes as each operation is added" {
     let [x, ids] = mixed_inputs();
@@ -43,6 +44,24 @@ test "a recorded graph run on the CPU computes what the CPU computes as each ope
         host_of(&want.2),
         host_of(&want.3),
         host_of(&want.4),
+    ] as List<Any<Cpu>>;
+}
+
+test "an arg max records as one node, which a run computes as the backend's kernel does, a NaN greatest" {
+    let x = Tensor::<f32, [A, B]> {
+        data: [1.0, 3.0, 3.0, f32::NAN, 2.0, -1.0],
+        extents: [2, 3],
+    };
+    let mut r = Recorder::new();
+    let rx = r.parameter::<f32, [A, B]>(x.extents);
+    let ranked = r.arg_max(&rx, 1);
+    let recorded = r.finished([ranked.id]);
+    assert recorded.nodes.len() == 2;
+    assert run(&mut Cpu {}, &recorded, &[host_of(&x)]) == [
+        host_of(&Tensor::<i64, [A, B]> {
+            data: [1, 0],
+            extents: [2, 1],
+        }),
     ] as List<Any<Cpu>>;
 }
 

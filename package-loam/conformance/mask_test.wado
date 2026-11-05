@@ -2,20 +2,20 @@
 //! float.
 
 use { Cpu, Tensor } from "lib:loam";
-use { M0, M1, Weights, Y1, Y2, forward } from "./mask.onnxtext"
+use { M0, M1, Model, Params, Y1, Y2, compute } from "./mask.onnxtext"
     with {
         type: "onnxtext",
         generator: { module: "lib:loam" },
     };
 
 test "a masked key becomes -f32::MAX and a kept one 0" {
-    let got: Tensor<f32, [M0, Y1, Y2, M1]> = forward(
+    let got: Tensor<f32, [M0, Y1, Y2, M1]> = compute(
         &mut Cpu {},
         &Tensor::<i64, [M0, M1]> {
             data: [1, 1, 0],
             extents: [1, 3],
         },
-        &Weights {}.prepare(&mut Cpu {}),
+        &mut Model::new(Params::embedded(&mut Cpu {})),
     );
     assert got.extents == [1, 1, 1, 3];
     assert got.data == [0.0, 0.0, -f32::MAX];

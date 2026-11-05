@@ -2,14 +2,14 @@
 //! the output under the one name both take.
 
 use { Cpu, Tensor } from "lib:loam";
-use { Prepared, forward } from "./renamed_unit.onnxtext"
+use { Model, Params, compute } from "./renamed_unit.onnxtext"
     with {
         type: "onnxtext",
         generator: { module: "lib:loam" },
     };
 
 test "a folded scalar and a Gemm bias, folded or not, each name the axis of 1 they meet" {
-    let out = forward(
+    let out = compute(
         &mut Cpu {},
         &Tensor {
             data: [1.0],
@@ -23,7 +23,7 @@ test "a folded scalar and a Gemm bias, folded or not, each name the axis of 1 th
             data: [1.0, 0.0, 0.0, 1.0, 1.0, 1.0],
             extents: [3, 2],
         },
-        &Prepared::embedded(&mut Cpu {}),
+        &mut Model::new(Params::embedded(&mut Cpu {})),
     );
 
     assert out.Y.data == [3.0] as List<f32>;

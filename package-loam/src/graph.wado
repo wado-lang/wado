@@ -141,18 +141,6 @@ pub fn push_element(bytes: &mut ByteList, bits: u64, width: i32) {
     }
 }
 
-/// How many times `graph`'s nodes read each tensor, a node reading one twice
-/// counted twice.
-pub fn read_counts(graph: &Graph) -> HashMap<String, i32> {
-    let mut reads = HashMap::<String, i32>::new();
-    for let node of &graph.nodes {
-        for let t of node.reads() {
-            reads[t] = reads.get(t).unwrap_or(0) + 1;
-        }
-    }
-    return reads;
-}
-
 /// Records that the node at `at` reads `tensor`.
 pub fn read_at(readers: &mut HashMap<String, List<i32>>, tensor: &String, at: i32) {
     let mut by = readers.get(*tensor).unwrap_or([]);
@@ -489,7 +477,7 @@ pub fn is_build_time(dtype: &String) -> bool {
     return *dtype == "int64" || *dtype == "int32" || *dtype == "bool";
 }
 
-/// `inputs` holds the parameters `forward` takes, so it never names an
+/// `inputs` holds the parameters `compute` takes, so it never names an
 /// initializer: both readers pass theirs through `parameters` first.
 pub struct Graph {
     pub name: String,
@@ -501,7 +489,7 @@ pub struct Graph {
     /// The default domain's opset, which fixes what an operator means. `None`
     /// where the graph names none, read as the current one.
     pub opset: Option<i64> = null,
-    /// The weights `Prepared::load` reads out of a file where the build found
+    /// The weights `Params::load` reads out of a file where the build found
     /// them, rather than under a checkpoint header naming each.
     pub in_place: Option<InPlace> = null,
 }
@@ -514,7 +502,7 @@ pub struct InPlace {
     /// Each weight's first byte and the byte past its last, by its name.
     pub ranges: TreeMap<String, [i32, i32]>,
     /// The file's length, where the build read the whole of it, which the file
-    /// `Prepared::load` is handed must have.
+    /// `Params::load` is handed must have.
     pub len: Option<i32> = null,
 }
 

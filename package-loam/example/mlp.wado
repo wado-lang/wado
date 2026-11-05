@@ -1,4 +1,4 @@
-//! A two-layer MLP checked at build time and run through the generated kernels.
+//! A two-layer MLP checked at build time and run through the generated graph.
 //!
 //! Loam reads `mlp.onnxtext` through Kiln, names each axis from the graph, and
 //! discharges every operator's extent conditions before this file compiles.
@@ -10,7 +10,7 @@
 
 use { println, Stdout } from "core:cli";
 use { Cpu, Tensor } from "lib:loam";
-use { N as Batch, W11 as Hidden, Weights, X1 as In, Y1 as Out, forward } from "./mlp.onnxtext"
+use { Model, N as Batch, W11 as Hidden, Weights, X1 as In, Y1 as Out, compute } from "./mlp.onnxtext"
     with {
         type: "onnxtext",
         generator: { module: "lib:loam" },
@@ -54,12 +54,12 @@ fn ones_input() -> Tensor<f32, [Batch, In]> {
 
 export fn run() with Stdout {
     let x = ones_input();
-    let y = forward(&mut Cpu {}, &x, &weights().prepare(&mut Cpu {}));
+    let y = compute(&mut Cpu {}, &x, &mut Model::new(weights().params(&mut Cpu {})));
     println(`batch ${batch_size(&x)}, logits ${y.extents[1]}, first ${y.data[0]}`);
 }
 
-test "the generated forward pass runs the graph's operators" {
-    let y = forward(&mut Cpu {}, &ones_input(), &weights().prepare(&mut Cpu {}));
+test "the generated graph runs the graph's operators" {
+    let y = compute(&mut Cpu {}, &ones_input(), &mut Model::new(weights().params(&mut Cpu {})));
 
     assert y.extents == [1, 10] as List<i32>;
     // Each hidden unit sums 128 ones, `Relu` keeps them, each logit sums 64

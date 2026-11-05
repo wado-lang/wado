@@ -82,6 +82,38 @@ test "an extent that falls as a length rises refuses it" {
     assert judged(source) == ["N: refused at P = Range: an extent may fall as it rises"] as List<String>;
 }
 
+test "a slice of a table the lengths are owed to stay within keeps them padded" {
+    // A causal mask cut from a fixed table, from the past's length on, and
+    // added to the step, as GPT-2's is: the sum owes the table to hold the
+    // step, so the cut's extent is the step's wherever the run gets to it.
+    let source = `g (float[S, 4] X, float[P, 4] Q) => (float[S, 4] Z) <float[8, 4] B> {
+        Zero = Constant<value_ints = [0]>()
+        One = Constant<value_ints = [1]>()
+        SQ = Shape(Q)
+        SX = Shape(X)
+        L = Slice(SQ, Zero, One)
+        N = Slice(SX, Zero, One)
+        E = Add(L, N)
+        Y = Slice(B, L, E)
+        Z = Add(Y, X)
+    }`;
+    assert judged(source) == ["S: padded", "P: padded"] as List<String>;
+}
+
+test "a slice of a table nothing owes the lengths to stay within refuses them" {
+    let source = `g (float[S, 4] X, float[P, 4] Q) => (float[?, 4] Y) <float[8, 4] B> {
+        Zero = Constant<value_ints = [0]>()
+        One = Constant<value_ints = [1]>()
+        SQ = Shape(Q)
+        SX = Shape(X)
+        L = Slice(SQ, Zero, One)
+        N = Slice(SX, Zero, One)
+        E = Add(L, N)
+        Y = Slice(B, L, E)
+    }`;
+    assert judged(source) == ["S: padded", "P: refused at Y = Slice: an extent may fall as it rises"] as List<String>;
+}
+
 test "a length owed equal to a sum with a refused one is refused with it" {
     let source = `g (float[N, 2] X, float[M, 2] P, float[K, 2] Z) => (float[K, 2] Y, float[?, 2] H) {
         J = Concat<axis = 0>(P, X)

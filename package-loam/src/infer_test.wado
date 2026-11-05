@@ -637,6 +637,20 @@ test "a reduction axis outside the operand stops the build" {
     assert y_axes(source).unwrap_err() == "Y = ReduceMean: axis 3 is outside rank 3";
 }
 
+test "ArgMax taking the last of equal greatest elements stops the build" {
+    let source = `g (float[2, 4] X) => (int64[2, 1] Y) {
+        Y = ArgMax <axis = 1, select_last_index = 1> (X)
+    }`;
+    assert y_axes(source).unwrap_err() == "Y = ArgMax: attribute select_last_index is set, and the kernels take the first index";
+}
+
+test "ArgMax of an i64 operand stops the build" {
+    let source = `g (int64[2, 4] X) => (int64[2, 1] Y) {
+        Y = ArgMax <axis = 1> (X)
+    }`;
+    assert y_axes(source).unwrap_err() == "Y = ArgMax: operand X is i64, and ArgMax ranks f32";
+}
+
 test "Reshape merges adjacent axes into one named by its parts" {
     let source = `g (float[1, 16, 4, 4] X) => (float[1, 256] Y) <int64[2] S = {1, 256}> {
         Y = Reshape(X, S)
@@ -1283,6 +1297,15 @@ test "an If's output takes a fresh length where its branches' lengths differ" {
         Y = If <then_branch = t () => (float[?, 4] A) { A = Concat<axis = 0>(P, X) }, else_branch = e () => (float[N, 4] B) { B = Relu(X) }> (C)
     }`;
     assert y_axes(source).unwrap() == `Y0="Y[0]",X1=4`;
+}
+
+test "an If's output takes the length each branch owes its own equal to" {
+    // As a merged decoder's present is the past and the step in the branch
+    // with a past, and the step alone in the other: the mask's length in both.
+    let source = `g (bool[1] C, float[N, 4] X, float[M, 4] P, float[T, 4] K) => (float[?, 4] Y) {
+        Y = If <then_branch = t () => (float[?, 4] A) { J = Concat<axis = 0>(P, X) A = Add(J, K) }, else_branch = e () => (float[N, 4] B) { B = Add(X, K) }> (C)
+    }`;
+    assert y_axes(source).unwrap() == `N=T,X1=4`;
 }
 
 test "an If's output axis its branches give apart is minted" {

@@ -1,15 +1,16 @@
-//! GPT-2 (124M) as `../generate.wado` drives it. `onnxruntime.cpp` is the
-//! same program over onnxruntime.
+//! GPT-2 (124M) as `../generate.wado` drives it: the first token reads the
+//! prompt, and each one after it only itself against the attention cache.
+//! `onnxruntime.cpp` is the same program over onnxruntime.
 
-use { Backend } from "lib:loam";
+use { Graph } from "lib:loam";
 use { Generator } from "../generate.wado";
 use { Model, Tokenizer } from "../../example/gpt2-124m/model.wado";
 
 pub use { timed } from "../generate.wado";
 
-impl<affine Bk: Backend> Generator for Model<Bk> {
-    /// The graph takes no attention cache, so a run leaves nothing behind.
-    fn reset(&mut self) {
+impl<affine Bk: Graph> Generator for Model<Bk> {
+    fn reset(&mut self) with _ {
+        self.forget();
     }
 
     fn step(&mut self, ids: &List<i32>) -> i32 with _ {

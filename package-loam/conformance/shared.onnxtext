@@ -1,0 +1,26 @@
+# Two RMS normalized inputs, each projected by two weights, the first weight
+# shared: the first pair's weights lie side by side, and the second pair's
+# cannot.
+<ir_version: 8, opset_import: [ "" : 13 ]>
+shared (float[N, S, 2] X) => (float[N, S, 4] P, float[N, S, 2] Q, float[N, S, 4] R, float[N, S, 3] T)
+<float[2] W = {1.5, -0.5}, float[2, 4] A = {0.5, -1.0, 0.25, 1.5, 0.75, -0.5, 2.0, -0.25}, float[2, 2] B = {1.0, 0.5, -0.25, -1.5}, float[2, 3] C = {1.0, -0.5, 0.25, 2.0, -1.0, 0.5}>
+{
+    Q1 = Mul(X, X)
+    M1 = ReduceMean <axes = [-1], keepdims = 1> (Q1)
+    Eps = Constant <value = float {0.000001}> ()
+    V1 = Add(M1, Eps)
+    R1 = Sqrt(V1)
+    O1 = Div(X, R1)
+    H1 = Mul(O1, W)
+    P = MatMul(H1, A)
+    Q = MatMul(H1, B)
+    G = Tanh(X)
+    Q2 = Mul(G, G)
+    M2 = ReduceMean <axes = [-1], keepdims = 1> (Q2)
+    V2 = Add(M2, Eps)
+    R2 = Sqrt(V2)
+    O2 = Div(G, R2)
+    H2 = Mul(O2, W)
+    R = MatMul(H2, A)
+    T = MatMul(H2, C)
+}

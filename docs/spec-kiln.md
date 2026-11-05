@@ -226,7 +226,7 @@ has none:
 So a use site that must work with both writes every field that is not an
 `Option`, a `List`, or a `TreeMap`.
 
-Loam's options hold two maps, a list of strings, and two flags.
+Loam's options hold three maps, a list of strings, and a flag.
 They are declared in `compile.wado`, which the `loam` command reads too, and
 the entry module re-exports them:
 
@@ -236,37 +236,37 @@ the entry module re-exports them:
 export struct Options {
     /// Static extents for the graph's symbolic dimensions, keyed by `dim_param`.
     pub dims: TreeMap<String, i32> = {},
-    /// The graph outputs `forward` returns. Empty keeps every output.
+    /// The graph outputs `compute` returns. Empty keeps every output.
     pub outputs: List<String> = [],
-    /// Outputs `forward` returns only the last position of, each by the axis
+    /// Outputs `compute` returns only the last position of, each by the axis
     /// it is cut along. What computes each position from the same position of
     /// its operands computes the last alone; what reads across them, as
     /// attention does, still computes them all.
     pub last: TreeMap<String, i32> = {},
-    /// Whether operators fuse into one kernel where the plan finds they can.
-    /// Off, every kernel writes its output, which is what a fused module is
-    /// compared against.
-    pub fuse: bool = true,
+    /// Outputs `compute` returns the index of the greatest element of, each by
+    /// the axis it ranks along, kept at extent 1: a greedy pick reads one
+    /// index rather than a vocabulary's scores. Applied after `last`.
+    pub arg_max: TreeMap<String, i32> = {},
     /// Whether the weights a `type: "onnx"` file carries are compiled into the
-    /// module. Off, the build reads past them, and `Prepared::load` reads them
+    /// module. Off, the build reads past them, and `Params::load` reads them
     /// out of that file where the build found them, so a model too large to
     /// compile in still builds.
     pub embed: bool = true,
 }
 ```
 
-Only the flags' defaults change what a use site of the source generator may
+Only the flag's default changes what a use site of the source generator may
 leave out; the list and map fields may be left out without one. The rest are
 for the `loam` command, which reads the struct from JSON through `core:serde`,
-where a field without a default is required. From a prebuilt Loam, `fuse` and
-`embed` are required.
+where a field without a default is required. From a prebuilt Loam, `embed` is
+required.
 
 The `dims` map is written as an object:
 
 <!-- {"source": "package-loam/conformance/specialize_test.wado"} -->
 
 ```wado
-use { N, Weights, X1, X2, forward } from "./specialize.onnxtext"
+use { Model, N, Params, X1, X2, compute } from "./specialize.onnxtext"
     with {
         type: "onnxtext",
         generator: {

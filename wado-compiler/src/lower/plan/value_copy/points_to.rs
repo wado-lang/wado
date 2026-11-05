@@ -32,6 +32,7 @@ use super::is_reference_type;
 use super::last_use::collect_child_exprs;
 use super::place::could_write_through;
 use super::{EnvFrame, NEEDS_COPY_DEPTH_LIMIT, resolve_param_in_env};
+use crate::cut_memo::CutWalk;
 use crate::defs::DefId;
 use crate::flat_package::FlatPackage;
 use crate::graph::{DisjointSets, strongly_connected_components};
@@ -224,7 +225,7 @@ enum Handle {
 /// The types a walk is inside of: a struct by its type, a variant by its
 /// declaration and its arguments resolved to concrete types. A cycle back to
 /// one adds no path to a handle.
-type UnderWay = IndexSet<(Option<DefId>, Vec<TypeKey>)>;
+type UnderWay = CutWalk<(Option<DefId>, Vec<TypeKey>)>;
 
 /// `walk` inside `key`, or `false` where `key` is already under way.
 fn guarded(
@@ -232,12 +233,7 @@ fn guarded(
     under_way: &mut UnderWay,
     walk: impl FnOnce(&mut UnderWay) -> bool,
 ) -> bool {
-    if !under_way.insert(key.clone()) {
-        return false;
-    }
-    let answer = walk(under_way);
-    under_way.swap_remove(&key);
-    answer
+    under_way.visit(key, walk).answer
 }
 
 /// Whether a value of a type holds a [`Handle`] at any depth. Everything else
@@ -261,7 +257,7 @@ impl<'a> HoldsHandle<'a> {
 
     fn of(&self, ty: TypeId) -> bool {
         self.known.get_or_compute(self.type_table.type_key(ty), || {
-            self.walk(ty, None, &mut IndexSet::default(), 0)
+            self.walk(ty, None, &mut UnderWay::new(false), 0)
         })
     }
 
@@ -274,6 +270,7 @@ impl<'a> HoldsHandle<'a> {
         depth: usize,
     ) -> bool {
         if depth > NEEDS_COPY_DEPTH_LIMIT {
+            under_way.unkept();
             return true;
         }
         let tt = self.type_table;

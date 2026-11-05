@@ -3,9 +3,9 @@
 //! it, wrote beside it what onnxruntime computes from it at each length of `X`.
 //! Here the case builds as the generator would build it and runs under `eval`,
 //! printing the same lines, so a refused build, a trap and a wrong answer each
-//! show as a difference from them: once through `forward`, and once through
-//! `compute`, which pads each length to a capacity past it. A case Loam does
-//! not match yet is a `#[TODO]` test, so the run lists where the two part.
+//! show as a difference from them. It runs through `compute`, which pads each
+//! length to a capacity past it. A case Loam does not match yet is a `#[TODO]`
+//! test, so the run lists where the two part.
 
 use { HashMap } from "core:collections";
 use { Graph } from "lib:loam/src/graph.wado";
@@ -26,41 +26,20 @@ global INPUTS: HashMap<String, String> = {
     W: "Tensor { data: iota(0.0, 12), extents: [3, 2, 2] }",
 } as HashMap<String, String>;
 
-/// How a case's `run` calls the module at length `n`, given each input as an
-/// argument: `forward` through the kernels, or `compute`, which pads every
-/// length to its capacity, through the graph.
-enum Entry {
-    Forward,
-    Compute,
-}
-
-impl Entry {
-    fn call(&self, args: &String) -> String {
-        return match *self {
-            Forward => `let mut opaque = Opaque::new();
-        let weights = Prepared::embedded(&mut opaque);
-        let got = forward(&mut opaque, ${*args}&weights);`,
-            Compute => `let mut cpu = Cpu {};
-        let mut model = Model::new(Params::embedded(&mut cpu));
-        let got = compute(&mut cpu, ${*args}&mut model);`,
-        };
-    }
-}
-
-/// What Loam computes from `model` through `entry` at each of `LENGTHS`, in
-/// the oracle's lines, and past them why it computes nothing more: the build's
-/// refusal, or how the run stopped.
-fn loam(model: ByteList, entry: Entry) -> String with EvalHost {
+/// What Loam computes from `model` at each of `LENGTHS`, in the oracle's
+/// lines, and past them why it computes nothing more: the build's refusal, or
+/// how the run stopped.
+fn loam(model: ByteList) -> String with EvalHost {
     let graph = read(model).unwrap();
     return match generated(&graph) {
-        Ok(source) => run(source, &graph, entry),
+        Ok(source) => run(source, &graph),
         Err(reason) => `refused: ${reason}`,
     };
 }
 
-/// `source` with a `run` that calls `entry` at each of `LENGTHS` and prints
+/// `source` with a `run` that calls `compute` at each of `LENGTHS` and prints
 /// what it returns, run under `eval`.
-fn run(source: String, graph: &Graph, entry: Entry) -> String with EvalHost {
+fn run(source: String, graph: &Graph) -> String with EvalHost {
     let mut args = "";
     for let vi of graph.inputs {
         args.push_str(`&${INPUTS[vi.name]}, `);
@@ -81,7 +60,9 @@ fn joined<T: Display>(values: List<T>) -> String {
 
 export fn run() with Stdout {
     for let n of ${LENGTHS:?} as List<i32> {
-        ${entry.call(&args)}
+        let mut cpu = Cpu {};
+        let mut model = Model::new(Params::embedded(&mut cpu));
+        let got = compute(&mut cpu, ${args}&mut model);
         println(\`N = \${n}: extents [\${joined(got.extents)}], data [\${joined(got.data)}]\`);
     }
 }
@@ -89,15 +70,9 @@ export fn run() with Stdout {
     return ran(program);
 }
 
-/// Loam computes from `model` what onnxruntime does, which `onnx` states,
-/// through either entry.
+/// Loam computes from `model` what onnxruntime does, which `onnx` states.
 fn assert_agrees(model: ByteList, onnx: String) with EvalHost {
-    let [forward, compute] = [
-        loam(model, Entry::Forward),
-        loam(model, Entry::Compute),
-    ];
-    assert agrees(&forward, &onnx);
-    assert agrees(&compute, &onnx);
+    assert agrees(&loam(model), &onnx);
 }
 
 /// Whether Loam's lines, `got`, say what the oracle's, `want`, do: each the

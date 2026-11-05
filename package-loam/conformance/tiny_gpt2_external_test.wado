@@ -4,7 +4,7 @@
 
 use { Cpu, Tensor } from "lib:loam";
 use { assert_close, ints_of, tensor_of } from "./oracle.wado";
-use { BatchSize, Prepared, SequenceLength, forward } from "../tests/models/tiny-gpt2/external/model.onnx"
+use { BatchSize, Model, Params, SequenceLength, compute } from "../tests/models/tiny-gpt2/external/model.onnx"
     with {
         type: "onnx",
         generator: {
@@ -22,12 +22,12 @@ fn reproduces(input_ids: ByteList, attention_mask: ByteList, logits: ByteList) {
     let [want, want_extents] = tensor_of(logits);
 
     let data = #include_bytes("../tests/models/tiny-gpt2/external/model.onnx_data");
-    let weights = Prepared::load(&mut Cpu {}, &data).unwrap();
-    let got = forward(
+    let mut model = Model::new(Params::load(&mut Cpu {}, &data).unwrap());
+    let got = compute(
         &mut Cpu {},
         &Tensor::<i64, [BatchSize, SequenceLength]> { data: ids, extents: ids_extents },
         &Tensor::<i64, [BatchSize, SequenceLength]> { data: mask, extents: mask_extents },
-        &weights,
+        &mut model,
     );
 
     assert got.extents == want_extents;
@@ -53,6 +53,6 @@ test "and for seven" {
 test "a file shorter than the build found the weights in names the tensor it cuts off" {
     let data = #include_bytes("../tests/models/tiny-gpt2/external/model.onnx_data");
     let cut = data[0..<data.len() - 1].to_list() as ByteList;
-    let e = Prepared::load(&mut Cpu {}, &cut).unwrap_err();
+    let e = Params::load(&mut Cpu {}, &cut).unwrap_err();
     assert `${e}`.ends_with(`: the payload ends at byte ${data.len()}, past the ${data.len() - 1} given`);
 }

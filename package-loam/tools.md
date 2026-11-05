@@ -4,14 +4,14 @@
 
 `loam gen` runs what the Kiln generator runs, without Kiln, and prints the
 module. It is the entry point for profiling the generator. `loam dump` prints
-the checked graph: how `forward` lowers each node (a kernel call, a step fused
-into a later kernel, folded by stage 0, an alias of its operand, or a branch),
-why each kernel writes its output, where each axis took its name from, each
+the checked graph: how `build` lowers each node (operations of the graph,
+folded by stage 0, an alias of its operand, a branch, or a weight's transpose
+viewed by the product reading it), where each axis took its name from, each
 tensor's element type and axes, the values stage 0 folded, what each scope
-leaves `forward` to check, and which lengths the run may pad to a capacity or
-the node that refuses one.
-`--format json` prints the same for a test to read. `"fuse": false` in the
-options turns fusion off, for a comparison.
+leaves `compute` to check, and which lengths the run may pad to a capacity or
+the node that refuses one. The device compiler's fusion is decided when it
+runs, so no dump reports it. `--format json` prints the same for a test to
+read.
 
 ```sh
 wado run package-loam gen --type onnx --options options.json --checkpoint model.safetensors model.onnx
@@ -32,6 +32,10 @@ one small model per case and what onnxruntime computes from it. The test builds
 each model as the generator would and runs the result under `core:eval`, so a
 refused build, a trap and a wrong answer each show as a difference from
 onnxruntime.
+
+Each example's `generate.mjs` writes its model's `generate.json` through
+`tools/greedy.mjs`: the tokens onnxruntime picks greedily, and its time a token
+on the CPU and on its WebGPU provider, which must pick the same tokens.
 
 `package.json` pins the Node runtimes the oracle scripts (`*.mjs`) run, and
 `mise run loam-oracle-deps` installs them. `mise run loam-ort-inspect <model.onnx> [--dim name=extent]...` reports what onnxruntime makes of a model:

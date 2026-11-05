@@ -55,7 +55,7 @@ leaves this file, and `design.md` states what it built.
    question is padded at its end, and its answer is read at its own last
    token. Every row reads the state's cache, which keeps its batch of one
    rather than being copied for each row. The graph gives the past and the new
-   tokens one batch axis, and `forward` checks that the inputs agree on it
+   tokens one batch axis, and `compute` checks that the inputs agree on it
    (see Axis Identity Is a Type, Extents Are Values). This item changes that
    check to admit a past of batch one beside n rows. Finished when `design.md`
    records the time n questions take as rows of one pass as a ratio to the
@@ -115,7 +115,7 @@ leaves this file, and `design.md` states what it built.
     with the tokens onnxruntime picks, under `wado run-webgpu` from
     onnx-community's `q4` export, with no line that names a layer.
 17. [ ] A half graph keeps its type. Every kernel stores the element type the
-    graph gives its output, `Prepared` holds a half weight as a half, and
+    graph gives its output, `Params` holds a half weight as a half, and
     `WebGpuBackend` computes in f16 where the device offers `shader-f16` (see
     Wado Stores a Half, a Device Computes In It). Finished when Gemma 3
     (270M)'s `fp16` export picks the tokens onnxruntime picks from it on `Cpu`
@@ -232,7 +232,7 @@ Over a symbol, it stops the build unless the dividend is never negative and the
 divisor is a positive number. There truncating rounds down, and a derived symbol
 rounds down.
 
-A value `forward` computes from the symbols, an extent or an owed slack, must
+A value `compute` computes from the symbols, an extent or an owed slack, must
 fit `i64` with every symbol as large as a length can be, or the build stops.
 That bound takes each symbol apart from the others, so it also stops a length
 the inputs bound together. `[N, M, 3]` flattened is `3 * N * M` elements, which
@@ -274,7 +274,7 @@ generator the model alone.
 
 Every arithmetic kernel computes in f32 and stores f32, as the WEP's signatures
 spell, but a half graph needs it to store `f16` or `bf16` as well. A
-`WebGpuBackend` view holds f32 alone, and `forward` converts a half input and
+`WebGpuBackend` view holds f32 alone, and `compute` converts a half input and
 output where it crosses the boundary. One of `int64` is held in `i64`, and one
 of `bool` in `bool`. Every other element type stops the build naming it.
 Arithmetic in `double` and the integer types is a second instantiation of the
@@ -285,14 +285,10 @@ A half graph computes at the precision its exporter chose, and a caller cannot
 keep a node's output in f32 instead. An exporter that keeps a softmax or a norm
 in f32 says so in the graph; one that does not leaves the rounding to Loam.
 
-`WebGpuBackend` takes the f16 path wherever the device offers `shader-f16`, and
-a caller cannot take the f32 path on such a device.
-
 What the tolerance is is open: for one operator and for a whole model, and for
 a half graph, where onnxruntime computes some operators in f32 and others in
 half. So is how a decoder's token check treats two logits the tolerance cannot
-tell apart. `fusion_test.wado` still holds the fused module to the unfused one
-bit for bit, which the kernels give today and Loam no longer promises.
+tell apart.
 
 Quantization beyond int4. Block formats are parameterized by block size, scale
 representation, and rotation, so the type that carries one must be
@@ -311,16 +307,16 @@ them.
 
 ### WebGPU
 
-The WebGPU backend runs the convolutions and `max_pool` on the CPU, each
+The WebGPU backend runs `convolution` and `reduce_window` on the CPU, each
 downloading its operand. So does a kernel over an element type other than f32,
 a product with more batch elements or tiles than one dispatch dimension holds,
 and an elementwise kernel, a row kernel or a product whose output outgrows one
 binding. A model whose graph alternates the two crosses the boundary at every
 such node.
 
-A kernel over weights alone runs on every call to `forward`. MNIST-12 regroups
-its last weight with a `Reshape`, which `loam dump` reports as a kernel and
-onnxruntime folds into the weight once.
+An operation over weights alone runs on every call to `compute`, where
+onnxruntime folds it into the weight once. MNIST-12 regroups its last weight
+with a `Reshape`.
 
 A kernel reading more buffers than the adapter binds to one shader copies its
 operands into one buffer first, so it moves them twice.
@@ -328,13 +324,12 @@ operands into one buffer first, so it moves them twice.
 Merging attention heads after their transpose is a `reshape` no strides say, so
 the device copies it: one dispatch a layer that a view cannot spare.
 
-Products of one input are concatenated only where each is a kernel alone, by a
-weight as stored. A projection with a bias after it, as some models give
-attention's query, key and value, stays a product of its own, and so does one
-by a transposed weight. Over more than one row, a part of a concatenation is
-strided by the whole product's row, so a `reshape` merging its rows with an
-axis after them copies it, as Gemma 3's query and key normalization over heads
-does on a prompt.
+Products of one input are joined only where each writes its product alone, by
+a weight. A projection with a bias after it, as some models give attention's
+query, key and value, stays a product of its own. Over more than one row, a
+part of a concatenation is strided by the whole product's row, so a `reshape`
+merging its rows with an axis after them copies it, as Gemma 3's query and key
+normalization over heads does on a prompt.
 
 A buffer of the pass is released when the next pass begins, never while this
 one runs, so a pass holds every tensor it computes at once.

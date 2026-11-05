@@ -14,7 +14,7 @@ cache:
 - GPT-2's weights are in the file the build read, so `fetch.sh` downloads the
   same 653 MB a second time.
 - Gemma's weights are in `model.onnx_data`, which the build never reads. Nothing
-  pins it but `fetch.sh`, and `Prepared::load` cannot tell it from another file
+  pins it but `fetch.sh`, and `Params::load` cannot tell it from another file
   long enough to hold every weight's range: it loads garbage. An `Asset` the host
   checked against its digest is the file the program named.
 
@@ -78,15 +78,15 @@ Such a program is distributed as its repository.
 
 ### Loam reads each weight where it is
 
-An option names the asset, and the generated `Prepared::open(backend)` reads
+An option names the asset, and the generated `Params::open(backend)` reads
 each weight's range with `read_at`. The caller writes neither a path nor the
 bytes:
 
 ```wado
-let weights = gemma::Prepared::open(&mut backend)?;
+let weights = gemma::Params::open(&mut backend)?;
 ```
 
-Reading by range holds the weights once. `Prepared::load` given the whole file
+Reading by range holds the weights once. `Params::load` given the whole file
 holds the file and the weights at once. `load` stays for bytes the program
 already has, such as `#include_bytes` in a test.
 

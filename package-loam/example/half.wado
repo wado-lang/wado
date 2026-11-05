@@ -1,14 +1,14 @@
-//! A graph whose boundary is `float16`, run through the generated kernels.
+//! A graph whose boundary is `float16`, run through the generated graph.
 //!
 //! Wado's `f16` is storage only, so the weights and the boundary tensors are
-//! held in it. `prepare` converts the weights once into the f32 the kernels
-//! compute in, and `forward` converts each input as it arrives.
+//! held in it. `params` converts the weights once into the f32 the graph
+//! computes in, and `compute` converts each input as it arrives.
 //!
 //!     wado run package-loam/example/half.wado
 
 use { println, Stdout } from "core:cli";
 use { Cpu, Tensor } from "lib:loam";
-use { N as Batch, Weights, X1 as In, Y1 as Out, forward } from "./half.onnxtext"
+use { Model, N as Batch, Weights, X1 as In, Y1 as Out, compute } from "./half.onnxtext"
     with {
         type: "onnxtext",
         generator: { module: "lib:loam" },
@@ -41,14 +41,14 @@ fn ones_input() -> Tensor<f16, [Batch, In]> {
 
 export fn run() with Stdout {
     let mut cpu = Cpu {};
-    let prepared = weights().prepare(&mut cpu);
-    let y = forward(&mut cpu, &ones_input(), &prepared);
+    let mut model = Model::new(weights().params(&mut cpu));
+    let y = compute(&mut cpu, &ones_input(), &mut model);
     println(`logits ${y.extents[1]}, first ${y.data[0]}`);
 }
 
-test "a float16 boundary runs through the f32 kernels and comes back half" {
+test "a float16 boundary runs through the f32 graph and comes back half" {
     let mut cpu = Cpu {};
-    let y = forward(&mut cpu, &ones_input(), &weights().prepare(&mut cpu));
+    let y = compute(&mut cpu, &ones_input(), &mut Model::new(weights().params(&mut cpu)));
 
     assert y.extents == [1, 2] as List<i32>;
     // Four ones at 0.5 each, plus the bias. Every value here is exact in f16.

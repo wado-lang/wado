@@ -122,8 +122,8 @@ fn cmd_dump(d: DumpArgs) -> Result<String, String> with Preopens {
     let path = one_file("loam dump", &d.files)?;
     let model = checked_model("loam dump", &path, &d.type, &d.options)?;
     return match d.format.as_str_slice() {
-        "text" => Result::Ok(render_dump(&model.graph, &model.checked, model.fuse)),
-        "json" => Result::Ok(`${render_dump_json(&model.graph, &model.checked, model.fuse)}\n`),
+        "text" => Result::Ok(render_dump(&model.graph, &model.checked)),
+        "json" => Result::Ok(`${render_dump_json(&model.graph, &model.checked)}\n`),
         _ => Result::Err(`loam dump: --format is text or json\n${USAGE}`),
     };
 }

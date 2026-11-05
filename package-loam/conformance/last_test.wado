@@ -1,9 +1,9 @@
-//! The `last` option: `forward` computes the last position alone, and returns
+//! The `last` option: `compute` computes the last position alone, and returns
 //! what the whole graph computes there.
 
 use { Cpu, Tensor } from "lib:loam";
 use { assert_close } from "./oracle.wado";
-use { N, S, W1, Weights, X2, forward } from "./last.onnxtext"
+use { Model, N, Params, S, W1, X2, compute } from "./last.onnxtext"
     with {
         type: "onnxtext",
         generator: {
@@ -52,7 +52,7 @@ fn last_rows(batch: i32, seq: i32) -> List<f32> {
 }
 
 fn run(batch: i32, seq: i32) -> Tensor<f32, [N, S, W1]> {
-    return forward(
+    return compute(
         &mut Cpu {},
         &Tensor::<f32, [N, S, X2]> {
             data: X[0..<batch * seq * 4].to_list(),
@@ -66,7 +66,7 @@ fn run(batch: i32, seq: i32) -> Tensor<f32, [N, S, W1]> {
             data: W,
             extents: [4, 3],
         },
-        &Weights {}.prepare(&mut Cpu {}),
+        &mut Model::new(Params::embedded(&mut Cpu {})),
     );
 }
 

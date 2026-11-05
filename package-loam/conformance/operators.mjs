@@ -223,6 +223,22 @@ add('ReduceSumNoop', {
   nodes: [node('ReduceSum', ['A'], 'Y', { noop_with_empty_axes: 1 })],
 });
 
+// `halves` puts each lane's greatest at one index, and these move it about.
+const scattered = (dims) => float(dims, Array.from({ length: dims.reduce((a, b) => a * b, 1) }, (_, i) => ((i * 5) % 7) - 3));
+add('ArgMaxKept', { inputs: { A: scattered([2, 3, 4]) }, nodes: [node('ArgMax', ['A'], 'Y', { axis: 1 })], out: INT64 });
+add('ArgMaxDropped', {
+  inputs: { A: scattered([2, 3, 4]) },
+  nodes: [node('ArgMax', ['A'], 'Y', { axis: -1, keepdims: 0 })],
+  out: INT64,
+});
+add('ArgMaxFirst', { inputs: { A: scattered([3, 2]) }, nodes: [node('ArgMax', ['A'], 'Y')], out: INT64 });
+// Each row's greatest twice, and an infinity: the first of them is the index.
+add('ArgMaxTies', {
+  inputs: { A: float([3, 4], [1, 3, 3, 0, -1, -2, -1, -3, -Infinity, Infinity, 2, Infinity]) },
+  nodes: [node('ArgMax', ['A'], 'Y', { axis: 1 })],
+  out: INT64,
+});
+
 // Loam holds no bool at the boundary, so the condition is cast from a float.
 add('WhereBroadcast', {
   inputs: { C: float([2, 3], [1, 0, -2, 0, 0, 0.5]), A: float([2, 3]), B: float([3]) },

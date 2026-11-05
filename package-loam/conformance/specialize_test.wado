@@ -1,7 +1,7 @@
 //! The `dims` and `outputs` options: without both, this graph stops the build.
 
 use { Cpu, Merged, Tensor } from "lib:loam";
-use { N, Weights, X1, X2, forward } from "./specialize.onnxtext"
+use { Model, N, Params, X1, X2, compute } from "./specialize.onnxtext"
     with {
         type: "onnxtext",
         generator: {
@@ -15,13 +15,13 @@ use { N, Weights, X1, X2, forward } from "./specialize.onnxtext"
 
 test "a fixed batch lets the kept output regroup" {
     let data: List<f32> = [0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0];
-    let got: Tensor<f32, [N, Merged<[X1, X2]>]> = forward(
+    let got: Tensor<f32, [N, Merged<[X1, X2]>]> = compute(
         &mut Cpu {},
         &Tensor::<f32, [N, X1, X2]> {
             data,
             extents: [2, 2, 3],
         },
-        &Weights {}.prepare(&mut Cpu {}),
+        &mut Model::new(Params::embedded(&mut Cpu {})),
     );
     assert got.extents == [2, 6];
     assert got.data == data;

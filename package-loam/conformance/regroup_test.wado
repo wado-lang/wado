@@ -17,13 +17,13 @@ test "Flatten reproduces the output ONNX ships" {
         #include_bytes("../tests/onnx/pytorch-operator/test_operator_flatten/test_data_set_0/output_0.pb"),
     );
 
-    let got: Tensor<f32, [flatten::Axis00, Merged<[flatten::Axis01, flatten::Axis02, flatten::Axis03]>]> = flatten::forward(
+    let got: Tensor<f32, [flatten::Axis00, Merged<[flatten::Axis01, flatten::Axis02, flatten::Axis03]>]> = flatten::compute(
         &mut Cpu {},
         &Tensor::<f32, [flatten::Axis00, flatten::Axis01, flatten::Axis02, flatten::Axis03]> {
             data: x,
             extents: x_extents,
         },
-        &flatten::Weights {}.prepare(&mut Cpu {}),
+        &mut flatten::Model::new(flatten::Params::embedded(&mut Cpu {})),
     );
 
     assert got.extents == want_extents;

@@ -5,7 +5,7 @@
 use { Cpu, Tensor } from "lib:loam";
 use { HashMap } from "core:collections";
 use { assert_close, ints_of, tensor_of } from "./oracle.wado";
-use { BatchSize, Prepared, SequenceLength, forward } from "../tests/models/tiny-gpt2/model.onnxtext"
+use { BatchSize, Model, Params, SequenceLength, compute } from "../tests/models/tiny-gpt2/model.onnxtext"
     with {
         type: "onnxtext",
         generator: {
@@ -37,12 +37,12 @@ fn reproduces(input_ids: ByteList, attention_mask: ByteList, logits: ByteList) {
     let [mask, mask_extents] = ints_of(attention_mask);
     let [want, want_extents] = tensor_of(logits);
 
-    let weights = Prepared::load(&mut Cpu {}, &every_shard()).unwrap();
-    let got = forward(
+    let mut model = Model::new(Params::load(&mut Cpu {}, &every_shard()).unwrap());
+    let got = compute(
         &mut Cpu {},
         &Tensor::<i64, [BatchSize, SequenceLength]> { data: ids, extents: ids_extents },
         &Tensor::<i64, [BatchSize, SequenceLength]> { data: mask, extents: mask_extents },
-        &weights,
+        &mut model,
     );
 
     assert got.extents == want_extents;
@@ -68,6 +68,6 @@ test "and for seven" {
 test "a shard left out of the load is named with a tensor it holds" {
     let mut given = every_shard();
     given.remove("model-00003-of-00003.safetensors");
-    let e = Prepared::load(&mut Cpu {}, &given).unwrap_err();
+    let e = Params::load(&mut Cpu {}, &given).unwrap_err();
     assert `${e}` == "onnx::MatMul_1588: the index places it in model-00003-of-00003.safetensors, which is not given";
 }

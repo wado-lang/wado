@@ -1,5 +1,5 @@
 //! One generated module run on the CPU and on a WebGPU device: the same
-//! `forward`, instantiated at two backends, gives the same logits within
+//! `compute`, instantiated at two backends, gives the same logits within
 //! tolerance, and the device gives them sooner.
 //!
 //!     wado run-webgpu package-loam/example/webgpu/mlp.wado
@@ -25,7 +25,7 @@ use {
 } from "wasi:webgpu";
 use { deviation, noise } from "./compare.wado";
 use { Cpu, Tensor, WebGpuBackend, element_count } from "lib:loam";
-use { N as Batch, Weights, X1 as In, forward } from "./mlp.onnxtext"
+use { Model, N as Batch, Weights, X1 as In, compute } from "./mlp.onnxtext"
     with {
         type: "onnxtext",
         generator: { module: "lib:loam" },
@@ -58,17 +58,17 @@ export fn run() with (Stdout, MonotonicClock, Webgpu, Gpu, GpuAdapter, GpuDevice
         return;
     };
     let w = weights();
-    let on_host = w.prepare(&mut Cpu {});
-    let on_device = w.prepare(&mut gpu);
+    let mut on_host = Model::new(w.params(&mut Cpu {}));
+    let mut on_device = Model::new(w.params(&mut gpu));
     let x = tensor::<[Batch, In]>([BATCH, 1024], 7, 1.0);
 
     let t0 = MonotonicClock::now();
-    let on_cpu = forward(&mut Cpu {}, &x, &on_host);
+    let on_cpu = compute(&mut Cpu {}, &x, &mut on_host);
     let t1 = MonotonicClock::now();
-    // The first call compiles the shaders, which the second finds compiled.
-    let _ = forward(&mut gpu, &x, &on_device);
+    // The first call compiles the program, which the second replays.
+    let _ = compute(&mut gpu, &x, &mut on_device);
     let t2 = MonotonicClock::now();
-    let on_gpu = forward(&mut gpu, &x, &on_device);
+    let on_gpu = compute(&mut gpu, &x, &mut on_device);
     let t3 = MonotonicClock::now();
 
     println(`logits ${on_gpu.extents:?}, largest deviation from the CPU ${deviation(&on_gpu.data, &on_cpu.data)}`);

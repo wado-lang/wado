@@ -22,13 +22,38 @@ use {
     GpuSupportedLimits,
     RecordOptionGpuSize64,
 } from "wasi:webgpu";
-use { Cpu, Element, Graph, Holds, Placed, Tensor, WebGpuBackend } from "lib:loam";
+use { Comparison, Cpu, Element, full, Graph, Holds, Placed, strided_gather, Tensor, WebGpuBackend } from "lib:loam";
 use cases from "lib:loam/src/runtime/graph_cases.wado";
 use { deviation } from "lib:loam/example/webgpu/compare.wado";
 use gated from "./gated.onnxtext"
     with {
         type: "onnxtext",
         generator: { module: "lib:loam" },
+    };
+use projected from "./projected.onnxtext"
+    with {
+        type: "onnxtext",
+        generator: { module: "lib:loam" },
+    };
+use attended from "./attended.onnxtext"
+    with {
+        type: "onnxtext",
+        generator: { module: "lib:loam" },
+    };
+use shared from "./shared.onnxtext"
+    with {
+        type: "onnxtext",
+        generator: { module: "lib:loam" },
+    };
+use merged from "../tests/models/tiny-gpt2/merged/model.onnx"
+    with {
+        type: "onnx",
+        generator: {
+            module: "lib:loam",
+            options: {
+                dims: { batch_size: 1 },
+            },
+        },
     };
 
 export fn run() with (Stdout, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder, GpuSupportedLimits, RecordOptionGpuSize64) {
@@ -46,6 +71,44 @@ export fn run() with (Stdout, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuC
     println(`mixed converted ${apart(&mut gpu, &got.2, &want.2)}`);
     println(`mixed compared ${apart(&mut gpu, &got.3, &want.3)}`);
     println(`mixed i64 ${apart(&mut gpu, &got.4, &want.4)}`);
+
+    // A gather of consecutive rows is a view of them, and dispatches nothing.
+    let rows = rows_of::<[Rows, Run, Pair]>(5);
+    let from_one = full::<Cpu, i64, []>(cpu, 1, []);
+    let gathered = strided_gather::<Cpu, f32, [Rows, Run, Pair], [Rows, Run, Pair]>(cpu, &rows, 1, &from_one, 3, 1);
+    let gathering = gpu.dispatches();
+    let uploaded = gpu.upload(&rows);
+    let start = full::<WebGpuBackend, i64, []>(&mut gpu, 1, []);
+    let taken = strided_gather::<WebGpuBackend, f32, [Rows, Run, Pair], [Rows, Run, Pair]>(
+        &mut gpu,
+        &uploaded,
+        1,
+        &start,
+        3,
+        1,
+    );
+    assert gpu.dispatches() == gathering;
+    println(`consecutive rows ${apart(&mut gpu, &taken, &gathered)}`);
+
+    // Rows of a mask a step apart are gathered on the device, as a causal
+    // mask's are, read back by nothing.
+    let zero = full::<Cpu, f32, [Rows, Run, Pair]>(cpu, 0.0, [1, 5, 2]);
+    let positive = cpu.compare(Comparison::Gt, &rows, &zero);
+    let from_zero = full::<Cpu, i64, []>(cpu, 0, []);
+    let picked = strided_gather::<Cpu, bool, [Rows, Run, Pair], [Rows, Run, Pair]>(cpu, &positive, 1, &from_zero, 3, 2);
+    let held_mask = gpu.compare(Comparison::Gt, &uploaded, &gpu.upload(&zero));
+    let read_before = gpu.read_backs();
+    let start_zero = full::<WebGpuBackend, i64, []>(&mut gpu, 0, []);
+    let alternate = strided_gather::<WebGpuBackend, bool, [Rows, Run, Pair], [Rows, Run, Pair]>(
+        &mut gpu,
+        &held_mask,
+        1,
+        &start_zero,
+        3,
+        2,
+    );
+    assert gpu.read_backs() == read_before, "a mask's rows are gathered on the device";
+    println(`mask rows ${apart(&mut gpu, &alternate, &picked)}`);
 
     let w = cases::windowed_input();
     println(`windowed ${apart(&mut gpu, &cases::windowed(&mut gpu, &gpu.upload(&w)), &cases::windowed(cpu, &w))}`);
@@ -74,38 +137,218 @@ export fn run() with (Stdout, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuC
         gpu.upload(&case.rotation.1),
     ];
     let bias = gpu.upload(&case.bias);
-    let dispatched = gpu.dispatches();
+    let attending_from = gpu.dispatches();
     let attended = cases::attending(&mut gpu, &inputs, &past, &rotation, &bias, &case.options);
     // A past the backend did not fill is copied into a cache, then the kernels
     // append, attend and join; the decomposition takes dozens.
-    assert gpu.dispatches() - dispatched == 5, "a causal attention over a shared cache runs in its kernels";
+    assert gpu.dispatches() - attending_from == 5, "a causal attention over a shared cache runs in its kernels";
     println(`attending out ${apart(&mut gpu, &attended.0, &expected.0)}`);
-    println(`attending present_k ${apart(&mut gpu, &attended.1, &expected.1)}`);
-    println(`attending present_v ${apart(&mut gpu, &attended.2, &expected.2)}`);
+    // What a shared present holds past the valid positions is unspecified.
+    let valid = case.past.2.data[0] as i32 + case.inputs.0.extents[1];
+    for let [name, present, reference] of [
+        ["present_k", attended.1, expected.1],
+        ["present_v", attended.2, expected.2],
+    ] {
+        let read = gpu.download(&present);
+        println(
+            `attending ${name} ${deviation(&leading(cpu, &read, valid).data, &leading(cpu, &reference, valid).data)}`,
+        );
+    }
 
-    // `compute` compiles one program per shape class and replays it: 3 and 4
-    // positions share a capacity, 5 takes the next.
+    // `compute` compiles one program per shape class and replays it: 5 and 6
+    // positions share a capacity, 7 takes the next. A program's second call
+    // does again what its first recorded of each kernel, and so does a call
+    // after passes of another program. A later call binds the buffers the
+    // first made, so it makes a bind group only for the dispatches reading the
+    // input it uploads and writing the value it returns, which the pass holds.
+    let kept = gpu.kept_bytes();
     let mut on_gpu = gated::Model::new(gated::Params::embedded(&mut gpu));
+    // The normalization's weight and the folded epsilon in f32, and the
+    // products' three in bf16: 2 * 4 + 4 + 3 * 6 * 2 bytes.
+    assert gpu.kept_bytes() - kept == 48, "a weight only products read is kept in bf16";
     let mut on_cpu = gated::Model::new(gated::Params::embedded(cpu));
-    for let [positions, programs] of [
-        [3, 1],
-        [4, 1],
-        [5, 2],
-    ] as List<[i32, i32]> {
-        let input = gated_input(positions);
-        let before = gpu.dispatches();
+    for let [positions, programs, replays, groups] of [
+        [5, 1, 0, 2],
+        [6, 1, 2, 2],
+        [7, 2, 0, 2],
+        [7, 2, 2, 2],
+        [5, 2, 2, 2],
+        [9, 3, 0, 4],
+    ] as List<[i32, i32, i32, i32]> {
+        let input = rows_of::<[gated::N, gated::S, gated::X2]>(positions);
+        let [before, replayed, grouped] = [
+            gpu.dispatches(),
+            gpu.replays(),
+            gpu.bind_groups(),
+        ];
         let on_device = gated::compute(&mut gpu, &input, &mut on_gpu);
-        // The normalization, the gate's product, the value's with the gate in
-        // its epilogue, and the product down.
-        assert gpu.dispatches() - before == 4, "one dispatch for each kernel the plan forms";
+        // The gate's and the value's products of the normalization, as one by
+        // their weights interleaved, computing the normalization row by row as
+        // they read it, and the product down. Over more rows than one dispatch
+        // stages, the normalization, then each product.
+        let launched = if positions > 8 { 4 } else { 2 };
+        assert gpu.dispatches() - before == launched, "one dispatch for each launch the plan forms";
+        assert gpu.replays() - replayed == replays;
+        assert gpu.bind_groups() - grouped <= groups;
         let reference = gated::compute(cpu, &input, &mut on_cpu);
         assert on_gpu.programs.len() == programs, "one program per shape class";
         println(`compiled gated ${positions} ${deviation(&on_device.data, &reference.data)}`);
     }
+    // Launches idle for 256 passes free the buffers and parameters they own at
+    // the next sweep, at most 32 passes on, and a value a call returned is the
+    // caller's, freed when it drops. What stays is the weights and each
+    // program's constants.
+    let busy = gpu.kept_bytes();
+    idle(&mut gpu);
+    let idle_bytes = gpu.kept_bytes();
+    assert idle_bytes < busy, "an idle launch frees what it owns";
+    gated::compute(&mut gpu, &rows_of::<[gated::N, gated::S, gated::X2]>(3), &mut on_gpu);
+    idle(&mut gpu);
+    assert gpu.kept_bytes() == idle_bytes, "a call leaves nothing once its launches idle";
+
+    // The three projections of one input are one product, by their weights
+    // kept side by side.
+    let mut projected_gpu = projected::Model::new(projected::Params::embedded(&mut gpu));
+    let mut projected_cpu = projected::Model::new(projected::Params::embedded(cpu));
+    for let positions of [1, 3, 9] as List<i32> {
+        let input = rows_of::<[projected::N, projected::S, projected::X2]>(positions);
+        let before = gpu.dispatches();
+        let on_device = projected::compute(&mut gpu, &input, &mut projected_gpu);
+        // The products, computing the normalization as they read it, the
+        // softmax and the mean, and over more than one row a copy of `K`, a
+        // slice of the products' columns, to return it. Over more rows than
+        // one dispatch stages, the normalization first.
+        let copied = if positions > 1 { 1 } else { 0 };
+        let normalized = if positions > 8 { 1 } else { 0 };
+        assert gpu.dispatches() - before == 3 + copied + normalized, "products of one input are one dispatch";
+        let reference = projected::compute(cpu, &input, &mut projected_cpu);
+        println(`compiled projected ${positions} ${deviation(&on_device.Y.data, &reference.Y.data)} ${deviation(
+            &on_device.K.data,
+            &reference.K.data,
+        )} ${deviation(&on_device.Z.data, &reference.Z.data)}`);
+    }
+
+    // The second normalization's products launch one by one, after it.
+    let mut shared_gpu = shared::Model::new(shared::Params::embedded(&mut gpu));
+    let mut shared_cpu = shared::Model::new(shared::Params::embedded(cpu));
+    let input = rows_of::<[shared::N, shared::S, shared::X2]>(1);
+    let before = gpu.dispatches();
+    let on_device = shared::compute(&mut gpu, &input, &mut shared_gpu);
+    assert gpu.dispatches() - before == 4, "products whose weights lie apart launch apart";
+    let reference = shared::compute(cpu, &input, &mut shared_cpu);
+    println(`compiled shared ${deviation(&on_device.P.data, &reference.P.data)} ${deviation(
+        &on_device.Q.data,
+        &reference.Q.data,
+    )} ${deviation(&on_device.R.data, &reference.R.data)} ${deviation(&on_device.T.data, &reference.T.data)}`);
+
+    let mut attended_gpu = attended::Model::new(attended::Params::embedded(&mut gpu));
+    let mut attended_cpu = attended::Model::new(attended::Params::embedded(cpu));
+    let mut cache_gpu = attended::Cache::empty(&mut gpu);
+    let mut cache_cpu = attended::Cache::empty(cpu);
+    // A decode step appending to the cache in place replays the attention the
+    // step before recorded at that capacity: the steps to 6 and 8 positions,
+    // each the second at its capacity. The steps to 4, 5, 7 and 9 are the
+    // first at theirs. The other replay slices the key and the value.
+    // Every decode step appends in place, so each dispatches as many kernels:
+    // past the prompt's padding, and across a capacity it outgrows too.
+    let mut total = 0;
+    let mut step_dispatches: Option<i32> = null;
+    for let [positions, replays] of [
+        [3, 0],
+        [1, 0],
+        [1, 1],
+        [1, 2],
+        [1, 1],
+        [1, 2],
+        [1, 1],
+    ] as List<[i32, i32]> {
+        total += positions;
+        let mut data: List<f32> = [];
+        for let i of 0..<positions * 32 {
+            data.push(((i + total) % 11) as f32 * 0.125 - 0.625);
+        }
+        let fresh = Tensor::<f32, [attended::X0, attended::S, attended::X2]> {
+            data,
+            extents: [1, positions, 32],
+        };
+        let mask = Tensor::<i64, [attended::AttentionMask0, attended::T]> {
+            data: List::<i64>::filled(total, 1),
+            extents: [1, total],
+        };
+        let [replayed_before, dispatched_before] = [
+            gpu.replays(),
+            gpu.dispatches(),
+        ];
+        let stepped = attended::compute(&mut gpu, &fresh, &mask, &cache_gpu, &mut attended_gpu);
+        assert gpu.replays() - replayed_before == replays;
+        let dispatched = gpu.dispatches() - dispatched_before;
+        if total > positions {
+            assert step_dispatches.unwrap_or(dispatched) == dispatched;
+            step_dispatches = Option::Some(dispatched);
+        }
+        let wanted = attended::compute(cpu, &fresh, &mask, &cache_cpu, &mut attended_cpu);
+        println(`compiled attended ${total} ${deviation(&stepped.Y.data, &wanted.Y.data)}`);
+        cache_gpu = stepped.cache;
+        cache_cpu = wanted.cache;
+    }
+
+    // An `If` on an input: the prompt takes the branch without a past, each
+    // step after it the one with, and each program records its branch alone.
+    let mut merged_gpu = merged::Model::new(merged::Params::embedded(&mut gpu));
+    let mut merged_cpu = merged::Model::new(merged::Params::embedded(cpu));
+    let mut past_gpu = merged::Cache::empty(&mut gpu);
+    let mut past_cpu = merged::Cache::empty(cpu);
+    let mut length = 0;
+    for let tokens of [
+        [1, 5, 42, 7],
+        [11],
+        [13],
+    ] as List<List<i64>> {
+        let fresh = Tensor::<i64, [merged::BatchSize, merged::SequenceLength]> {
+            data: tokens,
+            extents: [1, tokens.len()],
+        };
+        let mask = Tensor::<i64, [merged::BatchSize, merged::SequenceLength]> {
+            data: List::<i64>::filled(length + tokens.len(), 1),
+            extents: [1, length + tokens.len()],
+        };
+        let branch = Tensor::<bool, [merged::UseCacheBranch0]> {
+            data: [length > 0],
+            extents: [1],
+        };
+        let stepped = merged::compute(&mut gpu, &fresh, &mask, &branch, &past_gpu, &mut merged_gpu);
+        let wanted = merged::compute(cpu, &fresh, &mask, &branch, &past_cpu, &mut merged_cpu);
+        length += tokens.len();
+        println(`compiled merged ${length} ${deviation(&stepped.logits.data, &wanted.logits.data)}`);
+        past_gpu = stepped.cache;
+        past_cpu = wanted.cache;
+    }
+}
+
+/// Passes enough that every launch is idle.
+fn idle(gpu: &mut WebGpuBackend) with (GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBindGroup, GpuBuffer) {
+    for let _ of 0..<256 + 32 + 2 {
+        gpu.begin();
+    }
+}
+
+/// The first `positions` positions of a cache.
+fn leading<Axes>(cpu: &mut Cpu, t: &Tensor<f32, Axes>, positions: i32) -> Tensor<f32, Axes> {
+    let mut limit = t.extents;
+    limit[2] = positions;
+    return cpu.slice::<f32, Axes, Axes>(t, [0, 0, 0, 0], limit, [1, 1, 1, 1]);
+}
+
+/// The axes of the rows a gather takes a run of.
+struct Rows {
+}
+struct Run {
+}
+struct Pair {
 }
 
 /// `positions` rows of two features, each a distinct value.
-fn gated_input(positions: i32) -> Tensor<f32, [gated::N, gated::S, gated::X2]> {
+fn rows_of<Axes>(positions: i32) -> Tensor<f32, Axes> {
     let mut data: List<f32> = [];
     for let i of 0..<positions * 2 {
         data.push((i % 7) as f32 * 0.25 - 0.75);
