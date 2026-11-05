@@ -105,7 +105,7 @@ fn an_import_nothing_serves_traps_where_it_is_called() {
 #[ignore = "needs a plugin: run `mise run test-pjrt`"]
 fn loams_programs_compute_what_its_cpu_graph_does() {
     let printed = run("../package-loam/conformance/pjrt_graph.wado");
-    assert_eq!(printed.lines().count(), 49, "{printed}");
+    assert_eq!(printed.lines().count(), 54, "{printed}");
     for line in printed.lines() {
         let deviation: f32 = line
             .rsplit(' ')

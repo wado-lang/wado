@@ -226,8 +226,8 @@ has none:
 So a use site that must work with both writes every field that is not an
 `Option`, a `List`, or a `TreeMap`.
 
-Loam's options hold three maps, a list of strings, and a flag.
-They are declared in `compile.wado`, which the `loam` command reads too, and
+Loam's options hold three maps, a list of strings, an optional struct, and a
+flag. They are declared in `compile.wado`, which the `loam` command reads too, and
 the entry module re-exports them:
 
 <!-- {"source": "package-loam/src/compile.wado"} -->
@@ -247,6 +247,9 @@ export struct Options {
     /// the axis it ranks along, kept at extent 1: a greedy pick reads one
     /// index rather than a vocabulary's scores. Applied after `last`.
     pub arg_max: TreeMap<String, i32> = {},
+    /// The tensors a `decode` entry loops over, beside `compute`, which then
+    /// takes how many positions its cache keeps room for.
+    pub decode: Option<Decode> = null,
     /// Whether the weights a `type: "onnx"` file carries are compiled into the
     /// module. Off, the build reads past them, and `Params::load` reads them
     /// out of that file where the build found them, so a model too large to
@@ -256,7 +259,7 @@ export struct Options {
 ```
 
 Only the flag's default changes what a use site of the source generator may
-leave out; the list and map fields may be left out without one. The rest are
+leave out; the other fields may be left out without one. The rest are
 for the `loam` command, which reads the struct from JSON through `core:serde`,
 where a field without a default is required. From a prebuilt Loam, `embed` is
 required.
