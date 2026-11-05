@@ -1,0 +1,362 @@
+//! `PjrtBackend`: a `Graph` whose programs a PJRT plugin compiles and runs. An
+//! operation a pass adds outside a program computes on the host, as `Cpu`
+//! computes it. `core:pjrt` hosts it, so only `wado run-pjrt` runs it.
+
+use { HashSet } from "core:collections";
+use { Buffer, ElementType, Executable, PjrtHost } from "core:pjrt";
+use { Binary, Comparison, Convolution, DotDims, GatherDims, Graph, ScatterDims, Unary, WindowReduce } from "./hlo.wado";
+use { Cpu, Element, ElementKind, Holds, Tensor } from "./tensor.wado";
+use { Any, Recorded, Recorder, Untyped, data_of } from "./recorded.wado";
+use { le_bytes, module_of } from "./stablehlo.wado";
+
+/// A tensor on the device: which of the backend's buffers holds it.
+pub struct DeviceBuffer {
+    slot: i32,
+    extents: List<i32>,
+}
+
+/// Where `PjrtBackend` holds a tensor.
+pub variant Located<E, Axes> {
+    Host(Tensor<E, Axes>),
+    Device(DeviceBuffer),
+}
+
+/// What a program returns, each as its recording does.
+struct Returned {
+    kind: ElementKind,
+    extents: List<i32>,
+}
+
+/// A compiled pass: which of the backend's executables it is.
+pub struct PjrtProgram {
+    at: i32,
+    returned: List<Returned>,
+}
+
+/// The device of the plugin `wado run-pjrt` loaded. Buffers and executables are
+/// resources, which a tensor's value cannot hold, so the backend holds them
+/// and a tensor names its slot.
+pub affine struct PjrtBackend {
+    cpu: Cpu,
+    buffers: List<Option<Buffer>>,
+    /// The slots of `buffers` that hold none.
+    free: List<i32>,
+    /// The slots the next `begin` releases: what this pass put on the device,
+    /// and what the pass before retained.
+    pass: List<i32>,
+    retaining: HashSet<i32>,
+    executables: List<Executable>,
+}
+
+/// `outcome`'s value. What a plugin refuses is a bug of the writer or of the
+/// plugin, and its message is the one thing that says which.
+fn done<affine T>(outcome: Result<T, String>) -> T {
+    return match outcome {
+        Ok(value) => value,
+        Err(message) => panic(message),
+    };
+}
+
+fn element_type(kind: ElementKind) -> ElementType {
+    return match kind {
+        F32 => ElementType::Float32,
+        I64 => ElementType::Int64,
+        Bool => ElementType::Pred,
+    };
+}
+
+/// The `E`s `bytes` holds, as `le_bytes` lays them out.
+fn elements_of<E: Element>(bytes: ByteList) -> List<E> {
+    return match E::kind() {
+        F32 => List::<f32>::from_le_bytes(bytes).into_iter().map(|v| E::from_f32(v)).collect(),
+        I64 => List::<i64>::from_le_bytes(bytes).into_iter().map(|v| E::from_i64(v)).collect(),
+        Bool => bytes.into_iter().map(|b| E::from_bool(b != 0)).collect(),
+    };
+}
+
+impl PjrtBackend {
+    pub fn new() -> PjrtBackend {
+        return PjrtBackend {
+            cpu: Cpu {},
+            buffers: [],
+            free: [],
+            pass: [],
+            retaining: HashSet::new(),
+            executables: [],
+        };
+    }
+
+    fn stored(&mut self, buffer: Buffer) -> i32 {
+        let Some(slot) = self.free.pop() else {
+            self.buffers.push(Option::Some(buffer));
+            return self.buffers.len() - 1;
+        };
+        self.buffers[slot] = Option::Some(buffer);
+        return slot;
+    }
+
+    fn sent<E: Element, Axes>(&mut self, t: &Tensor<E, Axes>) -> i32 with PjrtHost {
+        let extents: List<i64> = t.extents.into_iter().map(|e| e as i64).collect();
+        return self.stored(done(PjrtHost::upload(element_type(E::kind()), extents, le_bytes(&data_of(&t.data)))));
+    }
+
+    /// The slot of `value`, sent to the device for this pass if it is on the host.
+    fn on_device(&mut self, value: &Any<PjrtBackend>) -> i32 with PjrtHost {
+        let host = match value {
+            F32(Device(d)) | I64(Device(d)) | Bool(Device(d)) => return d.slot,
+            F32(Host(t)) => self.sent(t),
+            I64(Host(t)) => self.sent(t),
+            Bool(Host(t)) => self.sent(t),
+        };
+        self.pass.push(host);
+        return host;
+    }
+
+    fn host<E: Element, Axes>(&self, t: &Located<E, Axes>) -> Tensor<E, Axes> {
+        return match t {
+            Host(h) => *h,
+            Device(d) => {
+                let Some(buffer) = &self.buffers[d.slot] else {
+                    panic("a tensor of a pass that has ended is no longer held");
+                };
+                Tensor { data: elements_of(done(buffer.to_host())), extents: d.extents }
+            },
+        };
+    }
+}
+
+impl Holds for PjrtBackend {
+    type Tensor<E: Element, Axes> = Located<E, Axes>;
+
+    fn upload<E: Element, Axes>(&mut self, t: &Tensor<E, Axes>) -> Located<E, Axes> {
+        return Located::Host(*t);
+    }
+
+    fn keep<E: Element, Axes>(&mut self, t: &Tensor<E, Axes>) -> Located<E, Axes> with PjrtHost {
+        return Located::Device(DeviceBuffer { slot: self.sent(t), extents: t.extents });
+    }
+
+    fn extents_of<E: Element, Axes>(&self, t: &Located<E, Axes>) -> List<i32> {
+        return match t {
+            Host(h) => h.extents,
+            Device(d) => d.extents,
+        };
+    }
+
+    fn download<E: Element, Axes>(&mut self, t: &Located<E, Axes>) -> Tensor<E, Axes> {
+        return self.host(t);
+    }
+
+    fn begin(&mut self) {
+        let pass = self.pass;
+        self.pass = [];
+        for let slot of pass {
+            if self.retaining.contains(slot) {
+                self.pass.push(slot);
+            } else {
+                self.buffers[slot] = null;
+                self.free.push(slot);
+            }
+        }
+        self.retaining = HashSet::new();
+    }
+
+    fn retain<E: Element, Axes>(&mut self, t: &Located<E, Axes>) {
+        if let Device(d) = t {
+            self.retaining.insert(d.slot);
+        }
+    }
+}
+
+impl Graph for PjrtBackend {
+    type Program = PjrtProgram;
+
+    fn relabeled<E: Element, In, Out>(&self, t: &Located<E, In>) -> Located<E, Out> {
+        return match t {
+            Host(h) => Located::Host(Tensor { data: h.data, extents: h.extents }),
+            Device(d) => Located::Device(*d),
+        };
+    }
+
+    fn compiled(
+        &mut self,
+        record: fn(&mut Recorder) -> Recorded with _,
+        earlier: &List<&PjrtProgram>,
+    ) -> Option<PjrtProgram> with (_, PjrtHost) {
+        let recorded = record(&mut Recorder::decomposing());
+        let returned: List<Returned> = recorded.body.results.into_iter().map(|id| {
+            let node = &recorded.nodes[id];
+            return Returned { kind: node.kind, extents: node.extents };
+        }).collect();
+        self.executables.push(done(PjrtHost::compile(module_of(&recorded))));
+        return Option::Some(PjrtProgram { at: self.executables.len() - 1, returned });
+    }
+
+    fn executed(
+        &mut self,
+        program: &PjrtProgram,
+        arguments: &List<Any<PjrtBackend>>,
+        weights: &List<Any<PjrtBackend>>,
+    ) -> List<Any<PjrtBackend>> with PjrtHost {
+        let slots: List<i32> = arguments.into_iter().chain(weights.into_iter()).map(|a| self.on_device(a)).collect();
+        let mut held: List<&Buffer> = [];
+        for let slot of slots {
+            let Some(buffer) = &self.buffers[slot] else {
+                panic("a tensor of a pass that has ended is no longer held");
+            };
+            held.push(buffer);
+        }
+        let results = done(self.executables[program.at].execute(held));
+        let mut values: List<Any<PjrtBackend>> = [];
+        for let result of results {
+            let slot = self.stored(result);
+            self.pass.push(slot);
+            let returned = &program.returned[values.len()];
+            let on = DeviceBuffer { slot, extents: returned.extents };
+            values.push(match returned.kind {
+                F32 => Any::F32(Located::Device(on)),
+                I64 => Any::I64(Located::Device(on)),
+                Bool => Any::Bool(Located::Device(on)),
+            });
+        }
+        return values;
+    }
+
+    fn iota<E: Element, Axes>(&mut self, extents: List<i32>, dimension: i32) -> Located<E, Axes> {
+        return Located::Host(self.cpu.iota(extents, dimension));
+    }
+
+    fn convert<A: Element, B: Element, Axes>(&mut self, x: &Located<A, Axes>) -> Located<B, Axes> {
+        return Located::Host(self.cpu.convert(&self.host(x)));
+    }
+
+    fn unary<Axes>(&mut self, op: Unary, x: &Located<f32, Axes>) -> Located<f32, Axes> {
+        return Located::Host(self.cpu.unary(op, &self.host(x)));
+    }
+
+    fn binary<E: Element, Axes>(&mut self, op: Binary, a: &Located<E, Axes>, b: &Located<E, Axes>) -> Located<E, Axes> {
+        return Located::Host(self.cpu.binary(op, &self.host(a), &self.host(b)));
+    }
+
+    fn compare<E: Element, Axes>(
+        &mut self,
+        direction: Comparison,
+        a: &Located<E, Axes>,
+        b: &Located<E, Axes>,
+    ) -> Located<bool, Axes> {
+        return Located::Host(self.cpu.compare(direction, &self.host(a), &self.host(b)));
+    }
+
+    fn select<E: Element, Axes>(
+        &mut self,
+        pred: &Located<bool, Axes>,
+        on_true: &Located<E, Axes>,
+        on_false: &Located<E, Axes>,
+    ) -> Located<E, Axes> {
+        return Located::Host(self.cpu.select(&self.host(pred), &self.host(on_true), &self.host(on_false)));
+    }
+
+    fn broadcast_in_dim<E: Element, In, Out>(
+        &mut self,
+        x: &Located<E, In>,
+        extents: List<i32>,
+        dims: List<i32>,
+    ) -> Located<E, Out> {
+        return Located::Host(self.cpu.broadcast_in_dim(&self.host(x), extents, dims));
+    }
+
+    fn reshape<E: Element, In, Out>(&mut self, x: &Located<E, In>, extents: List<i32>) -> Located<E, Out> {
+        return Located::Host(self.cpu.reshape(&self.host(x), extents));
+    }
+
+    fn transpose<E: Element, In, Out>(&mut self, x: &Located<E, In>, perm: List<i32>) -> Located<E, Out> {
+        return Located::Host(self.cpu.transpose(&self.host(x), perm));
+    }
+
+    fn slice<E: Element, In, Out>(
+        &mut self,
+        x: &Located<E, In>,
+        start: List<i32>,
+        limit: List<i32>,
+        strides: List<i32>,
+    ) -> Located<E, Out> {
+        return Located::Host(self.cpu.slice(&self.host(x), start, limit, strides));
+    }
+
+    fn concatenate<E: Element, A, B, Out>(
+        &mut self,
+        a: &Located<E, A>,
+        b: &Located<E, B>,
+        dimension: i32,
+    ) -> Located<E, Out> {
+        return Located::Host(self.cpu.concatenate(&self.host(a), &self.host(b), dimension));
+    }
+
+    fn reduce<In, Out>(&mut self, x: &Located<f32, In>, op: Binary, init: f32, dims: List<i32>) -> Located<f32, Out> {
+        return Located::Host(self.cpu.reduce(&self.host(x), op, init, dims));
+    }
+
+    fn dot_general<A, B, Out>(
+        &mut self,
+        lhs: &Located<f32, A>,
+        rhs: &Located<f32, B>,
+        dims: &DotDims,
+    ) -> Located<f32, Out> {
+        return Located::Host(self.cpu.dot_general(&self.host(lhs), &self.host(rhs), dims));
+    }
+
+    fn gather<E: Element, D, I, Out>(
+        &mut self,
+        operand: &Located<E, D>,
+        indices: &Located<i64, I>,
+        dims: &GatherDims,
+    ) -> Located<E, Out> {
+        return Located::Host(self.cpu.gather(&self.host(operand), &self.host(indices), dims));
+    }
+
+    fn scatter<E: Element, D, I, U>(
+        &mut self,
+        operand: &Located<E, D>,
+        indices: &Located<i64, I>,
+        updates: &Located<E, U>,
+        dims: &ScatterDims,
+    ) -> Located<E, D> {
+        return Located::Host(self.cpu.scatter(&self.host(operand), &self.host(indices), &self.host(updates), dims));
+    }
+
+    fn convolution<In, K, Out>(
+        &mut self,
+        x: &Located<f32, In>,
+        kernel: &Located<f32, K>,
+        conv: &Convolution,
+    ) -> Located<f32, Out> {
+        return Located::Host(self.cpu.convolution(&self.host(x), &self.host(kernel), conv));
+    }
+
+    fn reduce_window<In, Out>(
+        &mut self,
+        x: &Located<f32, In>,
+        op: Binary,
+        init: f32,
+        window: &WindowReduce,
+    ) -> Located<f32, Out> {
+        return Located::Host(self.cpu.reduce_window(&self.host(x), op, init, window));
+    }
+
+    fn reverse<E: Element, Axes>(&mut self, x: &Located<E, Axes>, dims: List<i32>) -> Located<E, Axes> {
+        return Located::Host(self.cpu.reverse(&self.host(x), dims));
+    }
+
+    fn conditional<Axes, T>(
+        &mut self,
+        pred: &Located<bool, Axes>,
+        then: fn() -> T with _,
+        otherwise: fn() -> T with _,
+    ) -> T with _ {
+        return self.cpu.conditional(&self.host(pred), then, otherwise);
+    }
+
+    fn arg_max<Axes>(&mut self, x: &Located<f32, Axes>, axis: i32) -> Located<i64, Axes> {
+        return Located::Host(self.cpu.arg_max(&self.host(x), axis));
+    }
+}

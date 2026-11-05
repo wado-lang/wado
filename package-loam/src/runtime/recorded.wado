@@ -15,6 +15,7 @@ use {
     WindowReduce,
     broadcast_in_dim_extents,
     conv_window,
+    decomposed_attention,
     dot_extents,
     elementwise_extents,
     gathered_extents,
@@ -119,11 +120,18 @@ pub struct Recorder {
     /// The region operations are recorded into, a branch's while it records.
     current: Region,
     parameters: i32,
+    /// Whether a composite records as the operations it is made of, for a
+    /// compiler with no operation for it.
+    decomposes: bool,
 }
 
 impl Recorder {
     pub fn new() -> Recorder {
-        return Recorder { nodes: [], current: Region::empty(), parameters: 0 };
+        return Recorder { nodes: [], current: Region::empty(), parameters: 0, decomposes: false };
+    }
+
+    pub fn decomposing() -> Recorder {
+        return Recorder { nodes: [], current: Region::empty(), parameters: 0, decomposes: true };
     }
 
     /// The next argument of the run, of `extents`.
@@ -163,7 +171,7 @@ impl Recorder {
 }
 
 /// `v`'s elements, as `Data` holds them.
-fn data_of<E: Element>(v: &List<E>) -> Data {
+internal fn data_of<E: Element>(v: &List<E>) -> Data {
     return match E::kind() {
         F32 => Data::F32(v.into_iter().map(|x| x.cast_to::<f32>()).collect()),
         I64 => Data::I64(v.into_iter().map(|x| x.cast_to::<i64>()).collect()),
@@ -389,6 +397,21 @@ impl Graph for Recorder {
         bias: Option<&Value<f32, [BB, BH, S, T]>>,
         options: &Attention,
     ) -> [Value<f32, [B, S, Q]>, Value<f32, [B, H, T, D]>, Value<f32, [B, H, T, D]>] {
+        if self.decomposes {
+            return decomposed_attention::<Recorder, B, S, Q, K, H, P, T, D, Pos, Half, BB, BH>(
+                self,
+                q,
+                k,
+                v,
+                past_k,
+                past_v,
+                past_length,
+                cos,
+                sin,
+                bias,
+                options,
+            );
+        }
         let mut operands: List<i32> = [q.id, k.id, v.id, past_k.id, past_v.id];
         let mut node = AttentionNode { options: *options, shared: false, rotary: false, biased: false };
         if let Some(l) = past_length {
