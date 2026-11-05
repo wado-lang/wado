@@ -365,6 +365,8 @@ pub enum ExprKind {
     IndirectCall {
         callee: Operand,
         args: Vec<Operand>,
+        /// The [`ExprKind::Call::ceiling`] the call takes once it is direct.
+        ceiling: Heat,
     },
     ClosureToCanonical {
         functor: Operand,
@@ -444,6 +446,35 @@ impl ExprKind {
             args,
             ceiling: Heat::Hot,
         }
+    }
+
+    /// An indirect call no splice has carried yet.
+    #[must_use]
+    pub fn indirect_call(callee: Operand, args: Vec<Operand>) -> Self {
+        ExprKind::IndirectCall {
+            callee,
+            args,
+            ceiling: Heat::Hot,
+        }
+    }
+
+    /// A call's ceiling, for the call a pass rebuilds it into.
+    #[must_use]
+    pub fn ceiling(&self) -> Heat {
+        match self {
+            ExprKind::Call { ceiling, .. } | ExprKind::IndirectCall { ceiling, .. } => *ceiling,
+            other => unreachable!("only a call carries a ceiling, not {other:?}"),
+        }
+    }
+
+    /// This call, rebuilt from one that carried `ceiling`.
+    #[must_use]
+    pub fn under(mut self, ceiling: Heat) -> Self {
+        let ExprKind::Call { ceiling: own, .. } = &mut self else {
+            unreachable!("only a direct call is rebuilt under a ceiling");
+        };
+        *own = ceiling;
+        self
     }
 
     /// Build `recv.m(args)`: the receiver heads the argument list, carrying the
@@ -1267,9 +1298,14 @@ pub trait SubtreeCopy {
                     .map(|e| self.clone_operand(e))
                     .collect(),
             },
-            ExprKind::IndirectCall { callee, args } => ExprKind::IndirectCall {
+            ExprKind::IndirectCall {
+                callee,
+                args,
+                ceiling,
+            } => ExprKind::IndirectCall {
                 callee: self.clone_operand(callee),
                 args: args.into_iter().map(|a| self.clone_operand(a)).collect(),
+                ceiling,
             },
             ExprKind::ClosureToCanonical {
                 functor,
@@ -1767,7 +1803,7 @@ impl Body {
                         f(el);
                     }
                 }
-                ExprKind::IndirectCall { callee, args } => {
+                ExprKind::IndirectCall { callee, args, .. } => {
                     f(callee);
                     for a in args {
                         f(a);
@@ -2226,7 +2262,7 @@ impl Body {
                         f(Slot::Operand(*el));
                     }
                 }
-                ExprKind::IndirectCall { callee, args } => {
+                ExprKind::IndirectCall { callee, args, .. } => {
                     f(Slot::Operand(*callee));
                     for a in args {
                         f(Slot::Operand(*a));

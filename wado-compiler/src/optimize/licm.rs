@@ -1599,7 +1599,7 @@ fn collect_modified_vars_in_expr(
             }
         }
         // A closure's captures ride the callee, so it is scanned as an argument is.
-        ExprKind::IndirectCall { callee, args } => {
+        ExprKind::IndirectCall { callee, args, .. } => {
             modified.call_sites.push(e);
             let operands: Vec<Operand> = std::iter::once(*callee).chain(args.clone()).collect();
             for a in operands {

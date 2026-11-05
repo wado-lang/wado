@@ -20,6 +20,7 @@ use crate::nir_arena::{
 use crate::nir_engine::{Engine, Rule};
 use crate::nir_package::NirPackage;
 use crate::parallel::Executor;
+use crate::pgo::Heat;
 use crate::tir::{ResolvedType, TypeId};
 use crate::token::Span;
 use crate::type_table::{TypeKey, TypeTable};
@@ -187,6 +188,8 @@ struct Candidate {
     /// Span of the original let statement
     span: Span,
     init: CandidateInit,
+    /// The initializer call's ceiling, which each field's constructor takes.
+    init_ceiling: Heat,
 }
 
 /// Layout of the per-element container value.
@@ -1148,6 +1151,7 @@ fn scalarize_at_root(engine: &mut Engine, rule: &ContainerSroaRule) -> bool {
                     layout: c.layout.clone(),
                     span: c.span,
                     init: c.init.clone(),
+                    init_ceiling: c.init_ceiling,
                 },
             )
         })
@@ -1176,6 +1180,7 @@ struct CandidateRewriteInfo {
     layout: ElementLayout,
     span: Span,
     init: CandidateInit,
+    init_ceiling: Heat,
 }
 
 /// The parallel `List<T_k>` local one decomposed field became.
@@ -1284,7 +1289,9 @@ fn collect_candidates(
                 continue;
             }
             // Initializer must be one of the recognized forms.
-            let Some(init) = recognize_init_operand(body, *value, sig, value_copy_ids) else {
+            let Some((init, init_ceiling)) =
+                recognize_init_operand(body, *value, sig, value_copy_ids)
+            else {
                 continue;
             };
             let all_scalar = element_types
@@ -1299,6 +1306,7 @@ fn collect_candidates(
                 layout,
                 span: body.stmts[*s].span,
                 init,
+                init_ceiling,
             });
         }
     }
@@ -1337,7 +1345,7 @@ fn recognize_init_operand(
     op: Operand,
     sig: &MethodSig,
     value_copy_ids: &IndexSet<FuncId>,
-) -> Option<CandidateInit> {
+) -> Option<(CandidateInit, Heat)> {
     op.as_expr()
         .and_then(|e| recognize_init(body, e, sig, value_copy_ids))
 }
@@ -1380,12 +1388,18 @@ fn recognize_init(
     value: ExprId,
     sig: &MethodSig,
     value_copy_ids: &IndexSet<FuncId>,
-) -> Option<CandidateInit> {
+) -> Option<(CandidateInit, Heat)> {
     // The constructor result is fresh, so a `$value_copy$T` wrapping the whole
     // initializer (inserted for the by-value binding) is a no-op — see through
     // it to reach the call.
     let inner = peel_value_copy(body, value, value_copy_ids);
-    let ExprKind::Call { func_id, args, .. } = &body.exprs[inner].kind else {
+    let ExprKind::Call {
+        func_id,
+        args,
+        ceiling,
+        ..
+    } = &body.exprs[inner].kind
+    else {
         return None;
     };
     if args.len() != 1 {
@@ -1400,7 +1414,7 @@ fn recognize_init(
             cap.as_expr().map(|e| &body.exprs[e].kind),
             Some(ExprKind::ArrayLiteral { elements }) if elements.is_empty()
         );
-        return empty_literal.then_some(CandidateInit::EmptyLiteral);
+        return empty_literal.then_some((CandidateInit::EmptyLiteral, *ceiling));
     }
     if kind != ListMethodKind::Constructor {
         return None;
@@ -1409,10 +1423,13 @@ fn recognize_init(
     if !cap.as_expr().is_none_or(|e| is_duplicable_expr(body, e)) {
         return None;
     }
-    Some(CandidateInit::Constructor {
-        method: sig_key_of_id(sig, *func_id)?,
-        capacity: cap,
-    })
+    Some((
+        CandidateInit::Constructor {
+            method: sig_key_of_id(sig, *func_id)?,
+            capacity: cap,
+        },
+        *ceiling,
+    ))
 }
 
 /// Look up the `ListMethodKind` of a call target by signature, via the
@@ -1902,7 +1919,7 @@ impl Rewriter<'_, '_> {
                     engine.const_operand(ValueKind::Int(0, TypeTable::I32), TypeTable::I32)
                 }
             };
-            let init = build_constructor_call(engine, &field, &info.init, cap, span, ctx);
+            let init = build_constructor_call(engine, &field, info, cap, ctx);
             let let_stmt = engine.alloc_stmt(
                 StmtKind::Let {
                     name: field.name,
@@ -1949,6 +1966,7 @@ impl Rewriter<'_, '_> {
         span: Span,
     ) -> Option<Vec<StmtId>> {
         let ctx = self.ctx;
+        let ceiling = engine.body.exprs[expr].kind.ceiling();
         let (receiver, func_id, args) = engine.body.exprs[expr].kind.as_method_call()?;
         let arg_ids = args.iter().map(|a| a.expr).collect::<Vec<_>>();
         let rec_local = receiver_local(engine.body, receiver)?;
@@ -1981,8 +1999,9 @@ impl Rewriter<'_, '_> {
                 };
                 for (k, elem_expr) in per_field.into_iter().enumerate() {
                     let field = ctx.field_map[&(rec_local, k as u32)].clone();
-                    let call =
-                        build_element_writer_call(engine, &field, elem_expr, &sig, span, ctx);
+                    let call = build_element_writer_call(
+                        engine, &field, elem_expr, &sig, span, ceiling, ctx,
+                    );
                     let st = engine.alloc_stmt(StmtKind::Expr(call.into()), span);
                     out.push(st);
                 }
@@ -2022,7 +2041,7 @@ impl Rewriter<'_, '_> {
                     let field = ctx.field_map[&(rec_local, k as u32)].clone();
                     let idx_clone = clone_or_dup(engine, idx);
                     let call = build_index_writer_call(
-                        engine, &field, idx_clone, elem_expr, &sig, span, ctx,
+                        engine, &field, idx_clone, elem_expr, &sig, span, ceiling, ctx,
                     );
                     let st = engine.alloc_stmt(StmtKind::Expr(call.into()), span);
                     out.push(st);
@@ -2121,6 +2140,7 @@ impl Rewriter<'_, '_> {
                 idx: Operand,
                 sig: Box<SigKey>,
                 span: Span,
+                ceiling: Heat,
             },
         }
         let source = match &engine.body.exprs[expr].kind {
@@ -2169,6 +2189,7 @@ impl Rewriter<'_, '_> {
                     idx: idx_expr,
                     sig: Box::new(sig),
                     span: engine.body.exprs[expr].span,
+                    ceiling: kind.ceiling(),
                 }
             }
             _ => return None,
@@ -2213,6 +2234,7 @@ impl Rewriter<'_, '_> {
                 idx,
                 sig,
                 span,
+                ceiling,
             } => {
                 let idx = if is_duplicable_operand(engine.body, idx) {
                     idx
@@ -2223,7 +2245,9 @@ impl Rewriter<'_, '_> {
                 for k in 0..expected_arity {
                     let field = ctx.field_map[&(other, k as u32)].clone();
                     let idx_clone = clone_or_dup(engine, idx);
-                    let call = build_index_reader_call(engine, &field, idx_clone, &sig, span, ctx);
+                    let call = build_index_reader_call(
+                        engine, &field, idx_clone, &sig, span, ceiling, ctx,
+                    );
                     fields.push(Operand::Expr(call));
                 }
                 Some(fields)
@@ -2273,15 +2297,17 @@ impl Rewriter<'_, '_> {
                 && let Some(rec_local) = receiver_local(engine.body, receiver)
                 && ctx.decomposed.contains(&rec_local)
             {
-                sig_key_of_id(ctx.sig, func_id)
-                    .map(|sig| (rec_local, field_index, args[0].expr, sig))
+                sig_key_of_id(ctx.sig, func_id).map(|sig| {
+                    let ceiling = engine.body.exprs[inner_e].kind.ceiling();
+                    (rec_local, field_index, args[0].expr, sig, ceiling)
+                })
             } else {
                 None
             }
         } else {
             None
         };
-        if let Some((rec_local, field_index, idx_arg, sig)) = field_read {
+        if let Some((rec_local, field_index, idx_arg, sig, ceiling)) = field_read {
             let info = ctx
                 .candidate_data
                 .get(&rec_local)
@@ -2294,7 +2320,8 @@ impl Rewriter<'_, '_> {
                     self.rewrite_expr(engine, ie);
                 }
                 let span = engine.body.exprs[e].span;
-                let new_call = build_index_reader_call(engine, &field, idx_clone, &sig, span, ctx);
+                let new_call =
+                    build_index_reader_call(engine, &field, idx_clone, &sig, span, ceiling, ctx);
                 // Promote `new_call`'s content into `e`, leaving `new_call`
                 // a dead `Unit`. Equivalent to the old `body.exprs[e] = node;`
                 // but registers the move in the engine's parent map and use
@@ -2325,10 +2352,12 @@ impl Rewriter<'_, '_> {
                 .cloned()
                 .expect("Query monomorphization must exist for decomposed element type");
             let span = engine.body.exprs[e].span;
+            let ceiling = engine.body.exprs[e].kind.ceiling();
             let new_receiver = build_receiver(engine, &field, false, span);
             engine.replace_expr_kind(
                 e,
-                ExprKind::method_call(new_func_id, new_receiver.into(), false, Vec::new()),
+                ExprKind::method_call(new_func_id, new_receiver.into(), false, Vec::new())
+                    .under(ceiling),
             );
             return;
         }
@@ -2437,12 +2466,11 @@ fn field_method(field: &FieldList, sig: &SigKey, ctx: &RewriteCtx) -> FuncId {
 fn build_constructor_call(
     engine: &mut Engine,
     field: &FieldList,
-    init: &CandidateInit,
+    info: &CandidateRewriteInfo,
     cap: Operand,
-    span: Span,
     ctx: &RewriteCtx,
 ) -> ExprId {
-    let sig = field_constructor(init, field.elem_key, ctx.sig)
+    let sig = field_constructor(&info.init, field.elem_key, ctx.sig)
         .expect("Constructor checked by required_methods_available");
     let func_id = field_method(field, &sig, ctx);
     engine.alloc_expr(
@@ -2453,9 +2481,10 @@ fn build_constructor_call(
                 expr: cap,
                 is_mut: false,
             }]),
-        ),
+        )
+        .under(info.init_ceiling),
         field.list_type,
-        span,
+        info.span,
     )
 }
 
@@ -2466,6 +2495,7 @@ fn build_element_writer_call(
     value: Operand,
     sig: &SigKey,
     span: Span,
+    ceiling: Heat,
     ctx: &RewriteCtx,
 ) -> ExprId {
     let func_id = field_method(field, sig, ctx);
@@ -2479,7 +2509,8 @@ fn build_element_writer_call(
                 expr: value,
                 is_mut: false,
             }],
-        ),
+        )
+        .under(ceiling),
         TypeTable::UNIT,
         span,
     )
@@ -2493,6 +2524,7 @@ fn build_index_writer_call(
     value: Operand,
     sig: &SigKey,
     span: Span,
+    ceiling: Heat,
     ctx: &RewriteCtx,
 ) -> ExprId {
     let func_id = field_method(field, sig, ctx);
@@ -2512,7 +2544,8 @@ fn build_index_writer_call(
                     is_mut: false,
                 },
             ],
-        ),
+        )
+        .under(ceiling),
         TypeTable::UNIT,
         span,
     )
@@ -2525,6 +2558,7 @@ fn build_index_reader_call(
     index: Operand,
     sig: &SigKey,
     span: Span,
+    ceiling: Heat,
     ctx: &RewriteCtx,
 ) -> ExprId {
     let func_id = field_method(field, sig, ctx);
@@ -2538,7 +2572,8 @@ fn build_index_reader_call(
                 expr: index,
                 is_mut: false,
             }],
-        ),
+        )
+        .under(ceiling),
         field.elem_type,
         span,
     )

@@ -2340,7 +2340,7 @@ fn expr_readonly(body: &Body, expr: ExprId, idx: u32, gate: &Gate<'_>) -> bool {
             rest.iter()
                 .all(|&(arg, arg_use)| call_arg_readonly_operand(body, arg, idx, gate, arg_use))
         }
-        ExprKind::IndirectCall { callee, args } => {
+        ExprKind::IndirectCall { callee, args, .. } => {
             let callee = *callee;
             let args = args.clone();
             expr_readonly_operand(body, callee, idx, gate)

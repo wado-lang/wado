@@ -295,7 +295,7 @@ impl ModRef {
                     self.accumulate_operand(body, a, scope);
                 }
             }
-            ExprKind::IndirectCall { callee, args } => {
+            ExprKind::IndirectCall { callee, args, .. } => {
                 self.calls = true;
                 self.may_trap = true;
                 let callee = *callee;

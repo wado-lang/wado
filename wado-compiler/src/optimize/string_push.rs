@@ -11,6 +11,7 @@ use crate::nir_arena::{ArenaCallArg, BlockId, Body, ExprId, ExprKind, Operand, S
 use crate::nir_engine::{Engine, Rule};
 use crate::nir_package::NirPackage;
 use crate::nir_value_graph::ValueKind;
+use crate::pgo::Heat;
 use crate::tir;
 use crate::token::Span;
 use crate::type_table::TypeTable;
@@ -112,12 +113,12 @@ impl ConstAsciiPushRule {
 
 impl Rule for ConstAsciiPushRule {
     fn apply_expr(&self, engine: &mut Engine, id: ExprId) -> bool {
-        let (receiver, arg0, type_args_empty) = {
+        let (receiver, arg0, type_args_empty, ceiling) = {
             let ExprKind::Call {
                 func_id,
                 args,
                 type_args,
-                ..
+                ceiling,
             } = &engine.body.exprs[id].kind
             else {
                 return false;
@@ -128,7 +129,7 @@ impl Rule for ConstAsciiPushRule {
             if *func_id != self.push_char_id {
                 return false;
             }
-            (receiver.expr, arg0.expr, type_args.is_empty())
+            (receiver.expr, arg0.expr, type_args.is_empty(), *ceiling)
         };
         if !type_args_empty {
             return false;
@@ -154,7 +155,8 @@ impl Rule for ConstAsciiPushRule {
                     expr: byte_arg,
                     is_mut: false,
                 }],
-            ),
+            )
+            .under(ceiling),
         );
         true
     }
@@ -252,7 +254,14 @@ impl AppendFuseRule {
     }
 
     /// Build the fused statements for `run`, all appending to `recv`.
-    fn emit(&self, engine: &mut Engine, recv: ExprId, run: Vec<Piece>, span: Span) -> Vec<StmtId> {
+    fn emit(
+        &self,
+        engine: &mut Engine,
+        recv: ExprId,
+        run: Vec<Piece>,
+        origin: Origin,
+    ) -> Vec<StmtId> {
+        let span = origin.span;
         let mut stmts = Vec::with_capacity(run.len() + 2);
         let mut terms: Vec<LenTerm> = Vec::with_capacity(run.len());
         for piece in &run {
@@ -262,7 +271,7 @@ impl AppendFuseRule {
                     const_len: Some(n), ..
                 } => LenTerm::Const(*n),
                 Piece::Str { arg, .. } => {
-                    LenTerm::Local(self.bind_len(engine, *arg, span, &mut stmts))
+                    LenTerm::Local(self.bind_len(engine, *arg, origin, &mut stmts))
                 }
             });
         }
@@ -276,7 +285,7 @@ impl AppendFuseRule {
             true,
             vec![total],
             TypeTable::I32,
-            span,
+            origin,
         );
         stmts.push(let_stmt(engine, at, TypeTable::I32, reserve, span));
 
@@ -295,7 +304,7 @@ impl AppendFuseRule {
                         true,
                         vec![offset, value],
                         TypeTable::UNIT,
-                        span,
+                        origin,
                     );
                     stmts.push(engine.alloc_stmt(StmtKind::Expr(call), span));
                 }
@@ -309,7 +318,7 @@ impl AppendFuseRule {
                         true,
                         vec![offset, source, len],
                         TypeTable::UNIT,
-                        span,
+                        origin,
                     );
                     stmts.push(engine.alloc_stmt(StmtKind::Expr(call), span));
                 }
@@ -323,22 +332,23 @@ impl AppendFuseRule {
         &self,
         engine: &mut Engine,
         arg: ExprId,
-        span: Span,
+        at: Origin,
         stmts: &mut Vec<StmtId>,
     ) -> u32 {
         let local = engine.alloc_minted_local("fuse_len", TypeTable::I32, /* is_mut */ false);
         let source = engine.clone_expr(arg);
         let call = engine.alloc_expr(
-            ExprKind::method_call(self.ids.len, Operand::Expr(source), false, vec![]),
+            ExprKind::method_call(self.ids.len, Operand::Expr(source), false, vec![])
+                .under(at.ceiling),
             TypeTable::I32,
-            span,
+            at.span,
         );
         stmts.push(let_stmt(
             engine,
             local,
             TypeTable::I32,
             Operand::Expr(call),
-            span,
+            at.span,
         ));
         local
     }
@@ -424,7 +434,7 @@ impl AppendFuseRule {
         receiver_is_mut: bool,
         args: Vec<Operand>,
         type_id: tir::TypeId,
-        span: Span,
+        at: Origin,
     ) -> Operand {
         let receiver = engine.clone_expr(recv);
         let args = args
@@ -435,9 +445,10 @@ impl AppendFuseRule {
             })
             .collect();
         Operand::Expr(engine.alloc_expr(
-            ExprKind::method_call(func_id, Operand::Expr(receiver), receiver_is_mut, args),
+            ExprKind::method_call(func_id, Operand::Expr(receiver), receiver_is_mut, args)
+                .under(at.ceiling),
             type_id,
-            span,
+            at.span,
         ))
     }
 }
@@ -470,9 +481,17 @@ impl Rule for AppendFuseRule {
                     out.extend(group.into_iter().map(|(stmt, _)| stmt));
                     continue;
                 }
-                let span = engine.body.stmts[group[0].0].span;
+                let at = Origin {
+                    span: engine.body.stmts[group[0].0].span,
+                    // The appends run together, so each one's ceiling bounds them all.
+                    ceiling: group
+                        .iter()
+                        .map(|&(stmt, _)| append_ceiling(engine.body, stmt))
+                        .min()
+                        .expect("a fused group holds two appends"),
+                };
                 let group = group.into_iter().map(|(_, piece)| piece).collect();
-                out.extend(self.emit(engine, recv, group, span));
+                out.extend(self.emit(engine, recv, group, at));
                 changed = true;
             }
             i = j;
@@ -482,6 +501,21 @@ impl Rule for AppendFuseRule {
         }
         changed
     }
+}
+
+/// The ceiling of the append call `stmt` makes.
+fn append_ceiling(body: &Body, stmt: StmtId) -> Heat {
+    let StmtKind::Expr(Operand::Expr(call)) = body.stmts[stmt].kind else {
+        unreachable!("an append is a call statement");
+    };
+    body.exprs[call].kind.ceiling()
+}
+
+/// Where a fused run's statements go, and the ceiling its calls take.
+#[derive(Clone, Copy)]
+struct Origin {
+    span: Span,
+    ceiling: Heat,
 }
 
 /// Split a run into groups one reservation each can cover. A piece whose

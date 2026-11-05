@@ -811,7 +811,7 @@ impl<'a> NirUnparser<'a> {
                 let elements = elements.clone();
                 self.delimited("[", "]", elements, |s, e| s.unparse_operand(body, e));
             }
-            ExprKind::IndirectCall { callee, args } => {
+            ExprKind::IndirectCall { callee, args, .. } => {
                 let callee = *callee;
                 let args = args.clone();
                 self.unparse_operand(body, callee);

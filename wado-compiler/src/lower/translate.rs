@@ -2344,18 +2344,17 @@ impl FunctionTranslator<'_, '_> {
             TirExprKind::Closure { .. } => unreachable!(
                 "TirExprKind::Closure reached lower::translate without a functor_id assigned by lower::plan::closure"
             ),
-            TirExprKind::IndirectCall { callee, args } => ExprKind::IndirectCall {
-                callee: self.convert_operand(callee),
+            TirExprKind::IndirectCall { callee, args } => ExprKind::indirect_call(
+                self.convert_operand(callee),
                 // Indirect-call args take an unconditional defensive
                 // copy when the value semantics require it: the callee
                 // signature is opaque here, so the wrap predicate is
                 // applied to every arg regardless of an `is_mut`
                 // marker.
-                args: args
-                    .iter()
+                args.iter()
                     .map(|a| self.convert_stored_operand(a))
                     .collect(),
-            },
+            ),
             TirExprKind::VariantConstruct {
                 variant_type,
                 case_index,

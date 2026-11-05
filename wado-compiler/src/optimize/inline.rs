@@ -568,7 +568,7 @@ impl<'a> CostWalk<'a> {
             ExprKind::CmRawCall { args, .. } => {
                 weight::CALL + args.iter().map(|a| self.operand(*a, seen)).sum::<usize>()
             }
-            ExprKind::IndirectCall { callee, args } => {
+            ExprKind::IndirectCall { callee, args, .. } => {
                 weight::CALL
                     + self.operand(*callee, seen)
                     + args.iter().map(|a| self.operand(*a, seen)).sum::<usize>()
@@ -977,14 +977,12 @@ struct BodyScan {
     /// Every call, with its by-value arguments keyed by position: an
     /// [`ArgSite`] before the callee's own writes rule any out.
     calls: Vec<ArgSite>,
-    /// The callees called from at least one site no cold marker covers.
-    hot_callees: IndexSet<FuncId>,
     /// The callees called from at least one site a cold marker covers.
     cold_callees: IndexSet<FuncId>,
     /// The callees called from at least one site outside every loop.
     unlooped_callees: IndexSet<FuncId>,
-    /// Where each callee's sites no cold marker covers sit, by the heat the
-    /// profile set on the site.
+    /// The callees called from at least one site no cold marker covers, with
+    /// where those sites sit, by the heat the profile set on the site.
     warm_sites: IndexMap<FuncId, ByHeat<Spots>>,
     /// Whether the body holds a `loop`.
     loopy: bool,
@@ -1108,7 +1106,6 @@ fn scan_body(func: &NirFunction, markers: MarkerBuiltins, heat_map: &HeatMap) ->
                 if cold.contains(&e) {
                     scan.cold_callees.insert(*func_id);
                 } else {
-                    scan.hot_callees.insert(*func_id);
                     let heat =
                         call_heat(heat_map, &body.exprs[e]).plain_where(unlikely.contains(&e));
                     let spots = scan.warm_sites.entry(*func_id).or_default().at_mut(heat);
@@ -2213,7 +2210,7 @@ fn movable(
             let Some(reach) = reach.get(callee) else {
                 continue;
             };
-            // A hot site prices plain while its caller is a candidate itself.
+            // A hot site prices plain where its caller is movable itself.
             let admits = |site: Heat, priced: Heat| reach.at(priced).covers(placed(*at.at(site)));
             if admits(Heat::Cold, Heat::Cold)
                 || admits(Heat::Plain, Heat::Plain)
@@ -2580,20 +2577,20 @@ fn inline_round(
     // Taken every round, unlike the prices below: a callee's only site is one
     // where its splice pays back.
     let call_sites = call_site_counts(&sites);
-    let (live_ref, no_callees) = (&live, &IndexSet::default());
-    let live_edges = |pick: fn(&BodyScan) -> &IndexSet<FuncId>| {
-        move |caller: usize| {
-            if live_ref[caller] {
-                pick(&scans[caller])
-            } else {
-                no_callees
-            }
-        }
-    };
-    let cold_functions = unreached_through(project, &call_sites, live_edges(|s| &s.hot_callees));
+    let cold_functions = unreached_through(project, &call_sites, |caller| {
+        live[caller]
+            .then(|| scans[caller].warm_sites.keys())
+            .into_iter()
+            .flatten()
+    });
     // A function only loops reach runs once per iteration of one, so each of
     // its sites pays its call edge on every iteration, as a site in a loop does.
-    let looped = unreached_through(project, &call_sites, live_edges(|s| &s.unlooped_callees));
+    let looped = unreached_through(project, &call_sites, |caller| {
+        live[caller]
+            .then(|| &scans[caller].unlooped_callees)
+            .into_iter()
+            .flatten()
+    });
     let called_cold = called_cold(scans, &live, &cold_functions);
     let mut called_at = vec![ByHeat::<bool>::default(); scans.len()];
     for (caller, scan) in scans.iter().enumerate() {
@@ -2914,15 +2911,20 @@ fn inline_round(
     let carried = carried_calls(&inline_candidates);
     let functions = &project.functions;
     let held = &holds.held;
-    let movable = movable(
-        scans,
-        |caller| live[caller] && !held.contains(&FuncId::new(caller)),
-        &cold_functions,
-        &looped,
-        &inline_candidates,
-        &reach,
-        &shrinking,
-    );
+    // Only a hot price reads it, and a profile with no hot region sets none.
+    let movable = if heat_map.any_hot() {
+        movable(
+            scans,
+            |caller| live[caller] && !held.contains(&FuncId::new(caller)),
+            &cold_functions,
+            &looped,
+            &inline_candidates,
+            &reach,
+            &shrinking,
+        )
+    } else {
+        IndexSet::default()
+    };
     let fold_pending = !holds.released;
     let deferrals: Mutex<Vec<(FuncId, bool)>> = Mutex::new(Vec::new());
     let site_decisions: Mutex<Vec<(FuncId, Vec<SiteEntry>)>> = Mutex::new(Vec::new());
@@ -4367,14 +4369,19 @@ fn splice_expr(caller: &mut Body, callee: &Body, id: ExprId, ctx: &InlineCtx) ->
                     .collect(),
             }
         }
-        ExprKind::IndirectCall { callee: c, args } => {
-            let (c, args) = (*c, args.clone());
+        ExprKind::IndirectCall {
+            callee: c,
+            args,
+            ceiling,
+        } => {
+            let (c, args, ceiling) = (*c, args.clone(), *ceiling);
             ExprKind::IndirectCall {
                 callee: splice_operand(caller, callee, c, ctx),
                 args: args
                     .into_iter()
                     .map(|a| splice_operand(caller, callee, a, ctx))
                     .collect(),
+                ceiling: ceiling.min(ctx.ceiling),
             }
         }
         ExprKind::ClosureToCanonical {

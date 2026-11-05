@@ -3380,7 +3380,7 @@ impl FunctionTranslator<'_, '_> {
                 }
             }
 
-            ExprKind::IndirectCall { callee, args } => {
+            ExprKind::IndirectCall { callee, args, .. } => {
                 self.translate_indirect_call(*callee, args, expr.type_id)
             }
             ExprKind::ClosureToCanonical {

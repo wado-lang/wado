@@ -1520,7 +1520,7 @@ impl<'a> Builder<'a> {
                 self.heap_state.bump_all();
                 None
             }
-            ExprKind::IndirectCall { callee, args } => {
+            ExprKind::IndirectCall { callee, args, .. } => {
                 self.walk_operand(callee);
                 for a in args {
                     self.walk_operand(a);
