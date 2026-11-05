@@ -239,11 +239,7 @@ mod tests {
     fn elide_binding_of_trapping_call(proven_callee: Option<usize>) -> Vec<StmtKind> {
         let mut body = Body::empty();
         let call = body.exprs.push(ExprNode {
-            kind: ExprKind::Call {
-                func_id: FuncId::new(0),
-                type_args: vec![],
-                args: CallArgs::free(vec![]),
-            },
+            kind: ExprKind::call(FuncId::new(0), vec![], CallArgs::free(vec![])),
             type_id: TypeTable::I32,
             span: Span::default(),
         });

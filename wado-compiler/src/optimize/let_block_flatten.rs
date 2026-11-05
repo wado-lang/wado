@@ -238,11 +238,7 @@ mod tests {
     /// binding is a genuine intermediate (not a bare-local shadow the gate
     /// defers on).
     fn call_expr() -> ExprKind {
-        ExprKind::Call {
-            func_id: FuncId::from_u32(0),
-            type_args: vec![],
-            args: CallArgs::free(vec![]),
-        }
+        ExprKind::call(FuncId::from_u32(0), vec![], CallArgs::free(vec![]))
     }
 
     fn local(name: &str) -> NirLocal {

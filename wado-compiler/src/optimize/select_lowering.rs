@@ -125,11 +125,11 @@ pub(super) fn select_call(
         expr,
         is_mut: false,
     };
-    ExprKind::Call {
-        func_id: select_id,
-        type_args: vec![ty],
-        args: CallArgs::free(vec![arg(cond), arg(a), arg(b)]),
-    }
+    ExprKind::call(
+        select_id,
+        vec![ty],
+        CallArgs::free(vec![arg(cond), arg(a), arg(b)]),
+    )
 }
 
 /// A branch is select-able when it is a single `Expr` statement whose value is

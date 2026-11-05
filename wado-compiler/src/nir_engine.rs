@@ -1616,6 +1616,7 @@ impl<'a> Engine<'a> {
                 func_id,
                 type_args,
                 args,
+                ceiling,
             } => ExprKind::Call {
                 func_id,
                 type_args,
@@ -1623,6 +1624,7 @@ impl<'a> Engine<'a> {
                     expr: self.clone_operand(a.expr),
                     is_mut: a.is_mut,
                 }),
+                ceiling,
             },
             ExprKind::CmRawCall { target, args } => ExprKind::CmRawCall {
                 target,

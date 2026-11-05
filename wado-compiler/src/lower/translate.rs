@@ -1520,14 +1520,14 @@ impl FunctionTranslator<'_, '_> {
         };
         let func_id = self.base.interner.borrow_mut().resolve(&func);
         self.alloc_expr(
-            ExprKind::Call {
+            ExprKind::call(
                 func_id,
-                type_args: vec![],
-                args: CallArgs::free(vec![ArenaCallArg {
+                vec![],
+                CallArgs::free(vec![ArenaCallArg {
                     expr: value.into(),
                     is_mut: false,
                 }]),
-            },
+            ),
             type_id,
             span,
         )
@@ -2123,11 +2123,7 @@ impl FunctionTranslator<'_, '_> {
             let func = nir::FunctionRef::closure_call(&functor.module_source, functor.id);
             let func_id = self.base.interner.borrow_mut().resolve(&func);
             return self.alloc_expr(
-                ExprKind::Call {
-                    func_id,
-                    type_args: Vec::new(),
-                    args: nir_args,
-                },
+                ExprKind::call(func_id, Vec::new(), nir_args),
                 expr.type_id,
                 expr.span,
             );
@@ -2446,10 +2442,10 @@ impl FunctionTranslator<'_, '_> {
             let func_id = self.base.interner.borrow_mut().resolve(&func);
             // Bypass `convert_call_arg_at`: wrapping a copy helper's own
             // argument would emit copy(copy(x)).
-            return ExprKind::Call {
+            return ExprKind::call(
                 func_id,
-                type_args: vec![],
-                args: CallArgs::free(
+                vec![],
+                CallArgs::free(
                     args.iter()
                         .map(|a| ArenaCallArg {
                             expr: self.convert_operand(&a.expr),
@@ -2457,7 +2453,7 @@ impl FunctionTranslator<'_, '_> {
                         })
                         .collect(),
                 ),
-            };
+            );
         }
         if let Some(rewritten) = self.convert_case_bridge_call(func, type_args, args) {
             return rewritten;
@@ -2489,11 +2485,7 @@ impl FunctionTranslator<'_, '_> {
                 }
             })
             .collect();
-        ExprKind::Call {
-            func_id,
-            type_args: type_args.to_vec(),
-            args: args.rebuild(list),
-        }
+        ExprKind::call(func_id, type_args.to_vec(), args.rebuild(list))
     }
 
     /// A call of the bridge helper `callee` with a marker's arguments.
@@ -2505,10 +2497,10 @@ impl FunctionTranslator<'_, '_> {
             method_info: None,
         };
         let func_id = self.base.interner.borrow_mut().resolve(&nir_func);
-        ExprKind::Call {
+        ExprKind::call(
             func_id,
-            type_args: vec![],
-            args: CallArgs::free(
+            vec![],
+            CallArgs::free(
                 args.iter()
                     .map(|a| ArenaCallArg {
                         expr: self.convert_operand(&a.expr),
@@ -2516,7 +2508,7 @@ impl FunctionTranslator<'_, '_> {
                     })
                     .collect(),
             ),
-        }
+        )
     }
 
     /// Rewrites the `Case<V, P>` bridge markers (WEP 2026-06-13 §3e):

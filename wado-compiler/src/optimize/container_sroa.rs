@@ -2446,14 +2446,14 @@ fn build_constructor_call(
         .expect("Constructor checked by required_methods_available");
     let func_id = field_method(field, &sig, ctx);
     engine.alloc_expr(
-        ExprKind::Call {
+        ExprKind::call(
             func_id,
-            type_args: Vec::new(),
-            args: CallArgs::free(vec![ArenaCallArg {
+            Vec::new(),
+            CallArgs::free(vec![ArenaCallArg {
                 expr: cap,
                 is_mut: false,
             }]),
-        },
+        ),
         field.list_type,
         span,
     )

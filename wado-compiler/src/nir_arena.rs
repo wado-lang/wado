@@ -16,6 +16,7 @@ use crate::canonical::CmCallTarget;
 use crate::const_eval::{MAX_SEQ_ELEMENTS, Value, truncate_int};
 use crate::hashmap;
 use crate::hashmap::IndexSet;
+use crate::pgo::Heat;
 use crate::module_source::ModuleSource;
 use crate::name::minted_name;
 use crate::nir::{FuncId, NirBinaryOp, NirLiteralPattern, NirLocal, NirUnaryOp};
@@ -323,6 +324,10 @@ pub enum ExprKind {
         /// Arguments in the callee's parameter order, carried down from
         /// [`crate::tir::TirExprKind::Call`] with the receiver's meaning intact.
         args: CallArgs<ArenaCallArg>,
+        /// The hottest a profile may price this call: the coolest site a splice
+        /// carried it through, since the call's span still names the region it
+        /// was written in. [`Heat::Hot`] where no splice lowered it.
+        ceiling: Heat,
     },
     CmRawCall {
         target: CmCallTarget,
@@ -430,6 +435,17 @@ impl ExprKind {
         }
     }
 
+    /// A call no splice has carried yet.
+    #[must_use]
+    pub fn call(func_id: FuncId, type_args: Vec<TypeId>, args: CallArgs<ArenaCallArg>) -> Self {
+        ExprKind::Call {
+            func_id,
+            type_args,
+            args,
+            ceiling: Heat::Hot,
+        }
+    }
+
     /// Build `recv.m(args)`: the receiver heads the argument list, carrying the
     /// callee's `self` mutability as its own `is_mut`.
     pub fn method_call(
@@ -442,11 +458,7 @@ impl ExprKind {
             expr: receiver,
             is_mut: receiver_is_mut,
         };
-        ExprKind::Call {
-            func_id,
-            type_args: Vec::new(),
-            args: CallArgs::method(receiver, args),
-        }
+        Self::call(func_id, Vec::new(), CallArgs::method(receiver, args))
     }
 
     /// An instance-method call viewed as receiver plus the arguments after it.
@@ -1146,6 +1158,7 @@ impl Body {
                 func_id,
                 type_args,
                 args,
+                ceiling,
             } => ExprKind::Call {
                 func_id,
                 type_args,
@@ -1153,6 +1166,7 @@ impl Body {
                     expr: self.clone_operand(a.expr),
                     is_mut: a.is_mut,
                 }),
+                ceiling,
             },
             ExprKind::CmRawCall { target, args } => ExprKind::CmRawCall {
                 target,

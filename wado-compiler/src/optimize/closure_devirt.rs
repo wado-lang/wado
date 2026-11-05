@@ -363,11 +363,7 @@ impl Rule for ClosureDevirtRule {
             ),
             None => CallArgs::free(passed.collect()),
         };
-        let call = ExprKind::Call {
-            func_id: target.func_id,
-            type_args: Vec::new(),
-            args,
-        };
+        let call = ExprKind::call(target.func_id, Vec::new(), args);
         engine.replace_expr_kind(id, call);
         true
     }

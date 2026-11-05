@@ -117,6 +117,7 @@ impl Rule for ConstAsciiPushRule {
                 func_id,
                 args,
                 type_args,
+                ..
             } = &engine.body.exprs[id].kind
             else {
                 return false;

@@ -1195,11 +1195,7 @@ mod tests {
         use cranelift_entity::EntityRef;
         pe(
             body,
-            ExprKind::Call {
-                func_id: FuncId::new(0),
-                type_args: vec![],
-                args: CallArgs::free(args),
-            },
+            ExprKind::call(FuncId::new(0), vec![], CallArgs::free(args)),
         )
     }
 

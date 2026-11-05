@@ -2995,6 +2995,7 @@ impl FunctionTranslator<'_, '_> {
                 func_id,
                 args,
                 type_args,
+                ceiling: _,
             } => {
                 // The callee descriptor comes from the function record by
                 // `func_id` (Phase 5); the call node carries no `FunctionRef`.

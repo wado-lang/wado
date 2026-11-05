@@ -1095,9 +1095,7 @@ fn scan_body(func: &NirFunction, markers: MarkerBuiltins, heat_map: &HeatMap) ->
                     scan.cold_callees.insert(*func_id);
                 } else {
                     scan.hot_callees.insert(*func_id);
-                    let heat = heat_map
-                        .heat(body.exprs[e].span)
-                        .plain_where(unlikely.contains(&e));
+                    let heat = call_heat(heat_map, &body.exprs[e]).plain_where(unlikely.contains(&e));
                     scan.callees_at.at_mut(heat).insert(*func_id);
                 }
                 if !looped.contains(&e) {
@@ -1109,6 +1107,15 @@ fn scan_body(func: &NirFunction, markers: MarkerBuiltins, heat_map: &HeatMap) ->
         NodeRef::Block(_) | NodeRef::Pat(_) => {}
     });
     scan
+}
+
+/// The heat a profile sets on `call`: its region's, bounded by every site a
+/// splice carried it through.
+fn call_heat(heat_map: &HeatMap, call: &ExprNode) -> Heat {
+    let ExprKind::Call { ceiling, .. } = call.kind else {
+        unreachable!("a call site is a call")
+    };
+    heat_map.heat(call.span).min(ceiling)
 }
 
 /// Every expression under a `loop`. A loop inside another is covered by the
@@ -3354,6 +3361,9 @@ pub(super) struct InlineCtx<'a> {
     param_count: u32,
     label: &'a str,
     label_map: &'a IndexMap<String, String>,
+    /// The heat of the site the code lands at, which bounds every call it
+    /// copies.
+    ceiling: Heat,
 }
 
 impl<'a> InlineCtx<'a> {
@@ -3372,6 +3382,8 @@ impl<'a> InlineCtx<'a> {
             param_count: inherited,
             label: "",
             label_map,
+            // The region runs as often in its own function as it did in place.
+            ceiling: Heat::Hot,
         }
     }
 }
@@ -3487,6 +3499,7 @@ fn build_inlined_labeled_block(
     bindings: Vec<InlineBinding>,
     call_span: Span,
     call_expr: ExprId,
+    landing: Heat,
     frame: &mut CallerFrame<'_>,
     labels: &mut InlineLabels,
     reval: &mut Vec<InlineRevalInfo>,
@@ -3571,6 +3584,7 @@ fn build_inlined_labeled_block(
         param_count: callee_param_count,
         label: &label,
         label_map: &label_map,
+        ceiling: landing,
     };
     splice_block_into(caller, callee, callee.root(), &ctx, &mut block_stmts);
 
@@ -3614,10 +3628,8 @@ fn try_inline_call_expr(
     // The call's stamped `func_id` is the exact callee identity; look the
     // candidate up directly (no `(module, name)` resolution).
     let candidate = candidates.bodies.get(&func_id)?;
-    let heat = candidates
-        .heat_map
-        .heat(caller.exprs[call_id].span)
-        .plain_where(!site.heats() || frame.candidate);
+    let landing = call_heat(candidates.heat_map, &caller.exprs[call_id]);
+    let heat = landing.plain_where(!site.heats() || frame.candidate);
     let reach = *candidates.reach[&func_id].at(heat);
     let sole_site = |frame: &CallerFrame<'_>| {
         if frame.glue {
@@ -3740,6 +3752,7 @@ fn try_inline_call_expr(
         bindings,
         call_span,
         call_id,
+        landing,
         frame,
         labels,
         reval,
@@ -4134,6 +4147,7 @@ fn splice_expr(caller: &mut Body, callee: &Body, id: ExprId, ctx: &InlineCtx) ->
             func_id,
             type_args,
             args,
+            ceiling,
         } => ExprKind::Call {
             func_id: *func_id,
             type_args: type_args.clone(),
@@ -4145,6 +4159,7 @@ fn splice_expr(caller: &mut Body, callee: &Body, id: ExprId, ctx: &InlineCtx) ->
                     })
                     .collect(),
             ),
+            ceiling: (*ceiling).min(ctx.ceiling),
         },
         ExprKind::CmRawCall { target, args } => {
             let (target, args) = (target.clone(), args.clone());

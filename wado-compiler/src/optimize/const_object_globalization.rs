@@ -2762,14 +2762,14 @@ fn guard_set_on_uninit(
         span,
     });
     let cond = body.exprs.push(ExprNode {
-        kind: ExprKind::Call {
-            func_id: is_uninitialized,
-            type_args: vec![ty],
-            args: CallArgs::free(vec![ArenaCallArg {
+        kind: ExprKind::call(
+            is_uninitialized,
+            vec![ty],
+            CallArgs::free(vec![ArenaCallArg {
                 expr: global_get.into(),
                 is_mut: false,
             }]),
-        },
+        ),
         type_id: TypeTable::BOOL,
         span,
     });

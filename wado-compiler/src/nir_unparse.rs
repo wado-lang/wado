@@ -676,6 +676,7 @@ impl<'a> NirUnparser<'a> {
                 func_id,
                 type_args,
                 args,
+                ceiling: _,
             } => {
                 let func_id = *func_id;
                 let type_args = type_args.clone();

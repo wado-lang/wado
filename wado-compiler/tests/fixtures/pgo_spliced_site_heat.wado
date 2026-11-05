@@ -1,0 +1,60 @@
+// A call a splice copies is priced at the heat of the site it lands at, not of
+// the region it was written in. `step`'s call to `mix` runs hot through `hot`,
+// but the copy `step`'s splice leaves in `warm` runs at `warm`'s plain heat, so
+// it stays a call there.
+use { println, Stdout } from "core:cli";
+
+fn mix(x: i32) -> i32 {
+    let mut h = x;
+    h = h * 31 + builtin::black_box(7);
+    h = h ^ (h >> 3);
+    h = h * 17 + builtin::black_box(5);
+    h = h ^ (h >> 5);
+    h = h * 13 + builtin::black_box(3);
+    h = h ^ (h >> 7);
+    h = h * 11 + builtin::black_box(2);
+    h = h ^ (h >> 11);
+    h = h * 7 + builtin::black_box(1);
+    h = h ^ (h >> 13);
+    h = h * 5 + builtin::black_box(9);
+    h = h ^ (h >> 2);
+    return h;
+}
+
+fn step(x: i32) -> i32 {
+    return mix(x) + 1;
+}
+
+#[inline("never")]
+fn hot(n: i32) -> i32 {
+    let mut s = 0;
+    for let i of 0..<n {
+        s += step(i);
+    }
+    return s;
+}
+
+#[inline("never")]
+fn warm(x: i32) -> i32 {
+    return step(x) + 2;
+}
+
+// A second site, so `mix` is not admitted at its one site.
+#[inline("never")]
+fn other(x: i32) -> i32 {
+    return mix(x) + 3;
+}
+
+export fn run() with Stdout {
+    let s = hot(builtin::black_box(10000));
+    let w = warm(builtin::black_box(1)) + warm(builtin::black_box(2));
+    println(`${s + w + other(builtin::black_box(3))}`);
+}
+
+__DATA__
+{
+  "profile": "testdata/pgo_spliced_site_heat.pgo",
+  "wir_scope": "pgo_spliced_site_heat.wado/warm",
+  "wir_expect:O2": ["\"pgo_spliced_site_heat.wado/mix\"(x)"],
+  "stdout": "-498555318\n"
+}

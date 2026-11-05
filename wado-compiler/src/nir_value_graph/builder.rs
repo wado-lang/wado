@@ -2638,11 +2638,7 @@ mod tests {
         };
         *b.locals = vec![mut_local("a"), mut_local("b")];
         let call = b.exprs.push(ExprNode {
-            kind: ExprKind::Call {
-                func_id: FuncId::from_u32(0),
-                type_args: vec![],
-                args: CallArgs::free(vec![]),
-            },
+            kind: ExprKind::call(FuncId::from_u32(0), vec![], CallArgs::free(vec![])),
             type_id: TypeTable::I32,
             span,
         });
