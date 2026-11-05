@@ -1,7 +1,7 @@
 // A call a later pass rebuilds keeps the heat a splice capped it at. `step`'s
-// call through `f` runs hot through `hot`; the copy `step`'s splice leaves in
-// `warm` becomes a direct call only once `warm` supplies the closure, and that
-// call still prices at `warm`'s plain heat, so `mix` stays a call there.
+// call through `f` runs hot through `hot`. The copy `step`'s splice leaves in
+// `warm` turns direct only once `warm` supplies the closure, and that direct
+// call still prices at `warm`'s plain heat, so the closure stays a call there.
 use { println, Stdout } from "core:cli";
 
 fn mix(x: i32) -> i32 {
@@ -43,6 +43,12 @@ fn warm(x: i32) -> i32 {
     return step(mixer(), x) + 2;
 }
 
+// A third site of the closure, so `warm`'s is not its one site.
+#[inline("never")]
+fn cool(x: i32) -> i32 {
+    return step(mixer(), x) + 4;
+}
+
 // A second site, so `mix` is not admitted at its one site.
 #[inline("never")]
 fn other(x: i32) -> i32 {
@@ -52,13 +58,13 @@ fn other(x: i32) -> i32 {
 export fn run() with Stdout {
     let s = hot(builtin::black_box(10000));
     let w = warm(builtin::black_box(1)) + warm(builtin::black_box(2));
-    println(`${s + w + other(builtin::black_box(3))}`);
+    println(`${s + w + cool(builtin::black_box(4)) + other(builtin::black_box(3))}`);
 }
 
 __DATA__
 {
   "profile": "testdata/pgo_rebuilt_call_heat.pgo",
   "wir_scope": "pgo_rebuilt_call_heat.wado/warm",
-  "wir_expect:O2": ["\"pgo_rebuilt_call_heat.wado/mix\"("],
-  "stdout": "-498555318\n"
+  "wir_expect:O2": ["$Closure_0::$call"],
+  "stdout": "-488631699\n"
 }
