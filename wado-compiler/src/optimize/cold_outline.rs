@@ -477,11 +477,7 @@ fn outline(project: &mut NirPackage, fi: usize, region: Region, ordinal: u32) {
         })
         .collect();
     let call = body.exprs.push(ExprNode {
-        kind: ExprKind::Call {
-            func_id: id,
-            type_args: Vec::new(),
-            args: CallArgs::free(args),
-        },
+        kind: ExprKind::call(id, Vec::new(), CallArgs::free(args)),
         type_id: region.return_type,
         span,
     });

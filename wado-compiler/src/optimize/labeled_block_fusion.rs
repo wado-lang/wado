@@ -1964,7 +1964,7 @@ fn subst_temp_reads_in_expr(engine: &mut Engine, e: ExprId, f: &TempReads) {
         ExprKind::CmRawCall { args, .. } => {
             Walk::Exprs(args.iter().filter_map(|o| o.as_expr()).collect())
         }
-        ExprKind::IndirectCall { callee, args } => {
+        ExprKind::IndirectCall { callee, args, .. } => {
             let mut v: Vec<ExprId> = callee.as_expr().into_iter().collect();
             v.extend(args.iter().filter_map(|o| o.as_expr()));
             Walk::Exprs(v)

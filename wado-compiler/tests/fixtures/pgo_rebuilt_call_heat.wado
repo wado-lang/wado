@@ -1,0 +1,71 @@
+// A call a later pass rebuilds keeps the heat a splice capped it at. `step`'s
+// call through `f` runs hot through `hot`. The copy `step`'s splice leaves in
+// `warm` turns direct only once `warm` supplies the closure, and that direct
+// call still prices at `warm`'s plain heat, so the closure stays a call there.
+use { println, Stdout } from "core:cli";
+
+fn mix(x: i32) -> i32 {
+    let mut h = x;
+    h = h * 31 + builtin::black_box(7);
+    h = h ^ (h >> 3);
+    h = h * 17 + builtin::black_box(5);
+    h = h ^ (h >> 5);
+    h = h * 13 + builtin::black_box(3);
+    h = h ^ (h >> 7);
+    h = h * 11 + builtin::black_box(2);
+    h = h ^ (h >> 11);
+    h = h * 7 + builtin::black_box(1);
+    h = h ^ (h >> 13);
+    h = h * 5 + builtin::black_box(9);
+    h = h ^ (h >> 2);
+    return h;
+}
+
+fn mixer() -> fn(i32) -> i32 {
+    return |v| mix(v);
+}
+
+fn step(f: fn(i32) -> i32, x: i32) -> i32 {
+    return f(x) + 1;
+}
+
+#[inline("never")]
+fn hot(n: i32) -> i32 {
+    let mut s = 0;
+    for let i of 0..<n {
+        s += step(mixer(), i);
+    }
+    return s;
+}
+
+#[inline("never")]
+fn warm(x: i32) -> i32 {
+    return step(mixer(), x) + 2;
+}
+
+// A third site of the closure, so `warm`'s is not its one site.
+#[inline("never")]
+fn cool(x: i32) -> i32 {
+    return step(mixer(), x) + 4;
+}
+
+// A second site, so `mix` is not admitted at its one site.
+#[inline("never")]
+fn other(x: i32) -> i32 {
+    return mix(x) + 3;
+}
+
+export fn run() with Stdout {
+    let s = hot(builtin::black_box(10000));
+    let w = warm(builtin::black_box(1)) + warm(builtin::black_box(2));
+    println(`${s + w + cool(builtin::black_box(4)) + other(builtin::black_box(3))}`);
+}
+
+__DATA__
+{
+  "profile": "testdata/pgo_rebuilt_call_heat.pgo",
+  "wir_scope": "pgo_rebuilt_call_heat.wado/warm",
+  "wir_expect:O2": ["$Closure_0::$call"],
+  "wir_contrast": {"O2": [{"return |v| mix(v);": "return |v| v;"}]},
+  "stdout": "-488631699\n"
+}

@@ -312,7 +312,7 @@ impl<'a> SharedEscape<'a> {
             }
             ExprKind::ClosureToCanonical { functor, .. } => !taint.operand(*functor),
             ExprKind::GlobalVarSet { value, .. } => !taint.operand(*value),
-            ExprKind::IndirectCall { callee, args } => {
+            ExprKind::IndirectCall { callee, args, .. } => {
                 !taint.operand(*callee) && !args.iter().any(|&a| taint.operand(a))
             }
             ExprKind::CmRawCall { args, .. } => !args.iter().any(|&a| taint.operand(a)),

@@ -2077,7 +2077,7 @@ fn call_target<'s>(effects: &'s HeapEffects, body: &Body, e: ExprId) -> Target<'
 fn call_operands(body: &Body, e: ExprId) -> Vec<Operand> {
     match &body.exprs[e].kind {
         ExprKind::Call { args, .. } => args.iter().map(|a| a.expr).collect(),
-        ExprKind::IndirectCall { callee, args } => std::iter::once(*callee)
+        ExprKind::IndirectCall { callee, args, .. } => std::iter::once(*callee)
             .chain(args.iter().copied())
             .collect(),
         other => panic!("call_operands on a non-call {other:?}"),

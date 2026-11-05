@@ -199,8 +199,9 @@ impl Reading {
 }
 
 /// The price a profile sets on a call site: the inliner's hot threshold, its
-/// cold one, or the threshold a site without a profile pays.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// cold one, or the threshold a site without a profile pays. Ordered from cold
+/// to hot.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Heat {
     Cold,
     Plain,

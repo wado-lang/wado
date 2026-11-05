@@ -890,10 +890,10 @@ fn escapes_from<'a>(
 ///
 /// Over the sites no cold marker covers, it answers the cold
 /// functions: whatever runs in one runs only once a cold path is taken.
-pub(super) fn unreached_through<'a>(
+pub(super) fn unreached_through<'a, Callees: IntoIterator<Item = &'a FuncId>>(
     project: &NirPackage,
     call_sites: &[usize],
-    edges: impl Fn(usize) -> &'a IndexSet<FuncId>,
+    edges: impl Fn(usize) -> Callees,
 ) -> Vec<bool> {
     let mut reached: Vec<bool> = project
         .functions

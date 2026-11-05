@@ -893,7 +893,7 @@ fn walk_expr_for_uses(
                 walk_expr_for_uses_operand(body, a, cx, invalid, tracked);
             }
         }
-        ExprKind::IndirectCall { callee, args } => {
+        ExprKind::IndirectCall { callee, args, .. } => {
             let callee = *callee;
             let args = args.clone();
             walk_expr_for_uses_operand(body, callee, cx, invalid, tracked);
