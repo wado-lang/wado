@@ -1,0 +1,78 @@
+// A caller's hot sites wait for it only while some site can admit it. `f` is
+// a candidate, but its one site is in a loop and it is admitted only outside
+// one, so it never moves: its hot call to `h` is priced hot and spliced.
+use { println, Stdout } from "core:cli";
+
+// A call that stays one: `f` and `h` reach a safepoint.
+#[inline("never")]
+fn sink(x: i32) -> i32 {
+    return x ^ 1;
+}
+
+fn h(x: i32) -> i32 {
+    let mut s = x;
+    s = s * 31 + builtin::black_box(7);
+    s = s ^ (s >> 3);
+    s = s * 17 + builtin::black_box(5);
+    s = s ^ (s >> 5);
+    s = s * 13 + builtin::black_box(3);
+    s = s ^ (s >> 7);
+    return sink(s);
+}
+
+fn f(x: i32) -> i32 {
+    let mut s = x;
+    s = s * 11 + builtin::black_box(2);
+    s = s ^ (s >> 11);
+    s = s * 7 + builtin::black_box(1);
+    s = s ^ (s >> 13);
+    s = s * 5 + builtin::black_box(9);
+    s = s ^ (s >> 2);
+    s = s * 3 + builtin::black_box(4);
+    s = s ^ (s >> 9);
+    s = s * 19 + builtin::black_box(6);
+    s = s ^ (s >> 6);
+    s = s * 23 + builtin::black_box(8);
+    s = s ^ (s >> 4);
+    s = s * 29 + builtin::black_box(2);
+    s = s ^ (s >> 10);
+    s = s * 37 + builtin::black_box(3);
+    s = s ^ (s >> 12);
+    s = s * 41 + builtin::black_box(5);
+    s = s ^ (s >> 14);
+    s = s * 43 + builtin::black_box(7);
+    s = s ^ (s >> 15);
+    s = s * 47 + builtin::black_box(1);
+    s = s ^ (s >> 1);
+    return h(s) + sink(s);
+}
+
+#[inline("never")]
+fn driver(n: i32) -> i32 {
+    let mut s = 0;
+    for let i of 0..<n {
+        s += f(i);
+    }
+    return s;
+}
+
+// A second site, so `h` is not admitted at its one site.
+#[inline("never")]
+fn other(x: i32) -> i32 {
+    return h(x) + 3;
+}
+
+export fn run() with Stdout {
+    let s = driver(builtin::black_box(10000));
+    println(`${s + other(builtin::black_box(3))}`);
+}
+
+__DATA__
+{
+  "profile": "testdata/pgo_unmoved_caller_hot_site.pgo",
+  "wir_scope": "pgo_unmoved_caller_hot_site.wado/f",
+  "wir_not_expect:O2": [
+    "\"pgo_unmoved_caller_hot_site.wado/h\"("
+  ],
+  "stdout": "1431570020\n"
+}
