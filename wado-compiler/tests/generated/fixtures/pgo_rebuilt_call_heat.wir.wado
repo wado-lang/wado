@@ -31,37 +31,41 @@ type "functype//pgo_rebuilt_call_heat.wado/hot" = fn(i32) -> i32;  // TypeId(11)
 
 type "functype//pgo_rebuilt_call_heat.wado/warm" = fn(i32) -> i32;  // TypeId(12)
 
-type "functype//pgo_rebuilt_call_heat.wado/other" = fn(i32) -> i32;  // TypeId(13)
+type "functype//pgo_rebuilt_call_heat.wado/cool" = fn(i32) -> i32;  // TypeId(13)
 
-type "functype//pgo_rebuilt_call_heat.wado/run" = fn();  // TypeId(14)
+type "functype//pgo_rebuilt_call_heat.wado/other" = fn(i32) -> i32;  // TypeId(14)
 
-type "functype//pgo_rebuilt_call_heat.wado/$cm_export__run" = fn();  // TypeId(15)
+type "functype//pgo_rebuilt_call_heat.wado/run" = fn();  // TypeId(15)
 
-type "functype//core:prelude/primitive.wado/write_decimal_digits" = fn(ref Array<u8>, i32, u64, i32);  // TypeId(16)
+type "functype//pgo_rebuilt_call_heat.wado/$cm_export__run" = fn();  // TypeId(16)
 
-type "functype//core:prelude/primitive.wado/count_digits_u64" = fn(u64) -> i32;  // TypeId(17)
+type "functype//core:prelude/primitive.wado/write_decimal_digits" = fn(ref Array<u8>, i32, u64, i32);  // TypeId(17)
 
-type "functype//core:rt/unreachable" = fn();  // TypeId(18)
+type "functype//core:prelude/primitive.wado/count_digits_u64" = fn(u64) -> i32;  // TypeId(18)
 
-type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(19)
+type "functype//core:rt/unreachable" = fn();  // TypeId(19)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::realloc_to" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(20)
+type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(20)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(21)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::realloc_to" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(21)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]" = fn(ref "core:prelude/string.wado//String", bool, i32) -> i32;  // TypeId(22)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(22)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(23)
+type "functype//pgo_rebuilt_call_heat.wado/pgo_rebuilt_call_heat.wado/$Closure_0::$call$dae[self]" = fn(i32) -> i32;  // TypeId(23)
 
-type "functype//wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode" = fn(i32);  // TypeId(24)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]" = fn(ref "core:prelude/string.wado//String", bool, i32) -> i32;  // TypeId(24)
 
-type "functype//wasi/task-return" = fn(i32);  // TypeId(25)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(25)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(26)
+type "functype//wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode" = fn(i32);  // TypeId(26)
 
-type "functype//pgo_rebuilt_call_heat.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(27)
+type "functype//wasi/task-return" = fn(i32);  // TypeId(27)
 
-type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(28)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(28)
+
+type "functype//pgo_rebuilt_call_heat.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(29)
+
+type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(30)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -98,7 +102,11 @@ fn "pgo_rebuilt_call_heat.wado/hot"(n) {
 }
 
 fn "pgo_rebuilt_call_heat.wado/warm"(x) {
-    return (local.tee x(((local.tee x(((local.tee x(((local.tee x(((local.tee x(((local.tee x((x * 31) + black_box(7)) ^ (x >> 3)) * 17) + black_box(5)) ^ (x >> 5)) * 13) + black_box(3)) ^ (x >> 7)) * 11) + black_box(2)) ^ (x >> 11)) * 7) + black_box(1)) ^ (x >> 13)) * 5) + black_box(9)) ^ (x >> 2) + 1) + 2;
+    return ("pgo_rebuilt_call_heat.wado/pgo_rebuilt_call_heat.wado/$Closure_0::$call$dae[self]"(x) + 1) + 2;
+}
+
+fn "pgo_rebuilt_call_heat.wado/cool"(x) {
+    return ("pgo_rebuilt_call_heat.wado/pgo_rebuilt_call_heat.wado/$Closure_0::$call$dae[self]"(x) + 1) + 4;
 }
 
 fn "pgo_rebuilt_call_heat.wado/other"(x) {
@@ -112,7 +120,7 @@ fn "pgo_rebuilt_call_heat.wado/run"() with Stdout {
     let x: i64;
     s = "pgo_rebuilt_call_heat.wado/hot"(black_box(10000));
     w = "pgo_rebuilt_call_heat.wado/warm"(black_box(1)) + "pgo_rebuilt_call_heat.wado/warm"(black_box(2));
-    s = (s + w) + "pgo_rebuilt_call_heat.wado/other"(black_box(3));
+    s = ((s + w) + "pgo_rebuilt_call_heat.wado/cool"(black_box(4))) + "pgo_rebuilt_call_heat.wado/other"(black_box(3));
     out_20 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
     $inline_core_prelude_string_wado_String__format_pgo_rebuilt_call_heat_wado__tmpl_fb51c04d54491732__i32___spec0_spec0_sroa_t_h0__0__$inline_core_prelude_string_wado_String__internal_push_view_20: block {
         break $inline_core_prelude_string_wado_String__format_pgo_rebuilt_call_heat_wado__tmpl_fb51c04d54491732__i32___spec0_spec0_sroa_t_h0__0__$inline_core_prelude_string_wado_String__internal_push_view_20;
@@ -343,6 +351,10 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, min_ca
         return;
     }
     "core:prelude/string.wado/core:prelude/string.wado/String::realloc_to"(self, select i32(min_capacity > 8, local.tee min_capacity(select i32(capacity > min_capacity, local.tee capacity(capacity * 2), min_capacity)), 8));
+}
+
+fn "pgo_rebuilt_call_heat.wado/pgo_rebuilt_call_heat.wado/$Closure_0::$call$dae[self]"(v) {
+    return local.tee v(((local.tee v(((local.tee v(((local.tee v(((local.tee v(((local.tee v((v * 31) + black_box(7)) ^ (v >> 3)) * 17) + black_box(5)) ^ (v >> 5)) * 13) + black_box(3)) ^ (v >> 7)) * 11) + black_box(2)) ^ (v >> 11)) * 7) + black_box(1)) ^ (v >> 13)) * 5) + black_box(9)) ^ (v >> 2);
 }
 
 fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"(self, is_negative, digit_count) {
