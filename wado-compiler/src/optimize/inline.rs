@@ -248,9 +248,8 @@ impl<'a> CostWalk<'a> {
     /// parameters, not one site's arguments, so `null`, `false` and a radix
     /// argument all switch the lookahead off too.
     ///
-    /// Each call is charged at the cooler of its own heat and the site's: the
-    /// splice carries it through that site, and a hot site's table charged a
-    /// callee's warm calls for bodies only a hot site splices.
+    /// Each call is charged at the cooler of its own heat and the site's, since
+    /// the splice carries it through that site.
     fn call_price(&self, call: ExprId, callee: FuncId, args: &[ArenaCallArg]) -> usize {
         let Some(lookahead) = self.lookahead else {
             return weight::CALL;
@@ -1023,6 +1022,12 @@ struct Spots {
     outside_loops: bool,
 }
 
+impl Spots {
+    fn any(self) -> bool {
+        self.in_loop || self.outside_loops
+    }
+}
+
 /// The [`BodyScan`]s, and what the last sweep read about each function, kept
 /// across rounds.
 #[derive(Default)]
@@ -1128,7 +1133,8 @@ fn scan_body(func: &NirFunction, markers: MarkerBuiltins, heat_map: &HeatMap) ->
                     scan.cold_callees.insert(*func_id);
                 } else {
                     scan.hot_callees.insert(*func_id);
-                    let heat = call_heat(heat_map, &body.exprs[e]).plain_where(unlikely.contains(&e));
+                    let heat =
+                        call_heat(heat_map, &body.exprs[e]).plain_where(unlikely.contains(&e));
                     let spots = scan.warm_sites.entry(*func_id).or_default().at_mut(heat);
                     if looped.contains(&e) {
                         spots.in_loop = true;
@@ -1617,7 +1623,7 @@ impl Reach {
     /// loop depth decides.
     fn covers(self, spots: Spots) -> bool {
         match self {
-            Reach::Everywhere | Reach::Sole => spots.in_loop || spots.outside_loops,
+            Reach::Everywhere | Reach::Sole => spots.any(),
             Reach::SoleOutsideLoops => spots.outside_loops,
             Reach::Loops => spots.in_loop,
             Reach::Nowhere => false,
@@ -2197,9 +2203,9 @@ fn movable(
     shrinking: &IndexSet<FuncId>,
 ) -> IndexSet<FuncId> {
     let takes_cold = |callee: &FuncId| {
-        candidates.get(callee).is_some_and(|f| {
-            shrinking.contains(callee) || f.inline_hint == InlineHint::Always
-        })
+        candidates
+            .get(callee)
+            .is_some_and(|f| shrinking.contains(callee) || f.inline_hint == InlineHint::Always)
     };
     let mut movable = IndexSet::default();
     for (caller, scan) in scans.iter().enumerate() {
@@ -2207,24 +2213,29 @@ fn movable(
             continue;
         }
         if cold_functions[caller] {
-            movable.extend(scan.calls.iter().map(|(callee, _)| *callee).filter(takes_cold));
+            movable.extend(
+                scan.calls
+                    .iter()
+                    .map(|(callee, _)| *callee)
+                    .filter(takes_cold),
+            );
             continue;
         }
         movable.extend(scan.cold_callees.iter().copied().filter(takes_cold));
+        // A caller only loops reach is a loop around every site in it.
+        let placed = |spots: Spots| {
+            if looped[caller] {
+                Spots {
+                    in_loop: spots.any(),
+                    outside_loops: false,
+                }
+            } else {
+                spots
+            }
+        };
         for (callee, at) in &scan.warm_sites {
             let Some(reach) = reach.get(callee) else {
                 continue;
-            };
-            // A caller only loops reach is a loop around every site in it.
-            let placed = |spots: Spots| {
-                if looped[caller] {
-                    Spots {
-                        in_loop: spots.in_loop || spots.outside_loops,
-                        outside_loops: false,
-                    }
-                } else {
-                    spots
-                }
             };
             // A hot site prices plain while its caller is a candidate itself.
             let admits = |site: Heat, priced: Heat| reach.at(priced).covers(placed(*at.at(site)));
@@ -2613,7 +2624,7 @@ fn inline_round(
         if live[caller] && !cold_functions[caller] {
             for (callee, spots) in &scan.warm_sites {
                 for heat in [Heat::Cold, Heat::Hot] {
-                    if *spots.at(heat) != Spots::default() {
+                    if spots.at(heat).any() {
                         *called_at[callee.index()].at_mut(heat) = true;
                     }
                 }
@@ -2743,9 +2754,15 @@ fn inline_round(
         let admitted = |gross: usize, heat: Heat| {
             let fits = net_cost(gross, func.params.len())
                 <= effective_threshold(&func, *thresholds.at(heat));
-            if func.inline_hint == InlineHint::Always || fits { gross } else { 0 }
+            if func.inline_hint == InlineHint::Always || fits {
+                gross
+            } else {
+                0
+            }
         };
         let gross = inline_cost(body, type_table, runs_at(i, Heat::Plain), None);
+        // The hot price is read only for a hot call, which a map with no hot
+        // region holds none of.
         let gross_hot = if heat_map.any_hot() {
             inline_cost(body, type_table, runs_at(i, Heat::Hot), None)
         } else {

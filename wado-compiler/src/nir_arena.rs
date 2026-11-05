@@ -16,13 +16,13 @@ use crate::canonical::CmCallTarget;
 use crate::const_eval::{MAX_SEQ_ELEMENTS, Value, truncate_int};
 use crate::hashmap;
 use crate::hashmap::IndexSet;
-use crate::pgo::Heat;
 use crate::module_source::ModuleSource;
 use crate::name::minted_name;
 use crate::nir::{FuncId, NirBinaryOp, NirLiteralPattern, NirLocal, NirUnaryOp};
 use crate::nir_value_graph::builder::ValueGraphBuild;
 use crate::nir_value_graph::{ValueId, ValueKind, ValuePool};
 use crate::nir_visitor::NirRefVisitor;
+use crate::pgo::Heat;
 use crate::primitive::PrimitiveType;
 use crate::tir::TypeId;
 use crate::token::Span;
@@ -1058,17 +1058,10 @@ impl Body {
     /// Deep-copy the expression subtree rooted at `id` into fresh arena nodes,
     /// returning the new root. The arena is a tree (one parent per node), so a
     /// rewrite that needs two references to one subtree must clone it rather
-    /// than alias the id. This is the structural counterpart of
-    /// `Engine::clone_expr` (which additionally maintains the engine's use
-    /// index); passes not running under the engine clone through `Body`.
+    /// than alias the id. Passes not running under the rewrite engine clone
+    /// through `Body`.
     pub fn clone_expr(&mut self, id: ExprId) -> ExprId {
-        let node = self.exprs[id].clone();
-        let kind = self.clone_expr_kind(node.kind);
-        self.exprs.push(ExprNode {
-            kind,
-            type_id: node.type_id,
-            span: node.span,
-        })
+        SubtreeCopy::clone_expr(self, id)
     }
 
     /// Take a node's content, leaving the slot `Dead` so every id pointing at it
@@ -1087,6 +1080,57 @@ impl Body {
         )
     }
 
+    /// Deep-copy a block subtree into fresh arena nodes, returning the new
+    /// block id. The block-level counterpart of [`Body::clone_expr`].
+    pub fn clone_block(&mut self, id: BlockId) -> BlockId {
+        SubtreeCopy::clone_block(self, id)
+    }
+}
+
+impl SubtreeCopy for Body {
+    fn arena(&self) -> &Body {
+        self
+    }
+
+    fn push_expr(&mut self, node: ExprNode) -> ExprId {
+        self.exprs.push(node)
+    }
+
+    fn push_stmt(&mut self, node: StmtNode) -> StmtId {
+        self.stmts.push(node)
+    }
+
+    fn push_pat(&mut self, node: PatNode) -> PatId {
+        self.pats.push(node)
+    }
+
+    fn push_block(&mut self, node: BlockNode) -> BlockId {
+        self.blocks.push(node)
+    }
+}
+
+/// A deep copy of an arena subtree: where it reads the nodes, where each copy
+/// goes, and which locals it renames on the way. [`Body`] pushes the copies
+/// as they are; the rewrite engine also registers each in its parent map and
+/// use index.
+pub trait SubtreeCopy {
+    fn arena(&self) -> &Body;
+    fn push_expr(&mut self, node: ExprNode) -> ExprId;
+    fn push_stmt(&mut self, node: StmtNode) -> StmtId;
+    fn push_pat(&mut self, node: PatNode) -> PatId;
+    fn push_block(&mut self, node: BlockNode) -> BlockId;
+
+    /// `local` and its name as the copy spells them.
+    fn renamed(&self, local: u32, name: String) -> (u32, String) {
+        (local, name)
+    }
+
+    fn clone_expr(&mut self, id: ExprId) -> ExprId {
+        let node = self.arena().exprs[id].clone();
+        let kind = self.clone_expr_kind(node.kind);
+        self.push_expr(ExprNode { kind, ..node })
+    }
+
     /// Deep-copy an operand. A promoted pure value is shared (the same pool
     /// backs the clone, so its `ValueId` stays valid); an effectful subtree is
     /// cloned into fresh nodes.
@@ -1097,33 +1141,22 @@ impl Body {
         }
     }
 
-    /// Deep-copy a block subtree into fresh arena nodes, returning the new
-    /// block id. The block-level counterpart of [`Body::clone_expr`].
-    pub fn clone_block(&mut self, id: BlockId) -> BlockId {
-        let node = self.blocks[id].clone();
+    fn clone_block(&mut self, id: BlockId) -> BlockId {
+        let node = self.arena().blocks[id].clone();
         let stmts = node.stmts.iter().map(|s| self.clone_stmt(*s)).collect();
-        self.blocks.push(BlockNode {
-            stmts,
-            span: node.span,
-        })
+        self.push_block(BlockNode { stmts, ..node })
     }
 
     fn clone_stmt(&mut self, id: StmtId) -> StmtId {
-        let node = self.stmts[id].clone();
+        let node = self.arena().stmts[id].clone();
         let kind = self.clone_stmt_kind(node.kind);
-        self.stmts.push(StmtNode {
-            kind,
-            span: node.span,
-        })
+        self.push_stmt(StmtNode { kind, ..node })
     }
 
     fn clone_pat(&mut self, id: PatId) -> PatId {
-        let node = self.pats[id].clone();
+        let node = self.arena().pats[id].clone();
         let kind = self.clone_pat_kind(node.kind);
-        self.pats.push(PatNode {
-            kind,
-            span: node.span,
-        })
+        self.push_pat(PatNode { kind, ..node })
     }
 
     fn clone_expr_kind(&mut self, kind: ExprKind) -> ExprKind {
@@ -1303,6 +1336,10 @@ impl Body {
                 arms: arms.into_iter().map(|a| self.clone_block(a)).collect(),
                 default: self.clone_block(default),
             },
+            ExprKind::Local { index, name } => {
+                let (index, name) = self.renamed(index, name);
+                ExprKind::Local { index, name }
+            }
             // Leaves carry no id children.
             leaf => leaf,
         }
@@ -1317,14 +1354,17 @@ impl Body {
                 type_id,
                 value,
                 skip_value_copy,
-            } => StmtKind::Let {
-                name,
-                local_index,
-                is_mut,
-                type_id,
-                value: self.clone_operand(value),
-                skip_value_copy,
-            },
+            } => {
+                let (local_index, name) = self.renamed(local_index, name);
+                StmtKind::Let {
+                    name,
+                    local_index,
+                    is_mut,
+                    type_id,
+                    value: self.clone_operand(value),
+                    skip_value_copy,
+                }
+            }
             StmtKind::Expr(e) => StmtKind::Expr(self.clone_operand(e)),
             StmtKind::Return { value } => StmtKind::Return {
                 value: value.map(|o| self.clone_operand(o)),
@@ -1395,6 +1435,18 @@ impl Body {
             PatKind::ConstantValue { expr } => PatKind::ConstantValue {
                 expr: self.clone_operand(expr),
             },
+            PatKind::Binding {
+                name,
+                local_index,
+                type_id,
+            } => {
+                let (local_index, name) = self.renamed(local_index, name);
+                PatKind::Binding {
+                    name,
+                    local_index,
+                    type_id,
+                }
+            }
             // Leaves carry no id children.
             leaf => leaf,
         }
