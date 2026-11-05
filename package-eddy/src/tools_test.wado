@@ -1,6 +1,28 @@
+use fs from "core:fs";
 use { from_string } from "core:json";
 use { Value } from "core:value";
-use { Workspace } from "./tools.wado";
+use { Runner, Workspace } from "./tools.wado";
+
+test "Write and Run are offered only with a runner" {
+    let ws = Workspace { root: "src" };
+    assert ws.call(&"Write", &tool_input(`{"file_path": "x.txt", "content": ""}`)).unwrap_err() == "no tool named Write";
+    let runner = Runner { target_dir: "build/target", cargo_home: "", rustup_home: "" };
+    let names = Workspace { root: "src", runner: Some(runner) }.tools().into_iter().map(|t| t.name).collect();
+    assert names.contains_str("Write") && names.contains_str("Run");
+}
+
+test "Write creates the file and its directories inside the root" {
+    let root = "build/tools-test";
+    fs::remove_dir_all(root).unwrap();
+    fs::create_dir_all(root).unwrap();
+    let runner = Runner { target_dir: "build/target", cargo_home: "", rustup_home: "" };
+    let ws = Workspace { root, runner: Some(runner) };
+    assert ws.call(&"Write", &tool_input(`{"file_path": "/a/b.txt", "content": "hi\\n"}`)).unwrap() == "Wrote /a/b.txt";
+    assert fs::read_to_string("build/tools-test/a/b.txt").unwrap() == "hi\n";
+    assert ws.call(&"Write", &tool_input(`{"file_path": "../escape.txt", "content": ""}`)).unwrap_err().contains(
+        "outside the repository",
+    );
+}
 
 test "Read numbers the lines of the range it reads" {
     let ws = Workspace { root: "src" };

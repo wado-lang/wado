@@ -10,7 +10,11 @@
 //! FindSymbol and FindReferences over SCIP indexes of that tree, which
 //! rust-analyzer and `-D wado=<path>` (`target/debug/wado` by default) write.
 //! rust-analyzer runs only with `--process-read` on `~/.cargo` and
-//! `~/.rustup`.
+//! `~/.rustup`. `-D run=true` adds Write and Run, which build and run the
+//! tree with `cargo` into `scratchpad/eddy-target`; each run starts from the
+//! tree as checked out. Run needs the tree's toolchain installed and its crates
+//! fetched, since a child cannot write `~/.cargo` or `~/.rustup`.
+//! `-D only=<fix>` reviews that entry alone.
 //!
 //! Run it from the repository root. The reviewer is a build input:
 //! `CLAUDE_MODEL` in the environment, or `-D CLAUDE_MODEL=...`.
@@ -35,6 +39,7 @@ use {
     json_object,
     merge_title,
     snapshot,
+    reset_snapshot,
     drop_snapshot,
     index,
     Census,
@@ -44,8 +49,8 @@ use {
 } from "./eval.wado";
 use { Usage } from "../src/anthropic.wado";
 use { run_agent, Call } from "../src/agent.wado";
-use { Workspace } from "../src/tools.wado";
-use { load } from "../src/symbols.wado";
+use { Runner, Workspace } from "../src/tools.wado";
+use { load, SymbolIndex } from "../src/symbols.wado";
 
 #[param(from_env = "CLAUDE_MODEL")]
 global CLAUDE_MODEL: String = "claude-opus-5-5";
@@ -65,6 +70,13 @@ global TOOLS: bool = false;
 #[param(name = "symbols")]
 global SYMBOLS: bool = false;
 
+#[param(name = "run")]
+global RUN: bool = false;
+
+/// The one fix to review, or 0 for every usable entry.
+#[param(name = "only")]
+global ONLY: i32 = 0;
+
 /// The `wado` that indexes the Wado source of each tree.
 #[param(name = "wado")]
 global WADO: String = "target/debug/wado";
@@ -81,6 +93,8 @@ Report at most 10 findings, the most severe first. An empty list is a valid answ
 global READING: String = "You can read the repository as it stood once this pull request merged, with the tools Read, Grep and Glob. Before you report, read what the diff alone does not show: the callers of what changed, the definitions it relies on, the rest of a file. Your final reply is the JSON object.";
 
 global SYMBOL_READING: String = "FindSymbol and FindReferences answer from the compiler's index of the Rust and Wado code: use them to find a definition and the uses of a function, type or field, and Grep for other text.";
+
+global RUNNING: String = "You can also check a suspicion by running the code: Write a test or a small program into the tree, and build and run it with Run, which runs cargo. A defect a run reproduces is one to report; a suspicion a run refutes is one to drop. Run what you suspect before you decide.";
 
 global GRADE: String = "You grade a code review against one known defect.
 The KNOWN DEFECT is what a later pull request had to fix in the reviewed change. The FINDINGS are what the reviewer reported on the change.
@@ -125,6 +139,7 @@ struct Baseline {
     grader: String,
     tools: bool = false,
     symbols: bool = false,
+    run: bool = false,
     // The defaults are what the files written before these were recorded ran.
     max_turns: i32 = 40,
     diff_limit: i32 = 2_000_000,
@@ -134,6 +149,7 @@ struct Baseline {
 export fn run() with (Stderr, Environment, Preopens, Process, Client) {
     let arguments = args();
     assert !SYMBOLS || TOOLS, "the symbol tools read the tree that tools=true checks out";
+    assert !RUN || TOOLS, "Run builds the tree that tools=true checks out";
     assert arguments.len() == 4, "usage: baseline.wado <szz.json> <checked.json> <judged.json> <out.json>";
     let Some(api_key) = env("CLAUDE_API_KEY") else {
         panic("CLAUDE_API_KEY is not set");
@@ -151,12 +167,13 @@ export fn run() with (Stderr, Environment, Preopens, Process, Client) {
         grader: GRADER,
         tools: TOOLS,
         symbols: SYMBOLS,
+        run: RUN,
         max_turns: MAX_TURNS,
         diff_limit: LIMIT,
         entries: [],
     };
     for let c of &checked.pairs {
-        if !c.usable() {
+        if !c.usable() || ONLY != 0 && c.fix != ONLY {
             continue;
         }
         assert fix_result(&census, c.fix).blamed[0].pr == c.culprit, "the census must still blame the checked culprit";
@@ -195,6 +212,9 @@ ${fix_diff}
 
         let ws: Option<Workspace> = if TOOLS { Some(workspace(&culprit.sha)) } else { null };
         while out.entries[i].runs.len() < RUNS {
+            if RUN && let Some(w) = &ws {
+                reset_snapshot(&w.root);
+            }
             out.entries[i].runs.push(review_once(&api_key, &review_prompt, &known, &ws));
             // Written after every run, so a run that dies keeps what it paid for.
             fs::write(&out_path, &to_bytes_pretty(&out).unwrap()).unwrap();
@@ -211,10 +231,18 @@ ${fix_diff}
 /// The tree as merge `sha` left it, indexed when `symbols` is set.
 fn workspace(sha: &String) -> Workspace with (Process, Preopens, Environment) {
     let root = snapshot(sha);
-    if !SYMBOLS {
-        return Workspace { root };
-    }
-    return Workspace { root, symbols: Some(load(&index(&root, &WADO)).unwrap()) };
+    let symbols: Option<SymbolIndex> = if SYMBOLS { Some(load(&index(&root, &WADO)).unwrap()) } else { null };
+    let runner: Option<Runner> = if RUN { Some(runner()) } else { null };
+    return Workspace { root, symbols, runner };
+}
+
+fn runner() -> Runner with Environment {
+    let home = env("HOME").expect("rustup's default homes are under HOME");
+    return Runner {
+        target_dir: "scratchpad/eddy-target",
+        cargo_home: env("CARGO_HOME").unwrap_or(`${home}/.cargo`),
+        rustup_home: env("RUSTUP_HOME").unwrap_or(`${home}/.rustup`),
+    };
 }
 
 fn fix_result(census: &Census, fix: i32) -> FixResult {
@@ -269,7 +297,13 @@ fn review(api_key: &String, review_prompt: &String, ws: &Option<Workspace>) -> R
             Err(e) => Run { error: Some(e) },
         };
     };
-    let reading = if SYMBOLS { `${READING}\n${SYMBOL_READING}` } else { READING };
+    let mut reading = READING;
+    if SYMBOLS {
+        reading.push_str(`\n${SYMBOL_READING}`);
+    }
+    if RUN {
+        reading.push_str(`\n${RUNNING}`);
+    }
     let agent = run_agent(api_key, CLAUDE_MODEL, `${REVIEW}\n${reading}`, *review_prompt, w, MAX_TURNS, 32_000);
     let mut reviewed = Run { turns: agent.turns, calls: agent.calls, usage: Some(agent.usage) };
     match agent.answer {
@@ -294,6 +328,7 @@ fn earlier_entries(path: &String) -> TreeMap<i32, Entry> with Preopens {
         || earlier.grader != GRADER
         || earlier.tools != TOOLS
         || earlier.symbols != SYMBOLS
+        || earlier.run != RUN
         || earlier.diff_limit != LIMIT
         || TOOLS && earlier.max_turns != MAX_TURNS {
         return by_fix;

@@ -153,6 +153,12 @@ pub fn snapshot(sha: &String) -> String with Process {
     return root;
 }
 
+/// The snapshot at `root` with what a reviewer wrote into it undone.
+pub fn reset_snapshot(root: &String) with Process {
+    git(["-C", *root, "reset", "--hard", "--quiet"]);
+    git(["-C", *root, "clean", "-fdx", "--quiet"]);
+}
+
 pub fn drop_snapshot(root: &String) with (Process, Preopens) {
     git(["worktree", "remove", "--force", *root]);
     fs::remove_dir_all(index_dir(root)).unwrap();
