@@ -132,13 +132,13 @@ test "a row kernel folds each row to its mean and to its softmax, summing in ord
     let normalized = fused_rows::<[Row, Col], [Row, Col]>(&reads, &softmax, 1, false, x.extents);
     for let r of 0..<2 {
         let row = data[r * 4..<r * 4 + 4].to_list();
-        let mut sum: f32 = 0.0;
+        let mut total: f32 = 0.0;
         let mut top = -f32::INFINITY;
         for let v of row {
-            sum += v;
+            total += v;
             top = f32::ieee754_max(top, v);
         }
-        assert reduced.data[r] == sum / 4.0;
+        assert reduced.data[r] == total / 4.0;
         let mut exponentials: f32 = 0.0;
         for let v of row {
             exponentials += f32::exp(v - top);
