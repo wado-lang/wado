@@ -66,7 +66,7 @@ async fn run(options: RunOptions, plugin: Option<PathBuf>) -> Result<(), CliExit
         )));
     };
     // The plugin first: a missing one is better said before the compile.
-    let plugin = plugin::Plugin::open(&plugin).map_err(|e| CliExit::error(format!("{e:#}")))?;
+    let plugin = plugin::Plugin::open(&plugin)?;
     let program = program_for(&options)?;
     host::run(&program, &options, plugin).await
 }

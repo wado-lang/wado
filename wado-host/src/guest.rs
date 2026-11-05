@@ -413,19 +413,6 @@ pub fn create_config(opt_level: OptLevel, profile: &ProfileMode, knobs: &Runtime
     config
 }
 
-/// Create a wasmtime Engine with the standard configuration.
-///
-/// # Errors
-///
-/// Returns an error if the engine cannot be created with the given configuration.
-pub fn create_engine(
-    opt_level: OptLevel,
-    profile: &ProfileMode,
-    knobs: &RuntimeKnobs,
-) -> Result<Engine> {
-    Ok(Engine::new(&create_config(opt_level, profile, knobs))?)
-}
-
 /// A store over `state`. On a metering engine it holds fuel it can never
 /// exhaust, so `--report-fuel` observes the guest without stopping it.
 #[must_use]

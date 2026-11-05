@@ -1,7 +1,6 @@
 use std::fmt::Write as _;
 use std::path::PathBuf;
 
-use wado_host::guest::GuestState;
 use wado_host::options::{CliExit, OptSpec};
 use wado_host::runner::{self, CompileOpt, OwnOption, Parsed, RunEngine, run_options_help};
 
@@ -137,11 +136,12 @@ pub async fn run(opts: RunOptions) -> Result<(), CliExit> {
         return Ok(());
     }
 
-    let argv: Vec<String> = std::iter::once(opts.input)
-        .chain(opts.program_args)
-        .collect();
-    let guest = GuestState::new(&opts.preopened_dirs, &argv, opts.runtime.process.clone())
-        .map_err(|e| CliExit::error(format!("Runtime error: {e:?}")))?;
+    let guest = runner::guest_state(
+        &opts.input,
+        &opts.program_args,
+        &opts.preopened_dirs,
+        opts.runtime.process.clone(),
+    )?;
     let engine = RunEngine {
         opt_level,
         profile: &opts.profile,

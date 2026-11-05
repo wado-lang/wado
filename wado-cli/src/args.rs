@@ -85,11 +85,6 @@ pub fn apply_param_opt(
     Ok(())
 }
 
-#[must_use]
-pub fn parse_log_level(s: &str) -> Option<LogLevel> {
-    HostLogLevel::parse(s).map(compiler_log_level)
-}
-
 const fn compiler_log_level(level: HostLogLevel) -> LogLevel {
     match level {
         HostLogLevel::Off => LogLevel::Off,

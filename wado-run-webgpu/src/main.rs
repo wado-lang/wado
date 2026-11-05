@@ -25,7 +25,7 @@ async fn main() -> ExitCode {
 async fn run(options: RunOptions, gpu_adapter: Option<AdapterSelector>) -> Result<(), CliExit> {
     // The GPU first: a machine without one has nothing to run on, and saying so
     // before the compile beats saying it after.
-    let gpu = host::gpu(gpu_adapter.as_ref()).map_err(|e| CliExit::error(format!("{e:#}")))?;
+    let gpu = host::gpu(gpu_adapter.as_ref())?;
     let program = program_for(&options)?;
     host::run(&program, &options, gpu).await
 }

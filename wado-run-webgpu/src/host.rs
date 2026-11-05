@@ -7,7 +7,7 @@ use tokio::task::spawn_blocking;
 use wado_host::guest::GuestState;
 use wado_host::guest_views;
 use wado_host::options::{CliExit, LogLevel};
-use wado_host::runner::{self, Program, RunEngine, RunOptions};
+use wado_host::runner::{self, Program, RunOptions};
 use wasi_webgpu_wasmtime::wasi::webgpu::webgpu::{
     Gpu as GuestGpu, GpuQueue as GuestGpuQueue, GpuRequestAdapterOptions,
 };
@@ -123,25 +123,20 @@ impl WasiWebGpuCtxView for Host {
 
 /// Run a component that exports `wasi:cli/run`, on the GPU already found.
 pub async fn run(program: &Program, options: &RunOptions, gpu: Gpu) -> Result<(), CliExit> {
-    let command = &options.command;
-    let guest = GuestState::new(
-        &command.preopened_dirs,
-        &options.guest_args(program),
-        command.runtime.process.clone(),
-    )
-    .map_err(|e| CliExit::error(format!("{e:#}")))?;
     let host = Host {
-        guest,
+        guest: options.guest(program)?,
         gpu,
         options: WasiWebGpuOptions::default(),
         log_level: options.log_level,
     };
-    let engine = RunEngine {
-        opt_level: options.opt_level.to_wasmtime(),
-        profile: &command.profile,
-        knobs: &command.runtime,
-    };
-    runner::run("wado-run-webgpu", &program.wasm, &engine, host, link).await
+    runner::run(
+        "wado-run-webgpu",
+        &program.wasm,
+        &options.engine(),
+        host,
+        link,
+    )
+    .await
 }
 
 fn link(engine: &Engine, component: &Component, linker: &mut Linker<Host>) -> Result<()> {

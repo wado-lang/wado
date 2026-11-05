@@ -23,12 +23,14 @@ use wasmtime::{Engine, GuestProfiler, Store, UpdateDeadline};
 use wasmtime_wasi::I32Exit;
 use wasmtime_wasi::p3::bindings::Command;
 
-use crate::guest::{Guest, create_engine, fuel_spent, host_linker, new_store};
+use crate::guest::{Guest, GuestState, create_config, fuel_spent, host_linker, new_store};
 use crate::options::{
     CliExit, CompileKnobOpt, DirGrants, HELP_SPEC, HostKnobOpt, LogLevel, NO_DIR_SPEC, OptLevel,
     OptSpec, OptsHelp, ParamOpt, ProfileMode, RuntimeKnobOpt, RuntimeKnobs, match_opt, next_arg,
     parse_log_level_arg, parse_opt_level_arg, parse_profile, require_string, require_value,
+    unexpected_arg,
 };
+use crate::process_host::ProcessGrant;
 use crate::sync::lock;
 use crate::ticker::Ticker;
 
@@ -197,22 +199,17 @@ pub fn parse_run_command(
             program_args = args_after_input(parser, options_ended);
             break;
         } else {
-            let name = match arg {
-                Long(name) => name.to_owned(),
+            let name = match &arg {
+                Long(name) => (*name).to_owned(),
                 Short(name) => name.to_string(),
                 Value(_) => unreachable!("taken as the input above"),
             };
+            let refused = unexpected_arg(arg, usage);
             match own(&name, parser)? {
                 OwnOption::Taken => {}
                 OwnOption::Help => return Ok(Parsed::Help),
                 OwnOption::Version => return Ok(Parsed::Version),
-                OwnOption::Unknown => {
-                    let dashes = if name.len() == 1 { "-" } else { "--" };
-                    return Err(CliExit::error_with_usage(
-                        format!("invalid option '{dashes}{name}'"),
-                        usage,
-                    ));
-                }
+                OwnOption::Unknown => return Err(refused),
             }
         }
     }
@@ -254,8 +251,8 @@ from the current directory. Arguments after the input file go to the program.
 
 /// One run, as a runner's command line asks for it.
 pub struct RunOptions {
-    pub command: RunCommand,
-    pub opt_level: OptLevel,
+    command: RunCommand,
+    opt_level: OptLevel,
     pub log_level: LogLevel,
     /// What goes on to `wado`, as it was spelled.
     compile_args: Vec<OsString>,
@@ -327,11 +324,54 @@ impl RunOptions {
             Parsed::Version => Invocation::Version,
         })
     }
+
+    /// What a guest of `program` holds on this command line.
+    ///
+    /// # Errors
+    ///
+    /// Fails when a directory cannot be opened.
+    pub fn guest(&self, program: &Program) -> Result<GuestState, CliExit> {
+        guest_state(
+            &program.entry,
+            &self.command.program_args,
+            &self.command.preopened_dirs,
+            self.command.runtime.process.clone(),
+        )
+    }
+
+    /// The engine this command line asks for.
+    #[must_use]
+    pub fn engine(&self) -> RunEngine<'_> {
+        RunEngine {
+            opt_level: self.opt_level.to_wasmtime(),
+            profile: &self.command.profile,
+            knobs: &self.command.runtime,
+        }
+    }
+}
+
+/// What a guest holds: `entry` is the program name it reads ahead of
+/// `program_args`.
+///
+/// # Errors
+///
+/// Fails when a directory cannot be opened.
+pub fn guest_state(
+    entry: &str,
+    program_args: &[String],
+    preopened_dirs: &[(String, String)],
+    process: ProcessGrant,
+) -> Result<GuestState, CliExit> {
+    let args: Vec<String> = std::iter::once(entry)
+        .chain(program_args.iter().map(String::as_str))
+        .map(str::to_owned)
+        .collect();
+    GuestState::new(preopened_dirs, &args, process).map_err(|e| run_error(&e))
 }
 
 /// Whether the next argument is the `--` that ends a command's options. Any
 /// other `--` belongs to the program.
-pub fn ends_options(parser: &mut Parser) -> bool {
+fn ends_options(parser: &mut Parser) -> bool {
     parser
         .try_raw_args()
         .is_some_and(|raw| raw.peek() == Some(OsStr::new("--")))
@@ -339,7 +379,7 @@ pub fn ends_options(parser: &mut Parser) -> bool {
 
 /// Everything after the input file, flags included, which goes to the program,
 /// less the `--` ending the command's options where none has ended them yet.
-pub fn args_after_input(parser: &mut Parser, options_ended: bool) -> Vec<String> {
+fn args_after_input(parser: &mut Parser, options_ended: bool) -> Vec<String> {
     let Some(mut raw) = parser.try_raw_args() else {
         return Vec::new();
     };
@@ -351,8 +391,7 @@ pub fn args_after_input(parser: &mut Parser, options_ended: bool) -> Vec<String>
 
 /// The status a program chose through `wasi:cli/exit`, which wasmtime reports as
 /// an error so that a program that exits on purpose reads like a trap.
-#[must_use]
-pub fn exit_status(error: &anyhow::Error) -> Option<i32> {
+fn exit_status(error: &anyhow::Error) -> Option<i32> {
     error.downcast_ref::<I32Exit>().map(|exit| exit.0)
 }
 
@@ -398,16 +437,6 @@ pub async fn command_line<T>(
 pub struct Program {
     pub entry: String,
     pub wasm: Vec<u8>,
-}
-
-impl RunOptions {
-    /// What `wasi:cli/environment.get-arguments` answers for `program`.
-    #[must_use]
-    pub fn guest_args(&self, program: &Program) -> Vec<String> {
-        std::iter::once(program.entry.clone())
-            .chain(self.command.program_args.iter().cloned())
-            .collect()
-    }
 }
 
 /// The component the input names, built by `wado run --emit-component` unless it
@@ -496,7 +525,8 @@ async fn run_component<T: Guest>(
     state: T,
     link: impl FnOnce(&Engine, &Component, &mut Linker<T>) -> Result<()>,
 ) -> Result<()> {
-    let engine = create_engine(run_engine.opt_level, run_engine.profile, run_engine.knobs)?;
+    let config = create_config(run_engine.opt_level, run_engine.profile, run_engine.knobs);
+    let engine = Engine::new(&config)?;
     let component = Component::new(&engine, wasm)?;
 
     let mut linker = host_linker(&engine)?;
@@ -539,7 +569,7 @@ async fn run_component<T: Guest>(
 /// `--profile guest`, as `wado run` samples: a thread advances the epoch every
 /// interval, and the store's deadline callback records where the guest is.
 /// `WADO_PROFILE_MAX_SECS` stops the guest once that many seconds have passed.
-pub struct Sampling {
+struct Sampling {
     profiler: Arc<Mutex<Option<GuestProfiler>>>,
     ticker: Ticker,
     file: File,
@@ -548,12 +578,7 @@ pub struct Sampling {
 
 impl Sampling {
     /// Starts sampling the run `store` is about to make.
-    ///
-    /// # Errors
-    ///
-    /// Fails when `path` cannot be written or `WADO_PROFILE_MAX_SECS` does not
-    /// parse.
-    pub fn start<H: 'static>(
+    fn start<H: 'static>(
         runner: &str,
         engine: &Engine,
         component: &Component,
@@ -607,11 +632,7 @@ impl Sampling {
 
     /// What a run that ended with `outcome` reports, once any sampling of it
     /// has written its profile.
-    ///
-    /// # Errors
-    ///
-    /// Fails when the run did or the profile cannot be written.
-    pub fn conclude(sampling: Option<Self>, outcome: Result<()>) -> Result<()> {
+    fn conclude(sampling: Option<Self>, outcome: Result<()>) -> Result<()> {
         reported(outcome, sampling.map_or(Ok(()), Self::finish))
     }
 
@@ -670,8 +691,7 @@ fn profile_budget() -> Result<Option<Duration>> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::options::{GuestProfile, parse_collector};
-    use crate::process_host::ProcessGrant;
+    use crate::options::GuestProfile;
 
     fn try_parse(argv: &[&str]) -> Result<Invocation, CliExit> {
         RunOptions::parse(argv.iter().map(OsString::from), "usage", |_, _| Ok(false))
@@ -864,10 +884,10 @@ mod tests {
             "app.wado",
         ]);
         let knobs = &options.command.runtime;
-        assert_eq!(
-            format!("{:?}", knobs.collector),
-            format!("{:?}", parse_collector("drc").unwrap())
-        );
+        assert!(matches!(
+            knobs.collector,
+            wasmtime::Collector::DeferredReferenceCounting
+        ));
         assert_eq!(knobs.gc_heap_initial_size, 1 << 20);
         assert!(knobs.report_fuel);
         assert_eq!(knobs.process, ProcessGrant::Denied);

@@ -1242,7 +1242,8 @@ fn opt_level_maps_to_wasmtime_cranelift() {
 
 #[test]
 fn parse_log_level_valid() {
-    use wado_cli::args::parse_log_level;
+    let parse_log_level =
+        |level| wado_cli::args::parse_log_level_arg(&mut Parser::from_args(&[level])).ok();
     assert_eq!(
         parse_log_level("debug"),
         Some(wado_compiler::LogLevel::Debug)

@@ -64,6 +64,12 @@ impl CliExit {
     }
 }
 
+impl From<anyhow::Error> for CliExit {
+    fn from(error: anyhow::Error) -> Self {
+        Self::error(format!("{error:#}"))
+    }
+}
+
 pub fn next_arg(parser: &mut Parser) -> Result<Option<lexopt::Arg<'_>>, CliExit> {
     parser.next().map_err(CliExit::error)
 }

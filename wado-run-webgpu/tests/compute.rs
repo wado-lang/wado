@@ -139,6 +139,25 @@ fn a_compile_error_ends_the_run_with_the_compilers_own_report() {
 }
 
 #[test]
+fn a_directory_that_cannot_be_opened_is_reported_as_wado_run_reports_it() {
+    let served = served();
+    let args = ["--dir", "/nonexistent/grant", served.to_str().unwrap()];
+    let here = run(&args);
+    let there = Command::new(&*WADO)
+        .arg("run")
+        .args(args)
+        .output()
+        .expect("running wado");
+
+    assert!(!here.status.success());
+    assert_eq!(here.status.code(), there.status.code());
+    assert_eq!(
+        String::from_utf8_lossy(&here.stderr),
+        String::from_utf8_lossy(&there.stderr)
+    );
+}
+
+#[test]
 fn a_compute_shader_writes_what_the_guest_reads_back() {
     let output = run(&[fixture("compute_double.wado").to_str().unwrap()]);
     let stdout = String::from_utf8_lossy(&output.stdout);

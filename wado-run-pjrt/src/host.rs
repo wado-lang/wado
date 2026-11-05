@@ -5,7 +5,7 @@ use std::sync::Arc;
 use wado_host::guest::GuestState;
 use wado_host::guest_views;
 use wado_host::options::CliExit;
-use wado_host::runner::{self, Program, RunEngine, RunOptions};
+use wado_host::runner::{self, Program, RunOptions};
 use wasmtime::component::{HasData, Resource};
 
 pub use crate::plugin::{Buffer, Executable};
@@ -162,27 +162,15 @@ pub async fn run(
     options: &RunOptions,
     plugin: Arc<Plugin>,
 ) -> Result<(), CliExit> {
-    let command = &options.command;
-    let guest = GuestState::new(
-        &command.preopened_dirs,
-        &options.guest_args(program),
-        command.runtime.process.clone(),
-    )
-    .map_err(|e| CliExit::error(format!("{e:#}")))?;
     let host = Host {
-        guest,
+        guest: options.guest(program)?,
         client: None,
         plugin,
-    };
-    let engine = RunEngine {
-        opt_level: options.opt_level.to_wasmtime(),
-        profile: &command.profile,
-        knobs: &command.runtime,
     };
     runner::run(
         "wado-run-pjrt",
         &program.wasm,
-        &engine,
+        &options.engine(),
         host,
         |_, _, linker| {
             pjrt_host::add_to_linker::<Host, Pjrt>(linker, |host| host)?;
