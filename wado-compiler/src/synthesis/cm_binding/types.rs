@@ -537,7 +537,7 @@ fn check_cm_boundary_representable_inner(
                 match struct_decl_of(type_table, *def, type_args, tir_modules) {
                     // Only the declaration stands for an instance no
                     // monomorphization listed.
-                    Some(decl) if !type_table.same_instance_args(&decl.type_args, type_args) => {
+                    Some(decl) if !decl.lists(type_table, *def, type_args) => {
                         Err(format!(
                             "generic type `{}` has no Component Model value representation",
                             type_table.name(type_id)
@@ -1071,13 +1071,10 @@ pub(super) fn struct_decl_of(
 ) -> Option<TirStruct> {
     let mut declaration = None;
     for s in tir_modules.values().flat_map(|module| &module.structs) {
-        if s.def != def {
-            continue;
-        }
-        if type_table.same_instance_args(&s.type_args, type_args) {
+        if s.lists(type_table, def, type_args) {
             return Some(s.clone());
         }
-        if s.type_args.is_empty() {
+        if s.def == def && s.type_args.is_empty() {
             declaration.get_or_insert(s);
         }
     }

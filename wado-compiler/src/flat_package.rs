@@ -125,8 +125,7 @@ impl FlatPackage {
         self.target_world == world_registry::TEST_WORLD
     }
 
-    /// The listed struct `def` instantiated with `type_args`, each argument
-    /// compared by [`InstanceKey`] so an instance matches the struct it became.
+    /// The listed struct `def` instantiated with `type_args` lowers as.
     pub fn listed_struct(
         &self,
         type_table: &TypeTable,
@@ -135,7 +134,7 @@ impl FlatPackage {
     ) -> Option<&TirStruct> {
         self.structs
             .iter()
-            .find(|s| s.def == def && type_table.same_instance_args(&s.type_args, type_args))
+            .find(|s| s.lists(type_table, def, type_args))
     }
 
     /// Walk every function body with `visitor`, which may rewrite it in place.

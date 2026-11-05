@@ -3854,15 +3854,6 @@ impl TypeTable {
         self.trait_frames.get(&trait_)
     }
 
-    /// Whether two argument lists instantiate a declaration as one instance.
-    #[must_use]
-    pub fn same_instance_args(&self, a: &[TypeId], b: &[TypeId]) -> bool {
-        a.len() == b.len()
-            && a.iter()
-                .zip(b)
-                .all(|(&x, &y)| self.instance_key(x) == self.instance_key(y))
-    }
-
     /// The [`InstanceKey`] of `id`.
     pub fn instance_key(&self, id: TypeId) -> InstanceKey {
         let args = |type_args: &[TypeId]| type_args.iter().map(|a| self.instance_key(*a)).collect();
