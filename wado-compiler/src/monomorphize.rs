@@ -215,7 +215,15 @@ impl Pool {
     /// instance of it is.
     fn keep_instances(&mut self, found: &[TypeId], type_table: &TypeTable) {
         self.instances.extend(found.iter().copied().filter(|&id| {
-            type_table.instance_parts(id).is_some() && !type_table.contains_type_param(id)
+            let instance = match type_table.get(id) {
+                ResolvedType::Struct {
+                    def: StructDef::Decl(_),
+                    type_args,
+                }
+                | ResolvedType::Variant { type_args, .. } => !type_args.is_empty(),
+                _ => false,
+            };
+            instance && !type_table.contains_type_param(id)
         }));
     }
 

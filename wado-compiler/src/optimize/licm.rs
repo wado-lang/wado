@@ -1608,9 +1608,7 @@ fn extract_alias_source(body: &Body, e: ExprId) -> Option<u32> {
 fn is_gc_heap_type(type_id: TypeId, type_table: &TypeTable) -> bool {
     match type_table.get(type_id) {
         ResolvedType::Struct { .. } | ResolvedType::Tuple(_) => true,
-        ResolvedType::Variant { type_args, .. } | ResolvedType::Resource { type_args, .. } => {
-            !type_args.is_empty()
-        }
+        ResolvedType::Variant { type_args, .. } => !type_args.is_empty(),
         ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
             is_gc_heap_type(*inner, type_table)
         }

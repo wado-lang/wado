@@ -701,7 +701,7 @@ impl FunctionTranslator<'_, '_> {
                 let variant_type_id = self.ctx.type_map.get(&key)?;
                 let WirTypeDef::Variant(vt) = &self.ctx.types[variant_type_id.index() as usize]
                 else {
-                    return None;
+                    unreachable!("a variant key registers a variant type")
                 };
                 Some(vt.cases.len())
             }

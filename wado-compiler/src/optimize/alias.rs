@@ -981,9 +981,7 @@ fn shared_object_key(type_id: TypeId, type_table: &TypeTable) -> Option<TypeKey>
                 under_ref.then(|| type_table.type_key(type_id))
             }
             ResolvedType::Struct { .. } => Some(type_table.type_key(type_id)),
-            ResolvedType::Variant { type_args, .. } | ResolvedType::Resource { type_args, .. }
-                if !type_args.is_empty() =>
-            {
+            ResolvedType::Variant { type_args, .. } if !type_args.is_empty() => {
                 under_ref.then(|| type_table.type_key(type_id))
             }
             ResolvedType::Tuple(_) | ResolvedType::BuiltinArray(_) => {

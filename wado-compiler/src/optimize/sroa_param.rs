@@ -493,8 +493,11 @@ fn by_value_structs(
         }
         return;
     }
-    // An instance with no listed struct may hold its arguments by value.
-    if let Some((_, type_args)) = type_table.instance_parts(ty) {
+    // An instance with no listed struct may hold its arguments by value; a
+    // resource is a handle, holding none.
+    if let Some((_, type_args)) = type_table.instance_parts(ty)
+        && !matches!(type_table.get(ty), ResolvedType::Resource { .. })
+    {
         if out.insert(type_table.type_key(ty)) {
             for &arg in type_args {
                 by_value_structs(arg, type_table, struct_fields, out);

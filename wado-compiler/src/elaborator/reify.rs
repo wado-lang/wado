@@ -9814,8 +9814,16 @@ impl TypeSystem {
         if table.contains_type_param(expected) {
             return None;
         }
-        let recorded_is_concrete =
-            table.instance_parts(recorded).is_some() && !table.contains_type_param(recorded);
+        let recorded_is_instance = match table.get(recorded) {
+            ResolvedType::Tuple(_) => true,
+            ResolvedType::Struct {
+                def: tir::StructDef::Decl(_),
+                type_args,
+            }
+            | ResolvedType::Variant { type_args, .. } => !type_args.is_empty(),
+            _ => false,
+        };
+        let recorded_is_concrete = recorded_is_instance && !table.contains_type_param(recorded);
         if recorded_is_concrete {
             return None;
         }

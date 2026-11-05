@@ -707,9 +707,9 @@ pub(super) fn synthesize_lower_list_to_buffer(
     // would fall back to i32.
     let elem_type_id = {
         let tt = ctx.type_table.borrow();
-        match tt.get(list_type_id) {
-            ResolvedType::Struct { type_args, .. } if !type_args.is_empty() => type_args[0],
-            _ => {
+        match tt.list_element(list_type_id) {
+            Some(elem) => elem,
+            None => {
                 drop(tt);
                 let mut tt = ctx.type_table.borrow_mut();
                 cm_held_type_to_type_id(&elem_resolved, &mut tt, ctx.cm_interface_registry)
