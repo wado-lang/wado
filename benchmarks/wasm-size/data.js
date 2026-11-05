@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1793856063319,
+  "lastUpdate": 1793873938071,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -74681,6 +74681,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/db1cb6724ee34f1776952c606486854ab08952da"
         },
         "date": 1793856062490,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3099,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7303,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21965,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 375776,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "9d51dc741c761d329e386adddf4a04a1bf376118",
+          "message": "Merge pull request #2553 from wado-lang/loam/pjrt\n\nfeat(loam): run Loam on PJRT plugins, and compile Gemma 3 for a TPU",
+          "timestamp": "2026-11-05T19:01:20+09:00",
+          "tree_id": "7e35564e18ccb566b682f9187bc5e552179ece72",
+          "url": "https://github.com/wado-lang/wado/commit/9d51dc741c761d329e386adddf4a04a1bf376118"
+        },
+        "date": 1793873936879,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
