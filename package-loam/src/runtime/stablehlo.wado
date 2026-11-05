@@ -3,7 +3,17 @@
 //! specification states it in, so one shape of line serves them all.
 
 use { HashMap, HashSet } from "core:collections";
-use { Binary, Comparison, DotDims, GatherDims, ScatterDims, Unary, WindowReduce, Convolution, reduced_extents } from "./hlo.wado";
+use {
+    Binary,
+    Comparison,
+    DotDims,
+    GatherDims,
+    ScatterDims,
+    Unary,
+    WindowReduce,
+    Convolution,
+    reduced_extents,
+} from "./hlo.wado";
 use { ElementKind } from "./tensor.wado";
 use { Data, Recorded, RecordedNode, Region } from "./recorded.wado";
 
@@ -39,6 +49,35 @@ pub fn le_bytes(data: &Data) -> ByteList {
         },
     }
     return bytes;
+}
+
+/// Each `[parameter, result]` of `recorded` a program may update in place: a
+/// shared attention buffer it takes and returns. A cache's parameter is the
+/// past itself only where it reaches the attention untouched.
+pub fn in_place(recorded: &Recorded) -> List<[i32, i32]> {
+    let mut pairs: List<[i32, i32]> = [];
+    for let [past, present] of recorded.appended {
+        let Parameter(parameter) = &recorded.nodes[past].op else {
+            continue;
+        };
+        let updated = relabeled_from(recorded, present);
+        for let [result, id] of recorded.body.results.into_iter().enumerate() {
+            if relabeled_from(recorded, id) == updated {
+                pairs.push([*parameter, result]);
+            }
+        }
+    }
+    return pairs;
+}
+
+/// The node `id` holds the elements of, past reshapes that move no axis, which
+/// a decomposed attention and a generated pass write to relabel axes.
+fn relabeled_from(recorded: &Recorded, id: i32) -> i32 {
+    let node = &recorded.nodes[id];
+    if node.op matches { Reshape } && recorded.nodes[node.operands[0]].extents == node.extents {
+        return relabeled_from(recorded, node.operands[0]);
+    }
+    return id;
 }
 
 fn push_le(bytes: &mut ByteList, bits: u64, width: i32) {
@@ -212,6 +251,10 @@ impl Writer {
     fn module(&mut self) {
         let mut parameters = List::<String>::filled(self.recorded.parameters, "");
         let mut widened = "";
+        let mut aliases = HashMap::<i32, i32>::new();
+        for let [parameter, result] of in_place(self.recorded) {
+            aliases[parameter] = result;
+        }
         for let id of 0..<self.recorded.nodes.len() {
             if let Parameter(at) = &self.recorded.nodes[id].op {
                 let name = `%a${*at}`;
@@ -222,7 +265,10 @@ impl Writer {
                     widened.push_str(`${name}w = "stablehlo.convert"(${name}) : (${half}) -> ${ty}\n`);
                     self.names[id] = `${name}w`;
                 } else {
-                    parameters[*at] = `${name}: ${ty}`;
+                    parameters[*at] = match aliases.get(*at) {
+                        Some(result) => `${name}: ${ty} {tf.aliasing_output = ${result} : i32}`,
+                        None => `${name}: ${ty}`,
+                    };
                     self.names[id] = name;
                 }
             }
@@ -274,7 +320,9 @@ impl Writer {
                     node,
                     "stablehlo.slice",
                     "",
-                    ` {start_indices = ${dense_array(start)}, limit_indices = ${dense_array(limit)}, strides = ${dense_array(strides)}}`,
+                    ` {start_indices = ${dense_array(start)}, limit_indices = ${dense_array(limit)}, strides = ${dense_array(
+                        strides,
+                    )}}`,
                 );
             },
             Concatenate(dimension) => {
@@ -313,7 +361,7 @@ impl Writer {
             hex.push_str(`${b:02x}`);
         }
         hex.push_str("\"");
-        if !(node.kind matches { Bool }) {
+        if !node.kind matches { Bool } {
             self.scalar(node_name(id), hex, type_of(node.kind, &node.extents));
             return;
         }
@@ -332,7 +380,15 @@ impl Writer {
         self.scalar(`${n}i`, `0x${init.to_bits():08X}`, scalar);
         let body = ` ({\n^bb0(${n}a: ${scalar}, ${n}b: ${scalar}):\n${n}r = "${binary_name(binary)}"(${n}a, ${n}b) : (${scalar}, ${scalar}) -> ${scalar}\n"stablehlo.return"(${n}r) : (${scalar}) -> ()\n})`;
         let operand = node.operands[0];
-        self.lined(id, node, op, `${self.name(operand)}, ${n}i`, `${self.type_at(operand)}, ${scalar}`, body, attributes);
+        self.lined(
+            id,
+            node,
+            op,
+            `${self.name(operand)}, ${n}i`,
+            `${self.type_at(operand)}, ${scalar}`,
+            body,
+            attributes,
+        );
     }
 
     fn scattered(&mut self, id: i32, node: &RecordedNode, dims: &ScatterDims) {
@@ -376,7 +432,9 @@ impl Writer {
         self.text.push_str(scalar_selected(`${n}w`, ElementKind::F32, `${n}u`, `${n}b`, `${n}a`));
         self.text.push_str(scalar_selected(`${n}x`, ElementKind::I64, `${n}u`, `${n}d`, `${n}c`));
         self.text.push_str(`"stablehlo.return"(${n}w, ${n}x) : (${f}, ${i}) -> ()\n`);
-        self.text.push_str(`}) {dimensions = array<i64: ${axis}>} : (${values}, ${indices}, ${f}, ${i}) -> (${best_value}, ${best_index})\n`);
+        self.text.push_str(
+            `}) {dimensions = array<i64: ${axis}>} : (${values}, ${indices}, ${f}, ${i}) -> (${best_value}, ${best_index})\n`,
+        );
         self.lined(id, node, "stablehlo.reshape", `${n}r#1`, best_index, "", "");
     }
 
@@ -402,23 +460,41 @@ impl Writer {
 }
 
 fn dot_attributes(dims: &DotDims) -> String {
-    return ` {dot_dimension_numbers = #stablehlo.dot<lhs_batching_dimensions = [${numbers(&dims.lhs_batch)}], rhs_batching_dimensions = [${numbers(&dims.rhs_batch)}], lhs_contracting_dimensions = [${numbers(&dims.lhs_contracting)}], rhs_contracting_dimensions = [${numbers(&dims.rhs_contracting)}]>}`;
+    return ` {dot_dimension_numbers = #stablehlo.dot<lhs_batching_dimensions = [${numbers(&dims.lhs_batch)}], rhs_batching_dimensions = [${numbers(
+        &dims.rhs_batch,
+    )}], lhs_contracting_dimensions = [${numbers(&dims.lhs_contracting)}], rhs_contracting_dimensions = [${numbers(
+        &dims.rhs_contracting,
+    )}]>}`;
 }
 
 fn gather_attributes(dims: &GatherDims) -> String {
-    return ` {dimension_numbers = #stablehlo.gather<offset_dims = [${numbers(&dims.offset_dims)}], collapsed_slice_dims = [${numbers(&dims.collapsed_slice_dims)}], start_index_map = [${numbers(&dims.start_index_map)}], index_vector_dim = ${dims.index_vector_dim}>, indices_are_sorted = false, slice_sizes = ${dense_array(&dims.slice_sizes)}}`;
+    return ` {dimension_numbers = #stablehlo.gather<offset_dims = [${numbers(&dims.offset_dims)}], collapsed_slice_dims = [${numbers(
+        &dims.collapsed_slice_dims,
+    )}], start_index_map = [${numbers(&dims.start_index_map)}], index_vector_dim = ${dims.index_vector_dim}>, indices_are_sorted = false, slice_sizes = ${dense_array(
+        &dims.slice_sizes,
+    )}}`;
 }
 
 fn scatter_attributes(dims: &ScatterDims) -> String {
-    return ` {indices_are_sorted = false, scatter_dimension_numbers = #stablehlo.scatter<update_window_dims = [${numbers(&dims.update_window_dims)}], inserted_window_dims = [${numbers(&dims.inserted_window_dims)}], scatter_dims_to_operand_dims = [${numbers(&dims.scatter_dims_to_operand_dims)}], index_vector_dim = ${dims.index_vector_dim}>, unique_indices = false}`;
+    return ` {indices_are_sorted = false, scatter_dimension_numbers = #stablehlo.scatter<update_window_dims = [${numbers(
+        &dims.update_window_dims,
+    )}], inserted_window_dims = [${numbers(&dims.inserted_window_dims)}], scatter_dims_to_operand_dims = [${numbers(
+        &dims.scatter_dims_to_operand_dims,
+    )}], index_vector_dim = ${dims.index_vector_dim}>, unique_indices = false}`;
 }
 
 fn convolution_attributes(conv: &Convolution, spatial: i32) -> String {
     let axes: List<i32> = (0..<spatial).collect();
     let laid = numbers(&axes);
-    return ` {batch_group_count = 1 : i64, dimension_numbers = #stablehlo.conv<[b, f, ${laid}]x[o, i, ${laid}]->[b, f, ${laid}]>, feature_group_count = ${conv.feature_group_count} : i64, padding = ${padding_attribute(&conv.padding)}, rhs_dilation = ${dense_array(&conv.rhs_dilation)}, window_strides = ${dense_array(&conv.window_strides)}}`;
+    return ` {batch_group_count = 1 : i64, dimension_numbers = #stablehlo.conv<[b, f, ${laid}]x[o, i, ${laid}]->[b, f, ${laid}]>, feature_group_count = ${conv.feature_group_count} : i64, padding = ${padding_attribute(
+        &conv.padding,
+    )}, rhs_dilation = ${dense_array(&conv.rhs_dilation)}, window_strides = ${dense_array(&conv.window_strides)}}`;
 }
 
 fn window_attributes(window: &WindowReduce) -> String {
-    return ` {padding = ${padding_attribute(&window.padding)}, window_dilations = ${dense_array(&window.window_dilations)}, window_dimensions = ${dense_array(&window.window_dimensions)}, window_strides = ${dense_array(&window.window_strides)}}`;
+    return ` {padding = ${padding_attribute(&window.padding)}, window_dilations = ${dense_array(
+        &window.window_dilations,
+    )}, window_dimensions = ${dense_array(&window.window_dimensions)}, window_strides = ${dense_array(
+        &window.window_strides,
+    )}}`;
 }

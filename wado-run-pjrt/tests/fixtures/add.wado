@@ -26,7 +26,7 @@ export fn run() with (Stdout, PjrtHost) {
     let executable = PjrtHost::compile(MODULE).unwrap();
     let a = PjrtHost::upload(ElementType::Float32, [2], floats([1.5, 2.0])).unwrap();
     let b = PjrtHost::upload(ElementType::Float32, [2], floats([0.25, 3.0])).unwrap();
-    let results = executable.execute([&a, &b]).unwrap();
+    let results = executable.execute([&a, &b], []).unwrap();
     let bytes = results[0].to_host().unwrap();
     println(`${bytes:?}`);
 }

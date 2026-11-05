@@ -29,9 +29,29 @@ interface pjrt-host {
 
     /// A program compiled for this device.
     resource executable {
-        /// Runs the program. A program may donate an argument to its result,
-        /// and using such a buffer afterwards is an error.
-        execute: func(arguments: list<borrow<buffer>>) -> result<list<buffer>, string>;
+        /// Runs the program. An argument the program updates in place is
+        /// donated to its result, and using such a buffer afterwards is an
+        /// error, unless `kept` holds its index, which copies it instead.
+        execute: func(arguments: list<borrow<buffer>>, kept: list<s64>) -> result<list<buffer>, string>;
+
+        /// What the plugin reports of the compiled program.
+        analysis: func() -> result<analysis, string>;
+    }
+
+    /// One figure of a plugin's cost model, such as TPU's `optimal_seconds`.
+    record cost {
+        name: string,
+        value: f64,
+    }
+
+    /// The device memory a compiled program needs, and what it costs to run.
+    record analysis {
+        argument-bytes: s64,
+        output-bytes: s64,
+        /// How much of the arguments the outputs reuse.
+        alias-bytes: s64,
+        temporary-bytes: s64,
+        costs: list<cost>,
     }
 
     /// The plugin's name for its platform, such as `cpu` or `tpu`.
@@ -39,6 +59,11 @@ interface pjrt-host {
 
     /// Compiles a StableHLO module, in MLIR's text form.
     compile: func(module: string) -> result<executable, string>;
+
+    /// Compiles a StableHLO module for `topology`, such as `v5e:1x1`, which
+    /// needs no device: what the plugin reports of it. A plugin that runs no
+    /// program here may still compile for a device it names.
+    analyzed: func(module: string, topology: string) -> result<analysis, string>;
 
     /// A buffer of the `elements` given little-endian, in row-major order.
     upload: func(

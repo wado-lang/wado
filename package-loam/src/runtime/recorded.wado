@@ -107,6 +107,9 @@ pub struct Recorded {
     pub nodes: List<RecordedNode>,
     pub body: Region,
     pub parameters: i32,
+    /// Each decomposed attention's past over a shared buffer, and the present
+    /// that buffer becomes: the same positions, and more of them valid.
+    pub appended: List<[i32, i32]>,
 }
 
 /// A tensor of the graph being recorded: the node that computes it.
@@ -123,15 +126,16 @@ pub struct Recorder {
     /// Whether a composite records as the operations it is made of, for a
     /// compiler with no operation for it.
     decomposes: bool,
+    appended: List<[i32, i32]>,
 }
 
 impl Recorder {
     pub fn new() -> Recorder {
-        return Recorder { nodes: [], current: Region::empty(), parameters: 0, decomposes: false };
+        return Recorder { nodes: [], current: Region::empty(), parameters: 0, decomposes: false, appended: [] };
     }
 
     pub fn decomposing() -> Recorder {
-        return Recorder { nodes: [], current: Region::empty(), parameters: 0, decomposes: true };
+        return Recorder { nodes: [], current: Region::empty(), parameters: 0, decomposes: true, appended: [] };
     }
 
     /// The next argument of the run, of `extents`.
@@ -145,7 +149,7 @@ impl Recorder {
     pub fn finished(&self, results: List<i32>) -> Recorded {
         let mut body = self.current;
         body.results = results;
-        return Recorded { nodes: self.nodes, body, parameters: self.parameters };
+        return Recorded { nodes: self.nodes, body, parameters: self.parameters, appended: self.appended };
     }
 
     fn added(&mut self, op: Operation, operands: List<i32>, kind: ElementKind, extents: List<i32>) -> i32 {
@@ -398,7 +402,7 @@ impl Graph for Recorder {
         options: &Attention,
     ) -> [Value<f32, [B, S, Q]>, Value<f32, [B, H, T, D]>, Value<f32, [B, H, T, D]>] {
         if self.decomposes {
-            return decomposed_attention::<Recorder, B, S, Q, K, H, P, T, D, Pos, Half, BB, BH>(
+            let attended = decomposed_attention::<Recorder, B, S, Q, K, H, P, T, D, Pos, Half, BB, BH>(
                 self,
                 q,
                 k,
@@ -411,6 +415,11 @@ impl Graph for Recorder {
                 bias,
                 options,
             );
+            if past_length matches { Some(_) } {
+                self.appended.push([past_k.id, attended.1.id]);
+                self.appended.push([past_v.id, attended.2.id]);
+            }
+            return attended;
         }
         let mut operands: List<i32> = [q.id, k.id, v.id, past_k.id, past_v.id];
         let mut node = AttentionNode { options: *options, shared: false, rotary: false, biased: false };

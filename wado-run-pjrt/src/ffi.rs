@@ -147,6 +147,70 @@ arguments! {
         dst_size: usize,
         event: Opaque,
     }
+    ExecutableGetCostAnalysis {
+        executable: Opaque,
+        num_properties: usize,
+        properties: *const NamedValue,
+    }
+    ExecutableGetCompiledMemoryStats {
+        executable: Opaque,
+        generated_code_size_in_bytes: i64,
+        argument_size_in_bytes: i64,
+        output_size_in_bytes: i64,
+        alias_size_in_bytes: i64,
+        temp_size_in_bytes: i64,
+        host_generated_code_size_in_bytes: i64,
+        host_argument_size_in_bytes: i64,
+        host_output_size_in_bytes: i64,
+        host_alias_size_in_bytes: i64,
+        host_temp_size_in_bytes: i64,
+        peak_memory_in_bytes: i64,
+        total_size_in_bytes: i64,
+        total_allocation_bytes: i64,
+        indefinite_allocations: i64,
+        peak_unpadded_heap_bytes: i64,
+    }
+    TopologyDescriptionCreate {
+        topology_name: *const c_char,
+        topology_name_size: usize,
+        create_options: *const c_void,
+        num_options: usize,
+        topology: Opaque,
+    }
+    TopologyDescriptionDestroy { topology: Opaque }
+    Compile {
+        topology: Opaque,
+        program: *const Program,
+        compile_options: *const c_char,
+        compile_options_size: usize,
+        client: Opaque,
+        executable: Opaque,
+    }
+}
+
+/// `PJRT_NamedValue`: one property a plugin reports.
+#[repr(C)]
+pub struct NamedValue {
+    pub header: Header,
+    pub name: *const c_char,
+    pub name_size: usize,
+    pub value_type: i32,
+    /// The union of the value's types, which `value_type` picks among.
+    pub value: u64,
+    pub value_size: usize,
+}
+
+impl NamedValue {
+    /// The value, where it is a number.
+    pub fn number(&self) -> Option<f64> {
+        const INT64: i32 = 1;
+        const FLOAT: i32 = 3;
+        match self.value_type {
+            INT64 => Some(self.value.cast_signed() as f64),
+            FLOAT => Some(f64::from(f32::from_bits(self.value as u32))),
+            _ => None,
+        }
+    }
 }
 
 /// `PJRT_HostBufferSemantics_kImmutableOnlyDuringCall`: the plugin copies the
@@ -171,11 +235,16 @@ pub enum Slot {
     ClientBufferFromHostBuffer = 22,
     ExecutableDestroy = 40,
     ExecutableNumOutputs = 44,
+    ExecutableGetCostAnalysis = 46,
     LoadedExecutableDestroy = 50,
     LoadedExecutableGetExecutable = 51,
     LoadedExecutableExecute = 55,
     BufferDestroy = 58,
     BufferToHostBuffer = 70,
+    TopologyDescriptionCreate = 82,
+    TopologyDescriptionDestroy = 83,
+    Compile = 89,
+    ExecutableGetCompiledMemoryStats = 96,
 }
 
 #[repr(C)]

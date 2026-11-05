@@ -126,26 +126,47 @@ export fn run() with (Stdout, PjrtHost) {
     let mut cache_device = attended::Cache::empty(&mut device);
     let mut cache_cpu = attended::Cache::empty(cpu);
     let mut total = 0;
-    for let positions of [3, 1, 1, 1, 1, 1, 1] as List<i32> {
-        total += positions;
+    let attended_input = |positions: i32, length: i32| {
         let mut data: List<f32> = [];
         for let i of 0..<positions * 32 {
-            data.push(((i + total) % 11) as f32 * 0.125 - 0.625);
+            data.push(((i + length) % 11) as f32 * 0.125 - 0.625);
         }
-        let fresh = Tensor::<f32, [attended::X0, attended::S, attended::X2]> {
-            data,
-            extents: [1, positions, 32],
-        };
-        let mask = Tensor::<i64, [attended::AttentionMask0, attended::T]> {
-            data: List::<i64>::filled(total, 1),
-            extents: [1, total],
-        };
+        return [
+            Tensor::<f32, [attended::X0, attended::S, attended::X2]> {
+                data,
+                extents: [1, positions, 32],
+            },
+            Tensor::<i64, [attended::AttentionMask0, attended::T]> {
+                data: List::<i64>::filled(length, 1),
+                extents: [1, length],
+            },
+        ];
+    };
+    for let positions of [3, 1, 1, 1, 1, 1, 1] as List<i32> {
+        total += positions;
+        let [fresh, mask] = attended_input(positions, total);
         let stepped = attended::compute(&mut device, &fresh, &mask, &cache_device, &mut attended_device);
         let wanted = attended::compute(cpu, &fresh, &mask, &cache_cpu, &mut attended_cpu);
         println(`compiled attended ${total} ${deviation(&stepped.Y.data, &wanted.Y.data)}`);
         cache_device = stepped.cache;
         cache_cpu = wanted.cache;
     }
+    assert device.donations() > 0, "a step updates the cache in place";
+
+    // A cache a step has donated still reads as it did, and two steps from one
+    // cache each keep their own positions, whichever goes first.
+    let [last, last_mask] = attended_input(1, total + 1);
+    let [other, other_mask] = attended_input(2, total + 2);
+    let tip = attended::compute(&mut device, &last, &last_mask, &cache_device, &mut attended_device);
+    let tip_cpu = attended::compute(cpu, &last, &last_mask, &cache_cpu, &mut attended_cpu);
+    println(`branched first ${deviation(&tip.Y.data, &tip_cpu.Y.data)}`);
+    let sibling = attended::compute(&mut device, &other, &other_mask, &cache_device, &mut attended_device);
+    let sibling_cpu = attended::compute(cpu, &other, &other_mask, &cache_cpu, &mut attended_cpu);
+    println(`branched second ${deviation(&sibling.Y.data, &sibling_cpu.Y.data)}`);
+    let [after, after_mask] = attended_input(1, total + 2);
+    let resumed = attended::compute(&mut device, &after, &after_mask, &tip.cache, &mut attended_device);
+    let resumed_cpu = attended::compute(cpu, &after, &after_mask, &tip_cpu.cache, &mut attended_cpu);
+    println(`branched resumed ${deviation(&resumed.Y.data, &resumed_cpu.Y.data)}`);
 
     // An `If` on an input: the prompt takes the branch without a past, each
     // step after it the one with.

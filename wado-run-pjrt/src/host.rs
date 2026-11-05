@@ -1,14 +1,15 @@
 //! The wasmtime host: WASI P3 plus `core:pjrt`, served by a PJRT plugin.
 
 use std::path::Path;
+use std::sync::Arc;
 
 use anyhow::Result;
 use wado_host::runner::{self, RunOptions, wasi_ctx};
 use wasmtime::component::{HasData, Resource, ResourceTable};
 use wasmtime_wasi::{WasiCtx, WasiCtxView, WasiView};
 
-use crate::plugin::Client;
 pub use crate::plugin::{Buffer, Executable};
+use crate::plugin::{Client, Plugin};
 
 wasmtime::component::bindgen!({
     inline: "package wado:pjrt-host; world host { import core:pjrt/pjrt-host@0.1.0; }",
@@ -23,15 +24,26 @@ wasmtime::component::bindgen!({
 });
 
 use self::core::pjrt::pjrt_host::{self, ElementType, HostBuffer, HostExecutable};
+pub use self::core::pjrt::pjrt_host::{Analysis, Cost};
 
 struct Host {
     ctx: WasiCtx,
     table: ResourceTable,
     // After `table`, whose buffers and executables must go before their client.
-    client: Client,
+    // Opened at first use: `libtpu.so` with no TPU has no client, and still
+    // compiles for a topology.
+    client: Option<Client>,
+    plugin: Arc<Plugin>,
 }
 
 impl Host {
+    fn client(&mut self) -> Result<&Client, String> {
+        if self.client.is_none() {
+            self.client = Some(Client::open(Arc::clone(&self.plugin))?);
+        }
+        Ok(self.client.as_ref().expect("opened above"))
+    }
+
     /// `made`, in the guest's hands.
     fn held<T: Send + 'static>(
         &mut self,
@@ -74,15 +86,25 @@ fn pjrt_type(element: ElementType) -> i32 {
 
 impl pjrt_host::Host for Host {
     fn platform(&mut self) -> wasmtime::Result<String> {
-        self.client.platform().map_err(wasmtime::Error::msg)
+        self.client()
+            .and_then(Client::platform)
+            .map_err(wasmtime::Error::msg)
     }
 
     fn compile(
         &mut self,
         module: String,
     ) -> wasmtime::Result<Result<Resource<Executable>, String>> {
-        let executable = self.client.compile(&module);
+        let executable = self.client().and_then(|client| client.compile(&module));
         self.held(executable)
+    }
+
+    fn analyzed(
+        &mut self,
+        module: String,
+        topology: String,
+    ) -> wasmtime::Result<Result<Analysis, String>> {
+        Ok(self.plugin.analyzed(&module, &topology))
     }
 
     fn upload(
@@ -91,7 +113,9 @@ impl pjrt_host::Host for Host {
         extents: Vec<i64>,
         elements: Vec<u8>,
     ) -> wasmtime::Result<Result<Resource<Buffer>, String>> {
-        let buffer = self.client.upload(pjrt_type(element), &extents, &elements);
+        let buffer = self
+            .client()
+            .and_then(|client| client.upload(pjrt_type(element), &extents, &elements));
         self.held(buffer)
     }
 }
@@ -112,18 +136,26 @@ impl HostExecutable for Host {
         &mut self,
         executable: Resource<Executable>,
         arguments: Vec<Resource<Buffer>>,
+        kept: Vec<i64>,
     ) -> wasmtime::Result<Result<Vec<Resource<Buffer>>, String>> {
         let held = arguments
             .iter()
             .map(|a| self.table.get(a))
             .collect::<Result<Vec<_>, _>>()?;
-        Ok(match self.table.get(&executable)?.execute(&held) {
+        Ok(match self.table.get(&executable)?.execute(&held, &kept) {
             Ok(results) => Ok(results
                 .into_iter()
                 .map(|r| self.table.push(r))
                 .collect::<Result<_, _>>()?),
             Err(error) => Err(error),
         })
+    }
+
+    fn analysis(
+        &mut self,
+        executable: Resource<Executable>,
+    ) -> wasmtime::Result<Result<Analysis, String>> {
+        Ok(self.table.get(&executable)?.analysis())
     }
 
     fn drop(&mut self, executable: Resource<Executable>) -> wasmtime::Result<()> {
@@ -138,12 +170,13 @@ impl HasData for Pjrt {
     type Data<'a> = &'a mut Host;
 }
 
-/// Runs a component that exports `wasi:cli/run` on `client`.
-pub async fn run(component: &Path, options: &RunOptions, client: Client) -> Result<()> {
+/// Runs a component that exports `wasi:cli/run` on `plugin`.
+pub async fn run(component: &Path, options: &RunOptions, plugin: Arc<Plugin>) -> Result<()> {
     let host = Host {
         ctx: wasi_ctx(options)?,
         table: ResourceTable::new(),
-        client,
+        client: None,
+        plugin,
     };
     runner::run("wado-run-pjrt", component, options, host, |_, _, linker| {
         pjrt_host::add_to_linker::<Host, Pjrt>(linker, |host| host)?;

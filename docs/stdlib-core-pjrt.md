@@ -29,6 +29,14 @@ The plugin's name for its platform, such as `cpu` or `tpu`.
 
 Compiles a StableHLO module, in MLIR's text form.
 
+#### `fn analyzed(module: String, topology: String) -> Result<Analysis, String>`
+
+`#[cm("core:pjrt/pjrt-host@0.1.0#analyzed")]` `#[cm_params("module", "topology")]`
+
+Compiles a StableHLO module for `topology`, such as `v5e:1x1`, which
+needs no device: what the plugin reports of it. A plugin that runs no
+program here may still compile for a device it names.
+
 #### `fn upload(element: ElementType, extents: &ListView<i64>, elements: &ListView<u8>) -> Result<Buffer, String>`
 
 `#[cm("core:pjrt/pjrt-host@0.1.0#upload")]` `#[cm_params("element", "extents", "elements")]`
@@ -57,18 +65,51 @@ Drop the resource. Scope exit drops one that nothing moved.
 
 A program compiled for this device.
 
-#### `fn execute(&self, arguments: List<&Buffer>) -> Result<List<Buffer>, String>`
+#### `fn execute(&self, arguments: List<&Buffer>, kept: &ListView<i64>) -> Result<List<Buffer>, String>`
 
-`#[cm("core:pjrt/pjrt-host@0.1.0#[method]executable.execute")]` `#[cm_params("self", "arguments")]`
+`#[cm("core:pjrt/pjrt-host@0.1.0#[method]executable.execute")]` `#[cm_params("self", "arguments", "kept")]`
 
-Runs the program. A program may donate an argument to its result,
-and using such a buffer afterwards is an error.
+Runs the program. An argument the program updates in place is
+donated to its result, and using such a buffer afterwards is an
+error, unless `kept` holds its index, which copies it instead.
+
+#### `fn analysis(&self) -> Result<Analysis, String>`
+
+`#[cm("core:pjrt/pjrt-host@0.1.0#[method]executable.analysis")]` `#[cm_params("self")]`
+
+What the plugin reports of the compiled program.
 
 #### `fn drop(self)`
 
 `#[cm("resource-drop")]`
 
 Drop the resource. Scope exit drops one that nothing moved.
+
+## Structs
+
+### `pub struct Cost`
+
+One figure of a plugin's cost model, such as TPU's `optimal_seconds`.
+
+#### `name: String`
+
+#### `value: f64`
+
+### `pub struct Analysis`
+
+The device memory a compiled program needs, and what it costs to run.
+
+#### `argument_bytes: i64`
+
+#### `output_bytes: i64`
+
+#### `alias_bytes: i64`
+
+How much of the arguments the outputs reuse.
+
+#### `temporary_bytes: i64`
+
+#### `costs: List<Cost>`
 
 ## Enums
 

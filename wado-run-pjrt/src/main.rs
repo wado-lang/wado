@@ -59,7 +59,7 @@ async fn run(options: RunOptions, plugin: Option<PathBuf>) -> Result<()> {
         bail!("no PJRT plugin: pass --plugin or set {PLUGIN_VARIABLE}");
     };
     // The plugin first: a missing one is better said before the compile.
-    let client = plugin::Client::open(&plugin)?;
+    let plugin = plugin::Plugin::open(&plugin)?;
     let program = program_for(&options)?;
-    host::run(program.path(), &options, client).await
+    host::run(program.path(), &options, plugin).await
 }

@@ -9,14 +9,26 @@ use anyhow::{Context as _, Result, bail};
 use libloading::{Library, Symbol};
 
 use crate::ffi::{self, Api, Arguments, Opaque, Slot};
+use crate::host::{Analysis, Cost};
 
-/// What `PJRT_Client_Compile` takes as options, a serialized
-/// `CompileOptionsProto` of one replica and one partition: an empty one is not
-/// a valid default, as the CPU plugin aborts on its replica count of 0.
+/// What a compile takes as options, a serialized `CompileOptionsProto` of one
+/// replica and one partition: an empty one is not a valid default, as the CPU
+/// plugin aborts on its replica count of 0.
 const ONE_REPLICA_ONE_PARTITION: [u8; 6] = [0x1a, 0x04, 0x20, 0x01, 0x28, 0x01];
 
+/// A module of MLIR text, as a compile takes it. The text must outlive it.
+fn mlir_program(module: &str) -> ffi::Program {
+    const FORMAT: &str = "mlir";
+    let mut program = ffi::Program::new();
+    program.code = module.as_ptr().cast();
+    program.code_size = module.len();
+    program.format = FORMAT.as_ptr().cast();
+    program.format_size = FORMAT.len();
+    program
+}
+
 /// The plugin's library, which the API table points into.
-struct Plugin {
+pub struct Plugin {
     api: *const Api,
     _library: Library,
 }
@@ -27,6 +39,103 @@ unsafe impl Send for Plugin {}
 unsafe impl Sync for Plugin {}
 
 impl Plugin {
+    /// Loads and initializes the plugin at `path`.
+    pub fn open(path: &Path) -> Result<Arc<Self>> {
+        // SAFETY: a plugin's initializers run here, which the user named.
+        let library = unsafe { Library::new(path) }
+            .with_context(|| format!("cannot load the PJRT plugin {}", path.display()))?;
+        // SAFETY: `GetPjrtApi` is what makes a library a PJRT plugin, and takes
+        // nothing.
+        let api = unsafe {
+            let get: Symbol<unsafe extern "C" fn() -> *const Api> = library
+                .get(b"GetPjrtApi\0")
+                .with_context(|| format!("{} is not a PJRT plugin", path.display()))?;
+            get()
+        };
+        let plugin = Arc::new(Self {
+            api,
+            _library: library,
+        });
+        let major = plugin.api().major_version();
+        if major != 0 {
+            bail!("a PJRT plugin of API major version {major} is not one this host speaks");
+        }
+        let mut initialize = ffi::PluginInitialize::new();
+        // SAFETY: the struct is the one the slot takes.
+        unsafe { plugin.call(Slot::PluginInitialize, &mut initialize) }
+            .map_err(anyhow::Error::msg)?;
+        Ok(plugin)
+    }
+
+    /// Compiles `module` for `topology`, which needs no device, and reports
+    /// what the plugin says of it.
+    pub fn analyzed(&self, module: &str, topology: &str) -> Result<Analysis, String> {
+        let mut create = ffi::TopologyDescriptionCreate::new();
+        create.topology_name = topology.as_ptr().cast();
+        create.topology_name_size = topology.len();
+        // SAFETY: the struct is the one the slot takes, and the name outlives the
+        // call.
+        unsafe {
+            self.call(Slot::TopologyDescriptionCreate, &mut create)?;
+        }
+        let program = mlir_program(module);
+        let mut compile = ffi::Compile::new();
+        compile.topology = create.topology;
+        compile.program = &raw const program;
+        compile.compile_options = ONE_REPLICA_ONE_PARTITION.as_ptr().cast();
+        compile.compile_options_size = ONE_REPLICA_ONE_PARTITION.len();
+        // SAFETY: as above, and the module outlives the call.
+        let compiled = unsafe { self.call(Slot::Compile, &mut compile) };
+        let analysis = compiled.and_then(|()| {
+            let analysis = self.analysis(compile.executable);
+            let mut destroy = ffi::ExecutableDestroy::new();
+            destroy.executable = compile.executable;
+            // SAFETY: the executable is destroyed once.
+            unsafe { self.call(Slot::ExecutableDestroy, &mut destroy) }?;
+            analysis
+        });
+        let mut destroy = ffi::TopologyDescriptionDestroy::new();
+        destroy.topology = create.topology;
+        // SAFETY: the topology is destroyed once.
+        unsafe { self.call(Slot::TopologyDescriptionDestroy, &mut destroy) }?;
+        analysis
+    }
+
+    /// What the plugin reports of `executable`.
+    fn analysis(&self, executable: Opaque) -> Result<Analysis, String> {
+        let mut memory = ffi::ExecutableGetCompiledMemoryStats::new();
+        memory.executable = executable;
+        let mut cost = ffi::ExecutableGetCostAnalysis::new();
+        cost.executable = executable;
+        // SAFETY: each struct is the one its slot takes, and the properties live
+        // as long as the executable.
+        let properties = unsafe {
+            self.call(Slot::ExecutableGetCompiledMemoryStats, &mut memory)?;
+            self.call(Slot::ExecutableGetCostAnalysis, &mut cost)?;
+            if cost.num_properties == 0 {
+                &[]
+            } else {
+                std::slice::from_raw_parts(cost.properties, cost.num_properties)
+            }
+        };
+        let costs = properties
+            .iter()
+            .filter_map(|property| {
+                let value = property.number()?;
+                // SAFETY: the plugin's name, of the size it says.
+                let name = unsafe { text_at(property.name, property.name_size) };
+                Some(Cost { name, value })
+            })
+            .collect();
+        Ok(Analysis {
+            argument_bytes: memory.argument_size_in_bytes,
+            output_bytes: memory.output_size_in_bytes,
+            alias_bytes: memory.alias_size_in_bytes,
+            temporary_bytes: memory.temp_size_in_bytes,
+            costs,
+        })
+    }
+
     fn api(&self) -> &Api {
         // SAFETY: `GetPjrtApi` returned it, and `_library` keeps it loaded.
         unsafe { &*self.api }
@@ -92,49 +201,21 @@ pub struct Client {
 unsafe impl Send for Client {}
 
 impl Client {
-    /// Loads the plugin at `path` and opens its first device.
-    pub fn open(path: &Path) -> Result<Self> {
-        // SAFETY: a plugin's initializers run here, which the user named.
-        let library = unsafe { Library::new(path) }
-            .with_context(|| format!("cannot load the PJRT plugin {}", path.display()))?;
-        // SAFETY: `GetPjrtApi` is what makes a library a PJRT plugin, and takes
-        // nothing.
-        let api = unsafe {
-            let get: Symbol<unsafe extern "C" fn() -> *const Api> = library
-                .get(b"GetPjrtApi\0")
-                .with_context(|| format!("{} is not a PJRT plugin", path.display()))?;
-            get()
-        };
-        let plugin = Arc::new(Plugin {
-            api,
-            _library: library,
-        });
-        let major = plugin.api().major_version();
-        if major != 0 {
-            bail!("a PJRT plugin of API major version {major} is not one this host speaks");
-        }
-
-        let mut initialize = ffi::PluginInitialize::new();
+    /// Opens the first device of `plugin`.
+    pub fn open(plugin: Arc<Plugin>) -> Result<Self, String> {
         let mut create = ffi::ClientCreate::new();
-        // SAFETY: each struct is the one its slot takes.
+        // SAFETY: the struct is the one the slot takes.
         unsafe {
-            plugin
-                .call(Slot::PluginInitialize, &mut initialize)
-                .map_err(anyhow::Error::msg)?;
-            plugin
-                .call(Slot::ClientCreate, &mut create)
-                .map_err(anyhow::Error::msg)?;
+            plugin.call(Slot::ClientCreate, &mut create)?;
         }
         let raw = create.client;
         let mut devices = ffi::ClientAddressableDevices::new();
         devices.client = raw;
         // SAFETY: as above, and the list lives as long as the client.
         let device = unsafe {
-            plugin
-                .call(Slot::ClientAddressableDevices, &mut devices)
-                .map_err(anyhow::Error::msg)?;
+            plugin.call(Slot::ClientAddressableDevices, &mut devices)?;
             if devices.num_addressable_devices == 0 {
-                bail!("the PJRT plugin {} has no device here", path.display());
+                return Err("the PJRT plugin has no device here".to_owned());
             }
             *devices.addressable_devices
         };
@@ -159,12 +240,7 @@ impl Client {
 
     /// Compiles a module of MLIR text.
     pub fn compile(&self, module: &str) -> Result<Executable, String> {
-        const FORMAT: &str = "mlir";
-        let mut program = ffi::Program::new();
-        program.code = module.as_ptr().cast();
-        program.code_size = module.len();
-        program.format = FORMAT.as_ptr().cast();
-        program.format_size = FORMAT.len();
+        let program = mlir_program(module);
         let mut compile = ffi::ClientCompile::new();
         compile.client = self.raw;
         compile.program = &raw const program;
@@ -293,14 +369,22 @@ pub struct Executable {
 unsafe impl Send for Executable {}
 
 impl Executable {
-    /// Runs the program on `arguments`. The results are ready to read, and
+    /// What the plugin reports of the program.
+    pub fn analysis(&self) -> Result<Analysis, String> {
+        self.plugin.analysis(self.held)
+    }
+
+    /// Runs the program on `arguments`, donating each it updates in place but
+    /// those `kept` holds the index of. The results are ready to read, and
     /// reading waits for the device.
-    pub fn execute(&self, arguments: &[&Buffer]) -> Result<Vec<Buffer>, String> {
+    pub fn execute(&self, arguments: &[&Buffer], kept: &[i64]) -> Result<Vec<Buffer>, String> {
         let raw: Vec<Opaque> = arguments.iter().map(|b| b.raw).collect();
         let lists: [*const Opaque; 1] = [raw.as_ptr()];
         let mut results: Vec<Opaque> = vec![null_mut(); self.outputs];
         let result_lists: [*mut Opaque; 1] = [results.as_mut_ptr()];
         let mut options = ffi::ExecuteOptions::new();
+        options.non_donatable_input_indices = kept.as_ptr();
+        options.num_non_donatable_input_indices = kept.len();
         let mut execute = ffi::LoadedExecutableExecute::new();
         execute.executable = self.loaded;
         execute.options = &raw mut options;
