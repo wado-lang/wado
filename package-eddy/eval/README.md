@@ -28,6 +28,8 @@ reverts, so the defects come from fix pull requests rather than reverts.
   Glob tools. Each run records the tool calls and the token usage.
 - `symbols.json` holds the agent's review with FindSymbol and FindReferences
   added. The review prompt names them and says what they are for.
+- `run.json` holds the agent's review with Write and Run added, on the three
+  entries no review had found. Each Run call keeps its output.
 
 The model reads both diffs whole, generated, vendored and Markdown files left
 out. A pair with a diff past `diff_limit` (2,000,000 bytes) gets an error
@@ -59,7 +61,17 @@ CLAUDE_API_KEY=... PATH=/usr/bin:$PATH wado run \
     -D tools=true -D symbols=true package-eddy/tools/baseline.wado -- \
     package-eddy/eval/szz.json package-eddy/eval/checked.json \
     package-eddy/eval/judged.json package-eddy/eval/symbols.json
+CLAUDE_API_KEY=... PATH=/usr/bin:$PATH wado run \
+    --process-read "$HOME/.cargo" --process-read "$HOME/.rustup" \
+    -D tools=true -D run=true -D only=1915 package-eddy/tools/baseline.wado -- \
+    package-eddy/eval/szz.json package-eddy/eval/checked.json \
+    package-eddy/eval/judged.json scratchpad/run-1915.json
 ```
+
+`run.json` joins three such runs, `only` set to 1915, 1697 and 1680. Run
+builds the tree with the toolchain its `rust-toolchain.toml` names. A child
+cannot write `~/.cargo` or `~/.rustup`, so first run `cargo fetch` in a
+checkout of each culprit's merge, which installs that toolchain too.
 
 They run `git` and `rg` through `core:process`, which needs no flag: the
 repository is the directory `wado run` grants. Both must be installed system
@@ -190,6 +202,22 @@ is done.
   naming them, one run over the set called them 10 times. The runs read 32
   million cached input tokens. The three entries no review finds are missed in
   reasoning about the change, not in locating a definition or its uses.
+- Running the code turns #1915 from never to always. With Write and Run, the
+  agent writes a test into `wado-lsp/tests/`, runs it, and reports the shifted
+  labels as what it saw: the hint `k:` on `&p` in `P::sum(&p, 2)`. Without
+  Run, reading talked it out of that finding. The table counts runs that hit,
+  out of 3:
+
+  | Entry | Agent | With symbols | With Run | Runs that called Run |
+  | ----- | ----: | -----------: | -------: | -------------------: |
+  | #1680 |     0 |            0 |        0 |                    0 |
+  | #1697 |     0 |            0 |        1 |                    0 |
+  | #1915 |     0 |            0 |        3 |                    3 |
+
+  #1697's hit came from reading alone. Neither its runs nor #1680's called Run:
+  #1697 is a parser generator's lowering, where a check needs a grammar that
+  reaches the case, and #1680 is a race with a concurrent delete. The #1680
+  runs end in 3 to 5 turns.
 
 ## To Do
 
@@ -202,4 +230,8 @@ is done.
   it hits the known defect.
 - [x] Give the agent a tool over the language service, and measure it against
   `agentic.json`.
-- [ ] Find why #1680, #1697 and #1915 are missed by every review.
+- [ ] Find why #1680 and #1697 are missed by every review.
+- [ ] Run the whole set with Run, to see whether running costs the entries
+  reading already finds.
+- [ ] Keep a reviewer's test from reaching history past the merge: the tree is
+  a worktree, so a test that runs `git log` sees the later commits.

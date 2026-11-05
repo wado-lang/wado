@@ -55,11 +55,12 @@ and their stdlib uses would bury the ones a reviewer asks about.
 
 ## Running
 
-This also needs the toolchain built at the merge's revision.
+They are in `src/tools.wado`, and build the tree with the toolchain its
+`rust-toolchain.toml` names. A finding a check reproduces becomes evidence, and
+one the code refutes is dropped on what the code did, not on a chain of
+reasoning.
 
-- [ ] Run a check: compile and run a small Wado program or fixture
-  (`wado run`, `wado test`), print the compiler's internal stages
-  (`wado dump`), or run a chosen Rust test. A finding it reproduces becomes
-  evidence, and one the code refutes is dropped on what the code did, not on a
-  chain of reasoning. The entry where reading dropped a right finding could
-  have been settled by running it once.
+- [x] Write: a file into the tree, such as a test or a small program.
+- [x] Run: `cargo` at the tree's root, under a timeout, into one target
+  directory every tree shares. It covers a Rust test and `wado` itself
+  (`cargo run --bin wado -- run`, `test` or `dump`).
