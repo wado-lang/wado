@@ -8,7 +8,9 @@ use { Command, Process, ProcessError } from "core:process";
 use { Deserialize } from "core:serde";
 use { from_string } from "core:json";
 use { Client } from "wasi:http";
-use { ask } from "../src/anthropic.wado";
+use { ask, Usage } from "../src/anthropic.wado";
+use { Call } from "../src/agent.wado";
+use { Runner } from "../src/tools.wado";
 
 /// One pull request, as the merge commit that landed it on `main` records it.
 pub struct Merge {
@@ -92,6 +94,48 @@ pub struct Checked {
     pub pairs: List<CheckedPair>,
 }
 
+/// What `baseline.wado` writes: each entry's reviews, graded.
+pub struct Baseline {
+    pub reviewer: String,
+    pub grader: String,
+    pub tools: bool = false,
+    pub symbols: bool = false,
+    pub run: bool = false,
+    // The defaults are what the files written before these were recorded ran.
+    pub max_turns: i32 = 40,
+    pub diff_limit: i32 = 2_000_000,
+    pub entries: List<Entry>,
+}
+
+pub struct Entry {
+    pub fix: i32,
+    pub culprit: i32,
+    pub defect: String,
+    pub runs: List<Run>,
+}
+
+/// One review of an entry's culprit.
+pub struct Run {
+    pub findings: List<Finding> = [],
+    pub turns: i32 = 0,
+    pub calls: List<Call> = [],
+    pub usage: Option<Usage> = null,
+    pub grade: Option<Grade> = null,
+    pub error: Option<String> = null,
+}
+
+pub struct Finding {
+    pub file: String,
+    pub summary: String,
+    pub detail: String,
+}
+
+pub struct Grade {
+    pub hit: bool,
+    pub finding: i32,
+    pub reason: String,
+}
+
 impl CheckedPair {
     /// An entry of the evaluation set: every answer is `yes`.
     pub fn usable(&self) -> bool {
@@ -149,11 +193,89 @@ pub fn generated(rev: &String, paths: &List<String>) -> List<String> with Proces
 pub fn snapshot(sha: &String) -> String with Process {
     let root = `scratchpad/eddy-trees/${*sha}`;
     try_git(["worktree", "remove", "--force", root]);
-    git(["-c", "core.symlinks=false", "worktree", "add", "--force", "--detach", root, *sha]);
+    tree_git(&".", ["worktree", "add", "--force", "--detach", root, *sha]);
     return root;
 }
 
+/// `git` run in `dir`, a checkout a reviewer reaches, with every symbolic link
+/// kept a file: a command that rewrites the tree, such as `reset --hard`,
+/// would otherwise make it a link again.
+fn tree_git(dir: &String, args: List<String>) -> String with Process {
+    let mut full = ["-c", "core.symlinks=false", "-C", *dir] as List<String>;
+    full.extend(&args);
+    return git(full);
+}
+
+/// Checks out in the snapshot at `root` the submodules its `Cargo.toml` builds
+/// from, at the commits the tree records, so `cargo` builds it. Each is a
+/// worktree of the repository's own checkout of that submodule, which fetches
+/// a commit it lacks.
+pub fn add_build_submodules(root: &String) with (Process, Preopens) {
+    for let [path, sha] of build_submodules(root) {
+        assert fs::exists(fs::join(path, ".git")), `the submodule must be checked out: git submodule update --init ${path}`;
+        if try_git(["-C", path, "cat-file", "-e", `${sha}^{commit}`]) matches { None } {
+            git(["-C", path, "fetch", "--quiet", "--depth", "1", "origin", sha]);
+        }
+        tree_git(&path, ["worktree", "add", "--force", "--detach", from_submodule(&path, root), sha]);
+    }
+}
+
+/// The submodules `root`'s `Cargo.toml` names by path, as path and the commit
+/// HEAD records. Both are read from HEAD, so a reviewer's edit to the manifest
+/// or a commit checked out in a submodule changes nothing.
+fn build_submodules(root: &String) -> List<[String, String]> with Process {
+    let manifest = git(["-C", *root, "show", "HEAD:Cargo.toml"]);
+    let mut found: List<[String, String]> = [];
+    // A line is a status flag, a commit, and the path: `-<sha> vendor/x`.
+    for let line of git(["-C", *root, "submodule", "status"]).lines() {
+        let path = line.slice(1, line.len()).split(" ").collect()[1].to_string();
+        // A path is matched to its end, or `vendor/wasm` would match
+        // `vendor/wasmtime/...` too.
+        if manifest.contains(`${path}/`) || manifest.contains(`${path}"`) {
+            let recorded = git(["-C", *root, "rev-parse", `HEAD:${path}`]).trim().to_string();
+            found.push([path, recorded]);
+        }
+    }
+    return found;
+}
+
+/// `path` under `root`, as a path from the submodule checkout at `path`.
+fn from_submodule(path: &String, root: &String) -> String {
+    let up = "../".repeat(path.split("/").count());
+    return `${up}${*root}/${*path}`;
+}
+
+/// How Run builds a snapshot: with the toolchain the user's homes hold, into
+/// one target directory every snapshot shares.
+pub fn home_runner() -> Runner with Environment {
+    let home = env("HOME").expect("rustup's default homes are under HOME");
+    return Runner {
+        target_dir: "scratchpad/eddy-target",
+        cargo_home: env("CARGO_HOME").unwrap_or(`${home}/.cargo`),
+        rustup_home: env("RUSTUP_HOME").unwrap_or(`${home}/.rustup`),
+    };
+}
+
+/// The snapshot of `sha` at `root`, its submodules included, back as checked
+/// out: a run may have written, committed or checked out anything in it.
+pub fn reset_snapshot(root: &String, sha: &String) with Process {
+    reset_checkout(root, sha);
+    // Read once the tree is back at `sha`, so HEAD records what it checked out.
+    for let [path, recorded] of build_submodules(root) {
+        reset_checkout(&`${*root}/${path}`, &recorded);
+    }
+}
+
+fn reset_checkout(dir: &String, commit: &String) with Process {
+    tree_git(dir, ["reset", "--hard", "--quiet", *commit]);
+    tree_git(dir, ["clean", "-fdx", "--quiet"]);
+}
+
 pub fn drop_snapshot(root: &String) with (Process, Preopens) {
+    for let [path, _] of build_submodules(root) {
+        // Absent unless Run checked it out.
+        try_git(["-C", path, "worktree", "remove", "--force", from_submodule(&path, root)]);
+    }
     git(["worktree", "remove", "--force", *root]);
     fs::remove_dir_all(index_dir(root)).unwrap();
 }
@@ -172,11 +294,11 @@ pub fn index(root: &String, wado_path: &String) -> List<String> with (Process, E
     let wado = `${dir}/wado.scip`;
     fs::create_dir_all(&dir).unwrap();
     // A child gets a private HOME, where rustup would find no toolchain.
-    let home = env("HOME").expect("rustup's default homes are under HOME");
+    let homes = home_runner();
     let analyzer = Command::new("rust-analyzer").args(["scip", *root, "--output", rust, "--exclude-vendored-libraries"]).env(
         "RUSTUP_HOME",
-        env("RUSTUP_HOME").unwrap_or(`${home}/.rustup`),
-    ).env("CARGO_HOME", env("CARGO_HOME").unwrap_or(`${home}/.cargo`));
+        homes.rustup_home,
+    ).env("CARGO_HOME", homes.cargo_home);
     succeed(&analyzer);
     // The generated and fixture tests are most of the tree's Wado and use the
     // stdlib thousands of times over, which would bury a reference a reviewer

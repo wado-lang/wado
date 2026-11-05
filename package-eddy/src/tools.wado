@@ -1,6 +1,7 @@
 //! The tools a reviewer reads a repository with: Read, Grep and Glob, shaped
 //! as Claude Code's, over one checked-out tree. Grep and Glob run ripgrep.
-//! With a SCIP index of the tree, FindSymbol and FindReferences as well.
+//! With a SCIP index of the tree, FindSymbol and FindReferences as well. With
+//! a [`Runner`], Write and Run, which change the tree and run `cargo` in it.
 
 use fs from "core:fs";
 use { Preopens } from "core:fs";
@@ -27,6 +28,42 @@ global PATHS: String = "Paths are relative to the repository root; a leading `/`
 pub struct Workspace {
     pub root: String,
     pub symbols: Option<SymbolIndex> = null,
+    pub runner: Option<Runner> = null,
+}
+
+/// How Run runs `cargo`. A child gets a private `HOME`, so the toolchain's
+/// homes are named, and every tree builds into one target directory, so a
+/// tree reuses what an earlier one built.
+pub struct Runner {
+    /// From the directory `wado run` grants, which a child starts in.
+    pub target_dir: String,
+    pub cargo_home: String,
+    pub rustup_home: String,
+}
+
+/// The most Runs one review makes. Retrying a defect that does not reproduce,
+/// such as a race, spends a review's turns on nothing, so past this the
+/// reviewer answers from what it has.
+global RUN_LIMIT: i32 = 12;
+
+/// How long one Run may take, in seconds, unless it asks for another time.
+global RUN_TIMEOUT: i32 = 900;
+
+/// The longest time, in seconds, a Run may ask for.
+global RUN_TIMEOUT_LIMIT: i32 = 1800;
+
+/// The most of each stream Run returns, in bytes, from its end: a build's
+/// error and a test's verdict come last.
+global RUN_TAIL: i32 = 20_000;
+
+struct WriteInput {
+    file_path: String,
+    content: String,
+}
+
+struct RunInput {
+    args: List<String>,
+    timeout: i32 = RUN_TIMEOUT,
 }
 
 struct ReadInput {
@@ -105,8 +142,43 @@ impl Workspace {
                 ),
             );
         }
+        if self.runner matches { Some(_) } {
+            out.extend(&running_tools());
+        }
         return out;
     }
+}
+
+fn running_tools() -> List<Tool> {
+    return [
+        tool("Write", `Writes a file into the repository, replacing any file at that path. ${PATHS}
+- Use it for a test or a small program that checks a suspicion, then run it with Run.
+- Changes last until the review ends.`, `{
+  "type": "object",
+  "properties": {
+    "file_path": {"type": "string", "description": "The path of the file to write"},
+    "content": {"type": "string", "description": "The content to write to the file"}
+  },
+  "required": ["file_path", "content"],
+  "additionalProperties": false
+}`),
+        tool(
+            "Run",
+            `Runs cargo at the repository root with the given arguments, and returns how it ended and the end of its stderr and stdout.
+- Examples: ["test", "-p", "wado-lsp", "--test", "my_check"]; ["run", "--bin", "wado", "--", "run", "check.wado"]; ["test", "-p", "wado-compiler", "--lib", "some_test_name"].
+- The first build takes minutes; later ones reuse it. It stops after timeout seconds (default ${RUN_TIMEOUT}, at most ${RUN_TIMEOUT_LIMIT}).
+- A review makes at most ${RUN_LIMIT} runs.`,
+            `{
+  "type": "object",
+  "properties": {
+    "args": {"type": "array", "items": {"type": "string"}, "description": "The arguments to cargo"},
+    "timeout": {"type": "integer", "minimum": 1, "maximum": ${RUN_TIMEOUT_LIMIT}, "description": "Seconds before the run is stopped"}
+  },
+  "required": ["args"],
+  "additionalProperties": false
+}`,
+        ),
+    ];
 }
 
 fn reading_tools() -> List<Tool> {
@@ -175,6 +247,18 @@ fn tool(name: String, description: String, schema: String) -> Tool {
 }
 
 impl Workspace {
+    /// The most calls of tool `name` one review makes, where it has a limit.
+    pub fn call_limit(&self, name: &String) -> Option<i32> {
+        return if *name == "Run" { Some(RUN_LIMIT) } else { null };
+    }
+
+    /// Whether what tool `name` returns is an observation the tree cannot give
+    /// again, and so worth keeping beside the call. A Run's output is; Read's,
+    /// say, can be read again.
+    pub fn observes(&self, name: &String) -> bool {
+        return *name == "Run";
+    }
+
     /// What tool `name` returns for `input`, or the error to report to the
     /// model, which may then try again.
     pub fn call(&self, name: &String, input: &Value) -> Result<String, String> with (Preopens, Process) {
@@ -193,6 +277,11 @@ impl Workspace {
             "Grep" => self.grep(&input_of::<GrepInput>(input)?)?,
             "Glob" => self.glob(&input_of::<GlobInput>(input)?)?,
             "FindSymbol" | "FindReferences" => self.find(name, &input_of::<SymbolInput>(input)?)?,
+            "Write" | "Run" && self.runner matches { None } => {
+                return Err(`no tool named ${*name}`);
+            },
+            "Write" => self.write(&input_of::<WriteInput>(input)?)?,
+            "Run" => self.run(&input_of::<RunInput>(input)?)?,
             _ => {
                 return Err(`no tool named ${*name}`);
             },
@@ -215,6 +304,63 @@ impl Workspace {
         };
         let text = page(&found, input.offset, input.head_limit)?;
         return Ok(if found.is_empty() { "No symbols found" } else { text });
+    }
+
+    fn write(&self, input: &WriteInput) -> Result<String, String> with Preopens {
+        let path = self.resolve(&input.file_path)?;
+        if let Some(parent) = fs::parent(&path) {
+            fs::create_dir_all(parent).map_err(|e| `${e}`)?;
+        }
+        fs::write(&path, &input.content).map_err(|e| `${e}`)?;
+        return Ok(`Wrote ${input.file_path}`);
+    }
+
+    fn run(&self, input: &RunInput) -> Result<String, String> with Process {
+        let Some(runner) = &self.runner else {
+            unreachable();  // dispatch offers Run only with a runner
+        };
+        if input.timeout < 1 || input.timeout > RUN_TIMEOUT_LIMIT {
+            return Err(`timeout must be from 1 to ${RUN_TIMEOUT_LIMIT}`);
+        }
+        // `core:process` starts a child where the guest's grant is, so the
+        // shell moves into the tree, the target directory resolved first.
+        let mut args = [
+            "--kill-after=10", `${input.timeout}`, "sh", "-c",
+            "export CARGO_TARGET_DIR=\"$PWD/$1\"; cd \"$0\" && shift && exec cargo \"$@\"", self.root, runner.target_dir,
+        ] as List<String>;
+        args.extend(&input.args);
+        let run = Command::new("timeout").args(args).env("CARGO_HOME", runner.cargo_home).env(
+            "RUSTUP_HOME",
+            runner.rustup_home,
+        ).env("CARGO_TERM_COLOR", "never").env(
+            // Each tree is built a few times at most, so the incremental cache
+            // would cost disk, gigabytes per toolchain, for no time saved.
+            "CARGO_INCREMENTAL",
+            "0",
+        ).output();
+        let out = match run {
+            Ok(out) => out,
+            // It ran, so it is an answer and spends a run, not an error.
+            Err(e) && e.kind matches { OutputTooLarge } => {
+                return Ok("killed: its stdout passed the capture limit, so nothing it printed is kept");
+            },
+            Err(e) => {
+                return Err(`${e}`);
+            },
+        };
+        let ended = match out.status {
+            Exited(124) => `timed out after ${input.timeout} seconds`,
+            // What `timeout` exits with once it kills a command that outlived
+            // SIGTERM, and what a kill for lack of memory gives too.
+            Exited(137) => `killed: it ran past ${input.timeout} seconds and ignored SIGTERM, or ran out of memory`,
+            Exited(code) => `exit code ${code}`,
+            other => `${other:?}`,
+        };
+        return Ok(`${ended}
+<stderr>
+${tail(String::from_utf8_lossy(out.stderr))}</stderr>
+<stdout>
+${tail(String::from_utf8_lossy(out.stdout))}</stdout>`);
     }
 
     fn read(&self, input: &ReadInput) -> Result<String, String> with Preopens {
@@ -391,6 +537,15 @@ fn page(lines: &List<String>, offset: i32, limit: i32) -> Result<String, String>
         out.push_str("\n");
     }
     return Ok(out);
+}
+
+/// The last `RUN_TAIL` bytes of `out`, marked as cut where they are.
+fn tail(out: String) -> String {
+    if out.len() <= RUN_TAIL {
+        return out;
+    }
+    let start = out.ceil_char_boundary(out.len() - RUN_TAIL);
+    return `(${start} bytes cut)\n${out.substr_bytes(start, out.len())}`;
 }
 
 fn clip(out: String) -> String {

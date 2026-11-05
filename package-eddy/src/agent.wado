@@ -20,6 +20,8 @@ pub struct Call {
     pub name: String,
     pub input: Value,
     pub is_error: bool,
+    /// What the call returned, where `Workspace::observes` keeps it.
+    pub output: Option<String> = null,
 }
 
 struct TextBlock {
@@ -80,11 +82,18 @@ pub fn run_agent(
                 continue;
             }
             let name = b.name.unwrap();
-            let [content, is_error] = match ws.call(&name, &b.input) {
+            let result: Result<String, String> = match ws.call_limit(&name) {
+                Some(limit) && count_of(&calls, &name) >= limit => Err(
+                    `all ${limit} calls of ${name} are spent; answer from what you have`,
+                ),
+                _ => ws.call(&name, &b.input),
+            };
+            let [content, is_error] = match result {
                 Ok(out) => [out, false],
                 Err(e) => [e, true],
             };
-            calls.push(Call { name, input: b.input, is_error });
+            let output: Option<String> = if ws.observes(&name) && !is_error { Some(content) } else { null };
+            calls.push(Call { name, input: b.input, is_error, output });
             results.push(message(&ToolResult { tool_use_id: b.id.unwrap(), content, is_error }));
         }
         if turns + 1 == max_turns {
@@ -95,4 +104,16 @@ pub fn run_agent(
         messages.push(message(&Blocks { role: "assistant", content: turn.content }));
         messages.push(message(&Blocks { role: "user", content: results }));
     }
+}
+
+/// How many of `calls` called tool `name` and got an answer: a call refused
+/// for its input did nothing, so it spends nothing.
+fn count_of(calls: &List<Call>, name: &String) -> i32 {
+    let mut n = 0;
+    for let c of calls {
+        if c.name == *name && !c.is_error {
+            n += 1;
+        }
+    }
+    return n;
 }
