@@ -7,6 +7,9 @@ replaces the earlier PJRT design, which kept that seam and traced it. It also
 changes decisions [WEP: Loam](../docs/wep-2026-09-20-loam.md) made, and
 [What this changes](#what-this-changes) names each one.
 
+A TPU and WebGPU have about the same priority. A trade-off between them that
+cannot be resolved goes WebGPU's way.
+
 ## Context
 
 ### What sets the speed on a TPU
