@@ -254,17 +254,7 @@ async fn run_cli_component(
         Err(()) => bail!("Component returned error"),
     })();
 
-    let profiled = sampling.map_or(Ok(()), Sampling::finish);
-
-    // What the run reported comes first; a profile it could not write is
-    // only the error where the run itself succeeded.
-    match (outcome, profiled) {
-        (Err(e), Err(p)) => {
-            eprintln!("error: {p:#}");
-            Err(e)
-        }
-        (outcome, profiled) => outcome.and(profiled),
-    }
+    Sampling::conclude(sampling, outcome)
 }
 
 pub async fn run(opts: RunOptions) -> Result<(), CliExit> {

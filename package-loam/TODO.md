@@ -12,7 +12,7 @@ leaves this file, and `design.md` states what it built.
 ## Roadmap
 
 1. [ ] TPU and WebGPU at their best speed. A pass is a graph built once per
-   shape class and compiled for each device: StableHLO through `wado:pjrt` for
+   shape class and compiled for each device: StableHLO through `core:pjrt` for
    a TPU, Loam's own compiler for WebGPU. See
    [Loam on TPU and WebGPU](./devices.md), whose plan lists the steps, a TPU
    run and many requests at once among them. Finished when every step of that

@@ -194,9 +194,8 @@ pub struct Api {
 }
 
 impl Api {
-    /// The plugin's API version, major then minor.
-    pub fn version(&self) -> (i32, i32) {
-        (self.version.major_version, self.version.minor_version)
+    pub fn major_version(&self) -> i32 {
+        self.version.major_version
     }
 
     /// Calls `slot`, and returns the error it reports, null where it reports

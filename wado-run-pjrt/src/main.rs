@@ -10,7 +10,7 @@ use std::path::PathBuf;
 use std::process::ExitCode;
 
 use anyhow::{Result, bail};
-use wado_host::runner::{Invocation, RunOptions, program_for, usage};
+use wado_host::runner::{Invocation, RunOptions, command_line, program_for, usage};
 
 /// The variable that names the plugin `--plugin` does not.
 const PLUGIN_VARIABLE: &str = "WADO_PJRT_PLUGIN";
@@ -43,29 +43,14 @@ where
 
 #[tokio::main]
 async fn main() -> ExitCode {
-    let (options, plugin) = match parse(std::env::args_os().skip(1)) {
-        Ok((Invocation::Run(options), plugin)) => (options, plugin),
-        Ok((Invocation::Help, _)) => {
-            print!("{}", help());
-            return ExitCode::SUCCESS;
-        }
-        Ok((Invocation::Version, _)) => {
-            println!("wado-run-pjrt {}", env!("CARGO_PKG_VERSION"));
-            return ExitCode::SUCCESS;
-        }
-        Err(error) => {
-            eprintln!("wado-run-pjrt: {error}");
-            return ExitCode::FAILURE;
-        }
-    };
-
-    match run(options, plugin).await {
-        Ok(()) => ExitCode::SUCCESS,
-        Err(error) => {
-            eprintln!("wado-run-pjrt: {error:#}");
-            ExitCode::FAILURE
-        }
-    }
+    command_line(
+        "wado-run-pjrt",
+        env!("CARGO_PKG_VERSION"),
+        parse(std::env::args_os().skip(1)),
+        help,
+        run,
+    )
+    .await
 }
 
 async fn run(options: RunOptions, plugin: Option<PathBuf>) -> Result<()> {

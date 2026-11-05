@@ -2,7 +2,7 @@
 
 use std::ffi::{c_char, c_void};
 use std::path::Path;
-use std::ptr::{null, null_mut};
+use std::ptr::null_mut;
 use std::sync::Arc;
 
 use anyhow::{Context as _, Result, bail};
@@ -59,9 +59,6 @@ impl Plugin {
 
     /// Waits for `event` and destroys it.
     fn awaited(&self, event: Opaque) -> Result<(), String> {
-        if event.is_null() {
-            return Ok(());
-        }
         let mut wait = ffi::EventAwait::new();
         wait.event = event;
         // SAFETY: `event` is the plugin's, and is destroyed once.
@@ -93,8 +90,6 @@ pub struct Client {
 
 // SAFETY: as `Plugin`.
 unsafe impl Send for Client {}
-// SAFETY: as `Plugin`.
-unsafe impl Sync for Client {}
 
 impl Client {
     /// Loads the plugin at `path` and opens its first device.
@@ -114,7 +109,7 @@ impl Client {
             api,
             _library: library,
         });
-        let (major, _) = plugin.api().version();
+        let major = plugin.api().major_version();
         if major != 0 {
             bail!("a PJRT plugin of API major version {major} is not one this host speaks");
         }
@@ -162,7 +157,7 @@ impl Client {
         }
     }
 
-    /// Compiles a StableHLO module.
+    /// Compiles a module of MLIR text.
     pub fn compile(&self, module: &str) -> Result<Executable, String> {
         const FORMAT: &str = "mlir";
         let mut program = ffi::Program::new();
@@ -250,8 +245,6 @@ pub struct Buffer {
 
 // SAFETY: as `Plugin`.
 unsafe impl Send for Buffer {}
-// SAFETY: as `Plugin`.
-unsafe impl Sync for Buffer {}
 
 impl Buffer {
     /// The elements, little-endian, in row-major order, once the device has
@@ -298,8 +291,6 @@ pub struct Executable {
 
 // SAFETY: as `Plugin`.
 unsafe impl Send for Executable {}
-// SAFETY: as `Plugin`.
-unsafe impl Sync for Executable {}
 
 impl Executable {
     /// Runs the program on `arguments`. The results are ready to read, and
@@ -310,7 +301,6 @@ impl Executable {
         let mut results: Vec<Opaque> = vec![null_mut(); self.outputs];
         let result_lists: [*mut Opaque; 1] = [results.as_mut_ptr()];
         let mut options = ffi::ExecuteOptions::new();
-        options.non_donatable_input_indices = null();
         let mut execute = ffi::LoadedExecutableExecute::new();
         execute.executable = self.loaded;
         execute.options = &raw mut options;

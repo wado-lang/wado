@@ -8,7 +8,7 @@ use std::ffi::OsString;
 use std::fs::File;
 use std::io::{BufWriter, Write};
 use std::path::{Path, PathBuf};
-use std::process::Command as Process;
+use std::process::{Command as Process, ExitCode};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
@@ -295,6 +295,40 @@ impl RunOptions {
     }
 }
 
+/// A runner's `main`, from its parsed command line. `help` is what `--help`
+/// prints, and `run` makes the run, its `T` being what `parsed` adds to the
+/// options every runner takes.
+pub async fn command_line<T>(
+    runner: &str,
+    version: &str,
+    parsed: Result<(Invocation, T)>,
+    help: impl FnOnce() -> String,
+    run: impl AsyncFnOnce(RunOptions, T) -> Result<()>,
+) -> ExitCode {
+    let (options, own) = match parsed {
+        Ok((Invocation::Run(options), own)) => (options, own),
+        Ok((Invocation::Help, _)) => {
+            print!("{}", help());
+            return ExitCode::SUCCESS;
+        }
+        Ok((Invocation::Version, _)) => {
+            println!("{runner} {version}");
+            return ExitCode::SUCCESS;
+        }
+        Err(error) => {
+            eprintln!("{runner}: {error}");
+            return ExitCode::FAILURE;
+        }
+    };
+    match run(options, own).await {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(error) => {
+            eprintln!("{runner}: {error:#}");
+            ExitCode::FAILURE
+        }
+    }
+}
+
 /// A component to run. A compiled one holds its temporary directory open for
 /// as long as the run needs the file in it.
 pub struct Program {
@@ -420,20 +454,11 @@ where
         }
         Err(e) => Err(e),
     };
-    let profiled = sampling.map(Sampling::finish).transpose();
     let outcome = (|| match ran?? {
         Ok(()) => Ok(()),
         Err(()) => bail!("the program exited with an error"),
     })();
-    // What the run reported comes first; a profile it could not write is
-    // only the error where the run itself succeeded.
-    match (outcome, profiled) {
-        (Err(e), Err(p)) => {
-            eprintln!("error: {p:#}");
-            Err(e)
-        }
-        (outcome, profiled) => outcome.and(profiled.map(|_| ())),
-    }
+    Sampling::conclude(sampling, outcome)
 }
 
 /// `--profile guest`, as `wado run` samples: a thread advances the epoch every
@@ -510,12 +535,24 @@ impl Sampling {
         })
     }
 
-    /// Stops sampling and writes the profile.
+    /// What a run that ended with `outcome` reports, once any sampling of it
+    /// has written its profile. The run's own outcome comes first; a profile it
+    /// could not write is only the error where the run itself succeeded.
     ///
     /// # Errors
     ///
-    /// Fails when the profile cannot be written.
-    pub fn finish(self) -> Result<()> {
+    /// Fails when the run did or the profile cannot be written.
+    pub fn conclude(sampling: Option<Self>, outcome: Result<()>) -> Result<()> {
+        match (outcome, sampling.map_or(Ok(()), Self::finish)) {
+            (Err(e), Err(p)) => {
+                eprintln!("error: {p:#}");
+                Err(e)
+            }
+            (outcome, profiled) => outcome.and(profiled),
+        }
+    }
+
+    fn finish(self) -> Result<()> {
         self.stop.store(true, Ordering::Relaxed);
         let Some(profiler) = lock(&self.profiler).take() else {
             unreachable!("`finish` takes the sampling by value, so it runs once");
