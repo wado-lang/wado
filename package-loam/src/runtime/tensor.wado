@@ -850,8 +850,6 @@ pub enum UnaryOp {
     Sqrt,
     Neg,
     Abs,
-    /// Toward zero, as a conversion to an integer rounds.
-    Trunc,
 }
 
 /// A two-operand operator of an [`Expr`]. The cases past `Pow` are
@@ -1212,7 +1210,6 @@ fn unary_over(op: UnaryOp, v: &Slice<f32>) -> List<f32> {
         Sqrt => each(v, |e| f32::sqrt(e)),
         Neg => each(v, |e| -e),
         Abs => each(v, |e| f32::abs(e)),
-        Trunc => each(v, |e| f32::trunc(e)),
     };
 }
 

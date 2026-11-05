@@ -28,6 +28,12 @@ fn mask(length: i32) -> Tensor<i64, [AttentionMask0, T]> {
     };
 }
 
+/// What a row returns for `picked` after `tokens`: the first of the ends, once
+/// one of them is among `tokens`.
+fn returned(sampling: &Sampling, tokens: &List<i64>, picked: i64) -> i64 {
+    return if tokens.into_iter().any(|t| sampling.ends.contains(t)) { sampling.ends[0] } else { picked };
+}
+
 /// `count` tokens after `prompt`, one pass and one host pick each.
 pub fn stepped_tokens<affine Bk: Graph>(
     g: &mut Bk,
@@ -43,7 +49,7 @@ pub fn stepped_tokens<affine Bk: Graph>(
     for let _ of 1..<count {
         seen += 1;
         let next = compute(g, &ids([tokens[tokens.len() - 1]]), &mask(seen), &cache, 0, &mut model);
-        tokens.extend(&sampling.first_tokens(&next.logits, seen as i64));
+        tokens.push(returned(sampling, &tokens, sampling.first_tokens(&next.logits, seen as i64)[0]));
         cache = next.cache;
     }
     return tokens;
@@ -93,7 +99,7 @@ pub fn samplers() -> List<Sampling> {
             top_k: 4,
             top_p: 0.9,
             seed: 17,
-            ends: [3, 5],
+            ends: [7, 4],
         },
     ];
 }

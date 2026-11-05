@@ -790,7 +790,7 @@ g (float[1, T, 8] P, float[1, 1, 8] N) => (float[1, U, 8] Y)
     let out = generate(source).unwrap();
 
     assert out.contains(
-        "let Y = joined_at::<Bk, f32, [P0, U, P2], [P0, N1, P2], [P0, U, P2]>(backend, &joined_at::<Bk, f32, [P0, T, P2], [P0, N1, P2], [P0, U, P2]>(backend, P, N, 1, &lengths.dim_T), N, 1, &backend.binary::<i64, []>(Binary::Add, &lengths.dim_T, &full::<Bk, i64, []>(backend, 1, [])));",
+        "let Y = joined_at::<Bk, f32, [P0, U, P2], [P0, N1, P2], [P0, U, P2]>(backend, &joined_at::<Bk, f32, [P0, T, P2], [P0, N1, P2], [P0, U, P2]>(backend, P, N, 1, &lengths.dim_T), N, 1, &backend.binary::<i64, []>(Binary::Add, &lengths.dim_T, &scalar::<Bk, i64>(backend, 1)));",
     );
 }
 
@@ -864,7 +864,7 @@ g (float[2, 4, 8] X) => (float[2, 4, 8] Y)
     let out = generate(source).unwrap();
 
     assert out.contains(
-        "let M = backend.reshape::<f32, [X0, X1], [X0, X1, X2]>(&reduce_mean::<Bk, [X0, X1, X2], [X0, X1]>(backend, X, [2], &full::<Bk, i64, []>(backend, 8, [])), [2, 4, 1]);",
+        "let M = backend.reshape::<f32, [X0, X1], [X0, X1, X2]>(&reduce_mean::<Bk, [X0, X1, X2], [X0, X1]>(backend, X, [2], &scalar::<Bk, i64>(backend, 8)), [2, 4, 1]);",
     );
     assert out.contains(
         "let Y = backend.binary::<f32, [X0, X1, X2]>(Binary::Subtract, X, &backend.broadcast_in_dim::<f32, [X0, X1, X2], [X0, X1, X2]>(&M, [2, 4, 8], [0, 1, 2]));",
@@ -895,7 +895,7 @@ g (float[2, 4, 8] X) => (float[2, 4] Y)
     let out = generate(source).unwrap();
 
     assert out.contains(
-        "let Y = reduce_mean::<Bk, [X0, X1, X2], [X0, X1]>(backend, X, [2], &full::<Bk, i64, []>(backend, 8, []));",
+        "let Y = reduce_mean::<Bk, [X0, X1, X2], [X0, X1]>(backend, X, [2], &scalar::<Bk, i64>(backend, 8));",
     );
 }
 
@@ -1293,7 +1293,7 @@ test "a Range over a symbolic length is computed on the backend" {
     }`;
     let out = generate(source).unwrap();
     assert out.contains(
-        "let Y = range_i64::<Bk, N>(backend, &full::<Bk, i64, []>(backend, 0, []), to_extent(dim_N), &full::<Bk, i64, []>(backend, 1, []));",
+        "let Y = range_i64::<Bk, N>(backend, &scalar::<Bk, i64>(backend, 0), to_extent(dim_N), &scalar::<Bk, i64>(backend, 1));",
     );
 }
 
@@ -1329,7 +1329,7 @@ test "a Slice by a negative step walks back from its start" {
     }`;
     let out = generate(source).unwrap();
     assert out.contains(
-        "let Y = strided_gather::<Bk, f32, [N], [Y0]>(backend, X, 0, &backend.binary::<i64, []>(Binary::Add, &lengths.dim_N, &full::<Bk, i64, []>(backend, -1, [])), to_extent(dim_N), -1);",
+        "let Y = strided_gather::<Bk, f32, [N], [Y0]>(backend, X, 0, &backend.binary::<i64, []>(Binary::Add, &lengths.dim_N, &scalar::<Bk, i64>(backend, -1)), to_extent(dim_N), -1);",
     );
 }
 
@@ -1354,7 +1354,7 @@ test "an embedding lookup is a gather of rows, and a folded index tensor is a li
     }`;
     let out = generate(source).unwrap();
     assert out.contains(
-        "let E = backend.gather::<f32, [W0, Y2], [I0, I1], [I0, I1, Y2]>(&weights.W, &from_end_indices::<Bk, [I0, I1]>(backend, I, &full::<Bk, i64, []>(backend, 16, [])), &GatherDims { offset_dims: [2], collapsed_slice_dims: [0], start_index_map: [0], index_vector_dim: 2, slice_sizes: [1, 8] });",
+        "let E = backend.gather::<f32, [W0, Y2], [I0, I1], [I0, I1, Y2]>(&weights.W, &from_end_indices::<Bk, [I0, I1]>(backend, I, &scalar::<Bk, i64>(backend, 16)), &GatherDims { offset_dims: [2], collapsed_slice_dims: [0], start_index_map: [0], index_vector_dim: 2, slice_sizes: [1, 8] });",
     );
     assert out.contains("return backend.keep(&Tensor::<i64, [I0, I1]> { data: [0, 1, 2, 3], extents: [1, 4] });");
     assert out.contains(
@@ -1393,7 +1393,7 @@ test "Gather along any axis but the first gathers along it, the axes spelled" {
     }`;
     let out = generate(source).unwrap();
     assert out.contains(
-        "let Y = backend.gather::<f32, [Y0, W1], [I0], [Y0, I0]>(&weights.W, &from_end_indices::<Bk, [I0]>(backend, I, &full::<Bk, i64, []>(backend, 8, [])), &GatherDims { offset_dims: [0], collapsed_slice_dims: [1], start_index_map: [1], index_vector_dim: 1, slice_sizes: [16, 1] });",
+        "let Y = backend.gather::<f32, [Y0, W1], [I0], [Y0, I0]>(&weights.W, &from_end_indices::<Bk, [I0]>(backend, I, &scalar::<Bk, i64>(backend, 8)), &GatherDims { offset_dims: [0], collapsed_slice_dims: [1], start_index_map: [1], index_vector_dim: 1, slice_sizes: [16, 1] });",
     );
 }
 

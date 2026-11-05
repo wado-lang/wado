@@ -52,7 +52,6 @@ use {
     Prologue,
     RowOp,
     Tensor,
-    UnaryOp,
     constant,
     element_count,
     interleaved,
@@ -267,19 +266,16 @@ impl Graph for WebGpuBackend {
         &mut self,
         x: &Placed<A, Axes>,
     ) -> Placed<B, Axes> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
-        let Device(d) = x else {
-            return Placed::Host(self.cpu.convert(&self.host(x)));
-        };
-        // A device holds a bool or an i64 as the f32 it converts to.
-        if A::kind() == B::kind() || B::is_f32() || A::kind() matches { Bool } {
-            return Placed::Device(*d);
+        if let Device(d) = x && !(A::is_f32() && B::kind() matches { I64 }) {
+            // A device holds a bool, or an index a kernel ranked, as the f32 it
+            // converts to.
+            if !B::kind() matches { Bool } || A::kind() matches { Bool } {
+                return Placed::Device(*d);
+            }
+            let nonzero = operand(0).binary(BinaryOp::Ne, &constant(0.0));
+            return as_element(self, self.fused_on::<Axes>(&([*d] as List<DeviceTensor>), &nonzero));
         }
-        let op = if B::kind() matches { Bool } {
-            operand(0).binary(BinaryOp::Ne, &constant(0.0));
-        } else {
-            operand(0).unary(UnaryOp::Trunc);
-        };
-        return as_element(self, self.fused_on::<Axes>(&([*d] as List<DeviceTensor>), &op));
+        return Placed::Host(self.cpu.convert(&self.host(x)));
     }
 
     fn unary<Axes>(
@@ -884,7 +880,7 @@ fn repeated_launch(
         }
         let returned = launched(g, state, program, body);
         carried = returned.into_iter().map(|value| match on_device(&value) {
-            Some(d) && g.remade(d.slot) => at_slot(&value, g.moved_to_pass(d).slot),
+            Some(d) && g.remade(d.slot) => viewing(&value, g.moved_to_pass(d)),
             _ => value,
         }).collect();
     }
@@ -1083,11 +1079,15 @@ fn on_device(value: &Any<WebGpuBackend>) -> Option<&DeviceTensor> {
 
 /// `value`, a view on the device, of the buffer at `slot`.
 fn at_slot(value: &Any<WebGpuBackend>, slot: i32) -> Any<WebGpuBackend> {
+    return viewing(value, DeviceTensor { ..*on_device(value).unwrap(), slot });
+}
+
+/// `view`, of `value`'s element.
+fn viewing(value: &Any<WebGpuBackend>, view: DeviceTensor) -> Any<WebGpuBackend> {
     return match value {
-        F32(Device(d)) => Any::F32(Placed::Device(DeviceTensor { ..*d, slot })),
-        I64(Device(d)) => Any::I64(Placed::Device(DeviceTensor { ..*d, slot })),
-        Bool(Device(d)) => Any::Bool(Placed::Device(DeviceTensor { ..*d, slot })),
-        _ => unreachable(),
+        F32(_) => Any::F32(Placed::Device(view)),
+        I64(_) => Any::I64(Placed::Device(view)),
+        Bool(_) => Any::Bool(Placed::Device(view)),
     };
 }
 

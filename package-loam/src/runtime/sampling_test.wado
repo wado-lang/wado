@@ -107,7 +107,7 @@ test "an ended row keeps returning its first end token" {
     let sampling = Sampling {
         ends: [2, 3],
     };
-    let decoding = Decoding::new(&mut cpu, &sampling, 3, 0, 2);
+    let decoding = Decoding::new(&mut cpu, &sampling, [false, false], 3, 0);
     let scores = logits([
         [0.0, 0.0, 1.0, 0.0],
         [1.0, 0.0, 0.0, 0.0],
@@ -141,6 +141,10 @@ test "an ended row keeps returning its first end token" {
     assert second.token.data == [2, 3];
     assert second.finished.data == [true, true];
     assert second.tokens.data == [2, 2, 0, 0, 3, 0];
+}
+
+test "a greedy sampler is one program whatever else it holds" {
+    assert Sampling { top_k: 3, top_p: 0.5 }.sampler().key() == Sampling {}.sampler().key();
 }
 
 test "a mask opens the position a step reads" {

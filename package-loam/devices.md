@@ -414,9 +414,11 @@ how many positions past its own its cache holds for the steps to come.
   it equals. Each dispatch's parameters take a span of the pass's buffer, and
   the host writes the spans once per submission. A loop keeps `SUBMIT_EVERY`'s
   submissions, since [the device then runs while the host records](#gemma-3-on-webgpu).
-- A slot that picks an end token keeps returning that token, and its cache goes
-  on being written past the valid length, where nothing reads it. The loop is
-  counted on every backend, and the host cuts the row at its first end token.
+- A slot that picks an end token keeps returning the first of the end tokens,
+  and its cache goes on being written past the valid length, where nothing reads
+  it. A call takes each row's last token, so a row a call ended, or that a host
+  pick ended, stays ended. The loop is counted on every backend, and the host
+  cuts the row at its first end token.
 
 ### The device compiler lays out the weights
 
@@ -662,9 +664,14 @@ model, and it does not price 94 and 93 of each program's operations
   its call, on every backend.
 - Backends add up a row's probabilities in their own order, so a draw landing
   within rounding of a token's edge can pick apart on two of them. Greedy cannot.
-- On WebGPU a device-held `i64` is the f32 it equals, so an id is below 2²⁴, and
-  only `Add`, `Subtract`, `Minimum` and `Maximum` run on one there. Another
-  operation reads it back.
+- On WebGPU a device-held `i64` is an index `arg_max` ranked, as the f32 it
+  equals, so an id is below 2²⁴, and only `Add`, `Subtract`, `Minimum` and
+  `Maximum` run on one there. Another operation reads it back.
+- WGSL lets an implementation assume no infinity or NaN at run time, and a
+  shader still starts a maximum at negative infinity and masks attention with
+  it.
+- A loop on WebGPU copies what it carries to a new buffer of the pass at each
+  step, and those stay until the pass's end. Each also takes a new bind group.
 - GPT-2 (124M)'s `compute` on `WebGpuBackend` takes 2.5 times the kernel
   pass's time a token, and on `Cpu` 1.9 times; Gemma 3's on `Cpu` 4 times
   ([measured](./webgpu.md#measurements)). `Cpu` reads each weight from a

@@ -60,13 +60,13 @@ pub global MAP: String = "HashMap";
 /// spells, whether or not one graph's code reads it.
 pub global RUNTIME_NAMES: List<String> = [
     "Any", "Attention", "Binary", "CheckpointBytes", "Convolution", "Cpu", "Decoding", "DotDims", "Expected",
-    "GatherDims", "Graph", "Holds", "LoadError", "Merged", "One", "Picks", "Programs", "Recorded", "Recorder",
+    "GatherDims", "Graph", "Holds", "LoadError", "Merged", "One", "Picks", "Programs", "Recorded", "Recorder", "Sampler",
     "Sampling", "Slots", "Tensor", "Unary", "Untyped", "WindowReduce", "advanced", "assembled", "axis_mismatch",
     "bool_host", "bool_of", "branched", "capacity_of", "expect_len", "extent_mismatch", "extents_mismatch", "f32_host",
     "f32_of", "fitted", "from_end", "from_end_indices", "full", "i64_host", "i64_of", "input_mismatch", "joined_at",
     "lifted", "masked", "narrow", "opened", "payload_at", "quotient", "range_i64", "read_checkpoint", "read_shards",
-    "reduce_mean", "refuse", "resized", "softmax", "softmax_flattened", "stepped", "strided_gather", "to_extent",
-    "unmet", "widen", "written_at",
+    "reduce_mean", "refuse", "resized", "scalar", "softmax", "softmax_flattened", "stepped", "strided_gather",
+    "to_extent", "unmet", "widen", "written_at",
 ];
 
 /// Whether `name` already means something in the generated module.
@@ -105,7 +105,7 @@ pub fn module_idents() -> HashSet<String> {
     reserved.insert(RECORDED_DECODED);
     // The parameters and locals the entries and what they record bind.
     for let name of [
-        "at", "class", "decoding", "extents", "finished", "last", "moved", "next", "passed", "recorder", "results",
+        "at", "decoding", "ended", "extents", "finished", "last", "moved", "next", "passed", "recorder", "results",
         "returned", "room", "rows", "sampler", "sampling", "start", "state", "step", "steps", "tokens",
     ] as List<String> {
         reserved.insert(name);

@@ -30,7 +30,7 @@ test "decode refuses steps past what the graph's tables reach" {
     steps_taken(&mut Cpu {}, 15);
 }
 
-test "a row that picks an end token keeps returning it" {
+test "a row that picks an end token keeps returning the first of the ends" {
     let cpu = &mut Cpu {};
     let tokens = decoded_tokens(cpu, [1, 2], [9], &Sampling { temperature: 1.0, seed: 3 });
     let end = tokens[3];
@@ -38,9 +38,40 @@ test "a row that picks an end token keeps returning it" {
     let ended = decoded_tokens(cpu, [1, 2], [9], &Sampling {
         temperature: 1.0,
         seed: 3,
-        ends: [end],
+        ends: [end + 1, end],
     });
     for let [at, token] of ended.into_iter().enumerate() {
-        assert token == if at <= first { tokens[at] } else { end };
+        assert token == if at <= first { tokens[at] } else { end + 1 };
     }
+}
+
+test "a row a call ended stays ended in the next call" {
+    let cpu = &mut Cpu {};
+    let free = Sampling { temperature: 1.0, seed: 3 };
+    let end = decoded_tokens(cpu, [1, 2], [9], &free)[3];
+    let sampling = Sampling {
+        temperature: 1.0,
+        seed: 3,
+        ends: [end],
+    };
+    assert decoded_tokens(cpu, [1, 2], [4, 5], &sampling) == decoded_tokens(cpu, [1, 2], [9], &sampling);
+}
+
+test "a first token that ends a row ends it for the program" {
+    let cpu = &mut Cpu {};
+    let free = Sampling { temperature: 1.0, seed: 3 };
+    let end = decoded_tokens(cpu, [1, 2], [1], &free)[0];
+    let tokens = decoded_tokens(cpu, [1, 2], [5], &Sampling {
+        temperature: 1.0,
+        seed: 3,
+        ends: [end],
+    });
+    assert tokens == List::<i64>::filled(6, end);
+}
+
+test "a sampler of the conformance programs ends its row" {
+    let sampling = samplers()[4];
+    let tokens = stepped_tokens(&mut Cpu {}, [2, 6, 1], 8, &sampling);
+    assert tokens[tokens.len() - 1] == sampling.ends[0];
+    assert tokens.into_iter().any(|t| t == sampling.ends[1]);
 }

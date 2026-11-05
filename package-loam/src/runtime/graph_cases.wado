@@ -326,6 +326,23 @@ pub fn repeating<affine G: Graph>(
     ];
 }
 
+/// A loop of `count` runs, each carrying its value doubled and transposed, so
+/// what it carries is a view.
+pub fn repeating_view<affine G: Graph>(
+    g: &mut G,
+    count: &G::Tensor<i64, []>,
+    x: &G::Tensor<f32, [A, A]>,
+) -> G::Tensor<f32, [A, A]> with _ {
+    let start: List<Any<G>> = [Any::F32(g.relabeled::<f32, [A, A], Untyped>(x))];
+    let last = g.repeated(count, &start, |_, state| {
+        let held = f32_of::<G, [A, A]>(g, &state[0]);
+        let doubled = g.binary(Binary::Add, &held, &held);
+        let turned = g.transpose::<f32, [A, A], [A, A]>(&doubled, [1, 0]);
+        return [Any::F32(g.relabeled::<f32, [A, A], Untyped>(&turned))];
+    });
+    return f32_of::<G, [A, A]>(g, &last[0]);
+}
+
 /// `repeating`'s arguments, for `count` runs.
 pub fn repeating_inputs(count: i64) -> [Tensor<i64, []>, Tensor<f32, [A]>, Tensor<i64, [A]>] {
     return [

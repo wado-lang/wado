@@ -22,7 +22,22 @@ use {
     GpuSupportedLimits,
     RecordOptionGpuSize64,
 } from "wasi:webgpu";
-use { Comparison, Cpu, Element, full, Graph, Holds, Placed, strided_gather, Tensor, WebGpuBackend } from "lib:loam";
+use {
+    Any,
+    Binary,
+    Comparison,
+    Cpu,
+    Element,
+    f32_of,
+    full,
+    Graph,
+    Holds,
+    Placed,
+    strided_gather,
+    Tensor,
+    Untyped,
+    WebGpuBackend,
+} from "lib:loam";
 use cases from "lib:loam/src/runtime/graph_cases.wado";
 use { deviation } from "lib:loam/example/webgpu/compare.wado";
 use { decoded_tokens, samplers, stepped_tokens, tokens_apart } from "./decoded.wado";
@@ -336,6 +351,40 @@ export fn run() with (Stdout, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuC
         println(`repeated ${times} carried ${apart(&mut gpu, &ran.0, &want.0)}`);
         println(`repeated ${times} tally ${apart(&mut gpu, &ran.1, &want.1)}`);
     }
+
+    let turns = Tensor::<i64, []> {
+        data: [3],
+        extents: [],
+    };
+    let square = Tensor::<f32, [cases::A, cases::A]> {
+        data: [1.0, 2.0, 3.0, 4.0],
+        extents: [2, 2],
+    };
+    let viewing = gpu.compiled(|r| {
+        let rturns = r.parameter::<i64, []>(turns.extents);
+        let rsquare = r.parameter::<f32, [cases::A, cases::A]>(square.extents);
+        return r.finished([cases::repeating_view(r, &rturns, &rsquare).id]);
+    }, &[], &[]).unwrap();
+    let viewed = gpu.executed(&viewing, &[
+        Any::I64(gpu.relabeled::<i64, [], Untyped>(&gpu.upload(&turns))),
+        Any::F32(gpu.relabeled::<f32, [cases::A, cases::A], Untyped>(&gpu.upload(&square))),
+    ], &[]);
+    let turned = f32_of::<WebGpuBackend, [cases::A, cases::A]>(&gpu, &viewed[0]);
+    println(`repeated view ${apart(&mut gpu, &turned, &cases::repeating_view(cpu, &turns, &square))}`);
+
+    // An i64 converted from an f32 is no index, which alone a device holds.
+    let wide = Tensor::<f32, [cases::A]> {
+        data: [3.0e7, f32::NAN],
+        extents: [2],
+    };
+    let ones = full::<Cpu, i64, [cases::A]>(cpu, 1, [2]);
+    let reckoned = cpu.binary(Binary::Add, &cpu.convert::<f32, i64, [cases::A]>(&wide), &ones);
+    let converted = gpu.binary(
+        Binary::Add,
+        &gpu.convert::<f32, i64, [cases::A]>(&gpu.upload(&wide)),
+        &gpu.upload(&ones),
+    );
+    assert gpu.download(&converted).data == reckoned.data;
 
     for let [k, sampling] of samplers().into_iter().enumerate() {
         let want = stepped_tokens(cpu, [2, 6, 1], 8, &sampling);

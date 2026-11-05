@@ -24,6 +24,7 @@ use {
     UnaryOp,
     arg_max,
     broadcast_extents,
+    constant,
     element_count,
     fused,
     fused_rows,
@@ -473,6 +474,8 @@ pub affine struct WebGpuBackend {
     /// The buffers each launch of a program makes, by its `launch_key`, in
     /// the order a launch makes them.
     owned: HashMap<i64, List<Owned>>,
+    /// The slots of those a launch still makes its next ones in.
+    remade_slots: HashSet<i32>,
     /// The parameters of each launch of a program, by the same key.
     launch_parameters: HashMap<i64, LaunchParameters>,
     /// The buffers launches' parameters are carved from, the last the one
@@ -644,6 +647,7 @@ impl WebGpuBackend {
             programs: HashMap::new(),
             signatures: HashMap::new(),
             owned: HashMap::new(),
+            remade_slots: HashSet::new(),
             launch_parameters: HashMap::new(),
             carved: [],
             running: null,
@@ -776,6 +780,7 @@ impl WebGpuBackend {
         }
         let slot = self.held_buffer(count);
         self.owned[key].push(Owned { slot, words: count, returned: false });
+        self.remade_slots.insert(slot);
         return Option::Some(slot);
     }
 
@@ -846,6 +851,7 @@ impl WebGpuBackend {
         for let slot of given {
             self.pass.push(self.held[slot]);
             self.held.remove(slot);
+            self.remade_slots.remove(slot);
             let to = self.pass_start + self.pass.len() - 1;
             moved[slot] = to;
             if let Some(cache) = self.filled.get(slot) {
@@ -970,6 +976,7 @@ impl WebGpuBackend {
                 for let o of owned {
                     if !o.returned {
                         self.dropped_held(o.slot, dropped);
+                        self.remade_slots.remove(o.slot);
                     }
                 }
                 self.owned.remove(key);
@@ -2862,15 +2869,7 @@ impl WebGpuBackend {
     /// this one's: one it owns, but for an attention cache, which a run
     /// appends to.
     internal fn remade(&self, slot: i32) -> bool {
-        if slot >= 0 || self.filled.contains_key(slot) {
-            return false;
-        }
-        for let [_, owned] of self.owned.entries() {
-            if owned.into_iter().any(|o| o.slot == slot) {
-                return true;
-            }
-        }
-        return false;
+        return self.remade_slots.contains(slot) && !self.filled.contains_key(slot);
     }
 
     /// `t` copied to a buffer of the pass, which no launch makes again.
@@ -3318,7 +3317,7 @@ fn steps_wgsl(op: &Expr, last: i32, indent: String) -> String {
     for let i of 0..=last {
         let value = match op.steps[i] {
             Operand(n) => `x${n}`,
-            Constant(c) => `bitcast<f32>(${c.to_bits()}u)`,
+            Constant(c) => if c.is_finite() { `bitcast<f32>(${c.to_bits()}u)` } else { `non_finite(${c.to_bits()}u)` },
             Unary([u, a]) => unary_wgsl(u, `s${a}`),
             Binary([o, a, b]) => binary_wgsl(o, `s${a}`, `s${b}`),
             Select([c, a, b]) => `select(s${b}, s${a}, s${c} != 0.0)`,
@@ -3361,7 +3360,7 @@ variant ShaderKey {
 impl ShaderKey {
     /// The WGSL this key makes.
     fn source(&self) -> String {
-        return match self {
+        let source = match self {
             Elementwise([op, bindings, rank]) => elementwise_shader(op, bindings, *rank),
             Rows([op, bindings, rank, row_axes, reduced]) => row_shader(op, bindings, *rank, *row_axes, *reduced),
             Copy([rank, half]) => copy_shader(*rank, *half),
@@ -3391,7 +3390,26 @@ impl ShaderKey {
             AttendJoin(bindings) => attend_join_shader(bindings),
             ArgMax([bindings, rank, stage]) => arg_max_shader(bindings, *rank, *stage),
         };
+        return if source.contains("non_finite(") { `${NON_FINITE_WGSL}${source}` } else { source };
     }
+}
+
+/// The f32 of `bits`, an infinity or a NaN. A const-expression that evaluates to
+/// one is a shader-creation error, and a call's result is no const-expression.
+global NON_FINITE_WGSL: String = "fn non_finite(bits: u32) -> f32 {
+    return bitcast<f32>(bits);
+}
+";
+
+test "an infinity in a kernel is no const-expression" {
+    let source = ShaderKey::Elementwise([
+        constant(f32::NEG_INFINITY),
+        [0],
+        1,
+    ]).source();
+    assert source.contains("fn non_finite");
+    assert source.contains("non_finite(4286578688u)");
+    assert !ShaderKey::Copy([1, false]).source().contains("non_finite");
 }
 
 /// The element of operand `k`, read from binding `bindings[k]`, whose view's
@@ -3532,7 +3550,7 @@ fn main(@builtin(workgroup_id) group: vec3<u32>, @builtin(local_invocation_index
     let b = row / (heads * seq);
     let kh = h / p[8];
     let position = past + s;
-    let none = bitcast<f32>(0xff800000u);
+    let none = non_finite(0xff800000u);
     for (var e = lid; e < d; e += ${LANES}u) {
         let x = ${query_at("e")};
 ${turning}        query[e] = turned;
@@ -3623,7 +3641,7 @@ fn main(@builtin(workgroup_id) group: vec3<u32>, @builtin(local_invocation_index
     }
     let parts = p[2];
     let d = p[3];
-    let none = bitcast<f32>(0xff800000u);
+    let none = non_finite(0xff800000u);
     var most = none;
     for (var c = 0u; c < parts; c++) {
         most = max(most, ${part("c", "d")});
@@ -4263,7 +4281,7 @@ fn fold_wgsl(
 ) -> String {
     let [init, combine] = match kind {
         Sum => ["0.0", "acc + v"],
-        Max => ["bitcast<f32>(0xff800000u)", "max(acc, v)"],
+        Max => ["non_finite(0xff800000u)", "max(acc, v)"],
     };
     let tree = combine.replace("acc", "partial[lid]").replace("v", "partial[lid + h]");
     return `${indent}var acc = ${init};
@@ -4350,7 +4368,6 @@ fn unary_wgsl(op: UnaryOp, v: String) -> String {
         Sqrt => `sqrt(${v})`,
         Neg => `-(${v})`,
         Abs => `abs(${v})`,
-        Trunc => `trunc(${v})`,
     };
 }
 
@@ -4399,7 +4416,7 @@ fn pow_(x: f32, y: f32) -> f32 {
     }
     if x == 0.0 {
         if y < 0.0 {
-            return bitcast<f32>(0x7f800000u);
+            return non_finite(0x7f800000u);
         }
         return 0.0;
     }

@@ -976,7 +976,7 @@ impl Lowers for Symbols {
 
 /// The `i64` the host computes as `host`, as a value of `[]`.
 fn value_of(host: String) -> String {
-    return `full::<${BACKEND_PARAM}, i64, []>(backend, ${host}, [])`;
+    return `scalar::<${BACKEND_PARAM}, i64>(backend, ${host})`;
 }
 
 /// `Binary::<op>` of two values of `[]`.
@@ -1461,11 +1461,11 @@ fn emit_decode(w: &mut CodeWriter, context: &EntryContext, given: Symbols, axes:
     let mut lines = entry.lines;
     let ids = names.get(&axes.ids);
     let chooses = !entry.chosen.is_empty();
-    lines.push(`let rows = backend.extents_of(&${ids})[0];`);
+    lines.push("let rows = ended.len();");
     lines.push(
-        `let decoding = Decoding::new(backend, sampling, steps, ${symbols.spell(&Poly::symbol(&axes.total))?}, rows);`,
+        `let decoding = Decoding::new(backend, sampling, ended, steps, ${symbols.spell(&Poly::symbol(&axes.total))?});`,
     );
-    lines.push("let sampler = sampling.class();");
+    lines.push("let sampler = sampling.sampler();");
     let mut arguments = entry.arguments;
     if chooses {
         arguments.push("&chosen");
@@ -1473,7 +1473,7 @@ fn emit_decode(w: &mut CodeWriter, context: &EntryContext, given: Symbols, axes:
     arguments.push("&model.weights");
     arguments.push("&decoding");
     let mut class = entry.class;
-    class.push("sampler");
+    class.push("sampler.key()");
     class.push("backend.extents_of(&decoding.tokens)");
     let taken = entry.taken_args;
     let [erased, erased_weights] = erased_arguments(&taken, entry.first_weight);
@@ -1517,6 +1517,7 @@ fn emit_decode(w: &mut CodeWriter, context: &EntryContext, given: Symbols, axes:
     let ids_axis = checked.shapes[axes.ids].axes[1].name;
     w.line(`refuse(unmet(steps as i64 - 1, "decode takes at least one step"));`);
     w.line(wado`refuse(extent_mismatch("${axes.ids}", "${ids_axis}", ${ids}.extents[1], "1", 1));`);
+    w.line(`let ended = sampling.ended(&${ids}.data);`);
     for let line of entry_lines(context, &symbols, &lines) {
         w.line(&line);
     }
@@ -1920,8 +1921,8 @@ fn emit_recorded(
     w.line("/// passes its program the arguments.");
     let chosen = if chooses { `, chosen: &${CHOSEN}` } else { "" };
     let name = if decoding { RECORDED_DECODED } else { RECORDED };
-    let class = if decoding { ", class: &List<i32>" } else { "" };
-    w.begin(`fn ${name}(recorder: &mut Recorder, extents: &List<List<i32>>${class}${chosen}) -> Recorded`);
+    let sampler = if decoding { ", sampler: &Sampler" } else { "" };
+    w.begin(`fn ${name}(recorder: &mut Recorder, extents: &List<List<i32>>${sampler}${chosen}) -> Recorded`);
     // The weights come last, past however many values the sampler takes.
     let extents_at = |at: i32| if decoding && at >= first_weight {
         `extents.len() - ${taken.len() - at}`;
@@ -1948,7 +1949,7 @@ fn emit_recorded(
         }
         if crossed matches { Weight } {
             if decoding {
-                w.line(`let decoding = Decoding::recorded(recorder, extents, ${first_weight}, class);`);
+                w.line(`let decoding = Decoding::recorded(recorder, extents, ${first_weight}, sampler);`);
             }
             if chooses {
                 arguments.push("chosen");
@@ -3084,7 +3085,7 @@ fn built_call(
         return Result::Ok(`backend.binary::<f32, [${axes}]>(Binary::Maximum, ${operand(0)}, ${zero})`);
     }
     let name = match unary {
-        Relu | Trunc => unreachable(),
+        Relu => unreachable(),
         Sigmoid => "Logistic",
         Tanh => "Tanh",
         Erf => "Erf",
