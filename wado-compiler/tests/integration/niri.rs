@@ -3629,11 +3629,7 @@ fn seq_write_call(func_id: wado_compiler::nir::FuncId, args: Vec<Build>, type_id
             .collect();
         Operand::Expr(pe(
             b,
-            ExprKind::Call {
-                func_id,
-                type_args: Vec::new(),
-                args: CallArgs::free(args),
-            },
+            ExprKind::call(func_id, Vec::new(), CallArgs::free(args)),
             type_id,
         ))
     })
@@ -3655,11 +3651,7 @@ fn ctfe_builtin_call(
             .collect();
         Operand::Expr(pe(
             b,
-            ExprKind::Call {
-                func_id,
-                type_args: Vec::new(),
-                args: CallArgs::free(args),
-            },
+            ExprKind::call(func_id, Vec::new(), CallArgs::free(args)),
             type_id,
         ))
     })
@@ -5329,11 +5321,7 @@ fn call_expr(func: &NirFunction, args: Vec<Build>) -> Build {
             .collect();
         Operand::Expr(pe(
             b,
-            ExprKind::Call {
-                func_id,
-                type_args: Vec::new(),
-                args: CallArgs::free(call_args),
-            },
+            ExprKind::call(func_id, Vec::new(), CallArgs::free(call_args)),
             return_type,
         ))
     })
@@ -5354,11 +5342,7 @@ fn call_expr_args(func: &NirFunction, args: Vec<(Build, bool)>) -> Build {
             .collect();
         Operand::Expr(pe(
             b,
-            ExprKind::Call {
-                func_id,
-                type_args: Vec::new(),
-                args: CallArgs::free(call_args),
-            },
+            ExprKind::call(func_id, Vec::new(), CallArgs::free(call_args)),
             return_type,
         ))
     })
@@ -7288,14 +7272,14 @@ fn a_displaced_call_still_vouches_for_its_argument() {
     // mention id by value.
     pe(
         &mut body,
-        ExprKind::Call {
-            func_id: reader.id.expect("test function must have an id"),
-            type_args: Vec::new(),
-            args: CallArgs::free(vec![wado_compiler::nir_arena::ArenaCallArg {
+        ExprKind::call(
+            reader.id.expect("test function must have an id"),
+            Vec::new(),
+            CallArgs::free(vec![wado_compiler::nir_arena::ArenaCallArg {
                 expr: Operand::Expr(mention),
                 is_mut: false,
             }]),
-        },
+        ),
         TypeTable::I32,
     );
 
