@@ -36,17 +36,6 @@ pub enum TypeDecl<'a> {
 /// Get type dependencies (FQ `"{module_source}//{name}"` keys) for a given type.
 fn get_type_dependencies(type_table: &TypeTable, type_id: TypeId) -> Vec<String> {
     match type_table.get(type_id) {
-        ResolvedType::Struct { def, type_args } => {
-            if type_args.iter().any(|t| type_table.contains_type_param(*t)) {
-                return vec![];
-            }
-            let name = type_table.struct_mangled_name(*def, type_args);
-            let mut deps = vec![wir_type_key(type_table.struct_head_module(*def), &name)];
-            for arg in type_args {
-                deps.extend(get_type_dependencies(type_table, *arg));
-            }
-            deps
-        }
         ResolvedType::Variant { def, type_args } if type_args.is_empty() => vec![wir_type_key(
             type_table.def_module(*def),
             type_table.decl_name(*def),
@@ -55,13 +44,21 @@ fn get_type_dependencies(type_table: &TypeTable, type_id: TypeId) -> Vec<String>
             .iter()
             .flat_map(|a| get_type_dependencies(type_table, *a))
             .collect(),
-        ResolvedType::Variant { type_args, .. } | ResolvedType::Tuple(type_args) => {
+        ResolvedType::Struct { type_args, .. }
+        | ResolvedType::Variant { type_args, .. }
+        | ResolvedType::Tuple(type_args) => {
             // Skip unresolved generic instances (containing type params or projections)
             if type_args.iter().any(|t| type_table.contains_type_param(*t)) {
                 return vec![];
             }
-            let mangled_name = type_table.mangle_type_name(type_id);
-            let mut deps = vec![mangled_name];
+            let own = match type_table.struct_parts(type_id) {
+                Some((def, args)) => wir_type_key(
+                    type_table.struct_head_module(def),
+                    &type_table.struct_mangled_name(def, args),
+                ),
+                None => type_table.mangle_type_name(type_id),
+            };
+            let mut deps = vec![own];
             for arg in type_args {
                 deps.extend(get_type_dependencies(type_table, *arg));
             }
@@ -220,7 +217,7 @@ pub fn register_types(ctx: &mut WirContext<'_>) {
     // Phase 3.5: Pre-register arrays from mono struct fields
     register_mono_field_arrays(ctx);
 
-    // Phase 3.6: All remaining raw array types (must come before wrapper structs)
+    // Phase 3.6: All remaining raw array types
     register_remaining_arrays(ctx);
 
     // Phase 4: Monomorphized entry module structs
@@ -348,18 +345,19 @@ fn register_struct(
     }
     ctx.struct_type_map.insert(struct_name, type_id.clone());
 
-    // A `GenericInstance` mangles its arguments qualified, while the
-    // monomorphizer names the struct unqualified; alias the one to the other.
+    // The monomorphizer named the struct before the boxing rewrite respelled a
+    // `&mut T` argument as `Box<T>` in place; a lookup spells the rewritten
+    // arguments, so alias that spelling to the instance.
     if let Some(ref mono) = tir_struct.monomorph_info {
-        let qualified_args: Vec<String> = mono
+        let rewritten_args: Vec<String> = mono
             .impl_type_args
             .iter()
             .map(|t| type_table.mangle_type_arg_rowless(*t))
             .collect();
-        let qualified_name = mangle_generic_name(&mono.generic_name, &qualified_args);
-        if qualified_name != tir_struct.name {
-            let qualified_sn = StructName::new(effective_module, qualified_name);
-            ctx.struct_type_map.entry(qualified_sn).or_insert(type_id);
+        let rewritten_name = mangle_generic_name(&mono.generic_name, &rewritten_args);
+        if rewritten_name != tir_struct.name {
+            let rewritten_sn = StructName::new(effective_module, rewritten_name);
+            ctx.struct_type_map.entry(rewritten_sn).or_insert(type_id);
         }
     }
 }
@@ -469,12 +467,8 @@ fn register_raw_array_type(
     if ctx.array_type_map.contains_key(&element_type_id) {
         return;
     }
-    // Use the type-arg mangle so the element name matches what
-    // `register_list_wrapper_struct` looks up under (which is the
-    // monomorphizer-side qualified form). Otherwise the wrapper
-    // lookup misses and the wrapper struct ends up unregistered for
-    // any element whose qualified form differs from the unqualified
-    // one (i.e. user-defined Structs / GenericInstances).
+    // Keyed by the element's spelling, so two ids of one element type share
+    // one array type.
     let elem_name = type_table.mangle_type_arg_rowless(element_type_id);
     if ctx.array_type_by_name.contains_key(&elem_name) {
         // Already registered under a different TypeId
@@ -1115,9 +1109,9 @@ fn register_canonical_closure_types(ctx: &mut WirContext<'_>) {
     }
 }
 
-/// The name a monomorphized generic instance is registered under: the base name
-/// with module-qualified type arguments, which keeps two same-named arguments
-/// apart. Registration and lookup both derive it here.
+/// The name a variant instance is registered under: the base name with
+/// module-qualified type arguments, which keeps two same-named arguments apart.
+/// Registration and lookup both derive it here.
 pub(super) fn generic_instance_name(
     type_table: &TypeTable,
     name: &str,

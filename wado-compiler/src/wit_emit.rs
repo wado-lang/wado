@@ -27,7 +27,8 @@ use crate::name::to_cm_name;
 use crate::primitive::PrimitiveType;
 use crate::semantics::Semantics;
 use crate::tir::{
-    ResolvedType, StructDef, TirEnum, TirFlags, TirModule, TirNewtype, TirStruct, TirVariantDecl, TypeId,
+    ResolvedType, StructDef, TirEnum, TirFlags, TirModule, TirNewtype, TirStruct, TirVariantDecl,
+    TypeId,
 };
 use crate::type_table::TypeTable;
 use crate::unparse::unparse_type_into;

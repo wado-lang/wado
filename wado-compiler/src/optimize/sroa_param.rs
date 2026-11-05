@@ -24,7 +24,7 @@ use crate::nir::{FuncCell, FunctionRef, NirFunction, NirUnaryOp, StructDecls, St
 use crate::nir_arena::{Body, ExprId, ExprKind, ExprNode, NodeRef, Operand};
 use crate::nir_package::{FieldForm, NirPackage, ParamShape, Reshape, SroaParamProjection};
 use crate::parallel::Executor;
-use crate::tir::{ResolvedType, StructDef, TypeId};
+use crate::tir::{ResolvedType, TypeId};
 use crate::token::Span;
 use crate::type_table::{TypeKey, TypeTable};
 
@@ -493,7 +493,8 @@ fn by_value_structs(
         }
         return;
     }
-    if let Some(type_args) = instance_args(ty, type_table) {
+    // An instance with no listed struct may hold its arguments by value.
+    if let Some((_, type_args)) = type_table.instance_parts(ty) {
         if out.insert(type_table.type_key(ty)) {
             for &arg in type_args {
                 by_value_structs(arg, type_table, struct_fields, out);
@@ -501,25 +502,6 @@ fn by_value_structs(
         }
     } else if let ResolvedType::Newtype { base_type, .. } = type_table.get(ty) {
         by_value_structs(*base_type, type_table, struct_fields, out);
-    }
-}
-
-/// The arguments of a tuple or of an instance of a generic declaration with no
-/// listed struct, which may sit in it by value.
-fn instance_args(ty: TypeId, type_table: &TypeTable) -> Option<&[TypeId]> {
-    match type_table.get(ty) {
-        ResolvedType::Tuple(type_args) => Some(type_args),
-        ResolvedType::Struct {
-            def: StructDef::Decl(_),
-            type_args,
-        }
-        | ResolvedType::Variant { type_args, .. }
-        | ResolvedType::Resource { type_args, .. }
-            if !type_args.is_empty() =>
-        {
-            Some(type_args)
-        }
-        _ => None,
     }
 }
 
@@ -587,7 +569,7 @@ fn mut_reachable_contains(
             )
         });
     }
-    if let Some(type_args) = instance_args(ty, type_table) {
+    if let Some((_, type_args)) = type_table.instance_parts(ty) {
         if writable && type_table.type_key(ty) == target {
             return true;
         }

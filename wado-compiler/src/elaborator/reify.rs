@@ -4911,7 +4911,7 @@ impl<'a> Reify<'a> {
     /// `RangeInclusive` struct literals; reify
     /// produces the same shape by reading the element type from
     /// the reified `start` expression and interning the
-    /// `GenericInstance` via `make_generic_instance`.
+    /// instance via `make_generic_instance`.
     fn reify_range(&mut self, range: &ast::RangeExpr, ctx: &mut FunctionContext) -> TirExpr {
         // Annotate has unified the endpoints, so either type is the element
         // type — but only in the order the elaborator resolved them in.
@@ -9709,7 +9709,7 @@ impl<'a> Reify<'a> {
             return (Some(case_index), payload);
         }
         // Map TypeParam{index} → concrete `type_args[index]`. Recurse
-        // through containers (`Ref`, `BuiltinArray`, `GenericInstance`,
+        // through containers (`Ref`, `BuiltinArray`, a generic instance,
         // `Function`, …) via `TypeTable::substitute_type_params`.
         let substitution: hashmap::IndexMap<u32, TypeId> = type_param_indices
             .iter()
@@ -9814,16 +9814,8 @@ impl TypeSystem {
         if table.contains_type_param(expected) {
             return None;
         }
-        let recorded_is_instance = match table.get(recorded) {
-            ResolvedType::Tuple(_) => true,
-            ResolvedType::Struct {
-                def: StructDef::Decl(_),
-                type_args,
-            }
-            | ResolvedType::Variant { type_args, .. } => !type_args.is_empty(),
-            _ => false,
-        };
-        let recorded_is_concrete = recorded_is_instance && !table.contains_type_param(recorded);
+        let recorded_is_concrete =
+            table.instance_parts(recorded).is_some() && !table.contains_type_param(recorded);
         if recorded_is_concrete {
             return None;
         }

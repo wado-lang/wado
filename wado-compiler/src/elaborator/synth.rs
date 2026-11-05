@@ -701,20 +701,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     fn method_return_type(&mut self, receiver: TypeId, method: &str, span: Span) -> Option<TypeId> {
         let base = self.tysys.get_base_type(receiver);
         let name = self.tysys.struct_name_for_type(base)?;
-        let type_args = match self.tysys.type_table.borrow().get(base) {
-            ResolvedType::Tuple(type_args) => Some(type_args.clone()),
-            ResolvedType::Struct {
-                def: StructDef::Decl(_),
-                type_args,
-            }
-            | ResolvedType::Resource { type_args, .. }
-            | ResolvedType::Variant { type_args, .. }
-                if !type_args.is_empty() =>
-            {
-                Some(type_args.clone())
-            }
-            _ => None,
-        };
+        let type_args = self
+            .tysys
+            .type_table
+            .borrow()
+            .instance_parts(base)
+            .map(|(_, args)| args.to_vec());
         let ref_kind =
             RefKind::from_resolved(&self.tysys.type_table.borrow().get(receiver).clone());
         if let Some(ref_kind) = ref_kind

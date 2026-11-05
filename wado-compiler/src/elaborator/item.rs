@@ -1373,9 +1373,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             let tt = self.tysys.type_table.borrow();
             let is_concrete_value = match tt.get(self_ty) {
                 ResolvedType::Enum { .. } => true,
-                ResolvedType::Struct { type_args, .. } | ResolvedType::Variant { type_args, .. } => {
-                    type_args.is_empty()
-                }
+                ResolvedType::Struct { type_args, .. }
+                | ResolvedType::Variant { type_args, .. } => type_args.is_empty(),
                 _ => false,
             };
             (is_concrete_value, tt.name(self_ty))
@@ -1517,9 +1516,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 ResolvedType::Enum { .. }
                 | ResolvedType::Flags { .. }
                 | ResolvedType::Newtype { .. } => true,
-                ResolvedType::Struct { type_args, .. } | ResolvedType::Variant { type_args, .. } => {
-                    type_args.is_empty()
-                }
+                ResolvedType::Struct { type_args, .. }
+                | ResolvedType::Variant { type_args, .. } => type_args.is_empty(),
                 _ => false,
             };
             if !named {

@@ -2811,18 +2811,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if own_static.is_some() {
             return own;
         }
+        if type_table.instance_parts(base).is_some() {
+            return nominal_receiver(&type_table, base);
+        }
         match type_table.get(base) {
-            ResolvedType::Tuple(_) => nominal_receiver(&type_table, base),
-            ResolvedType::Struct {
-                def: StructDef::Decl(_),
-                type_args,
-            }
-            | ResolvedType::Resource { type_args, .. }
-            | ResolvedType::Variant { type_args, .. }
-                if !type_args.is_empty() =>
-            {
-                nominal_receiver(&type_table, base)
-            }
             ResolvedType::Primitive(prim) => primitive_receiver(*prim),
             ResolvedType::Struct { .. } | ResolvedType::Newtype { .. } => {
                 let head = type_table.representation_head(base);

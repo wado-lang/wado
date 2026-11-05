@@ -284,25 +284,12 @@ impl FunctionEntry {
 #[derive(Default, PartialEq)]
 struct Layouts {
     struct_fields: StructFieldTypes,
-    /// Every array type by its element, for the backing array a `List<T>` hides.
-    arrays_of: IndexMap<TypeKey, Vec<TypeKey>>,
 }
 
 impl Layouts {
     fn of(project: &NirPackage, type_table: &TypeTable) -> Self {
-        let struct_fields = StructFieldTypes::new(&project.structs, type_table);
-        let mut arrays_of: IndexMap<TypeKey, Vec<TypeKey>> = IndexMap::default();
-        for (id, ty) in type_table.all_types() {
-            if let ResolvedType::BuiltinArray(element) = ty {
-                arrays_of
-                    .entry(type_table.type_key(*element))
-                    .or_default()
-                    .push(type_table.type_key(id));
-            }
-        }
         Self {
-            struct_fields,
-            arrays_of,
+            struct_fields: StructFieldTypes::new(&project.structs, type_table),
         }
     }
 }
@@ -723,26 +710,12 @@ impl HeapEffects<'_> {
                     self.reach_into(elem, seen, out);
                 }
             }
-            ResolvedType::Struct { type_args, .. } => {
+            ResolvedType::Struct { .. } => {
                 out.insert(tt.type_key(ty));
                 if let Some(fields) = self.struct_field_types(ty) {
                     for &f in fields {
                         self.reach_into(f, seen, out);
                     }
-                } else if let [element] = type_args.as_slice()
-                    && tt.is_list(ty)
-                {
-                    for &array in self
-                        .cache
-                        .layouts
-                        .arrays_of
-                        .get(&tt.type_key(*element))
-                        .into_iter()
-                        .flatten()
-                    {
-                        out.insert(array);
-                    }
-                    self.reach_into(*element, seen, out);
                 } else {
                     out.set_any();
                 }

@@ -13,8 +13,9 @@ use crate::flat_package::FlatPackage;
 use crate::hashmap::IndexSet;
 use crate::module_source::ModuleSource;
 use crate::tir::{
-    CallArg, FunctionKind, FunctionRef, InlineHint, MonomorphInfo, ResolvedType, TirBlock, TirExpr, TirExprKind, TirField, TirFunction, TirLocal, TirMatchArm, TirParam,
-    TirPattern, TirStmt, TirStmtKind, TirStruct, TirStructField, TirUnaryOp, TypeId,
+    CallArg, FunctionKind, FunctionRef, InlineHint, MonomorphInfo, ResolvedType, TirBlock, TirExpr,
+    TirExprKind, TirField, TirFunction, TirLocal, TirMatchArm, TirParam, TirPattern, TirStmt,
+    TirStmtKind, TirStruct, TirStructField, TirUnaryOp, TypeId,
 };
 use crate::tir_visitor::TirRefVisitor;
 use crate::token::Span;

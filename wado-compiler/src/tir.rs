@@ -511,8 +511,8 @@ impl TemplateShape {
 pub fn hold_hole(field: &mut TirStructField, hole_ty: TypeId, tt: &mut TypeTable) -> Option<u32> {
     let field_ty = tt.hole_field_type(hole_ty);
     // Monomorphization holds a substituted shape before its instances are
-    // drained, while one generic instance may still be spelled both as a
-    // `GenericInstance` and as its struct.
+    // drained, while one generic instance may still be spelled by two ids of
+    // its arguments.
     let same = |tt: &TypeTable, a: TypeId, b: TypeId| {
         tt.same_type(a, b) || tt.instance_key(a) == tt.instance_key(b)
     };

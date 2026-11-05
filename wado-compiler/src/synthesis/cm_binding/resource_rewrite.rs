@@ -22,7 +22,7 @@ use crate::name::{
 use crate::package::Package;
 use crate::tir::{
     CallArg, FrameLocals, FunctionKind, FunctionRef, InlineHint, MonomorphInfo, ResolvedType,
-    StructDef, TirBinaryOp, TirBlock, TirExpr, TirExprKind, TirFunction, TirLocal, TirParam, TirStmt,
+    TirBinaryOp, TirBlock, TirExpr, TirExprKind, TirFunction, TirLocal, TirParam, TirStmt,
     TirStmtKind, TypeId,
 };
 use crate::tir_visitor::{TirMutVisitor, TirRefVisitor};
@@ -373,21 +373,8 @@ fn payload_ast_type(payload: TypeId, tt: &TypeTable, registry: &CmInterfaceRegis
     if let ResolvedType::Tuple(elems) = tt.get(id) {
         return ast::Type::Tuple(args_of(elems));
     }
-    let instance = match tt.get(id) {
-        ResolvedType::Struct {
-            def: StructDef::Decl(def),
-            type_args,
-        }
-        | ResolvedType::Variant { def, type_args }
-        | ResolvedType::Resource { def, type_args }
-            if !type_args.is_empty() =>
-        {
-            Some((def, type_args))
-        }
-        _ => None,
-    };
-    if let Some((def, type_args)) = instance {
-        let name = tt.decl_name(*def).to_string();
+    if let Some((def, type_args)) = tt.instance_parts(id) {
+        let name = tt.decl_name(def).to_string();
         let args = args_of(type_args);
         return if let Some(item) = cm_item_of_type(tt, id) {
             registry.type_decls().item_type(item, args, synth_span())

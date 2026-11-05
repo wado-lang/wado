@@ -943,7 +943,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// literal / variant-ctor at `ast_id`. `type_args`
     /// is the inferred (or explicitly written) concrete type for each
     /// generic parameter in declaration order; `instance_type` is the
-    /// `TypeId` of the resulting `GenericInstance` / monomorphic target.
+    /// `TypeId` of the resulting instance / monomorphic target.
     ///
     /// Skipped when `type_args` is empty (the site is non-generic) so the
     /// map only carries decisions reify needs.

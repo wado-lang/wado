@@ -32,22 +32,14 @@ impl Monomorphizer {
         ids.append(&mut self.pool.instances);
         let mut variants = Vec::new();
         for id in ids {
-            let (ResolvedType::Struct {
-                def: StructDef::Decl(def),
-                type_args,
-            }
-            | ResolvedType::Variant { def, type_args }) = type_table.get(id)
-            else {
-                unreachable!("the pool keeps only struct and variant instances for the drain");
-            };
-            if self.pool.generic_variants.contains_key(def) {
+            let (def, type_args) = type_table
+                .instance_parts(id)
+                .expect("the pool keeps only instances for the drain");
+            if self.pool.generic_variants.contains_key(&def) {
                 variants.push(id);
                 continue;
             }
-            if type_args.is_empty() {
-                continue;
-            }
-            if !generic_structs.contains_key(def) {
+            if !generic_structs.contains_key(&def) {
                 self.structs.unmatched.push(id);
                 continue;
             }
@@ -56,10 +48,10 @@ impl Monomorphizer {
                 .all(|&arg| !type_table.contains_type_param(arg));
             if all_concrete {
                 let key = InstantiationKey {
-                    def: Some(*def),
-                    name: type_table.decl_name(*def).to_string(),
-                    module_source: type_table.def_module(*def).clone(),
-                    impl_type_args: type_args.clone(),
+                    def: Some(def),
+                    name: type_table.decl_name(def).to_string(),
+                    module_source: type_table.def_module(def).clone(),
+                    impl_type_args: type_args.to_vec(),
                     method_type_args: vec![],
                     method_info: None,
                     template: None,

@@ -12,8 +12,8 @@ use crate::flat_package::FlatPackage;
 use crate::hashmap::IndexSet;
 use crate::name::widen_helper_name;
 use crate::tir::{
-    ResolvedType, TirBinaryOp, TirBlock, TirExpr, TirExprKind, TirFunction, TirLocal,
-    TirStmt, TypeId,
+    ResolvedType, TirBinaryOp, TirBlock, TirExpr, TirExprKind, TirFunction, TirLocal, TirStmt,
+    TypeId,
 };
 use crate::tir_visitor::TirMutVisitor;
 use crate::type_table::TypeTable;

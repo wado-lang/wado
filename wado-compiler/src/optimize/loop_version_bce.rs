@@ -409,7 +409,8 @@ impl InnerGuard {
         var: u32,
         max: i64,
     ) -> Option<InnerGuard> {
-        let (left, NirBinaryOp::Lt, right) = binary_parts(engine.body, resolve(engine, binds, cond))?
+        let (left, NirBinaryOp::Lt, right) =
+            binary_parts(engine.body, resolve(engine, binds, cond))?
         else {
             return None;
         };
@@ -784,7 +785,11 @@ fn collect_window_checks(
         i64::try_from(max).ok()
     });
     let mut checks = Vec::new();
-    for &s in engine.body.blocks[loop_body].stmts.iter().skip(guard_idx + 1) {
+    for &s in engine.body.blocks[loop_body]
+        .stmts
+        .iter()
+        .skip(guard_idx + 1)
+    {
         if stmt_modifies(engine, s, var, h) {
             break;
         }

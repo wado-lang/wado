@@ -67,15 +67,11 @@ pub struct TypeTable {
     /// being what the impl wrote beyond the declared defaults — so a bare bound
     /// and `impl Add<Cm> for Cm` meet at the empty list.
     assoc_type_resolutions: IndexMap<AssocTypeKey, AssocAnswers>,
-    /// Generic associated type definitions:
-    /// `(base decl, declaring trait, assoc_name)` → `TypeId`.
-    /// The `TypeId` is typically a `TypeParam` that can be substituted using the
-    /// `GenericInstance`'s `type_args`. Populated when processing generic impl blocks
-    /// (e.g., `impl Iterator for ListIter<T> { type Item = T; }`).
-    /// Used by the monomorphizer to resolve associated types for `GenericInstance` types.
-    /// A generic impl's `type X = …` before substitution, keyed like
+    /// A generic impl's `type X = …` before substitution (`type Item = T` of
+    /// `impl Iterator for ListIter<T>`), keyed like
     /// [`Self::assoc_type_resolutions`] but by the target's declaration: two
     /// generic impls of one trait at different instantiations are two answers.
+    /// An instance's `type_args` substitute it.
     generic_assoc_type_defs: IndexMap<GenericAssocTypeKey, AssocAnswers>,
     /// What each trait declares of its associated types, by declaring trait and
     /// name. See [`AssocTypeSig`].
@@ -103,8 +99,7 @@ pub struct TypeTable {
     /// it arrives.
     instances_settled: bool,
     /// The settled spellings minted as keys that nothing has interned as a
-    /// type yet, which `newtype_decls` and [`Self::monomorphized_struct_of`]
-    /// leave out until something does.
+    /// type yet, which `newtype_decls` leaves out until something does.
     unindexed: IndexSet<TypeId>,
     /// Reverse mapping `Box<T>` `TypeId` → `T`'s `TypeId`, populated by the
     /// boxing pass (`lower/plan/boxing.rs`). The pass rewrites `&T` /
@@ -122,8 +117,6 @@ pub struct TypeTable {
     /// The first type interned for each non-generic newtype declaration: its base is part
     /// of the intern key, so the declaration alone is no key into `intern_map`.
     newtype_decls: IndexMap<DefId, TypeId>,
-    /// Each struct declaration's instances, for [`Self::monomorphized_struct_of`].
-    monomorphized_structs: IndexMap<DefId, Vec<TypeId>>,
     /// Canonical map: declared-type symbol → `TypeId`, populated whenever the
     /// elaborator mints a decl-backed type, so an LSP-style query can go from an
     /// [`AstId`](crate::ast::AstId) to its type without searching by name.
@@ -276,18 +269,15 @@ impl TypeTable {
     /// name no impl was registered under. `None` for every other type (their
     /// dispatch name is derived differently).
     pub fn generic_dispatch_components(&self, type_id: TypeId) -> Option<(String, Vec<TypeId>)> {
+        if let Some((def, type_args)) = self.instance_parts(type_id) {
+            let name = if self.is_tuple(type_id) {
+                TUPLE_TYPE_NAME
+            } else {
+                self.decl_name(def)
+            };
+            return Some((name.to_string(), type_args.to_vec()));
+        }
         match self.get(type_id) {
-            ResolvedType::Struct {
-                def: StructDef::Decl(def),
-                type_args,
-            }
-            | ResolvedType::Resource { def, type_args }
-            | ResolvedType::Variant { def, type_args }
-                if !type_args.is_empty() =>
-            {
-                Some((self.decl_name(*def).to_string(), type_args.clone()))
-            }
-            ResolvedType::Tuple(elems) => Some((TUPLE_TYPE_NAME.to_string(), elems.clone())),
             ResolvedType::BuiltinArray(elem) => Some((ARRAY_TYPE_NAME.to_string(), vec![*elem])),
             _ => None,
         }
@@ -314,7 +304,6 @@ impl TypeTable {
             box_payload_types: TypeMap::default(),
             slot_boxes: IndexMap::default(),
             newtype_decls: IndexMap::default(),
-            monomorphized_structs: IndexMap::default(),
             type_by_symbol: IndexMap::default(),
             symbol_by_type: TypeMap::default(),
             bound_driven_synth_requests: IndexSet::default(),
@@ -370,17 +359,10 @@ impl TypeTable {
     }
 
     fn index_type(&mut self, id: TypeId, ty: &ResolvedType) {
-        match ty {
-            ResolvedType::Newtype { def, type_args, .. } if type_args.is_empty() => {
-                self.newtype_decls.entry(*def).or_insert(id);
-            }
-            ResolvedType::Struct {
-                def: StructDef::Decl(def),
-                type_args,
-            } if !type_args.is_empty() => {
-                self.monomorphized_structs.entry(*def).or_default().push(id);
-            }
-            _ => {}
+        if let ResolvedType::Newtype { def, type_args, .. } = ty
+            && type_args.is_empty()
+        {
+            self.newtype_decls.entry(*def).or_insert(id);
         }
     }
 
@@ -1703,7 +1685,16 @@ impl TypeTable {
         // An instantiation records the declaration it came from, so the
         // answer is read off the type rather than re-derived from a spelling
         // whose base may already have been pruned.
-        let def = match self.get(type_id) {
+        let (def, _) = self.instance_parts(type_id)?;
+        Some(self.defs.ast_id(def))
+    }
+
+    /// The declaration a generic instance instantiates, and its arguments: a
+    /// tuple's is the tuple family's, and a struct, variant or resource is one
+    /// with arguments. A declaration's own type is none.
+    #[must_use]
+    pub fn instance_parts(&self, id: TypeId) -> Option<(DefId, &[TypeId])> {
+        match self.get(id) {
             ResolvedType::Struct {
                 def: StructDef::Decl(def),
                 type_args,
@@ -1712,12 +1703,11 @@ impl TypeTable {
             | ResolvedType::Variant { def, type_args }
                 if !type_args.is_empty() =>
             {
-                *def
+                Some((*def, type_args))
             }
-            ResolvedType::Tuple(_) => self.tuple_def(),
-            _ => return None,
-        };
-        Some(self.defs.ast_id(def))
+            ResolvedType::Tuple(elems) => Some((self.tuple_def(), elems)),
+            _ => None,
+        }
     }
 
     /// Whether `decl` is one of the four reflection member handles, whose own
@@ -1924,7 +1914,6 @@ impl TypeTable {
         // Rebuild intern map from the surviving entries.
         self.intern_map.clear();
         self.newtype_decls.clear();
-        self.monomorphized_structs.clear();
         for (id, ty) in self.types.iter() {
             // A redefined reference keeps its spelling in the slot alone.
             // Re-interning it would hand a later `intern(&T)` an id that no
@@ -2337,12 +2326,6 @@ impl TypeTable {
         self.intern(ResolvedType::Tuple(elements))
     }
 
-    /// Whether an instance of `def` is a struct: monomorphization makes a
-    /// `Struct` of it.
-    fn is_struct_instance_def(&self, def: DefId) -> bool {
-        self.defs.kind(def) == DefKind::Struct
-    }
-
     /// Whether a type is a built-in tuple.
     pub fn is_tuple(&self, id: TypeId) -> bool {
         matches!(self.get(id), ResolvedType::Tuple(_))
@@ -2502,9 +2485,7 @@ impl TypeTable {
     pub fn struct_type_mangled_name(&self, id: TypeId) -> String {
         match self.get(id) {
             ResolvedType::Struct { def, type_args } => self.struct_mangled_name(*def, type_args),
-            ResolvedType::Variant { def, type_args } => {
-                self.generic_mangled_name(*def, type_args)
-            }
+            ResolvedType::Variant { def, type_args } => self.generic_mangled_name(*def, type_args),
             ResolvedType::Tuple(elems) => self.generic_mangled_name(self.tuple_def(), elems),
             other => panic!("`{other:?}` is not a struct type"),
         }
@@ -4155,18 +4136,10 @@ impl TypeTable {
     /// `Array<T>` is declared definitionless, so it interns as a `BuiltinArray`
     /// carrying its element type alone.
     pub fn nominal_type_args(&self, type_id: TypeId) -> Option<Vec<TypeId>> {
+        if let Some((_, type_args)) = self.instance_parts(type_id) {
+            return Some(type_args.to_vec());
+        }
         match self.get(type_id) {
-            ResolvedType::Tuple(type_args) => Some(type_args.clone()),
-            ResolvedType::Struct {
-                def: StructDef::Decl(_),
-                type_args,
-            }
-            | ResolvedType::Resource { type_args, .. }
-            | ResolvedType::Variant { type_args, .. }
-                if !type_args.is_empty() =>
-            {
-                Some(type_args.clone())
-            }
             ResolvedType::BuiltinArray(elem) => Some(vec![*elem]),
             _ => None,
         }
@@ -4183,7 +4156,7 @@ impl TypeTable {
         }
     }
 
-    /// Resolve an associated type for a `GenericInstance` type using generic definitions.
+    /// Resolve an associated type of a generic instance from its impl's definition.
     /// For `ListIter<i32>::Item`: looks up `("ListIter", "Item")` → `TypeParam(0)`,
     /// then substitutes using the instance's `type_args` to get `i32`.
     pub fn resolve_generic_assoc_type(
@@ -4238,7 +4211,7 @@ impl TypeTable {
         }
     }
 
-    /// Monomorphization-time associated-type resolution for a `GenericInstance`.
+    /// Monomorphization-time associated-type resolution for a generic instance.
     /// Where [`Self::resolve_generic_assoc_type`] is a `&self` fast path limited
     /// to a bare-`TypeParam` def, this substitutes positionally through
     /// [`Self::substitute_type_params`], so a composite or nested definition
@@ -4281,12 +4254,10 @@ impl TypeTable {
             .is_some()
     }
 
-    /// Resolve an associated type for whatever form the subject currently has:
-    /// a registered resolution for a plain or monomorphized type, substitution
-    /// of the generic definition for a `GenericInstance`.
-    ///
-    /// Reflection projections hit both forms — the same receiver reads as an
-    /// instance before monomorphization and as a struct after.
+    /// Resolve an associated type of `concrete_id`: the resolution registered
+    /// for it, a plain type's or one monomorphization registered for an
+    /// instance, else the generic impl's definition substituted, which serves
+    /// an instance monomorphization has not reached.
     pub fn resolve_assoc_type_of_instance(
         &mut self,
         concrete_id: TypeId,
@@ -5087,14 +5058,11 @@ impl TypeTable {
 
     /// Create a generic instance (e.g., `Box<i32>`)
     pub fn make_generic_instance(&mut self, def: DefId, type_args: Vec<TypeId>) -> TypeId {
-        // The instantiation carries the declaration it came from, so nothing
-        // has to be registered beside it and nothing re-derives the answer
-        // from a spelling whose base `prune` may already have dropped.
         assert!(
             !self.is_compiler_item(def, CompilerItem::Tuple),
             "a tuple is interned by `make_tuple`"
         );
-        let type_args = if self.is_struct_instance_def(def) {
+        let type_args = if self.defs.kind(def) == DefKind::Struct {
             self.struct_instance_args(type_args)
         } else {
             type_args
@@ -5239,22 +5207,6 @@ impl TypeTable {
                 rows.entry(effect.name().to_string()).or_default();
             }
         }
-    }
-
-    /// The monomorphized `Struct` an instantiation of `def` became, when the run
-    /// made one: [`Self::make_monomorphized_struct_from_args`] interns it.
-    pub fn monomorphized_struct_of(&self, def: DefId, type_args: &[TypeId]) -> Option<TypeId> {
-        let instances = self.monomorphized_structs.get(&def)?;
-        let wanted = self.instance_args(type_args);
-        instances.iter().copied().find(|&id| {
-            let ResolvedType::Struct {
-                type_args: held, ..
-            } = self.get(id)
-            else {
-                unreachable!("only a struct instance is filed here");
-            };
-            self.instance_args(held) == wanted
-        })
     }
 
     /// `ids` as struct instance arguments.
@@ -5414,7 +5366,7 @@ impl TypeTable {
 
     /// The reflection kind `id` is, or `None` where reflection does not cover
     /// it: the one answer to which `Reflect*` the compiler synthesizes for a
-    /// type, and so to which kind bound can hold for it. A `GenericInstance`
+    /// type, and so to which kind bound can hold for it. A generic instance
     /// takes its declaration's kind — `Pair<i32>` is a struct because `Pair` is.
     ///
     /// The sealed member handles are the one declared struct it withholds.
@@ -7449,8 +7401,8 @@ struct AssocTypeKey {
     assoc_name: String,
 }
 
-/// A type keyed by its declaration and arguments: one key whether read as the
-/// instance or as the monomorphized struct, which [`TypeKey`] keeps apart.
+/// A type keyed by its declaration and arguments: one key whatever ids spell
+/// the arguments, which [`TypeKey`] keeps apart.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum InstanceKey {
     Nominal(DefId, Vec<InstanceKey>),

@@ -1446,7 +1446,7 @@ impl DceAnalysis {
         self.struct_heads.clear();
         self.nominal_defs.clear();
         for &id in &self.types {
-            // A dead local still declares its type as a `GenericInstance`, and
+            // A dead local still declares its type as a struct instance, and
             // `wir_build` declares a Wasm local for it, so that spelling keeps
             // the struct too.
             if let Some(instance) = nir::struct_instance(id, type_table) {
@@ -1615,7 +1615,7 @@ fn populate_type_reachability(
         }
 
         // Same predicate as above but for variants: the base type, any
-        // `GenericInstance` of the declaration, or a declaration kept past
+        // instance of the declaration, or a declaration kept past
         // its last use keeps payloads alive. The same predicate gates the
         // `project.variants` retain in `remove_unreachable_types`.
         for variant in &project.variants {

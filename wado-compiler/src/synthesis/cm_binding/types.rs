@@ -1081,7 +1081,6 @@ pub(super) fn struct_decl_of(
 
 /// Create a `VariantTag` TIR expression (extracts i32 discriminant).
 pub(super) fn variant_tag(expr: TirExpr) -> TirExpr {
-    let _ = expr.type_id;
     TirExpr::new(
         TirExprKind::VariantTag {
             expr: Box::new(expr),

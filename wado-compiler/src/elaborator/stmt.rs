@@ -308,7 +308,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             self.tysys.type_table.borrow_mut().mark_affine_decl(def);
         }
         // Mirrors `intern_all_decl_types`'s "base entry" for a module-level
-        // generic struct: its usage sites mint separate `GenericInstance`
+        // generic struct: its usage sites mint separate instance
         // TypeIds, and this one exists so `type_id_of_decl` has something to
         // find. The head is the declaration, not the `Foo@AstId` storage
         // spelling, which names none.

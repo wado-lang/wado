@@ -13,7 +13,7 @@ use crate::name::{
     unalias_namespace_member,
 };
 use crate::tir::{
-    FunctionRef, InferVarId, MonomorphInfo, ResolvedType, StructDef, SubstitutionContext, TypeId,
+    FunctionRef, InferVarId, MonomorphInfo, ResolvedType, SubstitutionContext, TypeId,
 };
 use crate::type_table::TypeTable;
 
@@ -1284,14 +1284,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let (kind, result) = {
             let tt = self.tysys.type_table.borrow();
             let bare_generic_of_arg = bare_generic
-                && match tt.get(arg) {
-                    ResolvedType::Struct {
-                        def: StructDef::Decl(_),
-                        type_args,
-                    } => !type_args.is_empty(),
-                    ResolvedType::Variant { .. } | ResolvedType::Resource { .. } => true,
-                    _ => false,
-                }
+                && tt.instance_parts(arg).is_some()
                 && tt.nominal_def(arg).is_some()
                 && tt.nominal_def(arg) == tt.nominal_def(receiver)
                 && tt
@@ -1881,7 +1874,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // `lookup_static_method_param_types` substitutes in — since reify
                 // needs both halves to rebuild the mangled `__<Type>__<method>`.
                 // The instance type is UNKNOWN: a static call anchors no
-                // `GenericInstance`, so reify reads `expression_types` instead.
+                // instance type, so reify reads `expression_types` instead.
                 {
                     let mut combined = static_args.impl_args.clone();
                     combined.extend_from_slice(&static_args.method_args);
@@ -2564,7 +2557,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // WEP 2026-05-26: record the inferred /
         // explicit `type_args` so reify can emit
         // `TirExprKind::Call { type_args, … }` without re-running
-        // inference. Free-function calls have no `GenericInstance`-style
+        // inference. Free-function calls have no instance
         // anchor type — the substituted return type plays the same role
         // (it pins the per-call monomorphic shape reify needs to seed
         // mangled-name construction).

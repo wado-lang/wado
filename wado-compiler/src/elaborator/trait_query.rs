@@ -3189,30 +3189,24 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let tt = self.tysys.type_table.borrow();
             let effective_id = tt.representation_head(concrete_type_id);
             let list_name = tt.compiler_struct_fq_name(CompilerItem::List);
-            match tt.get(effective_id).clone() {
-                ResolvedType::Tuple(type_args) => {
-                    (tt.fq_type_name(effective_id).head_only(), type_args)
+            if let Some((_, type_args)) = tt.instance_parts(effective_id) {
+                (
+                    tt.fq_type_name(effective_id).head_only(),
+                    type_args.to_vec(),
+                )
+            } else {
+                match tt.get(effective_id).clone() {
+                    // Primitives (`i32`, `f64`, `bool`, ...) can implement traits
+                    // with associated types just like structs. Without this arm,
+                    // a generic call like `parse_range::<i32>(...)` would skip
+                    // the `i32::Err = ParseIntError` registration and leave
+                    // `T::Err` unresolved at the caller's binding site.
+                    ResolvedType::Struct { .. } | ResolvedType::Primitive(_) => {
+                        (tt.fq_type_name(effective_id), vec![])
+                    }
+                    ResolvedType::BuiltinArray(elem) => (list_name, vec![elem]),
+                    _ => return,
                 }
-                ResolvedType::Struct {
-                    def: StructDef::Decl(_),
-                    type_args,
-                }
-                | ResolvedType::Resource { type_args, .. }
-                | ResolvedType::Variant { type_args, .. }
-                    if !type_args.is_empty() =>
-                {
-                    (tt.fq_type_name(effective_id).head_only(), type_args)
-                }
-                // Primitives (`i32`, `f64`, `bool`, ...) can implement traits
-                // with associated types just like structs. Without this arm,
-                // a generic call like `parse_range::<i32>(...)` would skip
-                // the `i32::Err = ParseIntError` registration and leave
-                // `T::Err` unresolved at the caller's binding site.
-                ResolvedType::Struct { .. } | ResolvedType::Primitive(_) => {
-                    (tt.fq_type_name(effective_id), vec![])
-                }
-                ResolvedType::BuiltinArray(elem) => (list_name, vec![elem]),
-                _ => return,
             }
         };
 

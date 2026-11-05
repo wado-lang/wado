@@ -570,8 +570,7 @@ fn slice_list_conversion(tt: &TypeTable, source: TypeId, target: TypeId) -> Opti
         ResolvedType::Struct {
             def: StructDef::Decl(def),
             type_args,
-        } if tt.is_compiler_item(*def, CompilerItem::Slice) && type_args.len() == 1 =>
-        {
+        } if tt.is_compiler_item(*def, CompilerItem::Slice) && type_args.len() == 1 => {
             Some(type_args[0])
         }
         _ => None,

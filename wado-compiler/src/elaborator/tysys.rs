@@ -948,8 +948,9 @@ fn constituents(table: &TypeTable, ty: TypeId) -> (Option<DefId>, Vec<TypeId>) {
             type_args,
         }
         | ResolvedType::Newtype { def, type_args, .. } => (Some(*def), type_args.clone()),
-        ResolvedType::Variant { def, type_args }
-        | ResolvedType::Resource { def, type_args } => (Some(*def), type_args.clone()),
+        ResolvedType::Variant { def, type_args } | ResolvedType::Resource { def, type_args } => {
+            (Some(*def), type_args.clone())
+        }
         ResolvedType::Tuple(elems) => (None, elems.clone()),
         ResolvedType::Ref(inner)
         | ResolvedType::MutRef(inner)
@@ -1109,8 +1110,6 @@ impl TypeSystem {
                     .borrow()
                     .nominal_type_args(base)
                     .unwrap_or_default();
-                // A generic struct's instance is a `GenericInstance`, as a
-                // generic variant's is.
                 let members = if let Some(templates) = self.struct_field_type_ids_of(base) {
                     templates
                         .into_iter()
