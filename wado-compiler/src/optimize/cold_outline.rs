@@ -33,7 +33,10 @@ use crate::nir_visitor::reachable_exprs;
 use crate::tir::{ResolvedType, TypeId};
 use crate::type_table::TypeTable;
 
-use super::arena_query::{MarkerBuiltins, RareRuns, control_escapes};
+use super::arena_query::{
+    MarkerBuiltins, MutRefAliases, RareRuns, control_escapes, locals_possibly_mutated,
+};
+use super::value_copy::mutation::MutationOracle;
 use super::inline::{InlineCtx, splice_stmt};
 use crate::ast::Visibility;
 use crate::compiler_trace;
@@ -298,6 +301,7 @@ fn free_vars(
         &[],
     );
     let outer = LocalRefs::collect(body, vec![NodeRef::Block(body.root())], region);
+    let written = written_in(body, region, func, param_count, type_table);
     let mut bound_ahead = None;
     let mut args = Vec::new();
     for idx in inside.mentioned.iter().copied() {
@@ -317,7 +321,7 @@ fn free_vars(
         // One question, asked of every crossing that leaves the storage behind:
         // a write inside the region is one no call carries back.
         if crossing.leaves_storage_behind()
-            && (inside.written.contains(&idx)
+            && (written.contains(&idx)
                 || (storage_in_slot && func.address_taken_locals.contains(&idx)))
         {
             compiler_trace!(
@@ -354,6 +358,26 @@ fn free_vars(
     Some(args)
 }
 
+/// The locals `region` may write: a rebind, a store into a field or element,
+/// and a `&mut` handed to a call or a receiver alike.
+fn written_in(
+    body: &Body,
+    region: &[StmtId],
+    func: &NirFunction,
+    param_count: u32,
+    type_table: &TypeTable,
+) -> IndexSet<u32> {
+    let no_signatures = IndexMap::default();
+    let oracle = MutationOracle::new(&no_signatures);
+    let aliases = MutRefAliases::of_body(body, &func.locals, param_count as usize, type_table);
+    region
+        .iter()
+        .flat_map(|&s| {
+            locals_possibly_mutated(body, NodeRef::Stmt(s), type_table, &oracle, &aliases)
+        })
+        .collect()
+}
+
 /// The locals a root-level `let` binds ahead of the root statement holding
 /// `region`, which every path into the region has run.
 fn bound_ahead_of(body: &Body, region: &[StmtId]) -> IndexSet<u32> {
@@ -377,7 +401,6 @@ fn bound_ahead_of(body: &Body, region: &[StmtId]) -> IndexSet<u32> {
 struct LocalRefs {
     declared: IndexSet<u32>,
     mentioned: IndexSet<u32>,
-    written: IndexSet<u32>,
 }
 
 impl LocalRefs {
@@ -407,17 +430,11 @@ impl LocalRefs {
                         refs.declared.insert(*local_index);
                     }
                 }
-                NodeRef::Expr(e) => match &body.exprs[e].kind {
-                    ExprKind::Local { index, .. } => {
+                NodeRef::Expr(e) => {
+                    if let ExprKind::Local { index, .. } = &body.exprs[e].kind {
                         refs.mentioned.insert(*index);
                     }
-                    ExprKind::Assign { target, .. } => {
-                        if let ExprKind::Local { index, .. } = &body.exprs[*target].kind {
-                            refs.written.insert(*index);
-                        }
-                    }
-                    _ => {}
-                },
+                }
                 NodeRef::Block(_) => {}
             }
             body.for_each_operand(node, |op| {
