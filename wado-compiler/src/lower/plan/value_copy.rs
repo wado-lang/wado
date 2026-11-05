@@ -28,7 +28,7 @@ use crate::tir::{
     BuiltinDeclarations, ResolvedType, StructDef, TemplateId, TirExpr, TirExprKind, TirFunction,
     TypeId,
 };
-use crate::type_table::{TypeMemo, TypeTable};
+use crate::type_table::{TypeKey, TypeMemo, TypeTable};
 use funcset::{FuncKeyMap, FuncKeySet};
 
 /// The `T` of a `builtin::copy_value::<T>` callee, which is the helper the fold
@@ -365,8 +365,15 @@ pub fn is_scalar_type(type_id: TypeId, type_table: &TypeTable) -> bool {
 /// agree: a `true` here means `synthesize::generate_copy_function`
 /// emits a non-identity helper, and every caller routes through it.
 pub fn needs_value_copy(type_id: TypeId, type_table: &TypeTable) -> bool {
-    needs_copy_in_env(type_id, None, type_table, 0)
+    needs_copy_in_env(type_id, None, type_table, 0, &mut IndexMap::default())
 }
+
+/// The answers of one [`needs_value_copy`] walk with no frame to resolve in,
+/// by type and depth: types share payloads, so without them a walk visits a
+/// payload once per path to it, exponentially many in a chain of variants
+/// that each hold the next twice. The depth limit makes the depth part of the
+/// answer.
+type CopyWalk = IndexMap<(TypeKey, usize), bool>;
 
 /// [`needs_value_copy`], remembered for each type over one borrow of the type
 /// table: no mutation outlives the borrow, so no answer goes stale. A walk
@@ -444,6 +451,26 @@ fn needs_copy_in_env(
     env: Option<&EnvFrame<'_>>,
     type_table: &TypeTable,
     depth: usize,
+    walk: &mut CopyWalk,
+) -> bool {
+    if env.is_some() {
+        return needs_copy_walked(type_id, env, type_table, depth, walk);
+    }
+    let key = (type_table.type_key(type_id), depth);
+    if let Some(&answer) = walk.get(&key) {
+        return answer;
+    }
+    let answer = needs_copy_walked(type_id, env, type_table, depth, walk);
+    walk.insert(key, answer);
+    answer
+}
+
+fn needs_copy_walked(
+    type_id: TypeId,
+    env: Option<&EnvFrame<'_>>,
+    type_table: &TypeTable,
+    depth: usize,
+    walk: &mut CopyWalk,
 ) -> bool {
     if depth > NEEDS_COPY_DEPTH_LIMIT {
         return true;
@@ -479,7 +506,7 @@ fn needs_copy_in_env(
                     parent: env,
                 };
                 return cases.iter().any(|(_, _, payload)| {
-                    needs_copy_in_env(*payload, Some(&frame), type_table, depth + 1)
+                    needs_copy_in_env(*payload, Some(&frame), type_table, depth + 1, walk)
                 });
             }
             // Every other nominal instantiation is a struct, copied field by
@@ -496,7 +523,7 @@ fn needs_copy_in_env(
                 .variant_template_cases(*def)
                 .is_some_and(|cases| {
                     cases.iter().any(|(_, _, payload)| {
-                        needs_copy_in_env(*payload, None, type_table, depth + 1)
+                        needs_copy_in_env(*payload, None, type_table, depth + 1, walk)
                     })
                 })
         }
@@ -514,7 +541,7 @@ fn needs_copy_in_env(
                     family: args,
                     parent: env,
                 };
-                needs_copy_in_env(payload, Some(&frame), type_table, depth + 1)
+                needs_copy_in_env(payload, Some(&frame), type_table, depth + 1, walk)
             }
             None => true,
         },
@@ -525,6 +552,7 @@ fn needs_copy_in_env(
                 frame.parent,
                 type_table,
                 depth + 1,
+                walk,
             )
         }
         // A bare param with no frame is an unmonomorphized template
@@ -532,10 +560,9 @@ fn needs_copy_in_env(
         ResolvedType::TypeParam { index, .. } => {
             let i = *index as usize;
             env.is_some_and(|frame| {
-                frame
-                    .args
-                    .get(i)
-                    .is_some_and(|arg| needs_copy_in_env(*arg, frame.parent, type_table, depth + 1))
+                frame.args.get(i).is_some_and(|arg| {
+                    needs_copy_in_env(*arg, frame.parent, type_table, depth + 1, walk)
+                })
             })
         }
         // The raw GC array is a value type: assignment / parameter
