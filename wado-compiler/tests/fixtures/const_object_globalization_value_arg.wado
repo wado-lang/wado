@@ -20,10 +20,11 @@ use { println, Stdout } from "core:cli";
 
 // `bias` is opaque at the call site, so the call survives to the pass with its
 // literal argument intact — folding `head_len` away would leave nothing to
-// hoist.
+// hoist. It indexes `s` too: a body reading only the constant length lets
+// `param_spec` fold the whole literal into a clone.
 #[inline(never)]
 fn head_len(s: List<u8>, bias: i32) -> i32 {
-    return s.len() + bias;
+    return s.len() + s[bias] as i32;
 }
 
 #[inline(never)]
@@ -33,14 +34,15 @@ fn bump_first(mut v: List<u8>, bias: i32) -> i32 {
 }
 
 export fn run() with Stdout {
-    // b"hello" is 5 bytes; `bump_first` must see a fresh b"abc" every call.
+    // b"hello" is 5 bytes from `h` (104); `bump_first` must see a fresh b"abc"
+    // every call.
     let zero = builtin::black_box(0);
     println(`${head_len(b"hello", zero)} ${bump_first(b"abc", zero)} ${bump_first(b"abc", zero)} ${bump_first(b"abc", zero)}`);
 }
 
 __DATA__
 {
-    "stdout": "5 98 98 98\n",
+    "stdout": "109 98 98 98\n",
     "wir_pass": {"O2": ["nir/const_object_globalization"]},
     "wir_contrast": {"O2": [
         {"fn bump_first(mut v: List<u8>, bias: i32) -> i32 {\n    v[0] = v[0] + 1;\n    return v[0] as i32 + bias;": "fn bump_first(v: List<u8>, bias: i32) -> i32 {\n    return v[0] as i32 + bias + 1;"}

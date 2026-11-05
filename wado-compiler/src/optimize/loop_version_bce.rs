@@ -610,9 +610,9 @@ const MAX_LIMITS: usize = 8;
 /// A local the loop binds anew each iteration to the length of a list or
 /// string local is read through, as that length: a [`reload`] bound.
 ///
-/// A local less a non-negative constant, `B - c`, reads as `B` with the `c`
-/// it takes away: the form `condition_implication` leaves where it merged
-/// `i < B` and `i + c < B` into one check.
+/// A local or a constant less a non-negative constant, `B - c`, reads as `B`
+/// with the `c` it takes away: the form `condition_implication` leaves where
+/// it merged `i < B` and `i + c < B` into one check.
 fn parse_check_bound(
     engine: &Engine,
     binds: &Binds,
@@ -637,7 +637,11 @@ fn parse_check_bound(
         return None;
     };
     let c = parse_const_i64(engine, binds, less).filter(|&c| c >= 0)?;
-    Some((BoundKey::Local(operand_local(engine.body, minuend)?), c))
+    let bound = match parse_const_i64(engine, binds, minuend) {
+        Some(b) => BoundKey::Const(b),
+        None => BoundKey::Local(operand_local(engine.body, minuend)?),
+    };
+    Some((bound, c))
 }
 
 /// Read the conjunct `left < right` as a limit on `var`. A constant `right`

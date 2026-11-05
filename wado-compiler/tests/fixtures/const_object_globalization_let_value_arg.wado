@@ -11,9 +11,11 @@
 
 use { println, Stdout } from "core:cli";
 
+// Indexing `s` keeps `param_spec` from folding the whole literal into a clone,
+// which a body reading only the constant length allows.
 #[inline(never)]
 fn head_len(s: List<u8>, bias: i32) -> i32 {
-    return s.len() + bias;
+    return s.len() + s[bias] as i32;
 }
 
 #[inline(never)]
@@ -47,7 +49,7 @@ export fn run() with Stdout {
 
 __DATA__
 {
-    "stdout": "50 50 980 980\n",
+    "stdout": "1090 1090 980 980\n",
     "wir_pass": {"O2": ["nir/const_object_globalization"]},
     "wir_contrast": {"O2": [
         {"fn bump_first(mut v: List<u8>, bias: i32) -> i32 {\n    v[0] = v[0] + 1;\n": "fn bump_first(v: List<u8>, bias: i32) -> i32 {\n"}
