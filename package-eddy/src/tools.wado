@@ -333,6 +333,9 @@ impl Workspace {
         ).output().map_err(|e| `${e}`)?;
         let ended = match out.status {
             Exited(124) => `timed out after ${input.timeout} seconds`,
+            // What `timeout` exits with once it kills a command that outlived
+            // SIGTERM, and what a kill for lack of memory gives too.
+            Exited(137) => `killed: it ran past ${input.timeout} seconds and ignored SIGTERM, or ran out of memory`,
             Exited(code) => `exit code ${code}`,
             other => `${other:?}`,
         };

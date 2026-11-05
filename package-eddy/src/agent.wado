@@ -93,7 +93,7 @@ pub fn run_agent(
                 Ok(out) => [out, false],
                 Err(e) => [e, true],
             };
-            let output: Option<String> = if name == "Run" { Some(content) } else { null };
+            let output: Option<String> = if name == "Run" && !is_error { Some(content) } else { null };
             calls.push(Call { name, input: b.input, is_error, output });
             results.push(message(&ToolResult { tool_use_id: b.id.unwrap(), content, is_error }));
         }
@@ -107,11 +107,12 @@ pub fn run_agent(
     }
 }
 
-/// How many of `calls` called tool `name`.
+/// How many of `calls` called tool `name` and got an answer: a call refused
+/// for its input did nothing, so it spends nothing.
 fn count_of(calls: &List<Call>, name: &String) -> i32 {
     let mut n = 0;
     for let c of calls {
-        if c.name == *name {
+        if c.name == *name && !c.is_error {
             n += 1;
         }
     }

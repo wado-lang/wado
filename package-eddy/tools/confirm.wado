@@ -96,23 +96,29 @@ fn run_outputs(r: &Run) -> String {
     return text;
 }
 
+/// The totals over the runs graded. A run whose grading failed is left out and
+/// counted apart, and a finding counts once however often the grader names it.
 fn report(out: &Confirmed) with Stderr {
-    let [mut findings, mut reproduced, mut hits, mut hits_reproduced] = [0, 0, 0, 0];
+    let [mut findings, mut reproduced, mut hits, mut hits_reproduced, mut errors] = [0, 0, 0, 0, 0];
     for let r of &out.runs {
+        if r.error matches { Some(_) } {
+            errors += 1;
+            continue;
+        }
         findings += r.findings.len();
         if r.hit >= 0 {
             hits += 1;
         }
-        for let c of &r.confirmations {
-            if c.reproduced {
+        for let i of 0..<r.findings.len() {
+            if r.confirmations.into_iter().any(|c| c.finding == i && c.reproduced) {
                 reproduced += 1;
-                if c.finding == r.hit {
+                if i == r.hit {
                     hits_reproduced += 1;
                 }
             }
         }
     }
     eprintln(
-        `findings: ${findings}; reproduced: ${reproduced}; known-defect hits: ${hits}, ${hits_reproduced} of them reproduced`,
+        `findings: ${findings}; reproduced: ${reproduced}; known-defect hits: ${hits}, ${hits_reproduced} of them reproduced; runs not graded: ${errors}`,
     );
 }

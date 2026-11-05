@@ -268,5 +268,7 @@ is done.
 - [ ] Find why #1680 and #1697 are missed by every review.
 - [ ] Run the whole set with Run, to see whether running costs the entries
   reading already finds.
-- [ ] Keep a reviewer's test from reaching history past the merge: the tree is
-  a worktree, so a test that runs `git log` sees the later commits.
+- [ ] Keep a reviewer's test from reaching past the tree: Run's child may read
+  the whole repository, so a test that runs `git log` sees the later commits,
+  and one that reads `package-eddy/eval/` sees the known defects. Run's child
+  needs a grant of the snapshot alone.

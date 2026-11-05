@@ -193,8 +193,17 @@ pub fn generated(rev: &String, paths: &List<String>) -> List<String> with Proces
 pub fn snapshot(sha: &String) -> String with Process {
     let root = `scratchpad/eddy-trees/${*sha}`;
     try_git(["worktree", "remove", "--force", root]);
-    git(["-c", "core.symlinks=false", "worktree", "add", "--force", "--detach", root, *sha]);
+    tree_git(&".", ["worktree", "add", "--force", "--detach", root, *sha]);
     return root;
+}
+
+/// `git` run in `dir`, a checkout a reviewer reaches, with every symbolic link
+/// kept a file: a command that rewrites the tree, such as `reset --hard`,
+/// would otherwise make it a link again.
+fn tree_git(dir: &String, args: List<String>) -> String with Process {
+    let mut full = ["-c", "core.symlinks=false", "-C", *dir] as List<String>;
+    full.extend(&args);
+    return git(full);
 }
 
 /// Checks out in the snapshot at `root` the submodules its `Cargo.toml` builds
@@ -203,16 +212,18 @@ pub fn snapshot(sha: &String) -> String with Process {
 /// a commit it lacks.
 pub fn add_build_submodules(root: &String) with (Process, Preopens) {
     for let [path, sha] of build_submodules(root) {
+        assert fs::exists(fs::join(path, ".git")), `the submodule must be checked out: git submodule update --init ${path}`;
         if try_git(["-C", path, "cat-file", "-e", `${sha}^{commit}`]) matches { None } {
             git(["-C", path, "fetch", "--quiet", "--depth", "1", "origin", sha]);
         }
-        git(["-C", path, "worktree", "add", "--force", "--detach", from_submodule(&path, root), sha]);
+        tree_git(&path, ["worktree", "add", "--force", "--detach", from_submodule(&path, root), sha]);
     }
 }
 
-/// The submodules `root`'s `Cargo.toml` names by path, as path and commit.
-fn build_submodules(root: &String) -> List<[String, String]> with (Process, Preopens) {
-    let manifest = fs::read_to_string(fs::join(*root, "Cargo.toml")).unwrap();
+/// The submodules `root`'s `Cargo.toml` names by path, as path and commit. The
+/// manifest is read as checked out, so a reviewer's edit to it changes nothing.
+fn build_submodules(root: &String) -> List<[String, String]> with Process {
+    let manifest = git(["-C", *root, "show", "HEAD:Cargo.toml"]);
     let mut found: List<[String, String]> = [];
     // A line is a status flag, the commit, and the path: `-<sha> vendor/x`.
     for let line of git(["-C", *root, "submodule", "status"]).lines() {
@@ -244,14 +255,22 @@ pub fn home_runner() -> Runner with Environment {
     };
 }
 
-/// The snapshot at `root` with what a reviewer wrote into it undone.
+/// The snapshot at `root`, its submodules included, with what a reviewer wrote
+/// into it undone.
 pub fn reset_snapshot(root: &String) with Process {
-    git(["-C", *root, "reset", "--hard", "--quiet"]);
-    git(["-C", *root, "clean", "-fdx", "--quiet"]);
+    let mut dirs = [*root] as List<String>;
+    for let [path, _] of build_submodules(root) {
+        dirs.push(`${*root}/${path}`);
+    }
+    for let dir of dirs {
+        tree_git(&dir, ["reset", "--hard", "--quiet"]);
+        tree_git(&dir, ["clean", "-fdx", "--quiet"]);
+    }
 }
 
 pub fn drop_snapshot(root: &String) with (Process, Preopens) {
     for let [path, _] of build_submodules(root) {
+        // Absent unless Run checked it out.
         try_git(["-C", path, "worktree", "remove", "--force", from_submodule(&path, root)]);
     }
     git(["worktree", "remove", "--force", *root]);

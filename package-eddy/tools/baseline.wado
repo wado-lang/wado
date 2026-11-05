@@ -14,7 +14,8 @@
 //! tree with `cargo` into `scratchpad/eddy-target`; each run starts from the
 //! tree as checked out. Run needs the tree's toolchain installed and its crates
 //! fetched, since a child cannot write `~/.cargo` or `~/.rustup`.
-//! `-D only=<fix>` reviews that entry alone.
+//! `-D only=<fix>` reviews that entry alone, and keeps what the output file
+//! holds for the others.
 //!
 //! Run it from the repository root. The reviewer is a build input:
 //! `CLAUDE_MODEL` in the environment, or `-D CLAUDE_MODEL=...`.
@@ -142,7 +143,7 @@ export fn run() with (Stderr, Environment, Preopens, Process, Client) {
         entries: [],
     };
     for let c of &checked.pairs {
-        if !c.usable() || ONLY != 0 && c.fix != ONLY {
+        if !c.usable() {
             continue;
         }
         assert fix_result(&census, c.fix).blamed[0].pr == c.culprit, "the census must still blame the checked culprit";
@@ -156,8 +157,9 @@ export fn run() with (Stderr, Environment, Preopens, Process, Client) {
         }
         out.entries.push(entry);
     }
+    // An entry `only` passes over keeps what `out_path` held for it.
     for let i of 0..<out.entries.len() {
-        if out.entries[i].runs.len() >= RUNS {
+        if out.entries[i].runs.len() >= RUNS || ONLY != 0 && out.entries[i].fix != ONLY {
             continue;
         }
         let fix = out.entries[i].fix;
