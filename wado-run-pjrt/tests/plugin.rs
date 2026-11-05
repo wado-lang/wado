@@ -40,9 +40,16 @@ fn a_program_compiles_and_runs_on_the_device() {
         lines.next(),
         Some("[0, 0, 224, 63, 0, 0, 160, 64] as ByteList")
     );
-    // Elements that do not fill the extents never reach the plugin.
-    assert_eq!(lines.next(), Some("true"));
-    assert_eq!(lines.next(), Some("true"));
+}
+
+/// A newer plugin may stop checking one of these, which then crashes the process
+/// here rather than in a program.
+#[test]
+#[ignore = "needs a plugin: run `mise run test-pjrt`"]
+fn a_plugin_refuses_what_a_guest_gets_wrong() {
+    let printed = run("tests/fixtures/malformed.wado");
+    assert_eq!(printed.lines().count(), 15, "{printed}");
+    assert!(printed.lines().all(|line| line == "true"), "{printed}");
 }
 
 /// Every operation a recorded pass holds, the composite decomposed, and

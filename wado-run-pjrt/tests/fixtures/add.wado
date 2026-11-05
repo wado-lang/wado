@@ -29,8 +29,4 @@ export fn run() with (Stdout, PjrtHost) {
     let results = executable.execute([&a, &b], []).unwrap();
     let bytes = results[0].to_host().unwrap();
     println(`${bytes:?}`);
-    let short = PjrtHost::upload(ElementType::Float64, [1 << 30], floats([1.0]));
-    println(`${short.is_err()}`);
-    let negative = PjrtHost::upload(ElementType::Float32, [-1], floats([1.0]));
-    println(`${negative.is_err()}`);
 }
