@@ -63,11 +63,10 @@ still sees dependencies and builds real files; it just never does the resolving.
 - `run` / `serve` / `test` / `publish` share the `build` core in project mode.
   A bare-file argument (`wado run file.wado`) routes through the standalone
   `compile` path instead.
-- `wado build -o -` and `wado build <file> -o <path>` build the one component a
-  driver would run, through that same path, and run nothing. A driver outside
-  this binary, such as `wado run-webgpu`, compiles this way. The component comes
-  back on stdout, and `--embed-entry` names its entry in the `wado:entry` custom
-  section, so the driver reads both from one stream.
+- `wado build -o - [<file>]` builds the one component a driver would run,
+  through that same path, and writes it to stdout. A driver outside this binary,
+  such as `wado run-webgpu`, compiles this way. `--embed-entry` names the entry
+  in the `wado:entry` custom section, so the driver reads both from one stream.
 - `run` and `serve` keep the component they built, keyed by the `wado`
   binary, the options, the `WADO_*` environment and the entry file, and reuse
   it while every file and environment variable its compile read is unchanged.

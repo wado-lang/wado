@@ -1,9 +1,9 @@
 //! `wado build` — the project orchestrator. Reads `wado.toml`, builds each
 //! declared world (`[package].lib` plus every `[world]` entry) through the
 //! `compile` primitive with `[package]` metadata embedded, and writes each
-//! component to `<root>/build/<world>.wasm`. With `-o -` or a named input it
-//! builds instead the one component a driver would run, for a `wado run-*`
-//! subcommand to host.
+//! component to `<root>/build/<world>.wasm`. With `-o -` it writes instead the
+//! one component a driver would run to stdout, for a `wado run-*` subcommand to
+//! host.
 //!
 //! Dependency resolution, locking, and caching belong here (see the
 //! CLI-subcommands WEP, Command Tiers); `compile` never resolves. Wiring the
@@ -49,8 +49,8 @@ pub struct BuildOptions {
     lib: bool,
     /// `-o`: output path; valid only when a single world is selected.
     output: Option<String>,
-    /// Whether this builds what a driver of this kind would run, and not the
-    /// manifest's worlds: an input is named, or the output is stdout.
+    /// `-o -`: write what a driver of this kind would run to stdout, in place of
+    /// building the manifest's worlds.
     driver: Option<EntryPointKind>,
     /// `--embed-entry`: name the entry in the component.
     embed_entry: bool,
@@ -123,7 +123,7 @@ impl Opt {
                 long: Some("embed-entry"),
                 short: None,
                 value: None,
-                desc: "Name the entry in the component, in the `wado:entry` custom section\n(only with -o - or a named input)",
+                desc: "Name the entry in the component, in the `wado:entry` custom section\n(only with -o -)",
             },
             Self::Help => args::HELP_SPEC,
         }
@@ -141,7 +141,7 @@ fn format_usage() -> String {
     .unwrap();
     writeln!(
         buf,
-        "A named input, which needs -o, builds that file as `wado run` would."
+        "A named input, which needs -o -, builds that file as `wado run` would."
     )
     .unwrap();
     writeln!(buf).unwrap();
@@ -202,21 +202,18 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<BuildOptions, CliExit> {
             "`--lib` and `--world` are mutually exclusive",
         ));
     }
-    let driver = if input.is_some() || output.as_deref() == Some(STDOUT) {
-        Some(driver_kind(
-            input.as_deref(),
-            output.as_deref(),
-            world.as_deref(),
-            lib,
-            embed,
-        )?)
-    } else if embed_entry {
+    let to_stdout = output.as_deref() == Some(STDOUT);
+    if input.is_some() && !to_stdout {
         return Err(CliExit::error(
-            "`--embed-entry` takes `-o -` or a named input",
+            "a named input needs `-o -`; `wado compile` writes one file to a path",
         ));
-    } else {
-        None
-    };
+    }
+    if embed_entry && !to_stdout {
+        return Err(CliExit::error("`--embed-entry` takes `-o -`"));
+    }
+    let driver = to_stdout
+        .then(|| driver_kind(world.as_deref(), lib, embed))
+        .transpose()?;
 
     Ok(BuildOptions {
         input,
@@ -231,26 +228,21 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<BuildOptions, CliExit> {
     })
 }
 
-/// The driver whose component a build for `-o -` or a named input makes, and
-/// which takes only what that driver takes.
+/// The driver whose component `-o -` writes, which takes only what that driver
+/// takes.
 fn driver_kind(
-    input: Option<&str>,
-    output: Option<&str>,
     world: Option<&str>,
     lib: bool,
     embed: EmbedOptions,
 ) -> Result<EntryPointKind, CliExit> {
-    if input.is_some() && output.is_none() {
-        return Err(CliExit::error("a named input needs `-o`"));
-    }
     if lib {
         return Err(CliExit::error(
-            "`--lib` takes no named input and no `-o -`: no driver runs a library",
+            "`--lib` does not take `-o -`: no driver runs a library",
         ));
     }
     if embed.wit != EmbedPolicy::Auto || embed.metadata != EmbedPolicy::Auto {
         return Err(CliExit::error(
-            "`--embed-wit` and `--embed-metadata` take no named input and no `-o -`: \
+            "`--embed-wit` and `--embed-metadata` do not take `-o -`: \
              a driver's component embeds at the defaults",
         ));
     }
@@ -262,7 +254,7 @@ fn driver_kind(
         .find(|kind| kind.world_fq() == Some(world))
         .ok_or_else(|| {
             CliExit::error(format!(
-                "no driver runs the world `{world}`; `-o -` and a named input take \
+                "no driver runs the world `{world}`; `-o -` takes \
                  wasi:cli/command or wasi:http/service"
             ))
         })
@@ -383,12 +375,12 @@ pub async fn run(opts: BuildOptions) -> Result<(), CliExit> {
     build_world_components(targets, &opts.knobs, opts.embed).await
 }
 
-/// Write the component a driver of `kind` would run, which is how a `wado run-*`
-/// subcommand compiles. The entry section goes on here, past the cache, so what
-/// `wado run` keeps and runs is unchanged by it.
+/// Write the component a driver of `kind` would run to stdout, which is how a
+/// `wado run-*` subcommand compiles. The entry section goes on here, past the
+/// cache, so what `wado run` keeps and runs is unchanged by it.
 async fn emit_driver_component(opts: BuildOptions, kind: EntryPointKind) -> Result<(), CliExit> {
-    let output = opts.output.expect("`driver_kind` requires an output");
-    let entry = manifest::resolve_input(opts.input, kind, &format_usage())?;
+    // No usage: the person reading this asked a runner, not `wado build`.
+    let entry = manifest::resolve_input(opts.input, kind, "")?;
     let wasm = Box::pin(build_for_driver(&entry, kind, opts.knobs)).await?;
     let wasm = if opts.embed_entry {
         let section = MetadataSection {
@@ -399,18 +391,17 @@ async fn emit_driver_component(opts: BuildOptions, kind: EntryPointKind) -> Resu
     } else {
         wasm
     };
-    if output == STDOUT {
-        std::io::stdout()
-            .write_all(&wasm)
-            .map_err(|e| CliExit::error(format!("writing the component to stdout: {e}")))
-    } else {
-        write_atomic(Path::new(&output), &wasm)
-            .map_err(|e| CliExit::error(format!("writing {output}: {e}")))
-    }
+    // `Stdout` holds what follows the last newline, and a failure writing that
+    // at exit goes unreported, so a truncated component would read as written.
+    let mut stdout = std::io::stdout();
+    stdout
+        .write_all(&wasm)
+        .and_then(|()| stdout.flush())
+        .map_err(|e| CliExit::error(format!("writing the component to stdout: {e}")))
 }
 
-/// Build every target concurrently, announcing each artifact and printing each
-/// failure as it lands, so one broken world does not hide another. The
+/// Build every target concurrently, printing each failure as it lands, so one
+/// broken world does not hide another. The
 /// builds share the cores, so unless `--optimize-threads` says otherwise each
 /// optimizes on its share of them.
 pub async fn build_world_components(
@@ -554,4 +545,20 @@ fn cache_component(slot: &Slot<'_>, reads: Vec<Input>, wasm: &[u8], metadata: St
 
 fn sha256_hex(bytes: &[u8]) -> String {
     hex32(&Sha256::digest(bytes).into())
+}
+
+#[cfg(test)]
+mod tests {
+    use wado_host::runner::RUN_KNOBS;
+
+    use super::Opt;
+
+    #[test]
+    fn build_takes_every_compile_knob_a_runner_passes_it() {
+        let taken: Vec<String> = Opt::KNOBS.iter().map(|k| k.spec().flag()).collect();
+        for knob in RUN_KNOBS {
+            let flag = knob.spec().flag();
+            assert!(taken.contains(&flag), "`wado build` refuses {flag}");
+        }
+    }
 }

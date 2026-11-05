@@ -7,7 +7,7 @@ use crate::args;
 use crate::build::build_for_driver;
 use crate::knobs::{CompileKnobs, HostKnobs, RuntimeKnobs};
 use crate::manifest;
-use crate::runtime::{ProfileMode, WasiState};
+use crate::runtime::ProfileMode;
 
 pub struct RunOptions {
     pub input: String,
@@ -122,8 +122,5 @@ pub async fn run(opts: RunOptions) -> Result<(), CliExit> {
         profile: &opts.profile,
         knobs: &opts.runtime,
     };
-    runner::run("wado", &wasm, &engine, WasiState::from(guest), |_, _, _| {
-        Ok(())
-    })
-    .await
+    runner::run("wado", &wasm, &engine, guest, |_, _, _| Ok(())).await
 }

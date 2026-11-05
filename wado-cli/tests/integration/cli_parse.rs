@@ -154,8 +154,9 @@ fn build_embed_metadata_flags_mutually_exclusive() {
 
 #[test]
 fn build_named_input_needs_an_output() {
-    let parser = Parser::from_args(&["main.wado"]);
-    assert_err(build::parse_args(parser), "`-o`");
+    for args in [["main.wado"].as_slice(), &["main.wado", "-o", "out.wasm"]] {
+        assert_err(build::parse_args(Parser::from_args(args)), "`-o -`");
+    }
 }
 
 #[test]

@@ -29,6 +29,7 @@ use crate::options::{
     parse_log_level_arg, parse_opt_level_arg, parse_profile, require_string, require_value,
     unexpected_arg,
 };
+use crate::path_search::find_program;
 use crate::process_host::ProcessGrant;
 use crate::sync::lock;
 use crate::ticker::Ticker;
@@ -68,7 +69,7 @@ impl RunOpt {
 }
 
 /// The compile knobs `wado run` and the runners take.
-const RUN_KNOBS: &[CompileKnobOpt] = &[
+pub const RUN_KNOBS: &[CompileKnobOpt] = &[
     CompileKnobOpt::NoCache,
     CompileKnobOpt::OptLevel,
     CompileKnobOpt::InlineThreshold,
@@ -253,7 +254,7 @@ pub struct RunOptions {
     command: RunCommand,
     opt_level: OptLevel,
     pub log_level: LogLevel,
-    /// What goes on to `wado`, as it was spelled.
+    /// The options only a compile reads, as they were spelled.
     compile_args: Vec<OsString>,
 }
 
@@ -281,27 +282,24 @@ impl RunOptions {
     {
         let mut opt_level = OptLevel::O1;
         let mut log_level = LogLevel::Warn;
-        let mut compile_args = Vec::new();
+        let mut compile_args: Vec<OsString> = Vec::new();
         let parsed = parse_run_command(
             &mut Parser::from_args(argv),
             usage,
             |opt, parser| {
-                let flag = opt.spec().flag();
                 match opt {
                     CompileOpt::Knob(CompileKnobOpt::OptLevel) => {
                         opt_level = parse_opt_level_arg(parser)?;
-                        compile_args.push(opt_level.flag().into());
                     }
                     CompileOpt::Knob(CompileKnobOpt::LogLevel) => {
                         log_level = parse_log_level_arg(parser)?;
-                        compile_args.push(flag.into());
-                        compile_args.push(log_level.flag_value().into());
                     }
-                    _ if opt.spec().value.is_some() => {
-                        compile_args.push(flag.into());
-                        compile_args.push(require_value(parser)?);
+                    _ => {
+                        compile_args.push(opt.spec().flag().into());
+                        if opt.spec().value.is_some() {
+                            compile_args.push(require_value(parser)?);
+                        }
                     }
-                    _ => compile_args.push(flag.into()),
                 }
                 Ok(())
             },
@@ -454,19 +452,26 @@ pub fn program_for(options: &RunOptions) -> Result<Program, CliExit> {
     let input = options.command.input.as_deref();
     if let Some(entry) = input.filter(|input| Path::new(input).extension() == Some("wasm".as_ref()))
     {
+        if let Some(flag) = options.compile_args.first() {
+            return Err(CliExit::error(format!(
+                "{} configures a compile, and {entry} is already compiled",
+                flag.display()
+            )));
+        }
         return Ok(Program {
             entry: entry.to_owned(),
             wasm: std::fs::read(entry).map_err(|e| CliExit::error(format!("{entry}: {e}")))?,
         });
     }
 
-    let wado = wado_binary();
+    let wado = wado_binary()?;
     let mut build = Process::new(&wado);
     build
         .args(["build", "--world", "wasi:cli/command", "--embed-entry"])
         .args(["-o", "-"])
-        // `wado build` defaults to another level than `wado run`.
+        // Always spelled: `wado build`'s default level is not `wado run`'s.
         .arg(options.opt_level.flag())
+        .args(["--log-level", options.log_level.flag_value()])
         .args(&options.compile_args)
         .stderr(Stdio::inherit());
     if let Some(input) = input {
@@ -476,7 +481,11 @@ pub fn program_for(options: &RunOptions) -> Result<Program, CliExit> {
         .output()
         .map_err(|e| CliExit::error(format!("failed to run '{}': {e}", wado.display())))?;
     if !built.status.success() {
-        return Err(CliExit::silent_failure(built.status.code().unwrap_or(1)));
+        // A code means it ended on its own, its diagnostics already printed.
+        return Err(built.status.code().map_or_else(
+            || CliExit::error(format!("'{}' ended by {}", wado.display(), built.status)),
+            CliExit::silent_failure,
+        ));
     }
 
     let Some(entry) = embedded_entry(&built.stdout) else {
@@ -491,23 +500,28 @@ pub fn program_for(options: &RunOptions) -> Result<Program, CliExit> {
     })
 }
 
-/// The entry `wado build --embed-entry` named in `wasm`.
+/// The entry `wado build --embed-entry` named in `wasm`. Its section is the last
+/// one: a component the program imports may carry one of its own, further in.
 #[must_use]
 pub fn embedded_entry(wasm: &[u8]) -> Option<String> {
     wasmparser::Parser::new(0)
         .parse_all(wasm)
-        .find_map(|payload| match payload {
+        .filter_map(|payload| match payload {
             Ok(wasmparser::Payload::CustomSection(section)) if section.name() == ENTRY_SECTION => {
                 Some(String::from_utf8_lossy(section.data()).into_owned())
             }
             _ => None,
         })
+        .last()
 }
 
 /// `WADO` is the binary that dispatched this subcommand, so a child compiles
 /// with the same `wado` the user invoked. Run directly, it falls back to `PATH`.
-fn wado_binary() -> PathBuf {
-    std::env::var_os("WADO").map_or_else(|| PathBuf::from("wado"), PathBuf::from)
+fn wado_binary() -> Result<PathBuf, CliExit> {
+    std::env::var_os("WADO")
+        .map(PathBuf::from)
+        .or_else(|| find_program(&format!("wado{}", std::env::consts::EXE_SUFFIX)))
+        .ok_or_else(|| CliExit::error("no `wado` on PATH; set WADO to the binary"))
 }
 
 /// A run's engine: its optimization level, profile and runtime knobs.
@@ -876,7 +890,6 @@ mod tests {
         assert_eq!(
             spelled,
             [
-                "-O3",
                 "--allocator",
                 "debug",
                 "-f",
@@ -885,8 +898,6 @@ mod tests {
                 "A=1",
                 "--no-lint",
                 "--no-retain-memory",
-                "--log-level",
-                "info",
             ]
         );
     }
@@ -910,6 +921,17 @@ mod tests {
         assert_eq!(knobs.gc_heap_initial_size, 1 << 20);
         assert!(knobs.report_fuel);
         assert_eq!(knobs.process, ProcessGrant::Denied);
+    }
+
+    #[test]
+    fn a_wasm_input_refuses_what_only_a_compile_reads() {
+        let refused = |argv| match program_for(&parse(argv)) {
+            Ok(_) => panic!("no such file to read"),
+            Err(exit) => exit.message,
+        };
+        assert!(refused(&["-D", "A=1", "missing.wasm"]).contains("--define"));
+        // The engine and the host read these two as well.
+        assert!(refused(&["-O3", "--log-level", "info", "missing.wasm"]).contains("missing.wasm:"));
     }
 
     #[test]

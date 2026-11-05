@@ -139,6 +139,65 @@ fn a_compile_error_ends_the_run_with_the_compilers_own_report() {
 }
 
 #[test]
+fn no_input_and_no_manifest_says_so_without_wado_builds_usage() {
+    let dir = tempfile::tempdir().expect("a temporary directory");
+    let output = runner()
+        .current_dir(dir.path())
+        .output()
+        .expect("running wado-run-webgpu");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(!output.status.success());
+    assert!(stderr.contains("no wado.toml found"), "stderr: {stderr}");
+    assert!(!stderr.contains("wado build"), "stderr: {stderr}");
+}
+
+/// An executable script in a directory of its own, named `name`.
+#[cfg(unix)]
+fn script(dir: &std::path::Path, name: &str, body: &str) -> PathBuf {
+    use std::os::unix::fs::PermissionsExt as _;
+
+    let path = dir.join(name);
+    std::fs::write(&path, format!("#!/bin/sh\n{body}\n")).expect("writing the script");
+    std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755))
+        .expect("marking it executable");
+    path
+}
+
+#[cfg(unix)]
+#[test]
+fn a_wado_killed_by_a_signal_is_named_rather_than_left_silent() {
+    let dir = tempfile::tempdir().expect("a temporary directory");
+    let killed = script(dir.path(), "killed", "kill -9 $$");
+    let output = runner()
+        .env("WADO", killed)
+        .arg(served())
+        .output()
+        .expect("running wado-run-webgpu");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(!output.status.success());
+    assert!(stderr.contains("signal"), "stderr: {stderr}");
+}
+
+/// With no `WADO`, the search follows `path_search`: an empty `PATH` entry would
+/// let the directory a user stands in decide what compiles.
+#[cfg(unix)]
+#[test]
+fn a_wado_in_the_current_directory_is_not_run() {
+    let dir = tempfile::tempdir().expect("a temporary directory");
+    script(dir.path(), "wado", "echo ran the wado here >&2");
+    let output = runner()
+        .env_remove("WADO")
+        .env("PATH", ":")
+        .current_dir(dir.path())
+        .arg(served())
+        .output()
+        .expect("running wado-run-webgpu");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(!output.status.success());
+    assert!(!stderr.contains("ran the wado here"), "stderr: {stderr}");
+}
+
+#[test]
 fn a_directory_that_cannot_be_opened_is_reported_as_wado_run_reports_it() {
     let served = served();
     let args = ["--dir", "/nonexistent/grant", served.to_str().unwrap()];
