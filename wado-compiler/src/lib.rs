@@ -1712,7 +1712,7 @@ fn check_effects_and_moves<H: CompilerHost>(
     let diags = effect_check::check_semantics(sem, provided_import_fqs, library_exports.as_deref());
     let move_errors = affine_move_check::check_affine_moves_semantic(sem);
     let had_error = !diags.is_empty() || !move_errors.is_empty();
-    sem.redirect_effect_vars(&diags.rows);
+    sem.write_back_effect_rows(&diags.rows);
     for error in diags.effects {
         let _ = logger.error(error);
     }

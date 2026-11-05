@@ -7,7 +7,7 @@
 use crate::ast::{self};
 use crate::compiler_host::CompilerHost;
 use crate::name::capture_ref_name;
-use crate::tir::{CaptureSource, EffectRef, ResolvedType, TirCapture, TypeId};
+use crate::tir::{CaptureSource, ResolvedType, TirCapture, TypeId};
 use crate::type_table::TypeTable;
 
 use super::Elaborator;
@@ -56,7 +56,6 @@ struct ExpectedFn {
     ty: TypeId,
     params: Vec<TypeId>,
     return_type: TypeId,
-    effects: Vec<EffectRef>,
 }
 
 /// The environment slot `ctx` holds `name` in, registering the capture if this
@@ -116,13 +115,11 @@ impl TypeSystem {
             ResolvedType::Function {
                 params,
                 return_type,
-                effects,
                 ..
             } => Some(ExpectedFn {
                 ty: tid,
                 params: params.clone(),
                 return_type: *return_type,
-                effects: effects.clone(),
             }),
             _ => None,
         }
@@ -312,7 +309,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 captures: recorded_captures,
                 is_mutating: any_mutating_capture,
                 declared_return,
-                declared_effects: expected_fn.map(|ef| ef.effects).unwrap_or_default(),
             },
         );
 
