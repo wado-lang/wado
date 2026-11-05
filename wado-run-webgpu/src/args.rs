@@ -2,22 +2,22 @@
 
 use std::ffi::OsString;
 
-use anyhow::Result;
-use lexopt::ValueExt as _;
+use wado_host::options::{CliExit, OptSpec, require_string};
 use wado_host::runner::{Invocation, RunOptions, usage};
+
+const GPU_ADAPTER_SPEC: OptSpec = OptSpec {
+    long: Some("gpu-adapter"),
+    short: None,
+    value: Some("<index|name>"),
+    desc: "Give the program one adapter, whatever it requests:\nan integer is its index in the adapter list, anything\nelse a case-insensitive part of its name.\n--log-level info names each adapter it returns",
+};
 
 /// What `--help` prints ahead of the adapter list.
 pub fn help() -> String {
     usage(
         "run-webgpu",
         "Run a Wado program on a wasi:webgpu host.",
-        "      \
-      --gpu-adapter <index|name>
-                         Give the program one adapter, whatever it requests:
-                         an integer is its index in the adapter list, anything
-                         else a case-insensitive part of its name.
-                         --log-level info names each adapter it returns
-",
+        &[GPU_ADAPTER_SPEC],
     )
 }
 
@@ -37,16 +37,16 @@ impl AdapterSelector {
 }
 
 /// What the command line asks for, and the adapter it pins.
-pub fn parse<I>(argv: I) -> Result<(Invocation, Option<AdapterSelector>)>
+pub fn parse<I>(argv: I) -> Result<(Invocation, Option<AdapterSelector>), CliExit>
 where
     I: IntoIterator<Item = OsString>,
 {
     let mut gpu_adapter = None;
     let invocation = RunOptions::parse(argv, &help(), |name, parser| {
-        if name != "gpu-adapter" {
+        if GPU_ADAPTER_SPEC.long != Some(name) {
             return Ok(false);
         }
-        gpu_adapter = Some(AdapterSelector::parse(parser.value()?.string()?));
+        gpu_adapter = Some(AdapterSelector::parse(require_string(parser)?));
         Ok(true)
     })?;
     Ok((invocation, gpu_adapter))
@@ -56,7 +56,7 @@ where
 mod tests {
     use super::*;
 
-    fn adapter(argv: &[&str]) -> Result<Option<AdapterSelector>> {
+    fn adapter(argv: &[&str]) -> Result<Option<AdapterSelector>, CliExit> {
         Ok(parse(argv.iter().map(OsString::from))?.1)
     }
 

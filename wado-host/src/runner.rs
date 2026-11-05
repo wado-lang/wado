@@ -1,192 +1,264 @@
-//! What a `wado run-*` subcommand shares, so a program behaves the same under
-//! each of them and under `wado run`: the command line, the compile, the
-//! engine, the WASI context and the guest profile. A runner adds the interface
-//! it serves. It compiles nothing itself: `WADO` names the binary that
-//! dispatched it.
+//! What `wado run` and each `wado run-*` subcommand share, so a program behaves
+//! the same under all of them: the command line, the compile, the engine and
+//! the guest profile. [`crate::guest`] holds what the guest reaches. A runner
+//! adds the interface it serves. It compiles nothing itself: `WADO` names the
+//! binary that dispatched it, and `wado run --emit-component` builds what
+//! `wado run` would have run.
 
 use std::ffi::{OsStr, OsString};
 use std::fs::File;
 use std::io::{BufWriter, Write};
 use std::path::{Path, PathBuf};
-use std::process::{Command as Process, ExitCode};
+use std::process::{Command as Process, ExitCode, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use anyhow::{Context as _, Result, bail};
 use lexopt::Arg::{Long, Short, Value};
-use lexopt::{Parser, ValueExt as _};
-use tempfile::{TempDir, tempdir};
+use lexopt::Parser;
+use tempfile::tempdir;
 use wasmtime::component::{Component, Linker};
 use wasmtime::{Engine, GuestProfiler, Store, UpdateDeadline};
-use wasmtime_wasi::p3::add_to_linker as add_wasi_to_linker;
+use wasmtime_wasi::I32Exit;
 use wasmtime_wasi::p3::bindings::Command;
-use wasmtime_wasi::{FsPerms, I32Exit, WasiCtx, WasiCtxBuilder, WasiView};
 
-use crate::engine::{default_config, guest_store};
+use crate::guest::{Guest, create_engine, fuel_spent, host_linker, new_store};
+use crate::options::{
+    CliExit, CompileKnobOpt, DirGrants, HELP_SPEC, HostKnobOpt, LogLevel, NO_DIR_SPEC, OptLevel,
+    OptSpec, OptsHelp, ParamOpt, ProfileMode, RuntimeKnobOpt, RuntimeKnobs, match_opt, next_arg,
+    parse_log_level_arg, parse_opt_level_arg, parse_profile, require_string, require_value,
+};
 use crate::sync::lock;
 use crate::ticker::Ticker;
+
+/// An option of `wado run` and the runners that no other subcommand shares.
+#[derive(Clone, Copy)]
+enum RunOpt {
+    Dir,
+    NoDir,
+    Profile,
+    Help,
+}
+
+impl RunOpt {
+    const ALL: &[Self] = &[Self::Dir, Self::NoDir, Self::Profile, Self::Help];
+
+    const fn spec(self) -> OptSpec {
+        match self {
+            // Override the shared --dir description to also document the
+            // implicit "preopen cwd by default" rule.
+            Self::Dir => OptSpec {
+                long: Some("dir"),
+                short: None,
+                value: Some("<path>"),
+                desc: "Preopen directory for WASI filesystem access\nUse --dir host::guest to specify different guest path\nOverrides the default of preopening the current directory",
+            },
+            Self::NoDir => NO_DIR_SPEC,
+            Self::Profile => OptSpec {
+                long: Some("profile"),
+                short: None,
+                value: Some("<mode>"),
+                desc: "Enable profiling:\n  guest[,path[,interval_ms]]  Cross-platform guest profiling\n                               (default: profile.json, 10ms)\n  jitdump   Linux perf jitdump (use with perf record -k mono)\n  perfmap   Linux perf map (use with perf record -k mono)",
+            },
+            Self::Help => HELP_SPEC,
+        }
+    }
+}
+
+/// The compile knobs `wado run` and the runners take.
+const RUN_KNOBS: &[CompileKnobOpt] = &[
+    CompileKnobOpt::NoCache,
+    CompileKnobOpt::OptLevel,
+    CompileKnobOpt::InlineThreshold,
+    CompileKnobOpt::InlineHotCallsiteThreshold,
+    CompileKnobOpt::InlineColdCallsiteThreshold,
+    CompileKnobOpt::InlineGrowth,
+    CompileKnobOpt::OptIterations,
+    CompileKnobOpt::Specializations,
+    CompileKnobOpt::OptThreads,
+    CompileKnobOpt::PredictableBranchThreshold,
+    CompileKnobOpt::ProfileSummaryCutoffHot,
+    CompileKnobOpt::ProfileSummaryCutoffCold,
+    CompileKnobOpt::LogLevel,
+    CompileKnobOpt::Allocator,
+    CompileKnobOpt::Feature,
+    CompileKnobOpt::NoLint,
+    CompileKnobOpt::Lint,
+    CompileKnobOpt::LintGenerated,
+];
+
+/// An option that bears on the compile. `wado run` applies it, and a runner
+/// passes it on.
+#[derive(Clone, Copy)]
+pub enum CompileOpt {
+    Knob(CompileKnobOpt),
+    Param(ParamOpt),
+    Host(HostKnobOpt),
+}
+
+impl CompileOpt {
+    const fn spec(self) -> OptSpec {
+        match self {
+            Self::Knob(knob) => knob.spec(),
+            Self::Param(param) => param.spec(),
+            Self::Host(host) => host.spec(),
+        }
+    }
+}
+
+/// The options of `wado run` and every runner, `extra` after the first group,
+/// rendered for a help text.
+#[must_use]
+pub fn run_options_help(extra: &[OptSpec]) -> String {
+    OptsHelp::default()
+        .add(RunOpt::ALL, |o| o.spec())
+        .add(extra, |spec| *spec)
+        .add(RUN_KNOBS, |o| o.spec())
+        .add(RuntimeKnobOpt::ALL, |o| o.spec())
+        .add(HostKnobOpt::ALL, |o| o.spec())
+        .add(ParamOpt::ALL, |o| o.spec())
+        .render()
+}
+
+/// What an `own` callback made of an option [`parse_run_command`] does not know.
+pub enum OwnOption {
+    /// It took the option, and its value from the parser.
+    Taken,
+    Help,
+    Version,
+    /// It does not know the option either.
+    Unknown,
+}
+
+/// What the command line of `wado run` or a runner says.
+pub struct RunCommand {
+    /// The `.wado` source or `.wasm` component to run, where one is named.
+    pub input: Option<String>,
+    pub profile: ProfileMode,
+    /// `(host_path, guest_path)` pairs from `--dir host[::guest]`.
+    pub preopened_dirs: Vec<(String, String)>,
+    /// The arguments after the input file, which belong to the program.
+    pub program_args: Vec<String>,
+    pub runtime: RuntimeKnobs,
+}
+
+/// How a command line ended.
+pub enum Parsed {
+    Run(RunCommand),
+    Help,
+    Version,
+}
+
+/// Parses what `wado run` and the runners share. `compile` takes each option
+/// that bears on the compile, its value still in the parser, and `own` each
+/// that is neither shared nor a compile option, by name.
+///
+/// # Errors
+///
+/// Fails on anything no callback takes, or on what one rejects.
+pub fn parse_run_command(
+    parser: &mut Parser,
+    usage: &str,
+    mut compile: impl FnMut(CompileOpt, &mut Parser) -> Result<(), CliExit>,
+    mut own: impl FnMut(&str, &mut Parser) -> Result<OwnOption, CliExit>,
+) -> Result<Parsed, CliExit> {
+    let mut input = None;
+    let mut profile = ProfileMode::None;
+    let mut dirs = DirGrants::default();
+    let mut program_args = Vec::new();
+    let mut runtime = RuntimeKnobs::default();
+
+    // Whether a `--` has already ended this command's options. Only the one
+    // that does that job is the command's; any other belongs to the guest.
+    let mut options_ended = false;
+    loop {
+        options_ended |= ends_options(parser);
+        let Some(arg) = next_arg(parser)? else {
+            break;
+        };
+        let matched = match_opt(&arg, RUN_KNOBS, |k| k.spec())
+            .map(CompileOpt::Knob)
+            .or_else(|| match_opt(&arg, HostKnobOpt::ALL, |h| h.spec()).map(CompileOpt::Host))
+            .or_else(|| match_opt(&arg, ParamOpt::ALL, |p| p.spec()).map(CompileOpt::Param));
+        if let Some(opt) = matched {
+            compile(opt, parser)?;
+        } else if let Some(r) = match_opt(&arg, RuntimeKnobOpt::ALL, |r| r.spec()) {
+            runtime.apply(r, parser)?;
+        } else if let Some(opt) = match_opt(&arg, RunOpt::ALL, |o| o.spec()) {
+            match opt {
+                RunOpt::Dir => dirs.add(parser)?,
+                RunOpt::NoDir => dirs.suppress_default(),
+                RunOpt::Profile => profile = parse_profile(&require_string(parser)?)?,
+                RunOpt::Help => return Ok(Parsed::Help),
+            }
+        } else if let Value(value) = arg {
+            input = Some(value.to_string_lossy().into_owned());
+            program_args = args_after_input(parser, options_ended);
+            break;
+        } else {
+            let name = match arg {
+                Long(name) => name.to_owned(),
+                Short(name) => name.to_string(),
+                Value(_) => unreachable!("taken as the input above"),
+            };
+            match own(&name, parser)? {
+                OwnOption::Taken => {}
+                OwnOption::Help => return Ok(Parsed::Help),
+                OwnOption::Version => return Ok(Parsed::Version),
+                OwnOption::Unknown => {
+                    let dashes = if name.len() == 1 { "-" } else { "--" };
+                    return Err(CliExit::error_with_usage(
+                        format!("invalid option '{dashes}{name}'"),
+                        usage,
+                    ));
+                }
+            }
+        }
+    }
+
+    Ok(Parsed::Run(RunCommand {
+        input,
+        profile,
+        preopened_dirs: dirs.finish(),
+        program_args,
+        runtime,
+    }))
+}
 
 /// The usage of the runner `wado <command>`. `own` lists what it adds to the
 /// options every runner takes.
 #[must_use]
-pub fn usage(command: &str, summary: &str, own: &str) -> String {
+pub fn usage(command: &str, summary: &str, own: &[OptSpec]) -> String {
+    let version = OptSpec {
+        long: Some("version"),
+        short: Some('V'),
+        value: None,
+        desc: "Show the version",
+    };
+    let extra: Vec<OptSpec> = own.iter().copied().chain([version]).collect();
     format!(
         "\
 {summary}
 
-Usage: wado {command} [options] <file.wado|file.wasm> [args...]
+Usage: wado {command} [options] [<file.wado|file.wasm>] [args...]
 
 Options:
-  -O<level>              Optimization level: 0, 1, 2, 3 or s (default: 1)
-      --dir <path>       Preopen a directory (repeatable; default: the current one)
-      --no-dir           Drop that default
-{own}      --log-level <level>
-                         Log level: debug, info, warn, error, off (default: warn)
-      --profile guest[,path[,interval_ms]]
-                         Sample the guest into a Firefox Profiler file
-                         (default: profile.json, 10ms)
-  -h, --help             Show this help
-  -V, --version          Show the version
-
-Arguments after the input file go to the program.
-"
+{}
+With no input file, it runs the `wasi:cli/command` entry of the wado.toml found
+from the current directory. Arguments after the input file go to the program.
+",
+        run_options_help(&extra)
     )
 }
 
-/// An optimization level `wado` accepts, so no other spelling reaches a caller.
-#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
-pub enum OptLevel {
-    O0,
-    /// All passes on a small budget, and contract checks on. Iterations: 2,
-    /// inline threshold: 4.
-    O1,
-    /// Production: contract checks off. Iterations: 15, inline threshold: 16.
-    #[default]
-    O2,
-    /// Aggressive. Iterations: 20, inline threshold: 26.
-    O3,
-    /// `O2` plus name-section stripping.
-    Os,
-}
-
-impl OptLevel {
-    #[must_use]
-    pub fn parse(level: &str) -> Option<Self> {
-        match level {
-            "0" => Some(Self::O0),
-            "1" => Some(Self::O1),
-            "2" => Some(Self::O2),
-            "3" => Some(Self::O3),
-            "s" => Some(Self::Os),
-            _ => None,
-        }
-    }
-
-    /// The `-O` flag that passes this level to `wado compile`.
-    #[must_use]
-    pub fn flag(self) -> &'static str {
-        match self {
-            Self::O0 => "-O0",
-            Self::O1 => "-O1",
-            Self::O2 => "-O2",
-            Self::O3 => "-O3",
-            Self::Os => "-Os",
-        }
-    }
-
-    /// wasmtime exposes only `None`/`Speed`/`SpeedAndSize`, so `O1`/`O2`/
-    /// `O3` collapse to `Speed` — mirroring the `wasmtime` CLI's own `-O`
-    /// mapping.
-    #[must_use]
-    pub const fn to_wasmtime(self) -> wasmtime::OptLevel {
-        match self {
-            Self::O0 => wasmtime::OptLevel::None,
-            Self::O1 | Self::O2 | Self::O3 => wasmtime::OptLevel::Speed,
-            Self::Os => wasmtime::OptLevel::SpeedAndSize,
-        }
-    }
-}
-
-/// The levels and spellings `wado --log-level` takes, in rising verbosity.
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
-pub enum LogLevel {
-    Off,
-    Error,
-    Warn,
-    Info,
-    Debug,
-}
-
-impl LogLevel {
-    #[must_use]
-    pub fn parse(level: &str) -> Option<Self> {
-        match level.to_lowercase().as_str() {
-            "debug" => Some(Self::Debug),
-            "info" => Some(Self::Info),
-            "warn" | "warning" => Some(Self::Warn),
-            "error" => Some(Self::Error),
-            "off" | "none" => Some(Self::Off),
-            _ => None,
-        }
-    }
-
-    /// The value that passes this level to `wado compile --log-level`.
-    #[must_use]
-    pub fn flag_value(self) -> &'static str {
-        match self {
-            Self::Off => "off",
-            Self::Error => "error",
-            Self::Warn => "warn",
-            Self::Info => "info",
-            Self::Debug => "debug",
-        }
-    }
-}
-
-/// `--profile guest[,path[,interval_ms]]`. An empty path is the default one.
-#[derive(Clone, PartialEq, Eq, Debug)]
-pub struct GuestProfile {
-    pub path: PathBuf,
-    pub interval: Duration,
-}
-
-impl GuestProfile {
-    #[must_use]
-    pub fn parse(value: &str) -> Option<Self> {
-        let mut parts = value.split(',');
-        if parts.next() != Some("guest") {
-            return None;
-        }
-        let path = match parts.next() {
-            None | Some("") => PathBuf::from("profile.json"),
-            Some(path) => PathBuf::from(path),
-        };
-        let interval_ms = match parts.next() {
-            Some(ms) => ms.parse().ok()?,
-            None => 10,
-        };
-        if parts.next().is_some() {
-            return None;
-        }
-        Some(Self {
-            path,
-            interval: Duration::from_millis(interval_ms),
-        })
-    }
-}
-
-/// One run, as the command line asks for it.
+/// One run, as a runner's command line asks for it.
 pub struct RunOptions {
-    /// The `.wado` source or `.wasm` component to run.
-    pub input: PathBuf,
+    pub command: RunCommand,
     pub opt_level: OptLevel,
     pub log_level: LogLevel,
-    pub profile: Option<GuestProfile>,
-    /// Empty means preopen nothing, which `--no-dir` also asks for.
-    pub preopens: Vec<PathBuf>,
-    /// The arguments after the input file, which belong to the program.
-    pub program_args: Vec<String>,
+    /// What goes on to `wado`, as it was spelled.
+    compile_args: Vec<OsString>,
 }
 
 /// What the command line asks for.
@@ -206,86 +278,54 @@ impl RunOptions {
     pub fn parse<I>(
         argv: I,
         usage: &str,
-        mut own: impl FnMut(&str, &mut Parser) -> Result<bool>,
-    ) -> Result<Invocation>
+        mut own: impl FnMut(&str, &mut Parser) -> Result<bool, CliExit>,
+    ) -> Result<Invocation, CliExit>
     where
         I: IntoIterator<Item = OsString>,
     {
-        let mut parser = Parser::from_args(argv);
-        let mut input = None;
         let mut opt_level = OptLevel::O1;
         let mut log_level = LogLevel::Warn;
-        let mut profile = None;
-        let mut preopens = Vec::new();
-        let mut no_dir = false;
-        let mut program_args = Vec::new();
-        let mut options_ended = false;
-
-        loop {
-            options_ended |= ends_options(&mut parser);
-            let Some(arg) = parser.next()? else {
-                break;
-            };
-            match arg {
-                Short('h') | Long("help") => return Ok(Invocation::Help),
-                Short('V') | Long("version") => return Ok(Invocation::Version),
-                // Attached and explicit, as `wado run` takes it: `-O2`.
-                Short('O') => {
-                    let Some(level) = parser.optional_value() else {
-                        bail!("-O takes its level attached, as '-O2'\n\n{usage}");
-                    };
-                    let level = level.string()?;
-                    let Some(parsed) = OptLevel::parse(&level) else {
-                        bail!("unknown optimization level '-O{level}'\n\n{usage}");
-                    };
-                    opt_level = parsed;
-                }
-                Long("log-level") => {
-                    let level = parser.value()?.string()?;
-                    let Some(parsed) = LogLevel::parse(&level) else {
-                        bail!("unknown log level '{level}'. Use debug, info, warn, error, or off");
-                    };
-                    log_level = parsed;
-                }
-                Long("profile") => {
-                    let value = parser.value()?.string()?;
-                    let Some(parsed) = GuestProfile::parse(&value) else {
-                        bail!("unknown profile mode '{value}'. Use guest[,path[,interval_ms]]");
-                    };
-                    profile = Some(parsed);
-                }
-                Long("dir") => preopens.push(PathBuf::from(parser.value()?)),
-                Long("no-dir") => no_dir = true,
-                Long(name) => {
-                    let name = name.to_owned();
-                    if !own(&name, &mut parser)? {
-                        bail!("invalid option '--{name}'\n\n{usage}");
+        let mut compile_args = Vec::new();
+        let parsed = parse_run_command(
+            &mut Parser::from_args(argv),
+            usage,
+            |opt, parser| {
+                let flag = opt.spec().flag();
+                match opt {
+                    CompileOpt::Knob(CompileKnobOpt::OptLevel) => {
+                        opt_level = parse_opt_level_arg(parser)?;
+                        compile_args.push(opt_level.flag().into());
                     }
+                    CompileOpt::Knob(CompileKnobOpt::LogLevel) => {
+                        log_level = parse_log_level_arg(parser)?;
+                        compile_args.push(flag.into());
+                        compile_args.push(log_level.flag_value().into());
+                    }
+                    _ if opt.spec().value.is_some() => {
+                        compile_args.push(flag.into());
+                        compile_args.push(require_value(parser)?);
+                    }
+                    _ => compile_args.push(flag.into()),
                 }
-                Value(value) => {
-                    input = Some(PathBuf::from(value));
-                    program_args = args_after_input(&mut parser, options_ended);
-                    break;
-                }
-                other @ Short(_) => bail!("{}\n\n{usage}", other.unexpected()),
-            }
-        }
-
-        let Some(input) = input else {
-            bail!("no input file\n\n{usage}");
-        };
-        if preopens.is_empty() && !no_dir {
-            preopens.push(std::env::current_dir()?);
-        }
-
-        Ok(Invocation::Run(Self {
-            input,
-            opt_level,
-            log_level,
-            profile,
-            preopens,
-            program_args,
-        }))
+                Ok(())
+            },
+            |name, parser| match name {
+                "h" => Ok(OwnOption::Help),
+                "V" | "version" => Ok(OwnOption::Version),
+                _ if own(name, parser)? => Ok(OwnOption::Taken),
+                _ => Ok(OwnOption::Unknown),
+            },
+        )?;
+        Ok(match parsed {
+            Parsed::Run(command) => Invocation::Run(Self {
+                command,
+                opt_level,
+                log_level,
+                compile_args,
+            }),
+            Parsed::Help => Invocation::Help,
+            Parsed::Version => Invocation::Version,
+        })
     }
 }
 
@@ -316,18 +356,30 @@ pub fn exit_status(error: &anyhow::Error) -> Option<i32> {
     error.downcast_ref::<I32Exit>().map(|exit| exit.0)
 }
 
+/// Propagate the code of a program that exits on purpose, and leave its own
+/// diagnostics as the only output.
+fn run_error(error: &anyhow::Error) -> CliExit {
+    match exit_status(error) {
+        Some(code) => CliExit::silent_failure(code),
+        None => CliExit::error(format!("Runtime error: {error:?}")),
+    }
+}
+
 /// A runner's `main`, from its parsed command line. `help` is what `--help`
 /// prints, and `run` makes the run, its `T` being what `parsed` adds to the
 /// options every runner takes.
 pub async fn command_line<T>(
     runner: &str,
     version: &str,
-    parsed: Result<(Invocation, T)>,
+    parsed: Result<(Invocation, T), CliExit>,
     help: impl FnOnce() -> String,
-    run: impl AsyncFnOnce(RunOptions, T) -> Result<()>,
+    run: impl AsyncFnOnce(RunOptions, T) -> Result<(), CliExit>,
 ) -> ExitCode {
-    let (options, own) = match parsed {
-        Ok((Invocation::Run(options), own)) => (options, own),
+    let exit = match parsed {
+        Ok((Invocation::Run(options), own)) => match run(options, own).await {
+            Ok(()) => return ExitCode::SUCCESS,
+            Err(exit) => exit,
+        },
         Ok((Invocation::Help, _)) => {
             print!("{}", help());
             return ExitCode::SUCCESS;
@@ -336,70 +388,72 @@ pub async fn command_line<T>(
             println!("{runner} {version}");
             return ExitCode::SUCCESS;
         }
-        Err(error) => {
-            eprintln!("{runner}: {error}");
-            return ExitCode::FAILURE;
-        }
+        Err(exit) => exit,
     };
-    let Err(error) = run(options, own).await else {
-        return ExitCode::SUCCESS;
-    };
-    if let Some(status) = exit_status(&error) {
-        return ExitCode::from(status as u8);
-    }
-    eprintln!("{runner}: {error:#}");
-    ExitCode::FAILURE
+    eprint!("{}", exit.message);
+    ExitCode::from(exit.exit_code as u8)
 }
 
-/// A component to run. A compiled one holds its temporary directory open for
-/// as long as the run needs the file in it.
+/// A component to run, and the entry `wado` built it from.
 pub struct Program {
-    path: PathBuf,
-    _dir: Option<TempDir>,
+    pub entry: String,
+    pub wasm: Vec<u8>,
 }
 
-impl Program {
-    /// The component file.
+impl RunOptions {
+    /// What `wasi:cli/environment.get-arguments` answers for `program`.
     #[must_use]
-    pub fn path(&self) -> &Path {
-        &self.path
+    pub fn guest_args(&self, program: &Program) -> Vec<String> {
+        std::iter::once(program.entry.clone())
+            .chain(self.command.program_args.iter().cloned())
+            .collect()
     }
 }
 
-/// Compiles the input with `wado` unless it is already a component.
+/// The component the input names, built by `wado run --emit-component` unless it
+/// already is one.
 ///
 /// # Errors
 ///
-/// Fails when `wado` cannot run or the compile does.
-pub fn program_for(options: &RunOptions) -> Result<Program> {
-    if options.input.extension().is_some_and(|ext| ext == "wasm") {
+/// Fails when `wado` cannot run or the compile does, whose own diagnostics are
+/// then the output.
+pub fn program_for(options: &RunOptions) -> Result<Program, CliExit> {
+    let input = options.command.input.as_deref();
+    if let Some(entry) = input.filter(|input| Path::new(input).extension() == Some("wasm".as_ref()))
+    {
         return Ok(Program {
-            path: options.input.clone(),
-            _dir: None,
+            entry: entry.to_owned(),
+            wasm: read_program(Path::new(entry))?,
         });
     }
 
-    let dir = tempdir()?;
+    let dir = tempdir().map_err(CliExit::error)?;
     let path = dir.path().join("program.wasm");
     let wado = wado_binary();
-    let status = Process::new(&wado)
-        .arg("compile")
-        .arg(options.opt_level.flag())
-        .args(["--log-level", options.log_level.flag_value()])
-        .arg("-o")
+    let mut build = Process::new(&wado);
+    build
+        .args(["run", "--emit-component"])
         .arg(&path)
-        .arg("--")
-        .arg(&options.input)
-        .status()
-        .with_context(|| format!("failed to run '{}'", wado.display()))?;
-    if !status.success() {
-        bail!("{} compile failed", wado.display());
+        .args(&options.compile_args)
+        .stderr(Stdio::inherit());
+    if let Some(input) = input {
+        build.arg("--").arg(input);
+    }
+    let built = build
+        .output()
+        .map_err(|e| CliExit::error(format!("failed to run '{}': {e}", wado.display())))?;
+    if !built.status.success() {
+        return Err(CliExit::silent_failure(built.status.code().unwrap_or(1)));
     }
 
     Ok(Program {
-        path,
-        _dir: Some(dir),
+        entry: String::from_utf8_lossy(&built.stdout).trim_end().to_owned(),
+        wasm: read_program(&path)?,
     })
+}
+
+fn read_program(path: &Path) -> Result<Vec<u8>, CliExit> {
+    std::fs::read(path).map_err(|e| CliExit::error(format!("{}: {e}", path.display())))
 }
 
 /// `WADO` is the binary that dispatched this subcommand, so a child compiles
@@ -408,82 +462,62 @@ fn wado_binary() -> PathBuf {
     std::env::var_os("WADO").map_or_else(|| PathBuf::from("wado"), PathBuf::from)
 }
 
-/// Let `wasi:sockets` and `wasi:tls` reach the host network, as a native tool
-/// can: a guest is confined by what its effects reach, and one that names
-/// `TcpSocket` asked for the network. A deployment that must not give it one
-/// confines the host process instead.
-pub fn grant_host_network(builder: &mut WasiCtxBuilder) {
-    builder.inherit_network();
-    // wasmtime denies creating a socket by default; `inherit_network`
-    // relaxes only the per-address check that comes after it.
-    builder.allow_tcp(true);
-    builder.allow_udp(true);
-    builder.allow_ip_name_lookup(true);
+/// A run's engine: its optimization level, profile and runtime knobs.
+pub struct RunEngine<'a> {
+    pub opt_level: wasmtime::OptLevel,
+    pub profile: &'a ProfileMode,
+    pub knobs: &'a RuntimeKnobs,
 }
 
-/// The WASI context `wado run` gives a guest: the host's stdio, environment and
-/// network, the arguments, and the preopened directories.
-///
-/// # Errors
-///
-/// Fails when a directory cannot be opened.
-pub fn wasi_ctx(options: &RunOptions) -> Result<WasiCtx> {
-    let mut builder = WasiCtx::builder();
-    builder.inherit_stdio().inherit_env();
-    grant_host_network(&mut builder);
-
-    builder.arg(options.input.to_string_lossy());
-    builder.args(&options.program_args);
-
-    for dir in &options.preopens {
-        let guest = dir.to_string_lossy().into_owned();
-        builder.preopened_dir(dir, &guest, FsPerms::ReadWrite)?;
-    }
-    Ok(builder.build())
-}
-
-/// Runs a component that exports `wasi:cli/run` on `host`. `link` adds what the
-/// runner serves beside WASI, and any other import traps where it is called.
+/// Runs a component that exports `wasi:cli/run` on `state`. `link` adds what a
+/// runner serves, and any import nothing serves traps where it is called.
+/// `runner` names the profile a guest profile writes.
 ///
 /// # Errors
 ///
 /// Fails when the program does not load, traps or exits with an error, or when
 /// its profile cannot be written.
-pub async fn run<H>(
+pub async fn run<T: Guest>(
     runner: &str,
-    component: &Path,
-    options: &RunOptions,
-    host: H,
-    link: impl FnOnce(&Engine, &Component, &mut Linker<H>) -> Result<()>,
-) -> Result<()>
-where
-    H: WasiView + Send + 'static,
-{
-    let mut config = default_config(options.opt_level.to_wasmtime());
-    config.epoch_interruption(options.profile.is_some());
-    let engine = Engine::new(&config)?;
-    let component = Component::from_file(&engine, component)?;
+    wasm: &[u8],
+    engine: &RunEngine<'_>,
+    state: T,
+    link: impl FnOnce(&Engine, &Component, &mut Linker<T>) -> Result<()>,
+) -> Result<(), CliExit> {
+    run_component(runner, wasm, engine, state, link)
+        .await
+        .map_err(|e| run_error(&e))
+}
 
-    let mut linker: Linker<H> = Linker::new(&engine);
-    add_wasi_to_linker(&mut linker)?;
+async fn run_component<T: Guest>(
+    runner: &str,
+    wasm: &[u8],
+    run_engine: &RunEngine<'_>,
+    state: T,
+    link: impl FnOnce(&Engine, &Component, &mut Linker<T>) -> Result<()>,
+) -> Result<()> {
+    let engine = create_engine(run_engine.opt_level, run_engine.profile, run_engine.knobs)?;
+    let component = Component::new(&engine, wasm)?;
+
+    let mut linker = host_linker(&engine)?;
     link(&engine, &component, &mut linker)?;
     linker.define_unknown_imports_as_traps(&component)?;
 
-    let mut store = guest_store(&engine, host);
-    let sampling = options
-        .profile
-        .as_ref()
-        .map(|profile| {
-            Sampling::start(
-                runner,
-                &engine,
-                &component,
-                &mut store,
-                &profile.path,
-                profile.interval,
-            )
-        })
-        .transpose()?;
+    let mut store = new_store(&engine, state);
+    let sampling = if let ProfileMode::Guest(profile) = run_engine.profile {
+        Some(Sampling::start(
+            runner,
+            &engine,
+            &component,
+            &mut store,
+            &profile.path,
+            profile.interval,
+        )?)
+    } else {
+        None
+    };
+    // `run` is exported through the `wasi:cli/run` instance, so bind via the
+    // `Command` bindings; the async export is driven through `run_concurrent`.
     let ran = match Command::instantiate_async(&mut store, &component, &linker).await {
         Ok(command) => {
             store
@@ -492,6 +526,9 @@ where
         }
         Err(e) => Err(e),
     };
+    if let Some(fuel) = fuel_spent(&store) {
+        eprintln!("fuel {fuel}");
+    }
     let outcome = (|| match ran?? {
         Ok(()) => Ok(()),
         Err(()) => bail!("the program exited with an error"),
@@ -633,8 +670,10 @@ fn profile_budget() -> Result<Option<Duration>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::options::{GuestProfile, parse_collector};
+    use crate::process_host::ProcessGrant;
 
-    fn try_parse(argv: &[&str]) -> Result<Invocation> {
+    fn try_parse(argv: &[&str]) -> Result<Invocation, CliExit> {
         RunOptions::parse(argv.iter().map(OsString::from), "usage", |_, _| Ok(false))
     }
 
@@ -659,15 +698,21 @@ mod tests {
         let options = parse(&["-O0", "app.wado", "--dir", "/data", "-x", "rest"]);
 
         assert_eq!(options.opt_level, OptLevel::O0);
-        assert_eq!(options.program_args, ["--dir", "/data", "-x", "rest"]);
-        assert_eq!(options.preopens, [std::env::current_dir().unwrap()]);
+        assert_eq!(
+            options.command.program_args,
+            ["--dir", "/data", "-x", "rest"]
+        );
+        assert_eq!(
+            options.command.preopened_dirs,
+            [(".".to_owned(), ".".to_owned())]
+        );
     }
 
     #[test]
     fn one_double_dash_ends_the_options_and_any_other_is_the_programs() {
-        assert_eq!(parse(&["app.wado", "--", "x"]).program_args, ["x"]);
+        assert_eq!(parse(&["app.wado", "--", "x"]).command.program_args, ["x"]);
         assert_eq!(
-            parse(&["--", "app.wado", "--", "x"]).program_args,
+            parse(&["--", "app.wado", "--", "x"]).command.program_args,
             ["--", "x"]
         );
     }
@@ -687,31 +732,32 @@ mod tests {
     }
 
     #[test]
-    fn a_guest_profile_takes_wado_runs_spelling() {
-        let profile = |value: &str| parse(&["--profile", value, "app.wado"]).profile;
-        assert_eq!(parse(&["app.wado"]).profile, None);
+    fn a_profile_takes_wado_runs_spelling() {
+        let profile = |value: &str| parse(&["--profile", value, "app.wado"]).command.profile;
+        assert_eq!(parse(&["app.wado"]).command.profile, ProfileMode::None);
         assert_eq!(
             profile("guest"),
-            Some(GuestProfile {
+            ProfileMode::Guest(GuestProfile {
                 path: PathBuf::from("profile.json"),
                 interval: Duration::from_millis(10),
             })
         );
         assert_eq!(
             profile("guest,out.json,2"),
-            Some(GuestProfile {
+            ProfileMode::Guest(GuestProfile {
                 path: PathBuf::from("out.json"),
                 interval: Duration::from_millis(2),
             })
         );
         assert_eq!(
             profile("guest,,5"),
-            Some(GuestProfile {
+            ProfileMode::Guest(GuestProfile {
                 path: PathBuf::from("profile.json"),
                 interval: Duration::from_millis(5),
             })
         );
-        assert!(try_parse(&["--profile", "jitdump", "app.wado"]).is_err());
+        assert_eq!(profile("jitdump"), ProfileMode::JitDump);
+        assert_eq!(profile("perfmap"), ProfileMode::PerfMap);
         assert!(try_parse(&["--profile", "guest,a,b", "app.wado"]).is_err());
     }
 
@@ -736,11 +782,19 @@ mod tests {
 
     #[test]
     fn no_dir_drops_the_default_grant_and_keeps_every_explicit_one() {
-        let preopens = parse(&["--no-dir", "app.wado"]).preopens;
-        assert!(preopens.is_empty(), "{preopens:?}");
+        let dirs = parse(&["--no-dir", "app.wado"]).command.preopened_dirs;
+        assert!(dirs.is_empty(), "{dirs:?}");
         assert_eq!(
-            parse(&["--no-dir", "--dir", "/data", "app.wado"]).preopens,
-            [PathBuf::from("/data")]
+            parse(&["--no-dir", "--dir", "/data", "app.wado"])
+                .command
+                .preopened_dirs,
+            [("/data".to_owned(), "/data".to_owned())]
+        );
+        assert_eq!(
+            parse(&["--dir", "/data::/mnt", "app.wado"])
+                .command
+                .preopened_dirs,
+            [("/data".to_owned(), "/mnt".to_owned())]
         );
     }
 
@@ -751,11 +805,76 @@ mod tests {
             "usage",
             |name, parser| {
                 assert_eq!(name, "own");
-                assert_eq!(parser.value()?, "value");
+                assert_eq!(require_string(parser)?, "value");
                 Ok(true)
             },
         );
         assert!(matches!(parsed, Ok(Invocation::Run(_))));
         assert!(try_parse(&["--own", "app.wado"]).is_err());
+    }
+
+    #[test]
+    fn a_compile_option_reaches_wado_as_it_was_spelled() {
+        let options = parse(&[
+            "-O3",
+            "--allocator",
+            "debug",
+            "-f",
+            "no-pgo",
+            "-D",
+            "A=1",
+            "--no-lint",
+            "--no-retain-memory",
+            "--log-level",
+            "info",
+            "app.wado",
+        ]);
+        let spelled: Vec<_> = options
+            .compile_args
+            .iter()
+            .map(|arg| arg.to_string_lossy().into_owned())
+            .collect();
+        assert_eq!(
+            spelled,
+            [
+                "-O3",
+                "--allocator",
+                "debug",
+                "-f",
+                "no-pgo",
+                "--define",
+                "A=1",
+                "--no-lint",
+                "--no-retain-memory",
+                "--log-level",
+                "info",
+            ]
+        );
+    }
+
+    #[test]
+    fn the_runtime_knobs_are_wado_runs() {
+        let options = parse(&[
+            "--collector",
+            "drc",
+            "--gc-heap-initial",
+            "1m",
+            "--report-fuel",
+            "--deny-process",
+            "app.wado",
+        ]);
+        let knobs = &options.command.runtime;
+        assert_eq!(
+            format!("{:?}", knobs.collector),
+            format!("{:?}", parse_collector("drc").unwrap())
+        );
+        assert_eq!(knobs.gc_heap_initial_size, 1 << 20);
+        assert!(knobs.report_fuel);
+        assert_eq!(knobs.process, ProcessGrant::Denied);
+    }
+
+    #[test]
+    fn no_input_file_is_left_to_the_manifest() {
+        assert_eq!(parse(&["-O0"]).command.input, None);
     }
 }

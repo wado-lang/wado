@@ -50,6 +50,94 @@ fn run(args: &[&str]) -> std::process::Output {
         .expect("running wado-run-webgpu")
 }
 
+fn served() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../wado-host/tests/fixtures/served.wado")
+}
+
+/// `served.wado`'s stdout under `wado run`.
+fn under_wado_run(args: &[&str]) -> String {
+    let output = Command::new(&*WADO)
+        .arg("run")
+        .args(args)
+        .arg(served())
+        .output()
+        .expect("running wado");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(output.status.success(), "stderr: {stderr}");
+    String::from_utf8(output.stdout).expect("the program prints text")
+}
+
+#[test]
+fn a_program_reaches_what_it_reaches_under_wado_run() {
+    for args in [
+        ["-D", "ANSWER=42", "--allocator", "freelist"].as_slice(),
+        [
+            "--deny-process",
+            "--collector",
+            "drc",
+            "--gc-heap-initial",
+            "64m",
+        ]
+        .as_slice(),
+    ] {
+        let output = runner()
+            .args(args)
+            .arg(served())
+            .output()
+            .expect("running wado-run-webgpu");
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(output.status.success(), "stderr: {stderr}");
+        assert_eq!(
+            String::from_utf8_lossy(&output.stdout),
+            under_wado_run(args)
+        );
+        assert_eq!(stderr, "");
+    }
+}
+
+#[test]
+fn a_fuel_report_is_the_one_wado_run_prints() {
+    let output = runner()
+        .arg("--report-fuel")
+        .arg(served())
+        .output()
+        .expect("running wado-run-webgpu");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.starts_with("fuel "), "stderr: {stderr}");
+}
+
+#[test]
+fn with_no_input_the_entry_comes_from_the_manifest() {
+    let dir = tempfile::tempdir().expect("a temporary directory");
+    std::fs::write(
+        dir.path().join("wado.toml"),
+        "[package]\nname = \"app\"\nversion = \"0.1.0\"\n\n[world]\n\"wasi:cli/command\" = \"main.wado\"\n",
+    )
+    .expect("writing the manifest");
+    std::fs::copy(served(), dir.path().join("main.wado")).expect("copying the program");
+
+    let output = runner()
+        .current_dir(dir.path())
+        .output()
+        .expect("running wado-run-webgpu");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(output.status.success(), "stderr: {stderr}");
+    assert!(stdout.contains("main.wado"), "stdout: {stdout}");
+}
+
+#[test]
+fn a_compile_error_ends_the_run_with_the_compilers_own_report() {
+    let dir = tempfile::tempdir().expect("a temporary directory");
+    let path = dir.path().join("broken.wado");
+    std::fs::write(&path, "export fn run() { missing(); }\n").expect("writing the program");
+
+    let output = run(&[path.to_str().unwrap()]);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(!output.status.success());
+    assert!(stderr.contains("missing"), "stderr: {stderr}");
+}
+
 #[test]
 fn a_compute_shader_writes_what_the_guest_reads_back() {
     let output = run(&[fixture("compute_double.wado").to_str().unwrap()]);

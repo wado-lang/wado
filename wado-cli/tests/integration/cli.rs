@@ -45,6 +45,34 @@ fn test_compile_project_under_path_with_space() {
     assert!(out.exists(), "expected out.wasm to be written");
 }
 
+/// `wado run --emit-component` builds what `wado run` would run and leaves it
+/// unrun, for a runner to host.
+#[test]
+fn test_emit_component_writes_it_and_names_its_entry() {
+    let tmp = tempfile::tempdir().unwrap();
+    let main = tmp.path().join("main.wado");
+    std::fs::write(
+        &main,
+        "use { println, Stdout } from \"core:cli\";\n\
+         export fn run() with Stdout { println(\"ran\"); }\n",
+    )
+    .unwrap();
+    let out = tmp.path().join("out.wasm");
+
+    wado()
+        .args(["run", "--emit-component"])
+        .arg(&out)
+        .arg(&main)
+        .assert()
+        .success()
+        .stdout(format!("{}\n", main.display()))
+        .stderr(predicate::str::is_empty());
+    assert!(
+        std::fs::metadata(&out).unwrap().len() > 0,
+        "expected the component to be written"
+    );
+}
+
 /// A compile that succeeds prints nothing, and says what it wrote only at
 /// `--log-level debug`. A runner that compiles through `wado compile` leaves
 /// its program's stderr alone because of this.

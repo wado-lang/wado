@@ -1048,7 +1048,7 @@ fn instantiate_wasmtime(
     let engine = Arc::new(runtime::create_test_engine(
         opt_level,
         profile,
-        runtime_knobs,
+        &runtime_knobs,
     )?);
     let component = Arc::new(Component::new(&engine, wasm)?);
     let linker = Arc::new(runtime::create_test_linker(&component)?);

@@ -1,11 +1,13 @@
 //! The wasmtime host: WASI P3 plus `wasi:webgpu`, backed by wgpu.
 
-use std::path::Path;
 use std::sync::Arc;
 
 use anyhow::{Result, bail};
 use tokio::task::spawn_blocking;
-use wado_host::runner::{LogLevel, RunOptions, wasi_ctx};
+use wado_host::guest::GuestState;
+use wado_host::guest_views;
+use wado_host::options::{CliExit, LogLevel};
+use wado_host::runner::{self, Program, RunEngine, RunOptions};
 use wasi_webgpu_wasmtime::wasi::webgpu::webgpu::{
     Gpu as GuestGpu, GpuQueue as GuestGpuQueue, GpuRequestAdapterOptions,
 };
@@ -14,8 +16,7 @@ use wasi_webgpu_wasmtime::{
     add_to_linker as add_webgpu_to_linker,
 };
 use wasmtime::Engine;
-use wasmtime::component::{Accessor, Component, Linker, Resource, ResourceTable};
-use wasmtime_wasi::{WasiCtx, WasiCtxView, WasiView};
+use wasmtime::component::{Accessor, Component, Linker, Resource};
 use wgpu_core::global::Global;
 use wgpu_core::id::AdapterId;
 use wgpu_core::instance::RequestAdapterOptions;
@@ -31,12 +32,13 @@ pub struct Gpu {
 }
 
 struct Host {
-    ctx: WasiCtx,
-    table: ResourceTable,
+    guest: GuestState,
     gpu: Gpu,
     options: WasiWebGpuOptions,
     log_level: LogLevel,
 }
+
+guest_views!(Host, guest);
 
 impl Host {
     /// What the host's own `request-adapter` answers, unless `--gpu-adapter`
@@ -58,7 +60,7 @@ impl Host {
             Some(_) | None => {}
         }
         Ok(adapter
-            .map(|adapter| self.table.push(adapter))
+            .map(|adapter| self.guest.table.push(adapter))
             .transpose()?)
     }
 
@@ -109,35 +111,37 @@ fn describe(info: &AdapterInfo) -> String {
     )
 }
 
-impl WasiView for Host {
-    fn ctx(&mut self) -> WasiCtxView<'_> {
-        WasiCtxView {
-            ctx: &mut self.ctx,
-            table: &mut self.table,
-        }
-    }
-}
-
 impl WasiWebGpuCtxView for Host {
     fn webgpu_ctx(&mut self) -> WasiWebGpuCtx<'_> {
         WasiWebGpuCtx {
             instance: &self.gpu.instance,
-            table: &mut self.table,
+            table: &mut self.guest.table,
             options: &self.options,
         }
     }
 }
 
 /// Run a component that exports `wasi:cli/run`, on the GPU already found.
-pub async fn run(component: &Path, options: &RunOptions, gpu: Gpu) -> Result<()> {
+pub async fn run(program: &Program, options: &RunOptions, gpu: Gpu) -> Result<(), CliExit> {
+    let command = &options.command;
+    let guest = GuestState::new(
+        &command.preopened_dirs,
+        &options.guest_args(program),
+        command.runtime.process.clone(),
+    )
+    .map_err(|e| CliExit::error(format!("{e:#}")))?;
     let host = Host {
-        ctx: wasi_ctx(options)?,
-        table: ResourceTable::new(),
+        guest,
         gpu,
         options: WasiWebGpuOptions::default(),
         log_level: options.log_level,
     };
-    wado_host::runner::run("wado-run-webgpu", component, options, host, link).await
+    let engine = RunEngine {
+        opt_level: options.opt_level.to_wasmtime(),
+        profile: &command.profile,
+        knobs: &command.runtime,
+    };
+    runner::run("wado-run-webgpu", &program.wasm, &engine, host, link).await
 }
 
 fn link(engine: &Engine, component: &Component, linker: &mut Linker<Host>) -> Result<()> {
