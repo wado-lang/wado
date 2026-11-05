@@ -2133,7 +2133,7 @@ mod tests {
             ]
         );
         let markers = markers([&sem.tir_modules[&sem.entry_module_source]]);
-        assert_eq!(markers["ran"], ["$known_cold_path", "$known_cold_path"]);
+        assert_eq!(markers["ran"], ["cold_path", "cold_path"]);
         assert_eq!(markers["never"], [] as [String; 0]);
         assert_eq!(markers["run"], [] as [String; 0]);
     }
@@ -2216,7 +2216,7 @@ mod tests {
         .expect("it parses");
         let sem = analyzed(source, None, Some(&profile));
         let markers = markers([&sem.tir_modules[&sem.entry_module_source]]);
-        assert_eq!(markers["rarely"], ["$known_cold_path"]);
+        assert_eq!(markers["rarely"], ["cold_path"]);
         assert_eq!(markers["often"], ["unlikely_path"]);
         // Entered once, so not cold: its calls may reach what ran a million
         // times.
@@ -2263,7 +2263,7 @@ mod tests {
             markers(snap.tir_modules.values())
                 .values()
                 .flatten()
-                .filter(|marker| *marker == "$known_cold_path")
+                .filter(|marker| *marker == "cold_path")
                 .count()
         };
         assert_eq!(count(&marked), count(&plain) + 1);
@@ -2276,11 +2276,10 @@ mod tests {
         assert_eq!(sem.marked_regions(), marked.marked_regions());
     }
 
-    /// A cold marker says after reify who placed it: the author's and `?`'s
-    /// guesses are `cold_path`, and the compiler's, where the program itself
-    /// makes a path rare, are `$known_cold_path`.
+    /// Reify keeps the author's cold marker and places one on a `?`'s failure
+    /// path and ahead of a trap.
     #[test]
-    fn a_cold_marker_records_who_placed_it() {
+    fn reify_marks_the_paths_a_program_makes_rare() {
         let host = InMemoryCompilerHost::new();
         let sem = block_on(semantics(
             "fn authored(x: i32) -> i32 { if x > 0 { builtin::cold_path(); return 1; } return 0; }
@@ -2294,8 +2293,8 @@ mod tests {
         let markers = markers([&sem.tir_modules[&sem.entry_module_source]]);
         assert_eq!(markers["authored"], ["cold_path"]);
         assert_eq!(markers["guessed"], ["cold_path"]);
-        assert_eq!(markers["asserted"], ["$known_cold_path"]);
-        assert_eq!(markers["panicked"], ["$known_cold_path"]);
+        assert_eq!(markers["asserted"], ["cold_path"]);
+        assert_eq!(markers["panicked"], ["cold_path"]);
     }
 
     /// A `!` statement is cold only where every path through it traps. One
@@ -2323,9 +2322,9 @@ mod tests {
         let markers = markers([&sem.tir_modules[&sem.entry_module_source]]);
         assert_eq!(markers["breaks_out"], [] as [String; 0]);
         // Only the `panic("b")` the `let … else` arm runs.
-        assert_eq!(markers["serves"], ["$known_cold_path"]);
+        assert_eq!(markers["serves"], ["cold_path"]);
         // The `let … else` itself, its else block's panic, and its arm's.
-        assert_eq!(markers["traps_after_a_loop"], ["$known_cold_path"; 3]);
+        assert_eq!(markers["traps_after_a_loop"], ["cold_path"; 3]);
     }
 
     /// What an `iter_*` yields is what a point lookup answers, so the entry a

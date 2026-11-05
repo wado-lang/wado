@@ -169,12 +169,6 @@ pub const UNLIKELY_PATH_INTRINSIC: &str = "unlikely_path";
 /// its branch is not unlikely.
 pub const COLD_CODE_INTRINSIC: &str = "cold_code";
 
-/// The `core:builtin` intrinsic marking a path the program itself makes rare:
-/// ahead of a trap, or past a global's once-guard. Reify and lowering write it
-/// where an author would write `cold_path`, and `lower::translate` turns it
-/// into one. No source spells it.
-pub const KNOWN_COLD_PATH_INTRINSIC: &str = "$known_cold_path";
-
 /// The name of the hidden default method a trait declares to hold the
 /// `contract` clauses of its method `method`, which every impl of the method
 /// calls at its head.

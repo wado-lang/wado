@@ -14,7 +14,7 @@ use crate::name::{
     FunctionId, MODULE_INIT_FUNCTION, MODULES_INIT_FLAG, MODULES_INIT_FUNCTION,
     global_init_function, global_init_target,
 };
-use crate::synthesis::common::known_cold_path_stmt;
+use crate::synthesis::common::cold_path_stmt;
 use crate::tir::{
     FunctionRef, GlobalInit, LocalFrame, TirBlock, TirExpr, TirExprKind, TirFunction, TirGlobal,
     TirStmt, TirStmtKind, is_constant_initializer,
@@ -522,7 +522,7 @@ pub fn build_initialize_modules(flat: &mut FlatPackage) {
     // the guard is hinted likely-taken (`hint_guard_fall_through`), including
     // the copies inlined into each export entry, and the inliner excludes the
     // one-shot init calls from its cost estimate.
-    init_stmts.push(known_cold_path_stmt(span));
+    init_stmts.push(cold_path_stmt(span));
 
     for module_source in &modules_with_init {
         let call = TirExpr::new(
