@@ -13,7 +13,7 @@ the component on a wasmtime host that serves `core:pjrt` from a PJRT plugin.
   follows it. An argument struct must be at least the plugin's size, so each
   struct is declared in full, whatever a call uses of it.
 - A program behaves the same here as under `wado run`, which is the only reason
-  to have both. `wado_host::runner` holds what makes that so, and a divergence
+  to have both. `wado_host::runner`, `guest` and `options` hold what makes that so, and a divergence
   is a defect, not a variant.
 - A plugin's fault ends the process, so [crashes.md](./crashes.md) records each
   `SIGSEGV` and `SIGABRT`, fixed or not, with the top of its backtrace.

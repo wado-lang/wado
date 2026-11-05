@@ -1,6 +1,6 @@
 //! Shared rustls trust-anchor configuration for the CLI's outbound TLS:
-//! `wado run`'s high-level `wasi:http` client (`wado-cli`'s `http_hooks`),
-//! its raw `wasi:tls` connector (its `runtime`), and the OCI registry client
+//! the guest's high-level `wasi:http` client ([`crate::http_hooks`]), its raw
+//! `wasi:tls` connector ([`crate::guest`]), and `wado-cli`'s OCI registry client
 //! (its `oci`).
 //!
 //! `webpki-roots` (Mozilla's curated list) is the baseline. On top of

@@ -13,15 +13,7 @@ toolchain = [
     "dep:wado-compiler",
     "dep:wado-lsp",
     "dep:wado-manifest",
-    "dep:iana-time-zone",
-    "dep:indexmap",
-    "dep:libc",
-    "dep:rand",
-    "dep:rustls",
-    "dep:rustls-webpki",
-    "dep:serde",
     "dep:serde_json",
-    "dep:webpki-roots",
 ]
 
 [dependencies]
@@ -29,20 +21,31 @@ wado-compiler = { path = "../wado-compiler", optional = true }
 wado-lsp = { path = "../wado-lsp", optional = true }
 wado-manifest = { path = "../wado-manifest", optional = true }
 anyhow = { workspace = true }
-iana-time-zone = { workspace = true, optional = true }
-indexmap = { workspace = true, optional = true }
+bytes = { workspace = true }
+futures = { workspace = true }
+http = { workspace = true }
+http-body = { workspace = true }
+http-body-util = { workspace = true }
+hyper = { workspace = true, features = ["client"] }
+hyper-util = { workspace = true }
+iana-time-zone = { workspace = true }
+indexmap = { workspace = true }
 lexopt = { workspace = true }
-libc = { workspace = true, optional = true }
-rand = { workspace = true, optional = true }
-rustls = { workspace = true, optional = true }
-rustls-webpki = { workspace = true, optional = true }
-serde = { workspace = true, optional = true }
+libc = { workspace = true }
+rand = { workspace = true }
+rustls = { workspace = true }
+rustls-webpki = { workspace = true }
+serde = { workspace = true }
 serde_json = { workspace = true, optional = true }
 tempfile = { workspace = true }
-tokio = { workspace = true }
-webpki-roots = { workspace = true, optional = true }
+tokio = { workspace = true, features = ["net", "time", "signal"] }
+tokio-rustls = { workspace = true }
+toml = { workspace = true }
+webpki-roots = { workspace = true }
 wasmtime = { workspace = true }
 wasmtime-wasi = { workspace = true }
+wasmtime-wasi-http = { workspace = true }
+wasmtime-wasi-tls = { workspace = true }
 wasmparser = { workspace = true }
 
 [lints]

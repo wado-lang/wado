@@ -3,15 +3,13 @@ use std::collections::BTreeSet;
 #[cfg(unix)]
 use std::path::{Path, PathBuf};
 
-use wado_host::sandbox::Trace;
-#[cfg(unix)]
-use wado_host::sandbox::{Access as Reach, Refusal};
-
 #[cfg(unix)]
 use super::posix::{refusals_warning, refused_warning};
 #[cfg(unix)]
 use super::types::ExitStatus;
-use super::{Answer, ProcessGrant, answer, unsupported_reason};
+use super::{Answer, ProcessGrant, Trace, answer, unsupported_reason};
+#[cfg(unix)]
+use crate::sandbox::{Access as Reach, Refusal};
 
 fn grants(dirs: &[(&std::path::Path, &str)]) -> Answer {
     let dirs: Vec<(String, String)> = dirs

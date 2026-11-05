@@ -63,8 +63,24 @@ fn an_exit_status_is_the_programs_own() {
         let output = command.output().expect("wado-run-pjrt runs");
         let stderr = String::from_utf8_lossy(&output.stderr);
         assert_eq!(output.status.code(), Some(status), "{stderr}");
-        assert!(!stderr.contains("exit status"), "{stderr}");
+        assert!(stderr.is_empty(), "{stderr}");
     }
+}
+
+#[test]
+#[ignore = "needs a plugin: run `mise run test-pjrt`"]
+fn a_program_reaches_what_it_reaches_under_wado_run() {
+    const SERVED: &str = "../wado-host/tests/fixtures/served.wado";
+    let wado = std::env::var_os("WADO").expect("`mise run test-pjrt` sets WADO");
+    let mut under_wado_run = Command::new(wado);
+    under_wado_run.arg("run").args(["-D", "ANSWER=42"]);
+    let mut under_the_plugin = Command::new(env!("CARGO_BIN_EXE_wado-run-pjrt"));
+    under_the_plugin.args(["-D", "ANSWER=42"]);
+
+    assert_eq!(
+        printed_by(under_the_plugin, SERVED),
+        printed_by(under_wado_run, SERVED)
+    );
 }
 
 /// An import outside what a runner serves stops the program at its call, as

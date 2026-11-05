@@ -9,8 +9,8 @@ The native host pieces that `wado-cli`, `wado-dev-tools`, the runners, and
   It depends on the compiler, so nothing here may be needed by the compiler
   library itself.
 - The `toolchain` feature, on by default, gates what needs the compiler. A
-  runner turns it off, so `engine.rs`, `fuel.rs` and `runner.rs` stay free of
-  it.
+  runner turns it off, so everything a guest reaches and the command line of a
+  run stay free of it.
 - It is native-only. Code the browser also runs belongs in `wado-lsp`, which
   must build for `wasm32-unknown-unknown`.
 - Put a piece here once a second crate needs it, not before. What only `wado`
@@ -41,15 +41,30 @@ The native host pieces that `wado-cli`, `wado-dev-tools`, the runners, and
 - `sandbox.rs` — spawning a child confined to the guest's grants plus a fixed
   baseline, for `core:process`: Landlock and seccomp in `sandbox/linux.rs`,
   `sandbox-exec` in `sandbox/macos.rs`, and the terminal a child holds as a
-  shell's job does in `sandbox/terminal.rs`. `wado-cli`'s `process_host` is its
-  caller. See [WEP: `core:process`](../docs/wep-2026-10-21-core-process.md).
+  shell's job does in `sandbox/terminal.rs`. See
+  [WEP: `core:process`](../docs/wep-2026-10-21-core-process.md).
+- `process_host.rs` — the `core:process` host: whether a guest may spawn, and
+  the streams and kill of each child. `sandbox.rs` confines it.
+- `http_hooks.rs` — the `wasi:http` client's connections, on the trust store of
+  `tls_trust.rs`.
+- `user_config.rs` — the user's `~/.config/wado/config.toml`
+  (`$XDG_CONFIG_HOME`): the Wado root and `[process] read`. Read once, and
+  ignored whole when another user could have written it.
+- `path_search.rs` — finding a program on `PATH`, for `wado <name>`,
+  `core:process`, and a runner started without `WADO`.
 - `ticker.rs` — `Ticker`, a thread on an interval that dropping stops and joins.
 - `engine.rs` — the Wasm features and GC defaults every wasmtime engine takes,
   so the e2e harness runs a program as `wado` does, and the fuel-metered engine
   generators and `core:eval` run on.
-- `runner.rs` — what a `wado run-*` subcommand shares, so a program behaves the
-  same under each of them and under `wado run`: the command line, the compile,
-  the engine, the WASI context and the guest profile.
+- `options.rs` — every option `wado` and the runners share, with the `CliExit`
+  a command ends in. `wado-cli` applies a compile knob to the compiler's types;
+  a runner passes it on as spelled.
+- `guest.rs` — what a guest reaches, on every host: the store data, the linker
+  and the engine under the runtime knobs. A host embeds a `GuestState` and names
+  the field to `guest_views!`.
+- `runner.rs` — what `wado run` and each `wado run-*` subcommand share, so a
+  program behaves the same under all of them: the command line, the compile
+  (`wado build -o -`), the run and the guest profile.
 - `fuel.rs` — the price of each Wasm operator in fuel, which every metered
   engine takes. See
   [WEP: Fuel Benchmarks](../docs/wep-2026-10-25-fuel-benchmarks.md).

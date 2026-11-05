@@ -1,11 +1,11 @@
 use { println, Stdout } from "core:cli";
-use { Fields } from "wasi:http";
+use { Webgpu } from "wasi:webgpu";
 
-fn unserved() with Fields {
-    let _fields = Fields::new();
+fn unserved() with Webgpu {
+    let _gpu = Webgpu::get_gpu();
 }
 
-export fn run() with (Stdout, Fields) {
+export fn run() with (Stdout, Webgpu) {
     println("instantiated");
     unserved();
 }

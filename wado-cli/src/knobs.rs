@@ -1,6 +1,7 @@
-//! The knobs shared across subcommands: [`CompileKnobs`] for what the compiler
-//! is told, [`RuntimeKnobs`] for what the wasmtime engine is built with, and
-//! [`HostKnobs`] for how the `wado` process itself runs.
+//! The knobs shared across subcommands, in `wado`'s own terms: [`CompileKnobs`]
+//! for what the compiler is told and [`HostKnobs`] for how the `wado` process
+//! itself runs. `wado_host::options` declares each option, and the runtime
+//! knobs along with them.
 
 use lexopt::Parser;
 use wado_compiler::LogLevel;
@@ -9,179 +10,10 @@ use wado_compiler::pgo::{Cutoff, Percent};
 
 use crate::args::{self, CliExit, OptSpec};
 use crate::host_memory::{FreedMemory, set_freed_memory};
-use crate::process_host::ProcessGrant;
-use crate::runtime::{parse_collector, parse_gc_heap_size};
-use wado_host::engine::{DEFAULT_COLLECTOR, DEFAULT_GC_HEAP_INITIAL_SIZE};
-use wado_host::sandbox::Trace;
 
-pub use wado_host::runner::OptLevel;
-
-/// Parse `-O<n>`. The level is always attached and always explicit: a bare
-/// `-O` is an error rather than a silent default, and the level is never taken
-/// from the next argument, so `-O` cannot swallow the input file.
-pub fn parse_opt_level_arg(parser: &mut Parser) -> Result<OptLevel, CliExit> {
-    let Some(val) = parser.optional_value() else {
-        return Err(CliExit::error(
-            "-O requires a level. Use -O0, -O1, -O2, -O3, or -Os",
-        ));
-    };
-    let level = val.to_string_lossy();
-    OptLevel::parse(&level).ok_or_else(|| {
-        CliExit::error(format!(
-            "unknown optimization level '-O{level}'. Use -O0, -O1, -O2, -O3, or -Os"
-        ))
-    })
-}
-
-/// A knob shared by the compiling subcommands. Each one declares the subset it
-/// accepts as a `&[CompileKnobOpt]`, used for both matching and help rendering.
-#[derive(Clone, Copy)]
-pub enum CompileKnobOpt {
-    OptLevel,
-    InlineThreshold,
-    InlineHotCallsiteThreshold,
-    InlineColdCallsiteThreshold,
-    InlineGrowth,
-    OptIterations,
-    Specializations,
-    OptThreads,
-    PredictableBranchThreshold,
-    ProfileSummaryCutoffHot,
-    ProfileSummaryCutoffCold,
-    LogLevel,
-    Allocator,
-    Feature,
-    NoCache,
-    NoValidate,
-    NoLint,
-    Lint,
-    LintGenerated,
-}
-
-impl CompileKnobOpt {
-    #[must_use]
-    pub const fn spec(self) -> OptSpec {
-        match self {
-            Self::OptLevel => OptSpec {
-                long: None,
-                short: Some('O'),
-                value: Some("<n>"),
-                desc: "Optimization level: -O0, -O1, -O2, -O3, -Os\n(default: -O2; -O1 under run, serve and test)",
-            },
-            Self::InlineThreshold => OptSpec {
-                long: Some("optimize-inline-threshold"),
-                short: None,
-                value: Some("<n>"),
-                desc: "Override inlining threshold (max statement count per function)",
-            },
-            Self::InlineHotCallsiteThreshold => OptSpec {
-                long: Some("optimize-inline-hot-callsite-threshold"),
-                short: None,
-                value: Some("<n>"),
-                desc: "Override the inlining threshold at a call site the profile\nmeasured hot (default: 4x the inlining threshold)",
-            },
-            Self::InlineColdCallsiteThreshold => OptSpec {
-                long: Some("optimize-inline-cold-callsite-threshold"),
-                short: None,
-                value: Some("<n>"),
-                desc: "Override the inlining threshold at a call site the profile\nmeasured cold (default: a quarter of the inlining threshold)",
-            },
-            Self::InlineGrowth => OptSpec {
-                long: Some("optimize-inline-growth"),
-                short: None,
-                value: Some("<pct>"),
-                desc: "Override how far inlining may grow the program, in percent",
-            },
-            Self::OptIterations => OptSpec {
-                long: Some("optimize-iterations"),
-                short: None,
-                value: Some("<n>"),
-                desc: "Override number of fixed-point optimization iterations",
-            },
-            Self::Specializations => OptSpec {
-                long: Some("optimize-specializations"),
-                short: None,
-                value: Some("<n>"),
-                desc: "Override how many clones specializing a callee on constant\narguments may mint; reaching it is a remark (--log-level info)",
-            },
-            Self::OptThreads => OptSpec {
-                long: Some("optimize-threads"),
-                short: None,
-                value: Some("<n>"),
-                desc: "Threads the optimizer runs on; the output does not depend on it\n(default: the available cores, shared among the files compiled\nat once: 1 each under `wado test`)",
-            },
-            Self::PredictableBranchThreshold => OptSpec {
-                long: Some("optimize-predictable-branch-threshold"),
-                short: None,
-                value: Some("<pct>"),
-                desc: "The share of a branch's runs, in percent, one side must take for\nthe profile to call the other side unlikely (default: 99)",
-            },
-            Self::ProfileSummaryCutoffHot => OptSpec {
-                long: Some("optimize-profile-summary-cutoff-hot"),
-                short: None,
-                value: Some("<ppm>"),
-                desc: "The share of all runs, in parts per million, whose smallest count\nis the profile's hot line (default: 990000)",
-            },
-            Self::ProfileSummaryCutoffCold => OptSpec {
-                long: Some("optimize-profile-summary-cutoff-cold"),
-                short: None,
-                value: Some("<ppm>"),
-                desc: "The share of all runs, in parts per million, whose smallest count\nis the profile's cold line (default: 999999)",
-            },
-            Self::LogLevel => OptSpec {
-                long: Some("log-level"),
-                short: None,
-                value: Some("<level>"),
-                desc: "Log level: debug, info, warn, error, off (default: warn)",
-            },
-            Self::Allocator => OptSpec {
-                long: Some("allocator"),
-                short: None,
-                value: Some("<mode>"),
-                desc: "Allocator mode (default depends on target world):\nfreelist, debug (test; no-reuse + 0xFF poison)",
-            },
-            // Repeatable; prefix a flag with `no-` to disable it. The compiler
-            // validates the names.
-            Self::Feature => OptSpec {
-                long: None,
-                short: Some('f'),
-                value: Some("<flag>"),
-                desc: "Toggle a codegen feature flag (repeatable; prefix no- to disable):\nbranch-hinting   emit metadata.code.branch_hint entries (default: on)\ncold-paths       keep the cold_path() markers, the compiler's included (default: on)\nbare-asserts     assertion failures trap without a message (default: on at -Os)\nwide-arithmetic  native i64.mul_wide/add128/sub128 (default: on)\ncontract-checks  check the contract of a call marked unchecked (default: on in the test world, at -O0 and -O1)\npgo              apply the entry's profile, pgo/default.pgo or pgo/<stem>.pgo (default: on; off under wado test --pgo)",
-            },
-            Self::NoCache => OptSpec {
-                long: Some("no-cache"),
-                short: None,
-                value: None,
-                desc: "Bypass all build caches: re-run Kiln generators on every invocation,\nrecompile generator wasm components from source, re-evaluate\nevery `core:eval` program, and rerun every test file that passed before.\nThe cache refreshes automatically, so this is normally unnecessary —\nit exists for benchmarking and cache-bug debugging.",
-            },
-            Self::NoValidate => OptSpec {
-                long: Some("no-validate"),
-                short: None,
-                value: None,
-                desc: "Skip Wasm validation (output raw bytes even if invalid)",
-            },
-            // The three set one value, so the last one given wins.
-            Self::NoLint => OptSpec {
-                long: Some("no-lint"),
-                short: None,
-                value: None,
-                desc: "Report no lint warnings, and skip the passes only lints need",
-            },
-            Self::Lint => OptSpec {
-                long: Some("lint"),
-                short: None,
-                value: None,
-                desc: "Report lint warnings in the package's own modules,\n`#![generated]` ones aside (the default; undoes --no-lint)",
-            },
-            Self::LintGenerated => OptSpec {
-                long: Some("lint-generated"),
-                short: None,
-                value: None,
-                desc: "Report lint warnings in `#![generated]` modules too",
-            },
-        }
-    }
-}
+pub use wado_host::options::{
+    CompileKnobOpt, HostKnobOpt, OptLevel, RuntimeKnobOpt, RuntimeKnobs, parse_opt_level_arg,
+};
 
 /// Every knob a compiling subcommand parses and forwards to the compile core.
 ///
@@ -377,176 +209,6 @@ fn parse_cutoff_arg(opt: &str, parser: &mut Parser) -> Result<Cutoff, CliExit> {
     })
 }
 
-/// A knob shared by the subcommands that host a guest (`run` / `serve` /
-/// `test`), used for both matching and help rendering.
-#[derive(Clone, Copy)]
-pub enum RuntimeKnobOpt {
-    Collector,
-    GcHeapInitial,
-    ReportFuel,
-    DenyProcess,
-    ProcessRead,
-    ProcessTrace,
-}
-
-impl RuntimeKnobOpt {
-    pub const ALL: &[Self] = &[
-        Self::Collector,
-        Self::GcHeapInitial,
-        Self::ReportFuel,
-        Self::DenyProcess,
-        Self::ProcessRead,
-        Self::ProcessTrace,
-    ];
-
-    #[must_use]
-    pub const fn spec(self) -> OptSpec {
-        match self {
-            Self::Collector => OptSpec {
-                long: Some("collector"),
-                short: None,
-                value: Some("<mode>"),
-                desc: "GC collector (default: copying):\ncopying, drc (deferred ref-counting), null (never collects)",
-            },
-            Self::GcHeapInitial => OptSpec {
-                long: Some("gc-heap-initial"),
-                short: None,
-                value: Some("<size>"),
-                desc: "GC heap a guest starts with (default: 256m)\nBytes, or a k / m / g suffix. The copying collector splits it\ninto two semi-spaces, so a program allocates through half",
-            },
-            Self::ReportFuel => OptSpec {
-                long: Some("report-fuel"),
-                short: None,
-                value: None,
-                desc: "Meter the guest in wasmtime fuel (about one unit per Wasm\ninstruction) and report what it spent: per program (run), per\ntest (test), per request (serve, one request at a time).\nA test's wasi:random/insecure and insecure-seed answer the same on\nevery run, and its core:fuel regions are reported too.\nPure computation spends the same fuel on every machine; a guest\nwaiting on I/O can loop more or less, as the host answers",
-            },
-            Self::DenyProcess => OptSpec {
-                long: Some("deny-process"),
-                short: None,
-                value: None,
-                desc: "Turn off core:process: the guest may not spawn a host program,\neven one confined to its own grants",
-            },
-            Self::ProcessRead => OptSpec {
-                long: Some("process-read"),
-                short: None,
-                value: Some("<path>"),
-                desc: "Let a child the guest spawns read and execute <path>, beyond\nthe guest's grants and the system baseline (a toolchain under\nHOME, say). Repeatable; the guest itself gains nothing.\n`[process] read` in ~/.config/wado/config.toml adds the same",
-            },
-            Self::ProcessTrace => OptSpec {
-                long: Some("process-trace"),
-                short: None,
-                value: None,
-                desc: "Watch each file a child the guest spawns opens, creates or\nremoves, and name each path the sandbox refused it, with the\ngrant that would allow it. Every such call waits on wado, so\nchildren run slower. Linux only",
-            },
-        }
-    }
-}
-
-/// Every knob a guest-hosting subcommand parses and forwards to the wasmtime
-/// engine.
-#[derive(Clone, Debug)]
-pub struct RuntimeKnobs {
-    pub collector: wasmtime::Collector,
-    pub gc_heap_initial_size: u64,
-    /// `--report-fuel`: meter the guest in fuel and report what it spent.
-    pub report_fuel: bool,
-    /// `--deny-process` / `--process-read` / `--process-trace`: whether a
-    /// guest may spawn, what its children may read beyond its grants, and
-    /// whether the host watches their file calls.
-    pub process: ProcessGrant,
-}
-
-impl Default for RuntimeKnobs {
-    fn default() -> Self {
-        Self {
-            collector: DEFAULT_COLLECTOR,
-            gc_heap_initial_size: DEFAULT_GC_HEAP_INITIAL_SIZE,
-            report_fuel: false,
-            process: ProcessGrant::Offered {
-                read: Vec::new(),
-                trace: Trace::Off,
-            },
-        }
-    }
-}
-
-impl RuntimeKnobs {
-    /// Apply a matched [`RuntimeKnobOpt`], consuming its value from the parser.
-    pub fn apply(&mut self, opt: RuntimeKnobOpt, parser: &mut Parser) -> Result<(), CliExit> {
-        match opt {
-            RuntimeKnobOpt::Collector => {
-                self.collector =
-                    parse_collector(&args::require_string(parser)?).map_err(CliExit::error)?;
-            }
-            RuntimeKnobOpt::GcHeapInitial => {
-                self.gc_heap_initial_size =
-                    parse_gc_heap_size(&args::require_string(parser)?).map_err(CliExit::error)?;
-            }
-            RuntimeKnobOpt::ReportFuel => self.report_fuel = true,
-            RuntimeKnobOpt::DenyProcess => match &self.process {
-                ProcessGrant::Offered {
-                    read,
-                    trace: Trace::Off,
-                } if read.is_empty() => {
-                    self.process = ProcessGrant::Denied;
-                }
-                ProcessGrant::Offered { .. } => return Err(child_knob_with_deny()),
-                ProcessGrant::Denied => {}
-            },
-            RuntimeKnobOpt::ProcessRead => {
-                let path = args::require_string(parser)?;
-                let ProcessGrant::Offered { read, .. } = &mut self.process else {
-                    return Err(child_knob_with_deny());
-                };
-                // Resolved here, so a symlink the child would follow names the
-                // tree the rule opens, and a typo fails before the guest runs.
-                read.push(
-                    std::fs::canonicalize(&path)
-                        .map_err(|e| CliExit::error(format!("--process-read {path}: {e}")))?,
-                );
-            }
-            RuntimeKnobOpt::ProcessTrace => {
-                let ProcessGrant::Offered { trace, .. } = &mut self.process else {
-                    return Err(child_knob_with_deny());
-                };
-                *trace = Trace::Files;
-            }
-        }
-        Ok(())
-    }
-}
-
-/// A knob shared by the subcommands that compile, for how the `wado` process
-/// itself runs, used for both matching and help rendering.
-#[derive(Clone, Copy)]
-pub enum HostKnobOpt {
-    RetainMemory,
-    NoRetainMemory,
-}
-
-impl HostKnobOpt {
-    pub const ALL: &[Self] = &[Self::RetainMemory, Self::NoRetainMemory];
-
-    #[must_use]
-    pub const fn spec(self) -> OptSpec {
-        match self {
-            // The two set one value, so the last one given wins.
-            Self::RetainMemory => OptSpec {
-                long: Some("retain-memory"),
-                short: None,
-                value: None,
-                desc: "Keep the memory wado frees for reuse instead of returning it to\nthe OS, which saves a compile rebuilding it (default: on, but\noff under serve, whose resident set would stay at its peak).\nA build without the mimalloc feature ignores it",
-            },
-            Self::NoRetainMemory => OptSpec {
-                long: Some("no-retain-memory"),
-                short: None,
-                value: None,
-                desc: "Return the memory wado frees to the OS (undoes --retain-memory)",
-            },
-        }
-    }
-}
-
 /// Every knob a compiling subcommand parses for the `wado` process itself.
 /// A subcommand without them leaves the allocator returning freed memory.
 #[derive(Clone, Copy, Debug)]
@@ -576,12 +238,6 @@ impl HostKnobs {
     pub fn install(self) {
         set_freed_memory(self.freed_memory);
     }
-}
-
-fn child_knob_with_deny() -> CliExit {
-    CliExit::error(
-        "--process-read and --process-trace act on a spawned child, which --deny-process forbids",
-    )
 }
 
 /// Whether a custom section is embedded in the output component. `Auto` follows
@@ -686,31 +342,8 @@ impl EmbedOptions {
 
 #[cfg(test)]
 mod tests {
-    use super::{
-        CompileKnobOpt, EmbedOpt, EmbedOptions, EmbedPolicy, OptLevel, RuntimeKnobOpt,
-        RuntimeKnobs, parse_opt_level_arg,
-    };
-    use lexopt::Parser;
+    use super::{CompileKnobOpt, EmbedOpt, EmbedOptions, EmbedPolicy, OptLevel};
     use wado_compiler::CodegenFlags;
-
-    fn apply_runtime(opts: &[RuntimeKnobOpt]) -> Result<RuntimeKnobs, String> {
-        let mut knobs = RuntimeKnobs::default();
-        for &opt in opts {
-            knobs
-                .apply(opt, &mut Parser::from_args::<[&str; 0]>([]))
-                .map_err(|e| e.message)?;
-        }
-        Ok(knobs)
-    }
-
-    #[test]
-    fn deny_process_refuses_a_trace_in_either_order() {
-        use RuntimeKnobOpt::{DenyProcess, ProcessTrace};
-        for opts in [[DenyProcess, ProcessTrace], [ProcessTrace, DenyProcess]] {
-            let err = apply_runtime(&opts).unwrap_err();
-            assert!(err.contains("--deny-process forbids"), "{err}");
-        }
-    }
 
     #[test]
     fn the_feature_help_lists_every_supported_flag() {
@@ -722,47 +355,6 @@ mod tests {
             .map(|line| line.split_whitespace().next().unwrap())
             .collect();
         assert_eq!(listed, CodegenFlags::SUPPORTED);
-    }
-
-    /// Drive `parse_opt_level_arg` the way the parse loop does: the parser sits
-    /// just past the matched `-O`.
-    fn parse_opt_level(args: &[&str]) -> Result<OptLevel, String> {
-        let mut parser = Parser::from_args(args);
-        parser.next().unwrap().unwrap();
-        parse_opt_level_arg(&mut parser).map_err(|e| e.message)
-    }
-
-    #[test]
-    fn every_level_is_spelled_out() {
-        for (arg, expected) in [
-            ("-O0", OptLevel::O0),
-            ("-O1", OptLevel::O1),
-            ("-O2", OptLevel::O2),
-            ("-O3", OptLevel::O3),
-            ("-Os", OptLevel::Os),
-        ] {
-            assert_eq!(parse_opt_level(&[arg]), Ok(expected), "failed for {arg}");
-        }
-    }
-
-    #[test]
-    fn a_bare_dash_o_is_rejected() {
-        let err = parse_opt_level(&["-O", "input.wado"]).unwrap_err();
-        assert!(err.contains("requires a level"), "{err}");
-    }
-
-    #[test]
-    fn a_bare_dash_o_does_not_swallow_the_input_file() {
-        // `-O` takes its level attached, never from the next argument, so a
-        // rejected `-O` never blames the file that follows it.
-        let err = parse_opt_level(&["-O", "input.wado"]).unwrap_err();
-        assert!(!err.contains("input.wado"), "{err}");
-    }
-
-    #[test]
-    fn an_unknown_level_is_rejected() {
-        let err = parse_opt_level(&["-O9"]).unwrap_err();
-        assert!(err.contains("unknown optimization level '-O9'"), "{err}");
     }
 
     #[test]
