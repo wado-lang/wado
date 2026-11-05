@@ -1,4 +1,5 @@
-//! Symbol notation, as the `rust-rename` skill defines it.
+//! Symbol notation: a Rust path from the crate down, resolved to the location
+//! it names.
 //!
 //! rust-analyzer has no lookup by path, so resolution searches
 //! `workspace/symbol` for the last segment and keeps the candidates whose

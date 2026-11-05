@@ -1,5 +1,5 @@
 //! `rust-rename`: renames a Rust symbol through rust-analyzer's
-//! `textDocument/rename`. The `rust-rename` skill says how to use it.
+//! `textDocument/rename`.
 
 mod edit;
 mod lsp;
