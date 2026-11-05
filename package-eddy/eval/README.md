@@ -30,6 +30,12 @@ reverts, so the defects come from fix pull requests rather than reverts.
   added. The review prompt names them and says what they are for.
 - `run.json` holds the agent's review with Write and Run added, on the three
   entries no review had found. Each Run call keeps its output.
+- `reproduce.json` holds the same review of #1697 and #1680 with a prompt that
+  has the reviewer reproduce every finding before it reports one, within a
+  budget of Run calls.
+- `run-confirmed.json` and `reproduce-confirmed.json` say, for each finding
+  of those reviews, whether one of its own runs reproduced it, as
+  `confirm.wado` graded it from the runs' output.
 
 The model reads both diffs whole, generated, vendored and Markdown files left
 out. A pair with a diff past `diff_limit` (2,000,000 bytes) gets an error
@@ -68,7 +74,16 @@ CLAUDE_API_KEY=... PATH=/usr/bin:$PATH wado run \
     package-eddy/eval/judged.json scratchpad/run-1915.json
 ```
 
-`run.json` joins three such runs, `only` set to 1915, 1697 and 1680. Run
+`run.json` joins three such runs, `only` set to 1915, 1697 and 1680, and
+`reproduce.json` two, 1697 and 1680, with the prompt as it stands. Each
+`*-confirmed.json` is `confirm.wado` over one of them:
+
+```sh
+CLAUDE_API_KEY=... wado run package-eddy/tools/confirm.wado -- \
+    package-eddy/eval/reproduce.json package-eddy/eval/reproduce-confirmed.json
+```
+
+Run
 builds the tree with the toolchain its `rust-toolchain.toml` names. A child
 cannot write `~/.cargo` or `~/.rustup`, so first run `cargo fetch` in a
 checkout of each culprit's merge, which installs that toolchain too.
@@ -218,6 +233,25 @@ is done.
   #1697 is a parser generator's lowering, where a check needs a grammar that
   reaches the case, and #1680 is a race with a concurrent delete. The #1680
   runs end in 3 to 5 turns.
+- Asked to reproduce every finding, the reviewer runs code on every entry, and
+  what it reports is what it saw. It still misses #1697's and #1680's known
+  defects, but finds other defects of those changes and shows each one:
+
+  | Entry | Findings | Reproduced | Distinct defects reproduced |
+  | ----- | -------: | ---------: | --------------------------: |
+  | #1697 |        5 |          5 |                           2 |
+  | #1680 |       15 |         13 |                           7 |
+  | #1915 |        6 |          6 |                           5 |
+
+  #1915's row counts `run.json`'s second and third runs, which kept their
+  output, and includes the known defect, reproduced in both. #1697's two are a
+  required `(a|b)+` group that matches nothing without an error and an empty
+  rule's reversed span, and the first one's test passes on today's `main`, so a
+  later change fixed it. #1680's are in
+  Kiln's output reconcile and cache: a nested output directory's files
+  deleted, a cache hit across a generator or output-directory change, and
+  `read-file` reading outside the project. The grader counts only the known
+  defect, so these earn nothing there.
 
 ## To Do
 
@@ -227,7 +261,8 @@ is done.
   ones Claude settled.
 - [ ] Split off the held-out part that learning never sees.
 - [ ] Measure the precision of the baseline's other findings, not only whether
-  it hits the known defect.
+  it hits the known defect. `confirm.wado` does it for a review that runs code.
+- [ ] Score a review by the defects it reproduces as well as the known one.
 - [x] Give the agent a tool over the language service, and measure it against
   `agentic.json`.
 - [ ] Find why #1680 and #1697 are missed by every review.

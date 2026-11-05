@@ -1,0 +1,85 @@
+{
+  "grader": "claude-opus-5-5",
+  "runs": [
+    {
+      "fix": 1915,
+      "run": 1,
+      "findings": [
+        {
+          "file": "wado-lsp/src/inlay_hints.rs",
+          "summary": "When a `&self` method is called with static-call syntax (`Type::method(&recv, arg)`), every parameter-name hint is shifted by one, so the receiver argument gets the first real parameter's name.",
+          "detail": "`hint_static_method_call_args` uses `filter_non_self_param_names`, which removes the `self` parameter, then zips the remaining names with *all* call arguments. With static-call syntax the receiver is written out as the first argument. For `impl Counter { fn add(&self, by: i32) }`, the call `Counter::add(&c, 5)` gets the hint `by:` on `&c` (I reproduced this at line 6, character 24), and the real `by` argument `5` gets no hint. For methods with more parameters, every hint is wrong."
+        },
+        {
+          "file": "wado-compiler/src/elaborator/stmt.rs",
+          "summary": "The type stored in `local_types` is the binding's type at the moment the local is declared, before later inference fills it in, so the hints show unfinished types such as `: []` and `: fn(unknown) -> unknown`.",
+          "detail": "`record_local_symbol(..., type_id)` keeps the `TypeId` passed to `add_local` and never updates it after the body is unified. I reproduced two cases. `let mut a = []; a.push(1);` shows the hint `: []` instead of `Array<i32>`. `let f = |x| x + 1; let y: i32 = f(2);` shows `: fn(unknown) -> unknown` on `f` and `: unknown` on the closure parameter `x` (the same happens in closure.rs when no expected type exists yet). The user sees wrong or meaningless type hints for these common inferred bindings."
+        },
+        {
+          "file": "wado-lsp/src/inlay_hints.rs",
+          "summary": "Tuple-destructuring lets such as `let (p, q) = pair();` get no type hints, even though the module says tuple patterns recurse into their leaves.",
+          "detail": "`hint_pattern_bindings` recurses into `Pattern::Tuple`, but the elaborator's tuple-let path never calls `record_local_symbol` for the leaf bindings. `local_type_name` therefore returns None and nothing is shown. I reproduced this with both `let (p, q) = (1, 2);` and `let (p, q) = pair();`: the hint list was empty. This is a missing result for a pattern shape the change says it supports."
+        }
+      ],
+      "hit": 0,
+      "confirmations": [
+        {
+          "finding": 0,
+          "reproduced": true,
+          "reason": "The UFCS probe output lists only one Parameter hint, `by:`, at line 6 character 24 (the receiver position the finding names), and no hint for the real `5` argument."
+        },
+        {
+          "finding": 1,
+          "reproduced": true,
+          "reason": "The probe printed `emptyarr: [(1, 13, \": []\")]` and `closure_use: [(1, 9, \": fn(unknown) -> unknown\"), (1, 14, \": unknown\")]`, which are the unfinished types the finding describes."
+        },
+        {
+          "finding": 2,
+          "reproduced": true,
+          "reason": "The probe printed `tuple: []` and `tuple2: []`, so tuple-destructuring lets produced no type hints at all."
+        }
+      ],
+      "error": null
+    },
+    {
+      "fix": 1915,
+      "run": 2,
+      "findings": [
+        {
+          "file": "wado-lsp/src/inlay_hints.rs",
+          "summary": "When an impl method that takes `&self` is called in static form (`Type::method(recv, arg)`), every parameter-name hint lands one argument too early, so the receiver is labelled with the first non-self parameter's name.",
+          "detail": "`method_param_names` reads names through `filter_non_self_param_names`, which drops the `&self` / `&mut self` parameter, and the call-site arguments are then paired with those names from the first argument. For `MethodCallExpr` the receiver is not in `args`, so this is correct. For `StaticMethodCallExpr`, though, the receiver is the first entry in `args`. I reproduced this with `impl P { fn dist(&self, other: &P) ... }` and `P::dist(&a, &b)`: the hint `other:` was placed on `&a`, the receiver, and `&b` got no hint."
+        },
+        {
+          "file": "wado-compiler/src/elaborator.rs",
+          "summary": "A trait default method's body is elaborated again for each implementing type, so the single `local_types` entry per binding keeps the type from whichever impl ran last, and the hint shows that concrete type.",
+          "detail": "`record_local_symbol` writes `local_types.insert(key, type_id)` keyed only on (module, AstId). A default method body inside a `trait` is elaborated once for each impl, and each pass overwrites the previous entry. I reproduced this with `trait Desc { fn describe(&self) -> i32 { let me = self; ... } }` implemented for `A` and `B`: the hint on `me` reads `: &B`. It should be the generic `&Self`, and the result depends on which impl was elaborated last. Parameters and closure parameters inside such bodies are affected in the same way."
+        },
+        {
+          "file": "wado-lsp/src/inlay_hints.rs",
+          "summary": "When a closure's parameter types are not settled at the point the binding is recorded, the hints show `: unknown` and `: fn(unknown) -> unknown` instead of being left out or showing the inferred type.",
+          "detail": "`push_type_hint` prints whatever `TypeId` the elaborator recorded, including `TypeTable::UNKNOWN` and function types that contain it. `closure_param_type` records UNKNOWN when there is no expected type, and the `for` destructuring path records `unwrap_or(TypeTable::UNKNOWN)`. I reproduced this: `let f = |q| q + a; return f(b);` produced `f: fn(unknown) -> unknown` and `q: unknown`, and `let g = |x| x;` did the same. These hints are wrong or useless, because the closure is later called with `i32`. Hints whose type contains UNKNOWN should be skipped."
+        }
+      ],
+      "hit": 0,
+      "confirmations": [
+        {
+          "finding": 0,
+          "reproduced": true,
+          "reason": "For `return P::dist(&a, &b);` the probe printed `2:73 Parameter other:`; column 73 is `&a`, the receiver, and no hint was printed for `&b` at column 77."
+        },
+        {
+          "finding": 1,
+          "reproduced": true,
+          "reason": "Inside the trait default method `describe`, the probe printed `2:38 Type : &B` for `let me = self;`, which is a concrete impl type rather than `&Self`."
+        },
+        {
+          "finding": 2,
+          "reproduced": true,
+          "reason": "The probe printed `0:41 Type : fn(unknown) -> unknown` and `0:46 Type : unknown` for `let f = |q| q + a`, and the same pair at `4:7`/`4:12` for `let g = |x| x;`."
+        }
+      ],
+      "error": null
+    }
+  ]
+}
