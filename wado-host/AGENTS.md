@@ -43,6 +43,7 @@ The native host pieces that `wado-cli`, `wado-dev-tools`, the runners, and
   `sandbox-exec` in `sandbox/macos.rs`, and the terminal a child holds as a
   shell's job does in `sandbox/terminal.rs`. `wado-cli`'s `process_host` is its
   caller. See [WEP: `core:process`](../docs/wep-2026-10-21-core-process.md).
+- `ticker.rs` — `Ticker`, a thread on an interval that dropping stops and joins.
 - `engine.rs` — the Wasm features and GC defaults every wasmtime engine takes,
   so the e2e harness runs a program as `wado` does, and the fuel-metered engine
   generators and `core:eval` run on.

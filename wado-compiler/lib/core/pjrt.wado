@@ -1,7 +1,7 @@
 #![stdlib("core:pjrt")]
 //! A device behind a PJRT plugin, the only public way to run a program on a
 //! TPU. `wado run-pjrt` hosts it: a program compiles StableHLO, moves buffers
-//! to and from the device, and runs what it compiled. A program for any other
-//! host does not instantiate.
+//! to and from the device, and runs what it compiled. Under any other host a
+//! program runs until its first call of this module, which traps.
 
 pub use { Analysis, Buffer, Cost, ElementType, Executable, PjrtHost } from "core:pjrt/pjrt_host.wado";

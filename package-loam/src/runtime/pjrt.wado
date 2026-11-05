@@ -46,9 +46,11 @@ pub struct PjrtProgram {
 ///
 /// Donating a shared attention buffer consumes it while a caller may still hold
 /// the cache it was, and read it or branch from it. That cache's positions are
-/// the same in the buffer it became, so its slot moves there. Only the last
-/// cache of a buffer is donated, whose new positions no other cache reads: any
-/// earlier one is copied by the program, so two branches never write one buffer.
+/// the same in the buffer it became, so its slot moves there. Past its length it
+/// reads what later steps wrote, which are no positions of that cache: its mask
+/// leaves them out, and a step from it writes them first. Only the last cache of
+/// a buffer is donated, whose new positions no other cache reads: any earlier
+/// one is copied by the program, so two branches never write one buffer.
 pub affine struct PjrtBackend {
     cpu: Cpu,
     buffers: List<Option<Buffer>>,

@@ -51,8 +51,9 @@ interface pjrt-host {
         costs: list<cost>,
     }
 
-    /// The plugin's name for its platform, such as `cpu` or `tpu`.
-    platform: func() -> string;
+    /// The plugin's name for its platform, such as `cpu` or `tpu`. A plugin with
+    /// no device here reports an error, as it may still compile for a topology.
+    platform: func() -> result<string, string>;
 
     /// Compiles a StableHLO module, in MLIR's text form.
     compile: func(module: string) -> result<executable, string>;

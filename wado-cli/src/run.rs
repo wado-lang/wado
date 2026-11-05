@@ -1,11 +1,8 @@
-use std::ffi::OsStr;
 use std::fmt::Write as _;
-use std::path::Path;
-use std::time::Duration;
 
 use anyhow::{Result, bail};
 use lexopt::Arg::Value;
-use wado_host::runner::Sampling;
+use wado_host::runner::{Sampling, args_after_input, ends_options, exit_status};
 use wasmtime::component::Component;
 
 use crate::args::{self, CliExit};
@@ -152,9 +149,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<RunOptions, CliExit> {
     // that does that job is `wado run`'s; any other belongs to the guest.
     let mut options_ended = false;
     loop {
-        options_ended |= parser
-            .try_raw_args()
-            .is_some_and(|raw| raw.peek() == Some(OsStr::new("--")));
+        options_ended |= ends_options(&mut parser);
         let Some(arg) = args::next_arg(&mut parser)? else {
             break;
         };
@@ -178,16 +173,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<RunOptions, CliExit> {
             }
         } else if let Value(val) = arg {
             input = Some(val.to_string_lossy().into_owned());
-            // Everything after the input file goes to the guest, less the `--`
-            // ending this command's options where none has ended them yet.
-            if let Some(mut raw) = parser.try_raw_args() {
-                if !options_ended {
-                    raw.next_if(|first| first == "--");
-                }
-                for raw_arg in raw {
-                    program_args.push(raw_arg.to_string_lossy().into_owned());
-                }
-            }
+            program_args = args_after_input(&mut parser, options_ended);
             break;
         } else {
             return Err(args::unexpected_arg(arg, &usage));
@@ -218,14 +204,14 @@ async fn run_cli_component(
     let linker = runtime::create_linker(&component)?;
     let mut store = runtime::create_store(&engine, preopened_dirs, argv, runtime_knobs.process)?;
 
-    let sampling = if let ProfileMode::Guest { interval_ms, path } = profile {
+    let sampling = if let ProfileMode::Guest(guest) = profile {
         Some(Sampling::start(
             "wado",
             &engine,
             &component,
             &mut store,
-            Path::new(path),
-            Duration::from_millis(*interval_ms),
+            &guest.path,
+            guest.interval,
         )?)
     } else {
         None
@@ -285,12 +271,11 @@ pub async fn run(opts: RunOptions) -> Result<(), CliExit> {
     .map_err(classify_run_error)
 }
 
-/// wasmtime reports `wasi:cli/exit` as `Err(I32Exit(code))`, so a program that
-/// exits on purpose is indistinguishable from a trap. Propagate the code and
-/// leave the program's own diagnostics as the only output.
+/// Propagate the code of a program that exits on purpose, and leave its own
+/// diagnostics as the only output.
 fn classify_run_error(e: anyhow::Error) -> CliExit {
-    match e.downcast_ref::<wasmtime_wasi::I32Exit>() {
-        Some(wasmtime_wasi::I32Exit(code)) => CliExit::silent_failure(*code),
+    match exit_status(&e) {
+        Some(code) => CliExit::silent_failure(code),
         None => CliExit::error(format!("Runtime error: {e:?}")),
     }
 }

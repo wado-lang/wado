@@ -18,6 +18,7 @@ pub mod sandbox;
 #[cfg(feature = "toolchain")]
 pub mod stub_host;
 pub mod sync;
+pub mod ticker;
 #[cfg(feature = "toolchain")]
 pub mod timezone;
 #[cfg(feature = "toolchain")]

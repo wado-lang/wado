@@ -89,9 +89,10 @@ pub resource Executable {
 /// StableHLO, so nothing here says what a tensor means.
 #[cm("core:pjrt/pjrt-host@0.1.0")]
 pub interface PjrtHost {
-    /// The plugin's name for its platform, such as `cpu` or `tpu`.
+    /// The plugin's name for its platform, such as `cpu` or `tpu`. A plugin with
+    /// no device here reports an error, as it may still compile for a topology.
     #[cm("core:pjrt/pjrt-host@0.1.0#platform")]
-    fn platform() -> String;
+    fn platform() -> Result<String, String>;
     /// Compiles a StableHLO module, in MLIR's text form.
     #[cm("core:pjrt/pjrt-host@0.1.0#compile")]
     #[cm_params("module")]

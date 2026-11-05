@@ -52,6 +52,36 @@ fn a_plugin_refuses_what_a_guest_gets_wrong() {
     assert!(printed.lines().all(|line| line == "true"), "{printed}");
 }
 
+#[test]
+#[ignore = "needs a plugin: run `mise run test-pjrt`"]
+fn an_exit_status_is_the_programs_own() {
+    for status in [0, 3] {
+        let mut command = Command::new(env!("CARGO_BIN_EXE_wado-run-pjrt"));
+        command
+            .arg(Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/exit.wado"))
+            .arg(status.to_string());
+        let output = command.output().expect("wado-run-pjrt runs");
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert_eq!(output.status.code(), Some(status), "{stderr}");
+        assert!(!stderr.contains("exit status"), "{stderr}");
+    }
+}
+
+/// An import outside what a runner serves stops the program at its call, as
+/// under `wado run`, and not before it starts.
+#[test]
+#[ignore = "needs a plugin: run `mise run test-pjrt`"]
+fn an_import_nothing_serves_traps_where_it_is_called() {
+    let output = output_of(
+        Command::new(env!("CARGO_BIN_EXE_wado-run-pjrt")),
+        "tests/fixtures/unserved.wado",
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert_eq!(String::from_utf8_lossy(&output.stdout), "instantiated\n");
+    assert!(!output.status.success(), "{stderr}");
+    assert!(stderr.contains("unknown import"), "{stderr}");
+}
+
 /// Every operation a recorded pass holds, the composite decomposed, and
 /// `compute` over models with a cache and an `If`, one compile per shape class.
 #[test]

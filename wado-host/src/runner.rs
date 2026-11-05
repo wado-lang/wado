@@ -4,7 +4,7 @@
 //! it serves. It compiles nothing itself: `WADO` names the binary that
 //! dispatched it.
 
-use std::ffi::OsString;
+use std::ffi::{OsStr, OsString};
 use std::fs::File;
 use std::io::{BufWriter, Write};
 use std::path::{Path, PathBuf};
@@ -21,10 +21,11 @@ use wasmtime::component::{Component, Linker};
 use wasmtime::{Engine, GuestProfiler, Store, UpdateDeadline};
 use wasmtime_wasi::p3::add_to_linker as add_wasi_to_linker;
 use wasmtime_wasi::p3::bindings::Command;
-use wasmtime_wasi::{FsPerms, WasiCtx, WasiCtxBuilder, WasiView};
+use wasmtime_wasi::{FsPerms, I32Exit, WasiCtx, WasiCtxBuilder, WasiView};
 
 use crate::engine::{default_config, guest_store};
 use crate::sync::lock;
+use crate::ticker::Ticker;
 
 /// The usage of the runner `wado <command>`. `own` lists what it adds to the
 /// options every runner takes.
@@ -70,7 +71,8 @@ pub enum OptLevel {
 }
 
 impl OptLevel {
-    fn parse(level: &str) -> Option<Self> {
+    #[must_use]
+    pub fn parse(level: &str) -> Option<Self> {
         match level {
             "0" => Some(Self::O0),
             "1" => Some(Self::O1),
@@ -104,18 +106,6 @@ impl OptLevel {
             Self::Os => wasmtime::OptLevel::SpeedAndSize,
         }
     }
-
-    #[cfg(feature = "toolchain")]
-    #[must_use]
-    pub const fn to_compiler(self) -> wado_compiler::OptLevel {
-        match self {
-            Self::O0 => wado_compiler::OptLevel::O0,
-            Self::O1 => wado_compiler::OptLevel::O1,
-            Self::O2 => wado_compiler::OptLevel::O2,
-            Self::O3 => wado_compiler::OptLevel::O3,
-            Self::Os => wado_compiler::OptLevel::Os,
-        }
-    }
 }
 
 /// The levels and spellings `wado --log-level` takes, in rising verbosity.
@@ -129,7 +119,8 @@ pub enum LogLevel {
 }
 
 impl LogLevel {
-    fn parse(level: &str) -> Option<Self> {
+    #[must_use]
+    pub fn parse(level: &str) -> Option<Self> {
         match level.to_lowercase().as_str() {
             "debug" => Some(Self::Debug),
             "info" => Some(Self::Info),
@@ -153,20 +144,24 @@ impl LogLevel {
     }
 }
 
-/// `--profile guest[,path[,interval_ms]]`, as `wado run` takes it.
-#[derive(PartialEq, Eq, Debug)]
+/// `--profile guest[,path[,interval_ms]]`. An empty path is the default one.
+#[derive(Clone, PartialEq, Eq, Debug)]
 pub struct GuestProfile {
     pub path: PathBuf,
     pub interval: Duration,
 }
 
 impl GuestProfile {
-    fn parse(value: &str) -> Option<Self> {
+    #[must_use]
+    pub fn parse(value: &str) -> Option<Self> {
         let mut parts = value.split(',');
         if parts.next() != Some("guest") {
             return None;
         }
-        let path = PathBuf::from(parts.next().unwrap_or("profile.json"));
+        let path = match parts.next() {
+            None | Some("") => PathBuf::from("profile.json"),
+            Some(path) => PathBuf::from(path),
+        };
         let interval_ms = match parts.next() {
             Some(ms) => ms.parse().ok()?,
             None => 10,
@@ -224,8 +219,13 @@ impl RunOptions {
         let mut preopens = Vec::new();
         let mut no_dir = false;
         let mut program_args = Vec::new();
+        let mut options_ended = false;
 
-        while let Some(arg) = parser.next()? {
+        loop {
+            options_ended |= ends_options(&mut parser);
+            let Some(arg) = parser.next()? else {
+                break;
+            };
             match arg {
                 Short('h') | Long("help") => return Ok(Invocation::Help),
                 Short('V') | Long("version") => return Ok(Invocation::Version),
@@ -262,15 +262,9 @@ impl RunOptions {
                         bail!("invalid option '--{name}'\n\n{usage}");
                     }
                 }
-                // Everything after the input file, flags included, is the
-                // program's, exactly as `wado run` forwards it.
                 Value(value) => {
                     input = Some(PathBuf::from(value));
-                    if let Some(raw) = parser.try_raw_args() {
-                        for raw_arg in raw {
-                            program_args.push(raw_arg.string()?);
-                        }
-                    }
+                    program_args = args_after_input(&mut parser, options_ended);
                     break;
                 }
                 other @ Short(_) => bail!("{}\n\n{usage}", other.unexpected()),
@@ -293,6 +287,33 @@ impl RunOptions {
             program_args,
         }))
     }
+}
+
+/// Whether the next argument is the `--` that ends a command's options. Any
+/// other `--` belongs to the program.
+pub fn ends_options(parser: &mut Parser) -> bool {
+    parser
+        .try_raw_args()
+        .is_some_and(|raw| raw.peek() == Some(OsStr::new("--")))
+}
+
+/// Everything after the input file, flags included, which goes to the program,
+/// less the `--` ending the command's options where none has ended them yet.
+pub fn args_after_input(parser: &mut Parser, options_ended: bool) -> Vec<String> {
+    let Some(mut raw) = parser.try_raw_args() else {
+        return Vec::new();
+    };
+    if !options_ended {
+        raw.next_if(|first| first == "--");
+    }
+    raw.map(|arg| arg.to_string_lossy().into_owned()).collect()
+}
+
+/// The status a program chose through `wasi:cli/exit`, which wasmtime reports as
+/// an error so that a program that exits on purpose reads like a trap.
+#[must_use]
+pub fn exit_status(error: &anyhow::Error) -> Option<i32> {
+    error.downcast_ref::<I32Exit>().map(|exit| exit.0)
 }
 
 /// A runner's `main`, from its parsed command line. `help` is what `--help`
@@ -320,13 +341,14 @@ pub async fn command_line<T>(
             return ExitCode::FAILURE;
         }
     };
-    match run(options, own).await {
-        Ok(()) => ExitCode::SUCCESS,
-        Err(error) => {
-            eprintln!("{runner}: {error:#}");
-            ExitCode::FAILURE
-        }
+    let Err(error) = run(options, own).await else {
+        return ExitCode::SUCCESS;
+    };
+    if let Some(status) = exit_status(&error) {
+        return ExitCode::from(status as u8);
     }
+    eprintln!("{runner}: {error:#}");
+    ExitCode::FAILURE
 }
 
 /// A component to run. A compiled one holds its temporary directory open for
@@ -420,7 +442,7 @@ pub fn wasi_ctx(options: &RunOptions) -> Result<WasiCtx> {
 }
 
 /// Runs a component that exports `wasi:cli/run` on `host`. `link` adds what the
-/// runner serves beside WASI.
+/// runner serves beside WASI, and any other import traps where it is called.
 ///
 /// # Errors
 ///
@@ -444,6 +466,7 @@ where
     let mut linker: Linker<H> = Linker::new(&engine);
     add_wasi_to_linker(&mut linker)?;
     link(&engine, &component, &mut linker)?;
+    linker.define_unknown_imports_as_traps(&component)?;
 
     let mut store = guest_store(&engine, host);
     let sampling = options
@@ -480,7 +503,7 @@ where
 /// `WADO_PROFILE_MAX_SECS` stops the guest once that many seconds have passed.
 pub struct Sampling {
     profiler: Arc<Mutex<Option<GuestProfiler>>>,
-    stop: Arc<AtomicBool>,
+    ticker: Ticker,
     file: File,
     path: PathBuf,
 }
@@ -528,22 +551,17 @@ impl Sampling {
             Ok(UpdateDeadline::Continue(1))
         });
         store.set_epoch_deadline(1);
-        let stop = Arc::new(AtomicBool::new(false));
-        let stopped = Arc::clone(&stop);
         let ticking = engine.clone();
-        std::thread::spawn(move || {
-            let started = Instant::now();
-            while !stopped.load(Ordering::Relaxed) {
-                std::thread::sleep(interval);
-                if budget.is_some_and(|budget| started.elapsed() >= budget) {
-                    over_budget.store(true, Ordering::Relaxed);
-                }
-                ticking.increment_epoch();
+        let started = Instant::now();
+        let ticker = Ticker::start(interval, move || {
+            if budget.is_some_and(|budget| started.elapsed() >= budget) {
+                over_budget.store(true, Ordering::Relaxed);
             }
+            ticking.increment_epoch();
         });
         Ok(Self {
             profiler,
-            stop,
+            ticker,
             file,
             path: path.to_owned(),
         })
@@ -567,7 +585,7 @@ impl Sampling {
     }
 
     fn finish(self) -> Result<()> {
-        self.stop.store(true, Ordering::Relaxed);
+        drop(self.ticker);
         let Some(profiler) = lock(&self.profiler).take() else {
             unreachable!("`finish` takes the sampling by value, so it runs once");
         };
@@ -639,6 +657,15 @@ mod tests {
     }
 
     #[test]
+    fn one_double_dash_ends_the_options_and_any_other_is_the_programs() {
+        assert_eq!(parse(&["app.wado", "--", "x"]).program_args, ["x"]);
+        assert_eq!(
+            parse(&["--", "app.wado", "--", "x"]).program_args,
+            ["--", "x"]
+        );
+    }
+
+    #[test]
     fn the_log_level_takes_what_wado_takes_and_defaults_to_warn() {
         assert_eq!(parse(&["app.wado"]).log_level, LogLevel::Warn);
         assert_eq!(
@@ -668,6 +695,13 @@ mod tests {
             Some(GuestProfile {
                 path: PathBuf::from("out.json"),
                 interval: Duration::from_millis(2),
+            })
+        );
+        assert_eq!(
+            profile("guest,,5"),
+            Some(GuestProfile {
+                path: PathBuf::from("profile.json"),
+                interval: Duration::from_millis(5),
             })
         );
         assert!(try_parse(&["--profile", "jitdump", "app.wado"]).is_err());

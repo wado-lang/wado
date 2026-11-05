@@ -85,10 +85,8 @@ fn pjrt_type(element: ElementType) -> (i32, usize) {
 }
 
 impl pjrt_host::Host for Host {
-    fn platform(&mut self) -> wasmtime::Result<String> {
-        self.client()
-            .and_then(Client::platform)
-            .map_err(wasmtime::Error::msg)
+    fn platform(&mut self) -> wasmtime::Result<Result<String, String>> {
+        Ok(self.client().and_then(Client::platform))
     }
 
     fn compile(

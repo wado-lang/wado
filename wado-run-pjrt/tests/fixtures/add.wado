@@ -22,7 +22,7 @@ fn floats(values: List<f32>) -> ByteList {
 }
 
 export fn run() with (Stdout, PjrtHost) {
-    println(PjrtHost::platform());
+    println(PjrtHost::platform().unwrap());
     let executable = PjrtHost::compile(MODULE).unwrap();
     let a = PjrtHost::upload(ElementType::Float32, [2], floats([1.5, 2.0])).unwrap();
     let b = PjrtHost::upload(ElementType::Float32, [2], floats([0.25, 3.0])).unwrap();

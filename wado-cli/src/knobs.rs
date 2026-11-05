@@ -25,16 +25,12 @@ pub fn parse_opt_level_arg(parser: &mut Parser) -> Result<OptLevel, CliExit> {
             "-O requires a level. Use -O0, -O1, -O2, -O3, or -Os",
         ));
     };
-    match val.to_string_lossy().as_ref() {
-        "0" => Ok(OptLevel::O0),
-        "1" => Ok(OptLevel::O1),
-        "2" => Ok(OptLevel::O2),
-        "3" => Ok(OptLevel::O3),
-        "s" => Ok(OptLevel::Os),
-        other => Err(CliExit::error(format!(
-            "unknown optimization level '-O{other}'. Use -O0, -O1, -O2, -O3, or -Os"
-        ))),
-    }
+    let level = val.to_string_lossy();
+    OptLevel::parse(&level).ok_or_else(|| {
+        CliExit::error(format!(
+            "unknown optimization level '-O{level}'. Use -O0, -O1, -O2, -O3, or -Os"
+        ))
+    })
 }
 
 /// A knob shared by the compiling subcommands. Each one declares the subset it
@@ -236,6 +232,17 @@ impl Default for CompileKnobs {
 }
 
 impl CompileKnobs {
+    #[must_use]
+    pub const fn compiler_opt_level(&self) -> wado_compiler::OptLevel {
+        match self.opt_level {
+            OptLevel::O0 => wado_compiler::OptLevel::O0,
+            OptLevel::O1 => wado_compiler::OptLevel::O1,
+            OptLevel::O2 => wado_compiler::OptLevel::O2,
+            OptLevel::O3 => wado_compiler::OptLevel::O3,
+            OptLevel::Os => wado_compiler::OptLevel::Os,
+        }
+    }
+
     /// The knobs of a subcommand that runs what it compiles at once (`run`,
     /// `serve`, `test`). They default to `-O1`: there the compile counts
     /// against the run, which `-O2` costs more than it saves, and `-O1` keeps

@@ -6,8 +6,8 @@
 
 A device behind a PJRT plugin, the only public way to run a program on a
 TPU. `wado run-pjrt` hosts it: a program compiles StableHLO, moves buffers
-to and from the device, and runs what it compiled. A program for any other
-host does not instantiate.
+to and from the device, and runs what it compiled. Under any other host a
+program runs until its first call of this module, which traps.
 
 ## Effects
 
@@ -17,11 +17,12 @@ A device behind a PJRT plugin, the only public way to run a program on a
 TPU. It mirrors the calls of PJRT's C API a program needs. A plugin compiles
 StableHLO, so nothing here says what a tensor means.
 
-#### `fn platform() -> String`
+#### `fn platform() -> Result<String, String>`
 
 `#[cm("core:pjrt/pjrt-host@0.1.0#platform")]`
 
-The plugin's name for its platform, such as `cpu` or `tpu`.
+The plugin's name for its platform, such as `cpu` or `tpu`. A plugin with
+no device here reports an error, as it may still compile for a topology.
 
 #### `fn compile(module: String) -> Result<Executable, String>`
 

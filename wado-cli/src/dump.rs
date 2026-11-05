@@ -391,7 +391,7 @@ async fn run_single(opts: &DumpOptions, input: &str) -> Result<(), CliExit> {
         &source,
         &host,
         Some(input),
-        knobs.opt_level.to_compiler(),
+        knobs.compiler_opt_level(),
         opts.target_world.as_deref(),
         knobs.allocator.as_deref(),
         knobs.opt,

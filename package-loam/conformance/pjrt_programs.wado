@@ -180,8 +180,8 @@ pub fn programs(device: &mut PjrtBackend, mut note: fn mut(String, f32) with _) 
         cache_cpu = wanted.cache;
     }
 
-    // A cache a step has donated still reads as it did, and two steps from one
-    // cache each keep their own positions, whichever goes first.
+    // A cache a step has donated still reads as it did up to its length, and two
+    // steps from one cache each keep their own positions, whichever goes first.
     let [last, last_mask] = attended_input(1, total + 1);
     let [other, other_mask] = attended_input(2, total + 2);
     let tip = attended::compute(device, &last, &last_mask, &cache_device, &mut attended_device);

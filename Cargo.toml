@@ -13,8 +13,8 @@ members = [
     "wado-run-pjrt",
     "wado-wasm-embed",
 ]
-# `wado-run-webgpu` is a workspace of its own: its host crate follows wasmtime
-# on its own schedule, and one workspace resolves one version of a crate.
+# `wado-run-webgpu` is a workspace of its own so that no root build compiles
+# wgpu. It shares `wado-host`, so it moves to a new wasmtime with this one.
 exclude = ["vendor", "wado-run-webgpu"]
 resolver = "3"
 

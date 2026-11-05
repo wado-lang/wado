@@ -409,7 +409,7 @@ pub async fn try_compile_with_run_cache(
             .map_err(TryCompileError::reported)?
     };
     let options = wado_compiler::CompilerOptions {
-        opt_level: knobs.opt_level.to_compiler(),
+        opt_level: knobs.compiler_opt_level(),
         skip_validation: knobs.skip_validation,
         opt: knobs.opt,
         parallelism: knobs.optimize_threads(),
@@ -447,11 +447,7 @@ pub(crate) fn entry_profile(
     host: &FilesystemCompilerHost,
 ) -> Result<Option<Arc<Profile>>, String> {
     let test_world = target_world == Some(TEST_WORLD);
-    let parsed = CodegenFlags::parse(
-        &knobs.codegen_flags,
-        knobs.opt_level.to_compiler(),
-        test_world,
-    );
+    let parsed = CodegenFlags::parse(&knobs.codegen_flags, knobs.compiler_opt_level(), test_world);
     // An unknown flag is the compile's to report.
     let Ok(CodegenFlags { pgo, .. }) = parsed else {
         return Ok(None);
