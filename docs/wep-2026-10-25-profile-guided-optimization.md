@@ -479,9 +479,9 @@ output at every level. It is a nightly campaign, not a gate.
     - The inliner's `branch_weight` guard reads the cold half, while the layout
       it protects follows the unlikely hint. The table settles which half it
       should read.
-11. [x] Call-site heat in context. The inliner prices the first two cases below
-    by where the site's code now stands, and an e2e fixture states each. The
-    third was built and measured, and lost.
+11. [x] Call-site heat in context. The inliner prices each case below by where
+    the site's code now stands, and an e2e fixture states each. A third case,
+    the lookahead at a hot site, is a [dead end](#dead-ends).
     - A spliced callee's sites. A site keeps the span it was written at, so its
       region still names the callee's heat. Each call carries a ceiling, the
       coolest site a splice carried it through, and its heat is the cooler of
@@ -491,15 +491,6 @@ output at every level. It is a nightly campaign, not a gate.
       wait holds only while some site this round visits may admit it, judged
       from the site's loop depth and heat, so a candidate that never moves
       takes the hot price (`pgo_unmoved_caller_hot_site`).
-    - The lookahead at a hot site. The table of what this round splices is
-      built at the plain threshold, so a hot site's price counts a loopy callee
-      that only a hot site would splice as a call. A table per heat, charging
-      each call at the cooler of its own heat and the pricing site's, gained no
-      benchmark and cost `cbor/canada/de` 1.95% and `gale/generate` 0.5% in
-      fuel. `CborDeserializer::begin_seq` then priced 84 at its hot sites, over
-      the hot threshold of 64, since its callee `begin_container` counts as
-      loopy. That loop's back edge never runs in the profile. Splicing both,
-      one round apart, is what the plain table allows and what ran faster.
 
 ## Known gaps
 
@@ -531,3 +522,32 @@ output at every level. It is a nightly campaign, not a gate.
 - [ ] The inliner reads a caller's cold code once, before it splices. A callee
   whose whole body is cold, spliced in, covers its block on both sides of the
   call, yet the calls after it are still inlined at hot-path prices.
+
+## Dead ends
+
+### The lookahead at a hot site
+
+The table of what a round splices is built at the plain threshold. A hot
+site's price therefore counts a loopy callee that only a hot site would splice
+as a call, not as its size. A table per heat, charging each call at the cooler
+of its own heat and the pricing site's, closes that gap. It gained no
+benchmark.
+
+It lost on `cbor/canada/de`. `CborDeserializer::begin_seq` priced 84 at its hot
+sites, over the hot threshold of 64, because its callee `begin_container`
+counts as loopy, and so `begin_seq` stayed a call. That loop's back edge never
+runs in the profile. Under the plain table, `begin_seq` is spliced first and
+`begin_container` follows a round later. That is the faster code.
+
+Neither a higher hot threshold nor a hot table that leaves out the cold code
+recovered it. Fuel against the build before cases 1 and 2 of roadmap item 11,
+with `+` meaning less fuel, measured by
+`wado test -O2 --allocator freelist --report-fuel --test-name fuel benchmark`:
+
+| Variant                             | `cbor/canada/de` | `gale/generate` | Mean over the rows |
+| ----------------------------------- | ---------------: | --------------: | -----------------: |
+| Plain table                         |           +0.00% |          -0.51% |             +0.98% |
+| Table per heat                      |           -1.95% |          -1.04% |             +0.75% |
+| Table per heat, hot threshold 96    |           -1.26% |          -0.43% |             +0.84% |
+| Table per heat, hot threshold 128   |          -10.49% |          -0.45% |             +0.22% |
+| Table per heat, hot price cold-free |           +0.00% |          -1.68% |             +0.87% |
