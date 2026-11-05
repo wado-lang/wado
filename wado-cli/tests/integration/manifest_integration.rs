@@ -123,7 +123,13 @@ export fn run() with Stdout {
     let output_path = tmp.path().join("out.wasm");
 
     wado_in(tmp.path())
-        .args(["build", "-o", output_path.to_str().unwrap()])
+        .args([
+            "build",
+            "--log-level",
+            "debug",
+            "-o",
+            output_path.to_str().unwrap(),
+        ])
         .assert()
         .success()
         .stderr(predicate::str::contains("Generated:"));
