@@ -1,4 +1,4 @@
-use { Decoding, Picks, Sampling, Slots, advanced, opened, stepped } from "./sampling.wado";
+use { Decoding, Picks, Sampling, Slots, opened, stepped } from "./sampling.wado";
 use { One } from "./hlo.wado";
 use { Cpu, Tensor } from "./tensor.wado";
 
@@ -163,17 +163,4 @@ test "a mask opens the position a step reads" {
         extents: [],
     };
     assert opened::<Cpu, [Slots, Picks]>(&mut cpu, &mask, &at).data == [1, 1, 1, 0];
-}
-
-test "a length advances by each step" {
-    let mut cpu = Cpu {};
-    let length = Tensor::<i64, []> {
-        data: [5],
-        extents: [],
-    };
-    let step = Tensor::<i64, []> {
-        data: [3],
-        extents: [],
-    };
-    assert advanced(&mut cpu, &length, &step).data == [8];
 }

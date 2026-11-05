@@ -1600,7 +1600,7 @@ fn emit_decoded(
         for let symbol of *read {
             let ident = names.get(&symbol_key(&symbol));
             fields.push(if moves_a_step(&symbol, &axes.total, owed)? {
-                `${ident}: advanced(backend, &lengths.${ident}, step)`;
+                `${ident}: backend.binary::<i64, []>(Binary::Add, &lengths.${ident}, step)`;
             } else {
                 `${ident}: lengths.${ident}`;
             });

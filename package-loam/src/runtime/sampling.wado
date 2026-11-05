@@ -288,15 +288,6 @@ pub fn opened<affine G: Graph, Axes>(
     return written_at::<G, i64, Axes, [Slots, One]>(g, mask, &ones, 1, at);
 }
 
-/// `length` `step` steps on.
-pub fn advanced<affine G: Graph>(
-    g: &mut G,
-    length: &G::Tensor<i64, []>,
-    step: &G::Tensor<i64, []>,
-) -> G::Tensor<i64, []> with _ {
-    return g.binary(Binary::Add, length, step);
-}
-
 /// The token each row of `logits` picks for the step `step`: its greatest
 /// logit, or the step's draw among those `decoding` keeps.
 fn picked<affine G: Graph>(
@@ -367,9 +358,9 @@ fn sum_where<affine G: Graph>(
 
 /// Each row's largest value at or below which the `weights` of the elements of
 /// `x` that reach it still sum to `wanted`, found by halving the range the row's
-/// values span, so no sort is needed. Each row's weights must reach `wanted`.
-/// The range ends [`NEGLIGIBLE`] below the row's greatest, as `-inf` would leave
-/// nothing to halve.
+/// values span, so no sort is needed. The range ends [`NEGLIGIBLE`] below the
+/// row's greatest, as `-inf` would leave nothing to halve, and that end is the
+/// answer where the weights fall short of `wanted`.
 fn threshold<affine G: Graph>(
     g: &mut G,
     x: &G::Tensor<f32, [Slots, Tokens]>,
