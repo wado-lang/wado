@@ -151,13 +151,6 @@ impl HostExecutable for Host {
         })
     }
 
-    fn analysis(
-        &mut self,
-        executable: Resource<Executable>,
-    ) -> wasmtime::Result<Result<Analysis, String>> {
-        Ok(self.table.get(&executable)?.analysis())
-    }
-
     fn drop(&mut self, executable: Resource<Executable>) -> wasmtime::Result<()> {
         self.table.delete(executable)?;
         Ok(())

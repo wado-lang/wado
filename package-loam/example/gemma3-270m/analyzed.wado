@@ -2,20 +2,16 @@
 //! as the device would hold them, and what the plugin reports of the program of
 //! a prompt and of a step after it. `README.md` says how to run it.
 
-use { eprintln, println, Stderr, Stdout } from "core:cli";
-use fs from "core:fs";
+use { println, Stderr, Stdout } from "core:cli";
 use { Preopens } from "core:fs";
 use { PjrtHost } from "core:pjrt";
 use { PjrtBackend, summary } from "lib:loam";
+use { read_checkpoint } from "./continued.wado";
 use { Model } from "./model.wado";
 
 export fn run() with (Stdout, Stderr, Preopens, PjrtHost) {
-    let checkpoint = match fs::read_linear("build/model.onnx_data") {
-        Ok(bytes) => bytes,
-        Err(e) => {
-            eprintln(`${e}; run fetch.sh first`);
-            return;
-        },
+    let Some(checkpoint) = read_checkpoint() else {
+        return;
     };
     let f32_bytes = checkpoint.len();
     let mut model = Model::load(PjrtBackend::analyzing("v5e:1x1"), &checkpoint).unwrap();

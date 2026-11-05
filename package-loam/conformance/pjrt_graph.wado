@@ -57,6 +57,24 @@ export fn run() with (Stdout, PjrtHost) {
     println(`mixed compared ${apart(&mut device, &got[3], &want.3)}`);
     println(`mixed i64 ${apart(&mut device, &got[4], &want.4)}`);
 
+    // The same graph over a weight the device holds in bf16.
+    let kept = device.kept_weights(
+        |r| r.finished([]),
+        0,
+        1,
+        |_| Result::<Any<Cpu>, ()>::Ok(Any::F32(cpu.relabeled(&x))),
+    ).unwrap();
+    assert device.weight_bytes()[0] == 12, "every element of the weight fits bf16";
+    let over_half = device.compiled(|r| {
+        let rids = r.parameter::<i64, [cases::C]>(ids.extents);
+        let rx = r.parameter::<f32, [cases::A, cases::B]>(x.extents);
+        let graph = cases::mixed(r, &rx, &rids);
+        return r.finished([graph.0.id, graph.1.id]);
+    }, &kept, &[]).unwrap();
+    let halved = device.executed(&over_half, &[Any::I64(untyped(&device, &device.upload(&ids)))], &kept);
+    println(`halved product ${apart(&mut device, &halved[0], &want.0)}`);
+    println(`halved scattered ${apart(&mut device, &halved[1], &want.1)}`);
+
     let w = cases::windowed_input();
     let windowed = device.compiled(|r| {
         let rw = r.parameter::<f32, [cases::A, cases::B, cases::C]>(w.extents);

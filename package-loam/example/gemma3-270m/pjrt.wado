@@ -4,22 +4,17 @@
 //! it picks the tokens onnxruntime picks. It prints the time per token, and the
 //! programs run and read backs a token takes. `README.md` says how to run it.
 
-use { eprintln, Stderr, Stdout } from "core:cli";
-use fs from "core:fs";
+use { Stderr, Stdout } from "core:cli";
 use { Preopens } from "core:fs";
 use { PjrtHost } from "core:pjrt";
 use { MonotonicClock } from "wasi:clocks";
 use { PjrtBackend } from "lib:loam";
-use { continued, recorded } from "./continued.wado";
+use { continued, read_checkpoint, recorded } from "./continued.wado";
 use { Model } from "./model.wado";
 
 export fn run() with (Stdout, Stderr, Preopens, MonotonicClock, PjrtHost) {
-    let checkpoint = match fs::read_linear("build/model.onnx_data") {
-        Ok(bytes) => bytes,
-        Err(e) => {
-            eprintln(`${e}; run fetch.sh first`);
-            return;
-        },
+    let Some(checkpoint) = read_checkpoint() else {
+        return;
     };
     let Some(generate) = recorded() else {
         return;

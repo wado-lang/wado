@@ -79,10 +79,6 @@ pub resource Executable {
     #[cm("core:pjrt/pjrt-host@0.1.0#[method]executable.execute")]
     #[cm_params("self", "arguments", "kept")]
     fn execute(&self, arguments: List<&Buffer>, kept: &ListView<i64>) -> Result<List<Buffer>, String>;
-    /// What the plugin reports of the compiled program.
-    #[cm("core:pjrt/pjrt-host@0.1.0#[method]executable.analysis")]
-    #[cm_params("self")]
-    fn analysis(&self) -> Result<Analysis, String>;
     /// Drop the resource. Scope exit drops one that nothing moved.
     #[cm("resource-drop")]
     fn drop(self);

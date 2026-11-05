@@ -43,7 +43,7 @@ fn a_program_compiles_and_runs_on_the_device() {
 #[ignore = "needs a plugin: run `mise run test-pjrt`"]
 fn loams_programs_compute_what_its_cpu_graph_does() {
     let printed = run("../package-loam/conformance/pjrt_graph.wado");
-    assert_eq!(printed.lines().count(), 30, "{printed}");
+    assert_eq!(printed.lines().count(), 32, "{printed}");
     for line in printed.lines() {
         let deviation: f32 = line
             .rsplit(' ')

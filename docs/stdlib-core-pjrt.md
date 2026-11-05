@@ -73,12 +73,6 @@ Runs the program. An argument the program updates in place is
 donated to its result, and using such a buffer afterwards is an
 error, unless `kept` holds its index, which copies it instead.
 
-#### `fn analysis(&self) -> Result<Analysis, String>`
-
-`#[cm("core:pjrt/pjrt-host@0.1.0#[method]executable.analysis")]` `#[cm_params("self")]`
-
-What the plugin reports of the compiled program.
-
 #### `fn drop(self)`
 
 `#[cm("resource-drop")]`

@@ -6,6 +6,7 @@ use { eprintln, println, Stderr, Stdout } from "core:cli";
 use fs from "core:fs";
 use { Preopens } from "core:fs";
 use { from_string } from "core:json";
+use { LinearArray } from "core:linear";
 use { MonotonicClock } from "wasi:clocks";
 
 /// One prompt and the tokens onnxruntime picks after it, as `generate.mjs`
@@ -20,6 +21,17 @@ pub struct Generated {
 
 struct Oracle {
     generate: List<Generated>,
+}
+
+/// The bytes of `model.onnx_data`, or `None` where it is missing.
+pub fn read_checkpoint() -> Option<LinearArray<u8>> with (Stderr, Preopens) {
+    return match fs::read_linear("build/model.onnx_data") {
+        Ok(bytes) => Option::Some(bytes),
+        Err(e) => {
+            eprintln(`${e}; run fetch.sh first`);
+            null;
+        },
+    };
 }
 
 /// The prompts `generate.json` records, or `None` where it is missing.

@@ -189,7 +189,7 @@ impl Plugin {
     ///
     /// # Safety
     ///
-    /// As [`Api::call`].
+    /// As [`Self::enter`].
     unsafe fn call<A: Arguments>(&self, slot: Slot, arguments: &mut A) -> Result<(), String> {
         // SAFETY: the caller's.
         let error = unsafe { self.enter(slot, arguments) };
@@ -431,11 +431,6 @@ pub struct Executable {
 unsafe impl Send for Executable {}
 
 impl Executable {
-    /// What the plugin reports of the program.
-    pub fn analysis(&self) -> Result<Analysis, String> {
-        self.plugin.analysis(self.held)
-    }
-
     /// Runs the program on `arguments`, donating each it updates in place but
     /// those `kept` holds the index of. The results are ready to read, and
     /// reading waits for the device.
