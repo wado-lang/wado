@@ -1876,7 +1876,7 @@ fn collect_modified_vars_in_expr(
             }
         }
         // A closure's captures ride the callee, the heap summary's parameter 0.
-        ExprKind::IndirectCall { callee, args } => {
+        ExprKind::IndirectCall { callee, args, .. } => {
             modified.call_sites.push(e);
             let operands: Vec<Operand> = std::iter::once(*callee).chain(args.clone()).collect();
             for a in operands {
@@ -1924,28 +1924,6 @@ fn collect_modified_vars_in_expr(
                 collect_modified_vars_in_operand(body, el, modified, type_table);
             }
         }
-<<<<<<< HEAD
-        // A closure's captures ride the callee, so it is scanned as an argument is.
-        ExprKind::IndirectCall { callee, args, .. } => {
-            modified.call_sites.push(e);
-            let operands: Vec<Operand> = std::iter::once(*callee).chain(args.clone()).collect();
-            for a in operands {
-                mark_gc_local_as_fully_modified_operand(body, a, modified, type_table);
-                collect_modified_vars_in_operand(body, a, modified, type_table);
-            }
-        }
-||||||| 8f8d1fdd0
-        // A closure's captures ride the callee, so it is scanned as an argument is.
-        ExprKind::IndirectCall { callee, args } => {
-            modified.call_sites.push(e);
-            let operands: Vec<Operand> = std::iter::once(*callee).chain(args.clone()).collect();
-            for a in operands {
-                mark_gc_local_as_fully_modified_operand(body, a, modified, type_table);
-                collect_modified_vars_in_operand(body, a, modified, type_table);
-            }
-        }
-=======
->>>>>>> origin/main
         ExprKind::ClosureToCanonical { functor, .. } => {
             collect_modified_vars_in_operand(body, *functor, modified, type_table);
         }
