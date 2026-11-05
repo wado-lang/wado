@@ -397,29 +397,7 @@ async fn run_single(opts: &DumpOptions, input: &str) -> Result<(), CliExit> {
         &source,
         &host,
         Some(input),
-<<<<<<< HEAD
-        knobs.compiler_opt_level(),
-        opts.target_world.as_deref(),
-        knobs.allocator.as_deref(),
-        knobs.opt,
-        &knobs.codegen_flags,
-        profile.as_deref(),
-        &knobs.params,
-        invocations,
-        knobs.optimize_threads(),
-||||||| f7568574bcf
-        knobs.opt_level.to_compiler(),
-        opts.target_world.as_deref(),
-        knobs.allocator.as_deref(),
-        knobs.opt,
-        &knobs.codegen_flags,
-        profile.as_deref(),
-        &knobs.params,
-        invocations,
-        knobs.optimize_threads(),
-=======
         options,
->>>>>>> origin/main
         opts.inline_decisions.as_deref(),
     )
     .await

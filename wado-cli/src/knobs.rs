@@ -271,7 +271,7 @@ impl CompileKnobs {
     #[must_use]
     pub fn compiler_options(&self) -> wado_compiler::CompilerOptions {
         wado_compiler::CompilerOptions {
-            opt_level: self.opt_level.to_compiler(),
+            opt_level: self.compiler_opt_level(),
             skip_validation: self.skip_validation,
             opt: self.opt.clone(),
             parallelism: self.optimize_threads(),
