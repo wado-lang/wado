@@ -78,6 +78,8 @@ export fn run() with (Stderr, Environment, Preopens, Client) {
                 Ok(c) && !judges_each_once(&c.findings, r.findings.len()) => confirmed.error = Some(
                     "the grader did not judge each finding exactly once",
                 ),
+
+
                 Ok(c) => confirmed.confirmations = c.findings,
                 Err(error) => confirmed.error = Some(error),
             }
