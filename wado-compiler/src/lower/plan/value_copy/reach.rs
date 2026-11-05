@@ -240,7 +240,7 @@ impl<'a> StorageReach<'a> {
     /// How many fields a struct `owner` has, `None` for any other type.
     #[must_use]
     pub fn field_count(&self, owner: TypeId) -> Option<u32> {
-        let (def, type_args) = self.type_table.settled_struct_parts(owner)?;
+        let (def, type_args) = self.type_table.monomorphized_struct_parts(owner)?;
         let fields = self.fields.get(&(def, type_args.to_vec()))?;
         Some(u32::try_from(fields.len()).unwrap())
     }
@@ -254,7 +254,7 @@ impl<'a> StorageReach<'a> {
             return Members::Held(vec![element]);
         }
         // A `List`'s instance has no declaration, and its element is read above.
-        if let Some((def, type_args)) = tt.settled_struct_parts(ty)
+        if let Some((def, type_args)) = tt.monomorphized_struct_parts(ty)
             && let Some(fields) = self.fields.get(&(def, type_args.to_vec()))
         {
             return Members::Held(fields.iter().map(|f| f.type_id).collect());

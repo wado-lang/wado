@@ -120,7 +120,7 @@ impl Scan<'_> {
     fn field_type_of(&self, owner: TypeId, index: u32) -> TypeId {
         let (def, type_args) = self
             .type_table
-            .settled_struct_parts(owner)
+            .monomorphized_struct_parts(owner)
             .expect("a struct pattern matches a struct");
         self.fields[&(def, type_args.to_vec())][index as usize].type_id
     }

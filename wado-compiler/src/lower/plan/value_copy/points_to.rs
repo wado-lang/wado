@@ -286,7 +286,7 @@ impl<'a> HoldsHandle<'a> {
                 _ => true,
             };
         }
-        match tt.settled(ty) {
+        match tt.monomorphized(ty) {
             ResolvedType::Primitive(_)
             | ResolvedType::Unit
             | ResolvedType::Never

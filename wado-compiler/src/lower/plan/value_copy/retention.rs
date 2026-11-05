@@ -1041,7 +1041,7 @@ impl RefCarrying<'_> {
     /// The types of the fields of the struct `type_id` instantiates, whichever
     /// spelling it is, where the plan phase sees its declaration.
     fn declared_fields(&self, type_id: TypeId) -> Option<Vec<TypeId>> {
-        let (def, type_args) = self.type_table.settled_struct_parts(type_id)?;
+        let (def, type_args) = self.type_table.monomorphized_struct_parts(type_id)?;
         self.structs
             .iter()
             .find(|s| s.def == def && s.type_args == type_args)

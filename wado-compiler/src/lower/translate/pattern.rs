@@ -429,7 +429,7 @@ impl<'a> PatternLowerer<'a> {
     /// The fields of the struct a struct pattern reads.
     fn struct_fields_of(&self, type_id: TypeId, type_table: &TypeTable) -> Vec<TirField> {
         let (def, type_args) = type_table
-            .settled_struct_parts(type_id)
+            .monomorphized_struct_parts(type_id)
             .expect("a struct pattern reads a struct");
         self.struct_fields_map[&(def, type_args.to_vec())].clone()
     }
