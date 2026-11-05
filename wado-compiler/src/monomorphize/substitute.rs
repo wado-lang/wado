@@ -314,7 +314,9 @@ impl Monomorphizer {
                 }
                 type_table.make_tuple(new_elems)
             }
-            ResolvedType::GenericInstance { def, type_args } => {
+            ResolvedType::GenericInstance { def, type_args }
+            | ResolvedType::Variant { def, type_args }
+            | ResolvedType::Resource { def, type_args } => {
                 if type_args.is_empty() {
                     if !substitution.is_empty() {
                         let mut indexed_args: Vec<(u32, TypeId)> =
@@ -343,13 +345,6 @@ impl Monomorphizer {
                     return tid;
                 }
 
-                type_table.make_generic_instance(def, new_args)
-            }
-            ResolvedType::Variant { def, type_args } | ResolvedType::Resource { def, type_args } => {
-                let new_args: Vec<TypeId> = type_args
-                    .iter()
-                    .map(|&arg| self.substitute_type(arg, substitution, type_table))
-                    .collect();
                 type_table.make_generic_instance(def, new_args)
             }
             // Delegate leaf cases (TypeParam, TypePack,

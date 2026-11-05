@@ -3192,7 +3192,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 | ResolvedType::Tuple(type_args) => {
                     (tt.fq_type_name(effective_id).head_only(), type_args)
                 }
-                ResolvedType::Resource { type_args, .. } | ResolvedType::Variant { type_args, .. }
+                ResolvedType::Resource { type_args, .. }
+                | ResolvedType::Variant { type_args, .. }
                     if !type_args.is_empty() =>
                 {
                     (tt.fq_type_name(effective_id).head_only(), type_args)

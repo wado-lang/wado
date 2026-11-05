@@ -549,8 +549,7 @@ fn check_cm_boundary_representable_inner(
             ResolvedType::Variant { def, type_args } if type_args.is_empty() => {
                 match variant_decl_of(*def, tir_modules) {
                     Some(decl) => {
-                        let payloads: Vec<TypeId> =
-                            decl.cases.iter().map(|c| c.payload).collect();
+                        let payloads: Vec<TypeId> = decl.cases.iter().map(|c| c.payload).collect();
                         for p in payloads {
                             recurse(p, Slot::Optional, visited)?;
                         }

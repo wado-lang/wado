@@ -3002,18 +3002,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // `.next()` returns `Option<Item>`. Extract the `Some` payload type
         // for the binding scrutinee. Bind out of the borrow first so the
         // `get_variant_case_payload_type` call below can re-borrow `&mut self`.
-        let option_shape: Option<(DefId, Vec<TypeId>)> = {
-            let decl = self.tysys.type_def(option_type);
-            let is_variant =
-                decl.is_some_and(|def| self.type_lookup().variant_cases_of(def).is_some());
+        let option_shape: Option<(DefId, Vec<TypeId>)> =
             match self.tysys.type_table.borrow().get(option_type).clone() {
-                ResolvedType::Variant { type_args, .. } if is_variant => Some((
-                    decl.expect("a variant answers with its declaration"),
-                    type_args,
-                )),
+                ResolvedType::Variant { def, type_args } => Some((def, type_args)),
                 _ => None,
-            }
-        };
+            };
         let item_type = match option_shape {
             Some((def, type_args)) => {
                 self.get_variant_case_payload_type(def, &some_case_name, &type_args, span)

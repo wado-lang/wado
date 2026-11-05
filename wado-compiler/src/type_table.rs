@@ -282,7 +282,8 @@ impl TypeTable {
             ResolvedType::GenericInstance { def, type_args } => {
                 Some((self.decl_name(*def).to_string(), type_args.clone()))
             }
-            ResolvedType::Resource { def, type_args } | ResolvedType::Variant { def, type_args }
+            ResolvedType::Resource { def, type_args }
+            | ResolvedType::Variant { def, type_args }
                 if !type_args.is_empty() =>
             {
                 Some((self.decl_name(*def).to_string(), type_args.clone()))
@@ -1748,7 +1749,8 @@ impl TypeTable {
         // whose base may already have been pruned.
         let def = match self.get(type_id) {
             ResolvedType::GenericInstance { def, .. } => *def,
-            ResolvedType::Resource { def, type_args } | ResolvedType::Variant { def, type_args }
+            ResolvedType::Resource { def, type_args }
+            | ResolvedType::Variant { def, type_args }
                 if !type_args.is_empty() =>
             {
                 *def
@@ -2544,7 +2546,9 @@ impl TypeTable {
         match self.get(id) {
             ResolvedType::Struct { def, type_args } => self.struct_mangled_name(*def, type_args),
             ResolvedType::GenericInstance { def, type_args }
-            | ResolvedType::Variant { def, type_args } => self.generic_mangled_name(*def, type_args),
+            | ResolvedType::Variant { def, type_args } => {
+                self.generic_mangled_name(*def, type_args)
+            }
             ResolvedType::Tuple(elems) => self.generic_mangled_name(self.tuple_def(), elems),
             other => panic!("`{other:?}` is not a struct type"),
         }
@@ -2633,7 +2637,11 @@ impl TypeTable {
     /// The payloads of variant `def` applied to `type_args`, a payload that is
     /// one of its parameters read as the argument there. A declaration's own
     /// (no arguments) keep its parameters.
-    pub fn variant_instance_payloads(&self, def: DefId, type_args: &[TypeId]) -> Option<Vec<TypeId>> {
+    pub fn variant_instance_payloads(
+        &self,
+        def: DefId,
+        type_args: &[TypeId],
+    ) -> Option<Vec<TypeId>> {
         let cases = self.variant_template_cases(def)?;
         Some(
             cases
@@ -2923,8 +2931,7 @@ impl TypeTable {
             .any(|member| self.reaches_in(member, target, &template_args, walked))
     }
 
-    /// Find a variant type by (name, `module_source`) pair via `intern_map` (O(1)).
-    /// Collision-safe across modules when two variant types share a name.
+    /// The interned type of variant `def` itself, applied to no arguments.
     pub fn find_variant_type(&self, def: DefId) -> Option<TypeId> {
         self.intern_map
             .get(&ResolvedType::Variant {
@@ -2934,8 +2941,7 @@ impl TypeTable {
             .copied()
     }
 
-    /// Find a resource type by (name, `module_source`) pair via `intern_map` (O(1)).
-    /// Collision-safe across modules when two resource types share a name.
+    /// The interned type of resource `def` itself, applied to no arguments.
     pub fn find_resource_type(&self, def: DefId) -> Option<TypeId> {
         self.intern_map
             .get(&ResolvedType::Resource {
@@ -3008,13 +3014,17 @@ impl TypeTable {
 
     /// The interned instance of `def` at `type_args`, if one exists.
     fn find_generic_instance(&self, def: DefId, type_args: &[TypeId]) -> Option<TypeId> {
-        let type_args = type_args.to_vec();
-        let spelling = match self.defs.kind(def) {
+        let spelling = self.instance_spelling(def, type_args.to_vec());
+        self.intern_map.get(&spelling).copied()
+    }
+
+    /// `def` applied to `type_args`, in the kind that carries its arguments.
+    fn instance_spelling(&self, def: DefId, type_args: Vec<TypeId>) -> ResolvedType {
+        match self.defs.kind(def) {
             DefKind::Resource => ResolvedType::Resource { def, type_args },
             DefKind::Variant => ResolvedType::Variant { def, type_args },
             _ => ResolvedType::GenericInstance { def, type_args },
-        };
-        self.intern_map.get(&spelling).copied()
+        }
     }
 
     pub fn make_enum(&mut self, def: DefId) -> TypeId {
@@ -5105,18 +5115,16 @@ impl TypeTable {
             !self.is_compiler_item(def, CompilerItem::Tuple),
             "a tuple is interned by `make_tuple`"
         );
-        match self.defs.kind(def) {
-            DefKind::Resource => self.intern(ResolvedType::Resource { def, type_args }),
-            DefKind::Variant => self.intern(ResolvedType::Variant { def, type_args }),
-            DefKind::Struct => {
-                let type_args = self.struct_instance_args(type_args);
-                self.intern(ResolvedType::GenericInstance { def, type_args })
-            }
-            _ => self.intern(ResolvedType::GenericInstance { def, type_args }),
-        }
+        let type_args = if self.is_struct_instance_def(def) {
+            self.struct_instance_args(type_args)
+        } else {
+            type_args
+        };
+        let spelling = self.instance_spelling(def, type_args);
+        self.intern(spelling)
     }
 
-    /// Create a `List<T>` type (`GenericInstance` { name: "List", ... })
+    /// Create a `List<T>` type.
     pub fn make_list(&mut self, element: TypeId) -> TypeId {
         let def = self
             .compiler_item_def(CompilerItem::List)
@@ -5297,7 +5305,8 @@ impl TypeTable {
             ResolvedType::GenericInstance { def, type_args } => {
                 InstanceArg::Generic(*def, self.instance_args(type_args))
             }
-            ResolvedType::Resource { def, type_args } | ResolvedType::Variant { def, type_args }
+            ResolvedType::Resource { def, type_args }
+            | ResolvedType::Variant { def, type_args }
                 if !type_args.is_empty() =>
             {
                 InstanceArg::Generic(*def, self.instance_args(type_args))
@@ -6425,7 +6434,8 @@ impl TypeTable {
             // spelling the argument into the head applies it twice
             // (`StreamWritable<u8><u8>::write_all`) and resolves to nothing.
             ResolvedType::GenericInstance { def, .. } => self.decl_name(*def).to_string(),
-            ResolvedType::Resource { def, type_args } | ResolvedType::Variant { def, type_args }
+            ResolvedType::Resource { def, type_args }
+            | ResolvedType::Variant { def, type_args }
                 if !type_args.is_empty() =>
             {
                 self.decl_name(*def).to_string()

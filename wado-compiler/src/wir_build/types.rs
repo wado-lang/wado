@@ -1115,7 +1115,7 @@ fn register_canonical_closure_types(ctx: &mut WirContext<'_>) {
     }
 }
 
-/// Register a `List<T>` wrapper struct for every `GenericInstance("List", [T])`
+/// Register a `List<T>` wrapper struct for every `List<T>` instance
 /// in any module's type table, TIR carrying no struct definition of its own to
 /// supply the GC array type the emitter needs. Processed in dependency order, so
 /// a nested `List<U>` is registered before `List<List<U>>` and the backing array
@@ -1199,6 +1199,13 @@ pub(super) fn generic_instance_name(
         })
         .collect();
     mangle_generic_name(name, &type_arg_names)
+}
+
+/// The key variant `def` applied to `type_args` (none for a plain variant) is
+/// registered under.
+pub(super) fn variant_type_key(type_table: &TypeTable, def: DefId, type_args: &[TypeId]) -> String {
+    let name = generic_instance_name(type_table, type_table.decl_name(def), type_args);
+    wir_type_key(type_table.def_module(def), &name)
 }
 
 /// The name of an associated-type projection (`f64::Err`) as the type it

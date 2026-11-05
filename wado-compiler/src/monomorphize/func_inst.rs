@@ -2379,7 +2379,8 @@ impl Monomorphizer {
                 // indicating the variant is generic. Non-generic variants like
                 // `Shape { Circle(f64), Point }` have concrete payload types that aren't
                 // affected by substitution and must keep no arguments.
-                if let ResolvedType::Variant { def, type_args } = type_table.get(*variant_type).clone()
+                if let ResolvedType::Variant { def, type_args } =
+                    type_table.get(*variant_type).clone()
                     && type_args.is_empty()
                     && let Some(payload_expr) = payload
                     && original_payload_type.is_some_and(|orig| orig != payload_expr.type_id)
@@ -2770,9 +2771,8 @@ impl Monomorphizer {
                 | ResolvedType::Tuple(_)
                 | ResolvedType::BuiltinArray(_)
                 | ResolvedType::Struct { .. } => true,
-                ResolvedType::Resource { type_args, .. } | ResolvedType::Variant { type_args, .. } => {
-                    !type_args.is_empty()
-                }
+                ResolvedType::Resource { type_args, .. }
+                | ResolvedType::Variant { type_args, .. } => !type_args.is_empty(),
                 _ => false,
             }
         };
@@ -4115,10 +4115,6 @@ fn try_lower_comparison(
     let (impl_type_args, type_module_source): (Vec<FqTypeName>, Option<ModuleSource>) =
         match operand_type {
             ResolvedType::Struct { .. } => (
-                vec![],
-                type_table.nominal_head(left.type_id).map(|(_, m)| m),
-            ),
-            ResolvedType::Variant { type_args, .. } if type_args.is_empty() => (
                 vec![],
                 type_table.nominal_head(left.type_id).map(|(_, m)| m),
             ),

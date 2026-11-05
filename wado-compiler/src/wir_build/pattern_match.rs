@@ -13,13 +13,11 @@ use crate::wir::{WirInstr, WirType, WirTypeId};
 
 use super::calls::{MULTIVALUE_I64_BUILTINS, MULTIVALUE_I64_RESULTS};
 use super::translate::{FunctionTranslator, LabelEntry, declare_and_set_local};
-use crate::name::{
-    VARIANT_DISCRIMINANT_FIELD, variant_payload_field, wir_type_key, wir_variant_case_key,
-};
+use crate::name::{VARIANT_DISCRIMINANT_FIELD, variant_payload_field, wir_variant_case_key};
 use crate::nir_arena::{ArmData, BlockId, Body, ExprKind, Operand, PatId, PatKind};
 use crate::wir::{WirTypeDef, WirVariantCase, WirVariantType};
 use crate::wir_build::translate::ref_binding_needs_boxing;
-use crate::wir_build::types::generic_instance_name;
+use crate::wir_build::types::variant_type_key;
 use std::assert_matches;
 
 /// Most intervals an or-pattern's test compares one by one. Past it the test
@@ -726,12 +724,7 @@ impl FunctionTranslator<'_, '_> {
     fn variant_type_key(&self, type_id: TypeId) -> String {
         match self.type_table.get(type_id) {
             ResolvedType::Variant { def, type_args } => {
-                let mangled = generic_instance_name(
-                    self.type_table,
-                    self.type_table.decl_name(*def),
-                    type_args,
-                );
-                wir_type_key(self.type_table.def_module(*def), &mangled)
+                variant_type_key(self.type_table, *def, type_args)
             }
             other => panic!("[WIR] expected a variant type, got {other:?}"),
         }

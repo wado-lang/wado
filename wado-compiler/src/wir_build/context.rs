@@ -9,7 +9,7 @@ use crate::name::MangledName;
 
 use crate::canonical::CanonicalIntrinsic;
 use crate::module_source::ModuleSource;
-use crate::name::{StructName, wir_enum_type_key, wir_type_key};
+use crate::name::{StructName, wir_enum_type_key};
 use crate::nir::{FuncId, FuncRef};
 use crate::nir_package::NirPackage;
 use crate::primitive::PrimitiveType;
@@ -21,7 +21,7 @@ use crate::wir::{
     WirImport, WirImportDesc, WirInstr, WirMemory, WirMeta, WirName, WirNames, WirPackage,
     WirStructType, WirType, WirTypeDef, WirTypeId,
 };
-use crate::wir_build::types::{generic_instance_name, list_wrapper_struct_name};
+use crate::wir_build::types::{generic_instance_name, list_wrapper_struct_name, variant_type_key};
 use crate::world_registry::WorldSurface;
 use crate::{nir, tir};
 
@@ -963,14 +963,7 @@ impl<'a> WirContext<'a> {
                 }
             }
             ResolvedType::Variant { def, type_args } => {
-                // An instance registers under its mangled spelling, which for
-                // a function-local declaration carries its disambiguator.
-                let name = if type_args.is_empty() {
-                    type_table.decl_name(*def).to_string()
-                } else {
-                    generic_instance_name(type_table, &type_table.decl_mangled_name(*def), type_args)
-                };
-                let key = wir_type_key(type_table.def_module(*def), &name);
+                let key = variant_type_key(type_table, *def, type_args);
                 let Some(type_id) = self.type_map.get(&key) else {
                     return Err(UnregisteredType::struct_ref(format!("variant `{key}`")));
                 };
