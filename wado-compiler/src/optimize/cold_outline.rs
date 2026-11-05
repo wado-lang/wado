@@ -36,8 +36,8 @@ use crate::type_table::TypeTable;
 use super::arena_query::{
     MarkerBuiltins, MutRefAliases, RareRuns, control_escapes, locals_possibly_mutated,
 };
-use super::value_copy::mutation::MutationOracle;
 use super::inline::{InlineCtx, splice_stmt};
+use super::value_copy::mutation::MutationOracle;
 use crate::ast::Visibility;
 use crate::compiler_trace;
 use crate::name::cold_region_helper_name;
@@ -301,7 +301,7 @@ fn free_vars(
         &[],
     );
     let outer = LocalRefs::collect(body, vec![NodeRef::Block(body.root())], region);
-    let written = written_in(body, region, func, param_count, type_table);
+    let written = written_in(body, region, func, type_table);
     let mut bound_ahead = None;
     let mut args = Vec::new();
     for idx in inside.mentioned.iter().copied() {
@@ -364,12 +364,11 @@ fn written_in(
     body: &Body,
     region: &[StmtId],
     func: &NirFunction,
-    param_count: u32,
     type_table: &TypeTable,
 ) -> IndexSet<u32> {
     let no_signatures = IndexMap::default();
     let oracle = MutationOracle::new(&no_signatures);
-    let aliases = MutRefAliases::of_body(body, &func.locals, param_count as usize, type_table);
+    let aliases = MutRefAliases::of_body(body, &func.locals, func.params.len(), type_table);
     region
         .iter()
         .flat_map(|&s| {
