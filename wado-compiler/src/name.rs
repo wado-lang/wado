@@ -264,6 +264,35 @@ pub fn packaged_module_name(coordinate: &str, path: &str) -> String {
     format!("{coordinate}/{path}")
 }
 
+/// A [`packaged_module_name`] read back into its parts.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct PackagedModuleName<'a> {
+    /// The coordinate without its version: `acme:app`.
+    pub package: &'a str,
+    pub version: &'a str,
+    pub path: &'a str,
+}
+
+impl<'a> PackagedModuleName<'a> {
+    /// `None` for a name [`packaged_module_name`] did not make.
+    #[must_use]
+    pub fn parse(name: &'a str) -> Option<Self> {
+        let (coordinate, path) = name.split_once('/')?;
+        let (package, version) = coordinate.split_once('@')?;
+        Some(Self {
+            package,
+            version,
+            path,
+        })
+    }
+
+    /// The name with the version left out: `acme:app/src/lib.wado`.
+    #[must_use]
+    pub fn unversioned(&self) -> String {
+        format!("{}/{}", self.package, self.path)
+    }
+}
+
 /// `name` with the module paths in its type arguments dropped and its clone
 /// suffix cut. A synthesized name opens with [`INTERNAL_PREFIX`], which is its
 /// own first character rather than a suffix marker; so may a type argument.

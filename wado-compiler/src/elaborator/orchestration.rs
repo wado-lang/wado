@@ -24,7 +24,7 @@ use crate::component_model::CmInterfaceRegistry;
 use crate::coverage::{CoverageMap, CoverageScope};
 use crate::logger::{Bail, Logger, ModuleDiag};
 use crate::module_source::{ModuleSource, ModuleSourceInterner};
-use crate::pgo::{Applied, MarkMap};
+use crate::pgo::{Applied, MarkMap, ProfileNames};
 use crate::symbol::SymbolTable;
 use crate::tir::{TirModule, TypeId};
 use crate::type_table::TypeTable;
@@ -1749,10 +1749,16 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         } else {
             IndexSet::default()
         };
+        let names = if coverage.is_some() || profile.is_some() {
+            ProfileNames::of(modules.keys())
+        } else {
+            ProfileNames::default()
+        };
         state.coverage = coverage.map(|scope| {
             CoverageMap::build(
                 snapshot.and_then(|s| s.coverage.as_ref()),
                 modules.iter().filter(|(source, _)| scope.measures(source)),
+                &names,
                 &unreachable_calls,
             )
         });
@@ -1760,6 +1766,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             MarkMap::build(
                 snapshot.and_then(|s| s.marks.as_ref()),
                 modules,
+                &names,
                 profile,
                 &unreachable_calls,
             )

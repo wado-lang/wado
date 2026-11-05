@@ -31,7 +31,7 @@ use crate::logger::Logger;
 use crate::marker::write_out_markers;
 use crate::module_source::{ModuleSource, ModuleSourceInterner, ParseModules};
 use crate::name::resolve_import_with_entry;
-use crate::pgo::{Applied, MarkMap};
+use crate::pgo::{Applied, MarkMap, ProfileNames};
 use crate::resolve::Resolutions;
 use crate::stdlib_snapshot::{get_or_init_snapshot, reparsed_snapshot_module, stdlib_sources};
 use crate::symbol::{Symbol, SymbolTable};
@@ -257,6 +257,7 @@ impl Semantics {
         let module = self.modules.get(&self.entry_module_source)?;
         let planned = plan_module(
             &self.entry_module_source,
+            ProfileNames::of(self.modules.keys()).name(&self.entry_module_source),
             module,
             &rt_unreachable_calls(state, &self.symbols),
         );

@@ -16,6 +16,7 @@ use crate::coverage::{
 };
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
+use crate::name::PackagedModuleName;
 use crate::rarity::Mark;
 use crate::stdlib::core_module_file;
 use crate::token::Span;
@@ -329,6 +330,51 @@ fn times(runs: i64) -> String {
     }
 }
 
+/// The names a profile gives the modules of one build: each module's name,
+/// with its package's version left out, so a release keeps the counts recorded
+/// before it. A package the build holds two versions of keeps them, since its
+/// versions are two packages.
+#[derive(Debug, Clone, Default)]
+pub(crate) struct ProfileNames {
+    versioned: IndexSet<String>,
+}
+
+impl ProfileNames {
+    pub(crate) fn of<'a>(sources: impl IntoIterator<Item = &'a ModuleSource>) -> Self {
+        let mut versions: IndexMap<String, IndexSet<String>> = IndexMap::default();
+        for source in sources {
+            let name = source.to_string();
+            if let Some(parts) = packaged(source, &name) {
+                versions
+                    .entry(parts.package.to_string())
+                    .or_default()
+                    .insert(parts.version.to_string());
+            }
+        }
+        Self {
+            versioned: versions
+                .into_iter()
+                .filter(|(_, versions)| versions.len() > 1)
+                .map(|(package, _)| package)
+                .collect(),
+        }
+    }
+
+    pub(crate) fn name(&self, source: &ModuleSource) -> String {
+        let name = source.to_string();
+        match packaged(source, &name) {
+            Some(parts) if !self.versioned.contains(parts.package) => parts.unversioned(),
+            _ => name,
+        }
+    }
+}
+
+/// `name`'s parts, where `source`'s file lies in a package with a `[package]`.
+fn packaged<'n>(source: &ModuleSource, name: &'n str) -> Option<PackagedModuleName<'n>> {
+    source.file()?;
+    PackagedModuleName::parse(name)
+}
+
 /// Where a profile marks a compile's code rare, the source's markers it
 /// overrides, and the remarks applying it makes.
 #[derive(Debug, Clone, Default)]
@@ -422,6 +468,7 @@ impl MarkMap {
     pub(crate) fn build<'a>(
         seed: Option<&MarkMap>,
         modules: impl IntoIterator<Item = (&'a ModuleSource, &'a ast::Module)>,
+        names: &ProfileNames,
         applied: Applied<'_>,
         rt_unreachable_calls: &IndexSet<AstId>,
     ) -> Self {
@@ -430,11 +477,12 @@ impl MarkMap {
             if map.sources.contains(source) {
                 continue;
             }
-            let Some(functions) = applied.profile.modules.get(&source.to_string()) else {
+            let name = names.name(source);
+            let Some(functions) = applied.profile.modules.get(&name) else {
                 continue;
             };
             map.apply(
-                plan_module(source, module, rt_unreachable_calls),
+                plan_module(source, name, module, rt_unreachable_calls),
                 module.ast_id_space(),
                 functions,
                 applied.reading,
@@ -684,6 +732,33 @@ mod tests {
             choice: None,
             derived: Vec::new(),
         }
+    }
+
+    /// A packaged module's profile name leaves its package's version out,
+    /// unless the build holds a second version of the package.
+    #[test]
+    fn a_profile_names_a_package_without_its_version_while_it_has_one() {
+        use crate::module_source::ModuleSourceInterner;
+
+        let mut interner = ModuleSourceInterner::new();
+        let mut module = |path: &str, name: &str| {
+            let name = interner.intern(name);
+            interner.dependency(path).named(name)
+        };
+        let app = module("app/lib.wado", "acme:app@0.1.0/lib.wado");
+        let dep = module("dep1/lib.wado", "acme:dep@0.1.0/src/lib.wado");
+        let dep2 = module("dep2/lib.wado", "acme:dep@0.2.0/src/lib.wado");
+        let core = ModuleSource::prelude();
+
+        let one = ProfileNames::of([&app, &dep, &core]);
+        assert_eq!(one.name(&app), "acme:app/lib.wado");
+        assert_eq!(one.name(&dep), "acme:dep/src/lib.wado");
+        assert_eq!(one.name(&core), "core:prelude");
+
+        let two = ProfileNames::of([&app, &dep, &dep2]);
+        assert_eq!(two.name(&app), "acme:app/lib.wado");
+        assert_eq!(two.name(&dep), "acme:dep@0.1.0/src/lib.wado");
+        assert_eq!(two.name(&dep2), "acme:dep@0.2.0/src/lib.wado");
     }
 
     fn recorded() -> Coverage {

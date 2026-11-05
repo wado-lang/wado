@@ -30,7 +30,7 @@ A profile is text, one record per line:
 
 ```text
 wado-pgo 1
-module acme:app@0.1.0/src/lib.wado
+module acme:app/src/lib.wado
 fn 3f2a9c0d1e2b4a59 12 pick
 0 5
 1 4
@@ -40,8 +40,11 @@ A `module` line names a module the same way on any machine and from any entry
 of one package:
 
 - A file of a package whose `wado.toml` has a `[package]`, the recording
-  package's own or a dependency's, is the package's `namespace:name@version`,
-  then the file relative to its root: `acme:dep@0.1.0/src/lib.wado`.
+  package's own or a dependency's, is the package's `namespace:name`, then the
+  file relative to its root: `acme:dep/src/lib.wado`. The version is left out,
+  so a release keeps the profile recorded before it. Where the build holds two
+  versions of the package, which are two packages, each is
+  `namespace:name@version` instead: `acme:dep@0.1.0/src/lib.wado`.
 - Any other file is relative to the recording package's root, or for a program
   in no package, to the program's directory.
 - A `core:` module is its import path, and a remote module its URL.

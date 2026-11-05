@@ -22,6 +22,7 @@ use crate::hashmap::{IndexMap, IndexSet};
 use crate::lexer::normalize_line_breaks;
 use crate::module_source::ModuleSource;
 use crate::name::COLD_PATH_INTRINSIC;
+use crate::pgo::ProfileNames;
 use crate::token::Span;
 
 /// Name of the custom section embedded in instrumented test-world components.
@@ -181,8 +182,8 @@ pub struct PlannedFunction {
 /// The regions a module's source implies, numbered from zero.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct ModulePlan {
-    /// The module's name, the same on any machine and from any entry of one
-    /// package.
+    /// The module's name in a profile ([`crate::pgo::ProfileNames`]), the
+    /// same on any machine and from any entry of one package.
     pub name: String,
     /// Where the host reads the module, relative to the entry module's
     /// directory ([`ModuleSource::file`]); for a module that is no file, its
@@ -233,9 +234,10 @@ impl CoverageMap {
     /// instead: they come from the stdlib snapshot with their probes already in
     /// place, and reify still reads their sites where it replays a default body
     /// of theirs in another module. The rest number past the seed's last id.
-    pub fn build<'a>(
+    pub(crate) fn build<'a>(
         seed: Option<&CoverageMap>,
         modules: impl IntoIterator<Item = (&'a ModuleSource, &'a ast::Module)>,
+        names: &ProfileNames,
         rt_unreachable_calls: &IndexSet<AstId>,
     ) -> Self {
         let mut map = seed.map_or_else(Self::default, Self::without_entry);
@@ -250,7 +252,7 @@ impl CoverageMap {
                 sites,
                 for_of_bodies,
                 ..
-            } = plan_module(source, module, rt_unreachable_calls);
+            } = plan_module(source, names.name(source), module, rt_unreachable_calls);
             let base = next;
             next += plan.regions.len() as u32;
             let first_function = map.function_probes.len();
@@ -561,18 +563,20 @@ pub(crate) struct PlannedModule {
     pub markers: Vec<(SourceMarker, Span, u32)>,
 }
 
-/// Plan one module: its regions, the site each region's probe goes at, and
-/// the regions of each `for-of` body. `rt_unreachable_calls` holds the callee
-/// sites that name `core:rt`'s `unreachable`.
+/// Plan one module, named `name` in a profile: its regions, the site each
+/// region's probe goes at, and the regions of each `for-of` body.
+/// `rt_unreachable_calls` holds the callee sites that name `core:rt`'s
+/// `unreachable`.
 #[must_use]
 pub(crate) fn plan_module(
     source: &ModuleSource,
+    name: String,
     module: &ast::Module,
     rt_unreachable_calls: &IndexSet<AstId>,
 ) -> PlannedModule {
     let mut planner = Planner {
         plan: ModulePlan {
-            name: source.to_string(),
+            name,
             path: source.file().unwrap_or_else(|| source.to_string()),
             ..ModulePlan::default()
         },
@@ -1656,7 +1660,8 @@ mod tests {
     /// Each function's hash in `source`, by name.
     fn hashes(source: &str) -> BTreeMap<String, u64> {
         let module = parse(source);
-        let plan = plan_module(&ModuleSource::builtin(), &module, &IndexSet::default()).plan;
+        let builtin = ModuleSource::builtin();
+        let plan = plan_module(&builtin, builtin.to_string(), &module, &IndexSet::default()).plan;
         plan.functions
             .into_iter()
             .map(|f| (f.name, f.hash))
@@ -1697,7 +1702,8 @@ mod tests {
         for item in &module.items {
             spelled.visit_item(item);
         }
-        let plan = plan_module(&ModuleSource::builtin(), &module, &spelled.0).plan;
+        let builtin = ModuleSource::builtin();
+        let plan = plan_module(&builtin, builtin.to_string(), &module, &spelled.0).plan;
         plan.regions.iter().map(|r| r.kind).collect()
     }
 

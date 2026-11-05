@@ -59,7 +59,7 @@ fn only_the_workloads_are_recorded_into_the_package_profile() {
     let profile = fs::read_to_string(tmp.path().join("pgo/default.pgo")).unwrap();
     assert!(profile.starts_with("wado-pgo 1\n"), "{profile}");
     assert!(profile.contains("\nmodule core:prelude\n"), "{profile}");
-    let lib = section(&profile, "acme:app@0.1.0/lib.wado");
+    let lib = section(&profile, "acme:app/lib.wado");
     assert_eq!(lib.len(), 5, "{profile}");
     assert!(
         lib[0].starts_with("fn ") && lib[0].ends_with(" 1 pick"),
@@ -157,11 +157,11 @@ fn a_dependency_is_named_by_its_package() {
     wado_in(&app).args(["test", "--pgo"]).assert().success();
     let profile = fs::read_to_string(app.join("pgo/default.pgo")).unwrap();
     assert!(
-        profile.contains("\nmodule acme:dep@0.1.0/src/lib.wado\n"),
+        profile.contains("\nmodule acme:dep/src/lib.wado\n"),
         "{profile}"
     );
     assert!(
-        profile.contains("\nmodule app@0.1.0/bench_test.wado\n"),
+        profile.contains("\nmodule app/bench_test.wado\n"),
         "{profile}"
     );
 }
@@ -241,21 +241,23 @@ fn a_package_left_with_no_workload_loses_its_profile() {
     assert!(!stale.exists());
 }
 
+/// A program whose workload runs the path its `cold_path()` marks rare.
+const COLD_PICK: &str = "use { println, Stdout } from \"core:cli\";\n\n\
+    fn pick(x: i32) -> i32 {\n    if x > 0 {\n        builtin::cold_path();\n        return 2;\n    }\n    return 0;\n}\n\n\
+    #[workload]\ntest {\n    assert pick(1) == 2;\n}\n\n\
+    export fn run() with Stdout {\n    println(`${pick(1)}`);\n}\n";
+
+/// What a build applying a profile of [`COLD_PICK`] remarks.
+const COLD_PICK_REMARK: &str = "`cold_path()` marks this path rare, but the profile ran it once";
+
 /// A build applies the profile `--pgo` recorded unless `-f no-pgo` says not
 /// to. The remark overriding the `cold_path()` the workload ran shows it was
 /// applied.
 #[test]
 fn a_build_applies_the_entry_profile_under_pgo() {
     let tmp = tempfile::tempdir().unwrap();
-    fs::write(
-        tmp.path().join("prog.wado"),
-        "use { println, Stdout } from \"core:cli\";\n\n\
-         fn pick(x: i32) -> i32 {\n    if x > 0 {\n        builtin::cold_path();\n        return 2;\n    }\n    return 0;\n}\n\n\
-         #[workload]\ntest {\n    assert pick(1) == 2;\n}\n\n\
-         export fn run() with Stdout {\n    println(`${pick(1)}`);\n}\n",
-    )
-    .unwrap();
-    let remark = "`cold_path()` marks this path rare, but the profile ran it once";
+    fs::write(tmp.path().join("prog.wado"), COLD_PICK).unwrap();
+    let remark = COLD_PICK_REMARK;
     let missing = "-f pgo: no profile at";
     let run = || {
         wado_in(tmp.path())
@@ -285,6 +287,33 @@ fn a_build_applies_the_entry_profile_under_pgo() {
     fs::remove_file(tmp.path().join("pgo/prog.pgo")).unwrap();
     compile(&["-f", "pgo"]).stderr(predicate::str::contains(missing));
     compile(&[]).stderr(predicate::str::contains(missing).not());
+}
+
+/// A release bumps the package's version and nothing it measured, so the
+/// profile recorded before it still applies.
+#[test]
+fn a_profile_outlives_a_version_bump() {
+    let tmp = tempfile::tempdir().unwrap();
+    let manifest = |version: &str| {
+        fs::write(
+            tmp.path().join("wado.toml"),
+            format!("[package]\nnamespace = \"acme\"\nname = \"app\"\nversion = \"{version}\"\n"),
+        )
+        .unwrap();
+    };
+    manifest("0.1.0");
+    fs::write(tmp.path().join("prog.wado"), COLD_PICK).unwrap();
+    wado_in(tmp.path())
+        .args(["test", "--pgo"])
+        .assert()
+        .success();
+
+    manifest("0.2.0");
+    wado_in(tmp.path())
+        .args(["run", "--log-level", "info", "prog.wado"])
+        .assert()
+        .success()
+        .stderr(predicate::str::contains(COLD_PICK_REMARK));
 }
 
 /// The test world applies the profile, so a cached pass depends on it: its
