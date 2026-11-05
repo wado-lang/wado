@@ -325,7 +325,12 @@ impl Workspace {
         let out = Command::new("timeout").args(args).env("CARGO_HOME", runner.cargo_home).env(
             "RUSTUP_HOME",
             runner.rustup_home,
-        ).env("CARGO_TERM_COLOR", "never").output().map_err(|e| `${e}`)?;
+        ).env("CARGO_TERM_COLOR", "never").env(
+            // Each tree is built a few times at most, so the incremental cache
+            // would cost disk, gigabytes per toolchain, for no time saved.
+            "CARGO_INCREMENTAL",
+            "0",
+        ).output().map_err(|e| `${e}`)?;
         let ended = match out.status {
             Exited(124) => `timed out after ${input.timeout} seconds`,
             Exited(code) => `exit code ${code}`,
