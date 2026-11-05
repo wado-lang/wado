@@ -302,13 +302,14 @@ n=$(nproc); threads=$(( n > 1 ? n - 1 : 1 ))
 """
 
 [tasks.test-pjrt]
-description = "Run wado-run-pjrt's programs on XLA's CPU plugin, fetched and pinned"
+description = "Run wado-run-pjrt's programs on XLA's CPU plugin and compile them for a TPU, both plugins fetched and pinned"
 run = """
 #!/usr/bin/env bash
 set -xe -o pipefail
 WADO=$(scripts/dev-bin.sh --path wado)
 WADO_PJRT_PLUGIN=$(scripts/fetch-pjrt-plugin.sh)
-export WADO WADO_PJRT_PLUGIN
+WADO_PJRT_TPU_PLUGIN=$(scripts/fetch-pjrt-plugin.sh tpu)
+export WADO WADO_PJRT_PLUGIN WADO_PJRT_TPU_PLUGIN
 cargo test --locked -p wado-run-pjrt -- --ignored
 """
 

@@ -260,7 +260,7 @@ impl Writer {
                 let name = `%a${*at}`;
                 let ty = self.type_at(id);
                 if self.halved.contains(*at) {
-                    let half = ty.replace("f32>", "bf16>");
+                    let half = in_half(&ty);
                     parameters[*at] = `${name}: ${half}`;
                     widened.push_str(`${name}w = "stablehlo.convert"(${name}) : (${half}) -> ${ty}\n`);
                     self.names[id] = `${name}w`;
@@ -332,7 +332,7 @@ impl Writer {
                 self.folded(id, node, "stablehlo.reduce", *op, *init, ` {dimensions = ${dense_array(dims)}}`);
             },
             DotGeneral(dims) => self.line(id, node, "stablehlo.dot_general", "", dot_attributes(dims)),
-            Gather(dims) => self.line(id, node, "stablehlo.gather", "", gather_attributes(dims)),
+            Gather(dims) => self.gathered(id, node, dims),
             Scatter(dims) => self.scattered(id, node, dims),
             Convolution(conv) => {
                 self.line(id, node, "stablehlo.convolution", "", convolution_attributes(conv, node.extents.len() - 2));
@@ -389,6 +389,28 @@ impl Writer {
             body,
             attributes,
         );
+    }
+
+    /// A gather from a weight in bf16 reads it as it is and widens what it read:
+    /// widening the weight first holds all of it in f32 while the program runs,
+    /// and a gather does not fold into the widening as a product does.
+    fn gathered(&mut self, id: i32, node: &RecordedNode, dims: &GatherDims) {
+        let attributes = gather_attributes(dims);
+        let source = node.operands[0];
+        if let Parameter(at) = &self.recorded.nodes[source].op && self.halved.contains(*at) {
+            let n = node_name(id);
+            let wide = type_of(node.kind, &node.extents);
+            let half = in_half(&wide);
+            let indices = node.operands[1];
+            self.text.push_str(
+                `${n}h = "stablehlo.gather"(%a${*at}, ${self.name(indices)})${attributes} : (${in_half(&self.type_at(
+                    source,
+                ))}, ${self.type_at(indices)}) -> ${half}\n`,
+            );
+            self.text.push_str(`${n} = "stablehlo.convert"(${n}h) : (${half}) -> ${wide}\n`);
+            return;
+        }
+        self.line(id, node, "stablehlo.gather", "", attributes);
     }
 
     fn scattered(&mut self, id: i32, node: &RecordedNode, dims: &ScatterDims) {
@@ -457,6 +479,11 @@ impl Writer {
             self.names[result] = `${n}#${k}`;
         }
     }
+}
+
+/// The f32 tensor type `ty` in bf16.
+fn in_half(ty: &String) -> String {
+    return ty.replace("f32>", "bf16>");
 }
 
 fn dot_attributes(dims: &DotDims) -> String {

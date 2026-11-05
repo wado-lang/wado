@@ -1,0 +1,71 @@
+//! Compiles the programs `pjrt_graph.wado` runs for a TPU topology, which needs
+//! no TPU, and prints what the plugin reports of each. `libtpu.so` opens no
+//! client on a machine without one, so nothing here runs, and `wado-run-pjrt`'s
+//! tests do this:
+//!
+//!     TPU_SKIP_MDS_QUERY=1 wado run-pjrt --plugin libtpu.so package-loam/conformance/pjrt_topology.wado
+
+use { println, Stdout } from "core:cli";
+use { PjrtHost } from "core:pjrt";
+use { PjrtBackend, Tensor, summary } from "lib:loam";
+use attended from "./attended.onnxtext"
+    with {
+        type: "onnxtext",
+        generator: { module: "lib:loam" },
+    };
+use merged from "../tests/models/tiny-gpt2/merged/model.onnx"
+    with {
+        type: "onnx",
+        generator: {
+            module: "lib:loam",
+            options: {
+                dims: { batch_size: 1 },
+            },
+        },
+    };
+
+export fn run() with (Stdout, PjrtHost) {
+    let mut device = PjrtBackend::analyzing("v5e:1x1");
+
+    let mut attended_model = attended::Model::new(attended::Params::embedded(&mut device));
+    let cache = attended::Cache::empty(&mut device);
+    let fresh = Tensor::<f32, [attended::X0, attended::S, attended::X2]> {
+        data: List::<f32>::filled(32, 0.25),
+        extents: [1, 1, 32],
+    };
+    let mask = Tensor::<i64, [attended::AttentionMask0, attended::T]> {
+        data: [1],
+        extents: [1, 1],
+    };
+    attended::compute(&mut device, &fresh, &mask, &cache, &mut attended_model);
+    let analyses = device.analyses();
+    let last = &analyses[analyses.len() - 1];
+    // Keys and values, each of the 8 positions the least capacity holds.
+    assert last.alias_bytes == 2 * 8 * 16 * 4, "a step updates the whole cache in place";
+    println(`attended: ${summary(last)}`);
+
+    let mut merged_model = merged::Model::new(merged::Params::embedded(&mut device));
+    let mut past = merged::Cache::empty(&mut device);
+    let mut length = 0;
+    for let tokens of [
+        [1, 5, 42, 7],
+        [11],
+    ] as List<List<i64>> {
+        let ids = Tensor::<i64, [merged::BatchSize, merged::SequenceLength]> {
+            data: tokens,
+            extents: [1, tokens.len()],
+        };
+        let ones = Tensor::<i64, [merged::BatchSize, merged::SequenceLength]> {
+            data: List::<i64>::filled(length + tokens.len(), 1),
+            extents: [1, length + tokens.len()],
+        };
+        let branch = Tensor::<bool, [merged::UseCacheBranch0]> {
+            data: [length > 0],
+            extents: [1],
+        };
+        past = merged::compute(&mut device, &ids, &ones, &branch, &past, &mut merged_model).cache;
+        length += tokens.len();
+        let compiled = device.analyses();
+        println(`tiny GPT-2 ${length}: ${summary(&compiled[compiled.len() - 1])}`);
+    }
+}

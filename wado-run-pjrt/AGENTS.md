@@ -6,8 +6,9 @@ the component on a wasmtime host that serves `core:pjrt` from a PJRT plugin.
 ## Rules
 
 - A plugin is loaded at run time, from `--plugin` or `WADO_PJRT_PLUGIN`, so no
-  build depends on one. `mise run test-pjrt` fetches the pinned CPU plugin
-  (`scripts/fetch-pjrt-plugin.sh`) and runs the `#[ignore]`d tests on it.
+  build depends on one. `mise run test-pjrt` fetches the pinned CPU plugin and
+  `libtpu.so` (`scripts/fetch-pjrt-plugin.sh`) and runs the `#[ignore]`d tests
+  on them.
 - `xla/pjrt/c/pjrt_c_api.h` is the one part of XLA that may be read. `src/ffi.rs`
   follows it. An argument struct must be at least the plugin's size, so each
   struct is declared in full, whatever a call uses of it.

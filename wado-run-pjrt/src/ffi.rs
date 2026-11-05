@@ -8,6 +8,9 @@ use std::ptr::null_mut;
 /// What a handle of the plugin's points to, which only the plugin reads.
 pub type Opaque = *mut c_void;
 
+/// An entry of the plugin's table.
+pub type Call = unsafe extern "C" fn(*mut c_void) -> Opaque;
+
 /// A struct's opening: its size, then the extensions it starts.
 #[repr(C)]
 pub struct Header {
@@ -259,7 +262,7 @@ struct Version {
 pub struct Api {
     header: Header,
     version: Version,
-    calls: [Option<unsafe extern "C" fn(*mut c_void) -> Opaque>; 1],
+    calls: [Option<Call>; 1],
 }
 
 impl Api {
@@ -267,13 +270,9 @@ impl Api {
         self.version.major_version
     }
 
-    /// Calls `slot`, and returns the error it reports, null where it reports
-    /// none.
-    ///
-    /// # Safety
-    ///
-    /// `A` is the struct `slot` takes, and holds handles of this plugin.
-    pub unsafe fn call<A: Arguments>(&self, slot: Slot, arguments: &mut A) -> Opaque {
+    /// The call at `slot`. It takes `slot`'s argument struct, and returns the
+    /// error it reports, null where it reports none.
+    pub fn entry(&self, slot: Slot) -> Call {
         let held =
             (self.header.struct_size - std::mem::offset_of!(Api, calls)) / size_of::<usize>();
         assert!(
@@ -282,11 +281,7 @@ impl Api {
         );
         // SAFETY: `held` says the plugin's table reaches this entry, past the one
         // the array declares.
-        unsafe {
-            let call = self.calls.as_ptr().add(slot as usize).read();
-            call.expect("a plugin implements every call of this file")(
-                std::ptr::from_mut(arguments).cast(),
-            )
-        }
+        unsafe { self.calls.as_ptr().add(slot as usize).read() }
+            .expect("a plugin implements every call of this file")
     }
 }

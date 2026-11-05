@@ -65,6 +65,8 @@ pub affine struct PjrtBackend {
     reads: i32,
     runs: i32,
     donated: i32,
+    halved_bytes: i64,
+    whole_bytes: i64,
 }
 
 /// `outcome`'s value. What a plugin refuses is a bug of the writer or of the
@@ -93,6 +95,20 @@ fn elements_of<E: Element>(bytes: ByteList) -> List<E> {
     };
 }
 
+/// `analysis` as a line. A TPU's `optimal_seconds` takes 1 off for each
+/// operation at a computed index, whose time its model leaves out, so its
+/// estimate is what lies above that.
+pub fn summary(analysis: &Analysis) -> String {
+    let mut line = `${analysis.argument_bytes} argument bytes, ${analysis.alias_bytes} aliased, ${analysis.temporary_bytes} temporary`;
+    for let cost of analysis.costs {
+        if cost.name == "optimal_seconds" {
+            let unmodeled = f64::ceil(-cost.value);
+            line.push_str(`, ${cost.value + unmodeled:e} optimal seconds, ${unmodeled} operations unmodeled`);
+        }
+    }
+    return line;
+}
+
 fn zeros(returned: &Returned) -> Any<PjrtBackend> {
     let count = element_count(&returned.extents);
     return match returned.kind {
@@ -117,6 +133,8 @@ impl PjrtBackend {
             reads: 0,
             runs: 0,
             donated: 0,
+            halved_bytes: 0,
+            whole_bytes: 0,
         };
     }
 
@@ -151,6 +169,12 @@ impl PjrtBackend {
         return self.donated;
     }
 
+    /// The bytes the weights take in bf16, and those that stay f32 to lose
+    /// nothing.
+    pub fn weight_bytes(&self) -> [i64, i64] {
+        return [self.halved_bytes, self.whole_bytes];
+    }
+
     fn stored(&mut self, buffer: Buffer) -> i32 {
         let Some(slot) = self.free.pop() else {
             self.buffers.push(Option::Some(buffer));
@@ -178,6 +202,11 @@ impl PjrtBackend {
                 break;
             }
             halves[at] = half.to_bits();
+        }
+        if halved {
+            self.halved_bytes += t.data.len() as i64 * 2;
+        } else {
+            self.whole_bytes += t.data.len() as i64 * 4;
         }
         if self.topology matches { Some(_) } {
             return DeviceBuffer { slot: -1, extents: t.extents, halved };

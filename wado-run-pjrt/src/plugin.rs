@@ -3,7 +3,7 @@
 use std::ffi::{c_char, c_void};
 use std::path::Path;
 use std::ptr::null_mut;
-use std::sync::Arc;
+use std::sync::{Arc, mpsc};
 
 use anyhow::{Context as _, Result, bail};
 use libloading::{Library, Symbol};
@@ -27,9 +27,52 @@ fn mlir_program(module: &str) -> ffi::Program {
     program
 }
 
+/// The stack of the thread a plugin runs on. It reaches what a large program's
+/// compile recurses to, and stays unmapped until then.
+const STACK_BYTES: usize = 64 << 20;
+
+/// What crosses to the plugin's thread and back. Its sender waits for the
+/// answer, so nothing here is used on two threads at once.
+struct Crossing<T>(T);
+
+// SAFETY: as the struct says.
+unsafe impl<T> Send for Crossing<T> {}
+
+/// One call of the plugin.
+struct Request {
+    entry: ffi::Call,
+    arguments: *mut c_void,
+    reported: mpsc::SyncSender<Crossing<Opaque>>,
+}
+
+/// Starts the thread that makes every call of a plugin. A guest runs on a
+/// wasmtime fiber, whose stack a plugin cannot walk: `libtpu.so` samples a hash
+/// table now and then by following frame pointers from wherever it is, and
+/// reading past a fiber's frames faults.
+fn plugin_thread() -> Result<mpsc::Sender<Crossing<Request>>> {
+    let (calls, requests) = mpsc::channel::<Crossing<Request>>();
+    std::thread::Builder::new()
+        .name("pjrt-plugin".to_owned())
+        .stack_size(STACK_BYTES)
+        .spawn(move || {
+            for Crossing(request) in requests {
+                // SAFETY: `Plugin::enter`'s caller vouches for the pair, and
+                // waits while the arguments are in use.
+                let error = unsafe { (request.entry)(request.arguments) };
+                request
+                    .reported
+                    .send(Crossing(error))
+                    .expect("the caller waits for the answer");
+            }
+        })
+        .context("cannot start the plugin's thread")?;
+    Ok(calls)
+}
+
 /// The plugin's library, which the API table points into.
 pub struct Plugin {
     api: *const Api,
+    calls: mpsc::Sender<Crossing<Request>>,
     _library: Library,
 }
 
@@ -54,6 +97,7 @@ impl Plugin {
         };
         let plugin = Arc::new(Self {
             api,
+            calls: plugin_thread()?,
             _library: library,
         });
         let major = plugin.api().major_version();
@@ -148,7 +192,7 @@ impl Plugin {
     /// As [`Api::call`].
     unsafe fn call<A: Arguments>(&self, slot: Slot, arguments: &mut A) -> Result<(), String> {
         // SAFETY: the caller's.
-        let error = unsafe { self.api().call(slot, arguments) };
+        let error = unsafe { self.enter(slot, arguments) };
         if error.is_null() {
             return Ok(());
         }
@@ -159,11 +203,29 @@ impl Plugin {
         // SAFETY: `error` is the plugin's, and is destroyed once, after the
         // message is copied out of it.
         unsafe {
-            self.api().call(Slot::ErrorMessage, &mut message);
+            self.enter(Slot::ErrorMessage, &mut message);
             let text = text_at(message.message, message.message_size);
-            self.api().call(Slot::ErrorDestroy, &mut destroy);
+            self.enter(Slot::ErrorDestroy, &mut destroy);
             Err(text)
         }
+    }
+
+    /// `slot` on `arguments`, run on the plugin's thread, and the error it
+    /// reports.
+    ///
+    /// # Safety
+    ///
+    /// `A` is the struct `slot` takes, and holds handles of this plugin.
+    unsafe fn enter<A: Arguments>(&self, slot: Slot, arguments: &mut A) -> Opaque {
+        let (reported, report) = mpsc::sync_channel(1);
+        self.calls
+            .send(Crossing(Request {
+                entry: self.api().entry(slot),
+                arguments: std::ptr::from_mut(arguments).cast(),
+                reported,
+            }))
+            .expect("the plugin's thread lives as long as the plugin");
+        report.recv().expect("the plugin's thread answers").0
     }
 
     /// Waits for `event` and destroys it.

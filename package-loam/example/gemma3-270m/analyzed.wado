@@ -1,0 +1,32 @@
+//! Gemma 3 (270M) compiled for a TPU topology, which needs no TPU: the weights
+//! as the device would hold them, and what the plugin reports of the program of
+//! a prompt and of a step after it. `README.md` says how to run it.
+
+use { eprintln, println, Stderr, Stdout } from "core:cli";
+use fs from "core:fs";
+use { Preopens } from "core:fs";
+use { PjrtHost } from "core:pjrt";
+use { PjrtBackend, summary } from "lib:loam";
+use { Model } from "./model.wado";
+
+export fn run() with (Stdout, Stderr, Preopens, PjrtHost) {
+    let checkpoint = match fs::read_linear("build/model.onnx_data") {
+        Ok(bytes) => bytes,
+        Err(e) => {
+            eprintln(`${e}; run fetch.sh first`);
+            return;
+        },
+    };
+    let f32_bytes = checkpoint.len();
+    let mut model = Model::load(PjrtBackend::analyzing("v5e:1x1"), &checkpoint).unwrap();
+    builtin::drop(checkpoint);
+    let [halved, whole] = model.backend().weight_bytes();
+    println(`${f32_bytes} bytes in f32: ${halved} in bf16, ${whole} staying f32`);
+    let mut ids: List<i32> = [1, 2, 3, 4, 5, 6, 7, 8];
+    model.next_token(&ids);
+    ids.push(9);
+    model.next_token(&ids);
+    for let analysis of model.backend().analyses() {
+        println(summary(analysis));
+    }
+}
