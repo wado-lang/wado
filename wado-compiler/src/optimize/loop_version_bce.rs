@@ -382,9 +382,9 @@ struct Check {
     /// when it demands none. A floor under `var + shift` is demanded of `var`
     /// itself, which the shift's non-negativity makes sufficient.
     floor: i64,
-    /// The bound of the [`InnerGuard`] the check rests on, which must hold
-    /// still between that guard and the check.
-    rests_on: Option<BoundKey>,
+    /// The [`InnerGuard`] the check rests on, whose bound must hold still
+    /// between that guard and the check.
+    rests_on: Option<InnerGuard>,
 }
 
 /// An in-body `if var + reach < bound { … }` over the checks in its then-arm,
@@ -392,20 +392,23 @@ struct Check {
 /// a check `var + k < bound` with `k <= reach`, or a floor under `var + k`, only
 /// where `var + reach` stays at or under the type's `max`: the limit
 /// [`InnerGuard::wrap_free`] puts on `var`, which the guard's own bound need not
-/// take part in.
+/// take part in. `arm` is the then-arm, the only place the guard holds.
 #[derive(Clone, Copy)]
 struct InnerGuard {
     reach: i64,
     bound: BoundKey,
     max: i64,
+    arm: BlockId,
 }
 
 impl InnerGuard {
+    #[expect(clippy::too_many_arguments)]
     fn parse(
         engine: &Engine,
         binds: &Binds,
         loop_body: BlockId,
         cond: Operand,
+        arm: BlockId,
         var: u32,
         max: i64,
     ) -> Option<InnerGuard> {
@@ -426,6 +429,7 @@ impl InnerGuard {
             reach: shift.konst,
             bound,
             max,
+            arm,
         })
     }
 
@@ -461,8 +465,9 @@ fn collect_checks_in_node(
                 then_block,
                 else_block,
             } = engine.body.stmts[s].kind
-            && let Some(inner) = var_max
-                .and_then(|max| InnerGuard::parse(engine, binds, loop_body, condition, var, max))
+            && let Some(inner) = var_max.and_then(|max| {
+                InnerGuard::parse(engine, binds, loop_body, condition, then_block, var, max)
+            })
         {
             let mut collect = |node, guard| {
                 collect_checks_in_node(engine, binds, loop_body, node, var, var_max, guard, out);
@@ -524,8 +529,8 @@ fn parse_versionable_check(
         l.bound == g.bound && l.shift.is_konst() && l.shift.konst <= g.reach
     };
     let (limit, reach, rests_on) = match (limit, guard) {
-        (Some(l), Some(g)) if proved(&l, g) => (g.wrap_free(), g.reach, Some(g.bound)),
-        (None, Some(g)) if !floors.is_empty() => (g.wrap_free(), g.reach, Some(g.bound)),
+        (Some(l), Some(g)) if proved(&l, g) => (g.wrap_free(), g.reach, Some(g)),
+        (None, Some(g)) if !floors.is_empty() => (g.wrap_free(), g.reach, Some(g)),
         (Some(l), _) => (l, l.shift.konst, None),
         (None, _) => return None,
     };
@@ -769,8 +774,8 @@ fn parse_limit(
     })
 }
 
-/// The checks in the statements after the guard while `var` and `H` hold still:
-/// within that window the guard fact `var <= H` holds.
+/// The statements after the guard while `var` and `H` hold still, where the
+/// guard fact `var <= H` holds, and the checks in them.
 fn collect_window_checks(
     engine: &Engine,
     binds: &Binds,
@@ -779,20 +784,20 @@ fn collect_window_checks(
     guard_idx: usize,
     var: u32,
     h: BoundKey,
-) -> Vec<Check> {
+) -> (Vec<StmtId>, Vec<Check>) {
     let var_max = engine.locals().get(var as usize).and_then(|l| {
         let max = type_table.primitive_head(l.type_id)?.int_max()?;
         i64::try_from(max).ok()
     });
-    let mut checks = Vec::new();
-    for &s in engine.body.blocks[loop_body]
+    let window: Vec<StmtId> = engine.body.blocks[loop_body]
         .stmts
         .iter()
         .skip(guard_idx + 1)
-    {
-        if stmt_modifies(engine, s, var, h) {
-            break;
-        }
+        .copied()
+        .take_while(|&s| !stmt_modifies(engine, s, var, h))
+        .collect();
+    let mut checks = Vec::new();
+    for &s in &window {
         collect_checks_in_node(
             engine,
             binds,
@@ -804,7 +809,7 @@ fn collect_window_checks(
             &mut checks,
         );
     }
-    checks
+    (window, checks)
 }
 
 /// Analyze one loop for versioning. See the module docs for the conditions.
@@ -823,7 +828,8 @@ fn analyze_loop(
         return None;
     }
     let (guard_idx, var, h, guard_le, offset) = parse_loop_guard(engine, binds, loop_body)?;
-    let checks = collect_window_checks(engine, binds, type_table, loop_body, guard_idx, var, h);
+    let (_, checks) =
+        collect_window_checks(engine, binds, type_table, loop_body, guard_idx, var, h);
     // A floor is answered from the fast arm's own facts, so it must hold for
     // every collected check before any of them is deleted.
     let demanded = checks.iter().map(|c| c.floor).max()?;
@@ -885,10 +891,10 @@ fn analyze_loop(
     };
     invariant.extend(bound_local(h)?);
     for check in &checks {
-        if let Some(b) = check.rests_on
+        if let Some(g) = check.rests_on
             && limits.contains(&check.limit)
         {
-            invariant.extend(bound_local(b)?);
+            invariant.extend(bound_local(g.bound)?);
         }
     }
     for limit in &limits {
@@ -1425,8 +1431,10 @@ fn and_floor_terms(
 
 /// In the fast clone, drive every implied check to `false` (the paired
 /// `BranchPruneRule` removes the dead panic arms), and constify the
-/// single-purpose `let $cond = <cmp>` temp feeding each check — in the fast
-/// arm the comparison is provably constant, so this is exact for any reader.
+/// single-purpose `let $cond = <cmp>` temp feeding each check where it is
+/// bound inside the region the check's fact holds in: the window, or the arm
+/// of the guard the check rests on. There the comparison is provably constant,
+/// so this is exact for any reader.
 /// `fast_body` is a clone of `plan.loop_body`, so `plan`'s guard layout applies.
 fn eliminate_checks_in_fast(
     engine: &mut Engine,
@@ -1435,7 +1443,7 @@ fn eliminate_checks_in_fast(
     plan: &Plan,
     fast_body: BlockId,
 ) {
-    let checks = collect_window_checks(
+    let (window, checks) = collect_window_checks(
         engine,
         binds,
         type_table,
@@ -1450,7 +1458,11 @@ fn eliminate_checks_in_fast(
         if !plan.limits.contains(&check.limit) || !is_pure_operand(engine.body, check.cond) {
             continue;
         }
-        constify_check_temp(engine, binds, check.cond, plan.var, check.limit, fast_body);
+        let region = match check.rests_on {
+            Some(g) => vec![NodeRef::Block(g.arm)],
+            None => window.iter().map(|&s| NodeRef::Stmt(s)).collect(),
+        };
+        constify_check_temp(engine, binds, &check, plan.var, fast_body, region);
         eliminate_condition(engine, check.holder, check.cond);
     }
 }
@@ -1459,23 +1471,23 @@ fn eliminate_checks_in_fast(
 /// initializer in the fast clone with the constant the comparison provably
 /// evaluates to (`!c` panics ⇒ `c` is `true`), deleting the per-iteration
 /// compare. Overwritten only when the initializer structurally *is* that
-/// comparison, a function-scoped slot being re-bindable.
+/// comparison, a function-scoped slot being re-bindable, and only when the
+/// `let` lies in `region`.
 fn constify_check_temp(
     engine: &mut Engine,
     binds: &Binds,
-    cond: Operand,
+    check: &Check,
     var: u32,
-    limit: Limit,
     fast_body: BlockId,
+    region: Vec<NodeRef>,
 ) {
-    let negated = negated_operand(engine, binds, cond);
-    let Some(temp) = operand_local(engine.body, negated.unwrap_or(cond)) else {
+    let negated = negated_operand(engine, binds, check.cond);
+    let Some(temp) = operand_local(engine.body, negated.unwrap_or(check.cond)) else {
         return;
     };
     let konst = negated.is_some();
-    let limit = konst.then_some(limit);
-    // Find the temp's comparison `let` inside the fast clone and overwrite it.
-    let mut stack = vec![NodeRef::Block(fast_body)];
+    let limit = konst.then_some(check.limit);
+    let mut stack = region;
     while let Some(n) = stack.pop() {
         if let NodeRef::Stmt(s) = n
             && let StmtKind::Let {
