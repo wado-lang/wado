@@ -1,0 +1,34 @@
+//! Gemma 3 (270M) on a PJRT plugin's device, a token a `compute` through the
+//! program the plugin compiled for its shape class. It continues each prompt
+//! `generate.json` records with greedy tokens on the device, and says whether
+//! it picks the tokens onnxruntime picks. It prints the time per token, and the
+//! programs run and read backs a token takes. `README.md` says how to run it.
+
+use { eprintln, Stderr, Stdout } from "core:cli";
+use fs from "core:fs";
+use { Preopens } from "core:fs";
+use { PjrtHost } from "core:pjrt";
+use { MonotonicClock } from "wasi:clocks";
+use { PjrtBackend } from "lib:loam";
+use { continued, recorded } from "./continued.wado";
+use { Model } from "./model.wado";
+
+export fn run() with (Stdout, Stderr, Preopens, MonotonicClock, PjrtHost) {
+    let checkpoint = match fs::read_linear("build/model.onnx_data") {
+        Ok(bytes) => bytes,
+        Err(e) => {
+            eprintln(`${e}; run fetch.sh first`);
+            return;
+        },
+    };
+    let Some(generate) = recorded() else {
+        return;
+    };
+    let mut model = Model::load(PjrtBackend::new(), &checkpoint).unwrap();
+    // The device holds the weights.
+    builtin::drop(checkpoint);
+    continued(generate, |ids| model.next_token(ids), || [
+        model.backend().read_backs(),
+        model.backend().executions(),
+    ]);
+}

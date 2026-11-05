@@ -3,16 +3,19 @@
 //! computes it. `core:pjrt` hosts it, so only `wado run-pjrt` runs it.
 
 use { HashSet } from "core:collections";
+use { LinearArray } from "core:linear";
 use { Buffer, ElementType, Executable, PjrtHost } from "core:pjrt";
 use { Binary, Comparison, Convolution, DotDims, GatherDims, Graph, ScatterDims, Unary, WindowReduce } from "./hlo.wado";
 use { Cpu, Element, ElementKind, Holds, Tensor } from "./tensor.wado";
-use { Any, Recorded, Recorder, Untyped, data_of } from "./recorded.wado";
+use { Any, Recorded, Recorder, Untyped, data_of, kept_any } from "./recorded.wado";
 use { le_bytes, module_of } from "./stablehlo.wado";
 
 /// A tensor on the device: which of the backend's buffers holds it.
 pub struct DeviceBuffer {
     slot: i32,
     extents: List<i32>,
+    /// Whether a weight of f32 sits there in bf16, which a program converts.
+    halved: bool,
 }
 
 /// Where `PjrtBackend` holds a tensor.
@@ -46,6 +49,8 @@ pub affine struct PjrtBackend {
     pass: List<i32>,
     retaining: HashSet<i32>,
     executables: List<Executable>,
+    reads: i32,
+    runs: i32,
 }
 
 /// `outcome`'s value. What a plugin refuses is a bug of the writer or of the
@@ -83,7 +88,19 @@ impl PjrtBackend {
             pass: [],
             retaining: HashSet::new(),
             executables: [],
+            reads: 0,
+            runs: 0,
         };
+    }
+
+    /// How many tensors have been read back from the device.
+    pub fn read_backs(&self) -> i32 {
+        return self.reads;
+    }
+
+    /// How many times a program has run.
+    pub fn executions(&self) -> i32 {
+        return self.runs;
     }
 
     fn stored(&mut self, buffer: Buffer) -> i32 {
@@ -100,6 +117,28 @@ impl PjrtBackend {
         return self.stored(done(PjrtHost::upload(element_type(E::kind()), extents, le_bytes(&data_of(&t.data)))));
     }
 
+    /// `t` as a weight: in bf16 where that loses nothing, and in linear memory
+    /// on its way there, as a model's largest weights fit no GC array of bytes.
+    fn kept_weight(&mut self, t: &Tensor<f32, Untyped>) -> DeviceBuffer with PjrtHost {
+        let extents: List<i64> = t.extents.into_iter().map(|e| e as i64).collect();
+        let mut halves = LinearArray::<u16>::filled(t.data.len(), 0);
+        let mut halved = true;
+        for let at of 0..<t.data.len() {
+            let half = bf16::from_f32(t.data[at]);
+            if f32::from(half).to_bits() != t.data[at].to_bits() {
+                halved = false;
+                break;
+            }
+            halves[at] = half.to_bits();
+        }
+        let buffer = if halved {
+            done(PjrtHost::upload(ElementType::Bfloat16, extents, &halves.cast::<u8>()));
+        } else {
+            done(PjrtHost::upload(ElementType::Float32, extents, &LinearArray::<f32>::from_slice(&t.data).cast::<u8>()));
+        };
+        return DeviceBuffer { slot: self.stored(buffer), extents: t.extents, halved };
+    }
+
     /// The slot of `value`, sent to the device for this pass if it is on the host.
     fn on_device(&mut self, value: &Any<PjrtBackend>) -> i32 with PjrtHost {
         let host = match value {
@@ -112,13 +151,14 @@ impl PjrtBackend {
         return host;
     }
 
-    fn host<E: Element, Axes>(&self, t: &Located<E, Axes>) -> Tensor<E, Axes> {
+    fn host<E: Element, Axes>(&mut self, t: &Located<E, Axes>) -> Tensor<E, Axes> {
         return match t {
             Host(h) => *h,
             Device(d) => {
                 let Some(buffer) = &self.buffers[d.slot] else {
                     panic("a tensor of a pass that has ended is no longer held");
                 };
+                self.reads += 1;
                 Tensor { data: elements_of(done(buffer.to_host())), extents: d.extents }
             },
         };
@@ -133,7 +173,7 @@ impl Holds for PjrtBackend {
     }
 
     fn keep<E: Element, Axes>(&mut self, t: &Tensor<E, Axes>) -> Located<E, Axes> with PjrtHost {
-        return Located::Device(DeviceBuffer { slot: self.sent(t), extents: t.extents });
+        return Located::Device(DeviceBuffer { slot: self.sent(t), extents: t.extents, halved: false });
     }
 
     fn extents_of<E: Element, Axes>(&self, t: &Located<E, Axes>) -> List<i32> {
@@ -181,6 +221,7 @@ impl Graph for PjrtBackend {
     fn compiled(
         &mut self,
         record: fn(&mut Recorder) -> Recorded with _,
+        weights: &List<Any<PjrtBackend>>,
         earlier: &List<&PjrtProgram>,
     ) -> Option<PjrtProgram> with (_, PjrtHost) {
         let recorded = record(&mut Recorder::decomposing());
@@ -188,8 +229,32 @@ impl Graph for PjrtBackend {
             let node = &recorded.nodes[id];
             return Returned { kind: node.kind, extents: node.extents };
         }).collect();
-        self.executables.push(done(PjrtHost::compile(module_of(&recorded))));
+        let first = recorded.parameters - weights.len();
+        let mut halved = HashSet::<i32>::new();
+        for let [at, weight] of weights.into_iter().enumerate() {
+            if let F32(Device(d)) = weight && d.halved {
+                halved.insert(first + at);
+            }
+        }
+        self.executables.push(done(PjrtHost::compile(module_of(&recorded, &halved))));
         return Option::Some(PjrtProgram { at: self.executables.len() - 1, returned });
+    }
+
+    fn kept_weights<Er>(
+        &mut self,
+        record: fn(&mut Recorder) -> Recorded with _,
+        first: i32,
+        count: i32,
+        load: fn(i32) -> Result<Any<Cpu>, Er> with _,
+    ) -> Result<List<Any<PjrtBackend>>, Er> with (_, PjrtHost) {
+        let mut kept: List<Any<PjrtBackend>> = [];
+        for let at of 0..<count {
+            kept.push(match load(at)? {
+                F32(t) => Any::F32(Located::Device(self.kept_weight(&t))),
+                other => kept_any(self, &other),
+            });
+        }
+        return Result::Ok(kept);
     }
 
     fn executed(
@@ -206,13 +271,14 @@ impl Graph for PjrtBackend {
             };
             held.push(buffer);
         }
+        self.runs += 1;
         let results = done(self.executables[program.at].execute(held));
         let mut values: List<Any<PjrtBackend>> = [];
         for let result of results {
             let slot = self.stored(result);
             self.pass.push(slot);
             let returned = &program.returned[values.len()];
-            let on = DeviceBuffer { slot, extents: returned.extents };
+            let on = DeviceBuffer { slot, extents: returned.extents, halved: false };
             values.push(match returned.kind {
                 F32 => Any::F32(Located::Device(on)),
                 I64 => Any::I64(Located::Device(on)),

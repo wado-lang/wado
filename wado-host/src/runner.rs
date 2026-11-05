@@ -432,6 +432,9 @@ where
     link(&engine, &component, &mut linker)?;
 
     let mut store = Store::new(&engine, host);
+    // A device takes a model's weights in one call, past wasmtime's default cap
+    // on what a guest copies to the host. The guest is the user's own program.
+    store.set_hostcall_fuel(usize::MAX);
     let sampling = options
         .profile
         .as_ref()

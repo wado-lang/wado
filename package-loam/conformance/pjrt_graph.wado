@@ -46,7 +46,7 @@ export fn run() with (Stdout, PjrtHost) {
         let rids = r.parameter::<i64, [cases::C]>(ids.extents);
         let got = cases::mixed(r, &rx, &rids);
         return r.finished([got.0.id, got.1.id, got.2.id, got.3.id, got.4.id]);
-    }, &[]).unwrap();
+    }, &[], &[]).unwrap();
     let got = device.executed(&program, &[
         Any::F32(untyped(&device, &device.upload(&x))),
         Any::I64(untyped(&device, &device.upload(&ids))),
@@ -61,7 +61,7 @@ export fn run() with (Stdout, PjrtHost) {
     let windowed = device.compiled(|r| {
         let rw = r.parameter::<f32, [cases::A, cases::B, cases::C]>(w.extents);
         return r.finished([cases::windowed(r, &rw).id]);
-    }, &[]).unwrap();
+    }, &[], &[]).unwrap();
     let slid = device.executed(&windowed, &[Any::F32(untyped(&device, &device.upload(&w)))], &[]);
     println(`windowed ${apart(&mut device, &slid[0], &cases::windowed(cpu, &w))}`);
 
@@ -71,7 +71,7 @@ export fn run() with (Stdout, PjrtHost) {
             let rp = r.parameter::<bool, [cases::C]>(pred.extents);
             let rx = r.parameter::<f32, [cases::A]>(bx.extents);
             return r.finished([cases::branching(r, &rp, &rx).id]);
-        }, &[]).unwrap();
+        }, &[], &[]).unwrap();
         let branched = device.executed(&branching, &[
             Any::Bool(untyped(&device, &device.upload(&pred))),
             Any::F32(untyped(&device, &device.upload(&bx))),
@@ -86,7 +86,7 @@ export fn run() with (Stdout, PjrtHost) {
     let arg_max = device.compiled(|r| {
         let rx = r.parameter::<f32, [cases::A, cases::B]>(ranked.extents);
         return r.finished([r.arg_max(&rx, 1).id]);
-    }, &[]).unwrap();
+    }, &[], &[]).unwrap();
     let first = device.executed(&arg_max, &[Any::F32(untyped(&device, &device.upload(&ranked)))], &[]);
     println(`arg max ${apart(&mut device, &first[0], &cpu.arg_max(&ranked, 1))}`);
 

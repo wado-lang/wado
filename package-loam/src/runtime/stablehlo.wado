@@ -2,16 +2,17 @@
 //! plugin compiles. Each operation takes the generic form, the one the
 //! specification states it in, so one shape of line serves them all.
 
-use { HashMap } from "core:collections";
+use { HashMap, HashSet } from "core:collections";
 use { Binary, Comparison, DotDims, GatherDims, ScatterDims, Unary, WindowReduce, Convolution, reduced_extents } from "./hlo.wado";
 use { ElementKind } from "./tensor.wado";
 use { Data, Recorded, RecordedNode, Region } from "./recorded.wado";
 
 /// `recorded` as a module whose `main` takes its parameters and returns its
-/// results. An attention composite has no StableHLO operation: `Recorder::decomposing`
-/// records one as the operations it is made of.
-pub fn module_of(recorded: &Recorded) -> String {
-    let mut w = Writer { recorded, text: "", names: HashMap::new() };
+/// results. The parameters `halved` holds are bf16 on the way in. An attention
+/// composite has no StableHLO operation: `Recorder::decomposing` records one as
+/// the operations it is made of.
+pub fn module_of(recorded: &Recorded, halved: &HashSet<i32>) -> String {
+    let mut w = Writer { recorded, halved, text: "", names: HashMap::new() };
     w.module();
     return w.text;
 }
@@ -158,6 +159,7 @@ fn scalar_selected(result: String, kind: ElementKind, pick: String, a: String, b
 
 struct Writer {
     recorded: &Recorded,
+    halved: &HashSet<i32>,
     text: String,
     /// The name of each node that is not `%` and its id: a parameter's, a
     /// branch result's, and a yielded node's, which is its operand's.
@@ -209,15 +211,25 @@ impl Writer {
 
     fn module(&mut self) {
         let mut parameters = List::<String>::filled(self.recorded.parameters, "");
+        let mut widened = "";
         for let id of 0..<self.recorded.nodes.len() {
             if let Parameter(at) = &self.recorded.nodes[id].op {
                 let name = `%a${*at}`;
-                parameters[*at] = `${name}: ${self.type_at(id)}`;
-                self.names[id] = name;
+                let ty = self.type_at(id);
+                if self.halved.contains(*at) {
+                    let half = ty.replace("f32>", "bf16>");
+                    parameters[*at] = `${name}: ${half}`;
+                    widened.push_str(`${name}w = "stablehlo.convert"(${name}) : (${half}) -> ${ty}\n`);
+                    self.names[id] = `${name}w`;
+                } else {
+                    parameters[*at] = `${name}: ${ty}`;
+                    self.names[id] = name;
+                }
             }
         }
         let results = self.types_of(&self.recorded.body.results);
         self.text.push_str(`module {\nfunc.func public @main(${parameters.join(", ")}) -> (${results}) {\n`);
+        self.text.push_str(widened);
         self.region(&self.recorded.body);
         self.ended("func.return", &self.recorded.body);
         self.text.push_str("}\n}\n");
