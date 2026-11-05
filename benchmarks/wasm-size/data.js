@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1793873938071,
+  "lastUpdate": 1793874995845,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -74725,6 +74725,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/9d51dc741c761d329e386adddf4a04a1bf376118"
         },
         "date": 1793873936879,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3099,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7303,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21965,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 375776,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "430ab7548e6c0acaf7ddaec42dac3eb3405bd28f",
+          "message": "Merge pull request #2554 from wado-lang/eddy/rg-optional\n\nfix(eddy): Grep's tests pass on a machine with no rg, and CI must have it",
+          "timestamp": "2026-11-05T19:11:02+09:00",
+          "tree_id": "410b6638ee3deb68d158ce730605e85e65116127",
+          "url": "https://github.com/wado-lang/wado/commit/430ab7548e6c0acaf7ddaec42dac3eb3405bd28f"
+        },
+        "date": 1793874994713,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
