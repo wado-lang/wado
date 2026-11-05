@@ -4,10 +4,10 @@
 //! writes it there until `compute` downloads it, and so does a `bool` one, as
 //! 1.0 and 0.0. An `i64` tensor stays on the host, since WGSL stores none, and
 //! a gather writes its indices to the device as `u32` when it runs, but for the
-//! index `arg_max` leaves on the device as an f32, which a gather reads there. A weight
-//! kept for products alone is held in bf16 where that loses nothing, which
-//! halves what a product reads. The convolutions and `max_pool` run on the
-//! CPU. See `package-loam/webgpu.md`.
+//! index `arg_max` leaves on the device as an f32, which a gather reads there.
+//! A weight kept for products alone is held in bf16 where that loses nothing,
+//! which halves what a product reads. The convolutions and `max_pool` run on
+//! the CPU. See `package-loam/webgpu.md`.
 
 use {
     Attention,

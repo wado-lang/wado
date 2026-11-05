@@ -371,7 +371,7 @@ pub fn decomposed_attention<affine G: Graph, B, S, Q, K, H, P, T, D, Pos, Half, 
     let [heads, kv] = [options.heads, options.kv_heads];
     let [first, total] = match past_length {
         Some(l) => [*l, past],
-        None => [full::<G, i64, []>(g, past as i64, []), past + s],
+        None => [scalar(g, past as i64), past + s],
     };
     let mut query = heads_first::<G, B, S, Q, Heads, D>(g, q, heads, d);
     let mut key = heads_first::<G, B, S, K, H, D>(g, k, kv, d);
@@ -699,7 +699,7 @@ pub fn strided_gather<affine G: Graph, E: Element, In, Out>(
     count: i32,
     step: i64,
 ) -> G::Tensor<E, Out> with _ {
-    let indices = range_i64::<G, Row>(g, start, count, &full::<G, i64, []>(g, step, []));
+    let indices = range_i64::<G, Row>(g, start, count, &scalar(g, step));
     let mut sizes = g.extents_of(x);
     sizes[axis] = 1;
     let dims = GatherDims {

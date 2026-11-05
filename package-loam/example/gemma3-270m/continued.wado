@@ -10,7 +10,7 @@ use { LinearArray } from "core:linear";
 use { MonotonicClock } from "wasi:clocks";
 
 /// How many tokens a call picks on a device: a read back each, then one for all.
-pub global EACH_CALL: List<i32> = [1, 32];
+global EACH_CALL: List<i32> = [1, 32];
 
 /// One prompt and the tokens onnxruntime picks after it, as `generate.mjs`
 /// writes them.
@@ -47,42 +47,44 @@ pub fn recorded() -> Option<List<Generated>> with (Stderr, Preopens) {
 }
 
 /// Continues each of `generate` by `next`, the prompt and its first token in a
-/// call, then the tokens after it `each_call` at a time, and prints how each
-/// went. `next` takes the ids so far, how many tokens to pick and how many to
-/// leave the cache room for after those. `counts` is the backend's read backs
-/// and device runs so far: a compute shader's dispatches, or a PJRT program's
-/// executions.
+/// call, then the tokens after it as many a call as each of `EACH_CALL` says,
+/// and prints how each went. `next` takes the ids so far, how many tokens to
+/// pick and how many to leave the cache room for after those. `counts` is the
+/// backend's read backs and device runs so far: a compute shader's dispatches,
+/// or a PJRT program's executions.
 pub fn continued<effect E>(
     generate: List<Generated>,
-    each_call: i32,
     mut next: fn mut(&List<i32>, i32, i32) -> List<i32> with E,
     counts: fn() -> [i32, i32] with E,
 ) with (E, Stdout, MonotonicClock) {
-    for let g of generate {
-        let mut all = g.ids;
-        let steps = g.generated.len();
-        let started = MonotonicClock::now();
-        all.extend(&next(&all, 1, steps - 1));
-        let prompted = MonotonicClock::now();
-        let [read, ran] = counts();
-        while all.len() < g.ids.len() + steps {
-            all.extend(&next(&all, i32::min(each_call, g.ids.len() + steps - all.len()), 0));
+    for let each_call of EACH_CALL {
+        println(`${each_call} tokens a call:`);
+        for let g of generate {
+            let mut all = g.ids;
+            let steps = g.generated.len();
+            let started = MonotonicClock::now();
+            all.extend(&next(&all, 1, steps - 1));
+            let prompted = MonotonicClock::now();
+            let [read, ran] = counts();
+            while all.len() < g.ids.len() + steps {
+                all.extend(&next(&all, i32::min(each_call, g.ids.len() + steps - all.len()), 0));
+            }
+            let ended = MonotonicClock::now();
+            let [reads_now, runs_now] = counts();
+            let reads = (reads_now - read) as f64 / (steps - 1) as f64;
+            let runs = (runs_now - ran) as f64 / (steps - 1) as f64;
+            let generated = all[g.ids.len()..<all.len()].to_list();
+            let verdict = if generated == g.generated {
+                "matches onnxruntime";
+            } else {
+                `onnxruntime picks ${g.generated:?}`;
+            };
+            let first = (prompted - started) as u64 as f64 / 1_000_000.0;
+            let rest = (ended - prompted) as u64 as f64 / 1_000_000.0 / (steps - 1) as f64;
+            println(`${g.prompt:?} -> ${generated:?}: ${verdict}`);
+            println(
+                `  ${first:.0} ms for the prompt, ${rest:.1} ms a token after it in ${runs:.1} device runs and ${reads:.2} read backs (onnxruntime ${g.ms_per_token:.1} on the CPU, ${g.webgpu_ms_per_token:.1} on WebGPU)`,
+            );
         }
-        let ended = MonotonicClock::now();
-        let [reads_now, runs_now] = counts();
-        let reads = (reads_now - read) as f64 / (steps - 1) as f64;
-        let runs = (runs_now - ran) as f64 / (steps - 1) as f64;
-        let generated = all[g.ids.len()..<all.len()].to_list();
-        let verdict = if generated == g.generated {
-            "matches onnxruntime";
-        } else {
-            `onnxruntime picks ${g.generated:?}`;
-        };
-        let first = (prompted - started) as u64 as f64 / 1_000_000.0;
-        let rest = (ended - prompted) as u64 as f64 / 1_000_000.0 / (steps - 1) as f64;
-        println(`${g.prompt:?} -> ${generated:?}: ${verdict}`);
-        println(
-            `  ${first:.0} ms for the prompt, ${rest:.1} ms a token after it in ${runs:.1} device runs and ${reads:.2} read backs (onnxruntime ${g.ms_per_token:.1} on the CPU, ${g.webgpu_ms_per_token:.1} on WebGPU)`,
-        );
     }
 }

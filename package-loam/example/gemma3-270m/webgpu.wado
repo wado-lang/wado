@@ -1,10 +1,10 @@
 //! Gemma 3 (270M) on a WebGPU device, through the programs the backend compiled
-//! for each shape class. It continues each prompt
-//! `generate.json` records with greedy tokens on the device, and says whether
-//! it picks the tokens onnxruntime picks. It prints the time per token, and the
-//! device runs and read backs a token takes. `README.md` says how to run it.
+//! for each shape class. It continues each prompt `generate.json` records with
+//! greedy tokens on the device, and says whether it picks the tokens onnxruntime
+//! picks. It prints the time per token, and the device runs and read backs a
+//! token takes. `README.md` says how to run it.
 
-use { eprintln, println, Stderr, Stdout } from "core:cli";
+use { eprintln, Stderr, Stdout } from "core:cli";
 use { Preopens } from "core:fs";
 use { MonotonicClock } from "wasi:clocks";
 use {
@@ -25,7 +25,7 @@ use {
     RecordOptionGpuSize64,
 } from "wasi:webgpu";
 use { Sampling, WebGpuBackend } from "lib:loam";
-use { EACH_CALL, continued, read_checkpoint, recorded } from "./continued.wado";
+use { continued, read_checkpoint, recorded } from "./continued.wado";
 use { Model } from "./model.wado";
 
 export fn run() with (Stdout, Stderr, Preopens, MonotonicClock, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder, GpuSupportedLimits, RecordOptionGpuSize64) {
@@ -42,11 +42,8 @@ export fn run() with (Stdout, Stderr, Preopens, MonotonicClock, Webgpu, Gpu, Gpu
     let mut model = Model::load(gpu, &checkpoint).unwrap();
     // The device holds the weights.
     builtin::drop(checkpoint);
-    for let each_call of EACH_CALL {
-        println(`${each_call} tokens a call:`);
-        continued(generate, each_call, |ids, count, room| model.next_tokens(ids, count, &Sampling {}, room), || [
-            model.backend().read_backs(),
-            model.backend().dispatches(),
-        ]);
-    }
+    continued(generate, |ids, count, room| model.next_tokens(ids, count, &Sampling {}, room), || [
+        model.backend().read_backs(),
+        model.backend().dispatches(),
+    ]);
 }

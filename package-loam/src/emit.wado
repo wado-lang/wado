@@ -1101,14 +1101,7 @@ fn emit_compute(
     if room matches { Some(_) } {
         compute.add_param("room", "i32");
     }
-    let mut lines = entry.lines;
-    let mut symbols = entry.symbols;
-    let mut arguments = entry.arguments;
-    let taken_args = entry.taken_args;
-    let first_weight = entry.first_weight;
-    let class = entry.class;
-    let chosen = entry.chosen;
-    let fitted_cache = entry.fitted_cache;
+    let Entry { lines: mut lines, symbols: mut symbols, arguments: mut arguments, taken_args, first_weight, class, chosen, fitted_cache } = entry;
     // `build` and `recorded` take the branches where they take the lengths.
     let [record, least] = if chosen.is_empty() {
         [RECORDED, `${RECORDED}(recorder, &${LEAST_EXTENTS}())`];
@@ -1653,23 +1646,17 @@ fn per_step(symbol: &String, total: &String, owed: &List<[Grown, Option<Poly>]>)
     if symbol == total {
         return Result::Ok(1);
     }
-    for let [g, value] of *owed {
-        if g.symbol != *symbol {
-            continue;
-        }
-        let Some(v) = value else {
-            return Result::Ok(0);
-        };
-        if !v.symbols().contains(total) {
-            return Result::Ok(0);
-        }
-        let Some([moves, _]) = v.linear_in(total) else {
-            builtin::cold_path();
-            return Result::Err(EmitError::Undecodable(`${*symbol} does not move by a fixed amount a step`));
-        };
-        return Result::Ok(moves);
+    let Some([_, Some(v)]) = owed.into_iter().find(|o| o.0.symbol == *symbol) else {
+        return Result::Ok(0);
+    };
+    if !v.symbols().contains(total) {
+        return Result::Ok(0);
     }
-    return Result::Ok(0);
+    let Some([moves, _]) = v.linear_in(total) else {
+        builtin::cold_path();
+        return Result::Err(EmitError::Undecodable(`${*symbol} does not move by a fixed amount a step`));
+    };
+    return Result::Ok(moves);
 }
 
 /// `least_extents`: the extents `recorded` takes where each length an input

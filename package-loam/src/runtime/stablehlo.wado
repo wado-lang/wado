@@ -59,8 +59,9 @@ pub fn in_place(recorded: &Recorded) -> List<[i32, i32]> {
     let mut looped = HashSet::<i32>::new();
     for let node of &recorded.nodes {
         if let Repeat(repeat) = &node.op {
+            let start_of = carried_starts(node);
             for let [k, carried] of repeat.carried.into_iter().enumerate() {
-                starts[carried] = carried_starts(node)[k];
+                starts[carried] = start_of[k];
             }
             for let result of repeat.body.results {
                 looped.insert(result);

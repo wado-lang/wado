@@ -37,6 +37,7 @@ use {
     padded_with_zeros,
     picked,
     reduced_extents,
+    scalar,
     sliced_extents,
 } from "./hlo.wado";
 use {
@@ -877,10 +878,7 @@ fn repeated_launch(
     };
     let mut carried: List<Any<WebGpuBackend>> = carried_starts(node).into_iter().map(|o| state.values[o]).collect();
     for let at of 0..<g.host(count).data[0] {
-        state.values[repeat.step] = Any::I64(Placed::Host(Tensor {
-            data: [at],
-            extents: [],
-        }));
+        state.values[repeat.step] = Any::I64(g.relabeled::<i64, [], Untyped>(&scalar(g, at)));
         for let [k, c] of repeat.carried.into_iter().enumerate() {
             state.values[c] = carried[k];
         }

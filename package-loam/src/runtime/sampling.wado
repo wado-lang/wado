@@ -63,7 +63,7 @@ impl Sampling {
         ];
     }
 
-    /// The draws of `count` positions from `at`, `rows` of them each, in `[0,
+    /// The draws of `held` positions from `at`, `rows` of them each, in `[0,
     /// 1)`. A position's draw is the keyed hash of it and the row, so it does
     /// not depend on how a call splits its steps, and no device's random source
     /// is read. Every step's are written up front, as a keyed hash is cheap on
@@ -92,8 +92,7 @@ impl Sampling {
         let rows = extents[0];
         let decoding = Decoding::new(&mut cpu, self, 1, at, rows);
         let flat: Tensor<f32, [Slots, Tokens]> = cpu.reshape(logits, [rows, extents[extents.len() - 1]]);
-        let picked = picked(&mut cpu, &flat, &decoding, &full::<Cpu, i64, []>(&mut cpu, 0, []));
-        return picked.data;
+        return picked(&mut cpu, &flat, &decoding, &scalar(&mut cpu, 0 as i64)).data;
     }
 }
 
@@ -275,7 +274,7 @@ pub fn advanced<affine G: Graph>(
     step: &G::Tensor<i64, []>,
     per_step: i64,
 ) -> G::Tensor<i64, []> with _ {
-    return g.binary(Binary::Add, length, &g.binary(Binary::Multiply, step, &full::<G, i64, []>(g, per_step, [])));
+    return g.binary(Binary::Add, length, &g.binary(Binary::Multiply, step, &scalar(g, per_step)));
 }
 
 /// The token each row of `logits` picks for the step `step`: its greatest
@@ -320,6 +319,20 @@ fn by_row<affine G: Graph>(
     return g.broadcast_in_dim(x, *extents, [0]);
 }
 
+/// Each row's sum of the `weights` of the elements of `x` that compare to its
+/// `limit` as `direction` says.
+fn sum_where<affine G: Graph>(
+    g: &mut G,
+    direction: Comparison,
+    x: &G::Tensor<f32, [Slots, Tokens]>,
+    limit: &G::Tensor<f32, [Slots]>,
+    weights: &G::Tensor<f32, [Slots, Tokens]>,
+) -> G::Tensor<f32, [Slots]> with _ {
+    let extents = g.extents_of(x);
+    let within = g.convert::<bool, f32, [Slots, Tokens]>(&g.compare(direction, x, &by_row(g, limit, &extents)));
+    return g.reduce(&g.binary(Binary::Multiply, &within, weights), Binary::Add, 0.0, [1]);
+}
+
 /// Each row's largest value at or below which the `weights` of the elements of
 /// `x` that reach it still sum to `wanted`, found by halving the range the row's
 /// values span, so no sort is needed. Each row's weights must reach `wanted`.
@@ -329,21 +342,13 @@ fn threshold<affine G: Graph>(
     weights: &G::Tensor<f32, [Slots, Tokens]>,
     wanted: &G::Tensor<f32, [Slots]>,
 ) -> G::Tensor<f32, [Slots]> with _ {
-    let extents = g.extents_of(x);
-    let half = full::<G, f32, [Slots]>(g, 0.5, [extents[0]]);
+    let half = full::<G, f32, [Slots]>(g, 0.5, [g.extents_of(x)[0]]);
     let mut high: G::Tensor<f32, [Slots]> = g.reduce(x, Binary::Maximum, f32::NEG_INFINITY, [1]);
     let lowest: G::Tensor<f32, [Slots]> = g.reduce(&g.unary(Unary::Negate, x), Binary::Maximum, f32::NEG_INFINITY, [1]);
     let mut low = g.unary(Unary::Negate, &lowest);
     for let _ of 0..<BISECTIONS {
         let middle = g.binary(Binary::Multiply, &g.binary(Binary::Add, &low, &high), &half);
-        let reaches = g.convert::<bool, f32, [Slots, Tokens]>(&g.compare(Comparison::Ge, x, &by_row(
-            g,
-            &middle,
-            &extents,
-        )));
-        let held: G::Tensor<f32, [Slots]> = g.reduce(&g.binary(Binary::Multiply, &reaches, weights), Binary::Add, 0.0, [
-            1,
-        ]);
+        let held = sum_where(g, Comparison::Ge, x, &middle, weights);
         let enough = g.compare(Comparison::Ge, &held, wanted);
         low = g.select(&enough, &middle, &low);
         high = g.select(&enough, &high, &middle);
@@ -372,17 +377,7 @@ fn categorical<affine G: Graph>(
     }
     while bit > 0 {
         let further = g.binary(Binary::Add, &at, &full::<G, f32, [Slots]>(g, bit as f32, rows));
-        let before = g.convert::<bool, f32, [Slots, Tokens]>(&g.compare(Comparison::Lt, &positions, &by_row(
-            g,
-            &further,
-            &extents,
-        )));
-        let sum: G::Tensor<f32, [Slots]> = g.reduce(
-            &g.binary(Binary::Multiply, &before, weights),
-            Binary::Add,
-            0.0,
-            [1],
-        );
+        let sum = sum_where(g, Comparison::Lt, &positions, &further, weights);
         let fits = g.compare(Comparison::Le, &sum, &target);
         at = g.select(&fits, &further, &at);
         bit /= 2;

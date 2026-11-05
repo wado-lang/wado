@@ -538,7 +538,7 @@ measured before its deletion, by the same test running it:
 | -------------------------------------------- | ------------------------ |
 | the kernel pass                              | 1                        |
 | `compute`, the graph's ops at the capacities | 0.89                     |
-| `decode`, one step a call                    | 0.92                     |
+| `decode`, a step a call                      | 0.92                     |
 
 `decode` is the one test of `example/gemma3-270m/generate_test.wado`, and
 `compute` is that test with `next_tokens` never taking its `decoded` branch:

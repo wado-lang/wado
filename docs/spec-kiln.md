@@ -227,8 +227,8 @@ So a use site that must work with both writes every field that is not an
 `Option`, a `List`, or a `TreeMap`.
 
 Loam's options hold three maps, a list of strings, an optional struct, and a
-flag. They are declared in `compile.wado`, which the `loam` command reads too, and
-the entry module re-exports them:
+flag. They are declared in `compile.wado`, which the `loam` command reads too,
+and the entry module re-exports them:
 
 <!-- {"source": "package-loam/src/compile.wado"} -->
 
