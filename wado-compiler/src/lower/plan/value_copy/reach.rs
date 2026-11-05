@@ -240,10 +240,8 @@ impl<'a> StorageReach<'a> {
     /// How many fields a struct `owner` has, `None` for any other type.
     #[must_use]
     pub fn field_count(&self, owner: TypeId) -> Option<u32> {
-        let ResolvedType::Struct { def, type_args } = self.type_table.get(owner) else {
-            return None;
-        };
-        let fields = self.fields.get(&(*def, type_args.clone()))?;
+        let (def, type_args) = self.type_table.settled_struct_parts(owner)?;
+        let fields = self.fields.get(&(def, type_args.to_vec()))?;
         Some(u32::try_from(fields.len()).unwrap())
     }
 

@@ -592,6 +592,14 @@ impl TypeTable {
         }
     }
 
+    /// [`Self::struct_parts`] as the struct's declaration is keyed, whichever
+    /// spelling of it `id` is: monomorphization leaves a payload's type as its
+    /// `GenericInstance`.
+    #[must_use]
+    pub fn settled_struct_parts(&self, id: TypeId) -> Option<(StructDef, &[TypeId])> {
+        self.struct_parts(self.type_key(id).0)
+    }
+
     /// [`Self::type_key`] of each id, in order.
     #[must_use]
     pub fn type_keys(&self, ids: &[TypeId]) -> Vec<TypeKey> {

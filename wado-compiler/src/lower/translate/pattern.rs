@@ -428,10 +428,10 @@ impl<'a> PatternLowerer<'a> {
 
     /// The fields of the struct a struct pattern reads.
     fn struct_fields_of(&self, type_id: TypeId, type_table: &TypeTable) -> Vec<TirField> {
-        let ResolvedType::Struct { def, type_args } = type_table.get(type_id) else {
-            panic!("a struct pattern reads a struct");
-        };
-        self.struct_fields_map[&(*def, type_args.clone())].clone()
+        let (def, type_args) = type_table
+            .settled_struct_parts(type_id)
+            .expect("a struct pattern reads a struct");
+        self.struct_fields_map[&(def, type_args.to_vec())].clone()
     }
 
     /// Consume the lowerer and return the final local count and locals.

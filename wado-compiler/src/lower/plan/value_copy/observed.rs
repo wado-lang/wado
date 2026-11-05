@@ -21,8 +21,8 @@ use super::{is_reference_type, is_scalar_type};
 use crate::flat_package::FlatPackage;
 use crate::hashmap::IndexSet;
 use crate::tir::{
-    FunctionRef, ResolvedType, StructFields, TirExpr, TirExprKind, TirPattern, TirStmt,
-    TirStmtKind, TirUnaryOp, TypeId, struct_fields,
+    FunctionRef, StructFields, TirExpr, TirExprKind, TirPattern, TirStmt, TirStmtKind, TirUnaryOp,
+    TypeId, struct_fields,
 };
 use crate::tir_visitor::TirRefVisitor;
 use crate::type_table::TypeTable;
@@ -118,10 +118,11 @@ impl Scan<'_> {
 
     /// The declared type of field `index` of struct `owner`.
     fn field_type_of(&self, owner: TypeId, index: u32) -> TypeId {
-        let ResolvedType::Struct { def, type_args } = self.type_table.get(owner) else {
-            unreachable!("a struct pattern matches a struct")
-        };
-        self.fields[&(*def, type_args.clone())][index as usize].type_id
+        let (def, type_args) = self
+            .type_table
+            .settled_struct_parts(owner)
+            .expect("a struct pattern matches a struct");
+        self.fields[&(def, type_args.to_vec())][index as usize].type_id
     }
 
     fn field_steps(&self, place: &TirExpr, out: &mut Steps) {

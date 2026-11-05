@@ -1,0 +1,84 @@
+// A variant's payload spells a generic struct as the instance monomorphization
+// left it, which a struct pattern's fields are looked up through all the same.
+
+struct G<A> {
+    a: A,
+    n: i32,
+}
+
+variant Tagged<T> {
+    Tag(G<T>),
+    Bare,
+}
+
+fn f(v: Option<G<String>>) -> i32 {
+    return match v {
+        Some({ n: 2, .. }) => 1,
+        _ => -1,
+    };
+}
+
+fn g(v: Option<G<Option<i32>>>) -> i32 {
+    if let Some({ a: Some(x), n }) = v {
+        return x + n;
+    }
+    return -1;
+}
+
+fn h(v: Tagged<i32>) -> i32 {
+    if let Tag({ a, n: 2 }) = v {
+        return a;
+    }
+    return -1;
+}
+
+fn w<T>(v: Option<G<T>>) -> i32 {
+    let Some({ n: m, .. }) = v else {
+        return -1;
+    };
+    return m;
+}
+
+fn i(v: &Option<G<[i32, String]>>) -> i32 {
+    if let Some({ a: [x, _], n }) = v {
+        return *x + *n;
+    }
+    return -1;
+}
+
+struct Box2 {
+    v: i32,
+}
+
+fn write(v: Option<&mut G<Option<Box2>>>) {
+    if let Some({ a: Some(b), .. }) = v {
+        b.v = 9;
+    }
+}
+
+test "a literal field" {
+    assert f(Option::Some(G { a: "s", n: 2 })) == 1;
+    assert f(Option::Some(G { a: "s", n: 3 })) == -1;
+}
+
+test "a variant field" {
+    assert g(Option::Some(G { a: Option::Some(1), n: 2 })) == 3;
+}
+
+test "a generic variant's payload" {
+    assert h(Tagged::Tag(G { a: 5, n: 2 })) == 5;
+}
+
+test "a generic function's parameter" {
+    assert w(Option::Some(G { a: 5, n: 2 })) == 2;
+}
+
+test "a tuple field behind a reference" {
+    assert i(&Option::Some(G { a: [1, "s"], n: 2 })) == 3;
+}
+
+test "a binding through a mutable reference writes the place" {
+    let mut held = G { a: Option::Some(Box2 { v: 1 }), n: 0 };
+    write(Option::Some(&mut held));
+    assert held.a.unwrap().v == 9;
+}
