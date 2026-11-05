@@ -580,19 +580,11 @@ fn mut_reachable_contains(
         | ResolvedType::Newtype {
             base_type: inner, ..
         } => (*inner, writable),
-        ResolvedType::GenericInstance { def, type_args } => {
-            if writable && !type_table.is_resource_def(*def) && type_table.type_key(ty) == target {
+        ResolvedType::GenericInstance { type_args, .. } | ResolvedType::Tuple(type_args) => {
+            if writable && !type_table.is_resource_type(ty) && type_table.type_key(ty) == target {
                 return true;
             }
             return type_args.iter().any(|&t| {
-                mut_reachable_contains(t, writable, target, type_table, struct_fields, visited)
-            });
-        }
-        ResolvedType::Tuple(elems) => {
-            if writable && type_table.type_key(ty) == target {
-                return true;
-            }
-            return elems.iter().any(|&t| {
                 mut_reachable_contains(t, writable, target, type_table, struct_fields, visited)
             });
         }

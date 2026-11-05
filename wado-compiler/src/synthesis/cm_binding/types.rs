@@ -492,7 +492,7 @@ fn check_cm_boundary_representable_inner(
                     .to_string(),
             ),
             ResolvedType::Tuple(elems) => {
-                for &e in &elems.clone() {
+                for &e in elems {
                     recurse(e, Slot::Value, visited)?;
                 }
                 Ok(())
@@ -1272,9 +1272,9 @@ pub(super) fn param_needs_lifting(type_id: TypeId, tt: &TypeTable) -> bool {
         // the base type rather than treating the newtype itself as
         // opaque.
         ResolvedType::Newtype { base_type, .. } => param_needs_lifting(*base_type, tt),
-        // Everything else (Struct, Variant, tuples,
-        // `List<T>`, `Option<T>`, `Result<T, E>`, references, etc.)
-        // either widens or splits at the flat ABI.
+        // Everything else (Struct, Variant, tuples, `List<T>`, `Option<T>`,
+        // `Result<T, E>`, references, etc.) either widens or splits at the
+        // flat ABI.
         _ => true,
     }
 }

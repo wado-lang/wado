@@ -489,7 +489,7 @@ fn needs_copy_walked(
         ResolvedType::GenericInstance { def, .. } if type_table.is_resource_def(*def) => false,
         // Empty tuples are unit-shaped; non-empty tuples need element-wise
         // deep copy.
-        ResolvedType::Tuple(elems) => !elems.is_empty(),
+        ResolvedType::Tuple(elems) => !is_box && !elems.is_empty(),
         ResolvedType::GenericInstance { def, type_args } => {
             if is_box {
                 return false;

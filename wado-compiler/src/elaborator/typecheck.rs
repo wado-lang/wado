@@ -161,10 +161,7 @@ fn check_at(
 
     // Two instances of one declaration, or two tuples, compare by their
     // arguments (Rule 8), whatever their slots.
-    let same_declaration = match (
-        type_table.get(actual_inner),
-        type_table.get(expected_inner),
-    ) {
+    let same_declaration = match (type_table.get(actual_inner), type_table.get(expected_inner)) {
         (ResolvedType::Tuple(actual_elems), ResolvedType::Tuple(expected_elems)) => {
             Some((actual_elems.as_slice(), expected_elems.as_slice()))
         }
@@ -293,9 +290,8 @@ fn check_at(
     }
 
     // Rule 8: Instances of one generic struct, resource or newtype, or two
-    // tuples -- compare
-    // their type args, so an argument's effect row is the effect check's to
-    // resolve.
+    // tuples -- compare their type args, so an argument's effect row is the
+    // effect check's to resolve.
     if let Some((actual_args, expected_args)) = same_declaration {
         return check_type_args(actual_args, expected_args, type_table, fixed);
     }

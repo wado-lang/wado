@@ -733,9 +733,8 @@ impl HeapEffects<'_> {
             ResolvedType::GenericInstance { def, .. } if tt.is_resource_def(*def) => {}
             ResolvedType::Tuple(elems) => {
                 out.insert(tt.type_key(ty));
-                let members = self.struct_field_types(ty).unwrap_or(elems.as_slice());
-                for &member in members {
-                    self.reach_into(member, seen, out);
+                for &elem in elems {
+                    self.reach_into(elem, seen, out);
                 }
             }
             ResolvedType::GenericInstance { def, type_args } => {

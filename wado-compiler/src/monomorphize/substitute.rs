@@ -108,9 +108,6 @@ impl Monomorphizer {
                     type_table.make_mut_ref(new_inner_id)
                 }
             }
-            // Handle GenericInstance types that weren't in the direct substitution map
-            // This can happen when function substitution creates new GenericInstance types
-            // with different TypeIds for the type arguments
             ResolvedType::Tuple(elems) => {
                 let new_elems: Vec<TypeId> = elems
                     .iter()
@@ -122,6 +119,9 @@ impl Monomorphizer {
                     type_table.make_tuple(new_elems)
                 }
             }
+            // Handle GenericInstance types that weren't in the direct substitution map
+            // This can happen when function substitution creates new GenericInstance types
+            // with different TypeIds for the type arguments
             ResolvedType::GenericInstance { def, type_args } => {
                 // Lowered by codegen as it is, never as a monomorphized struct.
                 if type_table.is_list(type_id) {

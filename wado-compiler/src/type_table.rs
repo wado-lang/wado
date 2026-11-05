@@ -18,7 +18,7 @@ use crate::module_source::{CmNamespace, ModuleSource};
 use crate::name;
 use crate::name::{
     ARRAY_TYPE_NAME, FqTraitName, FqTypeName, INTERNAL_PREFIX, NEVER_TYPE_NAME, Receiver, RefKind,
-    TypeHead, TypeNameInfo, UNIT_TYPE_NAME, assoc_type_projection_name,
+    TUPLE_TYPE_NAME, TypeHead, TypeNameInfo, UNIT_TYPE_NAME, assoc_type_projection_name,
     display_assoc_type_projection, display_generic_name, display_tuple_type, format_type_name,
     mangle_builtin_array_type, mangle_declared, mangle_generic_name, mangle_local_item_name,
     mangle_tuple_type, pack_element_name, ref_type_name, repeated_element, template_shape_name,
@@ -282,9 +282,7 @@ impl TypeTable {
             ResolvedType::GenericInstance { def, type_args } => {
                 Some((self.decl_name(*def).to_string(), type_args.clone()))
             }
-            ResolvedType::Tuple(elems) => {
-                Some((self.decl_name(self.tuple_def()).to_string(), elems.clone()))
-            }
+            ResolvedType::Tuple(elems) => Some((TUPLE_TYPE_NAME.to_string(), elems.clone())),
             ResolvedType::BuiltinArray(elem) => Some((ARRAY_TYPE_NAME.to_string(), vec![*elem])),
             _ => None,
         }
@@ -417,7 +415,9 @@ impl TypeTable {
         }
         let spelling = self.types.get(id).expect("an interned type").clone();
         let rebuilt = match &spelling {
-            ResolvedType::GenericInstance { def, type_args } if self.is_struct_instance_def(*def) => {
+            ResolvedType::GenericInstance { def, type_args }
+                if self.is_struct_instance_def(*def) =>
+            {
                 ResolvedType::Struct {
                     def: StructDef::Decl(*def),
                     type_args: self.settle_spellings(type_args),
@@ -574,7 +574,9 @@ impl TypeTable {
     pub fn struct_parts(&self, id: TypeId) -> Option<(StructDef, &[TypeId])> {
         match self.get(id) {
             ResolvedType::Struct { def, type_args } => Some((*def, type_args)),
-            ResolvedType::GenericInstance { def, type_args } if self.is_struct_instance_def(*def) => {
+            ResolvedType::GenericInstance { def, type_args }
+                if self.is_struct_instance_def(*def) =>
+            {
                 Some((StructDef::Decl(*def), type_args))
             }
             _ => None,
@@ -2350,11 +2352,6 @@ impl TypeTable {
 
     pub fn make_tuple(&mut self, elements: Vec<TypeId>) -> TypeId {
         self.intern(ResolvedType::Tuple(elements))
-    }
-
-    /// Whether `def` declares the built-in tuple family.
-    pub fn is_tuple_def(&self, def: DefId) -> bool {
-        self.is_compiler_item(def, CompilerItem::Tuple)
     }
 
     /// Whether an instance of `def` is a struct: monomorphization makes a
@@ -4888,14 +4885,16 @@ impl TypeTable {
             ResolvedType::Tuple(elems) => {
                 let mut new_elems: Vec<TypeId> = Vec::new();
                 for &e in &elems {
-                    let ResolvedType::TypePack {
-                        index, mapped_elem, ..
-                    } = self.get(e).clone()
-                    else {
-                        new_elems.push(self.subst_rec(e, leaves));
-                        continue;
+                    let bound_pack = match self.get(e) {
+                        ResolvedType::TypePack {
+                            index, mapped_elem, ..
+                        } => leaves
+                            .params
+                            .get(index)
+                            .map(|&pack_type| (*index, *mapped_elem, pack_type)),
+                        _ => None,
                     };
-                    let Some(&pack_type) = leaves.params.get(&index) else {
+                    let Some((index, mapped_elem, pack_type)) = bound_pack else {
                         new_elems.push(self.subst_rec(e, leaves));
                         continue;
                     };
@@ -5055,7 +5054,10 @@ impl TypeTable {
         // The instantiation carries the declaration it came from, so nothing
         // has to be registered beside it and nothing re-derives the answer
         // from a spelling whose base `prune` may already have dropped.
-        assert!(!self.is_tuple_def(def), "a tuple is interned by `make_tuple`");
+        assert!(
+            !self.is_compiler_item(def, CompilerItem::Tuple),
+            "a tuple is interned by `make_tuple`"
+        );
         let type_args = if self.is_struct_instance_def(def) {
             self.struct_instance_args(type_args)
         } else {
@@ -6208,8 +6210,10 @@ impl TypeTable {
                 }
             }
             ResolvedType::Tuple(elems) => {
-                let resolved: Vec<TypeId> =
-                    elems.iter().map(|t| self.resolve_newtypes_deep(*t)).collect();
+                let resolved: Vec<TypeId> = elems
+                    .iter()
+                    .map(|t| self.resolve_newtypes_deep(*t))
+                    .collect();
                 if resolved == elems {
                     base
                 } else {
@@ -6359,7 +6363,7 @@ impl TypeTable {
             // spelling the argument into the head applies it twice
             // (`StreamWritable<u8><u8>::write_all`) and resolves to nothing.
             ResolvedType::GenericInstance { def, .. } => self.decl_name(*def).to_string(),
-            ResolvedType::Tuple(_) => self.decl_name(self.tuple_def()).to_string(),
+            ResolvedType::Tuple(_) => TUPLE_TYPE_NAME.to_string(),
             ResolvedType::Struct { def, .. } => self.struct_head_mangled_name(*def),
             ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => self.base_type_name(*inner),
             _ => self.mangle_type_name(id),

@@ -563,6 +563,7 @@ async fn run_single(opts: &DumpOptions, input: &str) -> Result<(), CliExit> {
                         wado_compiler::tir::ResolvedType::MutRef(_) => "mut_ref",
                         wado_compiler::tir::ResolvedType::Function { .. } => "fn",
                         wado_compiler::tir::ResolvedType::BuiltinArray(_) => "builtin_array",
+                        wado_compiler::tir::ResolvedType::Tuple(_) => "tuple",
                         wado_compiler::tir::ResolvedType::TypeParam { .. } => "type_param",
                         wado_compiler::tir::ResolvedType::AssocParam { .. } => "assoc_param",
                         wado_compiler::tir::ResolvedType::GenericInstance { .. } => {
