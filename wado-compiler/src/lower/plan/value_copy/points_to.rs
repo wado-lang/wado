@@ -286,7 +286,7 @@ impl<'a> HoldsHandle<'a> {
                 _ => true,
             };
         }
-        match tt.get(ty) {
+        match tt.settled(ty) {
             ResolvedType::Primitive(_)
             | ResolvedType::Unit
             | ResolvedType::Never

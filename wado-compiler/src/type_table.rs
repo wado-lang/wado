@@ -592,9 +592,15 @@ impl TypeTable {
         }
     }
 
-    /// [`Self::struct_parts`] as the struct's declaration is keyed, whichever
-    /// spelling of it `id` is: monomorphization leaves a payload's type as its
-    /// `GenericInstance`.
+    /// [`Self::get`] of the spelling a declaration is keyed by: monomorphization
+    /// leaves a payload's type as its `GenericInstance`, which holds the fields
+    /// of no struct.
+    #[must_use]
+    pub fn settled(&self, id: TypeId) -> &ResolvedType {
+        self.get(self.type_key(id).0)
+    }
+
+    /// [`Self::struct_parts`] of the spelling a declaration is keyed by.
     #[must_use]
     pub fn settled_struct_parts(&self, id: TypeId) -> Option<(StructDef, &[TypeId])> {
         self.struct_parts(self.type_key(id).0)

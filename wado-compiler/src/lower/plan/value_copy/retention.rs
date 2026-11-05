@@ -1039,7 +1039,7 @@ impl RefCarrying<'_> {
     }
 
     fn members(&self, type_id: TypeId, walk: &mut Walk) -> bool {
-        match self.type_table.get(type_id) {
+        match self.type_table.settled(type_id) {
             ResolvedType::Ref(_) | ResolvedType::MutRef(_) => true,
             // What a type parameter stands for is not known here.
             ResolvedType::TypeParam { .. }

@@ -253,7 +253,7 @@ impl<'a> StorageReach<'a> {
         if let Some(element) = tt.list_element(ty) {
             return Members::Held(vec![element]);
         }
-        match tt.get(ty) {
+        match tt.settled(ty) {
             ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => Members::Reference(*inner),
             ResolvedType::BuiltinArray(inner) => Members::Held(vec![*inner]),
             ResolvedType::Newtype { base_type, .. } => Members::Held(vec![*base_type]),
