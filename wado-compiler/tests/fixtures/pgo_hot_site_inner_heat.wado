@@ -1,0 +1,74 @@
+// A hot site prices its callee's hot calls at what a hot site splices. `f`
+// alone fits `hot`, but its call to `g` runs hot too, and a hot site admits
+// `g`: splicing `f` would bring `g` along, over the hot threshold.
+use { println, Stdout } from "core:cli";
+
+fn g(xs: &List<i32>, k: i32) -> i32 {
+    let mut s = k;
+    for let x of xs {
+        s = s * 31 + *x;
+        s = s ^ (s >> 3);
+        s = s * 17 + builtin::black_box(5);
+        s = s ^ (s >> 5);
+        s = s * 13 + builtin::black_box(3);
+        s = s ^ (s >> 7);
+        s = s * 11 + builtin::black_box(2);
+        s = s ^ (s >> 11);
+        s = s * 7 + builtin::black_box(1);
+        s = s ^ (s >> 13);
+        s = s * 5 + builtin::black_box(9);
+        s = s ^ (s >> 2);
+        s = s * 3 + builtin::black_box(4);
+    }
+    return s;
+}
+
+fn f(x: i32, xs: &List<i32>) -> i32 {
+    let mut h = x;
+    h = h * 11 + builtin::black_box(2);
+    h = h ^ (h >> 11);
+    h = h * 7 + builtin::black_box(1);
+    h = h ^ (h >> 13);
+    h = h * 5 + builtin::black_box(9);
+    h = h ^ (h >> 2);
+    h = h * 3 + builtin::black_box(4);
+    return g(xs, sink(h)) + h;
+}
+
+// A call that stays one, so `f` reaches a safepoint and is never admitted
+// on the payback bound inside a loop.
+#[inline("never")]
+fn sink(x: i32) -> i32 {
+    return x ^ 1;
+}
+
+#[inline("never")]
+fn hot(n: i32, xs: &List<i32>) -> i32 {
+    let mut s = 0;
+    for let i of 0..<n {
+        s += f(i, xs);
+    }
+    return s;
+}
+
+// Second sites, so neither callee is admitted at its one site.
+#[inline("never")]
+fn other(x: i32, xs: &List<i32>) -> i32 {
+    return f(x, xs) + g(xs, x);
+}
+
+export fn run() with Stdout {
+    let xs: List<i32> = [1, 2, 3];
+    let s = hot(builtin::black_box(10000), &xs);
+    println(`${s + other(builtin::black_box(3), &xs)}`);
+}
+
+__DATA__
+{
+  "profile": "testdata/pgo_hot_site_inner_heat.pgo",
+  "wir_scope": "pgo_hot_site_inner_heat.wado/hot",
+  "wir_expect:O2": [
+    "\"pgo_hot_site_inner_heat.wado/f\"("
+  ],
+  "stdout": "-1479252892\n"
+}
