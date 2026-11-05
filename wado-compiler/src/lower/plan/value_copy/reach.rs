@@ -265,26 +265,14 @@ impl<'a> StorageReach<'a> {
                 }
             }
             ResolvedType::Tuple(elems) => Members::Held(elems.clone()),
-            ResolvedType::GenericInstance { def, type_args } => {
-                match tt.variant_template_cases(*def) {
-                    Some(cases) => Members::Held(
-                        cases
-                            .iter()
-                            .map(|&(_, _, payload)| match tt.get(payload) {
-                                ResolvedType::TypeParam { index, .. } => type_args[*index as usize],
-                                _ => payload,
-                            })
-                            .collect(),
-                    ),
+            ResolvedType::GenericInstance { type_args, .. } => Members::Held(type_args.clone()),
+            ResolvedType::Variant { def, type_args } => {
+                match tt.variant_instance_payloads(*def, type_args) {
+                    Some(payloads) => Members::Held(payloads),
+                    None if type_args.is_empty() => Members::Unknown,
                     None => Members::Held(type_args.clone()),
                 }
             }
-            ResolvedType::Variant { def } => match tt.variant_template_cases(*def) {
-                Some(cases) => {
-                    Members::Held(cases.iter().map(|&(_, _, payload)| payload).collect())
-                }
-                None => Members::Unknown,
-            },
             // A closure holds what it captured, which its type does not name:
             // whatever any closure of its shape captured.
             ResolvedType::Function { .. } => Members::Held(self.captures.of(ty, tt).to_vec()),

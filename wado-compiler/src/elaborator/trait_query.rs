@@ -1290,17 +1290,13 @@ impl TypeSystem {
                 let info = scope.struct_fields_of_head(*def)?;
                 Some(walk_struct(info, &[], visit))
             }
-            ResolvedType::Variant { def } => {
+            ResolvedType::Variant { def, type_args } => {
                 let info = scope.variant_cases_of(*def)?;
-                Some(walk_variant(info, &[], visit))
+                Some(walk_variant(info, type_args, visit))
             }
             ResolvedType::GenericInstance { def, type_args } => {
-                if let Some(info) = scope.struct_fields_of(*def) {
-                    Some(walk_struct(info, type_args, visit))
-                } else {
-                    let info = scope.variant_cases_of(*def)?;
-                    Some(walk_variant(info, type_args, visit))
-                }
+                let info = scope.struct_fields_of(*def)?;
+                Some(walk_struct(info, type_args, visit))
             }
             _ => None,
         }
@@ -1439,26 +1435,15 @@ impl TypeSystem {
     /// a reference are `Ref` but boxed (replace-on-assign, WEP 2026-06-13), so a
     /// `&mut` cannot write through them; every other `Ref` type qualifies. A
     /// `Newtype` follows its base.
-    pub(super) fn is_ref_mut_identity(
-        &self,
-        is_variant: &dyn Fn(DefId) -> bool,
-        resolved: &ResolvedType,
-    ) -> bool {
+    pub(super) fn is_ref_mut_identity(&self, resolved: &ResolvedType) -> bool {
         match resolved {
             ResolvedType::Variant { .. }
             | ResolvedType::Function { .. }
             | ResolvedType::Ref(_)
             | ResolvedType::MutRef(_) => false,
-            ResolvedType::GenericInstance { def, .. } => {
-                if is_variant(*def) {
-                    false
-                } else {
-                    self.is_ref_identity(resolved)
-                }
-            }
             ResolvedType::Newtype { base_type, .. } => {
                 let base = self.type_table.borrow().get(*base_type).clone();
-                self.is_ref_mut_identity(is_variant, &base)
+                self.is_ref_mut_identity(&base)
             }
             _ => self.is_ref_identity(resolved),
         }
@@ -3207,7 +3192,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 | ResolvedType::Tuple(type_args) => {
                     (tt.fq_type_name(effective_id).head_only(), type_args)
                 }
-                ResolvedType::Resource { type_args, .. } if !type_args.is_empty() => {
+                ResolvedType::Resource { type_args, .. } | ResolvedType::Variant { type_args, .. }
+                    if !type_args.is_empty() =>
+                {
                     (tt.fq_type_name(effective_id).head_only(), type_args)
                 }
                 // Primitives (`i32`, `f64`, `bool`, ...) can implement traits

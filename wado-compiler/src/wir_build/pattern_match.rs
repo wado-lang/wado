@@ -5,7 +5,6 @@
 //! These methods are part of `FunctionTranslator`; see `translate.rs` for
 //! the struct definition and the primary translation dispatch.
 
-use crate::module_source::ModuleSource;
 use crate::nir::NirLiteralPattern;
 use crate::optimize::pass_dump;
 use crate::primitive::PrimitiveType;
@@ -699,17 +698,14 @@ impl FunctionTranslator<'_, '_> {
     /// isn't a concrete variant or enum the compiler can enumerate here.
     fn total_cases(&self, scrut_type: TypeId) -> Option<usize> {
         match self.type_table.get(scrut_type) {
-            ResolvedType::Variant { def } => self.variant_total_cases(
-                self.type_table.decl_name(*def),
-                self.type_table.def_module(*def),
-            ),
-            ResolvedType::GenericInstance { def, type_args } => {
-                let mangled = generic_instance_name(
-                    self.type_table,
-                    self.type_table.decl_name(*def),
-                    type_args,
-                );
-                self.variant_total_cases(&mangled, self.type_table.def_module(*def))
+            ResolvedType::Variant { .. } => {
+                let key = self.variant_type_key(scrut_type);
+                let variant_type_id = self.ctx.type_map.get(&key)?;
+                let WirTypeDef::Variant(vt) = &self.ctx.types[variant_type_id.index() as usize]
+                else {
+                    return None;
+                };
+                Some(vt.cases.len())
             }
             ResolvedType::Enum { def } => self
                 .ctx
@@ -725,30 +721,11 @@ impl FunctionTranslator<'_, '_> {
         }
     }
 
-    fn variant_total_cases(
-        &self,
-        variant_name: &str,
-        module_source: &ModuleSource,
-    ) -> Option<usize> {
-        let fq = wir_type_key(module_source, variant_name);
-        let variant_type_id = self.ctx.type_map.get(&fq)?;
-        let WirTypeDef::Variant(vt) = &self.ctx.types[variant_type_id.index() as usize] else {
-            return None;
-        };
-        Some(vt.cases.len())
-    }
-
-    /// Key of the WIR variant type a scrutinee lowers to. A variant arrives
-    /// either as `ResolvedType::Variant` or, once monomorphized, as the
-    /// `GenericInstance` spelling; registration covers both.
+    /// Key of the WIR variant type a scrutinee lowers to.
     #[track_caller]
     fn variant_type_key(&self, type_id: TypeId) -> String {
         match self.type_table.get(type_id) {
-            ResolvedType::Variant { def } => wir_type_key(
-                self.type_table.def_module(*def),
-                self.type_table.decl_name(*def),
-            ),
-            ResolvedType::GenericInstance { def, type_args } => {
+            ResolvedType::Variant { def, type_args } => {
                 let mangled = generic_instance_name(
                     self.type_table,
                     self.type_table.decl_name(*def),

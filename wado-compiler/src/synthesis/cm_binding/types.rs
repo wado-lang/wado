@@ -470,7 +470,7 @@ fn check_cm_boundary_representable_inner(
             ),
             ResolvedType::Enum { def }
             | ResolvedType::Flags { def }
-            | ResolvedType::Variant { def }
+            | ResolvedType::Variant { def, .. }
                 if declares_no_case(*def, tir_modules) =>
             {
                 Err(format!(
@@ -546,30 +546,39 @@ fn check_cm_boundary_representable_inner(
                     None => Ok(()),
                 }
             }
-            ResolvedType::Variant { def } => match variant_decl_of(*def, tir_modules) {
-                Some(decl) => {
-                    let payloads: Vec<TypeId> = decl.cases.iter().map(|c| c.payload).collect();
-                    for p in payloads {
-                        recurse(p, Slot::Optional, visited)?;
+            ResolvedType::Variant { def, type_args } if type_args.is_empty() => {
+                match variant_decl_of(*def, tir_modules) {
+                    Some(decl) => {
+                        let payloads: Vec<TypeId> =
+                            decl.cases.iter().map(|c| c.payload).collect();
+                        for p in payloads {
+                            recurse(p, Slot::Optional, visited)?;
+                        }
+                        Ok(())
                     }
-                    Ok(())
+                    None => Ok(()),
                 }
-                None => Ok(()),
-            },
-            ResolvedType::GenericInstance { def, type_args } => {
-                // Option/List/Tuple were handled above by the `as_*` accessors;
-                // `Result<T, E>` recurses into its arms. Any other generic
-                // instance has no concrete CM lowering at this boundary (it
-                // should have monomorphized to a named type), so reject it
-                // rather than lowering it as an opaque i32.
-                let item = type_table.compiler_type_item(*def);
-                if item == Some(CompilerItem::Result) {
-                    let args = type_args.clone();
-                    for a in args {
-                        recurse(a, Slot::Optional, visited)?;
-                    }
-                    Ok(())
-                } else if let Some((key, value)) = type_table.as_tree_map(type_id) {
+            }
+            // Option was handled above by `as_option`; `Result<T, E>` recurses
+            // into its arms. Any other generic instance has no concrete CM
+            // lowering at this boundary (it should have monomorphized to a
+            // named type), so reject it rather than lowering it as an opaque
+            // i32.
+            ResolvedType::Variant { def, type_args }
+                if type_table.compiler_type_item(*def) == Some(CompilerItem::Result) =>
+            {
+                let args = type_args.clone();
+                for a in args {
+                    recurse(a, Slot::Optional, visited)?;
+                }
+                Ok(())
+            }
+            ResolvedType::Variant { .. } => Err(format!(
+                "generic type `{}` has no Component Model value representation",
+                type_table.name(type_id)
+            )),
+            ResolvedType::GenericInstance { .. } => {
+                if let Some((key, value)) = type_table.as_tree_map(type_id) {
                     // `map<K, V>`: the key comes from the CM's `keytype`
                     // subset, the value from any representable valtype.
                     if let Some(reason) = map_key_rejection(type_table, key) {
@@ -950,20 +959,20 @@ fn flat_types_from_type_id_inner(
             });
         }
         ResolvedType::Enum { .. } => out.push(cm_abi::CmValType::I32),
-        ResolvedType::Variant { def } => {
-            if let Some(variant_decl) = variant_decl_of(*def, tir_modules) {
-                flatten_variant_type(&variant_decl, out, tir_modules, type_table, names);
-            } else {
-                out.push(cm_abi::CmValType::I32);
-            }
-        }
         ResolvedType::Tuple(elems) => {
             for &elem in elems {
                 flat_types_from_type_id_inner(elem, out, tir_modules, type_table, names);
             }
         }
-        ResolvedType::GenericInstance { def, type_args } => {
+        ResolvedType::Variant { def, type_args } => {
             match (type_table.compiler_type_item(*def), type_args.as_slice()) {
+                (_, []) => {
+                    if let Some(variant_decl) = variant_decl_of(*def, tir_modules) {
+                        flatten_variant_type(&variant_decl, out, tir_modules, type_table, names);
+                    } else {
+                        out.push(cm_abi::CmValType::I32);
+                    }
+                }
                 (Some(CompilerItem::Option), [inner]) => {
                     out.push(cm_abi::CmValType::I32); // discriminant
                     flat_types_from_type_id_inner(*inner, out, tir_modules, type_table, names);
@@ -988,9 +997,14 @@ fn flat_types_from_type_id_inner(
                     );
                     out.extend(cm_abi::join_flat_unions(&ok_flat, &err_flat));
                 }
+                _ => out.push(cm_abi::CmValType::I32),
+            }
+        }
+        ResolvedType::GenericInstance { def, .. } => {
+            match type_table.compiler_type_item(*def) {
                 // A `map<K, V>` despecializes to `list<tuple<K, V>>`, so it
                 // carries that type's pair.
-                (Some(CompilerItem::List | CompilerItem::TreeMap), _) => {
+                Some(CompilerItem::List | CompilerItem::TreeMap) => {
                     out.push(cm_abi::CmValType::I32); // ptr
                     out.push(cm_abi::CmValType::I32); // len
                 }
@@ -1186,9 +1200,9 @@ pub(super) fn type_id_to_ast_type(
     let to_ast = |tid: &TypeId| type_id_to_ast_type(*tid, type_table, cm_interface_registry);
     if let Some(item) = cm_item_of_type(type_table, type_id) {
         let args = match resolved {
-            ResolvedType::GenericInstance { type_args, .. } => {
-                type_args.iter().map(to_ast).collect()
-            }
+            ResolvedType::GenericInstance { type_args, .. }
+            | ResolvedType::Variant { type_args, .. }
+            | ResolvedType::Resource { type_args, .. } => type_args.iter().map(to_ast).collect(),
             _ => Vec::new(),
         };
         return cm_interface_registry
@@ -1221,11 +1235,14 @@ pub(super) fn type_id_to_ast_type(
         ResolvedType::Unit => Type::unit(AstId::fresh(), span),
         // `Flags` joins them: its own CM type, 1 byte at <=8 labels, not a
         // four-byte `i32`.
+        ResolvedType::GenericInstance { def, type_args }
+        | ResolvedType::Variant { def, type_args }
+        | ResolvedType::Resource { def, type_args } => {
+            declared(*def, type_args.iter().map(to_ast).collect())
+        }
         ResolvedType::Struct { .. }
-        | ResolvedType::Variant { .. }
         | ResolvedType::Enum { .. }
         | ResolvedType::Flags { .. }
-        | ResolvedType::Resource { .. }
         | ResolvedType::Newtype { .. } => declared(
             type_table
                 .nominal_def(type_id)
@@ -1233,9 +1250,6 @@ pub(super) fn type_id_to_ast_type(
             Vec::new(),
         ),
         ResolvedType::Tuple(elems) => Type::Tuple(elems.iter().map(to_ast).collect()),
-        ResolvedType::GenericInstance { def, type_args } => {
-            declared(*def, type_args.iter().map(to_ast).collect())
-        }
         ResolvedType::Ref(inner) => Type::Reference(Box::new(to_ast(inner))),
         ResolvedType::MutRef(inner) => Type::MutReference(Box::new(to_ast(inner))),
         ResolvedType::Never

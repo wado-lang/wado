@@ -315,7 +315,7 @@ fn lower_to_flat_inner(
                 },
             ]
         }
-        ResolvedType::GenericInstance { type_args, .. }
+        ResolvedType::Variant { type_args, .. }
             if ctx.type_table.borrow().as_option(type_id).is_some() =>
         {
             // Option<T> → disc(i32) + flat(T)
@@ -440,7 +440,7 @@ fn lower_to_flat_inner(
                 },
             ]
         }
-        ResolvedType::GenericInstance { type_args, .. }
+        ResolvedType::Variant { type_args, .. }
             if type_args.len() == 2 && ctx.type_table.borrow().is_result(type_id) =>
         {
             // Result<T, E> → disc(i32) + join(flat(T), flat(E)). disc 0 = Ok,
@@ -551,7 +551,7 @@ fn lower_to_flat_inner(
 
             result
         }
-        ResolvedType::Variant { def } => {
+        ResolvedType::Variant { def, type_args } if type_args.is_empty() => {
             let name = &ctx.type_table.borrow().decl_name(*def).to_string();
             // Named variant → disc(i32) + join of the case payload flats, per
             // the Canonical ABI. Reuses the same discriminant-plus-Match
@@ -798,7 +798,7 @@ pub(super) fn synthesize_lift_from_flat_params(
                         lift_ctx,
                     )
                 }
-                ResolvedType::Variant { def } => {
+                ResolvedType::Variant { def, type_args } if type_args.is_empty() => {
                     let variant_decl = variant_decl_of(def, tir_modules)
                         .expect("an export's variant type has a declaration");
                     lift_variant_from_flat_params(
@@ -827,6 +827,7 @@ pub(super) fn synthesize_lift_from_flat_params(
                 other @ (ResolvedType::Never
                 | ResolvedType::Newtype { .. }
                 | ResolvedType::GenericInstance { .. }
+                | ResolvedType::Variant { .. }
                 | ResolvedType::Tuple(_)
                 | ResolvedType::Ref(_)
                 | ResolvedType::MutRef(_)
@@ -1018,7 +1019,7 @@ pub(super) fn synthesize_lift_from_flat_params(
 /// variant (Ok=0, Err=1); its arm payload types are the instance's type args.
 fn synthetic_result_variant_decl(type_table: &TypeTable, result_type_id: TypeId) -> TirVariantDecl {
     let (ok_tid, err_tid) = match type_table.get(result_type_id) {
-        ResolvedType::GenericInstance { type_args, .. } if type_args.len() == 2 => {
+        ResolvedType::Variant { type_args, .. } if type_args.len() == 2 => {
             (type_args[0], type_args[1])
         }
         _ => (TypeTable::UNIT, TypeTable::UNIT),
@@ -1797,7 +1798,7 @@ fn push_result_task_return_epilogue(
 
     let tt = env.type_table.borrow();
     let (ok_type_id, err_type_id) = match tt.get(user_return_type) {
-        ResolvedType::GenericInstance { type_args, .. } if type_args.len() == 2 => {
+        ResolvedType::Variant { type_args, .. } if type_args.len() == 2 => {
             (type_args[0], type_args[1])
         }
         other => panic!("expected Result type for export binding return, got: {other:?}"),
@@ -1953,7 +1954,9 @@ fn lower_result_arm(
     )));
 
     let payload_resolved = lift_ctx.type_table.borrow().get(payload_type_id).clone();
-    if let ResolvedType::Variant { def } = &payload_resolved {
+    if let ResolvedType::Variant { def, type_args } = &payload_resolved
+        && type_args.is_empty()
+    {
         if let Some(variant_decl) = variant_decl_of(*def, tir_modules) {
             synthesize_variant_lower_to_flat(
                 payload_local,

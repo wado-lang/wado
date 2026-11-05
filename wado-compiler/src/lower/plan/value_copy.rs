@@ -482,47 +482,31 @@ fn needs_copy_walked(
     }
     let is_box = type_table.is_compiler_struct_instance(type_id, CompilerItem::Box);
     match type_table.get(type_id) {
-        // Concrete structs need a field-by-field deep copy, except for
-        // the `Box<T>` shortcut whose semantics intentionally share
-        // the underlying cell.
-        ResolvedType::Struct { .. } => !is_box,
+        // Structs need a field-by-field deep copy, except for the `Box<T>`
+        // shortcut whose semantics intentionally share the underlying cell.
+        // An instance is answered without its declaration's fields, which
+        // would need a registry the type table does not keep: a spurious copy
+        // costs, a missed one aliases.
+        ResolvedType::Struct { .. } | ResolvedType::GenericInstance { .. } => !is_box,
         // Empty tuples are unit-shaped; non-empty tuples need element-wise
         // deep copy.
         ResolvedType::Tuple(elems) => !is_box && !elems.is_empty(),
-        ResolvedType::GenericInstance { def, type_args } => {
-            if is_box {
-                return false;
-            }
-            if type_table.is_list(type_id) {
-                return true;
-            }
-            if let Some(cases) = type_table.variant_template_cases(*def) {
-                let frame = EnvFrame {
-                    args: type_args,
-                    family: &[],
-                    parent: env,
-                };
-                return cases.iter().any(|(_, _, payload)| {
-                    needs_copy_in_env(*payload, Some(&frame), type_table, depth + 1, walk)
-                });
-            }
-            // Every other nominal instantiation is a struct, copied field by
-            // field. Answering from the declaration's fields would need a
-            // registry the type table does not keep, and `true` is the safe
-            // direction: a spurious copy costs, a missed one aliases.
-            true
-        }
         // A variant is reference-shaped at the WIR level, so copying it
         // shares the payload storage: it needs a deep copy exactly when
         // one of its payloads does.
-        ResolvedType::Variant { def } => {
-            type_table
-                .variant_template_cases(*def)
-                .is_some_and(|cases| {
-                    cases.iter().any(|(_, _, payload)| {
-                        needs_copy_in_env(*payload, None, type_table, depth + 1, walk)
-                    })
-                })
+        ResolvedType::Variant { def, type_args } => {
+            let frame = EnvFrame {
+                args: type_args,
+                family: &[],
+                parent: env,
+            };
+            let env = (!type_args.is_empty()).then_some(&frame);
+            match type_table.variant_template_cases(*def) {
+                Some(cases) => cases.iter().any(|(_, _, payload)| {
+                    needs_copy_in_env(*payload, env, type_table, depth + 1, walk)
+                }),
+                None => env.is_some(),
+            }
         }
         // An unresolvable projection gets `true`: a spurious copy is
         // safe, a missed one aliases.

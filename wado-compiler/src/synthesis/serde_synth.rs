@@ -165,6 +165,7 @@ fn distribute_bound_driven_requests(project: &mut Package) {
         let tt = type_table.borrow();
         tt.all_types()
             .filter_map(|(id, resolved)| match resolved {
+                ResolvedType::Variant { type_args, .. } if !type_args.is_empty() => None,
                 ResolvedType::Struct { .. }
                 | ResolvedType::Enum { .. }
                 | ResolvedType::Variant { .. }

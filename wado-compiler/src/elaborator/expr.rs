@@ -5255,7 +5255,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let tt = self.tysys.type_table.borrow();
             if tt.as_option(return_type).is_some() {
                 None
-            } else if let ResolvedType::GenericInstance { type_args, .. } = tt.get(return_type)
+            } else if let ResolvedType::Variant { type_args, .. } = tt.get(return_type)
                 && tt.is_result(return_type)
                 && type_args.len() == 2
             {
@@ -5371,14 +5371,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Extract T, E from inner Result<T, E>
         let tt = self.tysys.type_table.borrow();
         let (ok_type, inner_err_type) = match tt.get(inner_type) {
-            ResolvedType::GenericInstance { type_args, .. } if type_args.len() == 2 => {
+            ResolvedType::Variant { type_args, .. } if type_args.len() == 2 => {
                 (type_args[0], type_args[1])
             }
             _ => panic!("? operand must be Result<T, E>"),
         };
         // Extract F from return Result<U, F>
         let outer_err_type = match tt.get(return_type) {
-            ResolvedType::GenericInstance { type_args, .. } if type_args.len() == 2 => type_args[1],
+            ResolvedType::Variant { type_args, .. } if type_args.len() == 2 => type_args[1],
             _ => panic!("? return type must be Result<U, F>"),
         };
         drop(tt);

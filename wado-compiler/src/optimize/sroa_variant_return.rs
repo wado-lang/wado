@@ -861,8 +861,7 @@ fn tail_call_callees(body: &Body) -> Vec<FuncId> {
 /// substituted against the instance's type arguments.
 fn variant_cases(project: &NirPackage, type_id: TypeId) -> Option<(Vec<String>, Vec<TypeId>)> {
     let (def, type_args) = match project.type_table.borrow().get(type_id) {
-        ResolvedType::Variant { def } => (*def, Vec::new()),
-        ResolvedType::GenericInstance { def, type_args } => (*def, type_args.clone()),
+        ResolvedType::Variant { def, type_args } => (*def, type_args.clone()),
         _ => return None,
     };
     Some(project.variant_cases(def, &type_args)?.into_iter().unzip())
@@ -910,8 +909,8 @@ fn slot_shape(payload: TypeId, type_table: &TypeTable) -> Option<SlotShape> {
         ResolvedType::Struct { .. }
         | ResolvedType::Tuple(_)
         | ResolvedType::BuiltinArray(_)
-        | ResolvedType::Variant { .. } => Some(SlotShape::Wrapped),
-        ResolvedType::GenericInstance { .. } => {
+        | ResolvedType::GenericInstance { .. } => Some(SlotShape::Wrapped),
+        ResolvedType::Variant { .. } => {
             // `Option<X>` for a GC-ref `X` is already `ref null X`; wrapping it
             // again yields a variant whose payload is nullable, which
             // `nullable_ref` refuses to erase — so it would cost a real box.

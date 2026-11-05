@@ -41,7 +41,7 @@ fn get_type_dependencies(type_table: &TypeTable, type_id: TypeId) -> Vec<String>
             let name = type_table.struct_mangled_name(*def, type_args);
             vec![wir_type_key(type_table.struct_head_module(*def), &name)]
         }
-        ResolvedType::Variant { def } => vec![wir_type_key(
+        ResolvedType::Variant { def, type_args } if type_args.is_empty() => vec![wir_type_key(
             type_table.def_module(*def),
             type_table.decl_name(*def),
         )],
@@ -49,7 +49,9 @@ fn get_type_dependencies(type_table: &TypeTable, type_id: TypeId) -> Vec<String>
             .iter()
             .flat_map(|a| get_type_dependencies(type_table, *a))
             .collect(),
-        ResolvedType::GenericInstance { type_args, .. } | ResolvedType::Tuple(type_args) => {
+        ResolvedType::GenericInstance { type_args, .. }
+        | ResolvedType::Variant { type_args, .. }
+        | ResolvedType::Tuple(type_args) => {
             // Skip unresolved generic instances (containing type params or projections)
             if type_args.iter().any(|t| type_table.contains_type_param(*t)) {
                 return vec![];
@@ -857,13 +859,14 @@ fn register_mono_variants(ctx: &mut WirContext<'_>) {
         {
             let type_table = &*ctx.package.type_table.borrow();
             for type_id in type_table.iter_type_ids() {
-                let ResolvedType::GenericInstance { def, type_args } = type_table.get(type_id)
-                else {
+                let ResolvedType::Variant { def, type_args } = type_table.get(type_id) else {
                     continue;
                 };
+                if type_args.is_empty() {
+                    continue;
+                }
                 let name = &type_table.decl_name(*def).to_string();
                 let module_source = &type_table.def_module(*def).clone();
-                // Option is now handled as a regular variant (SubtypeHierarchy).
                 // TODO: NullableRef optimization — when T is non-nullable (ref type,
                 // not another Option), skip variant registration and represent
                 // Option<T> as (ref null T) instead. This avoids the discriminant

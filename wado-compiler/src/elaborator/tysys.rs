@@ -284,13 +284,12 @@ impl TypeSystem {
             ResolvedType::Newtype { base_type, .. } => (vec![base_type], Vec::new()),
             ResolvedType::Tuple(elems) => (elems, Vec::new()),
             ResolvedType::Struct { type_args, .. }
-            | ResolvedType::GenericInstance { type_args, .. } => {
-                let mut members = self.struct_field_type_ids_of(type_id).unwrap_or_default();
-                members.extend(self.case_payload_types(type_id).unwrap_or_default());
-                (type_args, members)
-            }
-            ResolvedType::Variant { .. } => (
-                Vec::new(),
+            | ResolvedType::GenericInstance { type_args, .. } => (
+                type_args,
+                self.struct_field_type_ids_of(type_id).unwrap_or_default(),
+            ),
+            ResolvedType::Variant { type_args, .. } => (
+                type_args,
                 self.case_payload_types(type_id).unwrap_or_default(),
             ),
         };
@@ -354,10 +353,13 @@ impl TypeSystem {
             | ResolvedType::GenericInstance { type_args, .. } => {
                 let mut reached = type_args;
                 reached.extend(self.struct_field_type_ids_of(type_id).unwrap_or_default());
+                reached
+            }
+            ResolvedType::Variant { type_args, .. } => {
+                let mut reached = type_args;
                 reached.extend(self.case_payload_types(type_id).unwrap_or_default());
                 reached
             }
-            ResolvedType::Variant { .. } => self.case_payload_types(type_id).unwrap_or_default(),
         };
         if !walked.insert(self.type_table.borrow().type_key(type_id)) {
             return false;
@@ -480,8 +482,10 @@ impl TypeSystem {
     /// Get the struct name from a type ID, if it's a struct, generic instance, newtype, or flags.
     pub(crate) fn struct_name_for_type(&self, type_id: TypeId) -> Option<String> {
         match self.type_table.borrow().get(type_id) {
+            ResolvedType::Variant { type_args, .. } if type_args.is_empty() => None,
             ResolvedType::Struct { .. }
             | ResolvedType::GenericInstance { .. }
+            | ResolvedType::Variant { .. }
             | ResolvedType::Resource { .. }
             | ResolvedType::Tuple(_)
             | ResolvedType::Newtype { .. }
@@ -584,16 +588,17 @@ impl TypeSystem {
     /// user impl can supply an operator for.
     pub(crate) fn operator_receiver_name(&self, ty: TypeId) -> Option<String> {
         let table = self.type_table.borrow();
-        matches!(
-            table.get(ty),
+        let receives = match table.get(ty) {
+            ResolvedType::Variant { type_args, .. } => !type_args.is_empty(),
             ResolvedType::Struct { .. }
-                | ResolvedType::GenericInstance { .. }
-                | ResolvedType::Resource { .. }
-                | ResolvedType::Tuple(_)
-                | ResolvedType::Newtype { .. }
-                | ResolvedType::Flags { .. }
-        )
-        .then(|| table.base_type_name(ty))
+            | ResolvedType::GenericInstance { .. }
+            | ResolvedType::Resource { .. }
+            | ResolvedType::Tuple(_)
+            | ResolvedType::Newtype { .. }
+            | ResolvedType::Flags { .. } => true,
+            _ => false,
+        };
+        receives.then(|| table.base_type_name(ty))
     }
 
     /// [`Self::newtype_base_lookup`] for a trait dispatch: an impl a link below
@@ -640,7 +645,12 @@ impl TypeSystem {
                 ResolvedType::Struct { def, .. } => {
                     return self.type_table.borrow().struct_head_mangled_name(def);
                 }
-                ResolvedType::GenericInstance { def, .. } | ResolvedType::Resource { def, .. } => {
+                ResolvedType::Variant { type_args, .. } if type_args.is_empty() => {
+                    return self.type_table.borrow().name(current);
+                }
+                ResolvedType::GenericInstance { def, .. }
+                | ResolvedType::Variant { def, .. }
+                | ResolvedType::Resource { def, .. } => {
                     return self.type_table.borrow().decl_name(def).to_string();
                 }
                 ResolvedType::Tuple(_) => return TUPLE_TYPE_NAME.to_string(),
@@ -756,6 +766,7 @@ impl TypeSystem {
 
             // Generic instance (e.g., Option<T>, List<T>): substitute in type args
             ResolvedType::GenericInstance { def, type_args }
+            | ResolvedType::Variant { def, type_args }
             | ResolvedType::Resource { def, type_args } => {
                 let new_args: Vec<TypeId> = type_args
                     .iter()
@@ -943,6 +954,7 @@ fn constituents(table: &TypeTable, ty: TypeId) -> (Option<DefId>, Vec<TypeId>) {
         }
         | ResolvedType::Newtype { def, type_args, .. } => (Some(*def), type_args.clone()),
         ResolvedType::GenericInstance { def, type_args }
+        | ResolvedType::Variant { def, type_args }
         | ResolvedType::Resource { def, type_args } => (Some(*def), type_args.clone()),
         ResolvedType::Tuple(elems) => (None, elems.clone()),
         ResolvedType::Ref(inner)

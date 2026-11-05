@@ -703,11 +703,10 @@ impl Lowering {
                 )?;
                 decl(DeclKey::AnonymousStruct, vec![SolverType::Tuple(fields)])
             }
-            ResolvedType::Enum { def }
-            | ResolvedType::Variant { def }
-            | ResolvedType::Flags { def } => instance(*def, &[]),
+            ResolvedType::Enum { def } | ResolvedType::Flags { def } => instance(*def, &[]),
             ResolvedType::GenericInstance { def, type_args }
             | ResolvedType::Resource { def, type_args }
+            | ResolvedType::Variant { def, type_args }
             | ResolvedType::Newtype { def, type_args, .. } => instance(*def, type_args),
             ResolvedType::Tuple(elems) => {
                 said(elems.iter().map(|&a| tuple_elem(a))).map(SolverType::Tuple)
@@ -1902,7 +1901,6 @@ impl SolverBridge {
         else {
             return;
         };
-        let is_variant = |def: DefId| tysys.data.variant_cases.contains_key(&def);
         for &head in heads {
             let key = lowering.decl_key(head);
             let (is_ref, is_ref_mut) = match key {
@@ -1915,7 +1913,7 @@ impl SolverBridge {
                     };
                     (
                         tysys.is_ref_identity(&shape),
-                        tysys.is_ref_mut_identity(&is_variant, &shape),
+                        tysys.is_ref_mut_identity(&shape),
                     )
                 }
                 // A literal's shape is a struct, which both predicates read as
@@ -2294,6 +2292,7 @@ impl SolverBridge {
             }
             | ResolvedType::GenericInstance { type_args, .. }
             | ResolvedType::Resource { type_args, .. }
+            | ResolvedType::Variant { type_args, .. }
             | ResolvedType::Tuple(type_args)
             | ResolvedType::Newtype { type_args, .. } => each(type_args),
             ResolvedType::BuiltinArray(inner)

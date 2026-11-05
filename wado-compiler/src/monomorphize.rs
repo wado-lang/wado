@@ -138,7 +138,7 @@ pub(crate) struct Pool {
     laid_out: IndexSet<TypeKey>,
     /// What a held type released, for the caller to scan.
     released: Vec<Rc<RefCell<TirFunction>>>,
-    /// The `GenericInstance`s held since the struct drain last read them.
+    /// The struct and variant instances held since the drain last read them.
     instances: Vec<TypeId>,
     /// Each generic variant's type parameter indices and case payloads, which
     /// a held instance of it holds substituted.
@@ -215,8 +215,12 @@ impl Pool {
     /// instance of it is.
     fn keep_instances(&mut self, found: &[TypeId], type_table: &TypeTable) {
         self.instances.extend(found.iter().copied().filter(|&id| {
-            matches!(type_table.get(id), ResolvedType::GenericInstance { .. })
-                && !type_table.contains_type_param(id)
+            let instance = match type_table.get(id) {
+                ResolvedType::GenericInstance { .. } => true,
+                ResolvedType::Variant { type_args, .. } => !type_args.is_empty(),
+                _ => false,
+            };
+            instance && !type_table.contains_type_param(id)
         }));
     }
 
@@ -553,13 +557,13 @@ impl Monomorphizer {
         new_structs
     }
 
-    /// The payload types of each of `instances`, a generic variant's
-    /// `GenericInstance`, substituted with its type arguments.
+    /// The payload types of each of `instances`, a generic variant's instance,
+    /// substituted with its type arguments.
     fn variant_payloads(&self, instances: &[TypeId], tt: &mut TypeTable) -> Vec<TypeId> {
         let mut payloads = Vec::new();
         for &id in instances {
-            let ResolvedType::GenericInstance { def, type_args } = tt.get(id).clone() else {
-                unreachable!("only a `GenericInstance` is kept for the struct drain");
+            let ResolvedType::Variant { def, type_args } = tt.get(id).clone() else {
+                unreachable!("only a variant instance is kept for the variant drain");
             };
             let (params, cases) = &self.pool.generic_variants[&def];
             let substitution: IndexMap<u32, TypeId> =

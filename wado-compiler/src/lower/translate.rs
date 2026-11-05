@@ -2570,7 +2570,7 @@ impl FunctionTranslator<'_, '_> {
                 // so it uses the per-instance helper minted post-monomorphize.
                 let items = tt.compiler_items();
                 let name = match tt.get(variant_ty) {
-                    tir::ResolvedType::GenericInstance { .. } => {
+                    tir::ResolvedType::Variant { type_args, .. } if !type_args.is_empty() => {
                         variant_tag_helper_name(&tt.mangle_type_arg_unboxed(variant_ty))
                     }
                     _ => MethodName::format_local(

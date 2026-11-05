@@ -5626,7 +5626,8 @@ impl<'a> Reify<'a> {
                 tt.as_option(inner_type).is_some(),
                 matches!(
                     tt.get(inner_type),
-                    ResolvedType::GenericInstance { .. } if tt.is_result(inner_type)
+                    ResolvedType::Variant { type_args, .. }
+                        if !type_args.is_empty() && tt.is_result(inner_type)
                 ),
             )
         };
@@ -5767,13 +5768,13 @@ impl<'a> Reify<'a> {
         let return_type = ctx.return_type;
 
         let (ok_type, inner_err_type) = match self.tysys.type_table.borrow().get(inner_type) {
-            ResolvedType::GenericInstance { type_args, .. } if type_args.len() == 2 => {
+            ResolvedType::Variant { type_args, .. } if type_args.len() == 2 => {
                 (type_args[0], type_args[1])
             }
             _ => panic!("reify_question_mark_result: ? operand must be Result<T, E>"),
         };
         let outer_err_type = match self.tysys.type_table.borrow().get(return_type) {
-            ResolvedType::GenericInstance { type_args, .. } if type_args.len() == 2 => type_args[1],
+            ResolvedType::Variant { type_args, .. } if type_args.len() == 2 => type_args[1],
             _ => panic!("reify_question_mark_result: ? return type must be Result<U, F>"),
         };
 
@@ -8981,8 +8982,7 @@ impl<'a> Reify<'a> {
             .copied()
     }
 
-    /// True when `scrutinee_type` is a variant (directly or as a generic
-    /// instance) whose cases include `case_name`.
+    /// True when `scrutinee_type` is a variant whose cases include `case_name`.
     fn scrutinee_has_variant_case(&self, scrutinee_type: TypeId, case_name: &str) -> bool {
         let peeled = self
             .tysys
@@ -8991,7 +8991,7 @@ impl<'a> Reify<'a> {
             .scrutinee_structure_head(scrutinee_type);
         if !matches!(
             self.tysys.type_table.borrow().get(peeled),
-            ResolvedType::Variant { .. } | ResolvedType::GenericInstance { .. }
+            ResolvedType::Variant { .. }
         ) {
             return false;
         }
@@ -9690,7 +9690,7 @@ impl<'a> Reify<'a> {
         case_name: &str,
     ) -> (Option<u32>, TypeId) {
         let type_args = match self.tysys.type_table.borrow().get(variant_type).clone() {
-            ResolvedType::GenericInstance { type_args, .. } => type_args,
+            ResolvedType::Variant { type_args, .. } => type_args,
             _ => Vec::new(),
         };
         let (case_index, payload, type_param_indices): (u32, TypeId, Vec<u32>) = {
@@ -9821,10 +9821,12 @@ impl TypeSystem {
         if table.contains_type_param(expected) {
             return None;
         }
-        let recorded_is_concrete = matches!(
-            table.get(recorded),
-            ResolvedType::GenericInstance { .. } | ResolvedType::Tuple(_)
-        ) && !table.contains_type_param(recorded);
+        let recorded_is_instance = match table.get(recorded) {
+            ResolvedType::GenericInstance { .. } | ResolvedType::Tuple(_) => true,
+            ResolvedType::Variant { type_args, .. } => !type_args.is_empty(),
+            _ => false,
+        };
+        let recorded_is_concrete = recorded_is_instance && !table.contains_type_param(recorded);
         if recorded_is_concrete {
             return None;
         }

@@ -28,10 +28,7 @@ type VariantInstance = (DefId, Vec<TypeKey>);
 
 fn variant_instance(type_id: TypeId, type_table: &TypeTable) -> Option<VariantInstance> {
     match type_table.get(type_id) {
-        ResolvedType::Variant { def } => Some((*def, Vec::new())),
-        ResolvedType::GenericInstance { def, type_args } => {
-            Some((*def, type_table.type_keys(type_args)))
-        }
+        ResolvedType::Variant { def, type_args } => Some((*def, type_table.type_keys(type_args))),
         _ => None,
     }
 }
@@ -68,11 +65,10 @@ impl AggregateShapes {
             .collect();
         let mut instances: IndexMap<VariantInstance, Vec<TypeId>> = IndexMap::default();
         for (_, ty) in type_table.all_types() {
-            let (def, type_args) = match ty {
-                ResolvedType::Variant { def } => (*def, &[][..]),
-                ResolvedType::GenericInstance { def, type_args } => (*def, type_args.as_slice()),
-                _ => continue,
+            let ResolvedType::Variant { def, type_args } = ty else {
+                continue;
             };
+            let def = *def;
             if project.find_variant(def).is_some() {
                 instances
                     .entry((def, type_table.type_keys(type_args)))

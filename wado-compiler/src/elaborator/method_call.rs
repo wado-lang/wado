@@ -991,20 +991,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .clone()
         {
             ResolvedType::GenericInstance { .. }
+            | ResolvedType::Variant { .. }
             | ResolvedType::Resource { .. }
             | ResolvedType::Tuple(_)
             | ResolvedType::BuiltinArray(_)
-                if self
+                if let Some(type_args) = self
                     .tysys
                     .type_table
                     .borrow()
-                    .plain_resource_def(method_impl_type_id)
-                    .is_none() =>
+                    .nominal_type_args(method_impl_type_id) =>
             {
                 let tt = self.tysys.type_table.borrow();
-                let type_args = tt
-                    .nominal_type_args(method_impl_type_id)
-                    .expect("an instantiation carries its arguments");
                 // Qualify the base and the arguments alike, so a concrete-generic
                 // impl's method name matches its definition (issue #1348). A
                 // tuple keeps the `[a,b]` spelling every other namespace gives it.
@@ -1529,9 +1526,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     fn applies_written_args(&self, target: TypeId) -> bool {
         match self.tysys.type_table.borrow().get(target) {
             ResolvedType::GenericInstance { .. } => true,
-            ResolvedType::Resource { type_args, .. } | ResolvedType::Newtype { type_args, .. } => {
-                !type_args.is_empty()
-            }
+            ResolvedType::Resource { type_args, .. }
+            | ResolvedType::Variant { type_args, .. }
+            | ResolvedType::Newtype { type_args, .. } => !type_args.is_empty(),
             _ => false,
         }
     }
@@ -1541,7 +1538,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     fn with_written_args(&mut self, target: TypeId, args: &[TypeId]) -> TypeId {
         let shape = self.tysys.type_table.borrow().get(target).clone();
         match shape {
-            ResolvedType::GenericInstance { def, .. } | ResolvedType::Resource { def, .. } => self
+            ResolvedType::GenericInstance { def, .. }
+            | ResolvedType::Variant { def, .. }
+            | ResolvedType::Resource { def, .. } => self
                 .tysys
                 .type_table
                 .borrow_mut()
@@ -2813,7 +2812,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             ResolvedType::GenericInstance { .. } | ResolvedType::Tuple(_) => {
                 nominal_receiver(&type_table, base)
             }
-            ResolvedType::Resource { type_args, .. } if !type_args.is_empty() => {
+            ResolvedType::Resource { type_args, .. } | ResolvedType::Variant { type_args, .. }
+                if !type_args.is_empty() =>
+            {
                 nominal_receiver(&type_table, base)
             }
             ResolvedType::Primitive(prim) => primitive_receiver(*prim),

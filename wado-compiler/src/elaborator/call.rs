@@ -1286,7 +1286,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let bare_generic_of_arg = bare_generic
                 && matches!(
                     tt.get(arg),
-                    ResolvedType::GenericInstance { .. } | ResolvedType::Resource { .. }
+                    ResolvedType::GenericInstance { .. }
+                        | ResolvedType::Variant { .. }
+                        | ResolvedType::Resource { .. }
                 )
                 && tt.nominal_def(arg).is_some()
                 && tt.nominal_def(arg) == tt.nominal_def(receiver)
@@ -5236,7 +5238,7 @@ impl TypeSystem {
         expected: Option<TypeId>,
     ) -> Option<Vec<TypeId>> {
         let table = self.type_table.borrow();
-        let ResolvedType::GenericInstance { def, type_args } = table.get(expected?) else {
+        let ResolvedType::Variant { def, type_args } = table.get(expected?) else {
             return None;
         };
         (*def == table.defs().def_at(variant_info.defined_at)

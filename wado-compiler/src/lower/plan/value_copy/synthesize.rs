@@ -252,11 +252,7 @@ fn variant_cases_concrete(
     type_table: &Rc<RefCell<TypeTable>>,
 ) -> Option<Vec<(String, u32, TypeId)>> {
     match resolved {
-        ResolvedType::Variant { def } => type_table
-            .borrow()
-            .variant_template_cases(*def)
-            .map(<[_]>::to_vec),
-        ResolvedType::GenericInstance { def, type_args } => {
+        ResolvedType::Variant { def, type_args } => {
             let cases = type_table
                 .borrow()
                 .variant_template_cases(*def)
@@ -463,7 +459,6 @@ fn is_synth_safe_element(
             // Any other instance needs a monomorphized struct for WIR to point at.
             tt.is_list(elem_type)
                 || tt.is_compiler_struct_instance(elem_type, CompilerItem::Box)
-                || project.variants.iter().any(|v| v.def == def)
                 || project
                     .listed_struct(&tt, StructDef::Decl(def), &type_args)
                     .is_some()

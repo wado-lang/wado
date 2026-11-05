@@ -373,10 +373,16 @@ fn payload_ast_type(payload: TypeId, tt: &TypeTable, registry: &CmInterfaceRegis
     if let ResolvedType::Tuple(elems) = tt.get(id) {
         return ast::Type::Tuple(args_of(elems));
     }
-    if let ResolvedType::GenericInstance { def, type_args }
-    | ResolvedType::Resource { def, type_args } = tt.get(id)
-        && tt.plain_resource_def(id).is_none()
-    {
+    let instance = match tt.get(id) {
+        ResolvedType::GenericInstance { def, type_args } => Some((def, type_args)),
+        ResolvedType::Variant { def, type_args } | ResolvedType::Resource { def, type_args }
+            if !type_args.is_empty() =>
+        {
+            Some((def, type_args))
+        }
+        _ => None,
+    };
+    if let Some((def, type_args)) = instance {
         let name = tt.decl_name(*def).to_string();
         let args = args_of(type_args);
         return if let Some(item) = cm_item_of_type(tt, id) {

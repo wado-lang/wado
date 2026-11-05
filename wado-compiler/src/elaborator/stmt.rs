@@ -1025,7 +1025,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .tysys
                 .enum_of_type(type_id)
                 .is_some_and(|info| info.cases.iter().any(|c| c.name == case_name)),
-            ResolvedType::Variant { .. } | ResolvedType::GenericInstance { .. } => self
+            ResolvedType::Variant { .. } => self
                 .tysys
                 .variant_of_type(type_id)
                 .is_some_and(|info| info.case_named(case_name).is_some()),
@@ -1049,7 +1049,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .borrow()
             .scrutinee_structure_head(scrutinee_type);
         let scrutinee_args = match self.tysys.type_table.borrow().get(base_type) {
-            ResolvedType::Enum { .. } | ResolvedType::Variant { .. } => None,
+            ResolvedType::Enum { .. } => None,
+            ResolvedType::Variant { type_args, .. } => {
+                (!type_args.is_empty()).then(|| type_args.clone())
+            }
             ResolvedType::GenericInstance { type_args, .. } => Some(type_args.clone()),
             _ => return false,
         };
@@ -1935,34 +1938,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // declaration asked for the payload type is that structure's.
                 let scrutinee_decl = self.tysys.type_def(base_type);
                 let payload_type: TypeId = match &resolved_type {
-                    // Non-generic variant
-                    ResolvedType::Variant { .. } => self.get_variant_case_payload_type(
+                    ResolvedType::Variant { type_args, .. } => self.get_variant_case_payload_type(
                         scrutinee_decl.expect("a variant answers with its declaration"),
                         normalized_variant_name,
-                        &[],
+                        type_args,
                         *span,
                     ),
-                    // Generic variant instantiation
-                    ResolvedType::GenericInstance { type_args, .. } => {
-                        // Check if this is a variant (not a struct)
-                        let is_variant = scrutinee_decl
-                            .is_some_and(|def| self.type_lookup().variant_cases_of(def).is_some());
-                        if is_variant {
-                            self.get_variant_case_payload_type(
-                                scrutinee_decl.expect("a variant answers with its declaration"),
-                                normalized_variant_name,
-                                type_args,
-                                *span,
-                            )
-                        } else {
-                            let found = self.tysys.type_table.borrow().name(scrutinee_type);
-                            let _ = self.emit(TypeError::PatternTypeMismatch {
-                                expected: "variant type".to_string(),
-                                found,
-                                span: *span,
-                            });
-                            TypeTable::UNKNOWN
-                        }
+                    ResolvedType::GenericInstance { .. } => {
+                        let found = self.tysys.type_table.borrow().name(scrutinee_type);
+                        let _ = self.emit(TypeError::PatternTypeMismatch {
+                            expected: "variant type".to_string(),
+                            found,
+                            span: *span,
+                        });
+                        TypeTable::UNKNOWN
                     }
                     _ => {
                         let _ = self.emit(TypeError::PatternTypeMismatch {
@@ -3018,13 +3007,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let is_variant =
                 decl.is_some_and(|def| self.type_lookup().variant_cases_of(def).is_some());
             match self.tysys.type_table.borrow().get(option_type).clone() {
-                ResolvedType::GenericInstance { type_args, .. } if is_variant => Some((
+                ResolvedType::Variant { type_args, .. } if is_variant => Some((
                     decl.expect("a variant answers with its declaration"),
                     type_args,
-                )),
-                ResolvedType::Variant { .. } if is_variant => Some((
-                    decl.expect("a variant answers with its declaration"),
-                    vec![],
                 )),
                 _ => None,
             }
@@ -3110,10 +3095,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             | ResolvedType::Flags { .. }
             | ResolvedType::Function { .. }
             | ResolvedType::Resource { .. } => true,
-            // The instance's own declaration, not its name looked up again.
-            ResolvedType::GenericInstance { def, .. } => {
-                self.lookup_variant_case_of_decl(def).is_some()
-            }
             ResolvedType::Newtype { base_type, .. } => self.is_replace_on_assign_element(base_type),
             _ => false,
         }

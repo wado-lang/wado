@@ -195,7 +195,7 @@ fn try_classify_future_payload(
                 return Some(CmFuturePayload::Scalar(scalar));
             }
         }
-        ResolvedType::GenericInstance { type_args, .. }
+        ResolvedType::Variant { type_args, .. }
             if type_table.is_result(type_arg) && type_args.len() >= 2 =>
         {
             if matches!(type_table.get(type_args[0]), ResolvedType::Unit)
@@ -215,7 +215,7 @@ fn try_classify_future_payload(
 /// `result<option<trailers>, error-code>`, recognized by shape: codegen builds
 /// this `future<T>` from the HTTP types interface, not from a [`CmPayloadType`].
 fn is_trailers_payload(type_table: &TypeTable, type_arg: TypeId) -> bool {
-    let ResolvedType::GenericInstance { type_args, .. } = type_table.get(type_arg) else {
+    let ResolvedType::Variant { type_args, .. } = type_table.get(type_arg) else {
         return false;
     };
     if !type_table.is_result(type_arg) || type_args.len() < 2 {
@@ -280,7 +280,7 @@ pub fn cm_payload_type_from_type_id(
     match type_table.get(type_id) {
         ResolvedType::Primitive(prim) => primitive_to_cm_scalar(prim).map(CmPayloadType::Scalar),
         ResolvedType::Struct { .. } if type_table.is_string(type_id) => Some(CmPayloadType::String),
-        ResolvedType::GenericInstance { type_args, .. }
+        ResolvedType::Variant { type_args, .. }
             if type_table.is_result(type_id) && type_args.len() == 2 =>
         {
             let arm = |id: TypeId| -> Option<Option<Box<CmPayloadType>>> {
@@ -309,9 +309,10 @@ pub fn cm_payload_type_from_type_id(
                 def.decl()?,
             )))
         }
-        ResolvedType::Enum { def }
-        | ResolvedType::Variant { def }
-        | ResolvedType::Flags { def } => {
+        ResolvedType::Enum { def } | ResolvedType::Flags { def } => {
+            Some(CmPayloadType::Named(CmDecl::new(type_table.defs(), *def)))
+        }
+        ResolvedType::Variant { def, type_args } if type_args.is_empty() => {
             Some(CmPayloadType::Named(CmDecl::new(type_table.defs(), *def)))
         }
         // Unlike the records above, a WASI-owned resource is included: its
@@ -563,7 +564,7 @@ pub fn primitive_to_cm_scalar(prim: &PrimitiveType) -> Option<CmScalarType> {
 /// The declaration and not its package: `wasi:sockets/types` and
 /// `wasi:sockets/ip-name-lookup` each declare one, and they are unrelated.
 fn wasi_error_code_decl(type_table: &TypeTable, error_type_id: TypeId) -> Option<CmDecl> {
-    let (ResolvedType::Enum { def } | ResolvedType::Variant { def }) =
+    let (ResolvedType::Enum { def } | ResolvedType::Variant { def, .. }) =
         type_table.get(error_type_id)
     else {
         return None;

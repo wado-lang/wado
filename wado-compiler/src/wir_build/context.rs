@@ -925,19 +925,14 @@ impl<'a> WirContext<'a> {
                 // disambiguator, and two sibling functions' `struct Box<T>`
                 // are two registrations.
                 let name = &type_table.decl_mangled_name(*def);
-                let module_source = &type_table.def_module(*def).clone();
-                // A generic instance is either a struct or a variant, and the
-                // two live in different maps. Registration aliases the
-                // newtype-resolved spelling onto the same type, so one key each.
+                let module_source = type_table.def_module(*def).clone();
+                // Registration aliases the newtype-resolved spelling onto the
+                // same type, so one key.
                 let mangled = generic_instance_name(type_table, name, type_args);
-                let struct_name = StructName::new(module_source.clone(), mangled.clone());
-                let type_id = self
-                    .struct_type_map
-                    .get(&struct_name)
-                    .or_else(|| self.type_map.get(&wir_type_key(module_source, &mangled)));
-                let Some(type_id) = type_id else {
+                let struct_name = StructName::new(module_source, mangled);
+                let Some(type_id) = self.struct_type_map.get(&struct_name) else {
                     return Err(UnregisteredType::struct_ref(format!(
-                        "generic instance `{struct_name}` (as neither a struct nor a variant)"
+                        "generic instance `{struct_name}`"
                     )));
                 };
                 Self::ref_to(type_id)
@@ -957,7 +952,6 @@ impl<'a> WirContext<'a> {
                 };
                 Self::ref_to(type_id)
             }
-            // Option<T> is handled as GenericInstance (variant).
             ResolvedType::Enum { def } => {
                 let key =
                     wir_enum_type_key(type_table.def_module(*def), type_table.decl_name(*def));
@@ -968,8 +962,15 @@ impl<'a> WirContext<'a> {
                     type_id: type_id.clone(),
                 }
             }
-            ResolvedType::Variant { def } => {
-                let key = wir_type_key(type_table.def_module(*def), type_table.decl_name(*def));
+            ResolvedType::Variant { def, type_args } => {
+                // An instance registers under its mangled spelling, which for
+                // a function-local declaration carries its disambiguator.
+                let name = if type_args.is_empty() {
+                    type_table.decl_name(*def).to_string()
+                } else {
+                    generic_instance_name(type_table, &type_table.decl_mangled_name(*def), type_args)
+                };
+                let key = wir_type_key(type_table.def_module(*def), &name);
                 let Some(type_id) = self.type_map.get(&key) else {
                     return Err(UnregisteredType::struct_ref(format!("variant `{key}`")));
                 };

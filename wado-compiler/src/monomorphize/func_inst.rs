@@ -2373,13 +2373,14 @@ impl Monomorphizer {
                     );
                 }
                 // After substitution, if variant_type is still a bare Variant (from
-                // generic library code), convert it to a GenericInstance using the
-                // payload type as type arg (e.g., Option + &mut Node<String> → Option<&mut Node<String>>).
+                // generic library code), instantiate it with the payload type as
+                // its argument (e.g., Option + &mut Node<String> → Option<&mut Node<String>>).
                 // Only promote if the payload type was actually changed by substitution,
                 // indicating the variant is generic. Non-generic variants like
                 // `Shape { Circle(f64), Point }` have concrete payload types that aren't
-                // affected by substitution and should NOT be promoted to GenericInstance.
-                if let ResolvedType::Variant { def } = type_table.get(*variant_type).clone()
+                // affected by substitution and must keep no arguments.
+                if let ResolvedType::Variant { def, type_args } = type_table.get(*variant_type).clone()
+                    && type_args.is_empty()
                     && let Some(payload_expr) = payload
                     && original_payload_type.is_some_and(|orig| orig != payload_expr.type_id)
                 {
@@ -2769,7 +2770,9 @@ impl Monomorphizer {
                 | ResolvedType::Tuple(_)
                 | ResolvedType::BuiltinArray(_)
                 | ResolvedType::Struct { .. } => true,
-                ResolvedType::Resource { type_args, .. } => !type_args.is_empty(),
+                ResolvedType::Resource { type_args, .. } | ResolvedType::Variant { type_args, .. } => {
+                    !type_args.is_empty()
+                }
                 _ => false,
             }
         };
@@ -2991,6 +2994,7 @@ impl Monomorphizer {
             matches!(
                 type_table.get(resolved),
                 ResolvedType::GenericInstance { type_args: elems, .. }
+                    | ResolvedType::Variant { type_args: elems, .. }
                     | ResolvedType::Tuple(elems) if !elems.is_empty()
             ) || matches!(type_table.get(resolved), ResolvedType::BuiltinArray(_))
         };
@@ -4110,14 +4114,19 @@ fn try_lower_comparison(
     let operand_type = type_table.get(left.type_id);
     let (impl_type_args, type_module_source): (Vec<FqTypeName>, Option<ModuleSource>) =
         match operand_type {
-            ResolvedType::Struct { .. } | ResolvedType::Variant { .. } => (
+            ResolvedType::Struct { .. } => (
+                vec![],
+                type_table.nominal_head(left.type_id).map(|(_, m)| m),
+            ),
+            ResolvedType::Variant { type_args, .. } if type_args.is_empty() => (
                 vec![],
                 type_table.nominal_head(left.type_id).map(|(_, m)| m),
             ),
             // Tuple Eq/Ord are provided by variadic impls in core:prelude/tuple.wado
             // and already lowered to method calls by the elaborator.
             ResolvedType::Tuple(_) => return None,
-            ResolvedType::GenericInstance { def, type_args } => {
+            ResolvedType::GenericInstance { def, type_args }
+            | ResolvedType::Variant { def, type_args } => {
                 // Must match the struct-name form
                 // `method_instantiation_name_inner` writes into `MethodInfo`.
                 let args: Vec<FqTypeName> = type_args

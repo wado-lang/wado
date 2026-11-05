@@ -166,8 +166,10 @@ impl Monomorphizer {
         ids.append(&mut self.pool.instances);
         let mut variants = Vec::new();
         for id in ids {
-            let ResolvedType::GenericInstance { def, type_args } = type_table.get(id) else {
-                unreachable!("the pool keeps only a `GenericInstance` for the drain");
+            let (ResolvedType::GenericInstance { def, type_args }
+            | ResolvedType::Variant { def, type_args }) = type_table.get(id)
+            else {
+                unreachable!("the pool keeps only struct and variant instances for the drain");
             };
             if self.pool.generic_variants.contains_key(def) {
                 variants.push(id);
@@ -341,6 +343,13 @@ impl Monomorphizer {
                     return tid;
                 }
 
+                type_table.make_generic_instance(def, new_args)
+            }
+            ResolvedType::Variant { def, type_args } | ResolvedType::Resource { def, type_args } => {
+                let new_args: Vec<TypeId> = type_args
+                    .iter()
+                    .map(|&arg| self.substitute_type(arg, substitution, type_table))
+                    .collect();
                 type_table.make_generic_instance(def, new_args)
             }
             // Delegate leaf cases (TypeParam, TypePack,

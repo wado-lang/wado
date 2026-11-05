@@ -977,6 +977,11 @@ fn shared_object_key(type_id: TypeId, type_table: &TypeTable) -> Option<TypeKey>
             ),
             ResolvedType::Struct { .. } => Some(type_table.type_key(type_id)),
             // A value tuple is copied on assignment, so only a handle to one shares it.
+            ResolvedType::Variant { type_args, .. } | ResolvedType::Resource { type_args, .. }
+                if !type_args.is_empty() =>
+            {
+                under_ref.then(|| type_table.type_key(type_id))
+            }
             ResolvedType::GenericInstance { .. }
             | ResolvedType::Tuple(_)
             | ResolvedType::BuiltinArray(_) => under_ref.then(|| type_table.type_key(type_id)),

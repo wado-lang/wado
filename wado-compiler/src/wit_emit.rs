@@ -961,6 +961,7 @@ impl<'a> Emitter<'a> {
             ResolvedType::Tuple(elems) => CmShape::Tuple(elems.clone()),
             ResolvedType::Resource { .. } if self.is_named_resource(id) => CmShape::Leaf,
             ResolvedType::GenericInstance { def, type_args }
+            | ResolvedType::Variant { def, type_args }
             | ResolvedType::Resource { def, type_args } => {
                 match (self.types.compiler_type_item(*def), type_args.as_slice()) {
                     (Some(CompilerItem::Option), [arg]) => CmShape::Option(*arg),
@@ -990,6 +991,12 @@ impl<'a> Emitter<'a> {
         match self.types.get(id) {
             ResolvedType::Primitive(p) => map_primitive(*p),
             ResolvedType::Struct { .. } if self.types.is_string(id) => Ok(Type::String),
+            // A generic variant's instance has no named WIT type to stand for it.
+            ResolvedType::Variant { type_args, .. } if !type_args.is_empty() => {
+                Err(WitEmitError::UnrepresentableType {
+                    description: self.describe_type(id),
+                })
+            }
             ResolvedType::Struct { .. }
             | ResolvedType::Enum { .. }
             | ResolvedType::Variant { .. }

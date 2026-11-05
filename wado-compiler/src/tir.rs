@@ -268,7 +268,9 @@ impl SubstitutionContext {
                 }
                 type_table.make_tuple(new_elems)
             }
-            ResolvedType::GenericInstance { def, type_args } => {
+            ResolvedType::GenericInstance { def, type_args }
+            | ResolvedType::Variant { def, type_args }
+            | ResolvedType::Resource { def, type_args } => {
                 let new_args: Vec<TypeId> = type_args
                     .iter()
                     .map(|&arg| self.substitute(arg, type_table))
@@ -685,12 +687,13 @@ pub enum ResolvedType {
         def: DefId,
         type_args: Vec<TypeId>,
     },
+    /// A variant, applied to its type arguments (`Option<i32>`); none for the
+    /// declaration itself. A generic variant keeps one declaration, so its
+    /// instances are never monomorphized into types of their own.
     Variant {
         def: DefId,
+        type_args: Vec<TypeId>,
     },
-    // `Option<T>` is a `GenericInstance`, not a variant here — see
-    // `TypeTable::as_option`.
-    //
     // TODO: represent `Option<T>` as `ref null T` when `T` is a non-nullable
     // reference, dropping the discriminant struct. `Option<Option<T>>` must not
     // take that route — its null would be ambiguous.
@@ -771,9 +774,8 @@ pub enum ResolvedType {
     /// A tuple, `[i32, String]`: the elements, among which a
     /// [`ResolvedType::TypePack`] stands for the run it expands to.
     Tuple(Vec<TypeId>),
-    /// An application of a generic struct or variant (`Box<i32>`,
-    /// `Option<T>`). A struct's or a variant's is replaced by its monomorphized `Struct` /
-    /// `Variant`.
+    /// An application of a generic struct (`Box<i32>`), replaced by its
+    /// monomorphized `Struct`.
     GenericInstance {
         /// The generic declaration this instantiates.
         def: DefId,

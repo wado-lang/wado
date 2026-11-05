@@ -415,7 +415,12 @@ impl TypeSystem {
     fn handler_impl_target_name(&self, handler_type: TypeId) -> String {
         let resolved = self.type_table.borrow().get(handler_type).clone();
         match &resolved {
-            ResolvedType::GenericInstance { def, .. } | ResolvedType::Resource { def, .. } => {
+            ResolvedType::Variant { type_args, .. } if type_args.is_empty() => {
+                self.type_table.borrow().name(handler_type)
+            }
+            ResolvedType::GenericInstance { def, .. }
+            | ResolvedType::Variant { def, .. }
+            | ResolvedType::Resource { def, .. } => {
                 self.type_table.borrow().decl_name(*def).to_string()
             }
             ResolvedType::Tuple(_) => TUPLE_TYPE_NAME.to_string(),

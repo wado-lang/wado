@@ -1101,9 +1101,10 @@ pub(super) fn operand_values_may_trap(body: &Body, node: NodeRef) -> bool {
 ///
 /// A `FieldAccess` traps only on a null receiver, and every type a field access
 /// can name is a non-null heap value in NIR — a struct, a tuple, a reference, or
-/// a generic instance (`Box` / `List` / user generic). `Option` is the one
-/// nullable type, and it is read via `VariantPayload`, never `FieldAccess`; its
-/// null niche is a WIR representation, chosen after the NIR optimizer has run.
+/// a generic struct instance (`Box` / `List` / user generic). `Option` is the
+/// one nullable type, and it is read via `VariantPayload`, never `FieldAccess`;
+/// its null niche is a WIR representation, chosen after the NIR optimizer has
+/// run.
 /// Provable only with a type table.
 pub(super) fn field_receiver_nonnull(
     body: &Body,
@@ -1117,11 +1118,11 @@ pub(super) fn field_receiver_nonnull(
     match types.get_pruned(ty) {
         Some(
             ResolvedType::Struct { .. }
+            | ResolvedType::GenericInstance { .. }
             | ResolvedType::Tuple(_)
             | ResolvedType::Ref(_)
             | ResolvedType::MutRef(_),
         ) => true,
-        Some(ResolvedType::GenericInstance { .. }) => types.as_option(ty).is_none(),
         _ => false,
     }
 }

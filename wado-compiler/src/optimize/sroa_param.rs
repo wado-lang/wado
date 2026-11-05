@@ -493,18 +493,30 @@ fn by_value_structs(
         }
         return;
     }
-    match type_table.get(ty) {
-        ResolvedType::GenericInstance { type_args, .. } | ResolvedType::Tuple(type_args) => {
-            if out.insert(type_table.type_key(ty)) {
-                for &arg in type_args {
-                    by_value_structs(arg, type_table, struct_fields, out);
-                }
+    if let Some(type_args) = instance_args(ty, type_table) {
+        if out.insert(type_table.type_key(ty)) {
+            for &arg in type_args {
+                by_value_structs(arg, type_table, struct_fields, out);
             }
         }
-        ResolvedType::Newtype { base_type, .. } => {
-            by_value_structs(*base_type, type_table, struct_fields, out);
+    } else if let ResolvedType::Newtype { base_type, .. } = type_table.get(ty) {
+        by_value_structs(*base_type, type_table, struct_fields, out);
+    }
+}
+
+/// The arguments of a tuple or of an instance of a generic declaration other
+/// than a struct, which may sit in it by value.
+fn instance_args(ty: TypeId, type_table: &TypeTable) -> Option<&[TypeId]> {
+    match type_table.get(ty) {
+        ResolvedType::GenericInstance { type_args, .. } | ResolvedType::Tuple(type_args) => {
+            Some(type_args)
         }
-        _ => {}
+        ResolvedType::Variant { type_args, .. } | ResolvedType::Resource { type_args, .. }
+            if !type_args.is_empty() =>
+        {
+            Some(type_args)
+        }
+        _ => None,
     }
 }
 
@@ -572,6 +584,14 @@ fn mut_reachable_contains(
             )
         });
     }
+    if let Some(type_args) = instance_args(ty, type_table) {
+        if writable && type_table.type_key(ty) == target {
+            return true;
+        }
+        return type_args.iter().any(|&t| {
+            mut_reachable_contains(t, writable, target, type_table, struct_fields, visited)
+        });
+    }
     let (inner, inner_writable) = match type_table.get(ty) {
         ResolvedType::MutRef(inner) => (*inner, true),
         ResolvedType::Ref(inner) => (*inner, false),
@@ -579,14 +599,6 @@ fn mut_reachable_contains(
         | ResolvedType::Newtype {
             base_type: inner, ..
         } => (*inner, writable),
-        ResolvedType::GenericInstance { type_args, .. } | ResolvedType::Tuple(type_args) => {
-            if writable && type_table.type_key(ty) == target {
-                return true;
-            }
-            return type_args.iter().any(|&t| {
-                mut_reachable_contains(t, writable, target, type_table, struct_fields, visited)
-            });
-        }
         _ => return false,
     };
     mut_reachable_contains(

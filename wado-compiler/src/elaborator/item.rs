@@ -1371,15 +1371,12 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     fn check_self_by_value(&mut self, self_ty: TypeId, span: Span) {
         let (is_concrete_value, type_name) = {
             let tt = self.tysys.type_table.borrow();
-            (
-                matches!(
-                    tt.get(self_ty),
-                    ResolvedType::Struct { .. }
-                        | ResolvedType::Enum { .. }
-                        | ResolvedType::Variant { .. }
-                ),
-                tt.name(self_ty),
-            )
+            let is_concrete_value = match tt.get(self_ty) {
+                ResolvedType::Struct { .. } | ResolvedType::Enum { .. } => true,
+                ResolvedType::Variant { type_args, .. } => type_args.is_empty(),
+                _ => false,
+            };
+            (is_concrete_value, tt.name(self_ty))
         };
         if is_concrete_value && !self.tysys.carries_affine(self_ty) {
             let _ = self.emit(TypeError::SelfByValueOnCopyable { type_name, span });
@@ -1514,14 +1511,15 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     ) -> Option<TypeId> {
         self.first_type_within(type_id, true, &|scope: &Self, t| {
             let tt = scope.tysys.type_table.borrow();
-            if !matches!(
-                tt.get(t),
+            let named = match tt.get(t) {
                 ResolvedType::Struct { .. }
-                    | ResolvedType::Enum { .. }
-                    | ResolvedType::Variant { .. }
-                    | ResolvedType::Flags { .. }
-                    | ResolvedType::Newtype { .. }
-            ) {
+                | ResolvedType::Enum { .. }
+                | ResolvedType::Flags { .. }
+                | ResolvedType::Newtype { .. } => true,
+                ResolvedType::Variant { type_args, .. } => type_args.is_empty(),
+                _ => false,
+            };
+            if !named {
                 return false;
             }
             tt.nominal_def(t).is_some_and(|def| {
@@ -1636,7 +1634,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             ResolvedType::Ref(t) | ResolvedType::MutRef(t) | ResolvedType::BuiltinArray(t) => {
                 vec![t]
             }
-            ResolvedType::Variant { .. } => self.tysys.case_payload_types(head).unwrap_or_default(),
+            ResolvedType::Variant { type_args, .. } if type_args.is_empty() => {
+                self.tysys.case_payload_types(head).unwrap_or_default()
+            }
             ResolvedType::Struct { .. } if into_fields => self
                 .struct_field_types(head)
                 .map(|fields| fields.into_iter().map(|(_, t)| t).collect())
@@ -1654,6 +1654,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 fields.into_iter().map(|(_, t)| t).collect()
             }
             ResolvedType::GenericInstance { type_args, .. }
+            | ResolvedType::Variant { type_args, .. }
             | ResolvedType::Resource { type_args, .. }
             | ResolvedType::Tuple(type_args) => type_args,
             _ => Vec::new(),

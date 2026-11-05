@@ -769,7 +769,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 (TUPLE_TYPE_NAME.to_string(), None, Some(elems.clone()), None)
             }
             // Generic instances like Box<i32> use the base name "Box" for method lookup.
-            ResolvedType::GenericInstance { def, type_args } => {
+            ResolvedType::GenericInstance { def, type_args }
+            | ResolvedType::Variant { def, type_args } => {
                 let table = self.tysys.type_table.borrow();
                 (
                     table.decl_name(*def).to_string(),
@@ -840,16 +841,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
             // Unit type () - search for impl blocks in loaded modules
             ResolvedType::Unit => (UNIT_TYPE_NAME.to_string(), None, None, None),
-            // An enum or a non-generic variant: the declaration is the whole
-            // receiver, so its head names the impl blocks to search. A generic
-            // variant arrives as `GenericInstance`, handled above.
-            ResolvedType::Enum { .. } | ResolvedType::Variant { .. } => {
+            // An enum: the declaration is the whole receiver, so its head names
+            // the impl blocks to search.
+            ResolvedType::Enum { .. } => {
                 let (name, module_source) = self
                     .tysys
                     .type_table
                     .borrow()
                     .nominal_head(base_type_id)
-                    .expect("an enum or variant names a declaration");
+                    .expect("an enum names a declaration");
                 (name, Some(module_source), None, None)
             }
             _ => return None,
@@ -1292,11 +1292,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let (key, args) = {
             let tt = self.tysys.type_table.borrow();
             let (ResolvedType::GenericInstance { def, type_args }
+            | ResolvedType::Variant { def, type_args }
             | ResolvedType::Resource { def, type_args }) = tt.get(receiver)
             else {
                 return Vec::new();
             };
-            if tt.plain_resource_def(receiver).is_some() {
+            if tt.nominal_type_args(receiver).is_none() {
                 return Vec::new();
             }
             let key = self.impl_target_of(receiver, &DeclName::new(tt.decl_name(*def)));
@@ -3066,6 +3067,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // A generic newtype's own impls bind its own arguments.
                 args
             } else if let ResolvedType::GenericInstance { type_args, .. }
+            | ResolvedType::Variant { type_args, .. }
             | ResolvedType::Resource { type_args, .. }
             | ResolvedType::Tuple(type_args) = table.get(receiver)
             {
@@ -3329,8 +3331,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let container_type = self.resolve_expr(&index_expr.expr, ctx, None);
         let base_type_id = self.tysys.through_ref(container_type);
         let head = match self.tysys.type_table.borrow().get(base_type_id).clone() {
+            ResolvedType::Variant { type_args, .. } if type_args.is_empty() => return None,
             ResolvedType::Struct { .. }
             | ResolvedType::GenericInstance { .. }
+            | ResolvedType::Variant { .. }
             | ResolvedType::Resource { .. }
             | ResolvedType::Tuple(_)
             | ResolvedType::Newtype { .. }
@@ -3410,34 +3414,31 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let output_type = index_mut_info.output_type;
         let output_base_type_id = self.tysys.through_ref(output_type);
 
-        let (output_struct_name, output_module_source, output_type_args) = match self
+        let nominal_args = match self
             .tysys
             .type_table
             .borrow()
             .get(output_base_type_id)
             .clone()
         {
-            ResolvedType::Struct { .. } => {
-                let (n, m) = self
-                    .tysys
-                    .type_table
-                    .borrow()
-                    .nominal_head(output_base_type_id)
-                    .expect("a struct names a declaration");
-                (n, m, None)
-            }
+            ResolvedType::Struct { .. } => Some(Vec::new()),
             ResolvedType::GenericInstance { type_args, .. }
             | ResolvedType::Resource { type_args, .. }
-            | ResolvedType::Tuple(type_args) => {
+            | ResolvedType::Tuple(type_args) => Some(type_args),
+            ResolvedType::Variant { type_args, .. } if !type_args.is_empty() => Some(type_args),
+            _ => None,
+        };
+        let (output_struct_name, output_module_source, output_type_args) = match nominal_args {
+            Some(type_args) => {
                 let (n, m) = self
                     .tysys
                     .type_table
                     .borrow()
                     .nominal_head(output_base_type_id)
-                    .expect("an instance names a declaration");
+                    .expect("a nominal type names a declaration");
                 (n, m, (!type_args.is_empty()).then_some(type_args))
             }
-            _ => (
+            None => (
                 self.tysys
                     .type_table
                     .borrow()
@@ -3852,11 +3853,7 @@ impl TypeSystem {
     pub(super) fn is_replace_on_assign_place_type(&self, type_id: TypeId) -> bool {
         let table = self.type_table.borrow();
         let head = table.representation_head(type_id);
-        let is_variant = match table.get(head) {
-            ResolvedType::Variant { .. } => true,
-            ResolvedType::GenericInstance { def, .. } => table.find_variant_type(*def).is_some(),
-            _ => false,
-        };
+        let is_variant = matches!(table.get(head), ResolvedType::Variant { .. });
         table.is_boxed_reference_target(head) && !is_variant
     }
 

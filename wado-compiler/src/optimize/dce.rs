@@ -1069,7 +1069,19 @@ impl<'a> DceWalker<'a> {
                 ));
                 self.analysis.callees.insert(method_id);
             }
-            ResolvedType::GenericInstance { def, type_args } => {
+            ResolvedType::Variant { def, type_args } if type_args.is_empty() => {
+                let module_source = self.type_table.def_module(def).clone();
+                // Variant method, e.g. `Shape^Inspect::inspect`.
+                let method_id = FunctionId::Method(MethodName::new(
+                    module_source,
+                    FqTypeName::declared(self.type_table.defs(), def),
+                    trait_name,
+                    method_name,
+                ));
+                self.analysis.callees.insert(method_id);
+            }
+            ResolvedType::GenericInstance { def, type_args }
+            | ResolvedType::Variant { def, type_args } => {
                 let name = self.type_table.decl_name(def).to_string();
                 // Generic instance method (e.g. `Box<i32>::get`,
                 // `TreeMap<String,i32>^Index::index`). Trait methods
@@ -1094,17 +1106,6 @@ impl<'a> DceWalker<'a> {
             ResolvedType::Enum { def } => {
                 let module_source = self.type_table.def_module(def).clone();
                 // Enum method (user-defined or auto-derived trait impl).
-                let method_id = FunctionId::Method(MethodName::new(
-                    module_source,
-                    FqTypeName::declared(self.type_table.defs(), def),
-                    trait_name,
-                    method_name,
-                ));
-                self.analysis.callees.insert(method_id);
-            }
-            ResolvedType::Variant { def } => {
-                let module_source = self.type_table.def_module(def).clone();
-                // Variant method, e.g. `Shape^Inspect::inspect`.
                 let method_id = FunctionId::Method(MethodName::new(
                     module_source,
                     FqTypeName::declared(self.type_table.defs(), def),
@@ -1455,10 +1456,9 @@ impl DceAnalysis {
                 continue;
             }
             match type_table.get(id) {
-                ResolvedType::Variant { def } | ResolvedType::Enum { def } => {
-                    self.nominal_defs.insert(*def);
-                }
-                ResolvedType::GenericInstance { def, .. } => {
+                ResolvedType::Variant { def, .. }
+                | ResolvedType::Enum { def }
+                | ResolvedType::GenericInstance { def, .. } => {
                     self.nominal_defs.insert(*def);
                 }
                 _ => {}
@@ -1479,7 +1479,7 @@ fn variant_decls_kept_past_use(project: &NirPackage, type_table: &TypeTable) -> 
         .iter()
         .filter_map(|f| f.borrow().scalarized_from)
         .filter_map(|t| match type_table.get(t) {
-            ResolvedType::Variant { def } | ResolvedType::GenericInstance { def, .. } => Some(*def),
+            ResolvedType::Variant { def, .. } => Some(*def),
             _ => None,
         })
         .chain(type_table.compiler_item_def(CompilerItem::Option))
@@ -1668,12 +1668,13 @@ fn variant_instance_payloads(project: &NirPackage) -> Vec<(TypeId, Vec<TypeId>)>
         type_table
             .iter_type_ids()
             .filter_map(|id| {
-                let ResolvedType::GenericInstance { def, type_args } = type_table.get(id) else {
+                let ResolvedType::Variant { def, type_args } = type_table.get(id) else {
                     return None;
                 };
-                let concrete = !type_args
-                    .iter()
-                    .any(|&arg| type_table.contains_type_param(arg));
+                let concrete = !type_args.is_empty()
+                    && !type_args
+                        .iter()
+                        .any(|&arg| type_table.contains_type_param(arg));
                 concrete.then(|| (id, *def, type_args.clone()))
             })
             .collect()
@@ -1728,6 +1729,7 @@ fn collect_type_dependencies(
         }
         ResolvedType::GenericInstance { type_args, .. }
         | ResolvedType::Resource { type_args, .. }
+        | ResolvedType::Variant { type_args, .. }
         | ResolvedType::Tuple(type_args) => {
             for arg in type_args {
                 collect_type_transitive(*arg, type_table, reachable);
@@ -1758,7 +1760,6 @@ fn collect_type_dependencies(
         | ResolvedType::Error
         | ResolvedType::Struct { .. }
         | ResolvedType::Enum { .. }
-        | ResolvedType::Variant { .. }
         | ResolvedType::TypeParam { .. }
         | ResolvedType::AssocParam { .. }
         | ResolvedType::TypePack { .. }

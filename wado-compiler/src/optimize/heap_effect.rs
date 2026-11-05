@@ -736,7 +736,7 @@ impl HeapEffects<'_> {
                     self.reach_into(elem, seen, out);
                 }
             }
-            ResolvedType::GenericInstance { def, type_args } => {
+            ResolvedType::GenericInstance { type_args, .. } => {
                 if let Some(fields) = self.struct_field_types(ty) {
                     out.insert(tt.type_key(ty));
                     for &f in fields {
@@ -757,21 +757,16 @@ impl HeapEffects<'_> {
                         out.insert(array);
                     }
                     self.reach_into(*element, seen, out);
-                } else if let Some(cases) = tt.variant_template_cases(*def) {
-                    out.insert(tt.type_key(ty));
-                    for &(_, _, payload) in cases {
-                        self.reach_template(payload, type_args, seen, out);
-                    }
                 } else {
                     out.set_any();
                 }
             }
-            ResolvedType::Variant { def } => {
+            ResolvedType::Variant { def, type_args } => {
                 out.insert(tt.type_key(ty));
                 match tt.variant_template_cases(*def) {
                     Some(cases) => {
                         for &(_, _, payload) in cases {
-                            self.reach_template(payload, &[], seen, out);
+                            self.reach_template(payload, type_args, seen, out);
                         }
                     }
                     None => {

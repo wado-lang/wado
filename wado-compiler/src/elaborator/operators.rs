@@ -327,13 +327,15 @@ impl TypeSystem {
             ResolvedType::Struct { .. }
             | ResolvedType::GenericInstance { .. }
             | ResolvedType::Tuple(_) => true,
+            ResolvedType::Variant { type_args, .. } => !type_args.is_empty(),
             ResolvedType::Newtype { base_type, .. } => {
                 let ultimate = tt.representation_head(*base_type);
                 match tt.get(ultimate) {
                     ResolvedType::Struct { .. }
                     | ResolvedType::GenericInstance { .. }
                     | ResolvedType::Tuple(_) => true,
-                    ResolvedType::Resource { type_args, .. } => !type_args.is_empty(),
+                    ResolvedType::Resource { type_args, .. }
+                    | ResolvedType::Variant { type_args, .. } => !type_args.is_empty(),
                     // SIMD aliases (`type f32x4 = v128`) and half aliases —
                     // see the `Primitive` arm below.
                     ResolvedType::Primitive(p) => *p == PrimitiveType::V128 || p.is_half(),
@@ -1400,8 +1402,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     fn index_dispatch_head(&self, base_type_id: TypeId) -> Option<String> {
         let tt = self.tysys.type_table.borrow();
         match tt.get(base_type_id) {
+            ResolvedType::Variant { type_args, .. } if type_args.is_empty() => None,
             ResolvedType::Struct { .. }
             | ResolvedType::GenericInstance { .. }
+            | ResolvedType::Variant { .. }
             | ResolvedType::Resource { .. }
             | ResolvedType::Tuple(_)
             | ResolvedType::Newtype { .. }

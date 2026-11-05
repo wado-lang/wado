@@ -343,7 +343,7 @@ fn heads_apart(actual: TypeId, expected: TypeId, type_table: &TypeTable) -> bool
     match (a, e) {
         (ResolvedType::Primitive(a), ResolvedType::Primitive(e)) => a != e,
         (ResolvedType::Enum { def: a }, ResolvedType::Enum { def: e })
-        | (ResolvedType::Variant { def: a }, ResolvedType::Variant { def: e })
+        | (ResolvedType::Variant { def: a, .. }, ResolvedType::Variant { def: e, .. })
         | (
             ResolvedType::GenericInstance { def: a, .. },
             ResolvedType::GenericInstance { def: e, .. },
@@ -361,12 +361,13 @@ fn needs_rebuild(actual: TypeId, expected: TypeId, fixed: bool) -> bool {
 }
 
 /// The declaration `id` instantiates and its type arguments, where it is a
-/// generic struct, a generic resource or a newtype; a non-generic newtype has
+/// generic struct, resource or variant, or a newtype; a non-generic one has
 /// none.
 fn declaration_instance(id: TypeId, type_table: &TypeTable) -> Option<(DefId, &[TypeId])> {
     match type_table.get(id) {
         ResolvedType::GenericInstance { def, type_args }
         | ResolvedType::Resource { def, type_args }
+        | ResolvedType::Variant { def, type_args }
         | ResolvedType::Newtype { def, type_args, .. } => Some((*def, type_args.as_slice())),
         _ => None,
     }

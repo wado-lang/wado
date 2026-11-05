@@ -486,9 +486,7 @@ pub(super) fn synthesize_lower_option_to_memory(
     let inner_type_id = {
         let tt = ctx.type_table.borrow();
         match tt.get(value_type_id) {
-            ResolvedType::GenericInstance { type_args, .. } if !type_args.is_empty() => {
-                type_args[0]
-            }
+            ResolvedType::Variant { type_args, .. } if !type_args.is_empty() => type_args[0],
             _ => {
                 drop(tt);
                 cm_held_type_to_type_id(
@@ -587,7 +585,7 @@ pub(super) fn synthesize_lower_result_to_memory(
             .compiler_items()
             .require_variant_case(CompilerItem::ResultErr);
         let (ok_tid, err_tid) = match tt.get(value_type_id) {
-            ResolvedType::GenericInstance { type_args, .. } if type_args.len() == 2 => {
+            ResolvedType::Variant { type_args, .. } if type_args.len() == 2 => {
                 (type_args[0], type_args[1])
             }
             _ => (TypeTable::UNIT, TypeTable::UNIT),
