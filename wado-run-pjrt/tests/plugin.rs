@@ -35,6 +35,9 @@ fn a_program_compiles_and_runs_on_the_device() {
         lines.next(),
         Some("[0, 0, 224, 63, 0, 0, 160, 64] as ByteList")
     );
+    // Elements that do not fill the extents never reach the plugin.
+    assert_eq!(lines.next(), Some("true"));
+    assert_eq!(lines.next(), Some("true"));
 }
 
 /// Every operation a recorded pass holds, the composite decomposed, and
@@ -52,6 +55,22 @@ fn loams_programs_compute_what_its_cpu_graph_does() {
             .unwrap_or_else(|| panic!("no deviation in {line:?}"));
         assert!(deviation <= LOAM_TOLERANCE, "{line}");
     }
+}
+
+/// A freed slot holds another tensor by the time this reads the one it held.
+#[test]
+#[ignore = "needs a plugin: run `mise run test-pjrt`"]
+fn a_tensor_of_an_ended_pass_is_refused() {
+    let output = Command::new(env!("CARGO_BIN_EXE_wado-run-pjrt"))
+        .arg(
+            Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("../package-loam/conformance/pjrt_stale.wado"),
+        )
+        .output()
+        .expect("wado-run-pjrt runs");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(!output.status.success(), "{stderr}");
+    assert!(stderr.contains("is no longer held"), "{stderr}");
 }
 
 /// The same programs compiled for a TPU topology, by `libtpu.so`, on a machine

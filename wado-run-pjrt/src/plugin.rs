@@ -69,11 +69,12 @@ fn plugin_thread() -> Result<mpsc::Sender<Crossing<Request>>> {
     Ok(calls)
 }
 
-/// The plugin's library, which the API table points into.
+/// A plugin loaded for the rest of the process, whose API table points into its
+/// library: PJRT has no call that stops what a plugin runs, so its threads and
+/// their thread-locals must never find the code unmapped.
 pub struct Plugin {
     api: *const Api,
     calls: mpsc::Sender<Crossing<Request>>,
-    _library: Library,
 }
 
 // SAFETY: PJRT's calls may come from any thread.
@@ -84,8 +85,10 @@ unsafe impl Sync for Plugin {}
 impl Plugin {
     /// Loads and initializes the plugin at `path`.
     pub fn open(path: &Path) -> Result<Arc<Self>> {
+        // A bare name would send the loader to its search path rather than here.
+        let path = std::path::absolute(path)?;
         // SAFETY: a plugin's initializers run here, which the user named.
-        let library = unsafe { Library::new(path) }
+        let library = unsafe { Library::new(&path) }
             .with_context(|| format!("cannot load the PJRT plugin {}", path.display()))?;
         // SAFETY: `GetPjrtApi` is what makes a library a PJRT plugin, and takes
         // nothing.
@@ -95,10 +98,10 @@ impl Plugin {
                 .with_context(|| format!("{} is not a PJRT plugin", path.display()))?;
             get()
         };
+        std::mem::forget(library);
         let plugin = Arc::new(Self {
             api,
             calls: plugin_thread()?,
-            _library: library,
         });
         let major = plugin.api().major_version();
         if major != 0 {
@@ -181,7 +184,7 @@ impl Plugin {
     }
 
     fn api(&self) -> &Api {
-        // SAFETY: `GetPjrtApi` returned it, and `_library` keeps it loaded.
+        // SAFETY: `GetPjrtApi` returned it, and the library is never unloaded.
         unsafe { &*self.api }
     }
 
@@ -270,22 +273,24 @@ impl Client {
         unsafe {
             plugin.call(Slot::ClientCreate, &mut create)?;
         }
-        let raw = create.client;
+        let mut client = Self {
+            plugin,
+            raw: create.client,
+            device: null_mut(),
+        };
         let mut devices = ffi::ClientAddressableDevices::new();
-        devices.client = raw;
+        devices.client = client.raw;
         // SAFETY: as above, and the list lives as long as the client.
-        let device = unsafe {
-            plugin.call(Slot::ClientAddressableDevices, &mut devices)?;
+        unsafe {
+            client
+                .plugin
+                .call(Slot::ClientAddressableDevices, &mut devices)?;
             if devices.num_addressable_devices == 0 {
                 return Err("the PJRT plugin has no device here".to_owned());
             }
-            *devices.addressable_devices
-        };
-        Ok(Self {
-            plugin,
-            raw,
-            device,
-        })
+            client.device = *devices.addressable_devices;
+        }
+        Ok(client)
     }
 
     /// The plugin's name for its platform.
@@ -313,36 +318,50 @@ impl Client {
         unsafe {
             self.plugin.call(Slot::ClientCompile, &mut compile)?;
         }
-        let loaded = compile.executable;
+        let mut executable = Executable {
+            plugin: Arc::clone(&self.plugin),
+            loaded: compile.executable,
+            held: null_mut(),
+            outputs: 0,
+        };
 
         let mut held = ffi::LoadedExecutableGetExecutable::new();
-        held.loaded_executable = loaded;
+        held.loaded_executable = executable.loaded;
         // SAFETY: as above.
         unsafe {
             self.plugin
                 .call(Slot::LoadedExecutableGetExecutable, &mut held)?;
         }
+        executable.held = held.executable;
         let mut outputs = ffi::ExecutableNumOutputs::new();
-        outputs.executable = held.executable;
+        outputs.executable = executable.held;
         // SAFETY: as above.
         unsafe {
             self.plugin.call(Slot::ExecutableNumOutputs, &mut outputs)?;
         }
-        Ok(Executable {
-            plugin: Arc::clone(&self.plugin),
-            loaded,
-            held: held.executable,
-            outputs: outputs.num_outputs,
-        })
+        executable.outputs = outputs.num_outputs;
+        Ok(executable)
     }
 
-    /// A buffer of `elements`, little-endian, in row-major order.
+    /// A buffer of `elements`, little-endian, in row-major order, each of
+    /// `element_bytes`. The plugin reads as much as `extents` say, so the guest's
+    /// extents must not reach past `elements`.
     pub fn upload(
         &self,
         element_type: i32,
+        element_bytes: usize,
         extents: &[i64],
         elements: &[u8],
     ) -> Result<Buffer, String> {
+        let needed = extents.iter().try_fold(element_bytes, |bytes, &extent| {
+            bytes.checked_mul(usize::try_from(extent).ok()?)
+        });
+        if needed != Some(elements.len()) {
+            return Err(format!(
+                "{} bytes do not fill extents {extents:?} of {element_bytes} bytes each",
+                elements.len()
+            ));
+        }
         let mut upload = ffi::ClientBufferFromHostBuffer::new();
         upload.client = self.raw;
         upload.data = elements.as_ptr().cast::<c_void>();
@@ -357,11 +376,12 @@ impl Client {
             self.plugin
                 .call(Slot::ClientBufferFromHostBuffer, &mut upload)?;
         }
-        self.plugin.awaited(upload.done_with_host_buffer)?;
-        Ok(Buffer {
+        let buffer = Buffer {
             plugin: Arc::clone(&self.plugin),
             raw: upload.buffer,
-        })
+        };
+        self.plugin.awaited(upload.done_with_host_buffer)?;
+        Ok(buffer)
     }
 }
 
@@ -471,11 +491,15 @@ impl Drop for Executable {
         loaded.executable = self.loaded;
         let mut held = ffi::ExecutableDestroy::new();
         held.executable = self.held;
-        // SAFETY: each is destroyed once.
+        // SAFETY: each is destroyed once, and `held` is null only where a compile
+        // failed before the plugin handed it over.
         let destroyed = unsafe {
-            self.plugin
-                .call(Slot::ExecutableDestroy, &mut held)
-                .and_then(|()| self.plugin.call(Slot::LoadedExecutableDestroy, &mut loaded))
+            if self.held.is_null() {
+                Ok(())
+            } else {
+                self.plugin.call(Slot::ExecutableDestroy, &mut held)
+            }
+            .and_then(|()| self.plugin.call(Slot::LoadedExecutableDestroy, &mut loaded))
         };
         destroyed.expect("a PJRT executable drops");
     }

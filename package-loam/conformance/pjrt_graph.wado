@@ -6,11 +6,26 @@
 
 use { println, Stdout } from "core:cli";
 use { PjrtHost } from "core:pjrt";
-use { PjrtBackend } from "lib:loam";
+use { Any, Cpu, Graph, Holds, PjrtBackend, Tensor, Untyped } from "lib:loam";
 use { programs } from "./pjrt_programs.wado";
 
 export fn run() with (Stdout, PjrtHost) {
     let mut device = PjrtBackend::new();
     programs(&mut device, |name, apart| println(`${name} ${apart}`));
     assert device.donations() > 0, "a step updates the cache in place";
+
+    let weight = Tensor::<f32, Untyped> {
+        data: [0.5, -1.25],
+        extents: [2],
+    };
+    let kept = device.kept_weights(
+        |r| r.finished([]),
+        0,
+        1,
+        |_| Result::<Any<Cpu>, ()>::Ok(Any::F32(weight)),
+    ).unwrap();
+    let F32(held) = &kept[0] else {
+        unreachable();
+    };
+    assert device.download(held).data == weight.data, "a weight in bf16 reads back as it was";
 }

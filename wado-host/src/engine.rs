@@ -1,7 +1,7 @@
 //! The wasmtime configuration every host of Wado's output shares, so a program
 //! runs under the e2e harness and a runner as it does under `wado`.
 
-use wasmtime::{Collector, Config, Engine, OptLevel};
+use wasmtime::{Collector, Config, Engine, OptLevel, Store};
 
 use crate::fuel::meter_fuel;
 
@@ -44,6 +44,16 @@ pub fn default_config(opt_level: OptLevel) -> Config {
     config.gc_heap_initial_size(DEFAULT_GC_HEAP_INITIAL_SIZE);
     config.cranelift_opt_level(opt_level);
     config
+}
+
+/// A store for a guest. A device takes a model's weights in one call, past
+/// wasmtime's default cap on what a guest copies to the host, and the guest is
+/// the user's own program.
+#[must_use]
+pub fn guest_store<T: 'static>(engine: &Engine, data: T) -> Store<T> {
+    let mut store = Store::new(engine, data);
+    store.set_hostcall_fuel(usize::MAX);
+    store
 }
 
 /// An engine on [`default_config`] that consumes fuel, for a guest run under a

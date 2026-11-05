@@ -21,9 +21,9 @@ use wasmtime::component::{Component, Linker};
 use wasmtime::{Engine, GuestProfiler, Store, UpdateDeadline};
 use wasmtime_wasi::p3::add_to_linker as add_wasi_to_linker;
 use wasmtime_wasi::p3::bindings::Command;
-use wasmtime_wasi::{FsPerms, WasiCtx, WasiView};
+use wasmtime_wasi::{FsPerms, WasiCtx, WasiCtxBuilder, WasiView};
 
-use crate::engine::default_config;
+use crate::engine::{default_config, guest_store};
 use crate::sync::lock;
 
 /// The usage of the runner `wado <command>`. `own` lists what it adds to the
@@ -37,7 +37,7 @@ pub fn usage(command: &str, summary: &str, own: &str) -> String {
 Usage: wado {command} [options] <file.wado|file.wasm> [args...]
 
 Options:
-  -O<level>              Optimization level: 0, 1, 2, 3 or s (default: 2)
+  -O<level>              Optimization level: 0, 1, 2, 3 or s (default: 1)
       --dir <path>       Preopen a directory (repeatable; default: the current one)
       --no-dir           Drop that default
 {own}      --log-level <level>
@@ -218,7 +218,7 @@ impl RunOptions {
     {
         let mut parser = Parser::from_args(argv);
         let mut input = None;
-        let mut opt_level = OptLevel::default();
+        let mut opt_level = OptLevel::O1;
         let mut log_level = LogLevel::Warn;
         let mut profile = None;
         let mut preopens = Vec::new();
@@ -385,8 +385,21 @@ fn wado_binary() -> PathBuf {
     std::env::var_os("WADO").map_or_else(|| PathBuf::from("wado"), PathBuf::from)
 }
 
-/// The WASI context `wado run` gives a guest: the host's stdio and environment,
-/// the arguments, and the preopened directories.
+/// Let `wasi:sockets` and `wasi:tls` reach the host network, as a native tool
+/// can: a guest is confined by what its effects reach, and one that names
+/// `TcpSocket` asked for the network. A deployment that must not give it one
+/// confines the host process instead.
+pub fn grant_host_network(builder: &mut WasiCtxBuilder) {
+    builder.inherit_network();
+    // wasmtime denies creating a socket by default; `inherit_network`
+    // relaxes only the per-address check that comes after it.
+    builder.allow_tcp(true);
+    builder.allow_udp(true);
+    builder.allow_ip_name_lookup(true);
+}
+
+/// The WASI context `wado run` gives a guest: the host's stdio, environment and
+/// network, the arguments, and the preopened directories.
 ///
 /// # Errors
 ///
@@ -394,6 +407,7 @@ fn wado_binary() -> PathBuf {
 pub fn wasi_ctx(options: &RunOptions) -> Result<WasiCtx> {
     let mut builder = WasiCtx::builder();
     builder.inherit_stdio().inherit_env();
+    grant_host_network(&mut builder);
 
     builder.arg(options.input.to_string_lossy());
     builder.args(&options.program_args);
@@ -431,10 +445,7 @@ where
     add_wasi_to_linker(&mut linker)?;
     link(&engine, &component, &mut linker)?;
 
-    let mut store = Store::new(&engine, host);
-    // A device takes a model's weights in one call, past wasmtime's default cap
-    // on what a guest copies to the host. The guest is the user's own program.
-    store.set_hostcall_fuel(usize::MAX);
+    let mut store = guest_store(&engine, host);
     let sampling = options
         .profile
         .as_ref()
@@ -612,7 +623,7 @@ mod tests {
     #[test]
     fn the_optimization_level_comes_attached() {
         assert_eq!(parse(&["-O0", "app.wado"]).opt_level, OptLevel::O0);
-        assert_eq!(parse(&["app.wado"]).opt_level, OptLevel::O2);
+        assert_eq!(parse(&["app.wado"]).opt_level, OptLevel::O1);
         assert!(try_parse(&["-O", "app.wado"]).is_err());
         assert!(try_parse(&["-O", "2", "app.wado"]).is_err());
         assert!(try_parse(&["-O9", "app.wado"]).is_err());

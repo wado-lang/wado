@@ -13,6 +13,8 @@ use { in_place, le_bytes, module_of } from "./stablehlo.wado";
 /// A tensor on the device: which of the backend's buffers holds it.
 pub struct DeviceBuffer {
     slot: i32,
+    /// Which of the buffers the slot has held, as a freed slot is used again.
+    generation: i32,
     extents: List<i32>,
     /// Whether a weight of f32 sits there in bf16, which a program converts.
     halved: bool,
@@ -50,6 +52,8 @@ pub struct PjrtProgram {
 pub affine struct PjrtBackend {
     cpu: Cpu,
     buffers: List<Option<Buffer>>,
+    /// How many buffers each slot has released.
+    generations: List<i32>,
     /// The slots of `buffers` that hold none.
     free: List<i32>,
     /// The slots the next `begin` releases: what this pass put on the device,
@@ -95,14 +99,20 @@ fn elements_of<E: Element>(bytes: ByteList) -> List<E> {
     };
 }
 
+/// The f32s a weight's `bytes` hold in bf16, each `E`.
+fn widened<E: Element>(bytes: ByteList) -> List<E> {
+    return List::<u16>::from_le_bytes(bytes).into_iter().map(|bits| E::from_f32(f32::from(bf16::from_bits(bits)))).collect();
+}
+
 /// `analysis` as a line. A TPU's `optimal_seconds` takes 1 off for each
-/// operation at a computed index, whose time its model leaves out, so its
-/// estimate is what lies above that.
+/// operation at a computed index, whose time its model leaves out. So where it
+/// is negative, its estimate is what lies above the next whole number, which
+/// reads true while that estimate is under a second.
 pub fn summary(analysis: &Analysis) -> String {
     let mut line = `${analysis.argument_bytes} argument bytes, ${analysis.alias_bytes} aliased, ${analysis.temporary_bytes} temporary`;
     for let cost of analysis.costs {
         if cost.name == "optimal_seconds" {
-            let unmodeled = f64::ceil(-cost.value) as i64;
+            let unmodeled = if cost.value < 0.0 { f64::ceil(-cost.value) as i64 } else { 0 };
             line.push_str(`, ${cost.value + unmodeled as f64:e} optimal seconds, ${unmodeled} operations unmodeled`);
         }
     }
@@ -123,6 +133,7 @@ impl PjrtBackend {
         return PjrtBackend {
             cpu: Cpu {},
             buffers: [],
+            generations: [],
             free: [],
             pass: [],
             retaining: HashSet::new(),
@@ -178,10 +189,23 @@ impl PjrtBackend {
     fn stored(&mut self, buffer: Buffer) -> i32 {
         let Some(slot) = self.free.pop() else {
             self.buffers.push(Option::Some(buffer));
+            self.generations.push(0);
             return self.buffers.len() - 1;
         };
         self.buffers[slot] = Option::Some(buffer);
         return slot;
+    }
+
+    fn device_buffer(&self, slot: i32, extents: List<i32>, halved: bool) -> DeviceBuffer {
+        return DeviceBuffer { slot, generation: self.generations[slot], extents, halved };
+    }
+
+    /// The slot of `d`, which must still hold it: one that has been freed may
+    /// hold another tensor by now.
+    fn slot_of(&self, d: &DeviceBuffer) -> i32 {
+        assert d.slot >= 0, "a backend compiling for a topology holds no weight";
+        assert self.generations[d.slot] == d.generation, "a tensor of a pass that has ended is no longer held";
+        return d.slot;
     }
 
     fn sent<E: Element, Axes>(&mut self, t: &Tensor<E, Axes>) -> i32 with PjrtHost {
@@ -209,21 +233,21 @@ impl PjrtBackend {
             self.whole_bytes += t.data.len() as i64 * 4;
         }
         if self.topology matches { Some(_) } {
-            return DeviceBuffer { slot: -1, extents: t.extents, halved };
+            return DeviceBuffer { slot: -1, generation: 0, extents: t.extents, halved };
         }
         let buffer = if halved {
             done(PjrtHost::upload(ElementType::Bfloat16, extents, &halves.cast::<u8>()));
         } else {
             done(PjrtHost::upload(ElementType::Float32, extents, &LinearArray::<f32>::from_slice(&t.data).cast::<u8>()));
         };
-        return DeviceBuffer { slot: self.stored(buffer), extents: t.extents, halved };
+        return self.device_buffer(self.stored(buffer), t.extents, halved);
     }
 
     /// The slot of `value`, sent to the device for this pass if it is on the host.
     fn on_device(&mut self, value: &Any<PjrtBackend>) -> i32 with PjrtHost {
         let host = match value {
             F32(Device(d)) | I64(Device(d)) | Bool(Device(d)) => {
-                return d.slot;
+                return self.slot_of(d);
             },
             F32(Host(t)) => self.sent(t),
             I64(Host(t)) => self.sent(t),
@@ -244,7 +268,7 @@ impl PjrtBackend {
 
     fn buffer_at(&self, slot: i32) -> &Buffer {
         let Some(buffer) = &self.buffers[self.current(slot)] else {
-            panic("a tensor of a pass that has ended is no longer held");
+            unreachable();
         };
         return buffer;
     }
@@ -254,7 +278,8 @@ impl PjrtBackend {
             Host(h) => *h,
             Device(d) => {
                 self.reads += 1;
-                Tensor { data: elements_of(done(self.buffer_at(d.slot).to_host())), extents: d.extents };
+                let bytes = done(self.buffer_at(self.slot_of(d)).to_host());
+                Tensor { data: if d.halved { widened(bytes) } else { elements_of(bytes) }, extents: d.extents };
             },
         };
     }
@@ -271,7 +296,7 @@ impl Holds for PjrtBackend {
         if self.topology matches { Some(_) } {
             return Located::Host(*t);
         }
-        return Located::Device(DeviceBuffer { slot: self.sent(t), extents: t.extents, halved: false });
+        return Located::Device(self.device_buffer(self.sent(t), t.extents, false));
     }
 
     fn extents_of<E: Element, Axes>(&self, t: &Located<E, Axes>) -> List<i32> {
@@ -293,6 +318,7 @@ impl Holds for PjrtBackend {
                 self.pass.push(slot);
             } else {
                 self.buffers[slot] = null;
+                self.generations[slot] += 1;
                 self.moved.remove(slot);
                 self.free.push(slot);
             }
@@ -302,7 +328,7 @@ impl Holds for PjrtBackend {
 
     fn retain<E: Element, Axes>(&mut self, t: &Located<E, Axes>) {
         if let Device(d) = t {
-            let mut at = d.slot;
+            let mut at = self.slot_of(d);
             self.retaining.insert(at);
             while let Some(next) = self.moved.get(at) {
                 at = next;
@@ -402,7 +428,7 @@ impl Graph for PjrtBackend {
             self.pass.push(slot);
             result_slots.push(slot);
             let returned = &program.returned[values.len()];
-            let on = DeviceBuffer { slot, extents: returned.extents, halved: false };
+            let on = self.device_buffer(slot, returned.extents, false);
             values.push(match returned.kind {
                 F32 => Any::F32(Located::Device(on)),
                 I64 => Any::I64(Located::Device(on)),

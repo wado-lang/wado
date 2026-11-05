@@ -12,7 +12,7 @@ use wasmtime::{
 };
 use wasmtime_wasi::filesystem::WasiFilesystemCtx;
 use wasmtime_wasi::p2::pipe::MemoryOutputPipe;
-use wasmtime_wasi::{FsPerms, WasiCtx, WasiCtxBuilder, WasiCtxView, WasiView};
+use wasmtime_wasi::{FsPerms, WasiCtx, WasiCtxView, WasiView};
 use wasmtime_wasi_http::{WasiHttpCtx, WasiHttpCtxView, WasiHttpView};
 use wasmtime_wasi_tls::{
     Error as WasiTlsError, TlsProvider, TlsStream, TlsTransport, WasiTlsCtx, WasiTlsCtxBuilder,
@@ -29,25 +29,13 @@ use crate::process_host::{
     GuestStdio, ProcessCtx, ProcessGrant, ProcessView, Spawning,
     add_to_linker as add_process_to_linker,
 };
-use wado_host::engine::default_config;
+use wado_host::engine::{default_config, guest_store};
 use wado_host::fuel::meter_fuel;
 use wado_host::random;
+use wado_host::runner::grant_host_network;
 use wado_host::sync::{join_in_drop, lock};
 use wado_host::timezone::add_to_linker;
 use wado_host::tls_trust::{build_root_cert_store, install_default_crypto_provider};
-
-/// Let `wasi:sockets` and `wasi:tls` reach the host network, as a native tool
-/// can: a guest is confined by what its effects reach, and one that names
-/// `TcpSocket` asked for the network. A deployment that must not give it one
-/// confines the host process instead.
-fn grant_host_network(builder: &mut WasiCtxBuilder) {
-    builder.inherit_network();
-    // wasmtime denies creating a socket by default; `inherit_network`
-    // relaxes only the per-address check that comes after it.
-    builder.allow_tcp(true);
-    builder.allow_udp(true);
-    builder.allow_ip_name_lookup(true);
-}
 
 /// Build a [`WasiTlsCtx`] backed by [`WadoTlsProvider`] so the raw
 /// `wasi:tls` connector and [`WadoHttpHooks`] share the same trust store.
@@ -573,7 +561,7 @@ pub fn create_serve_engine(
 /// exhaust, so `--report-fuel` observes the guest without stopping it.
 #[must_use]
 pub fn new_store(engine: &Engine, state: WasiState) -> Store<WasiState> {
-    let mut store = Store::new(engine, state);
+    let mut store = guest_store(engine, state);
     if engine.get_consume_fuel() {
         store.set_fuel(u64::MAX).expect("the engine meters fuel");
         store.data_mut().fuel_start = Some(u64::MAX);

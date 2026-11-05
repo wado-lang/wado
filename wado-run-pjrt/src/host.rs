@@ -65,22 +65,22 @@ impl WasiView for Host {
     }
 }
 
-/// `PJRT_Buffer_Type`.
-fn pjrt_type(element: ElementType) -> i32 {
+/// `PJRT_Buffer_Type`, and the bytes one element takes.
+fn pjrt_type(element: ElementType) -> (i32, usize) {
     match element {
-        ElementType::Pred => 1,
-        ElementType::Int8 => 2,
-        ElementType::Int16 => 3,
-        ElementType::Int32 => 4,
-        ElementType::Int64 => 5,
-        ElementType::Uint8 => 6,
-        ElementType::Uint16 => 7,
-        ElementType::Uint32 => 8,
-        ElementType::Uint64 => 9,
-        ElementType::Float16 => 10,
-        ElementType::Float32 => 11,
-        ElementType::Float64 => 12,
-        ElementType::Bfloat16 => 13,
+        ElementType::Pred => (1, 1),
+        ElementType::Int8 => (2, 1),
+        ElementType::Int16 => (3, 2),
+        ElementType::Int32 => (4, 4),
+        ElementType::Int64 => (5, 8),
+        ElementType::Uint8 => (6, 1),
+        ElementType::Uint16 => (7, 2),
+        ElementType::Uint32 => (8, 4),
+        ElementType::Uint64 => (9, 8),
+        ElementType::Float16 => (10, 2),
+        ElementType::Float32 => (11, 4),
+        ElementType::Float64 => (12, 8),
+        ElementType::Bfloat16 => (13, 2),
     }
 }
 
@@ -113,9 +113,10 @@ impl pjrt_host::Host for Host {
         extents: Vec<i64>,
         elements: Vec<u8>,
     ) -> wasmtime::Result<Result<Resource<Buffer>, String>> {
+        let (element_type, element_bytes) = pjrt_type(element);
         let buffer = self
             .client()
-            .and_then(|client| client.upload(pjrt_type(element), &extents, &elements));
+            .and_then(|client| client.upload(element_type, element_bytes, &extents, &elements));
         self.held(buffer)
     }
 }
