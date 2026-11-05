@@ -70,21 +70,24 @@ fn "licm_reloadable_hoist.wado/escape_quotes"(buf, s) {
     let new_used: i32;
     let start_27: i32;
     let $licm_repr_29: ref Array<u8>;
+    let $licm_repr_30: ref Array<u8>;
     self_5 = s.used;
     i = 0;
     $licm_repr_29 = s.repr;
+    $licm_repr_30 = buf.repr;
     b0: block {
         l1: loop {
             break_if b0 i >= self_5;
             if builtin::array_get_value<u8>($licm_repr_29, i) == 34 {
-                if @unlikely(local.tee new_used(buf.used + 3) > builtin::array_len(buf.repr)) {
+                if @unlikely(local.tee new_used(buf.used + 3) > builtin::array_len($licm_repr_30)) {
                     cold_path;
                     "core:prelude/string.wado/core:prelude/string.wado/String::grow"(buf, new_used);
                     $licm_repr_29 = s.repr;
+                    $licm_repr_30 = buf.repr;
                 }
                 start_27 = buf.used;
                 buf.used = new_used;
-                builtin::array_copy<u8>(buf.repr, start_27, global:licm_reloadable_hoist.wado::$const_obj_0, 0, 3);
+                builtin::array_copy<u8>($licm_repr_30, start_27, global:licm_reloadable_hoist.wado::$const_obj_0, 0, 3);
             }
             i = i + 1;
             continue l1;

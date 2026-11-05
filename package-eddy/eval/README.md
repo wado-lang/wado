@@ -26,6 +26,8 @@ reverts, so the defects come from fix pull requests rather than reverts.
 - `agentic.json` holds the same review by an agent that also reads the
   repository as it stood once the culprit merged, through Eddy's Read, Grep and
   Glob tools. Each run records the tool calls and the token usage.
+- `symbols.json` holds the agent's review with FindSymbol and FindReferences
+  added. The review prompt names them and says what they are for.
 
 The model reads both diffs whole, generated, vendored and Markdown files left
 out. A pair with a diff past `diff_limit` (2,000,000 bytes) gets an error
@@ -52,12 +54,22 @@ CLAUDE_API_KEY=... wado run package-eddy/tools/baseline.wado -- \
 CLAUDE_API_KEY=... wado run -D tools=true package-eddy/tools/baseline.wado -- \
     package-eddy/eval/szz.json package-eddy/eval/checked.json \
     package-eddy/eval/judged.json package-eddy/eval/agentic.json
+CLAUDE_API_KEY=... PATH=/usr/bin:$PATH wado run \
+    --process-read "$HOME/.cargo" --process-read "$HOME/.rustup" \
+    -D tools=true -D symbols=true package-eddy/tools/baseline.wado -- \
+    package-eddy/eval/szz.json package-eddy/eval/checked.json \
+    package-eddy/eval/judged.json package-eddy/eval/symbols.json
 ```
 
 They run `git` and `rg` through `core:process`, which needs no flag: the
 repository is the directory `wado run` grants. Both must be installed system
 wide, such as under `/usr/bin`: a child may run only programs in the system
-baseline, not one under `$HOME`. The
+baseline, not one under `$HOME`. A `PATH` that finds a shim first, such as
+mise's `rg`, leaves every Grep call failing, hence `/usr/bin` ahead of it. The
+symbol run also runs `rust-analyzer`, which lives under `$HOME/.cargo` and
+reads the toolchain under `$HOME/.rustup`. A rerun tops each entry up to its
+run count but does not compare the prompt, so a prompt change needs a new
+output file. The
 agent's tree is a `git worktree` under `scratchpad/`, removed once its entry
 is done.
 
@@ -158,6 +170,26 @@ is done.
   passes its receiver, and then report only one or two findings, none of them
   the shifted labels. Reading can talk the reviewer out of a finding that was
   right.
+- FindSymbol and FindReferences do not raise the hit rate. With them the agent
+  finds the defect in 28 of 45 runs, and in the same 12 of the 15 entries.
+  The table counts runs that hit, out of 3:
+
+  | Entry | Agent | With symbols |
+  | ----- | ----: | -----------: |
+  | #1088 |     1 |            1 |
+  | #1112 |     1 |            3 |
+  | #1223 |     3 |            2 |
+  | #1585 |     2 |            1 |
+  | #1672 |     2 |            2 |
+  | #2310 |     2 |            1 |
+
+  The other nine entries score the same: 3 each, except 0 for #1680, #1697
+  and #1915. The differences are within what three runs vary by. The agent
+  made 358 tool calls over 345 turns. Of them, 18 were FindSymbol or
+  FindReferences, in 12 of the 45 runs, and 181 were Grep. Without the prompt
+  naming them, one run over the set called them 10 times. The runs read 32
+  million cached input tokens. The three entries no review finds are missed in
+  reasoning about the change, not in locating a definition or its uses.
 
 ## To Do
 
@@ -168,5 +200,6 @@ is done.
 - [ ] Split off the held-out part that learning never sees.
 - [ ] Measure the precision of the baseline's other findings, not only whether
   it hits the known defect.
-- [ ] Give the agent a tool over the language service (`wado query`) built at
-  the culprit's revision, and measure it against `agentic.json`.
+- [x] Give the agent a tool over the language service, and measure it against
+  `agentic.json`.
+- [ ] Find why #1680, #1697 and #1915 are missed by every review.

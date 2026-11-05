@@ -12,6 +12,7 @@ use crate::hashmap::{IndexMap, IndexSet};
 
 use crate::ast::{AstId, HandleClasses, MAX_GENERIC_PARAMS, RangeKind};
 use crate::compiler_item::CompilerItems;
+use crate::cut_memo::CutMemo;
 use crate::defs::{DefId, DefKind, DefTable};
 use crate::module_source::{CmNamespace, ModuleSource};
 use crate::name;
@@ -2608,7 +2609,7 @@ impl TypeTable {
     /// handle hold none.
     #[must_use]
     pub fn holds_affine_resource(&self, ty: TypeId) -> bool {
-        self.holds_affine_in(ty, &[], &mut Vec::new())
+        self.holds_affine_in(ty, &[], &mut Vec::new(), &mut CutMemo::new(false))
     }
 
     /// [`Self::holds_affine_resource`] inside a template whose type parameters
@@ -2620,11 +2621,30 @@ impl TypeTable {
         ty: TypeId,
         params: &[bool],
         open: &mut Vec<(DefId, Vec<bool>)>,
+        memo: &mut CutMemo<(TypeKey, Vec<bool>)>,
+    ) -> bool {
+        let key = (self.type_key(ty), params.to_vec());
+        if let Some(held) = memo.get(&key) {
+            return held;
+        }
+        let depth = memo.depth();
+        let outer_cuts = memo.begin();
+        let held = self.walk_affine_in(ty, params, open, memo);
+        memo.end(key, depth, held, outer_cuts);
+        held
+    }
+
+    fn walk_affine_in(
+        &self,
+        ty: TypeId,
+        params: &[bool],
+        open: &mut Vec<(DefId, Vec<bool>)>,
+        memo: &mut CutMemo<(TypeKey, Vec<bool>)>,
     ) -> bool {
         let ty = self.representation_head(ty);
         // `List` is the compiler's, so no struct registers its fields.
         if let Some(elem) = self.list_element(ty) {
-            return self.holds_affine_in(elem, params, open);
+            return self.holds_affine_in(elem, params, open, memo);
         }
         let (def, args, members): (Option<DefId>, &[TypeId], Vec<TypeId>) = match self.get(ty) {
             ResolvedType::TypeParam { index, .. } => {
@@ -2635,7 +2655,7 @@ impl TypeTable {
                 return self.is_resource_object(ty);
             }
             ResolvedType::BuiltinArray(elem) => {
-                return self.holds_affine_in(*elem, params, open);
+                return self.holds_affine_in(*elem, params, open, memo);
             }
             ResolvedType::Struct {
                 def: StructDef::Anon(shape),
@@ -2677,22 +2697,24 @@ impl TypeTable {
         let Some(def) = def else {
             return members
                 .into_iter()
-                .any(|member| self.holds_affine_in(member, params, open));
+                .any(|member| self.holds_affine_in(member, params, open, memo));
         };
         if self.is_affine_decl(def) {
             return true;
         }
         let inner: Vec<bool> = args
             .iter()
-            .map(|&arg| self.holds_affine_in(arg, params, open))
+            .map(|&arg| self.holds_affine_in(arg, params, open, memo))
             .collect();
-        if open.iter().any(|(d, p)| *d == def && *p == inner) {
-            return false;
+        if let Some(at) = open.iter().position(|(d, p)| *d == def && *p == inner) {
+            return memo.cut(at);
         }
         open.push((def, inner.clone()));
+        memo.open();
         let held = members
             .into_iter()
-            .any(|member| self.holds_affine_in(member, &inner, open));
+            .any(|member| self.holds_affine_in(member, &inner, open, memo));
+        memo.close(held);
         open.pop();
         held
     }
@@ -5128,38 +5150,24 @@ impl TypeTable {
         }
     }
 
-    /// Redirect each type holding an effect variable to the type with each
-    /// variable replaced by what `solved` says it stands for, and one nothing
-    /// solved by the empty row, once the effect check has solved them.
-    pub fn redirect_effect_vars(&mut self, solved: &EffectRows) {
+    /// What each effect variable stands for once the effect check has solved
+    /// them: what `solved` says, and the empty row for one nothing solved. No
+    /// row it answers names a variable, and no variable is minted from here on.
+    pub fn close_effect_rows(&mut self, solved: &EffectRows) -> EffectRows {
         self.effect_vars_solved = true;
-        let ids: Vec<TypeId> = self.iter_type_ids().collect();
         let mut rows = solved.clone();
-        for &id in &ids {
+        for id in self.iter_type_ids() {
             self.unsolved_vars_in(id, &mut rows);
-        }
-        if rows.is_empty() {
-            return;
         }
         // A solution may name another variable, which stands for what that one
         // is solved to, or for nothing where it is solved nowhere.
-        let rows: EffectRows = rows
-            .iter()
+        rows.iter()
             .map(|(var, solution)| {
                 let mut solved = solve_row(solution, &rows, &mut |_| {});
                 solved.retain(|effect| !effect.is_var());
                 (var.clone(), solved)
             })
-            .collect();
-        for id in ids {
-            if self.redirects.get(id).is_some() {
-                continue;
-            }
-            let solved_type = self.substitute_effect_rows(id, &rows);
-            if solved_type != id {
-                self.redirects.set_growing(id, solved_type);
-            }
-        }
+            .collect()
     }
 
     /// Note each effect variable in `id`'s rows that `rows` holds no solution

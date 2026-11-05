@@ -47,6 +47,7 @@ use crate::nir_arena::{
 };
 use crate::nir_package::NirPackage;
 use crate::nir_value_graph::{ValueId, ValueKind, ValuePool};
+use crate::optimize::pass_dump;
 use crate::primitive::PrimitiveType;
 use crate::reflect_marker::{BridgeCallee, bridge_callee};
 use crate::tir::{
@@ -75,7 +76,7 @@ pub fn translate(flat: FlatPackage, plan: LowerPlan, profiler: &dyn SpanEmitter)
         value_copy,
     } = plan;
     // After the plan, whose global once-guards place a marker of their own.
-    if !flat.codegen_flags.cold_paths {
+    if !flat.codegen_flags.cold_paths && pass_dump::decides("lower/drop_cold_markers") {
         cold_paths::drop_markers(&flat);
     }
     // Before pattern lowering, which keeps a destructure of a multi-value
@@ -869,8 +870,13 @@ impl FunctionTranslator<'_, '_> {
         // A move-eligible local at its final use (WEP 2026-05-21) transfers its
         // storage: no defensive copy is needed. Sound because last-use liveness
         // proved the source dead afterward.
-        if self.moves.is_move(value) {
+        if self.moves.is_move(value) && pass_dump::decides("lower/value_copy/move") {
             return false;
+        }
+        if !pass_dump::decides("lower/value_copy/owned") {
+            let type_table = self.base.type_table.borrow();
+            return value_copy::needs_value_copy(value.type_id, &type_table)
+                && !value_copy::analyze::is_copy_value_call(value);
         }
         let oracle = value_copy::ownership::OwnedCalls::new(
             &self.base.value_copy.returns_owned,
@@ -896,7 +902,8 @@ impl FunctionTranslator<'_, '_> {
         // storage to a new — possibly mutable — owner, and a write through that
         // owner is one the source observes. Either end being moved keeps the
         // copy.
-        if self.moved_roots.contains(&local_index) {
+        if self.moved_roots.contains(&local_index) || !pass_dump::decides("lower/value_copy/share")
+        {
             return false;
         }
         let type_table = self.base.type_table.borrow();
@@ -1714,8 +1721,10 @@ impl FunctionTranslator<'_, '_> {
                 let box_type = self.box_type_of_local(*local_index, *type_id);
                 let effective_type = box_type.unwrap_or(*type_id);
                 let box_wrap_type = box_type.filter(|_| !self.guarded_locals.contains(local_index));
+                let shares_value = self.share_eligible_locals.contains(local_index)
+                    && pass_dump::decides("lower/value_copy/share");
                 let needs_value_copy_wrap = !storage.skips_copy()
-                    && !self.share_eligible_locals.contains(local_index)
+                    && !shares_value
                     && (*is_mut || !self.source_shares_immutable_storage(*local_index, value))
                     && self.should_wrap_value_copy(value);
                 let value_op = self.convert_operand(value);
@@ -2966,6 +2975,7 @@ impl FunctionTranslator<'_, '_> {
                 .is_confined(c, param_index)
         }) && self.args_checked
             && !value_copy::last_use::strip_casts(arg).marks().written
+            && pass_dump::decides("lower/value_copy/confined")
     }
 
     /// A call's arguments paired with their declared `mut`-ness, in the callee's

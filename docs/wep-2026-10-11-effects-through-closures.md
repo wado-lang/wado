@@ -83,9 +83,10 @@ effect row is not yet known, and the effect check solves it.
   So a type's own arguments are spelled and interned without rows, and two
   instances that differ only there are one struct. A function type standing
   alone keeps its row, which selects an impl written for it, and so does a
-  function instance's type argument. After the check, a type holding a
-  variable is redirected to the type with it solved, or emptied where nothing
-  solved it, as newtype erasure redirects a newtype to its base.
+  function instance's type argument. After the check, every type the TIR holds
+  is rewritten with each variable replaced by its solved row, or by the empty
+  row where nothing solved it. The table keeps each id meaning what it was
+  interned as.
 
 ## Roadmap
 

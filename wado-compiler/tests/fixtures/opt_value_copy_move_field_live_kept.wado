@@ -1,11 +1,14 @@
 // When the aggregate is still live after the materialization, the field copy must be kept.
+// `c` is the function's own, so its later read is what keeps it: a parameter only
+// read is one its caller may share, which copies anyway.
 
 use { println, Stdout } from "core:cli";
 
 struct Cols { a: List<i32>, b: List<i32> }
 struct Out { x: List<i32>, y: List<i32> }
 
-fn split_and_peek(c: Cols) -> i32 {
+fn split_and_peek(n: i32) -> i32 {
+    let c = make(n);
     let mut o = Out { x: c.a, y: c.b };
     o.x.push(999);
     return c.a.len() + o.x.len();
@@ -25,11 +28,14 @@ fn make(n: i32) -> Cols {
 }
 
 export fn run() with Stdout {
-    println(`${split_and_peek(make(3))}`);
+    println(`${split_and_peek(3)}`);
 }
 
 __DATA__
 {
     "stdout": "7\n",
-    "wir_expect:O0": ["$value_copy$core:prelude/list.wado/List<i32>"]
+    "wir_expect:O0": ["$value_copy$core:prelude/list.wado/List<i32>"],
+    "wir_contrast": {"O0": [
+        {"c.a.len() + ": ""}
+    ]}
 }

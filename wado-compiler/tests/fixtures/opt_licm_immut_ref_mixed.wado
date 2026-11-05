@@ -1,7 +1,9 @@
 // Optimization: LICM with mixed immutable and mutable ref locals.
 //
-// In the same loop, an immutable ref local's field access should be hoisted
-// while a mutable ref local's field access should remain inside the loop.
+// In the same loop, the immutable ref's field read hoists, while the mutable
+// ref's field is read after `increment` writes it on every iteration, which
+// the output shows. The config is a list element, so no pass scalarizes it
+// before LICM sees the read.
 
 use { println, Stdout } from "core:cli";
 
@@ -25,18 +27,15 @@ fn increment(ctr: &mut Counter) {
     ctr.value = ctr.value + 1;
 }
 
-// Case: Mixed — immutable ref hoisted, mutable ref not hoisted.
 export fn run() with Stdout {
-    let config = Config { threshold: 10, scale: 2 };
+    let configs: List<Config> = [Config { threshold: builtin::black_box(10), scale: 2 }];
     let mut counter = Counter { value: 0, limit: 100 };
-    let cr = &config;
+    let cr = &configs[0];
     let cm = &mut counter;
     let mut sum = 0;
     for let mut i = 0; i < 5; i += 1 {
         let _ = read_config(cr);
         increment(cm);
-        // cr.threshold should be hoisted (immutable ref)
-        // cm.value should NOT be hoisted (mutable ref, modified by increment)
         sum += cr.threshold + cm.value;
     }
     println(`${sum}`);
@@ -45,6 +44,11 @@ export fn run() with Stdout {
 __DATA__
 {
     "stdout": "65\n",
-    "wir_expect:O2": ["10 + counter.value"],
-    "wir_not_expect:O2": ["$licm_value"]
+    "wir_scope": "opt_licm_immut_ref_mixed.wado/run",
+    "wir_pass": {"O2": ["nir/licm"]},
+    "wir_expect:O2": ["$licm_threshold"],
+    "wir_not_expect:O2": ["$licm_arith_{} = cr.threshold + counter.value;"],
+    "wir_contrast": {"O2": [
+        {"    ctr.value = ctr.value + 1;": "    ctr.limit = ctr.limit + 1;", "Counter { value: 0,": "Counter { value: builtin::black_box(0),"}
+    ]}
 }

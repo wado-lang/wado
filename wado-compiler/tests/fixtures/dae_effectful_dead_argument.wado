@@ -1,0 +1,37 @@
+// Dead Argument Elimination drops a parameter whose argument has an effect:
+// the effect stays at the call site, in its place in the argument order. The
+// trace of `mark` digits shows that order survives both before and after the
+// argument that stays live.
+
+use { println, Stdout } from "core:cli";
+
+global mut TRACE: i32 = 0;
+
+#[inline(never)]
+fn mark(digit: i32) -> i32 {
+    TRACE = TRACE * 10 + digit;
+    return digit;
+}
+
+#[inline(never)]
+fn scale(x: i32, unused: i32) -> i32 {
+    return x * 3;
+}
+
+#[inline(never)]
+fn bump(unused: i32, x: i32) -> i32 {
+    return x + 1;
+}
+
+export fn run() with Stdout {
+    let a = scale(mark(1), mark(2));
+    let b = bump(mark(3), mark(4));
+    println(`${a} ${b} ${TRACE}`);
+}
+
+__DATA__
+{
+    "stdout": "3 5 1234\n",
+    "wir_pass": {"O2": ["nir/dae"]},
+    "wir_expect:O2": ["scale$dae[unused]\"(", "bump$dae[unused]\"("]
+}

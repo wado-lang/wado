@@ -22,6 +22,10 @@ export fn run() with Stdout {
 __DATA__
 {
     "stdout": "13\n",
+    "wir_pass": {"O2": ["nir/peephole/match_to_switch"]},
+    "wir_contrast": {"O2": [
+        {"fn is_kw(k: i64) -> bool {": "fn is_kw(k: i32) -> bool {", "        if is_kw(i as i64) {": "        if is_kw(i) {", "3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15": "3 | 4 | 5 | 7 | 8 | 9 | 10 | 12 | 13 | 14 | 15 | 16 | 17 | 20"}
+    ]},
     "wir_expect:O2": ["br_table"],
     "wir_not_expect:O2": ["$bitset_offset"]
 }

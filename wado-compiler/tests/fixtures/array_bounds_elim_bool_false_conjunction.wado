@@ -27,11 +27,10 @@ __DATA__
 {
     "stdout": "15\n",
     "wir_scope": ".wado/run\"",
-    "wir_expect:O2": [
-        "builtin::array_get_value<i32>("
-    ],
-    "wir_not_expect:O2": [
-        "\"core:rt/panic\"(",
-        "$cold"
-    ]
+    "wir_pass": {"O2": ["nir/copy_prop", "nir/inline"]},
+    "wir_contrast": {"O2": [
+        {"{ i < xs.len() }": "{ i < xs.len() - 1 }"}
+    ]},
+    "wir_expect:O2": ["builtin::array_get_value<i32>("],
+    "wir_not_expect:O2": ["$cold"]
 }

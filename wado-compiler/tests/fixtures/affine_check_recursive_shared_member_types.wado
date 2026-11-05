@@ -1,0 +1,55 @@
+// Each struct holds the next one twice and the first one again, so every
+// type is on a cycle through `S0` and the types form a DAG of 2^40 paths
+// below it. Asking whether `S0` is affine visits each type once.
+
+struct S0 { a: Option<S1>, b: List<S1>, back: Option<S0> }
+struct S1 { a: Option<S2>, b: List<S2>, back: Option<S0> }
+struct S2 { a: Option<S3>, b: List<S3>, back: Option<S0> }
+struct S3 { a: Option<S4>, b: List<S4>, back: Option<S0> }
+struct S4 { a: Option<S5>, b: List<S5>, back: Option<S0> }
+struct S5 { a: Option<S6>, b: List<S6>, back: Option<S0> }
+struct S6 { a: Option<S7>, b: List<S7>, back: Option<S0> }
+struct S7 { a: Option<S8>, b: List<S8>, back: Option<S0> }
+struct S8 { a: Option<S9>, b: List<S9>, back: Option<S0> }
+struct S9 { a: Option<S10>, b: List<S10>, back: Option<S0> }
+struct S10 { a: Option<S11>, b: List<S11>, back: Option<S0> }
+struct S11 { a: Option<S12>, b: List<S12>, back: Option<S0> }
+struct S12 { a: Option<S13>, b: List<S13>, back: Option<S0> }
+struct S13 { a: Option<S14>, b: List<S14>, back: Option<S0> }
+struct S14 { a: Option<S15>, b: List<S15>, back: Option<S0> }
+struct S15 { a: Option<S16>, b: List<S16>, back: Option<S0> }
+struct S16 { a: Option<S17>, b: List<S17>, back: Option<S0> }
+struct S17 { a: Option<S18>, b: List<S18>, back: Option<S0> }
+struct S18 { a: Option<S19>, b: List<S19>, back: Option<S0> }
+struct S19 { a: Option<S20>, b: List<S20>, back: Option<S0> }
+struct S20 { a: Option<S21>, b: List<S21>, back: Option<S0> }
+struct S21 { a: Option<S22>, b: List<S22>, back: Option<S0> }
+struct S22 { a: Option<S23>, b: List<S23>, back: Option<S0> }
+struct S23 { a: Option<S24>, b: List<S24>, back: Option<S0> }
+struct S24 { a: Option<S25>, b: List<S25>, back: Option<S0> }
+struct S25 { a: Option<S26>, b: List<S26>, back: Option<S0> }
+struct S26 { a: Option<S27>, b: List<S27>, back: Option<S0> }
+struct S27 { a: Option<S28>, b: List<S28>, back: Option<S0> }
+struct S28 { a: Option<S29>, b: List<S29>, back: Option<S0> }
+struct S29 { a: Option<S30>, b: List<S30>, back: Option<S0> }
+struct S30 { a: Option<S31>, b: List<S31>, back: Option<S0> }
+struct S31 { a: Option<S32>, b: List<S32>, back: Option<S0> }
+struct S32 { a: Option<S33>, b: List<S33>, back: Option<S0> }
+struct S33 { a: Option<S34>, b: List<S34>, back: Option<S0> }
+struct S34 { a: Option<S35>, b: List<S35>, back: Option<S0> }
+struct S35 { a: Option<S36>, b: List<S36>, back: Option<S0> }
+struct S36 { a: Option<S37>, b: List<S37>, back: Option<S0> }
+struct S37 { a: Option<S38>, b: List<S38>, back: Option<S0> }
+struct S38 { a: Option<S39>, b: List<S39>, back: Option<S0> }
+struct S39 { a: Option<S40>, b: List<S40>, back: Option<S0> }
+struct S40 { back: Option<S0> }
+
+fn take(s: S0) -> i32 {
+    let t = s;
+    let u = s;
+    return t.b.len() + u.b.len();
+}
+
+test {
+    assert take(S0 { a: null, b: [], back: null }) == 0;
+}

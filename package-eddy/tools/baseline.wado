@@ -80,6 +80,8 @@ Report at most 10 findings, the most severe first. An empty list is a valid answ
 
 global READING: String = "You can read the repository as it stood once this pull request merged, with the tools Read, Grep and Glob. Before you report, read what the diff alone does not show: the callers of what changed, the definitions it relies on, the rest of a file. Your final reply is the JSON object.";
 
+global SYMBOL_READING: String = "FindSymbol and FindReferences answer from the compiler's index of the Rust and Wado code: use them to find a definition and the uses of a function, type or field, and Grep for other text.";
+
 global GRADE: String = "You grade a code review against one known defect.
 The KNOWN DEFECT is what a later pull request had to fix in the reviewed change. The FINDINGS are what the reviewer reported on the change.
 A finding is a hit when it points at the same root cause: the same code and the same wrong behaviour, even if worded differently or only partly explained. A finding about something else in the same area is not a hit.
@@ -267,7 +269,8 @@ fn review(api_key: &String, review_prompt: &String, ws: &Option<Workspace>) -> R
             Err(e) => Run { error: Some(e) },
         };
     };
-    let agent = run_agent(api_key, CLAUDE_MODEL, `${REVIEW}\n${READING}`, *review_prompt, w, MAX_TURNS, 32_000);
+    let reading = if SYMBOLS { `${READING}\n${SYMBOL_READING}` } else { READING };
+    let agent = run_agent(api_key, CLAUDE_MODEL, `${REVIEW}\n${reading}`, *review_prompt, w, MAX_TURNS, 32_000);
     let mut reviewed = Run { turns: agent.turns, calls: agent.calls, usage: Some(agent.usage) };
     match agent.answer {
         Ok(answer) => match json_object::<Review>(&answer) {

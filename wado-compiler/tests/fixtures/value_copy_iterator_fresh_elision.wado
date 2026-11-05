@@ -8,7 +8,7 @@
 //
 // Since $pattern_temp_0 holds a fresh value (Call result), and
 // RefAsNonNull(LocalGet{$pattern_temp_0}) propagates that freshness,
-// the value_copy is unnecessary and should be elided at O2.
+// the value_copy is unnecessary and lowering elides it.
 
 use { println, Stdout } from "core:cli";
 
@@ -27,5 +27,6 @@ export fn run() with Stdout {
 __DATA__
 {
     "stdout": "1 2\n3 4\n",
-    "wir_not_expect:O2": ["value_copy Point"]
+    "wir_pass": {"O2": ["lower/value_copy/owned"]},
+    "wir_not_expect:O2": ["$value_copy$value_copy_iterator_fresh_elision.wado/Point"]
 }

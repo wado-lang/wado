@@ -40,7 +40,8 @@ fn tamper_arg(h: &H) {
 }
 
 // The scrutinee is this function's own by-value parameter, dead after the
-// match, so the payload may still move.
+// match. It still copies: `consume` only reads `p`, so its caller may share
+// the storage it passes.
 fn consume(p: P) -> i32 {
     match p {
         P::A(xs) => {
@@ -83,5 +84,9 @@ export fn run() with Stdout {
 __DATA__
 {
     "stdout": "a P::A([7])\nb P::A([7])\nh P::A([7])\nc 2\n",
-    "wir_expect:O0": ["$value_copy$core:prelude/list.wado/List<i32>"]
+    "wir_expect:O0": ["$value_copy$core:prelude/list.wado/List<i32>"],
+    "wir_scope": "opt_value_copy_match_binding_live_scrutinee.wado/run",
+    "wir_contrast": {"O0": [
+        {"    println(`a ${a:?}`);\n": "", "    println(`b ${b:?}`);\n": ""}
+    ]}
 }

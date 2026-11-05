@@ -34,11 +34,7 @@ export fn run() with Stdout {
 __DATA__
 {
     "stdout": "{\"description\":{\"urls\":[1,2]},\"url\":{\"urls\":[3]}}\n",
-    "wir_expect:O2": [
-        "fn \"core:serde/opt_sroa_param_scalarizes_clone_again.wado/Urls^core:serde/Serialize::serialize<core:json/JsonSerializer>$sroa[self.urls,s.buf]\"("
-    ],
-    "wir_not_expect:O2": [
-        "struct.new \"core:json//JsonSerializer\"",
-        "$sroa[self.urls]$sroa"
-    ]
+    "wir_pass": {"O2": ["nir/sroa_param"]},
+    "wir_expect:O2": ["fn \"core:serde/opt_sroa_param_scalarizes_clone_again.wado/Urls^core:serde/Serialize::serialize<core:json/JsonSerializer>$sroa[self.urls,s.buf]\"("],
+    "wir_not_expect:O2": ["struct.new \"core:json//JsonSerializer\""]
 }

@@ -17,8 +17,8 @@ use crate::type_table::TypeTable;
 
 use super::callee::{CallSite, CalleeKey};
 use super::place::{
-    named_local, place_aliased_by_another, place_of, places_overlap, referenced_place_operand,
-    write_root_local,
+    is_array_place, named_local, place_aliased_by_another, place_of, places_overlap,
+    referenced_place_operand, write_root_local,
 };
 use super::region::{block_shape, region_needs, region_shape, value_block_shape};
 use super::rewrite::is_discardable_operand;
@@ -27,6 +27,16 @@ use super::{CallRun, CtfeBuiltin, FrameState, Interpreter, Lattice};
 use crate::{compiler_trace, niri};
 
 impl FrameState {
+    /// A store replaced the value at `(root, path)`: an array alias over it, or
+    /// over anything inside it, no longer names what its local holds.
+    pub(super) fn replace_place(&mut self, root: u32, path: &[u32]) {
+        for (index, (alias_root, alias_path)) in &self.array_aliases {
+            if *alias_root == root && alias_path.starts_with(path) {
+                self.place_aliases.swap_remove(index);
+            }
+        }
+    }
+
     /// Whether `index` takes part in a live place alias, as the alias handle
     /// or as the place it names. Either role makes a value snapshot of the
     /// local unsound to hand out.
@@ -330,22 +340,27 @@ impl Interpreter<'_> {
                 {
                     return Flow::Bail;
                 }
-                if self.binds_written_array_handle(body, index, value) {
-                    return Flow::Bail;
-                }
                 // What makes a binding of a reference an alias is that nothing
                 // displaces it. `mut` does not say so: scalarizing leaves an
                 // immutable `let` that is assigned later.
                 if !self.frame.reassigned.contains(index) {
                     if let Some(named) = self.aliased_operand(body, value) {
-                        return match self.record_place_alias(body, index, named) {
-                            Some(()) => Flow::Fallthrough(Lattice::Unevaluated),
-                            None => Flow::Bail,
-                        };
+                        if self.record_place_alias(body, index, named).is_none() {
+                            return Flow::Bail;
+                        }
+                        if is_array_place(body, value, self.type_table) {
+                            let place = self.frame.place_aliases[&index].clone();
+                            self.frame.array_aliases.insert(index, place);
+                        }
+                        return Flow::Fallthrough(Lattice::Unevaluated);
                     }
                     if let Some(flow) = self.bind_place_fields(body, index, value) {
                         return flow;
                     }
+                }
+                // Past the aliases, the binding copies what it reads.
+                if self.binds_written_array_handle(body, index, value) {
+                    return Flow::Bail;
                 }
                 let lattice = match value.as_expr().and_then(|e| self.exec_call_stmt(body, e)) {
                     Some(Flow::Fallthrough(lattice)) => lattice,
@@ -597,6 +612,23 @@ impl Interpreter<'_> {
     /// root. A target naming no place, or a projection into a root the frame
     /// holds no constant for, bails.
     fn exec_store(&mut self, body: &mut Body, target: ExprId, value: Operand) -> Flow {
+        // Only a reload assigns an alias (`reassigned_locals`): it names the
+        // place again, and anything else would rebind it.
+        if let Some(index) = named_local(body, target.into())
+            && let Some(bound) = self
+                .frame
+                .array_aliases
+                .get(&index)
+                .or_else(|| self.frame.place_aliases.get(&index))
+                .cloned()
+        {
+            return if self.frame_place_of(body, value).as_ref() == Some(&bound) {
+                self.frame.place_aliases.insert(index, bound);
+                Flow::Fallthrough(Lattice::Unevaluated)
+            } else {
+                Flow::Bail
+            };
+        }
         // A store over a place field, or over what encloses one, would repoint
         // the reference rather than write through it.
         if self
@@ -615,6 +647,7 @@ impl Interpreter<'_> {
             self.bind_ctfe_local(root, Lattice::Const(value));
             return Flow::Fallthrough(Lattice::Unevaluated);
         }
+        self.frame.replace_place(root, &path);
         match self.update_place(root, &path, |place| {
             *place = value;
             Some(())
@@ -789,13 +822,17 @@ impl Interpreter<'_> {
     }
 
     /// The operand a `let` binds as a place rather than a value: a reference names
-    /// the place it was taken over, and a bare local or a place field already
-    /// naming one rebinds the same place. Any other projection out of an alias
-    /// reads *through* it. Boxing rewrites `&x` into a bare read, so the type
-    /// test accepts any reference shape.
+    /// the place it was taken over, an array read from a place names that
+    /// place, and a bare local or a place field already naming one rebinds the
+    /// same place. Any other projection out of an alias reads *through* it.
+    /// Boxing rewrites `&x` into a bare read, so the type test accepts any
+    /// reference shape.
     fn aliased_operand(&self, body: &Body, value: Operand) -> Option<Operand> {
         if let Some((_, referenced)) = referenced_place_operand(body, value) {
             return Some(referenced);
+        }
+        if is_array_place(body, value, self.type_table) {
+            return Some(value);
         }
         let index = named_local(body, value);
         if index.is_some_and(|index| self.frame.place_aliases.contains_key(&index)) {
@@ -1312,6 +1349,7 @@ impl Interpreter<'_> {
             if path.is_empty() {
                 self.bind_ctfe_local(root, Lattice::Const(value));
             } else {
+                self.frame.replace_place(root, &path);
                 self.update_place(root, &path, |place| {
                     *place = value;
                     Some(())

@@ -6234,9 +6234,6 @@ impl<'a> Reify<'a> {
         };
         let address_taken_locals = closure_ctx.address_taken_locals;
 
-        let declared_effects =
-            Some(cap_info.declared_effects.clone()).filter(|effects| !effects.is_empty());
-
         let closure_tir = TirExpr::new(
             TirExprKind::Closure {
                 params,
@@ -6245,7 +6242,6 @@ impl<'a> Reify<'a> {
                 functor_id: None,
                 address_taken_locals,
                 body_locals,
-                declared_effects,
             },
             func_type,
             span,
@@ -9890,9 +9886,7 @@ fn extract_allocator_tag_attr(attrs: &[Attribute]) -> Option<String> {
 /// closure's expected type only in this case: it is what lets an unannotated
 /// `|a, b| ...` infer its params from a `fn`-typed (or `fn`-newtype) param.
 /// Closures whose params are fully annotated (or take no params) gain nothing
-/// and must not receive the expected type — doing so would pin an
-/// effect-polymorphic closure's `declared_effects` to a generic effect param
-/// instead of the effects inferred from its body.
+/// from it.
 fn arg_is_unannotated_closure(arg: &ast::Expr) -> bool {
     matches!(arg, ast::Expr::Closure(c) if c.params.iter().any(|p| p.ty.is_none()))
 }

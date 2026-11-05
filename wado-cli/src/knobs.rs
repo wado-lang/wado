@@ -267,6 +267,23 @@ impl CompileKnobs {
         })
     }
 
+    /// The compiler options these knobs set, the rest at their defaults.
+    #[must_use]
+    pub fn compiler_options(&self) -> wado_compiler::CompilerOptions {
+        wado_compiler::CompilerOptions {
+            opt_level: self.opt_level.to_compiler(),
+            skip_validation: self.skip_validation,
+            opt: self.opt.clone(),
+            parallelism: self.optimize_threads(),
+            log_level: Some(self.log_level),
+            allocator: self.allocator.clone(),
+            codegen_flags: self.codegen_flags.clone(),
+            lints: self.lints,
+            params: self.params.clone(),
+            ..wado_compiler::CompilerOptions::default()
+        }
+    }
+
     /// Apply a matched [`CompileKnobOpt`], consuming its value from the parser.
     pub fn apply(&mut self, opt: CompileKnobOpt, parser: &mut Parser) -> Result<(), CliExit> {
         match opt {

@@ -1,0 +1,72 @@
+// A field LICM hoists out of a loop and reloads after each call that may write
+// it is not hoisted where a jump skips the reload. `advance(c, n)` writes
+// `c.at` as the value a `break` carries out of a block inside the loop, so a
+// reload placed after that `break` never runs and the next iteration reads a
+// stale `at`, as `onnx_stream`'s inlined `copy_len` once did.
+
+use { println, Stdout } from "core:cli";
+
+struct Cursor {
+    bytes: List<u8>,
+    at: i32,
+}
+
+#[inline(never)]
+fn advance(c: &mut Cursor, n: i32) -> bool {
+    c.at += n;
+    return c.at <= c.bytes.len();
+}
+
+#[inline(never)]
+fn take(c: &mut Cursor) -> i32 {
+    let n = c.bytes[c.at] as i32;
+    c.at += 1;
+    return n;
+}
+
+#[inline(never)]
+fn walk(c: &mut Cursor) -> i32 {
+    let mut fields = 0;
+    while c.at < c.bytes.len() {
+        let n = take(c);
+        let ok = skipped: {
+            if n == 0 {
+                break skipped: false;
+            }
+            break skipped: advance(c, n);
+        };
+        if !ok {
+            return -1;
+        }
+        fields += 1;
+    }
+    return fields;
+}
+
+// The same through `continue`: the reload after the `if` never runs on the
+// path that takes it.
+#[inline(never)]
+fn walk_continuing(c: &mut Cursor) -> i32 {
+    let mut fields = 0;
+    while c.at < c.bytes.len() {
+        let n = take(c);
+        fields += 1;
+        if advance(c, n) {
+            continue;
+        }
+        return -1;
+    }
+    return fields;
+}
+
+export fn run() with Stdout {
+    let bytes: List<u8> = [2, 10, 11, 1, 12, 3, 13, 14, 15];
+    let mut c = Cursor { bytes: builtin::black_box(bytes), at: 0 };
+    let mut d = Cursor { bytes: builtin::black_box(bytes), at: 0 };
+    println(`${walk(&mut c)} ${walk_continuing(&mut d)}`);
+}
+
+__DATA__
+{
+    "stdout": "3 3\n"
+}

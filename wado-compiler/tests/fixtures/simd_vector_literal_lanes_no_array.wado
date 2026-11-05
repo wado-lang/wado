@@ -1,0 +1,26 @@
+// A fixed array literal read back only at constant indices must not allocate.
+//
+// `core:simd` builds one per vector literal — `From<Array<i64>> for u64x2`
+// passes it to `lane()` once per lane — so every `u64x2` literal over
+// non-constant elements paid for an `array.new_fixed` plus a bounds-checked
+// read per lane.
+use { u64x2 } from "core:simd";
+
+#[inline(never)]
+fn lanes(a: i64, b: i64) -> u64 {
+    let v: u64x2 = [a, b];
+    return v.extract_lane(0) as u64 ^ v.extract_lane(1) as u64;
+}
+
+export fn run() {
+    assert lanes(builtin::black_box(1), builtin::black_box(2)) == 3;
+}
+
+__DATA__
+{
+    "stdout": "",
+    "wir_pass": {"O2": ["nir/sroa"], "O3": ["nir/sroa"]},
+    "wir_scope": "lanes",
+    "wir_not_expect:O2": ["array.new_fixed", "array_len", "array_get_value"],
+    "wir_not_expect:O3": ["array.new_fixed", "array_len", "array_get_value"]
+}

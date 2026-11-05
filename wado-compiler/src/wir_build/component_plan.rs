@@ -567,7 +567,7 @@ mod tests {
 
         // `()` is the type that carries nothing. The empty tuple `[]` is a type
         // of its own with no CM representation, rejected at the boundary before
-        // a world export resolves — see `tests/integration/empty_tuple_boundary.rs`.
+        // a world export resolves — see `lib_export_empty_tuple_result_rejected.wado`.
         assert_matches!(
             resolve_cm_export_type(&unit_named(), &registry),
             CmExportType::Unit

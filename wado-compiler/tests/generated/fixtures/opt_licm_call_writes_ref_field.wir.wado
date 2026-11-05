@@ -109,16 +109,13 @@ fn "opt_licm_call_writes_ref_field.wado/bump_global"() {
 fn "opt_licm_call_writes_ref_field.wado/through_global"(r) {
     let s: i32;
     let i: i32;
-    let $licm_x_3: i32;
     s = 0;
     i = 0;
-    $licm_x_3 = r.x;
     b0: block {
         l1: loop {
             break_if b0 i >= 3;
-            s = s + $licm_x_3;
+            s = s + r.x;
             "opt_licm_call_writes_ref_field.wado/bump_global"();
-            $licm_x_3 = r.x;
             i = i + 1;
             continue l1;
         };
@@ -129,17 +126,14 @@ fn "opt_licm_call_writes_ref_field.wado/through_global"(r) {
 fn "opt_licm_call_writes_ref_field.wado/through_closure"(r, f) {
     let s: i32;
     let i: i32;
-    let $licm_x_5: i32;
     s = 0;
     i = 0;
-    $licm_x_5 = r.x;
     b2: block {
         l3: loop {
             break_if b2 i >= 3;
-            s = s + $licm_x_5;
+            s = s + r.x;
             let $indirect_call_1: ref "canonical//CanonicalClosure_0";
             call_ref "functype/$canonical_closure_fn_0"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_0"(f)).env);
-            $licm_x_5 = r.x;
             i = i + 1;
             continue l3;
         };
@@ -155,16 +149,13 @@ fn "opt_licm_call_writes_ref_field.wado/bump_inner"(o) {
 fn "opt_licm_call_writes_ref_field.wado/through_container"(o, r) {
     let s: i32;
     let i: i32;
-    let $licm_x_4: i32;
     s = 0;
     i = 0;
-    $licm_x_4 = r.x;
     b4: block {
         l5: loop {
             break_if b4 i >= 3;
-            s = s + $licm_x_4;
+            s = s + r.x;
             "opt_licm_call_writes_ref_field.wado/bump_inner"(o);
-            $licm_x_4 = r.x;
             i = i + 1;
             continue l5;
         };

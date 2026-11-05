@@ -10,25 +10,16 @@
 //! runtime.
 
 use crate::common::{block_on, in_memory_host};
-use wado_compiler::{OptLevel, dump_with_host_and_world};
+use wado_compiler::{OptLevel, dump_with_host};
 
 /// Monomorphized TIR text for `source`.
 fn monomorphized_tir(source: &str) -> String {
     let host = in_memory_host(&[]);
-    let dump = block_on(dump_with_host_and_world(
+    let dump = block_on(dump_with_host(
         source,
         &host,
         Some("entry.wado"),
         OptLevel::O0,
-        None,
-        None,
-        wado_compiler::OptOverrides::default(),
-        &[],
-        None,
-        &wado_compiler::param_resolution::ParamInputs::default(),
-        wado_compiler::kiln::InvocationIndex::default(),
-        1,
-        None,
     ))
     .expect("dump succeeds");
     dump.monomorphized_tir_text

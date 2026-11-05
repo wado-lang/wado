@@ -8,6 +8,7 @@ use crate::hashmap::IndexSet;
 use crate::lower::plan::value_copy;
 use crate::lower::plan::value_copy::last_use::RefTargets;
 use crate::lower::plan::value_copy::{copied_element_type_arg, copy_value_type_arg};
+use crate::optimize::pass_dump;
 use crate::tir::{
     BuiltinDeclarations, FunctionRef, LetStorage, ResolvedType, TirBlock, TirExpr, TirExprKind,
     TirMatchArm, TirPattern, TirStmt, TirStmtKind, TirUnaryOp, TypeId,
@@ -96,7 +97,7 @@ pub fn should_wrap(
 
 /// Avoid re-wrapping the `copy_value::<NestedT>(...)` markers
 /// `synthesize_helpers` plants inside helper bodies.
-fn is_copy_value_call(expr: &TirExpr) -> bool {
+pub fn is_copy_value_call(expr: &TirExpr) -> bool {
     matches!(
         &expr.kind,
         TirExprKind::Call { func, .. } if func.is_builtin_named("copy_value")
@@ -116,6 +117,7 @@ pub fn passes_through(builtins: &BuiltinDeclarations, func: &FunctionRef, pos: u
         .part_of_params(func)
         .is_some_and(|ps| ps.contains(&pos))
         && !builtins.retain_specs(func).any(|r| r.source == pos)
+        && pass_dump::decides("lower/value_copy/pass_through")
 }
 
 /// What a `return` actually delivers. `return` is no wrap site, so

@@ -11,6 +11,7 @@ use std::ops::ControlFlow;
 use crate::const_eval::{Value, eval_binary, eval_cast, eval_unary, is_int_prim, prim_of};
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::nir::{NirBinaryOp, NirUnaryOp};
+use crate::optimize::pass_dump;
 use crate::primitive::PrimitiveType;
 use crate::tir::TypeId;
 use crate::type_table::TypeTable;
@@ -1144,11 +1145,13 @@ impl ValuePool {
         {
             return rhs;
         }
-        let folded = type_table.and_then(|tt| {
-            let l = self.const_of(lhs, tt)?;
-            let r = self.const_of(rhs, tt)?;
-            eval_binary(l, op, r)
-        });
+        let folded = type_table
+            .filter(|_| pass_dump::decides("nir/value_pool/fold_const"))
+            .and_then(|tt| {
+                let l = self.const_of(lhs, tt)?;
+                let r = self.const_of(rhs, tt)?;
+                eval_binary(l, op, r)
+            });
         match folded {
             Some(v) => self.intern_const(v, ty),
             None => self.binary(op, lhs, rhs, ty),

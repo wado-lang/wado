@@ -1,8 +1,5 @@
-//! Symbol notation: a Rust path from the crate name down, as rustdoc's
-//! intra-doc links write one. `wado_compiler::name::Resolver::resolve` names a
-//! method, `wado_compiler::ast::Item::span` a field. A trait-impl member is
-//! named through the trait (`crate::Shape::area`), since renaming one renames
-//! the trait's and every impl's.
+//! Symbol notation: a Rust path from the crate down, resolved to the location
+//! it names.
 //!
 //! rust-analyzer has no lookup by path, so resolution searches
 //! `workspace/symbol` for the last segment and keeps the candidates whose

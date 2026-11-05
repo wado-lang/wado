@@ -1,0 +1,54 @@
+// Each variant holds the next one twice, so the types form a DAG of 2^40
+// paths. Asking whether `V0` needs a deep copy visits each type once per depth.
+
+variant V0 { A(V1), B(V1) }
+variant V1 { A(V2), B(V2) }
+variant V2 { A(V3), B(V3) }
+variant V3 { A(V4), B(V4) }
+variant V4 { A(V5), B(V5) }
+variant V5 { A(V6), B(V6) }
+variant V6 { A(V7), B(V7) }
+variant V7 { A(V8), B(V8) }
+variant V8 { A(V9), B(V9) }
+variant V9 { A(V10), B(V10) }
+variant V10 { A(V11), B(V11) }
+variant V11 { A(V12), B(V12) }
+variant V12 { A(V13), B(V13) }
+variant V13 { A(V14), B(V14) }
+variant V14 { A(V15), B(V15) }
+variant V15 { A(V16), B(V16) }
+variant V16 { A(V17), B(V17) }
+variant V17 { A(V18), B(V18) }
+variant V18 { A(V19), B(V19) }
+variant V19 { A(V20), B(V20) }
+variant V20 { A(V21), B(V21) }
+variant V21 { A(V22), B(V22) }
+variant V22 { A(V23), B(V23) }
+variant V23 { A(V24), B(V24) }
+variant V24 { A(V25), B(V25) }
+variant V25 { A(V26), B(V26) }
+variant V26 { A(V27), B(V27) }
+variant V27 { A(V28), B(V28) }
+variant V28 { A(V29), B(V29) }
+variant V29 { A(V30), B(V30) }
+variant V30 { A(V31), B(V31) }
+variant V31 { A(V32), B(V32) }
+variant V32 { A(V33), B(V33) }
+variant V33 { A(V34), B(V34) }
+variant V34 { A(V35), B(V35) }
+variant V35 { A(V36), B(V36) }
+variant V36 { A(V37), B(V37) }
+variant V37 { A(V38), B(V38) }
+variant V38 { A(V39), B(V39) }
+variant V39 { A(V40), B(V40) }
+variant V40 { Leaf(i32) }
+
+fn pass(v: V0) -> V0 {
+    let w = v;
+    return w;
+}
+
+test {
+    let v = pass(V0::A(V1::A(V2::A(V3::A(V4::A(V5::A(V6::A(V7::A(V8::A(V9::A(V10::A(V11::A(V12::A(V13::A(V14::A(V15::A(V16::A(V17::A(V18::A(V19::A(V20::A(V21::A(V22::A(V23::A(V24::A(V25::A(V26::A(V27::A(V28::A(V29::A(V30::A(V31::A(V32::A(V33::A(V34::A(V35::A(V36::A(V37::A(V38::A(V39::A(V40::Leaf(1))))))))))))))))))))))))))))))))))))))))));
+    assert v matches { A(_) };
+}

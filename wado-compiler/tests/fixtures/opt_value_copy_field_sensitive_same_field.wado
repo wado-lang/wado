@@ -1,12 +1,14 @@
 // A reference to the same field being moved, still read after the move, must keep
-// the deep copy.
+// the deep copy. `p` is the function's own, so the reference is what keeps it:
+// a parameter only read is one its caller may share, which copies anyway.
 
 use { println, Stdout } from "core:cli";
 
 struct P { a: List<i32> }
 struct R { x: List<i32> }
 
-fn split_same(p: P) -> i32 {
+fn split_same(n: i32) -> i32 {
+    let p = make(n);
     let r = &p.a;
     let out = R { x: p.a };
     return r.len() + out.x.len();
@@ -20,12 +22,15 @@ fn make(n: i32) -> P {
 }
 
 export fn run() with Stdout {
-    println(`${split_same(make(3))}`);
+    println(`${split_same(3)}`);
 }
 
 __DATA__
 {
     "stdout": "6\n",
     "wir_scope": "/split_same",
-    "wir_expect:O0": ["$value_copy$core:prelude/list.wado/List<i32>"]
+    "wir_expect:O0": ["$value_copy$core:prelude/list.wado/List<i32>"],
+    "wir_contrast": {"O0": [
+        {"    let r = &p.a;\n": "", "r.len() + ": ""}
+    ]}
 }

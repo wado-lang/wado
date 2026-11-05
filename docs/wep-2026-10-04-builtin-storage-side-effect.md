@@ -340,3 +340,11 @@ declaration still to be written.
 - A bundled core Wasm asset such as the libm is declared `opaque`, so a call to
   it is never hoisted, merged or deleted, and no field version forwards across
   it.
+- A `copies_args` result counts as holding the objects its arguments hold, as a
+  `holds_args` one does, though a value copy of a `String` element is a new
+  `String`. Two parameters `a` and `b` may name one list, so after
+  `let victim = *b; victim[0].push('!')` the write counts as one that may reach
+  `a`'s elements. `value_copy_demote` then keeps a deep copy of `*a` in the same
+  function that a shallow one would serve. Narrowing it needs a rule for what a
+  value copy of each type still shares: a reference, a function, a resource or
+  affine value, a `Box`, and a `variant` that needs no copy.

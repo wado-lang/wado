@@ -196,29 +196,32 @@ fn "licm_reloadable_hoist_alias.wado/probe"(sink, h, out) {
     let i: i32;
     let value_11: i32;
     let used: i32;
-    let $bce_limit_25: i32;
+    let $licm_repr_25: ref Array<i32>;
+    let $bce_limit_26: i32;
     n = local.tee $load_0(h.data).used;
     i = 0;
-    $bce_limit_25 = n;
+    $licm_repr_25 = out.repr;
+    $bce_limit_26 = n;
     if n <= $load_0.used {
         b1: block {
             l2: loop {
-                break_if b1 i >= $bce_limit_25;
+                break_if b1 i >= $bce_limit_26;
                 value_11 = builtin::array_get_value<i32>($load_0.repr, i);
-                if @unlikely(local.tee used(out.used) >= builtin::array_len(out.repr)) {
+                if @unlikely(local.tee used(out.used) >= builtin::array_len($licm_repr_25)) {
                     cold_path;
                     "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(out);
                     if n > $load_0.used {
-                        $bce_limit_25 = -2147483648;
+                        $bce_limit_26 = -2147483648;
                     }
+                    $licm_repr_25 = out.repr;
                 }
-                builtin::array_set<i32>(out.repr, used, value_11);
+                builtin::array_set<i32>($licm_repr_25, used, value_11);
                 out.used = used + 1;
                 if i == 0 {
                     "licm_reloadable_hoist_alias.wado/licm_reloadable_hoist_alias.wado/Holder::reset"(sink);
                     $load_0 = h.data;
                     if n > $load_0.used {
-                        $bce_limit_25 = -2147483648;
+                        $bce_limit_26 = -2147483648;
                     }
                 }
                 i = i + 1;
@@ -229,18 +232,19 @@ fn "licm_reloadable_hoist_alias.wado/probe"(sink, h, out) {
     b7: block {
         l8: loop {
             break_if b7 i >= n;
-            $bce_limit_25 = $load_0.used;
-            if @unlikely(i >= $bce_limit_25) {
+            $bce_limit_26 = $load_0.used;
+            if @unlikely(i >= $bce_limit_26) {
                 cold_path;
-                "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(i, $bce_limit_25, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("licm_reloadable_hoist_alias.wado:26"), used: 35 });
+                "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(i, $bce_limit_26, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("licm_reloadable_hoist_alias.wado:26"), used: 35 });
                 unreachable;
             }
             value_11 = builtin::array_get_value<i32>($load_0.repr, i);
-            if @unlikely(local.tee used(out.used) >= builtin::array_len(out.repr)) {
+            if @unlikely(local.tee used(out.used) >= builtin::array_len($licm_repr_25)) {
                 cold_path;
                 "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(out);
+                $licm_repr_25 = out.repr;
             }
-            builtin::array_set<i32>(out.repr, used, value_11);
+            builtin::array_set<i32>($licm_repr_25, used, value_11);
             out.used = used + 1;
             if i == 0 {
                 "licm_reloadable_hoist_alias.wado/licm_reloadable_hoist_alias.wado/Holder::reset"(sink);

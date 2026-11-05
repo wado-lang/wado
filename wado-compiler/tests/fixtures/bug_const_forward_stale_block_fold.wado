@@ -33,10 +33,10 @@ export fn run() {
 __DATA__
 {
     "stdout": "",
-    "wir_expect:O2": [
-        "return tag;"
-    ],
-    "wir_not_expect:O2": [
-        "return 99;"
-    ]
+    "wir_pass": {"O2": ["wir/coalesce_locals"]},
+    "wir_contrast": {"O2": [
+        {"        if tag == 0 { winner = 0; break dispatch: 0; }\n        if tag == 1 { winner = 1; break dispatch: 0; }\n": "        builtin::black_box(tag);\n"}
+    ]},
+    "wir_expect:O2": ["return tag;"],
+    "wir_not_expect:O2": ["return 99;"]
 }

@@ -1,0 +1,51 @@
+// A closure costs its captures their move, not the whole frame's.
+//
+// The move analysis used to abandon any function that built one, so a single
+// `map(|x| …)` left every other local in that body copying. The element the
+// iterator already copied moves into `next`; the one copy left is the
+// iterator's own, which value semantics requires.
+struct Cfg { alt: i32, elems: List<i32>, pos: i32 }
+
+#[inline(never)]
+fn advance(c: &Cfg, tk: i32) -> List<Cfg> {
+    return [Cfg { ..*c, pos: c.pos + tk }];
+}
+
+#[inline(never)]
+fn build(closed: &List<Cfg>, tokens: &List<i32>) -> List<Cfg> {
+    let bumped: List<i32> = closed.iter_ref().map(|c: &Cfg| c.pos + 1).collect();
+    let mut next: List<Cfg> = [];
+    let mut opaque: List<i32> = [];
+    for let mut t = 0; t < tokens.len(); t += 1 {
+        for let mut i = 0; i < closed.len(); i += 1 {
+            if bumped[i] > 0 {
+                for let a of advance(&closed[i], tokens[t]) {
+                    if a.pos == -1 {
+                        if !opaque.contains(&a.alt) { opaque.push(a.alt); }
+                    } else {
+                        next.push(a);
+                    }
+                }
+            }
+        }
+    }
+    return next;
+}
+
+export fn run() {
+    let closed: List<Cfg> = [Cfg { alt: 0, elems: [1], pos: 1 }];
+    assert build(&closed, &[1]).len() == 1;
+}
+
+__DATA__
+{
+    "stdout": "",
+    "wir_pass": {"O2": ["nir/inline"]},
+    "wir_scope": "build",
+    "wir_lines": {
+        "O2": [
+            {"contains": ["array_set", "next.repr"], "not_contains": ["struct.new", "array_copy"], "count": 1},
+            {"contains": ["array_copy"], "count": 1}
+        ]
+    }
+}

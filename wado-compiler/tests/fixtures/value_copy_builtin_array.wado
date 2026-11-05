@@ -32,6 +32,9 @@ export fn run() {
 __DATA__
 {
     "stdout": "",
+    "wir_scope": "value_copy_builtin_array.wado/run",
     "wir_expect:O2": ["builtin::array_copy<"],
-    "wir_not_expect:O2": ["builtin::array_clone<"]
+    "wir_contrast": {"O2": [
+        {"    let mut b = a;": "    let mut b: Array<i32> = builtin::array_new(3);", "    mutate_copy(a);": "    mutate_copy(builtin::array_new(3));"}
+    ]}
 }

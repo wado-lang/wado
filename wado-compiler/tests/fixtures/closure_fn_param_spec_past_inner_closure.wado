@@ -22,7 +22,8 @@ export fn run() with Stdout {
 __DATA__
 {
     "stdout": "6\n",
-    "wir_expect:O0": [
-        "/apply$$Closure_{}\"(struct.new"
-    ]
+    "wir_expect:O0": ["/apply$$Closure_{}\"(struct.new"],
+    "wir_contrast": {"O0": [
+        {"    let y = apply(|| n);": "    let c: fn() -> i32 = builtin::black_box(|| n);\n    let y = apply(c);"}
+    ]}
 }

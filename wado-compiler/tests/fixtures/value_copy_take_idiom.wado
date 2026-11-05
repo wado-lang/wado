@@ -1,0 +1,42 @@
+// The `take` idiom, in both spellings: reading a place into a binding and then
+// repointing the place hands the binding what the place held, and leaves the
+// place empty.
+
+struct Slot {
+    held: Option<String>,
+    name: String,
+}
+
+impl Slot {
+    fn take_name(&mut self) -> Result<String, i32> {
+        let v = self.name;
+        self.name = "";
+        return Result::Ok(v);
+    }
+
+    fn take_held(&mut self) -> Result<String, i32> {
+        if let Some(v) = self.held {
+            self.held = null;
+            return Result::Ok(v);
+        }
+        return Result::Err(1);
+    }
+}
+
+export fn run() {
+    let mut s = Slot { held: Option::Some("abc"), name: "xy" };
+
+    let Ok(held) = s.take_held() else { unreachable(); };
+    assert held.len() == 3;
+    assert s.held matches { None };
+    assert s.take_held() matches { Err(_) };
+
+    let Ok(name) = s.take_name() else { unreachable(); };
+    assert name.len() == 2;
+    assert s.name.len() == 0;
+}
+
+__DATA__
+{
+    "stdout": ""
+}

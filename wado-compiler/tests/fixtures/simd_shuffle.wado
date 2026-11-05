@@ -54,5 +54,9 @@ test "swizzle takes its indices at runtime, and zeroes an out-of-range one" {
 __DATA__
 {
     "test": {},
-    "wir_expect:O2": ["i8x16.shuffle", "i8x16.swizzle"]
+    "wir_expect:O2": ["i8x16.shuffle", "i8x16.swizzle"],
+    "wir_contrast": {"O2": [
+        {"builtin::i8x16_shuffle(\n        16, 17, 18, 19, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11,\n        a as v128,\n        b as v128,\n    ) as u8x16;": "a;", "builtin::i8x16_shuffle(\n        7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7,\n        a as v128,\n        a as v128,\n    ) as u8x16;": "a;"},
+        {"    let picked = a.swizzle(&indices);": "    let picked = indices;"}
+    ]}
 }
