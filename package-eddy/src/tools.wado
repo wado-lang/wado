@@ -252,6 +252,13 @@ impl Workspace {
         return if *name == "Run" { Some(RUN_LIMIT) } else { null };
     }
 
+    /// Whether what tool `name` returns is an observation the tree cannot give
+    /// again, and so worth keeping beside the call. A Run's output is; Read's,
+    /// say, can be read again.
+    pub fn observes(&self, name: &String) -> bool {
+        return *name == "Run";
+    }
+
     /// What tool `name` returns for `input`, or the error to report to the
     /// model, which may then try again.
     pub fn call(&self, name: &String, input: &Value) -> Result<String, String> with (Preopens, Process) {
