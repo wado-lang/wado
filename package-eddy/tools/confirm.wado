@@ -1,0 +1,180 @@
+//! Confirms what a review's runs showed. Each review that ran code has its
+//! files written into today's tree and its runs run again there, and a grader
+//! reads each finding against the run's output then and now. A finding a run
+//! showed then is reproduced; one whose run passes now was a real defect that
+//! a later change fixed, and one whose run still fails is still there. The
+//! known defect is only one of these, so a review is credited for every real
+//! defect it shows.
+//!
+//! Run it from the repository root, with the grants `baseline.wado` needs for
+//! Run:
+//!
+//! ```sh
+//! CLAUDE_API_KEY=... PATH=/usr/bin:$PATH wado run \
+//!     --process-read "$HOME/.cargo" --process-read "$HOME/.rustup" \
+//!     package-eddy/tools/confirm.wado -- package-eddy/eval/run.json out.json
+//! ```
+
+use { args, env, eprintln, Stderr, Environment } from "core:cli";
+use fs from "core:fs";
+use { Preopens } from "core:fs";
+use { Process } from "core:process";
+use { Client } from "wasi:http";
+use { to_bytes_pretty, to_string, from_string } from "core:json";
+use {
+    ask_json,
+    git,
+    snapshot,
+    add_build_submodules,
+    home_runner,
+    reset_snapshot,
+    drop_snapshot,
+    Baseline,
+    Finding,
+} from "./eval.wado";
+use { Call } from "../src/agent.wado";
+use { Workspace } from "../src/tools.wado";
+
+#[param(name = "grader")]
+global GRADER: String = "claude-opus-5-5";
+
+/// The revision the runs are run again at.
+#[param(name = "against")]
+global AGAINST: String = "origin/main";
+
+global CONFIRM: String = "You check which findings of a code review its runs confirmed.
+The reviewer wrote tests and programs into the repository as it stood at the reviewed change, and ran them: that output is THEN. The same files were written into the repository as it stands today, and the same commands run again: that output is NOW.
+For each finding, answer:
+- reproduced: true when a THEN run shows the wrong behaviour the finding describes, such as an assertion that names it failing or output that shows it. A run that failed to build, or that failed on something else, reproduces nothing.
+- now: \"fixed\" when the run that reproduced it passes NOW, so a later change fixed it; \"present\" when NOW still shows the wrong behaviour; \"unknown\" when NOW settles neither, such as a test that no longer builds against today's code, or when nothing reproduced the finding.
+Answer with one JSON object and nothing else:
+{\"findings\": [{\"finding\": <its index>, \"reproduced\": bool, \"now\": \"fixed\" | \"present\" | \"unknown\", \"reason\": \"<one sentence>\"}]}";
+
+/// One Run a review made, and what the same command gives today.
+struct Rerun {
+    input: String,
+    then: String,
+    now: String,
+}
+
+struct Confirmation {
+    finding: i32,
+    reproduced: bool,
+    now: String,
+    reason: String,
+}
+
+struct Confirmations {
+    findings: List<Confirmation>,
+}
+
+struct ConfirmedRun {
+    fix: i32,
+    run: i32,
+    findings: List<Finding>,
+    reruns: List<Rerun>,
+    confirmations: List<Confirmation> = [],
+    error: Option<String> = null,
+}
+
+struct Confirmed {
+    against: String,
+    grader: String,
+    runs: List<ConfirmedRun>,
+}
+
+export fn run() with (Stderr, Environment, Preopens, Process, Client) {
+    let arguments = args();
+    assert arguments.len() == 2, "usage: confirm.wado <reviews.json> <out.json>";
+    let Some(api_key) = env("CLAUDE_API_KEY") else {
+        panic("CLAUDE_API_KEY is not set");
+    };
+    let reviews = from_string::<Baseline, String>(fs::read_to_string(&arguments[0]).unwrap()).unwrap();
+    let out_path = arguments[1];
+    let sha = git(["rev-parse", AGAINST]).trim().to_string();
+    let root = snapshot(&sha);
+    add_build_submodules(&root);
+    let ws = Workspace { root, runner: Some(home_runner()) };
+    let mut out = Confirmed { against: sha, grader: GRADER, runs: [] };
+    for let e of &reviews.entries {
+        for let [i, r] of e.runs.into_iter().enumerate() {
+            let mut confirmed = ConfirmedRun { fix: e.fix, run: i, findings: r.findings, reruns: rerun(&ws, &r.calls) };
+            if confirmed.reruns.is_empty() {
+                continue;
+            }
+            match ask_json::<Confirmations>(&api_key, GRADER, CONFIRM, prompt(&confirmed), 16_000) {
+                Ok(c) => confirmed.confirmations = c.findings,
+                Err(error) => confirmed.error = Some(error),
+            }
+            out.runs.push(confirmed);
+            fs::write(&out_path, &to_bytes_pretty(&out).unwrap()).unwrap();
+            eprintln(`#${e.fix} run ${i + 1}`);
+        }
+    }
+    drop_snapshot(&ws.root);
+    report(&out);
+}
+
+/// The review's Runs, each run again in `ws` once the review's writes are
+/// replayed into it, the last of each command only.
+fn rerun(ws: &Workspace, calls: &List<Call>) -> List<Rerun> with (Preopens, Process) {
+    reset_snapshot(&ws.root);
+    let mut reruns: List<Rerun> = [];
+    for let c of calls {
+        if c.name == "Write" {
+            ws.call(&c.name, &c.input).unwrap();
+        }
+    }
+    for let c of calls {
+        let Some(then) = &c.output else {
+            continue;
+        };
+        let input = to_string(&c.input).unwrap();
+        let now = match ws.call(&c.name, &c.input) {
+            Ok(out) => out,
+            Err(e) => e,
+        };
+        let latest = Rerun { input, then: *then, now };
+        match index_of(&reruns, &input) {
+            Some(i) => reruns[i] = latest,
+            None => reruns.push(latest),
+        }
+    }
+    return reruns;
+}
+
+fn index_of(reruns: &List<Rerun>, input: &String) -> Option<i32> {
+    for let i of 0..<reruns.len() {
+        if reruns[i].input == *input {
+            return Some(i);
+        }
+    }
+    return null;
+}
+
+fn prompt(confirmed: &ConfirmedRun) -> String {
+    let mut text = `<findings>\n${to_string(&confirmed.findings).unwrap()}\n</findings>\n`;
+    for let r of &confirmed.reruns {
+        text.push_str(`<run input=${r.input}>\n<then>\n${r.then}\n</then>\n<now>\n${r.now}\n</now>\n</run>\n`);
+    }
+    return text;
+}
+
+fn report(out: &Confirmed) with Stderr {
+    let [mut findings, mut reproduced, mut fixed, mut present] = [0, 0, 0, 0];
+    for let r of &out.runs {
+        findings += r.findings.len();
+        for let c of &r.confirmations {
+            if c.reproduced {
+                reproduced += 1;
+                match c.now.as_str_slice() {
+                    "fixed" => fixed += 1,
+                    "present" => present += 1,
+                    _ => {
+                    },
+                }
+            }
+        }
+    }
+    eprintln(`findings: ${findings}; reproduced: ${reproduced}; fixed since: ${fixed}; still present: ${present}`);
+}

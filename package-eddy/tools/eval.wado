@@ -8,7 +8,9 @@ use { Command, Process, ProcessError } from "core:process";
 use { Deserialize } from "core:serde";
 use { from_string } from "core:json";
 use { Client } from "wasi:http";
-use { ask } from "../src/anthropic.wado";
+use { ask, Usage } from "../src/anthropic.wado";
+use { Call } from "../src/agent.wado";
+use { Runner } from "../src/tools.wado";
 
 /// One pull request, as the merge commit that landed it on `main` records it.
 pub struct Merge {
@@ -90,6 +92,48 @@ pub struct Checked {
     pub checker: String,
     pub scope: String,
     pub pairs: List<CheckedPair>,
+}
+
+/// What `baseline.wado` writes: each entry's reviews, graded.
+pub struct Baseline {
+    pub reviewer: String,
+    pub grader: String,
+    pub tools: bool = false,
+    pub symbols: bool = false,
+    pub run: bool = false,
+    // The defaults are what the files written before these were recorded ran.
+    pub max_turns: i32 = 40,
+    pub diff_limit: i32 = 2_000_000,
+    pub entries: List<Entry>,
+}
+
+pub struct Entry {
+    pub fix: i32,
+    pub culprit: i32,
+    pub defect: String,
+    pub runs: List<Run>,
+}
+
+/// One review of an entry's culprit.
+pub struct Run {
+    pub findings: List<Finding> = [],
+    pub turns: i32 = 0,
+    pub calls: List<Call> = [],
+    pub usage: Option<Usage> = null,
+    pub grade: Option<Grade> = null,
+    pub error: Option<String> = null,
+}
+
+pub struct Finding {
+    pub file: String,
+    pub summary: String,
+    pub detail: String,
+}
+
+pub struct Grade {
+    pub hit: bool,
+    pub finding: i32,
+    pub reason: String,
 }
 
 impl CheckedPair {
@@ -187,6 +231,17 @@ fn build_submodules(root: &String) -> List<[String, String]> with (Process, Preo
 fn from_submodule(path: &String, root: &String) -> String {
     let up = "../".repeat(path.split("/").count());
     return `${up}${*root}/${*path}`;
+}
+
+/// How Run builds a snapshot: with the toolchain the user's homes hold, into
+/// one target directory every snapshot shares.
+pub fn home_runner() -> Runner with Environment {
+    let home = env("HOME").expect("rustup's default homes are under HOME");
+    return Runner {
+        target_dir: "scratchpad/eddy-target",
+        cargo_home: env("CARGO_HOME").unwrap_or(`${home}/.cargo`),
+        rustup_home: env("RUSTUP_HOME").unwrap_or(`${home}/.rustup`),
+    };
 }
 
 /// The snapshot at `root` with what a reviewer wrote into it undone.

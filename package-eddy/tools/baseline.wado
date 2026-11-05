@@ -40,16 +40,21 @@ use {
     merge_title,
     snapshot,
     add_build_submodules,
+    home_runner,
     reset_snapshot,
     drop_snapshot,
     index,
+    Baseline,
     Census,
     Checked,
+    Entry,
+    Finding,
     FixResult,
+    Grade,
     Judged,
+    Run,
 } from "./eval.wado";
-use { Usage } from "../src/anthropic.wado";
-use { run_agent, Call } from "../src/agent.wado";
+use { run_agent } from "../src/agent.wado";
 use { Runner, Workspace } from "../src/tools.wado";
 use { load, SymbolIndex } from "../src/symbols.wado";
 
@@ -106,48 +111,8 @@ A finding is a hit when it points at the same root cause: the same code and the 
 Answer with one JSON object and nothing else:
 {\"hit\": bool, \"finding\": <the index of the hit, or -1>, \"reason\": \"<one sentence>\"}";
 
-struct Finding {
-    file: String,
-    summary: String,
-    detail: String,
-}
-
 struct Review {
     findings: List<Finding>,
-}
-
-struct Grade {
-    hit: bool,
-    finding: i32,
-    reason: String,
-}
-
-struct Run {
-    findings: List<Finding> = [],
-    turns: i32 = 0,
-    calls: List<Call> = [],
-    usage: Option<Usage> = null,
-    grade: Option<Grade> = null,
-    error: Option<String> = null,
-}
-
-struct Entry {
-    fix: i32,
-    culprit: i32,
-    defect: String,
-    runs: List<Run>,
-}
-
-struct Baseline {
-    reviewer: String,
-    grader: String,
-    tools: bool = false,
-    symbols: bool = false,
-    run: bool = false,
-    // The defaults are what the files written before these were recorded ran.
-    max_turns: i32 = 40,
-    diff_limit: i32 = 2_000_000,
-    entries: List<Entry>,
 }
 
 export fn run() with (Stderr, Environment, Preopens, Process, Client) {
@@ -240,18 +205,9 @@ fn workspace(sha: &String) -> Workspace with (Process, Preopens, Environment) {
     let mut runner: Option<Runner> = null;
     if RUN {
         add_build_submodules(&root);
-        runner = Some(runner_for_home());
+        runner = Some(home_runner());
     }
     return Workspace { root, symbols, runner };
-}
-
-fn runner_for_home() -> Runner with Environment {
-    let home = env("HOME").expect("rustup's default homes are under HOME");
-    return Runner {
-        target_dir: "scratchpad/eddy-target",
-        cargo_home: env("CARGO_HOME").unwrap_or(`${home}/.cargo`),
-        rustup_home: env("RUSTUP_HOME").unwrap_or(`${home}/.rustup`),
-    };
 }
 
 fn fix_result(census: &Census, fix: i32) -> FixResult {
