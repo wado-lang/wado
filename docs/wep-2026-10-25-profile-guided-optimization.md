@@ -479,8 +479,9 @@ output at every level. It is a nightly campaign, not a gate.
     - The inliner's `branch_weight` guard reads the cold half, while the layout
       it protects follows the unlikely hint. The table settles which half it
       should read.
-11. [x] Call-site heat in context. The inliner prices each case below by where
-    the site's code now stands, and an e2e fixture states each.
+11. [x] Call-site heat in context. The inliner prices the first two cases below
+    by where the site's code now stands, and an e2e fixture states each. The
+    third was built and measured, and lost.
     - A spliced callee's sites. A site keeps the span it was written at, so its
       region still names the callee's heat. Each call carries a ceiling, the
       coolest site a splice carried it through, and its heat is the cooler of
@@ -490,11 +491,15 @@ output at every level. It is a nightly campaign, not a gate.
       wait holds only while some site this round visits may admit it, judged
       from the site's loop depth and heat, so a candidate that never moves
       takes the hot price (`pgo_unmoved_caller_hot_site`).
-    - The lookahead at a hot site. The table of what this round splices holds
-      one price per heat, and charges each call in a callee at the cooler of
-      its own heat and the pricing site's. A hot site counts a loopy callee
-      that only a hot site would splice at its size
-      (`pgo_hot_site_inner_heat`).
+    - The lookahead at a hot site. The table of what this round splices is
+      built at the plain threshold, so a hot site's price counts a loopy callee
+      that only a hot site would splice as a call. A table per heat, charging
+      each call at the cooler of its own heat and the pricing site's, gained no
+      benchmark and cost `cbor/canada/de` 1.95% and `gale/generate` 0.5% in
+      fuel. `CborDeserializer::begin_seq` then priced 84 at its hot sites, over
+      the hot threshold of 64, since its callee `begin_container` counts as
+      loopy. That loop's back edge never runs in the profile. Splicing both,
+      one round apart, is what the plain table allows and what ran faster.
 
 ## Known gaps
 

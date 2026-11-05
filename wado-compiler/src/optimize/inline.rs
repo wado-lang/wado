@@ -169,22 +169,9 @@ struct CostWalk<'a> {
     /// The constants this walk prices the body under, or `None` to price it as
     /// written. See [`ConstView`].
     consts: Option<&'a ConstView<'a>>,
-    /// What a call costs where this pass will splice it, or `None` to price
-    /// every call as an ABI edge. See [`CostWalk::splicing`].
-    lookahead: Option<Lookahead<'a>>,
-}
-
-/// What a call to each function costs a caller that splices it, at the heat of
-/// the site the walked body is priced for.
-#[derive(Clone, Copy)]
-struct Lookahead<'a> {
-    /// Per-callee price at each heat, indexed by `FuncId`; `0` for one this
-    /// pass will leave as a call there.
-    prices: &'a [ByHeat<usize>],
-    heat_map: &'a HeatMap,
-    /// The heat of the site the walked body would land at. A splice carries
-    /// the body's calls through it, so none of them runs hotter.
-    site: Heat,
+    /// Per-callee price to charge a call, indexed by `FuncId`; `0` for one this
+    /// pass will leave as a call. See [`CostWalk::splicing`].
+    spliced: &'a [usize],
 }
 
 /// What the caller's constant arguments make of a callee's body: which of its
@@ -207,7 +194,7 @@ impl<'a> CostWalk<'a> {
             cold,
             price,
             consts: None,
-            lookahead: None,
+            spliced: &[],
         }
     }
 
@@ -220,8 +207,8 @@ impl<'a> CostWalk<'a> {
     /// Price a call to a callee this pass will splice at what the splice costs,
     /// rather than at the ABI edge. See [`CostWalk::call_price`]; the table
     /// itself is built in [`inline_functions`].
-    fn splicing(mut self, lookahead: Option<Lookahead<'a>>) -> Self {
-        self.lookahead = lookahead;
+    fn splicing(mut self, spliced: &'a [usize]) -> Self {
+        self.spliced = spliced;
         self
     }
 
@@ -247,18 +234,12 @@ impl<'a> CostWalk<'a> {
     /// [`fold_drops_loop`], but it reads a [`ConstView`] over the *callee's*
     /// parameters, not one site's arguments, so `null`, `false` and a radix
     /// argument all switch the lookahead off too.
-    ///
-    /// Each call is charged at the cooler of its own heat and the site's, since
-    /// the splice carries it through that site.
-    fn call_price(&self, call: ExprId, callee: FuncId, args: &[ArenaCallArg]) -> usize {
-        let Some(lookahead) = self.lookahead else {
-            return weight::CALL;
-        };
+    fn call_price(&self, callee: FuncId, args: &[ArenaCallArg]) -> usize {
         if args.iter().any(|a| self.arg_is_constant(a.expr)) {
             return weight::CALL;
         }
-        let heat = call_heat(lookahead.heat_map, &self.body.exprs[call]).min(lookahead.site);
-        (*lookahead.prices[callee.index()].at(heat)).max(weight::CALL)
+        let spliced = self.spliced.get(callee.index()).copied().unwrap_or(0);
+        spliced.max(weight::CALL)
     }
 
     /// Whether an argument reaches the callee as a compile-time constant:
@@ -578,7 +559,7 @@ impl<'a> CostWalk<'a> {
                 if self.folds(Operand::Expr(id)) {
                     return 0;
                 }
-                self.call_price(id, *func_id, args)
+                self.call_price(*func_id, args)
                     + args
                         .iter()
                         .map(|a| self.operand(a.expr, seen))
@@ -678,16 +659,11 @@ fn arity_excess(len: usize) -> usize {
 /// Two is what a binary — the widest fixed-arity node — already takes free.
 const FREE_ARITY: usize = 2;
 
-/// The inline cost of a function body, in the unit [`weight`] defines.
-/// `lookahead` prices its calls — see [`CostWalk::splicing`].
-fn inline_cost(
-    body: &Body,
-    type_table: &TypeTable,
-    cold: &RareRuns,
-    lookahead: Option<Lookahead<'_>>,
-) -> usize {
+/// The inline cost of a function body, in the unit [`weight`] defines. `spliced`
+/// prices its calls — see [`CostWalk::splicing`]; empty prices them as ABI edges.
+fn inline_cost(body: &Body, type_table: &TypeTable, cold: &RareRuns, spliced: &[usize]) -> usize {
     CostWalk::new(body, type_table, cold, Price::Hot)
-        .splicing(lookahead)
+        .splicing(spliced)
         .whole_body()
 }
 
@@ -743,11 +719,11 @@ fn inline_cost_folded(
     type_table: &TypeTable,
     cold: &RareRuns,
     view: &ConstView<'_>,
-    lookahead: Lookahead<'_>,
+    spliced: &[usize],
 ) -> usize {
     CostWalk::new(body, type_table, cold, Price::Hot)
         .under(view)
-        .splicing(Some(lookahead))
+        .splicing(spliced)
         .whole_body()
 }
 
@@ -1875,7 +1851,7 @@ fn classify_callee(
     safepoint_calls: &[bool],
     written: &IndexSet<u32>,
     sites: usize,
-    lookahead: Lookahead<'_>,
+    spliced: &[usize],
     hopeful: &IndexSet<u32>,
 ) -> Verdict {
     let Some(body) = &func.body else {
@@ -1886,7 +1862,7 @@ fn classify_callee(
         return Verdict::unpriced(basis);
     }
 
-    let plain = inline_cost(body, type_table, cold, Some(lookahead));
+    let plain = inline_cost(body, type_table, cold, spliced);
     // #[inline(always)] skips the remaining heuristic checks (but still requires
     // a body and passes `splice_barred`, both checked above)
     if func.inline_hint == InlineHint::Always {
@@ -1911,7 +1887,7 @@ fn classify_callee(
     // Over budget as written, but the caller's constants may still fold it
     // under. `(fits, drops a loop)` for one reading of the body.
     let weigh = |view: &ConstView<'_>| {
-        let folded = inline_cost_folded(body, type_table, cold, view, lookahead);
+        let folded = inline_cost_folded(body, type_table, cold, view, spliced);
         if net_cost(folded, params) > effective_threshold {
             return (false, false);
         }
@@ -2727,51 +2703,28 @@ fn inline_round(
             |b| RareRuns::of(b, markers, Rarity::Cold),
         )
     });
-    // Each heat prices a callee at its own threshold. A hot site weighs the
-    // cold code too: the plain price leaves it out, but a splice copies it, and
-    // at the hot threshold that let a deserializer grow 42-fold.
-    let runs_at = |i: usize, heat: Heat| match heat {
-        Heat::Hot => &no_cold_runs,
-        Heat::Cold | Heat::Plain => &cold_runs[i],
-    };
     cut_call_cycles(&call_graph, cycle_cuts, |i| {
         let func = functions[i].borrow();
         func.body
             .as_ref()
-            .map_or(0, |b| inline_cost(b, type_table, &cold_runs[i], None))
+            .map_or(0, |b| inline_cost(b, type_table, &cold_runs[i], &[]))
     });
     let cycle_cuts: &IndexSet<FuncId> = cycle_cuts;
-    // One price per heat, on the terms `classify_callee` judges that heat by:
-    // its own threshold, and at a hot site the cold code too.
-    let spliced: Vec<ByHeat<usize>> = exec.map_indices(functions.len(), |i| {
+    let spliced: Vec<usize> = exec.map_indices(functions.len(), |i| {
         let func = functions[i].borrow();
         let Some(body) = func.body.as_ref() else {
-            return ByHeat::default();
+            return 0;
         };
         if !loopy[i] || splice_barred(&func, cycle_cuts, type_table).is_some() {
-            return ByHeat::default();
+            return 0;
         }
-        let admitted = |gross: usize, heat: Heat| {
-            let fits = net_cost(gross, func.params.len())
-                <= effective_threshold(&func, *thresholds.at(heat));
-            if func.inline_hint == InlineHint::Always || fits {
-                gross
-            } else {
-                0
-            }
-        };
-        let gross = inline_cost(body, type_table, runs_at(i, Heat::Plain), None);
-        // The hot price is read only for a hot call, which a map with no hot
-        // region holds none of.
-        let gross_hot = if heat_map.any_hot() {
-            inline_cost(body, type_table, runs_at(i, Heat::Hot), None)
-        } else {
+        let gross = inline_cost(body, type_table, &cold_runs[i], &[]);
+        if func.inline_hint == InlineHint::Always
+            || net_cost(gross, func.params.len()) <= effective_threshold(&func, inline_threshold)
+        {
             gross
-        };
-        ByHeat {
-            cold: admitted(gross, Heat::Cold),
-            plain: admitted(gross, Heat::Plain),
-            hot: admitted(gross_hot, Heat::Hot),
+        } else {
+            0
         }
     });
     let logging: Option<&InlineLog> = record.as_ref().map(|(log, _)| *log);
@@ -2803,6 +2756,9 @@ fn inline_round(
                 foldable: &foldable,
                 loopy: &loopy,
             });
+        // Each heat prices the callee at its own threshold. A hot site weighs
+        // the cold code too: the plain price leaves it out, but a splice copies
+        // it, and at the hot threshold that let a deserializer grow 42-fold.
         let classify = |heat: Heat| {
             classify_callee(
                 &func,
@@ -2810,17 +2766,16 @@ fn inline_round(
                 cycle_cuts,
                 type_table,
                 *thresholds.at(heat),
-                runs_at(i, heat),
+                match heat {
+                    Heat::Hot => &no_cold_runs,
+                    Heat::Cold | Heat::Plain => runs,
+                },
                 &foldable,
                 &loopy,
                 &safepoint_calls,
                 &scans[i].written,
                 call_sites[i],
-                Lookahead {
-                    prices: &spliced,
-                    heat_map,
-                    site: heat,
-                },
+                &spliced,
                 &hopeful_params[i],
             )
         };
