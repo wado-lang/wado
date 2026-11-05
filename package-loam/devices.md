@@ -236,7 +236,7 @@ does not.
 #### PJRT
 
 The compiler writes the graph as StableHLO text and compiles it through
-`wado:pjrt`. No Loam fusion runs; the composites are decomposed, since XLA
+`core:pjrt`. No Loam fusion runs; the composites are decomposed, since XLA
 fuses them again. The prepared weights and the cache are parameters, the cache
 donated. A product's `precision_config` is an option of the backend, and
 `DEFAULT` unless the caller sets it, which on a TPU is faster than `HIGHEST`
@@ -244,11 +244,11 @@ and holds less of f32's precision. A compiled executable is serialized and kept
 on disk, keyed by the program's text, the plugin and the topology, so a second
 process compiles nothing.
 
-`wado:pjrt` mirrors the PJRT C API: compile, a buffer from and to the host, an
+`core:pjrt` mirrors the PJRT C API: compile, a buffer from and to the host, an
 execution with donated inputs, and the compiled program's memory and cost. It
 is not `wasi:`, which is reserved for WASI, and PJRT is no WASI proposal. The
-host is `wado-run-pjrt`, a workspace of its own as `wado-run-webgpu` is, since
-it loads a vendor's plugin the rest of the toolchain never needs. The same
+host is `wado-run-pjrt`, in the repository's workspace: it opens a vendor's
+plugin at run time, so unlike `wado-run-webgpu` it adds no heavy build. The same
 backend reaches NVIDIA GPUs through XLA's CUDA plugin.
 
 #### WebGPU

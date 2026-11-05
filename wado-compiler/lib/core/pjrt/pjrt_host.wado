@@ -1,0 +1,77 @@
+#![generated(by = "wado-from-idl", sources = ["wado-compiler/lib/core/pjrt/pjrt.wit"])]
+#![stdlib("core:pjrt/pjrt_host.wado")]
+
+use { ListView } from "core:linear";
+/// What a buffer's elements are.
+#[cm("core:pjrt/pjrt-host@0.1.0#element-type")]
+pub enum ElementType {
+    #[cm("pred")]
+    Pred,
+    #[cm("int8")]
+    Int8,
+    #[cm("int16")]
+    Int16,
+    #[cm("int32")]
+    Int32,
+    #[cm("int64")]
+    Int64,
+    #[cm("uint8")]
+    Uint8,
+    #[cm("uint16")]
+    Uint16,
+    #[cm("uint32")]
+    Uint32,
+    #[cm("uint64")]
+    Uint64,
+    #[cm("float16")]
+    Float16,
+    #[cm("bfloat16")]
+    Bfloat16,
+    #[cm("float32")]
+    Float32,
+    #[cm("float64")]
+    Float64,
+}
+
+/// A tensor on the device.
+#[cm("core:pjrt/pjrt-host@0.1.0#buffer")]
+pub resource Buffer {
+    /// The elements, little-endian, in row-major order.
+    #[cm("core:pjrt/pjrt-host@0.1.0#[method]buffer.to-host")]
+    #[cm_params("self")]
+    fn to_host(&self) -> Result<ByteList, String>;
+    /// Drop the resource. Scope exit drops one that nothing moved.
+    #[cm("resource-drop")]
+    fn drop(self);
+}
+
+/// A program compiled for this device.
+#[cm("core:pjrt/pjrt-host@0.1.0#executable")]
+pub resource Executable {
+    /// Runs the program. A program may donate an argument to its result,
+    /// and using such a buffer afterwards is an error.
+    #[cm("core:pjrt/pjrt-host@0.1.0#[method]executable.execute")]
+    #[cm_params("self", "arguments")]
+    fn execute(&self, arguments: List<&Buffer>) -> Result<List<Buffer>, String>;
+    /// Drop the resource. Scope exit drops one that nothing moved.
+    #[cm("resource-drop")]
+    fn drop(self);
+}
+
+/// A device behind a PJRT plugin, the only public way to run a program on a
+/// TPU. It mirrors the calls of PJRT's C API a program needs. A plugin compiles
+/// StableHLO, so nothing here says what a tensor means.
+#[cm("core:pjrt/pjrt-host@0.1.0")]
+pub interface PjrtHost {
+    /// The plugin's name for its platform, such as `cpu` or `tpu`.
+    #[cm("core:pjrt/pjrt-host@0.1.0#platform")]
+    fn platform() -> String;
+    /// Compiles a StableHLO module, in MLIR's text form.
+    #[cm("core:pjrt/pjrt-host@0.1.0#compile")]
+    #[cm_params("module")]
+    fn compile(module: String) -> Result<Executable, String>;
+    /// A buffer of the `elements` given little-endian, in row-major order.
+    #[cm("core:pjrt/pjrt-host@0.1.0#upload")]
+    #[cm_params("element", "extents", "elements")]
+    fn upload(element: ElementType, extents: &ListView<i64>, elements: &ListView<u8>) -> Result<Buffer, String>;
+}

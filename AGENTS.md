@@ -150,6 +150,7 @@ hand-authored layout. Naming a file bypasses the exclusion, so never
 - `wado-cli/` — the `wado` binary.
 - `wado-host/` — the native host pieces `wado-cli`, `wado-dev-tools`, the runners and the compiler's tests share.
 - `wado-run-webgpu/` — the `wado run-webgpu` subcommand, a Cargo workspace of its own that no command at the repository root builds or lints. A change that reaches every crate, such as a toolchain upgrade, runs `cargo clippy --all-targets` in `wado-run-webgpu/` too.
+- `wado-run-pjrt/` — the `wado run-pjrt` subcommand: a wasmtime host serving `core:pjrt` from a PJRT plugin, for Loam's XLA backend.
 - `wado-lsp/` — the language service engine, also compiled to Wasm for the browser.
 - `wado-vscode/` — the VS Code extension.
 - `wado-from-idl/` — generates the `wasi:*` and `core:kiln` stdlib modules from WIT, and `package-web`'s DOM bindings from WebIDL.

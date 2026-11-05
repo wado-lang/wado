@@ -174,6 +174,8 @@ stdlib_table! {
     "core:coverage/coverage_host.wado" => "core/coverage/coverage_host.wado",
     "core:fuel" => "core/fuel.wado",
     "core:fuel/fuel_host.wado" => "core/fuel/fuel_host.wado",
+    "core:pjrt" => "core/pjrt.wado",
+    "core:pjrt/pjrt_host.wado" => "core/pjrt/pjrt_host.wado",
     "core:process" => "core/process.wado",
     "core:process/process.wado" => "core/process/process.wado",
     "core:process/types.wado" => "core/process/types.wado",
@@ -183,7 +185,7 @@ stdlib_table! {
 /// declarations carry `#[cm]` bindings the CM registry owns. Each facade
 /// (`core:<package>`) is hand-written; its submodules live under
 /// `core:<package>/`.
-pub const WIT_CORE_PACKAGES: &[&str] = &["kiln", "eval", "coverage", "fuel", "process"];
+pub const WIT_CORE_PACKAGES: &[&str] = &["kiln", "eval", "coverage", "fuel", "pjrt", "process"];
 
 /// Whether `name` (a `ModuleSource::Core` name such as `"kiln/types.wado"`)
 /// is a [`WIT_CORE_PACKAGES`] facade or one of its submodules.
@@ -448,6 +450,17 @@ mod tests {
                 source.contains(&declaration),
                 "{import} lacks {declaration}"
             );
+        }
+    }
+
+    /// The CM registry reads only [`WIT_CORE_PACKAGES`], so a generated module
+    /// left out of it compiles until a call reaches WIR unresolved.
+    #[test]
+    fn every_module_generated_from_wit_is_in_a_wit_core_package() {
+        for (import, source) in all_core_modules() {
+            if source.contains("#![generated(by = \"wado-from-idl\"") {
+                assert!(is_wit_core_interface(import), "{import}");
+            }
         }
     }
 

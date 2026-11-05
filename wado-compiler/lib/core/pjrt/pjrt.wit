@@ -1,0 +1,49 @@
+package core:pjrt@0.1.0;
+
+/// A device behind a PJRT plugin, the only public way to run a program on a
+/// TPU. It mirrors the calls of PJRT's C API a program needs. A plugin compiles
+/// StableHLO, so nothing here says what a tensor means.
+interface pjrt-host {
+    /// What a buffer's elements are.
+    enum element-type {
+        pred,
+        int8,
+        int16,
+        int32,
+        int64,
+        uint8,
+        uint16,
+        uint32,
+        uint64,
+        float16,
+        bfloat16,
+        float32,
+        float64,
+    }
+
+    /// A tensor on the device.
+    resource buffer {
+        /// The elements, little-endian, in row-major order.
+        to-host: func() -> result<list<u8>, string>;
+    }
+
+    /// A program compiled for this device.
+    resource executable {
+        /// Runs the program. A program may donate an argument to its result,
+        /// and using such a buffer afterwards is an error.
+        execute: func(arguments: list<borrow<buffer>>) -> result<list<buffer>, string>;
+    }
+
+    /// The plugin's name for its platform, such as `cpu` or `tpu`.
+    platform: func() -> string;
+
+    /// Compiles a StableHLO module, in MLIR's text form.
+    compile: func(module: string) -> result<executable, string>;
+
+    /// A buffer of the `elements` given little-endian, in row-major order.
+    upload: func(
+        element: element-type,
+        extents: list<s64>,
+        elements: list<u8>,
+    ) -> result<buffer, string>;
+}
