@@ -4710,22 +4710,22 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_char_n$sr
 }
 
 fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::count_chars_from$sroa[self.buf]"(self, start_pos) {
-    let $load_0: i32;
     let count: i32;
+    let self_9: i32;
     let b: u8;
-    let $licm_repr_21: ref Array<u8>;
-    $load_0 = self.used;
+    let $licm_repr_20: ref Array<u8>;
+    self_9 = self.used;
     count = 0;
-    $licm_repr_21 = self.repr;
+    $licm_repr_20 = self.repr;
     b699: block {
         l700: loop {
-            break_if b699 start_pos >= $load_0;
+            break_if b699 start_pos >= self_9;
             if @unlikely(0 > start_pos) {
                 cold_path;
-                "core:prelude/string.wado/core:prelude/string.wado/String::byte_at$contract_report0"(start_pos, $load_0, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/format.wado:245"), used: 28 });
+                "core:prelude/string.wado/core:prelude/string.wado/String::byte_at$contract_report0"(start_pos, self_9, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/format.wado:245"), used: 28 });
                 unreachable;
             }
-            b = builtin::array_get_value<u8>($licm_repr_21, start_pos);
+            b = builtin::array_get_value<u8>($licm_repr_20, start_pos);
             count = count + ((b & 192) != 128);
             start_pos = start_pos + 1;
             continue l700;

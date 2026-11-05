@@ -7611,12 +7611,12 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::apply_padding_s
     let count: i32;
     let i_54: i32;
     let b: u8;
-    let $licm_repr_21: ref Array<u8>;
-    let $contract_arg_0_77: i32;
+    let $licm_repr_20: ref Array<u8>;
+    let $contract_arg_0_76: i32;
     content_bytes_2 = local.tee $load_0(self.used) - start_pos;
     count = 0;
     i_54 = start_pos;
-    $licm_repr_21 = self.repr;
+    $licm_repr_20 = self.repr;
     b1125: block {
         l1126: loop {
             break_if b1125 i_54 >= $load_0;
@@ -7625,7 +7625,7 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::apply_padding_s
                 "core:prelude/string.wado/core:prelude/string.wado/String::byte_at$contract_report0"(i_54, $load_0, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/format.wado:245"), used: 28 });
                 unreachable;
             }
-            b = builtin::array_get_value<u8>($licm_repr_21, i_54);
+            b = builtin::array_get_value<u8>($licm_repr_20, i_54);
             count = count + ((b & 192) != 128);
             i_54 = i_54 + 1;
             continue l1126;
@@ -7664,24 +7664,24 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::apply_padding_s
     };
     content_bytes_2 = content_bytes_2 - 1;
     count = self.used;
-    $licm_repr_21 = self.repr;
+    $licm_repr_20 = self.repr;
     i_54 = start_pos + $load_0;
     b1133: block {
         l1134: loop {
             break_if b1133 content_bytes_2 < 0;
             b = i_54 + content_bytes_2;
-            if @unlikely(local.tee $contract_arg_0_77(start_pos + content_bytes_2) >=u count) {
+            if @unlikely(local.tee $contract_arg_0_76(start_pos + content_bytes_2) >=u count) {
                 cold_path;
-                "core:prelude/string.wado/core:prelude/string.wado/String::byte_at$contract_report0"($contract_arg_0_77, count, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/format.wado:259"), used: 28 });
+                "core:prelude/string.wado/core:prelude/string.wado/String::byte_at$contract_report0"($contract_arg_0_76, count, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/format.wado:259"), used: 28 });
                 unreachable;
             }
-            $contract_arg_0_77 = builtin::array_get_value<u8>($licm_repr_21, $contract_arg_0_77);
+            $contract_arg_0_76 = builtin::array_get_value<u8>($licm_repr_20, $contract_arg_0_76);
             if @unlikely(b >=u count) {
                 cold_path;
                 "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_at$contract_report0"(b, count, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/string.wado:558"), used: 28 });
                 unreachable;
             }
-            builtin::array_set_u8($licm_repr_21, b, $contract_arg_0_77);
+            builtin::array_set_u8($licm_repr_20, b, $contract_arg_0_76);
             content_bytes_2 = content_bytes_2 - 1;
             continue l1134;
         };
