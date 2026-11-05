@@ -742,6 +742,7 @@ fn register_reflect_assoc_types(
             let Some(base_decl) = base_decl else { continue };
             tt.register_generic_assoc_type_def(
                 base_decl,
+                tt.ref_kind(self_type),
                 TraitRef::bare(trait_key),
                 (*assoc_name).to_string(),
                 *resolved,

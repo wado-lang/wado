@@ -44,7 +44,7 @@ impl Monomorphizer {
                 variants.push(id);
                 continue;
             }
-            if type_args.is_empty() || type_table.is_list(id) {
+            if type_args.is_empty() {
                 continue;
             }
             if !generic_structs.contains_key(def) {

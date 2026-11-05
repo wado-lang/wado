@@ -1965,8 +1965,11 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     .register_assoc_type_resolution(target_type_id, trait_ref, name, type_id);
             } else {
                 // A generic impl registers the definition instead, which the
-                // monomorphizer reads to answer a `GenericInstance`.
-                let base_decl = self.tysys.type_table.borrow().decl_of_type(target_type_id);
+                // monomorphizer reads to answer an instance.
+                let (base_decl, target_ref) = {
+                    let tt = self.tysys.type_table.borrow();
+                    (tt.decl_of_type(target_type_id), tt.ref_kind(target_type_id))
+                };
                 if let Some(base_decl) = base_decl {
                     let impl_def = self.tysys.def_at(impl_block.id);
                     self.tysys
@@ -1974,6 +1977,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         .borrow_mut()
                         .register_generic_assoc_type_def(
                             base_decl,
+                            target_ref,
                             trait_ref,
                             name,
                             type_id,

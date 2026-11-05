@@ -3094,6 +3094,15 @@ impl TypeTable {
         }
     }
 
+    /// Which reference `type_id` is, or `None` for a non-reference.
+    pub fn ref_kind(&self, type_id: TypeId) -> Option<RefKind> {
+        match self.get(type_id) {
+            ResolvedType::Ref(_) => Some(RefKind::Shared),
+            ResolvedType::MutRef(_) => Some(RefKind::Mut),
+            _ => None,
+        }
+    }
+
     /// The type the reference `type_id` points at.
     pub fn ref_pointee(&self, type_id: TypeId) -> Option<TypeId> {
         match self.get(type_id) {
@@ -3987,6 +3996,7 @@ impl TypeTable {
     pub fn register_generic_assoc_type_def(
         &mut self,
         base_decl: AstId,
+        target_ref: Option<RefKind>,
         trait_ref: TraitRef,
         assoc_name: String,
         type_param_id: TypeId,
@@ -3995,6 +4005,7 @@ impl TypeTable {
         self.generic_assoc_type_defs
             .entry(GenericAssocTypeKey {
                 target_decl: base_decl,
+                target_ref,
                 trait_decl: trait_ref.decl,
                 assoc_name,
             })
@@ -4010,13 +4021,18 @@ impl TypeTable {
     fn generic_assoc_type_def(
         &self,
         base_decl: AstId,
+        target_ref: Option<RefKind>,
         assoc_name: &str,
         type_args: Option<&[TypeId]>,
     ) -> Option<(DefId, AssocAnswer)> {
         let mut candidates: Vec<(DefId, &AssocAnswer)> = self
             .generic_assoc_type_defs
             .iter()
-            .filter(|(key, _)| key.target_decl == base_decl && key.assoc_name == assoc_name)
+            .filter(|(key, _)| {
+                key.target_decl == base_decl
+                    && key.target_ref == target_ref
+                    && key.assoc_name == assoc_name
+            })
             .flat_map(|(key, answers)| answers.0.iter().map(move |entry| (key.trait_decl, entry)))
             .filter(|(_, entry)| type_args.is_none_or(|args| self.entry_reaches(entry, args)))
             .collect();
@@ -4107,7 +4123,7 @@ impl TypeTable {
         let defs: Vec<(DefId, String, AssocAnswer)> = self
             .generic_assoc_type_defs
             .iter()
-            .filter(|(key, _)| key.target_decl == base_decl)
+            .filter(|(key, _)| key.target_decl == base_decl && key.target_ref.is_none())
             .flat_map(|(key, answers)| {
                 self.answers_reaching(answers, &type_args)
                     .0
@@ -4178,6 +4194,7 @@ impl TypeTable {
         let type_args = self.nominal_type_args(concrete_id)?;
         let (_, entry) = self.generic_assoc_type_def(
             self.decl_of_type(concrete_id)?,
+            self.ref_kind(concrete_id),
             assoc_name,
             Some(&type_args),
         )?;
@@ -4251,14 +4268,16 @@ impl TypeTable {
     /// declaration behind `type_id` — i.e. the generic type carries a
     /// synthesized impl binding that associated type.
     pub fn has_generic_assoc_type_def(&self, type_id: TypeId, assoc_name: &str) -> bool {
-        self.decl_of_type(type_id)
-            .is_some_and(|decl| self.has_generic_assoc_type_def_for_decl(decl, assoc_name))
+        self.decl_of_type(type_id).is_some_and(|decl| {
+            self.generic_assoc_type_def(decl, self.ref_kind(type_id), assoc_name, None)
+                .is_some()
+        })
     }
 
     /// [`Self::has_generic_assoc_type_def`] for a caller that already holds the
-    /// declaring [`AstId`](crate::ast::AstId).
+    /// declaring [`AstId`](crate::ast::AstId) of a type it names bare.
     pub fn has_generic_assoc_type_def_for_decl(&self, decl: AstId, assoc_name: &str) -> bool {
-        self.generic_assoc_type_def(decl, assoc_name, None)
+        self.generic_assoc_type_def(decl, None, assoc_name, None)
             .is_some()
     }
 
@@ -4315,6 +4334,7 @@ impl TypeTable {
         let type_args = self.nominal_type_args(concrete_id)?;
         let (owner, entry) = self.generic_assoc_type_def(
             self.decl_of_type(concrete_id)?,
+            self.ref_kind(concrete_id),
             assoc_name,
             Some(&type_args),
         )?;
@@ -4346,6 +4366,7 @@ impl TypeTable {
         let answers = self.answers_reaching(
             self.generic_assoc_type_defs.get(&GenericAssocTypeKey {
                 target_decl: decl,
+                target_ref: self.ref_kind(concrete_id),
                 trait_decl: *trait_key,
                 assoc_name: assoc_name.to_string(),
             })?,
@@ -7408,10 +7429,12 @@ impl TypeSet {
 }
 
 /// [`AssocTypeKey`] for a generic impl, whose target is a declaration rather
-/// than an instantiated type.
+/// than an instantiated type. `List<T>`, `&List<T>` and `&mut List<T>` each
+/// bind `IntoIter` their own way, so the target's reference kind is part of it.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 struct GenericAssocTypeKey {
     target_decl: AstId,
+    target_ref: Option<RefKind>,
     trait_decl: DefId,
     assoc_name: String,
 }
