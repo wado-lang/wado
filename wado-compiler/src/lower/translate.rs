@@ -1051,34 +1051,21 @@ impl FunctionTranslator<'_, '_> {
     }
 
     /// The fields an in-place aggregate (`TypeTable::is_in_place_aggregate`) is
-    /// written through: a plain struct's from `struct_fields_map`, a `List<T>`'s
-    /// `{repr, used}` from `SeqField`, and a tuple's positional ones.
+    /// written through: a struct's from `struct_fields_map`, and a tuple's
+    /// positional ones.
     fn aggregate_fields(&self, ty: tir::TypeId) -> Vec<(String, u32, tir::TypeId)> {
-        let (list_elem, tuple_elems) = {
-            let tt = self.base.type_table.borrow();
-            (tt.list_element(ty), tt.as_tuple(ty))
-        };
         let resolved = self.base.type_table.borrow().get(ty).clone();
-        if list_elem.is_none()
-            && let ResolvedType::Struct { def, type_args } = resolved
-        {
+        if let ResolvedType::Struct { def, type_args } = resolved {
             return self.base.struct_fields_map[&(def, type_args)]
                 .iter()
                 .map(|f| (f.name.clone(), f.index, f.type_id))
                 .collect();
         }
-        if let Some(elem) = list_elem {
-            let repr_ty = self.base.type_table.borrow_mut().make_builtin_array(elem);
-            return [
-                (SeqField::Backing, repr_ty),
-                (SeqField::Len, TypeTable::I32),
-            ]
-            .into_iter()
-            .map(|(field, ty)| (field.field_name().to_string(), field.index(), ty))
-            .collect();
-        }
-        tuple_elems
-            .expect("an in-place aggregate is a struct, a `List` or a tuple")
+        self.base
+            .type_table
+            .borrow()
+            .as_tuple(ty)
+            .expect("an in-place aggregate is a struct or a tuple")
             .into_iter()
             .enumerate()
             .map(|(i, ty)| (i.to_string(), u32::try_from(i).expect("tuple arity"), ty))

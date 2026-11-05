@@ -5,7 +5,6 @@
 //!
 //! Also contains type-ordering utilities (topological sort) used during registration.
 
-use crate::compiler_item::SeqField;
 use crate::defs::DefId;
 use crate::module_source::ModuleSource;
 use crate::name::{FqTypeName, StructName};
@@ -223,10 +222,6 @@ pub fn register_types(ctx: &mut WirContext<'_>) {
 
     // Phase 3.6: All remaining raw array types (must come before wrapper structs)
     register_remaining_arrays(ctx);
-
-    // Phase 3.7: List<T> wrapper structs — must come before mono entry structs
-    // because entry structs may have List<T> fields that reference these wrappers
-    register_list_wrapper_structs(ctx);
 
     // Phase 4: Monomorphized entry module structs
     register_mono_entry_types(ctx);
@@ -1120,72 +1115,6 @@ fn register_canonical_closure_types(ctx: &mut WirContext<'_>) {
     }
 }
 
-/// Register a `List<T>` wrapper struct for every `List<T>` instance
-/// in any module's type table, TIR carrying no struct definition of its own to
-/// supply the GC array type the emitter needs. Processed in dependency order, so
-/// a nested `List<U>` is registered before `List<List<U>>` and the backing array
-/// gets a concrete element type rather than an abstract `structref`.
-fn register_list_wrapper_structs(ctx: &mut WirContext<'_>) {
-    // Collect unique List<T> element types from the shared type table.
-    let mut array_elem_types: Vec<(tir::TypeId, String)> = Vec::new();
-    let tt_rc = ctx.package.type_table.clone();
-    {
-        let type_table = &*tt_rc.borrow();
-        for type_id in type_table.iter_type_ids() {
-            if let ResolvedType::Struct { type_args, .. } = type_table.get(type_id)
-                && type_table.is_list(type_id)
-                && type_args.len() == 1
-            {
-                if type_table.contains_type_param(type_args[0]) {
-                    continue;
-                }
-                // Use the type-arg mangle so the element name matches
-                // the registration key the monomorphizer's
-                // `instantiation_name` produces (qualifies struct args by
-                // `ModuleSource`). The
-                // newtype-resolving variant additionally resolves any
-                // newtype wrappers so that e.g.
-                // `List<[FieldName, FieldValue]>` and
-                // `List<[String, List<u8>]>` dedup to one entry when
-                // FieldName/FieldValue are newtypes.
-                let elem_name = type_table.mangle_type_arg_rowless_resolving_newtypes(type_args[0]);
-                if !array_elem_types.iter().any(|(_, n)| n == &elem_name) {
-                    array_elem_types.push((type_args[0], elem_name));
-                }
-            }
-        }
-    }
-
-    // Topological sort: process leaf element types (non-List) before nested ones.
-    // Partition into non-array elements (leaf) and array elements (nested).
-    let tt = tt_rc.borrow();
-    let mut leaf: Vec<(tir::TypeId, String)> = Vec::new();
-    let mut nested: Vec<(tir::TypeId, String)> = Vec::new();
-    for (elem_tid, elem_name) in &array_elem_types {
-        if tt.is_list(*elem_tid) {
-            nested.push((*elem_tid, elem_name.clone()));
-        } else {
-            leaf.push((*elem_tid, elem_name.clone()));
-        }
-    }
-    drop(tt);
-
-    // Process in order: leaf types first, then nested types.
-    // Each type gets both its raw array and wrapper struct registered together.
-    let ordered = leaf.into_iter().chain(nested);
-
-    for (elem_tid, elem_name) in ordered {
-        // Register raw GC array type
-        {
-            let tt = tt_rc.borrow();
-            register_raw_array_type(ctx, elem_tid, &tt);
-        }
-
-        // Register wrapper struct
-        register_list_wrapper_struct(ctx, &elem_name);
-    }
-}
-
 /// The name a monomorphized generic instance is registered under: the base name
 /// with module-qualified type arguments, which keeps two same-named arguments
 /// apart. Registration and lookup both derive it here.
@@ -1241,74 +1170,6 @@ fn normalized_projection_name(type_table: &TypeTable, type_id: TypeId) -> FqType
         .map(|&arg| type_table.fq_type_name(arg))
         .collect();
     type_table.family_name_at(*owning_trait, assoc_name, family, &args)
-}
-
-/// The `List<T>` wrapper struct's registration key. `T` is spelled with
-/// newtypes resolved, so `List<FieldName>` and `List<String>` share a wrapper.
-pub(super) fn list_wrapper_struct_name(
-    type_table: &TypeTable,
-    element_type_id: TypeId,
-) -> StructName {
-    list_wrapper_struct_name_for_elem(
-        &type_table.mangle_type_arg_rowless_resolving_newtypes(element_type_id),
-    )
-}
-
-/// [`list_wrapper_struct_name`] for an element whose name is already mangled.
-fn list_wrapper_struct_name_for_elem(elem_name: &str) -> StructName {
-    let mangled = mangle_generic_name("List", std::slice::from_ref(&elem_name.to_string()));
-    StructName::new(ModuleSource::prelude(), mangled)
-}
-
-/// Register a single `List<T>` wrapper struct given the element's mangled name.
-fn register_list_wrapper_struct(ctx: &mut WirContext<'_>, elem_name: &str) {
-    let struct_name = list_wrapper_struct_name_for_elem(elem_name);
-    let mangled = struct_name.name.clone();
-
-    // `register_raw_array_type` ran for this element first, under both
-    // spellings, so the backing array is present.
-    let Some(raw_type) = ctx.array_type_by_name.get(elem_name).cloned() else {
-        panic!("[WIR] raw array type for `{elem_name}` is missing, so `{mangled}` has no backing");
-    };
-
-    if ctx.struct_type_map.contains_key(&struct_name) {
-        return;
-    }
-
-    let module_source = struct_name.module_source.clone();
-    let fq = wir_type_key(&module_source, &mangled);
-    let type_id = ctx.register_type(
-        fq.clone(),
-        WirTypeDef::Struct(WirStructType {
-            name: WirName { fq },
-            fields: vec![
-                WirField {
-                    name: SeqField::Backing.field_name().to_string(),
-                    ty: WirType::Ref {
-                        type_id: raw_type,
-                        nullable: false,
-                    },
-                    mutable: true,
-                },
-                WirField {
-                    name: SeqField::Len.field_name().to_string(),
-                    ty: WirType::I32,
-                    mutable: true,
-                },
-            ],
-            meta: WirMeta {
-                module_source: Some(module_source),
-                ..WirMeta::default()
-            },
-            generic_origin: Some(WirGenericOrigin {
-                base_name: "List".to_string(),
-                type_args: vec![elem_name.to_string()],
-            }),
-            newtype_origin: None,
-            supertype: None,
-        }),
-    );
-    ctx.struct_type_map.insert(struct_name, type_id);
 }
 
 /// Check if a `WirType` is an unresolved abstract struct/array reference.

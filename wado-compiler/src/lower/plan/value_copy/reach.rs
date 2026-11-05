@@ -258,13 +258,10 @@ impl<'a> StorageReach<'a> {
             ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => Members::Reference(*inner),
             ResolvedType::BuiltinArray(inner) => Members::Held(vec![*inner]),
             ResolvedType::Newtype { base_type, .. } => Members::Held(vec![*base_type]),
-            // An instance with no listed struct is one codegen lowers as it
-            // is, `List<T>` among them: it holds its arguments.
             ResolvedType::Struct { def, type_args } => {
                 match self.fields.get(&(*def, type_args.clone())) {
                     Some(fields) => Members::Held(fields.iter().map(|f| f.type_id).collect()),
-                    None if type_args.is_empty() => Members::Unknown,
-                    None => Members::Held(type_args.clone()),
+                    None => Members::Unknown,
                 }
             }
             ResolvedType::Tuple(elems) => Members::Held(elems.clone()),

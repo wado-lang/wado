@@ -21,7 +21,7 @@ use crate::wir::{
     WirImport, WirImportDesc, WirInstr, WirMemory, WirMeta, WirName, WirNames, WirPackage,
     WirStructType, WirType, WirTypeDef, WirTypeId,
 };
-use crate::wir_build::types::{list_wrapper_struct_name, variant_type_key};
+use crate::wir_build::types::variant_type_key;
 use crate::world_registry::WorldSurface;
 use crate::{nir, tir};
 
@@ -870,17 +870,6 @@ impl<'a> WirContext<'a> {
                 } else {
                     Self::ref_to(self.handle_box())
                 }
-            }
-            ResolvedType::Struct { type_args, .. }
-                if type_args.len() == 1 && type_table.is_list(type_id) =>
-            {
-                let lookup_name = list_wrapper_struct_name(type_table, type_args[0]);
-                let Some(type_id) = self.struct_type_map.get(&lookup_name) else {
-                    return Err(UnregisteredType::struct_ref(format!(
-                        "list wrapper struct `{lookup_name}`"
-                    )));
-                };
-                Self::ref_to(type_id)
             }
             ResolvedType::Struct { def, type_args } => {
                 let lookup_module = if type_table.is_string(type_id) {

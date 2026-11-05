@@ -956,13 +956,10 @@ impl<'a> DceWalker<'a> {
         }
 
         match base_receiver_type {
-            // `List<T>` is lowered as it is, never monomorphized.
             ResolvedType::Struct {
                 ref def,
                 ref type_args,
-            } if !type_args.is_empty()
-                && !self.type_table.is_compiler_struct(*def, CompilerItem::List) =>
-            {
+            } if !type_args.is_empty() => {
                 let module_source = self.type_table.struct_head_module(*def);
                 let name = &self.type_table.struct_mangled_name(*def, type_args);
                 // Monomorphized struct method (e.g. `Box<i32>::get`):
@@ -994,15 +991,9 @@ impl<'a> DceWalker<'a> {
                     self.analysis.callees.insert(original_method_id);
                 }
             }
-            ResolvedType::Struct {
-                def: StructDef::Decl(def),
-                type_args,
-            }
-            | ResolvedType::Variant { def, type_args }
-                if !type_args.is_empty() =>
-            {
+            ResolvedType::Variant { def, type_args } if !type_args.is_empty() => {
                 let name = self.type_table.decl_name(def).to_string();
-                // Generic instance method (e.g. `List<i32>::push`,
+                // Generic instance method (e.g.
                 // `Option<i32>^Inspect::inspect`). Trait methods
                 // need the trait name baked into the mangle so trait-
                 // and inherent-name collisions stay separate.
