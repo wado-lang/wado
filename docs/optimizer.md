@@ -23,7 +23,7 @@ since removing it changes what the program does.
 | Flag  | Iterations | Inline threshold | Contract checks | Notes                                                                    |
 | ----- | ---------- | ---------------- | --------------- | ------------------------------------------------------------------------ |
 | `-O0` | 0          | N/A              | on              | Part of the pipeline; see [Pipeline](#pipeline)                          |
-| `-O1` | 2          | 4                | on              | The default of `wado run` and `wado serve`                               |
+| `-O1` | 2          | 4                | on              | The default of `wado run`, `wado serve`, `wado test` and each `run-*`    |
 | `-O2` | 15         | 16               | off             | The default of every other subcommand                                    |
 | `-O3` | 20         | 26               | off             |                                                                          |
 | `-Os` | 15         | 16               | off             | Strips the name section; a failed `assert` only traps; no loop unrolling |

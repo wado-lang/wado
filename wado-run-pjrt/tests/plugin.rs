@@ -3,18 +3,23 @@
 //! plugin and sets it, with `WADO`; a plain `cargo test` has no plugin to load.
 
 use std::path::Path;
-use std::process::Command;
+use std::process::{Command, Output};
 
 /// How far a program may sit from Loam's `Cpu`: a product summed in another
 /// order, and `erf` as XLA approximates it.
 const LOAM_TOLERANCE: f32 = 1e-4;
 
-/// What the program at `path`, from this crate, prints under `command`.
-fn printed_by(mut command: Command, path: &str) -> String {
-    let output = command
+/// How the program at `path`, from this crate, ends under `command`.
+fn output_of(mut command: Command, path: &str) -> Output {
+    command
         .arg(Path::new(env!("CARGO_MANIFEST_DIR")).join(path))
         .output()
-        .expect("wado-run-pjrt runs");
+        .expect("wado-run-pjrt runs")
+}
+
+/// What the program at `path` prints under `command`.
+fn printed_by(command: Command, path: &str) -> String {
+    let output = output_of(command, path);
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(output.status.success(), "{stderr}");
     String::from_utf8(output.stdout).expect("the program prints text")
@@ -61,13 +66,10 @@ fn loams_programs_compute_what_its_cpu_graph_does() {
 #[test]
 #[ignore = "needs a plugin: run `mise run test-pjrt`"]
 fn a_tensor_of_an_ended_pass_is_refused() {
-    let output = Command::new(env!("CARGO_BIN_EXE_wado-run-pjrt"))
-        .arg(
-            Path::new(env!("CARGO_MANIFEST_DIR"))
-                .join("../package-loam/conformance/pjrt_stale.wado"),
-        )
-        .output()
-        .expect("wado-run-pjrt runs");
+    let output = output_of(
+        Command::new(env!("CARGO_BIN_EXE_wado-run-pjrt")),
+        "../package-loam/conformance/pjrt_stale.wado",
+    );
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(!output.status.success(), "{stderr}");
     assert!(stderr.contains("is no longer held"), "{stderr}");

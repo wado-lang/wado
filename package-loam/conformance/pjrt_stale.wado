@@ -20,11 +20,8 @@ export fn run() with PjrtHost {
     let argument = device.relabeled(&device.upload(&x));
     let first = device.executed(&program, &[Any::F32(argument)], &[]);
     device.begin();
-    let second = device.executed(&program, &[Any::F32(argument)], &[]);
+    device.executed(&program, &[Any::F32(argument)], &[]);
     let F32(ended) = &first[0] else {
-        unreachable();
-    };
-    let F32(_held) = &second[0] else {
         unreachable();
     };
     device.download(ended);
