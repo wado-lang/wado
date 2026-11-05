@@ -80,13 +80,15 @@ effect row is not yet known, and the effect check solves it.
   it read grew after the read, so a body whose solutions arrive before they are
   read is walked once.
 - Effects carry no representation: a function value is one whatever its row.
-  So a type's own arguments are spelled and interned without rows, and two
-  instances that differ only there are one struct. A function type standing
-  alone keeps its row, which selects an impl written for it, and so does a
-  function instance's type argument. After the check, every type the TIR holds
-  is rewritten with each variable replaced by its solved row, or by the empty
-  row where nothing solved it. The table keeps each id meaning what it was
-  interned as.
+  A function type standing alone keeps its row, which selects an impl written
+  for it, and so does a function instance's type argument. After the check,
+  every type the TIR holds is rewritten with each variable replaced by its
+  solved row, or by the empty row where nothing solved it. The table keeps each
+  id meaning what it was interned as.
+- A struct's own arguments keep their rows until the check, since a method's
+  `with _` resolves from them. The rewrite drops them, and so does every
+  instance interned after it, so two instances that differ only there are one
+  struct.
 
 ## Roadmap
 
