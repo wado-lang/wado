@@ -1129,10 +1129,7 @@ fn scan_body(func: &NirFunction, markers: MarkerBuiltins, heat_map: &HeatMap) ->
 /// The heat a profile sets on `call`: its region's, bounded by every site a
 /// splice carried it through.
 fn call_heat(heat_map: &HeatMap, call: &ExprNode) -> Heat {
-    let ExprKind::Call { ceiling, .. } = call.kind else {
-        unreachable!("a call site is a call")
-    };
-    heat_map.heat(call.span).min(ceiling)
+    heat_map.heat(call.span).min(call.kind.ceiling())
 }
 
 /// Every expression under a `loop`. A loop inside another is covered by the

@@ -444,12 +444,14 @@ impl AppendFuseRule {
                 is_mut: false,
             })
             .collect();
-        Operand::Expr(engine.alloc_expr(
-            ExprKind::method_call(func_id, Operand::Expr(receiver), receiver_is_mut, args)
-                .under(at.ceiling),
-            type_id,
-            at.span,
-        ))
+        Operand::Expr(
+            engine.alloc_expr(
+                ExprKind::method_call(func_id, Operand::Expr(receiver), receiver_is_mut, args)
+                    .under(at.ceiling),
+                type_id,
+                at.span,
+            ),
+        )
     }
 }
 

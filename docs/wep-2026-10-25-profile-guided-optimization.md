@@ -485,7 +485,9 @@ output at every level. It is a nightly campaign, not a gate.
     - A spliced callee's sites. A site keeps the span it was written at, so its
       region still names the callee's heat. Each call carries a ceiling, the
       coolest site a splice carried it through, and its heat is the cooler of
-      its region's and the ceiling (`pgo_spliced_site_heat`).
+      its region's and the ceiling (`pgo_spliced_site_heat`). A call a later
+      pass rebuilds, such as an indirect call made direct, keeps the ceiling
+      of the one it replaces (`pgo_rebuilt_call_heat`).
     - A candidate's own hot sites. A caller that may itself be spliced this
       round prices its hot sites plain, waiting to move into its callers. The
       wait holds only while some site this round visits may admit it, judged
