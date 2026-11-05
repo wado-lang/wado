@@ -182,7 +182,7 @@ pub struct PlannedFunction {
 /// The regions a module's source implies, numbered from zero.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct ModulePlan {
-    /// The module's name in a profile ([`crate::pgo::ProfileNames`]), the
+    /// The module's name in a profile ([`ProfileNames`]), the
     /// same on any machine and from any entry of one package.
     pub name: String,
     /// Where the host reads the module, relative to the entry module's

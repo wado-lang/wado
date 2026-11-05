@@ -722,6 +722,7 @@ mod tests {
 
     use super::*;
     use crate::coverage::{ModulePlan, PlannedFunction, Pos, Region, RegionKind};
+    use crate::module_source::ModuleSourceInterner;
 
     fn region(kind: RegionKind, function: u32, line: u32) -> Region {
         Region {
@@ -738,8 +739,6 @@ mod tests {
     /// unless the build holds a second version of the package.
     #[test]
     fn a_profile_names_a_package_without_its_version_while_it_has_one() {
-        use crate::module_source::ModuleSourceInterner;
-
         let mut interner = ModuleSourceInterner::new();
         let mut module = |path: &str, name: &str| {
             let name = interner.intern(name);
