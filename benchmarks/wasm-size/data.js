@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1793893640748,
+  "lastUpdate": 1793904892292,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -74921,6 +74921,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 375776,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "e7f227de4c55b8aeaea00555c8434def5b31677e",
+          "message": "Merge pull request #2560 from wado-lang/ccr-52b7fd41-lzjtwq\n\nrefactor(pgo): spell every unlikely-and-cold marker as the declared `cold_path`",
+          "timestamp": "2026-11-06T03:37:55+09:00",
+          "tree_id": "2bb93ad92a3fc83fbf613b53b00dcf66d0294488",
+          "url": "https://github.com/wado-lang/wado/commit/e7f227de4c55b8aeaea00555c8434def5b31677e"
+        },
+        "date": 1793904891058,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3099,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7303,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21965,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 375757,
             "unit": "bytes"
           }
         ]
