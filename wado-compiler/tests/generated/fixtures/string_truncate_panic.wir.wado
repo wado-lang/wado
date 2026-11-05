@@ -90,9 +90,9 @@ type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(15)
 
 type "functype//wasi/$wasi:cli/stderr@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(16)
 
-type "functype//string_truncate_panic.wado/$cm_export__run" = fn();  // TypeId(17)
+type "functype//string_truncate_panic.wado/run" = fn();  // TypeId(17)
 
-type "functype//string_truncate_panic.wado/run$cold0$dae[$contract_arg_0,$v1,$v2]" = fn(ref "core:prelude/string.wado//String");  // TypeId(18)
+type "functype//string_truncate_panic.wado/$cm_export__run" = fn();  // TypeId(18)
 
 type "functype//core:prelude/primitive.wado/write_decimal_digits" = fn(ref Array<u8>, i32, u64, i32);  // TypeId(19)
 
@@ -243,19 +243,19 @@ import fn wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode f
 
 global global:core:prelude/primitive.wado::$const_obj_0: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
 
-fn "string_truncate_panic.wado/$cm_export__run"() {
-    let $sroa_s_repr_34: ref Array<u8>;
-    if @unlikely((builtin::array_get_value<u8>(local.tee $sroa_s_repr_34(array.new_data<u8>("日本語")), 4) & 192) == 128) {
+fn "string_truncate_panic.wado/run"() {
+    let s: ref "core:prelude/string.wado//String";
+    if @unlikely(((builtin::array_get_value<u8>(local.tee s(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("日本語"), used: 9 }).repr, 4) & 192) != 128) == 0) {
         cold_path;
-        "string_truncate_panic.wado/run$cold0$dae[$contract_arg_0,$v1,$v2]"(struct.new "core:prelude/string.wado//String" { repr: $sroa_s_repr_34, used: 9 });
+        "core:prelude/string.wado/core:prelude/string.wado/String::truncate$contract_report1"(0, s, 4, 9, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("string_truncate_panic.wado:4"), used: 28 });
         unreachable;
     }
-    "wasi/task-return"(0);
+    s.used = 4;
 }
 
-fn "string_truncate_panic.wado/run$cold0$dae[$contract_arg_0,$v1,$v2]"(s) {
-    "core:prelude/string.wado/core:prelude/string.wado/String::truncate$contract_report1"(0, s, 4, 9, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("string_truncate_panic.wado:4"), used: 28 });
-    unreachable;
+fn "string_truncate_panic.wado/$cm_export__run"() {
+    "string_truncate_panic.wado/run"();
+    "wasi/task-return"(0);
 }
 
 fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, val, digit_count) {

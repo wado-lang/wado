@@ -33,8 +33,11 @@ use crate::nir_visitor::reachable_exprs;
 use crate::tir::{ResolvedType, TypeId};
 use crate::type_table::TypeTable;
 
-use super::arena_query::{MarkerBuiltins, RareRuns, control_escapes};
+use super::arena_query::{
+    MarkerBuiltins, MutRefAliases, RareRuns, RootMutation, control_escapes, for_each_mutation_under,
+};
 use super::inline::{InlineCtx, splice_stmt};
+use super::value_copy::mutation::MutationOracle;
 use crate::ast::Visibility;
 use crate::compiler_trace;
 use crate::name::cold_region_helper_name;
@@ -298,6 +301,7 @@ fn free_vars(
         &[],
     );
     let outer = LocalRefs::collect(body, vec![NodeRef::Block(body.root())], region);
+    let writes = Writes::of(body, region, func, type_table);
     let mut bound_ahead = None;
     let mut args = Vec::new();
     for idx in inside.mentioned.iter().copied() {
@@ -314,10 +318,18 @@ fn free_vars(
         // A boxed local's storage is the box, which the call hands over, so a
         // write through its address lands where the caller reads it.
         let storage_in_slot = !type_table.is_compiler_struct_instance(type_id, CompilerItem::Box);
+        // A reference's pointee is shared, so a write through it lands where
+        // the caller reads it too.
+        let value_in_slot = storage_in_slot
+            && !matches!(
+                type_table.get(type_id),
+                ResolvedType::Ref(_) | ResolvedType::MutRef(_)
+            );
         // One question, asked of every crossing that leaves the storage behind:
         // a write inside the region is one no call carries back.
         if crossing.leaves_storage_behind()
-            && (inside.written.contains(&idx)
+            && (writes.rebound.contains(&idx)
+                || (value_in_slot && writes.through.contains(&idx))
                 || (storage_in_slot && func.address_taken_locals.contains(&idx)))
         {
             compiler_trace!(
@@ -354,6 +366,44 @@ fn free_vars(
     Some(args)
 }
 
+/// The locals `region` may write.
+#[derive(Default)]
+struct Writes {
+    /// `x = …`, which replaces the slot's value whatever it holds.
+    rebound: IndexSet<u32>,
+    /// A store into a field or element, or a `&mut` handed to a call or a
+    /// receiver: a write to what the slot holds, which leaves a slot holding a
+    /// reference unchanged.
+    through: IndexSet<u32>,
+}
+
+impl Writes {
+    fn of(body: &Body, region: &[StmtId], func: &NirFunction, type_table: &TypeTable) -> Self {
+        let no_signatures = IndexMap::default();
+        let oracle = MutationOracle::new(&no_signatures);
+        let aliases = MutRefAliases::of_body(body, &func.locals, func.params.len(), type_table);
+        let mut writes = Self::default();
+        for &s in region {
+            for_each_mutation_under(
+                body,
+                NodeRef::Stmt(s),
+                type_table,
+                &oracle,
+                &aliases,
+                &mut |m| match m {
+                    RootMutation::Rebind(l) => {
+                        writes.rebound.insert(l);
+                    }
+                    RootMutation::Through(l) => {
+                        writes.through.insert(l);
+                    }
+                },
+            );
+        }
+        writes
+    }
+}
+
 /// The locals a root-level `let` binds ahead of the root statement holding
 /// `region`, which every path into the region has run.
 fn bound_ahead_of(body: &Body, region: &[StmtId]) -> IndexSet<u32> {
@@ -377,7 +427,6 @@ fn bound_ahead_of(body: &Body, region: &[StmtId]) -> IndexSet<u32> {
 struct LocalRefs {
     declared: IndexSet<u32>,
     mentioned: IndexSet<u32>,
-    written: IndexSet<u32>,
 }
 
 impl LocalRefs {
@@ -407,17 +456,11 @@ impl LocalRefs {
                         refs.declared.insert(*local_index);
                     }
                 }
-                NodeRef::Expr(e) => match &body.exprs[e].kind {
-                    ExprKind::Local { index, .. } => {
+                NodeRef::Expr(e) => {
+                    if let ExprKind::Local { index, .. } = &body.exprs[e].kind {
                         refs.mentioned.insert(*index);
                     }
-                    ExprKind::Assign { target, .. } => {
-                        if let ExprKind::Local { index, .. } = &body.exprs[*target].kind {
-                            refs.written.insert(*index);
-                        }
-                    }
-                    _ => {}
-                },
+                }
                 NodeRef::Block(_) => {}
             }
             body.for_each_operand(node, |op| {

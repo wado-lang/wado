@@ -3159,13 +3159,13 @@ fn "core:json/core:json/JsonDeserializer::read_json_string$sroa[return]"(self) {
             $mv$prefix$stop = $mv$prefix$stop + $mv$prefix$valid;
             $inline_core_prelude_string_wado_String__push_bytes_unchecked_core_prelude_bytes_wado_ByteSlice__11: block {
                 break_if $inline_core_prelude_string_wado_String__push_bytes_unchecked_core_prelude_bytes_wado_ByteSlice__11 local.tee $mv$prefix$stop($mv$prefix$stop - quote) == 0;
-                if @unlikely($mv$prefix$stop > builtin::array_len(s_25.repr)) {
+                if @unlikely(local.tee $mv$prefix$valid(0 + $mv$prefix$stop) > builtin::array_len(s_25.repr)) {
                     cold_path;
-                    "core:prelude/string.wado/core:prelude/string.wado/String::grow"(s_25, $mv$prefix$stop);
+                    "core:prelude/string.wado/core:prelude/string.wado/String::grow"(s_25, $mv$prefix$valid);
                 }
-                $mv$prefix$valid = s_25.used;
-                s_25.used = $mv$prefix$stop;
-                builtin::array_copy<u8>(s_25.repr, $mv$prefix$valid, $sroa_slice_repr_85, quote, $mv$prefix$stop);
+                a_62 = s_25.used;
+                s_25.used = $mv$prefix$valid;
+                builtin::array_copy<u8>(s_25.repr, a_62, $sroa_slice_repr_85, quote, $mv$prefix$stop);
             };
             break $thread_$inline_core_json_JsonDeserializer__append_scanned_run_2;
         };
@@ -5967,13 +5967,13 @@ fn "core:json/core:json/JsonDeserializer::take_scanned_run$sroa[self.input,retur
         $mv$self$start = $mv$self$start + $mv$self$end;
         $inline_core_prelude_string_wado_String__push_bytes_unchecked_core_prelude_bytes_wado_ByteSlice__10: block {
             break_if $inline_core_prelude_string_wado_String__push_bytes_unchecked_core_prelude_bytes_wado_ByteSlice__10 local.tee $mv$self$start($mv$self$start - start) == 0;
-            if @unlikely($mv$self$start > builtin::array_len(s_4.repr)) {
+            if @unlikely(local.tee $mv$self$end(0 + $mv$self$start) > builtin::array_len(s_4.repr)) {
                 cold_path;
-                "core:prelude/string.wado/core:prelude/string.wado/String::grow"(s_4, $mv$self$start);
+                "core:prelude/string.wado/core:prelude/string.wado/String::grow"(s_4, $mv$self$end);
             }
-            $mv$self$end = s_4.used;
-            s_4.used = $mv$self$start;
-            builtin::array_copy<u8>(s_4.repr, $mv$self$end, $mv$self$repr, start, $mv$self$start);
+            end = s_4.used;
+            s_4.used = $mv$self$end;
+            builtin::array_copy<u8>(s_4.repr, end, $mv$self$repr, start, $mv$self$start);
         };
         break $thread_$inline_core_json_JsonDeserializer__append_scanned_run_1;
     };
