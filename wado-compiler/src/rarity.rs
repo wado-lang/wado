@@ -4,9 +4,7 @@
 //! needs. See
 //! [WEP: Profile-Guided Optimization](../../docs/wep-2026-10-25-profile-guided-optimization.md).
 
-use crate::name::{
-    COLD_CODE_INTRINSIC, COLD_PATH_INTRINSIC, KNOWN_COLD_PATH_INTRINSIC, UNLIKELY_PATH_INTRINSIC,
-};
+use crate::name::{COLD_CODE_INTRINSIC, COLD_PATH_INTRINSIC, UNLIKELY_PATH_INTRINSIC};
 
 /// The half of rarity a pass reads.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -47,14 +45,14 @@ impl Mark {
     #[must_use]
     pub fn of_builtin(name: &str) -> Option<Self> {
         match name {
-            COLD_PATH_INTRINSIC | KNOWN_COLD_PATH_INTRINSIC => Some(Self::ColdPath),
+            COLD_PATH_INTRINSIC => Some(Self::ColdPath),
             UNLIKELY_PATH_INTRINSIC => Some(Self::Unlikely),
             COLD_CODE_INTRINSIC => Some(Self::Cold),
             _ => None,
         }
     }
 
-    /// The builtin stating this mark, as an author or a profile writes it.
+    /// The builtin stating this mark.
     #[must_use]
     pub fn builtin(self) -> &'static str {
         match self {
@@ -105,10 +103,6 @@ mod tests {
         for mark in Mark::ALL {
             assert_eq!(Mark::of_builtin(mark.builtin()), Some(mark));
         }
-        assert_eq!(
-            Mark::of_builtin(KNOWN_COLD_PATH_INTRINSIC),
-            Some(Mark::ColdPath)
-        );
         assert_eq!(Mark::of_builtin("unreachable"), None);
     }
 }

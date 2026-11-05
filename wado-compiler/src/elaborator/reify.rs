@@ -91,8 +91,8 @@ use crate::pgo::MarkMap;
 use crate::rarity::Mark;
 use crate::symbol::{Symbol, SymbolKind};
 use crate::synthesis::common::{
-    bare_cast, bool_lit, builtin_call, cold_path_stmt, handle_bits, known_cold_path_stmt,
-    marker_stmt_mark, not_expr, ord_bool_from_cmp, rt_call,
+    bare_cast, bool_lit, builtin_call, cold_path_stmt, handle_bits, marker_stmt_mark, not_expr,
+    ord_bool_from_cmp, rt_call,
 };
 use crate::tir::{
     EffectRef, ExitScope, StructDef, TemplateId, TirEffectOp, TirField, TirImpl, TirParam,
@@ -2127,7 +2127,7 @@ impl<'a> Reify<'a> {
             .any(|s| marker_stmt_mark(s) == Some(Mark::ColdPath))
         {
             let span = stmts[first].span;
-            stmts.insert(first, known_cold_path_stmt(span));
+            stmts.insert(first, cold_path_stmt(span));
         }
         stmts
     }
@@ -3384,7 +3384,7 @@ impl<'a> Reify<'a> {
         );
 
         let mut then_stmts = Vec::with_capacity(text_lets.len() + 2);
-        then_stmts.push(known_cold_path_stmt(span));
+        then_stmts.push(cold_path_stmt(span));
         then_stmts.extend(text_lets);
         then_stmts.push(TirStmt::new(TirStmtKind::Expr(panic_call), span));
         let then_block = TirBlock::new(then_stmts, span);
