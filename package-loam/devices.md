@@ -538,8 +538,10 @@ measured before its deletion, by the same test running it:
 | -------------------------------------------- | ------------------------ |
 | the kernel pass                              | 1                        |
 | `compute`, the graph's ops at the capacities | 0.89                     |
+| `decode`, one step a call                    | 0.92                     |
 
-`compute` is the one test of `example/gemma3-270m/generate_test.wado`:
+`decode` is the one test of `example/gemma3-270m/generate_test.wado`, and
+`compute` is that test with `next_tokens` never taking its `decoded` branch:
 
 ```sh
 cd package-loam/example
@@ -669,6 +671,9 @@ model, and it does not price 94 and 93 of each program's operations
   `List`, where the kernel pass read packed vectors from linear memory.
 - On `Cpu` a pass still copies the cache it writes into, since `scatter`
   returns a new tensor.
+- On `Cpu` a step of `decode` also runs the sampler's graph, which a greedy
+  `compute` leaves to the host, so it takes longer than a `compute`
+  ([measured](#the-graph-on-the-cpu)).
 - A pass on WebGPU holds every tensor it computes at once, and the device memory
   in use climbed through Gemma 3's run
   ([measured](#gemma-3s-device-memory)). A memory plan would spare that: one
