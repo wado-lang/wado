@@ -45,6 +45,37 @@ fn test_compile_project_under_path_with_space() {
     assert!(out.exists(), "expected out.wasm to be written");
 }
 
+/// A compile that succeeds prints nothing, and says what it wrote only at
+/// `--log-level debug`. A runner that compiles through `wado compile` leaves
+/// its program's stderr alone because of this.
+#[test]
+fn test_compile_names_its_output_only_at_debug() {
+    let tmp = tempfile::tempdir().unwrap();
+    let main = tmp.path().join("main.wado");
+    std::fs::write(
+        &main,
+        "use { println, Stdout } from \"core:cli\";\n\
+         export fn run() with Stdout { println(\"hi\"); }\n",
+    )
+    .unwrap();
+    let out = tmp.path().join("out.wasm");
+    let compile = |extra: &[&str]| {
+        wado()
+            .arg("compile")
+            .args(extra)
+            .arg("-o")
+            .arg(&out)
+            .arg(&main)
+            .assert()
+            .success()
+    };
+    compile(&[]).stderr(predicate::str::is_empty());
+    compile(&["--log-level", "debug"]).stderr(predicate::str::contains(format!(
+        "Generated: {}",
+        out.display()
+    )));
+}
+
 /// Constant-argument specialization stops at `--optimize-specializations`
 /// clones, and a compile that reaches the cap says so in a remark.
 #[test]

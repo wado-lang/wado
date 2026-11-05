@@ -314,7 +314,6 @@ pub async fn build_world_components(
                 .build()
                 .map_err(|e| CliExit::error(format!("unable to create a build runtime: {e}")))?
                 .block_on(build_world_component(&target, &knobs, embed))?;
-            compile::announce_artifact(&target.output);
             Ok(())
         });
     }
@@ -330,8 +329,7 @@ pub async fn build_world_components(
 
 /// The single project-build path: compile one world with `[package]` metadata
 /// embedded, write it to `target.output`, and return its bytes. Shared by `wado
-/// build` and the run/serve drivers so a run artifact matches a built one. It
-/// announces nothing; `wado build` does that for the files it asked for.
+/// build` and the run/serve drivers so a run artifact matches a built one.
 pub async fn build_world_component(
     target: &BuildTarget,
     knobs: &CompileKnobs,

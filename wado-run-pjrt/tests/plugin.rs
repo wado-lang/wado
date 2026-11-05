@@ -63,7 +63,7 @@ fn an_exit_status_is_the_programs_own() {
         let output = command.output().expect("wado-run-pjrt runs");
         let stderr = String::from_utf8_lossy(&output.stderr);
         assert_eq!(output.status.code(), Some(status), "{stderr}");
-        assert!(!stderr.contains("exit status"), "{stderr}");
+        assert!(stderr.is_empty(), "{stderr}");
     }
 }
 

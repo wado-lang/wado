@@ -15,8 +15,7 @@ use wado_lsp::host::discovery::Disk;
 
 use crate::args::{self, CliExit, OptSpec};
 use crate::compile::{
-    announce_artifact, attach_manifest_and_component_deps, load_nearest_manifest,
-    maybe_run_pipeline,
+    attach_manifest_and_component_deps, load_nearest_manifest, maybe_run_pipeline,
 };
 use crate::compiler_host::FilesystemCompilerHost;
 use crate::dep_component::Acquisition;
@@ -160,7 +159,6 @@ pub async fn run(opts: WitOptions) -> Result<(), CliExit> {
         Some(file) => {
             fs::write(&file, &text)
                 .map_err(|e| CliExit::error(format!("writing '{file}': {e}")))?;
-            announce_artifact(&file);
         }
         None => print!("{text}"),
     }
