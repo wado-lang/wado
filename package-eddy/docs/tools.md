@@ -63,4 +63,5 @@ reasoning.
 - [x] Write: a file into the tree, such as a test or a small program.
 - [x] Run: `cargo` at the tree's root, under a timeout, into one target
   directory every tree shares. It covers a Rust test and `wado` itself
-  (`cargo run --bin wado -- run`, `test` or `dump`).
+  (`cargo run --bin wado -- run`, `test` or `dump`). A review makes a bounded
+  number of Runs, so a defect that will not reproduce cannot spend its turns.
