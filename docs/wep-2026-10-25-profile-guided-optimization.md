@@ -479,17 +479,22 @@ output at every level. It is a nightly campaign, not a gate.
     - The inliner's `branch_weight` guard reads the cold half, while the layout
       it protects follows the unlikely hint. The table settles which half it
       should read.
-11. [ ] Call-site heat in context. The inliner prices each case below by where
+11. [x] Call-site heat in context. The inliner prices each case below by where
     the site's code now stands, and an e2e fixture states each.
-    - A spliced callee's sites. A site keeps the span it was written at, so
-      after a splice it reads the callee's heat wherever it landed. A site that
-      a splice at a cold site brought in can still pay the hot price.
-    - A candidate's own hot sites. A caller that is itself a candidate this
-      round prices its hot sites plain. A candidate that no site ever admits
-      stays a candidate, so its hot sites never take the hot price.
-    - The lookahead at a hot site. The table of what this round splices is
-      built at the plain threshold. A hot site's price therefore counts a loopy
-      callee that only a hot site would splice as a call, not as its size.
+    - A spliced callee's sites. A site keeps the span it was written at, so its
+      region still names the callee's heat. Each call carries a ceiling, the
+      coolest site a splice carried it through, and its heat is the cooler of
+      its region's and the ceiling (`pgo_spliced_site_heat`).
+    - A candidate's own hot sites. A caller that may itself be spliced this
+      round prices its hot sites plain, waiting to move into its callers. The
+      wait holds only while some site this round visits may admit it, judged
+      from the site's loop depth and heat, so a candidate that never moves
+      takes the hot price (`pgo_unmoved_caller_hot_site`).
+    - The lookahead at a hot site. The table of what this round splices holds
+      one price per heat, and charges each call in a callee at the cooler of
+      its own heat and the pricing site's. A hot site counts a loopy callee
+      that only a hot site would splice at its size
+      (`pgo_hot_site_inner_heat`).
 
 ## Known gaps
 
