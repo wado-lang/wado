@@ -306,7 +306,7 @@ fn apply_dae(
             }
             let func = &mut *func;
             func.body.as_mut().is_some_and(|body| {
-                rewrite_calls_in_body(body, &mut *func.locals, confirmed, type_table)
+                rewrite_calls_in_body(body, &mut func.locals, confirmed, type_table)
             })
         });
         touched.extend(rewritten);

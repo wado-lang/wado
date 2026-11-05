@@ -599,7 +599,10 @@ fn text_match_not_contains_leaves_out_the_texts_holding_one() {
 fn with_passes(mut spec: TestSpec, passes: &[&str]) -> TestSpec {
     spec.wir_pass.insert(
         "O2".to_string(),
-        passes.iter().map(|p| p.to_string()).collect(),
+        passes
+            .iter()
+            .map(std::string::ToString::to_string)
+            .collect(),
     );
     spec
 }
