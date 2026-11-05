@@ -2236,11 +2236,11 @@ mod tests {
             .iter()
             .find_map(|plan| {
                 let regions = plan.regions_by_function();
-                let function =
-                    plan.functions
-                        .iter()
-                        .zip(&regions)
-                        .find_map(|(function, ids)| (ids.len() == 2).then_some(function))?;
+                let function = plan
+                    .functions
+                    .iter()
+                    .zip(&regions)
+                    .find_map(|(function, ids)| (ids.len() == 2).then_some(function))?;
                 Some((plan, function))
             })
             .expect("the stdlib has a function with one branch");
