@@ -33,30 +33,16 @@ impl Monomorphizer {
         let head_def = key
             .def
             .expect("a struct instantiation names its declaration");
-        // Every instance whose arguments differ from the key's only in rows is
-        // this struct: a row selects no representation.
-        let key_args: Vec<TypeId> = key
-            .impl_type_args
-            .iter()
-            .map(|&arg| type_table.without_rows(arg))
-            .collect();
-        let candidates: Vec<(TypeId, Vec<TypeId>)> = type_table
+        let instance_ids: Vec<TypeId> = type_table
             .generic_instances_of(head_def)
-            .map(|(id, type_args)| (id, type_args.to_vec()))
+            .filter(|(_, type_args)| *type_args == key.impl_type_args)
+            .map(|(id, _)| id)
             .collect();
-        let mut instance_ids = Vec::new();
-        for (id, type_args) in candidates {
-            let args: Vec<TypeId> = type_args
-                .iter()
-                .map(|&arg| type_table.without_rows(arg))
-                .collect();
-            if args == key_args {
-                self.structs.type_substitutions.insert(id, concrete_type_id);
-                self.structs
-                    .type_to_mangled_name
-                    .insert(id, mangled_name.clone());
-                instance_ids.push(id);
-            }
+        for &id in &instance_ids {
+            self.structs.type_substitutions.insert(id, concrete_type_id);
+            self.structs
+                .type_to_mangled_name
+                .insert(id, mangled_name.clone());
         }
 
         // Build substitution map: type param index -> concrete type

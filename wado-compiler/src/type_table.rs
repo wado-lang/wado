@@ -414,12 +414,10 @@ impl TypeTable {
         }
         let spelling = self.types.get(id).expect("an interned type").clone();
         let rebuilt = match &spelling {
-            ResolvedType::GenericInstance { def, type_args }
-                if self.defs.kind(*def) == DefKind::Struct && !self.is_tuple_def(*def) =>
-            {
+            ResolvedType::GenericInstance { def, type_args } if self.is_struct_instance_def(*def) => {
                 ResolvedType::Struct {
                     def: StructDef::Decl(*def),
-                    type_args: self.settle_struct_args(type_args),
+                    type_args: self.settle_spellings(type_args),
                 }
             }
             ResolvedType::GenericInstance { def, type_args } => ResolvedType::GenericInstance {
@@ -428,7 +426,7 @@ impl TypeTable {
             },
             ResolvedType::Struct { def, type_args } => ResolvedType::Struct {
                 def: *def,
-                type_args: self.settle_struct_args(type_args),
+                type_args: self.settle_spellings(type_args),
             },
             ResolvedType::Ref(inner) => ResolvedType::Ref(self.settle_spelling(*inner)),
             ResolvedType::MutRef(inner) => ResolvedType::MutRef(self.settle_spelling(*inner)),
@@ -491,17 +489,6 @@ impl TypeTable {
 
     fn settle_spellings(&mut self, ids: &[TypeId]) -> Vec<TypeId> {
         ids.iter().map(|&id| self.settle_spelling(id)).collect()
-    }
-
-    /// A struct instance's arguments as monomorphization keys it: settled, and
-    /// rowless as [`Self::make_monomorphized_struct_from_args`] makes them.
-    fn settle_struct_args(&mut self, ids: &[TypeId]) -> Vec<TypeId> {
-        ids.iter()
-            .map(|&id| {
-                let rowless = self.without_rows(id);
-                self.settle_spelling(rowless)
-            })
-            .collect()
     }
 
     /// The slot holding `id`'s value: itself, or what a redirect points it at.
@@ -583,9 +570,7 @@ impl TypeTable {
     pub fn struct_parts(&self, id: TypeId) -> Option<(StructDef, &[TypeId])> {
         match self.get(id) {
             ResolvedType::Struct { def, type_args } => Some((*def, type_args)),
-            ResolvedType::GenericInstance { def, type_args }
-                if self.defs.kind(*def) == DefKind::Struct && !self.is_tuple_def(*def) =>
-            {
+            ResolvedType::GenericInstance { def, type_args } if self.is_struct_instance_def(*def) => {
                 Some((StructDef::Decl(*def), type_args))
             }
             _ => None,
@@ -2356,6 +2341,12 @@ impl TypeTable {
         self.is_compiler_item(def, CompilerItem::Tuple)
     }
 
+    /// Whether an instance of `def` is a struct: monomorphization makes a
+    /// `Struct` of it. The tuple family is declared a struct and is not one.
+    fn is_struct_instance_def(&self, def: DefId) -> bool {
+        self.defs.kind(def) == DefKind::Struct && !self.is_tuple_def(def)
+    }
+
     /// Whether a type is a built-in tuple.
     pub fn is_tuple(&self, id: TypeId) -> bool {
         matches!(
@@ -2551,13 +2542,22 @@ impl TypeTable {
         def: StructDef,
         type_args: Vec<TypeId>,
     ) -> TypeId {
-        // An argument's row selects no representation, so instantiations
-        // differing only there are one struct, as their names already are.
-        let type_args = type_args
+        let type_args = self.struct_instance_args(type_args);
+        self.intern(ResolvedType::Struct { def, type_args })
+    }
+
+    /// A struct instance's arguments as interned: rowless once the effect check
+    /// is done. Until then a row there is what a method's `with _` resolves
+    /// from; after, it selects no representation, so instances differing only
+    /// there are one struct, as their names already are.
+    fn struct_instance_args(&mut self, type_args: Vec<TypeId>) -> Vec<TypeId> {
+        if !self.effect_vars_solved {
+            return type_args;
+        }
+        type_args
             .into_iter()
             .map(|arg| self.without_rows(arg))
-            .collect();
-        self.intern(ResolvedType::Struct { def, type_args })
+            .collect()
     }
 
     /// `id` with every function type's row emptied: what it is as a type's
@@ -4486,6 +4486,21 @@ impl TypeTable {
         )
     }
 
+    /// `type_id` once the effect check is done: each variable replaced by
+    /// what [`Self::close_effect_rows`] answered for it, and each struct
+    /// instance's arguments rowless.
+    pub fn close_type(&mut self, type_id: TypeId, rows: &EffectRows) -> TypeId {
+        assert!(self.effect_vars_solved);
+        self.subst_rec(
+            type_id,
+            &Leaves {
+                rows,
+                reintern_instances: true,
+                ..Leaves::NONE
+            },
+        )
+    }
+
     /// A declared type with each effect parameter its rows name replaced by a
     /// fresh variable, for the effect check to solve at one use. Applied in the
     /// declaration's frame, before its type arguments are, so a parameter the
@@ -4916,7 +4931,7 @@ impl TypeTable {
                         .iter()
                         .map(|&a| self.subst_rec(a, leaves))
                         .collect();
-                    if new_args == type_args {
+                    if new_args == type_args && !leaves.reintern_instances {
                         type_id
                     } else {
                         self.make_generic_instance(def, new_args)
@@ -5035,6 +5050,11 @@ impl TypeTable {
         // The instantiation carries the declaration it came from, so nothing
         // has to be registered beside it and nothing re-derives the answer
         // from a spelling whose base `prune` may already have dropped.
+        let type_args = if self.is_struct_instance_def(def) {
+            self.struct_instance_args(type_args)
+        } else {
+            type_args
+        };
         self.intern(ResolvedType::GenericInstance { def, type_args })
     }
 
@@ -7533,6 +7553,9 @@ struct Leaves<'s> {
     rows: &'s EffectRows,
     /// Whether every row is emptied, not just the names `rows` holds.
     erase_rows: bool,
+    /// Whether each instance is interned again even where its arguments are
+    /// unchanged, so it takes the spelling interning gives it now.
+    reintern_instances: bool,
     /// Whole types replaced wherever they stand, before any leaf inside them.
     subterms: &'s IndexMap<TypeKey, TypeId>,
     /// Slots moved to another index, name and pack shape kept, where `params`
@@ -7557,6 +7580,7 @@ impl Leaves<'static> {
         projections: &NO_PROJECTIONS,
         rows: &NO_ROWS,
         erase_rows: false,
+        reintern_instances: false,
         subterms: &NO_SUBTERMS,
         renames: &NO_RENAMES,
     };
@@ -7570,6 +7594,7 @@ impl Leaves<'_> {
             && self.projections.is_empty()
             && self.rows.is_empty()
             && !self.erase_rows
+            && !self.reintern_instances
             && self.subterms.is_empty()
             && self.renames.is_empty()
     }
