@@ -277,8 +277,9 @@ and makes a pass that runs from a list of dispatches:
 - It picks each kernel's variant for the shape class's extents.
 - It gives each launch buffers that later calls reuse. Nothing reuses a buffer
   within a pass, so a pass holds every tensor it computes at once.
-- It creates the pipelines and the bind groups, and carves each launch's
-  parameters from one buffer.
+- It creates the pipelines and the bind groups, and carves a launch's
+  parameters from buffers that later calls reuse. Parameters no launch owns
+  stay in the pass's buffers.
 
 A call writes the parameters that changed, encodes the list (pipeline, bind
 group, dispatch, and nothing else), and submits it. WebGPU offers no reusable
@@ -612,11 +613,13 @@ measured:
   WebGPU's default limit rather than the device's. It waits for a device or a
   model that a variant would serve. A half graph's `shader-f16` is the roadmap's
   [A half graph keeps its type](./TODO.md#roadmap).
-- An `If` on a value on WebGPU reads its condition back, one synchronization an
-  `If`. Indirect dispatches would spare that: a kernel writes each branch's
-  workgroup counts from the condition, none for the branch not taken, and both
-  branches write the `If`'s outputs to one place. It waits for a model that
-  takes such an `If` on every step.
+- An `If` on a value on WebGPU reads its condition back, which submits the
+  commands before it and waits for the device. So a step holding one cannot
+  share a submission with the steps after it, and the loop on the device reads
+  back once for each such `If`. Indirect dispatches would spare that: a kernel
+  writes each branch's workgroup counts from the condition, none for the branch
+  not taken, and both branches write the `If`'s outputs to one place. It waits
+  for a model that takes such an `If` on every step.
 - The first call of a shape class waits for its program to compile. At build
   time no user waits on the generator, and at first use one does. The cache on
   disk spares a second process on PJRT, and nothing spares a first call on
