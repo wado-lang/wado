@@ -174,7 +174,9 @@ fn build_submodules(root: &String) -> List<[String, String]> with (Process, Preo
     for let line of git(["-C", *root, "submodule", "status"]).lines() {
         let fields = line.slice(1, line.len()).split(" ").collect();
         let path = fields[1].to_string();
-        if manifest.contains(&path) {
+        // A path is matched to its end, or `vendor/wasm` would match
+        // `vendor/wasmtime/...` too.
+        if manifest.contains(`${path}/`) || manifest.contains(`${path}"`) {
             found.push([path, fields[0].to_string()]);
         }
     }
