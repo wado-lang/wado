@@ -50,8 +50,8 @@ The native host pieces that `wado-cli`, `wado-dev-tools`, the runners, and
 - `user_config.rs` — the user's `~/.config/wado/config.toml`
   (`$XDG_CONFIG_HOME`): the Wado root and `[process] read`. Read once, and
   ignored whole when another user could have written it.
-- `path_search.rs` — finding a program on `PATH`, for `wado <name>` and
-  `core:process`.
+- `path_search.rs` — finding a program on `PATH`, for `wado <name>`,
+  `core:process`, and a runner started without `WADO`.
 - `ticker.rs` — `Ticker`, a thread on an interval that dropping stops and joins.
 - `engine.rs` — the Wasm features and GC defaults every wasmtime engine takes,
   so the e2e harness runs a program as `wado` does, and the fuel-metered engine
