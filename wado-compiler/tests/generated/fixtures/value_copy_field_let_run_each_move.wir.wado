@@ -4,7 +4,7 @@
 
 array Array<i32> (mut i32);  // TypeId(0)
 
-struct core:prelude//List<i32> {  // TypeId(1)
+struct core:prelude/list.wado//List<i32> {  // TypeId(1)
     mut repr: ref Array<i32>,
     mut used: i32,
 }
@@ -15,7 +15,7 @@ type "functype//value_copy_field_let_run_each_move.wado/run" = fn();  // TypeId(
 
 type "functype//value_copy_field_let_run_each_move.wado/$cm_export__run" = fn();  // TypeId(4)
 
-type "functype//core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow" = fn(ref "core:prelude//List<i32>");  // TypeId(5)
+type "functype//core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow" = fn(ref "core:prelude/list.wado//List<i32>");  // TypeId(5)
 
 type "functype//wasi/task-return" = fn(i32);  // TypeId(6)
 
@@ -25,8 +25,8 @@ import fn wasi/task-return from "wasi/task-return";
 
 fn "value_copy_field_let_run_each_move.wado/run"() {
     let $load_0: ref Array<i32>;
-    let $sroa_again_xs_85: ref "core:prelude//List<i32>";
-    $load_0 = local.tee $sroa_again_xs_85(struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(1), used: 1 }).repr;
+    let $sroa_again_xs_85: ref "core:prelude/list.wado//List<i32>";
+    $load_0 = local.tee $sroa_again_xs_85(struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(1), used: 1 }).repr;
     builtin::array_copy<i32>(builtin::array_new<i32>(1), 0, $load_0, 0, 1);
     builtin::array_copy<i32>(builtin::array_new<i32>(1), 0, $load_0, 0, 1);
     if @unlikely(1 >= builtin::array_len($load_0)) {

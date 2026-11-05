@@ -12,13 +12,13 @@ struct core:prelude/string.wado//String {  // TypeId(2)
 }
 
 variant opt_value_copy_match_binding_live_scrutinee.wado//P {  // TypeId(3)
-    A(ref "core:prelude//List<i32>"),
+    A(ref "core:prelude/list.wado//List<i32>"),
     B(i32),
 }
 
 struct opt_value_copy_match_binding_live_scrutinee.wado//P::A {  // TypeId(4)
     discriminant: i32,
-    payload_0: ref "core:prelude//List<i32>",
+    payload_0: ref "core:prelude/list.wado//List<i32>",
 }
 
 struct opt_value_copy_match_binding_live_scrutinee.wado//P::B {  // TypeId(5)
@@ -28,7 +28,7 @@ struct opt_value_copy_match_binding_live_scrutinee.wado//P::B {  // TypeId(5)
 
 array Array<i32> (mut i32);  // TypeId(6)
 
-struct core:prelude//List<i32> {  // TypeId(7)
+struct core:prelude/list.wado//List<i32> {  // TypeId(7)
     mut repr: ref Array<i32>,
     mut used: i32,
 }
@@ -65,7 +65,7 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/String::reallo
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(23)
 
-type "functype//core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow" = fn(ref "core:prelude//List<i32>");  // TypeId(24)
+type "functype//core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow" = fn(ref "core:prelude/list.wado//List<i32>");  // TypeId(24)
 
 type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]" = fn(ref "core:prelude/string.wado//String", bool, i32) -> i32;  // TypeId(25)
 
@@ -112,15 +112,15 @@ global global:core:prelude/traits.wado::$const_obj_67: ref Array<u8> = array.new
 
 fn "opt_value_copy_match_binding_live_scrutinee.wado/run"() with Stdout {
     let a: ref "opt_value_copy_match_binding_live_scrutinee.wado//P";
-    let xs_1: ref "core:prelude//List<i32>";
+    let xs_1: ref "core:prelude/list.wado//List<i32>";
     let elements_7: ref Array<i32>;
     let used_8: i32;
     let $cm_pair_7_174: i64;
     let $sroa_$pattern_temp_0_1_14_181: i32;
     let out_260: ref "core:prelude/string.wado//String";
     let $sroa_view_repr_105_362: ref Array<u8>;
-    used_8 = local.tee xs_1(ref.cast "opt_value_copy_match_binding_live_scrutinee.wado//P::A"(local.tee a(struct.new "opt_value_copy_match_binding_live_scrutinee.wado//P::A" { discriminant: 0, payload_0: used_8 = builtin::array_len(local.tee elements_7(array.new_fixed<i32>(black_box(7)))); struct.new "core:prelude//List<i32>" { repr: elements_7, used: used_8 } })).payload_0).used;
-    xs_1 = struct.new "core:prelude//List<i32>" { repr: elements_7 = xs_1.repr; let $array_clone_dst_2: ref Array<i32>; builtin::array_copy<i32>(local.tee $array_clone_dst_2(builtin::array_new<i32>(used_8)), 0, elements_7, 0, used_8); $array_clone_dst_2, used: used_8 };
+    used_8 = local.tee xs_1(ref.cast "opt_value_copy_match_binding_live_scrutinee.wado//P::A"(local.tee a(struct.new "opt_value_copy_match_binding_live_scrutinee.wado//P::A" { discriminant: 0, payload_0: used_8 = builtin::array_len(local.tee elements_7(array.new_fixed<i32>(black_box(7)))); struct.new "core:prelude/list.wado//List<i32>" { repr: elements_7, used: used_8 } })).payload_0).used;
+    xs_1 = struct.new "core:prelude/list.wado//List<i32>" { repr: elements_7 = xs_1.repr; let $array_clone_dst_2: ref Array<i32>; builtin::array_copy<i32>(local.tee $array_clone_dst_2(builtin::array_new<i32>(used_8)), 0, elements_7, 0, used_8); $array_clone_dst_2, used: used_8 };
     if @unlikely(used_8 >= builtin::array_len(xs_1.repr)) {
         cold_path;
         "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(xs_1);
@@ -140,8 +140,8 @@ fn "opt_value_copy_match_binding_live_scrutinee.wado/run"() with Stdout {
     used_8 = "opt_value_copy_match_binding_live_scrutinee.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(used_8);
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_14_181, out_260.repr, out_260.used);
     "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(used_8);
-    used_8 = local.tee xs_1(ref.cast "opt_value_copy_match_binding_live_scrutinee.wado//P::A"(local.tee a(struct.new "opt_value_copy_match_binding_live_scrutinee.wado//P::A" { discriminant: 0, payload_0: used_8 = builtin::array_len(local.tee elements_7(array.new_fixed<i32>(black_box(7)))); struct.new "core:prelude//List<i32>" { repr: elements_7, used: used_8 } })).payload_0).used;
-    xs_1 = struct.new "core:prelude//List<i32>" { repr: elements_7 = xs_1.repr; builtin::array_copy<i32>(local.tee $array_clone_dst_2(builtin::array_new<i32>(used_8)), 0, elements_7, 0, used_8); $array_clone_dst_2, used: used_8 };
+    used_8 = local.tee xs_1(ref.cast "opt_value_copy_match_binding_live_scrutinee.wado//P::A"(local.tee a(struct.new "opt_value_copy_match_binding_live_scrutinee.wado//P::A" { discriminant: 0, payload_0: used_8 = builtin::array_len(local.tee elements_7(array.new_fixed<i32>(black_box(7)))); struct.new "core:prelude/list.wado//List<i32>" { repr: elements_7, used: used_8 } })).payload_0).used;
+    xs_1 = struct.new "core:prelude/list.wado//List<i32>" { repr: elements_7 = xs_1.repr; builtin::array_copy<i32>(local.tee $array_clone_dst_2(builtin::array_new<i32>(used_8)), 0, elements_7, 0, used_8); $array_clone_dst_2, used: used_8 };
     if @unlikely(used_8 >= builtin::array_len(xs_1.repr)) {
         cold_path;
         "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(xs_1);
@@ -161,8 +161,8 @@ fn "opt_value_copy_match_binding_live_scrutinee.wado/run"() with Stdout {
     used_8 = "opt_value_copy_match_binding_live_scrutinee.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(used_8);
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_14_181, out_260.repr, out_260.used);
     "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(used_8);
-    used_8 = local.tee xs_1(ref.cast "opt_value_copy_match_binding_live_scrutinee.wado//P::A"(local.tee a(struct.new "opt_value_copy_match_binding_live_scrutinee.wado//P::A" { discriminant: 0, payload_0: used_8 = builtin::array_len(local.tee elements_7(array.new_fixed<i32>(black_box(7)))); struct.new "core:prelude//List<i32>" { repr: elements_7, used: used_8 } })).payload_0).used;
-    xs_1 = struct.new "core:prelude//List<i32>" { repr: elements_7 = xs_1.repr; builtin::array_copy<i32>(local.tee $array_clone_dst_2(builtin::array_new<i32>(used_8)), 0, elements_7, 0, used_8); $array_clone_dst_2, used: used_8 };
+    used_8 = local.tee xs_1(ref.cast "opt_value_copy_match_binding_live_scrutinee.wado//P::A"(local.tee a(struct.new "opt_value_copy_match_binding_live_scrutinee.wado//P::A" { discriminant: 0, payload_0: used_8 = builtin::array_len(local.tee elements_7(array.new_fixed<i32>(black_box(7)))); struct.new "core:prelude/list.wado//List<i32>" { repr: elements_7, used: used_8 } })).payload_0).used;
+    xs_1 = struct.new "core:prelude/list.wado//List<i32>" { repr: elements_7 = xs_1.repr; builtin::array_copy<i32>(local.tee $array_clone_dst_2(builtin::array_new<i32>(used_8)), 0, elements_7, 0, used_8); $array_clone_dst_2, used: used_8 };
     if @unlikely(used_8 >= builtin::array_len(xs_1.repr)) {
         cold_path;
         "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(xs_1);
@@ -170,7 +170,7 @@ fn "opt_value_copy_match_binding_live_scrutinee.wado/run"() with Stdout {
     builtin::array_set<i32>(xs_1.repr, used_8, 9);
     xs_1.used = used_8 + 1;
     used_8 = local.tee xs_1(ref.cast "opt_value_copy_match_binding_live_scrutinee.wado//P::A"(a).payload_0).used;
-    xs_1 = struct.new "core:prelude//List<i32>" { repr: elements_7 = xs_1.repr; builtin::array_copy<i32>(local.tee $array_clone_dst_2(builtin::array_new<i32>(used_8)), 0, elements_7, 0, used_8); $array_clone_dst_2, used: used_8 };
+    xs_1 = struct.new "core:prelude/list.wado//List<i32>" { repr: elements_7 = xs_1.repr; builtin::array_copy<i32>(local.tee $array_clone_dst_2(builtin::array_new<i32>(used_8)), 0, elements_7, 0, used_8); $array_clone_dst_2, used: used_8 };
     if @unlikely(used_8 >= builtin::array_len(xs_1.repr)) {
         cold_path;
         "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(xs_1);
@@ -190,7 +190,7 @@ fn "opt_value_copy_match_binding_live_scrutinee.wado/run"() with Stdout {
     used_8 = "opt_value_copy_match_binding_live_scrutinee.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(used_8);
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_14_181, out_260.repr, out_260.used);
     "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(used_8);
-    xs_1 = struct.new "core:prelude//List<i32>" { repr: builtin::array_copy<i32>(local.tee $array_clone_dst_2(builtin::array_new<i32>(local.tee used_8(builtin::array_len(local.tee elements_7(array.new_fixed<i32>(black_box(7))))))), 0, elements_7, 0, used_8); $array_clone_dst_2, used: used_8 };
+    xs_1 = struct.new "core:prelude/list.wado//List<i32>" { repr: builtin::array_copy<i32>(local.tee $array_clone_dst_2(builtin::array_new<i32>(local.tee used_8(builtin::array_len(local.tee elements_7(array.new_fixed<i32>(black_box(7))))))), 0, elements_7, 0, used_8); $array_clone_dst_2, used: used_8 };
     if @unlikely(used_8 >= builtin::array_len(xs_1.repr)) {
         cold_path;
         "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(xs_1);
@@ -644,7 +644,7 @@ fn "core:prelude/traits.wado/opt_value_copy_match_binding_live_scrutinee.wado/P^
     let $load_4: ref Array<u8>;
     let new_used_23: i32;
     let start_24: i32;
-    let payload_60: ref "core:prelude//List<i32>";
+    let payload_60: ref "core:prelude/list.wado//List<i32>";
     let start_365: i32;
     let x_377: i64;
     if self.discriminant == 0 {

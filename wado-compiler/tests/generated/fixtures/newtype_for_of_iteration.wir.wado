@@ -39,15 +39,15 @@ struct newtype_for_of_iteration.wado//$tmpl$ebaa20f4a908b504 {  // TypeId(6)
     mut r1: ref "core:prelude/string.wado//String",
 }
 
-struct core:prelude/slice.wado//SliceRefIter<u8> {  // TypeId(7)
+struct core:prelude/list.wado//List<u8> {  // TypeId(7)
+    mut repr: ref Array<u8>,
+    mut used: i32,
+}
+
+struct core:prelude/slice.wado//SliceRefIter<u8> {  // TypeId(8)
     mut repr: ref Array<u8>,
     mut index: i32,
     mut end: i32,
-}
-
-struct core:prelude//List<u8> {  // TypeId(8)
-    mut repr: ref Array<u8>,
-    mut used: i32,
 }
 
 type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(9)
@@ -165,13 +165,13 @@ global global:core:prelude/primitive.wado::$const_obj_0: ref "core:prelude/strin
 
 fn "newtype_for_of_iteration.wado/run"() {
     let $load_0: ref Array<u8>;
-    let bag: ref "core:prelude//List<u8>";
+    let bag: ref "core:prelude/list.wado//List<u8>";
     let sum: i32;
     let $iter_9: ref "core:prelude/slice.wado//SliceRefIter<u8>";
     let item: u8;
     let ref_val_89: u8;
     let $sroa_$iter_0_index_100: i32;
-    builtin::array_set_u8(local.tee $load_0(local.tee bag(struct.new "core:prelude//List<u8>" { repr: builtin::array_new<u8>(4), used: 0 }).repr), 0, 1);
+    builtin::array_set_u8(local.tee $load_0(local.tee bag(struct.new "core:prelude/list.wado//List<u8>" { repr: builtin::array_new<u8>(4), used: 0 }).repr), 0, 1);
     bag.used = 1;
     builtin::array_set_u8($load_0, 1, 2);
     bag.used = 2;
@@ -209,7 +209,7 @@ fn "newtype_for_of_iteration.wado/run"() {
         "newtype_for_of_iteration.wado/run$cold2"(sum);
         unreachable;
     }
-    builtin::array_set_u8(local.tee $load_0(local.tee bag(struct.new "core:prelude//List<u8>" { repr: builtin::array_new<u8>(2), used: 0 }).repr), 0, 10);
+    builtin::array_set_u8(local.tee $load_0(local.tee bag(struct.new "core:prelude/list.wado//List<u8>" { repr: builtin::array_new<u8>(2), used: 0 }).repr), 0, 10);
     bag.used = 1;
     builtin::array_set_u8($load_0, 1, 20);
     bag.used = 2;

@@ -38,7 +38,12 @@ array Array<opt_dropped_value_in_if_let_arm.wado/Elem> (mut ref "opt_dropped_val
 
 array Array<()> (mut ());  // TypeId(11)
 
-struct core:collections/treemap.wado//TreeMap<core:prelude/string.wado/String,()> {  // TypeId(12)
+struct core:prelude/list.wado//List<opt_dropped_value_in_if_let_arm.wado/Elem> {  // TypeId(12)
+    mut repr: ref "Array<opt_dropped_value_in_if_let_arm.wado/Elem>",
+    mut used: i32,
+}
+
+struct core:collections/treemap.wado//TreeMap<core:prelude/string.wado/String,()> {  // TypeId(13)
     mut log: ref "core:collections/entries.wado//EntryLog<core:prelude/string.wado/String,()>",
     mut slots: ref Array<i32>,
     mut nkeys: ref "Array<core:prelude/string.wado/String>",
@@ -49,18 +54,13 @@ struct core:collections/treemap.wado//TreeMap<core:prelude/string.wado/String,()
     mut height: i32,
 }
 
-struct core:collections/entries.wado//EntryLog<core:prelude/string.wado/String,()> {  // TypeId(13)
+struct core:collections/entries.wado//EntryLog<core:prelude/string.wado/String,()> {  // TypeId(14)
     mut keys: ref "Array<core:prelude/string.wado/String>",
     mut values: ref Array<()>,
     mut alive: ref Array<bool>,
     mut count: i32,
     mut size: i32,
     mut deleted_count: i32,
-}
-
-struct core:prelude//List<opt_dropped_value_in_if_let_arm.wado/Elem> {  // TypeId(14)
-    mut repr: ref "Array<opt_dropped_value_in_if_let_arm.wado/Elem>",
-    mut used: i32,
 }
 
 type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(15)
@@ -77,7 +77,7 @@ type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(20)
 
 type "functype//wasi/$wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(21)
 
-type "functype//opt_dropped_value_in_if_let_arm.wado/distinct_names" = fn(ref "core:prelude//List<opt_dropped_value_in_if_let_arm.wado/Elem>") -> i32;  // TypeId(22)
+type "functype//opt_dropped_value_in_if_let_arm.wado/distinct_names" = fn(ref "Array<opt_dropped_value_in_if_let_arm.wado/Elem>", i32) -> i32;  // TypeId(22)
 
 type "functype//opt_dropped_value_in_if_let_arm.wado/run" = fn();  // TypeId(23)
 
@@ -128,41 +128,37 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode";
 import fn wasi/task-return from "wasi/task-return";
 
-fn "opt_dropped_value_in_if_let_arm.wado/distinct_names"(elems) {
-    let $load_4: ref "core:collections/entries.wado//EntryLog<core:prelude/string.wado/String,()>";
+fn "opt_dropped_value_in_if_let_arm.wado/distinct_names"($mv$elems$repr, $mv$elems$used) {
+    let $load_2: ref "core:collections/entries.wado//EntryLog<core:prelude/string.wado/String,()>";
     let n: ref "core:prelude/string.wado//String";
-    let end: i32;
     let ref_val: ref "opt_dropped_value_in_if_let_arm.wado//Elem";
     let $sroa_names_inner_28: ref "core:collections/treemap.wado//TreeMap<core:prelude/string.wado/String,()>";
     let b: i32;
-    let $sroa_$iter_0_repr_47: ref "Array<opt_dropped_value_in_if_let_arm.wado/Elem>";
     let $sroa_$iter_0_index_48: i32;
     let $av_50: i32;
     $sroa_names_inner_28 = struct.new "core:collections/treemap.wado//TreeMap<core:prelude/string.wado/String,()>" { log: struct.new "core:collections/entries.wado//EntryLog<core:prelude/string.wado/String,()>" { keys: builtin::array_new<ref "core:prelude/string.wado//String">(0), values: builtin::array_new<()>(0), alive: builtin::array_new<bool>(0), count: 0, size: 0, deleted_count: 0 }, slots: builtin::array_new<i32>(0), nkeys: builtin::array_new<ref "core:prelude/string.wado//String">(0), kids: builtin::array_new<i32>(0), lens: builtin::array_new<i32>(0), nodes: 0, root: -1, height: 0 };
-    end = elems.used;
-    $sroa_$iter_0_repr_47 = elems.repr;
     $sroa_$iter_0_index_48 = 0;
     b0: block {
         l1: loop {
-            break_if b0 $sroa_$iter_0_index_48 >= end;
-            ref_val = builtin::array_get_value<ref "opt_dropped_value_in_if_let_arm.wado//Elem">($sroa_$iter_0_repr_47, $sroa_$iter_0_index_48);
+            break_if b0 $sroa_$iter_0_index_48 >= $mv$elems$used;
+            ref_val = builtin::array_get_value<ref "opt_dropped_value_in_if_let_arm.wado//Elem">($mv$elems$repr, $sroa_$iter_0_index_48);
             $sroa_$iter_0_index_48 = $sroa_$iter_0_index_48 + 1;
             if ref.test "opt_dropped_value_in_if_let_arm.wado//Elem::Name"(ref_val) {
                 $av_50 = local.tee n(ref.cast "opt_dropped_value_in_if_let_arm.wado//Elem::Name"(ref_val).payload_0).used;
                 n = struct.new "core:prelude/string.wado//String" { repr: let $array_clone_src_1: ref Array<u8>; $array_clone_src_1 = n.repr; let $array_clone_dst_2: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>($av_50)), 0, $array_clone_src_1, 0, $av_50); $array_clone_dst_2, used: $av_50 };
                 drop($inline_core_collections_treemap_wado_TreeMap_core_prelude_string_wado_String______try_insert_15: block -> bool {
-                    if "core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:prelude/string.wado/String,()>::place"($sroa_names_inner_28, n, local.tee $load_4($sroa_names_inner_28.log).count) >= 0 {
+                    if "core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:prelude/string.wado/String,()>::place"($sroa_names_inner_28, n, local.tee $load_2($sroa_names_inner_28.log).count) >= 0 {
                         break $inline_core_collections_treemap_wado_TreeMap_core_prelude_string_wado_String______try_insert_15: 0;
                     }
-                    if @unlikely(local.tee $av_50($load_4.count) == builtin::array_len($load_4.keys)) {
+                    if @unlikely(local.tee $av_50($load_2.count) == builtin::array_len($load_2.keys)) {
                         cold_path;
-                        "core:collections/entries.wado/core:collections/entries.wado/EntryLog<core:prelude/string.wado/String,()>::grow"($load_4, b = $av_50 * 2; select i32(4 > b, 4, b));
+                        "core:collections/entries.wado/core:collections/entries.wado/EntryLog<core:prelude/string.wado/String,()>::grow"($load_2, b = $av_50 * 2; select i32(4 > b, 4, b));
                     }
-                    builtin::array_set<ref "core:prelude/string.wado//String">($load_4.keys, $av_50, n);
-                    builtin::array_set<()>($load_4.values, $av_50, nop);
-                    builtin::array_set<bool>($load_4.alive, $av_50, 1);
-                    $load_4.count = $av_50 + 1;
-                    $load_4.size = $load_4.size + 1;
+                    builtin::array_set<ref "core:prelude/string.wado//String">($load_2.keys, $av_50, n);
+                    builtin::array_set<()>($load_2.values, $av_50, nop);
+                    builtin::array_set<bool>($load_2.alive, $av_50, 1);
+                    $load_2.count = $av_50 + 1;
+                    $load_2.size = $load_2.size + 1;
                     break $inline_core_collections_treemap_wado_TreeMap_core_prelude_string_wado_String______try_insert_15: 1;
                 });
             } else {
@@ -184,7 +180,7 @@ fn "opt_dropped_value_in_if_let_arm.wado/run"() with Stdout {
     let tens: i32;
     let start_178: i32;
     used = builtin::array_len(local.tee elements(array.new_fixed<ref "opt_dropped_value_in_if_let_arm.wado//Elem">(struct.new "opt_dropped_value_in_if_let_arm.wado//Elem::Name" { discriminant: 0, payload_0: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97), used: 1 } }, struct.new "opt_dropped_value_in_if_let_arm.wado//Elem::Num" { discriminant: 1, payload_0: black_box(1) }, struct.new "opt_dropped_value_in_if_let_arm.wado//Elem::Name" { discriminant: 0, payload_0: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(98), used: 1 } }, struct.new "opt_dropped_value_in_if_let_arm.wado//Elem::Name" { discriminant: 0, payload_0: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97), used: 1 } })));
-    used = "opt_dropped_value_in_if_let_arm.wado/distinct_names"(struct.new "core:prelude//List<opt_dropped_value_in_if_let_arm.wado/Elem>" { repr: elements, used: used });
+    used = "opt_dropped_value_in_if_let_arm.wado/distinct_names"(struct.new "core:prelude/list.wado//List<opt_dropped_value_in_if_let_arm.wado/Elem>" { repr: elements, used: used }.repr, used);
     out_15 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
     $inline_core_prelude_string_wado_String__internal_push_view_24: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_24;

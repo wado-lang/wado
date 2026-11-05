@@ -40,7 +40,7 @@ struct scalar_read_keeps_move.wado//$tmpl$ebaa20f4a908b504 {  // TypeId(6)
 }
 
 struct scalar_read_keeps_move.wado//Item {  // TypeId(7)
-    mut ids: ref "core:prelude//List<i32>",
+    mut ids: ref "core:prelude/list.wado//List<i32>",
     mut tag: i32,
 }
 
@@ -48,12 +48,12 @@ array Array<i32> (mut i32);  // TypeId(8)
 
 array Array<scalar_read_keeps_move.wado/Item> (mut ref "scalar_read_keeps_move.wado//Item");  // TypeId(9)
 
-struct core:prelude//List<i32> {  // TypeId(10)
+struct core:prelude/list.wado//List<i32> {  // TypeId(10)
     mut repr: ref Array<i32>,
     mut used: i32,
 }
 
-struct core:prelude//List<scalar_read_keeps_move.wado/Item> {  // TypeId(11)
+struct core:prelude/list.wado//List<scalar_read_keeps_move.wado/Item> {  // TypeId(11)
     mut repr: ref "Array<scalar_read_keeps_move.wado/Item>",
     mut used: i32,
 }
@@ -72,9 +72,9 @@ type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(17)
 
 type "functype//wasi/$wasi:cli/stderr@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(18)
 
-type "functype//scalar_read_keeps_move.wado/make" = fn(i32) -> ref "core:prelude//List<scalar_read_keeps_move.wado/Item>";  // TypeId(19)
+type "functype//scalar_read_keeps_move.wado/make" = fn(i32) -> [ref "Array<scalar_read_keeps_move.wado/Item>", i32];  // TypeId(19)
 
-type "functype//scalar_read_keeps_move.wado/keep" = fn(i32) -> ref "core:prelude//List<scalar_read_keeps_move.wado/Item>";  // TypeId(20)
+type "functype//scalar_read_keeps_move.wado/keep" = fn(i32) -> ref "core:prelude/list.wado//List<scalar_read_keeps_move.wado/Item>";  // TypeId(20)
 
 type "functype//scalar_read_keeps_move.wado/$template_segment$scalar_read_keeps_move.wado/$tmpl$ebaa20f4a908b504" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", i32) -> ref "core:prelude/string.wado//String";  // TypeId(21)
 
@@ -132,9 +132,9 @@ type "functype//scalar_read_keeps_move.wado/scalar_read_keeps_move.wado/$tmpl$eb
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::format<scalar_read_keeps_move.wado/$tmpl$ebaa20f4a908b504,[i32]>" = fn(ref "scalar_read_keeps_move.wado//$tmpl$ebaa20f4a908b504") -> ref "core:prelude/string.wado//String";  // TypeId(48)
 
-type "functype//core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow" = fn(ref "core:prelude//List<i32>");  // TypeId(49)
+type "functype//core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow" = fn(ref "core:prelude/list.wado//List<i32>");  // TypeId(49)
 
-type "functype//core:prelude/list.wado/core:prelude/list.wado/List<scalar_read_keeps_move.wado/Item>::grow" = fn(ref "core:prelude//List<scalar_read_keeps_move.wado/Item>");  // TypeId(50)
+type "functype//core:prelude/list.wado/core:prelude/list.wado/List<scalar_read_keeps_move.wado/Item>::grow" = fn(ref "core:prelude/list.wado//List<scalar_read_keeps_move.wado/Item>");  // TypeId(50)
 
 type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(51)
 
@@ -173,53 +173,52 @@ fn "scalar_read_keeps_move.wado/make"(k) {
     let elements_1: ref "Array<scalar_read_keeps_move.wado/Item>";
     let elements_3: ref Array<i32>;
     let used_4: i32;
-    k = builtin::array_len(local.tee elements_1(array.new_fixed<ref "scalar_read_keeps_move.wado//Item">(struct.new "scalar_read_keeps_move.wado//Item" { ids: used_4 = builtin::array_len(local.tee elements_3(array.new_fixed<i32>(k))); struct.new "core:prelude//List<i32>" { repr: elements_3, used: used_4 }, tag: k })));
-    return struct.new "core:prelude//List<scalar_read_keeps_move.wado/Item>" { repr: elements_1, used: k };
+    k = builtin::array_len(local.tee elements_1(array.new_fixed<ref "scalar_read_keeps_move.wado//Item">(struct.new "scalar_read_keeps_move.wado//Item" { ids: used_4 = builtin::array_len(local.tee elements_3(array.new_fixed<i32>(k))); struct.new "core:prelude/list.wado//List<i32>" { repr: elements_3, used: used_4 }, tag: k })));
+    return elements_1, k;
 }
 
 fn "scalar_read_keeps_move.wado/keep"(n) {
-    let $load_5: i32;
-    let out: ref "core:prelude//List<scalar_read_keeps_move.wado/Item>";
-    let seen: ref "core:prelude//List<i32>";
-    let self_10: ref "core:prelude//List<scalar_read_keeps_move.wado/Item>";
+    let $load_4: i32;
+    let out: ref "core:prelude/list.wado//List<scalar_read_keeps_move.wado/Item>";
+    let seen: ref "core:prelude/list.wado//List<i32>";
     let v_16: ref "scalar_read_keeps_move.wado//Item";
-    let v_17: ref "core:prelude//List<i32>";
+    let v_17: ref "core:prelude/list.wado//List<i32>";
     let i: i32;
-    let $sroa_$iter_0_repr_45: ref "Array<scalar_read_keeps_move.wado/Item>";
     let $sroa_$iter_0_index_46: i32;
     let $av_51: i32;
-    out = struct.new "core:prelude//List<scalar_read_keeps_move.wado/Item>" { repr: array.new_fixed<ref "scalar_read_keeps_move.wado//Item">(), used: 0 };
-    seen = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(), used: 0 };
-    n = local.tee self_10("scalar_read_keeps_move.wado/make"(n)).used;
-    $sroa_$iter_0_repr_45 = self_10.repr;
+    out = struct.new "core:prelude/list.wado//List<scalar_read_keeps_move.wado/Item>" { repr: array.new_fixed<ref "scalar_read_keeps_move.wado//Item">(), used: 0 };
+    seen = struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(), used: 0 };
+    let $mv_repr_1: ref "Array<scalar_read_keeps_move.wado/Item>";
+    multivalue_bind [$mv_repr_1, n] = "scalar_read_keeps_move.wado/make"(n);
+    $mv_repr_1 = struct.new "core:prelude/list.wado//List<scalar_read_keeps_move.wado/Item>" { repr: $mv_repr_1, used: n }.repr;
     $sroa_$iter_0_index_46 = 0;
     b0: block {
         l1: loop {
             break_if b0 $sroa_$iter_0_index_46 >= n;
-            $av_51 = local.tee v_16(builtin::array_get_value<ref "scalar_read_keeps_move.wado//Item">($sroa_$iter_0_repr_45, $sroa_$iter_0_index_46)).tag;
-            v_16 = struct.new "scalar_read_keeps_move.wado//Item" { ids: v_17 = v_16.ids; struct.new "core:prelude//List<i32>" { repr: let $array_clone_src_1: ref Array<i32>; $array_clone_src_1 = v_17.repr; $load_5 = v_17.used; let $array_clone_dst_2: ref Array<i32>; builtin::array_copy<i32>(local.tee $array_clone_dst_2(builtin::array_new<i32>($load_5)), 0, $array_clone_src_1, 0, $load_5); $array_clone_dst_2, used: $load_5 }, tag: $av_51 };
+            $av_51 = local.tee v_16(builtin::array_get_value<ref "scalar_read_keeps_move.wado//Item">($mv_repr_1, $sroa_$iter_0_index_46)).tag;
+            v_16 = struct.new "scalar_read_keeps_move.wado//Item" { ids: v_17 = v_16.ids; struct.new "core:prelude/list.wado//List<i32>" { repr: let $array_clone_src_3: ref Array<i32>; $array_clone_src_3 = v_17.repr; $load_4 = v_17.used; let $array_clone_dst_4: ref Array<i32>; builtin::array_copy<i32>(local.tee $array_clone_dst_4(builtin::array_new<i32>($load_4)), 0, $array_clone_src_3, 0, $load_4); $array_clone_dst_4, used: $load_4 }, tag: $av_51 };
             $sroa_$iter_0_index_46 = $sroa_$iter_0_index_46 + 1;
             if $av_51 == -1 {
                 if $inline_core_prelude_slice_wado_Slice_i32___contains_sroa_value_value__8: block -> bool {
-                    $load_5 = seen.used;
-                    $array_clone_src_1 = seen.repr;
+                    $load_4 = seen.used;
+                    $array_clone_src_3 = seen.repr;
                     i = 0;
                     b4: block {
                         l5: loop {
-                            break_if b4 (((i >= $load_5) | ((i + 1) >= $load_5)) | (((i + 1) + 1) >= $load_5)) | ((((i + 1) + 1) + 1) >= $load_5);
-                            if builtin::array_get_value<i32>($array_clone_src_1, i) == $av_51 {
+                            break_if b4 (((i >= $load_4) | ((i + 1) >= $load_4)) | (((i + 1) + 1) >= $load_4)) | ((((i + 1) + 1) + 1) >= $load_4);
+                            if builtin::array_get_value<i32>($array_clone_src_3, i) == $av_51 {
                                 break $inline_core_prelude_slice_wado_Slice_i32___contains_sroa_value_value__8: 1;
                             }
                             i = i + 1;
-                            if builtin::array_get_value<i32>($array_clone_src_1, i) == $av_51 {
+                            if builtin::array_get_value<i32>($array_clone_src_3, i) == $av_51 {
                                 break $inline_core_prelude_slice_wado_Slice_i32___contains_sroa_value_value__8: 1;
                             }
                             i = i + 1;
-                            if builtin::array_get_value<i32>($array_clone_src_1, i) == $av_51 {
+                            if builtin::array_get_value<i32>($array_clone_src_3, i) == $av_51 {
                                 break $inline_core_prelude_slice_wado_Slice_i32___contains_sroa_value_value__8: 1;
                             }
                             i = i + 1;
-                            if builtin::array_get_value<i32>($array_clone_src_1, i) == $av_51 {
+                            if builtin::array_get_value<i32>($array_clone_src_3, i) == $av_51 {
                                 break $inline_core_prelude_slice_wado_Slice_i32___contains_sroa_value_value__8: 1;
                             }
                             i = i + 1;
@@ -228,8 +227,8 @@ fn "scalar_read_keeps_move.wado/keep"(n) {
                     };
                     b10: block {
                         l11: loop {
-                            break_if b10 i >= $load_5;
-                            if builtin::array_get_value<i32>($array_clone_src_1, i) == $av_51 {
+                            break_if b10 i >= $load_4;
+                            if builtin::array_get_value<i32>($array_clone_src_3, i) == $av_51 {
                                 break $inline_core_prelude_slice_wado_Slice_i32___contains_sroa_value_value__8: 1;
                             }
                             i = i + 1;
@@ -238,12 +237,12 @@ fn "scalar_read_keeps_move.wado/keep"(n) {
                     };
                     break $inline_core_prelude_slice_wado_Slice_i32___contains_sroa_value_value__8: 0;
                 } == 0 {
-                    if @unlikely(local.tee $load_5(seen.used) >= builtin::array_len(seen.repr)) {
+                    if @unlikely(local.tee $load_4(seen.used) >= builtin::array_len(seen.repr)) {
                         cold_path;
                         "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(seen);
                     }
-                    builtin::array_set<i32>(seen.repr, $load_5, $av_51);
-                    seen.used = $load_5 + 1;
+                    builtin::array_set<i32>(seen.repr, $load_4, $av_51);
+                    seen.used = $load_4 + 1;
                 }
             } else {
                 if @unlikely(local.tee $av_51(out.used) >= builtin::array_len(out.repr)) {
@@ -274,10 +273,10 @@ fn "scalar_read_keeps_move.wado/$template_segment$scalar_read_keeps_move.wado/$t
 }
 
 fn "scalar_read_keeps_move.wado/$cm_export__run"() {
-    let $v0: i32;
-    if @unlikely(local.tee $v0("scalar_read_keeps_move.wado/keep"(black_box(0)).used) != 1) {
+    let self: i32;
+    if @unlikely(local.tee self("scalar_read_keeps_move.wado/keep"(black_box(0)).used) != 1) {
         cold_path;
-        "scalar_read_keeps_move.wado/run$cold0"($v0);
+        "scalar_read_keeps_move.wado/run$cold0"(self);
         unreachable;
     }
     "wasi/task-return"(0);

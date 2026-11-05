@@ -14,32 +14,32 @@ struct core:prelude/string.wado//String {  // TypeId(2)
 struct opt_value_copy_iterated_ref_param_moves.wado//$Closure_0 {  // TypeId(3)}
 
 struct opt_value_copy_iterated_ref_param_moves.wado//Item {  // TypeId(4)
-    mut tags: ref "core:prelude//List<core:prelude/string.wado/String>",
+    mut tags: ref "core:prelude/list.wado//List<core:prelude/string.wado/String>",
 }
 
 array Array<core:prelude/string.wado/String> (mut ref "core:prelude/string.wado//String");  // TypeId(5)
 
 array Array<opt_value_copy_iterated_ref_param_moves.wado/Item> (mut ref "opt_value_copy_iterated_ref_param_moves.wado//Item");  // TypeId(6)
 
-struct core:prelude/slice.wado//SliceValueIter<core:prelude/string.wado/String> {  // TypeId(7)
+struct core:prelude/list.wado//List<core:prelude/string.wado/String> {  // TypeId(7)
+    mut repr: ref "Array<core:prelude/string.wado/String>",
+    mut used: i32,
+}
+
+struct core:prelude/list.wado//List<opt_value_copy_iterated_ref_param_moves.wado/Item> {  // TypeId(8)
+    mut repr: ref "Array<opt_value_copy_iterated_ref_param_moves.wado/Item>",
+    mut used: i32,
+}
+
+struct core:prelude/slice.wado//SliceValueIter<core:prelude/string.wado/String> {  // TypeId(9)
     mut repr: ref "Array<core:prelude/string.wado/String>",
     mut index: i32,
     mut end: i32,
 }
 
-struct core:prelude/traits.wado//IterFilter<core:prelude/slice.wado/SliceValueIter<core:prelude/string.wado/String>,fn mut(core:prelude/string.wado/String)->bool> {  // TypeId(8)
+struct core:prelude/traits.wado//IterFilter<core:prelude/slice.wado/SliceValueIter<core:prelude/string.wado/String>,fn mut(core:prelude/string.wado/String)->bool> {  // TypeId(10)
     mut inner: ref "core:prelude/slice.wado//SliceValueIter<core:prelude/string.wado/String>",
     mut pred: ref struct,
-}
-
-struct core:prelude//List<core:prelude/string.wado/String> {  // TypeId(9)
-    mut repr: ref "Array<core:prelude/string.wado/String>",
-    mut used: i32,
-}
-
-struct core:prelude//List<opt_value_copy_iterated_ref_param_moves.wado/Item> {  // TypeId(10)
-    mut repr: ref "Array<opt_value_copy_iterated_ref_param_moves.wado/Item>",
-    mut used: i32,
 }
 
 type "functype/$canonical_closure_fn_0" = fn(ref null struct, ref "core:prelude/string.wado//String") -> bool;  // TypeId(11)
@@ -77,11 +77,11 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/String::reallo
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(26)
 
-type "functype//core:prelude/list.wado/core:prelude/list.wado/List<opt_value_copy_iterated_ref_param_moves.wado/Item>::grow" = fn(ref "core:prelude//List<opt_value_copy_iterated_ref_param_moves.wado/Item>");  // TypeId(27)
+type "functype//core:prelude/list.wado/core:prelude/list.wado/List<opt_value_copy_iterated_ref_param_moves.wado/Item>::grow" = fn(ref "core:prelude/list.wado//List<opt_value_copy_iterated_ref_param_moves.wado/Item>");  // TypeId(27)
 
 type "functype//core:prelude/traits.wado/core:prelude/traits.wado/IterFilter<core:prelude/slice.wado/SliceValueIter<core:prelude/string.wado/String>,fn mut(core:prelude/string.wado/String)->bool>^core:prelude/traits.wado/Iterator::next" = fn(ref "core:prelude/traits.wado//IterFilter<core:prelude/slice.wado/SliceValueIter<core:prelude/string.wado/String>,fn mut(core:prelude/string.wado/String)->bool>") -> ref null "core:prelude/string.wado//String";  // TypeId(28)
 
-type "functype//core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>::grow" = fn(ref "core:prelude//List<core:prelude/string.wado/String>");  // TypeId(29)
+type "functype//core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>::grow" = fn(ref "core:prelude/list.wado//List<core:prelude/string.wado/String>");  // TypeId(29)
 
 type "functype//opt_value_copy_iterated_ref_param_moves.wado/opt_value_copy_iterated_ref_param_moves.wado/$Closure_0::$call$dae[self]" = fn(ref "core:prelude/string.wado//String") -> bool;  // TypeId(30)
 
@@ -115,8 +115,8 @@ import fn wasi/task-return from "wasi/task-return";
 global global:core:prelude/string.wado::$const_obj_1: ref Array<u8> = array.new_fixed<u8>(97, 97);
 
 fn "opt_value_copy_iterated_ref_param_moves.wado/build$dae[n]"() {
-    let $load_0: ref "core:prelude//List<core:prelude/string.wado/String>";
-    let out: ref "core:prelude//List<opt_value_copy_iterated_ref_param_moves.wado/Item>";
+    let $load_0: ref "core:prelude/list.wado//List<core:prelude/string.wado/String>";
+    let out: ref "core:prelude/list.wado//List<opt_value_copy_iterated_ref_param_moves.wado/Item>";
     let total: i32;
     let i_2: i32;
     let it: ref "opt_value_copy_iterated_ref_param_moves.wado//Item";
@@ -127,14 +127,14 @@ fn "opt_value_copy_iterated_ref_param_moves.wado/build$dae[n]"() {
     let $local_3: ref null "core:prelude/string.wado//String";
     let elements_47: ref "Array<core:prelude/string.wado/String>";
     let used_48: i32;
-    out = struct.new "core:prelude//List<opt_value_copy_iterated_ref_param_moves.wado/Item>" { repr: array.new_fixed<ref "opt_value_copy_iterated_ref_param_moves.wado//Item">(), used: 0 };
+    out = struct.new "core:prelude/list.wado//List<opt_value_copy_iterated_ref_param_moves.wado/Item>" { repr: array.new_fixed<ref "opt_value_copy_iterated_ref_param_moves.wado//Item">(), used: 0 };
     total = 0;
     i_2 = 0;
     b0: block {
         l1: loop {
             break_if b0 i_2 >= 3;
-            it = struct.new "opt_value_copy_iterated_ref_param_moves.wado//Item" { tags: used_48 = builtin::array_len(local.tee elements_47(array.new_fixed<ref "core:prelude/string.wado//String">("core:prelude/string.wado/core:prelude/string.wado/String::format<opt_value_copy_iterated_ref_param_moves.wado/$tmpl$fb51c04d54491732,[i32]>$spec0$spec0$sroa[t.h0]"(i_2), struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(98), used: 1 }))); struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: elements_47, used: used_48 } };
-            total = total + total = local.tee $load_0(it.tags).used; self_10 = struct.new "core:prelude/slice.wado//SliceValueIter<core:prelude/string.wado/String>" { repr: $load_0.repr, index: 0, end: total }; pred = struct.new "opt_value_copy_iterated_ref_param_moves.wado//$Closure_0" {}; $temp_inline_core_prelude_traits_wado_IterFilter_core_prelude_slice_wado_SliceValueIter_core_prelude_string_wado_String__fn_mut_core_prelude_string_wado_String___bool__core_prelude_traits_wado_Iterator__collect_core_prelude_list_wado_List_core_prelude_string_wado_String___2_0 = struct.new "core:prelude/traits.wado//IterFilter<core:prelude/slice.wado/SliceValueIter<core:prelude/string.wado/String>,fn mut(core:prelude/string.wado/String)->bool>" { inner: self_10, pred: struct.new "canonical//CanonicalClosure_0" { env: pred, func: ref.func "closure/opt_value_copy_iterated_ref_param_moves.wado/$closure_wrapper_0" } }; $load_0 = struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: array.new_fixed<ref "core:prelude/string.wado//String">(), used: 0 }; b2: block {
+            it = struct.new "opt_value_copy_iterated_ref_param_moves.wado//Item" { tags: used_48 = builtin::array_len(local.tee elements_47(array.new_fixed<ref "core:prelude/string.wado//String">("core:prelude/string.wado/core:prelude/string.wado/String::format<opt_value_copy_iterated_ref_param_moves.wado/$tmpl$fb51c04d54491732,[i32]>$spec0$spec0$sroa[t.h0]"(i_2), struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(98), used: 1 }))); struct.new "core:prelude/list.wado//List<core:prelude/string.wado/String>" { repr: elements_47, used: used_48 } };
+            total = total + total = local.tee $load_0(it.tags).used; self_10 = struct.new "core:prelude/slice.wado//SliceValueIter<core:prelude/string.wado/String>" { repr: $load_0.repr, index: 0, end: total }; pred = struct.new "opt_value_copy_iterated_ref_param_moves.wado//$Closure_0" {}; $temp_inline_core_prelude_traits_wado_IterFilter_core_prelude_slice_wado_SliceValueIter_core_prelude_string_wado_String__fn_mut_core_prelude_string_wado_String___bool__core_prelude_traits_wado_Iterator__collect_core_prelude_list_wado_List_core_prelude_string_wado_String___2_0 = struct.new "core:prelude/traits.wado//IterFilter<core:prelude/slice.wado/SliceValueIter<core:prelude/string.wado/String>,fn mut(core:prelude/string.wado/String)->bool>" { inner: self_10, pred: struct.new "canonical//CanonicalClosure_0" { env: pred, func: ref.func "closure/opt_value_copy_iterated_ref_param_moves.wado/$closure_wrapper_0" } }; $load_0 = struct.new "core:prelude/list.wado//List<core:prelude/string.wado/String>" { repr: array.new_fixed<ref "core:prelude/string.wado//String">(), used: 0 }; b2: block {
                 l3: loop {
                     if ref.is_null(local.tee $local_3("core:prelude/traits.wado/core:prelude/traits.wado/IterFilter<core:prelude/slice.wado/SliceValueIter<core:prelude/string.wado/String>,fn mut(core:prelude/string.wado/String)->bool>^core:prelude/traits.wado/Iterator::next"($temp_inline_core_prelude_traits_wado_IterFilter_core_prelude_slice_wado_SliceValueIter_core_prelude_string_wado_String__fn_mut_core_prelude_string_wado_String___bool__core_prelude_traits_wado_Iterator__collect_core_prelude_list_wado_List_core_prelude_string_wado_String___2_0))) == 0 {
                         item = ref.as_non_null($local_3);

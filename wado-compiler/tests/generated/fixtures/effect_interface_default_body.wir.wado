@@ -56,7 +56,7 @@ struct effect_interface_default_body.wado//$Closure_0 {  // TypeId(12)
 
 array Array<core:prelude/string.wado/String> (mut ref "core:prelude/string.wado//String");  // TypeId(13)
 
-struct core:prelude//List<core:prelude/string.wado/String> {  // TypeId(14)
+struct core:prelude/list.wado//List<core:prelude/string.wado/String> {  // TypeId(14)
     mut repr: ref "Array<core:prelude/string.wado/String>",
     mut used: i32,
 }
@@ -118,9 +118,9 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/String::reallo
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(38)
 
-type "functype//core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>::grow" = fn(ref "core:prelude//List<core:prelude/string.wado/String>");  // TypeId(39)
+type "functype//core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>::grow" = fn(ref "core:prelude/list.wado//List<core:prelude/string.wado/String>");  // TypeId(39)
 
-type "functype//core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>^core:prelude/traits.wado/From<Array<T>>::from" = fn(ref "Array<core:prelude/string.wado/String>") -> ref "core:prelude//List<core:prelude/string.wado/String>";  // TypeId(40)
+type "functype//core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>^core:prelude/traits.wado/From<Array<T>>::from" = fn(ref "Array<core:prelude/string.wado/String>") -> [ref "Array<core:prelude/string.wado/String>", i32];  // TypeId(40)
 
 type "functype//effect_interface_default_body.wado/effect_interface_default_body.wado/$Closure_0::$call" = fn(ref "effect_interface_default_body.wado//$Closure_0") -> ref "core:prelude/string.wado//String";  // TypeId(41)
 
@@ -164,7 +164,7 @@ import fn wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode f
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
-global mut global:effect_interface_default_body.wado::LINES: ref null "core:prelude//List<core:prelude/string.wado/String>" = ref.null none;
+global mut global:effect_interface_default_body.wado::LINES: ref null "core:prelude/list.wado//List<core:prelude/string.wado/String>" = ref.null none;
 global mut global:effect_interface_default_body.wado::$effect_effect_interface_default_body.wado/Log: ref null "effect_interface_default_body.wado//$Dispatch_effect_interface_default_body.wado/Log" = ref.null none;
 global mut global:effect_interface_default_body.wado::$modules_initialized: bool = 0;
 global global:effect_interface_default_body.wado::$const_obj_0: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(110, 111, 32, 104, 97, 110, 100, 108, 101, 114, 32, 105, 110, 115, 116, 97, 108, 108, 101, 100, 32, 102, 111, 114, 32, 96, 76, 111, 103, 58, 58, 114, 101, 113, 117, 105, 114, 101, 100, 96), used: 40 };
@@ -177,7 +177,7 @@ fn "effect_interface_default_body.wado/run"() with Stdout, Log {
     let message_11: ref "core:prelude/string.wado//String";
     let $local_1_12: ref null "effect_interface_default_body.wado//$Dispatch_effect_interface_default_body.wado/Log";
     let $local_2_13: ref "effect_interface_default_body.wado//$Dispatch_effect_interface_default_body.wado/Log";
-    let self_15: ref "core:prelude//List<core:prelude/string.wado/String>";
+    let self_15: ref "core:prelude/list.wado//List<core:prelude/string.wado/String>";
     let used_17: i32;
     let $local_1_27: ref null "effect_interface_default_body.wado//$Dispatch_effect_interface_default_body.wado/Log";
     let text: ref "core:prelude/string.wado//String";
@@ -422,7 +422,10 @@ fn "effect_interface_default_body.wado/$cm_export__run"() {
 }
 
 fn "effect_interface_default_body.wado/$initialize_module"() {
-    global:effect_interface_default_body.wado::LINES = "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>^core:prelude/traits.wado/From<Array<T>>::from"(array.new_fixed<ref "core:prelude/string.wado//String">());
+    let $mv_repr_1: ref "Array<core:prelude/string.wado/String>";
+    let $mv_used_2: i32;
+    multivalue_bind [$mv_repr_1, $mv_used_2] = "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>^core:prelude/traits.wado/From<Array<T>>::from"(array.new_fixed<ref "core:prelude/string.wado//String">());
+    global:effect_interface_default_body.wado::LINES = struct.new "core:prelude/list.wado//List<core:prelude/string.wado/String>" { repr: $mv_repr_1, used: $mv_used_2 };
 }
 
 fn "effect_interface_default_body.wado/$initialize_modules$cold0"() {
@@ -581,7 +584,7 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/
 fn "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>^core:prelude/traits.wado/From<Array<T>>::from"(elements) {
     let used: i32;
     used = builtin::array_len(elements);
-    return struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: elements, used: used };
+    return elements, used;
 }
 
 fn "effect_interface_default_body.wado/effect_interface_default_body.wado/$Closure_0::$call"(self) {
@@ -590,7 +593,7 @@ fn "effect_interface_default_body.wado/effect_interface_default_body.wado/$Closu
 
 fn "effect_interface_default_body.wado/effect_interface_default_body.wado/$Closure_1::$call"(self, message) {
     let self_2: ref "effect_interface_default_body.wado//Collect";
-    let self_4: ref "core:prelude//List<core:prelude/string.wado/String>";
+    let self_4: ref "core:prelude/list.wado//List<core:prelude/string.wado/String>";
     let used: i32;
     self_2 = self.$capture_0;
     self_4 = global:effect_interface_default_body.wado::LINES;
@@ -634,7 +637,7 @@ fn "effect_interface_default_body.wado/effect_interface_default_body.wado/$Closu
 fn "effect_interface_default_body.wado/effect_interface_default_body.wado/$Closure_4::$call$dae[self]"(message) {
     let $local_1: ref null "effect_interface_default_body.wado//$Dispatch_effect_interface_default_body.wado/Log";
     let $local_2: ref "effect_interface_default_body.wado//$Dispatch_effect_interface_default_body.wado/Log";
-    let self_5: ref "core:prelude//List<core:prelude/string.wado/String>";
+    let self_5: ref "core:prelude/list.wado//List<core:prelude/string.wado/String>";
     let used: i32;
     $inline__effect_dispatch__effect_interface_default_body_wado_Log__emit_0: block {
         if ref.is_null(local.tee $local_1(global:effect_interface_default_body.wado::$effect_effect_interface_default_body.wado/Log)) == 0 {

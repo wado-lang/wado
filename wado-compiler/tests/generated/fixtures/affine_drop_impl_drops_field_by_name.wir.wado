@@ -53,7 +53,7 @@ struct affine_drop_impl_drops_field_by_name.wado//$Dispatch_core:prelude/types.w
 }
 
 struct affine_drop_impl_drops_field_by_name.wado//Box1 {  // TypeId(12)
-    mut items: ref null "core:prelude//List<core:prelude/types.wado/Stream<u8>>",
+    mut items: ref null "core:prelude/list.wado//List<core:prelude/types.wado/Stream<u8>>",
 }
 
 struct affine_drop_impl_drops_field_by_name.wado//Counter {  // TypeId(13)
@@ -66,23 +66,23 @@ struct affine_drop_impl_drops_field_by_name.wado//$Closure_3 {  // TypeId(14)
 
 array Array<core:prelude/types.wado/Stream<u8>> (mut ref null "core:prelude//$Resource");  // TypeId(15)
 
-struct core:prelude/types.wado//StartedRead<u8> {  // TypeId(16)
-    mut buffer: ref null "core:prelude/types.wado//CopyBuffer",
-    mut items: ref "core:prelude//List<u8>",
-}
-
-struct core:prelude//List<u8> {  // TypeId(17)
+struct core:prelude/list.wado//List<u8> {  // TypeId(16)
     mut repr: ref Array<u8>,
     mut used: i32,
 }
 
-struct core:prelude//List<core:prelude/types.wado/Stream<u8>> {  // TypeId(18)
-    mut repr: ref "Array<core:prelude/types.wado/Stream<u8>>",
+struct core:prelude/types.wado//StartedRead<u8> {  // TypeId(17)
+    mut buffer: ref null "core:prelude/types.wado//CopyBuffer",
+    mut items: ref "core:prelude/list.wado//List<u8>",
+}
+
+struct core:prelude/list.wado//List<core:prelude/types.wado/Stream<u8>> {  // TypeId(18)
+    mut repr: ref null "Array<core:prelude/types.wado/Stream<u8>>",
     mut used: i32,
 }
 
 struct affine_drop_impl_drops_field_by_name.wado//Bag<core:prelude/types.wado/Stream<u8>> {  // TypeId(19)
-    mut items: ref null "core:prelude//List<core:prelude/types.wado/Stream<u8>>",
+    mut items: ref null "core:prelude/list.wado//List<core:prelude/types.wado/Stream<u8>>",
 }
 
 type "functype/$canonical_closure_fn_0" = fn(ref null struct) -> ref null "tuple//[core:prelude/types.wado/Stream<u8>, core:prelude/types.wado/StreamWritable<u8>]";  // TypeId(20)
@@ -129,7 +129,7 @@ type "functype//wasi/$wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32; 
 
 type "functype//affine_drop_impl_drops_field_by_name.wado/run" = fn();  // TypeId(35)
 
-type "functype//affine_drop_impl_drops_field_by_name.wado/$drop$core:prelude/list.wado/List<core:prelude/types.wado/Stream<u8>>" = fn(ref null "core:prelude//List<core:prelude/types.wado/Stream<u8>>");  // TypeId(36)
+type "functype//affine_drop_impl_drops_field_by_name.wado/$drop$core:prelude/list.wado/List<core:prelude/types.wado/Stream<u8>>" = fn(ref null "Array<core:prelude/types.wado/Stream<u8>>", i32);  // TypeId(36)
 
 type "functype//affine_drop_impl_drops_field_by_name.wado/$cm_export__run" = fn();  // TypeId(37)
 
@@ -141,7 +141,7 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/String::reallo
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(41)
 
-type "functype//core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/types.wado/Stream<u8>>::grow" = fn(ref null "core:prelude//List<core:prelude/types.wado/Stream<u8>>");  // TypeId(42)
+type "functype//core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/types.wado/Stream<u8>>::grow" = fn(ref null "core:prelude/list.wado//List<core:prelude/types.wado/Stream<u8>>");  // TypeId(42)
 
 type "functype//affine_drop_impl_drops_field_by_name.wado/affine_drop_impl_drops_field_by_name.wado/$Closure_0::$call$dae[self]" = fn() -> ref null "tuple//[core:prelude/types.wado/Stream<u8>, core:prelude/types.wado/StreamWritable<u8>]";  // TypeId(43)
 
@@ -181,9 +181,9 @@ global mut global:affine_drop_impl_drops_field_by_name.wado::$effect_core:prelud
 global global:affine_drop_impl_drops_field_by_name.wado::$const_obj_0: ref Array<u8> = array.new_fixed<u8>(100, 114, 111, 112, 115, 61);
 
 fn "affine_drop_impl_drops_field_by_name.wado/run"() with Stdout {
-    let $load_45: ref Array<u8>;
+    let $load_53: ref Array<u8>;
     let c_0: ref "affine_drop_impl_drops_field_by_name.wado//Counter";
-    let items: ref null "core:prelude//List<core:prelude/types.wado/Stream<u8>>";
+    let items: ref null "core:prelude/list.wado//List<core:prelude/types.wado/Stream<u8>>";
     let _bag: ref null "affine_drop_impl_drops_field_by_name.wado//Bag<core:prelude/types.wado/Stream<u8>>";
     let _box: ref null "affine_drop_impl_drops_field_by_name.wado//Box1";
     let elements_16: ref null "Array<core:prelude/types.wado/Stream<u8>>";
@@ -249,7 +249,7 @@ fn "affine_drop_impl_drops_field_by_name.wado/run"() with Stdout {
     "wasi/stream-drop-writable"($local_2_186.1.value);
     global:affine_drop_impl_drops_field_by_name.wado::$effect_core:prelude/types.wado/Stream<u8> = struct.new "affine_drop_impl_drops_field_by_name.wado//$Dispatch_core:prelude/types.wado/Stream<u8>" { outer: local.tee $local_0_184(global:affine_drop_impl_drops_field_by_name.wado::$effect_core:prelude/types.wado/Stream<u8>), op_new: struct.new "canonical//CanonicalClosure_0" { env: struct.new "affine_drop_impl_drops_field_by_name.wado//$Closure_0" {}, func: ref.func "closure/affine_drop_impl_drops_field_by_name.wado/$closure_wrapper_0" }, op_begin_read: struct.new "canonical//CanonicalClosure_1" { env: struct.new "affine_drop_impl_drops_field_by_name.wado//$Closure_1" {}, func: ref.func "closure/affine_drop_impl_drops_field_by_name.wado/$closure_wrapper_1" }, op_cancel_read: struct.new "canonical//CanonicalClosure_2" { env: struct.new "affine_drop_impl_drops_field_by_name.wado//$Closure_2" {}, func: ref.func "closure/affine_drop_impl_drops_field_by_name.wado/$closure_wrapper_2" }, op_drop: struct.new "canonical//CanonicalClosure_3" { env: struct.new "affine_drop_impl_drops_field_by_name.wado//$Closure_3" { $capture_0: c_0 }, func: ref.func "closure/affine_drop_impl_drops_field_by_name.wado/$closure_wrapper_3" } };
     used_17 = builtin::array_len(local.tee elements_16(array.new_fixed<ref null "core:prelude//$Resource">()));
-    items = struct.new "core:prelude//List<core:prelude/types.wado/Stream<u8>>" { repr: ref.as_non_null(elements_16), used: used_17 };
+    items = struct.new "core:prelude/list.wado//List<core:prelude/types.wado/Stream<u8>>" { repr: elements_16, used: used_17 };
     if @unlikely(used_17 >= builtin::array_len(items.repr)) {
         cold_path;
         "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/types.wado/Stream<u8>>::grow"(items);
@@ -295,7 +295,7 @@ fn "affine_drop_impl_drops_field_by_name.wado/run"() with Stdout {
     items.used = used_17 + 1;
     _bag = struct.new "affine_drop_impl_drops_field_by_name.wado//Bag<core:prelude/types.wado/Stream<u8>>" { items: items };
     used_17 = builtin::array_len(local.tee elements_16(array.new_fixed<ref null "core:prelude//$Resource">()));
-    items = struct.new "core:prelude//List<core:prelude/types.wado/Stream<u8>>" { repr: ref.as_non_null(elements_16), used: used_17 };
+    items = struct.new "core:prelude/list.wado//List<core:prelude/types.wado/Stream<u8>>" { repr: elements_16, used: used_17 };
     if @unlikely(used_17 >= builtin::array_len(items.repr)) {
         cold_path;
         "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/types.wado/Stream<u8>>::grow"(items);
@@ -319,20 +319,20 @@ fn "affine_drop_impl_drops_field_by_name.wado/run"() with Stdout {
     items.used = used_17 + 1;
     items = local.tee _box(struct.new "affine_drop_impl_drops_field_by_name.wado//Box1" { items: items }).items;
     _box.items = ref.null none;
-    "affine_drop_impl_drops_field_by_name.wado/$drop$core:prelude/list.wado/List<core:prelude/types.wado/Stream<u8>>"(items);
+    "affine_drop_impl_drops_field_by_name.wado/$drop$core:prelude/list.wado/List<core:prelude/types.wado/Stream<u8>>"(items.repr, items.used);
     if ref.is_null(_box) == 0 {
         if ref.is_null(local.tee items(_box.items)) == 0 {
-            "affine_drop_impl_drops_field_by_name.wado/$drop$core:prelude/list.wado/List<core:prelude/types.wado/Stream<u8>>"(items);
+            "affine_drop_impl_drops_field_by_name.wado/$drop$core:prelude/list.wado/List<core:prelude/types.wado/Stream<u8>>"(items.repr, items.used);
         }
         _box.items = ref.null none;
     }
     if ref.is_null(_bag) == 0 {
         items = _bag.items;
         _bag.items = ref.null none;
-        "affine_drop_impl_drops_field_by_name.wado/$drop$core:prelude/list.wado/List<core:prelude/types.wado/Stream<u8>>"(items);
+        "affine_drop_impl_drops_field_by_name.wado/$drop$core:prelude/list.wado/List<core:prelude/types.wado/Stream<u8>>"(items.repr, items.used);
         if ref.is_null(_bag) == 0 {
             if ref.is_null(local.tee items(_bag.items)) == 0 {
-                "affine_drop_impl_drops_field_by_name.wado/$drop$core:prelude/list.wado/List<core:prelude/types.wado/Stream<u8>>"(items);
+                "affine_drop_impl_drops_field_by_name.wado/$drop$core:prelude/list.wado/List<core:prelude/types.wado/Stream<u8>>"(items.repr, items.used);
             }
             _bag.items = ref.null none;
         }
@@ -342,7 +342,7 @@ fn "affine_drop_impl_drops_field_by_name.wado/run"() with Stdout {
     out_81 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(22), used: 0 };
     $sroa_view_repr_667 = global:affine_drop_impl_drops_field_by_name.wado::$const_obj_0;
     out_81.used = 6;
-    builtin::array_copy<u8>(local.tee $load_45(out_81.repr), 0, $sroa_view_repr_667, 0, 6);
+    builtin::array_copy<u8>(local.tee $load_53(out_81.repr), 0, $sroa_view_repr_667, 0, 6);
     is_negative_143 = used_17 < 0;
     $cm_pair_5_189 = builtin::i64_extend_i32_s(used_17);
     $cm_pair_5_189 = select i64($cm_pair_5_189 < 0_i64, 0_i64 - $cm_pair_5_189, $cm_pair_5_189);
@@ -407,7 +407,7 @@ fn "affine_drop_impl_drops_field_by_name.wado/run"() with Stdout {
         break $inline_count_digits_u64_10: 20;
     };
     if is_negative_143 {
-        if @unlikely(local.tee is_negative_143(out_81.used + 1) > builtin::array_len($load_45)) {
+        if @unlikely(local.tee is_negative_143(out_81.used + 1) > builtin::array_len($load_53)) {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_81, is_negative_143);
         }
@@ -468,20 +468,16 @@ fn "affine_drop_impl_drops_field_by_name.wado/run"() with Stdout {
     "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(used_17);
 }
 
-fn "affine_drop_impl_drops_field_by_name.wado/$drop$core:prelude/list.wado/List<core:prelude/types.wado/Stream<u8>>"(value) {
-    let $slots_1: ref null "Array<core:prelude/types.wado/Stream<u8>>";
-    let $end_2: i32;
+fn "affine_drop_impl_drops_field_by_name.wado/$drop$core:prelude/list.wado/List<core:prelude/types.wado/Stream<u8>>"($mv$value$repr, $mv$value$used) {
     let $index_3: i32;
     let $slot_4: ref null "core:prelude//$Resource";
     let $local_1: ref null "affine_drop_impl_drops_field_by_name.wado//$Dispatch_core:prelude/types.wado/Stream<u8>";
     let $local_2: ref "affine_drop_impl_drops_field_by_name.wado//$Dispatch_core:prelude/types.wado/Stream<u8>";
-    $slots_1 = value.repr;
-    $end_2 = value.used;
     $index_3 = 0;
     b48: block {
         l49: loop {
-            break_if b48 $index_3 >= $end_2;
-            if ref.is_null(local.tee $slot_4(builtin::array_get_value<ref null "core:prelude//$Resource">($slots_1, $index_3))) == 0 {
+            break_if b48 $index_3 >= $mv$value$used;
+            if ref.is_null(local.tee $slot_4(builtin::array_get_value<ref null "core:prelude//$Resource">($mv$value$repr, $index_3))) == 0 {
                 $inline__effect_dispatch__core_prelude_types_wado_Stream_u8___drop_0: block {
                     if ref.is_null(local.tee $local_1(global:affine_drop_impl_drops_field_by_name.wado::$effect_core:prelude/types.wado/Stream<u8>)) == 0 {
                         global:affine_drop_impl_drops_field_by_name.wado::$effect_core:prelude/types.wado/Stream<u8> = local.tee $local_2(ref.as_non_null($local_1)).outer;
@@ -621,7 +617,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, min_ca
 }
 
 fn "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/types.wado/Stream<u8>>::grow"(self) {
-    let $load_0: ref "Array<core:prelude/types.wado/Stream<u8>>";
+    let $load_0: ref null "Array<core:prelude/types.wado/Stream<u8>>";
     let new_repr: ref null "Array<core:prelude/types.wado/Stream<u8>>";
     let a: i32;
     new_repr = builtin::array_new<ref null "core:prelude//$Resource">(select i32(a > 4, local.tee a(builtin::array_len(local.tee $load_0(self.repr)) * 2), 4));
@@ -631,7 +627,7 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/types.wado/S
     } else {
         builtin::array_fill<ref null "core:prelude//$Resource">($load_0, 0, ref.null none, a);
     }
-    self.repr = ref.as_non_null(new_repr);
+    self.repr = new_repr;
 }
 
 fn "affine_drop_impl_drops_field_by_name.wado/affine_drop_impl_drops_field_by_name.wado/$Closure_0::$call$dae[self]"() {

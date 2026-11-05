@@ -32,7 +32,7 @@ struct core:prelude/format.wado//Formatter {  // TypeId(5)
 }
 
 struct variant_construct.wado//$tmpl$f0c6495c7bb47a13 {  // TypeId(6)
-    mut h0: ref null "core:prelude//List<u8>",
+    mut h0: ref null "core:prelude/list.wado//List<u8>",
     mut s0: ref "core:prelude/string.wado//String",
     mut r0: ref "core:prelude/string.wado//String",
     mut s1: ref "core:prelude/string.wado//String",
@@ -47,19 +47,19 @@ struct variant_construct.wado//$tmpl$e651684364ce8ab5 {  // TypeId(7)
     mut r1: ref "core:prelude/string.wado//String",
 }
 
-variant core:prelude/types.wado//Option<i32> {  // TypeId(8)
+struct core:prelude/list.wado//List<u8> {  // TypeId(8)
+    mut repr: ref Array<u8>,
+    mut used: i32,
+}
+
+variant core:prelude/types.wado//Option<i32> {  // TypeId(9)
     None,
     Some(i32),
 }
 
-struct core:prelude/types.wado//Option<i32>::Some {  // TypeId(9)
+struct core:prelude/types.wado//Option<i32>::Some {  // TypeId(10)
     discriminant: i32,
     payload_0: i32,
-}
-
-struct core:prelude//List<u8> {  // TypeId(10)
-    mut repr: ref Array<u8>,
-    mut used: i32,
 }
 
 type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(11)
@@ -86,7 +86,7 @@ type "functype//variant_construct.wado/$template_segment$variant_construct.wado/
 
 type "functype//variant_construct.wado/$cm_export__run" = fn();  // TypeId(22)
 
-type "functype//variant_construct.wado/variant_construct_literal_coercion$cold0" = fn(ref null "core:prelude//List<u8>");  // TypeId(23)
+type "functype//variant_construct.wado/variant_construct_literal_coercion$cold0" = fn(ref null "core:prelude/list.wado//List<u8>");  // TypeId(23)
 
 type "functype//variant_construct.wado/variant_construct_literal_coercion$cold1" = fn(ref "core:prelude/types.wado//Option<i32>");  // TypeId(24)
 
@@ -104,7 +104,7 @@ type "functype//core:rt/unreachable" = fn();  // TypeId(30)
 
 type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(31)
 
-type "functype//core:prelude/traits.wado/core:prelude/traits.wado/inspect_variant_payload<core:prelude/list.wado/List<u8>>" = fn(ref "core:prelude//List<u8>", ref "core:prelude/format.wado//Formatter");  // TypeId(32)
+type "functype//core:prelude/traits.wado/core:prelude/traits.wado/inspect_variant_payload<core:prelude/list.wado/List<u8>>" = fn(ref Array<u8>, i32, ref "core:prelude/format.wado//Formatter");  // TypeId(32)
 
 type "functype//core:prelude/array.wado/core:prelude/array.wado/write_seq_inspect<u8>$dae[start,marker]" = fn(ref Array<u8>, i32, ref "core:prelude/format.wado//Formatter", i32);  // TypeId(33)
 
@@ -116,7 +116,7 @@ type "functype//core:prelude/traits.wado/core:prelude/traits.wado/inspect_varian
 
 type "functype//core:prelude/types.wado/$case_ref$core:prelude/types.wado/Option<i32>$i32$sroa[v.value]$spec0$dae[index]" = fn(ref "core:prelude/types.wado//Option<i32>") -> i32;  // TypeId(37)
 
-type "functype//core:prelude/types.wado/$case_ref$core:prelude/types.wado/Option<core:prelude/list.wado/List<u8>>$core:prelude/list.wado/List<u8>$sroa[v.value]$spec0$dae[index]" = fn(ref null "core:prelude//List<u8>") -> ref "core:prelude//List<u8>";  // TypeId(38)
+type "functype//core:prelude/types.wado/$case_ref$core:prelude/types.wado/Option<core:prelude/list.wado/List<u8>>$core:prelude/list.wado/List<u8>$sroa[v.value]$spec0$dae[index]" = fn(ref null "core:prelude/list.wado//List<u8>") -> ref "core:prelude/list.wado//List<u8>";  // TypeId(38)
 
 type "functype//core:rt/cm_stream_write_raw_all_u8$spec1$sroa[data.repr]$dae[return]" = fn(i32, ref Array<u8>);  // TypeId(39)
 
@@ -156,7 +156,7 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/String::format
 
 type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(57)
 
-type "functype//core:prelude/list.wado/core:prelude/list.wado/List<u8>^core:prelude/traits.wado/Inspect::inspect" = fn(ref "core:prelude//List<u8>", ref "core:prelude/format.wado//Formatter");  // TypeId(58)
+type "functype//core:prelude/list.wado/core:prelude/list.wado/List<u8>^core:prelude/traits.wado/Inspect::inspect" = fn(ref Array<u8>, i32, ref "core:prelude/format.wado//Formatter");  // TypeId(58)
 
 type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::write_char_n$sroa[self.buf]" = fn(ref "core:prelude/string.wado//String", char, i32);  // TypeId(59)
 
@@ -168,7 +168,7 @@ type "functype//core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<v
 
 type "functype//core:prelude/traits.wado/core:prelude/types.wado/Option<i32>^core:prelude/traits.wado/Inspect::inspect$sroa[self.value]" = fn(ref "core:prelude/types.wado//Option<i32>", ref "core:prelude/format.wado//Formatter");  // TypeId(63)
 
-type "functype//core:prelude/traits.wado/core:prelude/types.wado/Option<core:prelude/list.wado/List<u8>>^core:prelude/traits.wado/Inspect::inspect$sroa[self.value]" = fn(ref null "core:prelude//List<u8>", ref "core:prelude/format.wado//Formatter");  // TypeId(64)
+type "functype//core:prelude/traits.wado/core:prelude/types.wado/Option<core:prelude/list.wado/List<u8>>^core:prelude/traits.wado/Inspect::inspect$sroa[self.value]" = fn(ref null "core:prelude/list.wado//List<u8>", ref "core:prelude/format.wado//Formatter");  // TypeId(64)
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec0" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(65)
 
@@ -231,13 +231,13 @@ global global:core:prelude/traits.wado::$const_obj_24: ref "core:prelude/string.
 
 fn "variant_construct.wado/variant_construct_literal_coercion"() with Stdout {
     let opt_i32: ref "core:prelude/types.wado//Option<i32>";
-    let opt_arr: ref null "core:prelude//List<u8>";
+    let opt_arr: ref null "core:prelude/list.wado//List<u8>";
     let $cm_pair_7: i64;
     let $sroa_$pattern_temp_0_0_13: i32;
     let $sroa_$pattern_temp_0_1_14: i32;
     let new_repr: ref Array<u8>;
     opt_i32 = struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 1, payload_0: 42 };
-    opt_arr = struct.new "core:prelude//List<u8>" { repr: array.new_fixed<u8>(1, 2), used: 2 };
+    opt_arr = struct.new "core:prelude/list.wado//List<u8>" { repr: array.new_fixed<u8>(1, 2), used: 2 };
     if @unlikely(ref.cast "core:prelude/types.wado//Option<i32>::Some"(opt_i32).payload_0 != 42) {
         cold_path;
         "variant_construct.wado/variant_construct_literal_coercion$cold1"(opt_i32);
@@ -559,18 +559,18 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
     };
 }
 
-fn "core:prelude/traits.wado/core:prelude/traits.wado/inspect_variant_payload<core:prelude/list.wado/List<u8>>"(payload, f) {
+fn "core:prelude/traits.wado/core:prelude/traits.wado/inspect_variant_payload<core:prelude/list.wado/List<u8>>"($mv$payload$repr, $mv$payload$used, f) {
     let $load_2: ref "core:prelude/string.wado//String";
     if f.alternate {
         "core:prelude/format.wado/core:prelude/format.wado/Formatter::open_brace<core:prelude/string.wado/String>$spec0"(f, global:core:prelude/traits.wado::$const_obj_3);
         "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_newline_indent"(f);
-        "core:prelude/list.wado/core:prelude/list.wado/List<u8>^core:prelude/traits.wado/Inspect::inspect"(payload, f);
+        "core:prelude/list.wado/core:prelude/list.wado/List<u8>^core:prelude/traits.wado/Inspect::inspect"($mv$payload$repr, $mv$payload$used, f);
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec1"(f.buf, global:core:prelude/traits.wado::$const_obj_5);
         "core:prelude/format.wado/core:prelude/format.wado/Formatter::close_brace<core:prelude/string.wado/String>$spec0"(f, global:core:prelude/traits.wado::$const_obj_2);
         return;
     }
     "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec1"(local.tee $load_2(f.buf), global:core:prelude/traits.wado::$const_obj_3);
-    "core:prelude/list.wado/core:prelude/list.wado/List<u8>^core:prelude/traits.wado/Inspect::inspect"(payload, f);
+    "core:prelude/list.wado/core:prelude/list.wado/List<u8>^core:prelude/traits.wado/Inspect::inspect"($mv$payload$repr, $mv$payload$used, f);
     "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec1"($load_2, global:core:prelude/traits.wado::$const_obj_2);
 }
 
@@ -1053,13 +1053,12 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
     }
 }
 
-fn "core:prelude/list.wado/core:prelude/list.wado/List<u8>^core:prelude/traits.wado/Inspect::inspect"(self, f) {
-    let self_2: i32;
-    "core:prelude/array.wado/core:prelude/array.wado/write_seq_inspect<u8>$dae[start,marker]"(self.repr, self.used, f, $inline_core_prelude_format_wado_Formatter__resolved_seq_limit_sroa_self_precision__0: block -> i32 {
-        if local.tee self_2(f.precision) == -2 {
+fn "core:prelude/list.wado/core:prelude/list.wado/List<u8>^core:prelude/traits.wado/Inspect::inspect"($mv$self$repr, $mv$self$used, f) {
+    "core:prelude/array.wado/core:prelude/array.wado/write_seq_inspect<u8>$dae[start,marker]"($mv$self$repr, $mv$self$used, f, $inline_core_prelude_format_wado_Formatter__resolved_seq_limit_sroa_self_precision__0: block -> i32 {
+        if local.tee $mv$self$used(f.precision) == -2 {
             break $inline_core_prelude_format_wado_Formatter__resolved_seq_limit_sroa_self_precision__0: 256;
         }
-        break $inline_core_prelude_format_wado_Formatter__resolved_seq_limit_sroa_self_precision__0: self_2;
+        break $inline_core_prelude_format_wado_Formatter__resolved_seq_limit_sroa_self_precision__0: $mv$self$used;
     });
 }
 
@@ -1124,7 +1123,8 @@ fn "core:prelude/traits.wado/core:prelude/types.wado/Option<core:prelude/list.wa
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec4"(local.tee $load_0(f.buf), global:core:prelude/traits.wado::$const_obj_23);
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec0"($load_0, global:core:prelude/traits.wado::$const_obj_22);
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec5"($load_0, global:core:prelude/traits.wado::$const_obj_21);
-        "core:prelude/traits.wado/core:prelude/traits.wado/inspect_variant_payload<core:prelude/list.wado/List<u8>>"("core:prelude/types.wado/$case_ref$core:prelude/types.wado/Option<core:prelude/list.wado/List<u8>>$core:prelude/list.wado/List<u8>$sroa[v.value]$spec0$dae[index]"(self), f);
+        let $mv_arg_1: ref "core:prelude/list.wado//List<u8>";
+        "core:prelude/traits.wado/core:prelude/traits.wado/inspect_variant_payload<core:prelude/list.wado/List<u8>>"(local.tee $mv_arg_1("core:prelude/types.wado/$case_ref$core:prelude/types.wado/Option<core:prelude/list.wado/List<u8>>$core:prelude/list.wado/List<u8>$sroa[v.value]$spec0$dae[index]"(self)).repr, $mv_arg_1.used, f);
     }
 }
 

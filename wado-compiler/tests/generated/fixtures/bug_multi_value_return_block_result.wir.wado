@@ -68,7 +68,7 @@ struct bug_multi_value_return_block_result.wado//Sel::B {  // TypeId(10)
 
 array Array<i32> (mut i32);  // TypeId(11)
 
-struct core:prelude//List<i32> {  // TypeId(12)
+struct core:prelude/list.wado//List<i32> {  // TypeId(12)
     mut repr: ref Array<i32>,
     mut used: i32,
 }
@@ -89,15 +89,15 @@ type "functype//wasi/$wasi:cli/stderr@0.3.0#write-via-stream" = fn(i32) -> i32; 
 
 type "functype//wasi/$wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(20)
 
-type "functype//bug_multi_value_return_block_result.wado/find" = fn(ref "core:prelude//List<i32>", i32) -> i32;  // TypeId(21)
+type "functype//bug_multi_value_return_block_result.wado/find" = fn(ref Array<i32>, i32, i32) -> i32;  // TypeId(21)
 
-type "functype//bug_multi_value_return_block_result.wado/sum" = fn(ref "core:prelude//List<i32>", ref "core:prelude//List<i32>") -> i32;  // TypeId(22)
+type "functype//bug_multi_value_return_block_result.wado/sum" = fn(ref Array<i32>, i32, ref Array<i32>, i32) -> i32;  // TypeId(22)
 
 type "functype//bug_multi_value_return_block_result.wado/run" = fn();  // TypeId(23)
 
 type "functype//bug_multi_value_return_block_result.wado/$cm_export__run" = fn();  // TypeId(24)
 
-type "functype//bug_multi_value_return_block_result.wado/resolve$sroa[sel.value,return]" = fn(ref "core:prelude//List<i32>", ref "core:prelude//List<i32>", ref "bug_multi_value_return_block_result.wado//Sel") -> [i32, i32];  // TypeId(25)
+type "functype//bug_multi_value_return_block_result.wado/resolve$sroa[sel.value,return]" = fn(ref Array<i32>, i32, ref Array<i32>, i32, ref "bug_multi_value_return_block_result.wado//Sel") -> [i32, i32];  // TypeId(25)
 
 type "functype//core:prelude/list.wado/$template_segment$core:prelude/list.wado/$tmpl$59e16269228f9c88" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", i32) -> ref "core:prelude/string.wado//String";  // TypeId(26)
 
@@ -157,9 +157,9 @@ type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::pad
 
 type "functype//core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<core:prelude/list.wado/$tmpl$59e16269228f9c88,core:prelude/string.wado/String>::lit$sroa[self.index]" = fn(i32, ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//StrSlice";  // TypeId(54)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::write_char_n$sroa[self.buf]" = fn(ref "core:prelude/string.wado//String", char, i32);  // TypeId(55)
+type "functype//core:prelude/string.wado/&core:prelude/string.wado/StrSlice^core:prelude/string.wado/AsStrSlice::internal_append_to$sroa[self.value]" = fn(ref "core:prelude/string.wado//StrSlice", ref "core:prelude/string.wado//String");  // TypeId(55)
 
-type "functype//core:prelude/string.wado/&core:prelude/string.wado/StrSlice^core:prelude/string.wado/AsStrSlice::internal_append_to$sroa[self.value]" = fn(ref "core:prelude/string.wado//StrSlice", ref "core:prelude/string.wado//String");  // TypeId(56)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::write_char_n$sroa[self.buf]" = fn(ref "core:prelude/string.wado//String", char, i32);  // TypeId(56)
 
 type "functype//core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(57)
 
@@ -199,29 +199,25 @@ global global:bug_multi_value_return_block_result.wado::$const_obj_0: ref "bug_m
 global global:bug_multi_value_return_block_result.wado::$const_obj_1: ref "bug_multi_value_return_block_result.wado//Sel" = struct.new "bug_multi_value_return_block_result.wado//Sel::B" { discriminant: 1, payload_0: 30 };
 global global:bug_multi_value_return_block_result.wado::$const_obj_2: ref "bug_multi_value_return_block_result.wado//Sel" = struct.new "bug_multi_value_return_block_result.wado//Sel::A" { discriminant: 0, payload_0: 20 };
 
-fn "bug_multi_value_return_block_result.wado/find"(m, k) {
+fn "bug_multi_value_return_block_result.wado/find"($mv$m$repr, $mv$m$used, k) {
     let i: i32;
-    let $licm_used_15: i32;
-    let $licm_repr_16: ref Array<i32>;
     i = 0;
-    $licm_used_15 = m.used;
-    $licm_repr_16 = m.repr;
     b0: block {
         l1: loop {
-            break_if b0 (((i >= $licm_used_15) | ((i + 1) >= $licm_used_15)) | (((i + 1) + 1) >= $licm_used_15)) | ((((i + 1) + 1) + 1) >= $licm_used_15);
-            if builtin::array_get_value<i32>($licm_repr_16, i) == k {
+            break_if b0 (((i >= $mv$m$used) | ((i + 1) >= $mv$m$used)) | (((i + 1) + 1) >= $mv$m$used)) | ((((i + 1) + 1) + 1) >= $mv$m$used);
+            if builtin::array_get_value<i32>($mv$m$repr, i) == k {
                 return i;
             }
             i = i + 1;
-            if builtin::array_get_value<i32>($licm_repr_16, i) == k {
+            if builtin::array_get_value<i32>($mv$m$repr, i) == k {
                 return i;
             }
             i = i + 1;
-            if builtin::array_get_value<i32>($licm_repr_16, i) == k {
+            if builtin::array_get_value<i32>($mv$m$repr, i) == k {
                 return i;
             }
             i = i + 1;
-            if builtin::array_get_value<i32>($licm_repr_16, i) == k {
+            if builtin::array_get_value<i32>($mv$m$repr, i) == k {
                 return i;
             }
             i = i + 1;
@@ -230,8 +226,8 @@ fn "bug_multi_value_return_block_result.wado/find"(m, k) {
     };
     b6: block {
         l7: loop {
-            break_if b6 i >= $licm_used_15;
-            if builtin::array_get_value<i32>($licm_repr_16, i) == k {
+            break_if b6 i >= $mv$m$used;
+            if builtin::array_get_value<i32>($mv$m$repr, i) == k {
                 return i;
             }
             i = i + 1;
@@ -241,24 +237,24 @@ fn "bug_multi_value_return_block_result.wado/find"(m, k) {
     return -1;
 }
 
-fn "bug_multi_value_return_block_result.wado/sum"(a, b) {
+fn "bug_multi_value_return_block_result.wado/sum"($mv$a$repr, $mv$a$used, $mv$b$repr, $mv$b$used) {
     let s: i32;
     s = 0;
     let $mv$$match_6$0: i32;
     let $mv$$match_6$1: i32;
-    multivalue_bind [$mv$$match_6$0, $mv$$match_6$1] = "bug_multi_value_return_block_result.wado/resolve$sroa[sel.value,return]"(a, b, global:bug_multi_value_return_block_result.wado::$const_obj_2);
+    multivalue_bind [$mv$$match_6$0, $mv$$match_6$1] = (let $arg_spill_1: ref "bug_multi_value_return_block_result.wado//Sel"; $arg_spill_1 = global:bug_multi_value_return_block_result.wado::$const_obj_2; "bug_multi_value_return_block_result.wado/resolve$sroa[sel.value,return]"($mv$a$repr, $mv$a$used, $mv$b$repr, $mv$b$used, $arg_spill_1));
     if $mv$$match_6$0 == 1 {
         s = $mv$$match_6$1;
     } else {
     }
-    multivalue_bind [$mv$$match_6$0, $mv$$match_6$1] = "bug_multi_value_return_block_result.wado/resolve$sroa[sel.value,return]"(a, b, global:bug_multi_value_return_block_result.wado::$const_obj_1);
+    multivalue_bind [$mv$$match_6$0, $mv$$match_6$1] = ($arg_spill_1 = global:bug_multi_value_return_block_result.wado::$const_obj_1; "bug_multi_value_return_block_result.wado/resolve$sroa[sel.value,return]"($mv$a$repr, $mv$a$used, $mv$b$repr, $mv$b$used, $arg_spill_1));
     if $mv$$match_6$0 == 1 {
         s = s + $mv$$match_6$1;
     } else {
     }
-    multivalue_bind [$mv$$match_6$0, $mv$$match_6$1] = "bug_multi_value_return_block_result.wado/resolve$sroa[sel.value,return]"(a, b, global:bug_multi_value_return_block_result.wado::$const_obj_0);
-    if $mv$$match_6$0 == 1 {
-        s = s + $mv$$match_6$1;
+    multivalue_bind [$mv$a$used, $mv$b$used] = ($arg_spill_1 = global:bug_multi_value_return_block_result.wado::$const_obj_0; "bug_multi_value_return_block_result.wado/resolve$sroa[sel.value,return]"($mv$a$repr, $mv$a$used, $mv$b$repr, $mv$b$used, $arg_spill_1));
+    if $mv$a$used == 1 {
+        s = s + $mv$b$used;
     } else {
         s = s + 7;
     }
@@ -266,27 +262,27 @@ fn "bug_multi_value_return_block_result.wado/sum"(a, b) {
 }
 
 fn "bug_multi_value_return_block_result.wado/run"() with Stdout {
-    let a: ref "core:prelude//List<i32>";
-    let b: ref "core:prelude//List<i32>";
+    let a: ref "core:prelude/list.wado//List<i32>";
+    let b: ref "core:prelude/list.wado//List<i32>";
     let elements_2: ref Array<i32>;
     let used_3: i32;
+    let used_5: i32;
     let out_18: ref "core:prelude/string.wado//String";
-    let is_negative_80: bool;
     let x: i64;
     let arr: ref Array<u8>;
     let q: u64;
     let tens: i32;
     let start_166: i32;
     used_3 = builtin::array_len(local.tee elements_2(array.new_fixed<i32>(black_box(10), 20)));
-    a = struct.new "core:prelude//List<i32>" { repr: elements_2, used: used_3 };
-    used_3 = builtin::array_len(local.tee elements_2(array.new_fixed<i32>(black_box(30), 40)));
-    b = struct.new "core:prelude//List<i32>" { repr: elements_2, used: used_3 };
-    used_3 = "bug_multi_value_return_block_result.wado/sum"(a, b);
+    a = struct.new "core:prelude/list.wado//List<i32>" { repr: elements_2, used: used_3 };
+    used_5 = builtin::array_len(local.tee elements_2(array.new_fixed<i32>(black_box(30), 40)));
+    b = struct.new "core:prelude/list.wado//List<i32>" { repr: elements_2, used: used_5 };
+    used_3 = "bug_multi_value_return_block_result.wado/sum"(a.repr, used_3, b.repr, used_5);
     out_18 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
     $inline_core_prelude_string_wado_String__internal_push_view_25: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_25;
     };
-    is_negative_80 = used_3 < 0;
+    used_5 = used_3 < 0;
     x = builtin::i64_extend_i32_s(used_3);
     x = select i64(x < 0_i64, 0_i64 - x, x);
     used_3 = $inline_count_digits_u64_1: block -> i32 {
@@ -349,30 +345,30 @@ fn "bug_multi_value_return_block_result.wado/run"() with Stdout {
         }
         break $inline_count_digits_u64_1: 20;
     };
-    if is_negative_80 {
-        if @unlikely(local.tee is_negative_80(0 + 1) > builtin::array_len(out_18.repr)) {
+    if used_5 {
+        if @unlikely(local.tee used_5(0 + 1) > builtin::array_len(out_18.repr)) {
             cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_18, is_negative_80);
+            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_18, used_5);
         }
         start_166 = out_18.used;
-        out_18.used = is_negative_80;
+        out_18.used = used_5;
         builtin::array_set_u8(out_18.repr, start_166, 45);
     } else {
     }
-    if @unlikely(local.tee is_negative_80(out_18.used + used_3) > builtin::array_len(out_18.repr)) {
+    if @unlikely(local.tee used_5(out_18.used + used_3) > builtin::array_len(out_18.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_18, is_negative_80);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_18, used_5);
     }
     start_166 = out_18.used;
-    out_18.used = is_negative_80;
+    out_18.used = used_5;
     arr = out_18.repr;
     used_3 = start_166 + used_3;
     b34: block {
         l35: loop {
             break_if b34 (used_3 - start_166) < 2;
             q = x /u 100_i64;
-            tens = local.tee is_negative_80(builtin::i32_wrap_i64(x - (q * 100_i64))) / 10;
-            builtin::array_set_u8(arr, used_3 - 1, (48 + is_negative_80) - (tens * 10));
+            tens = local.tee used_5(builtin::i32_wrap_i64(x - (q * 100_i64))) / 10;
+            builtin::array_set_u8(arr, used_3 - 1, (48 + used_5) - (tens * 10));
             builtin::array_set_u8(arr, used_3 - 2, 48 + tens);
             used_3 = used_3 - 2;
             x = q;
@@ -386,9 +382,9 @@ fn "bug_multi_value_return_block_result.wado/run"() with Stdout {
         break $inline_core_prelude_string_wado_String__internal_push_view_44;
     };
     used_3 = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
-    is_negative_80 = builtin::i32_wrap_i64(x >> 32_i64);
+    used_5 = builtin::i32_wrap_i64(x >> 32_i64);
     used_3 = "bug_multi_value_return_block_result.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(used_3);
-    "core:rt/write_string_to_stream$dae[add_newline]"(is_negative_80, out_18.repr, out_18.used);
+    "core:rt/write_string_to_stream$dae[add_newline]"(used_5, out_18.repr, out_18.used);
     "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(used_3);
 }
 
@@ -401,30 +397,28 @@ fn "bug_multi_value_return_block_result.wado/$cm_export__run"() {
     "wasi/task-return"(0);
 }
 
-fn "bug_multi_value_return_block_result.wado/resolve$sroa[sel.value,return]"(a, b, sel) {
-    let n: i32;
-    let $v1_10: i32;
+fn "bug_multi_value_return_block_result.wado/resolve$sroa[sel.value,return]"($mv$a$repr, $mv$a$used, $mv$b$repr, $mv$b$used, sel) {
     if ref.test "bug_multi_value_return_block_result.wado//Sel::A"(sel) {
-        n = ref.cast "bug_multi_value_return_block_result.wado//Sel::A"(sel).payload_0;
+        $mv$b$used = ref.cast "bug_multi_value_return_block_result.wado//Sel::A"(sel).payload_0;
         block {
-            if local.tee n("bug_multi_value_return_block_result.wado/find"(a, n)) >= 0 {
-                return 1, $v1_10 = a.used; if @unlikely(n >= $v1_10) {
+            if local.tee $mv$b$used("bug_multi_value_return_block_result.wado/find"($mv$a$repr, $mv$a$used, $mv$b$used)) >= 0 {
+                return 1, if @unlikely($mv$b$used >= $mv$a$used) {
                     cold_path;
-                    "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(n, $v1_10, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("bug_multi_value_return_block_result.wado:32"), used: 43 });
+                    "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"($mv$b$used, $mv$a$used, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("bug_multi_value_return_block_result.wado:32"), used: 43 });
                     unreachable;
-                }; builtin::array_get_value<i32>(a.repr, n);
+                }; builtin::array_get_value<i32>($mv$a$repr, $mv$b$used);
             }
             return 0, 0;
         };
     } else {
-        n = ref.cast "bug_multi_value_return_block_result.wado//Sel::B"(sel).payload_0;
+        $mv$a$used = ref.cast "bug_multi_value_return_block_result.wado//Sel::B"(sel).payload_0;
         block {
-            if local.tee n("bug_multi_value_return_block_result.wado/find"(b, n)) >= 0 {
-                return 1, $v1_10 = b.used; if @unlikely(n >= $v1_10) {
+            if local.tee $mv$a$used("bug_multi_value_return_block_result.wado/find"($mv$b$repr, $mv$b$used, $mv$a$used)) >= 0 {
+                return 1, if @unlikely($mv$a$used >= $mv$b$used) {
                     cold_path;
-                    "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(n, $v1_10, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("bug_multi_value_return_block_result.wado:32"), used: 43 });
+                    "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"($mv$a$used, $mv$b$used, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("bug_multi_value_return_block_result.wado:32"), used: 43 });
                     unreachable;
-                }; builtin::array_get_value<i32>(b.repr, n);
+                }; builtin::array_get_value<i32>($mv$b$repr, $mv$a$used);
             }
             return 0, 0;
         };
@@ -950,19 +944,6 @@ fn "core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<core:prelude/
     };
 }
 
-fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_char_n$sroa[self.buf]"(self, c, n) {
-    let i: i32;
-    i = 0;
-    b110: block {
-        l111: loop {
-            break_if b110 i >= n;
-            "core:prelude/string.wado/core:prelude/string.wado/String::push"(self, c);
-            i = i + 1;
-            continue l111;
-        };
-    };
-}
-
 fn "core:prelude/string.wado/&core:prelude/string.wado/StrSlice^core:prelude/string.wado/AsStrSlice::internal_append_to$sroa[self.value]"(self, out) {
     let n_8: i32;
     let new_used: i32;
@@ -976,6 +957,19 @@ fn "core:prelude/string.wado/&core:prelude/string.wado/StrSlice^core:prelude/str
         start_14 = out.used;
         out.used = new_used;
         builtin::array_copy<u8>(out.repr, start_14, self.repr, self.start, n_8);
+    };
+}
+
+fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_char_n$sroa[self.buf]"(self, c, n) {
+    let i: i32;
+    i = 0;
+    b111: block {
+        l112: loop {
+            break_if b111 i >= n;
+            "core:prelude/string.wado/core:prelude/string.wado/String::push"(self, c);
+            i = i + 1;
+            continue l112;
+        };
     };
 }
 

@@ -32,13 +32,13 @@ struct ctfe_view_through_cast.wado//$tmpl$a85860b7a9443735 {  // TypeId(3)
 }
 
 struct ctfe_view_through_cast.wado//Buf {  // TypeId(4)
-    mut items: ref "core:prelude//List<i32>",
+    mut items: ref "core:prelude/list.wado//List<i32>",
     mut n: i32,
 }
 
 array Array<i32> (mut i32);  // TypeId(5)
 
-struct core:prelude//List<i32> {  // TypeId(6)
+struct core:prelude/list.wado//List<i32> {  // TypeId(6)
     mut repr: ref Array<i32>,
     mut used: i32,
 }
@@ -79,7 +79,7 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" 
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::format<ctfe_view_through_cast.wado/$tmpl$a85860b7a9443735,[i32,i32,i32,i32,i32]>" = fn(ref "ctfe_view_through_cast.wado//$tmpl$a85860b7a9443735") -> ref "core:prelude/string.wado//String";  // TypeId(24)
 
-type "functype//core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow" = fn(ref "core:prelude//List<i32>");  // TypeId(25)
+type "functype//core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow" = fn(ref "core:prelude/list.wado//List<i32>");  // TypeId(25)
 
 type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]" = fn(ref "core:prelude/string.wado//String", bool, i32) -> i32;  // TypeId(26)
 
@@ -110,9 +110,9 @@ global mut global:ctfe_view_through_cast.wado::G: ref null "ctfe_view_through_ca
 global mut global:ctfe_view_through_cast.wado::$modules_initialized: bool = 0;
 
 fn "ctfe_view_through_cast.wado/run"() with Stdout {
-    let items: ref "core:prelude//List<i32>";
-    let len_before: i32;
-    let self_9: ref "core:prelude//List<i32>";
+    let items: ref "core:prelude/list.wado//List<i32>";
+    let self_8: i32;
+    let self_9: ref "core:prelude/list.wado//List<i32>";
     let used: i32;
     let message_16: ref "core:prelude/string.wado//String";
     let $cm_pair_7: i64;
@@ -125,24 +125,24 @@ fn "ctfe_view_through_cast.wado/run"() with Stdout {
     };
     $sroa_r_value_30 = global:ctfe_view_through_cast.wado::G.n;
     global:ctfe_view_through_cast.wado::G.n = 7;
-    len_before = local.tee items(global:ctfe_view_through_cast.wado::G.items).used;
+    self_8 = local.tee items(global:ctfe_view_through_cast.wado::G.items).used;
     if @unlikely(local.tee used(local.tee self_9(global:ctfe_view_through_cast.wado::G.items).used) >= builtin::array_len(self_9.repr)) {
         cold_path;
         "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(self_9);
     }
     builtin::array_set<i32>(self_9.repr, used, 4);
     self_9.used = used + 1;
-    message_16 = "core:prelude/string.wado/core:prelude/string.wado/String::format<ctfe_view_through_cast.wado/$tmpl$a85860b7a9443735,[i32,i32,i32,i32,i32]>"(struct.new "ctfe_view_through_cast.wado//$tmpl$a85860b7a9443735" { h0: $sroa_r_value_30, h1: $sroa_r_value_30, h2: len_before, h3: items.used, h4: global:ctfe_view_through_cast.wado::G.n, s0: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, r0: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(32), used: 1 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(32), used: 1 }, s2: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(32), used: 1 }, r2: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(32), used: 1 }, s3: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(32), used: 1 }, r3: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(32), used: 1 }, s4: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(32), used: 1 }, r4: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(32), used: 1 }, s5: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, r5: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 } });
+    message_16 = "core:prelude/string.wado/core:prelude/string.wado/String::format<ctfe_view_through_cast.wado/$tmpl$a85860b7a9443735,[i32,i32,i32,i32,i32]>"(struct.new "ctfe_view_through_cast.wado//$tmpl$a85860b7a9443735" { h0: $sroa_r_value_30, h1: $sroa_r_value_30, h2: self_8, h3: items.used, h4: global:ctfe_view_through_cast.wado::G.n, s0: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, r0: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(32), used: 1 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(32), used: 1 }, s2: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(32), used: 1 }, r2: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(32), used: 1 }, s3: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(32), used: 1 }, r3: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(32), used: 1 }, s4: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(32), used: 1 }, r4: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(32), used: 1 }, s5: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, r5: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 } });
     $sroa_r_value_30 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
-    len_before = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
+    self_8 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
     $sroa_r_value_30 = "ctfe_view_through_cast.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_r_value_30);
     builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>(local.tee used(message_16.used) + 1)), 0, message_16.repr, 0, used);
     builtin::array_set_u8(new_repr, used, 10);
     drop(block -> "core:prelude/types.wado//enum:CopyResult" {
         used = used + 1;
-        "core:rt/cm_stream_write_raw_all_u8"(len_before, new_repr, 0, used);
+        "core:rt/cm_stream_write_raw_all_u8"(self_8, new_repr, 0, used);
     });
-    "wasi/stream-drop-writable"(len_before);
+    "wasi/stream-drop-writable"(self_8);
     "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_r_value_30);
 }
 
@@ -161,7 +161,7 @@ fn "ctfe_view_through_cast.wado/$cm_export__run"() {
 }
 
 fn "ctfe_view_through_cast.wado/$initialize_module"() {
-    global:ctfe_view_through_cast.wado::G = struct.new "ctfe_view_through_cast.wado//Buf" { items: struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(1, 2, 3), used: 3 }, n: 3 };
+    global:ctfe_view_through_cast.wado::G = struct.new "ctfe_view_through_cast.wado//Buf" { items: struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(1, 2, 3), used: 3 }, n: 3 };
 }
 
 fn "ctfe_view_through_cast.wado/$initialize_modules$cold0"() {

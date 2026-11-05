@@ -97,7 +97,7 @@ struct effect_handler_resource_stream.wado//$tmpl$cdb440ff7333898b {  // TypeId(
 }
 
 struct effect_handler_resource_stream.wado//MockStream {  // TypeId(18)
-    mut log: ref "core:prelude//List<u8>",
+    mut log: ref "core:prelude/list.wado//List<u8>",
     mut drops: i32,
 }
 
@@ -119,23 +119,23 @@ struct effect_handler_resource_stream.wado//$Closure_0 {  // TypeId(22)
 
 struct core:prelude/types.wado//StartedWrite<u8> {  // TypeId(23)
     mut buffer: ref null "core:prelude/types.wado//CopyBuffer",
-    mut data: ref "core:prelude//List<u8>",
+    mut data: ref "core:prelude/list.wado//List<u8>",
 }
 
 struct core:prelude/types.wado//StartedRead<u8> {  // TypeId(24)
     mut buffer: ref null "core:prelude/types.wado//CopyBuffer",
-    mut items: ref "core:prelude//List<u8>",
+    mut items: ref "core:prelude/list.wado//List<u8>",
 }
 
-struct core:prelude/slice.wado//Slice<u8> {  // TypeId(25)
+struct core:prelude/list.wado//List<u8> {  // TypeId(25)
+    mut repr: ref Array<u8>,
+    mut used: i32,
+}
+
+struct core:prelude/slice.wado//Slice<u8> {  // TypeId(26)
     mut repr: ref Array<u8>,
     mut start: i32,
     mut end: i32,
-}
-
-struct core:prelude//List<u8> {  // TypeId(26)
-    mut repr: ref Array<u8>,
-    mut used: i32,
 }
 
 type "functype/$canonical_closure_fn_0" = fn(ref null struct) -> ref null "tuple//[core:prelude/types.wado/Stream<u8>, core:prelude/types.wado/StreamWritable<u8>]";  // TypeId(27)
@@ -166,7 +166,7 @@ struct canonical//CanonicalClosure_3 {  // TypeId(34)
     func: ref "functype/$canonical_closure_fn_3",
 }
 
-type "functype/$canonical_closure_fn_4" = fn(ref null struct, ref null "core:prelude//$Resource", ref "core:prelude//List<u8>") -> ref null "core:prelude/types.wado//StartedWrite<u8>";  // TypeId(35)
+type "functype/$canonical_closure_fn_4" = fn(ref null struct, ref null "core:prelude//$Resource", ref "core:prelude/list.wado//List<u8>") -> ref null "core:prelude/types.wado//StartedWrite<u8>";  // TypeId(35)
 
 struct canonical//CanonicalClosure_4 {  // TypeId(36)
     env: ref null struct,
@@ -246,7 +246,7 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/String::format
 
 type "functype//core:prelude/slice.wado/core:prelude/slice.wado/Slice<u8>^core:prelude/traits.wado/Inspect::inspect" = fn(ref Array<u8>, i32, i32, ref "core:prelude/format.wado//Formatter");  // TypeId(71)
 
-type "functype//core:prelude/list.wado/core:prelude/list.wado/List<u8>::grow" = fn(ref "core:prelude//List<u8>");  // TypeId(72)
+type "functype//core:prelude/list.wado/core:prelude/list.wado/List<u8>::grow" = fn(ref "core:prelude/list.wado//List<u8>");  // TypeId(72)
 
 type "functype//effect_handler_resource_stream.wado/effect_handler_resource_stream.wado/$Closure_0::$call$dae[self]" = fn() -> ref null "tuple//[core:prelude/types.wado/Stream<u8>, core:prelude/types.wado/StreamWritable<u8>]";  // TypeId(73)
 
@@ -356,7 +356,7 @@ fn "effect_handler_resource_stream.wado/run"() with Stdout {
     let $local_1_47: ref "effect_handler_resource_stream.wado//$Dispatch_core:prelude/types.wado/Stream<u8>";
     let $local_2_48: ref null "tuple//[core:prelude/types.wado/Stream<u8>, core:prelude/types.wado/StreamWritable<u8>]";
     let $cm_pair_5_51: i64;
-    s = struct.new "effect_handler_resource_stream.wado//MockStream" { log: struct.new "core:prelude//List<u8>" { repr: array.new_fixed<u8>(), used: 0 }, drops: 0 };
+    s = struct.new "effect_handler_resource_stream.wado//MockStream" { log: struct.new "core:prelude/list.wado//List<u8>" { repr: array.new_fixed<u8>(), used: 0 }, drops: 0 };
     global:effect_handler_resource_stream.wado::$effect_core:prelude/types.wado/Stream<u8> = struct.new "effect_handler_resource_stream.wado//$Dispatch_core:prelude/types.wado/Stream<u8>" { outer: local.tee $save_core:prelude/types.wado/Stream<u8>(global:effect_handler_resource_stream.wado::$effect_core:prelude/types.wado/Stream<u8>), op_new: struct.new "canonical//CanonicalClosure_0" { env: struct.new "effect_handler_resource_stream.wado//$Closure_0" { $capture_0: s }, func: ref.func "closure/effect_handler_resource_stream.wado/$closure_wrapper_0" }, op_begin_read: struct.new "canonical//CanonicalClosure_1" { env: struct.new "effect_handler_resource_stream.wado//$Closure_1" {}, func: ref.func "closure/effect_handler_resource_stream.wado/$closure_wrapper_1" }, op_cancel_read: struct.new "canonical//CanonicalClosure_2" { env: struct.new "effect_handler_resource_stream.wado//$Closure_2" {}, func: ref.func "closure/effect_handler_resource_stream.wado/$closure_wrapper_2" }, op_drop: struct.new "canonical//CanonicalClosure_3" { env: struct.new "effect_handler_resource_stream.wado//$Closure_3" { $capture_0: s }, func: ref.func "closure/effect_handler_resource_stream.wado/$closure_wrapper_3" } };
     global:effect_handler_resource_stream.wado::$effect_core:prelude/types.wado/StreamWritable<u8> = struct.new "effect_handler_resource_stream.wado//$Dispatch_core:prelude/types.wado/StreamWritable<u8>" { outer: local.tee $save_core:prelude/types.wado/StreamWritable<u8>(global:effect_handler_resource_stream.wado::$effect_core:prelude/types.wado/StreamWritable<u8>), op_begin_write: struct.new "canonical//CanonicalClosure_4" { env: struct.new "effect_handler_resource_stream.wado//$Closure_4" {}, func: ref.func "closure/effect_handler_resource_stream.wado/$closure_wrapper_4" }, op_cancel_write: struct.new "canonical//CanonicalClosure_2" { env: struct.new "effect_handler_resource_stream.wado//$Closure_5" {}, func: ref.func "closure/effect_handler_resource_stream.wado/$closure_wrapper_5" }, op_write_raw_all: struct.new "canonical//CanonicalClosure_5" { env: struct.new "effect_handler_resource_stream.wado//$Closure_6" { $capture_0: s }, func: ref.func "closure/effect_handler_resource_stream.wado/$closure_wrapper_6" }, op_drop: struct.new "canonical//CanonicalClosure_3" { env: struct.new "effect_handler_resource_stream.wado//$Closure_7" { $capture_0: s }, func: ref.func "closure/effect_handler_resource_stream.wado/$closure_wrapper_7" } };
     rx_1 = local.tee $local_2_48($inline__effect_dispatch__core_prelude_types_wado_Stream_u8___new_1: block -> ref null "tuple//[core:prelude/types.wado/Stream<u8>, core:prelude/types.wado/StreamWritable<u8>]" {
@@ -1029,7 +1029,7 @@ fn "effect_handler_resource_stream.wado/effect_handler_resource_stream.wado/$Clo
 }
 
 fn "effect_handler_resource_stream.wado/effect_handler_resource_stream.wado/$Closure_6::$call$dae[self#1]"(self, data) {
-    let self_2: ref "core:prelude//List<u8>";
+    let self_2: ref "core:prelude/list.wado//List<u8>";
     let repr: ref Array<u8>;
     let index_11: i32;
     let end: i32;

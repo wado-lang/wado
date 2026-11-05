@@ -4,7 +4,7 @@
 
 array Array<u32> (mut u32);  // TypeId(0)
 
-struct core:prelude//List<u32> {  // TypeId(1)
+struct core:prelude/list.wado//List<u32> {  // TypeId(1)
     mut repr: ref Array<u32>,
     mut used: i32,
 }
@@ -23,7 +23,7 @@ type "functype//wasi/task-return" = fn(i32);  // TypeId(7)
 
 type "functype//cm_list_param_resource_return.wado/$cm_binding__wasi:demo/gfx@0.1.0#[method]layout.id" = fn(i32) -> u32;  // TypeId(8)
 
-type "functype//cm_list_param_resource_return.wado/$cm_binding__wasi:demo/gfx@0.1.0#make-layout$spec0$spec0" = fn(ref "core:prelude//List<u32>") -> i32;  // TypeId(9)
+type "functype//cm_list_param_resource_return.wado/$cm_binding__wasi:demo/gfx@0.1.0#make-layout$spec0$spec0" = fn(ref "core:prelude/list.wado//List<u32>") -> i32;  // TypeId(9)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/$wasi:demo/gfx@0.1.0#make-layout from "wasi/$wasi:demo/gfx@0.1.0#make-layout";
@@ -38,7 +38,7 @@ fn "cm_list_param_resource_return.wado/$cm_binding__wasi:demo/gfx@0.1.0#[method]
 
 fn "cm_list_param_resource_return.wado/$cm_export__run"() {
     let l: i32;
-    drop("cm_list_param_resource_return.wado/$cm_binding__wasi:demo/gfx@0.1.0#[method]layout.id"(local.tee l("cm_list_param_resource_return.wado/$cm_binding__wasi:demo/gfx@0.1.0#make-layout$spec0$spec0"(struct.new "core:prelude//List<u32>" { repr: array.new_fixed<u32>(1, 2), used: 2 }))));
+    drop("cm_list_param_resource_return.wado/$cm_binding__wasi:demo/gfx@0.1.0#[method]layout.id"(local.tee l("cm_list_param_resource_return.wado/$cm_binding__wasi:demo/gfx@0.1.0#make-layout$spec0$spec0"(struct.new "core:prelude/list.wado//List<u32>" { repr: array.new_fixed<u32>(1, 2), used: 2 }))));
     if (l == 0) == 0 {
         "wasi/resource-drop:cm_list_param_resource_return.wado#Layout"(l);
     }

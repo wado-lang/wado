@@ -53,9 +53,9 @@ struct core:prelude/format.wado//Formatter {  // TypeId(7)
 
 array Array<i32> (mut i32);  // TypeId(8)
 
-array Array<core:prelude/list.wado/List<i32>> (mut ref "core:prelude//List<i32>");  // TypeId(9)
+array Array<core:prelude/list.wado/List<i32>> (mut ref "core:prelude/list.wado//List<i32>");  // TypeId(9)
 
-struct core:prelude//List<i32> {  // TypeId(10)
+struct core:prelude/list.wado//List<i32> {  // TypeId(10)
     mut repr: ref Array<i32>,
     mut used: i32,
 }
@@ -142,7 +142,7 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/StrSlice^core:
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::format<core:prelude/list.wado/$tmpl$59e16269228f9c88,[core:prelude/string.wado/String,i32,i32]>" = fn(ref "core:prelude/list.wado//$tmpl$59e16269228f9c88") -> ref "core:prelude/string.wado//String";  // TypeId(51)
 
-type "functype//core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow" = fn(ref "core:prelude//List<i32>");  // TypeId(52)
+type "functype//core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow" = fn(ref "core:prelude/list.wado//List<i32>");  // TypeId(52)
 
 type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/StrSlice>" = fn(ref "core:prelude/format.wado//Formatter", ref "core:prelude/string.wado//StrSlice");  // TypeId(53)
 
@@ -199,18 +199,18 @@ fn "remark_two_copies_one_statement.wado/run"() with Stdout {
     let used_23: i32;
     let elements_24: ref "Array<core:prelude/list.wado/List<i32>>";
     let used_25: i32;
-    let self_28: ref "core:prelude//List<i32>";
+    let self_28: ref "core:prelude/list.wado//List<i32>";
     let used_30: i32;
     let message_56: ref "core:prelude/string.wado//String";
     let $cm_pair_7: i64;
     used_23 = builtin::array_len(local.tee elements_22(array.new_fixed<i32>(1, 2, black_box(3))));
-    used_25 = builtin::array_len(local.tee elements_24(array.new_fixed<ref "core:prelude//List<i32>">(struct.new "core:prelude//List<i32>" { repr: let $array_clone_dst_2: ref Array<i32>; builtin::array_copy<i32>(local.tee $array_clone_dst_2(builtin::array_new<i32>(used_23)), 0, elements_22, 0, used_23); $array_clone_dst_2, used: used_23 }, struct.new "core:prelude//List<i32>" { repr: builtin::array_copy<i32>(local.tee $array_clone_dst_2(builtin::array_new<i32>(used_23)), 0, elements_22, 0, used_23); $array_clone_dst_2, used: used_23 })));
+    used_25 = builtin::array_len(local.tee elements_24(array.new_fixed<ref "core:prelude/list.wado//List<i32>">(struct.new "core:prelude/list.wado//List<i32>" { repr: let $array_clone_dst_2: ref Array<i32>; builtin::array_copy<i32>(local.tee $array_clone_dst_2(builtin::array_new<i32>(used_23)), 0, elements_22, 0, used_23); $array_clone_dst_2, used: used_23 }, struct.new "core:prelude/list.wado//List<i32>" { repr: builtin::array_copy<i32>(local.tee $array_clone_dst_2(builtin::array_new<i32>(used_23)), 0, elements_22, 0, used_23); $array_clone_dst_2, used: used_23 })));
     if @unlikely(0 >= used_25) {
         cold_path;
         "remark_two_copies_one_statement.wado/run$cold3$dae[$contract_arg_0]"(used_25);
         unreachable;
     }
-    if @unlikely(local.tee used_30(local.tee self_28(builtin::array_get_value<ref "core:prelude//List<i32>">(elements_24, 0)).used) >= builtin::array_len(self_28.repr)) {
+    if @unlikely(local.tee used_30(local.tee self_28(builtin::array_get_value<ref "core:prelude/list.wado//List<i32>">(elements_24, 0)).used) >= builtin::array_len(self_28.repr)) {
         cold_path;
         "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(self_28);
     }
@@ -221,15 +221,15 @@ fn "remark_two_copies_one_statement.wado/run"() with Stdout {
         "remark_two_copies_one_statement.wado/run$cold2$dae[$contract_arg_1]"(used_25);
         unreachable;
     }
-    if @unlikely(local.tee used_25(local.tee self_28(builtin::array_get_value<ref "core:prelude//List<i32>">(elements_24, 1)).used) >= builtin::array_len(self_28.repr)) {
+    if @unlikely(local.tee used_25(local.tee self_28(builtin::array_get_value<ref "core:prelude/list.wado//List<i32>">(elements_24, 1)).used) >= builtin::array_len(self_28.repr)) {
         cold_path;
         "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(self_28);
     }
     builtin::array_set<i32>(self_28.repr, used_25, 5);
     self_28.used = used_25 + 1;
     message_56 = block -> ref "core:prelude/string.wado//String" {
-        used_25 = builtin::array_get_value<ref "core:prelude//List<i32>">(elements_24, 0).used;
-        used_30 = builtin::array_get_value<ref "core:prelude//List<i32>">(elements_24, 1).used;
+        used_25 = builtin::array_get_value<ref "core:prelude/list.wado//List<i32>">(elements_24, 0).used;
+        used_30 = builtin::array_get_value<ref "core:prelude/list.wado//List<i32>">(elements_24, 1).used;
         "core:prelude/string.wado/core:prelude/string.wado/String::format<remark_two_copies_one_statement.wado/$tmpl$b31438d91a1e3c14,[i32,i32,i32]>$spec0$spec0"(used_23, used_25, used_30);
     };
     used_23 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));

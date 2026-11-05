@@ -91,8 +91,8 @@ struct tuple//[u64, u64] {  // TypeId(12)
 }
 
 struct condition_implication_sibling_field_lengths.wado//Node {  // TypeId(13)
-    mut outputs: ref "core:prelude//List<core:prelude/string.wado/String>",
-    mut inputs: ref "core:prelude//List<core:prelude/string.wado/String>",
+    mut outputs: ref "core:prelude/list.wado//List<core:prelude/string.wado/String>",
+    mut inputs: ref "core:prelude/list.wado//List<core:prelude/string.wado/String>",
 }
 
 array Array<i32> (mut i32);  // TypeId(14)
@@ -101,7 +101,12 @@ array Array<bool> (mut bool);  // TypeId(15)
 
 array Array<core:prelude/string.wado/String> (mut ref "core:prelude/string.wado//String");  // TypeId(16)
 
-struct core:collections/hashmap.wado//HashMap<core:prelude/string.wado/String,core:prelude/string.wado/String> {  // TypeId(17)
+struct core:prelude/list.wado//List<core:prelude/string.wado/String> {  // TypeId(17)
+    mut repr: ref "Array<core:prelude/string.wado/String>",
+    mut used: i32,
+}
+
+struct core:collections/hashmap.wado//HashMap<core:prelude/string.wado/String,core:prelude/string.wado/String> {  // TypeId(18)
     mut log: ref "core:collections/entries.wado//EntryLog<core:prelude/string.wado/String,core:prelude/string.wado/String>",
     mut fps: ref Array<i32>,
     mut table: ref Array<i32>,
@@ -109,18 +114,13 @@ struct core:collections/hashmap.wado//HashMap<core:prelude/string.wado/String,co
     mut seed: ref "core:collections/hashmap.wado//HashSeed",
 }
 
-struct core:collections/entries.wado//EntryLog<core:prelude/string.wado/String,core:prelude/string.wado/String> {  // TypeId(18)
+struct core:collections/entries.wado//EntryLog<core:prelude/string.wado/String,core:prelude/string.wado/String> {  // TypeId(19)
     mut keys: ref "Array<core:prelude/string.wado/String>",
     mut values: ref "Array<core:prelude/string.wado/String>",
     mut alive: ref Array<bool>,
     mut count: i32,
     mut size: i32,
     mut deleted_count: i32,
-}
-
-struct core:prelude//List<core:prelude/string.wado/String> {  // TypeId(19)
-    mut repr: ref "Array<core:prelude/string.wado/String>",
-    mut used: i32,
 }
 
 type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(20)
@@ -141,7 +141,7 @@ type "functype//wasi/$wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32; 
 
 type "functype//wasi/$wasi:random/insecure-seed@0.3.0#get-insecure-seed" = fn(i32);  // TypeId(28)
 
-type "functype//condition_implication_sibling_field_lengths.wado/second_input" = fn(ref "core:prelude//List<core:prelude/string.wado/String>", ref "core:prelude//List<core:prelude/string.wado/String>") -> ref "core:collections/hashmap.wado//HashMap<core:prelude/string.wado/String,core:prelude/string.wado/String>";  // TypeId(29)
+type "functype//condition_implication_sibling_field_lengths.wado/second_input" = fn(ref "core:prelude/list.wado//List<core:prelude/string.wado/String>", ref "core:prelude/list.wado//List<core:prelude/string.wado/String>") -> ref "core:collections/hashmap.wado//HashMap<core:prelude/string.wado/String,core:prelude/string.wado/String>";  // TypeId(29)
 
 type "functype//condition_implication_sibling_field_lengths.wado/run" = fn();  // TypeId(30)
 
@@ -253,11 +253,11 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/String::format
 
 type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::write_char_n$sroa[self.buf]" = fn(ref "core:prelude/string.wado//String", char, i32);  // TypeId(84)
 
-type "functype//core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(85)
+type "functype//core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<core:prelude/list.wado/$tmpl$59e16269228f9c88,core:prelude/string.wado/String>::lit$sroa[self.index]" = fn(i32, ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//StrSlice";  // TypeId(85)
 
-type "functype//core:prelude/string.wado/&core:prelude/string.wado/StrSlice^core:prelude/string.wado/AsStrSlice::internal_append_to$sroa[self.value]" = fn(ref "core:prelude/string.wado//StrSlice", ref "core:prelude/string.wado//String");  // TypeId(86)
+type "functype//core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(86)
 
-type "functype//core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<core:prelude/list.wado/$tmpl$59e16269228f9c88,core:prelude/string.wado/String>::lit$sroa[self.index]" = fn(i32, ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//StrSlice";  // TypeId(87)
+type "functype//core:prelude/string.wado/&core:prelude/string.wado/StrSlice^core:prelude/string.wado/AsStrSlice::internal_append_to$sroa[self.value]" = fn(ref "core:prelude/string.wado//StrSlice", ref "core:prelude/string.wado//String");  // TypeId(87)
 
 type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$dae[alt_prefix]" = fn(ref "core:prelude/format.wado//Formatter", bool, i32) -> i32;  // TypeId(88)
 
@@ -406,7 +406,7 @@ fn "condition_implication_sibling_field_lengths.wado/run"() with Stdout {
         cold_path;
         "condition_implication_sibling_field_lengths.wado/$initialize_modules$cold0"();
     };
-    self_25 = "condition_implication_sibling_field_lengths.wado/second_input"(local.tee node(struct.new "condition_implication_sibling_field_lengths.wado//Node" { outputs: struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: array.new_fixed<ref "core:prelude/string.wado//String">(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(65), used: 1 }), used: 1 }, inputs: struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: array.new_fixed<ref "core:prelude/string.wado//String">(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(88), used: 1 }, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(87), used: 1 }), used: 2 } }).outputs, node.inputs);
+    self_25 = "condition_implication_sibling_field_lengths.wado/second_input"(local.tee node(struct.new "condition_implication_sibling_field_lengths.wado//Node" { outputs: struct.new "core:prelude/list.wado//List<core:prelude/string.wado/String>" { repr: array.new_fixed<ref "core:prelude/string.wado//String">(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(65), used: 1 }), used: 1 }, inputs: struct.new "core:prelude/list.wado//List<core:prelude/string.wado/String>" { repr: array.new_fixed<ref "core:prelude/string.wado//String">(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(88), used: 1 }, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(87), used: 1 }), used: 2 } }).outputs, node.inputs);
     v_23 = (if ref.is_null(local.tee v_23($inline_core_collections_entries_wado_EntryLog_core_prelude_string_wado_String_core_prelude_string_wado_String___value_at_7: block -> ref null "core:prelude/string.wado//String" {
         if local.tee $arg_spill_3($inline_core_collections_hashmap_wado_HashMap_core_prelude_string_wado_String_core_prelude_string_wado_String___find_index_0: block -> i32 {
             key_114 = global:condition_implication_sibling_field_lengths.wado::$const_obj_0;
@@ -1899,6 +1899,12 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_char_n$sr
     };
 }
 
+fn "core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<core:prelude/list.wado/$tmpl$59e16269228f9c88,core:prelude/string.wado/String>::lit$sroa[self.index]"(self, $mv$t$s0, $mv$t$r0, $mv$t$s1, $mv$t$r1, $mv$t$s2, $mv$t$r2, $mv$t$s3, $mv$t$r3) {
+    return block -> ref "core:prelude/string.wado//StrSlice" {
+        "core:prelude/string.wado/core:prelude/string.wado/String::internal_view"(local.tee $mv$t$s0("core:prelude/list.wado/$template_segment$core:prelude/list.wado/$tmpl$59e16269228f9c88"($mv$t$s0, $mv$t$r0, $mv$t$s1, $mv$t$r1, $mv$t$s2, $mv$t$r2, $mv$t$s3, $mv$t$r3, 2 * self)).repr, $mv$t$s0.used);
+    };
+}
+
 fn "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(self, f) {
     let is_negative: bool;
     let abs_val: u64;
@@ -1921,12 +1927,6 @@ fn "core:prelude/string.wado/&core:prelude/string.wado/StrSlice^core:prelude/str
         start_14 = out.used;
         out.used = new_used;
         builtin::array_copy<u8>(out.repr, start_14, self.repr, self.start, n_8);
-    };
-}
-
-fn "core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<core:prelude/list.wado/$tmpl$59e16269228f9c88,core:prelude/string.wado/String>::lit$sroa[self.index]"(self, $mv$t$s0, $mv$t$r0, $mv$t$s1, $mv$t$r1, $mv$t$s2, $mv$t$r2, $mv$t$s3, $mv$t$r3) {
-    return block -> ref "core:prelude/string.wado//StrSlice" {
-        "core:prelude/string.wado/core:prelude/string.wado/String::internal_view"(local.tee $mv$t$s0("core:prelude/list.wado/$template_segment$core:prelude/list.wado/$tmpl$59e16269228f9c88"($mv$t$s0, $mv$t$r0, $mv$t$s1, $mv$t$r1, $mv$t$s2, $mv$t$r2, $mv$t$s3, $mv$t$r3, 2 * self)).repr, $mv$t$s0.used);
     };
 }
 

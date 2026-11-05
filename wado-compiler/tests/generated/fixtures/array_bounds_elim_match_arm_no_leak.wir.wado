@@ -53,7 +53,7 @@ struct core:prelude/format.wado//Formatter {  // TypeId(7)
 
 array Array<i32> (mut i32);  // TypeId(8)
 
-struct core:prelude//List<i32> {  // TypeId(9)
+struct core:prelude/list.wado//List<i32> {  // TypeId(9)
     mut repr: ref Array<i32>,
     mut used: i32,
 }
@@ -74,7 +74,7 @@ type "functype//wasi/$wasi:cli/stderr@0.3.0#write-via-stream" = fn(i32) -> i32; 
 
 type "functype//array_bounds_elim_match_arm_no_leak.wado/$cm_export__run" = fn();  // TypeId(17)
 
-type "functype//array_bounds_elim_match_arm_no_leak.wado/f$dae[return]$spec0$dae[i]" = fn(ref "core:prelude//List<i32>");  // TypeId(18)
+type "functype//array_bounds_elim_match_arm_no_leak.wado/f$dae[return]$spec0$dae[i]" = fn(ref "core:prelude/list.wado//List<i32>");  // TypeId(18)
 
 type "functype//core:prelude/list.wado/$template_segment$core:prelude/list.wado/$tmpl$59e16269228f9c88" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", i32) -> ref "core:prelude/string.wado//String";  // TypeId(19)
 
@@ -194,7 +194,7 @@ import fn wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode f
 global global:core:prelude/primitive.wado::$const_obj_0: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
 
 fn "array_bounds_elim_match_arm_no_leak.wado/$cm_export__run"() {
-    "array_bounds_elim_match_arm_no_leak.wado/f$dae[return]$spec0$dae[i]"(struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(10), used: 1 });
+    "array_bounds_elim_match_arm_no_leak.wado/f$dae[return]$spec0$dae[i]"(struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(10), used: 1 });
     "wasi/task-return"(0);
 }
 

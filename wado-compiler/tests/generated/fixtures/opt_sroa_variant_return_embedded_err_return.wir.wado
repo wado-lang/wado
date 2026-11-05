@@ -74,24 +74,24 @@ struct opt_sroa_variant_return_embedded_err_return.wado//$tmpl$52746da7ae2b052a 
 
 array Array<opt_sroa_variant_return_embedded_err_return.wado/Tree> (mut ref "opt_sroa_variant_return_embedded_err_return.wado//Tree");  // TypeId(13)
 
-variant core:prelude/types.wado//Result<[i64,i64],core:prelude/string.wado/String> {  // TypeId(14)
+struct core:prelude/list.wado//List<opt_sroa_variant_return_embedded_err_return.wado/Tree> {  // TypeId(14)
+    mut repr: ref "Array<opt_sroa_variant_return_embedded_err_return.wado/Tree>",
+    mut used: i32,
+}
+
+variant core:prelude/types.wado//Result<[i64,i64],core:prelude/string.wado/String> {  // TypeId(15)
     Ok(ref "tuple//[i64, i64]"),
     Err(ref "core:prelude/string.wado//String"),
 }
 
-struct core:prelude/types.wado//Result<[i64,i64],core:prelude/string.wado/String>::Ok {  // TypeId(15)
+struct core:prelude/types.wado//Result<[i64,i64],core:prelude/string.wado/String>::Ok {  // TypeId(16)
     discriminant: i32,
     payload_0: ref "tuple//[i64, i64]",
 }
 
-struct core:prelude/types.wado//Result<[i64,i64],core:prelude/string.wado/String>::Err {  // TypeId(16)
+struct core:prelude/types.wado//Result<[i64,i64],core:prelude/string.wado/String>::Err {  // TypeId(17)
     discriminant: i32,
     payload_0: ref "core:prelude/string.wado//String",
-}
-
-struct core:prelude//List<opt_sroa_variant_return_embedded_err_return.wado/Tree> {  // TypeId(17)
-    mut repr: ref "Array<opt_sroa_variant_return_embedded_err_return.wado/Tree>",
-    mut used: i32,
 }
 
 type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(18)
@@ -120,7 +120,7 @@ type "functype//opt_sroa_variant_return_embedded_err_return.wado/run$cold0" = fn
 
 type "functype//opt_sroa_variant_return_embedded_err_return.wado/run$cold1" = fn(ref "core:prelude/types.wado//Result<[i64,i64],core:prelude/string.wado/String>");  // TypeId(30)
 
-type "functype//opt_sroa_variant_return_embedded_err_return.wado/first_two$sroa[return]$spec0" = fn(ref "core:prelude//List<opt_sroa_variant_return_embedded_err_return.wado/Tree>") -> [i32, ref null "tuple//[i64, i64]", ref null "core:prelude/string.wado//String"];  // TypeId(31)
+type "functype//opt_sroa_variant_return_embedded_err_return.wado/first_two$sroa[return]$spec0" = fn(ref "Array<opt_sroa_variant_return_embedded_err_return.wado/Tree>", i32) -> [i32, ref null "tuple//[i64, i64]", ref null "core:prelude/string.wado//String"];  // TypeId(31)
 
 type "functype//core:prelude/format.wado/$template_segment$core:prelude/format.wado/$tmpl$47518b5dd822a983" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", i32) -> ref "core:prelude/string.wado//String";  // TypeId(32)
 
@@ -268,8 +268,8 @@ import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode";
 
 global global:core:prelude/format.wado::$const_obj_0: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(32, 32), used: 2 };
-global global:opt_sroa_variant_return_embedded_err_return.wado::$const_obj_1: ref "core:prelude//List<opt_sroa_variant_return_embedded_err_return.wado/Tree>" = struct.new "core:prelude//List<opt_sroa_variant_return_embedded_err_return.wado/Tree>" { repr: array.new_fixed<ref "opt_sroa_variant_return_embedded_err_return.wado//Tree">(struct.new "opt_sroa_variant_return_embedded_err_return.wado//Tree::Leaf" { discriminant: 0, payload_0: 10_i64 }, struct.new "opt_sroa_variant_return_embedded_err_return.wado//Tree::Leaf" { discriminant: 0, payload_0: -5_i64 }, struct.new "opt_sroa_variant_return_embedded_err_return.wado//Tree::Leaf" { discriminant: 0, payload_0: 30_i64 }), used: 3 };
-global global:opt_sroa_variant_return_embedded_err_return.wado::$const_obj_2: ref "core:prelude//List<opt_sroa_variant_return_embedded_err_return.wado/Tree>" = struct.new "core:prelude//List<opt_sroa_variant_return_embedded_err_return.wado/Tree>" { repr: array.new_fixed<ref "opt_sroa_variant_return_embedded_err_return.wado//Tree">(struct.new "opt_sroa_variant_return_embedded_err_return.wado//Tree::Leaf" { discriminant: 0, payload_0: 10_i64 }, struct.new "opt_sroa_variant_return_embedded_err_return.wado//Tree" { 1 }, struct.new "opt_sroa_variant_return_embedded_err_return.wado//Tree::Leaf" { discriminant: 0, payload_0: 20_i64 }), used: 3 };
+global global:opt_sroa_variant_return_embedded_err_return.wado::$const_obj_1: ref "core:prelude/list.wado//List<opt_sroa_variant_return_embedded_err_return.wado/Tree>" = struct.new "core:prelude/list.wado//List<opt_sroa_variant_return_embedded_err_return.wado/Tree>" { repr: array.new_fixed<ref "opt_sroa_variant_return_embedded_err_return.wado//Tree">(struct.new "opt_sroa_variant_return_embedded_err_return.wado//Tree::Leaf" { discriminant: 0, payload_0: 10_i64 }, struct.new "opt_sroa_variant_return_embedded_err_return.wado//Tree::Leaf" { discriminant: 0, payload_0: -5_i64 }, struct.new "opt_sroa_variant_return_embedded_err_return.wado//Tree::Leaf" { discriminant: 0, payload_0: 30_i64 }), used: 3 };
+global global:opt_sroa_variant_return_embedded_err_return.wado::$const_obj_2: ref "core:prelude/list.wado//List<opt_sroa_variant_return_embedded_err_return.wado/Tree>" = struct.new "core:prelude/list.wado//List<opt_sroa_variant_return_embedded_err_return.wado/Tree>" { repr: array.new_fixed<ref "opt_sroa_variant_return_embedded_err_return.wado//Tree">(struct.new "opt_sroa_variant_return_embedded_err_return.wado//Tree::Leaf" { discriminant: 0, payload_0: 10_i64 }, struct.new "opt_sroa_variant_return_embedded_err_return.wado//Tree" { 1 }, struct.new "opt_sroa_variant_return_embedded_err_return.wado//Tree::Leaf" { discriminant: 0, payload_0: 20_i64 }), used: 3 };
 global global:core:prelude/traits.wado::$const_obj_3: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(69, 114, 114), used: 3 };
 global global:core:prelude/traits.wado::$const_obj_4: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(58, 58), used: 2 };
 global global:core:prelude/traits.wado::$const_obj_5: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(82, 101, 115, 117, 108, 116), used: 6 };
@@ -297,7 +297,7 @@ fn "opt_sroa_variant_return_embedded_err_return.wado/run"() {
     let $mv$ok$0: i32;
     let $mv$ok$1: ref null "tuple//[i64, i64]";
     let $mv$ok$2: ref null "core:prelude/string.wado//String";
-    multivalue_bind [$mv$ok$0, $mv$ok$1, $mv$ok$2] = "opt_sroa_variant_return_embedded_err_return.wado/first_two$sroa[return]$spec0"(global:opt_sroa_variant_return_embedded_err_return.wado::$const_obj_2);
+    multivalue_bind [$mv$ok$0, $mv$ok$1, $mv$ok$2] = (let $mv_arg_1: ref "core:prelude/list.wado//List<opt_sroa_variant_return_embedded_err_return.wado/Tree>"; "opt_sroa_variant_return_embedded_err_return.wado/first_two$sroa[return]$spec0"(local.tee $mv_arg_1(global:opt_sroa_variant_return_embedded_err_return.wado::$const_obj_2).repr, $mv_arg_1.used));
     if @unlikely((if (if $mv$ok$0 == 0 -> i32 {
         (local.tee $local_4(ref.as_non_null($mv$ok$1)).0 == 10_i64) & ($local_4.1 == 20_i64);
     } else {
@@ -316,7 +316,7 @@ fn "opt_sroa_variant_return_embedded_err_return.wado/run"() {
         }));
         unreachable;
     }
-    multivalue_bind [$mv$ok$0, $mv$ok$1, $mv$ok$2] = "opt_sroa_variant_return_embedded_err_return.wado/first_two$sroa[return]$spec0"(global:opt_sroa_variant_return_embedded_err_return.wado::$const_obj_1);
+    multivalue_bind [$mv$ok$0, $mv$ok$1, $mv$ok$2] = "opt_sroa_variant_return_embedded_err_return.wado/first_two$sroa[return]$spec0"(local.tee $mv_arg_1(global:opt_sroa_variant_return_embedded_err_return.wado::$const_obj_1).repr, $mv_arg_1.used);
     if @unlikely(($mv$ok$0 == 1) == 0) {
         cold_path;
         "opt_sroa_variant_return_embedded_err_return.wado/run$cold0"((if $mv$ok$0 == 0 -> ref "core:prelude/types.wado//Result<[i64,i64],core:prelude/string.wado/String>" {
@@ -367,24 +367,22 @@ ok: "), used: 122 }, s1: struct.new "core:prelude/string.wado//String" { repr: a
     unreachable;
 }
 
-fn "opt_sroa_variant_return_embedded_err_return.wado/first_two$sroa[return]$spec0"(nodes) {
+fn "opt_sroa_variant_return_embedded_err_return.wado/first_two$sroa[return]$spec0"($mv$nodes$repr, $mv$nodes$used) {
     let a: i64;
     let b: i64;
     let have_a: bool;
     let v: i64;
     let $qm_e: ref "core:prelude/string.wado//String";
     let ref_val: ref "opt_sroa_variant_return_embedded_err_return.wado//Tree";
-    let $sroa_$iter_0_repr_21: ref "Array<opt_sroa_variant_return_embedded_err_return.wado/Tree>";
     let $sroa_$iter_0_index_22: i32;
     a = 0_i64;
     b = 0_i64;
     have_a = 0;
-    $sroa_$iter_0_repr_21 = nodes.repr;
     $sroa_$iter_0_index_22 = 0;
     b11: block {
         l12: loop {
             break_if b11 $sroa_$iter_0_index_22 >= 3;
-            ref_val = builtin::array_get_value<ref "opt_sroa_variant_return_embedded_err_return.wado//Tree">($sroa_$iter_0_repr_21, $sroa_$iter_0_index_22);
+            ref_val = builtin::array_get_value<ref "opt_sroa_variant_return_embedded_err_return.wado//Tree">($mv$nodes$repr, $sroa_$iter_0_index_22);
             $sroa_$iter_0_index_22 = $sroa_$iter_0_index_22 + 1;
             if ref.test "opt_sroa_variant_return_embedded_err_return.wado//Tree::Leaf"(ref_val) {
                 v = ref.cast "opt_sroa_variant_return_embedded_err_return.wado//Tree::Leaf"(ref_val).payload_0;

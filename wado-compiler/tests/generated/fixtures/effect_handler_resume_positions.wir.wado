@@ -53,19 +53,19 @@ struct effect_handler_resume_positions.wado//$Closure_2 {  // TypeId(11)
 
 array Array<i32> (mut i32);  // TypeId(12)
 
-variant core:prelude/types.wado//Option<i32> {  // TypeId(13)
+struct core:prelude/list.wado//List<i32> {  // TypeId(13)
+    mut repr: ref Array<i32>,
+    mut used: i32,
+}
+
+variant core:prelude/types.wado//Option<i32> {  // TypeId(14)
     None,
     Some(i32),
 }
 
-struct core:prelude/types.wado//Option<i32>::Some {  // TypeId(14)
+struct core:prelude/types.wado//Option<i32>::Some {  // TypeId(15)
     discriminant: i32,
     payload_0: i32,
-}
-
-struct core:prelude//List<i32> {  // TypeId(15)
-    mut repr: ref Array<i32>,
-    mut used: i32,
 }
 
 type "functype/$canonical_closure_fn_0" = fn(ref null struct, i32);  // TypeId(16)
@@ -89,7 +89,7 @@ struct canonical//CanonicalClosure_2 {  // TypeId(21)
     func: ref "functype/$canonical_closure_fn_2",
 }
 
-type "functype/$canonical_closure_fn_3" = fn(ref null struct, ref "core:prelude//List<i32>") -> i32;  // TypeId(22)
+type "functype/$canonical_closure_fn_3" = fn(ref null struct, ref "core:prelude/list.wado//List<i32>") -> i32;  // TypeId(22)
 
 struct canonical//CanonicalClosure_3 {  // TypeId(23)
     env: ref null struct,
@@ -142,7 +142,7 @@ type "functype//effect_handler_resume_positions.wado/effect_handler_resume_posit
 
 type "functype//effect_handler_resume_positions.wado/effect_handler_resume_positions.wado/$Closure_4::$call$dae[self]" = fn(i32) -> i32;  // TypeId(46)
 
-type "functype//effect_handler_resume_positions.wado/effect_handler_resume_positions.wado/$Closure_5::$call$dae[self]" = fn(ref "core:prelude//List<i32>") -> i32;  // TypeId(47)
+type "functype//effect_handler_resume_positions.wado/effect_handler_resume_positions.wado/$Closure_5::$call$dae[self]" = fn(ref "core:prelude/list.wado//List<i32>") -> i32;  // TypeId(47)
 
 type "functype//effect_handler_resume_positions.wado/effect_handler_resume_positions.wado/$Closure_6::$call$dae[self]" = fn(i32) -> i32;  // TypeId(48)
 
@@ -199,7 +199,7 @@ fn "effect_handler_resume_positions.wado/run"() with Stdout {
     let $local_3_7: i32;
     let $local_3_11: i32;
     let $local_3_15: i32;
-    let xs_26: ref "core:prelude//List<i32>";
+    let xs_26: ref "core:prelude/list.wado//List<i32>";
     let $cm_pair_7_53: i64;
     h = struct.new "effect_handler_resume_positions.wado//H" { seen: 0 };
     global:effect_handler_resume_positions.wado::$effect_effect_handler_resume_positions.wado/A = struct.new "effect_handler_resume_positions.wado//$Dispatch_effect_handler_resume_positions.wado/A" { outer: local.tee $save_effect_handler_resume_positions.wado/A(global:effect_handler_resume_positions.wado::$effect_effect_handler_resume_positions.wado/A), op_pick: struct.new "canonical//CanonicalClosure_2" { env: struct.new "effect_handler_resume_positions.wado//$Closure_2" { $capture_0: h }, func: ref.func "closure/effect_handler_resume_positions.wado/$closure_wrapper_1" }, op_note: struct.new "canonical//CanonicalClosure_0" { env: struct.new "effect_handler_resume_positions.wado//$Closure_3" { $capture_0: h }, func: ref.func "closure/effect_handler_resume_positions.wado/$closure_wrapper_2" }, op_nested: struct.new "canonical//CanonicalClosure_2" { env: struct.new "effect_handler_resume_positions.wado//$Closure_4" { $capture_0: h }, func: ref.func "closure/effect_handler_resume_positions.wado/$closure_wrapper_3" }, op_first: struct.new "canonical//CanonicalClosure_3" { env: struct.new "effect_handler_resume_positions.wado//$Closure_5" { $capture_0: h }, func: ref.func "closure/effect_handler_resume_positions.wado/$closure_wrapper_4" }, op_via_closure: struct.new "canonical//CanonicalClosure_2" { env: struct.new "effect_handler_resume_positions.wado//$Closure_6" { $capture_0: h }, func: ref.func "closure/effect_handler_resume_positions.wado/$closure_wrapper_5" } };
@@ -297,7 +297,7 @@ fn "effect_handler_resume_positions.wado/run"() with Stdout {
     "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($local_3_7);
     $mv_arg_1 = block -> ref "core:prelude/string.wado//String" {
         $local_3_7 = $inline__effect_dispatch__effect_handler_resume_positions_wado_A__first_7: block -> i32 {
-            xs_26 = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(), used: 0 };
+            xs_26 = struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(), used: 0 };
             if @likely(ref.is_null(local.tee $local_1_5(global:effect_handler_resume_positions.wado::$effect_effect_handler_resume_positions.wado/A)) == 0) {
                 global:effect_handler_resume_positions.wado::$effect_effect_handler_resume_positions.wado/A = local.tee $local_2_6(ref.as_non_null($local_1_5)).outer;
                 $local_3_7 = block -> i32 {
@@ -313,7 +313,7 @@ fn "effect_handler_resume_positions.wado/run"() with Stdout {
             unreachable;
         };
         $local_3_11 = $inline__effect_dispatch__effect_handler_resume_positions_wado_A__first_9: block -> i32 {
-            xs_26 = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(7, 8), used: 2 };
+            xs_26 = struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(7, 8), used: 2 };
             if @likely(ref.is_null(local.tee $local_1_5(global:effect_handler_resume_positions.wado::$effect_effect_handler_resume_positions.wado/A)) == 0) {
                 global:effect_handler_resume_positions.wado::$effect_effect_handler_resume_positions.wado/A = local.tee $local_2_6(ref.as_non_null($local_1_5)).outer;
                 $local_3_11 = block -> i32 {
