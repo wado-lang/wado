@@ -977,34 +977,34 @@ fn "core:prelude/fpfmt.wado/big_mul_add$dae[addend]"(n, factor) {
 }
 
 fn "core:prelude/fpfmt.wado/big_mul_pow5"(n, e) {
-    let $load_0: i32;
-    let $load_1: ref Array<u32>;
+    let $load_1: i32;
     let carry: u64;
     let k_9: i32;
+    let $licm_repr_43: ref Array<u32>;
+    $licm_repr_43 = n.repr;
     b82: block {
         l83: loop {
             break_if b82 e < 13;
             carry = 0_i64;
             k_9 = 0;
-            $load_0 = n.used;
-            $load_1 = n.repr;
+            $load_1 = n.used;
             b84: block {
                 l85: loop {
-                    break_if b84 (((k_9 >= $load_0) | ((k_9 + 1) >= $load_0)) | (((k_9 + 1) + 1) >= $load_0)) | ((((k_9 + 1) + 1) + 1) >= $load_0);
-                    carry = (builtin::i64_extend_i32_u(builtin::array_get_value<u32>($load_1, k_9)) * 1220703125_i64) + carry;
-                    builtin::array_set<u32>($load_1, k_9, builtin::i32_wrap_i64(carry));
+                    break_if b84 (((k_9 >= $load_1) | ((k_9 + 1) >= $load_1)) | (((k_9 + 1) + 1) >= $load_1)) | ((((k_9 + 1) + 1) + 1) >= $load_1);
+                    carry = (builtin::i64_extend_i32_u(builtin::array_get_value<u32>($licm_repr_43, k_9)) * 1220703125_i64) + carry;
+                    builtin::array_set<u32>($licm_repr_43, k_9, builtin::i32_wrap_i64(carry));
                     carry = carry >>u 32_i64;
                     k_9 = k_9 + 1;
-                    carry = (builtin::i64_extend_i32_u(builtin::array_get_value<u32>($load_1, k_9)) * 1220703125_i64) + carry;
-                    builtin::array_set<u32>($load_1, k_9, builtin::i32_wrap_i64(carry));
+                    carry = (builtin::i64_extend_i32_u(builtin::array_get_value<u32>($licm_repr_43, k_9)) * 1220703125_i64) + carry;
+                    builtin::array_set<u32>($licm_repr_43, k_9, builtin::i32_wrap_i64(carry));
                     carry = carry >>u 32_i64;
                     k_9 = k_9 + 1;
-                    carry = (builtin::i64_extend_i32_u(builtin::array_get_value<u32>($load_1, k_9)) * 1220703125_i64) + carry;
-                    builtin::array_set<u32>($load_1, k_9, builtin::i32_wrap_i64(carry));
+                    carry = (builtin::i64_extend_i32_u(builtin::array_get_value<u32>($licm_repr_43, k_9)) * 1220703125_i64) + carry;
+                    builtin::array_set<u32>($licm_repr_43, k_9, builtin::i32_wrap_i64(carry));
                     carry = carry >>u 32_i64;
                     k_9 = k_9 + 1;
-                    carry = (builtin::i64_extend_i32_u(builtin::array_get_value<u32>($load_1, k_9)) * 1220703125_i64) + carry;
-                    builtin::array_set<u32>($load_1, k_9, builtin::i32_wrap_i64(carry));
+                    carry = (builtin::i64_extend_i32_u(builtin::array_get_value<u32>($licm_repr_43, k_9)) * 1220703125_i64) + carry;
+                    builtin::array_set<u32>($licm_repr_43, k_9, builtin::i32_wrap_i64(carry));
                     carry = carry >>u 32_i64;
                     k_9 = k_9 + 1;
                     continue l85;
@@ -1012,9 +1012,9 @@ fn "core:prelude/fpfmt.wado/big_mul_pow5"(n, e) {
             };
             b86: block {
                 l87: loop {
-                    break_if b86 k_9 >= $load_0;
-                    carry = (builtin::i64_extend_i32_u(builtin::array_get_value<u32>($load_1, k_9)) * 1220703125_i64) + carry;
-                    builtin::array_set<u32>($load_1, k_9, builtin::i32_wrap_i64(carry));
+                    break_if b86 k_9 >= $load_1;
+                    carry = (builtin::i64_extend_i32_u(builtin::array_get_value<u32>($licm_repr_43, k_9)) * 1220703125_i64) + carry;
+                    builtin::array_set<u32>($licm_repr_43, k_9, builtin::i32_wrap_i64(carry));
                     carry = carry >>u 32_i64;
                     k_9 = k_9 + 1;
                     continue l87;
@@ -1022,24 +1022,25 @@ fn "core:prelude/fpfmt.wado/big_mul_pow5"(n, e) {
             };
             if carry != 0_i64 {
                 k_9 = builtin::i32_wrap_i64(carry);
-                if @unlikely($load_0 >= builtin::array_len($load_1)) {
+                if @unlikely($load_1 >= builtin::array_len($licm_repr_43)) {
                     cold_path;
                     "core:prelude/list.wado/core:prelude/list.wado/List<u32>::grow"(n);
+                    $licm_repr_43 = n.repr;
                 }
-                builtin::array_set<u32>(n.repr, $load_0, k_9);
-                n.used = $load_0 + 1;
+                builtin::array_set<u32>($licm_repr_43, $load_1, k_9);
+                n.used = $load_1 + 1;
             }
             e = e - 13;
             continue l83;
         };
     };
     k_9 = 1;
-    $load_0 = 0;
+    $load_1 = 0;
     b90: block {
         l91: loop {
-            break_if b90 $load_0 >= e;
+            break_if b90 $load_1 >= e;
             k_9 = k_9 * 5;
-            $load_0 = $load_0 + 1;
+            $load_1 = $load_1 + 1;
             continue l91;
         };
     };

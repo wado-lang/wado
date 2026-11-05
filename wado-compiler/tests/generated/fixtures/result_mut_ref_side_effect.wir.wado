@@ -466,9 +466,8 @@ global global:core:prelude/string.wado::$const_obj_4: ref Array<u8> = array.new_
 fn "result_mut_ref_side_effect.wado/parse_expr$sroa[return]"(p) {
     let $load_0: ref "core:prelude//List<result_mut_ref_side_effect.wado/Token>";
     let $load_2: i32;
-    let $load_16: i32;
-    let $load_17: ref "Array<result_mut_ref_side_effect.wado/Token>";
     let result: ref "result_mut_ref_side_effect.wado//E";
+    let suffix_kind: i32;
     let $qm_e_7: ref "result_mut_ref_side_effect.wado//ParseError";
     let expr2_11: ref "result_mut_ref_side_effect.wado//E";
     let expr3: ref "result_mut_ref_side_effect.wado//E";
@@ -477,6 +476,8 @@ fn "result_mut_ref_side_effect.wado/parse_expr$sroa[return]"(p) {
     let v_246: ref "core:prelude/string.wado//String";
     let v_247: ref "result_mut_ref_side_effect.wado//Span";
     let v_370: ref "result_mut_ref_side_effect.wado//Token";
+    let $licm_repr_470: ref "Array<result_mut_ref_side_effect.wado/Token>";
+    let $hfs_pos_495: i32;
     $v1_234 = local.tee $load_0(p.tokens).used;
     if @unlikely(local.tee $load_2(p.pos) >=u $v1_234) {
         cold_path;
@@ -486,22 +487,23 @@ fn "result_mut_ref_side_effect.wado/parse_expr$sroa[return]"(p) {
     $v1_234 = builtin::array_get_value<ref "result_mut_ref_side_effect.wado//Token">($load_0.repr, $load_2).span.start;
     v_245 = struct.new "result_mut_ref_side_effect.wado//Token" { kind: local.tee v_245("result_mut_ref_side_effect.wado/result_mut_ref_side_effect.wado/Parser::advance"(p)).kind, text: v_246 = v_245.text; struct.new "core:prelude/string.wado//String" { repr: let $array_clone_src_1: ref Array<u8>; $array_clone_src_1 = v_246.repr; $load_2 = v_246.used; let $array_clone_dst_2: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>($load_2)), 0, $array_clone_src_1, 0, $load_2); $array_clone_dst_2, used: $load_2 }, span: struct.new "result_mut_ref_side_effect.wado//Span" { start: local.tee v_247(v_245.span).start, end: v_247.end } };
     result = struct.new "result_mut_ref_side_effect.wado//E::Lit" { discriminant: 0, payload_0: struct.new "result_mut_ref_side_effect.wado//P0" { span: struct.new "result_mut_ref_side_effect.wado//Span" { start: local.tee v_247(v_245.span).start, end: v_247.end }, tok: v_245 } };
-    $load_2 = p.pos;
+    $load_2 = local.tee $load_0(p.tokens).used;
+    $licm_repr_470 = $load_0.repr;
+    $hfs_pos_495 = p.pos;
     b1: block {
         l2: loop {
-            $load_16 = local.tee $load_0(p.tokens).used;
-            if @unlikely($load_2 >=u $load_16) {
+            if @unlikely(((0 <= $hfs_pos_495) & ($hfs_pos_495 < $load_2)) == 0) {
                 cold_path;
-                "result_mut_ref_side_effect.wado/result_mut_ref_side_effect.wado/Parser::peek_kind$cold0$sroa[self.pos]"($load_2, $load_16);
+                "result_mut_ref_side_effect.wado/result_mut_ref_side_effect.wado/Parser::peek_kind$cold0$sroa[self.pos]"($hfs_pos_495, $load_2);
                 unreachable;
             }
-            if local.tee $load_16(builtin::array_get_value<ref "result_mut_ref_side_effect.wado//Token">(local.tee $load_17($load_0.repr), $load_2).kind) == 4 {
+            if local.tee suffix_kind(builtin::array_get_value<ref "result_mut_ref_side_effect.wado//Token">($licm_repr_470, $hfs_pos_495).kind) == 4 {
                 let $mv$$vr_191$1: ref null "result_mut_ref_side_effect.wado//Token";
                 let $mv$$vr_191$2: ref null "result_mut_ref_side_effect.wado//ParseError";
-                multivalue_bind [$load_2, $mv$$vr_191$1, $mv$$vr_191$2] = "result_mut_ref_side_effect.wado/result_mut_ref_side_effect.wado/Parser::expect$sroa[return]"(p, 4, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(39, 124, 124, 39), used: 4 });
-                v_245 = (if $load_2 == 0 -> ref "result_mut_ref_side_effect.wado//Token" {
+                multivalue_bind [$hfs_pos_495, $mv$$vr_191$1, $mv$$vr_191$2] = "result_mut_ref_side_effect.wado/result_mut_ref_side_effect.wado/Parser::expect$sroa[return]"(p, 4, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(39, 124, 124, 39), used: 4 });
+                v_245 = (if $hfs_pos_495 == 0 -> ref "result_mut_ref_side_effect.wado//Token" {
                     ref.as_non_null($mv$$vr_191$1);
-                } else if @unlikely($load_2 == 1) -> ref "result_mut_ref_side_effect.wado//Token" {
+                } else if @unlikely($hfs_pos_495 == 1) -> ref "result_mut_ref_side_effect.wado//Token" {
                     cold_path;
                     $qm_e_7 = ref.as_non_null($mv$$vr_191$2);
                     cold_path;
@@ -509,11 +511,11 @@ fn "result_mut_ref_side_effect.wado/parse_expr$sroa[return]"(p) {
                 } else {
                     unreachable;
                 });
-                let $mv$$vr_468$1: ref null "result_mut_ref_side_effect.wado//E";
-                multivalue_bind [$load_2, $mv$$vr_468$1, $mv$$vr_191$2] = "result_mut_ref_side_effect.wado/parse_expr$sroa[return]"(p);
-                expr2_11 = (if $load_2 == 0 -> ref "result_mut_ref_side_effect.wado//E" {
-                    ref.as_non_null($mv$$vr_468$1);
-                } else if @unlikely($load_2 == 1) -> ref "result_mut_ref_side_effect.wado//E" {
+                let $mv$$vr_472$1: ref null "result_mut_ref_side_effect.wado//E";
+                multivalue_bind [$hfs_pos_495, $mv$$vr_472$1, $mv$$vr_191$2] = "result_mut_ref_side_effect.wado/parse_expr$sroa[return]"(p);
+                expr2_11 = (if $hfs_pos_495 == 0 -> ref "result_mut_ref_side_effect.wado//E" {
+                    ref.as_non_null($mv$$vr_472$1);
+                } else if @unlikely($hfs_pos_495 == 1) -> ref "result_mut_ref_side_effect.wado//E" {
                     cold_path;
                     $qm_e_7 = ref.as_non_null($mv$$vr_191$2);
                     cold_path;
@@ -521,13 +523,13 @@ fn "result_mut_ref_side_effect.wado/parse_expr$sroa[return]"(p) {
                 } else {
                     unreachable;
                 });
-                result = struct.new "result_mut_ref_side_effect.wado//E::Alt4" { discriminant: 1, payload_0: struct.new "result_mut_ref_side_effect.wado//P4" { span: $load_2 = "result_mut_ref_side_effect.wado/result_mut_ref_side_effect.wado/Parser::last_end"(p.tokens, p.pos); struct.new "result_mut_ref_side_effect.wado//Span" { start: $v1_234, end: $load_2 }, expr: result, tok: v_245, expr2: expr2_11 } };
-            } else if (($load_16 == 51) | ($load_16 == 52)) | ($load_16 == 53) {
-                if local.tee $load_2(builtin::array_get_value<ref "result_mut_ref_side_effect.wado//Token">($load_17, $load_2).kind) == 51 {
-                    multivalue_bind [$load_2, $mv$$vr_191$1, $mv$$vr_191$2] = "result_mut_ref_side_effect.wado/result_mut_ref_side_effect.wado/Parser::expect$sroa[return]"(p, 51, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(39, 42, 39), used: 3 });
-                    drop((if $load_2 == 0 -> ref "result_mut_ref_side_effect.wado//Token" {
+                result = struct.new "result_mut_ref_side_effect.wado//E::Alt4" { discriminant: 1, payload_0: struct.new "result_mut_ref_side_effect.wado//P4" { span: $hfs_pos_495 = "result_mut_ref_side_effect.wado/result_mut_ref_side_effect.wado/Parser::last_end"(p.tokens, p.pos); struct.new "result_mut_ref_side_effect.wado//Span" { start: $v1_234, end: $hfs_pos_495 }, expr: result, tok: v_245, expr2: expr2_11 } };
+            } else if ((suffix_kind == 51) | (suffix_kind == 52)) | (suffix_kind == 53) {
+                if local.tee $hfs_pos_495(builtin::array_get_value<ref "result_mut_ref_side_effect.wado//Token">($licm_repr_470, $hfs_pos_495).kind) == 51 {
+                    multivalue_bind [$hfs_pos_495, $mv$$vr_191$1, $mv$$vr_191$2] = "result_mut_ref_side_effect.wado/result_mut_ref_side_effect.wado/Parser::expect$sroa[return]"(p, 51, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(39, 42, 39), used: 3 });
+                    drop((if $hfs_pos_495 == 0 -> ref "result_mut_ref_side_effect.wado//Token" {
                         ref.as_non_null($mv$$vr_191$1);
-                    } else if @unlikely($load_2 == 1) -> ref "result_mut_ref_side_effect.wado//Token" {
+                    } else if @unlikely($hfs_pos_495 == 1) -> ref "result_mut_ref_side_effect.wado//Token" {
                         cold_path;
                         $qm_e_7 = ref.as_non_null($mv$$vr_191$2);
                         cold_path;
@@ -535,11 +537,11 @@ fn "result_mut_ref_side_effect.wado/parse_expr$sroa[return]"(p) {
                     } else {
                         unreachable;
                     }));
-                } else if $load_2 == 52 {
-                    multivalue_bind [$load_2, $mv$$vr_191$1, $mv$$vr_191$2] = "result_mut_ref_side_effect.wado/result_mut_ref_side_effect.wado/Parser::expect$sroa[return]"(p, 52, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(39, 47, 39), used: 3 });
-                    drop((if $load_2 == 0 -> ref "result_mut_ref_side_effect.wado//Token" {
+                } else if $hfs_pos_495 == 52 {
+                    multivalue_bind [$hfs_pos_495, $mv$$vr_191$1, $mv$$vr_191$2] = "result_mut_ref_side_effect.wado/result_mut_ref_side_effect.wado/Parser::expect$sroa[return]"(p, 52, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(39, 47, 39), used: 3 });
+                    drop((if $hfs_pos_495 == 0 -> ref "result_mut_ref_side_effect.wado//Token" {
                         ref.as_non_null($mv$$vr_191$1);
-                    } else if @unlikely($load_2 == 1) -> ref "result_mut_ref_side_effect.wado//Token" {
+                    } else if @unlikely($hfs_pos_495 == 1) -> ref "result_mut_ref_side_effect.wado//Token" {
                         cold_path;
                         $qm_e_7 = ref.as_non_null($mv$$vr_191$2);
                         cold_path;
@@ -547,11 +549,11 @@ fn "result_mut_ref_side_effect.wado/parse_expr$sroa[return]"(p) {
                     } else {
                         unreachable;
                     }));
-                } else if $load_2 == 53 {
-                    multivalue_bind [$load_2, $mv$$vr_191$1, $mv$$vr_191$2] = "result_mut_ref_side_effect.wado/result_mut_ref_side_effect.wado/Parser::expect$sroa[return]"(p, 53, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(39, 37, 39), used: 3 });
-                    drop((if $load_2 == 0 -> ref "result_mut_ref_side_effect.wado//Token" {
+                } else if $hfs_pos_495 == 53 {
+                    multivalue_bind [$hfs_pos_495, $mv$$vr_191$1, $mv$$vr_191$2] = "result_mut_ref_side_effect.wado/result_mut_ref_side_effect.wado/Parser::expect$sroa[return]"(p, 53, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(39, 37, 39), used: 3 });
+                    drop((if $hfs_pos_495 == 0 -> ref "result_mut_ref_side_effect.wado//Token" {
                         ref.as_non_null($mv$$vr_191$1);
-                    } else if @unlikely($load_2 == 1) -> ref "result_mut_ref_side_effect.wado//Token" {
+                    } else if @unlikely($hfs_pos_495 == 1) -> ref "result_mut_ref_side_effect.wado//Token" {
                         cold_path;
                         $qm_e_7 = ref.as_non_null($mv$$vr_191$2);
                         cold_path;
@@ -561,10 +563,10 @@ fn "result_mut_ref_side_effect.wado/parse_expr$sroa[return]"(p) {
                     }));
                 } else {
                 }
-                multivalue_bind [$load_2, $mv$$vr_468$1, $mv$$vr_191$2] = "result_mut_ref_side_effect.wado/parse_expr$sroa[return]"(p);
-                expr2_11 = (if $load_2 == 0 -> ref "result_mut_ref_side_effect.wado//E" {
-                    ref.as_non_null($mv$$vr_468$1);
-                } else if @unlikely($load_2 == 1) -> ref "result_mut_ref_side_effect.wado//E" {
+                multivalue_bind [$hfs_pos_495, $mv$$vr_472$1, $mv$$vr_191$2] = "result_mut_ref_side_effect.wado/parse_expr$sroa[return]"(p);
+                expr2_11 = (if $hfs_pos_495 == 0 -> ref "result_mut_ref_side_effect.wado//E" {
+                    ref.as_non_null($mv$$vr_472$1);
+                } else if @unlikely($hfs_pos_495 == 1) -> ref "result_mut_ref_side_effect.wado//E" {
                     cold_path;
                     $qm_e_7 = ref.as_non_null($mv$$vr_191$2);
                     cold_path;
@@ -572,13 +574,13 @@ fn "result_mut_ref_side_effect.wado/parse_expr$sroa[return]"(p) {
                 } else {
                     unreachable;
                 });
-                result = struct.new "result_mut_ref_side_effect.wado//E::Alt5" { discriminant: 2, payload_0: struct.new "result_mut_ref_side_effect.wado//P5" { span: $load_2 = "result_mut_ref_side_effect.wado/result_mut_ref_side_effect.wado/Parser::last_end"(p.tokens, p.pos); struct.new "result_mut_ref_side_effect.wado//Span" { start: $v1_234, end: $load_2 }, expr: result, expr2: expr2_11 } };
-            } else if ($load_16 == 61) | ($load_16 == 62) {
-                if local.tee $load_2(builtin::array_get_value<ref "result_mut_ref_side_effect.wado//Token">($load_17, $load_2).kind) == 61 {
-                    multivalue_bind [$load_2, $mv$$vr_191$1, $mv$$vr_191$2] = "result_mut_ref_side_effect.wado/result_mut_ref_side_effect.wado/Parser::expect$sroa[return]"(p, 61, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(39, 43, 39), used: 3 });
-                    drop((if $load_2 == 0 -> ref "result_mut_ref_side_effect.wado//Token" {
+                result = struct.new "result_mut_ref_side_effect.wado//E::Alt5" { discriminant: 2, payload_0: struct.new "result_mut_ref_side_effect.wado//P5" { span: $hfs_pos_495 = "result_mut_ref_side_effect.wado/result_mut_ref_side_effect.wado/Parser::last_end"(p.tokens, p.pos); struct.new "result_mut_ref_side_effect.wado//Span" { start: $v1_234, end: $hfs_pos_495 }, expr: result, expr2: expr2_11 } };
+            } else if (suffix_kind == 61) | (suffix_kind == 62) {
+                if local.tee $hfs_pos_495(builtin::array_get_value<ref "result_mut_ref_side_effect.wado//Token">($licm_repr_470, $hfs_pos_495).kind) == 61 {
+                    multivalue_bind [$hfs_pos_495, $mv$$vr_191$1, $mv$$vr_191$2] = "result_mut_ref_side_effect.wado/result_mut_ref_side_effect.wado/Parser::expect$sroa[return]"(p, 61, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(39, 43, 39), used: 3 });
+                    drop((if $hfs_pos_495 == 0 -> ref "result_mut_ref_side_effect.wado//Token" {
                         ref.as_non_null($mv$$vr_191$1);
-                    } else if @unlikely($load_2 == 1) -> ref "result_mut_ref_side_effect.wado//Token" {
+                    } else if @unlikely($hfs_pos_495 == 1) -> ref "result_mut_ref_side_effect.wado//Token" {
                         cold_path;
                         $qm_e_7 = ref.as_non_null($mv$$vr_191$2);
                         cold_path;
@@ -586,11 +588,11 @@ fn "result_mut_ref_side_effect.wado/parse_expr$sroa[return]"(p) {
                     } else {
                         unreachable;
                     }));
-                } else if $load_2 == 62 {
-                    multivalue_bind [$load_2, $mv$$vr_191$1, $mv$$vr_191$2] = "result_mut_ref_side_effect.wado/result_mut_ref_side_effect.wado/Parser::expect$sroa[return]"(p, 62, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(39, 45, 39), used: 3 });
-                    drop((if $load_2 == 0 -> ref "result_mut_ref_side_effect.wado//Token" {
+                } else if $hfs_pos_495 == 62 {
+                    multivalue_bind [$hfs_pos_495, $mv$$vr_191$1, $mv$$vr_191$2] = "result_mut_ref_side_effect.wado/result_mut_ref_side_effect.wado/Parser::expect$sroa[return]"(p, 62, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(39, 45, 39), used: 3 });
+                    drop((if $hfs_pos_495 == 0 -> ref "result_mut_ref_side_effect.wado//Token" {
                         ref.as_non_null($mv$$vr_191$1);
-                    } else if @unlikely($load_2 == 1) -> ref "result_mut_ref_side_effect.wado//Token" {
+                    } else if @unlikely($hfs_pos_495 == 1) -> ref "result_mut_ref_side_effect.wado//Token" {
                         cold_path;
                         $qm_e_7 = ref.as_non_null($mv$$vr_191$2);
                         cold_path;
@@ -600,10 +602,10 @@ fn "result_mut_ref_side_effect.wado/parse_expr$sroa[return]"(p) {
                     }));
                 } else {
                 }
-                multivalue_bind [$load_2, $mv$$vr_468$1, $mv$$vr_191$2] = "result_mut_ref_side_effect.wado/parse_expr$sroa[return]"(p);
-                expr2_11 = (if $load_2 == 0 -> ref "result_mut_ref_side_effect.wado//E" {
-                    ref.as_non_null($mv$$vr_468$1);
-                } else if @unlikely($load_2 == 1) -> ref "result_mut_ref_side_effect.wado//E" {
+                multivalue_bind [$hfs_pos_495, $mv$$vr_472$1, $mv$$vr_191$2] = "result_mut_ref_side_effect.wado/parse_expr$sroa[return]"(p);
+                expr2_11 = (if $hfs_pos_495 == 0 -> ref "result_mut_ref_side_effect.wado//E" {
+                    ref.as_non_null($mv$$vr_472$1);
+                } else if @unlikely($hfs_pos_495 == 1) -> ref "result_mut_ref_side_effect.wado//E" {
                     cold_path;
                     $qm_e_7 = ref.as_non_null($mv$$vr_191$2);
                     cold_path;
@@ -611,13 +613,13 @@ fn "result_mut_ref_side_effect.wado/parse_expr$sroa[return]"(p) {
                 } else {
                     unreachable;
                 });
-                result = struct.new "result_mut_ref_side_effect.wado//E::Alt6" { discriminant: 3, payload_0: struct.new "result_mut_ref_side_effect.wado//P6" { span: $load_2 = "result_mut_ref_side_effect.wado/result_mut_ref_side_effect.wado/Parser::last_end"(p.tokens, p.pos); struct.new "result_mut_ref_side_effect.wado//Span" { start: $v1_234, end: $load_2 }, expr: result, expr2: expr2_11 } };
-            } else if ((($load_16 == 71) | ($load_16 == 72)) | ($load_16 == 73)) | ($load_16 == 74) {
-                if local.tee $load_2(builtin::array_get_value<ref "result_mut_ref_side_effect.wado//Token">($load_17, $load_2).kind) == 71 {
-                    multivalue_bind [$load_2, $mv$$vr_191$1, $mv$$vr_191$2] = "result_mut_ref_side_effect.wado/result_mut_ref_side_effect.wado/Parser::expect$sroa[return]"(p, 71, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(39, 60, 60, 39), used: 4 });
-                    drop((if $load_2 == 0 -> ref "result_mut_ref_side_effect.wado//Token" {
+                result = struct.new "result_mut_ref_side_effect.wado//E::Alt6" { discriminant: 3, payload_0: struct.new "result_mut_ref_side_effect.wado//P6" { span: $hfs_pos_495 = "result_mut_ref_side_effect.wado/result_mut_ref_side_effect.wado/Parser::last_end"(p.tokens, p.pos); struct.new "result_mut_ref_side_effect.wado//Span" { start: $v1_234, end: $hfs_pos_495 }, expr: result, expr2: expr2_11 } };
+            } else if (((suffix_kind == 71) | (suffix_kind == 72)) | (suffix_kind == 73)) | (suffix_kind == 74) {
+                if local.tee $hfs_pos_495(builtin::array_get_value<ref "result_mut_ref_side_effect.wado//Token">($licm_repr_470, $hfs_pos_495).kind) == 71 {
+                    multivalue_bind [$hfs_pos_495, $mv$$vr_191$1, $mv$$vr_191$2] = "result_mut_ref_side_effect.wado/result_mut_ref_side_effect.wado/Parser::expect$sroa[return]"(p, 71, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(39, 60, 60, 39), used: 4 });
+                    drop((if $hfs_pos_495 == 0 -> ref "result_mut_ref_side_effect.wado//Token" {
                         ref.as_non_null($mv$$vr_191$1);
-                    } else if @unlikely($load_2 == 1) -> ref "result_mut_ref_side_effect.wado//Token" {
+                    } else if @unlikely($hfs_pos_495 == 1) -> ref "result_mut_ref_side_effect.wado//Token" {
                         cold_path;
                         $qm_e_7 = ref.as_non_null($mv$$vr_191$2);
                         cold_path;
@@ -625,11 +627,11 @@ fn "result_mut_ref_side_effect.wado/parse_expr$sroa[return]"(p) {
                     } else {
                         unreachable;
                     }));
-                } else if $load_2 == 72 {
-                    multivalue_bind [$load_2, $mv$$vr_191$1, $mv$$vr_191$2] = "result_mut_ref_side_effect.wado/result_mut_ref_side_effect.wado/Parser::expect$sroa[return]"(p, 72, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(39, 62, 62, 39), used: 4 });
-                    drop((if $load_2 == 0 -> ref "result_mut_ref_side_effect.wado//Token" {
+                } else if $hfs_pos_495 == 72 {
+                    multivalue_bind [$hfs_pos_495, $mv$$vr_191$1, $mv$$vr_191$2] = "result_mut_ref_side_effect.wado/result_mut_ref_side_effect.wado/Parser::expect$sroa[return]"(p, 72, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(39, 62, 62, 39), used: 4 });
+                    drop((if $hfs_pos_495 == 0 -> ref "result_mut_ref_side_effect.wado//Token" {
                         ref.as_non_null($mv$$vr_191$1);
-                    } else if @unlikely($load_2 == 1) -> ref "result_mut_ref_side_effect.wado//Token" {
+                    } else if @unlikely($hfs_pos_495 == 1) -> ref "result_mut_ref_side_effect.wado//Token" {
                         cold_path;
                         $qm_e_7 = ref.as_non_null($mv$$vr_191$2);
                         cold_path;
@@ -637,11 +639,11 @@ fn "result_mut_ref_side_effect.wado/parse_expr$sroa[return]"(p) {
                     } else {
                         unreachable;
                     }));
-                } else if $load_2 == 73 {
-                    multivalue_bind [$load_2, $mv$$vr_191$1, $mv$$vr_191$2] = "result_mut_ref_side_effect.wado/result_mut_ref_side_effect.wado/Parser::expect$sroa[return]"(p, 73, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(39, 38, 39), used: 3 });
-                    drop((if $load_2 == 0 -> ref "result_mut_ref_side_effect.wado//Token" {
+                } else if $hfs_pos_495 == 73 {
+                    multivalue_bind [$hfs_pos_495, $mv$$vr_191$1, $mv$$vr_191$2] = "result_mut_ref_side_effect.wado/result_mut_ref_side_effect.wado/Parser::expect$sroa[return]"(p, 73, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(39, 38, 39), used: 3 });
+                    drop((if $hfs_pos_495 == 0 -> ref "result_mut_ref_side_effect.wado//Token" {
                         ref.as_non_null($mv$$vr_191$1);
-                    } else if @unlikely($load_2 == 1) -> ref "result_mut_ref_side_effect.wado//Token" {
+                    } else if @unlikely($hfs_pos_495 == 1) -> ref "result_mut_ref_side_effect.wado//Token" {
                         cold_path;
                         $qm_e_7 = ref.as_non_null($mv$$vr_191$2);
                         cold_path;
@@ -649,11 +651,11 @@ fn "result_mut_ref_side_effect.wado/parse_expr$sroa[return]"(p) {
                     } else {
                         unreachable;
                     }));
-                } else if $load_2 == 74 {
-                    multivalue_bind [$load_2, $mv$$vr_191$1, $mv$$vr_191$2] = "result_mut_ref_side_effect.wado/result_mut_ref_side_effect.wado/Parser::expect$sroa[return]"(p, 74, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(39, 124, 39), used: 3 });
-                    drop((if $load_2 == 0 -> ref "result_mut_ref_side_effect.wado//Token" {
+                } else if $hfs_pos_495 == 74 {
+                    multivalue_bind [$hfs_pos_495, $mv$$vr_191$1, $mv$$vr_191$2] = "result_mut_ref_side_effect.wado/result_mut_ref_side_effect.wado/Parser::expect$sroa[return]"(p, 74, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(39, 124, 39), used: 3 });
+                    drop((if $hfs_pos_495 == 0 -> ref "result_mut_ref_side_effect.wado//Token" {
                         ref.as_non_null($mv$$vr_191$1);
-                    } else if @unlikely($load_2 == 1) -> ref "result_mut_ref_side_effect.wado//Token" {
+                    } else if @unlikely($hfs_pos_495 == 1) -> ref "result_mut_ref_side_effect.wado//Token" {
                         cold_path;
                         $qm_e_7 = ref.as_non_null($mv$$vr_191$2);
                         cold_path;
@@ -663,10 +665,10 @@ fn "result_mut_ref_side_effect.wado/parse_expr$sroa[return]"(p) {
                     }));
                 } else {
                 }
-                multivalue_bind [$load_2, $mv$$vr_468$1, $mv$$vr_191$2] = "result_mut_ref_side_effect.wado/parse_expr$sroa[return]"(p);
-                expr2_11 = (if $load_2 == 0 -> ref "result_mut_ref_side_effect.wado//E" {
-                    ref.as_non_null($mv$$vr_468$1);
-                } else if @unlikely($load_2 == 1) -> ref "result_mut_ref_side_effect.wado//E" {
+                multivalue_bind [$hfs_pos_495, $mv$$vr_472$1, $mv$$vr_191$2] = "result_mut_ref_side_effect.wado/parse_expr$sroa[return]"(p);
+                expr2_11 = (if $hfs_pos_495 == 0 -> ref "result_mut_ref_side_effect.wado//E" {
+                    ref.as_non_null($mv$$vr_472$1);
+                } else if @unlikely($hfs_pos_495 == 1) -> ref "result_mut_ref_side_effect.wado//E" {
                     cold_path;
                     $qm_e_7 = ref.as_non_null($mv$$vr_191$2);
                     cold_path;
@@ -674,13 +676,13 @@ fn "result_mut_ref_side_effect.wado/parse_expr$sroa[return]"(p) {
                 } else {
                     unreachable;
                 });
-                result = struct.new "result_mut_ref_side_effect.wado//E::Alt7" { discriminant: 4, payload_0: struct.new "result_mut_ref_side_effect.wado//P7" { span: $load_2 = "result_mut_ref_side_effect.wado/result_mut_ref_side_effect.wado/Parser::last_end"(p.tokens, p.pos); struct.new "result_mut_ref_side_effect.wado//Span" { start: $v1_234, end: $load_2 }, expr: result, expr2: expr2_11 } };
-            } else if ((($load_16 == 81) | ($load_16 == 82)) | ($load_16 == 83)) | ($load_16 == 84) {
-                if local.tee $load_2(builtin::array_get_value<ref "result_mut_ref_side_effect.wado//Token">($load_17, $load_2).kind) == 81 {
-                    multivalue_bind [$load_2, $mv$$vr_191$1, $mv$$vr_191$2] = "result_mut_ref_side_effect.wado/result_mut_ref_side_effect.wado/Parser::expect$sroa[return]"(p, 81, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(39, 60, 39), used: 3 });
-                    drop((if $load_2 == 0 -> ref "result_mut_ref_side_effect.wado//Token" {
+                result = struct.new "result_mut_ref_side_effect.wado//E::Alt7" { discriminant: 4, payload_0: struct.new "result_mut_ref_side_effect.wado//P7" { span: $hfs_pos_495 = "result_mut_ref_side_effect.wado/result_mut_ref_side_effect.wado/Parser::last_end"(p.tokens, p.pos); struct.new "result_mut_ref_side_effect.wado//Span" { start: $v1_234, end: $hfs_pos_495 }, expr: result, expr2: expr2_11 } };
+            } else if (((suffix_kind == 81) | (suffix_kind == 82)) | (suffix_kind == 83)) | (suffix_kind == 84) {
+                if local.tee $hfs_pos_495(builtin::array_get_value<ref "result_mut_ref_side_effect.wado//Token">($licm_repr_470, $hfs_pos_495).kind) == 81 {
+                    multivalue_bind [$hfs_pos_495, $mv$$vr_191$1, $mv$$vr_191$2] = "result_mut_ref_side_effect.wado/result_mut_ref_side_effect.wado/Parser::expect$sroa[return]"(p, 81, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(39, 60, 39), used: 3 });
+                    drop((if $hfs_pos_495 == 0 -> ref "result_mut_ref_side_effect.wado//Token" {
                         ref.as_non_null($mv$$vr_191$1);
-                    } else if @unlikely($load_2 == 1) -> ref "result_mut_ref_side_effect.wado//Token" {
+                    } else if @unlikely($hfs_pos_495 == 1) -> ref "result_mut_ref_side_effect.wado//Token" {
                         cold_path;
                         $qm_e_7 = ref.as_non_null($mv$$vr_191$2);
                         cold_path;
@@ -688,11 +690,11 @@ fn "result_mut_ref_side_effect.wado/parse_expr$sroa[return]"(p) {
                     } else {
                         unreachable;
                     }));
-                } else if $load_2 == 82 {
-                    multivalue_bind [$load_2, $mv$$vr_191$1, $mv$$vr_191$2] = "result_mut_ref_side_effect.wado/result_mut_ref_side_effect.wado/Parser::expect$sroa[return]"(p, 82, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(39, 60, 61, 39), used: 4 });
-                    drop((if $load_2 == 0 -> ref "result_mut_ref_side_effect.wado//Token" {
+                } else if $hfs_pos_495 == 82 {
+                    multivalue_bind [$hfs_pos_495, $mv$$vr_191$1, $mv$$vr_191$2] = "result_mut_ref_side_effect.wado/result_mut_ref_side_effect.wado/Parser::expect$sroa[return]"(p, 82, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(39, 60, 61, 39), used: 4 });
+                    drop((if $hfs_pos_495 == 0 -> ref "result_mut_ref_side_effect.wado//Token" {
                         ref.as_non_null($mv$$vr_191$1);
-                    } else if @unlikely($load_2 == 1) -> ref "result_mut_ref_side_effect.wado//Token" {
+                    } else if @unlikely($hfs_pos_495 == 1) -> ref "result_mut_ref_side_effect.wado//Token" {
                         cold_path;
                         $qm_e_7 = ref.as_non_null($mv$$vr_191$2);
                         cold_path;
@@ -700,11 +702,11 @@ fn "result_mut_ref_side_effect.wado/parse_expr$sroa[return]"(p) {
                     } else {
                         unreachable;
                     }));
-                } else if $load_2 == 83 {
-                    multivalue_bind [$load_2, $mv$$vr_191$1, $mv$$vr_191$2] = "result_mut_ref_side_effect.wado/result_mut_ref_side_effect.wado/Parser::expect$sroa[return]"(p, 83, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(39, 62, 39), used: 3 });
-                    drop((if $load_2 == 0 -> ref "result_mut_ref_side_effect.wado//Token" {
+                } else if $hfs_pos_495 == 83 {
+                    multivalue_bind [$hfs_pos_495, $mv$$vr_191$1, $mv$$vr_191$2] = "result_mut_ref_side_effect.wado/result_mut_ref_side_effect.wado/Parser::expect$sroa[return]"(p, 83, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(39, 62, 39), used: 3 });
+                    drop((if $hfs_pos_495 == 0 -> ref "result_mut_ref_side_effect.wado//Token" {
                         ref.as_non_null($mv$$vr_191$1);
-                    } else if @unlikely($load_2 == 1) -> ref "result_mut_ref_side_effect.wado//Token" {
+                    } else if @unlikely($hfs_pos_495 == 1) -> ref "result_mut_ref_side_effect.wado//Token" {
                         cold_path;
                         $qm_e_7 = ref.as_non_null($mv$$vr_191$2);
                         cold_path;
@@ -712,11 +714,11 @@ fn "result_mut_ref_side_effect.wado/parse_expr$sroa[return]"(p) {
                     } else {
                         unreachable;
                     }));
-                } else if $load_2 == 84 {
-                    multivalue_bind [$load_2, $mv$$vr_191$1, $mv$$vr_191$2] = "result_mut_ref_side_effect.wado/result_mut_ref_side_effect.wado/Parser::expect$sroa[return]"(p, 84, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(39, 62, 61, 39), used: 4 });
-                    drop((if $load_2 == 0 -> ref "result_mut_ref_side_effect.wado//Token" {
+                } else if $hfs_pos_495 == 84 {
+                    multivalue_bind [$hfs_pos_495, $mv$$vr_191$1, $mv$$vr_191$2] = "result_mut_ref_side_effect.wado/result_mut_ref_side_effect.wado/Parser::expect$sroa[return]"(p, 84, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(39, 62, 61, 39), used: 4 });
+                    drop((if $hfs_pos_495 == 0 -> ref "result_mut_ref_side_effect.wado//Token" {
                         ref.as_non_null($mv$$vr_191$1);
-                    } else if @unlikely($load_2 == 1) -> ref "result_mut_ref_side_effect.wado//Token" {
+                    } else if @unlikely($hfs_pos_495 == 1) -> ref "result_mut_ref_side_effect.wado//Token" {
                         cold_path;
                         $qm_e_7 = ref.as_non_null($mv$$vr_191$2);
                         cold_path;
@@ -726,10 +728,10 @@ fn "result_mut_ref_side_effect.wado/parse_expr$sroa[return]"(p) {
                     }));
                 } else {
                 }
-                multivalue_bind [$load_2, $mv$$vr_468$1, $mv$$vr_191$2] = "result_mut_ref_side_effect.wado/parse_expr$sroa[return]"(p);
-                expr2_11 = (if $load_2 == 0 -> ref "result_mut_ref_side_effect.wado//E" {
-                    ref.as_non_null($mv$$vr_468$1);
-                } else if @unlikely($load_2 == 1) -> ref "result_mut_ref_side_effect.wado//E" {
+                multivalue_bind [$hfs_pos_495, $mv$$vr_472$1, $mv$$vr_191$2] = "result_mut_ref_side_effect.wado/parse_expr$sroa[return]"(p);
+                expr2_11 = (if $hfs_pos_495 == 0 -> ref "result_mut_ref_side_effect.wado//E" {
+                    ref.as_non_null($mv$$vr_472$1);
+                } else if @unlikely($hfs_pos_495 == 1) -> ref "result_mut_ref_side_effect.wado//E" {
                     cold_path;
                     $qm_e_7 = ref.as_non_null($mv$$vr_191$2);
                     cold_path;
@@ -737,13 +739,13 @@ fn "result_mut_ref_side_effect.wado/parse_expr$sroa[return]"(p) {
                 } else {
                     unreachable;
                 });
-                result = struct.new "result_mut_ref_side_effect.wado//E::Alt8" { discriminant: 5, payload_0: struct.new "result_mut_ref_side_effect.wado//P8" { span: $load_2 = "result_mut_ref_side_effect.wado/result_mut_ref_side_effect.wado/Parser::last_end"(p.tokens, p.pos); struct.new "result_mut_ref_side_effect.wado//Span" { start: $v1_234, end: $load_2 }, expr: result, expr2: expr2_11 } };
-            } else if ((($load_16 == 91) | ($load_16 == 92)) | ($load_16 == 93)) | ($load_16 == 94) {
-                if local.tee $load_2(builtin::array_get_value<ref "result_mut_ref_side_effect.wado//Token">($load_17, $load_2).kind) == 91 {
-                    multivalue_bind [$load_2, $mv$$vr_191$1, $mv$$vr_191$2] = "result_mut_ref_side_effect.wado/result_mut_ref_side_effect.wado/Parser::expect$sroa[return]"(p, 91, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(39, 61, 39), used: 3 });
-                    drop((if $load_2 == 0 -> ref "result_mut_ref_side_effect.wado//Token" {
+                result = struct.new "result_mut_ref_side_effect.wado//E::Alt8" { discriminant: 5, payload_0: struct.new "result_mut_ref_side_effect.wado//P8" { span: $hfs_pos_495 = "result_mut_ref_side_effect.wado/result_mut_ref_side_effect.wado/Parser::last_end"(p.tokens, p.pos); struct.new "result_mut_ref_side_effect.wado//Span" { start: $v1_234, end: $hfs_pos_495 }, expr: result, expr2: expr2_11 } };
+            } else if (((suffix_kind == 91) | (suffix_kind == 92)) | (suffix_kind == 93)) | (suffix_kind == 94) {
+                if local.tee $hfs_pos_495(builtin::array_get_value<ref "result_mut_ref_side_effect.wado//Token">($licm_repr_470, $hfs_pos_495).kind) == 91 {
+                    multivalue_bind [$hfs_pos_495, $mv$$vr_191$1, $mv$$vr_191$2] = "result_mut_ref_side_effect.wado/result_mut_ref_side_effect.wado/Parser::expect$sroa[return]"(p, 91, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(39, 61, 39), used: 3 });
+                    drop((if $hfs_pos_495 == 0 -> ref "result_mut_ref_side_effect.wado//Token" {
                         ref.as_non_null($mv$$vr_191$1);
-                    } else if @unlikely($load_2 == 1) -> ref "result_mut_ref_side_effect.wado//Token" {
+                    } else if @unlikely($hfs_pos_495 == 1) -> ref "result_mut_ref_side_effect.wado//Token" {
                         cold_path;
                         $qm_e_7 = ref.as_non_null($mv$$vr_191$2);
                         cold_path;
@@ -751,11 +753,11 @@ fn "result_mut_ref_side_effect.wado/parse_expr$sroa[return]"(p) {
                     } else {
                         unreachable;
                     }));
-                } else if $load_2 == 92 {
-                    multivalue_bind [$load_2, $mv$$vr_191$1, $mv$$vr_191$2] = "result_mut_ref_side_effect.wado/result_mut_ref_side_effect.wado/Parser::expect$sroa[return]"(p, 92, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(39, 61, 61, 39), used: 4 });
-                    drop((if $load_2 == 0 -> ref "result_mut_ref_side_effect.wado//Token" {
+                } else if $hfs_pos_495 == 92 {
+                    multivalue_bind [$hfs_pos_495, $mv$$vr_191$1, $mv$$vr_191$2] = "result_mut_ref_side_effect.wado/result_mut_ref_side_effect.wado/Parser::expect$sroa[return]"(p, 92, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(39, 61, 61, 39), used: 4 });
+                    drop((if $hfs_pos_495 == 0 -> ref "result_mut_ref_side_effect.wado//Token" {
                         ref.as_non_null($mv$$vr_191$1);
-                    } else if @unlikely($load_2 == 1) -> ref "result_mut_ref_side_effect.wado//Token" {
+                    } else if @unlikely($hfs_pos_495 == 1) -> ref "result_mut_ref_side_effect.wado//Token" {
                         cold_path;
                         $qm_e_7 = ref.as_non_null($mv$$vr_191$2);
                         cold_path;
@@ -763,11 +765,11 @@ fn "result_mut_ref_side_effect.wado/parse_expr$sroa[return]"(p) {
                     } else {
                         unreachable;
                     }));
-                } else if $load_2 == 93 {
-                    multivalue_bind [$load_2, $mv$$vr_191$1, $mv$$vr_191$2] = "result_mut_ref_side_effect.wado/result_mut_ref_side_effect.wado/Parser::expect$sroa[return]"(p, 93, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(39, 33, 61, 39), used: 4 });
-                    drop((if $load_2 == 0 -> ref "result_mut_ref_side_effect.wado//Token" {
+                } else if $hfs_pos_495 == 93 {
+                    multivalue_bind [$hfs_pos_495, $mv$$vr_191$1, $mv$$vr_191$2] = "result_mut_ref_side_effect.wado/result_mut_ref_side_effect.wado/Parser::expect$sroa[return]"(p, 93, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(39, 33, 61, 39), used: 4 });
+                    drop((if $hfs_pos_495 == 0 -> ref "result_mut_ref_side_effect.wado//Token" {
                         ref.as_non_null($mv$$vr_191$1);
-                    } else if @unlikely($load_2 == 1) -> ref "result_mut_ref_side_effect.wado//Token" {
+                    } else if @unlikely($hfs_pos_495 == 1) -> ref "result_mut_ref_side_effect.wado//Token" {
                         cold_path;
                         $qm_e_7 = ref.as_non_null($mv$$vr_191$2);
                         cold_path;
@@ -775,11 +777,11 @@ fn "result_mut_ref_side_effect.wado/parse_expr$sroa[return]"(p) {
                     } else {
                         unreachable;
                     }));
-                } else if $load_2 == 94 {
-                    multivalue_bind [$load_2, $mv$$vr_191$1, $mv$$vr_191$2] = "result_mut_ref_side_effect.wado/result_mut_ref_side_effect.wado/Parser::expect$sroa[return]"(p, 94, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(39, 60, 62, 39), used: 4 });
-                    drop((if $load_2 == 0 -> ref "result_mut_ref_side_effect.wado//Token" {
+                } else if $hfs_pos_495 == 94 {
+                    multivalue_bind [$hfs_pos_495, $mv$$vr_191$1, $mv$$vr_191$2] = "result_mut_ref_side_effect.wado/result_mut_ref_side_effect.wado/Parser::expect$sroa[return]"(p, 94, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(39, 60, 62, 39), used: 4 });
+                    drop((if $hfs_pos_495 == 0 -> ref "result_mut_ref_side_effect.wado//Token" {
                         ref.as_non_null($mv$$vr_191$1);
-                    } else if @unlikely($load_2 == 1) -> ref "result_mut_ref_side_effect.wado//Token" {
+                    } else if @unlikely($hfs_pos_495 == 1) -> ref "result_mut_ref_side_effect.wado//Token" {
                         cold_path;
                         $qm_e_7 = ref.as_non_null($mv$$vr_191$2);
                         cold_path;
@@ -789,10 +791,10 @@ fn "result_mut_ref_side_effect.wado/parse_expr$sroa[return]"(p) {
                     }));
                 } else {
                 }
-                multivalue_bind [$load_2, $mv$$vr_468$1, $mv$$vr_191$2] = "result_mut_ref_side_effect.wado/parse_expr$sroa[return]"(p);
-                expr2_11 = (if $load_2 == 0 -> ref "result_mut_ref_side_effect.wado//E" {
-                    ref.as_non_null($mv$$vr_468$1);
-                } else if @unlikely($load_2 == 1) -> ref "result_mut_ref_side_effect.wado//E" {
+                multivalue_bind [$hfs_pos_495, $mv$$vr_472$1, $mv$$vr_191$2] = "result_mut_ref_side_effect.wado/parse_expr$sroa[return]"(p);
+                expr2_11 = (if $hfs_pos_495 == 0 -> ref "result_mut_ref_side_effect.wado//E" {
+                    ref.as_non_null($mv$$vr_472$1);
+                } else if @unlikely($hfs_pos_495 == 1) -> ref "result_mut_ref_side_effect.wado//E" {
                     cold_path;
                     $qm_e_7 = ref.as_non_null($mv$$vr_191$2);
                     cold_path;
@@ -800,13 +802,13 @@ fn "result_mut_ref_side_effect.wado/parse_expr$sroa[return]"(p) {
                 } else {
                     unreachable;
                 });
-                result = struct.new "result_mut_ref_side_effect.wado//E::Alt9" { discriminant: 6, payload_0: struct.new "result_mut_ref_side_effect.wado//P9" { span: $load_2 = "result_mut_ref_side_effect.wado/result_mut_ref_side_effect.wado/Parser::last_end"(p.tokens, p.pos); struct.new "result_mut_ref_side_effect.wado//Span" { start: $v1_234, end: $load_2 }, expr: result, expr2: expr2_11 } };
-            } else if $load_16 == 10 {
-                $mv$$vr_191$1 = (if builtin::array_get_value<ref "result_mut_ref_side_effect.wado//Token">($load_17, $load_2).kind == 10 -> ref null "result_mut_ref_side_effect.wado//Token" {
-                    multivalue_bind [$load_2, $mv$$vr_191$1, $mv$$vr_191$2] = "result_mut_ref_side_effect.wado/result_mut_ref_side_effect.wado/Parser::expect$sroa[return]"(p, 10, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(78, 79, 84), used: 3 });
-                    if $load_2 == 0 -> ref "result_mut_ref_side_effect.wado//Token" {
+                result = struct.new "result_mut_ref_side_effect.wado//E::Alt9" { discriminant: 6, payload_0: struct.new "result_mut_ref_side_effect.wado//P9" { span: $hfs_pos_495 = "result_mut_ref_side_effect.wado/result_mut_ref_side_effect.wado/Parser::last_end"(p.tokens, p.pos); struct.new "result_mut_ref_side_effect.wado//Span" { start: $v1_234, end: $hfs_pos_495 }, expr: result, expr2: expr2_11 } };
+            } else if suffix_kind == 10 {
+                $mv$$vr_191$1 = (if builtin::array_get_value<ref "result_mut_ref_side_effect.wado//Token">($licm_repr_470, $hfs_pos_495).kind == 10 -> ref null "result_mut_ref_side_effect.wado//Token" {
+                    multivalue_bind [$hfs_pos_495, $mv$$vr_191$1, $mv$$vr_191$2] = "result_mut_ref_side_effect.wado/result_mut_ref_side_effect.wado/Parser::expect$sroa[return]"(p, 10, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(78, 79, 84), used: 3 });
+                    if $hfs_pos_495 == 0 -> ref "result_mut_ref_side_effect.wado//Token" {
                         ref.as_non_null($mv$$vr_191$1);
-                    } else if @unlikely($load_2 == 1) -> ref "result_mut_ref_side_effect.wado//Token" {
+                    } else if @unlikely($hfs_pos_495 == 1) -> ref "result_mut_ref_side_effect.wado//Token" {
                         cold_path;
                         $qm_e_7 = ref.as_non_null($mv$$vr_191$2);
                         cold_path;
@@ -818,10 +820,10 @@ fn "result_mut_ref_side_effect.wado/parse_expr$sroa[return]"(p) {
                     ref.null none;
                 });
                 let $mv$$vr_210$1: ref null "result_mut_ref_side_effect.wado//Token";
-                multivalue_bind [$load_2, $mv$$vr_210$1, $mv$$vr_191$2] = "result_mut_ref_side_effect.wado/result_mut_ref_side_effect.wado/Parser::expect$sroa[return]"(p, 110, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(73, 78), used: 2 });
-                v_245 = (if $load_2 == 0 -> ref "result_mut_ref_side_effect.wado//Token" {
+                multivalue_bind [$hfs_pos_495, $mv$$vr_210$1, $mv$$vr_191$2] = "result_mut_ref_side_effect.wado/result_mut_ref_side_effect.wado/Parser::expect$sroa[return]"(p, 110, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(73, 78), used: 2 });
+                v_245 = (if $hfs_pos_495 == 0 -> ref "result_mut_ref_side_effect.wado//Token" {
                     ref.as_non_null($mv$$vr_210$1);
-                } else if @unlikely($load_2 == 1) -> ref "result_mut_ref_side_effect.wado//Token" {
+                } else if @unlikely($hfs_pos_495 == 1) -> ref "result_mut_ref_side_effect.wado//Token" {
                     cold_path;
                     $qm_e_7 = ref.as_non_null($mv$$vr_191$2);
                     cold_path;
@@ -829,27 +831,27 @@ fn "result_mut_ref_side_effect.wado/parse_expr$sroa[return]"(p) {
                 } else {
                     unreachable;
                 });
-                $load_16 = local.tee $load_0(p.tokens).used;
-                if @unlikely(local.tee $load_2(p.pos) >=u $load_16) {
+                suffix_kind = local.tee $hfs_pos_495(p.pos);
+                if @unlikely(((0 <= suffix_kind) & (suffix_kind < $load_2)) == 0) {
                     cold_path;
-                    "result_mut_ref_side_effect.wado/result_mut_ref_side_effect.wado/Parser::peek_kind$cold0$sroa[self.pos]"($load_2, $load_16);
+                    "result_mut_ref_side_effect.wado/result_mut_ref_side_effect.wado/Parser::peek_kind$cold0$sroa[self.pos]"($hfs_pos_495, $load_2);
                     unreachable;
                 }
-                if builtin::array_get_value<ref "result_mut_ref_side_effect.wado//Token">($load_0.repr, $load_2).kind == 120 {
-                    $load_16 = 0;
+                if builtin::array_get_value<ref "result_mut_ref_side_effect.wado//Token">($licm_repr_470, $hfs_pos_495).kind == 120 {
+                    suffix_kind = 0;
                     let $mv$r$0: i32;
-                    multivalue_bind [$mv$r$0, $mv$$vr_468$1, $mv$$vr_191$2] = "result_mut_ref_side_effect.wado/parse_expr$sroa[return]"(p);
+                    multivalue_bind [$mv$r$0, $mv$$vr_472$1, $mv$$vr_191$2] = "result_mut_ref_side_effect.wado/parse_expr$sroa[return]"(p);
                     if $mv$r$0 == 1 {
                     } else {
-                        $load_16 = 1;
-                        $load_2 = p.pos;
+                        suffix_kind = 1;
+                        $hfs_pos_495 = p.pos;
                     }
-                    if $load_16 == 0 {
-                        p.pos = $load_2;
-                        multivalue_bind [$load_2, $mv$$vr_468$1, $mv$$vr_191$2] = "result_mut_ref_side_effect.wado/parse_expr$sroa[return]"(p);
-                        drop((if $load_2 == 0 -> ref "result_mut_ref_side_effect.wado//E" {
-                            ref.as_non_null($mv$$vr_468$1);
-                        } else if @unlikely($load_2 == 1) -> ref "result_mut_ref_side_effect.wado//E" {
+                    if suffix_kind == 0 {
+                        p.pos = $hfs_pos_495;
+                        multivalue_bind [$hfs_pos_495, $mv$$vr_472$1, $mv$$vr_191$2] = "result_mut_ref_side_effect.wado/parse_expr$sroa[return]"(p);
+                        drop((if $hfs_pos_495 == 0 -> ref "result_mut_ref_side_effect.wado//E" {
+                            ref.as_non_null($mv$$vr_472$1);
+                        } else if @unlikely($hfs_pos_495 == 1) -> ref "result_mut_ref_side_effect.wado//E" {
                             cold_path;
                             $qm_e_7 = ref.as_non_null($mv$$vr_191$2);
                             cold_path;
@@ -857,17 +859,19 @@ fn "result_mut_ref_side_effect.wado/parse_expr$sroa[return]"(p) {
                         } else {
                             unreachable;
                         }));
+                        suffix_kind = local.tee $hfs_pos_495(p.pos);
                         b87: block {
                             l88: loop {
-                                break_if b87 $load_16 = local.tee $load_0(p.tokens).used; if @unlikely(local.tee $load_2(p.pos) >=u $load_16) {
+                                break_if b87 if @unlikely(((0 <= suffix_kind) & (suffix_kind < $load_2)) == 0) {
                                     cold_path;
-                                    "result_mut_ref_side_effect.wado/result_mut_ref_side_effect.wado/Parser::peek_kind$cold0$sroa[self.pos]"($load_2, $load_16);
+                                    "result_mut_ref_side_effect.wado/result_mut_ref_side_effect.wado/Parser::peek_kind$cold0$sroa[self.pos]"(suffix_kind, $load_2);
                                     unreachable;
-                                }; builtin::array_get_value<ref "result_mut_ref_side_effect.wado//Token">($load_0.repr, $load_2).kind != 130;
-                                multivalue_bind [$load_2, $mv$$vr_210$1, $mv$$vr_191$2] = "result_mut_ref_side_effect.wado/result_mut_ref_side_effect.wado/Parser::expect$sroa[return]"(p, 130, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(39, 44, 39), used: 3 });
-                                drop((if $load_2 == 0 -> ref "result_mut_ref_side_effect.wado//Token" {
+                                }; builtin::array_get_value<ref "result_mut_ref_side_effect.wado//Token">($licm_repr_470, suffix_kind).kind != 130;
+                                multivalue_bind [$hfs_pos_495, $mv$$vr_210$1, $mv$$vr_191$2] = "result_mut_ref_side_effect.wado/result_mut_ref_side_effect.wado/Parser::expect$sroa[return]"(p, 130, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(39, 44, 39), used: 3 });
+                                drop(p.pos);
+                                drop((if $hfs_pos_495 == 0 -> ref "result_mut_ref_side_effect.wado//Token" {
                                     ref.as_non_null($mv$$vr_210$1);
-                                } else if @unlikely($load_2 == 1) -> ref "result_mut_ref_side_effect.wado//Token" {
+                                } else if @unlikely($hfs_pos_495 == 1) -> ref "result_mut_ref_side_effect.wado//Token" {
                                     cold_path;
                                     $qm_e_7 = ref.as_non_null($mv$$vr_191$2);
                                     cold_path;
@@ -875,10 +879,10 @@ fn "result_mut_ref_side_effect.wado/parse_expr$sroa[return]"(p) {
                                 } else {
                                     unreachable;
                                 }));
-                                multivalue_bind [$load_2, $mv$$vr_468$1, $mv$$vr_191$2] = "result_mut_ref_side_effect.wado/parse_expr$sroa[return]"(p);
-                                drop((if $load_2 == 0 -> ref "result_mut_ref_side_effect.wado//E" {
-                                    ref.as_non_null($mv$$vr_468$1);
-                                } else if @unlikely($load_2 == 1) -> ref "result_mut_ref_side_effect.wado//E" {
+                                multivalue_bind [$hfs_pos_495, $mv$$vr_472$1, $mv$$vr_191$2] = "result_mut_ref_side_effect.wado/parse_expr$sroa[return]"(p);
+                                drop((if $hfs_pos_495 == 0 -> ref "result_mut_ref_side_effect.wado//E" {
+                                    ref.as_non_null($mv$$vr_472$1);
+                                } else if @unlikely($hfs_pos_495 == 1) -> ref "result_mut_ref_side_effect.wado//E" {
                                     cold_path;
                                     $qm_e_7 = ref.as_non_null($mv$$vr_191$2);
                                     cold_path;
@@ -886,16 +890,16 @@ fn "result_mut_ref_side_effect.wado/parse_expr$sroa[return]"(p) {
                                 } else {
                                     unreachable;
                                 }));
+                                suffix_kind = local.tee $hfs_pos_495(p.pos);
                                 continue l88;
                             };
                         };
-                        $load_2 = p.pos;
                     }
-                    p.pos = $load_2;
-                    multivalue_bind [$load_2, $mv$$vr_210$1, $mv$$vr_191$2] = "result_mut_ref_side_effect.wado/result_mut_ref_side_effect.wado/Parser::expect$sroa[return]"(p, 121, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(39, 41, 39), used: 3 });
-                    drop((if $load_2 == 0 -> ref "result_mut_ref_side_effect.wado//Token" {
+                    p.pos = $hfs_pos_495;
+                    multivalue_bind [$hfs_pos_495, $mv$$vr_210$1, $mv$$vr_191$2] = "result_mut_ref_side_effect.wado/result_mut_ref_side_effect.wado/Parser::expect$sroa[return]"(p, 121, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(39, 41, 39), used: 3 });
+                    drop((if $hfs_pos_495 == 0 -> ref "result_mut_ref_side_effect.wado//Token" {
                         ref.as_non_null($mv$$vr_210$1);
-                    } else if @unlikely($load_2 == 1) -> ref "result_mut_ref_side_effect.wado//Token" {
+                    } else if @unlikely($hfs_pos_495 == 1) -> ref "result_mut_ref_side_effect.wado//Token" {
                         cold_path;
                         $qm_e_7 = ref.as_non_null($mv$$vr_191$2);
                         cold_path;
@@ -906,23 +910,23 @@ fn "result_mut_ref_side_effect.wado/parse_expr$sroa[return]"(p) {
                 } else {
                     opt_bt: block {
                         $array_clone_src_1 = local.tee v_246("result_mut_ref_side_effect.wado/result_mut_ref_side_effect.wado/Parser::advance"(p).text).repr;
-                        builtin::array_copy<u8>(builtin::array_new<u8>(local.tee $load_16(v_246.used)), 0, $array_clone_src_1, 0, $load_16);
-                        multivalue_bind [$load_16, $mv$$vr_210$1, $mv$$vr_191$2] = "result_mut_ref_side_effect.wado/result_mut_ref_side_effect.wado/Parser::expect$sroa[return]"(p, 140, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(39, 46, 39), used: 3 });
-                        if $load_16 == 1 {
+                        builtin::array_copy<u8>(builtin::array_new<u8>(local.tee suffix_kind(v_246.used)), 0, $array_clone_src_1, 0, suffix_kind);
+                        multivalue_bind [suffix_kind, $mv$$vr_210$1, $mv$$vr_191$2] = "result_mut_ref_side_effect.wado/result_mut_ref_side_effect.wado/Parser::expect$sroa[return]"(p, 140, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(39, 46, 39), used: 3 });
+                        if suffix_kind == 1 {
                             break opt_bt;
                         } else {
                         }
                     };
-                    p.pos = $load_2;
+                    p.pos = $hfs_pos_495;
                     $array_clone_src_1 = local.tee v_246("result_mut_ref_side_effect.wado/result_mut_ref_side_effect.wado/Parser::advance"(p).text).repr;
-                    builtin::array_copy<u8>(builtin::array_new<u8>(local.tee $load_2(v_246.used)), 0, $array_clone_src_1, 0, $load_2);
+                    builtin::array_copy<u8>(builtin::array_new<u8>(local.tee $hfs_pos_495(v_246.used)), 0, $array_clone_src_1, 0, $hfs_pos_495);
                 }
-                result = struct.new "result_mut_ref_side_effect.wado//E::Alt10" { discriminant: 7, payload_0: struct.new "result_mut_ref_side_effect.wado//P10" { span: $load_2 = "result_mut_ref_side_effect.wado/result_mut_ref_side_effect.wado/Parser::last_end"(p.tokens, p.pos); struct.new "result_mut_ref_side_effect.wado//Span" { start: $v1_234, end: $load_2 }, expr: result, opt: $mv$$vr_191$1, tok: v_245 } };
-            } else if $load_16 == 111 {
-                multivalue_bind [$load_2, $mv$$vr_191$1, $mv$$vr_191$2] = "result_mut_ref_side_effect.wado/result_mut_ref_side_effect.wado/Parser::expect$sroa[return]"(p, 111, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(65, 78, 68), used: 3 });
-                v_245 = (if $load_2 == 0 -> ref "result_mut_ref_side_effect.wado//Token" {
+                result = struct.new "result_mut_ref_side_effect.wado//E::Alt10" { discriminant: 7, payload_0: struct.new "result_mut_ref_side_effect.wado//P10" { span: $hfs_pos_495 = "result_mut_ref_side_effect.wado/result_mut_ref_side_effect.wado/Parser::last_end"(p.tokens, p.pos); struct.new "result_mut_ref_side_effect.wado//Span" { start: $v1_234, end: $hfs_pos_495 }, expr: result, opt: $mv$$vr_191$1, tok: v_245 } };
+            } else if suffix_kind == 111 {
+                multivalue_bind [$hfs_pos_495, $mv$$vr_191$1, $mv$$vr_191$2] = "result_mut_ref_side_effect.wado/result_mut_ref_side_effect.wado/Parser::expect$sroa[return]"(p, 111, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(65, 78, 68), used: 3 });
+                v_245 = (if $hfs_pos_495 == 0 -> ref "result_mut_ref_side_effect.wado//Token" {
                     ref.as_non_null($mv$$vr_191$1);
-                } else if @unlikely($load_2 == 1) -> ref "result_mut_ref_side_effect.wado//Token" {
+                } else if @unlikely($hfs_pos_495 == 1) -> ref "result_mut_ref_side_effect.wado//Token" {
                     cold_path;
                     $qm_e_7 = ref.as_non_null($mv$$vr_191$2);
                     cold_path;
@@ -930,10 +934,10 @@ fn "result_mut_ref_side_effect.wado/parse_expr$sroa[return]"(p) {
                 } else {
                     unreachable;
                 });
-                multivalue_bind [$load_2, $mv$$vr_468$1, $mv$$vr_191$2] = "result_mut_ref_side_effect.wado/parse_expr$sroa[return]"(p);
-                expr2_11 = (if $load_2 == 0 -> ref "result_mut_ref_side_effect.wado//E" {
-                    ref.as_non_null($mv$$vr_468$1);
-                } else if @unlikely($load_2 == 1) -> ref "result_mut_ref_side_effect.wado//E" {
+                multivalue_bind [$hfs_pos_495, $mv$$vr_472$1, $mv$$vr_191$2] = "result_mut_ref_side_effect.wado/parse_expr$sroa[return]"(p);
+                expr2_11 = (if $hfs_pos_495 == 0 -> ref "result_mut_ref_side_effect.wado//E" {
+                    ref.as_non_null($mv$$vr_472$1);
+                } else if @unlikely($hfs_pos_495 == 1) -> ref "result_mut_ref_side_effect.wado//E" {
                     cold_path;
                     $qm_e_7 = ref.as_non_null($mv$$vr_191$2);
                     cold_path;
@@ -941,12 +945,12 @@ fn "result_mut_ref_side_effect.wado/parse_expr$sroa[return]"(p) {
                 } else {
                     unreachable;
                 });
-                result = struct.new "result_mut_ref_side_effect.wado//E::Alt11" { discriminant: 8, payload_0: struct.new "result_mut_ref_side_effect.wado//P11" { span: $load_2 = "result_mut_ref_side_effect.wado/result_mut_ref_side_effect.wado/Parser::last_end"(p.tokens, p.pos); struct.new "result_mut_ref_side_effect.wado//Span" { start: $v1_234, end: $load_2 }, expr: result, tok: v_245, expr2: expr2_11 } };
-            } else if $load_16 == 112 {
-                multivalue_bind [$load_2, $mv$$vr_191$1, $mv$$vr_191$2] = "result_mut_ref_side_effect.wado/result_mut_ref_side_effect.wado/Parser::expect$sroa[return]"(p, 112, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(79, 82), used: 2 });
-                v_245 = (if $load_2 == 0 -> ref "result_mut_ref_side_effect.wado//Token" {
+                result = struct.new "result_mut_ref_side_effect.wado//E::Alt11" { discriminant: 8, payload_0: struct.new "result_mut_ref_side_effect.wado//P11" { span: $hfs_pos_495 = "result_mut_ref_side_effect.wado/result_mut_ref_side_effect.wado/Parser::last_end"(p.tokens, p.pos); struct.new "result_mut_ref_side_effect.wado//Span" { start: $v1_234, end: $hfs_pos_495 }, expr: result, tok: v_245, expr2: expr2_11 } };
+            } else if suffix_kind == 112 {
+                multivalue_bind [$hfs_pos_495, $mv$$vr_191$1, $mv$$vr_191$2] = "result_mut_ref_side_effect.wado/result_mut_ref_side_effect.wado/Parser::expect$sroa[return]"(p, 112, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(79, 82), used: 2 });
+                v_245 = (if $hfs_pos_495 == 0 -> ref "result_mut_ref_side_effect.wado//Token" {
                     ref.as_non_null($mv$$vr_191$1);
-                } else if @unlikely($load_2 == 1) -> ref "result_mut_ref_side_effect.wado//Token" {
+                } else if @unlikely($hfs_pos_495 == 1) -> ref "result_mut_ref_side_effect.wado//Token" {
                     cold_path;
                     $qm_e_7 = ref.as_non_null($mv$$vr_191$2);
                     cold_path;
@@ -954,10 +958,10 @@ fn "result_mut_ref_side_effect.wado/parse_expr$sroa[return]"(p) {
                 } else {
                     unreachable;
                 });
-                multivalue_bind [$load_2, $mv$$vr_468$1, $mv$$vr_191$2] = "result_mut_ref_side_effect.wado/parse_expr$sroa[return]"(p);
-                expr2_11 = (if $load_2 == 0 -> ref "result_mut_ref_side_effect.wado//E" {
-                    ref.as_non_null($mv$$vr_468$1);
-                } else if @unlikely($load_2 == 1) -> ref "result_mut_ref_side_effect.wado//E" {
+                multivalue_bind [$hfs_pos_495, $mv$$vr_472$1, $mv$$vr_191$2] = "result_mut_ref_side_effect.wado/parse_expr$sroa[return]"(p);
+                expr2_11 = (if $hfs_pos_495 == 0 -> ref "result_mut_ref_side_effect.wado//E" {
+                    ref.as_non_null($mv$$vr_472$1);
+                } else if @unlikely($hfs_pos_495 == 1) -> ref "result_mut_ref_side_effect.wado//E" {
                     cold_path;
                     $qm_e_7 = ref.as_non_null($mv$$vr_191$2);
                     cold_path;
@@ -965,12 +969,12 @@ fn "result_mut_ref_side_effect.wado/parse_expr$sroa[return]"(p) {
                 } else {
                     unreachable;
                 });
-                result = struct.new "result_mut_ref_side_effect.wado//E::Alt12" { discriminant: 9, payload_0: struct.new "result_mut_ref_side_effect.wado//P12" { span: $load_2 = "result_mut_ref_side_effect.wado/result_mut_ref_side_effect.wado/Parser::last_end"(p.tokens, p.pos); struct.new "result_mut_ref_side_effect.wado//Span" { start: $v1_234, end: $load_2 }, expr: result, tok: v_245, expr2: expr2_11 } };
-            } else if $load_16 == 116 {
-                multivalue_bind [$load_2, $mv$$vr_191$1, $mv$$vr_191$2] = "result_mut_ref_side_effect.wado/result_mut_ref_side_effect.wado/Parser::expect$sroa[return]"(p, 116, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("COLLATE"), used: 7 });
-                v_245 = (if $load_2 == 0 -> ref "result_mut_ref_side_effect.wado//Token" {
+                result = struct.new "result_mut_ref_side_effect.wado//E::Alt12" { discriminant: 9, payload_0: struct.new "result_mut_ref_side_effect.wado//P12" { span: $hfs_pos_495 = "result_mut_ref_side_effect.wado/result_mut_ref_side_effect.wado/Parser::last_end"(p.tokens, p.pos); struct.new "result_mut_ref_side_effect.wado//Span" { start: $v1_234, end: $hfs_pos_495 }, expr: result, tok: v_245, expr2: expr2_11 } };
+            } else if suffix_kind == 116 {
+                multivalue_bind [$hfs_pos_495, $mv$$vr_191$1, $mv$$vr_191$2] = "result_mut_ref_side_effect.wado/result_mut_ref_side_effect.wado/Parser::expect$sroa[return]"(p, 116, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("COLLATE"), used: 7 });
+                v_245 = (if $hfs_pos_495 == 0 -> ref "result_mut_ref_side_effect.wado//Token" {
                     ref.as_non_null($mv$$vr_191$1);
-                } else if @unlikely($load_2 == 1) -> ref "result_mut_ref_side_effect.wado//Token" {
+                } else if @unlikely($hfs_pos_495 == 1) -> ref "result_mut_ref_side_effect.wado//Token" {
                     cold_path;
                     $qm_e_7 = ref.as_non_null($mv$$vr_191$2);
                     cold_path;
@@ -978,14 +982,14 @@ fn "result_mut_ref_side_effect.wado/parse_expr$sroa[return]"(p) {
                 } else {
                     unreachable;
                 });
-                v_370 = struct.new "result_mut_ref_side_effect.wado//Token" { kind: local.tee v_370("result_mut_ref_side_effect.wado/result_mut_ref_side_effect.wado/Parser::advance"(p)).kind, text: struct.new "core:prelude/string.wado//String" { repr: $array_clone_src_1 = local.tee v_246(v_370.text).repr; builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>(local.tee $load_2(v_246.used))), 0, $array_clone_src_1, 0, $load_2); $array_clone_dst_2, used: $load_2 }, span: struct.new "result_mut_ref_side_effect.wado//Span" { start: local.tee v_247(v_370.span).start, end: v_247.end } };
-                result = struct.new "result_mut_ref_side_effect.wado//E::Alt16" { discriminant: 10, payload_0: struct.new "result_mut_ref_side_effect.wado//P16" { span: $load_2 = "result_mut_ref_side_effect.wado/result_mut_ref_side_effect.wado/Parser::last_end"(p.tokens, p.pos); struct.new "result_mut_ref_side_effect.wado//Span" { start: $v1_234, end: $load_2 }, expr: result, tok: v_245, name: v_370 } };
-            } else if $load_16 == 17 {
-                $mv$$vr_191$1 = (if builtin::array_get_value<ref "result_mut_ref_side_effect.wado//Token">($load_17, $load_2).kind == 17 -> ref null "result_mut_ref_side_effect.wado//Token" {
-                    multivalue_bind [$load_2, $mv$$vr_191$1, $mv$$vr_191$2] = "result_mut_ref_side_effect.wado/result_mut_ref_side_effect.wado/Parser::expect$sroa[return]"(p, 17, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(78, 79, 84), used: 3 });
-                    if $load_2 == 0 -> ref "result_mut_ref_side_effect.wado//Token" {
+                v_370 = struct.new "result_mut_ref_side_effect.wado//Token" { kind: local.tee v_370("result_mut_ref_side_effect.wado/result_mut_ref_side_effect.wado/Parser::advance"(p)).kind, text: struct.new "core:prelude/string.wado//String" { repr: $array_clone_src_1 = local.tee v_246(v_370.text).repr; builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>(local.tee $hfs_pos_495(v_246.used))), 0, $array_clone_src_1, 0, $hfs_pos_495); $array_clone_dst_2, used: $hfs_pos_495 }, span: struct.new "result_mut_ref_side_effect.wado//Span" { start: local.tee v_247(v_370.span).start, end: v_247.end } };
+                result = struct.new "result_mut_ref_side_effect.wado//E::Alt16" { discriminant: 10, payload_0: struct.new "result_mut_ref_side_effect.wado//P16" { span: $hfs_pos_495 = "result_mut_ref_side_effect.wado/result_mut_ref_side_effect.wado/Parser::last_end"(p.tokens, p.pos); struct.new "result_mut_ref_side_effect.wado//Span" { start: $v1_234, end: $hfs_pos_495 }, expr: result, tok: v_245, name: v_370 } };
+            } else if suffix_kind == 17 {
+                $mv$$vr_191$1 = (if builtin::array_get_value<ref "result_mut_ref_side_effect.wado//Token">($licm_repr_470, $hfs_pos_495).kind == 17 -> ref null "result_mut_ref_side_effect.wado//Token" {
+                    multivalue_bind [$hfs_pos_495, $mv$$vr_191$1, $mv$$vr_191$2] = "result_mut_ref_side_effect.wado/result_mut_ref_side_effect.wado/Parser::expect$sroa[return]"(p, 17, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(78, 79, 84), used: 3 });
+                    if $hfs_pos_495 == 0 -> ref "result_mut_ref_side_effect.wado//Token" {
                         ref.as_non_null($mv$$vr_191$1);
-                    } else if @unlikely($load_2 == 1) -> ref "result_mut_ref_side_effect.wado//Token" {
+                    } else if @unlikely($hfs_pos_495 == 1) -> ref "result_mut_ref_side_effect.wado//Token" {
                         cold_path;
                         $qm_e_7 = ref.as_non_null($mv$$vr_191$2);
                         cold_path;
@@ -996,17 +1000,17 @@ fn "result_mut_ref_side_effect.wado/parse_expr$sroa[return]"(p) {
                 } else {
                     ref.null none;
                 });
-                $load_16 = local.tee $load_0(p.tokens).used;
-                if @unlikely(local.tee $load_2(p.pos) >=u $load_16) {
+                suffix_kind = local.tee $hfs_pos_495(p.pos);
+                if @unlikely(((0 <= suffix_kind) & (suffix_kind < $load_2)) == 0) {
                     cold_path;
-                    "result_mut_ref_side_effect.wado/result_mut_ref_side_effect.wado/Parser::peek_kind$cold0$sroa[self.pos]"($load_2, $load_16);
+                    "result_mut_ref_side_effect.wado/result_mut_ref_side_effect.wado/Parser::peek_kind$cold0$sroa[self.pos]"($hfs_pos_495, $load_2);
                     unreachable;
                 }
-                if local.tee $load_2(builtin::array_get_value<ref "result_mut_ref_side_effect.wado//Token">($load_0.repr, $load_2).kind) == 171 {
-                    multivalue_bind [$load_2, $mv$$vr_210$1, $mv$$vr_191$2] = "result_mut_ref_side_effect.wado/result_mut_ref_side_effect.wado/Parser::expect$sroa[return]"(p, 171, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(76, 73, 75, 69), used: 4 });
-                    drop((if $load_2 == 0 -> ref "result_mut_ref_side_effect.wado//Token" {
+                if local.tee $hfs_pos_495(builtin::array_get_value<ref "result_mut_ref_side_effect.wado//Token">($licm_repr_470, $hfs_pos_495).kind) == 171 {
+                    multivalue_bind [$hfs_pos_495, $mv$$vr_210$1, $mv$$vr_191$2] = "result_mut_ref_side_effect.wado/result_mut_ref_side_effect.wado/Parser::expect$sroa[return]"(p, 171, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(76, 73, 75, 69), used: 4 });
+                    drop((if $hfs_pos_495 == 0 -> ref "result_mut_ref_side_effect.wado//Token" {
                         ref.as_non_null($mv$$vr_210$1);
-                    } else if @unlikely($load_2 == 1) -> ref "result_mut_ref_side_effect.wado//Token" {
+                    } else if @unlikely($hfs_pos_495 == 1) -> ref "result_mut_ref_side_effect.wado//Token" {
                         cold_path;
                         $qm_e_7 = ref.as_non_null($mv$$vr_191$2);
                         cold_path;
@@ -1014,11 +1018,11 @@ fn "result_mut_ref_side_effect.wado/parse_expr$sroa[return]"(p) {
                     } else {
                         unreachable;
                     }));
-                } else if $load_2 == 172 {
-                    multivalue_bind [$load_2, $mv$$vr_210$1, $mv$$vr_191$2] = "result_mut_ref_side_effect.wado/result_mut_ref_side_effect.wado/Parser::expect$sroa[return]"(p, 172, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(71, 76, 79, 66), used: 4 });
-                    drop((if $load_2 == 0 -> ref "result_mut_ref_side_effect.wado//Token" {
+                } else if $hfs_pos_495 == 172 {
+                    multivalue_bind [$hfs_pos_495, $mv$$vr_210$1, $mv$$vr_191$2] = "result_mut_ref_side_effect.wado/result_mut_ref_side_effect.wado/Parser::expect$sroa[return]"(p, 172, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(71, 76, 79, 66), used: 4 });
+                    drop((if $hfs_pos_495 == 0 -> ref "result_mut_ref_side_effect.wado//Token" {
                         ref.as_non_null($mv$$vr_210$1);
-                    } else if @unlikely($load_2 == 1) -> ref "result_mut_ref_side_effect.wado//Token" {
+                    } else if @unlikely($hfs_pos_495 == 1) -> ref "result_mut_ref_side_effect.wado//Token" {
                         cold_path;
                         $qm_e_7 = ref.as_non_null($mv$$vr_191$2);
                         cold_path;
@@ -1026,11 +1030,11 @@ fn "result_mut_ref_side_effect.wado/parse_expr$sroa[return]"(p) {
                     } else {
                         unreachable;
                     }));
-                } else if $load_2 == 173 {
-                    multivalue_bind [$load_2, $mv$$vr_210$1, $mv$$vr_191$2] = "result_mut_ref_side_effect.wado/result_mut_ref_side_effect.wado/Parser::expect$sroa[return]"(p, 173, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("REGEXP"), used: 6 });
-                    drop((if $load_2 == 0 -> ref "result_mut_ref_side_effect.wado//Token" {
+                } else if $hfs_pos_495 == 173 {
+                    multivalue_bind [$hfs_pos_495, $mv$$vr_210$1, $mv$$vr_191$2] = "result_mut_ref_side_effect.wado/result_mut_ref_side_effect.wado/Parser::expect$sroa[return]"(p, 173, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("REGEXP"), used: 6 });
+                    drop((if $hfs_pos_495 == 0 -> ref "result_mut_ref_side_effect.wado//Token" {
                         ref.as_non_null($mv$$vr_210$1);
-                    } else if @unlikely($load_2 == 1) -> ref "result_mut_ref_side_effect.wado//Token" {
+                    } else if @unlikely($hfs_pos_495 == 1) -> ref "result_mut_ref_side_effect.wado//Token" {
                         cold_path;
                         $qm_e_7 = ref.as_non_null($mv$$vr_191$2);
                         cold_path;
@@ -1038,11 +1042,11 @@ fn "result_mut_ref_side_effect.wado/parse_expr$sroa[return]"(p) {
                     } else {
                         unreachable;
                     }));
-                } else if $load_2 == 174 {
-                    multivalue_bind [$load_2, $mv$$vr_210$1, $mv$$vr_191$2] = "result_mut_ref_side_effect.wado/result_mut_ref_side_effect.wado/Parser::expect$sroa[return]"(p, 174, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("MATCH"), used: 5 });
-                    drop((if $load_2 == 0 -> ref "result_mut_ref_side_effect.wado//Token" {
+                } else if $hfs_pos_495 == 174 {
+                    multivalue_bind [$hfs_pos_495, $mv$$vr_210$1, $mv$$vr_191$2] = "result_mut_ref_side_effect.wado/result_mut_ref_side_effect.wado/Parser::expect$sroa[return]"(p, 174, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("MATCH"), used: 5 });
+                    drop((if $hfs_pos_495 == 0 -> ref "result_mut_ref_side_effect.wado//Token" {
                         ref.as_non_null($mv$$vr_210$1);
-                    } else if @unlikely($load_2 == 1) -> ref "result_mut_ref_side_effect.wado//Token" {
+                    } else if @unlikely($hfs_pos_495 == 1) -> ref "result_mut_ref_side_effect.wado//Token" {
                         cold_path;
                         $qm_e_7 = ref.as_non_null($mv$$vr_191$2);
                         cold_path;
@@ -1052,10 +1056,10 @@ fn "result_mut_ref_side_effect.wado/parse_expr$sroa[return]"(p) {
                     }));
                 } else {
                 }
-                multivalue_bind [$load_2, $mv$$vr_468$1, $mv$$vr_191$2] = "result_mut_ref_side_effect.wado/parse_expr$sroa[return]"(p);
-                expr2_11 = (if $load_2 == 0 -> ref "result_mut_ref_side_effect.wado//E" {
-                    ref.as_non_null($mv$$vr_468$1);
-                } else if @unlikely($load_2 == 1) -> ref "result_mut_ref_side_effect.wado//E" {
+                multivalue_bind [$hfs_pos_495, $mv$$vr_472$1, $mv$$vr_191$2] = "result_mut_ref_side_effect.wado/parse_expr$sroa[return]"(p);
+                expr2_11 = (if $hfs_pos_495 == 0 -> ref "result_mut_ref_side_effect.wado//E" {
+                    ref.as_non_null($mv$$vr_472$1);
+                } else if @unlikely($hfs_pos_495 == 1) -> ref "result_mut_ref_side_effect.wado//E" {
                     cold_path;
                     $qm_e_7 = ref.as_non_null($mv$$vr_191$2);
                     cold_path;
@@ -1063,33 +1067,33 @@ fn "result_mut_ref_side_effect.wado/parse_expr$sroa[return]"(p) {
                 } else {
                     unreachable;
                 });
-                if $load_16 = local.tee $load_0(p.tokens).used; if @unlikely(local.tee $load_2(p.pos) >=u $load_16) {
+                if suffix_kind = local.tee $hfs_pos_495(p.pos); if @unlikely(((0 <= suffix_kind) & (suffix_kind < $load_2)) == 0) {
                     cold_path;
-                    "result_mut_ref_side_effect.wado/result_mut_ref_side_effect.wado/Parser::peek_kind$cold0$sroa[self.pos]"($load_2, $load_16);
+                    "result_mut_ref_side_effect.wado/result_mut_ref_side_effect.wado/Parser::peek_kind$cold0$sroa[self.pos]"($hfs_pos_495, $load_2);
                     unreachable;
-                }; builtin::array_get_value<ref "result_mut_ref_side_effect.wado//Token">($load_0.repr, $load_2).kind == 175 {
+                }; builtin::array_get_value<ref "result_mut_ref_side_effect.wado//Token">($licm_repr_470, $hfs_pos_495).kind == 175 {
                     opt_bt: block {
-                        multivalue_bind [$load_16, $mv$$vr_210$1, $mv$$vr_191$2] = "result_mut_ref_side_effect.wado/result_mut_ref_side_effect.wado/Parser::expect$sroa[return]"(p, 175, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("ESCAPE"), used: 6 });
-                        if $load_16 == 1 {
+                        multivalue_bind [suffix_kind, $mv$$vr_210$1, $mv$$vr_191$2] = "result_mut_ref_side_effect.wado/result_mut_ref_side_effect.wado/Parser::expect$sroa[return]"(p, 175, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("ESCAPE"), used: 6 });
+                        if suffix_kind == 1 {
                             break opt_bt;
                         } else {
                         }
-                        p.pos = $load_2;
-                        multivalue_bind [$load_16, $mv$$vr_468$1, $mv$$vr_191$2] = "result_mut_ref_side_effect.wado/parse_expr$sroa[return]"(p);
-                        if $load_16 == 1 {
+                        p.pos = $hfs_pos_495;
+                        multivalue_bind [suffix_kind, $mv$$vr_472$1, $mv$$vr_191$2] = "result_mut_ref_side_effect.wado/parse_expr$sroa[return]"(p);
+                        if suffix_kind == 1 {
                             break opt_bt;
                         } else {
                         }
                     };
                 } else {
                 }
-                result = struct.new "result_mut_ref_side_effect.wado//E::Alt17" { discriminant: 11, payload_0: struct.new "result_mut_ref_side_effect.wado//P17" { span: p.pos = $load_2; $load_2 = "result_mut_ref_side_effect.wado/result_mut_ref_side_effect.wado/Parser::last_end"(p.tokens, p.pos); struct.new "result_mut_ref_side_effect.wado//Span" { start: $v1_234, end: $load_2 }, expr: result, opt: $mv$$vr_191$1, expr2: expr2_11 } };
-            } else if (($load_16 == 181) | ($load_16 == 182)) | ($load_16 == 183) {
-                if local.tee $load_2(builtin::array_get_value<ref "result_mut_ref_side_effect.wado//Token">($load_17, $load_2).kind) == 181 {
-                    multivalue_bind [$load_2, $mv$$vr_191$1, $mv$$vr_191$2] = "result_mut_ref_side_effect.wado/result_mut_ref_side_effect.wado/Parser::expect$sroa[return]"(p, 181, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("ISNULL"), used: 6 });
-                    drop((if $load_2 == 0 -> ref "result_mut_ref_side_effect.wado//Token" {
+                result = struct.new "result_mut_ref_side_effect.wado//E::Alt17" { discriminant: 11, payload_0: struct.new "result_mut_ref_side_effect.wado//P17" { span: p.pos = $hfs_pos_495; $hfs_pos_495 = "result_mut_ref_side_effect.wado/result_mut_ref_side_effect.wado/Parser::last_end"(p.tokens, p.pos); struct.new "result_mut_ref_side_effect.wado//Span" { start: $v1_234, end: $hfs_pos_495 }, expr: result, opt: $mv$$vr_191$1, expr2: expr2_11 } };
+            } else if ((suffix_kind == 181) | (suffix_kind == 182)) | (suffix_kind == 183) {
+                if local.tee $hfs_pos_495(builtin::array_get_value<ref "result_mut_ref_side_effect.wado//Token">($licm_repr_470, $hfs_pos_495).kind) == 181 {
+                    multivalue_bind [$hfs_pos_495, $mv$$vr_191$1, $mv$$vr_191$2] = "result_mut_ref_side_effect.wado/result_mut_ref_side_effect.wado/Parser::expect$sroa[return]"(p, 181, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("ISNULL"), used: 6 });
+                    drop((if $hfs_pos_495 == 0 -> ref "result_mut_ref_side_effect.wado//Token" {
                         ref.as_non_null($mv$$vr_191$1);
-                    } else if @unlikely($load_2 == 1) -> ref "result_mut_ref_side_effect.wado//Token" {
+                    } else if @unlikely($hfs_pos_495 == 1) -> ref "result_mut_ref_side_effect.wado//Token" {
                         cold_path;
                         $qm_e_7 = ref.as_non_null($mv$$vr_191$2);
                         cold_path;
@@ -1097,11 +1101,11 @@ fn "result_mut_ref_side_effect.wado/parse_expr$sroa[return]"(p) {
                     } else {
                         unreachable;
                     }));
-                } else if $load_2 == 182 {
-                    multivalue_bind [$load_2, $mv$$vr_191$1, $mv$$vr_191$2] = "result_mut_ref_side_effect.wado/result_mut_ref_side_effect.wado/Parser::expect$sroa[return]"(p, 182, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("NOTNULL"), used: 7 });
-                    drop((if $load_2 == 0 -> ref "result_mut_ref_side_effect.wado//Token" {
+                } else if $hfs_pos_495 == 182 {
+                    multivalue_bind [$hfs_pos_495, $mv$$vr_191$1, $mv$$vr_191$2] = "result_mut_ref_side_effect.wado/result_mut_ref_side_effect.wado/Parser::expect$sroa[return]"(p, 182, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("NOTNULL"), used: 7 });
+                    drop((if $hfs_pos_495 == 0 -> ref "result_mut_ref_side_effect.wado//Token" {
                         ref.as_non_null($mv$$vr_191$1);
-                    } else if @unlikely($load_2 == 1) -> ref "result_mut_ref_side_effect.wado//Token" {
+                    } else if @unlikely($hfs_pos_495 == 1) -> ref "result_mut_ref_side_effect.wado//Token" {
                         cold_path;
                         $qm_e_7 = ref.as_non_null($mv$$vr_191$2);
                         cold_path;
@@ -1109,11 +1113,11 @@ fn "result_mut_ref_side_effect.wado/parse_expr$sroa[return]"(p) {
                     } else {
                         unreachable;
                     }));
-                } else if $load_2 == 183 {
-                    multivalue_bind [$load_2, $mv$$vr_191$1, $mv$$vr_191$2] = "result_mut_ref_side_effect.wado/result_mut_ref_side_effect.wado/Parser::expect$sroa[return]"(p, 183, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(78, 79, 84), used: 3 });
-                    drop((if $load_2 == 0 -> ref "result_mut_ref_side_effect.wado//Token" {
+                } else if $hfs_pos_495 == 183 {
+                    multivalue_bind [$hfs_pos_495, $mv$$vr_191$1, $mv$$vr_191$2] = "result_mut_ref_side_effect.wado/result_mut_ref_side_effect.wado/Parser::expect$sroa[return]"(p, 183, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(78, 79, 84), used: 3 });
+                    drop((if $hfs_pos_495 == 0 -> ref "result_mut_ref_side_effect.wado//Token" {
                         ref.as_non_null($mv$$vr_191$1);
-                    } else if @unlikely($load_2 == 1) -> ref "result_mut_ref_side_effect.wado//Token" {
+                    } else if @unlikely($hfs_pos_495 == 1) -> ref "result_mut_ref_side_effect.wado//Token" {
                         cold_path;
                         $qm_e_7 = ref.as_non_null($mv$$vr_191$2);
                         cold_path;
@@ -1121,10 +1125,10 @@ fn "result_mut_ref_side_effect.wado/parse_expr$sroa[return]"(p) {
                     } else {
                         unreachable;
                     }));
-                    multivalue_bind [$load_2, $mv$$vr_191$1, $mv$$vr_191$2] = "result_mut_ref_side_effect.wado/result_mut_ref_side_effect.wado/Parser::expect$sroa[return]"(p, 184, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(78, 85, 76, 76), used: 4 });
-                    drop((if $load_2 == 0 -> ref "result_mut_ref_side_effect.wado//Token" {
+                    multivalue_bind [$hfs_pos_495, $mv$$vr_191$1, $mv$$vr_191$2] = "result_mut_ref_side_effect.wado/result_mut_ref_side_effect.wado/Parser::expect$sroa[return]"(p, 184, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(78, 85, 76, 76), used: 4 });
+                    drop((if $hfs_pos_495 == 0 -> ref "result_mut_ref_side_effect.wado//Token" {
                         ref.as_non_null($mv$$vr_191$1);
-                    } else if @unlikely($load_2 == 1) -> ref "result_mut_ref_side_effect.wado//Token" {
+                    } else if @unlikely($hfs_pos_495 == 1) -> ref "result_mut_ref_side_effect.wado//Token" {
                         cold_path;
                         $qm_e_7 = ref.as_non_null($mv$$vr_191$2);
                         cold_path;
@@ -1134,12 +1138,12 @@ fn "result_mut_ref_side_effect.wado/parse_expr$sroa[return]"(p) {
                     }));
                 } else {
                 }
-                result = struct.new "result_mut_ref_side_effect.wado//E::Alt18" { discriminant: 12, payload_0: struct.new "result_mut_ref_side_effect.wado//P18" { span: $load_2 = "result_mut_ref_side_effect.wado/result_mut_ref_side_effect.wado/Parser::last_end"(p.tokens, p.pos); struct.new "result_mut_ref_side_effect.wado//Span" { start: $v1_234, end: $load_2 }, expr: result } };
-            } else if $load_16 == 19 {
-                multivalue_bind [$load_2, $mv$$vr_191$1, $mv$$vr_191$2] = "result_mut_ref_side_effect.wado/result_mut_ref_side_effect.wado/Parser::expect$sroa[return]"(p, 19, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(73, 83), used: 2 });
-                v_245 = (if $load_2 == 0 -> ref "result_mut_ref_side_effect.wado//Token" {
+                result = struct.new "result_mut_ref_side_effect.wado//E::Alt18" { discriminant: 12, payload_0: struct.new "result_mut_ref_side_effect.wado//P18" { span: $hfs_pos_495 = "result_mut_ref_side_effect.wado/result_mut_ref_side_effect.wado/Parser::last_end"(p.tokens, p.pos); struct.new "result_mut_ref_side_effect.wado//Span" { start: $v1_234, end: $hfs_pos_495 }, expr: result } };
+            } else if suffix_kind == 19 {
+                multivalue_bind [$hfs_pos_495, $mv$$vr_191$1, $mv$$vr_191$2] = "result_mut_ref_side_effect.wado/result_mut_ref_side_effect.wado/Parser::expect$sroa[return]"(p, 19, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(73, 83), used: 2 });
+                v_245 = (if $hfs_pos_495 == 0 -> ref "result_mut_ref_side_effect.wado//Token" {
                     ref.as_non_null($mv$$vr_191$1);
-                } else if @unlikely($load_2 == 1) -> ref "result_mut_ref_side_effect.wado//Token" {
+                } else if @unlikely($hfs_pos_495 == 1) -> ref "result_mut_ref_side_effect.wado//Token" {
                     cold_path;
                     $qm_e_7 = ref.as_non_null($mv$$vr_191$2);
                     cold_path;
@@ -1147,15 +1151,15 @@ fn "result_mut_ref_side_effect.wado/parse_expr$sroa[return]"(p) {
                 } else {
                     unreachable;
                 });
-                $mv$$vr_191$1 = (if $load_16 = local.tee $load_0(p.tokens).used; if @unlikely(local.tee $load_2(p.pos) >=u $load_16) {
+                $mv$$vr_191$1 = (if suffix_kind = local.tee $hfs_pos_495(p.pos); if @unlikely(((0 <= suffix_kind) & (suffix_kind < $load_2)) == 0) {
                     cold_path;
-                    "result_mut_ref_side_effect.wado/result_mut_ref_side_effect.wado/Parser::peek_kind$cold0$sroa[self.pos]"($load_2, $load_16);
+                    "result_mut_ref_side_effect.wado/result_mut_ref_side_effect.wado/Parser::peek_kind$cold0$sroa[self.pos]"($hfs_pos_495, $load_2);
                     unreachable;
-                }; builtin::array_get_value<ref "result_mut_ref_side_effect.wado//Token">($load_0.repr, $load_2).kind == 191 -> ref null "result_mut_ref_side_effect.wado//Token" {
-                    multivalue_bind [$load_2, $mv$$vr_191$1, $mv$$vr_191$2] = "result_mut_ref_side_effect.wado/result_mut_ref_side_effect.wado/Parser::expect$sroa[return]"(p, 191, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(78, 79, 84), used: 3 });
-                    if $load_2 == 0 -> ref "result_mut_ref_side_effect.wado//Token" {
+                }; builtin::array_get_value<ref "result_mut_ref_side_effect.wado//Token">($licm_repr_470, $hfs_pos_495).kind == 191 -> ref null "result_mut_ref_side_effect.wado//Token" {
+                    multivalue_bind [$hfs_pos_495, $mv$$vr_191$1, $mv$$vr_191$2] = "result_mut_ref_side_effect.wado/result_mut_ref_side_effect.wado/Parser::expect$sroa[return]"(p, 191, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(78, 79, 84), used: 3 });
+                    if $hfs_pos_495 == 0 -> ref "result_mut_ref_side_effect.wado//Token" {
                         ref.as_non_null($mv$$vr_191$1);
-                    } else if @unlikely($load_2 == 1) -> ref "result_mut_ref_side_effect.wado//Token" {
+                    } else if @unlikely($hfs_pos_495 == 1) -> ref "result_mut_ref_side_effect.wado//Token" {
                         cold_path;
                         $qm_e_7 = ref.as_non_null($mv$$vr_191$2);
                         cold_path;
@@ -1166,10 +1170,10 @@ fn "result_mut_ref_side_effect.wado/parse_expr$sroa[return]"(p) {
                 } else {
                     ref.null none;
                 });
-                multivalue_bind [$load_2, $mv$$vr_468$1, $mv$$vr_191$2] = "result_mut_ref_side_effect.wado/parse_expr$sroa[return]"(p);
-                expr2_11 = (if $load_2 == 0 -> ref "result_mut_ref_side_effect.wado//E" {
-                    ref.as_non_null($mv$$vr_468$1);
-                } else if @unlikely($load_2 == 1) -> ref "result_mut_ref_side_effect.wado//E" {
+                multivalue_bind [$hfs_pos_495, $mv$$vr_472$1, $mv$$vr_191$2] = "result_mut_ref_side_effect.wado/parse_expr$sroa[return]"(p);
+                expr2_11 = (if $hfs_pos_495 == 0 -> ref "result_mut_ref_side_effect.wado//E" {
+                    ref.as_non_null($mv$$vr_472$1);
+                } else if @unlikely($hfs_pos_495 == 1) -> ref "result_mut_ref_side_effect.wado//E" {
                     cold_path;
                     $qm_e_7 = ref.as_non_null($mv$$vr_191$2);
                     cold_path;
@@ -1177,13 +1181,13 @@ fn "result_mut_ref_side_effect.wado/parse_expr$sroa[return]"(p) {
                 } else {
                     unreachable;
                 });
-                result = struct.new "result_mut_ref_side_effect.wado//E::Alt19" { discriminant: 13, payload_0: struct.new "result_mut_ref_side_effect.wado//P19" { span: $load_2 = "result_mut_ref_side_effect.wado/result_mut_ref_side_effect.wado/Parser::last_end"(p.tokens, p.pos); struct.new "result_mut_ref_side_effect.wado//Span" { start: $v1_234, end: $load_2 }, expr: result, tok: v_245, opt: $mv$$vr_191$1, expr2: expr2_11 } };
-            } else if $load_16 == 20 {
-                $mv$$vr_191$1 = (if builtin::array_get_value<ref "result_mut_ref_side_effect.wado//Token">($load_17, $load_2).kind == 20 -> ref null "result_mut_ref_side_effect.wado//Token" {
-                    multivalue_bind [$load_2, $mv$$vr_191$1, $mv$$vr_191$2] = "result_mut_ref_side_effect.wado/result_mut_ref_side_effect.wado/Parser::expect$sroa[return]"(p, 20, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(78, 79, 84), used: 3 });
-                    if $load_2 == 0 -> ref "result_mut_ref_side_effect.wado//Token" {
+                result = struct.new "result_mut_ref_side_effect.wado//E::Alt19" { discriminant: 13, payload_0: struct.new "result_mut_ref_side_effect.wado//P19" { span: $hfs_pos_495 = "result_mut_ref_side_effect.wado/result_mut_ref_side_effect.wado/Parser::last_end"(p.tokens, p.pos); struct.new "result_mut_ref_side_effect.wado//Span" { start: $v1_234, end: $hfs_pos_495 }, expr: result, tok: v_245, opt: $mv$$vr_191$1, expr2: expr2_11 } };
+            } else if suffix_kind == 20 {
+                $mv$$vr_191$1 = (if builtin::array_get_value<ref "result_mut_ref_side_effect.wado//Token">($licm_repr_470, $hfs_pos_495).kind == 20 -> ref null "result_mut_ref_side_effect.wado//Token" {
+                    multivalue_bind [$hfs_pos_495, $mv$$vr_191$1, $mv$$vr_191$2] = "result_mut_ref_side_effect.wado/result_mut_ref_side_effect.wado/Parser::expect$sroa[return]"(p, 20, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(78, 79, 84), used: 3 });
+                    if $hfs_pos_495 == 0 -> ref "result_mut_ref_side_effect.wado//Token" {
                         ref.as_non_null($mv$$vr_191$1);
-                    } else if @unlikely($load_2 == 1) -> ref "result_mut_ref_side_effect.wado//Token" {
+                    } else if @unlikely($hfs_pos_495 == 1) -> ref "result_mut_ref_side_effect.wado//Token" {
                         cold_path;
                         $qm_e_7 = ref.as_non_null($mv$$vr_191$2);
                         cold_path;
@@ -1194,10 +1198,10 @@ fn "result_mut_ref_side_effect.wado/parse_expr$sroa[return]"(p) {
                 } else {
                     ref.null none;
                 });
-                multivalue_bind [$load_2, $mv$$vr_210$1, $mv$$vr_191$2] = "result_mut_ref_side_effect.wado/result_mut_ref_side_effect.wado/Parser::expect$sroa[return]"(p, 200, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("BETWEEN"), used: 7 });
-                v_245 = (if $load_2 == 0 -> ref "result_mut_ref_side_effect.wado//Token" {
+                multivalue_bind [$hfs_pos_495, $mv$$vr_210$1, $mv$$vr_191$2] = "result_mut_ref_side_effect.wado/result_mut_ref_side_effect.wado/Parser::expect$sroa[return]"(p, 200, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("BETWEEN"), used: 7 });
+                v_245 = (if $hfs_pos_495 == 0 -> ref "result_mut_ref_side_effect.wado//Token" {
                     ref.as_non_null($mv$$vr_210$1);
-                } else if @unlikely($load_2 == 1) -> ref "result_mut_ref_side_effect.wado//Token" {
+                } else if @unlikely($hfs_pos_495 == 1) -> ref "result_mut_ref_side_effect.wado//Token" {
                     cold_path;
                     $qm_e_7 = ref.as_non_null($mv$$vr_191$2);
                     cold_path;
@@ -1205,10 +1209,10 @@ fn "result_mut_ref_side_effect.wado/parse_expr$sroa[return]"(p) {
                 } else {
                     unreachable;
                 });
-                multivalue_bind [$load_2, $mv$$vr_468$1, $mv$$vr_191$2] = "result_mut_ref_side_effect.wado/parse_expr$sroa[return]"(p);
-                expr2_11 = (if $load_2 == 0 -> ref "result_mut_ref_side_effect.wado//E" {
-                    ref.as_non_null($mv$$vr_468$1);
-                } else if @unlikely($load_2 == 1) -> ref "result_mut_ref_side_effect.wado//E" {
+                multivalue_bind [$hfs_pos_495, $mv$$vr_472$1, $mv$$vr_191$2] = "result_mut_ref_side_effect.wado/parse_expr$sroa[return]"(p);
+                expr2_11 = (if $hfs_pos_495 == 0 -> ref "result_mut_ref_side_effect.wado//E" {
+                    ref.as_non_null($mv$$vr_472$1);
+                } else if @unlikely($hfs_pos_495 == 1) -> ref "result_mut_ref_side_effect.wado//E" {
                     cold_path;
                     $qm_e_7 = ref.as_non_null($mv$$vr_191$2);
                     cold_path;
@@ -1216,10 +1220,10 @@ fn "result_mut_ref_side_effect.wado/parse_expr$sroa[return]"(p) {
                 } else {
                     unreachable;
                 });
-                multivalue_bind [$load_2, $mv$$vr_210$1, $mv$$vr_191$2] = "result_mut_ref_side_effect.wado/result_mut_ref_side_effect.wado/Parser::expect$sroa[return]"(p, 201, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(65, 78, 68), used: 3 });
-                v_370 = (if $load_2 == 0 -> ref "result_mut_ref_side_effect.wado//Token" {
+                multivalue_bind [$hfs_pos_495, $mv$$vr_210$1, $mv$$vr_191$2] = "result_mut_ref_side_effect.wado/result_mut_ref_side_effect.wado/Parser::expect$sroa[return]"(p, 201, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(65, 78, 68), used: 3 });
+                v_370 = (if $hfs_pos_495 == 0 -> ref "result_mut_ref_side_effect.wado//Token" {
                     ref.as_non_null($mv$$vr_210$1);
-                } else if @unlikely($load_2 == 1) -> ref "result_mut_ref_side_effect.wado//Token" {
+                } else if @unlikely($hfs_pos_495 == 1) -> ref "result_mut_ref_side_effect.wado//Token" {
                     cold_path;
                     $qm_e_7 = ref.as_non_null($mv$$vr_191$2);
                     cold_path;
@@ -1227,10 +1231,10 @@ fn "result_mut_ref_side_effect.wado/parse_expr$sroa[return]"(p) {
                 } else {
                     unreachable;
                 });
-                multivalue_bind [$load_2, $mv$$vr_468$1, $mv$$vr_191$2] = "result_mut_ref_side_effect.wado/parse_expr$sroa[return]"(p);
-                expr3 = (if $load_2 == 0 -> ref "result_mut_ref_side_effect.wado//E" {
-                    ref.as_non_null($mv$$vr_468$1);
-                } else if @unlikely($load_2 == 1) -> ref "result_mut_ref_side_effect.wado//E" {
+                multivalue_bind [$hfs_pos_495, $mv$$vr_472$1, $mv$$vr_191$2] = "result_mut_ref_side_effect.wado/parse_expr$sroa[return]"(p);
+                expr3 = (if $hfs_pos_495 == 0 -> ref "result_mut_ref_side_effect.wado//E" {
+                    ref.as_non_null($mv$$vr_472$1);
+                } else if @unlikely($hfs_pos_495 == 1) -> ref "result_mut_ref_side_effect.wado//E" {
                     cold_path;
                     $qm_e_7 = ref.as_non_null($mv$$vr_191$2);
                     cold_path;
@@ -1238,11 +1242,11 @@ fn "result_mut_ref_side_effect.wado/parse_expr$sroa[return]"(p) {
                 } else {
                     unreachable;
                 });
-                result = struct.new "result_mut_ref_side_effect.wado//E::Alt20" { discriminant: 14, payload_0: struct.new "result_mut_ref_side_effect.wado//P20" { span: $load_2 = "result_mut_ref_side_effect.wado/result_mut_ref_side_effect.wado/Parser::last_end"(p.tokens, p.pos); struct.new "result_mut_ref_side_effect.wado//Span" { start: $v1_234, end: $load_2 }, expr: result, opt: $mv$$vr_191$1, tok: v_245, expr2: expr2_11, tok2: v_370, expr3: expr3 } };
+                result = struct.new "result_mut_ref_side_effect.wado//E::Alt20" { discriminant: 14, payload_0: struct.new "result_mut_ref_side_effect.wado//P20" { span: $hfs_pos_495 = "result_mut_ref_side_effect.wado/result_mut_ref_side_effect.wado/Parser::last_end"(p.tokens, p.pos); struct.new "result_mut_ref_side_effect.wado//Span" { start: $v1_234, end: $hfs_pos_495 }, expr: result, opt: $mv$$vr_191$1, tok: v_245, expr2: expr2_11, tok2: v_370, expr3: expr3 } };
             } else {
                 break b1;
             }
-            $load_2 = p.pos;
+            $hfs_pos_495 = p.pos;
             continue l2;
         };
     };
@@ -2043,6 +2047,7 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelud
     let n_27: i32;
     let start_99: i32;
     let $sroa_slot_202: i32;
+    let $licm_repr_259: ref Array<u8>;
     if local.tee $load_0(self.width) <= 0 {
         self_9 = self.buf;
         $inline_core_prelude_string_wado_String__internal_push_view_3: block {
@@ -2139,16 +2144,18 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelud
         };
         self_9 = self.buf;
         n_27 = 0;
+        $licm_repr_259 = self_9.repr;
         b288: block {
             l289: loop {
                 break_if b288 n_27 >= $load_0;
-                if @unlikely(local.tee $sroa_slot_202(self_9.used + 1) > builtin::array_len(self_9.repr)) {
+                if @unlikely(local.tee $sroa_slot_202(self_9.used + 1) > builtin::array_len($licm_repr_259)) {
                     cold_path;
                     "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_9, $sroa_slot_202);
+                    $licm_repr_259 = self_9.repr;
                 }
                 start_99 = self_9.used;
                 self_9.used = $sroa_slot_202;
-                builtin::array_set_u8(self_9.repr, start_99, 48);
+                builtin::array_set_u8($licm_repr_259, start_99, 48);
                 n_27 = n_27 + 1;
                 continue l289;
             };
@@ -2259,6 +2266,7 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelud
     let n_28: i32;
     let $sroa_slot_203: i32;
     let start_235: i32;
+    let $licm_repr_263: ref Array<u8>;
     if local.tee $load_0(self.width) <= 0 {
         self_9 = self.buf;
         $inline_core_prelude_string_wado_String__internal_push_string_2: block {
@@ -2354,16 +2362,18 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelud
         };
         self_9 = self.buf;
         n_28 = 0;
+        $licm_repr_263 = self_9.repr;
         b320: block {
             l321: loop {
                 break_if b320 n_28 >= $load_0;
-                if @unlikely(local.tee $sroa_slot_203(self_9.used + 1) > builtin::array_len(self_9.repr)) {
+                if @unlikely(local.tee $sroa_slot_203(self_9.used + 1) > builtin::array_len($licm_repr_263)) {
                     cold_path;
                     "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_9, $sroa_slot_203);
+                    $licm_repr_263 = self_9.repr;
                 }
                 start_235 = self_9.used;
                 self_9.used = $sroa_slot_203;
-                builtin::array_set_u8(self_9.repr, start_235, 48);
+                builtin::array_set_u8($licm_repr_263, start_235, 48);
                 n_28 = n_28 + 1;
                 continue l321;
             };

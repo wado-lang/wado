@@ -1,0 +1,54 @@
+// Each struct holds the next one twice, so the types form a DAG with 2^40
+// paths. Asking whether `S0` is affine visits each type once.
+
+struct S0 { a: Option<S1>, b: List<S1> }
+struct S1 { a: Option<S2>, b: List<S2> }
+struct S2 { a: Option<S3>, b: List<S3> }
+struct S3 { a: Option<S4>, b: List<S4> }
+struct S4 { a: Option<S5>, b: List<S5> }
+struct S5 { a: Option<S6>, b: List<S6> }
+struct S6 { a: Option<S7>, b: List<S7> }
+struct S7 { a: Option<S8>, b: List<S8> }
+struct S8 { a: Option<S9>, b: List<S9> }
+struct S9 { a: Option<S10>, b: List<S10> }
+struct S10 { a: Option<S11>, b: List<S11> }
+struct S11 { a: Option<S12>, b: List<S12> }
+struct S12 { a: Option<S13>, b: List<S13> }
+struct S13 { a: Option<S14>, b: List<S14> }
+struct S14 { a: Option<S15>, b: List<S15> }
+struct S15 { a: Option<S16>, b: List<S16> }
+struct S16 { a: Option<S17>, b: List<S17> }
+struct S17 { a: Option<S18>, b: List<S18> }
+struct S18 { a: Option<S19>, b: List<S19> }
+struct S19 { a: Option<S20>, b: List<S20> }
+struct S20 { a: Option<S21>, b: List<S21> }
+struct S21 { a: Option<S22>, b: List<S22> }
+struct S22 { a: Option<S23>, b: List<S23> }
+struct S23 { a: Option<S24>, b: List<S24> }
+struct S24 { a: Option<S25>, b: List<S25> }
+struct S25 { a: Option<S26>, b: List<S26> }
+struct S26 { a: Option<S27>, b: List<S27> }
+struct S27 { a: Option<S28>, b: List<S28> }
+struct S28 { a: Option<S29>, b: List<S29> }
+struct S29 { a: Option<S30>, b: List<S30> }
+struct S30 { a: Option<S31>, b: List<S31> }
+struct S31 { a: Option<S32>, b: List<S32> }
+struct S32 { a: Option<S33>, b: List<S33> }
+struct S33 { a: Option<S34>, b: List<S34> }
+struct S34 { a: Option<S35>, b: List<S35> }
+struct S35 { a: Option<S36>, b: List<S36> }
+struct S36 { a: Option<S37>, b: List<S37> }
+struct S37 { a: Option<S38>, b: List<S38> }
+struct S38 { a: Option<S39>, b: List<S39> }
+struct S39 { a: Option<S40>, b: List<S40> }
+struct S40 { v: i32 }
+
+fn take(s: S0) -> i32 {
+    let t = s;
+    let u = s;
+    return t.b.len() + u.b.len();
+}
+
+test {
+    assert take(S0 { a: null, b: [] }) == 0;
+}

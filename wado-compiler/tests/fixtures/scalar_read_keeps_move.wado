@@ -1,0 +1,41 @@
+// A scalar read out of a binding is not a use that costs it its move.
+//
+// `if it.tag == -1 { … } else { out.push(it) }` made the whole-value read
+// non-final, so the element the iterator had already copied was copied twice.
+// It moves into `out`; the one copy left is the iterator's own, which value
+// semantics requires.
+struct Item { ids: List<i32>, tag: i32 }
+
+#[inline(never)]
+fn make(k: i32) -> List<Item> { return [Item { ids: [k], tag: k }]; }
+
+#[inline(never)]
+fn keep(n: i32) -> List<Item> {
+    let mut out: List<Item> = [];
+    let mut seen: List<i32> = [];
+    for let it of make(n) {
+        if it.tag == -1 {
+            if !seen.contains(&it.tag) { seen.push(it.tag); }
+        } else {
+            out.push(it);
+        }
+    }
+    return out;
+}
+
+export fn run() {
+    assert keep(builtin::black_box(0)).len() == 1;
+}
+
+__DATA__
+{
+    "stdout": "",
+    "wir_pass": {"O2": ["nir/inline"]},
+    "wir_scope": "keep",
+    "wir_lines": {
+        "O2": [
+            {"contains": ["array_set", "out.repr"], "not_contains": ["struct.new", "array_copy"], "count": 1},
+            {"contains": ["array_copy"], "count": 1}
+        ]
+    }
+}

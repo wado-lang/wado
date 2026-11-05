@@ -93,7 +93,7 @@ pub use inline::InlineLog;
 use inline::inline_functions;
 pub(crate) use inline::is_constant_arg;
 use licm::apply_licm;
-use match_to_switch::{match_to_switch_all, match_to_switch_globals};
+use match_to_switch::match_to_switch_globals;
 use mod_ref::{SummaryCache, summarize};
 use scalar_forward::forward_scalar_temps;
 use sroa::scalar_replace_aggregates;
@@ -129,19 +129,20 @@ struct OptConfig {
     cap_is_defect: bool,
 }
 
-/// Optimization level. Every level runs DCE and the post-loop rewrites the Wasm
-/// backend depends on; `optimize` below sets each one's loop and inline budget.
+/// Optimization level. Every level runs DCE; `optimize` below sets each one's
+/// loop and inline budget.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum OptLevel {
-    /// No optimization loop. DCE plus the always-on post-optimization
-    /// rewrites required by the Wasm backend.
+    /// DCE alone, which keeps compiling a test cheap. Nothing else changes
+    /// the program.
     O0,
-    /// Development optimizations. All passes with fast iteration count.
+    /// The default of `wado run` and `wado test`: compile speed and run speed
+    /// in balance.
     O1,
-    /// Production optimizations. All passes including DCE.
+    /// For a release build.
     #[default]
     O2,
-    /// Aggressive production optimizations. All passes including DCE.
+    /// For fuzzing the optimizer, more than for a build.
     O3,
     /// Size optimizations. Same as O2 plus name section stripping.
     /// Intended for frontend/browser deployment.
@@ -174,6 +175,8 @@ pub fn optimize(
     profiler: &dyn SpanEmitter,
 ) -> NirPackage {
     let OptOverrides {
+        // The compile entered these, decisions ahead of the optimizer included.
+        skip_passes: _,
         inline_threshold,
         inline_hot_callsite_threshold,
         inline_cold_callsite_threshold,
@@ -223,7 +226,8 @@ pub fn optimize(
     let mut descriptors = dce::DescriptorCache::default();
     match opt_level {
         OptLevel::O0 => {
-            // No optimizations, but still run DCE to reduce codegen work
+            // DCE alone: it cuts codegen work, and nothing else may change
+            // the program `-O0` emits.
             run_dce(
                 &mut project,
                 profiler,
@@ -231,19 +235,10 @@ pub fn optimize(
                 &exec,
                 Initializers::DropUnread,
             );
-            // Dense-int / dense-enum `Match` → `Switch` is a codegen-
-            // friendly late lowering. The translator emits a canonical
-            // `Match` (see WEP 2026-05-11). Materialising `Switch` here
-            // — even at -O0 — keeps wir_build's `br_table` path live
-            // for dense matches when the optimizer loop is skipped.
-            // The synthesised default-arm call resolves to
-            // `builtin::unreachable`, which lowers to Wasm
-            // `unreachable` directly and is never DCE'd, so ordering
-            // around DCE is irrelevant.
-            run_pass("nir/match_to_switch", &mut project, profiler, |p| {
-                // O0 skips the loop/gate entirely; lower every function.
-                match_to_switch_all(p)
-            });
+            census::report(&project, "end-of-optimize");
+            #[cfg(debug_assertions)]
+            audit_nir(&project, "end-of-optimize");
+            return project;
         }
         OptLevel::O1 => {
             let config = OptConfig {
@@ -356,44 +351,40 @@ pub fn optimize(
     // the body into WIR-shaped forms the value-graph build would misread. The
     // two soundness gates (scalar-field + receiver-availability) and the WIR
     // const-local propagation keep it default-safe.
-    if opt_level != OptLevel::O0 {
-        run_pass("nir/promote_fields", &mut project, profiler, |p| {
-            extract::freeze_pure_arith(
-                p,
-                &exec,
-                /* include_fields */ true,
-                FreezePhase::Terminal,
-            )
-        });
-        // Re-run the structural BCE matcher now that `promote_fields` froze
-        // invariant bounds (`arr.used`) into constant operands the in-loop
-        // cond-impl could not see; pair with `const_branch_prune` so the
-        // now-`false` checks' panic blocks are removed. Must precede
-        // `select_lowering`, which reshapes conditions out of matcher form.
-        run_bounded_fixpoint(
-            "nir/cond_impl_post_promote",
-            &mut project,
-            profiler,
+    run_pass("nir/promote_fields", &mut project, profiler, |p| {
+        extract::freeze_pure_arith(
+            p,
             &exec,
-            |p, g| {
-                condition_implication::eliminate_post_promote(p, g) | prune_constant_branches(p, g)
-            },
-        );
-        // Loop-versioned BCE: a check whose bound is loop-invariant but not
-        // statically related to the loop guard (the relation lives at the
-        // call site) is deleted in a fast clone guarded by the runtime
-        // residual `H < B`; the original loop is kept as the slow arm. Runs
-        // after `cond_impl_post_promote` so only statically-unprovable
-        // checks are versioned, and before `select_lowering`, which
-        // reshapes conditions out of matcher form.
-        run_pass("nir/loop_version_bce", &mut project, profiler, |p| {
-            loop_version_bce::version_loops(p, &mut descriptors, &exec)
-        });
-        // After every bounds-check eliminator, which read the signed halves.
-        run_pass("nir/unsigned_range_check", &mut project, profiler, |p| {
-            unsigned_range_check::fuse_unsigned_range_checks(p)
-        });
-    }
+            /* include_fields */ true,
+            FreezePhase::Terminal,
+        )
+    });
+    // Re-run the structural BCE matcher now that `promote_fields` froze
+    // invariant bounds (`arr.used`) into constant operands the in-loop
+    // cond-impl could not see; pair with `const_branch_prune` so the
+    // now-`false` checks' panic blocks are removed. Must precede
+    // `select_lowering`, which reshapes conditions out of matcher form.
+    run_bounded_fixpoint(
+        "nir/cond_impl_post_promote",
+        &mut project,
+        profiler,
+        &exec,
+        |p, g| condition_implication::eliminate_post_promote(p, g) | prune_constant_branches(p, g),
+    );
+    // Loop-versioned BCE: a check whose bound is loop-invariant but not
+    // statically related to the loop guard (the relation lives at the
+    // call site) is deleted in a fast clone guarded by the runtime
+    // residual `H < B`; the original loop is kept as the slow arm. Runs
+    // after `cond_impl_post_promote` so only statically-unprovable
+    // checks are versioned, and before `select_lowering`, which
+    // reshapes conditions out of matcher form.
+    run_pass("nir/loop_version_bce", &mut project, profiler, |p| {
+        loop_version_bce::version_loops(p, &mut descriptors, &exec)
+    });
+    // After every bounds-check eliminator, which read the signed halves.
+    run_pass("nir/unsigned_range_check", &mut project, profiler, |p| {
+        unsigned_range_check::fuse_unsigned_range_checks(p)
+    });
 
     // Post-optimization rewrites: select lowering for branchless Wasm
     run_pass("nir/select_lowering", &mut project, profiler, |p| {
@@ -674,10 +665,11 @@ fn audit_promoted_reads(project: &NirPackage, pass: &str) {
 }
 
 pub mod pass_dump {
+    use std::cell::RefCell;
     use std::sync::{Mutex, OnceLock};
 
     use super::NirPackage;
-    use crate::hashmap::IndexMap;
+    use crate::hashmap::{IndexMap, IndexSet};
     use crate::nir_unparse::unparse_nir_package;
     use crate::trace;
     use crate::wir::WirPackage;
@@ -729,12 +721,69 @@ pub mod pass_dump {
         LIST.get_or_init(|| trace::parse_env_list(std::env::var("WADO_SKIP_PASS").ok().as_deref()))
     }
 
-    /// Returns true if `name` matches one of the comma-separated entries in
-    /// the `WADO_SKIP_PASS` env var. Each entry is matched against the bare
-    /// pass name (e.g., `nir/ref_elim`) and against `<pass>@<n>` where `<n>`
-    /// is the 1-based occurrence number — letting bisection target a
-    /// specific iteration (e.g., `nir/ref_elim@2`).
+    thread_local! {
+        static SKIPPED: RefCell<Vec<String>> = const { RefCell::new(Vec::new()) };
+    }
+
+    /// While it lives, the passes and decisions
+    /// [`crate::OptOverrides::skip_passes`] names are skipped on this thread,
+    /// and on the threads [`crate::parallel::Executor`] fans its work out to,
+    /// since a decision can be made inside a visit. A compile nested inside
+    /// another (a Kiln generator's) skips its own list, and the outer one's
+    /// comes back when it ends.
+    pub struct SkipScope {
+        outer: Vec<String>,
+    }
+
+    impl SkipScope {
+        pub fn enter(passes: &[String]) -> Self {
+            let outer = SKIPPED.replace(passes.to_vec());
+            Self { outer }
+        }
+
+        /// What this thread skips, for a visit on another thread to enter.
+        pub fn current() -> Vec<String> {
+            SKIPPED.with_borrow(Clone::clone)
+        }
+    }
+
+    impl Drop for SkipScope {
+        fn drop(&mut self) {
+            SKIPPED.set(std::mem::take(&mut self.outer));
+        }
+    }
+
+    /// Whether the compile makes the optimization decision `name`: a choice no
+    /// pass's own name covers, such as lowering eliding a value copy, or the
+    /// value pool folding a constant operation for every pass that interns
+    /// one. Skipping one keeps the shape the decision would have improved, so
+    /// a check is measured against it as against a pass. A decision takes no
+    /// `@<n>`: the optimizer's threads ask it in no fixed order.
+    pub fn decides(name: &str) -> bool {
+        if list_passes_enabled() {
+            static LISTED: OnceLock<Mutex<IndexSet<String>>> = OnceLock::new();
+            let mut listed = LISTED.get_or_init(Mutex::default).lock().unwrap();
+            if listed.insert(name.to_string()) {
+                list_pass(name);
+            }
+        }
+        !skips_by_name(name)
+    }
+
+    fn skips_by_name(name: &str) -> bool {
+        SKIPPED.with_borrow(|skipped| skipped.iter().any(|s| s == name))
+            || skip_list().iter().any(|s| s == name)
+    }
+
+    /// Returns true if the compile skips `name`, or if `name` matches one of the
+    /// comma-separated entries in the `WADO_SKIP_PASS` env var. Each entry is
+    /// matched against the bare pass name (e.g., `nir/ref_elim`) and against
+    /// `<pass>@<n>` where `<n>` is the 1-based occurrence number — letting
+    /// bisection target a specific iteration (e.g., `nir/ref_elim@2`).
     pub fn should_skip_pass(name: &str) -> bool {
+        if SKIPPED.with_borrow(|skipped| skipped.iter().any(|s| s == name)) {
+            return true;
+        }
         static COUNTS: OnceLock<Mutex<IndexMap<String, u32>>> = OnceLock::new();
         let list = skip_list();
         if list.is_empty() {

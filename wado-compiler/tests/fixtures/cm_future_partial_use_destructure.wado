@@ -26,11 +26,10 @@ export async fn handle(request: Request) -> Result<Response, ErrorCode> {
 __DATA__
 {
     "wasi:http/service": {"status": 200},
-    "wir_not_expect:O2": [
-        "struct.new \"tuple//[Future<i32>"
-    ],
-    "wir_expect:O2": [
-        "wasi/future-new:s32",
-        ">> 32_i64"
-    ]
+    "wir_not_expect:O2": ["struct.new \"tuple//[core:prelude/types.wado/Future<i32>"],
+    "wir_expect:O2": ["wasi/future-new:s32"],
+    "wir_pass": {"O2": ["nir/sroa"]},
+    "wir_contrast": {"O2": [
+        {"    let [_rx, tx] = Future::<i32>::new();\n    tx.write(42);\n": ""}
+    ]}
 }

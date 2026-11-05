@@ -1,7 +1,7 @@
 //! Regression test: `wado dump` must run the Kiln generator pipeline like
 //! `wado run`/`wado compile`/`wado check` do.
 //!
-//! `dump_with_host_and_world` builds its own `ModuleLoader` without ever
+//! The dump once built its own `ModuleLoader` without ever
 //! wiring in the invocations index the Kiln pipeline produces, so a `use x
 //! from "./schema.ext" with { generator: ... }` clause fell through to the
 //! plain module loader, which read the *schema* file (not Wado source, e.g.

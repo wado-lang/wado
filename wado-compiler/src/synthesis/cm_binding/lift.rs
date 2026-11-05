@@ -11,6 +11,7 @@ use crate::ast::{NamedType, Type};
 use crate::cm_abi;
 use crate::component_model::{CmVariantCase, EMPTY_TUPLE_AT_BOUNDARY};
 use crate::module_source::ModuleSource;
+use crate::optimize::pass_dump;
 use crate::tir::{TirBinaryOp, TirExpr, TirExprKind, TirLocal, TirStmt, TypeId};
 use crate::type_table::TypeTable;
 
@@ -818,7 +819,9 @@ fn synthesize_lift_list(
     let buffer = CmBuffer::read(&addr, elem_size, elem_align, next_local, stmts, locals);
 
     let result_local = alloc_local(next_local, locals, array_type_id);
-    if let Some(number) = number_name(elem_ty) {
+    if let Some(number) = number_name(elem_ty)
+        && pass_dump::decides("synthesis/cm_lift_bulk")
+    {
         let copied = if number == "u8" {
             internal_call(
                 CompilerItem::MemoryToByteList.attr_name(),

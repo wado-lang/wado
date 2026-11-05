@@ -3,7 +3,7 @@
 //! thread count.
 
 use crate::common::{block_on, in_memory_host};
-use wado_compiler::{OptLevel, dump_with_host_and_world};
+use wado_compiler::{CompilerOptions, OptLevel, dump_with_options};
 
 const SOURCE: &str = r#"
 fn medium(x: i32) -> i32 { return x * 3 + x / 7 + (x ^ 5) * 11; }
@@ -42,19 +42,16 @@ fn decisions_at(level: OptLevel, pattern: &str, parallelism: usize) -> String {
 
 fn dump(level: OptLevel, pattern: Option<&str>, parallelism: usize) -> wado_compiler::DumpResult {
     let host = in_memory_host(&[]);
-    block_on(dump_with_host_and_world(
+    let options = CompilerOptions {
+        opt_level: level,
+        parallelism,
+        ..CompilerOptions::default()
+    };
+    block_on(dump_with_options(
         SOURCE,
         &host,
         Some("entry.wado"),
-        level,
-        None,
-        None,
-        wado_compiler::OptOverrides::default(),
-        &[],
-        None,
-        &wado_compiler::param_resolution::ParamInputs::default(),
-        wado_compiler::kiln::InvocationIndex::default(),
-        parallelism,
+        options,
         pattern,
     ))
     .expect("dump succeeds")

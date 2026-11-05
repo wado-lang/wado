@@ -562,6 +562,11 @@ struct FrameState {
     /// referent.
     /// Populated only during frame execution; empty everywhere else.
     place_aliases: IndexMap<u32, (u32, Vec<u32>)>,
+    /// The place each array alias ([`place::is_array_place`]) was bound over.
+    /// A store replacing the array there leaves the local holding the old one,
+    /// which the frame has no value for: the alias leaves
+    /// [`Self::place_aliases`] until a reload binds the local to the place again.
+    array_aliases: IndexMap<u32, (u32, Vec<u32>)>,
     /// Fields a frame's `let` bound to a `&mut` over a local place, keyed by the
     /// local and the path to the field, and resolved as [`Self::place_aliases`]
     /// are. The aggregate holds a placeholder there, so neither the field nor
@@ -915,6 +920,8 @@ impl<'a> Interpreter<'a> {
     /// displaces any place alias the index held, and never restores it.
     pub fn bind_local(&mut self, index: u32, lattice: Lattice) {
         self.frame.place_aliases.swap_remove(&index);
+        self.frame.array_aliases.swap_remove(&index);
+        self.frame.replace_place(index, &[]);
         self.frame
             .place_fields
             .retain(|(root, _), _| *root != index);

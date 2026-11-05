@@ -299,6 +299,7 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
     let content_len: i32;
     let start_92: i32;
     let start_370: i32;
+    let $licm_repr_389: ref Array<u8>;
     if local.tee content_len(select i32(is_negative, 1, 0) + digit_count) >= 3 {
         if is_negative {
             if @unlikely(local.tee is_negative(self.used + 1) > builtin::array_len(self.repr)) {
@@ -330,16 +331,18 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
     } else {
     }
     is_negative = 0;
+    $licm_repr_389 = self.repr;
     b46: block {
         l47: loop {
             break_if b46 is_negative >= content_len;
-            if @unlikely(local.tee start_92(self.used + 1) > builtin::array_len(self.repr)) {
+            if @unlikely(local.tee start_92(self.used + 1) > builtin::array_len($licm_repr_389)) {
                 cold_path;
                 "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, start_92);
+                $licm_repr_389 = self.repr;
             }
             start_370 = self.used;
             self.used = start_92;
-            builtin::array_set_u8(self.repr, start_370, 48);
+            builtin::array_set_u8($licm_repr_389, start_370, 48);
             is_negative = is_negative + 1;
             continue l47;
         };

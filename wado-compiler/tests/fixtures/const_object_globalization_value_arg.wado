@@ -41,6 +41,10 @@ export fn run() with Stdout {
 __DATA__
 {
     "stdout": "5 98 98 98\n",
+    "wir_pass": {"O2": ["nir/const_object_globalization"]},
+    "wir_contrast": {"O2": [
+        {"fn bump_first(mut v: List<u8>, bias: i32) -> i32 {\n    v[0] = v[0] + 1;\n    return v[0] as i32 + bias;": "fn bump_first(v: List<u8>, bias: i32) -> i32 {\n    return v[0] as i32 + bias + 1;"}
+    ]},
     "wir_expect:O2": ["array.new_fixed<u8>(104, 101, 108, 108, 111), used: 5 }"],
     "wir_not_expect:O2": ["array.new_fixed<u8>(97, 98, 99), used: 3 };"]
 }

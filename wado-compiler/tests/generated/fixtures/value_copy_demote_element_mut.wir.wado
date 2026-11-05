@@ -244,12 +244,12 @@ fn "value_copy_demote_element_mut.wado/$value_copy$core:prelude/string.wado/Stri
 }
 
 fn "value_copy_demote_element_mut.wado/shout_first$cold1$dae[words,$contract_arg_0]"($v1) {
-    "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>^core:prelude/traits.wado/IndexRefMut<i32>::index_ref_mut$contract_report0"(0, $v1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("value_copy_demote_element_mut.wado:21"), used: 37 });
+    "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>^core:prelude/traits.wado/IndexRefMut<i32>::index_ref_mut$contract_report0"(0, $v1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("value_copy_demote_element_mut.wado:20"), used: 37 });
     unreachable;
 }
 
 fn "value_copy_demote_element_mut.wado/run$cold0$dae[$contract_arg_0]"($v1) with Stdout {
-    "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(0, $v1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("value_copy_demote_element_mut.wado:29"), used: 37 });
+    "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(0, $v1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("value_copy_demote_element_mut.wado:28"), used: 37 });
     unreachable;
 }
 
@@ -776,6 +776,7 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelud
     let n_27: i32;
     let start_99: i32;
     let $sroa_slot_202: i32;
+    let $licm_repr_259: ref Array<u8>;
     if local.tee $load_0(self.width) <= 0 {
         self_9 = self.buf;
         $inline_core_prelude_string_wado_String__internal_push_view_3: block {
@@ -872,16 +873,18 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelud
         };
         self_9 = self.buf;
         n_27 = 0;
+        $licm_repr_259 = self_9.repr;
         b102: block {
             l103: loop {
                 break_if b102 n_27 >= $load_0;
-                if @unlikely(local.tee $sroa_slot_202(self_9.used + 1) > builtin::array_len(self_9.repr)) {
+                if @unlikely(local.tee $sroa_slot_202(self_9.used + 1) > builtin::array_len($licm_repr_259)) {
                     cold_path;
                     "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_9, $sroa_slot_202);
+                    $licm_repr_259 = self_9.repr;
                 }
                 start_99 = self_9.used;
                 self_9.used = $sroa_slot_202;
-                builtin::array_set_u8(self_9.repr, start_99, 48);
+                builtin::array_set_u8($licm_repr_259, start_99, 48);
                 n_27 = n_27 + 1;
                 continue l103;
             };
@@ -992,6 +995,7 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelud
     let n_28: i32;
     let $sroa_slot_203: i32;
     let start_235: i32;
+    let $licm_repr_263: ref Array<u8>;
     if local.tee $load_0(self.width) <= 0 {
         self_9 = self.buf;
         $inline_core_prelude_string_wado_String__internal_push_string_2: block {
@@ -1087,16 +1091,18 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelud
         };
         self_9 = self.buf;
         n_28 = 0;
+        $licm_repr_263 = self_9.repr;
         b134: block {
             l135: loop {
                 break_if b134 n_28 >= $load_0;
-                if @unlikely(local.tee $sroa_slot_203(self_9.used + 1) > builtin::array_len(self_9.repr)) {
+                if @unlikely(local.tee $sroa_slot_203(self_9.used + 1) > builtin::array_len($licm_repr_263)) {
                     cold_path;
                     "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_9, $sroa_slot_203);
+                    $licm_repr_263 = self_9.repr;
                 }
                 start_235 = self_9.used;
                 self_9.used = $sroa_slot_203;
-                builtin::array_set_u8(self_9.repr, start_235, 48);
+                builtin::array_set_u8($licm_repr_263, start_235, 48);
                 n_28 = n_28 + 1;
                 continue l135;
             };

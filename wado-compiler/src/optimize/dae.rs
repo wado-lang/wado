@@ -1,5 +1,6 @@
 //! Dead Argument Elimination — drops parameters the callee never reads, along
-//! with the (pure) argument expressions at every call site. Running at NIR
+//! with the argument expressions at every call site; one whose evaluation is
+//! observable moves ahead of the call instead (`evaluate_ahead`). Running at NIR
 //! rather than WIR feeds the freshly dead expressions back into the fixed-point
 //! loop and shrinks signatures before `inline` sees them. [`is_dae_sroa_eligible`]
 //! holds the pinning rules; neither `is_export` nor a method receiver is pinned.
@@ -8,9 +9,13 @@ use std::sync::Arc;
 
 use cranelift_entity::EntityRef;
 
+use crate::call_args::CallArgs;
 use crate::hashmap::{IndexMap, IndexSet};
-use crate::nir::{FunctionKind, NirFunction};
-use crate::nir_arena::{Body, ExprId, ExprKind, NodeRef, PatKind, StmtKind};
+use crate::nir::{FunctionKind, NirFunction, NirLocal};
+use crate::nir_arena::{
+    ArenaCallArg, BlockNode, Body, ExprId, ExprKind, ExprNode, NodeRef, Operand, PatKind, StmtKind,
+    StmtNode,
+};
 use crate::nir_package::{NirPackage, Reshape};
 
 use super::arena_query;
@@ -64,8 +69,8 @@ fn eliminate_dead_arguments_round(
         return false;
     }
 
-    // Phase 2: validate every call site passes side-effect-free args at the
-    // dead positions. A single offending site rejects the candidate entirely.
+    // Phase 2: validate every call site. A single site that cannot be
+    // rewritten rejects the candidate entirely.
     let confirmed = validate_call_sites(project, candidates, &exec);
     if confirmed.is_empty() {
         return false;
@@ -136,8 +141,7 @@ pub(super) fn is_dae_sroa_eligible(func: &NirFunction, relax_closure_call: bool)
 
 /// Returns one bool per parameter: `true` means the parameter is unused and
 /// safe-to-remove. The receiver position (index 0 for methods) gets no special
-/// pin — `apply_dae` rewrites a method whose `self` is dead into a plain
-/// `Call(method_func, args)`, gated on receiver purity by the validator.
+/// pin: `apply_dae` drops a dead `self` as it drops any other argument.
 fn find_dead_params(func: &NirFunction) -> Vec<bool> {
     if func.params.is_empty() {
         return Vec::new();
@@ -164,9 +168,8 @@ fn find_dead_params(func: &NirFunction) -> Vec<bool> {
 // Call-site validation
 // ──────────────────────────────────────────────────────────────────────────────
 
-/// Walk every call site once. A single impure argument at a dead position
-/// drops the candidate completely so we never rewrite some sites and not
-/// others.
+/// Walk every call site once. A single site that cannot be rewritten drops the
+/// candidate completely so we never rewrite some sites and not others.
 fn validate_call_sites(
     project: &NirPackage,
     mut candidates: IndexMap<FnKey, Vec<bool>>,
@@ -202,8 +205,7 @@ fn validate_call_sites(
     candidates
 }
 
-/// Validate every call in a body: at each dead parameter position the supplied
-/// argument must be pure.
+/// Validate every call of a candidate in a body.
 fn validate_in_body(
     body: &Body,
     candidates: &IndexMap<FnKey, Vec<bool>>,
@@ -239,21 +241,28 @@ fn validate_call(
         dead.len(),
         "[NIR] dae: a call passes one argument per parameter of its callee"
     );
-    for (i, dead_at_i) in dead.iter().enumerate() {
-        if !*dead_at_i {
-            continue;
-        }
-        // Dropping the argument erases its evaluation, so a trapping (but
-        // side-effect-free) argument must keep the param alive. A promoted
-        // operand is not exempt: it is pure by construction but `100 / zero`
-        // still traps, and the shared predicate answers for either form.
-        let pure =
-            arena_query::is_pure_nontrapping_operand_typed(body, args[i].expr, Some(type_table));
-        if !pure {
-            rejected.insert(key);
-            break;
-        }
+    // An argument that is evaluated for its effect moves ahead of the call, and
+    // so does every live argument before it, into a temporary. A `&mut`
+    // argument is a place, which a temporary cannot stand in for.
+    if let Some(last) = last_effectful_dead_arg(body, args, dead, type_table)
+        && (0..last).any(|i| !dead[i] && args[i].is_mut)
+    {
+        rejected.insert(key);
     }
+}
+
+/// The last dead-position argument whose evaluation is observable: one with an
+/// effect, or a pure one that can trap (`100 / zero`), promoted or not.
+fn last_effectful_dead_arg(
+    body: &Body,
+    args: &CallArgs<ArenaCallArg>,
+    dead: &[bool],
+    type_table: &TypeTable,
+) -> Option<usize> {
+    (0..args.len()).rev().find(|&i| {
+        dead[i]
+            && !arena_query::is_pure_nontrapping_operand_typed(body, args[i].expr, Some(type_table))
+    })
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -286,18 +295,29 @@ fn apply_dae(
     }
 
     // Phase 3b: rewrite every call site.
-    let functions = &project.functions;
-    let rewritten = exec.indices_where(functions.len(), |i| {
-        let mut func = functions[i].borrow_mut();
-        func.calls_any(|id| confirmed.contains_key(id))
-            && func
-                .body
-                .as_mut()
-                .is_some_and(|body| rewrite_calls_in_body(body, confirmed))
-    });
-    touched.extend(rewritten);
-    for global in &mut project.globals {
-        rewrite_calls_in_body(global.init.slot_expr_mut().body_mut(), confirmed);
+    {
+        let type_table = project.type_table.borrow();
+        let type_table: &TypeTable = &type_table;
+        let functions = &project.functions;
+        let rewritten = exec.indices_where(functions.len(), |i| {
+            let mut func = functions[i].borrow_mut();
+            if !func.calls_any(|id| confirmed.contains_key(id)) {
+                return false;
+            }
+            let func = &mut *func;
+            func.body.as_mut().is_some_and(|body| {
+                rewrite_calls_in_body(body, &mut func.locals, confirmed, type_table)
+            })
+        });
+        touched.extend(rewritten);
+        for global in &mut project.globals {
+            rewrite_calls_in_body(
+                global.init.slot_expr_mut().body_mut(),
+                &mut global.locals,
+                confirmed,
+                type_table,
+            );
+        }
     }
 
     // Phase 3c: name each reshaped callee for its shape. One reshaped into a
@@ -309,7 +329,12 @@ fn apply_dae(
 
 /// Rewrite every call of a confirmed function in `body`: drop the dead-position
 /// arguments.
-fn rewrite_calls_in_body(body: &mut Body, confirmed: &IndexMap<FnKey, Vec<bool>>) -> bool {
+fn rewrite_calls_in_body(
+    body: &mut Body,
+    locals: &mut Vec<NirLocal>,
+    confirmed: &IndexMap<FnKey, Vec<bool>>,
+    type_table: &TypeTable,
+) -> bool {
     let mut calls = Vec::new();
     body.for_each_reachable_node(|node| {
         if let NodeRef::Expr(id) = node
@@ -322,25 +347,108 @@ fn rewrite_calls_in_body(body: &mut Body, confirmed: &IndexMap<FnKey, Vec<bool>>
     // independent of the call's position, so processing order does not matter.
     let mut changed = false;
     for id in calls {
-        changed |= rewrite_call(body, id, confirmed);
+        changed |= rewrite_call(body, locals, id, confirmed, type_table);
     }
     changed
 }
 
-fn rewrite_call(body: &mut Body, id: ExprId, confirmed: &IndexMap<FnKey, Vec<bool>>) -> bool {
-    let ExprKind::Call { func_id, .. } = &body.exprs[id].kind else {
+fn rewrite_call(
+    body: &mut Body,
+    locals: &mut Vec<NirLocal>,
+    id: ExprId,
+    confirmed: &IndexMap<FnKey, Vec<bool>>,
+    type_table: &TypeTable,
+) -> bool {
+    let ExprKind::Call { func_id, args, .. } = &body.exprs[id].kind else {
         return false;
     };
-    let Some(dead) = confirmed.get(func_id).cloned() else {
+    let Some(dead) = confirmed.get(func_id) else {
         return false;
     };
-    let ExprKind::Call { args, .. } = &mut body.exprs[id].kind else {
-        return false;
+    let call = match last_effectful_dead_arg(body, args, dead, type_table) {
+        Some(last) => evaluate_ahead(body, locals, id, dead, last, type_table),
+        None => id,
     };
-    // A dropped receiver was verified pure, so discarding it is
-    // observation-free.
+    let ExprKind::Call { args, .. } = &mut body.exprs[call].kind else {
+        unreachable!("evaluate_ahead keeps the call a call");
+    };
     args.retain_positions(|i| !dead[i]);
     true
+}
+
+/// Rewrite `f(a0, …, a_last, …)` into `{ let t0 = a0; …; a_last; f(t0, …, …) }`:
+/// up to `last`, a live argument is held in a temporary and a dead one is
+/// evaluated as a statement, its effect where the argument list had it, unless
+/// it is pure and cannot trap. Returns the call's new id; `id` hosts the block.
+fn evaluate_ahead(
+    body: &mut Body,
+    locals: &mut Vec<NirLocal>,
+    id: ExprId,
+    dead: &[bool],
+    last: usize,
+    type_table: &TypeTable,
+) -> ExprId {
+    let ExprNode { span, type_id, .. } = body.exprs[id];
+    let moved = body.take_expr(id);
+    let call = body.exprs.push(moved);
+    let ExprKind::Call { args, .. } = &body.exprs[call].kind else {
+        unreachable!("the moved node is the call");
+    };
+    let ahead: Vec<ArenaCallArg> = args.iter().take(last + 1).cloned().collect();
+    let mut stmts = Vec::with_capacity(last + 2);
+    let mut reads = Vec::new();
+    for (i, arg) in ahead.into_iter().enumerate() {
+        if dead[i] {
+            if !arena_query::is_pure_nontrapping_operand_typed(body, arg.expr, Some(type_table)) {
+                stmts.push(body.stmts.push(StmtNode {
+                    kind: StmtKind::Expr(arg.expr),
+                    span,
+                }));
+            }
+            continue;
+        }
+        assert!(
+            !arg.is_mut,
+            "[NIR] dae: a place argument ahead of an effect is rejected at validation"
+        );
+        let arg = arg.expr;
+        let arg_type = body.operand_type(arg);
+        let local_index = NirLocal::push_minted(locals, "dae_arg", arg_type, false);
+        let name = locals[local_index as usize].name.clone();
+        stmts.push(body.stmts.push(StmtNode {
+            kind: StmtKind::Let {
+                name: name.clone(),
+                local_index,
+                is_mut: false,
+                type_id: arg_type,
+                value: arg,
+                skip_value_copy: false,
+            },
+            span,
+        }));
+        let read = body.exprs.push(ExprNode {
+            kind: ExprKind::Local {
+                index: local_index,
+                name,
+            },
+            type_id: arg_type,
+            span,
+        });
+        reads.push((i, read));
+    }
+    let ExprKind::Call { args, .. } = &mut body.exprs[call].kind else {
+        unreachable!("the moved node is the call");
+    };
+    for (i, read) in reads {
+        args[i].expr = Operand::Expr(read);
+    }
+    stmts.push(body.stmts.push(StmtNode {
+        kind: StmtKind::Expr(Operand::Expr(call)),
+        span,
+    }));
+    let block = body.blocks.push(BlockNode { stmts, span });
+    body.exprs[id].kind = ExprKind::plain_block(block, type_id, "dae_args");
+    call
 }
 
 fn shrink_params_and_renumber(func: &mut NirFunction, dead: &[bool]) {

@@ -8,7 +8,7 @@
 //! shape is what the test has to read.
 
 use crate::common::{block_on, in_memory_host};
-use wado_compiler::{OptLevel, dump_with_host_and_world, unparse::unparse_tir};
+use wado_compiler::{OptLevel, dump_with_host, unparse::unparse_tir};
 
 const SOURCE: &str = r#"
 export fn run() {
@@ -22,20 +22,11 @@ export fn run() {
 #[test]
 fn byte_literal_at_int128_reifies_to_the_constructor_call() {
     let host = in_memory_host(&[]);
-    let dump = block_on(dump_with_host_and_world(
+    let dump = block_on(dump_with_host(
         SOURCE,
         &host,
         Some("entry.wado"),
         OptLevel::O2,
-        None,
-        None,
-        wado_compiler::OptOverrides::default(),
-        &[],
-        None,
-        &wado_compiler::param_resolution::ParamInputs::default(),
-        wado_compiler::kiln::InvocationIndex::default(),
-        1,
-        None,
     ))
     .expect("dump succeeds");
 

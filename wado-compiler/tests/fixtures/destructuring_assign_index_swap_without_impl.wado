@@ -33,5 +33,8 @@ export fn run() with Stdout {
 __DATA__
 {
     "stdout": "ba\n",
-    "wir_expect:O0": ["Shelf^core:prelude/traits.wado/IndexAssign<i32>::index_assign"]
+    "wir_expect:O0": ["Shelf^core:prelude/traits.wado/IndexAssign<i32>::index_assign"],
+    "wir_contrast": {"O0": [
+        {"impl IndexAssign<i32> for Shelf {": "impl IndexSwap<i32> for Shelf {\n    fn index_swap(&mut self, a: i32, b: i32) {\n        [self.books[a], self.books[b]] = [self.books[b], self.books[a]];\n    }\n}\n\nimpl IndexAssign<i32> for Shelf {"}
+    ]}
 }

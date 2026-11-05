@@ -47,12 +47,13 @@ export fn run() with Stdout {
 __DATA__
 {
     "stdout": "3\n",
+    "wir_pass": {"O2": ["nir/field_scalarize", "nir/inline"]},
+    "wir_contrast": {"O2": [
+        {"        while self.pos < self.data.len() {": "        while self.pos < self.limit() {", "    #[inline(never)]\n    fn skip_spaces": "    #[inline(never)]\n    fn limit(&self) -> i32 {\n        return self.data.len() - self.pos + self.pos;\n    }\n\n    #[inline(never)]\n    fn skip_spaces"}
+    ]},
     "wir_expect:O2": [
         "if builtin::array_get_value<u8>($licm_repr_",
         "self.pos = $hfs_pos_{};\n                break"
     ],
-    "wir_not_expect:O2": [
-        "self.pos = $hfs_pos_{};\n            continue",
-        "String::byte_at$unchecked\""
-    ]
+    "wir_not_expect:O2": ["String::byte_at$unchecked\"", "self.pos = $hfs_pos_{};\n            continue"]
 }

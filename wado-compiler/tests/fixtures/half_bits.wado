@@ -24,5 +24,8 @@ export fn run() with Stdout {
 __DATA__
 {
     "stdout": "16384\n",
-    "wir_expect:O2": ["array Array<f16> (mut u16)", "builtin::array_get_value<u16>"]
+    "wir_expect:O2": ["array Array<f16> (mut u16)", "builtin::array_get_value<u16>"],
+    "wir_contrast": {"O2": [
+        {"    let mut weights: List<f16> = [];\n    weights.push(f16::from_bits(0x3C00));\n    weights.push(f16::from_bits(0x4000));\n    weights.push(f16::from_bits(0xC000));\n    assert weights.len() == 3;\n    assert weights[2].to_bits() == 0xC000;\n\n    println(`${weights[1].to_bits()}`);\n": ""}
+    ]}
 }

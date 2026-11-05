@@ -6,9 +6,8 @@
 // `x[0].push('!')` would corrupt `words[0]` as well. The deep
 // per-element copy is mandatory — the demoted shallow form is unsound.
 //
-// `wir_expect:O2 ["array_clone_deep"]` asserts the copy stays deep
-// (demotion correctly refused); the stdout assertion catches the
-// corruption directly: `words[0]` must remain "hi", not "hi!".
+// The stdout assertion catches the corruption directly: `words[0]` must
+// remain "hi", not "hi!".
 //
 // `black_box` keeps the list off the constant path. A fully constant one
 // folds to its result at compile time, leaving no array to copy and no
@@ -32,5 +31,8 @@ export fn run() with Stdout {
 __DATA__
 {
     "stdout": "hi! hi\n",
-    "wir_expect:O2": ["array_clone_deep"]
+    "wir_expect:O2": ["array_clone_deep"],
+    "wir_contrast": {"O2": [
+        {"    x[0].push('!');\n    return x[0];": "    x.sort();\n    return `${x.len()}`;"}
+    ]}
 }

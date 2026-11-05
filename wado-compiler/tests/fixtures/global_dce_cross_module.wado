@@ -12,5 +12,8 @@ __DATA__
 {
     "stdout": "counter=2\n",
     "wir_expect:O0": ["global mut global:sub/global_dce_helper.wado::USED_COUNTER:"],
-    "wir_not_expect:O0": ["UNUSED_A", "UNUSED_B", "UNUSED_MUT"]
+    "wir_not_expect:O0": ["UNUSED_A", "UNUSED_B", "UNUSED_MUT"],
+    "wir_contrast": {"O0": [
+        {"use { bump, USED_COUNTER }": "use { UNUSED_A, UNUSED_B, UNUSED_MUT }", "    bump();\n    bump();\n    println(`counter=${USED_COUNTER}`);": "    println(`${UNUSED_A} ${UNUSED_B} ${UNUSED_MUT}`);"}
+    ]}
 }

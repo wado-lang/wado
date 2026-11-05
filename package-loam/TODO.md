@@ -285,9 +285,6 @@ A half graph computes at the precision its exporter chose, and a caller cannot
 keep a node's output in f32 instead. An exporter that keeps a softmax or a norm
 in f32 says so in the graph; one that does not leaves the rounding to Loam.
 
-`WebGpuBackend` takes the f16 path wherever the device offers `shader-f16`, and
-a caller cannot take the f32 path on such a device.
-
 What the tolerance is is open: for one operator and for a whole model, and for
 a half graph, where onnxruntime computes some operators in f32 and others in
 half. So is how a decoder's token check treats two logits the tolerance cannot

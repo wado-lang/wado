@@ -1254,6 +1254,7 @@ fn "core:prelude/tuple.wado/[i32,core:prelude/string.wado/String]^core:prelude/t
     let new_used_47: i32;
     let start_48: i32;
     let x_60: i64;
+    let $licm_repr_680: ref Array<u8>;
     if @unlikely(local.tee new_used_27(local.tee self_15(f.buf).used + 1) > builtin::array_len(self_15.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_15, new_used_27);
@@ -1271,17 +1272,18 @@ fn "core:prelude/tuple.wado/[i32,core:prelude/string.wado/String]^core:prelude/t
     builtin::array_set_u8(self_15.repr, start_28, 10);
     new_used_27 = 0;
     start_28 = f.indent;
-    self_15 = f.buf;
+    $licm_repr_680 = local.tee self_15(f.buf).repr;
     b172: block {
         l173: loop {
             break_if b172 new_used_27 >= start_28;
-            if @unlikely(local.tee new_used_47(self_15.used + 2) > builtin::array_len(self_15.repr)) {
+            if @unlikely(local.tee new_used_47(self_15.used + 2) > builtin::array_len($licm_repr_680)) {
                 cold_path;
                 "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_15, new_used_47);
+                $licm_repr_680 = self_15.repr;
             }
             start_48 = self_15.used;
             self_15.used = new_used_47;
-            builtin::array_copy<u8>(self_15.repr, start_48, global:core:prelude/tuple.wado::$const_obj_28, 0, 2);
+            builtin::array_copy<u8>($licm_repr_680, start_48, global:core:prelude/tuple.wado::$const_obj_28, 0, 2);
             new_used_27 = new_used_27 + 1;
             continue l173;
         };
@@ -1322,17 +1324,18 @@ fn "core:prelude/tuple.wado/[i32,core:prelude/string.wado/String]^core:prelude/t
     builtin::array_set_u8(self_15.repr, new_used_27, 10);
     $mv$self$0 = 0;
     new_used_27 = f.indent;
-    self_15 = f.buf;
+    $licm_repr_680 = local.tee self_15(f.buf).repr;
     b180: block {
         l181: loop {
             break_if b180 $mv$self$0 >= new_used_27;
-            if @unlikely(local.tee start_28(self_15.used + 2) > builtin::array_len(self_15.repr)) {
+            if @unlikely(local.tee start_28(self_15.used + 2) > builtin::array_len($licm_repr_680)) {
                 cold_path;
                 "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_15, start_28);
+                $licm_repr_680 = self_15.repr;
             }
             new_used_47 = self_15.used;
             self_15.used = start_28;
-            builtin::array_copy<u8>(self_15.repr, new_used_47, global:core:prelude/tuple.wado::$const_obj_28, 0, 2);
+            builtin::array_copy<u8>($licm_repr_680, new_used_47, global:core:prelude/tuple.wado::$const_obj_28, 0, 2);
             $mv$self$0 = $mv$self$0 + 1;
             continue l181;
         };
@@ -1355,17 +1358,18 @@ fn "core:prelude/tuple.wado/[i32,core:prelude/string.wado/String]^core:prelude/t
     builtin::array_set_u8($mv$self$1.repr, new_used_27, 10);
     $mv$self$0 = 0;
     new_used_27 = f.indent;
-    $mv$self$1 = f.buf;
+    $licm_repr_680 = local.tee $mv$self$1(f.buf).repr;
     b185: block {
         l186: loop {
             break_if b185 $mv$self$0 >= new_used_27;
-            if @unlikely(local.tee start_28($mv$self$1.used + 2) > builtin::array_len($mv$self$1.repr)) {
+            if @unlikely(local.tee start_28($mv$self$1.used + 2) > builtin::array_len($licm_repr_680)) {
                 cold_path;
                 "core:prelude/string.wado/core:prelude/string.wado/String::grow"($mv$self$1, start_28);
+                $licm_repr_680 = $mv$self$1.repr;
             }
             new_used_47 = $mv$self$1.used;
             $mv$self$1.used = start_28;
-            builtin::array_copy<u8>($mv$self$1.repr, new_used_47, global:core:prelude/tuple.wado::$const_obj_28, 0, 2);
+            builtin::array_copy<u8>($licm_repr_680, new_used_47, global:core:prelude/tuple.wado::$const_obj_28, 0, 2);
             $mv$self$0 = $mv$self$0 + 1;
             continue l186;
         };

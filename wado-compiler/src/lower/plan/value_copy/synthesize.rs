@@ -27,6 +27,7 @@ use crate::compiler_item::CompilerItem;
 use crate::lower::plan::value_copy;
 use crate::lower::plan::value_copy::{copied_element_type_arg, copy_value_type_arg};
 use crate::name::value_copy_helper_name;
+use crate::optimize::pass_dump;
 use crate::{hashmap, tir};
 
 pub fn synthesize_helpers(
@@ -54,6 +55,7 @@ pub fn synthesize_helpers(
     let mut seen: IndexSet<TypeId> = initial.iter().copied().collect();
     let mut worklist: Vec<TypeId> = initial.into_iter().collect();
     let mut generated_names: IndexSet<String> = IndexSet::default();
+    let copies_owned = !pass_dump::decides("lower/value_copy/owned");
     while let Some(type_id) = worklist.pop() {
         let (func, key) = generate_copy_function(type_id, project, &type_table_rc, &helper_module);
         if let Some(ref body) = func.body {
@@ -61,6 +63,7 @@ pub fn synthesize_helpers(
             let mut sub = Collector {
                 out: IndexSet::default(),
                 type_table: &tt,
+                copies_owned,
             };
             sub.visit_block(body);
             for nested in sub.out {
@@ -91,10 +94,16 @@ pub fn synthesize_helpers(
 struct Collector<'a> {
     out: IndexSet<TypeId>,
     type_table: &'a TypeTable,
+    /// Lowering copies every value of a copied type, owned ones included, so
+    /// each value the helper body yields needs a helper too.
+    copies_owned: bool,
 }
 
 impl TirRefVisitor for Collector<'_> {
     fn visit_expr(&mut self, expr: &TirExpr) {
+        if self.copies_owned && value_copy::needs_value_copy(expr.type_id, self.type_table) {
+            self.out.insert(expr.type_id);
+        }
         if let TirExprKind::Call { func, .. } = &expr.kind
             && let Some(t) = copy_value_type_arg(func)
         {

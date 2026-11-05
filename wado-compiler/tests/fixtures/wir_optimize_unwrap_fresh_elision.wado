@@ -51,5 +51,15 @@ export fn run() with Stdout {
 __DATA__
 {
     "stdout": "ok\n",
-    "wir_not_expect:O2": ["value_copy Data("]
+    "wir_scope": "/run",
+    "wir_pass": {"O0": ["lower/value_copy/owned"]},
+    "wir_contrast": {"O0": [
+        {"    assert opt2 matches { Some(_) };\n": ""}
+    ]},
+    "wir_not_expect:O0": [
+        "d1 = \"wir_optimize_unwrap_fresh_elision.wado/$value_copy$",
+        "d2 = \"wir_optimize_unwrap_fresh_elision.wado/$value_copy$",
+        "d3 = \"wir_optimize_unwrap_fresh_elision.wado/$value_copy$"
+    ],
+    "wir_expect:O0": ["d4 = \"wir_optimize_unwrap_fresh_elision.wado/$value_copy$"]
 }

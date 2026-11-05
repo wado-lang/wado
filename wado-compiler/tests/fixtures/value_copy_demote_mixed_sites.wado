@@ -1,15 +1,13 @@
 // `value_copy_demote` soundness: one function with two copies that share
-// the same `$value_copy$T_List<String>` helper — one demote-eligible
-// (`sorted`, only spine-mutated and read), one NOT (`victim`, an element
-// is mutated via `victim[0].push`).
+// the same `$value_copy$T_List<String>` helper. `sorted` is only
+// spine-mutated and read; `victim` has an element mutated via
+// `victim[0].push`.
 //
-// Retargeting must rewrite ONLY the eligible site. Demoting `victim` too
-// would make its shallow copy share `b`'s `String` objects, so
+// The demote decides each site on its own, and `victim` must stay deep:
+// a shallow copy would share `b`'s `String` objects, so
 // `victim[0].push('!')` would corrupt `b[0]`.
 //
-// `wir_expect:O2 ["array_clone_deep"]` asserts `victim`'s copy stays
-// deep; the stdout assertion catches the corruption (`b[0]` must remain
-// "hi").
+// The stdout assertion catches the corruption (`b[0]` must remain "hi").
 
 use { println, Stdout } from "core:cli";
 
@@ -30,5 +28,9 @@ export fn run() with Stdout {
 __DATA__
 {
     "stdout": "p hi! hi\n",
-    "wir_expect:O2": ["array_clone_deep"]
+    "wir_expect:O2": ["array_clone_deep"],
+    "wir_scope": "value_copy_demote_mixed_sites.wado/process",
+    "wir_contrast": {"O2": [
+        {"    victim[0].push('!');\n": ""}
+    ]}
 }

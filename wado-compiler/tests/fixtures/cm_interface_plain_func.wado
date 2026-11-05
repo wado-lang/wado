@@ -33,11 +33,14 @@ export fn run() with (Gfx, Device) {
 
 __DATA__
 {
-  "compile_only": true,
-  "wir_expect:O2": ["import fn wasi/$wasi:demo/gfx@0.1.0#[method]device.id"],
-  "wir_not_expect:O2": ["#[method]device.adapter"],
-  "wat_lines": [
-    { "contains": ["(export", "\"get-device\""], "count": 1 },
-    { "contains": ["(export", "\"[method]device.id\""], "count": 1 }
-  ]
+    "compile_only": true,
+    "wat_lines": [
+        {"contains": ["(export", "\"get-device\""], "count": 1},
+        {"contains": ["(export", "\"[method]device.id\""], "count": 1}
+    ],
+    "wir_expect:O0": ["import fn wasi/$wasi:demo/gfx@0.1.0#[method]device.id"],
+    "wir_not_expect:O0": ["#[method]device.adapter"],
+    "wir_contrast": {"O0": [
+        {"    let _ = device.id();": "    let _ = device.adapter();"}
+    ]}
 }

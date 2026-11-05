@@ -1,0 +1,30 @@
+// What a `test` block reaches decides between the two unused lints. Reached
+// from production (`run`) as well as a test, `shared` is live. Reached by
+// neither, `unreached` is dead, not test-only. `#[allow(dead_code)]` waives the
+// test-only lint too, as it does the dead one.
+fn shared() -> i32 { return 1; }
+
+fn unreached() -> i32 { return 2; }
+
+#[allow(dead_code)]
+fn waived() -> i32 { return 3; }
+
+export fn run() {
+    let _ = shared();
+}
+
+test "uses shared and waived" {
+    assert shared() == 1;
+    assert waived() == 3;
+}
+
+__DATA__
+{
+    "stdout": "",
+    "warnings_contains": ["function `unreached` is never used"],
+    "warnings_not_contains": [
+        "function `shared`",
+        "function `unreached` is only used by tests",
+        "function `waived`"
+    ]
+}

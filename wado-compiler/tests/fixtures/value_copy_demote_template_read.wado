@@ -1,0 +1,28 @@
+// `value_copy_demote` fires when the copy's elements are read into a template.
+// The template's holes reach `String::format` by reference, and `format` writes
+// only through the `Formatter` it builds around its own buffer. A callee's
+// writes are charged to the argument they go through, so that write does not
+// count as one through the template that reaches `sorted`'s elements.
+
+use { println, Stdout } from "core:cli";
+
+#[inline(never)]
+fn first_two(a: &List<String>) -> String {
+    let mut sorted = *a;
+    sorted.sort();
+    return `${sorted[0]} ${sorted[1]}`;
+}
+
+export fn run() with Stdout {
+    let a: List<String> = ["q", "p"];
+    println(first_two(&a));
+    println(`${a[0]}`);
+}
+
+__DATA__
+{
+    "stdout": "p q\nq\n",
+    "wir_scope": "value_copy_demote_template_read.wado/first_two",
+    "wir_pass": {"O2": ["nir/value_copy_demote"]},
+    "wir_not_expect:O2": ["array_clone_deep"]
+}
