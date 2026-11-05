@@ -1,20 +1,16 @@
 use anyhow::Result;
-use std::fs::File;
 use std::future::Future;
-use std::io::{BufWriter, Write};
 use std::pin::Pin;
-use std::sync::{Arc, Condvar, LazyLock, Mutex, PoisonError};
-use std::thread::JoinHandle;
-use std::time::Duration;
+use std::sync::{Arc, LazyLock};
 use wado_compiler::coverage::TestReport;
 use wasmtime::component::{Component, Linker, ResourceTable};
 use wasmtime::{
-    AsContext, Collector, Config, Engine, GuestProfiler, InstanceAllocationStrategy, OptLevel,
+    AsContext, Collector, Config, Engine, InstanceAllocationStrategy, OptLevel,
     PoolingAllocationConfig, ProfilingStrategy, Store,
 };
 use wasmtime_wasi::filesystem::WasiFilesystemCtx;
 use wasmtime_wasi::p2::pipe::MemoryOutputPipe;
-use wasmtime_wasi::{FsPerms, WasiCtx, WasiCtxBuilder, WasiCtxView, WasiView};
+use wasmtime_wasi::{FsPerms, WasiCtx, WasiCtxView, WasiView};
 use wasmtime_wasi_http::{WasiHttpCtx, WasiHttpCtxView, WasiHttpView};
 use wasmtime_wasi_tls::{
     Error as WasiTlsError, TlsProvider, TlsStream, TlsTransport, WasiTlsCtx, WasiTlsCtxBuilder,
@@ -31,25 +27,12 @@ use crate::process_host::{
     GuestStdio, ProcessCtx, ProcessGrant, ProcessView, Spawning,
     add_to_linker as add_process_to_linker,
 };
-use wado_host::engine::default_config;
+use wado_host::engine::{default_config, guest_store};
 use wado_host::fuel::meter_fuel;
 use wado_host::random;
-use wado_host::sync::{join_in_drop, lock};
+use wado_host::runner::{GuestProfile, grant_host_network};
 use wado_host::timezone::add_to_linker;
 use wado_host::tls_trust::{build_root_cert_store, install_default_crypto_provider};
-
-/// Let `wasi:sockets` and `wasi:tls` reach the host network, as a native tool
-/// can: a guest is confined by what its effects reach, and one that names
-/// `TcpSocket` asked for the network. A deployment that must not give it one
-/// confines the host process instead.
-fn grant_host_network(builder: &mut WasiCtxBuilder) {
-    builder.inherit_network();
-    // wasmtime denies creating a socket by default; `inherit_network`
-    // relaxes only the per-address check that comes after it.
-    builder.allow_tcp(true);
-    builder.allow_udp(true);
-    builder.allow_ip_name_lookup(true);
-}
 
 /// Build a [`WasiTlsCtx`] backed by [`WadoTlsProvider`] so the raw
 /// `wasi:tls` connector and [`WadoHttpHooks`] share the same trust store.
@@ -384,22 +367,7 @@ pub enum ProfileMode {
     /// Linux perf map profiling. Use with `perf record -k mono`.
     PerfMap,
     /// Cross-platform guest profiling. Produces Firefox Profiler JSON.
-    Guest {
-        /// Output file path.
-        path: String,
-        /// Sampling interval in milliseconds.
-        interval_ms: u64,
-    },
-}
-
-/// `profiler`'s samples written to `file`. Flushed here: a `BufWriter` dropped
-/// with its last block unwritten reports no error, so a profile that never
-/// reached the disk would read as written.
-pub fn write_guest_profile(profiler: GuestProfiler, file: File) -> Result<()> {
-    let mut out = BufWriter::new(file);
-    profiler.finish(&mut out)?;
-    out.flush()?;
-    Ok(())
+    Guest(GuestProfile),
 }
 
 /// Parse a `--profile` argument value. Shared by `run` and `serve`.
@@ -408,37 +376,15 @@ pub fn write_guest_profile(profiler: GuestProfiler, file: File) -> Result<()> {
 ///
 /// Returns an error if the mode name or the interval is unparseable.
 pub fn parse_profile(s: &str) -> Result<ProfileMode, CliExit> {
-    if s == "jitdump" {
-        return Ok(ProfileMode::JitDump);
+    match s {
+        "jitdump" => Ok(ProfileMode::JitDump),
+        "perfmap" => Ok(ProfileMode::PerfMap),
+        _ => GuestProfile::parse(s).map(ProfileMode::Guest).ok_or_else(|| {
+            CliExit::error(format!(
+                "unknown profile mode '{s}'. Use guest[,path[,interval_ms]], jitdump, or perfmap"
+            ))
+        }),
     }
-    if s == "perfmap" {
-        return Ok(ProfileMode::PerfMap);
-    }
-    if s == "guest" {
-        return Ok(ProfileMode::Guest {
-            path: "profile.json".to_owned(),
-            interval_ms: 10,
-        });
-    }
-    if let Some(rest) = s.strip_prefix("guest,") {
-        let parts: Vec<&str> = rest.splitn(2, ',').collect();
-        let path = if parts[0].is_empty() {
-            "profile.json".to_owned()
-        } else {
-            parts[0].to_owned()
-        };
-        let interval_ms = if parts.len() > 1 {
-            parts[1]
-                .parse::<u64>()
-                .map_err(|_| CliExit::error(format!("invalid profiling interval '{}'", parts[1])))?
-        } else {
-            10
-        };
-        return Ok(ProfileMode::Guest { path, interval_ms });
-    }
-    Err(CliExit::error(format!(
-        "unknown profile mode '{s}'. Use guest, jitdump, or perfmap"
-    )))
 }
 
 /// Parse a `--collector` argument value into a wasmtime [`Collector`].
@@ -498,7 +444,7 @@ pub fn create_config(opt_level: OptLevel, profile: &ProfileMode, knobs: RuntimeK
         ProfileMode::PerfMap => {
             config.profiler(ProfilingStrategy::PerfMap);
         }
-        ProfileMode::Guest { .. } => {
+        ProfileMode::Guest(_) => {
             config.epoch_interruption(true);
         }
     }
@@ -585,7 +531,7 @@ pub fn create_serve_engine(
 /// exhaust, so `--report-fuel` observes the guest without stopping it.
 #[must_use]
 pub fn new_store(engine: &Engine, state: WasiState) -> Store<WasiState> {
-    let mut store = Store::new(engine, state);
+    let mut store = guest_store(engine, state);
     if engine.get_consume_fuel() {
         store.set_fuel(u64::MAX).expect("the engine meters fuel");
         store.data_mut().fuel_start = Some(u64::MAX);
@@ -684,101 +630,4 @@ fn host_linker(component: &Component) -> Result<Linker<WasiState>> {
     add_to_linker(&mut linker)?;
     add_process_to_linker(&mut linker, WasiState::process_view)?;
     Ok(linker)
-}
-
-/// An OS thread calling `tick` every `interval` until the ticker drops.
-/// Dropping wakes the thread, so it never waits out the interval in flight,
-/// and no tick runs once the drop returns.
-pub struct Ticker {
-    control: Arc<(Mutex<TickerControl>, Condvar)>,
-    handle: Option<JoinHandle<()>>,
-}
-
-#[derive(Default)]
-struct TickerControl {
-    stopped: bool,
-    restarted: bool,
-}
-
-impl Ticker {
-    pub fn start(interval: Duration, mut tick: impl FnMut() + Send + 'static) -> Self {
-        let control = Arc::new((Mutex::new(TickerControl::default()), Condvar::new()));
-        let handle = std::thread::spawn({
-            let control = Arc::clone(&control);
-            move || {
-                let (state, wake) = &*control;
-                let mut state = lock(state);
-                while !state.stopped {
-                    let (guard, wait) = wake
-                        .wait_timeout_while(state, interval, |state| {
-                            !state.stopped && !state.restarted
-                        })
-                        .unwrap_or_else(PoisonError::into_inner);
-                    state = guard;
-                    state.restarted = false;
-                    if wait.timed_out() {
-                        tick();
-                    }
-                }
-            }
-        });
-        Self {
-            control,
-            handle: Some(handle),
-        }
-    }
-
-    /// Start the interval in flight over, so the next tick is a whole
-    /// interval away.
-    pub fn restart(&self) {
-        let (state, wake) = &*self.control;
-        lock(state).restarted = true;
-        wake.notify_all();
-    }
-}
-
-impl Drop for Ticker {
-    fn drop(&mut self) {
-        let (state, wake) = &*self.control;
-        lock(state).stopped = true;
-        wake.notify_all();
-        if let Some(handle) = self.handle.take() {
-            join_in_drop(handle);
-        }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use std::time::Instant;
-
-    #[test]
-    fn dropping_a_ticker_does_not_wait_out_its_interval() {
-        let ticker = Ticker::start(Duration::from_secs(60), || {});
-        // Dropped before its thread first runs, a ticker stops at the loop
-        // head and the wait is never exercised.
-        std::thread::sleep(Duration::from_millis(200));
-        let started = Instant::now();
-        drop(ticker);
-        assert!(started.elapsed() < Duration::from_secs(10));
-    }
-
-    #[test]
-    fn a_restart_holds_off_the_next_tick() {
-        let ticks = Arc::new(std::sync::atomic::AtomicU32::new(0));
-        let ticker = Ticker::start(Duration::from_millis(300), {
-            let ticks = Arc::clone(&ticks);
-            move || {
-                ticks.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-            }
-        });
-        for _ in 0..10 {
-            std::thread::sleep(Duration::from_millis(100));
-            ticker.restart();
-        }
-        assert_eq!(ticks.load(std::sync::atomic::Ordering::Relaxed), 0);
-        std::thread::sleep(Duration::from_millis(600));
-        assert!(ticks.load(std::sync::atomic::Ordering::Relaxed) > 0);
-    }
 }

@@ -1,0 +1,14 @@
+// An empty tuple behind a `future`, whose payload the boundary lifts by value,
+// is rejected too. Reaching it means the walk descends rather than stopping at
+// the handle.
+export async fn f() -> Future<Result<[], String>> {
+    let [rx, tx] = Future::<Result<[], String>>::new();
+    tx.write(Result::<[], String>::Ok([]));
+    task return rx;
+}
+
+__DATA__
+{
+    "lib_world": "test:empty/empty@0.1.0",
+    "compile_error": "the empty tuple `[]` has no Component Model representation"
+}

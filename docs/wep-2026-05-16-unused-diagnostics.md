@@ -419,11 +419,12 @@ land with stage 6 of the rearchitecture (see
   free-function reachability stays sound without the operator / `?` /
   for-of dispatch edges).
 - [x] Implement the emitter (`DeadFunction`, `DeadGlobal`) consuming
-  `Liveness::dead_items`; tests in `tests/integration/unused_diagnostics.rs`.
+  `Liveness::dead_items`; tests in the `dead_fn_*` / `dead_global_*` fixtures.
 - [x] Two-closure 3-way classification (`live` / `test-only` / `dead`): test
   blocks seed `T` only, never `E`; `live_items = E ∪ T` (reify gating
   unchanged). Adds `TestOnlyFunction` / `TestOnlyGlobal`, emitted in
-  non-test builds. Unit tests in `tests/integration/unused_diagnostics.rs`.
+  non-test builds. Tests in `dead_fn_test_only.wado` and
+  `dead_fn_test_reachability.wado`.
 - [x] E2E warning assertions: `warnings_contains` / `warnings_not_contains`
   fixture-spec fields (`compile_capturing_warnings` in the harness);
   `dead_fn_*` / `dead_global_*` fixtures cover dead and test-only.

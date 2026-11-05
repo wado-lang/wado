@@ -649,6 +649,7 @@ impl MarkMap {
         &self.marked
     }
 
+    #[cfg(test)]
     #[must_use]
     pub(crate) fn heat_map(&self) -> &HeatMap {
         &self.heat

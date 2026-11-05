@@ -73,7 +73,8 @@ test "no read follows the reassignment" {
 __DATA__
 {
     "test": {},
-    "wir_not_expect:O0": [
-        "let x: ref null"
-    ]
+    "wir_not_expect:O0": ["let x: ref null"],
+    "wir_contrast": {"O0": [
+        {"    x = P { a: 1, b: 1 };\n    while r.a < 1 {\n        r = &x;": "    while r.a < 1 {\n        x = P { a: 1, b: 1 };\n        r = &x;"}
+    ]}
 }

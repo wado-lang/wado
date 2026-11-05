@@ -8,6 +8,7 @@ use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::name::global_name;
 use crate::nir::{CallParamSource, FuncId, NirBinaryOp, NirFunction, NirParam, NirUnaryOp};
+use crate::optimize::pass_dump;
 use crate::primitive::PrimitiveType;
 use crate::tir::{ResolvedType, TypeId};
 use crate::type_table::TypeTable;
@@ -63,6 +64,13 @@ pub(super) fn declare_and_set_local(name: String, ty: WirType, value: WirInstr) 
             value: Box::new(value),
         },
     ]
+}
+
+/// Whether `instr` already diverges, so the `unreachable` that would mark its
+/// position dead is redundant: the validator's stack is polymorphic after a
+/// terminator.
+fn ends_diverged(instr: &WirInstr) -> bool {
+    instr.ends_with_terminator() && pass_dump::decides("wir_build/elide_terminator_unreachable")
 }
 
 /// A read of each of the named locals, in order.
@@ -913,7 +921,9 @@ pub fn translate_function_bodies(ctx: &mut WirContext<'_>) {
                 };
                 translator.translate_block(body.root())
             };
-            apply_unlikely_hints(&mut wir_body);
+            if pass_dump::decides("wir_build/branch_hints") {
+                apply_unlikely_hints(&mut wir_body);
+            }
             drop(tir_func);
             ctx.functions[pending_body.wir_func_index].body = Some(wir_body);
         }
@@ -2095,7 +2105,7 @@ impl FunctionTranslator<'_, '_> {
                     };
                     instrs.push(instr);
                     if self.is_stackless_type(self.operand_type_id(op))
-                        && !instrs.last().is_some_and(WirInstr::ends_with_terminator)
+                        && !instrs.last().is_some_and(ends_diverged)
                     {
                         instrs.push(WirInstr::Unreachable);
                     }
@@ -2132,7 +2142,7 @@ impl FunctionTranslator<'_, '_> {
             }
             if let Some(instr) = self.translate_stmt(*stmt_id) {
                 let needs_unreachable =
-                    is_last && !instr.produces_stack_value() && !instr.ends_with_terminator();
+                    is_last && !instr.produces_stack_value() && !ends_diverged(&instr);
                 instrs.push(instr);
                 if needs_unreachable {
                     instrs.push(WirInstr::Unreachable);
@@ -2465,9 +2475,7 @@ impl FunctionTranslator<'_, '_> {
     /// lets a `never`-typed sub-expression sit in any value position.
     pub(super) fn translate_expr(&mut self, expr_id: ExprId) -> WirInstr {
         let instr = self.translate_expr_inner(expr_id);
-        if self.type_table.is_never(self.body.exprs[expr_id].type_id)
-            && !instr.ends_with_terminator()
-        {
+        if self.type_table.is_never(self.body.exprs[expr_id].type_id) && !ends_diverged(&instr) {
             WirInstr::Seq(vec![instr, WirInstr::Unreachable])
         } else {
             instr

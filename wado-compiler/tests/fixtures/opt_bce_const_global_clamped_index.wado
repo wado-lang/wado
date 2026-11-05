@@ -30,10 +30,11 @@ export fn run() {
 __DATA__
 {
     "stdout": "",
-    "wir_expect:O2": [
-        "array_get_value<u64>"
-    ],
-    "wir_not_expect:O2": [
-        "x < 20"
-    ]
+    "wir_scope": "opt_bce_const_global_clamped_index.wado/lookup\"",
+    "wir_pass": {"O2": ["nir/cond_impl_post_promote", "nir/inline"]},
+    "wir_expect:O2": ["if @unlikely(0 > x) {", "array_get_value<u64>"],
+    "wir_not_expect:O2": ["x >=u 20"],
+    "wir_contrast": {"O2": [
+        {"    let n = if x > 18 { 18 } else { x };": "    let n = x;"}
+    ]}
 }

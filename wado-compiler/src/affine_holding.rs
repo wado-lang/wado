@@ -3,6 +3,7 @@
 //! supplies what a type holds one level down, typed at its instance; the walk
 //! here decides the rest, so the phases cannot disagree on an aggregate.
 
+use crate::cut_memo::CutMemo;
 use crate::defs::DefId;
 use crate::tir::TypeId;
 use crate::type_table::TypeKey;
@@ -36,6 +37,7 @@ pub(crate) fn holds_affine(types: &impl HeldTypes, type_id: TypeId) -> bool {
     Walk {
         types,
         open: Vec::new(),
+        memo: CutMemo::new(false),
     }
     .holds(type_id)
 }
@@ -45,6 +47,7 @@ struct Walk<'a, T> {
     /// The declarations the walk is inside, each with which of its arguments
     /// hold an affine value, and the arguments.
     open: Vec<Open>,
+    memo: CutMemo<TypeKey>,
 }
 
 struct Open {
@@ -64,6 +67,18 @@ impl<T: HeldTypes> Walk<'_, T> {
     }
 
     fn holds(&mut self, type_id: TypeId) -> bool {
+        let key = self.types.key(type_id);
+        if let Some(held) = self.memo.get(&key) {
+            return held;
+        }
+        let depth = self.memo.depth();
+        let outer_cuts = self.memo.begin();
+        let held = self.walk(type_id);
+        self.memo.end(key, depth, held, outer_cuts);
+        held
+    }
+
+    fn walk(&mut self, type_id: TypeId) -> bool {
         match self.types.held(type_id) {
             Held::Affine => true,
             Held::Nothing => false,
@@ -86,20 +101,22 @@ impl<T: HeldTypes> Walk<'_, T> {
                 // `Option<Fields>` is of `Option<Option<Fields>>`: the walk
                 // descends into it, which ends where the type does.
                 let holding: Vec<bool> = args.iter().map(|&arg| self.holds(arg)).collect();
-                let recurs = self.open.iter().any(|open| {
+                let cut = self.open.iter().position(|open| {
                     open.decl == decl
                         && open.holding == holding
                         && !self.within(type_id, &open.args)
                 });
-                if recurs {
-                    return false;
+                if let Some(at) = cut {
+                    return self.memo.cut(at);
                 }
                 self.open.push(Open {
                     decl,
                     holding,
                     args,
                 });
+                self.memo.open();
                 let held = members.into_iter().any(|member| self.holds(member));
+                self.memo.close(held);
                 self.open.pop();
                 held
             }

@@ -26,9 +26,7 @@ export fn run() with Stdout {
 __DATA__
 {
     "stdout": "k 1\n",
-    "wir_not_expect:O2": [
-        "dead_char_fold_83125",
-        "lower_k",
-        "char::to_ascii_lowercase\"(81)"
-    ]
+    "wir_pass": {"O2": ["nir/peephole", "nir/store_load_forward_post_scalarize", "nir/const_fold_post_global"]},
+    "wir_expect:O2": ["== 113)"],
+    "wir_not_expect:O2": ["dead_char_fold_83125", "lower_k"]
 }

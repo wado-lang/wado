@@ -6,14 +6,15 @@
 //! performs it — inside a compile-time frame, which either carries the write
 //! out or abandons the evaluation. An ordinary walk performs nothing at all.
 
-use crate::hashmap::IndexSet;
+use crate::hashmap::{IndexMap, IndexSet};
 use crate::nir::NirUnaryOp;
 use crate::nir_arena::{
     Body, ExprId, ExprKind, LocalSet, NodeRef, Operand, PatKind, StmtId, StmtKind,
 };
 
 use super::place::{
-    lvalue_root_local, peel_wrappers, place_of, referenced_place_operand, write_root_local,
+    is_array_place, lvalue_root_local, peel_wrappers, place_of, referenced_place_operand,
+    write_root_local,
 };
 use crate::nir_visitor::reachable_exprs;
 use crate::type_table::TypeTable;
@@ -67,7 +68,12 @@ pub(super) struct Reached {
 }
 
 impl Reached {
-    pub(super) fn in_frame(body: &Body, facts: ProgramFacts<'_>, reassigned: &LocalSet) -> Self {
+    pub(super) fn in_frame(
+        body: &Body,
+        facts: ProgramFacts<'_>,
+        reassigned: &LocalSet,
+        type_table: &TypeTable,
+    ) -> Self {
         let performed = performed_exprs(body);
         let mut reached = Self::collect(body, facts, &performed);
         for e in &performed {
@@ -77,7 +83,7 @@ impl Reached {
                 reached.place_assigns.insert(*e);
             }
         }
-        reached.record_alias_refs(body, reassigned);
+        reached.record_alias_refs(body, reassigned, type_table);
         reached
     }
 
@@ -86,7 +92,7 @@ impl Reached {
     /// performed against the place's current value or abandons the evaluation,
     /// and a read projects that value rather than a copy. Frame-only, like the
     /// write accounting — an ordinary walk resolves no aliases.
-    fn record_alias_refs(&mut self, body: &Body, reassigned: &LocalSet) {
+    fn record_alias_refs(&mut self, body: &Body, reassigned: &LocalSet, type_table: &TypeTable) {
         for s in reachable_stmts(body) {
             let StmtKind::Let {
                 value, local_index, ..
@@ -114,6 +120,14 @@ impl Reached {
                         self.record(body, inner, Reach::Write);
                     }
                 }
+                continue;
+            }
+            if is_array_place(body, *value, type_table) {
+                compiler_trace!(
+                    "region_seed",
+                    "array alias recorded: let {local_index} over {value:?}"
+                );
+                self.record(body, *value, Reach::Write);
                 continue;
             }
             let Some((is_mut, inner)) = referenced_place_operand(body, *value) else {
@@ -451,13 +465,31 @@ pub(super) fn clobbered_locals(
 
 /// Every local an `Assign` names as its whole target. A projection into one is a
 /// write through the binding, not a rebinding of it, so only a bare local counts.
+/// Nor does a reload, which assigns the local the place its one `let` bound:
+/// the binding names that place again, which the frame checks as it runs.
 fn reassigned_locals(body: &Body) -> LocalSet {
+    let mut let_places: IndexMap<u32, Option<(u32, Vec<u32>)>> = IndexMap::default();
+    for s in reachable_stmts(body) {
+        if let StmtKind::Let {
+            local_index, value, ..
+        } = &body.stmts[s].kind
+        {
+            let place = place_of(body, *value);
+            let_places
+                .entry(*local_index)
+                .and_modify(|bound| *bound = None)
+                .or_insert(place);
+        }
+    }
     let mut set = LocalSet::default();
     for e in reachable_exprs(body) {
-        if let ExprKind::Assign { target, .. } = &body.exprs[e].kind
+        if let ExprKind::Assign { target, value } = &body.exprs[e].kind
             && let ExprKind::Local { index, .. } = &body.exprs[*target].kind
         {
-            set.insert(*index);
+            let bound = let_places.get(index).and_then(Option::as_ref);
+            if bound.is_none() || bound != place_of(body, *value).as_ref() {
+                set.insert(*index);
+            }
         }
     }
     set
@@ -656,7 +688,7 @@ impl Trackability {
     /// For a compile-time frame, which performs the writes it walks.
     pub(super) fn in_frame(body: &Body, facts: ProgramFacts<'_>, type_table: &TypeTable) -> Self {
         let reassigned = reassigned_locals(body);
-        let reached = Reached::in_frame(body, facts, &reassigned);
+        let reached = Reached::in_frame(body, facts, &reassigned, type_table);
         let const_views = const_view_locals(body, facts, &reassigned);
         Self {
             aggregate_locals: aggregate_safe_locals(body, &reached, type_table, &const_views),

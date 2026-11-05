@@ -35,16 +35,20 @@ test {
     assert held.rx.read_to_end().is_empty();
     let [rx_c, tx_c] = Stream::<u8>::new();
     builtin::drop(tx_c);
-    let rx = pick_by_break(builtin::black_box(true), rx_b, rx_c);
-    assert rx.read_to_end().is_empty();
+    builtin::drop(pick_by_break(builtin::black_box(true), rx_b, rx_c));
 }
 
 __DATA__
 {
     "test": {},
+    "wir_pass": {"O2": ["wir/unbox_handles"]},
     "wir_expect:O2": [
         "type \"functype//affine_handle_unboxed_across_calls.wado/pick\" = fn(bool, i32, i32) -> i32;",
         "type \"functype//affine_handle_unboxed_across_calls.wado/pick_by_break\" = fn(bool, ref null \"core:prelude//$Resource\", ref null \"core:prelude//$Resource\") -> ref null \"core:prelude//$Resource\";",
-        "struct.new \"affine_handle_unboxed_across_calls.wado//Holder\" { rx: "
-    ]
+        "let $sroa_$pattern_temp_0_0_{}: ref null \"core:prelude//$Resource\";"
+    ],
+    "wir_contrast": {"O2": [
+        {"    let chosen = found: {\n        if first {\n            break found: a;\n        }\n        b\n    };": "    let chosen = if first { a } else { b };"},
+        {"    let held = Holder { rx: rx_a };\n    assert held.rx.read_to_end().is_empty();": "    builtin::drop(rx_a);"}
+    ]}
 }

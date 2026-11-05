@@ -18,14 +18,12 @@ __DATA__
 {
     "stdout": "14\n",
     "wir_scope": "window",
+    "wir_pass": {"O2": ["nir/licm", "nir/cond_impl_post_promote"]},
     "wir_expect:O2": [
         "(i < ($load_{n} - 3))) == 0)",
         "builtin::array_get_value<i32>($load_{r}, i + 1)",
         "builtin::array_get_value<i32>($load_{r}, i + 2)"
     ],
-    "wir_not_expect:O2": [
-        "(i + 1) >=",
-        "(i + 2) >=",
-        "(i + 3) >="
-    ]
+    "wir_lines": {"O2": [{"contains": ["index_value$contract_report0\"("], "count": 1}]},
+    "wir_not_expect:O2": ["(i + 3) >="]
 }

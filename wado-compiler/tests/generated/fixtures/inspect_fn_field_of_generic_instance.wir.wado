@@ -1360,17 +1360,18 @@ fn "core:prelude/traits.wado/core:prelude/traits.wado/inspect_struct_alternate<i
     builtin::array_set_u8(f_8.repr, start_26, 10);
     new_used_25 = 0;
     start_26 = f.indent;
-    f_8 = f.buf;
+    $load_4 = local.tee f_8(f.buf).repr;
     b171: block {
         l172: loop {
             break_if b171 new_used_25 >= start_26;
-            if @unlikely(local.tee new_used_77(f_8.used + 2) > builtin::array_len(f_8.repr)) {
+            if @unlikely(local.tee new_used_77(f_8.used + 2) > builtin::array_len($load_4)) {
                 cold_path;
                 "core:prelude/string.wado/core:prelude/string.wado/String::grow"(f_8, new_used_77);
+                $load_4 = f_8.repr;
             }
             start_78 = f_8.used;
             f_8.used = new_used_77;
-            builtin::array_copy<u8>(f_8.repr, start_78, global:core:prelude/traits.wado::$const_obj_8, 0, 2);
+            builtin::array_copy<u8>($load_4, start_78, global:core:prelude/traits.wado::$const_obj_8, 0, 2);
             new_used_25 = new_used_25 + 1;
             continue l172;
         };
@@ -1413,17 +1414,18 @@ fn "core:prelude/traits.wado/core:prelude/traits.wado/inspect_struct_alternate<i
     builtin::array_set_u8(f_8.repr, start_26, 10);
     new_used_25 = 0;
     start_26 = f.indent;
-    f_8 = f.buf;
+    $load_4 = local.tee f_8(f.buf).repr;
     b179: block {
         l180: loop {
             break_if b179 new_used_25 >= start_26;
-            if @unlikely(local.tee new_used_77(f_8.used + 2) > builtin::array_len(f_8.repr)) {
+            if @unlikely(local.tee new_used_77(f_8.used + 2) > builtin::array_len($load_4)) {
                 cold_path;
                 "core:prelude/string.wado/core:prelude/string.wado/String::grow"(f_8, new_used_77);
+                $load_4 = f_8.repr;
             }
             start_78 = f_8.used;
             f_8.used = new_used_77;
-            builtin::array_copy<u8>(f_8.repr, start_78, global:core:prelude/traits.wado::$const_obj_8, 0, 2);
+            builtin::array_copy<u8>($load_4, start_78, global:core:prelude/traits.wado::$const_obj_8, 0, 2);
             new_used_25 = new_used_25 + 1;
             continue l180;
         };

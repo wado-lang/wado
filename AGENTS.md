@@ -69,7 +69,7 @@ mise run format          # format Rust, Markdown, and Wado files
 
 ## Tooling
 
-- Make every edit with the editing tools, never a shell rewrite (`sed`, `awk`, a script), however bulk the change. The one exception is renaming a Rust symbol with `wado-dev-tools rust-rename`, which edits where rust-analyzer resolves the name rather than where the text matches.
+- Make every edit with the editing tools, never a shell rewrite (`sed`, `awk`, a script), however bulk the change. The one exception is renaming a Rust symbol with `wado-dev-tools rust-rename` (the `rust-rename` skill), which edits where rust-analyzer resolves the name rather than where the text matches.
 - Run a long job (`mise run test`, `test-wado`, `update-golden-fixtures`) in the background, one per invocation. Run one heavy job at a time; two starve each other.
 - `test`, `test-wado`, `test-stdlib`, `test-gale-o2` and `test-fuel` refuse to start while another of the same is running (`test-e2e` counts as `test`, and `update-baselines` as `test-fuel`), naming the holder's pid — where `flock` exists; `scripts/exclusive.sh` says so on stderr and runs unlocked where it does not. Abandoning a job does not stop it, so restarting after an edit means killing that pid first.
 - Redirect a job's output to a file and read the file, so what you did not anticipate is still there. Scratch files go in `scratchpad/`: it is git-ignored, so `git add -A` leaves them out, and per worktree, so concurrent sessions do not overwrite each other's. A fixed path under `/tmp` is shared by every session.
@@ -148,8 +148,9 @@ hand-authored layout. Naming a file bypasses the exclusion, so never
 
 - `wado-compiler/` — the compiler: frontend, IR pipeline, optimizer, codegen. The Wado standard library (`core:*`, `wasi:*`) lives in `wado-compiler/lib/`. Internals: `docs/compiler.md`, `docs/optimizer.md`.
 - `wado-cli/` — the `wado` binary.
-- `wado-host/` — the native host pieces `wado-cli`, `wado-dev-tools` and the compiler's tests share.
+- `wado-host/` — the native host pieces `wado-cli`, `wado-dev-tools`, the runners and the compiler's tests share.
 - `wado-run-webgpu/` — the `wado run-webgpu` subcommand, a Cargo workspace of its own that no command at the repository root builds or lints. A change that reaches every crate, such as a toolchain upgrade, runs `cargo clippy --all-targets` in `wado-run-webgpu/` too.
+- `wado-run-pjrt/` — the `wado run-pjrt` subcommand: a wasmtime host serving `core:pjrt` from a PJRT plugin, for Loam's XLA backend.
 - `wado-lsp/` — the language service engine, also compiled to Wasm for the browser.
 - `wado-vscode/` — the VS Code extension.
 - `wado-from-idl/` — generates the `wasi:*` and `core:kiln` stdlib modules from WIT, and `package-web`'s DOM bindings from WebIDL.

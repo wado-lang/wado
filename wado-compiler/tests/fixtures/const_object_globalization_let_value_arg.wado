@@ -48,6 +48,10 @@ export fn run() with Stdout {
 __DATA__
 {
     "stdout": "50 50 980 980\n",
-    "wir_expect:O2": ["tag = struct.new"],
-    "wir_not_expect:O2": ["name = struct.new"]
+    "wir_pass": {"O2": ["nir/const_object_globalization"]},
+    "wir_contrast": {"O2": [
+        {"fn bump_first(mut v: List<u8>, bias: i32) -> i32 {\n    v[0] = v[0] + 1;\n": "fn bump_first(v: List<u8>, bias: i32) -> i32 {\n"}
+    ]},
+    "wir_not_expect:O2": ["name = struct.new"],
+    "wir_expect:O2": ["tag = struct.new"]
 }

@@ -104,6 +104,28 @@ Sum: ${a + b}`;
     assert result == "First: 1\nSecond: 2\nSum: 3";
 }
 
+test "an interpolation holds any expression" {
+    let a = 1;
+    let b = 2;
+    let c = 3;
+    let name = "Wado";
+    assert `${a} + ${b} = ${c}` == "1 + 2 = 3";
+    assert `${a}${b}` == "12";
+    assert `Result: ${a + b}` == "Result: 3";
+    assert `Sum: ${a + b * c}` == "Sum: 7";
+    assert `Length: ${name.len()}` == "Length: 4";
+    assert `Outer ${`Inner ${a}`}` == "Outer Inner 1";
+}
+
+test "a path's `::` is not a format specifier" {
+    assert `Value: ${i32::max(1, 2)}` == "Value: 2";
+    assert `${255:x}` == "ff";
+}
+
+test "a template's literal text takes the string escapes" {
+    assert `Line 1\nLine 2\ttab` == "Line 1\nLine 2\ttab";
+}
+
 test "segment layouts around the interpolations" {
     let s1 = "X";
     let s2 = "Y";

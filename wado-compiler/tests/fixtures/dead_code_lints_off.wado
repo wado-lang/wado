@@ -1,0 +1,14 @@
+// With the unused lints off, a function and a global nothing reaches compile
+// without a warning.
+fn helper() -> i32 { return 1; }
+
+global UNUSED: i32 = 42;
+
+export fn run() {}
+
+__DATA__
+{
+    "unused_diagnostics": false,
+    "stdout": "",
+    "warnings_not_contains": ["is never used"]
+}

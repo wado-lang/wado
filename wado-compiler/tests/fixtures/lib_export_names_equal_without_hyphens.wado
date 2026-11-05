@@ -1,0 +1,17 @@
+// Two library exports whose CM names differ only by hyphens are one name to
+// the Component Model (`Explainer.md` § "Name Uniqueness"), so the compiler
+// reports the pair rather than emitting a component the validator rejects.
+export fn a_b() -> i32 {
+    return 1;
+}
+
+export fn ab() -> i32 {
+    return 2;
+}
+
+__DATA__
+{
+    "lib_world": "test:unique/unique@0.1.0",
+    "compile_error": "export `ab` becomes `ab`",
+    "compile_errors_contains": ["function `a_b`"]
+}

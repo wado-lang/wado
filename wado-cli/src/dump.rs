@@ -386,20 +386,18 @@ async fn run_single(opts: &DumpOptions, input: &str) -> Result<(), CliExit> {
     let knobs = &opts.knobs;
     let profile =
         entry_profile(path, knobs, opts.target_world.as_deref(), &host).map_err(CliExit::error)?;
+    let options = wado_compiler::CompilerOptions {
+        target_world: opts.target_world.clone(),
+        profile,
+        invocations,
+        ..knobs.compiler_options()
+    };
     // Diagnostics are already emitted by the host; signal silently on failure.
-    let result = wado_compiler::dump_with_host_and_world(
+    let result = wado_compiler::dump_with_options(
         &source,
         &host,
         Some(input),
-        knobs.opt_level.to_compiler(),
-        opts.target_world.as_deref(),
-        knobs.allocator.as_deref(),
-        knobs.opt,
-        &knobs.codegen_flags,
-        profile.as_deref(),
-        &knobs.params,
-        invocations,
-        knobs.optimize_threads(),
+        options,
         opts.inline_decisions.as_deref(),
     )
     .await

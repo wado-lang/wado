@@ -42,6 +42,10 @@ export fn run() {
 __DATA__
 {
     "stdout": "",
+    "wir_pass": {"O2": ["nir/field_scalarize"]},
+    "wir_contrast": {"O2": [
+        {"impl Cursor {\n": "impl Cursor {\n    #[inline(never)]\n    fn limit(&mut self) -> i32 {\n        if self.pos < 0 {\n            self.pos = 0;\n        }\n        return self.data.len();\n    }\n\n", "        while self.pos < self.data.len() {": "        while self.pos < self.limit() {"}
+    ]},
     "wir_expect:O2": [
         "self.pos = $hfs_pos_{};\n                break",
         "$hfs_pos_{p} = $hfs_pos_{p} + 1;\n                continue"

@@ -2188,6 +2188,7 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelud
     let n_27: i32;
     let start_99: i32;
     let $sroa_slot_202: i32;
+    let $licm_repr_259: ref Array<u8>;
     if local.tee $load_0(self.width) <= 0 {
         self_9 = self.buf;
         $inline_core_prelude_string_wado_String__internal_push_view_3: block {
@@ -2284,16 +2285,18 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelud
         };
         self_9 = self.buf;
         n_27 = 0;
+        $licm_repr_259 = self_9.repr;
         b259: block {
             l260: loop {
                 break_if b259 n_27 >= $load_0;
-                if @unlikely(local.tee $sroa_slot_202(self_9.used + 1) > builtin::array_len(self_9.repr)) {
+                if @unlikely(local.tee $sroa_slot_202(self_9.used + 1) > builtin::array_len($licm_repr_259)) {
                     cold_path;
                     "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_9, $sroa_slot_202);
+                    $licm_repr_259 = self_9.repr;
                 }
                 start_99 = self_9.used;
                 self_9.used = $sroa_slot_202;
-                builtin::array_set_u8(self_9.repr, start_99, 48);
+                builtin::array_set_u8($licm_repr_259, start_99, 48);
                 n_27 = n_27 + 1;
                 continue l260;
             };
@@ -2404,6 +2407,7 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelud
     let n_28: i32;
     let $sroa_slot_203: i32;
     let start_235: i32;
+    let $licm_repr_263: ref Array<u8>;
     if local.tee $load_0(self.width) <= 0 {
         self_9 = self.buf;
         $inline_core_prelude_string_wado_String__internal_push_string_2: block {
@@ -2499,16 +2503,18 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelud
         };
         self_9 = self.buf;
         n_28 = 0;
+        $licm_repr_263 = self_9.repr;
         b291: block {
             l292: loop {
                 break_if b291 n_28 >= $load_0;
-                if @unlikely(local.tee $sroa_slot_203(self_9.used + 1) > builtin::array_len(self_9.repr)) {
+                if @unlikely(local.tee $sroa_slot_203(self_9.used + 1) > builtin::array_len($licm_repr_263)) {
                     cold_path;
                     "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_9, $sroa_slot_203);
+                    $licm_repr_263 = self_9.repr;
                 }
                 start_235 = self_9.used;
                 self_9.used = $sroa_slot_203;
-                builtin::array_set_u8(self_9.repr, start_235, 48);
+                builtin::array_set_u8($licm_repr_263, start_235, 48);
                 n_28 = n_28 + 1;
                 continue l292;
             };
@@ -3075,6 +3081,7 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
     let self_21: ref "core:prelude/string.wado//String";
     let c_223: char;
     let i_225: i32;
+    let $licm_repr_389: ref Array<u8>;
     $load_0 = self.sign_plus;
     sign_len = select i32(select i32(is_negative, 1, $load_0), 1, 0);
     prefix_len = select i32(self.alternate, 0, 0);
@@ -3136,16 +3143,18 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
         }
         self_21 = self.buf;
         is_negative = 0;
+        $licm_repr_389 = self_21.repr;
         b386: block {
             l387: loop {
                 break_if b386 is_negative >= sign_len;
-                if @unlikely(local.tee $load_0(self_21.used + 1) > builtin::array_len(self_21.repr)) {
+                if @unlikely(local.tee $load_0(self_21.used + 1) > builtin::array_len($licm_repr_389)) {
                     cold_path;
                     "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_21, $load_0);
+                    $licm_repr_389 = self_21.repr;
                 }
                 prefix_len = self_21.used;
                 self_21.used = $load_0;
-                builtin::array_set_u8(self_21.repr, prefix_len, 48);
+                builtin::array_set_u8($licm_repr_389, prefix_len, 48);
                 is_negative = is_negative + 1;
                 continue l387;
             };
@@ -3570,17 +3579,17 @@ fn "core:prelude/types.wado/core:prelude/types.wado/WaitableSet<waitable_set_var
     let self_15: ref null "waitable_set_variant_members.wado//Timer";
     let $member_16: ref null "core:prelude/types.wado//AsyncCall<()>";
     let subtask_19: ref null "core:prelude//$Resource";
-    let $sroa_$iter_0_repr_24: ref null "Array<waitable_set_variant_members.wado/Timer>";
-    let $sroa_$iter_0_index_25: i32;
+    let $sroa_$iter_0_repr_22: ref null "Array<waitable_set_variant_members.wado/Timer>";
+    let $sroa_$iter_0_index_23: i32;
     at = 0;
     end = self.used;
-    $sroa_$iter_0_repr_24 = self.repr;
-    $sroa_$iter_0_index_25 = 0;
+    $sroa_$iter_0_repr_22 = self.repr;
+    $sroa_$iter_0_index_23 = 0;
     b463: block {
         l464: loop {
-            break_if b463 $sroa_$iter_0_index_25 >= end;
-            ref_val = builtin::array_get_value<ref null "core:prelude/types.wado//Box<waitable_set_variant_members.wado/Timer>">($sroa_$iter_0_repr_24, $sroa_$iter_0_index_25);
-            $sroa_$iter_0_index_25 = $sroa_$iter_0_index_25 + 1;
+            break_if b463 $sroa_$iter_0_index_23 >= end;
+            ref_val = builtin::array_get_value<ref null "core:prelude/types.wado//Box<waitable_set_variant_members.wado/Timer>">($sroa_$iter_0_repr_22, $sroa_$iter_0_index_23);
+            $sroa_$iter_0_index_23 = $sroa_$iter_0_index_23 + 1;
             $vr_7 = (if ref.test "waitable_set_variant_members.wado//Timer::Short"(local.tee self_15(ref_val.value)) -> ref "tuple//[i32, core:prelude/types.wado/Option<core:prelude/types.wado/ResourceId>, core:prelude/types.wado/Option<core:prelude/types.wado/ReadyEvent>]" {
                 $member_16 = ref.cast "waitable_set_variant_members.wado//Timer::Short"(self_15).payload_0;
                 let $match_scrut_2: ref null "core:prelude/types.wado//Option<core:prelude/types.wado/Subtask>";

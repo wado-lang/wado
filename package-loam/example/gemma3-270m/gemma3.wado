@@ -9,6 +9,7 @@ use { Preopens } from "core:fs";
 use { from_string } from "core:json";
 use { MonotonicClock } from "wasi:clocks";
 use { Cpu } from "lib:loam";
+use { read_checkpoint } from "./continued.wado";
 use { Model, Tokenizer } from "./model.wado";
 
 global STEPS: i32 = 8;
@@ -43,12 +44,8 @@ fn continued(model: &mut Model<Cpu>, ids: &List<i32>) -> [List<i32>, f64, f64] w
 }
 
 export fn run() with (Stdout, Stderr, Environment, Preopens, MonotonicClock) {
-    let checkpoint = match fs::read_linear("build/model.onnx_data") {
-        Ok(bytes) => bytes,
-        Err(e) => {
-            eprintln(`${e}; run fetch.sh first`);
-            return;
-        },
+    let Some(checkpoint) = read_checkpoint() else {
+        return;
     };
     let mut model = match Model::load(Cpu {}, &checkpoint) {
         Ok(model) => model,

@@ -18,6 +18,7 @@ use crate::type_table::{TypeKey, TypeTable};
 use super::{HeapVersion, ValueId, ValueKind, ValuePool};
 use crate::nir_value_graph::value_kind_to_const;
 use crate::niri::{CtfeBuiltin, CtfeBuiltinMap};
+use crate::optimize::pass_dump;
 use crate::primitive::PrimitiveType;
 use crate::{compiler_trace, tir};
 
@@ -744,6 +745,9 @@ impl<'a> Builder<'a> {
             if self.pool.kind(rhs).as_bool() == Some(identity) {
                 return Some(lhs);
             }
+        }
+        if !pass_dump::decides("nir/value_pool/fold_const") {
+            return None;
         }
         let lv = self.value_to_const(lhs, left, tt)?;
         let rv = self.value_to_const(rhs, right, tt)?;

@@ -559,17 +559,17 @@ struct Half {
 /// `(a, b)` by `(a cos − b sin, b cos + a sin)` of row `p`. Each score is
 /// scaled, capped, and biased by the row of `bias` a batch's and head's extent
 /// of 1 repeats, then masked by `options`.
-fn attended_directly<B, S, Q, K, H, P, T, D, Pos, Half, BB, BH>(
-    q: &Tensor<f32, [B, S, Q]>,
-    k: &Tensor<f32, [B, S, K]>,
-    v: &Tensor<f32, [B, S, K]>,
-    past_k: &Tensor<f32, [B, H, P, D]>,
-    past_v: &Tensor<f32, [B, H, P, D]>,
-    cos: Option<&Tensor<f32, [Pos, Half]>>,
-    sin: Option<&Tensor<f32, [Pos, Half]>>,
+fn attended_directly<Batch, S, Q, K, H, P, T, Depth, Place, Turn, BB, BH>(
+    q: &Tensor<f32, [Batch, S, Q]>,
+    k: &Tensor<f32, [Batch, S, K]>,
+    v: &Tensor<f32, [Batch, S, K]>,
+    past_k: &Tensor<f32, [Batch, H, P, Depth]>,
+    past_v: &Tensor<f32, [Batch, H, P, Depth]>,
+    cos: Option<&Tensor<f32, [Place, Turn]>>,
+    sin: Option<&Tensor<f32, [Place, Turn]>>,
     bias: Option<&Tensor<f32, [BB, BH, S, T]>>,
     options: &Attention,
-) -> [Tensor<f32, [B, S, Q]>, Tensor<f32, [B, H, T, D]>, Tensor<f32, [B, H, T, D]>] {
+) -> [Tensor<f32, [Batch, S, Q]>, Tensor<f32, [Batch, H, T, Depth]>, Tensor<f32, [Batch, H, T, Depth]>] {
     let [batch, s, kv, past, d] = [q.extents[0], q.extents[1], options.kv_heads, past_k.extents[2], past_k.extents[3]];
     let heads = options.heads;
     let total = past + s;
@@ -586,7 +586,7 @@ fn attended_directly<B, S, Q, K, H, P, T, D, Pos, Half, BB, BH>(
             row[at + i + half] = b * cv + a * sv;
         }
     };
-    let cached = |old: &Tensor<f32, [B, H, P, D]>, new: &Tensor<f32, [B, S, K]>, turned: bool| -> Tensor<f32, [B, H, T, D]> {
+    let cached = |old: &Tensor<f32, [Batch, H, P, Depth]>, new: &Tensor<f32, [Batch, S, K]>, turned: bool| -> Tensor<f32, [Batch, H, T, Depth]> {
         let mut data = List::<f32>::with_capacity(batch * kv * total * d);
         for let bi of 0..<batch {
             for let h of 0..<kv {
@@ -624,8 +624,8 @@ fn attended_directly<B, S, Q, K, H, P, T, D, Pos, Half, BB, BH>(
                 let keys = (bi * kv + h / group) * total * d;
                 let mut top = f32::NEG_INFINITY;
                 for let j of 0..<total {
-                    let masked = options.causal && j > position || options.window > 0 && position - j >= options.window;
-                    if masked {
+                    let hidden = options.causal && j > position || options.window > 0 && position - j >= options.window;
+                    if hidden {
                         weights[j] = f32::NEG_INFINITY;
                         continue;
                     }

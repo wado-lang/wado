@@ -15,6 +15,7 @@ use {
     WindowReduce,
     broadcast_in_dim_extents,
     conv_window,
+    decomposed_attention,
     dot_extents,
     elementwise_extents,
     gathered_extents,
@@ -106,6 +107,9 @@ pub struct Recorded {
     pub nodes: List<RecordedNode>,
     pub body: Region,
     pub parameters: i32,
+    /// Each decomposed attention's past over a shared buffer, and the present
+    /// that buffer becomes: the same positions, and more of them valid.
+    pub appended: List<[i32, i32]>,
 }
 
 /// A tensor of the graph being recorded: the node that computes it.
@@ -119,11 +123,19 @@ pub struct Recorder {
     /// The region operations are recorded into, a branch's while it records.
     current: Region,
     parameters: i32,
+    /// Whether a composite records as the operations it is made of, for a
+    /// compiler with no operation for it.
+    decomposes: bool,
+    appended: List<[i32, i32]>,
 }
 
 impl Recorder {
     pub fn new() -> Recorder {
-        return Recorder { nodes: [], current: Region::empty(), parameters: 0 };
+        return Recorder { nodes: [], current: Region::empty(), parameters: 0, decomposes: false, appended: [] };
+    }
+
+    pub fn decomposing() -> Recorder {
+        return Recorder { nodes: [], current: Region::empty(), parameters: 0, decomposes: true, appended: [] };
     }
 
     /// The next argument of the run, of `extents`.
@@ -137,7 +149,7 @@ impl Recorder {
     pub fn finished(&self, results: List<i32>) -> Recorded {
         let mut body = self.current;
         body.results = results;
-        return Recorded { nodes: self.nodes, body, parameters: self.parameters };
+        return Recorded { nodes: self.nodes, body, parameters: self.parameters, appended: self.appended };
     }
 
     fn added(&mut self, op: Operation, operands: List<i32>, kind: ElementKind, extents: List<i32>) -> i32 {
@@ -163,7 +175,7 @@ impl Recorder {
 }
 
 /// `v`'s elements, as `Data` holds them.
-fn data_of<E: Element>(v: &List<E>) -> Data {
+internal fn data_of<E: Element>(v: &List<E>) -> Data {
     return match E::kind() {
         F32 => Data::F32(v.into_iter().map(|x| x.cast_to::<f32>()).collect()),
         I64 => Data::I64(v.into_iter().map(|x| x.cast_to::<i64>()).collect()),
@@ -389,6 +401,26 @@ impl Graph for Recorder {
         bias: Option<&Value<f32, [BB, BH, S, T]>>,
         options: &Attention,
     ) -> [Value<f32, [B, S, Q]>, Value<f32, [B, H, T, D]>, Value<f32, [B, H, T, D]>] {
+        if self.decomposes {
+            let attended = decomposed_attention::<Recorder, B, S, Q, K, H, P, T, D, Pos, Half, BB, BH>(
+                self,
+                q,
+                k,
+                v,
+                past_k,
+                past_v,
+                past_length,
+                cos,
+                sin,
+                bias,
+                options,
+            );
+            if past_length matches { Some(_) } {
+                self.appended.push([past_k.id, attended.1.id]);
+                self.appended.push([past_v.id, attended.2.id]);
+            }
+            return attended;
+        }
         let mut operands: List<i32> = [q.id, k.id, v.id, past_k.id, past_v.id];
         let mut node = AttentionNode { options: *options, shared: false, rotary: false, biased: false };
         if let Some(l) = past_length {
@@ -535,7 +567,7 @@ impl<affine G: Graph> Programs<G> {
                     extents.push(extents_of_any(g, w));
                 }
                 return record(r, &extents);
-            }, &earlier) else {
+            }, erased, &earlier) else {
                 return null;
             };
             self.held[class] = program;

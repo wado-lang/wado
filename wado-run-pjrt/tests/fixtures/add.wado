@@ -1,0 +1,32 @@
+use { println, Stdout } from "core:cli";
+use { ElementType, PjrtHost } from "core:pjrt";
+
+global MODULE: String = #"
+module {
+  func.func @main(%a: tensor<2xf32>, %b: tensor<2xf32>) -> tensor<2xf32> {
+    %0 = stablehlo.add %a, %b : tensor<2xf32>
+    return %0 : tensor<2xf32>
+  }
+}
+"#;
+
+fn floats(values: List<f32>) -> ByteList {
+    let mut bytes: ByteList = [];
+    for let v of values {
+        let bits = v.to_bits();
+        for let shift of [0, 8, 16, 24] as List<u32> {
+            bytes.push((bits >> shift) as u8);
+        }
+    }
+    return bytes;
+}
+
+export fn run() with (Stdout, PjrtHost) {
+    println(PjrtHost::platform().unwrap());
+    let executable = PjrtHost::compile(MODULE).unwrap();
+    let a = PjrtHost::upload(ElementType::Float32, [2], floats([1.5, 2.0])).unwrap();
+    let b = PjrtHost::upload(ElementType::Float32, [2], floats([0.25, 3.0])).unwrap();
+    let results = executable.execute([&a, &b], []).unwrap();
+    let bytes = results[0].to_host().unwrap();
+    println(`${bytes:?}`);
+}

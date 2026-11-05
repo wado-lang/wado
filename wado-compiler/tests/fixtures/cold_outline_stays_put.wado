@@ -1,0 +1,47 @@
+// The regions `nir/cold_outline` turns down stay in their function, and the
+// program computes what it did.
+//
+// `find`'s region returns: in a function of its own, `return` would return
+// from the wrong frame. `scale`'s region writes a parameter, which rides in as
+// itself, so the helper would assign its own frame and `scale` keep the value
+// it was called with.
+#[inline(never)]
+fn work(x: i32) -> i32 {
+    return x * 3;
+}
+
+fn find(xs: &List<i32>, key: i32) -> i32 {
+    if xs.len() == 0 {
+        builtin::cold_path();
+        let sentinel = 0 - 1;
+        return sentinel;
+    }
+    let mut i = 0;
+    while i < xs.len() {
+        if xs[i] == key { return i }
+        i = i + 1
+    }
+    return 0 - 1;
+}
+
+fn scale(mut n: i32, cond: bool) -> i32 {
+    if cond {
+        builtin::cold_path();
+        n = work(n) + work(n + 1) + work(n + 2);
+    }
+    return n;
+}
+
+export fn run() {
+    let xs: List<i32> = [3, 1, 4];
+    let empty: List<i32> = [];
+    assert find(&xs, 4) == 2;
+    assert find(&empty, 4) == 0 - 1;
+    assert scale(2, true) == 27;
+    assert scale(2, false) == 2;
+}
+
+__DATA__
+{
+    "stdout": ""
+}

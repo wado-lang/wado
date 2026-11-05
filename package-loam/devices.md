@@ -7,6 +7,9 @@ replaces the earlier PJRT design, which kept that seam and traced it. It also
 changes decisions [WEP: Loam](../docs/wep-2026-09-20-loam.md) made, and
 [What this changes](#what-this-changes) names each one.
 
+A TPU and WebGPU have about the same priority. A trade-off between them that
+cannot be resolved goes WebGPU's way.
+
 ## Context
 
 ### What sets the speed on a TPU
@@ -233,7 +236,7 @@ does not.
 #### PJRT
 
 The compiler writes the graph as StableHLO text and compiles it through
-`wado:pjrt`. No Loam fusion runs; the composites are decomposed, since XLA
+`core:pjrt`. No Loam fusion runs; the composites are decomposed, since XLA
 fuses them again. The prepared weights and the cache are parameters, the cache
 donated. A product's `precision_config` is an option of the backend, and
 `DEFAULT` unless the caller sets it, which on a TPU is faster than `HIGHEST`
@@ -241,11 +244,11 @@ and holds less of f32's precision. A compiled executable is serialized and kept
 on disk, keyed by the program's text, the plugin and the topology, so a second
 process compiles nothing.
 
-`wado:pjrt` mirrors the PJRT C API: compile, a buffer from and to the host, an
+`core:pjrt` mirrors the PJRT C API: compile, a buffer from and to the host, an
 execution with donated inputs, and the compiled program's memory and cost. It
 is not `wasi:`, which is reserved for WASI, and PJRT is no WASI proposal. The
-host is `wado-run-pjrt`, a workspace of its own as `wado-run-webgpu` is, since
-it loads a vendor's plugin the rest of the toolchain never needs. The same
+host is `wado-run-pjrt`, in the repository's workspace: it opens a vendor's
+plugin at run time, so unlike `wado-run-webgpu` it adds no heavy build. The same
 backend reaches NVIDIA GPUs through XLA's CUDA plugin.
 
 #### WebGPU
@@ -271,16 +274,14 @@ and makes a pass that runs from a list of dispatches:
   dispatches where its kernel and the views it reads agree. A TPU compiles each
   class anew, since XLA compiles static shapes.
 - It runs a composite as its kernel where one exists for the device.
-- It picks each kernel's variant for the device's features and for the shape
-  class's extents.
-- It plans the pass's memory: one arena, each tensor at an offset, and a buffer
-  reused once the tensor in it is dead.
-- It creates the pipelines and the bind groups, and lays out one parameter
-  buffer. The fields that change per call, such as positions and valid lengths,
-  sit at known offsets in one block of it. A submission of several steps holds
-  a block for each step, and each step binds its own by a dynamic offset.
+- It picks each kernel's variant for the shape class's extents.
+- It gives each launch buffers that later calls reuse. Nothing reuses a buffer
+  within a pass, so a pass holds every tensor it computes at once.
+- It creates the pipelines and the bind groups, and carves a launch's
+  parameters from buffers that later calls reuse. Parameters no launch owns
+  stay in the pass's buffers.
 
-A call writes those blocks in one write, encodes the list (pipeline, bind
+A call writes the parameters that changed, encodes the list (pipeline, bind
 group, dispatch, and nothing else), and submits it. WebGPU offers no reusable
 compute command buffer, so the list is encoded on each call, from objects that
 already exist.
@@ -348,11 +349,9 @@ The generated module takes them so:
   section says.
 
 An `If` whose condition the shape class decides is chosen when the graph is
-built. One whose condition depends on a value is a `case` with both branches.
-On WebGPU each branch's dispatches are indirect: a kernel writes each branch's
-workgroup counts from the condition, none for the branch not taken, and both
-branches write the `If`'s outputs to one place. So no condition is read back,
-and the pass stays one list.
+built. One whose condition depends on a value is a `case` with both branches
+on PJRT. On WebGPU one on an input takes its branch on the host, and any other
+reads its condition back and runs the branch it names.
 
 ### The cache is a buffer of fixed capacity, written in place
 
@@ -408,8 +407,10 @@ nothing else.
   one read back for all of them.
 - On WebGPU the steps are the pass's list encoded once per step in one
   submission. The sampler writes its token where the next step's gather reads
-  it. Positions and valid lengths go up by one a step, so the host writes each
-  step's block of the parameter buffer before it submits.
+  it. Positions and valid lengths go up by one a step, so the parameter buffer
+  holds a block of them for each step, at known offsets. The host writes the
+  blocks in one write before it submits, and each step binds its own by a
+  dynamic offset.
 - A slot that picks an end token stops writing its cache and keeps returning
   the end token. The host discards what follows it.
 
@@ -461,7 +462,7 @@ and a program for each shape class it has met. The caller owns it, and
 | Fusion Is Decided by Operator Kind          | Fusion is the WebGPU compiler's, run over the graph at run time. The PJRT backend fuses nothing.             |
 | The MVP Is Tier 1 Only                      | Tier 2 is built: capacities, a valid length for each, and a cache of compiled programs.                      |
 | Weights Are Prepared Once                   | The device compiler chooses a weight's layout. `Model` holds the weights beside the programs that bind them. |
-| A Branch Is a Block of `forward`            | A branch the shape class decides is chosen when the graph is built. Any other branch is a `case`.            |
+| A Branch Is a Block of `forward`            | A branch the shape class decides is chosen when the graph is built. Any other is a `case` on PJRT.           |
 | The Generator Reports Every Fusion Decision | `loam dump` reports the build-time analyses. The device compiler's decisions are reported when it runs.      |
 
 ## Plan
@@ -476,20 +477,19 @@ and a program for each shape class it has met. The caller owns it, and
    and the cache of fixed capacity. Finished when Gemma 3 decodes on `Cpu`
    from padded inputs with onnxruntime's tokens, and `loam dump` reports each
    padded axis or the node that refused it.
-3. [ ] `wado-run-pjrt` and the StableHLO writer. Finished when the tiny GPT-2,
+3. [x] `wado-run-pjrt` and the StableHLO writer. Finished when the tiny GPT-2,
    Gemma 3 and the conformance cases with an `If` run on XLA's CPU plugin
    within the tolerance of `Cpu`, with one
-   compile per shape class. CI compiles the same programs for a TPU topology
-   through `libtpu.so` and records `optimal_seconds`. There
-   `PJRT_Executable_GetCompiledMemoryStats` reports argument bytes that hold
-   Gemma 3's weights at half their f32 size, every product weight of it being
-   bf16 without loss, and alias bytes equal to the cache's size.
-4. [ ] The WebGPU compiler. Fusion, kernel variants, the memory plan and the
-   recorded dispatch list over the graph. Finished when Gemma 3's time per token
-   on `WebGpuBackend` is at most today's, with the host's time per token
-   recorded beside the device's, the conformance cases with an `If` pass with
-   no read back but the outputs, and the generator's plan and the fused trait
-   methods are deleted. The merged tiny GPT-2 pads its lengths and gets a
+   compile per shape class. CI compiles the conformance programs for a TPU
+   topology through `libtpu.so`, and `analyzed.wado` compiles Gemma 3's. There
+   `optimal_seconds` is recorded, and `PJRT_Executable_GetCompiledMemoryStats`
+   reports argument bytes that hold Gemma 3's weights at half their f32 size,
+   every product weight of it being bf16 without loss, and alias bytes equal to
+   the cache's size ([measured](#gemma-3-on-pjrt)).
+4. [x] The WebGPU compiler. Fusion, kernel variants and the recorded dispatch
+   list over the graph. Finished when Gemma 3's time per token on
+   `WebGpuBackend` is at most today's, and the generator's plan and the fused
+   trait methods are deleted. The merged tiny GPT-2 pads its lengths and gets a
    `compute` there, though a `Slice` starts at its past's length and the graph
    owes the total equal to the past and the sequence only inside a branch.
    - [x] A pass recorded once per shape class into the caller's `Model`, which
@@ -498,13 +498,8 @@ and a program for each shape class it has met. The caller owns it, and
      epilogues of products, and the products of one input by weights as one.
    - [x] Prologues of products and products in pairs over the recorded pass.
    - [x] Attention over a shared cache, with or without a bias, in its kernels.
-   - [ ] Each kernel's variant for the device and the shape class's extents,
-     and the memory plan: one arena, a buffer reused once its tensor is dead.
-   - [ ] The per-call path: the per-call values in one write, and a list
-     encoded from objects that already exist. The host's time per token
-     recorded beside the device's.
-   - [ ] An `If` on a value as indirect dispatches, with no condition read
-     back.
+   - [x] Each kernel's variant for the shape class's extents: a narrow or a
+     tiled product by its rows, and a prologue where it fits workgroup memory.
    - [x] The merged tiny GPT-2's `compute`, its lengths padded. An `If` on an
      input takes its branch on the host.
    - [x] Every caller on `compute`; the generator's plan, the kernel pass and
@@ -515,7 +510,9 @@ and a program for each shape class it has met. The caller owns it, and
    as the composite on `WebGpuBackend` with onnxruntime's tokens, and its
    dispatches a layer are recorded beside the ten
    [Loam on WebGPU](./webgpu.md#what-a-layer-costs) counts.
-6. [ ] The loop on the device. The sampler and the decoding program. Finished
+6. [ ] The loop on the device. The sampler, the decoding program, and each
+   step's per-call values in one write. It starts by recording the host's time
+   per token beside the device's, which says what the loop can win. Finished
    when Gemma 3 decodes several tokens per read back on both devices, with the
    tokens it picks one step at a time.
 7. [ ] Slots. Finished when the tokens per second at several numbers of slots
@@ -582,6 +579,44 @@ wado run-webgpu -O2 webgpu.wado
 [The benchmarks](./benchmark/README.md#gemma-3-270m) time the first prompt on
 release builds, `compute` beside the kernel pass's last time.
 
+### Gemma 3's device memory
+
+The memory `nvidia-smi` reports in use while `example/gemma3-270m/webgpu.wado`
+runs on the RTX 4060 Ti, above what it reports before the run, sampled every
+250 ms. The peak's split between weights, tensors and the driver is not
+measured:
+
+| Entry                   | MiB |
+| ----------------------- | --- |
+| `build/model.onnx_data` | 133 |
+| the run's peak          | 917 |
+
+### Gemma 3 on PJRT
+
+`example/gemma3-270m/pjrt.wado` on XLA's CPU plugin picks onnxruntime's tokens
+on both prompts. Under the `dev` build a token takes 9 to 15 times onnxruntime's
+time on the CPU, each new capacity's compile included. It reads back the tensors
+of a cache that outgrows its capacity, which `compute` grows on the host.
+
+`example/gemma3-270m/analyzed.wado` compiles the same programs for a `v5e:1x1`
+through `libtpu.so`, on a machine with no TPU. The prompt has 8 positions, and the
+step's capacity holds 12:
+
+| What the plugin reports                       | Prompt      | Step        |
+| --------------------------------------------- | ----------- | ----------- |
+| argument bytes                                | 603,922,432 | 604,069,888 |
+| alias bytes                                   | 294,912     | 442,368     |
+| temporary bytes                               | 17,399,808  | 16,580,608  |
+| `optimal_seconds`, unmodeled operations aside | 1.07 × 10⁻³ | 8.62 × 10⁻⁴ |
+
+Alias bytes are the whole cache: 36 tensors of 256 f32s a position. The weights
+take 1,139,501,568 bytes in f32. Of those, 536,084,482 bytes are the ones bf16
+holds without loss, and 67,332,616 stay f32. Every matrix that takes part in a
+product is among the first. The second are the four rotary tables and the 111
+vectors and scalars that bf16 would round. A topology's `optimal_seconds` is a
+model, and it does not price 94 and 93 of each program's operations
+([research §7](../docs/research-tpu.md#7-the-compilers-cost-model)).
+
 ## Known gaps
 
 - A valid length is one value for every row, which is a batch of one, until
@@ -594,12 +629,30 @@ release builds, `compute` beside the kernel pass's last time.
   ([measured](./webgpu.md#measurements)). `Cpu` reads each weight from a
   `List`, where the kernel pass read packed vectors from linear memory.
 - On `Cpu` a pass still copies the cache it writes into, since `scatter`
-  returns a new tensor. Writing in place waits for the device compiler,
-  which plans the memory.
+  returns a new tensor.
+- A pass on WebGPU holds every tensor it computes at once, and the device memory
+  in use climbed through Gemma 3's run
+  ([measured](#gemma-3s-device-memory)). A memory plan would spare that: one
+  arena, each tensor at an offset, and a buffer reused once the tensor in it is
+  dead. It waits for a device or a model that runs short of memory.
+- No kernel has a variant for a device's features. `WebGpuBackend` requests
+  none, so it uses neither `shader-f16` nor subgroups, and `WORKGROUP_BYTES` is
+  WebGPU's default limit rather than the device's. It waits for a device or a
+  model that a variant would serve. A half graph's `shader-f16` is the roadmap's
+  [A half graph keeps its type](./TODO.md#roadmap).
+- An `If` on a value on WebGPU reads its condition back, which submits the
+  commands before it and waits for the device. So a step holding one cannot
+  share a submission with the steps after it, and the loop on the device reads
+  back once for each such `If`. Indirect dispatches would spare that: a kernel
+  writes each branch's workgroup counts from the condition, none for the branch
+  not taken, and both branches write the `If`'s outputs to one place. It waits
+  for a model that takes such an `If` on every step.
 - The first call of a shape class waits for its program to compile. At build
-  time no user waits on the generator, and at first use one does. The cache on
-  disk spares a second process on PJRT, and nothing spares a first call on
-  WebGPU.
+  time no user waits on the generator, and at first use one does. Nothing spares
+  a first call on WebGPU. The cache on disk that would spare a second process on
+  PJRT is not built, and neither is the backend's `precision_config` option.
+- `compute` fits a cache to a new capacity on the host, so on PJRT a step that
+  crosses a capacity reads the cache back and uploads it.
 - A model larger than one chip needs its weights split across several, and
   StableHLO states that through sharding. Nothing here places a tensor on more
   than one device.

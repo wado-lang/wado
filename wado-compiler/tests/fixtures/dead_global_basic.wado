@@ -1,11 +1,20 @@
 // A global with no reader is reported as dead code, and the program compiles
-// and runs without it.
+// and runs without it. One that is read is live, and `#[allow(dead_code)]`
+// waives the lint for one that is not.
 global UNUSED: i32 = 42;
 
-export fn run() {}
+global USED: i32 = 42;
+
+#[allow(dead_code)]
+global WAIVED: i32 = 42;
+
+export fn run() {
+    let _x = USED;
+}
 
 __DATA__
 {
     "stdout": "",
-    "warnings_contains": ["global `UNUSED` is never used"]
+    "warnings_contains": ["global `UNUSED` is never used"],
+    "warnings_not_contains": ["global `USED`", "global `WAIVED`"]
 }

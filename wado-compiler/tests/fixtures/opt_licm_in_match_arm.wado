@@ -1,8 +1,7 @@
-// Precision: LICM reaches loops nested under match/switch arms. The block
-// walker recurses through every child block (match and switch arms,
-// expression blocks), so `cref.threshold` hoists out of the loop inside the
-// `0 =>` arm; store-load forwarding then folds the hoisted load to `t`,
-// leaving `t * i` in the loop with no `config.threshold` read anywhere.
+// LICM reaches loops nested under match/switch arms. The block walker recurses
+// through every child block (match and switch arms, expression blocks), so
+// `config.threshold` hoists out of the loop inside the `0 =>` arm: `probe`
+// takes the config by `&`, so no call in the loop writes it.
 
 use { println, Stdout } from "core:cli";
 
@@ -17,19 +16,18 @@ fn probe(c: &Config) -> i32 {
 }
 
 #[inline(never)]
-fn accumulate(mode: i32, n: i32, t: i32) -> i32 {
-    let config = Config { threshold: t, scale: 2 };
-    let cref = &config;
+fn accumulate(mode: i32, n: i32, configs: &List<Config>) -> i32 {
+    let config = &configs[0];
     let mut sum = 0;
     match mode {
         0 => {
             for let mut i = 0; i < n; i += 1 {
-                builtin::black_box(probe(cref));
-                sum += cref.threshold * i;
+                builtin::black_box(probe(config));
+                sum += config.threshold * i;
             }
         },
-        1 => { sum = cref.scale; },
-        2 => { sum = cref.threshold + 1; },
+        1 => { sum = config.scale; },
+        2 => { sum = config.threshold + 1; },
         _ => { sum = -1; },
     }
     return sum;
@@ -37,16 +35,18 @@ fn accumulate(mode: i32, n: i32, t: i32) -> i32 {
 
 export fn run() with Stdout {
     let n = builtin::black_box(5);
-    let t = builtin::black_box(100);
-    println(`${accumulate(0, n, t)}`);
-    println(`${accumulate(1, n, t)}`);
-    println(`${accumulate(2, n, t)}`);
-    println(`${accumulate(9, n, t)}`);
+    let configs: List<Config> = [Config { threshold: builtin::black_box(100), scale: 2 }];
+    let mode = builtin::black_box(0);
+    println(`${accumulate(mode, n, &configs)}`);
+    println(`${accumulate(mode + 1, n, &configs)}`);
+    println(`${accumulate(mode + 2, n, &configs)}`);
+    println(`${accumulate(mode + 9, n, &configs)}`);
 }
 
 __DATA__
 {
     "stdout": "1000\n2\n101\n-1\n",
-    "wir_expect:O2": ["t * i"],
-    "wir_not_expect:O2": ["config.threshold"]
+    "wir_scope": "accumulate",
+    "wir_pass": {"O2": ["nir/licm"]},
+    "wir_expect:O2": ["$licm_threshold"]
 }

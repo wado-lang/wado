@@ -1,0 +1,55 @@
+// Each struct holds the next one twice, so the types form a DAG of 2^40 paths.
+// Asking whether `S0` has a value, for the arms the match reaches, visits each
+// type once.
+
+struct S0 { a: S1, b: S1 }
+struct S1 { a: S2, b: S2 }
+struct S2 { a: S3, b: S3 }
+struct S3 { a: S4, b: S4 }
+struct S4 { a: S5, b: S5 }
+struct S5 { a: S6, b: S6 }
+struct S6 { a: S7, b: S7 }
+struct S7 { a: S8, b: S8 }
+struct S8 { a: S9, b: S9 }
+struct S9 { a: S10, b: S10 }
+struct S10 { a: S11, b: S11 }
+struct S11 { a: S12, b: S12 }
+struct S12 { a: S13, b: S13 }
+struct S13 { a: S14, b: S14 }
+struct S14 { a: S15, b: S15 }
+struct S15 { a: S16, b: S16 }
+struct S16 { a: S17, b: S17 }
+struct S17 { a: S18, b: S18 }
+struct S18 { a: S19, b: S19 }
+struct S19 { a: S20, b: S20 }
+struct S20 { a: S21, b: S21 }
+struct S21 { a: S22, b: S22 }
+struct S22 { a: S23, b: S23 }
+struct S23 { a: S24, b: S24 }
+struct S24 { a: S25, b: S25 }
+struct S25 { a: S26, b: S26 }
+struct S26 { a: S27, b: S27 }
+struct S27 { a: S28, b: S28 }
+struct S28 { a: S29, b: S29 }
+struct S29 { a: S30, b: S30 }
+struct S30 { a: S31, b: S31 }
+struct S31 { a: S32, b: S32 }
+struct S32 { a: S33, b: S33 }
+struct S33 { a: S34, b: S34 }
+struct S34 { a: S35, b: S35 }
+struct S35 { a: S36, b: S36 }
+struct S36 { a: S37, b: S37 }
+struct S37 { a: S38, b: S38 }
+struct S38 { a: S39, b: S39 }
+struct S39 { a: S40, b: S40 }
+struct S40 { v: i32 }
+
+variant V { A(S0), B }
+
+fn f(v: V) -> i32 {
+    return match v { A(_) => 1, B => 2 };
+}
+
+test {
+    assert f(V::B) == 2;
+}

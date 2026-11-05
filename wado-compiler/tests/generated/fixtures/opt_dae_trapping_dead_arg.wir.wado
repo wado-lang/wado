@@ -20,7 +20,7 @@ type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(7)
 
 type "functype//wasi/$wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(8)
 
-type "functype//opt_dae_trapping_dead_arg.wado/helper" = fn(i32);  // TypeId(9)
+type "functype//opt_dae_trapping_dead_arg.wado/helper$dae[unused]" = fn();  // TypeId(9)
 
 type "functype//opt_dae_trapping_dead_arg.wado/$cm_export__run" = fn();  // TypeId(10)
 
@@ -55,7 +55,7 @@ import fn wasi/task-return from "wasi/task-return";
 
 global global:opt_dae_trapping_dead_arg.wado::$const_obj_0: ref Array<u8> = array.new_fixed<u8>(104, 101, 108, 112, 101, 114, 32, 114, 97, 110);
 
-fn "opt_dae_trapping_dead_arg.wado/helper"(unused) with Stdout {
+fn "opt_dae_trapping_dead_arg.wado/helper$dae[unused]"() with Stdout {
     let $cm_pair_7: i64;
     let $sroa_$pattern_temp_0_0_13: i32;
     let $sroa_$pattern_temp_0_1_14: i32;
@@ -80,7 +80,8 @@ fn "opt_dae_trapping_dead_arg.wado/$cm_export__run"() {
     let $sroa_$pattern_temp_0_1_14: i32;
     let new_repr: ref Array<u8>;
     let $sroa_message_repr_30: ref Array<u8>;
-    "opt_dae_trapping_dead_arg.wado/helper"(100 / 0);
+    drop(100 / 0);
+    "opt_dae_trapping_dead_arg.wado/helper$dae[unused]"();
     $sroa_$pattern_temp_0_0_13 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_14 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
     $sroa_$pattern_temp_0_0_13 = "opt_dae_trapping_dead_arg.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$pattern_temp_0_0_13);

@@ -378,7 +378,7 @@ fn "opt_codewriter_miscompile.wado/emit_alts"(w, n) {
     }
     new_used_24 = $licm_buf_322.used;
     $licm_buf_322.used = digit_count_402;
-    builtin::array_copy<u8>(local.tee $sroa_view_repr_117_452(w.buf.repr), new_used_24, out_338.repr, 0, is_negative_400);
+    builtin::array_copy<u8>(local.tee $sroa_view_repr_117_452(local.tee $licm_buf_322(w.buf).repr), new_used_24, out_338.repr, 0, is_negative_400);
     builtin::array_set_u8($sroa_view_repr_117_452, new_used_24 + is_negative_400, 10);
     w.fresh_line = 1;
     is_negative_400 = 0;
@@ -389,7 +389,6 @@ fn "opt_codewriter_miscompile.wado/emit_alts"(w, n) {
             if is_negative_400 > 0 {
                 out_338 = "core:prelude/string.wado/core:prelude/string.wado/String::format<opt_codewriter_miscompile.wado/$tmpl$fb51c04d54491732,[i32]>$spec2$spec0$sroa[t.h0]"(id);
                 new_used_24 = 0;
-                $licm_buf_322 = w.buf;
                 b25: block {
                     l26: loop {
                         break_if b25 new_used_24 >= digit_count_402;
@@ -405,13 +404,13 @@ fn "opt_codewriter_miscompile.wado/emit_alts"(w, n) {
                     };
                 };
                 new_used_24 = out_338.used;
-                if @unlikely(local.tee start_25(local.tee $licm_buf_322(w.buf).used + (3 + new_used_24)) > builtin::array_len($licm_buf_322.repr)) {
+                if @unlikely(local.tee start_25($licm_buf_322.used + (3 + new_used_24)) > builtin::array_len($licm_buf_322.repr)) {
                     cold_path;
                     "core:prelude/string.wado/core:prelude/string.wado/String::grow"($licm_buf_322, start_25);
                 }
                 start_113 = $licm_buf_322.used;
                 $licm_buf_322.used = start_25;
-                builtin::array_copy<u8>(local.tee $sroa_view_repr_117_452(w.buf.repr), start_113, out_338.repr, 0, new_used_24);
+                builtin::array_copy<u8>(local.tee $sroa_view_repr_117_452($licm_buf_322.repr), start_113, out_338.repr, 0, new_used_24);
                 builtin::array_copy<u8>($sroa_view_repr_117_452, start_113 + new_used_24, global:opt_codewriter_miscompile.wado::$const_obj_10, 0, 3);
                 w.fresh_line = 1;
                 digit_count_402 = digit_count_402 + 1;
@@ -419,7 +418,6 @@ fn "opt_codewriter_miscompile.wado/emit_alts"(w, n) {
             }
             out_338 = "core:prelude/string.wado/core:prelude/string.wado/String::format<opt_codewriter_miscompile.wado/$tmpl$fb51c04d54491732,[i32]>$spec3$spec0$sroa[t.h0]"(id);
             new_used_24 = 0;
-            $licm_buf_322 = w.buf;
             b29: block {
                 l30: loop {
                     break_if b29 new_used_24 >= digit_count_402;
@@ -435,13 +433,13 @@ fn "opt_codewriter_miscompile.wado/emit_alts"(w, n) {
                 };
             };
             new_used_24 = out_338.used;
-            if @unlikely(local.tee start_25(local.tee $licm_buf_322(w.buf).used + (3 + new_used_24)) > builtin::array_len($licm_buf_322.repr)) {
+            if @unlikely(local.tee start_25($licm_buf_322.used + (3 + new_used_24)) > builtin::array_len($licm_buf_322.repr)) {
                 cold_path;
                 "core:prelude/string.wado/core:prelude/string.wado/String::grow"($licm_buf_322, start_25);
             }
             start_113 = $licm_buf_322.used;
             $licm_buf_322.used = start_25;
-            builtin::array_copy<u8>(local.tee $sroa_view_repr_117_452(local.tee $licm_buf_322(w.buf).repr), start_113, out_338.repr, 0, new_used_24);
+            builtin::array_copy<u8>(local.tee $sroa_view_repr_117_452($licm_buf_322.repr), start_113, out_338.repr, 0, new_used_24);
             builtin::array_copy<u8>($sroa_view_repr_117_452, start_113 + new_used_24, global:opt_codewriter_miscompile.wado::$const_obj_10, 0, 3);
             w.fresh_line = 1;
             digit_count_402 = digit_count_402 + 1;
@@ -449,28 +447,31 @@ fn "opt_codewriter_miscompile.wado/emit_alts"(w, n) {
             b33: block {
                 l34: loop {
                     break_if b33 new_used_24 >= 1;
-                    if @unlikely(local.tee start_25($licm_buf_322.used + 1) > builtin::array_len($licm_buf_322.repr)) {
+                    if @unlikely(local.tee start_25($licm_buf_322.used + 1) > builtin::array_len($sroa_view_repr_117_452)) {
                         cold_path;
                         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($licm_buf_322, start_25);
+                        $sroa_view_repr_117_452 = $licm_buf_322.repr;
                     }
                     start_113 = $licm_buf_322.used;
                     $licm_buf_322.used = start_25;
-                    builtin::array_set_u8($licm_buf_322.repr, start_113, 35);
+                    builtin::array_set_u8($sroa_view_repr_117_452, start_113, 35);
                     new_used_24 = new_used_24 + 1;
                     continue l34;
                 };
             };
             new_used_24 = 0;
+            $sroa_view_repr_117_452 = $licm_buf_322.repr;
             b36: block {
                 l37: loop {
                     break_if b36 new_used_24 >= 0;
-                    if @unlikely(local.tee start_25($licm_buf_322.used + 1) > builtin::array_len($licm_buf_322.repr)) {
+                    if @unlikely(local.tee start_25($licm_buf_322.used + 1) > builtin::array_len($sroa_view_repr_117_452)) {
                         cold_path;
                         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($licm_buf_322, start_25);
+                        $sroa_view_repr_117_452 = $licm_buf_322.repr;
                     }
                     start_113 = $licm_buf_322.used;
                     $licm_buf_322.used = start_25;
-                    builtin::array_set_u8($licm_buf_322.repr, start_113, 46);
+                    builtin::array_set_u8($sroa_view_repr_117_452, start_113, 46);
                     new_used_24 = new_used_24 + 1;
                     continue l37;
                 };
@@ -479,28 +480,27 @@ fn "opt_codewriter_miscompile.wado/emit_alts"(w, n) {
             "opt_codewriter_miscompile.wado/emit_body"(w, "core:prelude/string.wado/core:prelude/string.wado/String::format<opt_codewriter_miscompile.wado/$tmpl$fb51c04d54491732,[i32]>$spec2$spec1$sroa[t.h0]"(id));
             digit_count_402 = w.indent_level - 1;
             new_used_24 = 0;
-            out_338 = w.buf;
             b39: block {
                 l40: loop {
                     break_if b39 new_used_24 >= digit_count_402;
-                    if @unlikely(local.tee start_25(out_338.used + 4) > builtin::array_len(out_338.repr)) {
+                    if @unlikely(local.tee start_25($licm_buf_322.used + 4) > builtin::array_len($licm_buf_322.repr)) {
                         cold_path;
-                        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_338, start_25);
+                        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($licm_buf_322, start_25);
                     }
-                    start_113 = out_338.used;
-                    out_338.used = start_25;
-                    builtin::array_copy<u8>(out_338.repr, start_113, global:opt_codewriter_miscompile.wado::$const_obj_0, 0, 4);
+                    start_113 = $licm_buf_322.used;
+                    $licm_buf_322.used = start_25;
+                    builtin::array_copy<u8>($licm_buf_322.repr, start_113, global:opt_codewriter_miscompile.wado::$const_obj_0, 0, 4);
                     new_used_24 = new_used_24 + 1;
                     continue l40;
                 };
             };
-            if @unlikely(local.tee new_used_24(local.tee out_338(w.buf).used + 2) > builtin::array_len(out_338.repr)) {
+            if @unlikely(local.tee new_used_24($licm_buf_322.used + 2) > builtin::array_len($licm_buf_322.repr)) {
                 cold_path;
-                "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_338, new_used_24);
+                "core:prelude/string.wado/core:prelude/string.wado/String::grow"($licm_buf_322, new_used_24);
             }
-            start_25 = out_338.used;
-            out_338.used = new_used_24;
-            builtin::array_copy<u8>(out_338.repr, start_25, global:opt_codewriter_miscompile.wado::$const_obj_6, 0, 2);
+            start_25 = $licm_buf_322.used;
+            $licm_buf_322.used = new_used_24;
+            builtin::array_copy<u8>($licm_buf_322.repr, start_25, global:opt_codewriter_miscompile.wado::$const_obj_6, 0, 2);
             w.fresh_line = 1;
             is_negative_400 = is_negative_400 + 1;
             w.indent_level = digit_count_402;

@@ -1,0 +1,48 @@
+// A hoisted field is reloaded only after a call that may write that field.
+// `scan` reads `a.items` every iteration; `regrow` writes it and `miss` writes
+// only `a.misses`, so the reload follows the `regrow` call and not the `miss`
+// one, though both write the object.
+use { println, Stdout } from "core:cli";
+
+struct Acc {
+    items: List<i32>,
+    misses: i32,
+}
+
+#[inline(never)]
+fn regrow(a: &mut Acc) {
+    a.items = [5, 6, 7, 8];
+}
+
+#[inline(never)]
+fn miss(a: &mut Acc) {
+    a.misses += 1;
+}
+
+#[inline(never)]
+fn scan(a: &mut Acc, n: i32) -> i32 {
+    let mut sum = 0;
+    for let mut i = 0; i < n; i += 1 {
+        let v = a.items[i % 4];
+        sum += v;
+        if v == 0 {
+            regrow(a);
+        } else if v < 0 {
+            miss(a);
+        }
+    }
+    return sum;
+}
+
+export fn run() with Stdout {
+    let mut a = Acc { items: builtin::black_box([1, -1, 0, 2]), misses: 0 };
+    println(`${scan(&mut a, builtin::black_box(8))} ${a.misses}`);
+}
+
+__DATA__
+{
+    "stdout": "34 1\n",
+    "wir_scope": "licm_reload_after_field_writer_only.wado/scan",
+    "wir_pass": {"O2": ["nir/licm"]},
+    "wir_lines": {"O2": [{"contains": ["= a.items"], "count": 2}]}
+}

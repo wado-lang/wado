@@ -1,6 +1,6 @@
 # wado-host
 
-The native host pieces that `wado-cli`, `wado-dev-tools`, and
+The native host pieces that `wado-cli`, `wado-dev-tools`, the runners, and
 `wado-compiler-tests` share.
 
 ## Rules
@@ -8,6 +8,9 @@ The native host pieces that `wado-cli`, `wado-dev-tools`, and
 - This crate exists so that the compiler's tests never depend on `wado-cli`.
   It depends on the compiler, so nothing here may be needed by the compiler
   library itself.
+- The `toolchain` feature, on by default, gates what needs the compiler. A
+  runner turns it off, so `engine.rs`, `fuel.rs` and `runner.rs` stay free of
+  it.
 - It is native-only. Code the browser also runs belongs in `wado-lsp`, which
   must build for `wasm32-unknown-unknown`.
 - Put a piece here once a second crate needs it, not before. What only `wado`
@@ -40,9 +43,13 @@ The native host pieces that `wado-cli`, `wado-dev-tools`, and
   `sandbox-exec` in `sandbox/macos.rs`, and the terminal a child holds as a
   shell's job does in `sandbox/terminal.rs`. `wado-cli`'s `process_host` is its
   caller. See [WEP: `core:process`](../docs/wep-2026-10-21-core-process.md).
+- `ticker.rs` — `Ticker`, a thread on an interval that dropping stops and joins.
 - `engine.rs` — the Wasm features and GC defaults every wasmtime engine takes,
   so the e2e harness runs a program as `wado` does, and the fuel-metered engine
   generators and `core:eval` run on.
+- `runner.rs` — what a `wado run-*` subcommand shares, so a program behaves the
+  same under each of them and under `wado run`: the command line, the compile,
+  the engine, the WASI context and the guest profile.
 - `fuel.rs` — the price of each Wasm operator in fuel, which every metered
   engine takes. See
   [WEP: Fuel Benchmarks](../docs/wep-2026-10-25-fuel-benchmarks.md).
