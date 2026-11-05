@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1793853763616,
+  "lastUpdate": 1793856063319,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -74637,6 +74637,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/7c1577959a399eb9eed95c168829ac811f46a4cc"
         },
         "date": 1793853763205,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3099,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7303,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21965,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 375776,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "db1cb6724ee34f1776952c606486854ab08952da",
+          "message": "Merge pull request #2552 from wado-lang/ccr-19ef8864-l39mxp\n\ndocs: a rust-rename skill so a Rust rename runs without reading the source",
+          "timestamp": "2026-11-05T14:03:24+09:00",
+          "tree_id": "a36edaa166667530bb04596478a88a98e80e351e",
+          "url": "https://github.com/wado-lang/wado/commit/db1cb6724ee34f1776952c606486854ab08952da"
+        },
+        "date": 1793856062490,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
