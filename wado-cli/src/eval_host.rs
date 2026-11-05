@@ -274,7 +274,7 @@ impl EvalHost {
         deps: Arc<Dependencies>,
     ) -> (Compiled, Option<Vec<Input>>) {
         let options = CompilerOptions {
-            opt_level: self.knobs.opt_level.to_compiler(),
+            opt_level: self.knobs.compiler_opt_level(),
             codegen_flags: self.knobs.codegen_flags.clone(),
             ..CompilerOptions::default()
         };

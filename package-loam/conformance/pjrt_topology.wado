@@ -1,0 +1,28 @@
+//! Compiles the programs `pjrt_graph.wado` runs for a TPU topology, which needs
+//! no TPU, and prints what the plugin reports of each. `libtpu.so` opens no
+//! client on a machine without one, so nothing here runs, and `wado-run-pjrt`'s
+//! tests do this:
+//!
+//!     TPU_SKIP_MDS_QUERY=1 wado run-pjrt --plugin libtpu.so package-loam/conformance/pjrt_topology.wado
+
+use { println, Stdout } from "core:cli";
+use { PjrtHost } from "core:pjrt";
+use { PjrtBackend, summary } from "lib:loam";
+use { programs } from "./pjrt_programs.wado";
+
+export fn run() with (Stdout, PjrtHost) {
+    let mut device = PjrtBackend::analyzing("v5e:1x1");
+    programs(&mut device, |_, _| {
+    });
+    let mut updating = 0;
+    for let analysis of device.analyses() {
+        println(summary(analysis));
+        if analysis.alias_bytes > 0 {
+            updating += 1;
+            // Beyond its cache `attended` returns at most 16 rows of 32 f32s.
+            let others = analysis.output_bytes - analysis.alias_bytes;
+            assert others <= 16 * 32 * 4, "a step updates the whole cache in place";
+        }
+    }
+    assert updating > 0;
+}

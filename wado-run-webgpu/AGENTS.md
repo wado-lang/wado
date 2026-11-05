@@ -5,22 +5,19 @@ runs the component on a wasmtime host that serves `wasi:webgpu`.
 
 ## Rules
 
-- This crate is a workspace of its own and is excluded from the repository's.
-  The host crate follows wasmtime on its own schedule, and one workspace
-  resolves one version of a crate. Nothing here is built by `cargo build` at the
-  repository root, `mise run test`, or the repository's clippy and fmt jobs. The
-  `test-webgpu` CI job is what builds, lints and tests it, on every change that
-  is not documentation.
+- This crate is a workspace of its own and is excluded from the repository's,
+  so that nothing at the repository root builds wgpu. Nothing here is built by
+  `cargo build` at the repository root, `mise run test`, or the repository's
+  clippy and fmt jobs. The `test-webgpu` CI job is what builds, lints and tests
+  it, on every change that is not documentation.
+- `wasi-webgpu-wasmtime` must build on the wasmtime the repository pins, since
+  this crate shares `wado-host`'s `runner`.
 - A program behaves the same here as under `wado run`, which is the only reason
-  to have both: the arguments after the input file go to the guest unparsed,
-  `--dir` and `--no-dir` grant what they grant there, `--log-level` takes the
-  same values and reaches the compile too, and the engine takes the same
-  collector, initial GC heap and Cranelift level. A divergence is a defect, not
-  a variant.
-- It compiles nothing itself. `WADO` names the binary that dispatched the
-  subcommand ([External Subcommands](../docs/wep-2026-09-19-external-subcommands.md)),
-  and the tests set it the same way, so the tests and a real invocation reach
-  the compiler through one path.
+  to have both. `wado_host::runner` holds what makes that so, and a divergence
+  is a defect, not a variant.
+- The tests set `WADO` as `wado` does
+  ([External Subcommands](../docs/wep-2026-09-19-external-subcommands.md)), so
+  the tests and a real invocation reach the compiler through one path.
 - Running needs a GPU adapter. wgpu finds none without a driver, and the host
   says so and exits rather than letting the guest see `request-adapter` answer
   `none`. On Linux `mesa-vulkan-drivers` supplies the lavapipe software adapter,

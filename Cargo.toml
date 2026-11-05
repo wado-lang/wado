@@ -10,10 +10,11 @@ members = [
     "wado-host",
     "wado-lsp",
     "wado-playground",
+    "wado-run-pjrt",
     "wado-wasm-embed",
 ]
-# `wado-run-webgpu` is a workspace of its own: its host crate follows wasmtime
-# on its own schedule, and one workspace resolves one version of a crate.
+# `wado-run-webgpu` is a workspace of its own so that no root build compiles
+# wgpu. It shares `wado-host`, so it moves to a new wasmtime with this one.
 exclude = ["vendor", "wado-run-webgpu"]
 resolver = "3"
 
@@ -106,6 +107,7 @@ http-body = { version = "1" }
 assert_cmd = { version = "2" }
 heck = { version = "0.5" }
 lexopt = { version = "0.3.2" }
+libloading = { version = "0.9" }
 predicates = { version = "3" }
 # Unused by name: `dfa-search` is what `assert_cmd`, a dev-dependency, enables
 # through bstr. Naming it for the build too keeps a build of `wado` on the

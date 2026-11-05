@@ -438,11 +438,7 @@ pub(crate) fn entry_profile(
     host: &FilesystemCompilerHost,
 ) -> Result<Option<Arc<Profile>>, String> {
     let test_world = target_world == Some(TEST_WORLD);
-    let parsed = CodegenFlags::parse(
-        &knobs.codegen_flags,
-        knobs.opt_level.to_compiler(),
-        test_world,
-    );
+    let parsed = CodegenFlags::parse(&knobs.codegen_flags, knobs.compiler_opt_level(), test_world);
     // An unknown flag is the compile's to report.
     let Ok(CodegenFlags { pgo, .. }) = parsed else {
         return Ok(None);

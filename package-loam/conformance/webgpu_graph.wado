@@ -72,6 +72,10 @@ export fn run() with (Stdout, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuC
     println(`mixed compared ${apart(&mut gpu, &got.3, &want.3)}`);
     println(`mixed i64 ${apart(&mut gpu, &got.4, &want.4)}`);
 
+    let [ex, ey] = cases::elementwise_inputs();
+    let every = cases::elementwise(&mut gpu, &gpu.upload(&ex), &gpu.upload(&ey));
+    println(`elementwise ${apart(&mut gpu, &every, &cases::elementwise(cpu, &ex, &ey))}`);
+
     // A gather of consecutive rows is a view of them, and dispatches nothing.
     let rows = rows_of::<[Rows, Run, Pair]>(5);
     let from_one = full::<Cpu, i64, []>(cpu, 1, []);

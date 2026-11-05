@@ -26,10 +26,24 @@ calls, so a call that extends the last one's ids runs only the new ones.
 `webgpu.wado` continues each prompt `generate.json` records on
 `WebGpuBackend`, a token a `compute` through the program the backend compiled
 for the shape class. It prints what `gemma3.wado` prints with no prompt, and
-the dispatches and read backs a token takes:
+the device runs and read backs a token takes:
 
     cd package-loam/example/gemma3-270m
     wado run-webgpu webgpu.wado
+
+## On a PJRT plugin
+
+`pjrt.wado` does the same on `PjrtBackend`, and needs a plugin
+(`scripts/fetch-pjrt-plugin.sh` prints the path of XLA's CPU plugin):
+
+    cd package-loam/example/gemma3-270m
+    wado run-pjrt --plugin libpjrt_cpu.so pjrt.wado
+
+`analyzed.wado` compiles the model's programs for a TPU topology, which needs
+no TPU, and prints the weights' bytes and what `libtpu.so` reports of each
+program (`scripts/fetch-pjrt-plugin.sh tpu` prints its path):
+
+    TPU_SKIP_MDS_QUERY=1 wado run-pjrt --plugin libtpu.so analyzed.wado
 
 ## What the build reads
 

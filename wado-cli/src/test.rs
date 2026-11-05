@@ -37,13 +37,15 @@ use crate::manifest::package_root;
 use crate::process_host::ProcessGrant;
 use crate::rss::summary_line;
 use crate::run_cache::RunCache;
-use crate::runtime::{self, InsecureRandom, ProfileMode, Ticker, WasiState};
+use crate::runtime::{self, InsecureRandom, ProfileMode, WasiState};
 use crate::test_cache::{self, Tally, TestCache};
 use crate::test_report::{
     CompileEvent, HeartbeatReporter, LoadEvent, PackageDoneArgs, TapReporter, TestReporter,
     VerboseReporter,
 };
+use wado_host::runner::write_guest_profile;
 use wado_host::sync::{joined, lock};
+use wado_host::ticker::Ticker;
 
 const DEFAULT_TIMEOUT_MS: u64 = 5000;
 // Coarse epoch interval to keep thread wake-ups down. Cost: up to 1s
@@ -580,7 +582,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<TestOptions, CliExit> {
         })
         .min(MAX_JOBS);
 
-    if matches!(profile, ProfileMode::Guest { .. }) {
+    if matches!(profile, ProfileMode::Guest(_)) {
         if no_run {
             return Err(CliExit::error(
                 "--profile has nothing to sample under --no-run",
@@ -1051,8 +1053,8 @@ fn instantiate_wasmtime(
     let component = Arc::new(Component::new(&engine, wasm)?);
     let linker = Arc::new(runtime::create_test_linker(&component)?);
     let profiler = match (profile, profiler_slot) {
-        (ProfileMode::Guest { interval_ms, .. }, Some(slot)) => {
-            let interval = Duration::from_millis(*interval_ms);
+        (ProfileMode::Guest(guest), Some(slot)) => {
+            let interval = guest.interval;
             *lock(slot) = Some(GuestProfiler::new_component(
                 &engine,
                 "wado",
@@ -2515,7 +2517,7 @@ fn write_profile(
     profile: &ProfileMode,
     profiler_slot: Option<&GuestProfilerSlot>,
 ) -> Result<(), CliExit> {
-    let ProfileMode::Guest { path, .. } = profile else {
+    let ProfileMode::Guest(guest) = profile else {
         return Ok(());
     };
     let Some(profiler) = profiler_slot.and_then(|s| lock(s).take()) else {
@@ -2523,9 +2525,10 @@ fn write_profile(
             "--profile sampled nothing: the file under test never loaded",
         ));
     };
+    let path = guest.path.display();
     let write = |e: &dyn std::fmt::Display| CliExit::error(format!("failed to write {path}: {e}"));
-    let file = std::fs::File::create(path).map_err(|e| write(&e))?;
-    runtime::write_guest_profile(profiler, file).map_err(|e| write(&e))?;
+    let file = std::fs::File::create(&guest.path).map_err(|e| write(&e))?;
+    write_guest_profile(profiler, file).map_err(|e| write(&e))?;
     eprintln!("Profile written to {path}");
     eprintln!("View at https://profiler.firefox.com/");
     Ok(())
@@ -2604,12 +2607,12 @@ pub async fn run(opts: TestOptions) -> Result<(), CliExit> {
     let eval_host = Arc::new(EvalHost::new(&flags.knobs, Arc::clone(&budget.cpu), jobs));
     // `parse_args` admits one file under `--profile`, so this one slot holds
     // the run's only profiler and the write below happens once.
-    let profiler_slot = matches!(profile, ProfileMode::Guest { .. })
+    let profiler_slot = matches!(profile, ProfileMode::Guest(_))
         .then(|| Arc::new(Mutex::new(None)) as GuestProfilerSlot);
     // One ticker for every package, since they run at once; `--no-run` loads
     // no engine to tick.
     let tick = match &profile {
-        ProfileMode::Guest { interval_ms, .. } => Duration::from_millis(*interval_ms),
+        ProfileMode::Guest(guest) => guest.interval,
         _ => Duration::from_millis(EPOCH_INTERVAL_MS),
     };
     let epoch_ticker = (!no_run).then(|| Arc::new(EpochTicker::start(tick)));

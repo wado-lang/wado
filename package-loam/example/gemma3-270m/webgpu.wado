@@ -2,10 +2,9 @@
 //! the backend compiled for its shape class. It continues each prompt
 //! `generate.json` records with greedy tokens on the device, and says whether
 //! it picks the tokens onnxruntime picks. It prints the time per token, and the
-//! dispatches and read backs a token takes. `README.md` says how to run it.
+//! device runs and read backs a token takes. `README.md` says how to run it.
 
 use { eprintln, Stderr, Stdout } from "core:cli";
-use fs from "core:fs";
 use { Preopens } from "core:fs";
 use { MonotonicClock } from "wasi:clocks";
 use {
@@ -26,16 +25,12 @@ use {
     RecordOptionGpuSize64,
 } from "wasi:webgpu";
 use { WebGpuBackend } from "lib:loam";
-use { continued, recorded } from "./continued.wado";
+use { continued, read_checkpoint, recorded } from "./continued.wado";
 use { Model } from "./model.wado";
 
 export fn run() with (Stdout, Stderr, Preopens, MonotonicClock, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder, GpuSupportedLimits, RecordOptionGpuSize64) {
-    let checkpoint = match fs::read_linear("build/model.onnx_data") {
-        Ok(bytes) => bytes,
-        Err(e) => {
-            eprintln(`${e}; run fetch.sh first`);
-            return;
-        },
+    let Some(checkpoint) = read_checkpoint() else {
+        return;
     };
     let Some(generate) = recorded() else {
         return;

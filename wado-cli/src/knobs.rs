@@ -14,45 +14,7 @@ use crate::runtime::{parse_collector, parse_gc_heap_size};
 use wado_host::engine::{DEFAULT_COLLECTOR, DEFAULT_GC_HEAP_INITIAL_SIZE};
 use wado_host::sandbox::Trace;
 
-#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
-pub enum OptLevel {
-    O0,
-    /// All passes on a small budget, and contract checks on. Iterations: 2,
-    /// inline threshold: 4.
-    O1,
-    /// Production: contract checks off. Iterations: 15, inline threshold: 16.
-    #[default]
-    O2,
-    /// Aggressive. Iterations: 20, inline threshold: 26.
-    O3,
-    /// `O2` plus name-section stripping.
-    Os,
-}
-
-impl OptLevel {
-    /// wasmtime exposes only `None`/`Speed`/`SpeedAndSize`, so `O1`/`O2`/
-    /// `O3` collapse to `Speed` — mirroring the `wasmtime` CLI's own `-O`
-    /// mapping.
-    #[must_use]
-    pub const fn to_wasmtime(self) -> wasmtime::OptLevel {
-        match self {
-            Self::O0 => wasmtime::OptLevel::None,
-            Self::O1 | Self::O2 | Self::O3 => wasmtime::OptLevel::Speed,
-            Self::Os => wasmtime::OptLevel::SpeedAndSize,
-        }
-    }
-
-    #[must_use]
-    pub const fn to_compiler(self) -> wado_compiler::OptLevel {
-        match self {
-            Self::O0 => wado_compiler::OptLevel::O0,
-            Self::O1 => wado_compiler::OptLevel::O1,
-            Self::O2 => wado_compiler::OptLevel::O2,
-            Self::O3 => wado_compiler::OptLevel::O3,
-            Self::Os => wado_compiler::OptLevel::Os,
-        }
-    }
-}
+pub use wado_host::runner::OptLevel;
 
 /// Parse `-O<n>`. The level is always attached and always explicit: a bare
 /// `-O` is an error rather than a silent default, and the level is never taken
@@ -63,16 +25,12 @@ pub fn parse_opt_level_arg(parser: &mut Parser) -> Result<OptLevel, CliExit> {
             "-O requires a level. Use -O0, -O1, -O2, -O3, or -Os",
         ));
     };
-    match val.to_string_lossy().as_ref() {
-        "0" => Ok(OptLevel::O0),
-        "1" => Ok(OptLevel::O1),
-        "2" => Ok(OptLevel::O2),
-        "3" => Ok(OptLevel::O3),
-        "s" => Ok(OptLevel::Os),
-        other => Err(CliExit::error(format!(
-            "unknown optimization level '-O{other}'. Use -O0, -O1, -O2, -O3, or -Os"
-        ))),
-    }
+    let level = val.to_string_lossy();
+    OptLevel::parse(&level).ok_or_else(|| {
+        CliExit::error(format!(
+            "unknown optimization level '-O{level}'. Use -O0, -O1, -O2, -O3, or -Os"
+        ))
+    })
 }
 
 /// A knob shared by the compiling subcommands. Each one declares the subset it
@@ -274,6 +232,17 @@ impl Default for CompileKnobs {
 }
 
 impl CompileKnobs {
+    #[must_use]
+    pub const fn compiler_opt_level(&self) -> wado_compiler::OptLevel {
+        match self.opt_level {
+            OptLevel::O0 => wado_compiler::OptLevel::O0,
+            OptLevel::O1 => wado_compiler::OptLevel::O1,
+            OptLevel::O2 => wado_compiler::OptLevel::O2,
+            OptLevel::O3 => wado_compiler::OptLevel::O3,
+            OptLevel::Os => wado_compiler::OptLevel::Os,
+        }
+    }
+
     /// The knobs of a subcommand that runs what it compiles at once (`run`,
     /// `serve`, `test`). They default to `-O1`: there the compile counts
     /// against the run, which `-O2` costs more than it saves, and `-O1` keeps
@@ -302,7 +271,7 @@ impl CompileKnobs {
     #[must_use]
     pub fn compiler_options(&self) -> wado_compiler::CompilerOptions {
         wado_compiler::CompilerOptions {
-            opt_level: self.opt_level.to_compiler(),
+            opt_level: self.compiler_opt_level(),
             skip_validation: self.skip_validation,
             opt: self.opt.clone(),
             parallelism: self.optimize_threads(),

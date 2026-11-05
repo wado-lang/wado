@@ -36,15 +36,14 @@ nothing. Correctness and speed come first.
 
 ## Testing a change
 
-Each semantics is written once per device: `Cpu`, `WebGpuBackend`, and a TPU
-to come. Generated code reaches all of them, so a change can break code it
-never touched. Test outward from the change, and run the whole package once,
-last:
+Each semantics is written once per device: `Cpu`, `WebGpuBackend`, and
+`PjrtBackend`. Generated code reaches all of them, so a change can break code
+it never touched. Test outward from the change, as
+[tools.md](./tools.md#testing) lists, and run the whole package once, last.
 
-1. The test beside the file changed, such as `src/runtime/recorded_test.wado`.
-2. `cargo test --test compute loam` in `wado-run-webgpu/`, for a change
-   `WebGpuBackend` runs. It checks each result against `Cpu`'s.
-3. `wado test package-loam`.
+CI tests the logic on every device with very small programs, which should
+reach as many operations and paths as they can. A real model such as Gemma 3
+runs by hand, and its figures go in a measurement table.
 
 ## Oracles
 

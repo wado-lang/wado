@@ -1,0 +1,527 @@
+//! A recorded pass as a StableHLO module, in MLIR's text form, which a PJRT
+//! plugin compiles. Each operation takes the generic form, the one the
+//! specification states it in, so one shape of line serves them all.
+
+use { HashMap, HashSet } from "core:collections";
+use {
+    Binary,
+    Comparison,
+    DotDims,
+    GatherDims,
+    ScatterDims,
+    Unary,
+    WindowReduce,
+    Convolution,
+    reduced_extents,
+} from "./hlo.wado";
+use { ElementKind } from "./tensor.wado";
+use { Data, Recorded, RecordedNode, Region } from "./recorded.wado";
+
+/// `recorded` as a module whose `main` takes its parameters and returns its
+/// results. The parameters `halved` holds are bf16 on the way in. An attention
+/// composite has no StableHLO operation: `Recorder::decomposing` records one as
+/// the operations it is made of.
+pub fn module_of(recorded: &Recorded, halved: &HashSet<i32>) -> String {
+    let mut w = Writer { recorded, halved, text: "", names: HashMap::new() };
+    w.module();
+    return w.text;
+}
+
+/// `data`'s elements, little-endian, a bool one byte: as `dense<"0x…">` reads
+/// them, and as PJRT's buffers hold them.
+pub fn le_bytes(data: &Data) -> ByteList {
+    let mut bytes: ByteList = [];
+    match data {
+        F32(values) => {
+            for let v of values {
+                push_le(&mut bytes, v.to_bits() as u64, 4);
+            }
+        },
+        I64(values) => {
+            for let v of values {
+                push_le(&mut bytes, *v as u64, 8);
+            }
+        },
+        Bool(values) => {
+            for let v of values {
+                bytes.push(*v as u8);
+            }
+        },
+    }
+    return bytes;
+}
+
+/// Each `[parameter, result]` of `recorded` a program may update in place: a
+/// shared attention buffer it takes and returns. A cache's parameter is the
+/// past itself only where it reaches the attention untouched.
+pub fn in_place(recorded: &Recorded) -> List<[i32, i32]> {
+    let mut pairs: List<[i32, i32]> = [];
+    for let [past, present] of recorded.appended {
+        let Parameter(parameter) = &recorded.nodes[past].op else {
+            continue;
+        };
+        let updated = relabeled_from(recorded, present);
+        for let [result, id] of recorded.body.results.into_iter().enumerate() {
+            if relabeled_from(recorded, id) == updated {
+                pairs.push([*parameter, result]);
+            }
+        }
+    }
+    return pairs;
+}
+
+/// The node `id` holds the elements of, past reshapes that move no axis, which
+/// a decomposed attention and a generated pass write to relabel axes.
+fn relabeled_from(recorded: &Recorded, id: i32) -> i32 {
+    let node = &recorded.nodes[id];
+    if node.op matches { Reshape } && recorded.nodes[node.operands[0]].extents == node.extents {
+        return relabeled_from(recorded, node.operands[0]);
+    }
+    return id;
+}
+
+fn push_le(bytes: &mut ByteList, bits: u64, width: i32) {
+    for let at of 0..<width {
+        bytes.push((bits >> (at * 8) as u64) as u8);
+    }
+}
+
+/// Node `id`'s value. The letter lets a value derived from it add a suffix,
+/// which MLIR refuses on a name of digits.
+fn node_name(id: i32) -> String {
+    return `%n${id}`;
+}
+
+fn element_name(kind: ElementKind) -> String {
+    return match kind {
+        F32 => "f32",
+        I64 => "i64",
+        Bool => "i1",
+    };
+}
+
+fn type_of(kind: ElementKind, extents: &List<i32>) -> String {
+    let mut text = "tensor<";
+    for let e of extents {
+        text.push_str(`${*e}x`);
+    }
+    text.push_str(element_name(kind));
+    text.push_str(">");
+    return text;
+}
+
+fn numbers(values: &List<i32>) -> String {
+    let texts: List<String> = values.into_iter().map(|v| `${v}`).collect();
+    return texts.join(", ");
+}
+
+fn dense_array(values: &List<i32>) -> String {
+    return if values.is_empty() { "array<i64>" } else { `array<i64: ${numbers(values)}>` };
+}
+
+/// A list of `[low, high]` padding pairs as an attribute.
+fn padding_attribute(padding: &List<i32>) -> String {
+    let mut pairs: List<String> = [];
+    for let at of 0..<padding.len() / 2 {
+        pairs.push(`[${padding[2 * at]}, ${padding[2 * at + 1]}]`);
+    }
+    return `dense<[${pairs.join(", ")}]> : tensor<${pairs.len()}x2xi64>`;
+}
+
+fn unary_name(op: Unary) -> String {
+    return match op {
+        Abs => "stablehlo.abs",
+        Erf => "chlo.erf",
+        Exponential => "stablehlo.exponential",
+        Log => "stablehlo.log",
+        Logistic => "stablehlo.logistic",
+        Negate => "stablehlo.negate",
+        Rsqrt => "stablehlo.rsqrt",
+        Sqrt => "stablehlo.sqrt",
+        Tanh => "stablehlo.tanh",
+    };
+}
+
+fn binary_name(op: Binary) -> String {
+    return match op {
+        Add => "stablehlo.add",
+        Divide => "stablehlo.divide",
+        Maximum => "stablehlo.maximum",
+        Minimum => "stablehlo.minimum",
+        Multiply => "stablehlo.multiply",
+        Power => "stablehlo.power",
+        Subtract => "stablehlo.subtract",
+    };
+}
+
+fn direction_name(direction: Comparison) -> String {
+    return match direction {
+        Eq => "EQ",
+        Ne => "NE",
+        Ge => "GE",
+        Gt => "GT",
+        Le => "LE",
+        Lt => "LT",
+    };
+}
+
+fn comparison_type_name(kind: ElementKind) -> String {
+    return match kind {
+        F32 => "FLOAT",
+        I64 => "SIGNED",
+        Bool => "UNSIGNED",
+    };
+}
+
+fn comparison_attributes(direction: String, kind: ElementKind) -> String {
+    let compared = comparison_type_name(kind);
+    return ` {compare_type = #stablehlo<comparison_type ${compared}>, comparison_direction = #stablehlo<comparison_direction ${direction}>}`;
+}
+
+/// A scalar `compare` of `a` and `b` into `result`.
+fn scalar_compared(result: String, direction: String, kind: ElementKind, a: String, b: String) -> String {
+    let ty = type_of(kind, &[]);
+    let attributes = comparison_attributes(direction, kind);
+    return `${result} = "stablehlo.compare"(${a}, ${b})${attributes} : (${ty}, ${ty}) -> tensor<i1>\n`;
+}
+
+/// A scalar logical operation of `a` and `b` into `result`.
+fn scalar_logical(result: String, op: String, a: String, b: String) -> String {
+    return `${result} = "stablehlo.${op}"(${a}, ${b}) : (tensor<i1>, tensor<i1>) -> tensor<i1>\n`;
+}
+
+/// A scalar `select` into `result`.
+fn scalar_selected(result: String, kind: ElementKind, pick: String, a: String, b: String) -> String {
+    let ty = type_of(kind, &[]);
+    return `${result} = "stablehlo.select"(${pick}, ${a}, ${b}) : (tensor<i1>, ${ty}, ${ty}) -> ${ty}\n`;
+}
+
+struct Writer {
+    recorded: &Recorded,
+    halved: &HashSet<i32>,
+    text: String,
+    /// The name of each node that is not `%` and its id: a parameter's, a
+    /// branch result's, and a yielded node's, which is its operand's.
+    names: HashMap<i32, String>,
+}
+
+impl Writer {
+    fn name(&self, id: i32) -> String {
+        return match self.names.get(id) {
+            Some(name) => name,
+            None => node_name(id),
+        };
+    }
+
+    fn type_at(&self, id: i32) -> String {
+        let node = &self.recorded.nodes[id];
+        return type_of(node.kind, &node.extents);
+    }
+
+    fn operand_list(&self, ids: &List<i32>) -> String {
+        let names: List<String> = ids.into_iter().map(|id| self.name(*id)).collect();
+        return names.join(", ");
+    }
+
+    fn types_of(&self, ids: &List<i32>) -> String {
+        let types: List<String> = ids.into_iter().map(|id| self.type_at(*id)).collect();
+        return types.join(", ");
+    }
+
+    /// `op` over the node's operands. `regions` and `attributes` each open with
+    /// a space where the operation has any.
+    fn line(&mut self, id: i32, node: &RecordedNode, op: String, regions: String, attributes: String) {
+        self.lined(id, node, op, self.operand_list(&node.operands), self.types_of(&node.operands), regions, attributes);
+    }
+
+    fn lined(
+        &mut self,
+        id: i32,
+        node: &RecordedNode,
+        op: String,
+        operands: String,
+        types: String,
+        regions: String,
+        attributes: String,
+    ) {
+        let result = type_of(node.kind, &node.extents);
+        self.text.push_str(`${node_name(id)} = "${op}"(${operands})${regions}${attributes} : (${types}) -> ${result}\n`);
+    }
+
+    fn module(&mut self) {
+        let mut parameters = List::<String>::filled(self.recorded.parameters, "");
+        let mut widened = "";
+        let mut aliases = HashMap::<i32, i32>::new();
+        for let [parameter, result] of in_place(self.recorded) {
+            aliases[parameter] = result;
+        }
+        for let id of 0..<self.recorded.nodes.len() {
+            if let Parameter(at) = &self.recorded.nodes[id].op {
+                let name = `%a${*at}`;
+                let ty = self.type_at(id);
+                if self.halved.contains(*at) {
+                    let half = in_half(&ty);
+                    parameters[*at] = `${name}: ${half}`;
+                    widened.push_str(`${name}w = "stablehlo.convert"(${name}) : (${half}) -> ${ty}\n`);
+                    self.names[id] = `${name}w`;
+                } else {
+                    parameters[*at] = match aliases.get(*at) {
+                        Some(result) => `${name}: ${ty} {tf.aliasing_output = ${result} : i32}`,
+                        None => `${name}: ${ty}`,
+                    };
+                    self.names[id] = name;
+                }
+            }
+        }
+        let results = self.types_of(&self.recorded.body.results);
+        self.text.push_str(`module {\nfunc.func public @main(${parameters.join(", ")}) -> (${results}) {\n`);
+        self.text.push_str(widened);
+        self.region(&self.recorded.body);
+        self.ended("func.return", &self.recorded.body);
+        self.text.push_str("}\n}\n");
+    }
+
+    fn region(&mut self, region: &Region) {
+        for let id of region.nodes {
+            self.node(id, &self.recorded.nodes[id]);
+        }
+    }
+
+    fn ended(&mut self, op: String, region: &Region) {
+        let operands = self.operand_list(&region.results);
+        let types = self.types_of(&region.results);
+        self.text.push_str(`"${op}"(${operands}) : (${types}) -> ()\n`);
+    }
+
+    fn node(&mut self, id: i32, node: &RecordedNode) {
+        match &node.op {
+            Parameter(_) => {
+            },
+            Constant(data) => self.constant(id, node, data),
+            Iota(dimension) => self.line(id, node, "stablehlo.iota", "", ` {iota_dimension = ${*dimension} : i64}`),
+            Convert => self.line(id, node, "stablehlo.convert", "", ""),
+            Unary(op) => self.line(id, node, unary_name(*op), "", ""),
+            Binary(op) => self.line(id, node, binary_name(*op), "", ""),
+            Compare(direction) => {
+                let kind = self.recorded.nodes[node.operands[0]].kind;
+                self.line(id, node, "stablehlo.compare", "", comparison_attributes(direction_name(*direction), kind));
+            },
+            Select => self.line(id, node, "stablehlo.select", "", ""),
+            BroadcastInDim(dims) => {
+                self.line(id, node, "stablehlo.broadcast_in_dim", "", ` {broadcast_dimensions = ${dense_array(dims)}}`);
+            },
+            Reshape => self.line(id, node, "stablehlo.reshape", "", ""),
+            Transpose(perm) => {
+                self.line(id, node, "stablehlo.transpose", "", ` {permutation = ${dense_array(perm)}}`);
+            },
+            Slice([start, limit, strides]) => {
+                self.line(
+                    id,
+                    node,
+                    "stablehlo.slice",
+                    "",
+                    ` {start_indices = ${dense_array(start)}, limit_indices = ${dense_array(limit)}, strides = ${dense_array(
+                        strides,
+                    )}}`,
+                );
+            },
+            Concatenate(dimension) => {
+                self.line(id, node, "stablehlo.concatenate", "", ` {dimension = ${*dimension} : i64}`);
+            },
+            Reduce([op, init, dims]) => {
+                self.folded(id, node, "stablehlo.reduce", *op, *init, ` {dimensions = ${dense_array(dims)}}`);
+            },
+            DotGeneral(dims) => self.line(id, node, "stablehlo.dot_general", "", dot_attributes(dims)),
+            Gather(dims) => self.gathered(id, node, dims),
+            Scatter(dims) => self.scattered(id, node, dims),
+            Convolution(conv) => {
+                self.line(id, node, "stablehlo.convolution", "", convolution_attributes(conv, node.extents.len() - 2));
+            },
+            ReduceWindow([op, init, window]) => {
+                self.folded(id, node, "stablehlo.reduce_window", *op, *init, window_attributes(window));
+            },
+            Reverse(dims) => self.line(id, node, "stablehlo.reverse", "", ` {dimensions = ${dense_array(dims)}}`),
+            ArgMax(axis) => self.arg_max(id, node, *axis),
+            Case([first, second]) => self.branched(id, node, first, second),
+            Yield => {
+                self.names[id] = self.name(node.operands[0]);
+            },
+            Attention(_) | Part(_) => unreachable(),
+        }
+    }
+
+    fn scalar(&mut self, name: String, value: String, ty: String) {
+        self.text.push_str(`${name} = "stablehlo.constant"() {value = dense<${value}> : ${ty}} : () -> ${ty}\n`);
+    }
+
+    fn constant(&mut self, id: i32, node: &RecordedNode, data: &Data) {
+        let bytes = le_bytes(data);
+        let mut hex = "\"0x";
+        for let b of bytes {
+            hex.push_str(`${b:02x}`);
+        }
+        hex.push_str("\"");
+        if !node.kind matches { Bool } {
+            self.scalar(node_name(id), hex, type_of(node.kind, &node.extents));
+            return;
+        }
+        // A dense `i1` packs its bits or does not by MLIR's version, so a bool
+        // goes through bytes.
+        let raw = type_of(ElementKind::Bool, &node.extents).replace("i1>", "i8>");
+        let bytes_name = `${node_name(id)}b`;
+        self.scalar(bytes_name, hex, raw);
+        self.lined(id, node, "stablehlo.convert", bytes_name, raw, "", "");
+    }
+
+    /// `op` folding the operand with `binary`, from `init`.
+    fn folded(&mut self, id: i32, node: &RecordedNode, op: String, binary: Binary, init: f32, attributes: String) {
+        let scalar = "tensor<f32>";
+        let n = node_name(id);
+        self.scalar(`${n}i`, `0x${init.to_bits():08X}`, scalar);
+        let body = ` ({\n^bb0(${n}a: ${scalar}, ${n}b: ${scalar}):\n${n}r = "${binary_name(binary)}"(${n}a, ${n}b) : (${scalar}, ${scalar}) -> ${scalar}\n"stablehlo.return"(${n}r) : (${scalar}) -> ()\n})`;
+        let operand = node.operands[0];
+        self.lined(
+            id,
+            node,
+            op,
+            `${self.name(operand)}, ${n}i`,
+            `${self.type_at(operand)}, ${scalar}`,
+            body,
+            attributes,
+        );
+    }
+
+    /// A gather from a weight in bf16 reads it as it is and widens what it read:
+    /// widening the weight first holds all of it in f32 while the program runs,
+    /// and a gather does not fold into the widening as a product does.
+    fn gathered(&mut self, id: i32, node: &RecordedNode, dims: &GatherDims) {
+        let attributes = gather_attributes(dims);
+        let source = node.operands[0];
+        if let Parameter(at) = &self.recorded.nodes[source].op && self.halved.contains(*at) {
+            let n = node_name(id);
+            let wide = type_of(node.kind, &node.extents);
+            let half = in_half(&wide);
+            let indices = node.operands[1];
+            self.text.push_str(
+                `${n}h = "stablehlo.gather"(%a${*at}, ${self.name(indices)})${attributes} : (${in_half(&self.type_at(
+                    source,
+                ))}, ${self.type_at(indices)}) -> ${half}\n`,
+            );
+            self.text.push_str(`${n} = "stablehlo.convert"(${n}h) : (${half}) -> ${wide}\n`);
+            return;
+        }
+        self.line(id, node, "stablehlo.gather", "", attributes);
+    }
+
+    fn scattered(&mut self, id: i32, node: &RecordedNode, dims: &ScatterDims) {
+        let scalar = type_of(node.kind, &[]);
+        let n = node_name(id);
+        let body = ` ({\n^bb0(${n}a: ${scalar}, ${n}b: ${scalar}):\n"stablehlo.return"(${n}b) : (${scalar}) -> ()\n})`;
+        self.line(id, node, "stablehlo.scatter", body, scatter_attributes(dims));
+    }
+
+    /// A reduce over each value and its index, where the greater value wins,
+    /// a NaN greatest of all, and the earlier index a tie, so it may fold in
+    /// any order.
+    fn arg_max(&mut self, id: i32, node: &RecordedNode, axis: i32) {
+        let n = node_name(id);
+        let operand = node.operands[0];
+        let extents = &self.recorded.nodes[operand].extents;
+        let values = type_of(ElementKind::F32, extents);
+        let indices = type_of(ElementKind::I64, extents);
+        let f = "tensor<f32>";
+        let i = "tensor<i64>";
+        let lanes = reduced_extents(extents, &[axis]);
+        let best_value = type_of(ElementKind::F32, &lanes);
+        let best_index = type_of(ElementKind::I64, &lanes);
+        self.text.push_str(`${n}k = "stablehlo.iota"() {iota_dimension = ${axis} : i64} : () -> ${indices}\n`);
+        self.scalar(`${n}v`, "0xFF800000", f);
+        self.scalar(`${n}m`, `${i64::MAX}`, i);
+        self.text.push_str(`${n}r:2 = "stablehlo.reduce"(${self.name(operand)}, ${n}k, ${n}v, ${n}m) ({\n`);
+        self.text.push_str(`^bb0(${n}a: ${f}, ${n}c: ${i}, ${n}b: ${f}, ${n}d: ${i}):\n`);
+        self.text.push_str(scalar_compared(`${n}e`, "NE", ElementKind::F32, `${n}a`, `${n}a`));
+        self.text.push_str(scalar_compared(`${n}f`, "NE", ElementKind::F32, `${n}b`, `${n}b`));
+        self.text.push_str(`${n}g = "stablehlo.not"(${n}e) : (tensor<i1>) -> tensor<i1>\n`);
+        self.text.push_str(scalar_logical(`${n}h`, "and", `${n}g`, `${n}f`));
+        self.text.push_str(scalar_compared(`${n}j`, "GT", ElementKind::F32, `${n}b`, `${n}a`));
+        self.text.push_str(scalar_logical(`${n}l`, "or", `${n}j`, `${n}h`));
+        self.text.push_str(scalar_logical(`${n}o`, "and", `${n}e`, `${n}f`));
+        self.text.push_str(scalar_compared(`${n}p`, "EQ", ElementKind::F32, `${n}a`, `${n}b`));
+        self.text.push_str(scalar_logical(`${n}q`, "or", `${n}p`, `${n}o`));
+        self.text.push_str(scalar_compared(`${n}s`, "LT", ElementKind::I64, `${n}d`, `${n}c`));
+        self.text.push_str(scalar_logical(`${n}t`, "and", `${n}q`, `${n}s`));
+        self.text.push_str(scalar_logical(`${n}u`, "or", `${n}l`, `${n}t`));
+        self.text.push_str(scalar_selected(`${n}w`, ElementKind::F32, `${n}u`, `${n}b`, `${n}a`));
+        self.text.push_str(scalar_selected(`${n}x`, ElementKind::I64, `${n}u`, `${n}d`, `${n}c`));
+        self.text.push_str(`"stablehlo.return"(${n}w, ${n}x) : (${f}, ${i}) -> ()\n`);
+        self.text.push_str(
+            `}) {dimensions = array<i64: ${axis}>} : (${values}, ${indices}, ${f}, ${i}) -> (${best_value}, ${best_index})\n`,
+        );
+        self.lined(id, node, "stablehlo.reshape", `${n}r#1`, best_index, "", "");
+    }
+
+    fn branched(&mut self, id: i32, node: &RecordedNode, first: &Region, second: &Region) {
+        let n = node_name(id);
+        let pred = node.operands[0];
+        let mut condition = self.name(pred);
+        if !self.recorded.nodes[pred].extents.is_empty() {
+            self.text.push_str(`${n}p = "stablehlo.reshape"(${condition}) : (${self.type_at(pred)}) -> tensor<i1>\n`);
+            condition = `${n}p`;
+        }
+        self.text.push_str(`${n}:${first.results.len()} = "stablehlo.if"(${condition}) ({\n`);
+        self.region(first);
+        self.ended("stablehlo.return", first);
+        self.text.push_str("}, {\n");
+        self.region(second);
+        self.ended("stablehlo.return", second);
+        self.text.push_str(`}) : (tensor<i1>) -> (${self.types_of(&first.results)})\n`);
+        for let [k, result] of first.results.into_iter().enumerate() {
+            self.names[result] = `${n}#${k}`;
+        }
+    }
+}
+
+/// The f32 tensor type `ty` in bf16.
+fn in_half(ty: &String) -> String {
+    return ty.replace("f32>", "bf16>");
+}
+
+fn dot_attributes(dims: &DotDims) -> String {
+    return ` {dot_dimension_numbers = #stablehlo.dot<lhs_batching_dimensions = [${numbers(&dims.lhs_batch)}], rhs_batching_dimensions = [${numbers(
+        &dims.rhs_batch,
+    )}], lhs_contracting_dimensions = [${numbers(&dims.lhs_contracting)}], rhs_contracting_dimensions = [${numbers(
+        &dims.rhs_contracting,
+    )}]>}`;
+}
+
+fn gather_attributes(dims: &GatherDims) -> String {
+    return ` {dimension_numbers = #stablehlo.gather<offset_dims = [${numbers(&dims.offset_dims)}], collapsed_slice_dims = [${numbers(
+        &dims.collapsed_slice_dims,
+    )}], start_index_map = [${numbers(&dims.start_index_map)}], index_vector_dim = ${dims.index_vector_dim}>, indices_are_sorted = false, slice_sizes = ${dense_array(
+        &dims.slice_sizes,
+    )}}`;
+}
+
+fn scatter_attributes(dims: &ScatterDims) -> String {
+    return ` {indices_are_sorted = false, scatter_dimension_numbers = #stablehlo.scatter<update_window_dims = [${numbers(
+        &dims.update_window_dims,
+    )}], inserted_window_dims = [${numbers(&dims.inserted_window_dims)}], scatter_dims_to_operand_dims = [${numbers(
+        &dims.scatter_dims_to_operand_dims,
+    )}], index_vector_dim = ${dims.index_vector_dim}>, unique_indices = false}`;
+}
+
+fn convolution_attributes(conv: &Convolution, spatial: i32) -> String {
+    let axes: List<i32> = (0..<spatial).collect();
+    let laid = numbers(&axes);
+    return ` {batch_group_count = 1 : i64, dimension_numbers = #stablehlo.conv<[b, f, ${laid}]x[o, i, ${laid}]->[b, f, ${laid}]>, feature_group_count = ${conv.feature_group_count} : i64, padding = ${padding_attribute(
+        &conv.padding,
+    )}, rhs_dilation = ${dense_array(&conv.rhs_dilation)}, window_strides = ${dense_array(&conv.window_strides)}}`;
+}
+
+fn window_attributes(window: &WindowReduce) -> String {
+    return ` {padding = ${padding_attribute(&window.padding)}, window_dilations = ${dense_array(
+        &window.window_dilations,
+    )}, window_dimensions = ${dense_array(&window.window_dimensions)}, window_strides = ${dense_array(
+        &window.window_strides,
+    )}}`;
+}

@@ -1,5 +1,5 @@
-//! Graphs built through any `Graph`, which the recorder's tests and the WebGPU
-//! conformance program both compute on `Cpu` to compare against.
+//! Graphs built through any `Graph`, which the recorder's tests and each
+//! device's conformance program compute on `Cpu` to compare against.
 
 use { Binary, Comparison, Convolution, DotDims, GatherDims, Graph, ScatterDims, Unary, WindowReduce } from "./hlo.wado";
 use { Attention, Tensor, element_count } from "./tensor.wado";
@@ -67,6 +67,45 @@ pub fn mixed<affine G: Graph>(
     let widened: G::Tensor<f32, [C]> = g.convert(ids);
     let twice = g.binary(Binary::Add, ids, ids);
     return [product, placed, widened, above, twice];
+}
+
+/// Every `Unary` and `Binary`, and every `Comparison` of each element type, one
+/// result after the next in one vector. `x` is positive, as `Log` and `Power` ask.
+pub fn elementwise<affine G: Graph>(
+    g: &mut G,
+    x: &G::Tensor<f32, [A]>,
+    y: &G::Tensor<f32, [A]>,
+) -> G::Tensor<f32, [A]> with _ {
+    let mut all = g.unary(Unary::Abs, y);
+    for let op of [
+        Unary::Erf, Unary::Exponential, Unary::Log, Unary::Logistic, Unary::Negate, Unary::Rsqrt, Unary::Sqrt,
+        Unary::Tanh,
+    ] as List<Unary> {
+        let computed = g.unary(op, x);
+        all = g.concatenate(&all, &computed, 0);
+    }
+    for let op of [
+        Binary::Add, Binary::Divide, Binary::Maximum, Binary::Minimum, Binary::Multiply, Binary::Power, Binary::Subtract,
+    ] as List<Binary> {
+        let computed = g.binary(op, x, y);
+        all = g.concatenate(&all, &computed, 0);
+    }
+    let whole_x: G::Tensor<i64, [A]> = g.convert(x);
+    let whole_y: G::Tensor<i64, [A]> = g.convert(y);
+    for let direction of [
+        Comparison::Eq, Comparison::Ne, Comparison::Ge, Comparison::Gt, Comparison::Le, Comparison::Lt,
+    ] as List<Comparison> {
+        let floats = g.compare(direction, x, y);
+        let integers = g.compare(direction, &whole_x, &whole_y);
+        let bools = g.compare(direction, &floats, &integers);
+        let from_floats: G::Tensor<f32, [A]> = g.convert(&floats);
+        let from_integers: G::Tensor<f32, [A]> = g.convert(&integers);
+        let from_bools: G::Tensor<f32, [A]> = g.convert(&bools);
+        all = g.concatenate(&all, &from_floats, 0);
+        all = g.concatenate(&all, &from_integers, 0);
+        all = g.concatenate(&all, &from_bools, 0);
+    }
+    return all;
 }
 
 /// A convolution then a pooling over `x` of extents [1, 1, 4].
@@ -176,6 +215,19 @@ pub fn mixed_inputs() -> [Tensor<f32, [A, B]>, Tensor<i64, [C]>] {
         Tensor {
             data: [1, 5],
             extents: [2],
+        },
+    ];
+}
+
+pub fn elementwise_inputs() -> [Tensor<f32, [A]>, Tensor<f32, [A]>] {
+    return [
+        Tensor {
+            data: [0.25, 1.5, 3.0, 2.0],
+            extents: [4],
+        },
+        Tensor {
+            data: [1.5, -2.0, 3.0, -0.5],
+            extents: [4],
         },
     ];
 }
