@@ -524,6 +524,11 @@ output at every level. It is a nightly campaign, not a gate.
 - [ ] The inliner reads a caller's cold code once, before it splices. A callee
   whose whole body is cold, spliced in, covers its block on both sides of the
   call, yet the calls after it are still inlined at hot-path prices.
+- [ ] A splice's ceiling bounds every call it copies at the landing site's
+  heat, a loop inside the callee included, though that loop runs more often
+  than the site does. In `microgpt`, `softmax` runs 130 times and the closure
+  its `collect` maps runs once per element, yet the closure is priced at
+  `softmax`'s plain heat and stays a call. That costs inference 0.55% of fuel.
 
 ## Dead ends
 
