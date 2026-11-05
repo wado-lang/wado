@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1793891412788,
+  "lastUpdate": 1793892623258,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -74813,6 +74813,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/36c5056f30e346c3658bf2e780c732d328371b25"
         },
         "date": 1793891411796,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3099,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7303,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21965,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 375776,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "8488e1c2b98323c7e6675a4c3bd743b8a5be9428",
+          "message": "Merge pull request #2556 from wado-lang/claude/peaceful-volta-u08hot\n\nfeat(eddy): let the reviewer run code to reproduce what it finds",
+          "timestamp": "2026-11-06T00:14:52+09:00",
+          "tree_id": "a65c8ea2e366354e2ea3113f48555d252ce712ed",
+          "url": "https://github.com/wado-lang/wado/commit/8488e1c2b98323c7e6675a4c3bd743b8a5be9428"
+        },
+        "date": 1793892622555,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
