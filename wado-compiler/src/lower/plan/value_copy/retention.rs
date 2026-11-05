@@ -1038,8 +1038,21 @@ impl RefCarrying<'_> {
         types.into_iter().any(|t| self.walk(t, walk))
     }
 
+    /// The types of the fields of the struct `type_id` instantiates, whichever
+    /// spelling it is, where the plan phase sees its declaration.
+    fn declared_fields(&self, type_id: TypeId) -> Option<Vec<TypeId>> {
+        let (def, type_args) = self.type_table.settled_struct_parts(type_id)?;
+        self.structs
+            .iter()
+            .find(|s| s.def == def && s.type_args == type_args)
+            .map(|s| s.fields.iter().map(|f| f.type_id).collect())
+    }
+
     fn members(&self, type_id: TypeId, walk: &mut Walk) -> bool {
-        match self.type_table.settled(type_id) {
+        if let Some(fields) = self.declared_fields(type_id) {
+            return self.any(fields, walk);
+        }
+        match self.type_table.get(type_id) {
             ResolvedType::Ref(_) | ResolvedType::MutRef(_) => true,
             // What a type parameter stands for is not known here.
             ResolvedType::TypeParam { .. }
@@ -1053,20 +1066,9 @@ impl RefCarrying<'_> {
                 let base = *base_type;
                 self.walk(base, walk)
             }
-            ResolvedType::Struct { def, type_args } => {
-                let (def, type_args) = (*def, type_args.clone());
-                let fields = self
-                    .structs
-                    .iter()
-                    .find(|s| s.def == def && s.type_args == type_args)
-                    .map(|s| s.fields.iter().map(|f| f.type_id).collect::<Vec<_>>());
-                match fields {
-                    Some(fields) => self.any(fields, walk),
-                    // A declaration the plan phase cannot see is read as
-                    // holding one, which only widens the carrier set.
-                    None => true,
-                }
-            }
+            // A declaration the plan phase cannot see is read as holding one,
+            // which only widens the carrier set.
+            ResolvedType::Struct { .. } => true,
             ResolvedType::GenericInstance { def, .. } if self.type_table.is_resource_def(*def) => {
                 false
             }

@@ -253,16 +253,17 @@ impl<'a> StorageReach<'a> {
         if let Some(element) = tt.list_element(ty) {
             return Members::Held(vec![element]);
         }
-        match tt.settled(ty) {
+        // A `List`'s instance has no declaration, and its element is read above.
+        if let Some((def, type_args)) = tt.settled_struct_parts(ty)
+            && let Some(fields) = self.fields.get(&(def, type_args.to_vec()))
+        {
+            return Members::Held(fields.iter().map(|f| f.type_id).collect());
+        }
+        match tt.get(ty) {
             ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => Members::Reference(*inner),
             ResolvedType::BuiltinArray(inner) => Members::Held(vec![*inner]),
             ResolvedType::Newtype { base_type, .. } => Members::Held(vec![*base_type]),
-            ResolvedType::Struct { def, type_args } => {
-                match self.fields.get(&(*def, type_args.clone())) {
-                    Some(fields) => Members::Held(fields.iter().map(|f| f.type_id).collect()),
-                    None => Members::Unknown,
-                }
-            }
+            ResolvedType::Struct { .. } => Members::Unknown,
             ResolvedType::GenericInstance { def, .. } if tt.is_resource_def(*def) => {
                 Members::Held(Vec::new())
             }
