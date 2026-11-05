@@ -1008,11 +1008,19 @@ struct BodyScan {
     cold_callees: IndexSet<FuncId>,
     /// The callees called from at least one site outside every loop.
     unlooped_callees: IndexSet<FuncId>,
-    /// The callees called from at least one site no cold marker covers, by the
-    /// heat the profile set on that site.
-    callees_at: ByHeat<IndexSet<FuncId>>,
+    /// Where each callee's sites no cold marker covers sit, by the heat the
+    /// profile set on the site.
+    warm_sites: IndexMap<FuncId, ByHeat<Spots>>,
     /// Whether the body holds a `loop`.
     loopy: bool,
+}
+
+/// Whether one callee has sites of one heat inside a loop of the body, and
+/// outside every loop.
+#[derive(Clone, Copy, Default, PartialEq, Eq, Debug)]
+struct Spots {
+    in_loop: bool,
+    outside_loops: bool,
 }
 
 /// The [`BodyScan`]s, and what the last sweep read about each function, kept
@@ -1121,7 +1129,12 @@ fn scan_body(func: &NirFunction, markers: MarkerBuiltins, heat_map: &HeatMap) ->
                 } else {
                     scan.hot_callees.insert(*func_id);
                     let heat = call_heat(heat_map, &body.exprs[e]).plain_where(unlikely.contains(&e));
-                    scan.callees_at.at_mut(heat).insert(*func_id);
+                    let spots = scan.warm_sites.entry(*func_id).or_default().at_mut(heat);
+                    if looped.contains(&e) {
+                        spots.in_loop = true;
+                    } else {
+                        spots.outside_loops = true;
+                    }
                 }
                 if !looped.contains(&e) {
                     scan.unlooped_callees.insert(*func_id);
@@ -1597,6 +1610,19 @@ enum ColdBy {
     Run(Span),
     /// Every path into the function passes a cold run.
     Callers,
+}
+
+impl Reach {
+    /// Whether a site of `spots` admits a callee of this reach, as far as its
+    /// loop depth decides.
+    fn covers(self, spots: Spots) -> bool {
+        match self {
+            Reach::Everywhere | Reach::Sole => spots.in_loop || spots.outside_loops,
+            Reach::SoleOutsideLoops => spots.outside_loops,
+            Reach::Loops => spots.in_loop,
+            Reach::Nowhere => false,
+        }
+    }
 }
 
 impl Site {
@@ -2155,6 +2181,65 @@ fn called_cold(scans: &[BodyScan], live: &[bool], cold: &[bool]) -> Vec<bool> {
     called
 }
 
+/// The candidates some site this round visits may admit, read off the sites'
+/// shapes: a warm site whose loop depth and heat the candidate's [`Reach`]
+/// covers, and a cold site taking an `#[inline(always)]` or shrinking callee.
+/// A refusal that turns on the splice under way (a copied site, glue, a spent
+/// re-scan, a call left to the engine) is read as admitting, so a doubt leaves
+/// the candidate where its hot sites wait for it.
+fn movable(
+    scans: &[BodyScan],
+    visited: impl Fn(usize) -> bool,
+    cold_functions: &[bool],
+    looped: &[bool],
+    candidates: &IndexMap<FuncId, NirFunction>,
+    reach: &IndexMap<FuncId, ByHeat<Reach>>,
+    shrinking: &IndexSet<FuncId>,
+) -> IndexSet<FuncId> {
+    let takes_cold = |callee: &FuncId| {
+        candidates.get(callee).is_some_and(|f| {
+            shrinking.contains(callee) || f.inline_hint == InlineHint::Always
+        })
+    };
+    let mut movable = IndexSet::default();
+    for (caller, scan) in scans.iter().enumerate() {
+        if !visited(caller) {
+            continue;
+        }
+        if cold_functions[caller] {
+            movable.extend(scan.calls.iter().map(|(callee, _)| *callee).filter(takes_cold));
+            continue;
+        }
+        movable.extend(scan.cold_callees.iter().copied().filter(takes_cold));
+        for (callee, at) in &scan.warm_sites {
+            let Some(reach) = reach.get(callee) else {
+                continue;
+            };
+            // A caller only loops reach is a loop around every site in it.
+            let placed = |spots: Spots| {
+                if looped[caller] {
+                    Spots {
+                        in_loop: spots.in_loop || spots.outside_loops,
+                        outside_loops: false,
+                    }
+                } else {
+                    spots
+                }
+            };
+            // A hot site prices plain while its caller is a candidate itself.
+            let admits = |site: Heat, priced: Heat| reach.at(priced).covers(placed(*at.at(site)));
+            if admits(Heat::Cold, Heat::Cold)
+                || admits(Heat::Plain, Heat::Plain)
+                || admits(Heat::Hot, Heat::Hot)
+                || admits(Heat::Hot, Heat::Plain)
+            {
+                movable.insert(*callee);
+            }
+        }
+    }
+    movable
+}
+
 /// A callee the heuristic admitted, priced for the budget.
 struct Candidate {
     id: FuncId,
@@ -2526,9 +2611,11 @@ fn inline_round(
     let mut called_at = vec![ByHeat::<bool>::default(); scans.len()];
     for (caller, scan) in scans.iter().enumerate() {
         if live[caller] && !cold_functions[caller] {
-            for heat in [Heat::Cold, Heat::Hot] {
-                for callee in scan.callees_at.at(heat) {
-                    *called_at[callee.index()].at_mut(heat) = true;
+            for (callee, spots) in &scan.warm_sites {
+                for heat in [Heat::Cold, Heat::Hot] {
+                    if *spots.at(heat) != Spots::default() {
+                        *called_at[callee.index()].at_mut(heat) = true;
+                    }
                 }
             }
         }
@@ -2855,6 +2942,15 @@ fn inline_round(
     let carried = carried_calls(&inline_candidates);
     let functions = &project.functions;
     let held = &holds.held;
+    let movable = movable(
+        scans,
+        |caller| live[caller] && !held.contains(&FuncId::new(caller)),
+        &cold_functions,
+        &looped,
+        &inline_candidates,
+        &reach,
+        &shrinking,
+    );
     let fold_pending = !holds.released;
     let deferrals: Mutex<Vec<(FuncId, bool)>> = Mutex::new(Vec::new());
     let site_decisions: Mutex<Vec<(FuncId, Vec<SiteEntry>)>> = Mutex::new(Vec::new());
@@ -2921,7 +3017,7 @@ fn inline_round(
             loop_calls: Vec::new(),
             original_exprs: func.body.as_ref().expect("checked above").exprs.len(),
             glue,
-            candidate: inline_candidates.contains_key(&fid),
+            movable: movable.contains(&fid),
             deferred: false,
             decisions: logging.map(|log| Decisions {
                 log,
@@ -3081,10 +3177,11 @@ struct CallerFrame<'f> {
     /// whose body `container_sroa` and `const_object_globalization` skip: a
     /// callee moved into one goes without the cleanup it gets where it stands.
     glue: bool,
-    /// The caller may itself be spliced this round. A hot price inside it would
-    /// grow it past what its own sites admit, trading the outer call for the
-    /// inner one, so its hot sites wait until it has moved into its callers.
-    candidate: bool,
+    /// The caller may itself be spliced this round: see [`movable`]. A hot
+    /// price inside it would grow it past what its own sites admit, trading the
+    /// outer call for the inner one, so its hot sites wait until it has moved
+    /// into its callers.
+    movable: bool,
     /// A call was left to the compile-time engine this visit.
     deferred: bool,
     /// What the visit decides at each site, where the package keeps a log.
@@ -3668,7 +3765,7 @@ fn try_inline_call_expr(
     // candidate up directly (no `(module, name)` resolution).
     let candidate = candidates.bodies.get(&func_id)?;
     let landing = call_heat(candidates.heat_map, &caller.exprs[call_id]);
-    let heat = landing.plain_where(!site.heats() || frame.candidate);
+    let heat = landing.plain_where(!site.heats() || frame.movable);
     let reach = *candidates.reach[&func_id].at(heat);
     let sole_site = |frame: &CallerFrame<'_>| {
         if frame.glue {
