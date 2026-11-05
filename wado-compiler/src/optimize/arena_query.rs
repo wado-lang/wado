@@ -746,19 +746,24 @@ impl RunScan<'_> {
                 self.branches(scrutinee, arms.iter().copied(), Some(*default))
             }
             ExprKind::LabeledBlock { block, .. } => self.block(*block),
-            // A guard runs only when the arms before it fail to match, and an
-            // arm's body only when its own pattern and guard pass; the match is
-            // exhaustive, so every path enters one body.
+            // A guard runs only when the arms before it fail to match and its
+            // own pattern matches, so the first arm's runs on every path when
+            // that pattern is a catch-all. An arm's body runs only when its
+            // pattern and guard pass; the match is exhaustive, so every path
+            // enters one body.
             ExprKind::Match { expr, arms } => {
-                let scrutinee = self.operand(*expr);
+                let mut head = vec![expr.as_expr()];
                 let mut every_arm = true;
-                for arm in arms {
-                    if let Some(guard) = arm.guard {
-                        self.operand(guard);
+                for (i, arm) in arms.iter().enumerate() {
+                    let guard = arm.guard.and_then(Operand::as_expr);
+                    if i == 0 && body.pattern_is_catch_all(arm.pattern) {
+                        head.push(guard);
+                    } else if let Some(guard) = guard {
+                        self.expr(guard);
                     }
                     every_arm &= self.operand(arm.body);
                 }
-                scrutinee || every_arm
+                self.in_order(head.into_iter().flatten().collect()) || every_arm
             }
             ExprKind::Dead
             | ExprKind::PackedArray(_)

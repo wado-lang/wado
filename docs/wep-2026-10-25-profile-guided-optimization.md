@@ -495,9 +495,6 @@ output at every level. It is a nightly campaign, not a gate.
 - [ ] A region is measured once for all of a generic function's
   instantiations, so an instantiation the workload never ran shares the counts
   of one it ran.
-- [ ] A NIR `match` is read as if every arm's guard ran only on some paths. The
-  first arm's guard runs on every path through the `match`, so a marker under
-  it covers the `match` but is not read that way.
 - [ ] On the `benchmark/` pilot the profile is mixed. Against `-f no-pgo` it buys
   up to 19% of fuel on the serde rows. But `microgpt`'s inference runs 46%
   longer by the wall clock for 4% more fuel: with a 2 GiB heap the PGO build is

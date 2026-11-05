@@ -11,7 +11,7 @@ use crate::const_eval::{MAX_SEQ_ELEMENTS, Value, eval_binary, eval_cast, eval_un
 use crate::module_source::ModuleSource;
 use crate::nir::{NirBinaryOp, NirUnaryOp};
 use crate::nir_arena::{
-    ArmData, BlockId, Body, ExprId, ExprKind, Operand, PatId, PatKind, StmtKind,
+    ArmData, BlockId, Body, ExprId, ExprKind, Operand, PatId, StmtKind,
 };
 use crate::nir_value_graph::{ValueId, ValueKind, value_kind_to_const};
 use crate::primitive::PrimitiveType;
@@ -841,15 +841,7 @@ pub(super) fn is_provably_exhaustive(
     arms: impl IntoIterator<Item = (Option<Operand>, PatId)>,
 ) -> bool {
     arms.into_iter()
-        .any(|(guard, pattern)| guard.is_none() && pattern_is_catch_all(body, pattern))
-}
-
-pub(super) fn pattern_is_catch_all(body: &Body, pat: PatId) -> bool {
-    match &body.pats[pat].kind {
-        PatKind::Wildcard | PatKind::Binding { .. } => true,
-        PatKind::Or(alts) => alts.iter().any(|p| pattern_is_catch_all(body, *p)),
-        _ => false,
-    }
+        .any(|(guard, pattern)| guard.is_none() && body.pattern_is_catch_all(pattern))
 }
 
 /// What a short-circuit yields on its left operand alone: `false && _` and
