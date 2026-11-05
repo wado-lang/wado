@@ -417,7 +417,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Get struct name and module source from base type
         // The struct_module is where the struct is defined (and inherent methods live)
         let (struct_name, struct_module) = match self.tysys.type_table.borrow().get(base_type_id) {
-            ResolvedType::Struct { .. } | ResolvedType::GenericInstance { .. } => self
+            ResolvedType::Struct { .. }
+            | ResolvedType::GenericInstance { .. }
+            | ResolvedType::Tuple(_) => self
                 .tysys
                 .type_table
                 .borrow()
@@ -988,7 +990,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .get(method_impl_type_id)
             .clone()
         {
-            ResolvedType::GenericInstance { .. } | ResolvedType::BuiltinArray(_) => {
+            ResolvedType::GenericInstance { .. }
+            | ResolvedType::Tuple(_)
+            | ResolvedType::BuiltinArray(_) => {
                 let tt = self.tysys.type_table.borrow();
                 let type_args = tt
                     .nominal_type_args(method_impl_type_id)
@@ -1162,6 +1166,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     match self.tysys.type_table.borrow().get(base_id) {
                         ResolvedType::Struct { .. }
                         | ResolvedType::GenericInstance { .. }
+                        | ResolvedType::Tuple(_)
                         | ResolvedType::Enum { .. }
                         | ResolvedType::Variant { .. }
                         | ResolvedType::Newtype { .. }
@@ -2235,7 +2240,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             | ResolvedType::Resource { .. }
             | ResolvedType::Enum { .. }
             | ResolvedType::Variant { .. }
-            | ResolvedType::GenericInstance { .. } => {
+            | ResolvedType::GenericInstance { .. }
+            | ResolvedType::Tuple(_) => {
                 nominal_receiver(&self.tysys.type_table.borrow(), target_type_id)
             }
             ResolvedType::Primitive(prim) => primitive_receiver(prim),
@@ -2794,7 +2800,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return own;
         }
         match type_table.get(base) {
-            ResolvedType::GenericInstance { .. } => nominal_receiver(&type_table, base),
+            ResolvedType::GenericInstance { .. } | ResolvedType::Tuple(_) => {
+                nominal_receiver(&type_table, base)
+            }
             ResolvedType::Primitive(prim) => primitive_receiver(*prim),
             ResolvedType::Struct { .. } | ResolvedType::Newtype { .. } => {
                 let head = type_table.representation_head(base);

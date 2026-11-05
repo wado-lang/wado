@@ -309,12 +309,8 @@ impl<'a> HoldsHandle<'a> {
             ResolvedType::Variant { def } => guarded((Some(*def), Vec::new()), under_way, |u| {
                 self.cases(*def, None, u, next)
             }),
+            ResolvedType::Tuple(elems) => elems.iter().any(|&a| self.walk(a, env, under_way, next)),
             ResolvedType::GenericInstance { def, type_args } => {
-                if tt.is_tuple_def(*def) {
-                    return type_args
-                        .iter()
-                        .any(|&a| self.walk(a, env, under_way, next));
-                }
                 if tt.variant_template_cases(*def).is_none() {
                     return true;
                 }

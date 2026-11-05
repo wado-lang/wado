@@ -911,6 +911,7 @@ fn slot_shape(payload: TypeId, type_table: &TypeTable) -> Option<SlotShape> {
             Some(SlotShape::Direct(Pad::Int(payload)))
         }
         ResolvedType::Struct { .. }
+        | ResolvedType::Tuple(_)
         | ResolvedType::BuiltinArray(_)
         | ResolvedType::Variant { .. } => Some(SlotShape::Wrapped),
         ResolvedType::GenericInstance { .. } => {
@@ -950,6 +951,7 @@ fn is_gc_ref(type_id: TypeId, type_table: &TypeTable) -> bool {
         ResolvedType::Struct { .. }
         | ResolvedType::Variant { .. }
         | ResolvedType::GenericInstance { .. }
+        | ResolvedType::Tuple(_)
         | ResolvedType::BuiltinArray(_) => true,
         ResolvedType::Newtype { base_type, .. } => is_gc_ref(*base_type, type_table),
         ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => is_gc_ref(*inner, type_table),

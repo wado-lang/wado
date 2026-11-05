@@ -607,6 +607,7 @@ fn needs_value_copy(type_id: TypeId, type_table: &TypeTable) -> bool {
             type_table.get(type_id),
             ResolvedType::Struct { .. }
                 | ResolvedType::GenericInstance { .. }
+                | ResolvedType::Tuple(_)
                 | ResolvedType::Variant { .. }
                 | ResolvedType::BuiltinArray(_)
         )

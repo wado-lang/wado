@@ -342,6 +342,11 @@ impl ResourceScan<'_> {
                     self.collect(member, out, visited);
                 }
             }
+            ResolvedType::Tuple(elems) => {
+                for elem in elems {
+                    self.collect(*elem, out, visited);
+                }
+            }
             ResolvedType::Ref(t) | ResolvedType::MutRef(t) | ResolvedType::BuiltinArray(t) => {
                 self.collect(*t, out, visited);
             }

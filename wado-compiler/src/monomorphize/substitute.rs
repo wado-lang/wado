@@ -111,18 +111,26 @@ impl Monomorphizer {
             // Handle GenericInstance types that weren't in the direct substitution map
             // This can happen when function substitution creates new GenericInstance types
             // with different TypeIds for the type arguments
+            ResolvedType::Tuple(elems) => {
+                let new_elems: Vec<TypeId> = elems
+                    .iter()
+                    .map(|&id| self.rewrite_type_id(id, type_table))
+                    .collect();
+                if new_elems == elems {
+                    type_id
+                } else {
+                    type_table.make_tuple(new_elems)
+                }
+            }
             ResolvedType::GenericInstance { def, type_args } => {
-                let is_tuple = type_table.is_tuple_def(def);
-                // Lowered by codegen as they are, never as a monomorphized struct.
-                if is_tuple || type_table.is_list(type_id) {
+                // Lowered by codegen as it is, never as a monomorphized struct.
+                if type_table.is_list(type_id) {
                     let new_args: Vec<TypeId> = type_args
                         .iter()
                         .map(|&id| self.rewrite_type_id(id, type_table))
                         .collect();
                     return if new_args == type_args {
                         type_id
-                    } else if is_tuple {
-                        type_table.make_tuple(new_args)
                     } else {
                         type_table.make_generic_instance(def, new_args)
                     };
@@ -247,6 +255,63 @@ impl Monomorphizer {
                     base_type: new_base,
                 })
             }
+            // A pack among the elements splices what it stands for. The rest
+            // are substituted through `self.substitute_type`, so a nested
+            // `GenericInstance` still gets its monomorphized-struct rewrite.
+            ResolvedType::Tuple(elems) => {
+                let mut new_elems: Vec<TypeId> = Vec::new();
+                for &e in &elems {
+                    let ResolvedType::TypePack {
+                        index,
+                        name: pack_name,
+                        mapped_elem,
+                    } = type_table.get(e).clone()
+                    else {
+                        new_elems.push(self.substitute_type(e, substitution, type_table));
+                        continue;
+                    };
+                    // A splice position spells the whole pack, so inside a
+                    // variadic for-of body it reads the pack's own tuple rather
+                    // than the element the loop binds (see
+                    // `pack_splice_bindings`).
+                    let pack_type = self
+                        .pack_splice_bindings
+                        .borrow()
+                        .get(&index)
+                        .copied()
+                        .or_else(|| substitution.get(&index).copied())
+                        .unwrap_or_else(|| {
+                            panic!(
+                                "TypePack `..{pack_name}` (index {index}) not found in substitution map"
+                            )
+                        });
+                    match mapped_elem {
+                        // Mapped pack: substitute `elem` once per source
+                        // element with the pack param bound to it —
+                        // `[..Case<T, P>]` yields `Case<T, P_k>`, a
+                        // pack-independent `..F::method()` repeats `R`.
+                        Some(elem) => {
+                            let pack_elems = type_table.elem_types_or_self(pack_type);
+                            // The element binding must not reach a splice
+                            // position nested in `elem`: one still spells the
+                            // whole pack, so it reads the pack's tuple, not `pe`.
+                            let displaced = self.bind_pack_splice(index, pack_type);
+                            for pe in pack_elems {
+                                let mut elem_substitution = substitution.clone();
+                                elem_substitution.insert(index, pe);
+                                new_elems.push(self.substitute_type(
+                                    elem,
+                                    &elem_substitution,
+                                    type_table,
+                                ));
+                            }
+                            self.restore_pack_splice(index, displaced);
+                        }
+                        None => new_elems.extend(type_table.elem_types_or_self(pack_type)),
+                    }
+                }
+                type_table.make_tuple(new_elems)
+            }
             ResolvedType::GenericInstance { def, type_args } => {
                 if type_args.is_empty() {
                     if !substitution.is_empty() {
@@ -262,71 +327,6 @@ impl Monomorphizer {
                     return type_table
                         .find_struct_type(StructDef::Decl(def))
                         .unwrap_or(type_id);
-                }
-
-                // Tuples need TypePack expansion: splice pack elements
-                // into the type args. Non-pack args are substituted
-                // recursively through `self.substitute_type` so that
-                // nested `GenericInstance`s inside the tuple still get
-                // their monomorphized-struct rewrite.
-                if type_table.is_tuple_def(def) {
-                    let mut new_elems: Vec<TypeId> = Vec::new();
-                    for &e in &type_args {
-                        match type_table.get(e).clone() {
-                            ResolvedType::TypePack {
-                                index,
-                                name: pack_name,
-                                mapped_elem,
-                            } => {
-                                // A splice position spells the whole pack, so
-                                // inside a variadic for-of body it reads the
-                                // pack's own tuple rather than the element the
-                                // loop binds (see `pack_splice_bindings`).
-                                let pack_type = self
-                                    .pack_splice_bindings
-                                    .borrow()
-                                    .get(&index)
-                                    .copied()
-                                    .or_else(|| substitution.get(&index).copied())
-                                    .unwrap_or_else(|| {
-                                        panic!(
-                                            "TypePack `..{pack_name}` (index {index}) not found in substitution map"
-                                        )
-                                    });
-                                match mapped_elem {
-                                    // Mapped pack: substitute `elem` once per source
-                                    // element with the pack param bound to it —
-                                    // `[..Case<T, P>]` yields `Case<T, P_k>`, a
-                                    // pack-independent `..F::method()` repeats `R`.
-                                    Some(elem) => {
-                                        let pack_elems = type_table.elem_types_or_self(pack_type);
-                                        // The element binding must not reach a
-                                        // splice position nested in `elem`: one
-                                        // still spells the whole pack, so it
-                                        // reads the pack's tuple, not `pe`.
-                                        let displaced = self.bind_pack_splice(index, pack_type);
-                                        for pe in pack_elems {
-                                            let mut elem_substitution = substitution.clone();
-                                            elem_substitution.insert(index, pe);
-                                            new_elems.push(self.substitute_type(
-                                                elem,
-                                                &elem_substitution,
-                                                type_table,
-                                            ));
-                                        }
-                                        self.restore_pack_splice(index, displaced);
-                                    }
-                                    None => {
-                                        new_elems.extend(type_table.elem_types_or_self(pack_type));
-                                    }
-                                }
-                            }
-                            _ => {
-                                new_elems.push(self.substitute_type(e, substitution, type_table));
-                            }
-                        }
-                    }
-                    return type_table.make_tuple(new_elems);
                 }
 
                 // Recursively substitute nested type args so inner

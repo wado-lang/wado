@@ -243,31 +243,36 @@ impl SubstitutionContext {
                 let new_inner = self.substitute(inner, type_table);
                 type_table.make_mut_ref(new_inner)
             }
-            ResolvedType::GenericInstance { def, type_args } => {
-                let splices_packs = type_table.is_tuple_def(def);
-                let mut new_args: Vec<TypeId> = Vec::new();
-                for &arg in &type_args {
+            ResolvedType::Tuple(elems) => {
+                let mut new_elems: Vec<TypeId> = Vec::new();
+                for &elem in &elems {
                     // A pack in a tuple stands for the elements it took, not
                     // for the tuple holding them: `[..T]` with `T = [i32,
                     // bool]` is `[i32, bool]`, never `[[i32, bool]]`.
-                    let is_plain_pack = splices_packs
-                        && matches!(
-                            type_table.get(arg),
-                            ResolvedType::TypePack {
-                                mapped_elem: None,
-                                ..
-                            }
-                        );
-                    let substituted = self.substitute(arg, type_table);
+                    let is_plain_pack = matches!(
+                        type_table.get(elem),
+                        ResolvedType::TypePack {
+                            mapped_elem: None,
+                            ..
+                        }
+                    );
+                    let substituted = self.substitute(elem, type_table);
                     if is_plain_pack
-                        && substituted != arg
+                        && substituted != elem
                         && let Some(elements) = type_table.as_tuple(substituted)
                     {
-                        new_args.extend(elements);
+                        new_elems.extend(elements);
                         continue;
                     }
-                    new_args.push(substituted);
+                    new_elems.push(substituted);
                 }
+                type_table.make_tuple(new_elems)
+            }
+            ResolvedType::GenericInstance { def, type_args } => {
+                let new_args: Vec<TypeId> = type_args
+                    .iter()
+                    .map(|&arg| self.substitute(arg, type_table))
+                    .collect();
                 type_table.make_generic_instance(def, new_args)
             }
             ResolvedType::Function {
@@ -761,6 +766,9 @@ pub enum ResolvedType {
         /// The declaration's spelling, for messages.
         name: String,
     },
+    /// A tuple, `[i32, String]`: the elements, among which a
+    /// [`ResolvedType::TypePack`] stands for the run it expands to.
+    Tuple(Vec<TypeId>),
     /// An application of a generic declaration (`Box<i32>`, `Option<T>`,
     /// `Stream<u8>`). A struct's or a variant's is replaced by its
     /// monomorphized `Struct` / `Variant`; a resource's is the handle type

@@ -487,14 +487,12 @@ fn needs_copy_walked(
         // the underlying cell.
         ResolvedType::Struct { .. } => !is_box,
         ResolvedType::GenericInstance { def, .. } if type_table.is_resource_def(*def) => false,
+        // Empty tuples are unit-shaped; non-empty tuples need element-wise
+        // deep copy.
+        ResolvedType::Tuple(elems) => !elems.is_empty(),
         ResolvedType::GenericInstance { def, type_args } => {
             if is_box {
                 return false;
-            }
-            if type_table.is_tuple_def(*def) {
-                // Empty tuples are unit-shaped; non-empty tuples need
-                // element-wise deep copy.
-                return !type_args.is_empty();
             }
             if type_table.is_list(type_id) {
                 return true;

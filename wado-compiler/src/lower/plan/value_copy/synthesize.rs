@@ -377,15 +377,28 @@ fn build_copy_return_expr(
     type_table: &Rc<RefCell<TypeTable>>,
     span: Span,
 ) -> Option<TirExpr> {
+    let mangled = || {
+        type_table
+            .borrow()
+            .struct_list_name(type_id)
+            .expect("struct-shaped type has a stored struct name")
+    };
     let (def, type_args) = match resolved {
         ResolvedType::Struct { def, type_args } => (*def, type_args),
         ResolvedType::GenericInstance { def, type_args } => (StructDef::Decl(*def), type_args),
+        ResolvedType::Tuple(elems) => {
+            return Some(build_tuple_copy(
+                type_id,
+                &mangled(),
+                elems,
+                v_local,
+                type_table,
+                span,
+            ));
+        }
         _ => return None,
     };
-    let mangled = type_table
-        .borrow()
-        .struct_list_name(type_id)
-        .expect("struct-shaped type has a stored struct name");
+    let mangled = mangled();
     let listed = project.listed_struct(&type_table.borrow(), def, type_args);
     if let Some(struct_def) = listed {
         let right_size_backing = type_table.borrow().is_seq_container(type_id);
@@ -400,7 +413,7 @@ fn build_copy_return_expr(
         ));
     }
     // An unlisted instance lowers to `AbstractRef(Struct)`, which WIR-build
-    // rejects in a `StructLiteral`; only `List<T>` and tuples copy without one.
+    // rejects in a `StructLiteral`; only `List<T>` copies without one.
     if matches!(resolved, ResolvedType::GenericInstance { .. })
         && type_table.borrow().is_list(type_id)
         && type_args.len() == 1
@@ -413,11 +426,6 @@ fn build_copy_return_expr(
             v_local,
             type_table,
             span,
-        ));
-    }
-    if type_table.borrow().is_tuple(type_id) {
-        return Some(build_tuple_copy(
-            type_id, &mangled, type_args, v_local, type_table, span,
         ));
     }
     None
@@ -453,8 +461,7 @@ fn is_synth_safe_element(
         ResolvedType::GenericInstance { def, type_args } => {
             let tt = type_table.borrow();
             // Any other instance needs a monomorphized struct for WIR to point at.
-            tt.is_tuple(elem_type)
-                || tt.is_list(elem_type)
+            tt.is_list(elem_type)
                 || tt.is_compiler_struct_instance(elem_type, CompilerItem::Box)
                 || project.variants.iter().any(|v| v.def == def)
                 || project

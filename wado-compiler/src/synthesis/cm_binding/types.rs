@@ -449,19 +449,6 @@ fn check_cm_boundary_representable_inner(
         if let Some(elem) = type_table.as_list(type_id) {
             return recurse(elem, Slot::Value, visited);
         }
-        if let Some(elems) = type_table.as_tuple(type_id) {
-            if elems.is_empty() {
-                return Err(
-                    "the empty tuple `[]` has no Component Model representation — a `tuple` \
-                     carries at least one type, and `()` is the type that carries none"
-                        .to_string(),
-                );
-            }
-            for e in elems {
-                recurse(e, Slot::Value, visited)?;
-            }
-            return Ok(());
-        }
         // Exhaustive over `ResolvedType` on purpose — no wildcard. A wildcard
         // would silently classify an unhandled (or future) variant as
         // representable and let it fall through to the i32 lowering, which is
@@ -499,6 +486,17 @@ fn check_cm_boundary_representable_inner(
             | ResolvedType::Enum { .. }
             | ResolvedType::Flags { .. }
             | ResolvedType::Resource { .. } => Ok(()),
+            ResolvedType::Tuple(elems) if elems.is_empty() => Err(
+                "the empty tuple `[]` has no Component Model representation — a `tuple` \
+                 carries at least one type, and `()` is the type that carries none"
+                    .to_string(),
+            ),
+            ResolvedType::Tuple(elems) => {
+                for &e in &elems.clone() {
+                    recurse(e, Slot::Value, visited)?;
+                }
+                Ok(())
+            }
             // The handle is an i32, but its payload is lifted and lowered by
             // value, so it must be classifiable too — `()` is representable
             // yet has no payload type.
@@ -961,13 +959,12 @@ fn flat_types_from_type_id_inner(
                 out.push(cm_abi::CmValType::I32);
             }
         }
-        ResolvedType::GenericInstance { def, type_args } => {
-            if type_table.is_tuple_def(*def) {
-                for &elem in type_args {
-                    flat_types_from_type_id_inner(elem, out, tir_modules, type_table, names);
-                }
-                return;
+        ResolvedType::Tuple(elems) => {
+            for &elem in elems {
+                flat_types_from_type_id_inner(elem, out, tir_modules, type_table, names);
             }
+        }
+        ResolvedType::GenericInstance { def, type_args } => {
             match (type_table.compiler_type_item(*def), type_args.as_slice()) {
                 (Some(CompilerItem::Option), [inner]) => {
                     out.push(cm_abi::CmValType::I32); // discriminant
@@ -1237,12 +1234,7 @@ pub(super) fn type_id_to_ast_type(
                 .expect("a type crossing the boundary is declared"),
             Vec::new(),
         ),
-        // The tuple family is a `GenericInstance`, but its CM surface is a
-        // structural tuple — emit `Type::Tuple` so lift/lower dispatch on the
-        // tuple arm rather than the generic catch-all.
-        ResolvedType::GenericInstance { def, type_args } if type_table.is_tuple_def(*def) => {
-            Type::Tuple(type_args.iter().map(to_ast).collect())
-        }
+        ResolvedType::Tuple(elems) => Type::Tuple(elems.iter().map(to_ast).collect()),
         ResolvedType::GenericInstance { def, type_args } => {
             declared(*def, type_args.iter().map(to_ast).collect())
         }
@@ -1280,7 +1272,7 @@ pub(super) fn param_needs_lifting(type_id: TypeId, tt: &TypeTable) -> bool {
         // the base type rather than treating the newtype itself as
         // opaque.
         ResolvedType::Newtype { base_type, .. } => param_needs_lifting(*base_type, tt),
-        // Everything else (Struct, Variant, tuples via GenericInstance,
+        // Everything else (Struct, Variant, tuples,
         // `List<T>`, `Option<T>`, `Result<T, E>`, references, etc.)
         // either widens or splits at the flat ABI.
         _ => true,

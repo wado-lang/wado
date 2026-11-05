@@ -830,6 +830,7 @@ pub(super) fn synthesize_lift_from_flat_params(
                 | ResolvedType::Resource { .. }
                 | ResolvedType::Newtype { .. }
                 | ResolvedType::GenericInstance { .. }
+                | ResolvedType::Tuple(_)
                 | ResolvedType::Ref(_)
                 | ResolvedType::MutRef(_)
                 | ResolvedType::Function { .. }

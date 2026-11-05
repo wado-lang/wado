@@ -324,11 +324,15 @@ impl TypeSystem {
     fn binop_operand_requires_trait(&self, type_id: TypeId) -> bool {
         let tt = self.type_table.borrow();
         match tt.get(type_id) {
-            ResolvedType::Struct { .. } | ResolvedType::GenericInstance { .. } => true,
+            ResolvedType::Struct { .. }
+            | ResolvedType::GenericInstance { .. }
+            | ResolvedType::Tuple(_) => true,
             ResolvedType::Newtype { base_type, .. } => {
                 let ultimate = tt.representation_head(*base_type);
                 match tt.get(ultimate) {
-                    ResolvedType::Struct { .. } | ResolvedType::GenericInstance { .. } => true,
+                    ResolvedType::Struct { .. }
+                    | ResolvedType::GenericInstance { .. }
+                    | ResolvedType::Tuple(_) => true,
                     // SIMD aliases (`type f32x4 = v128`) and half aliases —
                     // see the `Primitive` arm below.
                     ResolvedType::Primitive(p) => *p == PrimitiveType::V128 || p.is_half(),
@@ -482,6 +486,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let struct_name = match &left_type {
                 ResolvedType::Struct { .. }
                 | ResolvedType::GenericInstance { .. }
+                | ResolvedType::Tuple(_)
                 | ResolvedType::Variant { .. }
                 // `fq_base_type_name` spells a raw GC array `Array` and the
                 // unit type `()`, the names their `Eq` / `Ord` impls attach to.
@@ -516,6 +521,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     match tt.get(ultimate) {
                         ResolvedType::Struct { .. }
                         | ResolvedType::GenericInstance { .. }
+                        | ResolvedType::Tuple(_)
                         | ResolvedType::Variant { .. } => {
                             Some(tt.fq_base_type_name(ultimate).into_string())
                         }
@@ -1384,6 +1390,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         match tt.get(base_type_id) {
             ResolvedType::Struct { .. }
             | ResolvedType::GenericInstance { .. }
+            | ResolvedType::Tuple(_)
             | ResolvedType::Newtype { .. }
             | ResolvedType::Flags { .. } => Some(tt.base_type_name(base_type_id)),
             // `arr[i]` dispatches through `impl … for Array<T>`, keyed by the

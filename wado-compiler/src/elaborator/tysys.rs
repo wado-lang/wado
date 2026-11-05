@@ -27,7 +27,7 @@ use crate::ast::{AstId, GenericParam};
 use crate::defs::DefId;
 use crate::elaborator::sig;
 use crate::elaborator::solver_bridge::SolverBridge;
-use crate::name::{ARRAY_TYPE_NAME, FqTypeName};
+use crate::name::{ARRAY_TYPE_NAME, FqTypeName, TUPLE_TYPE_NAME};
 use crate::resolve::Resolutions;
 use crate::semantics::{Destination, Operand};
 
@@ -287,6 +287,7 @@ impl TypeSystem {
             }
             ResolvedType::BuiltinArray(inner) => (vec![inner], Vec::new()),
             ResolvedType::Newtype { base_type, .. } => (vec![base_type], Vec::new()),
+            ResolvedType::Tuple(elems) => (elems, Vec::new()),
             ResolvedType::Struct { type_args, .. }
             | ResolvedType::GenericInstance { type_args, .. } => {
                 let mut members = self.struct_field_type_ids_of(type_id).unwrap_or_default();
@@ -358,6 +359,7 @@ impl TypeSystem {
             | ResolvedType::Error => return false,
             ResolvedType::Ref(inner) | ResolvedType::BuiltinArray(inner) => vec![inner],
             ResolvedType::Newtype { base_type, .. } => vec![base_type],
+            ResolvedType::Tuple(elems) => elems,
             ResolvedType::Struct { type_args, .. }
             | ResolvedType::GenericInstance { type_args, .. } => {
                 let mut reached = type_args;
@@ -490,6 +492,7 @@ impl TypeSystem {
         match self.type_table.borrow().get(type_id) {
             ResolvedType::Struct { .. }
             | ResolvedType::GenericInstance { .. }
+            | ResolvedType::Tuple(_)
             | ResolvedType::Newtype { .. }
             | ResolvedType::Flags { .. } => self
                 .type_table
@@ -569,6 +572,7 @@ impl TypeSystem {
                     ResolvedType::Newtype { .. }
                         | ResolvedType::Struct { .. }
                         | ResolvedType::GenericInstance { .. }
+                        | ResolvedType::Tuple(_)
                         | ResolvedType::Variant { .. }
                 )
         })
@@ -592,6 +596,7 @@ impl TypeSystem {
             table.get(ty),
             ResolvedType::Struct { .. }
                 | ResolvedType::GenericInstance { .. }
+                | ResolvedType::Tuple(_)
                 | ResolvedType::Newtype { .. }
                 | ResolvedType::Flags { .. }
         )
@@ -645,6 +650,7 @@ impl TypeSystem {
                 ResolvedType::GenericInstance { def, .. } => {
                     return self.type_table.borrow().decl_name(def).to_string();
                 }
+                ResolvedType::Tuple(_) => return TUPLE_TYPE_NAME.to_string(),
                 ResolvedType::Newtype { base_type, .. } => current = base_type,
                 ResolvedType::Flags { .. } => return TypeTable::FLAGS_BASE_NAME.to_string(),
                 // The raw GC array's base method-owner name is "Array"
@@ -670,6 +676,7 @@ impl TypeSystem {
                 | ResolvedType::Enum { .. }
                 | ResolvedType::Flags { .. }
                 | ResolvedType::GenericInstance { .. }
+                | ResolvedType::Tuple(_)
         )
     }
 
@@ -739,6 +746,18 @@ impl TypeSystem {
                     self.type_table
                         .borrow_mut()
                         .intern(ResolvedType::MutRef(new_inner))
+                }
+            }
+
+            ResolvedType::Tuple(elems) => {
+                let new_elems: Vec<TypeId> = elems
+                    .iter()
+                    .map(|&elem| self.substitute_in_type(elem, replace))
+                    .collect();
+                if new_elems == elems {
+                    type_id
+                } else {
+                    self.type_table.borrow_mut().make_tuple(new_elems)
                 }
             }
 
@@ -933,6 +952,7 @@ fn constituents(table: &TypeTable, ty: TypeId) -> (Option<DefId>, Vec<TypeId>) {
         }
         | ResolvedType::Newtype { def, type_args, .. } => (Some(*def), type_args.clone()),
         ResolvedType::GenericInstance { def, type_args } => (Some(*def), type_args.clone()),
+        ResolvedType::Tuple(elems) => (None, elems.clone()),
         ResolvedType::Ref(inner)
         | ResolvedType::MutRef(inner)
         | ResolvedType::BuiltinArray(inner) => (None, vec![*inner]),

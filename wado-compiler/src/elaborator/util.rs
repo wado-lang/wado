@@ -896,7 +896,9 @@ pub(super) fn settles_literal_patterns(type_table: &TypeTable, scrutinee: TypeId
         | ResolvedType::Variant { .. }
         | ResolvedType::Flags { .. }
         | ResolvedType::Unit => true,
-        ResolvedType::GenericInstance { .. } => type_table.is_concrete(head),
+        ResolvedType::GenericInstance { .. } | ResolvedType::Tuple(_) => {
+            type_table.is_concrete(head)
+        }
         _ => false,
     }
 }

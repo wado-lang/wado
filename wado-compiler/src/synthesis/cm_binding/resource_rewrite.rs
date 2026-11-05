@@ -364,15 +364,19 @@ fn synthesize_stream_writes(sites: &BindingSites<'_>) -> Vec<Rc<RefCell<TirFunct
 /// own, so its base's, at every level.
 fn payload_ast_type(payload: TypeId, tt: &TypeTable, registry: &CmInterfaceRegistry) -> ast::Type {
     let id = peel_newtypes(tt, payload);
-    if let ResolvedType::GenericInstance { def, type_args } = tt.get(id) {
-        let name = tt.decl_name(*def).to_string();
-        let args: Vec<ast::Type> = type_args
+    let args_of = |type_args: &[TypeId]| -> Vec<ast::Type> {
+        type_args
             .iter()
             .map(|&a| payload_ast_type(a, tt, registry))
-            .collect();
-        return if tt.is_tuple_def(*def) {
-            ast::Type::Tuple(args)
-        } else if let Some(item) = cm_item_of_type(tt, id) {
+            .collect()
+    };
+    if let ResolvedType::Tuple(elems) = tt.get(id) {
+        return ast::Type::Tuple(args_of(elems));
+    }
+    if let ResolvedType::GenericInstance { def, type_args } = tt.get(id) {
+        let name = tt.decl_name(*def).to_string();
+        let args = args_of(type_args);
+        return if let Some(item) = cm_item_of_type(tt, id) {
             registry.type_decls().item_type(item, args, synth_span())
         } else {
             ast::Type::Generic(GenericType {

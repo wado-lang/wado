@@ -1070,6 +1070,10 @@ impl RefCarrying<'_> {
             ResolvedType::GenericInstance { def, .. } if self.type_table.is_resource_def(*def) => {
                 false
             }
+            ResolvedType::Tuple(elems) => {
+                let elems = elems.clone();
+                self.any(elems, walk)
+            }
             ResolvedType::GenericInstance { def, type_args } => {
                 let (def, type_args) = (*def, type_args.clone());
                 // A payload that is one of the template's parameters is the

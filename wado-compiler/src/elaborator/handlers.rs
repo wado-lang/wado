@@ -18,7 +18,7 @@ use crate::elaborator::sem::types::{HandlerBindingFacts, HandlerEffectEntry};
 use crate::elaborator::solver_bridge::{InstanceBody, InstanceImpl, InstanceOrder};
 use crate::elaborator::trait_env::ImplTargetKey;
 use crate::hashmap;
-use crate::name::{DeclName, DeclaredHead, FqTypeName};
+use crate::name::{DeclName, DeclaredHead, FqTypeName, TUPLE_TYPE_NAME};
 
 impl<H: CompilerHost> Elaborator<'_, H> {
     /// Annotate `with E1 => h1, ... do { body }`. Walks each handler
@@ -223,6 +223,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             | ResolvedType::Flags { .. }
             | ResolvedType::Resource { .. }
             | ResolvedType::GenericInstance { .. }
+            | ResolvedType::Tuple(_)
             | ResolvedType::Primitive(_) => {}
             // Anything else can't be the target of an `impl Effect for T`
             // block. These cases are reachable from user code — the most
@@ -417,6 +418,7 @@ impl TypeSystem {
             ResolvedType::GenericInstance { def, .. } => {
                 self.type_table.borrow().decl_name(*def).to_string()
             }
+            ResolvedType::Tuple(_) => TUPLE_TYPE_NAME.to_string(),
             _ => self.type_table.borrow().name(handler_type),
         }
     }

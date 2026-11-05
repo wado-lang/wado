@@ -2767,6 +2767,7 @@ impl Monomorphizer {
             matches!(
                 type_table.get(effective),
                 ResolvedType::GenericInstance { .. }
+                    | ResolvedType::Tuple(_)
                     | ResolvedType::BuiltinArray(_)
                     | ResolvedType::Struct { .. }
             )
@@ -2992,7 +2993,8 @@ impl Monomorphizer {
                     def,
                     type_args: args,
                 } if !args.is_empty() && !type_table.is_resource_def(*def)
-            ) || matches!(type_table.get(resolved), ResolvedType::BuiltinArray(_))
+            ) || matches!(type_table.get(resolved), ResolvedType::Tuple(elems) if !elems.is_empty())
+                || matches!(type_table.get(resolved), ResolvedType::BuiltinArray(_))
         };
         // A generic-instance receiver normally reaches a generic impl on its
         // own type, which the receiver scan instantiates. Reaching a blanket
@@ -4114,12 +4116,10 @@ fn try_lower_comparison(
                 vec![],
                 type_table.nominal_head(left.type_id).map(|(_, m)| m),
             ),
+            // Tuple Eq/Ord are provided by variadic impls in core:prelude/tuple.wado
+            // and already lowered to method calls by the elaborator.
+            ResolvedType::Tuple(_) => return None,
             ResolvedType::GenericInstance { def, type_args } => {
-                if type_table.is_tuple_def(*def) {
-                    // Tuple Eq/Ord are provided by variadic impls in core:prelude/tuple.wado
-                    // and already lowered to method calls by the elaborator.
-                    return None;
-                }
                 // Must match the struct-name form
                 // `method_instantiation_name_inner` writes into `MethodInfo`.
                 let args: Vec<FqTypeName> = type_args

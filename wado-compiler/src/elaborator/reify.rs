@@ -574,8 +574,7 @@ impl ownership::BodyFacts for ReifyFacts<'_, '_> {
             .ann_recorded_expression_type(base.id())
             .is_some_and(|ty| {
                 let tt = self.reify.tysys.type_table.borrow();
-                matches!(tt.get(tt.peel_refs(ty)), ResolvedType::GenericInstance { def, .. }
-                if tt.is_tuple_def(*def))
+                tt.is_tuple(tt.peel_refs(ty))
             })
     }
 
@@ -6391,12 +6390,7 @@ impl<'a> Reify<'a> {
                         mapped,
                         elem.span(),
                     ));
-                } else if let ResolvedType::GenericInstance {
-                    def,
-                    type_args: inner_elems,
-                } = spread_type
-                    && self.tysys.type_table.borrow().is_tuple_def(def)
-                {
+                } else if let ResolvedType::Tuple(inner_elems) = spread_type {
                     // Concrete tuple: expand inline via FieldAccess. Bind a
                     // non-trivial operand to a temporary for single evaluation.
                     let spread_ref = if matches!(spread_expr.kind, TirExprKind::Local { .. }) {
@@ -8147,23 +8141,20 @@ impl<'a> Reify<'a> {
         // spelling names — reaches its own.
         let (head, type_args): (Option<StructDef>, Vec<TypeId>) = match resolved {
             ResolvedType::Struct { def, .. } => (Some(def), vec![]),
-            ResolvedType::GenericInstance { type_args, .. } => {
-                // Tuple projection (`t.0`): a tuple has no struct decl, so the
-                // struct-fields lookup below misses and the `(0, …)` fallback
-                // would collapse every `t.N` onto field 0. Resolve the numeric
-                // field name into the element index directly.
-                let is_tuple = self.tysys.type_table.borrow().is_tuple(receiver_type);
-                if is_tuple
-                    && let Ok(index) = field_name.parse::<usize>()
-                    && let Ok(elem) = self.tysys.tuple_literal_index_type(&type_args, index)
+            // Tuple projection (`t.0`): a tuple has no struct decl, so the
+            // `(0, …)` fallback would collapse every `t.N` onto field 0.
+            ResolvedType::Tuple(elems) => {
+                if let Ok(index) = field_name.parse::<usize>()
+                    && let Ok(elem) = self.tysys.tuple_literal_index_type(&elems, index)
                 {
                     return (index as u32, field_name.to_string(), Some(elem));
                 }
-                (
-                    self.tysys.type_def(receiver_type).map(StructDef::Decl),
-                    type_args,
-                )
+                return (0, field_name.to_string(), None);
             }
+            ResolvedType::GenericInstance { type_args, .. } => (
+                self.tysys.type_def(receiver_type).map(StructDef::Decl),
+                type_args,
+            ),
             // Peel references and newtypes and recurse, mirroring the
             // elaborator's `lookup_field_type`: `&Point`, `&mut Point`, a
             // newtype `Location = Point`, and chained newtypes / `&Location`
@@ -9831,7 +9822,7 @@ impl TypeSystem {
             return None;
         }
         let recorded_is_concrete =
-            matches!(table.get(recorded), ResolvedType::GenericInstance { .. })
+            matches!(table.get(recorded), ResolvedType::GenericInstance { .. } | ResolvedType::Tuple(_))
                 && !table.contains_type_param(recorded);
         if recorded_is_concrete {
             return None;

@@ -539,8 +539,7 @@ const SHARE_NO_REPRESENTATION: &str =
 /// is only ever a newtype step, which shares a base.
 fn aggregate_cast_hint(tt: &TypeTable, source: TypeId, target: TypeId) -> Option<String> {
     // `i128` / `u128` are stored as structs but are scalars to `as`; the
-    // wide-int rules judge them. A tuple is a `GenericInstance` of a tuple
-    // head, so no arm of its own.
+    // wide-int rules judge them.
     let is_aggregate = |id| {
         !tt.is_wide_int(id)
             && !tt.is_resource_type(tt.representation_head(id))
@@ -548,6 +547,7 @@ fn aggregate_cast_hint(tt: &TypeTable, source: TypeId, target: TypeId) -> Option
                 tt.get(tt.representation_head(id)),
                 ResolvedType::Struct { .. }
                     | ResolvedType::GenericInstance { .. }
+                    | ResolvedType::Tuple(_)
                     | ResolvedType::Variant { .. }
             )
     };
@@ -1966,9 +1966,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             ResolvedType::Newtype { base_type, .. } => {
                 return self.lookup_field_type(base_type, field_name, span);
             }
+            ResolvedType::Tuple(elems) => {
+                if let Ok(index) = field_name.parse::<usize>() {
+                    match self.tysys.tuple_literal_index_type(&elems, index) {
+                        Ok(elem) => return (index as u32, elem),
+                        Err(message) => {
+                            let _ = self.emit(TypeError::InvalidLiteral { message, span });
+                            return (0, TypeTable::UNKNOWN);
+                        }
+                    }
+                }
+            }
             // Generic instance - look up field from generic struct definition
             // and substitute type parameters with concrete type args.
-            // Tuples use numeric field access (0, 1, 2, ...).
             ResolvedType::GenericInstance { type_args, .. } => {
                 let name = self
                     .tysys
@@ -1977,17 +1987,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .nominal_head(struct_type)
                     .expect("a generic instance names a declaration")
                     .0;
-                // Tuple field access (numeric field names: 0, 1, 2, ...)
-                let is_tuple = self.tysys.type_table.borrow().is_tuple(struct_type);
-                if is_tuple && let Ok(index) = field_name.parse::<usize>() {
-                    match self.tysys.tuple_literal_index_type(&type_args, index) {
-                        Ok(elem) => return (index as u32, elem),
-                        Err(message) => {
-                            let _ = self.emit(TypeError::InvalidLiteral { message, span });
-                            return (0, TypeTable::UNKNOWN);
-                        }
-                    }
-                }
                 // Clone fields to avoid borrow issues. The declaration the
                 // instance names answers first: a function-local generic
                 // struct's fields are keyed by its identity, and the spelling
@@ -2220,12 +2219,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let base_type = self.tysys.type_table.borrow().get(base_type_id).clone();
 
         // Handle tuple indexing: t[0] is equivalent to t.0
-        if let ResolvedType::GenericInstance {
-            def,
-            type_args: ref elements,
-        } = base_type
-            && self.tysys.type_table.borrow().is_tuple_def(def)
-        {
+        if let ResolvedType::Tuple(ref elements) = base_type {
             // Tuple indexing requires a constant integer index
             if let ast::Expr::Literal(ast::LiteralExpr {
                 value: ast::Literal::Number(repr),

@@ -1041,10 +1041,8 @@ impl<'a> DceWalker<'a> {
                 ));
                 self.analysis.callees.insert(method_id);
             }
-            ResolvedType::GenericInstance { def, type_args }
-                if self.type_table.is_tuple_def(def) =>
-            {
-                let elements: Vec<FqTypeName> = type_args
+            ResolvedType::Tuple(elems) => {
+                let elements: Vec<FqTypeName> = elems
                     .iter()
                     .map(|t| self.type_table.fq_type_name(*t))
                     .collect();
@@ -1730,7 +1728,7 @@ fn collect_type_dependencies(
             }
             collect_type_transitive(*return_type, type_table, reachable);
         }
-        ResolvedType::GenericInstance { type_args, .. } => {
+        ResolvedType::GenericInstance { type_args, .. } | ResolvedType::Tuple(type_args) => {
             for arg in type_args {
                 collect_type_transitive(*arg, type_table, reachable);
             }

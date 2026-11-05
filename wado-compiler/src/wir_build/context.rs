@@ -906,10 +906,7 @@ impl<'a> WirContext<'a> {
                 };
                 Self::ref_to(type_id)
             }
-            ResolvedType::GenericInstance {
-                type_args: elements,
-                ..
-            } if type_table.is_tuple(type_id) => {
+            ResolvedType::Tuple(elements) => {
                 // CM binding synthesis interns its own `TypeId`s for the same
                 // elements, so a miss falls back to structural matching.
                 let found =

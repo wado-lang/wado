@@ -930,6 +930,7 @@ impl FunctionTranslator<'_, '_> {
             && matches!(
                 elem_resolved,
                 ResolvedType::GenericInstance { .. }
+                    | ResolvedType::Tuple(_)
                     | ResolvedType::Struct { .. }
                     | ResolvedType::Function { .. }
                     | ResolvedType::Ref(_)

@@ -1311,7 +1311,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             && struct_lit.name.is_none()
             && matches!(
                 self.tysys.type_table.borrow().get(target_type),
-                ResolvedType::GenericInstance { .. }
+                ResolvedType::GenericInstance { .. } | ResolvedType::Tuple(_)
             )
             && self.implicit_struct_target(Some(target_type)).is_none()
         {

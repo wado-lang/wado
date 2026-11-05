@@ -51,7 +51,7 @@ fn get_type_dependencies(type_table: &TypeTable, type_id: TypeId) -> Vec<String>
                 .flat_map(|a| get_type_dependencies(type_table, *a))
                 .collect()
         }
-        ResolvedType::GenericInstance { type_args, .. } => {
+        ResolvedType::GenericInstance { type_args, .. } | ResolvedType::Tuple(type_args) => {
             // Skip unresolved generic instances (containing type params or projections)
             if type_args.iter().any(|t| type_table.contains_type_param(*t)) {
                 return vec![];
@@ -661,12 +661,7 @@ fn register_tuple_types(ctx: &mut WirContext<'_>) {
         let type_table = &*ctx.package.type_table.borrow();
         for type_id in type_table.iter_type_ids() {
             let resolved = type_table.get(type_id);
-            if let ResolvedType::GenericInstance {
-                type_args: elements,
-                ..
-            } = resolved
-                && type_table.is_tuple(type_id)
-            {
+            if let ResolvedType::Tuple(elements) = resolved {
                 if ctx.tuple_type_map.contains_key(elements) {
                     continue;
                 }
@@ -1377,12 +1372,7 @@ fn fixup_abstract_struct_fields(ctx: &mut WirContext<'_>) {
             if resolved.is_none() && struct_name_str.starts_with('[') {
                 let type_table = &*ctx.package.type_table.borrow();
                 for type_id in type_table.iter_type_ids() {
-                    if let ResolvedType::GenericInstance {
-                        type_args: elements,
-                        ..
-                    } = type_table.get(type_id)
-                        && type_table.is_tuple(type_id)
-                    {
+                    if let ResolvedType::Tuple(elements) = type_table.get(type_id) {
                         // Check if this tuple maps to the same WIR type
                         if let Some(wir_tid) = ctx.tuple_type_map.get(elements)
                             && wir_tid.index() == u32::try_from(wir_idx).unwrap_or(u32::MAX)

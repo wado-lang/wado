@@ -46,8 +46,8 @@ pub(super) fn unify(
             ResolvedType::TypePack {
                 mapped_elem: None, ..
             },
-            ResolvedType::GenericInstance { def, .. },
-        ) if type_table.borrow().is_tuple_def(*def) => {
+            ResolvedType::Tuple(_),
+        ) => {
             bindings.entry(expected).or_insert(actual);
         }
         // Direct type parameter mapping.
@@ -61,21 +61,8 @@ pub(super) fn unify(
         // Tuple types with a type pack: e.g., `[A, ..T, B]` matched
         // against `[i32, String, f64, bool]` binds `A = i32`, `B = bool`,
         // and the pack `T = [String, f64]`.
-        //
-        // Must come before the generic `GenericInstance` arm so that it
-        // matches first.
-        (
-            ResolvedType::GenericInstance {
-                def: expected_def,
-                type_args: expected_elems,
-            },
-            ResolvedType::GenericInstance {
-                def: actual_def,
-                type_args: actual_elems,
-            },
-        ) if type_table.borrow().is_tuple_def(*expected_def)
-            && type_table.borrow().is_tuple_def(*actual_def)
-            && expected_elems
+        (ResolvedType::Tuple(expected_elems), ResolvedType::Tuple(actual_elems))
+            if expected_elems
                 .iter()
                 .any(|e| type_table.borrow().is_type_pack(*e)) =>
         {
@@ -133,8 +120,15 @@ pub(super) fn unify(
                 }
             }
         }
-        // Same generic declaration (including tuples, `Future` and `Stream`):
-        // unify type arguments positionally.
+        // Same generic declaration (including `Future` and `Stream`), or two
+        // tuples of one length: unify type arguments positionally.
+        (ResolvedType::Tuple(expected_args), ResolvedType::Tuple(actual_args))
+            if expected_args.len() == actual_args.len() =>
+        {
+            for (&exp_arg, &act_arg) in expected_args.iter().zip(actual_args.iter()) {
+                unify(type_table, exp_arg, act_arg, bindings);
+            }
+        }
         (
             ResolvedType::GenericInstance {
                 def: expected_def,
@@ -168,12 +162,8 @@ pub(super) fn unify(
                 type_args: expected_args,
                 ..
             },
-            ResolvedType::GenericInstance {
-                def: actual_def,
-                type_args: actual_elems,
-            },
+            ResolvedType::Tuple(actual_elems),
         ) if type_table.borrow().is_list(expected)
-            && type_table.borrow().is_tuple_def(*actual_def)
             && expected_args.len() == 1
             && !actual_elems.is_empty() =>
         {

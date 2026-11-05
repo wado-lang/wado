@@ -495,7 +495,7 @@ fn by_value_structs(
     }
     match type_table.get(ty) {
         ResolvedType::GenericInstance { def, .. } if type_table.is_resource_def(*def) => {}
-        ResolvedType::GenericInstance { type_args, .. } => {
+        ResolvedType::GenericInstance { type_args, .. } | ResolvedType::Tuple(type_args) => {
             if out.insert(type_table.type_key(ty)) {
                 for &arg in type_args {
                     by_value_structs(arg, type_table, struct_fields, out);
@@ -585,6 +585,14 @@ fn mut_reachable_contains(
                 return true;
             }
             return type_args.iter().any(|&t| {
+                mut_reachable_contains(t, writable, target, type_table, struct_fields, visited)
+            });
+        }
+        ResolvedType::Tuple(elems) => {
+            if writable && type_table.type_key(ty) == target {
+                return true;
+            }
+            return elems.iter().any(|&t| {
                 mut_reachable_contains(t, writable, target, type_table, struct_fields, visited)
             });
         }

@@ -438,6 +438,7 @@ fn module_source_for_trait_impl(type_table: &TypeTable, type_id: TypeId) -> Opti
         ResolvedType::BuiltinArray(_) => Some(ModuleSource::array()),
         ResolvedType::Struct { .. }
         | ResolvedType::GenericInstance { .. }
+        | ResolvedType::Tuple(_)
         | ResolvedType::Enum { .. }
         | ResolvedType::Flags { .. }
         | ResolvedType::Resource { .. }

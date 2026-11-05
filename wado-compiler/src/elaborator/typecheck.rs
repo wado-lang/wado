@@ -159,16 +159,24 @@ fn check_at(
         return TypeCheckResult::Compatible;
     }
 
-    // Two instances of one declaration compare by their arguments (Rule 8),
-    // whatever their slots.
+    // Two instances of one declaration, or two tuples, compare by their
+    // arguments (Rule 8), whatever their slots.
     let same_declaration = match (
-        declaration_instance(actual_inner, type_table),
-        declaration_instance(expected_inner, type_table),
+        type_table.get(actual_inner),
+        type_table.get(expected_inner),
     ) {
-        (Some((a, actual_args)), Some((e, expected_args))) if a == e => {
-            Some((actual_args, expected_args))
+        (ResolvedType::Tuple(actual_elems), ResolvedType::Tuple(expected_elems)) => {
+            Some((actual_elems.as_slice(), expected_elems.as_slice()))
         }
-        _ => None,
+        _ => match (
+            declaration_instance(actual_inner, type_table),
+            declaration_instance(expected_inner, type_table),
+        ) {
+            (Some((a, actual_args)), Some((e, expected_args))) if a == e => {
+                Some((actual_args, expected_args))
+            }
+            _ => None,
+        },
     };
 
     // Rule 5: Newtype/flags distinctness, but for two instances of one newtype.
@@ -284,7 +292,8 @@ fn check_at(
         return TypeCheckResult::Incompatible;
     }
 
-    // Rule 8: Instances of one generic struct, resource or newtype -- compare
+    // Rule 8: Instances of one generic struct, resource or newtype, or two
+    // tuples -- compare
     // their type args, so an argument's effect row is the effect check's to
     // resolve.
     if let Some((actual_args, expected_args)) = same_declaration {
@@ -322,6 +331,7 @@ fn heads_apart(actual: TypeId, expected: TypeId, type_table: &TypeTable) -> bool
         | ResolvedType::Variant { .. }
         | ResolvedType::Function { .. }
         | ResolvedType::GenericInstance { .. }
+        | ResolvedType::Tuple(_)
         | ResolvedType::BuiltinArray(_)
         | ResolvedType::Newtype { .. }
         | ResolvedType::Flags { .. } => Some(type_table.get(id)),

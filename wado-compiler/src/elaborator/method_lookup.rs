@@ -727,53 +727,50 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .expect("a nominal type names a declaration");
                 (name, Some(module_source), None, None)
             }
+            ResolvedType::Tuple(elems) => {
+                if method_name == "len" {
+                    return Some(MethodInfo::undeclared(TypeTable::I32));
+                }
+                if method_name == "zip" {
+                    let rows: Vec<Vec<TypeId>> = elems
+                        .iter()
+                        .filter_map(|e| self.tysys.type_table.borrow().as_tuple(*e))
+                        .collect();
+                    // `zip` transposes rows of equal length; nothing else has
+                    // the method. A pack fills one position here, so equal
+                    // length still leaves the layouts free to differ.
+                    if rows.is_empty()
+                        || rows.len() != elems.len()
+                        || rows.iter().any(|row| row.len() != rows[0].len())
+                    {
+                        return None;
+                    }
+                    // Rows sharing no layout have no transposed shape. The
+                    // method exists, so the caller reaches the diagnostic
+                    // naming the offending row.
+                    let return_type = self
+                        .tysys
+                        .type_table
+                        .borrow_mut()
+                        .transposed_tuple(base_type_id)
+                        .unwrap_or(TypeTable::ERROR);
+                    return Some(MethodInfo::undeclared(return_type));
+                }
+                (TUPLE_TYPE_NAME.to_string(), None, Some(elems.clone()), None)
+            }
             // Generic instances like Box<i32> use the base name "Box" for method lookup.
             ResolvedType::GenericInstance { def, type_args } => {
-                let name = &self.tysys.type_table.borrow().decl_name(*def).to_string();
-                let module_source = &self.tysys.type_table.borrow().def_module(*def).clone();
-                if self.tysys.type_table.borrow().is_tuple_def(*def) {
-                    let elems = type_args;
-                    if method_name == "len" {
-                        return Some(MethodInfo::undeclared(TypeTable::I32));
-                    }
-                    if method_name == "zip" {
-                        let rows: Vec<Vec<TypeId>> = elems
-                            .iter()
-                            .filter_map(|e| self.tysys.type_table.borrow().as_tuple(*e))
-                            .collect();
-                        // `zip` transposes rows of equal length; nothing else has
-                        // the method. A pack fills one position here, so equal
-                        // length still leaves the layouts free to differ.
-                        if rows.is_empty()
-                            || rows.len() != elems.len()
-                            || rows.iter().any(|row| row.len() != rows[0].len())
-                        {
-                            return None;
-                        }
-                        // Rows sharing no layout have no transposed shape. The
-                        // method exists, so the caller reaches the diagnostic
-                        // naming the offending row.
-                        let return_type = self
-                            .tysys
-                            .type_table
-                            .borrow_mut()
-                            .transposed_tuple(base_type_id)
-                            .unwrap_or(TypeTable::ERROR);
-                        return Some(MethodInfo::undeclared(return_type));
-                    }
-                    (TUPLE_TYPE_NAME.to_string(), None, Some(elems.clone()), None)
-                } else {
-                    (
-                        name.clone(),
-                        Some(module_source.clone()),
-                        if type_args.is_empty() {
-                            None
-                        } else {
-                            Some(type_args.clone())
-                        },
-                        None,
-                    )
-                }
+                let table = self.tysys.type_table.borrow();
+                (
+                    table.decl_name(*def).to_string(),
+                    Some(table.def_module(*def).clone()),
+                    if type_args.is_empty() {
+                        None
+                    } else {
+                        Some(type_args.clone())
+                    },
+                    None,
+                )
             }
             // Newtype: first try looking up methods on the newtype itself,
             // then fall back to the base type for method inheritance
@@ -1287,9 +1284,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let ResolvedType::GenericInstance { def, type_args } = tt.get(receiver) else {
                 return Vec::new();
             };
-            if tt.is_tuple_def(*def) {
-                return Vec::new();
-            }
             let key = self.impl_target_of(receiver, &DeclName::new(tt.decl_name(*def)));
             (key, type_args.clone())
         };
@@ -3056,7 +3050,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             {
                 // A generic newtype's own impls bind its own arguments.
                 args
-            } else if let ResolvedType::GenericInstance { type_args, .. } = table.get(receiver) {
+            } else if let ResolvedType::GenericInstance { type_args, .. }
+            | ResolvedType::Tuple(type_args) = table.get(receiver)
+            {
                 type_args.clone()
             } else {
                 Vec::new()
@@ -3319,6 +3315,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let head = match self.tysys.type_table.borrow().get(base_type_id).clone() {
             ResolvedType::Struct { .. }
             | ResolvedType::GenericInstance { .. }
+            | ResolvedType::Tuple(_)
             | ResolvedType::Newtype { .. }
             | ResolvedType::Flags { .. } => self
                 .tysys
@@ -3412,7 +3409,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .expect("a struct names a declaration");
                 (n, m, None)
             }
-            ResolvedType::GenericInstance { type_args, .. } => (
+            ResolvedType::GenericInstance { type_args, .. } | ResolvedType::Tuple(type_args) => (
                 self.tysys
                     .type_table
                     .borrow()

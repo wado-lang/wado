@@ -978,7 +978,9 @@ fn shared_object_key(type_id: TypeId, type_table: &TypeTable) -> Option<TypeKey>
             ResolvedType::Struct { .. } => Some(type_table.type_key(type_id)),
             ResolvedType::GenericInstance { def, .. } if type_table.is_resource_def(*def) => None,
             // A value tuple is copied on assignment, so only a handle to one shares it.
-            ResolvedType::GenericInstance { .. } | ResolvedType::BuiltinArray(_) => {
+            ResolvedType::GenericInstance { .. }
+            | ResolvedType::Tuple(_)
+            | ResolvedType::BuiltinArray(_) => {
                 under_ref.then(|| type_table.type_key(type_id))
             }
             ResolvedType::Primitive(_)
@@ -1078,6 +1080,7 @@ fn type_creates_alias(type_id: TypeId, type_table: &TypeTable) -> bool {
         | ResolvedType::Resource { .. }
         | ResolvedType::Variant { .. }
         | ResolvedType::Function { .. }
+        | ResolvedType::Tuple(_)
         | ResolvedType::TypeParam { .. }
         | ResolvedType::AssocParam { .. }
         | ResolvedType::TypePack { .. }

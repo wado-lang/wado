@@ -1409,6 +1409,7 @@ impl TypeSystem {
             ResolvedType::Struct { .. }
             | ResolvedType::Variant { .. }
             | ResolvedType::GenericInstance { .. }
+            | ResolvedType::Tuple(_)
             | ResolvedType::BuiltinArray(_)
             | ResolvedType::Function { .. }
             | ResolvedType::Ref(_)
@@ -3202,7 +3203,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let effective_id = tt.representation_head(concrete_type_id);
             let list_name = tt.compiler_struct_fq_name(CompilerItem::List);
             match tt.get(effective_id).clone() {
-                ResolvedType::GenericInstance { type_args, .. } => {
+                ResolvedType::GenericInstance { type_args, .. } | ResolvedType::Tuple(type_args) => {
                     (tt.fq_type_name(effective_id).head_only(), type_args)
                 }
                 // Primitives (`i32`, `f64`, `bool`, ...) can implement traits

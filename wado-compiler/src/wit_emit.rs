@@ -958,9 +958,7 @@ impl<'a> Emitter<'a> {
                     self.classify_resolved(*inner)
                 }
             }
-            ResolvedType::GenericInstance { type_args, .. } if self.types.is_tuple(id) => {
-                CmShape::Tuple(type_args.clone())
-            }
+            ResolvedType::Tuple(elems) => CmShape::Tuple(elems.clone()),
             ResolvedType::GenericInstance { def, type_args } => {
                 match (self.types.compiler_type_item(*def), type_args.as_slice()) {
                     (Some(CompilerItem::Option), [arg]) => CmShape::Option(*arg),
