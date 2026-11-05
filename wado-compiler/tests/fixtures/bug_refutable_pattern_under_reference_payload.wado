@@ -1,0 +1,122 @@
+// A compound pattern with a refutable part, reached through a payload that is a
+// reference, projects the tuple or struct behind that reference.
+
+struct Pair {
+    id: i32,
+    inner: Option<i64>,
+}
+
+variant Shade {
+    Dark(i32),
+    Light,
+}
+
+fn tuple_payload(pair: Option<&[i32, Option<i64>]>) -> i64 {
+    let Some([_, Some(v)]) = pair else {
+        return -1;
+    };
+    return *v;
+}
+
+fn struct_payload(pair: Option<&Pair>) -> i64 {
+    let Some(Pair { id, inner: Some(v) }) = pair else {
+        return -1;
+    };
+    return *id as i64 + *v;
+}
+
+fn literal_part(pair: Option<&[i32, i64]>) -> i64 {
+    return match pair {
+        Some([1, v]) => *v,
+        Some([_, v]) => -*v,
+        None => 0,
+    };
+}
+
+fn variant_part(pair: Option<&[Shade, i64]>) -> i64 {
+    if let Some([Dark(d), v]) = pair {
+        return *d as i64 + *v;
+    }
+    return -1;
+}
+
+fn nested_tuple(pair: Option<&[i32, [i32, Option<i64>]]>) -> i64 {
+    let Some([a, [b, Some(v)]]) = pair else {
+        return -1;
+    };
+    return *a as i64 + *b as i64 + *v;
+}
+
+fn found(pairs: &List<[i32, Option<i64>]>, key: i32) -> i64 {
+    let Some([_, Some(v)]) = pairs.into_iter().find(|p| p.0 == key) else {
+        return -1;
+    };
+    return *v;
+}
+
+fn written(pair: Option<&mut [i32, Option<Pair>]>) {
+    if let Some([_, Some(p)]) = pair {
+        p.id = 9;
+    }
+}
+
+fn written_deep(pair: Option<&mut [i32, [i32, Option<Pair>]]>) {
+    if let Some([_, [_, Some(p)]]) = pair {
+        p.id = 9;
+    }
+}
+
+struct Holder {
+    pair: Option<Pair>,
+}
+
+fn written_field(holder: Option<&mut Holder>) {
+    if let Some(Holder { pair: Some(p) }) = holder {
+        p.id = 9;
+    }
+}
+
+test "a tuple behind a reference payload" {
+    assert tuple_payload(Option::Some(&[1, Option::Some(3 as i64)])) == 3;
+    assert tuple_payload(Option::Some(&[1, null])) == -1;
+    assert tuple_payload(null) == -1;
+}
+
+test "a struct behind a reference payload" {
+    assert struct_payload(Option::Some(&Pair { id: 2, inner: Option::Some(3) })) == 5;
+    assert struct_payload(Option::Some(&Pair { id: 2, inner: null })) == -1;
+}
+
+test "a literal part" {
+    assert literal_part(Option::Some(&[1, 4 as i64])) == 4;
+    assert literal_part(Option::Some(&[2, 4 as i64])) == -4;
+}
+
+test "a variant part" {
+    assert variant_part(Option::Some(&[Shade::Dark(2), 4 as i64])) == 6;
+    assert variant_part(Option::Some(&[Shade::Light, 4 as i64])) == -1;
+}
+
+test "a tuple within the tuple" {
+    assert nested_tuple(Option::Some(&[1, [2, Option::Some(3 as i64)]])) == 6;
+    assert nested_tuple(Option::Some(&[1, [2, null]])) == -1;
+}
+
+test "what an iterator finds by reference" {
+    let pairs: List<[i32, Option<i64>]> = [[1, Option::Some(3 as i64)], [2, null]];
+    assert found(&pairs, 1) == 3;
+    assert found(&pairs, 2) == -1;
+    assert found(&pairs, 3) == -1;
+}
+
+test "a binding through a mutable reference writes the place" {
+    let mut pair: [i32, Option<Pair>] = [1, Option::Some(Pair { id: 2, inner: null })];
+    written(Option::Some(&mut pair));
+    assert pair.1.unwrap().id == 9;
+    let mut deep: [i32, [i32, Option<Pair>]] = [1, [2, Option::Some(Pair { id: 2, inner: null })]];
+    written_deep(Option::Some(&mut deep));
+    assert deep.1.1.unwrap().id == 9;
+    let mut holder = Holder { pair: Option::Some(Pair { id: 2, inner: null }) };
+    written_field(Option::Some(&mut holder));
+    assert holder.pair.unwrap().id == 9;
+}
