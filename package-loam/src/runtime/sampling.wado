@@ -3,8 +3,20 @@
 //! backend picks the same token from the same logits.
 
 use { Seed, Seedable, Squares64 } from "core:prng";
-use { Binary, Comparison, Graph, One, Unary, capacity_of, full, softmax, strided_gather, written_at } from "./hlo.wado";
-use { Cpu, Element, Holds, Tensor } from "./tensor.wado";
+use {
+    Binary,
+    Comparison,
+    Graph,
+    One,
+    Unary,
+    capacity_of,
+    full,
+    scalar,
+    softmax,
+    strided_gather,
+    written_at,
+} from "./hlo.wado";
+use { Cpu, Holds, Tensor } from "./tensor.wado";
 use { Any, Recorder, Untyped } from "./recorded.wado";
 
 /// One row of a batch.
@@ -104,14 +116,6 @@ pub struct Decoding<affine G: Holds> {
     filters_top_p: bool,
 }
 
-/// `value` as a scalar `g` holds.
-fn scalar<affine G: Holds, E: Element>(g: &mut G, value: E) -> G::Tensor<E, []> with _ {
-    return g.upload(&Tensor::<E, []> {
-        data: [value],
-        extents: [],
-    });
-}
-
 impl<affine G: Graph> Decoding<G> {
     /// `steps` steps of `rows` rows from the position `at`, sampled as
     /// `sampling` says. The tokens hold a capacity, so a program serves every
@@ -139,6 +143,11 @@ impl<affine G: Graph> Decoding<G> {
             filters_top_k: class[1] == 1,
             filters_top_p: class[2] == 1,
         };
+    }
+
+    /// What the first step takes of what the steps carry.
+    pub fn carried(&self, g: &G) -> List<Any<G>> {
+        return carried_by(g, &self.tokens, &self.finished);
     }
 
     /// The values as a program takes them, in the order `recorded` makes its
@@ -198,6 +207,24 @@ pub struct Stepped<affine G: Holds> {
     pub token: G::Tensor<i64, [Slots, One]>,
     pub tokens: G::Tensor<i64, [Slots, Picks]>,
     pub finished: G::Tensor<bool, [Slots]>,
+}
+
+impl<affine G: Graph> Stepped<G> {
+    /// What the next step takes of what the steps carry.
+    pub fn carried(&self, g: &G) -> List<Any<G>> {
+        return carried_by(g, &self.tokens, &self.finished);
+    }
+}
+
+fn carried_by<affine G: Graph>(
+    g: &G,
+    tokens: &G::Tensor<i64, [Slots, Picks]>,
+    finished: &G::Tensor<bool, [Slots]>,
+) -> List<Any<G>> {
+    return [
+        Any::I64(g.relabeled::<i64, [Slots, Picks], Untyped>(tokens)),
+        Any::Bool(g.relabeled::<bool, [Slots], Untyped>(finished)),
+    ];
 }
 
 /// The step `step` of `decoding`, over a pass's `logits`, of `[rows, .., tokens]`

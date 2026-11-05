@@ -15,7 +15,7 @@ use {
     reduced_extents,
 } from "./hlo.wado";
 use { ElementKind } from "./tensor.wado";
-use { Data, Recorded, RecordedNode, Region, Repeat } from "./recorded.wado";
+use { Data, Recorded, RecordedNode, Region, Repeat, carried_starts } from "./recorded.wado";
 
 /// `recorded` as a module whose `main` takes its parameters and returns its
 /// results. The parameters `halved` holds are bf16 on the way in. An attention
@@ -56,10 +56,14 @@ pub fn le_bytes(data: &Data) -> ByteList {
 /// past itself only where it reaches the attention untouched.
 pub fn in_place(recorded: &Recorded) -> List<[i32, i32]> {
     let mut starts = HashMap::<i32, i32>::new();
+    let mut looped = HashSet::<i32>::new();
     for let node of &recorded.nodes {
         if let Repeat(repeat) = &node.op {
             for let [k, carried] of repeat.carried.into_iter().enumerate() {
-                starts[carried] = node.operands[k + 1];
+                starts[carried] = carried_starts(node)[k];
+            }
+            for let result of repeat.body.results {
+                looped.insert(result);
             }
         }
     }
@@ -72,9 +76,9 @@ pub fn in_place(recorded: &Recorded) -> List<[i32, i32]> {
         let Parameter(parameter) = &recorded.nodes[source].op else {
             continue;
         };
-        let updated = relabeled_from(recorded, present);
+        let updated = relabeled_from(recorded, &looped, present);
         for let [result, id] of recorded.body.results.into_iter().enumerate() {
-            if relabeled_from(recorded, id) == updated {
+            if relabeled_from(recorded, &looped, id) == updated {
                 pairs.push([*parameter, result]);
             }
         }
@@ -82,14 +86,14 @@ pub fn in_place(recorded: &Recorded) -> List<[i32, i32]> {
     return pairs;
 }
 
-/// The node `id` holds the elements of, past a loop's result and reshapes that
-/// move no axis, which a decomposed attention and a generated pass write to
-/// relabel axes.
-fn relabeled_from(recorded: &Recorded, id: i32) -> i32 {
+/// The node `id` holds the elements of, past the results of a loop, `looped`,
+/// and reshapes that move no axis, which a decomposed attention and a generated
+/// pass write to relabel axes.
+fn relabeled_from(recorded: &Recorded, looped: &HashSet<i32>, id: i32) -> i32 {
     let node = &recorded.nodes[id];
-    let relabels = node.op matches { Yield }
+    let relabels = looped.contains(id)
         || node.op matches { Reshape } && recorded.nodes[node.operands[0]].extents == node.extents;
-    return if relabels { relabeled_from(recorded, node.operands[0]) } else { id };
+    return if relabels { relabeled_from(recorded, looped, node.operands[0]) } else { id };
 }
 
 fn push_le(bytes: &mut ByteList, bits: u64, width: i32) {
@@ -501,7 +505,6 @@ impl Writer {
         let n = node_name(id);
         let i = "tensor<i64>";
         let carried_types: List<String> = repeat.carried.into_iter().map(|c| self.type_at(c)).collect();
-        let starts = node.operands[1..<node.operands.len()].to_list();
         let mut types: List<String> = [i];
         types.extend(&carried_types);
         let all = types.join(", ");
@@ -514,7 +517,7 @@ impl Writer {
         };
         self.scalar(`${n}z`, "0", i);
         let mut operands = [`${n}z`] as List<String>;
-        operands.extend(&starts.into_iter().map(|s| self.name(s)).collect());
+        operands.extend(&carried_starts(node).into_iter().map(|s| self.name(s)).collect());
         self.text.push_str(`${n}:${types.len()} = "stablehlo.while"(${operands.join(", ")}) ({\n`);
         self.text.push_str(`^bb0(${arguments(`${n}c`)}):\n`);
         self.text.push_str(scalar_compared(`${n}l`, "LT", ElementKind::I64, `${n}cs`, self.name(node.operands[0])));

@@ -1,8 +1,9 @@
 use { HashMap, TreeMap } from "core:collections";
-use { EmitError, NameCollision, Placement, UnmappedDtype, emit } from "./emit.wado";
+use { Decode, EmitError, NameCollision, Placement, UnmappedDtype, emit } from "./emit.wado";
 use { Attr, Dim, Elements, Graph, InPlace, Known, Node, Rank, ValueInfo } from "./graph.wado";
 use { infer } from "./infer.wado";
 use { read } from "./onnx_text.wado";
+use { keep_last } from "./specialize.wado";
 
 /// The package spec the generated module imports the runtime from.
 global RUNTIME: String = "lib:loam";
@@ -1599,4 +1600,55 @@ test "a constant one branch folds is spelled in that branch" {
     let body = generate(source).unwrap();
     let k = body.find("let K = ").unwrap();
     assert body.find("let Y = branched::<").unwrap() < k < body.find("}, || {").unwrap();
+}
+
+/// Why `decoder.onnxtext` takes no `decode` of these tensors, the output named
+/// in `last` where one is, or the module where it does.
+fn decoded(ids: String, mask: String, logits: String, last: Option<String> = null) -> Result<String, EmitError> {
+    let mut graph = read(&#include_str("../conformance/decoder.onnxtext")).unwrap();
+    if let Some(output) = last {
+        keep_last(&mut graph, &infer(&graph).unwrap(), &output, 1).unwrap();
+    }
+    return emit(&graph, &infer(&graph).unwrap(), &RUNTIME, Placement::File, Option::Some(Decode { ids, mask, logits }));
+}
+
+fn refused_for(result: Result<String, EmitError>, reason: String) -> bool {
+    return result matches { Err(Undecodable(why)) && why.contains(reason.as_str_slice()) };
+}
+
+test "decode offers a program beside compute, whose cache keeps room for its steps" {
+    let out = decoded("input_ids", "attention_mask", "logits", Option::Some("logits")).unwrap();
+    assert out.contains("pub fn decode<affine Bk: Graph>(");
+    assert out.contains("cache: &Cache<Bk>, room: i32, model: &mut Model<Bk>)");
+    assert out.contains("cache: &Cache<Bk>, steps: i32, sampling: &Sampling, model: &mut Model<Bk>)");
+}
+
+test "a module built without decode takes no room" {
+    let out = generate(decoder("past_key", "present_key")).unwrap();
+    assert !out.contains("room");
+    assert !out.contains("pub fn decode");
+}
+
+test "decode refuses tensors a loop cannot feed" {
+    let logits = Option::Some("logits") as Option<String>;
+    assert refused_for(decoded("ids", "attention_mask", "logits", logits), "input_ids is an input no step");
+    assert refused_for(decoded("input_ids", "mask", "logits", logits), "attention_mask is an input no step");
+    assert refused_for(decoded("input_ids", "attention_mask", "out", logits), "out is no f32 output");
+    assert refused_for(decoded("input_ids", "attention_mask", "present_key", logits), "present_key is no f32 output");
+    assert refused_for(decoded("past_key", "attention_mask", "logits", logits), "input_ids is an input no step");
+}
+
+test "decode refuses logits of more than one position" {
+    assert refused_for(decoded("input_ids", "attention_mask", "logits"), "must hold one position");
+}
+
+test "decode refuses a graph with no cache" {
+    let graph = read(
+        &"<ir_version: 8, opset_import: [ \"\" : 17 ]>\nplain (int64[1, N] ids) => (float[1, N] Y)\n{\n    Y = Cast<to = 1>(ids)\n}\n",
+    ).unwrap();
+    let decode = Decode { ids: "ids", mask: "ids", logits: "Y" };
+    assert refused_for(
+        emit(&graph, &infer(&graph).unwrap(), &RUNTIME, Placement::File, Option::Some(decode)),
+        "no cache",
+    );
 }

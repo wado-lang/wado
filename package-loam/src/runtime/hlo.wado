@@ -279,10 +279,7 @@ pub affine trait Graph: Holds with _ {
     ) -> List<Any<Self>> with _ {
         let mut state = *initial;
         for let at of 0..<self.download(count).data[0] {
-            state = body(&self.upload(&Tensor::<i64, []> {
-                data: [at],
-                extents: [],
-            }), &state);
+            state = body(&scalar(self, at), &state);
         }
         return state;
     }
@@ -473,14 +470,18 @@ fn unpacked4(extents: &List<i32>) -> [i32, i32, i32, i32] {
     return [extents[0], extents[1], extents[2], extents[3]];
 }
 
-/// `value` at every position of `extents`: a constant broadcast, as StableHLO
-/// spells one.
-pub fn full<affine G: Graph, E: Element, Axes>(g: &mut G, value: E, extents: List<i32>) -> G::Tensor<E, Axes> with _ {
-    let scalar: G::Tensor<E, []> = g.upload(&Tensor::<E, []> {
+/// `value` as a scalar `g` holds.
+pub fn scalar<affine G: Holds, E: Element>(g: &mut G, value: E) -> G::Tensor<E, []> with _ {
+    return g.upload(&Tensor::<E, []> {
         data: [value],
         extents: [],
     });
-    return g.broadcast_in_dim(&scalar, extents, []);
+}
+
+/// `value` at every position of `extents`: a constant broadcast, as StableHLO
+/// spells one.
+pub fn full<affine G: Graph, E: Element, Axes>(g: &mut G, value: E, extents: List<i32>) -> G::Tensor<E, Axes> with _ {
+    return g.broadcast_in_dim(&scalar(g, value), extents, []);
 }
 
 /// ONNX's `Softmax` along `axis`: less the greatest along it, exponentiated,

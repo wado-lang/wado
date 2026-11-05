@@ -1,6 +1,7 @@
 //! `WebGpuBackend` as a `Graph`: each operation computed as it is added, on
 //! the device where a kernel of the backend computes it, and on the host
-//! otherwise. An `i64` tensor stays on the host, as it does for the kernels.
+//! otherwise. An `i64` tensor stays on the host, as it does for the kernels,
+//! but for the index a kernel ranks and what reckons with it, held as an f32.
 //! A compiled program launches the kernels `fusion.wado` plans instead.
 
 use { HashMap, HashSet } from "core:collections";
@@ -69,7 +70,19 @@ use {
     splats_of,
     unary_of,
 } from "./fusion.wado";
-use { Any, Operation, Recorded, Recorder, Run, Untyped, Values, bools, constants, kept_any } from "./recorded.wado";
+use {
+    Any,
+    Operation,
+    Recorded,
+    Recorder,
+    Run,
+    Untyped,
+    Values,
+    bools,
+    carried_starts,
+    constants,
+    kept_any,
+} from "./recorded.wado";
 use { DeviceTensor, Placed, PlacedRead, WebGpuBackend, contiguous, permuted, reads_as, sliced } from "./webgpu.wado";
 
 /// A pass recorded once per shape class and planned into kernels, which each
@@ -473,7 +486,12 @@ impl Graph for WebGpuBackend {
         if let Device(by) = indices
             && E::exact_in_f32()
             && let Some(axis) = taken_axis(&extents, by.extents.len(), dims)
-            && let Some(out) = self.gathered_by(&self.device_view(data), by, axis) {
+            && let Some(out) = self.gathered_by(
+                &self.device_view(data),
+                by,
+                axis,
+                &gathered_extents(&by.extents, dims),
+            ) {
             return Placed::Device(out);
         }
         let index = self.host(indices);
@@ -857,9 +875,7 @@ fn repeated_launch(
     let I64(count) = &state.values[node.operands[0]] else {
         unreachable();
     };
-    let mut carried: List<Any<WebGpuBackend>> = node.operands[1..<node.operands.len()].to_list().into_iter().map(
-        |o| state.values[o],
-    ).collect();
+    let mut carried: List<Any<WebGpuBackend>> = carried_starts(node).into_iter().map(|o| state.values[o]).collect();
     for let at of 0..<g.host(count).data[0] {
         state.values[repeat.step] = Any::I64(Placed::Host(Tensor {
             data: [at],

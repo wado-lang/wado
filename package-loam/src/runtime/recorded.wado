@@ -126,6 +126,11 @@ pub struct Recorded {
     pub appended: List<[i32, i32]>,
 }
 
+/// What a `Repeat` node starts each carried value at.
+pub fn carried_starts(node: &RecordedNode) -> List<i32> {
+    return node.operands[1..<node.operands.len()].to_list();
+}
+
 /// A tensor of the graph being recorded: the node that computes it.
 pub struct Value<E, Axes> {
     pub id: i32,
@@ -767,9 +772,7 @@ impl<affine G: Graph> Run<G> {
                 continue;
             }
             if let Repeat(repeat) = &node.op {
-                let initial: List<Any<G>> = node.operands[1..<node.operands.len()].to_list().into_iter().map(
-                    |o| self.values[o],
-                ).collect();
+                let initial: List<Any<G>> = carried_starts(node).into_iter().map(|o| self.values[o]).collect();
                 let count = g.relabeled::<i64, Untyped, []>(i64s(&self.values[node.operands[0]]));
                 let last = g.repeated(&count, &initial, |step, state| {
                     self.values[repeat.step] = Any::I64(g.relabeled::<i64, [], Untyped>(step));

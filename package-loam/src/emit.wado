@@ -1094,12 +1094,13 @@ fn emit_compute(
     let has_cache = crossing.has_cache();
     let mut compute = FnSpec::new("compute", Vis::Pub);
     let mut room: Option<Room> = null;
-    let mut extra: List<[String, String]> = [];
     if let Some(axes) = decoding {
         room = Option::Some(Room { symbol: axes.total, spelled: "room as i64" });
-        extra.push(["room", "i32"]);
     }
-    let entry = prepared_entry(context, &mut compute, given, &room, &extra)?;
+    let entry = prepared_entry(context, &mut compute, given, &room)?;
+    if room matches { Some(_) } {
+        compute.add_param("room", "i32");
+    }
     let mut lines = entry.lines;
     let mut symbols = entry.symbols;
     let mut arguments = entry.arguments;
@@ -1120,19 +1121,14 @@ fn emit_compute(
         ];
     };
     arguments.push("&model.weights");
-    let erased: List<String> = taken_args.into_iter().take(first_weight).map(|a| a.erased()).collect();
-    let erased_weights: List<String> = taken_args.into_iter().skip(first_weight).map(|a| a.erased()).collect();
+    let [erased, erased_weights] = erased_arguments(&taken_args, first_weight);
     let results = if crossing.several() {
         let mut fields: List<String> = [];
         for let [at, output] of returned.into_iter().enumerate() {
             fields.push(`${names.get(&output)}: ${typed_result(checked, &output, at)}`);
         }
         if has_cache {
-            let mut parts: List<String> = [];
-            for let [k, [past, _]] of crossing.pairs.into_iter().enumerate() {
-                parts.push(`${names.get(&past)}: ${typed_result(checked, &past, returned.len() + k)}`);
-            }
-            fields.push(`cache: ${CACHE} { ${parts.join(", ")} }`);
+            fields.push(`cache: ${cache_from_results(checked, names, crossing, returned.len())}`);
         }
         `${PASSED} { ${fields.join(", ")} }`;
     } else {
@@ -1228,13 +1224,12 @@ struct EntryContext {
 }
 
 /// What an entry has made by the time it can run its program: its `lines`, the
-/// lengths as they are and at their capacities, what `build` is passed, what
-/// the program takes, its weights from `first_weight` on, what tells its
-/// programs apart, the fields of `chosen`, and the cache at the capacities.
+/// lengths, what `build` is passed, what the program takes, its weights from
+/// `first_weight` on, what tells its programs apart, the fields of `chosen`,
+/// and the cache at the capacities.
 struct Entry {
     lines: List<String>,
     symbols: Symbols,
-    capacities: Symbols,
     arguments: List<String>,
     taken_args: List<ProgramArgument>,
     first_weight: i32,
@@ -1243,14 +1238,12 @@ struct Entry {
     fitted_cache: String,
 }
 
-/// The entry `spec`, its inputs and the cache given, then the parameters
-/// `extra` names, up to the program it runs.
+/// The entry `spec`, its inputs and the cache given, up to the program it runs.
 fn prepared_entry(
     context: &EntryContext,
     spec: &mut FnSpec,
     mut symbols: Symbols,
     room: &Option<Room>,
-    extra: &List<[String, String]>,
 ) -> Result<Entry, EmitError> {
     let EntryContext { graph, checked, names, held, carriers, padded, read, kept, crossing, owed, conditions } = *context;
     let shapes = &checked.shapes;
@@ -1284,9 +1277,6 @@ fn prepared_entry(
     }
     if has_cache {
         spec.add_param("cache", `&${CACHE}<${BACKEND_PARAM}>`);
-    }
-    for let [name, ty] of *extra {
-        spec.add_param(name, ty);
     }
     lines.extend(&owed_checks(checked, &mut symbols)?);
     lines.extend(&branch_checks(graph, checked, names, conditions, &mut symbols)?);
@@ -1385,7 +1375,6 @@ fn prepared_entry(
     return Result::Ok(Entry {
         lines,
         symbols,
-        capacities,
         arguments,
         taken_args,
         first_weight,
@@ -1473,11 +1462,8 @@ fn emit_decode(w: &mut CodeWriter, context: &EntryContext, given: Symbols, axes:
     let EntryContext { checked, names, crossing, .. } = *context;
     let mut decode = FnSpec::new(DECODE, Vis::Pub);
     let room = Option::Some(Room { symbol: axes.total, spelled: "(steps - 1) as i64" });
-    let extra: List<[String, String]> = [
-        ["steps", "i32"],
-        ["sampling", "&Sampling"],
-    ];
-    let entry = prepared_entry(context, &mut decode, given, &room, &extra)?;
+    let entry = prepared_entry(context, &mut decode, given, &room)?;
+    decode.add_param("steps", "i32").add_param("sampling", "&Sampling");
     let mut symbols = entry.symbols;
     let mut lines = entry.lines;
     let ids = names.get(&axes.ids);
@@ -1497,13 +1483,8 @@ fn emit_decode(w: &mut CodeWriter, context: &EntryContext, given: Symbols, axes:
     class.push("sampler");
     class.push("backend.extents_of(&decoding.tokens)");
     let taken = entry.taken_args;
-    let erased: List<String> = taken.into_iter().take(entry.first_weight).map(|a| a.erased()).collect();
-    let erased_weights: List<String> = taken.into_iter().skip(entry.first_weight).map(|a| a.erased()).collect();
+    let [erased, erased_weights] = erased_arguments(&taken, entry.first_weight);
     let chosen_argument = if chooses { ", &chosen" } else { "" };
-    let mut fields: List<String> = [];
-    for let [k, [past, _]] of crossing.pairs.into_iter().enumerate() {
-        fields.push(`${names.get(&past)}: ${typed_result(checked, &past, k + 1)}`);
-    }
     lines.push(
         `let [tokens, cache] = match model.programs.run(backend, [${class.join(
             ", ",
@@ -1514,9 +1495,12 @@ fn emit_decode(w: &mut CodeWriter, context: &EntryContext, given: Symbols, axes:
     lines.push("    return all;");
     lines.push(`}, || [${erased_weights.join(", ")}]) {`);
     lines.push(
-        `    Some(results) => [i64_of::<${BACKEND_PARAM}, [Slots, Picks]>(backend, &results[0]), ${CACHE}::<${BACKEND_PARAM}> { ${fields.join(
-            ", ",
-        )} }],`,
+        `    Some(results) => [i64_of::<${BACKEND_PARAM}, [Slots, Picks]>(backend, &results[0]), ${cache_from_results(
+            checked,
+            names,
+            crossing,
+            1,
+        )}],`,
     );
     lines.push(`    None => ${DECODED}(${arguments.join(", ")}),`);
     lines.push("};");
@@ -1544,7 +1528,7 @@ fn emit_decode(w: &mut CodeWriter, context: &EntryContext, given: Symbols, axes:
         w.line(&line);
     }
     w.end();
-    emit_decoded(w, context, axes, &taken, chooses, &symbols)?;
+    emit_decoded(w, context, axes, &taken, chooses)?;
     emit_recorded(w, names, &taken, entry.first_weight, &[], crossing, chooses, true);
     return Result::Ok(());
 }
@@ -1558,9 +1542,8 @@ fn emit_decoded(
     axes: &DecodingAxes,
     taken: &List<ProgramArgument>,
     chooses: bool,
-    symbols: &Symbols,
 ) -> Result<(), EmitError> {
-    let EntryContext { names, read, crossing, owed, .. } = *context;
+    let EntryContext { checked, names, read, crossing, owed, .. } = *context;
     let bk = BACKEND_PARAM;
     let mut decoded = FnSpec::new(DECODED);
     decoded.add_generic(GRAPH_BOUND).add_param("backend", `&mut ${bk}`);
@@ -1583,7 +1566,7 @@ fn emit_decoded(
         } else {
             continue;
         }
-        let now = a.step_value(carried.len());
+        let now = a.taken_from("state", carried.len());
         if a.crossed matches { Cache } {
             cache_fields.push(`${a.ident}: ${now}`);
         } else {
@@ -1610,15 +1593,14 @@ fn emit_decoded(
     w.line("/// picked, by row, and the cache after the last step.");
     decoded.emit_begin(w);
     let count = carried.len();
-    start.push(`Any::I64(backend.relabeled::<i64, [Slots, Picks], Untyped>(&decoding.tokens))`);
-    start.push(`Any::Bool(backend.relabeled::<bool, [Slots], Untyped>(&decoding.finished))`);
-    w.line(`let start: List<Any<${bk}>> = [${start.join(", ")}];`);
+    w.line(`let mut start: List<Any<${bk}>> = [${start.join(", ")}];`);
+    w.line("start.extend(&decoding.carried(backend));");
     w.line("let last = backend.repeated(&decoding.steps, &start, |step, state| {");
     w.line(`    let held = ${CACHE}::<${bk}> { ${cache_fields.join(", ")} };`);
     if !read.is_empty() {
         let mut fields: List<String> = [];
         for let symbol of *read {
-            let ident = symbols.idents[symbol];
+            let ident = names.get(&symbol_key(&symbol));
             let moves = per_step(&symbol, &axes.total, owed)?;
             fields.push(if moves == 0 {
                 `${ident}: lengths.${ident}`;
@@ -1632,29 +1614,29 @@ fn emit_decoded(
     let logits = if crossing.several() { `passed.${names.get(&axes.logits)}` } else { "passed" };
     w.line(`    let tokens = i64_of::<${bk}, [Slots, Picks]>(backend, &state[${count}]);`);
     w.line(`    let finished = bool_of::<${bk}, [Slots]>(backend, &state[${count + 1}]);`);
-    let logits_axes = axis_list(&context.checked.shapes[axes.logits]);
+    let logits_axes = axis_list(&checked.shapes[axes.logits]);
     w.line(
         `    let next = stepped::<${bk}, [${logits_axes}]>(backend, &${logits}, decoding, &tokens, &finished, step);`,
     );
+    w.line("    let at = backend.binary::<i64, []>(Binary::Add, &decoding.position, step);");
     let mut returned: List<String> = [];
     for let [k, a] of carried.into_iter().enumerate() {
         returned.push(if a.tensor == axes.ids {
             "Any::I64(backend.relabeled::<i64, [Slots, One], Untyped>(&next.token))";
         } else if a.tensor == axes.mask {
-            w.line("    let at = backend.binary::<i64, []>(Binary::Add, &decoding.position, step);");
-            a.erased_from(`&opened::<${bk}, ${a.axes}>(backend, &${a.step_value(k)}, &at)`);
+            a.erased_from(`&opened::<${bk}, ${a.axes}>(backend, &${a.taken_from("state", k)}, &at)`);
         } else {
             a.erased_from(`&passed.cache.${a.ident}`);
         });
     }
-    returned.push("Any::I64(backend.relabeled::<i64, [Slots, Picks], Untyped>(&next.tokens))");
-    returned.push("Any::Bool(backend.relabeled::<bool, [Slots], Untyped>(&next.finished))");
-    w.line(`    return [${returned.join(", ")}];`);
+    w.line(`    let mut returned: List<Any<${bk}>> = [${returned.join(", ")}];`);
+    w.line("    returned.extend(&next.carried(backend));");
+    w.line("    return returned;");
     w.line("});");
     let mut last_fields: List<String> = [];
     for let [k, a] of carried.into_iter().enumerate() {
         if a.crossed matches { Cache } {
-            last_fields.push(`${a.ident}: ${a.element}_of::<${bk}, ${a.axes}>(backend, &last[${k}])`);
+            last_fields.push(`${a.ident}: ${a.taken_from("last", k)}`);
         }
     }
     w.line(`return [i64_of::<${bk}, [Slots, Picks]>(backend, &last[${count}]), ${CACHE}::<${bk}> { ${last_fields.join(
@@ -1781,10 +1763,10 @@ fn at_capacities(
 ) -> Result<Symbols, EmitError> {
     let mut capacities = *symbols;
     let grows = |symbol: &String| owed.into_iter().find(|o| o.0.symbol == *symbol);
-    let with_room = |length: String| if let Some(r) = room {
-        `${length} + ${r.spelled}`;
+    let more = if let Some(r) = room {
+        ` + ${r.spelled}`;
     } else {
-        length;
+        "";
     };
     // The rest of a present is spelled at the capacities of the lengths it reads.
     let mut ordered: List<String> = padded.into_iter().filter(|s| grows(s) matches { None }).map(|s| *s).collect();
@@ -1792,15 +1774,14 @@ fn at_capacities(
     for let symbol of ordered {
         let capacity = names.get(&capacity_key(&symbol));
         let Some([g, _]) = grows(&symbol) else {
-            let mut length = symbols.spell(&Poly::symbol(&symbol))?;
-            if room matches { Some(r) && r.symbol == symbol } {
-                length = with_room(length);
-            }
-            lines.push(`let ${capacity} = capacity_of(to_extent(${length})) as i64;`);
+            let own_more = if room matches { Some(r) && r.symbol == symbol } { more } else { "" };
+            lines.push(
+                `let ${capacity} = capacity_of(to_extent(${symbols.spell(&Poly::symbol(&symbol))?}${own_more})) as i64;`,
+            );
             capacities.idents[symbol] = capacity;
             continue;
         };
-        let present = `capacity_of(to_extent(${with_room(symbols.spell(&g.present)?)})) as i64`;
+        let present = `capacity_of(to_extent(${symbols.spell(&g.present)?}${more})) as i64`;
         lines.push(match g.present.linear_in(&symbol) {
             Some([1, rest]) => `let ${capacity} = ${present} - (${capacities.spell(&rest)?});`,
             _ => `let ${capacity} = ${present};`,
@@ -1861,9 +1842,9 @@ impl ProgramArgument {
         return `Any::${any_case(&self.element)}(backend.relabeled::<${self.element}, ${self.axes}, Untyped>(${place}))`;
     }
 
-    /// The argument as a step of `decoded` holds it, at `at` of what it carries.
-    fn step_value(&self, at: i32) -> String {
-        return `${self.element}_of::<${BACKEND_PARAM}, ${self.axes}>(backend, &state[${at}])`;
+    /// The argument as `decoded` reads it at `at` of the erased `list`.
+    fn taken_from(&self, list: String, at: i32) -> String {
+        return `${self.element}_of::<${BACKEND_PARAM}, ${self.axes}>(backend, &${list}[${at}])`;
     }
 
     /// The parameter `recorded` makes of the argument, of the extents at `at`.
@@ -1876,6 +1857,23 @@ impl ProgramArgument {
 fn typed_result(checked: &Checked, tensor: &String, at: i32) -> String {
     let axes = axis_list(&checked.shapes[*tensor]);
     return `${checked.primitives[*tensor]}_of::<${BACKEND_PARAM}, [${axes}]>(backend, &results[${at}])`;
+}
+
+/// The `Cache` the program's results hold from `first` on.
+fn cache_from_results(checked: &Checked, names: &Names, crossing: &Crossing, first: i32) -> String {
+    let mut fields: List<String> = [];
+    for let [k, [past, _]] of crossing.pairs.into_iter().enumerate() {
+        fields.push(`${names.get(&past)}: ${typed_result(checked, &past, first + k)}`);
+    }
+    return `${CACHE}::<${BACKEND_PARAM}> { ${fields.join(", ")} }`;
+}
+
+/// `taken` as the program takes it: all up to `first_weight`, then the weights.
+fn erased_arguments(taken: &List<ProgramArgument>, first_weight: i32) -> [List<String>, List<String>] {
+    return [
+        taken.into_iter().take(first_weight).map(|a| a.erased()).collect(),
+        taken.into_iter().skip(first_weight).map(|a| a.erased()).collect(),
+    ];
 }
 
 /// The case of `Any` holding an element of `primitive`.

@@ -71,7 +71,8 @@ runs.
   stride of 0.
 - A `bool` tensor lives on the device as 1.0 and 0.0. An `i64` tensor stays
   on the host, since WGSL stores none. Indices are small, and a gather uploads
-  them as `u32` when it runs.
+  them as `u32` when it runs. The index `arg_max` ranks stays on the device as
+  an f32, so a token a loop feeds back needs no read back.
 - `convolution` and `reduce_window` run on the CPU. No model step 14 targets
   has them.
 - `group_query_attention`, which Gemma 3 has and GPT-2 does not, is three

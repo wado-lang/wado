@@ -3,7 +3,8 @@
 //! An f32 tensor lives on the device from the kernel, `upload` or `keep` that
 //! writes it there until `compute` downloads it, and so does a `bool` one, as
 //! 1.0 and 0.0. An `i64` tensor stays on the host, since WGSL stores none, and
-//! a gather writes its indices to the device as `u32` when it runs. A weight
+//! a gather writes its indices to the device as `u32` when it runs, but for the
+//! index `arg_max` leaves on the device as an f32, which a gather reads there. A weight
 //! kept for products alone is held in bf16 where that loses nothing, which
 //! halves what a product reads. The convolutions and `max_pool` run on the
 //! CPU. See `package-loam/webgpu.md`.
@@ -2177,23 +2178,24 @@ impl WebGpuBackend {
     }
 
     /// [`Self::gathered`] by `indices` on the device, each an f32 clamped into
-    /// the axis, or `None` where the data or the output outgrows a binding.
+    /// the axis, its result of `extents`, or `None` where the data or the output
+    /// outgrows a binding.
     internal fn gathered_by(
         &mut self,
         data: &DeviceTensor,
         indices: &DeviceTensor,
         axis: i32,
+        extents: &List<i32>,
     ) -> Option<DeviceTensor> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
-        let count = element_count(&indices.extents);
         let mut flat = data.extents;
-        flat[axis] = count;
+        flat[axis] = element_count(&indices.extents);
         let source = self.span_of(data)?;
         self.span_of(&contiguous(PENDING, 0, flat))?;
         let whole = self.materialized(indices);
         let by = self.span_of(&whole)?;
-        let out = contiguous(self.allocated(element_count(&flat), false), 0, flat);
-        let target = self.span_of(&out)?;
         let total = element_count(&flat);
+        let out = contiguous(self.allocated(total, false), 0, flat);
+        let target = self.span_of(&out)?;
         let [x, y] = grid(total);
         let mut params = element_params(total, x, &flat);
         let mut across = data.strides;
@@ -2204,10 +2206,7 @@ impl WebGpuBackend {
         push_view(&mut params, 0, &out.strides);
         params.push((data.extents[axis] - 1) as u32);
         self.dispatch(ShaderKey::Gather([flat.len(), axis, data.half, true]), [source, by, target], params, [x, y, 1]);
-        let mut extents = data.extents[0..<axis].to_list();
-        extents.extend(&indices.extents);
-        extents.extend(&data.extents[axis + 1..<data.extents.len()].to_list());
-        return Option::Some(contiguous(out.slot, 0, extents));
+        return Option::Some(contiguous(out.slot, 0, *extents));
     }
 
     /// Writes `out`'s rows `lo..<hi` along `axis`, the data's rows `words`
