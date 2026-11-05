@@ -102,8 +102,8 @@ pub fn summary(analysis: &Analysis) -> String {
     let mut line = `${analysis.argument_bytes} argument bytes, ${analysis.alias_bytes} aliased, ${analysis.temporary_bytes} temporary`;
     for let cost of analysis.costs {
         if cost.name == "optimal_seconds" {
-            let unmodeled = f64::ceil(-cost.value);
-            line.push_str(`, ${cost.value + unmodeled:e} optimal seconds, ${unmodeled} operations unmodeled`);
+            let unmodeled = f64::ceil(-cost.value) as i64;
+            line.push_str(`, ${cost.value + unmodeled as f64:e} optimal seconds, ${unmodeled} operations unmodeled`);
         }
     }
     return line;

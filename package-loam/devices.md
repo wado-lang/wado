@@ -477,14 +477,15 @@ and a program for each shape class it has met. The caller owns it, and
    and the cache of fixed capacity. Finished when Gemma 3 decodes on `Cpu`
    from padded inputs with onnxruntime's tokens, and `loam dump` reports each
    padded axis or the node that refused it.
-3. [ ] `wado-run-pjrt` and the StableHLO writer. Finished when the tiny GPT-2,
+3. [x] `wado-run-pjrt` and the StableHLO writer. Finished when the tiny GPT-2,
    Gemma 3 and the conformance cases with an `If` run on XLA's CPU plugin
    within the tolerance of `Cpu`, with one
-   compile per shape class. CI compiles the same programs for a TPU topology
-   through `libtpu.so` and records `optimal_seconds`. There
-   `PJRT_Executable_GetCompiledMemoryStats` reports argument bytes that hold
-   Gemma 3's weights at half their f32 size, every product weight of it being
-   bf16 without loss, and alias bytes equal to the cache's size.
+   compile per shape class. CI compiles the conformance programs for a TPU
+   topology through `libtpu.so`, and `analyzed.wado` compiles Gemma 3's. There
+   `optimal_seconds` is recorded, and `PJRT_Executable_GetCompiledMemoryStats`
+   reports argument bytes that hold Gemma 3's weights at half their f32 size,
+   every product weight of it being bf16 without loss, and alias bytes equal to
+   the cache's size ([measured](#gemma-3-on-pjrt)).
 4. [x] The WebGPU compiler. Fusion, kernel variants and the recorded dispatch
    list over the graph. Finished when Gemma 3's time per token on
    `WebGpuBackend` is at most today's, and the generator's plan and the fused

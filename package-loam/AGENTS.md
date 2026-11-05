@@ -48,6 +48,10 @@ last:
    runs. It does the same on XLA's CPU plugin, and compiles for a TPU.
 4. `wado test package-loam`.
 
+CI tests the logic on every device with very small programs, which should
+reach as many operations and paths as they can. A real model such as Gemma 3
+runs by hand, and its figures go in a measurement table.
+
 ## Oracles
 
 `conformance/operators_test.wado` and `semantics_test.wado` take their
