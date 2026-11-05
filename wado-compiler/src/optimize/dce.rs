@@ -956,10 +956,13 @@ impl<'a> DceWalker<'a> {
         }
 
         match base_receiver_type {
+            // `List<T>` is lowered as it is, never monomorphized.
             ResolvedType::Struct {
                 ref def,
                 ref type_args,
-            } if !type_args.is_empty() => {
+            } if !type_args.is_empty()
+                && !self.type_table.is_compiler_struct(*def, CompilerItem::List) =>
+            {
                 let module_source = self.type_table.struct_head_module(*def);
                 let name = &self.type_table.struct_mangled_name(*def, type_args);
                 // Monomorphized struct method (e.g. `Box<i32>::get`):
@@ -990,6 +993,34 @@ impl<'a> DceWalker<'a> {
                     ));
                     self.analysis.callees.insert(original_method_id);
                 }
+            }
+            ResolvedType::Struct {
+                def: StructDef::Decl(def),
+                type_args,
+            }
+            | ResolvedType::Variant { def, type_args }
+                if !type_args.is_empty() =>
+            {
+                let name = self.type_table.decl_name(def).to_string();
+                // Generic instance method (e.g. `List<i32>::push`,
+                // `Option<i32>^Inspect::inspect`). Trait methods
+                // need the trait name baked into the mangle so trait-
+                // and inherent-name collisions stay separate.
+                let type_arg_names: Vec<String> = type_args
+                    .iter()
+                    .map(|t| self.type_table.mangle_type_name(*t))
+                    .collect();
+                let mangled_func_name = if let Some(ref trait_n) = trait_name {
+                    let generic_name = mangle_generic_name(&name, &type_arg_names);
+                    mangle_local_trait_method(&generic_name, &trait_n.to_mangled(), &method_name)
+                } else {
+                    mangle_method_generic(&name, &type_arg_names, &method_name)
+                };
+                let callee_id = FunctionId::Free(FreeFunctionName::new(
+                    self.current_module.clone(),
+                    mangled_func_name,
+                ));
+                self.analysis.callees.insert(callee_id);
             }
             ResolvedType::Struct { def, .. } => {
                 let module_source = self.type_table.struct_head_module(def).clone();
@@ -1069,7 +1100,7 @@ impl<'a> DceWalker<'a> {
                 ));
                 self.analysis.callees.insert(method_id);
             }
-            ResolvedType::Variant { def, type_args } if type_args.is_empty() => {
+            ResolvedType::Variant { def, .. } => {
                 let module_source = self.type_table.def_module(def).clone();
                 // Variant method, e.g. `Shape^Inspect::inspect`.
                 let method_id = FunctionId::Method(MethodName::new(
@@ -1079,29 +1110,6 @@ impl<'a> DceWalker<'a> {
                     method_name,
                 ));
                 self.analysis.callees.insert(method_id);
-            }
-            ResolvedType::GenericInstance { def, type_args }
-            | ResolvedType::Variant { def, type_args } => {
-                let name = self.type_table.decl_name(def).to_string();
-                // Generic instance method (e.g. `Box<i32>::get`,
-                // `TreeMap<String,i32>^Index::index`). Trait methods
-                // need the trait name baked into the mangle so trait-
-                // and inherent-name collisions stay separate.
-                let type_arg_names: Vec<String> = type_args
-                    .iter()
-                    .map(|t| self.type_table.mangle_type_name(*t))
-                    .collect();
-                let mangled_func_name = if let Some(ref trait_n) = trait_name {
-                    let generic_name = mangle_generic_name(&name, &type_arg_names);
-                    mangle_local_trait_method(&generic_name, &trait_n.to_mangled(), &method_name)
-                } else {
-                    mangle_method_generic(&name, &type_arg_names, &method_name)
-                };
-                let callee_id = FunctionId::Free(FreeFunctionName::new(
-                    self.current_module.clone(),
-                    mangled_func_name,
-                ));
-                self.analysis.callees.insert(callee_id);
             }
             ResolvedType::Enum { def } => {
                 let module_source = self.type_table.def_module(def).clone();
@@ -1456,9 +1464,7 @@ impl DceAnalysis {
                 continue;
             }
             match type_table.get(id) {
-                ResolvedType::Variant { def, .. }
-                | ResolvedType::Enum { def }
-                | ResolvedType::GenericInstance { def, .. } => {
+                ResolvedType::Variant { def, .. } | ResolvedType::Enum { def } => {
                     self.nominal_defs.insert(*def);
                 }
                 _ => {}
@@ -1727,7 +1733,7 @@ fn collect_type_dependencies(
             }
             collect_type_transitive(*return_type, type_table, reachable);
         }
-        ResolvedType::GenericInstance { type_args, .. }
+        ResolvedType::Struct { type_args, .. }
         | ResolvedType::Resource { type_args, .. }
         | ResolvedType::Variant { type_args, .. }
         | ResolvedType::Tuple(type_args) => {
@@ -1758,7 +1764,6 @@ fn collect_type_dependencies(
         | ResolvedType::Never
         | ResolvedType::Unknown
         | ResolvedType::Error
-        | ResolvedType::Struct { .. }
         | ResolvedType::Enum { .. }
         | ResolvedType::TypeParam { .. }
         | ResolvedType::AssocParam { .. }

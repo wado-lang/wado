@@ -40,7 +40,7 @@ use crate::elaborator::sig::{ImplSig, TraitMethod, TraitSig, own_params_of};
 use crate::elaborator::trait_env::get_type_name_static;
 use crate::hashmap;
 use crate::name::{FqTraitName, test_function_name};
-use crate::tir::{ResolvedType, TirTypeParam};
+use crate::tir::{ResolvedType, StructDef, TirTypeParam};
 
 /// Extract the [`CompilerItem`] marker — if any — from a declaration's
 /// `#[compiler_item("...")]` attributes, emitting a diagnostic for
@@ -1563,7 +1563,10 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         let head = {
             let tt = self.tysys.type_table.borrow();
             let head = tt.representation_head(type_id);
-            if let ResolvedType::GenericInstance { def, .. } = tt.get(head)
+            if let ResolvedType::Struct {
+                def: StructDef::Decl(def),
+                ..
+            } = tt.get(head)
                 && tt.is_compiler_item(*def, CompilerItem::Slice)
             {
                 return true;
@@ -1637,24 +1640,27 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             ResolvedType::Variant { type_args, .. } if type_args.is_empty() => {
                 self.tysys.case_payload_types(head).unwrap_or_default()
             }
-            ResolvedType::Struct { .. } if into_fields => self
-                .struct_field_types(head)
-                .map(|fields| fields.into_iter().map(|(_, t)| t).collect())
-                .unwrap_or_default(),
-            ResolvedType::GenericInstance { def, .. }
-                if into_fields
+            ResolvedType::Struct {
+                def: StructDef::Decl(def),
+                type_args,
+            } if !type_args.is_empty() => {
+                let own_fields = into_fields
                     && self
                         .tysys
                         .type_table
                         .borrow()
                         .compiler_type_item(def)
-                        .is_none()
-                    && let Some(fields) = self.struct_field_types(head) =>
-            {
-                fields.into_iter().map(|(_, t)| t).collect()
+                        .is_none();
+                match own_fields.then(|| self.struct_field_types(head)).flatten() {
+                    Some(fields) => fields.into_iter().map(|(_, t)| t).collect(),
+                    None => type_args,
+                }
             }
-            ResolvedType::GenericInstance { type_args, .. }
-            | ResolvedType::Variant { type_args, .. }
+            ResolvedType::Struct { .. } if into_fields => self
+                .struct_field_types(head)
+                .map(|fields| fields.into_iter().map(|(_, t)| t).collect())
+                .unwrap_or_default(),
+            ResolvedType::Variant { type_args, .. }
             | ResolvedType::Resource { type_args, .. }
             | ResolvedType::Tuple(type_args) => type_args,
             _ => Vec::new(),

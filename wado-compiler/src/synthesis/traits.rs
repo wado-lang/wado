@@ -4923,8 +4923,7 @@ fn resolve_impl_module_via_env(
         | ResolvedType::Variant { .. }
         | ResolvedType::Newtype { .. }
         | ResolvedType::Flags { .. }
-        | ResolvedType::Tuple(_)
-        | ResolvedType::GenericInstance { .. } => tt.nominal_head(type_id).map(|(_, m)| m),
+        | ResolvedType::Tuple(_) => tt.nominal_head(type_id).map(|(_, m)| m),
         ResolvedType::Primitive(prim) => Some(ModuleSource::of_primitive(*prim)),
         ResolvedType::Unit => Some(ModuleSource::primitive()),
         ResolvedType::BuiltinArray(_) => Some(ModuleSource::array()),

@@ -525,8 +525,22 @@ fn check_cm_boundary_representable_inner(
                 if type_table.is_string(type_id) {
                     return Ok(());
                 }
+                if let Some((key, value)) = type_table.as_tree_map(type_id) {
+                    // `map<K, V>`: the key comes from the CM's `keytype`
+                    // subset, the value from any representable valtype.
+                    if let Some(reason) = map_key_rejection(type_table, key) {
+                        return Err(reason);
+                    }
+                    return recurse(value, Slot::Value, visited);
+                }
                 let name = type_table.struct_head_mangled_name(*def);
                 match struct_decl_of(*def, type_args, tir_modules) {
+                    // Only the declaration stands for an instance no
+                    // monomorphization listed.
+                    Some(decl) if decl.type_args != *type_args => Err(format!(
+                        "generic type `{}` has no Component Model value representation",
+                        type_table.name(type_id)
+                    )),
                     Some(decl) if decl.fields.is_empty() => Err(format!(
                         "record `{name}` has no fields; an empty record has no \
                          Component Model representation — add at least one field"
@@ -576,21 +590,6 @@ fn check_cm_boundary_representable_inner(
                 "generic type `{}` has no Component Model value representation",
                 type_table.name(type_id)
             )),
-            ResolvedType::GenericInstance { .. } => {
-                if let Some((key, value)) = type_table.as_tree_map(type_id) {
-                    // `map<K, V>`: the key comes from the CM's `keytype`
-                    // subset, the value from any representable valtype.
-                    if let Some(reason) = map_key_rejection(type_table, key) {
-                        return Err(reason);
-                    }
-                    recurse(value, Slot::Value, visited)
-                } else {
-                    Err(format!(
-                        "generic type `{}` has no Component Model value representation",
-                        type_table.name(type_id)
-                    ))
-                }
-            }
             ResolvedType::Newtype { base_type, .. } => {
                 let base = *base_type;
                 recurse(base, slot, visited)
@@ -933,6 +932,19 @@ fn flat_types_from_type_id_inner(
             }
         },
         ResolvedType::Unit => {} // no flat values
+        // A `map<K, V>` despecializes to `list<tuple<K, V>>`, so it carries
+        // that type's pair.
+        ResolvedType::Struct {
+            def: StructDef::Decl(def),
+            ..
+        } if matches!(
+            type_table.compiler_type_item(*def),
+            Some(CompilerItem::List | CompilerItem::TreeMap)
+        ) =>
+        {
+            out.push(cm_abi::CmValType::I32); // ptr
+            out.push(cm_abi::CmValType::I32); // len
+        }
         ResolvedType::Struct { def, type_args } => {
             if type_table.is_string(type_id) {
                 out.push(cm_abi::CmValType::I32); // ptr
@@ -995,17 +1007,6 @@ fn flat_types_from_type_id_inner(
                         names,
                     );
                     out.extend(cm_abi::join_flat_unions(&ok_flat, &err_flat));
-                }
-                _ => out.push(cm_abi::CmValType::I32),
-            }
-        }
-        ResolvedType::GenericInstance { def, .. } => {
-            match type_table.compiler_type_item(*def) {
-                // A `map<K, V>` despecializes to `list<tuple<K, V>>`, so it
-                // carries that type's pair.
-                Some(CompilerItem::List | CompilerItem::TreeMap) => {
-                    out.push(cm_abi::CmValType::I32); // ptr
-                    out.push(cm_abi::CmValType::I32); // len
                 }
                 _ => out.push(cm_abi::CmValType::I32),
             }
@@ -1199,7 +1200,7 @@ pub(super) fn type_id_to_ast_type(
     let to_ast = |tid: &TypeId| type_id_to_ast_type(*tid, type_table, cm_interface_registry);
     if let Some(item) = cm_item_of_type(type_table, type_id) {
         let args = match resolved {
-            ResolvedType::GenericInstance { type_args, .. }
+            ResolvedType::Struct { type_args, .. }
             | ResolvedType::Variant { type_args, .. }
             | ResolvedType::Resource { type_args, .. } => type_args.iter().map(to_ast).collect(),
             _ => Vec::new(),
@@ -1234,9 +1235,7 @@ pub(super) fn type_id_to_ast_type(
         ResolvedType::Unit => Type::unit(AstId::fresh(), span),
         // `Flags` joins them: its own CM type, 1 byte at <=8 labels, not a
         // four-byte `i32`.
-        ResolvedType::GenericInstance { def, type_args }
-        | ResolvedType::Variant { def, type_args }
-        | ResolvedType::Resource { def, type_args } => {
+        ResolvedType::Variant { def, type_args } | ResolvedType::Resource { def, type_args } => {
             declared(*def, type_args.iter().map(to_ast).collect())
         }
         ResolvedType::Struct { .. }

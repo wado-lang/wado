@@ -13,7 +13,7 @@ use crate::defs::DefId;
 use crate::module_source::ModuleSource;
 use crate::name::{FqTypeName, Receiver, TypeHead, display_generic_name};
 use crate::primitive::PrimitiveType;
-use crate::tir::{ResolvedType, TypeId};
+use crate::tir::{ResolvedType, StructDef, TypeId};
 use crate::token::Span;
 use crate::type_table::TypeTable;
 
@@ -1282,6 +1282,13 @@ impl TypeSystem {
             ResolvedType::Enum { .. } => Some(true),
             // A bitmask has no members to recurse into, like a plain `enum`.
             ResolvedType::Flags { .. } => Some(true),
+            ResolvedType::Struct {
+                def: StructDef::Decl(def),
+                type_args,
+            } if !type_args.is_empty() => {
+                let info = scope.struct_fields_of(*def)?;
+                Some(walk_struct(info, type_args, visit))
+            }
             ResolvedType::Struct { def, .. } => {
                 // An anonymous struct has fields to walk like any other; it
                 // just has no declaration to reach them through. Asking the
@@ -1293,10 +1300,6 @@ impl TypeSystem {
             ResolvedType::Variant { def, type_args } => {
                 let info = scope.variant_cases_of(*def)?;
                 Some(walk_variant(info, type_args, visit))
-            }
-            ResolvedType::GenericInstance { def, type_args } => {
-                let info = scope.struct_fields_of(*def)?;
-                Some(walk_struct(info, type_args, visit))
             }
             _ => None,
         }
@@ -1404,7 +1407,6 @@ impl TypeSystem {
             ResolvedType::Primitive(_) => false,
             ResolvedType::Struct { .. }
             | ResolvedType::Variant { .. }
-            | ResolvedType::GenericInstance { .. }
             | ResolvedType::Tuple(_)
             | ResolvedType::BuiltinArray(_)
             | ResolvedType::Function { .. }
@@ -3188,11 +3190,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let effective_id = tt.representation_head(concrete_type_id);
             let list_name = tt.compiler_struct_fq_name(CompilerItem::List);
             match tt.get(effective_id).clone() {
-                ResolvedType::GenericInstance { type_args, .. }
-                | ResolvedType::Tuple(type_args) => {
+                ResolvedType::Tuple(type_args) => {
                     (tt.fq_type_name(effective_id).head_only(), type_args)
                 }
-                ResolvedType::Resource { type_args, .. }
+                ResolvedType::Struct {
+                    def: StructDef::Decl(_),
+                    type_args,
+                }
+                | ResolvedType::Resource { type_args, .. }
                 | ResolvedType::Variant { type_args, .. }
                     if !type_args.is_empty() =>
                 {

@@ -1604,9 +1604,7 @@ fn extract_alias_source(body: &Body, e: ExprId) -> Option<u32> {
 /// Check if a type is a GC heap type whose fields can be mutated by a callee.
 fn is_gc_heap_type(type_id: TypeId, type_table: &TypeTable) -> bool {
     match type_table.get(type_id) {
-        ResolvedType::GenericInstance { .. }
-        | ResolvedType::Struct { .. }
-        | ResolvedType::Tuple(_) => true,
+        ResolvedType::Struct { .. } | ResolvedType::Tuple(_) => true,
         ResolvedType::Variant { type_args, .. } | ResolvedType::Resource { type_args, .. } => {
             !type_args.is_empty()
         }

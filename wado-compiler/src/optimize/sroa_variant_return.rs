@@ -906,10 +906,9 @@ fn slot_shape(payload: TypeId, type_table: &TypeTable) -> Option<SlotShape> {
         ResolvedType::Resource { .. } | ResolvedType::Enum { .. } | ResolvedType::Flags { .. } => {
             Some(SlotShape::Direct(Pad::Int(payload)))
         }
-        ResolvedType::Struct { .. }
-        | ResolvedType::Tuple(_)
-        | ResolvedType::BuiltinArray(_)
-        | ResolvedType::GenericInstance { .. } => Some(SlotShape::Wrapped),
+        ResolvedType::Struct { .. } | ResolvedType::Tuple(_) | ResolvedType::BuiltinArray(_) => {
+            Some(SlotShape::Wrapped)
+        }
         ResolvedType::Variant { .. } => {
             // `Option<X>` for a GC-ref `X` is already `ref null X`; wrapping it
             // again yields a variant whose payload is nullable, which
@@ -943,7 +942,6 @@ fn is_gc_ref(type_id: TypeId, type_table: &TypeTable) -> bool {
         ResolvedType::Resource { .. } => type_table.is_resource_object(type_id),
         ResolvedType::Struct { .. }
         | ResolvedType::Variant { .. }
-        | ResolvedType::GenericInstance { .. }
         | ResolvedType::Tuple(_)
         | ResolvedType::BuiltinArray(_) => true,
         ResolvedType::Newtype { base_type, .. } => is_gc_ref(*base_type, type_table),

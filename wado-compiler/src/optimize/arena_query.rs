@@ -1118,7 +1118,6 @@ pub(super) fn field_receiver_nonnull(
     match types.get_pruned(ty) {
         Some(
             ResolvedType::Struct { .. }
-            | ResolvedType::GenericInstance { .. }
             | ResolvedType::Tuple(_)
             | ResolvedType::Ref(_)
             | ResolvedType::MutRef(_),

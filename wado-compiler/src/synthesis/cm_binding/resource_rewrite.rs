@@ -22,7 +22,7 @@ use crate::name::{
 use crate::package::Package;
 use crate::tir::{
     CallArg, FrameLocals, FunctionKind, FunctionRef, InlineHint, MonomorphInfo, ResolvedType,
-    TirBinaryOp, TirBlock, TirExpr, TirExprKind, TirFunction, TirLocal, TirParam, TirStmt,
+    StructDef, TirBinaryOp, TirBlock, TirExpr, TirExprKind, TirFunction, TirLocal, TirParam, TirStmt,
     TirStmtKind, TypeId,
 };
 use crate::tir_visitor::{TirMutVisitor, TirRefVisitor};
@@ -374,8 +374,12 @@ fn payload_ast_type(payload: TypeId, tt: &TypeTable, registry: &CmInterfaceRegis
         return ast::Type::Tuple(args_of(elems));
     }
     let instance = match tt.get(id) {
-        ResolvedType::GenericInstance { def, type_args } => Some((def, type_args)),
-        ResolvedType::Variant { def, type_args } | ResolvedType::Resource { def, type_args }
+        ResolvedType::Struct {
+            def: StructDef::Decl(def),
+            type_args,
+        }
+        | ResolvedType::Variant { def, type_args }
+        | ResolvedType::Resource { def, type_args }
             if !type_args.is_empty() =>
         {
             Some((def, type_args))

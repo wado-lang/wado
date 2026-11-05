@@ -334,8 +334,7 @@ impl ResourceScan<'_> {
             out.extend(resource_chain_effects(self.tt, self.resolutions, def));
         }
         match self.tt.get(type_id) {
-            ResolvedType::GenericInstance { type_args, .. }
-            | ResolvedType::Variant { type_args, .. } => {
+            ResolvedType::Struct { type_args, .. } | ResolvedType::Variant { type_args, .. } => {
                 for ta in type_args {
                     self.collect(*ta, out, visited);
                 }
@@ -366,11 +365,6 @@ impl ResourceScan<'_> {
             }
             ResolvedType::Newtype { base_type, .. } => {
                 self.collect(*base_type, out, visited);
-            }
-            ResolvedType::Struct { .. } => {
-                for member in self.members.of(type_id, self.tt) {
-                    self.collect(member, out, visited);
-                }
             }
             // Primitives, Unit, Never, Enum, Flags, TypeParam, TypePack,
             // AssocTypeProjection, Unknown, Error — no resource refs.

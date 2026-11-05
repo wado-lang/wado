@@ -381,7 +381,6 @@ fn build_copy_return_expr(
     };
     let (def, type_args) = match resolved {
         ResolvedType::Struct { def, type_args } => (*def, type_args),
-        ResolvedType::GenericInstance { def, type_args } => (StructDef::Decl(*def), type_args),
         ResolvedType::Tuple(elems) => {
             return Some(build_tuple_copy(
                 type_id,
@@ -410,8 +409,7 @@ fn build_copy_return_expr(
     }
     // An unlisted instance lowers to `AbstractRef(Struct)`, which WIR-build
     // rejects in a `StructLiteral`; only `List<T>` copies without one.
-    if matches!(resolved, ResolvedType::GenericInstance { .. })
-        && type_table.borrow().is_list(type_id)
+    if type_table.borrow().is_list(type_id)
         && type_args.len() == 1
         && is_synth_safe_element(type_args[0], type_table, project)
     {
@@ -454,14 +452,15 @@ fn is_synth_safe_element(
         | ResolvedType::TypeParam { .. }
         | ResolvedType::TypePack { .. } => false,
         ResolvedType::Variant { .. } => true,
-        ResolvedType::GenericInstance { def, type_args } => {
+        ResolvedType::Struct {
+            def: def @ StructDef::Decl(_),
+            type_args,
+        } if !type_args.is_empty() => {
             let tt = type_table.borrow();
             // Any other instance needs a monomorphized struct for WIR to point at.
             tt.is_list(elem_type)
                 || tt.is_compiler_struct_instance(elem_type, CompilerItem::Box)
-                || project
-                    .listed_struct(&tt, StructDef::Decl(def), &type_args)
-                    .is_some()
+                || project.listed_struct(&tt, def, &type_args).is_some()
         }
         _ => true,
     }

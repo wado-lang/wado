@@ -13,7 +13,7 @@ use crate::name::{
     unalias_namespace_member,
 };
 use crate::tir::{
-    FunctionRef, InferVarId, MonomorphInfo, ResolvedType, SubstitutionContext, TypeId,
+    FunctionRef, InferVarId, MonomorphInfo, ResolvedType, StructDef, SubstitutionContext, TypeId,
 };
 use crate::type_table::TypeTable;
 
@@ -1284,12 +1284,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let (kind, result) = {
             let tt = self.tysys.type_table.borrow();
             let bare_generic_of_arg = bare_generic
-                && matches!(
-                    tt.get(arg),
-                    ResolvedType::GenericInstance { .. }
-                        | ResolvedType::Variant { .. }
-                        | ResolvedType::Resource { .. }
-                )
+                && match tt.get(arg) {
+                    ResolvedType::Struct {
+                        def: StructDef::Decl(_),
+                        type_args,
+                    } => !type_args.is_empty(),
+                    ResolvedType::Variant { .. } | ResolvedType::Resource { .. } => true,
+                    _ => false,
+                }
                 && tt.nominal_def(arg).is_some()
                 && tt.nominal_def(arg) == tt.nominal_def(receiver)
                 && tt

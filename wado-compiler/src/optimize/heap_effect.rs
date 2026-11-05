@@ -684,7 +684,7 @@ impl HeapEffects<'_> {
     pub(super) fn element_reach(&self, ty: TypeId) -> Option<Arc<ObjectTypes>> {
         let tt = self.type_table;
         let ty = tt.strip_handles(ty);
-        let ResolvedType::GenericInstance { type_args, .. } = tt.get(ty) else {
+        let ResolvedType::Struct { type_args, .. } = tt.get(ty) else {
             return None;
         };
         let [element] = type_args.as_slice() else {
@@ -717,35 +717,21 @@ impl HeapEffects<'_> {
             return;
         }
         match tt.get(ty) {
-            ResolvedType::Struct { .. } => {
-                out.insert(tt.type_key(ty));
-                match self.struct_field_types(ty) {
-                    Some(fields) => {
-                        for &f in fields {
-                            self.reach_into(f, seen, out);
-                        }
-                    }
-                    None => {
-                        out.set_any();
-                    }
-                }
-            }
             ResolvedType::Tuple(elems) => {
                 out.insert(tt.type_key(ty));
                 for &elem in elems {
                     self.reach_into(elem, seen, out);
                 }
             }
-            ResolvedType::GenericInstance { type_args, .. } => {
+            ResolvedType::Struct { type_args, .. } => {
+                out.insert(tt.type_key(ty));
                 if let Some(fields) = self.struct_field_types(ty) {
-                    out.insert(tt.type_key(ty));
                     for &f in fields {
                         self.reach_into(f, seen, out);
                     }
                 } else if let [element] = type_args.as_slice()
                     && tt.is_list(ty)
                 {
-                    out.insert(tt.type_key(ty));
                     for &array in self
                         .cache
                         .layouts

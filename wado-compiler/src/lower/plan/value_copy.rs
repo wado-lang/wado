@@ -487,7 +487,7 @@ fn needs_copy_walked(
         // An instance is answered without its declaration's fields, which
         // would need a registry the type table does not keep: a spurious copy
         // costs, a missed one aliases.
-        ResolvedType::Struct { .. } | ResolvedType::GenericInstance { .. } => !is_box,
+        ResolvedType::Struct { .. } => !is_box,
         // Empty tuples are unit-shaped; non-empty tuples need element-wise
         // deep copy.
         ResolvedType::Tuple(elems) => !is_box && !elems.is_empty(),

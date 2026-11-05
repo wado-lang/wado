@@ -324,16 +324,12 @@ impl TypeSystem {
     fn binop_operand_requires_trait(&self, type_id: TypeId) -> bool {
         let tt = self.type_table.borrow();
         match tt.get(type_id) {
-            ResolvedType::Struct { .. }
-            | ResolvedType::GenericInstance { .. }
-            | ResolvedType::Tuple(_) => true,
+            ResolvedType::Struct { .. } | ResolvedType::Tuple(_) => true,
             ResolvedType::Variant { type_args, .. } => !type_args.is_empty(),
             ResolvedType::Newtype { base_type, .. } => {
                 let ultimate = tt.representation_head(*base_type);
                 match tt.get(ultimate) {
-                    ResolvedType::Struct { .. }
-                    | ResolvedType::GenericInstance { .. }
-                    | ResolvedType::Tuple(_) => true,
+                    ResolvedType::Struct { .. } | ResolvedType::Tuple(_) => true,
                     ResolvedType::Resource { type_args, .. }
                     | ResolvedType::Variant { type_args, .. } => !type_args.is_empty(),
                     // SIMD aliases (`type f32x4 = v128`) and half aliases —
@@ -488,7 +484,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // bound-driven synthesis request, and synthesis has already run.
             let struct_name = match &left_type {
                 ResolvedType::Struct { .. }
-                | ResolvedType::GenericInstance { .. }
                 | ResolvedType::Tuple(_)
                 | ResolvedType::Variant { .. }
                 // `fq_base_type_name` spells a raw GC array `Array` and the
@@ -531,7 +526,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     let ultimate = tt.representation_head(*base_type);
                     match tt.get(ultimate) {
                         ResolvedType::Struct { .. }
-                        | ResolvedType::GenericInstance { .. }
                         | ResolvedType::Tuple(_)
                         | ResolvedType::Variant { .. } => {
                             Some(tt.fq_base_type_name(ultimate).into_string())
@@ -1404,7 +1398,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         match tt.get(base_type_id) {
             ResolvedType::Variant { type_args, .. } if type_args.is_empty() => None,
             ResolvedType::Struct { .. }
-            | ResolvedType::GenericInstance { .. }
             | ResolvedType::Variant { .. }
             | ResolvedType::Resource { .. }
             | ResolvedType::Tuple(_)

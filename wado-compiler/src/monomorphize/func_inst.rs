@@ -9,7 +9,7 @@ use crate::compiler_item::CompilerItem;
 use crate::elaborator::trait_env::{BlanketImpl, BlanketReceiver, TraitEnv};
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
-use crate::name::{FqTypeName, LocalMethodName, Projected, RefKind, mangle_generic_name};
+use crate::name::{FqTypeName, LocalMethodName, Projected, RefKind};
 use crate::tir::{
     CallArg, FunctionKind, FunctionRef, InstantiationKey, LetStorage, MonomorphInfo, ResolvedType,
     ShapeSubstitution, StructDef, TemplateId, TemplateShape, TirBinaryOp, TirBlock, TirExpr,
@@ -2306,36 +2306,8 @@ impl Monomorphizer {
                     *struct_type = expr.type_id;
                 }
 
-                // Update struct_name to match the (possibly monomorphized) struct_type
-                match type_table.get(*struct_type) {
-                    ResolvedType::Struct { def, type_args } => {
-                        *struct_name = type_table.struct_mangled_name(*def, type_args);
-                    }
-                    ResolvedType::GenericInstance { def, type_args } => {
-                        let name = &type_table.decl_name(*def).to_string();
-                        if type_args.is_empty() && !substitution.is_empty() {
-                            // GenericInstance with empty type_args in a substitution context
-                            // Build the name using the substitution map. Type
-                            // args go through `mangle_type_arg_for_generic` so
-                            // the resulting struct name matches what the
-                            // function-definition side produces.
-                            let mut sorted_entries: Vec<_> = substitution.iter().collect();
-                            sorted_entries.sort_by_key(|(idx, _)| **idx);
-                            let args: Vec<String> = sorted_entries
-                                .iter()
-                                .map(|(_, tid)| type_table.mangle_type_arg_for_generic(**tid))
-                                .collect();
-                            *struct_name = mangle_generic_name(name, &args);
-                        } else {
-                            // For generic instances like Container<i32>, compute the mangled name.
-                            let args: Vec<String> = type_args
-                                .iter()
-                                .map(|arg| type_table.mangle_type_arg_for_generic(*arg))
-                                .collect();
-                            *struct_name = mangle_generic_name(name, &args);
-                        }
-                    }
-                    _ => {}
+                if let ResolvedType::Struct { def, type_args } = type_table.get(*struct_type) {
+                    *struct_name = type_table.struct_mangled_name(*def, type_args);
                 }
             }
             TirExprKind::IndirectCall { callee, args } => {
@@ -2767,8 +2739,7 @@ impl Monomorphizer {
                 _ => base,
             };
             match type_table.get(effective) {
-                ResolvedType::GenericInstance { .. }
-                | ResolvedType::Tuple(_)
+                ResolvedType::Tuple(_)
                 | ResolvedType::BuiltinArray(_)
                 | ResolvedType::Struct { .. } => true,
                 ResolvedType::Resource { type_args, .. }
@@ -2993,8 +2964,10 @@ impl Monomorphizer {
             let resolved = type_table.representation_head(inner);
             matches!(
                 type_table.get(resolved),
-                ResolvedType::GenericInstance { type_args: elems, .. }
-                    | ResolvedType::Variant { type_args: elems, .. }
+                ResolvedType::Struct {
+                    def: StructDef::Decl(_),
+                    type_args: elems,
+                } | ResolvedType::Variant { type_args: elems, .. }
                     | ResolvedType::Tuple(elems) if !elems.is_empty()
             ) || matches!(type_table.get(resolved), ResolvedType::BuiltinArray(_))
         };
@@ -4101,7 +4074,7 @@ impl Monomorphizer {
     }
 }
 
-/// Convert `==`/`!=`/`<`/`>`/`<=`/`>=` on Struct/Variant/GenericInstance types to
+/// Convert `==`/`!=`/`<`/`>`/`<=`/`>=` on Struct/Variant types to
 /// `Eq::eq` / `Ord::cmp` method calls. Returns `None` for primitives.
 fn try_lower_comparison(
     trait_env: &Arc<TraitEnv>,
@@ -4121,8 +4094,7 @@ fn try_lower_comparison(
             // Tuple Eq/Ord are provided by variadic impls in core:prelude/tuple.wado
             // and already lowered to method calls by the elaborator.
             ResolvedType::Tuple(_) => return None,
-            ResolvedType::GenericInstance { def, type_args }
-            | ResolvedType::Variant { def, type_args } => {
+            ResolvedType::Variant { def, type_args } => {
                 // Must match the struct-name form
                 // `method_instantiation_name_inner` writes into `MethodInfo`.
                 let args: Vec<FqTypeName> = type_args

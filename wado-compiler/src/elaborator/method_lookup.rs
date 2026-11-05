@@ -17,8 +17,8 @@ use crate::name::{
     ARRAY_TYPE_NAME, LocalMethodName, MethodName, TUPLE_TYPE_NAME, display_generic_name,
 };
 use crate::tir::{
-    EffectRows, FunctionRef, ProjectionAnswer, ResolvedType, SlotProjections, SubstitutionContext,
-    TemplateId, TypeId, positional_substitution,
+    EffectRows, FunctionRef, ProjectionAnswer, ResolvedType, SlotProjections, StructDef,
+    SubstitutionContext, TemplateId, TypeId, positional_substitution,
 };
 use crate::token::Span;
 use crate::type_table::{TargetBinding, TypeTable};
@@ -718,6 +718,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // For primitives, module_source is None to trigger "search all loaded modules" logic
         let (struct_name, struct_module_source, receiver_type_args, newtype_base) = match &base_type
         {
+            // Generic instances like Box<i32> use the base name "Box" for method lookup.
+            ResolvedType::Struct {
+                def: StructDef::Decl(def),
+                type_args,
+            } if !type_args.is_empty() => {
+                let table = self.tysys.type_table.borrow();
+                (
+                    table.decl_name(*def).to_string(),
+                    Some(table.def_module(*def).clone()),
+                    Some(type_args.clone()),
+                    None,
+                )
+            }
             ResolvedType::Struct { .. } => {
                 let (name, module_source) = self
                     .tysys
@@ -768,9 +781,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }
                 (TUPLE_TYPE_NAME.to_string(), None, Some(elems.clone()), None)
             }
-            // Generic instances like Box<i32> use the base name "Box" for method lookup.
-            ResolvedType::GenericInstance { def, type_args }
-            | ResolvedType::Variant { def, type_args } => {
+            ResolvedType::Variant { def, type_args } => {
                 let table = self.tysys.type_table.borrow();
                 (
                     table.decl_name(*def).to_string(),
@@ -1291,7 +1302,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ) -> Vec<(DefId, TargetBinding)> {
         let (key, args) = {
             let tt = self.tysys.type_table.borrow();
-            let (ResolvedType::GenericInstance { def, type_args }
+            let (ResolvedType::Struct {
+                def: StructDef::Decl(def),
+                type_args,
+            }
             | ResolvedType::Variant { def, type_args }
             | ResolvedType::Resource { def, type_args }) = tt.get(receiver)
             else {
@@ -3066,7 +3080,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             {
                 // A generic newtype's own impls bind its own arguments.
                 args
-            } else if let ResolvedType::GenericInstance { type_args, .. }
+            } else if let ResolvedType::Struct { type_args, .. }
             | ResolvedType::Variant { type_args, .. }
             | ResolvedType::Resource { type_args, .. }
             | ResolvedType::Tuple(type_args) = table.get(receiver)
@@ -3333,7 +3347,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let head = match self.tysys.type_table.borrow().get(base_type_id).clone() {
             ResolvedType::Variant { type_args, .. } if type_args.is_empty() => return None,
             ResolvedType::Struct { .. }
-            | ResolvedType::GenericInstance { .. }
             | ResolvedType::Variant { .. }
             | ResolvedType::Resource { .. }
             | ResolvedType::Tuple(_)
@@ -3421,8 +3434,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .get(output_base_type_id)
             .clone()
         {
-            ResolvedType::Struct { .. } => Some(Vec::new()),
-            ResolvedType::GenericInstance { type_args, .. }
+            ResolvedType::Struct { type_args, .. }
             | ResolvedType::Resource { type_args, .. }
             | ResolvedType::Tuple(type_args) => Some(type_args),
             ResolvedType::Variant { type_args, .. } if !type_args.is_empty() => Some(type_args),

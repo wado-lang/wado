@@ -268,7 +268,10 @@ impl SubstitutionContext {
                 }
                 type_table.make_tuple(new_elems)
             }
-            ResolvedType::GenericInstance { def, type_args }
+            ResolvedType::Struct {
+                def: StructDef::Decl(def),
+                type_args,
+            }
             | ResolvedType::Variant { def, type_args }
             | ResolvedType::Resource { def, type_args } => {
                 let new_args: Vec<TypeId> = type_args
@@ -774,14 +777,6 @@ pub enum ResolvedType {
     /// A tuple, `[i32, String]`: the elements, among which a
     /// [`ResolvedType::TypePack`] stands for the run it expands to.
     Tuple(Vec<TypeId>),
-    /// An application of a generic struct (`Box<i32>`), replaced by its
-    /// monomorphized `Struct`.
-    GenericInstance {
-        /// The generic declaration this instantiates.
-        def: DefId,
-        /// Concrete type arguments (e.g., [i32])
-        type_args: Vec<TypeId>,
-    },
     /// Associated type projection: `T::X` where T is a type parameter with a trait bound.
     /// During concrete instantiation this is resolved to the concrete associated type.
     AssocTypeProjection {

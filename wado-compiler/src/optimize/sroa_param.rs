@@ -24,7 +24,7 @@ use crate::nir::{FuncCell, FunctionRef, NirFunction, NirUnaryOp, StructDecls, St
 use crate::nir_arena::{Body, ExprId, ExprKind, ExprNode, NodeRef, Operand};
 use crate::nir_package::{FieldForm, NirPackage, ParamShape, Reshape, SroaParamProjection};
 use crate::parallel::Executor;
-use crate::tir::{ResolvedType, TypeId};
+use crate::tir::{ResolvedType, StructDef, TypeId};
 use crate::token::Span;
 use crate::type_table::{TypeKey, TypeTable};
 
@@ -504,14 +504,17 @@ fn by_value_structs(
     }
 }
 
-/// The arguments of a tuple or of an instance of a generic declaration other
-/// than a struct, which may sit in it by value.
+/// The arguments of a tuple or of an instance of a generic declaration with no
+/// listed struct, which may sit in it by value.
 fn instance_args(ty: TypeId, type_table: &TypeTable) -> Option<&[TypeId]> {
     match type_table.get(ty) {
-        ResolvedType::GenericInstance { type_args, .. } | ResolvedType::Tuple(type_args) => {
-            Some(type_args)
+        ResolvedType::Tuple(type_args) => Some(type_args),
+        ResolvedType::Struct {
+            def: StructDef::Decl(_),
+            type_args,
         }
-        ResolvedType::Variant { type_args, .. } | ResolvedType::Resource { type_args, .. }
+        | ResolvedType::Variant { type_args, .. }
+        | ResolvedType::Resource { type_args, .. }
             if !type_args.is_empty() =>
         {
             Some(type_args)

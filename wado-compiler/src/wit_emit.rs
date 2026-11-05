@@ -27,7 +27,7 @@ use crate::name::to_cm_name;
 use crate::primitive::PrimitiveType;
 use crate::semantics::Semantics;
 use crate::tir::{
-    ResolvedType, TirEnum, TirFlags, TirModule, TirNewtype, TirStruct, TirVariantDecl, TypeId,
+    ResolvedType, StructDef, TirEnum, TirFlags, TirModule, TirNewtype, TirStruct, TirVariantDecl, TypeId,
 };
 use crate::type_table::TypeTable;
 use crate::unparse::unparse_type_into;
@@ -960,7 +960,10 @@ impl<'a> Emitter<'a> {
             }
             ResolvedType::Tuple(elems) => CmShape::Tuple(elems.clone()),
             ResolvedType::Resource { .. } if self.is_named_resource(id) => CmShape::Leaf,
-            ResolvedType::GenericInstance { def, type_args }
+            ResolvedType::Struct {
+                def: StructDef::Decl(def),
+                type_args,
+            }
             | ResolvedType::Variant { def, type_args }
             | ResolvedType::Resource { def, type_args } => {
                 match (self.types.compiler_type_item(*def), type_args.as_slice()) {

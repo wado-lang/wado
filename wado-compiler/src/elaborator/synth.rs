@@ -702,10 +702,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let base = self.tysys.get_base_type(receiver);
         let name = self.tysys.struct_name_for_type(base)?;
         let type_args = match self.tysys.type_table.borrow().get(base) {
-            ResolvedType::GenericInstance { type_args, .. } | ResolvedType::Tuple(type_args) => {
-                Some(type_args.clone())
+            ResolvedType::Tuple(type_args) => Some(type_args.clone()),
+            ResolvedType::Struct {
+                def: StructDef::Decl(_),
+                type_args,
             }
-            ResolvedType::Resource { type_args, .. } | ResolvedType::Variant { type_args, .. }
+            | ResolvedType::Resource { type_args, .. }
+            | ResolvedType::Variant { type_args, .. }
                 if !type_args.is_empty() =>
             {
                 Some(type_args.clone())
@@ -1034,7 +1037,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
         let tt = self.tysys.type_table.borrow();
         match tt.get(type_id) {
-            ResolvedType::GenericInstance { .. }
+            ResolvedType::Struct {
+                def: StructDef::Decl(_),
+                ..
+            }
             | ResolvedType::Variant { .. }
             | ResolvedType::Resource { .. }
             | ResolvedType::Tuple(_) => ArgClass::Head(tt.fq_base_type_name(type_id)),

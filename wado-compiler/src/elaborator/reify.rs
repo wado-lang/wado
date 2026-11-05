@@ -8141,7 +8141,7 @@ impl<'a> Reify<'a> {
         // modules reach their own fields, and an anonymous shape — which no
         // spelling names — reaches its own.
         let (head, type_args): (Option<StructDef>, Vec<TypeId>) = match resolved {
-            ResolvedType::Struct { def, .. } => (Some(def), vec![]),
+            ResolvedType::Struct { def, type_args } => (Some(def), type_args),
             // Tuple projection (`t.0`): a tuple has no struct decl, so the
             // `(0, …)` fallback would collapse every `t.N` onto field 0.
             ResolvedType::Tuple(elems) => {
@@ -8152,10 +8152,6 @@ impl<'a> Reify<'a> {
                 }
                 return (0, field_name.to_string(), None);
             }
-            ResolvedType::GenericInstance { type_args, .. } => (
-                self.tysys.type_def(receiver_type).map(StructDef::Decl),
-                type_args,
-            ),
             // Peel references and newtypes and recurse, mirroring the
             // elaborator's `lookup_field_type`: `&Point`, `&mut Point`, a
             // newtype `Location = Point`, and chained newtypes / `&Location`
@@ -9523,9 +9519,6 @@ impl<'a> Reify<'a> {
         // falls back to UNKNOWN-typed sub-patterns, matching annotate.
         let scrutinee_head = match self.tysys.type_table.borrow().get(peeled_scrutinee) {
             ResolvedType::Struct { def, .. } => Some(*def),
-            ResolvedType::GenericInstance { .. } => {
-                self.tysys.type_def(peeled_scrutinee).map(StructDef::Decl)
-            }
             _ => None,
         };
         let field_info: hashmap::IndexMap<String, (u32, TypeId)> = {
@@ -9822,8 +9815,12 @@ impl TypeSystem {
             return None;
         }
         let recorded_is_instance = match table.get(recorded) {
-            ResolvedType::GenericInstance { .. } | ResolvedType::Tuple(_) => true,
-            ResolvedType::Variant { type_args, .. } => !type_args.is_empty(),
+            ResolvedType::Tuple(_) => true,
+            ResolvedType::Struct {
+                def: StructDef::Decl(_),
+                type_args,
+            }
+            | ResolvedType::Variant { type_args, .. } => !type_args.is_empty(),
             _ => false,
         };
         let recorded_is_concrete = recorded_is_instance && !table.contains_type_param(recorded);

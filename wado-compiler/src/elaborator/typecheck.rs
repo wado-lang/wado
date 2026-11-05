@@ -7,7 +7,7 @@
 use crate::ast::{AstId, Expr};
 use crate::compiler_host::CompilerHost;
 use crate::defs::DefId;
-use crate::tir::{EffectRef, ResolvedType, RowFlow, TupleSlot, TypeId};
+use crate::tir::{EffectRef, ResolvedType, RowFlow, StructDef, TupleSlot, TypeId};
 use crate::token::Span;
 use crate::type_table::TypeTable;
 
@@ -330,7 +330,6 @@ fn heads_apart(actual: TypeId, expected: TypeId, type_table: &TypeTable) -> bool
         | ResolvedType::Enum { .. }
         | ResolvedType::Variant { .. }
         | ResolvedType::Function { .. }
-        | ResolvedType::GenericInstance { .. }
         | ResolvedType::Tuple(_)
         | ResolvedType::BuiltinArray(_)
         | ResolvedType::Newtype { .. }
@@ -344,12 +343,20 @@ fn heads_apart(actual: TypeId, expected: TypeId, type_table: &TypeTable) -> bool
         (ResolvedType::Primitive(a), ResolvedType::Primitive(e)) => a != e,
         (ResolvedType::Enum { def: a }, ResolvedType::Enum { def: e })
         | (ResolvedType::Variant { def: a, .. }, ResolvedType::Variant { def: e, .. })
-        | (
-            ResolvedType::GenericInstance { def: a, .. },
-            ResolvedType::GenericInstance { def: e, .. },
-        )
         | (ResolvedType::Newtype { def: a, .. }, ResolvedType::Newtype { def: e, .. })
         | (ResolvedType::Flags { def: a }, ResolvedType::Flags { def: e }) => a != e,
+        (
+            ResolvedType::Struct {
+                def: a,
+                type_args: a_args,
+            },
+            ResolvedType::Struct {
+                def: e,
+                type_args: e_args,
+            },
+        ) if !a_args.is_empty() || !e_args.is_empty() => {
+            a_args.is_empty() || e_args.is_empty() || a != e
+        }
         (a, e) => std::mem::discriminant(a) != std::mem::discriminant(e),
     }
 }
@@ -365,7 +372,10 @@ fn needs_rebuild(actual: TypeId, expected: TypeId, fixed: bool) -> bool {
 /// none.
 fn declaration_instance(id: TypeId, type_table: &TypeTable) -> Option<(DefId, &[TypeId])> {
     match type_table.get(id) {
-        ResolvedType::GenericInstance { def, type_args }
+        ResolvedType::Struct {
+            def: StructDef::Decl(def),
+            type_args,
+        }
         | ResolvedType::Resource { def, type_args }
         | ResolvedType::Variant { def, type_args }
         | ResolvedType::Newtype { def, type_args, .. } => Some((*def, type_args.as_slice())),

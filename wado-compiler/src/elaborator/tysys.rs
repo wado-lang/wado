@@ -283,8 +283,7 @@ impl TypeSystem {
             ResolvedType::BuiltinArray(inner) => (vec![inner], Vec::new()),
             ResolvedType::Newtype { base_type, .. } => (vec![base_type], Vec::new()),
             ResolvedType::Tuple(elems) => (elems, Vec::new()),
-            ResolvedType::Struct { type_args, .. }
-            | ResolvedType::GenericInstance { type_args, .. } => (
+            ResolvedType::Struct { type_args, .. } => (
                 type_args,
                 self.struct_field_type_ids_of(type_id).unwrap_or_default(),
             ),
@@ -349,8 +348,7 @@ impl TypeSystem {
             ResolvedType::Ref(inner) | ResolvedType::BuiltinArray(inner) => vec![inner],
             ResolvedType::Newtype { base_type, .. } => vec![base_type],
             ResolvedType::Tuple(elems) => elems,
-            ResolvedType::Struct { type_args, .. }
-            | ResolvedType::GenericInstance { type_args, .. } => {
+            ResolvedType::Struct { type_args, .. } => {
                 let mut reached = type_args;
                 reached.extend(self.struct_field_type_ids_of(type_id).unwrap_or_default());
                 reached
@@ -484,7 +482,6 @@ impl TypeSystem {
         match self.type_table.borrow().get(type_id) {
             ResolvedType::Variant { type_args, .. } if type_args.is_empty() => None,
             ResolvedType::Struct { .. }
-            | ResolvedType::GenericInstance { .. }
             | ResolvedType::Variant { .. }
             | ResolvedType::Resource { .. }
             | ResolvedType::Tuple(_)
@@ -566,7 +563,6 @@ impl TypeSystem {
                     self.type_table.borrow().get(link),
                     ResolvedType::Newtype { .. }
                         | ResolvedType::Struct { .. }
-                        | ResolvedType::GenericInstance { .. }
                         | ResolvedType::Resource { .. }
                         | ResolvedType::Tuple(_)
                         | ResolvedType::Variant { .. }
@@ -591,7 +587,6 @@ impl TypeSystem {
         let receives = match table.get(ty) {
             ResolvedType::Variant { type_args, .. } => !type_args.is_empty(),
             ResolvedType::Struct { .. }
-            | ResolvedType::GenericInstance { .. }
             | ResolvedType::Resource { .. }
             | ResolvedType::Tuple(_)
             | ResolvedType::Newtype { .. }
@@ -648,9 +643,7 @@ impl TypeSystem {
                 ResolvedType::Variant { type_args, .. } if type_args.is_empty() => {
                     return self.type_table.borrow().name(current);
                 }
-                ResolvedType::GenericInstance { def, .. }
-                | ResolvedType::Variant { def, .. }
-                | ResolvedType::Resource { def, .. } => {
+                ResolvedType::Variant { def, .. } | ResolvedType::Resource { def, .. } => {
                     return self.type_table.borrow().decl_name(def).to_string();
                 }
                 ResolvedType::Tuple(_) => return TUPLE_TYPE_NAME.to_string(),
@@ -678,7 +671,6 @@ impl TypeSystem {
                 | ResolvedType::Variant { .. }
                 | ResolvedType::Enum { .. }
                 | ResolvedType::Flags { .. }
-                | ResolvedType::GenericInstance { .. }
                 | ResolvedType::Tuple(_)
         )
     }
@@ -765,7 +757,10 @@ impl TypeSystem {
             }
 
             // Generic instance (e.g., Option<T>, List<T>): substitute in type args
-            ResolvedType::GenericInstance { def, type_args }
+            ResolvedType::Struct {
+                def: StructDef::Decl(def),
+                type_args,
+            }
             | ResolvedType::Variant { def, type_args }
             | ResolvedType::Resource { def, type_args } => {
                 let new_args: Vec<TypeId> = type_args
@@ -953,8 +948,7 @@ fn constituents(table: &TypeTable, ty: TypeId) -> (Option<DefId>, Vec<TypeId>) {
             type_args,
         }
         | ResolvedType::Newtype { def, type_args, .. } => (Some(*def), type_args.clone()),
-        ResolvedType::GenericInstance { def, type_args }
-        | ResolvedType::Variant { def, type_args }
+        ResolvedType::Variant { def, type_args }
         | ResolvedType::Resource { def, type_args } => (Some(*def), type_args.clone()),
         ResolvedType::Tuple(elems) => (None, elems.clone()),
         ResolvedType::Ref(inner)

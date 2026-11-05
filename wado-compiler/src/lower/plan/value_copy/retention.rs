@@ -1064,16 +1064,15 @@ impl RefCarrying<'_> {
                     Some(fields) => self.any(fields, walk),
                     // A declaration the plan phase cannot see is read as
                     // holding one, which only widens the carrier set.
-                    None => true,
+                    None if type_args.is_empty() => true,
+                    // An instance with no listed struct is one codegen lowers
+                    // as it is, `List<T>` among them: it holds its arguments.
+                    None => self.any(type_args, walk),
                 }
             }
             ResolvedType::Tuple(elems) => {
                 let elems = elems.clone();
                 self.any(elems, walk)
-            }
-            ResolvedType::GenericInstance { type_args, .. } => {
-                let type_args = type_args.clone();
-                self.any(type_args, walk)
             }
             // A payload that is not one of the template's parameters still
             // reads its parameters as unknown.

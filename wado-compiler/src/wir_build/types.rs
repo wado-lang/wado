@@ -38,8 +38,15 @@ pub enum TypeDecl<'a> {
 fn get_type_dependencies(type_table: &TypeTable, type_id: TypeId) -> Vec<String> {
     match type_table.get(type_id) {
         ResolvedType::Struct { def, type_args } => {
+            if type_args.iter().any(|t| type_table.contains_type_param(*t)) {
+                return vec![];
+            }
             let name = type_table.struct_mangled_name(*def, type_args);
-            vec![wir_type_key(type_table.struct_head_module(*def), &name)]
+            let mut deps = vec![wir_type_key(type_table.struct_head_module(*def), &name)];
+            for arg in type_args {
+                deps.extend(get_type_dependencies(type_table, *arg));
+            }
+            deps
         }
         ResolvedType::Variant { def, type_args } if type_args.is_empty() => vec![wir_type_key(
             type_table.def_module(*def),
@@ -49,9 +56,7 @@ fn get_type_dependencies(type_table: &TypeTable, type_id: TypeId) -> Vec<String>
             .iter()
             .flat_map(|a| get_type_dependencies(type_table, *a))
             .collect(),
-        ResolvedType::GenericInstance { type_args, .. }
-        | ResolvedType::Variant { type_args, .. }
-        | ResolvedType::Tuple(type_args) => {
+        ResolvedType::Variant { type_args, .. } | ResolvedType::Tuple(type_args) => {
             // Skip unresolved generic instances (containing type params or projections)
             if type_args.iter().any(|t| type_table.contains_type_param(*t)) {
                 return vec![];
@@ -1127,7 +1132,7 @@ fn register_list_wrapper_structs(ctx: &mut WirContext<'_>) {
     {
         let type_table = &*tt_rc.borrow();
         for type_id in type_table.iter_type_ids() {
-            if let ResolvedType::GenericInstance { type_args, .. } = type_table.get(type_id)
+            if let ResolvedType::Struct { type_args, .. } = type_table.get(type_id)
                 && type_table.is_list(type_id)
                 && type_args.len() == 1
             {
@@ -1136,8 +1141,8 @@ fn register_list_wrapper_structs(ctx: &mut WirContext<'_>) {
                 }
                 // Use the type-arg mangle so the element name matches
                 // the registration key the monomorphizer's
-                // `instantiation_name` produces (qualifies Struct /
-                // GenericInstance args by `ModuleSource`). The
+                // `instantiation_name` produces (qualifies struct args by
+                // `ModuleSource`). The
                 // newtype-resolving variant additionally resolves any
                 // newtype wrappers so that e.g.
                 // `List<[FieldName, FieldValue]>` and

@@ -806,7 +806,6 @@ fn holds_element(type_table: &TypeTable, ty: TypeId, element: TypeKey) -> bool {
         | ResolvedType::BuiltinArray(inner) => holds_element(type_table, *inner, element),
         ResolvedType::Struct { type_args, .. }
         | ResolvedType::Tuple(type_args)
-        | ResolvedType::GenericInstance { type_args, .. }
         | ResolvedType::Variant { type_args, .. }
         | ResolvedType::Resource { type_args, .. } => type_args
             .iter()

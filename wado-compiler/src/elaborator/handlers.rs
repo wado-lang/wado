@@ -7,7 +7,7 @@
 
 use crate::ast;
 use crate::compiler_host::CompilerHost;
-use crate::tir::{EffectRef, ResolvedType, TypeId};
+use crate::tir::{EffectRef, ResolvedType, StructDef, TypeId};
 use crate::type_table::TypeKey;
 
 use super::Elaborator;
@@ -222,7 +222,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             | ResolvedType::Newtype { .. }
             | ResolvedType::Flags { .. }
             | ResolvedType::Resource { .. }
-            | ResolvedType::GenericInstance { .. }
             | ResolvedType::Tuple(_)
             | ResolvedType::Primitive(_) => {}
             // Anything else can't be the target of an `impl Effect for T`
@@ -418,9 +417,11 @@ impl TypeSystem {
             ResolvedType::Variant { type_args, .. } if type_args.is_empty() => {
                 self.type_table.borrow().name(handler_type)
             }
-            ResolvedType::GenericInstance { def, .. }
-            | ResolvedType::Variant { def, .. }
-            | ResolvedType::Resource { def, .. } => {
+            ResolvedType::Struct {
+                def: StructDef::Decl(def),
+                type_args,
+            } if !type_args.is_empty() => self.type_table.borrow().decl_name(*def).to_string(),
+            ResolvedType::Variant { def, .. } | ResolvedType::Resource { def, .. } => {
                 self.type_table.borrow().decl_name(*def).to_string()
             }
             ResolvedType::Tuple(_) => TUPLE_TYPE_NAME.to_string(),

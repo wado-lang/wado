@@ -1053,7 +1053,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             ResolvedType::Variant { type_args, .. } => {
                 (!type_args.is_empty()).then(|| type_args.clone())
             }
-            ResolvedType::GenericInstance { type_args, .. } => Some(type_args.clone()),
+            ResolvedType::Struct {
+                def: StructDef::Decl(_),
+                type_args,
+            } if !type_args.is_empty() => Some(type_args.clone()),
             _ => return false,
         };
         // Every name on the chain qualifies the same cases: `C::Green`,
@@ -1233,13 +1236,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let head = {
             let tt = self.tysys.type_table.borrow();
             match tt.get(tt.reflect_structure_head(scrutinee)) {
-                ResolvedType::Struct { def, .. } => Some(*def),
                 // A generic struct over a parameter its function has yet to
                 // fill, as `Pair<T>` is inside `fn f<T>`.
-                ResolvedType::GenericInstance { def, .. } => self
+                ResolvedType::Struct {
+                    def: StructDef::Decl(def),
+                    type_args,
+                } if !type_args.is_empty() => self
                     .lookup_struct_fields_of_decl(*def)
                     .is_some()
                     .then_some(StructDef::Decl(*def)),
+                ResolvedType::Struct { def, .. } => Some(*def),
                 _ => None,
             }
         };
@@ -1861,7 +1867,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     let scrutinee_name = self.tysys.type_table.borrow().name(scrutinee_type);
                     let expected = match &resolved_type {
                         ResolvedType::Enum { .. } => format!("valid case of enum {scrutinee_name}"),
-                        ResolvedType::Variant { .. } | ResolvedType::GenericInstance { .. } => {
+                        ResolvedType::Variant { .. } => {
+                            format!("valid case of variant {scrutinee_name}")
+                        }
+                        ResolvedType::Struct {
+                            def: StructDef::Decl(_),
+                            type_args,
+                        } if !type_args.is_empty() => {
                             format!("valid case of variant {scrutinee_name}")
                         }
                         _ => "variant or enum case".to_string(),
@@ -1944,7 +1956,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         type_args,
                         *span,
                     ),
-                    ResolvedType::GenericInstance { .. } => {
+                    ResolvedType::Struct {
+                        def: StructDef::Decl(_),
+                        type_args,
+                    } if !type_args.is_empty() => {
                         let found = self.tysys.type_table.borrow().name(scrutinee_type);
                         let _ = self.emit(TypeError::PatternTypeMismatch {
                             expected: "variant type".to_string(),

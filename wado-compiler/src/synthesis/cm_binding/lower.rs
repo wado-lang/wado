@@ -708,7 +708,7 @@ pub(super) fn synthesize_lower_list_to_buffer(
     let elem_type_id = {
         let tt = ctx.type_table.borrow();
         match tt.get(list_type_id) {
-            ResolvedType::GenericInstance { type_args, .. } if !type_args.is_empty() => {
+            ResolvedType::Struct { type_args, .. } if !type_args.is_empty() => {
                 type_args[0]
             }
             _ => {

@@ -336,7 +336,6 @@ pub(super) fn is_eligible_field_type(type_id: TypeId, type_table: &TypeTable) ->
         | ResolvedType::Enum { .. }
         | ResolvedType::Resource { .. }
         | ResolvedType::Variant { .. }
-        | ResolvedType::GenericInstance { .. }
         | ResolvedType::Tuple(_)
         | ResolvedType::Flags { .. }
         | ResolvedType::BuiltinArray(_) => true,

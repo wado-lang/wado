@@ -704,8 +704,7 @@ impl Lowering {
                 decl(DeclKey::AnonymousStruct, vec![SolverType::Tuple(fields)])
             }
             ResolvedType::Enum { def } | ResolvedType::Flags { def } => instance(*def, &[]),
-            ResolvedType::GenericInstance { def, type_args }
-            | ResolvedType::Resource { def, type_args }
+            ResolvedType::Resource { def, type_args }
             | ResolvedType::Variant { def, type_args }
             | ResolvedType::Newtype { def, type_args, .. } => instance(*def, type_args),
             ResolvedType::Tuple(elems) => {
@@ -2290,7 +2289,6 @@ impl SolverBridge {
                 def: StructDef::Decl(_),
                 type_args,
             }
-            | ResolvedType::GenericInstance { type_args, .. }
             | ResolvedType::Resource { type_args, .. }
             | ResolvedType::Variant { type_args, .. }
             | ResolvedType::Tuple(type_args)

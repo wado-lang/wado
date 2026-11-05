@@ -7,7 +7,7 @@
 use std::cell::RefCell;
 
 use crate::hashmap::IndexMap;
-use crate::tir::{InferVarId, ResolvedType, TypeId};
+use crate::tir::{InferVarId, ResolvedType, StructDef, TypeId};
 use crate::type_table::TypeTable;
 
 /// The answers among `bindings` that [`unify`] gave inference variables, keyed
@@ -130,12 +130,12 @@ pub(super) fn unify(
             }
         }
         (
-            ResolvedType::GenericInstance {
-                def: expected_def,
+            ResolvedType::Struct {
+                def: StructDef::Decl(expected_def),
                 type_args: expected_args,
             },
-            ResolvedType::GenericInstance {
-                def: actual_def,
+            ResolvedType::Struct {
+                def: StructDef::Decl(actual_def),
                 type_args: actual_args,
             },
         )
@@ -178,7 +178,7 @@ pub(super) fn unify(
         // `List<K>` (generic instance) matched against a homogeneous
         // tuple literal: infer `K` from the tuple element type.
         (
-            ResolvedType::GenericInstance {
+            ResolvedType::Struct {
                 type_args: expected_args,
                 ..
             },

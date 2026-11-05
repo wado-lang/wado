@@ -21,7 +21,7 @@ use crate::wir::{
     WirImport, WirImportDesc, WirInstr, WirMemory, WirMeta, WirName, WirNames, WirPackage,
     WirStructType, WirType, WirTypeDef, WirTypeId,
 };
-use crate::wir_build::types::{generic_instance_name, list_wrapper_struct_name, variant_type_key};
+use crate::wir_build::types::{list_wrapper_struct_name, variant_type_key};
 use crate::world_registry::WorldSurface;
 use crate::{nir, tir};
 
@@ -871,10 +871,7 @@ impl<'a> WirContext<'a> {
                     Self::ref_to(self.handle_box())
                 }
             }
-            // A list instance is one wrapper struct whether spelled as the
-            // instance or as its monomorphized struct.
             ResolvedType::Struct { type_args, .. }
-            | ResolvedType::GenericInstance { type_args, .. }
                 if type_args.len() == 1 && type_table.is_list(type_id) =>
             {
                 let lookup_name = list_wrapper_struct_name(type_table, type_args[0]);
@@ -918,24 +915,6 @@ impl<'a> WirContext<'a> {
                     )));
                 };
                 Self::ref_to(&type_id)
-            }
-            ResolvedType::GenericInstance { def, type_args } => {
-                // The mangled name, which is what the registrar wrote: a
-                // function-local declaration's spelling carries its
-                // disambiguator, and two sibling functions' `struct Box<T>`
-                // are two registrations.
-                let name = &type_table.decl_mangled_name(*def);
-                let module_source = type_table.def_module(*def).clone();
-                // Registration aliases the newtype-resolved spelling onto the
-                // same type, so one key.
-                let mangled = generic_instance_name(type_table, name, type_args);
-                let struct_name = StructName::new(module_source, mangled);
-                let Some(type_id) = self.struct_type_map.get(&struct_name) else {
-                    return Err(UnregisteredType::struct_ref(format!(
-                        "generic instance `{struct_name}`"
-                    )));
-                };
-                Self::ref_to(type_id)
             }
             ResolvedType::BuiltinArray(elem_type_id) => {
                 // Cross-module `TypeId`s for one element resolve by the

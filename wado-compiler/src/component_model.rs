@@ -148,7 +148,6 @@ pub fn map_key_rejection(type_table: &TypeTable, key: TypeId) -> Option<String> 
         | ResolvedType::Enum { .. }
         | ResolvedType::Flags { .. }
         | ResolvedType::Resource { .. }
-        | ResolvedType::GenericInstance { .. }
         | ResolvedType::Tuple(_)
         | ResolvedType::Variant { .. }
         | ResolvedType::Newtype { .. }

@@ -566,9 +566,6 @@ async fn run_single(opts: &DumpOptions, input: &str) -> Result<(), CliExit> {
                         wado_compiler::tir::ResolvedType::Tuple(_) => "tuple",
                         wado_compiler::tir::ResolvedType::TypeParam { .. } => "type_param",
                         wado_compiler::tir::ResolvedType::AssocParam { .. } => "assoc_param",
-                        wado_compiler::tir::ResolvedType::GenericInstance { .. } => {
-                            "generic_instance"
-                        }
                         wado_compiler::tir::ResolvedType::AssocTypeProjection { .. } => {
                             "assoc_type"
                         }

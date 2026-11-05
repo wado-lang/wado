@@ -890,7 +890,9 @@ fn limit_bits(owner: PrimitiveType, name: &str) -> (FloatFormat, u64) {
 pub(super) fn settles_literal_patterns(type_table: &TypeTable, scrutinee: TypeId) -> bool {
     let head = type_table.representation_head(type_table.peel_refs(scrutinee));
     match type_table.get(head) {
-        ResolvedType::Variant { type_args, .. } if !type_args.is_empty() => {
+        ResolvedType::Struct { type_args, .. } | ResolvedType::Variant { type_args, .. }
+            if !type_args.is_empty() =>
+        {
             type_table.is_concrete(head)
         }
         ResolvedType::Primitive(_)
@@ -899,9 +901,7 @@ pub(super) fn settles_literal_patterns(type_table: &TypeTable, scrutinee: TypeId
         | ResolvedType::Variant { .. }
         | ResolvedType::Flags { .. }
         | ResolvedType::Unit => true,
-        ResolvedType::GenericInstance { .. } | ResolvedType::Tuple(_) => {
-            type_table.is_concrete(head)
-        }
+        ResolvedType::Tuple(_) => type_table.is_concrete(head),
         _ => false,
     }
 }

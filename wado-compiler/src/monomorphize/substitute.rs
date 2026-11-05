@@ -1,152 +1,18 @@
-//! Type substitution and type rewriting for monomorphization.
-//!
-//! Contains `substitute_type` (replacing type params with concrete types),
-//! `rewrite_type_id` (rewriting `GenericInstance` to concrete struct types),
-//! and `rewrite_types_in_module` (applying rewrites across a module).
-
-use std::rc::Rc;
+//! Type substitution for monomorphization: `substitute_type` replaces type
+//! params with concrete types, and `collect_instantiation_sites` queues the
+//! struct instances the pool holds.
 
 use crate::defs::DefId;
 use crate::hashmap::IndexMap;
-use crate::tir::{
-    InstantiationKey, ResolvedType, StructDef, TirExpr, TirExprKind, TirFunction, TirModule,
-    TirPattern, TirStmt, TirStmtKind, TirStruct, TypeId,
-};
-use crate::tir_visitor::TirMutVisitor;
+use crate::tir::{InstantiationKey, ResolvedType, StructDef, TirPattern, TirStruct, TypeId};
 use crate::type_table::TypeTable;
 
-use super::Unrewritten;
 use super::state::Monomorphizer;
 
 impl Monomorphizer {
-    /// Rewrite the `GenericInstance` `type_ids` in the struct fields and in
-    /// what is `unrewritten` to monomorphized struct types.
-    pub(super) fn rewrite_types_in_module(&self, module: &mut TirModule, unrewritten: Unrewritten) {
-        let type_table = Rc::clone(&module.type_table);
-        let mut rewriter = TypeRewriter {
-            mono: self,
-            type_table: &mut type_table.borrow_mut(),
-        };
-
-        // Rewrite struct field types
-        for strct in &mut module.structs {
-            for field in &mut strct.fields {
-                field.type_id = rewriter.rewrite_type_id(field.type_id);
-            }
-        }
-
-        // Rewrite function signatures and bodies
-        for func_rc in unrewritten.functions(module) {
-            let mut func = func_rc.borrow_mut();
-            Self::rewrite_types_in_function_inner(&mut rewriter, &mut func);
-        }
-
-        // Rewrite global variable initializers
-        for global in unrewritten.globals_mut(module) {
-            global.ty = rewriter.rewrite_type_id(global.ty);
-            rewriter.visit_expr(global.init.slot_expr_mut());
-        }
-    }
-
-    /// Rewrite all `GenericInstance` `type_ids` in a single `TirFunction` — the
-    /// per-function dual of [`Self::rewrite_types_in_module`]. Called on each
-    /// newly-instantiated function after struct monomorphisation reaches
-    /// fixpoint, so `collect_function_instantiation_sites` sees only canonical
-    /// `Struct` form and `function_id_for` stays injective.
-    pub fn rewrite_types_in_function(&self, func: &mut TirFunction, type_table: &mut TypeTable) {
-        let mut rewriter = TypeRewriter {
-            mono: self,
-            type_table,
-        };
-        Self::rewrite_types_in_function_inner(&mut rewriter, func);
-    }
-
-    fn rewrite_types_in_function_inner(rewriter: &mut TypeRewriter<'_>, func: &mut TirFunction) {
-        for param in &mut func.params {
-            param.type_id = rewriter.rewrite_type_id(param.type_id);
-        }
-        func.return_type = rewriter.rewrite_type_id(func.return_type);
-        for local in &mut func.locals {
-            local.type_id = rewriter.rewrite_type_id(local.type_id);
-        }
-        if let Some(body) = &mut func.body {
-            rewriter.visit_block(body);
-        }
-    }
-
-    /// Rewrite a single `type_id`: if it's a `GenericInstance`, return the concrete struct `type_id`.
-    /// Also handles container types (List, Option, Tuple) that may contain `GenericInstance`.
-    pub fn rewrite_type_id(&self, type_id: TypeId, type_table: &mut TypeTable) -> TypeId {
-        // First check direct substitution
-        if let Some(&new_id) = self.structs.type_substitutions.get(&type_id) {
-            return new_id;
-        }
-
-        // Handle container types that may contain GenericInstance
-        match type_table.get(type_id).clone() {
-            ResolvedType::BuiltinArray(inner_id) => {
-                let new_inner_id = self.rewrite_type_id(inner_id, type_table);
-                if new_inner_id == inner_id {
-                    type_id
-                } else {
-                    type_table.intern(ResolvedType::BuiltinArray(new_inner_id))
-                }
-            }
-            ResolvedType::Ref(inner_id) => {
-                let new_inner_id = self.rewrite_type_id(inner_id, type_table);
-                if new_inner_id == inner_id {
-                    type_id
-                } else {
-                    type_table.make_ref(new_inner_id)
-                }
-            }
-            ResolvedType::MutRef(inner_id) => {
-                let new_inner_id = self.rewrite_type_id(inner_id, type_table);
-                if new_inner_id == inner_id {
-                    type_id
-                } else {
-                    type_table.make_mut_ref(new_inner_id)
-                }
-            }
-            ResolvedType::Tuple(elems) => {
-                let new_elems: Vec<TypeId> = elems
-                    .iter()
-                    .map(|&id| self.rewrite_type_id(id, type_table))
-                    .collect();
-                if new_elems == elems {
-                    type_id
-                } else {
-                    type_table.make_tuple(new_elems)
-                }
-            }
-            // Handle GenericInstance types that weren't in the direct substitution map
-            // This can happen when function substitution creates new GenericInstance types
-            // with different TypeIds for the type arguments
-            ResolvedType::GenericInstance { def, type_args } => {
-                // Lowered by codegen as it is, never as a monomorphized struct.
-                if type_table.is_list(type_id) {
-                    let new_args: Vec<TypeId> = type_args
-                        .iter()
-                        .map(|&id| self.rewrite_type_id(id, type_table))
-                        .collect();
-                    return if new_args == type_args {
-                        type_id
-                    } else {
-                        type_table.make_generic_instance(def, new_args)
-                    };
-                }
-
-                type_table
-                    .monomorphized_struct_of(def, &type_args)
-                    .unwrap_or(type_id)
-            }
-            _ => type_id,
-        }
-    }
-
-    /// Queue each concrete `GenericInstance` of a struct in `generic_structs`
-    /// that the pool holds, and return the held instances of generic variants,
-    /// whose payloads the drain lays out.
+    /// Queue each concrete instance of a struct in `generic_structs` that the
+    /// pool holds, and return the held instances of generic variants, whose
+    /// payloads the drain lays out.
     pub(super) fn collect_instantiation_sites(
         &mut self,
         type_table: &TypeTable,
@@ -166,7 +32,10 @@ impl Monomorphizer {
         ids.append(&mut self.pool.instances);
         let mut variants = Vec::new();
         for id in ids {
-            let (ResolvedType::GenericInstance { def, type_args }
+            let (ResolvedType::Struct {
+                def: StructDef::Decl(def),
+                type_args,
+            }
             | ResolvedType::Variant { def, type_args }) = type_table.get(id)
             else {
                 unreachable!("the pool keeps only struct and variant instances for the drain");
@@ -204,9 +73,8 @@ impl Monomorphizer {
 
     /// Substitute type parameters in a type with concrete types, delegating the
     /// leaf cases to [`TypeTable::substitute_type_params`] and handling
-    /// containers inline so a `GenericInstance` collapses onto an
-    /// already-monomorphized struct of the same arguments at every level.
-    /// Empty `type_args` resolve through the substitution map itself.
+    /// containers inline. A struct named with no arguments resolves through
+    /// the substitution map itself, to an instance already interned.
     pub fn substitute_type(
         &self,
         type_id: TypeId,
@@ -257,9 +125,7 @@ impl Monomorphizer {
                     base_type: new_base,
                 })
             }
-            // A pack among the elements splices what it stands for. The rest
-            // are substituted through `self.substitute_type`, so a nested
-            // `GenericInstance` still gets its monomorphized-struct rewrite.
+            // A pack among the elements splices what it stands for.
             ResolvedType::Tuple(elems) => {
                 let mut new_elems: Vec<TypeId> = Vec::new();
                 for &e in &elems {
@@ -314,37 +180,36 @@ impl Monomorphizer {
                 }
                 type_table.make_tuple(new_elems)
             }
-            ResolvedType::GenericInstance { def, type_args }
+            ResolvedType::Struct {
+                def: StructDef::Decl(def),
+                type_args,
+            } if type_args.is_empty() => {
+                if substitution.is_empty() {
+                    return type_id;
+                }
+                let mut indexed_args: Vec<(u32, TypeId)> =
+                    substitution.iter().map(|(&idx, &tid)| (idx, tid)).collect();
+                indexed_args.sort_by_key(|(idx, _)| *idx);
+                let args: Vec<TypeId> = indexed_args.into_iter().map(|(_, tid)| tid).collect();
+                type_table
+                    .find_generic_instance(def, &args)
+                    .unwrap_or(type_id)
+            }
+            ResolvedType::Variant { type_args, .. } | ResolvedType::Resource { type_args, .. }
+                if type_args.is_empty() =>
+            {
+                type_id
+            }
+            ResolvedType::Struct {
+                def: StructDef::Decl(def),
+                type_args,
+            }
             | ResolvedType::Variant { def, type_args }
             | ResolvedType::Resource { def, type_args } => {
-                if type_args.is_empty() {
-                    if !substitution.is_empty() {
-                        let mut indexed_args: Vec<(u32, TypeId)> =
-                            substitution.iter().map(|(&idx, &tid)| (idx, tid)).collect();
-                        indexed_args.sort_by_key(|(idx, _)| *idx);
-                        let args: Vec<TypeId> =
-                            indexed_args.into_iter().map(|(_, tid)| tid).collect();
-                        if let Some(tid) = type_table.monomorphized_struct_of(def, &args) {
-                            return tid;
-                        }
-                    }
-                    return type_table
-                        .find_struct_type(StructDef::Decl(def))
-                        .unwrap_or(type_id);
-                }
-
-                // Recursively substitute nested type args so inner
-                // GenericInstances get rewritten to their monomorphized
-                // Struct forms when available.
                 let new_args: Vec<TypeId> = type_args
                     .iter()
                     .map(|&arg| self.substitute_type(arg, substitution, type_table))
                     .collect();
-
-                if let Some(tid) = type_table.monomorphized_struct_of(def, &new_args) {
-                    return tid;
-                }
-
                 type_table.make_generic_instance(def, new_args)
             }
             // Delegate leaf cases (TypeParam, TypePack,
@@ -412,86 +277,5 @@ impl Monomorphizer {
                 expr.type_id = self.substitute_type(expr.type_id, substitution, type_table);
             }
         }
-    }
-}
-
-/// Rewrites `GenericInstance` `type_ids` throughout a TIR tree to use concrete struct types.
-/// Used by `rewrite_types_in_module`.
-pub(super) struct TypeRewriter<'a> {
-    pub mono: &'a Monomorphizer,
-    pub type_table: &'a mut TypeTable,
-}
-
-impl TypeRewriter<'_> {
-    pub fn rewrite_type_id(&mut self, type_id: TypeId) -> TypeId {
-        self.mono.rewrite_type_id(type_id, self.type_table)
-    }
-}
-
-impl TirMutVisitor for TypeRewriter<'_> {
-    fn visit_stmt(&mut self, stmt: &mut TirStmt) {
-        if let TirStmtKind::Let { type_id, .. } = &mut stmt.kind {
-            *type_id = self.rewrite_type_id(*type_id);
-        }
-        self.walk_stmt(stmt);
-    }
-
-    fn visit_pattern(&mut self, pattern: &mut TirPattern) {
-        match pattern {
-            TirPattern::Variant { enum_type, .. } | TirPattern::Enum { enum_type, .. } => {
-                *enum_type = self.rewrite_type_id(*enum_type);
-            }
-            TirPattern::Struct { struct_type, .. } => {
-                *struct_type = self.rewrite_type_id(*struct_type);
-            }
-            _ => {}
-        }
-        self.walk_pattern(pattern);
-    }
-
-    fn visit_expr(&mut self, expr: &mut TirExpr) {
-        expr.type_id = self.rewrite_type_id(expr.type_id);
-
-        // Rewrite explicit `type_args` on a call so post-monomorphisation
-        // `InstantiationKey`s use canonical `Struct` form: otherwise the
-        // call-site and receiver queue paths for one instantiation hash
-        // distinctly yet mangle identically, giving two `TirFunction`s one
-        // `function_id_for`. `walk_expr` does not descend into `type_args`.
-        if let TirExprKind::Call { type_args, .. } = &mut expr.kind {
-            for type_arg in type_args.iter_mut() {
-                *type_arg = self.rewrite_type_id(*type_arg);
-            }
-        }
-
-        if let TirExprKind::StructLiteral {
-            struct_type,
-            struct_name,
-            ..
-        } = &mut expr.kind
-        {
-            let original_type_id = *struct_type;
-            let new_type_id = self.rewrite_type_id(original_type_id);
-            *struct_type = new_type_id;
-            if let Some(mangled_name) = self
-                .mono
-                .structs
-                .type_to_mangled_name
-                .get(&original_type_id)
-            {
-                struct_name.clone_from(mangled_name);
-            } else {
-                match self.type_table.get(new_type_id) {
-                    ResolvedType::Struct { def, type_args } => {
-                        *struct_name = self.type_table.struct_mangled_name(*def, type_args);
-                    }
-                    ResolvedType::GenericInstance { def, type_args } => {
-                        *struct_name = self.type_table.generic_mangled_name(*def, type_args);
-                    }
-                    _ => {}
-                }
-            }
-        }
-
-        self.walk_expr(expr);
     }
 }

@@ -169,7 +169,7 @@ impl Pool {
 
     /// Note that a scanned body holds a value of `id`, and so of every type it
     /// is built over and every member of those: release what waited on one,
-    /// and keep each `GenericInstance` for the struct drain.
+    /// and keep each struct or variant instance for the drain.
     fn hold(&mut self, id: TypeId, type_table: &TypeTable) {
         let mut stack = vec![id];
         while let Some(id) = stack.pop() {
@@ -203,7 +203,7 @@ impl Pool {
         self.members.insert(def, members);
     }
 
-    /// Keep for the struct drain each `GenericInstance` that a declaration's
+    /// Keep for the drain each struct or variant instance that a declaration's
     /// member of type `id` is built over. A declaration is no reached body, so
     /// it releases nothing.
     fn lay_out(&mut self, id: TypeId, type_table: &TypeTable) {
@@ -216,8 +216,11 @@ impl Pool {
     fn keep_instances(&mut self, found: &[TypeId], type_table: &TypeTable) {
         self.instances.extend(found.iter().copied().filter(|&id| {
             let instance = match type_table.get(id) {
-                ResolvedType::GenericInstance { .. } => true,
-                ResolvedType::Variant { type_args, .. } => !type_args.is_empty(),
+                ResolvedType::Struct {
+                    def: StructDef::Decl(_),
+                    type_args,
+                }
+                | ResolvedType::Variant { type_args, .. } => !type_args.is_empty(),
                 _ => false,
             };
             instance && !type_table.contains_type_param(id)
@@ -441,7 +444,6 @@ fn module_source_for_trait_impl(type_table: &TypeTable, type_id: TypeId) -> Opti
         ResolvedType::Unit | ResolvedType::Never => Some(ModuleSource::primitive()),
         ResolvedType::BuiltinArray(_) => Some(ModuleSource::array()),
         ResolvedType::Struct { .. }
-        | ResolvedType::GenericInstance { .. }
         | ResolvedType::Tuple(_)
         | ResolvedType::Enum { .. }
         | ResolvedType::Flags { .. }
@@ -504,7 +506,6 @@ impl Monomorphizer {
         generic_functions: &Templates,
         unscanned: &mut Vec<Rc<RefCell<TirFunction>>>,
     ) {
-        self.rewrite_types_in_function(&mut func_rc.borrow_mut(), &mut type_table.borrow_mut());
         let func = func_rc.borrow();
         let mut type_table = type_table.borrow_mut();
         if let Some(body) = &func.body {
@@ -759,9 +760,6 @@ impl Monomorphizer {
             });
         }
 
-        // Phase 6: Rewrite all GenericInstance type_ids to concrete struct type_ids
-        self.rewrite_types_in_module(&mut module, unrewritten);
-
         // Phase 8: Collect function instantiation sites from Call expressions,
         // and take out of the pool what the bodies name.
         self.collect_function_instantiation_sites(&module, &generic_functions, unrewritten);
@@ -792,8 +790,6 @@ impl Monomorphizer {
                 self.note_types(&func_rc.borrow(), &module.type_table.borrow());
             }
 
-            // Call sites are collected only once the struct drain has run:
-            // collecting earlier queues under `GenericInstance` form.
             let mut batch: Vec<TirFunction> = Vec::new();
             while let Some(key) = self.functions.pending.pop() {
                 let concrete = {
@@ -827,10 +823,7 @@ impl Monomorphizer {
                 }
                 noted = batch.len();
                 let new_structs = self.drain_pending_structs(&module.type_table, &generic_structs);
-                if !new_structs.is_empty() {
-                    made_progress = true;
-                    self.alias_canonical_keys(&mut module.type_table.borrow_mut());
-                }
+                made_progress |= !new_structs.is_empty();
                 // A shape only a substitution reaches has no `$hole_fmt` from
                 // synthesis; built here, what it calls is instantiated in turn.
                 batch.extend(hole_fmt_helpers(
@@ -864,8 +857,7 @@ impl Monomorphizer {
                 module.functions.push(func_rc);
             }
 
-            for mut concrete in batch {
-                self.rewrite_types_in_function(&mut concrete, &mut module.type_table.borrow_mut());
+            for concrete in batch {
                 if let Some(body) = &concrete.body {
                     let mut type_table = module.type_table.borrow_mut();
                     let mut collector = func_inst::InstantiationCollector {
@@ -906,9 +898,6 @@ impl Monomorphizer {
         // Phase 12.5: Lower the comparisons on non-primitive types left to trait calls
         func_inst::lower_comparisons_in_module(&mut module, unrewritten, &self.functions.trait_env);
         never_dispatch::trap_never_dispatch_in_module(&mut module, unrewritten);
-
-        // Phase 13: Rewrite types (single pass — unified loop above ensures all structs exist)
-        self.rewrite_types_in_module(&mut module, unrewritten);
 
         module
     }

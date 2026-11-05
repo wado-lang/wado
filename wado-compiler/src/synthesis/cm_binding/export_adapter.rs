@@ -173,7 +173,7 @@ fn lower_to_flat_inner(
             ]
         }
         ResolvedType::Unit => vec![],
-        ResolvedType::GenericInstance { type_args, .. }
+        ResolvedType::Struct { type_args, .. }
             if type_args.len() == 1 && ctx.type_table.borrow().is_list(type_id) =>
         {
             // List<T> flat ABI: (ptr: i32, len: i32) pointing at
@@ -409,7 +409,7 @@ fn lower_to_flat_inner(
 
             result
         }
-        ResolvedType::GenericInstance { .. }
+        ResolvedType::Struct { .. }
             if let Some((key, value_type)) = ctx.type_table.borrow().as_tree_map(type_id) =>
         {
             // `map<K, V>` flattens as the `list<tuple<K, V>>` it despecializes to.
@@ -826,7 +826,6 @@ pub(super) fn synthesize_lift_from_flat_params(
                 }
                 other @ (ResolvedType::Never
                 | ResolvedType::Newtype { .. }
-                | ResolvedType::GenericInstance { .. }
                 | ResolvedType::Variant { .. }
                 | ResolvedType::Tuple(_)
                 | ResolvedType::Ref(_)
