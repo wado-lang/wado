@@ -15,6 +15,9 @@ use wasmtime_wasi::filesystem::Descriptor;
 use wasmtime_wasi::p2::pipe::MemoryOutputPipe;
 
 #[cfg(unix)]
+use crate::sandbox;
+
+#[cfg(unix)]
 mod posix;
 #[cfg(test)]
 mod tests;
@@ -166,9 +169,9 @@ fn answer(preopened_dirs: &[(String, String)], grant: ProcessGrant) -> Result<An
 
 #[cfg(unix)]
 fn unsupported_reason() -> Option<String> {
-    match crate::sandbox::availability() {
-        crate::sandbox::Availability::Available => None,
-        crate::sandbox::Availability::Unsupported(reason) => Some(reason),
+    match sandbox::availability() {
+        sandbox::Availability::Available => None,
+        sandbox::Availability::Unsupported(reason) => Some(reason),
     }
 }
 
