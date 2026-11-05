@@ -1,0 +1,17 @@
+// `param_spec` legality, callee side: reading an array field hands out the
+// array itself, so a write through the value read writes the caller's array.
+// `sort_by` hoists `self.repr` out of its merge loop and moves elements
+// through that local; binding the caller's `[5, 3, 8, 1]` copy into the callee
+// sorted a fresh array nobody reads, and printed `false`.
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    let orig: List<i32> = [5, 3, 8, 1];
+    let asc = orig.sorted();
+    println(`${asc == [1, 3, 5, 8]}`);
+}
+
+__DATA__
+{
+    "stdout": "true\n"
+}

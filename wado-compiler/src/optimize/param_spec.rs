@@ -578,6 +578,16 @@ fn held_struct(type_id: TypeId, types: &TypeTable) -> Option<TypeKey> {
     }
 }
 
+/// Whether a value of `type_id` is an object a field constant can be: a
+/// struct, held or referenced, or an array.
+fn hands_out_object(type_id: TypeId, types: &TypeTable) -> bool {
+    held_struct(type_id, types).is_some()
+        || matches!(
+            types.get(types.strip_handles(type_id)),
+            ResolvedType::BuiltinArray(_)
+        )
+}
+
 /// The struct type behind a type, looking through references and newtypes.
 fn struct_base(type_id: TypeId, types: &TypeTable) -> Option<TypeKey> {
     match types.get_pruned(type_id)? {
@@ -616,10 +626,10 @@ fn collect_local_uses(
                 };
                 classified.insert(expr.as_expr().expect("tracked local is a skeleton node"));
                 let uses = out.entry(local).or_default();
-                // A struct-valued read hands out the object itself, not a
-                // copy: whatever it is bound to may write through it.
-                let escapes = !projected.contains(&id)
-                    && held_struct(body.exprs[id].type_id, types).is_some();
+                // A struct- or array-valued read hands out the object itself,
+                // not a copy: whatever it is bound to may write through it.
+                let escapes =
+                    !projected.contains(&id) && hands_out_object(body.exprs[id].type_id, types);
                 if referenced.contains(&id) || escapes {
                     uses.writes.push((*field_index, None));
                     uses.reads.insert(*field_index);
