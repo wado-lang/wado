@@ -9,8 +9,10 @@ How to _use_ the CLI is the `wado-cli` skill, not this file.
 
 - Argument parsing is hand-rolled on `lexopt`. Do not introduce clap or another
   parser framework. Each subcommand parses its own options and owns its usage
-  and help text in its own module.
-- Shared knobs are declared once in `knobs.rs`, in three families.
+  and help text in its own module. `run` shares its parser with the runners,
+  in `wado_host::runner`.
+- Shared knobs are declared once in `wado_host::options`, in three families.
+  `knobs.rs` holds what applies them to `wado`'s own types.
   `CompileKnobs` / `CompileKnobOpt` carry what the compiler is told: `-O`,
   `--log-level`, `--allocator`, `-f`, `--no-cache`. `RuntimeKnobs` /
   `RuntimeKnobOpt` carry what the wasmtime engine is built with: `--collector`,
@@ -20,7 +22,7 @@ How to _use_ the CLI is the `wado-cli` skill, not this file.
   runs.
   A subcommand lists the subset it accepts and holds one field per family it
   uses. It declares no field, parse arm, or spec of its own for a shared knob,
-  and a new one is added in `knobs.rs` only.
+  and a new one is added in `wado_host::options` only.
 - `--profile` is not a shared knob, though `run`, `serve` and `test` all take
   it. Each accepts different modes and carries a different caveat, so each
   states its own spec.
@@ -45,9 +47,7 @@ How to _use_ the CLI is the `wado-cli` skill, not this file.
 
 The modules a subcommand is named after hold that subcommand. The rest:
 
-- `runtime.rs`, `http_hooks.rs` — the wasmtime host: instantiation, WASI wiring, and the hooks `serve` needs. The timezone host and the TLS trust store live in `wado-host`, which the compiler's tests share.
-- `process_host.rs` — the `core:process` host: whether a guest may spawn, and the streams and kill of each child. `wado-host`'s `sandbox` confines it.
-- `user_config.rs` — the user's `~/.config/wado/config.toml` (`$XDG_CONFIG_HOME`): the Wado root and `[process] read`. Read once, and ignored whole when another user could have written it.
+- `runtime.rs` — what only `wado` adds to the host `wado_host::guest` holds: the test-only imports, and the engines `test` and `serve` run on.
 - `kiln_provider.rs`, `kiln_wit.rs` — how `wado` resolves a Kiln generator to its component. The pipeline and the runtime it feeds live in `wado-host`'s `kiln/`. `check` runs the same pipeline `compile` does, writes included.
 - `manifest.rs`, `build.rs`, `build_dep.rs`, `dep_component.rs`, `fetch.rs`, `git.rs`, `oci.rs`, `registry.rs`, `publish.rs` — `wado.toml` handling and the dependency backends behind `wado-manifest`'s `DependencyProvider` seam.
 - `discover.rs`, `test_report.rs` — source file discovery (shared by `test`, `format`, and `query`) and the progress digest. A directory argument goes through `files_in_dir` and a project-wide walk through `discover_tree`; a file named directly is taken as given, filters and all. The subcommand supplies only a `Filters` callback: `filters_at` naming its manifest section, or `no_filters` where a package's excludes must not apply (`query references` spans them). Directory expansion has no second implementation to drift from.
