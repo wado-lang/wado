@@ -34,7 +34,7 @@ use crate::tir::{ResolvedType, TypeId};
 use crate::type_table::TypeTable;
 
 use super::arena_query::{
-    MarkerBuiltins, MutRefAliases, RareRuns, control_escapes, locals_possibly_mutated,
+    MarkerBuiltins, MutRefAliases, RareRuns, RootMutation, control_escapes, for_each_mutation_under,
 };
 use super::inline::{InlineCtx, splice_stmt};
 use super::value_copy::mutation::MutationOracle;
@@ -301,7 +301,7 @@ fn free_vars(
         &[],
     );
     let outer = LocalRefs::collect(body, vec![NodeRef::Block(body.root())], region);
-    let written = written_in(body, region, func, type_table);
+    let writes = Writes::of(body, region, func, type_table);
     let mut bound_ahead = None;
     let mut args = Vec::new();
     for idx in inside.mentioned.iter().copied() {
@@ -318,10 +318,18 @@ fn free_vars(
         // A boxed local's storage is the box, which the call hands over, so a
         // write through its address lands where the caller reads it.
         let storage_in_slot = !type_table.is_compiler_struct_instance(type_id, CompilerItem::Box);
+        // A reference's pointee is shared, so a write through it lands where
+        // the caller reads it too.
+        let value_in_slot = storage_in_slot
+            && !matches!(
+                type_table.get(type_id),
+                ResolvedType::Ref(_) | ResolvedType::MutRef(_)
+            );
         // One question, asked of every crossing that leaves the storage behind:
         // a write inside the region is one no call carries back.
         if crossing.leaves_storage_behind()
-            && (written.contains(&idx)
+            && (writes.rebound.contains(&idx)
+                || (value_in_slot && writes.through.contains(&idx))
                 || (storage_in_slot && func.address_taken_locals.contains(&idx)))
         {
             compiler_trace!(
@@ -358,23 +366,42 @@ fn free_vars(
     Some(args)
 }
 
-/// The locals `region` may write: a rebind, a store into a field or element,
-/// and a `&mut` handed to a call or a receiver alike.
-fn written_in(
-    body: &Body,
-    region: &[StmtId],
-    func: &NirFunction,
-    type_table: &TypeTable,
-) -> IndexSet<u32> {
-    let no_signatures = IndexMap::default();
-    let oracle = MutationOracle::new(&no_signatures);
-    let aliases = MutRefAliases::of_body(body, &func.locals, func.params.len(), type_table);
-    region
-        .iter()
-        .flat_map(|&s| {
-            locals_possibly_mutated(body, NodeRef::Stmt(s), type_table, &oracle, &aliases)
-        })
-        .collect()
+/// The locals `region` may write.
+#[derive(Default)]
+struct Writes {
+    /// `x = …`, which replaces the slot's value whatever it holds.
+    rebound: IndexSet<u32>,
+    /// A store into a field or element, or a `&mut` handed to a call or a
+    /// receiver: a write to what the slot holds, which leaves a slot holding a
+    /// reference unchanged.
+    through: IndexSet<u32>,
+}
+
+impl Writes {
+    fn of(body: &Body, region: &[StmtId], func: &NirFunction, type_table: &TypeTable) -> Self {
+        let no_signatures = IndexMap::default();
+        let oracle = MutationOracle::new(&no_signatures);
+        let aliases = MutRefAliases::of_body(body, &func.locals, func.params.len(), type_table);
+        let mut writes = Self::default();
+        for &s in region {
+            for_each_mutation_under(
+                body,
+                NodeRef::Stmt(s),
+                type_table,
+                &oracle,
+                &aliases,
+                &mut |m| match m {
+                    RootMutation::Rebind(l) => {
+                        writes.rebound.insert(l);
+                    }
+                    RootMutation::Through(l) => {
+                        writes.through.insert(l);
+                    }
+                },
+            );
+        }
+        writes
+    }
 }
 
 /// The locals a root-level `let` binds ahead of the root statement holding
