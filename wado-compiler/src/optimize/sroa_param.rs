@@ -580,7 +580,7 @@ fn mut_reachable_contains(
             base_type: inner, ..
         } => (*inner, writable),
         ResolvedType::GenericInstance { type_args, .. } | ResolvedType::Tuple(type_args) => {
-            if writable && !type_table.is_resource_type(ty) && type_table.type_key(ty) == target {
+            if writable && type_table.type_key(ty) == target {
                 return true;
             }
             return type_args.iter().any(|&t| {

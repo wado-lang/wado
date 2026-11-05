@@ -841,7 +841,8 @@ impl TypeTable {
 
     /// The resource `ty` is a handle to, where it takes no type arguments:
     /// only such a resource extends another.
-    fn plain_resource_def(&self, ty: TypeId) -> Option<DefId> {
+    #[must_use]
+    pub fn plain_resource_def(&self, ty: TypeId) -> Option<DefId> {
         match self.get(ty) {
             ResolvedType::Resource { def, type_args } if type_args.is_empty() => Some(*def),
             _ => None,
@@ -863,9 +864,10 @@ impl TypeTable {
     /// resource strictly extending `value`'s, which makes both unrestricted.
     #[must_use]
     pub fn is_resource_narrowing(&self, value: TypeId, target: TypeId) -> bool {
-        let (Some(value), Some(target)) =
-            (self.plain_resource_def(value), self.plain_resource_def(target))
-        else {
+        let (Some(value), Some(target)) = (
+            self.plain_resource_def(value),
+            self.plain_resource_def(target),
+        ) else {
             return false;
         };
         value != target && self.is_resource_subtype(target, value)
@@ -6331,7 +6333,9 @@ impl TypeTable {
     }
 
     fn mangle_type_args_rowless(&self, ids: &[TypeId]) -> Vec<String> {
-        ids.iter().map(|&t| self.mangle_type_arg_rowless(t)).collect()
+        ids.iter()
+            .map(|&t| self.mangle_type_arg_rowless(t))
+            .collect()
     }
 
     /// [`Self::mangle_type_arg_rowless`] of the newtype-resolved form, which

@@ -990,11 +990,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .get(method_impl_type_id)
             .clone()
         {
-            ref applied @ (ResolvedType::GenericInstance { .. }
+            ResolvedType::GenericInstance { .. }
             | ResolvedType::Resource { .. }
             | ResolvedType::Tuple(_)
-            | ResolvedType::BuiltinArray(_))
-                if !matches!(applied, ResolvedType::Resource { type_args, .. } if type_args.is_empty()) =>
+            | ResolvedType::BuiltinArray(_)
+                if self
+                    .tysys
+                    .type_table
+                    .borrow()
+                    .plain_resource_def(method_impl_type_id)
+                    .is_none() =>
             {
                 let tt = self.tysys.type_table.borrow();
                 let type_args = tt

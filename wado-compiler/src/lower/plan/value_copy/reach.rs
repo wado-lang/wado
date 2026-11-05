@@ -209,16 +209,15 @@ impl<'a> StorageReach<'a> {
     /// copies on every read.
     fn storage_of(&self, ty: TypeId) -> Vec<Storage> {
         let tt = self.type_table;
-        if tt.is_resource_type(ty)
-            || matches!(
-                tt.get(ty),
-                ResolvedType::Primitive(_)
-                    | ResolvedType::Unit
-                    | ResolvedType::Never
-                    | ResolvedType::Enum { .. }
-                    | ResolvedType::Flags { .. }
-            )
-        {
+        if matches!(
+            tt.get(ty),
+            ResolvedType::Primitive(_)
+                | ResolvedType::Unit
+                | ResolvedType::Never
+                | ResolvedType::Enum { .. }
+                | ResolvedType::Flags { .. }
+                | ResolvedType::Resource { .. }
+        ) {
             return Vec::new();
         }
         let mut out = vec![Storage::Of(tt.type_key(ty))];

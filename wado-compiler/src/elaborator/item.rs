@@ -2133,9 +2133,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// resource. That `Self` type comes back too, because it is the receiver's.
     ///
     /// It is constructed after the type params are in scope, so a generic
-    /// resource's `GenericInstance` can reference its own `TypeParam`s
-    /// (which gap-2 substitution then specialises per impl-block instantiation).
-    /// A non-generic resource is a plain `Resource { def }`.
+    /// resource's `Self` can take its own `TypeParam`s as arguments (which
+    /// gap-2 substitution then specialises per impl-block instantiation).
     fn enter_operation_scope(
         &mut self,
         type_params: &[ast::GenericParam],

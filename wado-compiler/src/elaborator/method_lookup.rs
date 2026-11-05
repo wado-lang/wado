@@ -1296,7 +1296,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             else {
                 return Vec::new();
             };
-            if type_args.is_empty() && tt.is_resource_type(receiver) {
+            if tt.plain_resource_def(receiver).is_some() {
                 return Vec::new();
             }
             let key = self.impl_target_of(receiver, &DeclName::new(tt.decl_name(*def)));

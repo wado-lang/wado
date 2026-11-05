@@ -542,7 +542,6 @@ fn aggregate_cast_hint(tt: &TypeTable, source: TypeId, target: TypeId) -> Option
     // wide-int rules judge them.
     let is_aggregate = |id| {
         !tt.is_wide_int(id)
-            && !tt.is_resource_type(tt.representation_head(id))
             && matches!(
                 tt.get(tt.representation_head(id)),
                 ResolvedType::Struct { .. }

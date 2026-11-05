@@ -375,7 +375,7 @@ fn payload_ast_type(payload: TypeId, tt: &TypeTable, registry: &CmInterfaceRegis
     }
     if let ResolvedType::GenericInstance { def, type_args }
     | ResolvedType::Resource { def, type_args } = tt.get(id)
-        && (!tt.is_resource_type(id) || !type_args.is_empty())
+        && tt.plain_resource_def(id).is_none()
     {
         let name = tt.decl_name(*def).to_string();
         let args = args_of(type_args);

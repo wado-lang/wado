@@ -1009,7 +1009,10 @@ impl<'a> Emitter<'a> {
                 if self.types.is_unrestricted_handle(inner) {
                     Ok(Type::F64)
                 } else if self.is_named_resource(inner) {
-                    let def = self.types.nominal_def(inner).expect("a resource names a declaration");
+                    let def = self
+                        .types
+                        .nominal_def(inner)
+                        .expect("a resource names a declaration");
                     Ok(Type::borrow(to_cm_name(self.types.decl_name(def))))
                 } else {
                     self.map_type(inner)

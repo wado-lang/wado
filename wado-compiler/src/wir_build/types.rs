@@ -45,12 +45,10 @@ fn get_type_dependencies(type_table: &TypeTable, type_id: TypeId) -> Vec<String>
             type_table.def_module(*def),
             type_table.decl_name(*def),
         )],
-        ResolvedType::Resource { type_args, .. } => {
-            type_args
-                .iter()
-                .flat_map(|a| get_type_dependencies(type_table, *a))
-                .collect()
-        }
+        ResolvedType::Resource { type_args, .. } => type_args
+            .iter()
+            .flat_map(|a| get_type_dependencies(type_table, *a))
+            .collect(),
         ResolvedType::GenericInstance { type_args, .. } | ResolvedType::Tuple(type_args) => {
             // Skip unresolved generic instances (containing type params or projections)
             if type_args.iter().any(|t| type_table.contains_type_param(*t)) {
