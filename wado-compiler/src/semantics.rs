@@ -2061,7 +2061,7 @@ mod tests {
         assert!(probes.0.iter().any(|&id| id < u64::from(seed_end)));
     }
 
-    /// The rarity markers in `block`, by who placed them and what they state.
+    /// The rarity markers in `block`.
     struct MarkerCalls(Vec<String>);
 
     impl TirRefVisitor for MarkerCalls {
@@ -2096,8 +2096,7 @@ mod tests {
     }
 
     /// A profile marks in reify each outermost region it recorded no run of
-    /// in a function that ran, with the compiler's marker. A function that
-    /// never ran gets none.
+    /// in a function that ran. A function that never ran gets no marker.
     #[test]
     fn a_profile_marks_what_never_ran_cold() {
         let source = "fn ran(x: i32) -> i32 { if x > 0 { return 1; } return 0; }

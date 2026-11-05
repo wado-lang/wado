@@ -52,7 +52,7 @@ impl Mark {
         }
     }
 
-    /// The builtin stating this mark, whoever writes it.
+    /// The builtin stating this mark.
     #[must_use]
     pub fn builtin(self) -> &'static str {
         match self {

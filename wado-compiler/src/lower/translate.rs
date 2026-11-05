@@ -31,9 +31,7 @@ use crate::lower::plan::boxing::BoxPlan;
 use crate::lower::plan::string;
 use crate::lower::wide_int_literal::literal_from_repr;
 use crate::lower::{bare_asserts, cold_paths, wide_arith, wide_int_literal};
-use crate::name::{
-    FunctionId, closure_capture_field, variant_tag_helper_name,
-};
+use crate::name::{FunctionId, closure_capture_field, variant_tag_helper_name};
 use crate::nir::{
     FuncCell, FuncId, FuncRef, NirEnum, NirEnumCase, NirField, NirFlags, NirFlagsMember,
     NirFunction, NirGlobal, NirLiteralPattern, NirLocal, NirParam, NirStruct, NirTest,

@@ -72,12 +72,10 @@ pub fn builtin_call(name: &str, args: Vec<TirExpr>, return_type: TypeId) -> TirE
     )
 }
 
-/// `builtin::cold_path();`
 pub fn cold_path_stmt(span: Span) -> TirStmt {
     marker_stmt(Mark::ColdPath, span)
 }
 
-/// The marker stating `mark`.
 pub fn marker_stmt(mark: Mark, span: Span) -> TirStmt {
     TirStmt::new(
         TirStmtKind::Expr(builtin_call(mark.builtin(), Vec::new(), TypeTable::UNIT)),
@@ -85,7 +83,7 @@ pub fn marker_stmt(mark: Mark, span: Span) -> TirStmt {
     )
 }
 
-/// What `stmt` states, where it is a marker, whoever placed it.
+/// What `stmt` states, where it is a marker.
 pub fn marker_stmt_mark(stmt: &TirStmt) -> Option<Mark> {
     match &stmt.kind {
         TirStmtKind::Expr(expr) => marker_mark(expr),
@@ -93,7 +91,7 @@ pub fn marker_stmt_mark(stmt: &TirStmt) -> Option<Mark> {
     }
 }
 
-/// What `expr` states, where it is a call to a marker, whoever placed it.
+/// What `expr` states, where it is a call to a marker.
 pub fn marker_mark(expr: &TirExpr) -> Option<Mark> {
     match &expr.kind {
         TirExprKind::Call { func, .. } => func.intrinsic().and_then(Mark::of_builtin),

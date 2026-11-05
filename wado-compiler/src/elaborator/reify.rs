@@ -91,7 +91,8 @@ use crate::pgo::MarkMap;
 use crate::rarity::Mark;
 use crate::symbol::{Symbol, SymbolKind};
 use crate::synthesis::common::{
-    bare_cast, bool_lit, builtin_call, cold_path_stmt, handle_bits, marker_stmt_mark, not_expr, ord_bool_from_cmp, rt_call,
+    bare_cast, bool_lit, builtin_call, cold_path_stmt, handle_bits, marker_stmt_mark, not_expr,
+    ord_bool_from_cmp, rt_call,
 };
 use crate::tir::{
     EffectRef, ExitScope, StructDef, TemplateId, TirEffectOp, TirField, TirImpl, TirParam,
