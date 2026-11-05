@@ -707,13 +707,12 @@ pub(super) fn synthesize_lower_list_to_buffer(
     // would fall back to i32.
     let elem_type_id = {
         let tt = ctx.type_table.borrow();
-        match tt.list_element(list_type_id) {
-            Some(elem) => elem,
-            None => {
-                drop(tt);
-                let mut tt = ctx.type_table.borrow_mut();
-                cm_held_type_to_type_id(&elem_resolved, &mut tt, ctx.cm_interface_registry)
-            }
+        if let Some(elem) = tt.list_element(list_type_id) {
+            elem
+        } else {
+            drop(tt);
+            let mut tt = ctx.type_table.borrow_mut();
+            cm_held_type_to_type_id(&elem_resolved, &mut tt, ctx.cm_interface_registry)
         }
     };
 

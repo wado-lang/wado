@@ -1115,15 +1115,15 @@ pub(super) fn field_receiver_nonnull(
         return false;
     };
     let ty = body.operand_type(receiver);
-    match types.get_pruned(ty) {
+    matches!(
+        types.get_pruned(ty),
         Some(
             ResolvedType::Struct { .. }
-            | ResolvedType::Tuple(_)
-            | ResolvedType::Ref(_)
-            | ResolvedType::MutRef(_),
-        ) => true,
-        _ => false,
-    }
+                | ResolvedType::Tuple(_)
+                | ResolvedType::Ref(_)
+                | ResolvedType::MutRef(_),
+        )
+    )
 }
 
 /// Without a type table `FieldAccess` is conservatively trap-capable.

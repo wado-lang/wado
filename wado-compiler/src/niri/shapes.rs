@@ -72,7 +72,7 @@ impl AggregateShapes {
             if project.find_variant(def).is_some() {
                 instances
                     .entry((def, type_table.type_keys(type_args)))
-                    .or_insert_with(|| type_args.to_vec());
+                    .or_insert_with(|| type_args.clone());
             }
         }
         drop(type_table);

@@ -996,15 +996,15 @@ impl TypeTable {
     /// predicate.
     #[must_use]
     pub fn is_boxed_reference_target(&self, ty: TypeId) -> bool {
-        match self.get(self.representation_head(ty)) {
-            ResolvedType::Primitive(_) => true,
-            ResolvedType::Enum { .. }
-            | ResolvedType::Variant { .. }
-            | ResolvedType::Function { .. }
-            | ResolvedType::Ref(_)
-            | ResolvedType::MutRef(_) => true,
-            _ => false,
-        }
+        matches!(
+            self.get(self.representation_head(ty)),
+            ResolvedType::Primitive(_)
+                | ResolvedType::Enum { .. }
+                | ResolvedType::Variant { .. }
+                | ResolvedType::Function { .. }
+                | ResolvedType::Ref(_)
+                | ResolvedType::MutRef(_)
+        )
     }
 
     /// Whether a value of `ty` is mutated in place through a reference to it, so

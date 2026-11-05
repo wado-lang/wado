@@ -402,7 +402,6 @@ struct InnerGuard {
 }
 
 impl InnerGuard {
-    #[expect(clippy::too_many_arguments)]
     fn parse(
         engine: &Engine,
         binds: &Binds,
