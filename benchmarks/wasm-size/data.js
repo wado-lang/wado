@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1793874995845,
+  "lastUpdate": 1793891412788,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -74769,6 +74769,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/430ab7548e6c0acaf7ddaec42dac3eb3405bd28f"
         },
         "date": 1793874994713,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3099,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7303,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21965,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 375776,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "36c5056f30e346c3658bf2e780c732d328371b25",
+          "message": "Merge pull request #2557 from wado-lang/ccr-52b7fd41-lzjtwq\n\nperf(pgo): price a call site by where its code now runs",
+          "timestamp": "2026-11-05T23:55:00+09:00",
+          "tree_id": "56430113ce576636fc9745e127849193eb201877",
+          "url": "https://github.com/wado-lang/wado/commit/36c5056f30e346c3658bf2e780c732d328371b25"
+        },
+        "date": 1793891411796,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
