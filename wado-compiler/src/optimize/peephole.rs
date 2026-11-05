@@ -34,6 +34,7 @@ use super::tuple_projection::TupleProjectionRule;
 use crate::optimize::heap_effect::{HeapEffectsCache, LazyHeapFrame};
 use crate::optimize::match_to_switch::intern_cold_markers;
 use crate::optimize::mod_ref::SummaryCache;
+use crate::optimize::pass_dump;
 use crate::optimize::select_lowering::intern_select;
 
 /// Run the unified peephole rule set over every function body. Returns whether
@@ -95,6 +96,12 @@ pub(super) fn run_peephole(
         "[NIR] run_peephole entered on a drained gate: the setup above would be \
          built for a run that visits no function. `gated!` owns that skip."
     );
+    // Decided here: the rules run on worker threads, which a skip scope does
+    // not reach.
+    let enabled: Vec<PeepholeRule> = PeepholeRule::ALL
+        .into_iter()
+        .filter(|rule| pass_dump::decides(&format!("nir/peephole/{}", rule.name())))
+        .collect();
     // Once for the run.
     let summaries = mod_ref.summaries(project, gate.exec());
     let type_table = &*type_table;
@@ -153,58 +160,62 @@ pub(super) fn run_peephole(
         let Some(body) = body else {
             return false;
         };
-        let mut rules: Vec<&dyn Rule> = Vec::with_capacity(10);
+        let mut rules: Vec<(PeepholeRule, &dyn Rule)> = Vec::with_capacity(20);
         if pre_inline {
             // Ordered before `match_rule`, which lowers the `Match` it plants;
             // `bitset_rule` before it too, taking the boolean sets `match_rule`
             // would otherwise make a `br_table` of.
-            rules.push(&if_chain_rule);
-            rules.push(&bitset_rule);
-            rules.push(&match_rule);
+            rules.push((PeepholeRule::IfChainToMatch, &if_chain_rule));
+            rules.push((PeepholeRule::MatchToBitset, &bitset_rule));
+            rules.push((PeepholeRule::MatchToSwitch, &match_rule));
         }
         if let Some(ref_elim_rule) = ref_elim_rule.as_ref() {
-            rules.push(ref_elim_rule);
+            rules.push((PeepholeRule::RefElim, ref_elim_rule));
         }
         if let Some(elide_box_rule) = elide_box_rule.as_ref() {
-            rules.push(elide_box_rule);
+            rules.push((PeepholeRule::ElideBoxLocal, elide_box_rule));
         }
         if let Some(labeled_block_fusion_rule) = labeled_block_fusion_rule.as_ref() {
-            rules.push(labeled_block_fusion_rule);
+            rules.push((PeepholeRule::LabeledBlockFusion, labeled_block_fusion_rule));
         }
         if let Some(slot_temp_sroa_rule) = slot_temp_sroa_rule.as_ref() {
-            rules.push(slot_temp_sroa_rule);
+            rules.push((PeepholeRule::SlotTempSroa, slot_temp_sroa_rule));
         }
         // Post-inline only: a value-producing labeled block in statement position
         // is what `inline` leaves where a caller discarded the result. After
         // fusion, whose shapes it would otherwise flatten, and before
         // `elide_rule`, which reclaims what it strips.
         if !pre_inline {
-            rules.push(&DropValueRule);
+            rules.push((PeepholeRule::DropValue, &DropValueRule));
         }
         if let Some(closure_devirt_rule) = closure_devirt_rule.as_ref() {
-            rules.push(closure_devirt_rule);
+            rules.push((PeepholeRule::ClosureDevirt, closure_devirt_rule));
         }
         rules.extend([
             // Ahead of the folding rules: the arms it drops are what leaves a
             // constant condition and a dead branch for them to reclaim.
-            &known_case_rule as &dyn Rule,
+            (PeepholeRule::KnownCase, &known_case_rule as &dyn Rule),
             // Ahead of every rule matching on the shape of a value: a cast that
             // changes no representation is what hides that shape.
-            &IdentityCastRule,
-            &IdentityDerefRule,
-            &FieldThroughRefRule,
-            &aggregate_forward_rule,
-            &elide_rule,
-            &const_fold_rule,
-            &branch_prune_rule,
-            &tuple_projection_rule,
+            (PeepholeRule::IdentityCast, &IdentityCastRule),
+            (PeepholeRule::IdentityDeref, &IdentityDerefRule),
+            (PeepholeRule::FieldThroughRef, &FieldThroughRefRule),
+            (PeepholeRule::AggregateForward, &aggregate_forward_rule),
+            (PeepholeRule::Elide, &elide_rule),
+            (PeepholeRule::ConstFold, &const_fold_rule),
+            (PeepholeRule::BranchPrune, &branch_prune_rule),
+            (PeepholeRule::TupleProjection, &tuple_projection_rule),
         ]);
         if let Some(const_ascii_push_rule) = const_ascii_push_rule.as_ref() {
-            rules.push(const_ascii_push_rule);
+            rules.push((PeepholeRule::ConstAsciiPush, const_ascii_push_rule));
         }
         if let Some(append_fuse_rule) = append_fuse_rule.as_ref() {
-            rules.push(append_fuse_rule);
+            rules.push((PeepholeRule::AppendFuse, append_fuse_rule));
         }
+        let rules: Vec<&dyn Rule> = rules
+            .into_iter()
+            .filter_map(|(name, rule)| enabled.contains(&name).then_some(rule))
+            .collect();
         let mut engine = Engine::new(body, buffers, locals, params);
         // `MatchToSwitchRule` materializes promoted constant scrutinees / arm
         // bodies; the extractor reads `prim` from the type table for literal repr.
@@ -224,4 +235,80 @@ pub(super) fn run_peephole(
     });
     exec.drop_all(callees);
     changed
+}
+
+/// A rule of the peephole session, named `nir/peephole/<name>` where a skip
+/// list names it.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum PeepholeRule {
+    IfChainToMatch,
+    MatchToBitset,
+    MatchToSwitch,
+    RefElim,
+    ElideBoxLocal,
+    LabeledBlockFusion,
+    SlotTempSroa,
+    DropValue,
+    ClosureDevirt,
+    KnownCase,
+    IdentityCast,
+    IdentityDeref,
+    FieldThroughRef,
+    AggregateForward,
+    Elide,
+    ConstFold,
+    BranchPrune,
+    TupleProjection,
+    ConstAsciiPush,
+    AppendFuse,
+}
+
+impl PeepholeRule {
+    const ALL: [Self; 20] = [
+        Self::IfChainToMatch,
+        Self::MatchToBitset,
+        Self::MatchToSwitch,
+        Self::RefElim,
+        Self::ElideBoxLocal,
+        Self::LabeledBlockFusion,
+        Self::SlotTempSroa,
+        Self::DropValue,
+        Self::ClosureDevirt,
+        Self::KnownCase,
+        Self::IdentityCast,
+        Self::IdentityDeref,
+        Self::FieldThroughRef,
+        Self::AggregateForward,
+        Self::Elide,
+        Self::ConstFold,
+        Self::BranchPrune,
+        Self::TupleProjection,
+        Self::ConstAsciiPush,
+        Self::AppendFuse,
+    ];
+
+    fn name(self) -> &'static str {
+        match self {
+            Self::IfChainToMatch => "if_chain_to_match",
+            Self::MatchToBitset => "match_to_bitset",
+            Self::MatchToSwitch => "match_to_switch",
+            Self::RefElim => "ref_elim",
+            Self::ElideBoxLocal => "elide_box_local",
+            Self::LabeledBlockFusion => "labeled_block_fusion",
+            Self::SlotTempSroa => "slot_temp_sroa",
+            Self::DropValue => "drop_value",
+            Self::ClosureDevirt => "closure_devirt",
+            Self::KnownCase => "known_case",
+            Self::IdentityCast => "identity_cast",
+            Self::IdentityDeref => "identity_deref",
+            Self::FieldThroughRef => "field_through_ref",
+            Self::AggregateForward => "aggregate_forward",
+            Self::Elide => "elide",
+            Self::ConstFold => "const_fold",
+            Self::BranchPrune => "branch_prune",
+            Self::TupleProjection => "tuple_projection",
+            Self::ConstAsciiPush => "const_ascii_push",
+            Self::AppendFuse => "append_fuse",
+        }
+    }
 }

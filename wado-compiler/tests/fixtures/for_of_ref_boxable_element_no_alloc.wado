@@ -1,0 +1,32 @@
+// A by-reference `for` over a `List` of a boxable element allocates nothing
+// per iteration.
+//
+// `&variant` lowers to `Box<T>`, and the box reads the very index the next
+// statement bumps — adjacency cannot move its initializer to the use.
+struct Inner { name: String, ids: List<i32> }
+variant Node { Leaf(Inner), Pair([Inner, Inner]) }
+
+#[inline(never)]
+fn count(nodes: &List<Node>) -> i32 {
+    let mut n = 0;
+    for let node of nodes {
+        match node {
+            Node::Leaf(i) => n += i.ids.len(),
+            Node::Pair([a, b]) => n += a.ids.len() + b.ids.len(),
+        }
+    }
+    return n;
+}
+
+export fn run() {
+    let nodes: List<Node> = [Node::Leaf(Inner { name: "a", ids: [1, 2] })];
+    assert count(&nodes) == 2;
+}
+
+__DATA__
+{
+    "stdout": "",
+    "wir_pass": {"O2": ["wir/unwrap_box_locals"]},
+    "wir_scope": "for_of_ref_boxable_element_no_alloc.wado/count",
+    "wir_not_expect:O2": ["struct.new"]
+}

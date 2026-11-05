@@ -1786,7 +1786,7 @@ fn "core:prelude/array.wado/core:prelude/array.wado/write_seq_inspect<u8>$dae[st
     let shown: i32;
     let truncated: bool;
     let i: i32;
-    let $licm_arith_35: bool;
+    let $licm_arith_36: bool;
     if f.alternate {
         "core:prelude/array.wado/core:prelude/array.wado/write_seq_inspect_alt<u8>$dae[start,marker]"(repr, end, f, limit);
         return;
@@ -1795,11 +1795,11 @@ fn "core:prelude/array.wado/core:prelude/array.wado/write_seq_inspect<u8>$dae[st
     shown = 0;
     truncated = 0;
     i = 0;
-    $licm_arith_35 = limit >= 0;
+    $licm_arith_36 = limit >= 0;
     b205: block {
         l206: loop {
             break_if b205 i >= end;
-            if select i32($licm_arith_35, shown >= limit, 0) {
+            if select i32($licm_arith_36, shown >= limit, 0) {
                 truncated = 1;
                 break b205;
             }
@@ -1823,10 +1823,11 @@ fn "core:prelude/array.wado/core:prelude/array.wado/write_seq_inspect<u8>$dae[st
 }
 
 fn "core:prelude/array.wado/core:prelude/array.wado/write_seq_inspect_alt<u8>$dae[start,marker]"(repr, end, f, limit) {
+    let $load_1: ref "core:prelude/string.wado//String";
     let shown: i32;
     let truncated: bool;
     let i: i32;
-    let $licm_arith_27: bool;
+    let $licm_arith_28: bool;
     if 0 >= end {
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec0"(f.buf, global:core:prelude/array.wado::$const_obj_16);
         return;
@@ -1835,17 +1836,18 @@ fn "core:prelude/array.wado/core:prelude/array.wado/write_seq_inspect_alt<u8>$da
     shown = 0;
     truncated = 0;
     i = 0;
-    $licm_arith_27 = limit >= 0;
+    $load_1 = f.buf;
+    $licm_arith_28 = limit >= 0;
     b212: block {
         l213: loop {
             break_if b212 i >= end;
-            if select i32($licm_arith_27, shown >= limit, 0) {
+            if select i32($licm_arith_28, shown >= limit, 0) {
                 truncated = 1;
                 break b212;
             }
             "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_newline_indent"(f);
             "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(builtin::array_get_value<u8>(repr, i), f);
-            "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_byte"(f.buf, 44);
+            "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_byte"($load_1, 44);
             shown = shown + 1;
             i = i + 1;
             continue l213;
@@ -1853,7 +1855,7 @@ fn "core:prelude/array.wado/core:prelude/array.wado/write_seq_inspect_alt<u8>$da
     };
     if truncated {
         "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_newline_indent"(f);
-        "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec5"(f.buf, global:core:prelude/array.wado::$const_obj_10);
+        "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec5"($load_1, global:core:prelude/array.wado::$const_obj_10);
     }
     "core:prelude/format.wado/core:prelude/format.wado/Formatter::close_brace<core:prelude/string.wado/String>$spec0"(f, global:core:prelude/array.wado::$const_obj_13);
 }
@@ -2060,7 +2062,6 @@ fn "core:prelude/types.wado/$case_ref$core:prelude/types.wado/Option<core:prelud
 }
 
 fn "core:base64/decode_impl$dae[canonical]$spec0"(input, table) {
-    let $load_3: ref Array<u8>;
     let end: i32;
     let remainder: i32;
     let out: ref "core:prelude//List<u8>";
@@ -2071,7 +2072,8 @@ fn "core:base64/decode_impl$dae[canonical]$spec0"(input, table) {
     let $m_1_48: i32;
     let $m_1_58: i32;
     let $licm_repr_343: ref Array<u8>;
-    let $licm_used_345: i32;
+    let $licm_used_347: i32;
+    let $licm_repr_349: ref Array<u8>;
     end = 4;
     $licm_repr_343 = input.repr;
     b227: block {
@@ -2102,8 +2104,9 @@ fn "core:base64/decode_impl$dae[canonical]$spec0"(input, table) {
     }
     out = struct.new "core:prelude//List<u8>" { repr: builtin::array_new<u8>($contract_arg_0), used: 0 };
     $contract_arg_0 = 0;
-    $licm_used_345 = table.used;
-    $licm_repr_343 = table.repr;
+    $licm_used_347 = table.used;
+    $licm_repr_343 = input.repr;
+    $licm_repr_349 = table.repr;
     if select i32(select i32(select i32((if (if (if (builtin::i64_extend_i32_s(end) + -4_i64) < 4_i64 -> i32 {
         ((builtin::i64_extend_i32_s(end) + -4_i64) + 1_i64) < 4_i64;
     } else {
@@ -2120,41 +2123,41 @@ fn "core:base64/decode_impl$dae[canonical]$spec0"(input, table) {
         b238: block {
             l239: loop {
                 break_if b238 ($contract_arg_0 + 3) >= end;
-                $m_1_28 = builtin::array_get_value<u8>(local.tee $load_3(input.repr), $contract_arg_0);
-                if @unlikely(((0 <= $m_1_28) & ($m_1_28 < $licm_used_345)) == 0) {
+                $m_1_28 = builtin::array_get_value<u8>($licm_repr_343, $contract_arg_0);
+                if @unlikely(((0 <= $m_1_28) & ($m_1_28 < $licm_used_347)) == 0) {
                     cold_path;
-                    "core:base64/decode_impl$cold8$dae[table,canonical]"(input, $contract_arg_0, $licm_used_345);
+                    "core:base64/decode_impl$cold8$dae[table,canonical]"(input, $contract_arg_0, $licm_used_347);
                     unreachable;
                 }
-                $m_1_28 = builtin::array_get_value<u8>($load_3, $contract_arg_0);
-                $m_1_28 = builtin::array_get_value<u8>($licm_repr_343, $m_1_28);
+                $m_1_28 = builtin::array_get_value<u8>($licm_repr_343, $contract_arg_0);
+                $m_1_28 = builtin::array_get_value<u8>($licm_repr_349, $m_1_28);
                 $contract_arg_2 = $contract_arg_0 + 1;
-                $m_1_38 = builtin::array_get_value<u8>($load_3, $contract_arg_2);
-                if @unlikely(((0 <= $m_1_38) & ($m_1_38 < $licm_used_345)) == 0) {
+                $m_1_38 = builtin::array_get_value<u8>($licm_repr_343, $contract_arg_2);
+                if @unlikely(((0 <= $m_1_38) & ($m_1_38 < $licm_used_347)) == 0) {
                     cold_path;
-                    "core:base64/decode_impl$cold7$dae[table,canonical]"(input, $contract_arg_2, $licm_used_345);
+                    "core:base64/decode_impl$cold7$dae[table,canonical]"(input, $contract_arg_2, $licm_used_347);
                     unreachable;
                 }
-                $contract_arg_2 = builtin::array_get_value<u8>($load_3, $contract_arg_2);
                 $contract_arg_2 = builtin::array_get_value<u8>($licm_repr_343, $contract_arg_2);
+                $contract_arg_2 = builtin::array_get_value<u8>($licm_repr_349, $contract_arg_2);
                 $m_1_38 = $contract_arg_0 + 2;
-                $m_1_48 = builtin::array_get_value<u8>($load_3, $m_1_38);
-                if @unlikely(((0 <= $m_1_48) & ($m_1_48 < $licm_used_345)) == 0) {
+                $m_1_48 = builtin::array_get_value<u8>($licm_repr_343, $m_1_38);
+                if @unlikely(((0 <= $m_1_48) & ($m_1_48 < $licm_used_347)) == 0) {
                     cold_path;
-                    "core:base64/decode_impl$cold6$dae[table,canonical]"(input, $m_1_38, $licm_used_345);
+                    "core:base64/decode_impl$cold6$dae[table,canonical]"(input, $m_1_38, $licm_used_347);
                     unreachable;
                 }
-                $m_1_38 = builtin::array_get_value<u8>($load_3, $m_1_38);
                 $m_1_38 = builtin::array_get_value<u8>($licm_repr_343, $m_1_38);
+                $m_1_38 = builtin::array_get_value<u8>($licm_repr_349, $m_1_38);
                 $m_1_48 = $contract_arg_0 + 3;
-                $m_1_58 = builtin::array_get_value<u8>($load_3, $m_1_48);
-                if @unlikely(((0 <= $m_1_58) & ($m_1_58 < $licm_used_345)) == 0) {
+                $m_1_58 = builtin::array_get_value<u8>($licm_repr_343, $m_1_48);
+                if @unlikely(((0 <= $m_1_58) & ($m_1_58 < $licm_used_347)) == 0) {
                     cold_path;
-                    "core:base64/decode_impl$cold5$dae[table,canonical]"(input, $m_1_48, $licm_used_345);
+                    "core:base64/decode_impl$cold5$dae[table,canonical]"(input, $m_1_48, $licm_used_347);
                     unreachable;
                 }
-                $m_1_48 = builtin::array_get_value<u8>($load_3, $m_1_48);
                 $m_1_48 = builtin::array_get_value<u8>($licm_repr_343, $m_1_48);
+                $m_1_48 = builtin::array_get_value<u8>($licm_repr_349, $m_1_48);
                 if ((($m_1_28 >= 254) | ($contract_arg_2 >= 254)) | ($m_1_38 >= 254)) | ($m_1_48 >= 254) {
                     return ref.null none;
                 }
@@ -2192,53 +2195,53 @@ fn "core:base64/decode_impl$dae[canonical]$spec0"(input, table) {
                     "core:prelude/slice.wado/core:prelude/slice.wado/Slice<u8>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"($contract_arg_0, 4, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:base64:154"), used: 15 });
                     unreachable;
                 }
-                $m_1_28 = builtin::array_get_value<u8>(local.tee $load_3(input.repr), $contract_arg_0);
-                if @unlikely(((0 <= $m_1_28) & ($m_1_28 < $licm_used_345)) == 0) {
+                $m_1_28 = builtin::array_get_value<u8>($licm_repr_343, $contract_arg_0);
+                if @unlikely(((0 <= $m_1_28) & ($m_1_28 < $licm_used_347)) == 0) {
                     cold_path;
-                    "core:base64/decode_impl$cold8$dae[table,canonical]"(input, $contract_arg_0, $licm_used_345);
+                    "core:base64/decode_impl$cold8$dae[table,canonical]"(input, $contract_arg_0, $licm_used_347);
                     unreachable;
                 }
-                $m_1_28 = builtin::array_get_value<u8>($load_3, $contract_arg_0);
-                $m_1_28 = builtin::array_get_value<u8>($licm_repr_343, $m_1_28);
+                $m_1_28 = builtin::array_get_value<u8>($licm_repr_343, $contract_arg_0);
+                $m_1_28 = builtin::array_get_value<u8>($licm_repr_349, $m_1_28);
                 if @unlikely(local.tee $contract_arg_2($contract_arg_0 + 1) >= 4) {
                     cold_path;
                     "core:prelude/slice.wado/core:prelude/slice.wado/Slice<u8>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"($contract_arg_2, 4, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:base64:155"), used: 15 });
                     unreachable;
                 }
-                $m_1_38 = builtin::array_get_value<u8>($load_3, $contract_arg_2);
-                if @unlikely(((0 <= $m_1_38) & ($m_1_38 < $licm_used_345)) == 0) {
+                $m_1_38 = builtin::array_get_value<u8>($licm_repr_343, $contract_arg_2);
+                if @unlikely(((0 <= $m_1_38) & ($m_1_38 < $licm_used_347)) == 0) {
                     cold_path;
-                    "core:base64/decode_impl$cold7$dae[table,canonical]"(input, $contract_arg_2, $licm_used_345);
+                    "core:base64/decode_impl$cold7$dae[table,canonical]"(input, $contract_arg_2, $licm_used_347);
                     unreachable;
                 }
-                $contract_arg_2 = builtin::array_get_value<u8>($load_3, $contract_arg_2);
                 $contract_arg_2 = builtin::array_get_value<u8>($licm_repr_343, $contract_arg_2);
+                $contract_arg_2 = builtin::array_get_value<u8>($licm_repr_349, $contract_arg_2);
                 if @unlikely(local.tee $m_1_38($contract_arg_0 + 2) >= 4) {
                     cold_path;
                     "core:prelude/slice.wado/core:prelude/slice.wado/Slice<u8>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"($m_1_38, 4, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:base64:156"), used: 15 });
                     unreachable;
                 }
-                $m_1_48 = builtin::array_get_value<u8>($load_3, $m_1_38);
-                if @unlikely(((0 <= $m_1_48) & ($m_1_48 < $licm_used_345)) == 0) {
+                $m_1_48 = builtin::array_get_value<u8>($licm_repr_343, $m_1_38);
+                if @unlikely(((0 <= $m_1_48) & ($m_1_48 < $licm_used_347)) == 0) {
                     cold_path;
-                    "core:base64/decode_impl$cold6$dae[table,canonical]"(input, $m_1_38, $licm_used_345);
+                    "core:base64/decode_impl$cold6$dae[table,canonical]"(input, $m_1_38, $licm_used_347);
                     unreachable;
                 }
-                $m_1_38 = builtin::array_get_value<u8>($load_3, $m_1_38);
                 $m_1_38 = builtin::array_get_value<u8>($licm_repr_343, $m_1_38);
+                $m_1_38 = builtin::array_get_value<u8>($licm_repr_349, $m_1_38);
                 if @unlikely(local.tee $m_1_48($contract_arg_0 + 3) >= 4) {
                     cold_path;
                     "core:prelude/slice.wado/core:prelude/slice.wado/Slice<u8>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"($m_1_48, 4, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:base64:157"), used: 15 });
                     unreachable;
                 }
-                $m_1_58 = builtin::array_get_value<u8>($load_3, $m_1_48);
-                if @unlikely(((0 <= $m_1_58) & ($m_1_58 < $licm_used_345)) == 0) {
+                $m_1_58 = builtin::array_get_value<u8>($licm_repr_343, $m_1_48);
+                if @unlikely(((0 <= $m_1_58) & ($m_1_58 < $licm_used_347)) == 0) {
                     cold_path;
-                    "core:base64/decode_impl$cold5$dae[table,canonical]"(input, $m_1_48, $licm_used_345);
+                    "core:base64/decode_impl$cold5$dae[table,canonical]"(input, $m_1_48, $licm_used_347);
                     unreachable;
                 }
-                $m_1_48 = builtin::array_get_value<u8>($load_3, $m_1_48);
                 $m_1_48 = builtin::array_get_value<u8>($licm_repr_343, $m_1_48);
+                $m_1_48 = builtin::array_get_value<u8>($licm_repr_349, $m_1_48);
                 if ((($m_1_28 >= 254) | ($contract_arg_2 >= 254)) | ($m_1_38 >= 254)) | ($m_1_48 >= 254) {
                     return ref.null none;
                 }
@@ -2281,7 +2284,7 @@ fn "core:base64/decode_impl$dae[canonical]$spec0"(input, table) {
             unreachable;
         }
         remainder = builtin::array_get_value<u8>($licm_repr_343, $contract_arg_0);
-        remainder = builtin::array_get_value<u8>(local.tee $load_3(table.repr), remainder);
+        remainder = builtin::array_get_value<u8>(local.tee $licm_repr_349(table.repr), remainder);
         if @unlikely(local.tee $contract_arg_0($contract_arg_0 + 1) >= 4) {
             cold_path;
             "core:prelude/slice.wado/core:prelude/slice.wado/Slice<u8>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"($contract_arg_0, 4, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:base64:171"), used: 15 });
@@ -2293,7 +2296,7 @@ fn "core:base64/decode_impl$dae[canonical]$spec0"(input, table) {
             unreachable;
         }
         end = builtin::array_get_value<u8>($licm_repr_343, $contract_arg_0);
-        end = builtin::array_get_value<u8>($load_3, end);
+        end = builtin::array_get_value<u8>($licm_repr_349, end);
         if (remainder >= 254) | (end >= 254) {
             return ref.null none;
         }
@@ -2317,19 +2320,19 @@ fn "core:base64/decode_impl$dae[canonical]$spec0"(input, table) {
             unreachable;
         }
         remainder = builtin::array_get_value<u8>($licm_repr_343, $contract_arg_0);
-        remainder = builtin::array_get_value<u8>(local.tee $load_3(table.repr), remainder);
-        if @unlikely(local.tee $licm_used_345($contract_arg_0 + 1) >= 4) {
+        remainder = builtin::array_get_value<u8>(local.tee $licm_repr_349(table.repr), remainder);
+        if @unlikely(local.tee $licm_used_347($contract_arg_0 + 1) >= 4) {
             cold_path;
-            "core:prelude/slice.wado/core:prelude/slice.wado/Slice<u8>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"($licm_used_345, 4, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:base64:183"), used: 15 });
+            "core:prelude/slice.wado/core:prelude/slice.wado/Slice<u8>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"($licm_used_347, 4, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:base64:183"), used: 15 });
             unreachable;
         }
-        if @unlikely(builtin::array_get_value<u8>($licm_repr_343, $licm_used_345) >=u end) {
+        if @unlikely(builtin::array_get_value<u8>($licm_repr_343, $licm_used_347) >=u end) {
             cold_path;
-            "core:base64/decode_impl$cold1$dae[table,canonical]"(input, $licm_used_345, end);
+            "core:base64/decode_impl$cold1$dae[table,canonical]"(input, $licm_used_347, end);
             unreachable;
         }
-        $licm_used_345 = builtin::array_get_value<u8>($licm_repr_343, $licm_used_345);
-        $licm_used_345 = builtin::array_get_value<u8>($load_3, $licm_used_345);
+        $licm_used_347 = builtin::array_get_value<u8>($licm_repr_343, $licm_used_347);
+        $licm_used_347 = builtin::array_get_value<u8>($licm_repr_349, $licm_used_347);
         if @unlikely(local.tee $contract_arg_0($contract_arg_0 + 2) >= 4) {
             cold_path;
             "core:prelude/slice.wado/core:prelude/slice.wado/Slice<u8>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"($contract_arg_0, 4, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:base64:184"), used: 15 });
@@ -2341,18 +2344,18 @@ fn "core:base64/decode_impl$dae[canonical]$spec0"(input, table) {
             unreachable;
         }
         end = builtin::array_get_value<u8>($licm_repr_343, $contract_arg_0);
-        end = builtin::array_get_value<u8>($load_3, end);
-        if ((remainder >= 254) | ($licm_used_345 >= 254)) | (end >= 254) {
+        end = builtin::array_get_value<u8>($licm_repr_349, end);
+        if ((remainder >= 254) | ($licm_used_347 >= 254)) | (end >= 254) {
             return ref.null none;
         }
-        $contract_arg_0 = ((remainder << 2) | ($licm_used_345 >> 4)) & 255;
+        $contract_arg_0 = ((remainder << 2) | ($licm_used_347 >> 4)) & 255;
         if @unlikely(local.tee remainder(out.used) >= builtin::array_len(out.repr)) {
             cold_path;
             "core:prelude/list.wado/core:prelude/list.wado/List<u8>::grow"(out);
         }
         builtin::array_set_u8(local.tee $licm_repr_343(out.repr), remainder, $contract_arg_0);
         out.used = remainder + 1;
-        end = ((($licm_used_345 & 15) << 4) | (end >> 2)) & 255;
+        end = ((($licm_used_347 & 15) << 4) | (end >> 2)) & 255;
         if @unlikely(local.tee $contract_arg_0(out.used) >= builtin::array_len($licm_repr_343)) {
             cold_path;
             "core:prelude/list.wado/core:prelude/list.wado/List<u8>::grow"(out);

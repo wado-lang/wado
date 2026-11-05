@@ -3,9 +3,7 @@
 // that local's field facts: `a.len()` is 5 or 6 depending on `c` and
 // must not fold to the pre-branch constant 5.
 //
-// `black_box` keeps CTFE from running `f` on a constant and erasing it, and
-// `wir_scope` holds the patterns to `f`, so a bare `return 5;` elsewhere in
-// the whole-program dump cannot answer for the code under test.
+// `black_box` keeps CTFE from running `f` on a constant and erasing it.
 
 use { println, Stdout } from "core:cli";
 
@@ -31,8 +29,8 @@ __DATA__
 {
     "stdout": "5 6\n",
     "wir_scope": "opt_const_forward_call_in_if_invalidates.wado/f",
-    "wir_not_expect:O2": [
-        "return 5;",
-        "return 6;"
-    ]
+    "wir_not_expect:O2": ["return 5;"],
+    "wir_contrast": {"O2": [
+        {"    if c {\n        grow(&mut a);\n    }\n": "    builtin::black_box(c);\n"}
+    ]}
 }

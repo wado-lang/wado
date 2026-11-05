@@ -9,8 +9,7 @@
 //
 // This regressed when `value_copy_elide` was folded into the pre-inline peephole
 // session, which ran after the standalone `value_copy_demote`. The fix runs
-// `value_copy_demote` after the pre-inline peephole. The `wir_not_expect` below
-// asserts no shallow-copy `array_clone` survives at -O2.
+// `value_copy_demote` after the pre-inline peephole.
 
 use { println, Stdout } from "core:cli";
 
@@ -21,6 +20,7 @@ export fn run() with Stdout {
 
 __DATA__
 {
+    "wir_pass": {"O2": ["lower/value_copy/confined"]},
     "stdout": "ok\n",
     "wir_not_expect:O2": ["array_clone"]
 }

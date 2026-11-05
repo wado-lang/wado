@@ -1,0 +1,29 @@
+// Labeled blocks whose only reference is a tail `break LABEL` (with or
+// without a value) are flattened, and the flattened program computes what the
+// blocks did (issue #1184, C2 and C3).
+//
+// C2: stmt-position `LABEL: { …; break LABEL; }` → straight-line stmts.
+// C3: value-position `LABEL: { …; break LABEL: V; }` → `{ …; V }`.
+
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    let n = builtin::black_box(3);
+    let mut s = 0;
+    c2: {
+        s += n;
+        break c2;
+    }
+    let v = c3: {
+        s += 1;
+        break c3: s * 2;
+    };
+    println(`${v}`);
+}
+
+__DATA__
+{
+    "stdout": "8\n",
+    "wir_pass": {"O2": ["nir/peephole/branch_prune", "nir/store_load_forward_post_scalarize", "nir/const_fold_post_global", "nir/cond_impl_post_promote"]},
+    "wir_not_expect:O2": ["c2: block", "c3: block"]
+}

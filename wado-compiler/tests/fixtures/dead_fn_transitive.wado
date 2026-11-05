@@ -1,0 +1,13 @@
+// A function called only by a dead one is dead too: `a` is called only by
+// `b`, and nothing calls `b`.
+fn a() -> i32 { return 1; }
+
+fn b() -> i32 { return a(); }
+
+export fn run() {}
+
+__DATA__
+{
+    "stdout": "",
+    "warnings_contains": ["function `a` is never used", "function `b` is never used"]
+}

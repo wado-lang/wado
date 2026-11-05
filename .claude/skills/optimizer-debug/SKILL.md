@@ -70,11 +70,20 @@ only on the second iteration — invaluable for iteration-dependent bugs
 whose failing test passes on the first iteration and only diverges once
 the inliner expands an additional function on a later one.
 
-Only standalone `run_pass` spans are skippable; confirm a name with
-`WADO_LIST_PASSES=1` first. Local rules folded into the peephole session
-(`ref_elim`, `elide_box_local`, `match_to_switch`, `value_copy_elide`,
-`array_literal`, …) are not individually addressable — target
-`nir/peephole` to skip the whole session.
+Passes and the optimization decisions made outside them are skippable;
+confirm a name with `WADO_LIST_PASSES=1` first. A rule of the peephole
+session is `nir/peephole/<rule>` (`nir/peephole/ref_elim`); `nir/peephole`
+skips the whole session. Lowering's value-copy elisions are
+`lower/value_copy/{move,owned,share,confined,pass_through}`, and
+`-f no-cold-paths` dropping the markers is `lower/drop_cold_markers`. The
+value pool folding a constant operation as it interns it, in lowering and in
+every NIR pass, is `nir/value_pool/fold_const`. The WIR builder's are
+`wir_build/exhaustive_last_arm` (the exhaustive match's unchecked last arm),
+`wir_build/branch_hints` (hints from cold paths) and
+`wir_build/elide_terminator_unreachable` (no `unreachable` after a
+terminator). A CM binding lifting a `list` of numbers by one copy out of
+linear memory is `synthesis/cm_lift_bulk`. A decision is listed once per
+compile and takes no `@N`: the optimizer's threads ask it in no fixed order.
 
 When a pass is the only one whose skipping makes the bug go away that
 just narrows the _participants_ in the buggy interaction — it does not

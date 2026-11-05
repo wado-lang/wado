@@ -152,17 +152,29 @@ impl ModifiedVars {
         field_idx: u32,
     ) -> bool {
         self.field_written(ctx, body, root, root_type, field_idx)
-            || self.call_writes_object(ctx, body, root, root_type)
+            || self.call_writes_field(ctx, body, root, root_type, field_idx)
     }
 
-    /// True when a call in the loop may write the object `root` holds.
-    fn call_writes_object(&self, ctx: &LicmCtx, body: &Body, root: u32, root_type: TypeId) -> bool {
+    /// True when a call in the loop may write `root.field_idx`.
+    fn call_writes_field(
+        &self,
+        ctx: &LicmCtx,
+        body: &Body,
+        root: u32,
+        root_type: TypeId,
+        field_idx: u32,
+    ) -> bool {
         let Some(key) = ctx.type_table.heap_object_key(root_type) else {
             return false;
         };
+        let watch = Watch {
+            key,
+            root,
+            field: field_idx,
+        };
         self.call_sites
             .iter()
-            .any(|&call| ctx.call_writes(body, call, key, root))
+            .any(|&call| ctx.call_writes_field(body, call, watch))
     }
 
     fn add_alias(&mut self, a: u32, b: u32) {
@@ -358,11 +370,17 @@ impl<'a> LicmCtx<'a> {
         index
     }
 
-    /// Whether `call` may write an object of type `key` that `root` holds.
-    fn call_writes(&self, body: &Body, call: ExprId, key: TypeKey, root: u32) -> bool {
+    /// Whether `call` may write field `field` of a `key` object that `root`
+    /// holds.
+    fn call_writes_field(&self, body: &Body, call: ExprId, watch: Watch) -> bool {
+        let Watch { key, root, field } = watch;
         self.heap
             .get(body)
             .call_may(self.heap.effects, body, call, Effect::Write, key, root)
+            && self
+                .heap
+                .effects
+                .call_may_write_field(body, call, key, field)
     }
 }
 
@@ -719,35 +737,51 @@ fn hoist_reloadable_field_loads(
     );
 
     // Keep only candidates whose sole obstacle is a call that may write the
-    // object, and that the loop still reads other than through a reload.
+    // object, and whose hoist saves loads.
     candidates.retain(|c| {
         let root_ty = candidate_root_ty(engine, c.local_index, c.type_id);
         if modified_vars.field_written(ctx, engine.body, c.local_index, root_ty, c.field_index)
-            || !modified_vars.call_writes_object(ctx, engine.body, c.local_index, root_ty)
+            || !modified_vars.call_writes_field(
+                ctx,
+                engine.body,
+                c.local_index,
+                root_ty,
+                c.field_index,
+            )
         {
             return false;
         }
-        count_genuine_field_reads(
-            engine.body,
-            NodeRef::Block(loop_body),
-            c.local_index,
-            c.field_index,
-            &ctx.hoist_locals,
-        ) > 0
+        let Some(watch) = c.watch(engine, ctx) else {
+            return false;
+        };
+        let mut readers = vec![c.local_index];
+        readers.extend(
+            ref_bindings
+                .iter()
+                .filter(|(_, binding)| binding.source_index == c.local_index)
+                .map(|(&local, _)| local),
+        );
+        let gain = ReloadGain {
+            ctx,
+            body: engine.body,
+            readers: &readers,
+            field_index: c.field_index,
+            clobbers: &Clobbers {
+                watched: [watch].into_iter().collect(),
+            },
+        };
+        gain.pays(loop_body)
     });
 
     if candidates.is_empty() {
         return;
     }
 
-    // The calls that force a reload: each writes some candidate's object.
+    // The calls that force a reload: each may write some candidate's field.
     let clobbers = Clobbers {
         watched: candidates
             .iter()
-            .filter_map(|c| {
-                let root_ty = candidate_root_ty(engine, c.local_index, c.type_id);
-                Some((ctx.type_table.heap_object_key(root_ty)?, c.local_index))
-            })
+            .filter_map(|c| c.watch(engine, ctx))
             .collect(),
     };
 
@@ -770,7 +804,9 @@ fn hoist_reloadable_field_loads(
     }
     // A clobbering call that is the value-producing tail of a value-block would
     // have its (non-unit) value dropped by an appended reload — bail on those.
-    if has_nonunit_clobber_value_tail(ctx, engine.body, NodeRef::Block(loop_body), &clobbers) {
+    if has_nonunit_clobber_value_tail(ctx, engine.body, NodeRef::Block(loop_body), &clobbers)
+        || reload_skipped_by_jump(ctx, engine.body, loop_body, &clobbers)
+    {
         return;
     }
 
@@ -778,9 +814,8 @@ fn hoist_reloadable_field_loads(
     let mut specs = Vec::with_capacity(candidates.len());
     for candidate in &candidates {
         let local_type_id = candidate_root_ty(engine, candidate.local_index, candidate.type_id);
-        let key = ctx
-            .type_table
-            .heap_object_key(local_type_id)
+        let watch = candidate
+            .watch(engine, ctx)
             .expect("a candidate's call clobber was found by its object key");
         let new_local_index = ctx.alloc_hoist(
             engine,
@@ -818,7 +853,7 @@ fn hoist_reloadable_field_loads(
             field_index: candidate.field_index,
             field_name: candidate.field_name.clone(),
             field_type: candidate.type_id,
-            watch: (key, candidate.local_index),
+            watch,
             hoist_local: new_local_index,
             hoist_name,
         });
@@ -839,20 +874,224 @@ fn hoist_reloadable_field_loads(
     insert_reloads(ctx, engine, loop_body, &specs, &clobbers);
 }
 
-/// The objects whose writes the reload path watches for, each an object key
-/// and the local holding the object.
+/// The least and the most loads the paths of one kind save; `None` when no
+/// path is of that kind.
+type Saved = Option<[i64; 2]>;
+
+fn either(a: Saved, b: Saved) -> Saved {
+    match (a, b) {
+        (Some([al, am]), Some([bl, bm])) => Some([al.min(bl), am.max(bm)]),
+        (one, None) | (None, one) => one,
+    }
+}
+
+fn then_saves(a: Saved, b: Saved) -> Saved {
+    Some([a?[0] + b?[0], a?[1] + b?[1]])
+}
+
+/// The paths through a statement or block that iterate again: those that fall
+/// off its end, those a `continue` takes to the next iteration, and those a
+/// `break` takes to the end of an enclosing block (by label) or inner loop
+/// (`None`). A path leaving the loop runs once, so what it saves is not
+/// counted.
+#[derive(Clone, Default)]
+struct IterationPaths {
+    fall: Saved,
+    next: Saved,
+    broken: Vec<(Option<String>, [i64; 2])>,
+}
+
+impl IterationPaths {
+    fn falling(saved: i64) -> Self {
+        Self {
+            fall: Some([saved, saved]),
+            ..Self::default()
+        }
+    }
+
+    /// These paths, each preceded by one saving `prefix`.
+    fn after(self, prefix: [i64; 2]) -> Self {
+        let prefix = Some(prefix);
+        Self {
+            fall: then_saves(prefix, self.fall),
+            next: then_saves(prefix, self.next),
+            broken: self
+                .broken
+                .into_iter()
+                .filter_map(|(label, saved)| Some((label, then_saves(prefix, Some(saved))?)))
+                .collect(),
+        }
+    }
+
+    fn or(mut self, other: Self) -> Self {
+        self.fall = either(self.fall, other.fall);
+        self.next = either(self.next, other.next);
+        self.broken.extend(other.broken);
+        self
+    }
+
+    /// The paths that leave by a `break` to `label`, which land after it.
+    fn landing(&mut self, label: Option<&str>) -> Saved {
+        let mut landed = None;
+        self.broken.retain(|(l, saved)| {
+            let lands = l.as_deref() == label;
+            if lands {
+                landed = either(landed, Some(*saved));
+            }
+            !lands
+        });
+        landed
+    }
+}
+
+/// What a reloadable hoist of one field saves in one iteration: each read it
+/// serves from the local saves a load, and each reload after a clobbering
+/// statement costs one. The hoist pays when no path through the body loses and
+/// some path gains; a clobber run as often as the read only moves the load.
+struct ReloadGain<'a> {
+    ctx: &'a LicmCtx<'a>,
+    body: &'a Body,
+    /// The source local and every immutable ref binding of it, whose reads of
+    /// the field the hoist also serves.
+    readers: &'a [u32],
+    field_index: u32,
+    /// The candidate's object alone.
+    clobbers: &'a Clobbers,
+}
+
+impl ReloadGain<'_> {
+    /// Whether the hoist pays over the paths of one iteration of `loop_body`.
+    /// A `break` to a label outside the loop leaves it, like a `return`.
+    fn pays(&self, loop_body: BlockId) -> bool {
+        let paths = self.of_block(loop_body, 0);
+        either(paths.fall, paths.next).is_some_and(|[least, most]| least >= 0 && most > 0)
+    }
+
+    /// The paths through `block`, `depth` loops inside the loop body.
+    fn of_block(&self, block: BlockId, depth: usize) -> IterationPaths {
+        let mut paths = IterationPaths::falling(0);
+        for &s in &self.body.blocks[block].stmts {
+            let Some(so_far) = paths.fall.take() else {
+                break;
+            };
+            paths = paths.or(self.of_stmt(s, depth).after(so_far));
+        }
+        paths
+    }
+
+    fn of_stmt(&self, s: StmtId, depth: usize) -> IterationPaths {
+        match &self.body.stmts[s].kind {
+            StmtKind::If {
+                condition,
+                then_block,
+                else_block,
+            } => {
+                let own = condition
+                    .as_expr()
+                    .map_or(0, |e| self.flat(NodeRef::Expr(e)))
+                    - self.reloads_after(NodeRef::Stmt(s));
+                let then_paths = self.of_block(*then_block, depth);
+                let else_paths =
+                    else_block.map_or(IterationPaths::falling(0), |b| self.of_block(b, depth));
+                then_paths.or(else_paths).after([own, own])
+            }
+            // An inner loop's iterations, counted once, end where it does.
+            StmtKind::Loop { body: block } => {
+                let mut inner = self.of_block(*block, depth + 1);
+                let left = inner.landing(None);
+                IterationPaths {
+                    fall: either(either(inner.fall, inner.next), left),
+                    next: None,
+                    broken: inner.broken,
+                }
+            }
+            StmtKind::LabeledBlock { label, block } => {
+                let mut paths = self.of_block(*block, depth);
+                let landed = paths.landing(Some(label));
+                paths.fall = either(paths.fall, landed);
+                paths
+            }
+            StmtKind::Continue => IterationPaths {
+                next: Some([0, 0]),
+                ..IterationPaths::default()
+            },
+            StmtKind::Return { .. } => IterationPaths::default(),
+            StmtKind::Break { label, .. } => {
+                let saved = self.flat(NodeRef::Stmt(s));
+                if label.is_none() && depth == 0 {
+                    return IterationPaths::default();
+                }
+                IterationPaths {
+                    broken: vec![(label.clone(), [saved, saved])],
+                    ..IterationPaths::default()
+                }
+            }
+            StmtKind::Let { .. } | StmtKind::Expr(_) | StmtKind::LetDestructure { .. } => {
+                IterationPaths::falling(self.flat(NodeRef::Stmt(s)))
+            }
+        }
+    }
+
+    /// Reads minus reloads under `node`, every branch inside it counted.
+    fn flat(&self, node: NodeRef) -> i64 {
+        let reads: usize = self
+            .readers
+            .iter()
+            .map(|&r| {
+                count_genuine_field_reads(
+                    self.body,
+                    node,
+                    r,
+                    self.field_index,
+                    &self.ctx.hoist_locals,
+                )
+            })
+            .sum();
+        let mut reloads = 0;
+        self.count_reload_sites(node, &mut reloads);
+        reads as i64 - reloads
+    }
+
+    fn reloads_after(&self, stmt: NodeRef) -> i64 {
+        i64::from(!node_clobbered(self.ctx, self.body, stmt, self.clobbers).is_empty())
+    }
+
+    /// The statements under `node`, itself included, that [`insert_reloads`]
+    /// would reload after.
+    fn count_reload_sites(&self, node: NodeRef, n: &mut i64) {
+        if let NodeRef::Stmt(_) = node {
+            *n += self.reloads_after(node);
+        }
+        self.body.for_each_child(node, |c| {
+            if !matches!(c, NodeRef::Pat(_)) {
+                self.count_reload_sites(c, n);
+            }
+        });
+    }
+}
+
+/// A field whose writes the reload path watches for: the `field` of the `key`
+/// object the local `root` holds.
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+struct Watch {
+    key: TypeKey,
+    root: u32,
+    field: u32,
+}
+
+/// The fields whose writes the reload path watches for.
 struct Clobbers {
-    watched: IndexSet<(TypeKey, u32)>,
+    watched: IndexSet<Watch>,
 }
 
 impl Clobbers {
-    /// The watched objects the call at `e` may write; none for a non-call.
+    /// The watched fields the call at `e` may write; none for a non-call.
     fn written_by<'s>(
         &'s self,
         ctx: &'s LicmCtx,
         body: &'s Body,
         e: ExprId,
-    ) -> impl Iterator<Item = (TypeKey, u32)> + 's {
+    ) -> impl Iterator<Item = Watch> + 's {
         let is_call = matches!(
             body.exprs[e].kind,
             ExprKind::Call { .. } | ExprKind::IndirectCall { .. }
@@ -860,10 +1099,10 @@ impl Clobbers {
         self.watched
             .iter()
             .copied()
-            .filter(move |&(key, root)| is_call && ctx.call_writes(body, e, key, root))
+            .filter(move |&watch| is_call && ctx.call_writes_field(body, e, watch))
     }
 
-    fn hits(&self, ctx: &LicmCtx, body: &Body, e: ExprId) -> IndexSet<(TypeKey, u32)> {
+    fn hits(&self, ctx: &LicmCtx, body: &Body, e: ExprId) -> IndexSet<Watch> {
         self.written_by(ctx, body, e).collect()
     }
 
@@ -882,8 +1121,7 @@ struct ReloadSpec {
     field_index: u32,
     field_name: String,
     field_type: TypeId,
-    /// The watched object whose writes require this field to be reloaded.
-    watch: (TypeKey, u32),
+    watch: Watch,
     hoist_local: u32,
     hoist_name: String,
 }
@@ -1027,6 +1265,117 @@ fn has_nonunit_clobber_value_tail(
     found
 }
 
+/// Whether a statement that may write a watched object can then jump past the
+/// reload [`insert_reloads`] appends after it, to a point still inside the loop:
+/// the statement is itself a `break` or `continue`, or holds one landing in a
+/// block or a loop the loop body holds. Such a jump reaches a read of the
+/// hoisted local with nothing reloaded on its way. A jump out of the loop, or a
+/// `return`, leaves no read of it behind.
+fn reload_skipped_by_jump(
+    ctx: &LicmCtx,
+    body: &Body,
+    loop_body: BlockId,
+    clobbers: &Clobbers,
+) -> bool {
+    let mut inner_labels = IndexSet::default();
+    collect_block_labels(body, NodeRef::Block(loop_body), &mut inner_labels);
+    clobber_then_jump(
+        ctx,
+        body,
+        NodeRef::Block(loop_body),
+        0,
+        &inner_labels,
+        clobbers,
+    )
+}
+
+fn collect_block_labels(body: &Body, node: NodeRef, out: &mut IndexSet<String>) {
+    match node {
+        NodeRef::Stmt(s) => {
+            if let StmtKind::LabeledBlock { label, .. } = &body.stmts[s].kind {
+                out.insert(label.clone());
+            }
+        }
+        NodeRef::Expr(e) => {
+            if let ExprKind::LabeledBlock { label, .. } = &body.exprs[e].kind {
+                out.insert(label.clone());
+            }
+        }
+        NodeRef::Block(_) | NodeRef::Pat(_) => {}
+    }
+    body.for_each_child(node, |c| collect_block_labels(body, c, out));
+}
+
+/// The number of loops `node` opens: one for a `loop` statement.
+fn loops_opened(body: &Body, node: NodeRef) -> usize {
+    usize::from(
+        matches!(node, NodeRef::Stmt(s) if matches!(body.stmts[s].kind, StmtKind::Loop { .. })),
+    )
+}
+
+/// [`reload_skipped_by_jump`] under `node`, `depth` loops inside the loop body.
+fn clobber_then_jump(
+    ctx: &LicmCtx,
+    body: &Body,
+    node: NodeRef,
+    depth: usize,
+    inner_labels: &IndexSet<String>,
+    clobbers: &Clobbers,
+) -> bool {
+    if let NodeRef::Stmt(_) = node
+        && node_contains_clobber(ctx, body, node, clobbers)
+        && jumps_within_loop(body, node, depth, inner_labels)
+    {
+        return true;
+    }
+    let depth = depth + loops_opened(body, node);
+    let mut found = false;
+    body.for_each_child(node, |c| {
+        if !found && !matches!(c, NodeRef::Pat(_)) {
+            found = clobber_then_jump(ctx, body, c, depth, inner_labels, clobbers);
+        }
+    });
+    found
+}
+
+/// Whether a `break` or `continue` under `node` lands inside the loop body:
+/// every `continue` does, as does a `break` to a block the body holds or one
+/// out of a loop nested in it.
+fn jumps_within_loop(
+    body: &Body,
+    node: NodeRef,
+    depth: usize,
+    inner_labels: &IndexSet<String>,
+) -> bool {
+    if let NodeRef::Stmt(s) = node {
+        match &body.stmts[s].kind {
+            StmtKind::Continue => return true,
+            StmtKind::Break {
+                label: Some(label), ..
+            } if inner_labels.contains(label) => {
+                return true;
+            }
+            StmtKind::Break { label: None, .. } if depth > 0 => return true,
+            StmtKind::Break { .. }
+            | StmtKind::Return { .. }
+            | StmtKind::Let { .. }
+            | StmtKind::Expr(_)
+            | StmtKind::If { .. }
+            | StmtKind::Loop { .. }
+            | StmtKind::LabeledBlock { .. }
+            | StmtKind::LetDestructure { .. } => {}
+        }
+    }
+    let depth = depth + loops_opened(body, node);
+    let mut found = false;
+    body.for_each_child(node, |c| {
+        if !found && !matches!(c, NodeRef::Pat(_)) {
+            found = jumps_within_loop(body, c, depth, inner_labels);
+        }
+    });
+    found
+}
+
 /// The watched objects a statement's own expression tree may write, stopping
 /// at nested blocks as [`node_contains_clobber`] does.
 fn node_clobbered(
@@ -1034,7 +1383,7 @@ fn node_clobbered(
     body: &Body,
     node: NodeRef,
     clobbers: &Clobbers,
-) -> IndexSet<(TypeKey, u32)> {
+) -> IndexSet<Watch> {
     let mut hit = IndexSet::default();
     collect_clobbered(ctx, body, node, clobbers, &mut hit);
     hit
@@ -1045,7 +1394,7 @@ fn collect_clobbered(
     body: &Body,
     node: NodeRef,
     clobbers: &Clobbers,
-    hit: &mut IndexSet<(TypeKey, u32)>,
+    hit: &mut IndexSet<Watch>,
 ) {
     if let NodeRef::Expr(e) = node {
         hit.extend(clobbers.hits(ctx, body, e));
@@ -1229,38 +1578,6 @@ fn collect_modified_vars_in_block(
 ) {
     for s in &body.blocks[block].stmts {
         collect_modified_vars_in_stmt(body, *s, modified, type_table);
-    }
-}
-
-fn mark_gc_local_as_fully_modified_operand(
-    body: &Body,
-    op: Operand,
-    modified: &mut ModifiedVars,
-    type_table: &TypeTable,
-) {
-    if let Some(e) = op.as_expr() {
-        mark_gc_local_as_fully_modified(body, e, modified, type_table);
-    }
-}
-
-/// Mark a local as fully modified if it has a GC struct type and is passed to a
-/// function call (callees can mutate any field). Immutable `&T` locals are
-/// skipped — no callee can mutate the pointee through them.
-fn mark_gc_local_as_fully_modified(
-    body: &Body,
-    e: ExprId,
-    modified: &mut ModifiedVars,
-    type_table: &TypeTable,
-) {
-    if let ExprKind::Local { index, .. } = &body.exprs[e].kind
-        && is_gc_heap_type(body.exprs[e].type_id, type_table)
-    {
-        if let ResolvedType::Ref(inner) = type_table.get(body.exprs[e].type_id)
-            && !matches!(type_table.get(*inner), ResolvedType::MutRef(_))
-        {
-            return;
-        }
-        modified.insert_full(*index);
     }
 }
 
@@ -1549,12 +1866,21 @@ fn collect_modified_vars_in_expr(
         ExprKind::Cast { expr: inner, .. } => {
             collect_modified_vars_in_operand(body, *inner, modified, type_table);
         }
+        // A call's writes through an argument are asked field by field
+        // (`call_writes_field`), so the call leaves the argument unmarked here.
         ExprKind::Call { args, .. } => {
             modified.call_sites.push(e);
             let arg_ids: Vec<ExprId> = args.iter().filter_map(|a| a.expr.as_expr()).collect();
             for a in arg_ids {
-                mark_gc_local_as_fully_modified(body, a, modified, type_table);
                 collect_modified_vars_in_expr(body, a, modified, type_table);
+            }
+        }
+        // A closure's captures ride the callee, the heap summary's parameter 0.
+        ExprKind::IndirectCall { callee, args } => {
+            modified.call_sites.push(e);
+            let operands: Vec<Operand> = std::iter::once(*callee).chain(args.clone()).collect();
+            for a in operands {
+                collect_modified_vars_in_operand(body, a, modified, type_table);
             }
         }
         ExprKind::CmRawCall { args, .. } => {
@@ -1596,15 +1922,6 @@ fn collect_modified_vars_in_expr(
             let elements = elements.clone();
             for el in elements {
                 collect_modified_vars_in_operand(body, el, modified, type_table);
-            }
-        }
-        // A closure's captures ride the callee, so it is scanned as an argument is.
-        ExprKind::IndirectCall { callee, args } => {
-            modified.call_sites.push(e);
-            let operands: Vec<Operand> = std::iter::once(*callee).chain(args.clone()).collect();
-            for a in operands {
-                mark_gc_local_as_fully_modified_operand(body, a, modified, type_table);
-                collect_modified_vars_in_operand(body, a, modified, type_table);
             }
         }
         ExprKind::ClosureToCanonical { functor, .. } => {
@@ -1769,6 +2086,19 @@ struct HoistCandidate {
     field_index: u32,
     field_name: String,
     type_id: TypeId,
+}
+
+impl HoistCandidate {
+    /// The field the candidate reads, as the reload path watches for writes to
+    /// it; none where the root is no heap object.
+    fn watch(&self, engine: &Engine, ctx: &LicmCtx) -> Option<Watch> {
+        let root_ty = candidate_root_ty(engine, self.local_index, self.type_id);
+        Some(Watch {
+            key: ctx.type_table.heap_object_key(root_ty)?,
+            root: self.local_index,
+            field: self.field_index,
+        })
+    }
 }
 
 /// A hoist performed in step 4: the (source local, field) pair now served by

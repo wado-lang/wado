@@ -625,7 +625,6 @@ fn "core:json/core:json/write_escaped_string<&core:prelude/string.wado/String>"(
     let hi: u32;
     let self_9: i32;
     let backslash: u32;
-    let $licm_repr_232: ref Array<u8>;
     self_9 = s.used;
     i_3 = 0;
     $load_1 = s.repr;
@@ -639,7 +638,6 @@ fn "core:json/core:json/write_escaped_string<&core:prelude/string.wado/String>"(
             continue l44;
         };
     };
-    $licm_repr_232 = $load_1;
     b45: block {
         l46: loop {
             break_if b45 i_3 >= self_9;
@@ -650,46 +648,46 @@ fn "core:json/core:json/write_escaped_string<&core:prelude/string.wado/String>"(
             if @unlikely(local.tee self_9(buf.used + 1) > builtin::array_len(buf.repr)) {
                 cold_path;
                 "core:prelude/string.wado/core:prelude/string.wado/String::grow"(buf, self_9);
-                $licm_repr_232 = s.repr;
             }
             lo = buf.used;
             buf.used = self_9;
             builtin::array_set_u8(buf.repr, lo, 34);
             self_9 = s.used;
             lo = 0;
+            $load_1 = s.repr;
             b49: block {
                 l50: loop {
                     break_if b49 @likely(i_3 >= self_9);
                     $inline_core_json_write_escaped_string_from__core_prelude_string_wado_String__0__$for_0_body: block {
-                        break_if $inline_core_json_write_escaped_string_from__core_prelude_string_wado_String__0__$for_0_body @likely(((local.tee hi(builtin::array_get_value<u8>($licm_repr_232, i_3)) >=u 32) & (hi != 34)) & (hi != 92));
+                        break_if $inline_core_json_write_escaped_string_from__core_prelude_string_wado_String__0__$for_0_body @likely(((local.tee hi(builtin::array_get_value<u8>($load_1, i_3)) >=u 32) & (hi != 34)) & (hi != 92));
                         cold_path;
                         "core:json/core:json/flush_run_and_escape<&core:prelude/string.wado/String>"(buf, s, lo, i_3, hi);
-                        $licm_repr_232 = s.repr;
+                        $load_1 = s.repr;
                         lo = i_3 + 1;
                     };
                     i_3 = i_3 + 1;
                     continue l50;
                 };
             };
+            $load_1 = s.repr;
             $inline_core_json_write_escaped_string_from__core_prelude_string_wado_String__0__$inline_core_prelude_string_wado_String__internal_push_view_21: block {
                 break_if $inline_core_json_write_escaped_string_from__core_prelude_string_wado_String__0__$inline_core_prelude_string_wado_String__internal_push_view_21 local.tee self_9(self_9 - lo) == 0;
                 if @unlikely(local.tee i_3(buf.used + self_9) > builtin::array_len(buf.repr)) {
                     cold_path;
                     "core:prelude/string.wado/core:prelude/string.wado/String::grow"(buf, i_3);
-                    drop(s.repr);
                 }
                 hi = buf.used;
                 buf.used = i_3;
-                builtin::array_copy<u8>(buf.repr, hi, $licm_repr_232, lo, self_9);
+                builtin::array_copy<u8>(buf.repr, hi, $load_1, lo, self_9);
             };
             if @unlikely(local.tee self_9(buf.used + 1) > builtin::array_len(buf.repr)) {
                 cold_path;
                 "core:prelude/string.wado/core:prelude/string.wado/String::grow"(buf, self_9);
-                drop(s.repr);
             }
             i_3 = buf.used;
             buf.used = self_9;
             builtin::array_set_u8(buf.repr, i_3, 34);
+            drop(s.repr);
             return;
             continue l46;
         };

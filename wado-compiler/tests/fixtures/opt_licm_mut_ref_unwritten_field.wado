@@ -1,0 +1,35 @@
+// LICM hoists a field read through a `&mut` local that a call in the loop
+// takes, when nothing the call runs writes that field: `increment_scale`
+// writes `scale` alone, so `threshold` is read once before the loop. The
+// sum reads `scale` after each call, which a hoist without a reload would miss.
+
+use { println, Stdout } from "core:cli";
+
+struct Config {
+    threshold: i32,
+    scale: i32,
+}
+
+#[inline("never")]
+fn increment_scale(c: &mut Config) {
+    c.scale = c.scale + 1;
+}
+
+export fn run() with Stdout {
+    let mut config = Config { threshold: builtin::black_box(100), scale: 2 };
+    let config_mut = &mut config;
+    let mut sum = 0;
+    for let mut i = 0; i < 5; i += 1 {
+        increment_scale(config_mut);
+        sum += config_mut.threshold * i + config_mut.scale;
+    }
+    println(`${sum}`);
+}
+
+__DATA__
+{
+    "stdout": "1025\n",
+    "wir_scope": "opt_licm_mut_ref_unwritten_field.wado/run",
+    "wir_pass": {"O2": ["nir/licm"]},
+    "wir_expect:O2": ["$licm_threshold"]
+}

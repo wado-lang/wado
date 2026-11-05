@@ -27,12 +27,7 @@ export fn run() with Stdout {
 __DATA__
 {
     "stdout": "3,4,Point { x: 3, y: 4 }\n",
-    "wir_expect:O2": [
-        "global global:const_global_entry.wado::ORIGIN",
-        "= struct.new",
-        "{ x: 3, y: 4 }"
-    ],
-    "wir_not_expect:O2": [
-        "global mut global:const_global_entry.wado::ORIGIN"
-    ]
+    "wir_pass": {"O2": ["wir/promote_const_global_inits"]},
+    "wir_expect:O2": ["global global:const_global_entry.wado::ORIGIN: ref \"const_global_entry.wado//Point\" = struct.new \"const_global_entry.wado//Point\" { x: 3, y: 4 };"],
+    "wir_not_expect:O2": ["global mut global:const_global_entry.wado::ORIGIN"]
 }

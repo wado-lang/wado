@@ -40,12 +40,9 @@ test "and the same via a direct concrete call" {
 __DATA__
 {
     "test": {},
-    "wir_not_expect:O0": [
-        "$v0_3",
-        "$v1_4"
-    ],
-    "wir_not_expect:O2": [
-        "$v0_3",
-        "$v1_4"
-    ]
+    "wir_scope": "Doubler::check",
+    "wir_contrast": {"O0": [
+        {"    assert Self::double(value + 1) == 8;": "    assert Self::double(value + 1) == Self::double(value + 1);"}
+    ]},
+    "wir_lines": {"O0": [{"contains": ["= value + 1;"], "count": 1}]}
 }

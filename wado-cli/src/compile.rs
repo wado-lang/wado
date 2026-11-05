@@ -409,15 +409,6 @@ pub async fn try_compile_with_run_cache(
             .map_err(TryCompileError::reported)?
     };
     let options = wado_compiler::CompilerOptions {
-        opt_level: knobs.opt_level.to_compiler(),
-        skip_validation: knobs.skip_validation,
-        opt: knobs.opt,
-        parallelism: knobs.optimize_threads(),
-        log_level: Some(knobs.log_level),
-        allocator: knobs.allocator.clone(),
-        codegen_flags: knobs.codegen_flags.clone(),
-        lints: knobs.lints,
-        params: knobs.params.clone(),
         target_world: flags.target_world.clone(),
         invocations: pipeline_outcome.invocations,
         test_selection: flags.test_selection.clone(),
@@ -426,7 +417,7 @@ pub async fn try_compile_with_run_cache(
         embed_wit_contract: flags.embed_wit_contract.clone(),
         coverage: flags.coverage,
         profile,
-        ..Default::default()
+        ..knobs.compiler_options()
     };
 
     wado_compiler::compile_with_options(&source, &host, Some(filename), options)

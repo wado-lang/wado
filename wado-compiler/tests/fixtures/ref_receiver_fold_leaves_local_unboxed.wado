@@ -25,5 +25,8 @@ test "a folded receiver borrow boxes nothing" {
 __DATA__
 {
     "test": {},
-    "wir_not_expect:O0": ["r = struct.new"]
+    "wir_not_expect:O0": ["r = struct.new"],
+    "wir_contrast": {"O0": [
+        {"    let r = &p;": "    let mut r = &p;\n    let rr = &mut r;\n    *rr = &p;"}
+    ]}
 }

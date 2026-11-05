@@ -7,6 +7,7 @@
 
 use crate::module_source::ModuleSource;
 use crate::nir::NirLiteralPattern;
+use crate::optimize::pass_dump;
 use crate::primitive::PrimitiveType;
 use crate::tir::{ResolvedType, TypeId};
 use crate::wir::{WirInstr, WirType, WirTypeId};
@@ -627,6 +628,7 @@ impl FunctionTranslator<'_, '_> {
             && !out[last_idx]
             && arms[last_idx].guard.is_none()
             && self.match_is_exhaustive(scrut_type, arms)
+            && pass_dump::decides("wir_build/exhaustive_last_arm")
         {
             out[last_idx] = true;
         }

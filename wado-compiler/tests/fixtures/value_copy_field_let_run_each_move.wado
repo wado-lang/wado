@@ -33,10 +33,14 @@ export fn run() {
 __DATA__
 {
     "stdout": "",
+    "wir_scope": "/run",
+    "wir_pass": {"O0": ["lower/value_copy/owned", "lower/value_copy/move", "lower/value_copy/share"]},
+    "wir_contrast": {"O0": [
+        {"    let second = again.xs;\n": "", "    again.xs.push(9);\n": "", "    assert second.len() == 1;\n": ""}
+    ]},
     "wir_expect:O0": [
-        "xs = $mv$p$xs;",
-        "ys = $mv$p$ys;",
-        "first = \"value_copy_field_let_run_each_move.wado/$value_copy$core:prelude/list.wado/List<i32>\"($mv$again$xs);"
-    ],
-    "wir_scope": "/run"
+        "xs = p.xs;",
+        "ys = p.ys;",
+        "first = \"value_copy_field_let_run_each_move.wado/$value_copy$core:prelude/list.wado/List<i32>\"(again.xs);"
+    ]
 }

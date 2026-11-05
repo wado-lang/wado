@@ -92,6 +92,7 @@ export fn run() with Stdout {
 __DATA__
 {
     "stdout": "2 2\nOption::Some([1, 3]) Option::Some([1, 2])\nOption::Some([7, 3]) Option::Some([7, 2])\n",
-    "wir_expect:O0": ["self.graph = $local_", "self.sub = $local_"],
-    "wir_expect:O2": ["self.graph = $load_{};", "self.sub = $load_{};"]
+    "wir_pass": {"O0": ["lower/value_copy/move", "lower/value_copy/owned"], "O2": ["wir/reuse_struct_loads"]},
+    "wir_expect:O2": ["self.graph = $load_{};", "self.sub = $load_{};"],
+    "wir_expect:O0": ["self.graph = $local_", "self.sub = $local_"]
 }

@@ -4,8 +4,8 @@
 //   let $tmp = labeled_block { ... break null / break Some(v) };
 //   if VariantTest($tmp) { ... }
 //
-// The fusion pass detects this pattern and merges them into a single block,
-// eliminating the heap-allocated Option<T> intermediate.
+// `nir/sroa_variant_return` detects this pattern and merges them into a single
+// block, eliminating the heap-allocated Option<T> intermediate.
 
 use { println, Stdout } from "core:cli";
 
@@ -52,5 +52,7 @@ export fn run() with Stdout {
 __DATA__
 {
     "stdout": "ok\n",
-    "wir_not_expect:O2": ["ref option<i32>"]
+    "wir_scope": "opt_labeled_block_fusion.wado/run\"",
+    "wir_pass": {"O2": ["nir/sroa_variant_return"]},
+    "wir_not_expect:O2": ["Option<i32>"]
 }

@@ -62,17 +62,47 @@ impl Prov {
     }
 }
 
-/// The object types an access reaches through the arguments, and elsewhere.
+/// The object types an access reaches through each parameter, and elsewhere.
+/// Kept per parameter so a call charges a callee's write to the argument it
+/// goes through: `format(t)` writing through its own fresh `Formatter` writes
+/// nothing `t` reaches.
 #[derive(Clone, Default, PartialEq, Debug)]
 struct Access {
-    through_args: ObjectTypes,
+    through_params: Vec<ObjectTypes>,
     elsewhere: ObjectTypes,
 }
 
 impl Access {
+    /// What the access reaches through parameter `index` (the last bit
+    /// [`Prov::param`] keeps stands for every parameter past it).
+    fn through(&self, index: usize) -> &ObjectTypes {
+        static NONE: std::sync::LazyLock<ObjectTypes> =
+            std::sync::LazyLock::new(ObjectTypes::default);
+        self.through_params.get(index.min(63)).unwrap_or(&NONE)
+    }
+
+    fn through_mut(&mut self, index: usize) -> &mut ObjectTypes {
+        if self.through_params.len() <= index {
+            self.through_params
+                .resize(index + 1, ObjectTypes::default());
+        }
+        &mut self.through_params[index]
+    }
+
+    fn params_of(prov: Prov) -> impl Iterator<Item = usize> {
+        let mut bits = prov.params;
+        std::iter::from_fn(move || {
+            (bits != 0).then(|| {
+                let index = bits.trailing_zeros() as usize;
+                bits &= bits - 1;
+                index
+            })
+        })
+    }
+
     fn record(&mut self, prov: Prov, keys: &ObjectTypes) {
-        if prov.params != 0 {
-            self.through_args.union(keys);
+        for i in Self::params_of(prov) {
+            self.through_mut(i).union(keys);
         }
         if prov.elsewhere {
             self.elsewhere.union(keys);
@@ -80,8 +110,8 @@ impl Access {
     }
 
     fn record_meet(&mut self, prov: Prov, a: &ObjectTypes, b: &ObjectTypes) {
-        if prov.params != 0 {
-            self.through_args.union_meet(a, b);
+        for i in Self::params_of(prov) {
+            self.through_mut(i).union_meet(a, b);
         }
         if prov.elsewhere {
             self.elsewhere.union_meet(a, b);
@@ -89,8 +119,72 @@ impl Access {
     }
 
     fn union(&mut self, other: &Access) {
-        self.through_args.union(&other.through_args);
+        for (i, keys) in other.through_params.iter().enumerate() {
+            self.through_mut(i).union(keys);
+        }
         self.elsewhere.union(&other.elsewhere);
+    }
+}
+
+/// The fields a function may write, by object type. A type mapped to `None`
+/// may have any field written: a store to the whole object, or to an element.
+#[derive(Clone, Default, PartialEq, Debug)]
+struct FieldWrites {
+    any: bool,
+    by_type: IndexMap<TypeKey, Option<IndexSet<u32>>>,
+}
+
+impl FieldWrites {
+    fn record(&mut self, key: TypeKey, field: Option<u32>) {
+        if self.any {
+            return;
+        }
+        let entry = self
+            .by_type
+            .entry(key)
+            .or_insert_with(|| Some(IndexSet::default()));
+        match (entry, field) {
+            (Some(fields), Some(f)) => {
+                fields.insert(f);
+            }
+            (entry, _) => *entry = None,
+        }
+    }
+
+    fn record_types(&mut self, keys: &ObjectTypes) {
+        if keys.is_any() {
+            self.any = true;
+            self.by_type.clear();
+            return;
+        }
+        for k in keys.keys() {
+            self.record(k, None);
+        }
+    }
+
+    fn union(&mut self, other: &FieldWrites) {
+        if other.any {
+            self.record_types(&ObjectTypes::everything());
+            return;
+        }
+        for (&key, fields) in &other.by_type {
+            match fields {
+                Some(fields) => {
+                    for &f in fields {
+                        self.record(key, Some(f));
+                    }
+                }
+                None => self.record(key, None),
+            }
+        }
+    }
+
+    fn may_write(&self, key: TypeKey, field: u32) -> bool {
+        self.any
+            || self
+                .by_type
+                .get(&key)
+                .is_some_and(|fields| fields.as_ref().is_none_or(|fields| fields.contains(&field)))
     }
 }
 
@@ -100,6 +194,8 @@ impl Access {
 struct Summary {
     reads: Access,
     writes: Access,
+    /// Which fields of those objects `writes` may write.
+    field_writes: FieldWrites,
     /// What the result may share.
     ret: Prov,
     /// What each parameter's objects may come to hold.
@@ -112,6 +208,7 @@ impl Summary {
     fn join(&mut self, other: &Summary) {
         self.reads.union(&other.reads);
         self.writes.union(&other.writes);
+        self.field_writes.union(&other.field_writes);
         self.ret.join(other.ret);
         if self.into_params.len() < other.into_params.len() {
             self.into_params
@@ -520,7 +617,7 @@ impl HeapEffects<'_> {
         for (j, &a) in args.iter().enumerate() {
             let ty = body.operand_type(a);
             match target {
-                Target::Summary(t) => out.union_meet(&t.writes.through_args, &self.reach(ty)),
+                Target::Summary(t) => out.union_meet(t.writes.through(j), &self.reach(ty)),
                 Target::Builtin(declaration) if declaration.mut_params.contains(&j) => {
                     out.union(&builtin_touches(self, declaration, ty));
                 }
@@ -535,9 +632,28 @@ impl HeapEffects<'_> {
     /// not allocate, where code after the write may read it.
     pub(super) fn function_may_write(&self, index: usize, ty: TypeId) -> bool {
         let writes = &self.cache.summaries[index].writes;
-        self.type_table
-            .heap_object_key(ty)
-            .is_none_or(|key| writes.through_args.contains(key) || writes.elsewhere.contains(key))
+        self.type_table.heap_object_key(ty).is_none_or(|key| {
+            writes.through_params.iter().any(|keys| keys.contains(key))
+                || writes.elsewhere.contains(key)
+        })
+    }
+
+    /// Whether `call` may write field `field` of a `key` object it did not
+    /// allocate. [`HeapFrame::call_may`] says whether it may write the object.
+    pub(super) fn call_may_write_field(
+        &self,
+        body: &Body,
+        call: ExprId,
+        key: TypeKey,
+        field: u32,
+    ) -> bool {
+        if !self.returns(body, call) {
+            return false;
+        }
+        match call_target(self, body, call) {
+            Target::Summary(t) => t.field_writes.may_write(key, field),
+            Target::Builtin(_) | Target::Opaque { .. } => true,
+        }
     }
 
     /// Whether `call` may return. One typed `!` traps or runs forever, since a
@@ -1509,10 +1625,20 @@ impl HeapFrame {
             ..Summary::default()
         };
         for AccessSite {
-            effect, node, keys, ..
+            effect,
+            node,
+            keys,
+            field,
+            ..
         } in &self.accesses
         {
             let prov = classes.prov_of(*node);
+            if *effect == Effect::Write && !prov.is_fresh() {
+                match keys {
+                    Keys::One(k) => s.field_writes.record(*k, *field),
+                    Keys::Set(set) => s.field_writes.record_types(set),
+                }
+            }
             let access = match effect {
                 Effect::Read => &mut s.reads,
                 Effect::Write => &mut s.writes,
@@ -1660,7 +1786,7 @@ impl HeapFrame {
             let ty = body.operand_type(a);
             match target {
                 Target::Summary(t) => {
-                    keys.meets_both(&t.access(effect).through_args, &effects.reach(ty))
+                    keys.meets_both(t.access(effect).through(j), &effects.reach(ty))
                 }
                 Target::Builtin(declaration) => {
                     (effect == Effect::Read || declaration.mut_params.contains(&j))
@@ -1871,14 +1997,25 @@ fn call_summary(
 ) {
     let target = call_target(effects, body, call);
     let mut unobserved = Access::default();
-    let Summary { reads, writes, .. } = s;
-    let writes = if effects.returns(body, call) {
-        writes
+    let mut unobserved_fields = FieldWrites::default();
+    let Summary {
+        reads,
+        writes,
+        field_writes,
+        ..
+    } = s;
+    let (writes, field_writes) = if effects.returns(body, call) {
+        (writes, field_writes)
     } else {
-        &mut unobserved
+        (&mut unobserved, &mut unobserved_fields)
     };
     reads.elsewhere.union(&target.elsewhere(Effect::Read));
-    writes.elsewhere.union(&target.elsewhere(Effect::Write));
+    let written_elsewhere = target.elsewhere(Effect::Write);
+    writes.elsewhere.union(&written_elsewhere);
+    match target {
+        Target::Summary(t) => field_writes.union(&t.field_writes),
+        Target::Builtin(_) | Target::Opaque { .. } => field_writes.record_types(&written_elsewhere),
+    }
     for (j, &(a, node)) in args.iter().enumerate() {
         let OperandNode::Node(n) = node else {
             continue;
@@ -1891,20 +2028,22 @@ fn call_summary(
         match target {
             Target::Summary(t) => {
                 let reach = effects.reach(ty);
-                reads.record_meet(prov, &t.reads.through_args, &reach);
-                writes.record_meet(prov, &t.writes.through_args, &reach);
+                reads.record_meet(prov, t.reads.through(j), &reach);
+                writes.record_meet(prov, t.writes.through(j), &reach);
             }
             Target::Builtin(declaration) => {
                 let touched = builtin_touches(effects, declaration, ty);
                 reads.record(prov, &touched);
                 if declaration.mut_params.contains(&j) {
                     writes.record(prov, &touched);
+                    field_writes.record_types(&touched);
                 }
             }
             Target::Opaque { .. } => {
                 let reach = effects.reach(ty);
                 reads.record(prov, &reach);
                 writes.record(prov, &reach);
+                field_writes.record_types(&reach);
             }
         }
     }
