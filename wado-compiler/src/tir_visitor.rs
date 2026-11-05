@@ -3,8 +3,8 @@
 
 use crate::flat_package::FlatPackage;
 use crate::tir::{
-    FunctionKind, MonomorphInfo, ReturnAbi, TirBlock, TirExpr, TirExprKind, TirFunction,
-    TirGlobal, TirLocal, TirPattern, TirStmt, TirStmtKind, TypeId,
+    FunctionKind, MonomorphInfo, ReturnAbi, TirBlock, TirExpr, TirExprKind, TirFunction, TirGlobal,
+    TirLocal, TirPattern, TirStmt, TirStmtKind, TypeId,
 };
 
 /// Trait for mutable traversal of TIR trees.
@@ -95,7 +95,7 @@ pub trait TirMutVisitor {
                 return_type,
             } => self.visit_type_id(return_type),
             FunctionKind::Regular
-            | FunctionKind::UncheckedTwin { .. }
+            | FunctionKind::UncheckedTwin { of: _ }
             | FunctionKind::ContractReport => {}
         }
         match return_abi {
@@ -281,8 +281,8 @@ pub trait TirMutVisitor {
     fn walk_expr(&mut self, expr: &mut TirExpr) {
         self.visit_type_id(&mut expr.type_id);
         match &mut expr.kind {
-            TirExprKind::IntLiteral { .. }
-            | TirExprKind::FloatLiteral { .. }
+            TirExprKind::IntLiteral { value: _, repr: _ }
+            | TirExprKind::FloatLiteral { value: _, repr: _ }
             | TirExprKind::BoolLiteral(_)
             | TirExprKind::CharLiteral(_)
             | TirExprKind::StringLiteral(_)
