@@ -902,10 +902,10 @@ mod tests {
 
     #[test]
     fn a_bare_dash_o_does_not_swallow_the_input_file() {
-        // `-O` takes its level attached, never from the next argument, so a
-        // rejected `-O` never blames the file that follows it.
-        let err = parse_opt_level(&["-O", "input.wado"]).unwrap_err();
-        assert!(!err.contains("input.wado"), "{err}");
+        let mut parser = Parser::from_args(["-O", "input.wado"]);
+        parser.next().unwrap().unwrap();
+        assert!(parse_opt_level_arg(&mut parser).is_err());
+        assert_eq!(parser.value().unwrap(), "input.wado");
     }
 
     #[test]

@@ -103,6 +103,7 @@ fn a_fuel_report_is_the_one_wado_run_prints() {
         .output()
         .expect("running wado-run-webgpu");
     let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(output.status.success(), "stderr: {stderr}");
     assert!(stderr.starts_with("fuel "), "stderr: {stderr}");
 }
 

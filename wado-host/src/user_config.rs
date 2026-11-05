@@ -13,7 +13,7 @@ use std::sync::OnceLock;
 use serde::Deserialize;
 
 fn home_dir() -> Option<PathBuf> {
-    std::env::home_dir().filter(|home| !home.as_os_str().is_empty())
+    std::env::home_dir().filter(|home| home.is_absolute())
 }
 
 /// The XDG base directory `var` names, else `~/<default>`. A relative value is

@@ -107,6 +107,25 @@ fn test_build_to_stdout_takes_its_entry_from_the_manifest() {
     assert!(entry.ends_with("main.wado"), "entry: {entry}");
 }
 
+/// A relative `HOME` names another directory from every working directory, so
+/// a checkout could otherwise supply the user's own config.
+#[test]
+fn test_a_relative_home_reads_no_config_from_the_current_directory() {
+    let tmp = tempfile::tempdir().unwrap();
+    let config = tmp.path().join(".home/.config/wado");
+    std::fs::create_dir_all(&config).unwrap();
+    std::fs::write(config.join("config.toml"), "not toml [[[\n").unwrap();
+    std::fs::write(tmp.path().join("main.wado"), "export fn run() { }\n").unwrap();
+
+    wado_in(tmp.path())
+        .env("HOME", ".home")
+        .env_remove("XDG_CONFIG_HOME")
+        .args(["run", "main.wado"])
+        .assert()
+        .success()
+        .stderr(predicate::str::contains("config.toml").not());
+}
+
 /// `build/<world>.wasm` is the world the manifest declares: a driver given
 /// another file runs it without taking that path.
 #[test]

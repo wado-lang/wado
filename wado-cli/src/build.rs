@@ -471,10 +471,10 @@ pub async fn build_world_component(
 /// Produce the runnable component for a driver (`run` / `serve`). For the entry
 /// a nearby `wado.toml` declares for the world, build it through the shared
 /// core — metadata embedded, written to `build/<world segment>.wasm`, matching
-/// `wado build`. Any other file falls back to the standalone compile primitive
-/// (in-memory, no artifact on disk), so `build/` holds only declared worlds.
-/// Metadata and WIT embed at their defaults, matching `wado build`, so a
-/// run/serve artifact is identical to a built one.
+/// `wado build`, with metadata and WIT at their defaults so a run/serve artifact
+/// is identical to a built one. Any other file falls back to the standalone
+/// compile primitive (in-memory, no artifact on disk, nothing embedded), so
+/// `build/` holds only declared worlds.
 ///
 /// A component built before, from sources unchanged since and with the same
 /// metadata to embed, is taken from the cache instead, and nothing is written.
