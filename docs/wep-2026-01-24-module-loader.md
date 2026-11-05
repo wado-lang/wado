@@ -158,8 +158,11 @@ Anchoring at the entry directory — rather than the manifest root — keeps non
 
 The identity above is where the host reads a module, and it moves with the
 entry. A module's name does not: it is the one spelling of the module in a
-symbol, a diagnostic's function name, a coverage plan and a profile, the same on
-any machine and from any entry of one package. Two programs in no package,
+symbol and a diagnostic's function name, the same on any machine and from any
+entry of one package. A coverage plan and a profile spell it without its
+package's version
+([WEP: Profile-Guided Optimization](./wep-2026-10-25-profile-guided-optimization.md#a-profile-names-what-it-measured-without-machine-paths)).
+Two programs in no package,
 each in its own directory, name a file they share from their own directories,
 so differently. `ModuleSource`'s `Display` prints it.
 

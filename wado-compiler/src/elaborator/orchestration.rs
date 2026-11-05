@@ -1744,15 +1744,13 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
 
         // The plan reads which callee names `core:rt`'s `unreachable`, so it
         // waits for the bodies to resolve.
-        let unreachable_calls = if coverage.is_some() || profile.is_some() {
-            rt_unreachable_calls(state, symbols)
+        let (unreachable_calls, names) = if coverage.is_some() || profile.is_some() {
+            (
+                rt_unreachable_calls(state, symbols),
+                ProfileNames::of(modules.keys()),
+            )
         } else {
-            IndexSet::default()
-        };
-        let names = if coverage.is_some() || profile.is_some() {
-            ProfileNames::of(modules.keys())
-        } else {
-            ProfileNames::default()
+            (IndexSet::default(), ProfileNames::default())
         };
         state.coverage = coverage.map(|scope| {
             CoverageMap::build(

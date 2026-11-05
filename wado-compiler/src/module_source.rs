@@ -1332,8 +1332,8 @@ fn redirected_file(uri: &str) -> String {
     strip_kiln_scheme(uri).unwrap_or_else(|| uri.to_string())
 }
 
-/// A module's name: the one spelling of it in a symbol, a coverage plan or a
-/// profile. A module of a file is named where it lies, never by the path the
+/// A module's name: the one spelling of it in a symbol. A profile spells it as
+/// [`crate::pgo::ProfileNames`] says. A module of a file is named where it lies, never by the path the
 /// compile reached it through, so the name is the same on any machine and
 /// from any entry of one package; [`ModuleSource::source_path`] says where it
 /// is read.

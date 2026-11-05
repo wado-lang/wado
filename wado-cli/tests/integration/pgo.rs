@@ -257,7 +257,6 @@ const COLD_PICK_REMARK: &str = "`cold_path()` marks this path rare, but the prof
 fn a_build_applies_the_entry_profile_under_pgo() {
     let tmp = tempfile::tempdir().unwrap();
     fs::write(tmp.path().join("prog.wado"), COLD_PICK).unwrap();
-    let remark = COLD_PICK_REMARK;
     let missing = "-f pgo: no profile at";
     let run = || {
         wado_in(tmp.path())
@@ -275,14 +274,14 @@ fn a_build_applies_the_entry_profile_under_pgo() {
             .success()
     };
 
-    run().stderr(predicate::str::contains(remark).not());
+    run().stderr(predicate::str::contains(COLD_PICK_REMARK).not());
     wado_in(tmp.path())
         .args(["test", "--pgo", "prog.wado"])
         .assert()
         .success();
     // The build cached above depended on the profile's absence.
-    run().stderr(predicate::str::contains(remark));
-    compile(&["-f", "no-pgo"]).stderr(predicate::str::contains(remark).not());
+    run().stderr(predicate::str::contains(COLD_PICK_REMARK));
+    compile(&["-f", "no-pgo"]).stderr(predicate::str::contains(COLD_PICK_REMARK).not());
 
     fs::remove_file(tmp.path().join("pgo/prog.pgo")).unwrap();
     compile(&["-f", "pgo"]).stderr(predicate::str::contains(missing));
