@@ -236,6 +236,7 @@
 - [core:kiln](./stdlib-core-kiln.md)
 - [core:linear](./stdlib-core-linear.md)
 - [core:log](./stdlib-core-log.md)
+- [core:pjrt](./stdlib-core-pjrt.md)
 - [core:prelude](./stdlib-core-prelude.md)
 - [core:prng](./stdlib-core-prng.md)
 - [core:process](./stdlib-core-process.md)

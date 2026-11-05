@@ -118,12 +118,14 @@ pub affine trait Graph: Holds with _ {
     /// the generated module, each `Untyped`.
     fn relabeled<E: Element, In, Out>(&self, t: &Self::Tensor<E, In>) -> Self::Tensor<E, Out> with ();
     /// The pass `record` records, compiled to run on this, or `None` where
-    /// this computes each operation as `build` adds it. `earlier` holds the
-    /// programs this compiled of the same graph at other extents, which
-    /// compiling may build on.
+    /// this computes each operation as `build` adds it. `weights` are what its
+    /// last parameters will be given, as [`Self::kept_weights`] kept them.
+    /// `earlier` holds the programs this compiled of the same graph at other
+    /// extents, which compiling may build on.
     fn compiled(
         &mut self,
         record: fn(&mut Recorder) -> Recorded with _,
+        weights: &List<Any<Self>>,
         earlier: &List<&Self::Program>,
     ) -> Option<Self::Program> with _ {
         return null;

@@ -200,6 +200,12 @@ TPU_SKIP_MDS_QUERY=1 ./probe ./libtpu.so gemv.mlir aot v4:2x2x1 v5e:1x1 v5e:2x2 
 research did not explain. `optimal_seconds` is the compiler's model, not a
 measurement on a device.
 
+A program holding an operation at a computed index reports a negative
+`optimal_seconds`. Each `dynamic_slice`, `dynamic_update_slice` and `gather` takes
+1 off, whatever its size, in a figure held in `f32`. What lies above the
+negative whole number is the estimate of the rest. An `if` adds its cost and no
+such 1.
+
 The first compile in a process includes the compiler's one-time setup. The
 compiles after it took within 1.3 times of one another.
 

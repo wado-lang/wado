@@ -1,5 +1,7 @@
+use { env, Environment } from "core:cli";
 use fs from "core:fs";
 use { from_string } from "core:json";
+use { Command, Process } from "core:process";
 use { Value } from "core:value";
 use { Runner, Workspace } from "./tools.wado";
 
@@ -30,6 +32,17 @@ test "Write creates the file and its directories inside the root" {
     );
 }
 
+/// Whether Grep and Glob can run here. A test of them returns early on a machine
+/// with no `rg`, so CI, which installs it, must never answer no: those tests
+/// would pass there without running.
+fn has_rg() -> bool with (Environment, Process) {
+    if Command::new("rg").arg("--version").output().is_ok() {
+        return true;
+    }
+    assert env("CI") matches { None }, "CI must install ripgrep";
+    return false;
+}
+
 test "Read numbers the lines of the range it reads" {
     let ws = Workspace { root: "src" };
     let out = ws.call(&"Read", &tool_input(`{"file_path": "/testdata/shapes.rs", "offset": 2, "limit": 2}`)).unwrap();
@@ -45,6 +58,9 @@ test "a path that leaves the root is refused" {
 }
 
 test "Grep and Glob answer with paths from the root" {
+    if !has_rg() {
+        return;
+    }
     let ws = Workspace { root: "src" };
     assert ws.call(&"Grep", &tool_input(`{"pattern": "^pub fn run_agent", "glob": "*.wado"}`)).unwrap() == "agent.wado\n";
     let hit = ws.call(&"Grep", &tool_input(`{"pattern": "^pub fn run_agent\\\\(", "output_mode": "content"}`)).unwrap();
@@ -69,6 +85,9 @@ test "a limit past the end reads the rest" {
     let ws = Workspace { root: "src" };
     let out = ws.call(&"Read", &tool_input(`{"file_path": "tools.wado", "offset": 2, "limit": 2147483647}`)).unwrap();
     assert out.starts_with("     2\t");
+    if !has_rg() {
+        return;
+    }
     let rest = ws.call(&"Grep", &tool_input(
         `{"pattern": "^pub fn", "glob": "*.wado", "offset": 1, "head_limit": 2147483647}`,
     )).unwrap();

@@ -236,7 +236,7 @@ does not.
 #### PJRT
 
 The compiler writes the graph as StableHLO text and compiles it through
-`wado:pjrt`. No Loam fusion runs; the composites are decomposed, since XLA
+`core:pjrt`. No Loam fusion runs; the composites are decomposed, since XLA
 fuses them again. The prepared weights and the cache are parameters, the cache
 donated. A product's `precision_config` is an option of the backend, and
 `DEFAULT` unless the caller sets it, which on a TPU is faster than `HIGHEST`
@@ -244,11 +244,11 @@ and holds less of f32's precision. A compiled executable is serialized and kept
 on disk, keyed by the program's text, the plugin and the topology, so a second
 process compiles nothing.
 
-`wado:pjrt` mirrors the PJRT C API: compile, a buffer from and to the host, an
+`core:pjrt` mirrors the PJRT C API: compile, a buffer from and to the host, an
 execution with donated inputs, and the compiled program's memory and cost. It
 is not `wasi:`, which is reserved for WASI, and PJRT is no WASI proposal. The
-host is `wado-run-pjrt`, a workspace of its own as `wado-run-webgpu` is, since
-it loads a vendor's plugin the rest of the toolchain never needs. The same
+host is `wado-run-pjrt`, in the repository's workspace: it opens a vendor's
+plugin at run time, so unlike `wado-run-webgpu` it adds no heavy build. The same
 backend reaches NVIDIA GPUs through XLA's CUDA plugin.
 
 #### WebGPU
@@ -477,14 +477,15 @@ and a program for each shape class it has met. The caller owns it, and
    and the cache of fixed capacity. Finished when Gemma 3 decodes on `Cpu`
    from padded inputs with onnxruntime's tokens, and `loam dump` reports each
    padded axis or the node that refused it.
-3. [ ] `wado-run-pjrt` and the StableHLO writer. Finished when the tiny GPT-2,
+3. [x] `wado-run-pjrt` and the StableHLO writer. Finished when the tiny GPT-2,
    Gemma 3 and the conformance cases with an `If` run on XLA's CPU plugin
    within the tolerance of `Cpu`, with one
-   compile per shape class. CI compiles the same programs for a TPU topology
-   through `libtpu.so` and records `optimal_seconds`. There
-   `PJRT_Executable_GetCompiledMemoryStats` reports argument bytes that hold
-   Gemma 3's weights at half their f32 size, every product weight of it being
-   bf16 without loss, and alias bytes equal to the cache's size.
+   compile per shape class. CI compiles the conformance programs for a TPU
+   topology through `libtpu.so`, and `analyzed.wado` compiles Gemma 3's. There
+   `optimal_seconds` is recorded, and `PJRT_Executable_GetCompiledMemoryStats`
+   reports argument bytes that hold Gemma 3's weights at half their f32 size,
+   every product weight of it being bf16 without loss, and alias bytes equal to
+   the cache's size ([measured](#gemma-3-on-pjrt)).
 4. [x] The WebGPU compiler. Fusion, kernel variants and the recorded dispatch
    list over the graph. Finished when Gemma 3's time per token on
    `WebGpuBackend` is at most today's, and the generator's plan and the fused
@@ -590,6 +591,32 @@ measured:
 | `build/model.onnx_data` | 133 |
 | the run's peak          | 917 |
 
+### Gemma 3 on PJRT
+
+`example/gemma3-270m/pjrt.wado` on XLA's CPU plugin picks onnxruntime's tokens
+on both prompts. Under the `dev` build a token takes 9 to 15 times onnxruntime's
+time on the CPU, each new capacity's compile included. It reads back the tensors
+of a cache that outgrows its capacity, which `compute` grows on the host.
+
+`example/gemma3-270m/analyzed.wado` compiles the same programs for a `v5e:1x1`
+through `libtpu.so`, on a machine with no TPU. The prompt has 8 positions, and the
+step's capacity holds 12:
+
+| What the plugin reports                       | Prompt      | Step        |
+| --------------------------------------------- | ----------- | ----------- |
+| argument bytes                                | 603,922,432 | 604,069,888 |
+| alias bytes                                   | 294,912     | 442,368     |
+| temporary bytes                               | 17,399,808  | 16,580,608  |
+| `optimal_seconds`, unmodeled operations aside | 1.07 × 10⁻³ | 8.62 × 10⁻⁴ |
+
+Alias bytes are the whole cache: 36 tensors of 256 f32s a position. The weights
+take 1,139,501,568 bytes in f32. Of those, 536,084,482 bytes are the ones bf16
+holds without loss, and 67,332,616 stay f32. Every matrix that takes part in a
+product is among the first. The second are the four rotary tables and the 111
+vectors and scalars that bf16 would round. A topology's `optimal_seconds` is a
+model, and it does not price 94 and 93 of each program's operations
+([research §7](../docs/research-tpu.md#7-the-compilers-cost-model)).
+
 ## Known gaps
 
 - A valid length is one value for every row, which is a batch of one, until
@@ -621,9 +648,11 @@ measured:
   not taken, and both branches write the `If`'s outputs to one place. It waits
   for a model that takes such an `If` on every step.
 - The first call of a shape class waits for its program to compile. At build
-  time no user waits on the generator, and at first use one does. The cache on
-  disk spares a second process on PJRT, and nothing spares a first call on
-  WebGPU.
+  time no user waits on the generator, and at first use one does. Nothing spares
+  a first call on WebGPU. The cache on disk that would spare a second process on
+  PJRT is not built, and neither is the backend's `precision_config` option.
+- `compute` fits a cache to a new capacity on the host, so on PJRT a step that
+  crosses a capacity reads the cache back and uploads it.
 - A model larger than one chip needs its weights split across several, and
   StableHLO states that through sharding. Nothing here places a tensor on more
   than one device.

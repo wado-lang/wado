@@ -7,6 +7,7 @@ use std::process;
 use lexopt::Parser;
 use wado_compiler::LogLevel;
 use wado_compiler::param_resolution::{ParamInputs, ParamPolicyLevel};
+use wado_host::runner::LogLevel as RunnerLogLevel;
 
 /// Outcome of a subcommand: a message to print and an exit code.
 ///
@@ -311,14 +312,13 @@ pub fn format_opts_help<T>(all: &[T], spec: impl Fn(&T) -> OptSpec) -> String {
 
 #[must_use]
 pub fn parse_log_level(s: &str) -> Option<LogLevel> {
-    match s.to_lowercase().as_str() {
-        "debug" => Some(LogLevel::Debug),
-        "info" => Some(LogLevel::Info),
-        "warn" | "warning" => Some(LogLevel::Warn),
-        "error" => Some(LogLevel::Error),
-        "off" | "none" => Some(LogLevel::Off),
-        _ => None,
-    }
+    Some(match RunnerLogLevel::parse(s)? {
+        RunnerLogLevel::Off => LogLevel::Off,
+        RunnerLogLevel::Error => LogLevel::Error,
+        RunnerLogLevel::Warn => LogLevel::Warn,
+        RunnerLogLevel::Info => LogLevel::Info,
+        RunnerLogLevel::Debug => LogLevel::Debug,
+    })
 }
 
 pub fn parse_log_level_arg(parser: &mut Parser) -> Result<LogLevel, CliExit> {

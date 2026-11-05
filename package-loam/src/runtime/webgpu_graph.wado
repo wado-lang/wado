@@ -114,6 +114,7 @@ impl Graph for WebGpuBackend {
     fn compiled(
         &mut self,
         record: fn(&mut Recorder) -> Recorded with _,
+        weights: &List<Any<WebGpuBackend>>,
         earlier: &List<&WebGpuProgram>,
     ) -> Option<WebGpuProgram> with _ {
         let recorded = record(&mut Recorder::new());

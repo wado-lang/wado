@@ -1,14 +1,11 @@
 //! The wasmtime host: WASI P3 plus `wasi:webgpu`, backed by wgpu.
 
-use std::fs::File;
-use std::io::{BufWriter, Write};
-use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex};
-use std::time::{Duration, Instant};
+use std::path::Path;
+use std::sync::Arc;
 
-use anyhow::{Context, Result, bail};
+use anyhow::{Result, bail};
 use tokio::task::spawn_blocking;
+use wado_host::runner::{LogLevel, RunOptions, wasi_ctx};
 use wasi_webgpu_wasmtime::wasi::webgpu::webgpu::{
     Gpu as GuestGpu, GpuQueue as GuestGpuQueue, GpuRequestAdapterOptions,
 };
@@ -16,17 +13,15 @@ use wasi_webgpu_wasmtime::{
     Adapter, WasiWebGpuCtx, WasiWebGpuCtxView, WasiWebGpuOptions,
     add_to_linker as add_webgpu_to_linker,
 };
+use wasmtime::Engine;
 use wasmtime::component::{Accessor, Component, Linker, Resource, ResourceTable};
-use wasmtime::{Collector, Config, Engine, GuestProfiler, Store, UpdateDeadline};
-use wasmtime_wasi::p3::add_to_linker as add_wasi_to_linker;
-use wasmtime_wasi::p3::bindings::Command;
-use wasmtime_wasi::{FsPerms, WasiCtx, WasiCtxView, WasiView};
+use wasmtime_wasi::{WasiCtx, WasiCtxView, WasiView};
 use wgpu_core::global::Global;
 use wgpu_core::id::AdapterId;
 use wgpu_core::instance::RequestAdapterOptions;
 use wgpu_types::{AdapterInfo, Backends, InstanceDescriptor, PowerPreference, RequestAdapterError};
 
-use crate::args::{AdapterSelector, Args, GuestProfile, LogLevel, OptLevel};
+use crate::args::AdapterSelector;
 
 /// The wgpu instance every `wasi:webgpu` call draws on, and the adapter
 /// `--gpu-adapter` hands every `request-adapter`.
@@ -134,21 +129,25 @@ impl WasiWebGpuCtxView for Host {
 }
 
 /// Run a component that exports `wasi:cli/run`, on the GPU already found.
-pub async fn run(component: &Path, args: &Args, gpu: Gpu) -> Result<()> {
-    let mut config = engine_config(args.opt_level);
-    config.epoch_interruption(args.profile.is_some());
-    let engine = Engine::new(&config)?;
-    let component = Component::from_file(&engine, component)?;
+pub async fn run(component: &Path, options: &RunOptions, gpu: Gpu) -> Result<()> {
+    let host = Host {
+        ctx: wasi_ctx(options)?,
+        table: ResourceTable::new(),
+        gpu,
+        options: WasiWebGpuOptions::default(),
+        log_level: options.log_level,
+    };
+    wado_host::runner::run("wado-run-webgpu", component, options, host, link).await
+}
 
-    let mut linker: Linker<Host> = Linker::new(&engine);
-    add_wasi_to_linker(&mut linker)?;
-    add_webgpu_to_linker(&mut linker)?;
+fn link(engine: &Engine, component: &Component, linker: &mut Linker<Host>) -> Result<()> {
+    add_webgpu_to_linker(linker)?;
     // Named by the guest's import rather than spelled here: a version the host
     // crate does not serve then fails to instantiate instead of leaving this
     // override on an interface nothing imports. The host crate's
     // `request-adapter` has no hook for `--gpu-adapter` to pin an adapter or
     // for `--log-level info` to name the one returned.
-    if let Some(interface) = webgpu_import(&engine, &component) {
+    if let Some(interface) = webgpu_import(engine, component) {
         linker.allow_shadowing(true);
         linker.instance(&interface)?.func_wrap_concurrent(
             "[method]gpu.request-adapter",
@@ -179,134 +178,7 @@ pub async fn run(component: &Path, args: &Args, gpu: Gpu) -> Result<()> {
             },
         )?;
     }
-
-    let mut store = Store::new(&engine, host(args, gpu)?);
-    let sampling = args
-        .profile
-        .as_ref()
-        .map(|profile| Sampling::start(&engine, &component, &mut store, profile))
-        .transpose()?;
-    let ran = match Command::instantiate_async(&mut store, &component, &linker).await {
-        Ok(command) => {
-            store
-                .run_concurrent(async |accessor| command.wasi_cli_run().call_run(accessor).await)
-                .await
-        }
-        Err(e) => Err(e),
-    };
-    let profiled = sampling.map(Sampling::finish).transpose();
-    let outcome = (|| match ran?? {
-        Ok(()) => Ok(()),
-        Err(()) => bail!("the program exited with an error"),
-    })();
-    // What the run reported comes first; a profile it could not write is
-    // only the error where the run itself succeeded.
-    match (outcome, profiled) {
-        (Err(e), Err(p)) => {
-            eprintln!("error: {p:#}");
-            Err(e)
-        }
-        (outcome, profiled) => outcome.and(profiled.map(|_| ())),
-    }
-}
-
-/// `--profile guest`, as `wado run` samples: a thread advances the epoch every
-/// interval, and the store's deadline callback records where the guest is.
-/// `WADO_PROFILE_MAX_SECS` stops the guest once that many seconds have passed.
-struct Sampling {
-    profiler: Arc<Mutex<Option<GuestProfiler>>>,
-    stop: Arc<AtomicBool>,
-    file: File,
-    path: PathBuf,
-}
-
-impl Sampling {
-    fn start(
-        engine: &Engine,
-        component: &Component,
-        store: &mut Store<Host>,
-        profile: &GuestProfile,
-    ) -> Result<Self> {
-        let interval = profile.interval;
-        let budget = profile_budget()?;
-        // Created before the run, so a path that cannot be written fails here
-        // rather than in place of what the run itself reports.
-        let file = File::create(&profile.path)
-            .with_context(|| format!("cannot write the profile to {}", profile.path.display()))?;
-        let profiler = GuestProfiler::new_component(
-            engine,
-            "wado-run-webgpu",
-            interval,
-            component.clone(),
-            std::iter::empty::<(String, wasmtime::Module)>(),
-        )?;
-        let profiler = Arc::new(Mutex::new(Some(profiler)));
-        let sampled = Arc::clone(&profiler);
-        let over_budget = Arc::new(AtomicBool::new(false));
-        let budget_reached = Arc::clone(&over_budget);
-        store.epoch_deadline_callback(move |store| {
-            if let Some(p) = sampled.lock().expect("the profiler lock").as_mut() {
-                p.sample(&store, interval);
-            }
-            if budget_reached.load(Ordering::Relaxed) {
-                return Err(wasmtime::Error::msg(
-                    "profile time budget reached (WADO_PROFILE_MAX_SECS)",
-                ));
-            }
-            Ok(UpdateDeadline::Continue(1))
-        });
-        store.set_epoch_deadline(1);
-        let stop = Arc::new(AtomicBool::new(false));
-        let stopped = Arc::clone(&stop);
-        let ticking = engine.clone();
-        std::thread::spawn(move || {
-            let started = Instant::now();
-            while !stopped.load(Ordering::Relaxed) {
-                std::thread::sleep(interval);
-                if budget.is_some_and(|budget| started.elapsed() >= budget) {
-                    over_budget.store(true, Ordering::Relaxed);
-                }
-                ticking.increment_epoch();
-            }
-        });
-        Ok(Self {
-            profiler,
-            stop,
-            file,
-            path: profile.path.clone(),
-        })
-    }
-
-    fn finish(self) -> Result<()> {
-        self.stop.store(true, Ordering::Relaxed);
-        let profiler = self
-            .profiler
-            .lock()
-            .expect("the profiler lock")
-            .take()
-            .expect("sampling finishes once");
-        // Flushed here: a `BufWriter` dropped with its last block unwritten
-        // reports no error, so a profile that never reached the disk would
-        // read as written.
-        let mut out = BufWriter::new(self.file);
-        profiler.finish(&mut out)?;
-        out.flush()?;
-        eprintln!("Profile written to {}", self.path.display());
-        Ok(())
-    }
-}
-
-/// How long `WADO_PROFILE_MAX_SECS` lets a profiled run go on, in whole
-/// seconds as `wado run` reads it; unset, as long as it takes.
-fn profile_budget() -> Result<Option<Duration>> {
-    let Some(value) = std::env::var_os("WADO_PROFILE_MAX_SECS") else {
-        return Ok(None);
-    };
-    let value = value.to_string_lossy();
-    let Ok(secs) = value.parse::<u64>() else {
-        bail!("WADO_PROFILE_MAX_SECS takes a whole number of seconds, not '{value}'");
-    };
-    Ok(Some(Duration::from_secs(secs)))
+    Ok(())
 }
 
 /// The `wasi:webgpu/webgpu` interface the component imports, versioned as it
@@ -320,69 +192,16 @@ fn webgpu_import(engine: &Engine, component: &Component) -> Option<String> {
         .map(str::to_owned)
 }
 
-/// The GC heap `wado run` starts a guest with, `DEFAULT_GC_HEAP_INITIAL_SIZE`
-/// in `wado-host/src/engine.rs`. wasmtime collects before it grows, so a heap
-/// starting at zero pays a full trace at every doubling up to the working set.
-const GC_HEAP_INITIAL_SIZE: u64 = 256 << 20;
-
-/// What `wado run` configures, so a program behaves the same under either
-/// runner: the same features, the same collector and initial GC heap, the same
-/// Cranelift level.
-fn engine_config(opt_level: OptLevel) -> Config {
-    let mut config = Config::new();
-    config.wasm_component_model_gc(true);
-    config.wasm_component_model_more_async_builtins(true);
-    config.wasm_component_model_async_stackful(true);
-    config.wasm_component_model_error_context(true);
-    config.wasm_component_model_map(true);
-    config.wasm_branch_hinting(true);
-    config.collector(Collector::Copying);
-    config.gc_heap_initial_size(GC_HEAP_INITIAL_SIZE);
-    config.cranelift_opt_level(cranelift_opt_level(opt_level));
-    config
-}
-
-fn cranelift_opt_level(opt_level: OptLevel) -> wasmtime::OptLevel {
-    match opt_level {
-        OptLevel::O0 => wasmtime::OptLevel::None,
-        OptLevel::O1 | OptLevel::O2 | OptLevel::O3 => wasmtime::OptLevel::Speed,
-        OptLevel::Os => wasmtime::OptLevel::SpeedAndSize,
-    }
-}
-
-fn host(args: &Args, gpu: Gpu) -> Result<Host> {
-    let mut builder = WasiCtx::builder();
-    builder.inherit_stdio().inherit_env();
-
-    builder.arg(args.input.to_string_lossy());
-    builder.args(&args.program_args);
-
-    for dir in &args.preopens {
-        let guest = dir.to_string_lossy().into_owned();
-        builder.preopened_dir(dir, &guest, FsPerms::ReadWrite)?;
-    }
-
-    Ok(Host {
-        ctx: builder.build(),
-        table: ResourceTable::new(),
-        gpu,
-        options: WasiWebGpuOptions::default(),
-        log_level: args.log_level,
-    })
-}
-
 /// The wgpu instance, refused when the machine offers no adapter: the guest
 /// would otherwise see `request-adapter` answer `none` and have nothing to say
 /// about why. `--gpu-adapter` is settled here too, before anything compiles.
-pub fn gpu(args: &Args) -> Result<Gpu> {
+pub fn gpu(selector: Option<&AdapterSelector>) -> Result<Gpu> {
     let global = instance();
     let adapters = global.enumerate_adapters(Backends::all());
     if adapters.is_empty() {
         bail!("{NO_ADAPTER}");
     }
-    let pinned = args
-        .gpu_adapter
-        .as_ref()
+    let pinned = selector
         .map(|selector| pin(&global, &adapters, selector))
         .transpose()?;
     for id in adapters {

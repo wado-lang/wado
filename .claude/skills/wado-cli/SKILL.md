@@ -99,7 +99,7 @@ wado compile --wat-to-stdout file.wado # output WAT to stdout
 ```
 
 Optimization levels: `-O0` (none), `-O1` (development; the default of `run`,
-`serve` and `test`), `-O2` (production; the default elsewhere), `-O3`
+`serve`, `test` and each `run-*`), `-O2` (production; the default elsewhere), `-O3`
 (aggressive), `-Os` (`-O2` + strip symbols). Below `-O2`, a call marked `unchecked` has its
 contract checked, so pass `-O2` to measure what ships.
 

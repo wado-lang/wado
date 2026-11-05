@@ -1,0 +1,28 @@
+//! A tensor of a pass that has ended traps when read, even once its slot holds
+//! another. `wado-run-pjrt`'s tests run it, and read the trap.
+
+use { PjrtHost } from "core:pjrt";
+use { Any, Graph, Holds, PjrtBackend, Tensor } from "lib:loam";
+
+struct A {
+}
+
+export fn run() with PjrtHost {
+    let mut device = PjrtBackend::new();
+    let x = Tensor::<f32, [A]> {
+        data: [1.0],
+        extents: [1],
+    };
+    let program = device.compiled(|r| {
+        let rx = r.parameter::<f32, [A]>(x.extents);
+        return r.finished([rx.id]);
+    }, &[], &[]).unwrap();
+    let argument = device.relabeled(&device.upload(&x));
+    let first = device.executed(&program, &[Any::F32(argument)], &[]);
+    device.begin();
+    device.executed(&program, &[Any::F32(argument)], &[]);
+    let F32(ended) = &first[0] else {
+        unreachable();
+    };
+    device.download(ended);
+}

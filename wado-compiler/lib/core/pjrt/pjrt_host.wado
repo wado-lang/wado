@@ -1,0 +1,110 @@
+#![generated(by = "wado-from-idl", sources = ["wado-compiler/lib/core/pjrt/pjrt.wit"])]
+#![stdlib("core:pjrt/pjrt_host.wado")]
+
+use { ListView } from "core:linear";
+/// What a buffer's elements are.
+#[cm("core:pjrt/pjrt-host@0.1.0#element-type")]
+pub enum ElementType {
+    #[cm("pred")]
+    Pred,
+    #[cm("int8")]
+    Int8,
+    #[cm("int16")]
+    Int16,
+    #[cm("int32")]
+    Int32,
+    #[cm("int64")]
+    Int64,
+    #[cm("uint8")]
+    Uint8,
+    #[cm("uint16")]
+    Uint16,
+    #[cm("uint32")]
+    Uint32,
+    #[cm("uint64")]
+    Uint64,
+    #[cm("float16")]
+    Float16,
+    #[cm("bfloat16")]
+    Bfloat16,
+    #[cm("float32")]
+    Float32,
+    #[cm("float64")]
+    Float64,
+}
+
+/// One figure of a plugin's cost model, such as TPU's `optimal_seconds`.
+#[cm("core:pjrt/pjrt-host@0.1.0#cost")]
+pub struct Cost {
+    #[cm("name")]
+    pub name: String,
+    #[cm("value")]
+    pub value: f64,
+}
+
+/// The device memory a compiled program needs, and what it costs to run.
+#[cm("core:pjrt/pjrt-host@0.1.0#analysis")]
+pub struct Analysis {
+    #[cm("argument-bytes")]
+    pub argument_bytes: i64,
+    #[cm("output-bytes")]
+    pub output_bytes: i64,
+    /// How much of the arguments the outputs reuse.
+    #[cm("alias-bytes")]
+    pub alias_bytes: i64,
+    #[cm("temporary-bytes")]
+    pub temporary_bytes: i64,
+    #[cm("costs")]
+    pub costs: List<Cost>,
+}
+
+/// A tensor on the device.
+#[cm("core:pjrt/pjrt-host@0.1.0#buffer")]
+pub resource Buffer {
+    /// The elements, little-endian, in row-major order.
+    #[cm("core:pjrt/pjrt-host@0.1.0#[method]buffer.to-host")]
+    #[cm_params("self")]
+    fn to_host(&self) -> Result<ByteList, String>;
+    /// Drop the resource. Scope exit drops one that nothing moved.
+    #[cm("resource-drop")]
+    fn drop(self);
+}
+
+/// A program compiled for this device.
+#[cm("core:pjrt/pjrt-host@0.1.0#executable")]
+pub resource Executable {
+    /// Runs the program. An argument the program updates in place is
+    /// donated to its result, and using such a buffer afterwards is an
+    /// error, unless `kept` holds its index, which copies it instead.
+    #[cm("core:pjrt/pjrt-host@0.1.0#[method]executable.execute")]
+    #[cm_params("self", "arguments", "kept")]
+    fn execute(&self, arguments: List<&Buffer>, kept: &ListView<i64>) -> Result<List<Buffer>, String>;
+    /// Drop the resource. Scope exit drops one that nothing moved.
+    #[cm("resource-drop")]
+    fn drop(self);
+}
+
+/// A device behind a PJRT plugin, the only public way to run a program on a
+/// TPU. It mirrors the calls of PJRT's C API a program needs. A plugin compiles
+/// StableHLO, so nothing here says what a tensor means.
+#[cm("core:pjrt/pjrt-host@0.1.0")]
+pub interface PjrtHost {
+    /// The plugin's name for its platform, such as `cpu` or `tpu`. A plugin with
+    /// no device here reports an error, as it may still compile for a topology.
+    #[cm("core:pjrt/pjrt-host@0.1.0#platform")]
+    fn platform() -> Result<String, String>;
+    /// Compiles a StableHLO module, in MLIR's text form.
+    #[cm("core:pjrt/pjrt-host@0.1.0#compile")]
+    #[cm_params("module")]
+    fn compile(module: String) -> Result<Executable, String>;
+    /// Compiles a StableHLO module for `topology`, such as `v5e:1x1`, which
+    /// needs no device: what the plugin reports of it. A plugin that runs no
+    /// program here may still compile for a device it names.
+    #[cm("core:pjrt/pjrt-host@0.1.0#analyzed")]
+    #[cm_params("module", "topology")]
+    fn analyzed(module: String, topology: String) -> Result<Analysis, String>;
+    /// A buffer of the `elements` given little-endian, in row-major order.
+    #[cm("core:pjrt/pjrt-host@0.1.0#upload")]
+    #[cm_params("element", "extents", "elements")]
+    fn upload(element: ElementType, extents: &ListView<i64>, elements: &ListView<u8>) -> Result<Buffer, String>;
+}
