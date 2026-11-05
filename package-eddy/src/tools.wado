@@ -41,6 +41,11 @@ pub struct Runner {
     pub rustup_home: String,
 }
 
+/// The most Runs one review makes. Retrying a defect that does not reproduce,
+/// such as a race, spends a review's turns on nothing, so past this the
+/// reviewer answers from what it has.
+global RUN_LIMIT: i32 = 12;
+
 /// How long one Run may take, in seconds, unless it asks for another time.
 global RUN_TIMEOUT: i32 = 900;
 
@@ -161,7 +166,8 @@ fn running_tools() -> List<Tool> {
             "Run",
             `Runs cargo at the repository root with the given arguments, and returns how it ended and the end of its stderr and stdout.
 - Examples: ["test", "-p", "wado-lsp", "--test", "my_check"]; ["run", "--bin", "wado", "--", "run", "check.wado"]; ["test", "-p", "wado-compiler", "--lib", "some_test_name"].
-- The first build takes minutes; later ones reuse it. It stops after timeout seconds (default ${RUN_TIMEOUT}, at most ${RUN_TIMEOUT_LIMIT}).`,
+- The first build takes minutes; later ones reuse it. It stops after timeout seconds (default ${RUN_TIMEOUT}, at most ${RUN_TIMEOUT_LIMIT}).
+- A review makes at most ${RUN_LIMIT} runs.`,
             `{
   "type": "object",
   "properties": {
@@ -241,6 +247,11 @@ fn tool(name: String, description: String, schema: String) -> Tool {
 }
 
 impl Workspace {
+    /// The most calls of tool `name` one review makes, where it has a limit.
+    pub fn call_limit(&self, name: &String) -> Option<i32> {
+        return if *name == "Run" { Some(RUN_LIMIT) } else { null };
+    }
+
     /// What tool `name` returns for `input`, or the error to report to the
     /// model, which may then try again.
     pub fn call(&self, name: &String, input: &Value) -> Result<String, String> with (Preopens, Process) {

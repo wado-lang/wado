@@ -95,7 +95,10 @@ global READING: String = "You can read the repository as it stood once this pull
 
 global SYMBOL_READING: String = "FindSymbol and FindReferences answer from the compiler's index of the Rust and Wado code: use them to find a definition and the uses of a function, type or field, and Grep for other text.";
 
-global RUNNING: String = "You can also check a suspicion by running the code: Write a test or a small program into the tree, and build and run it with Run, which runs cargo. A defect a run reproduces is one to report; a suspicion a run refutes is one to drop. Run what you suspect before you decide.";
+global RUNNING: String = "You can also run the code: Write a test or a small program into the tree, and build and run it with Run, which runs cargo.
+Before you report a finding, reproduce it: write a test that shows the wrong behaviour, and run it. A finding you are already sure of from reading is still one to reproduce, since reading can be wrong either way. A suspicion a run refutes is one to drop.
+A defect that depends on timing, such as a race with another process, is reproduced by making the interleaving happen in the test, for example by deleting a file between the two steps the race separates, never by running it again in the hope of hitting it.
+Give each finding at most three runs. One that does not reproduce by then is reported only if the code makes it certain, saying in its detail that it was not reproduced and why.";
 
 global GRADE: String = "You grade a code review against one known defect.
 The KNOWN DEFECT is what a later pull request had to fix in the reviewed change. The FINDINGS are what the reviewer reported on the change.

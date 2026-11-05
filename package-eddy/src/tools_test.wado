@@ -11,6 +11,12 @@ test "Write and Run are offered only with a runner" {
     assert names.contains_str("Write") && names.contains_str("Run");
 }
 
+test "only Run has a limit on its calls" {
+    let ws = Workspace { root: "src" };
+    assert ws.call_limit(&"Run") matches { Some(n) && n > 0 };
+    assert ws.call_limit(&"Read") matches { None };
+}
+
 test "Write creates the file and its directories inside the root" {
     let root = "build/tools-test";
     fs::remove_dir_all(root).unwrap();

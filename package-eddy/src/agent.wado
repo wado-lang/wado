@@ -83,7 +83,13 @@ pub fn run_agent(
                 continue;
             }
             let name = b.name.unwrap();
-            let [content, is_error] = match ws.call(&name, &b.input) {
+            let result: Result<String, String> = match ws.call_limit(&name) {
+                Some(limit) && count_of(&calls, &name) >= limit => Err(
+                    `all ${limit} calls of ${name} are spent; answer from what you have`,
+                ),
+                _ => ws.call(&name, &b.input),
+            };
+            let [content, is_error] = match result {
                 Ok(out) => [out, false],
                 Err(e) => [e, true],
             };
@@ -99,4 +105,15 @@ pub fn run_agent(
         messages.push(message(&Blocks { role: "assistant", content: turn.content }));
         messages.push(message(&Blocks { role: "user", content: results }));
     }
+}
+
+/// How many of `calls` called tool `name`.
+fn count_of(calls: &List<Call>, name: &String) -> i32 {
+    let mut n = 0;
+    for let c of calls {
+        if c.name == *name {
+            n += 1;
+        }
+    }
+    return n;
 }
