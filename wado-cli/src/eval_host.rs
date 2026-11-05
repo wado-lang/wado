@@ -36,8 +36,8 @@ use crate::fingerprint::{Input, compiler_digest, hash_field, write_entry};
 use crate::kiln_provider::hex32;
 use crate::knobs::CompileKnobs;
 use crate::run_cache::ReadLog;
-use crate::runtime::CAPTURED_STDIO_CAPACITY;
 use wado_host::engine::{DEFAULT_GC_HEAP_INITIAL_SIZE, fuel_engine};
+use wado_host::guest::CAPTURED_STDIO_CAPACITY;
 use wado_host::random;
 use wado_host::sync::{join_in_drop, joined, lock};
 

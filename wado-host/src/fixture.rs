@@ -170,7 +170,7 @@ pub struct CompileInputs {
     /// fixture by its file name, and `core:` modules by import path.
     #[serde(default)]
     pub profile: Option<String>,
-    /// Compile as a library exporting this world, as `wado compile --lib` does
+    /// Compile as a library exporting this world, as `wado build --lib` does
     /// for a package naming it. A library has no entry point to run.
     #[serde(default)]
     pub lib_world: Option<String>,

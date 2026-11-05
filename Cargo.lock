@@ -2923,14 +2923,12 @@ dependencies = [
  "predicates",
  "regex-automata",
  "reqwest",
- "rustls",
  "semver",
  "serde",
  "serde_json",
  "sha2 0.11.1",
  "tempfile",
  "tokio",
- "tokio-rustls",
  "toml",
  "unicode-normalization",
  "wado-compiler",
@@ -2943,7 +2941,6 @@ dependencies = [
  "wasmtime",
  "wasmtime-wasi",
  "wasmtime-wasi-http",
- "wasmtime-wasi-tls",
  "wit-component",
  "wit-parser",
 ]
@@ -3052,6 +3049,13 @@ name = "wado-host"
 version = "0.0.37"
 dependencies = [
  "anyhow",
+ "bytes",
+ "futures",
+ "http",
+ "http-body",
+ "http-body-util",
+ "hyper",
+ "hyper-util",
  "iana-time-zone",
  "indexmap",
  "lexopt",
@@ -3063,12 +3067,16 @@ dependencies = [
  "serde_json",
  "tempfile",
  "tokio",
+ "tokio-rustls",
+ "toml",
  "wado-compiler",
  "wado-lsp",
  "wado-manifest",
  "wasmparser",
  "wasmtime",
  "wasmtime-wasi",
+ "wasmtime-wasi-http",
+ "wasmtime-wasi-tls",
  "webpki-roots",
 ]
 
@@ -3115,12 +3123,10 @@ name = "wado-run-pjrt"
 version = "0.0.37"
 dependencies = [
  "anyhow",
- "lexopt",
  "libloading",
  "tokio",
  "wado-host",
  "wasmtime",
- "wasmtime-wasi",
 ]
 
 [[package]]

@@ -14,6 +14,7 @@ use std::os::fd::{OwnedFd, RawFd};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
+pub use crate::process_host::Trace;
 use crate::sync::lock;
 
 #[cfg(unix)]
@@ -283,16 +284,6 @@ pub struct Command<'a> {
     pub stderr: Stdio,
     pub policy: &'a Policy,
     pub trace: Trace,
-}
-
-/// What the host watches a child do, beyond the calls the filter refuses.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Trace {
-    Off,
-    /// Each call that names a path the sandbox mediates, recording a path the
-    /// policy does not grant as a [`Refusal::Path`]. Every such call waits on
-    /// the host, so a child runs slower. Linux alone watches.
-    Files,
 }
 
 /// A child that started, with the host's ends of its piped streams.

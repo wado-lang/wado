@@ -15,8 +15,7 @@ use wado_lsp::host::discovery::Disk;
 
 use crate::args::{self, CliExit, OptSpec};
 use crate::compile::{
-    announce_artifact, attach_manifest_and_component_deps, load_nearest_manifest,
-    maybe_run_pipeline,
+    attach_manifest_and_component_deps, load_nearest_manifest, maybe_run_pipeline,
 };
 use crate::compiler_host::FilesystemCompilerHost;
 use crate::dep_component::Acquisition;
@@ -160,7 +159,6 @@ pub async fn run(opts: WitOptions) -> Result<(), CliExit> {
         Some(file) => {
             fs::write(&file, &text)
                 .map_err(|e| CliExit::error(format!("writing '{file}': {e}")))?;
-            announce_artifact(&file);
         }
         None => print!("{text}"),
     }
@@ -249,7 +247,7 @@ async fn lib_snapshot_and_surface(
     let invocations = run_generators(&target.entry, &host, Some(project)).await?;
 
     let contract = wit_emit::wit_contract(None, Some(&target.interface_fq), None);
-    // Same `--lib` world as `wado compile --lib`, so the import set and subset
+    // Same `--lib` world as `wado build --lib`, so the import set and subset
     // match what that build embeds.
     let options = CompilerOptions {
         opt_level: wado_compiler::OptLevel::O2,

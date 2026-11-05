@@ -13,7 +13,7 @@ runs the component on a wasmtime host that serves `wasi:webgpu`.
 - `wasi-webgpu-wasmtime` must build on the wasmtime the repository pins, since
   this crate shares `wado-host`'s `runner`.
 - A program behaves the same here as under `wado run`, which is the only reason
-  to have both. `wado_host::runner` holds what makes that so, and a divergence
+  to have both. `wado_host::runner`, `guest` and `options` hold what makes that so, and a divergence
   is a defect, not a variant.
 - The tests set `WADO` as `wado` does
   ([External Subcommands](../docs/wep-2026-09-19-external-subcommands.md)), so

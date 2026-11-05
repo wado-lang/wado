@@ -34,7 +34,6 @@ use crate::knobs::{
     CompileKnobOpt, CompileKnobs, HostKnobOpt, HostKnobs, RuntimeKnobOpt, RuntimeKnobs,
 };
 use crate::manifest::package_root;
-use crate::process_host::ProcessGrant;
 use crate::rss::summary_line;
 use crate::run_cache::RunCache;
 use crate::runtime::{self, InsecureRandom, ProfileMode, WasiState};
@@ -43,6 +42,7 @@ use crate::test_report::{
     CompileEvent, HeartbeatReporter, LoadEvent, PackageDoneArgs, TapReporter, TestReporter,
     VerboseReporter,
 };
+use wado_host::process_host::ProcessGrant;
 use wado_host::runner::write_guest_profile;
 use wado_host::sync::{joined, lock};
 use wado_host::ticker::Ticker;
@@ -1048,7 +1048,7 @@ fn instantiate_wasmtime(
     let engine = Arc::new(runtime::create_test_engine(
         opt_level,
         profile,
-        runtime_knobs,
+        &runtime_knobs,
     )?);
     let component = Arc::new(Component::new(&engine, wasm)?);
     let linker = Arc::new(runtime::create_test_linker(&component)?);

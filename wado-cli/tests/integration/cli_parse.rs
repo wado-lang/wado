@@ -153,6 +153,37 @@ fn build_embed_metadata_flags_mutually_exclusive() {
 }
 
 #[test]
+fn build_named_input_needs_an_output() {
+    for args in [["main.wado"].as_slice(), &["main.wado", "-o", "out.wasm"]] {
+        assert_err(build::parse_args(Parser::from_args(args)), "`-o -`");
+    }
+}
+
+#[test]
+fn build_embed_entry_needs_a_driver_build() {
+    let parser = Parser::from_args(&["--embed-entry"]);
+    assert_err(build::parse_args(parser), "`--embed-entry`");
+}
+
+#[test]
+fn build_to_stdout_builds_no_library() {
+    let parser = Parser::from_args(&["--lib", "-o", "-"]);
+    assert_err(build::parse_args(parser), "`--lib`");
+}
+
+#[test]
+fn build_to_stdout_embeds_as_wado_run_does() {
+    let parser = Parser::from_args(&["--no-embed-wit", "-o", "-"]);
+    assert_err(build::parse_args(parser), "`--embed-wit`");
+}
+
+#[test]
+fn build_to_stdout_builds_a_world_wado_runs() {
+    let parser = Parser::from_args(&["--world", "acme:app/custom", "-o", "-"]);
+    assert_err(build::parse_args(parser), "acme:app/custom");
+}
+
+#[test]
 fn compile_requires_a_file() {
     // `compile` is the file primitive; no argument is an error pointing at build.
     let parser = Parser::from_args(&[] as &[&str]);
@@ -1242,7 +1273,8 @@ fn opt_level_maps_to_wasmtime_cranelift() {
 
 #[test]
 fn parse_log_level_valid() {
-    use wado_cli::args::parse_log_level;
+    let parse_log_level =
+        |level| wado_cli::args::parse_log_level_arg(&mut Parser::from_args(&[level])).ok();
     assert_eq!(
         parse_log_level("debug"),
         Some(wado_compiler::LogLevel::Debug)
