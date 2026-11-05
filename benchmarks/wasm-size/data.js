@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1793904892292,
+  "lastUpdate": 1793912098800,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -74945,6 +74945,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/e7f227de4c55b8aeaea00555c8434def5b31677e"
         },
         "date": 1793904891058,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3099,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7303,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21965,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 375757,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "189612fc21ea06de98a6e1156ffc2908be1b2f31",
+          "message": "Merge pull request #2561 from wado-lang/claude/emi-fix-20261106\n\nfix: keep writes a profile's cold marks and a mutating call make visible",
+          "timestamp": "2026-11-06T05:41:23+09:00",
+          "tree_id": "57b1a2d0a4d1aaebeb49f844ceca7c8ca79140bd",
+          "url": "https://github.com/wado-lang/wado/commit/189612fc21ea06de98a6e1156ffc2908be1b2f31"
+        },
+        "date": 1793912098283,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
