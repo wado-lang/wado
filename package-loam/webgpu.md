@@ -302,7 +302,7 @@ device. Its time per token is recorded against `Cpu` and against onnxruntime,
 which is run as a program and never read.
 
 Memory planning within a pass, a buffer reused once the tensor in it is dead,
-is step 4 of [Loam on TPU and WebGPU](./devices.md#plan).
+is a [known gap](./devices.md#known-gaps) of Loam on TPU and WebGPU.
 
 ## Plan
 
