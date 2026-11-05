@@ -46,13 +46,18 @@ program with no Wasm trap and no message.
 ### A module nested past the plugin's stack
 
 - Status: open.
-- Signal: `SIGABRT`. On the CPU plugin Rust's handler reports
+- Signal: `SIGSEGV` on the stack's guard page, which ends as `SIGABRT`. On the
+  CPU plugin Rust's handler reports
   `thread 'pjrt-plugin' has overflowed its stack`. On `libtpu.so` its own handler
   raises the signal.
-- Cause: the plugin recurses per nested region. 100,000 nested `stablehlo.if`
-  overflow `STACK_BYTES`, on both plugins. 10,000 come back as an error.
-- Guard: none. The overflow hits the guard page, so it ends the process without
-  corrupting anything. Loam's programs nest a region per `If`, far short of this.
+- Backtrace, on the CPU plugin: `mlir::Lexer::lexToken`, then `parseBlock`, `parseRegion` and
+  `parseGenericOperationAfterOpName` of MLIR's `OperationParser` in turn, to
+  80,975 frames.
+- Cause: MLIR's parser recurses per nested region, before anything of XLA runs.
+  100,000 nested `stablehlo.if` overflow `STACK_BYTES`, on both plugins. 10,000
+  come back as an error.
+- Guard: none. The overflow ends the process without corrupting anything, and
+  Loam's programs nest a region per `If`, far short of this.
 
 ## Never observed
 
