@@ -2335,9 +2335,6 @@ trait TypeTableExt {
 
 impl TypeTableExt for TypeTable {
     fn get_local_type(&self, index: u32, locals: &[TirLocal]) -> TypeId {
-        locals
-            .get(index as usize)
-            .map(|l| l.type_id)
-            .unwrap_or(TypeTable::UNKNOWN)
+        locals[index as usize].type_id
     }
 }
