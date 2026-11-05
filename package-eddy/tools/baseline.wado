@@ -229,7 +229,8 @@ ${fix_diff}
     report(&out);
 }
 
-/// The tree as merge `sha` left it, indexed when `symbols` is set.
+/// The tree as merge `sha` left it, indexed when `symbols` is set and ready to
+/// build when `run` is.
 fn workspace(sha: &String) -> Workspace with (Process, Preopens, Environment) {
     let root = snapshot(sha);
     let symbols: Option<SymbolIndex> = if SYMBOLS { Some(load(&index(&root, &WADO)).unwrap()) } else { null };
