@@ -388,6 +388,7 @@ pub fn program_for(options: &RunOptions) -> Result<Program> {
         .args(["--log-level", options.log_level.flag_value()])
         .arg("-o")
         .arg(&path)
+        .arg("--")
         .arg(&options.input)
         .status()
         .with_context(|| format!("failed to run '{}'", wado.display()))?;
@@ -568,20 +569,13 @@ impl Sampling {
     }
 
     /// What a run that ended with `outcome` reports, once any sampling of it
-    /// has written its profile. The run's own outcome comes first; a profile it
-    /// could not write is only the error where the run itself succeeded.
+    /// has written its profile.
     ///
     /// # Errors
     ///
     /// Fails when the run did or the profile cannot be written.
     pub fn conclude(sampling: Option<Self>, outcome: Result<()>) -> Result<()> {
-        match (outcome, sampling.map_or(Ok(()), Self::finish)) {
-            (Err(e), Err(p)) => {
-                eprintln!("error: {p:#}");
-                Err(e)
-            }
-            (outcome, profiled) => outcome.and(profiled),
-        }
+        reported(outcome, sampling.map_or(Ok(()), Self::finish))
     }
 
     fn finish(self) -> Result<()> {
@@ -593,6 +587,19 @@ impl Sampling {
         eprintln!("Profile written to {}", self.path.display());
         eprintln!("View at https://profiler.firefox.com/");
         Ok(())
+    }
+}
+
+/// The run's own outcome comes first; a profile it could not write is only the
+/// error where the run succeeded, which a program that exited 0 did.
+fn reported(outcome: Result<()>, profiled: Result<()>) -> Result<()> {
+    match (outcome, profiled) {
+        (Err(e), Err(p)) if exit_status(&e) != Some(0) => {
+            eprintln!("error: {p:#}");
+            Err(e)
+        }
+        (Err(e), Ok(())) => Err(e),
+        (_, profiled) => profiled,
     }
 }
 
@@ -706,6 +713,25 @@ mod tests {
         );
         assert!(try_parse(&["--profile", "jitdump", "app.wado"]).is_err());
         assert!(try_parse(&["--profile", "guest,a,b", "app.wado"]).is_err());
+    }
+
+    #[test]
+    fn a_lost_profile_fails_a_program_that_exited_zero_and_no_other() {
+        let lost = || Err(anyhow::anyhow!("no profile"));
+        let exited = |status| Err(anyhow::Error::new(I32Exit(status)));
+
+        let error = reported(exited(0), lost()).expect_err("the profile is lost");
+        assert_eq!(exit_status(&error), None);
+        assert_eq!(
+            exit_status(&reported(exited(3), lost()).unwrap_err()),
+            Some(3)
+        );
+        assert_eq!(
+            exit_status(&reported(exited(0), Ok(())).unwrap_err()),
+            Some(0)
+        );
+        assert!(reported(Ok(()), lost()).is_err());
+        assert!(reported(Ok(()), Ok(())).is_ok());
     }
 
     #[test]

@@ -26,7 +26,7 @@ calls, so a call that extends the last one's ids runs only the new ones.
 `webgpu.wado` continues each prompt `generate.json` records on
 `WebGpuBackend`, a token a `compute` through the program the backend compiled
 for the shape class. It prints what `gemma3.wado` prints with no prompt, and
-the dispatches and read backs a token takes:
+the device runs and read backs a token takes:
 
     cd package-loam/example/gemma3-270m
     wado run-webgpu webgpu.wado

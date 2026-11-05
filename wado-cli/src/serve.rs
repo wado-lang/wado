@@ -64,6 +64,11 @@ const DEFAULT_RECYCLE_REQUESTS: u64 = 200;
 /// and a worker left to run the whole backlog loses a third of it by 200.
 const DEFAULT_MAX_CONCURRENCY_PER_WORKER: usize = 32;
 
+/// What one host call may copy out of a guest, wasmtime's default. A worker
+/// keeps it where a program run by hand lifts it: requests reach this guest, and
+/// many of them share the host's memory.
+const HOSTCALL_FUEL: usize = 128 << 20;
+
 pub struct ServeOptions {
     pub input: String,
     pub knobs: CompileKnobs,
@@ -815,6 +820,7 @@ async fn worker_loop(
         // here — once per generation, not once per request.
         let state = WasiState::new_no_inherit_env_with_preopens(&preopens, &argv);
         let mut store = runtime::new_store(&engine, state);
+        store.set_hostcall_fuel(HOSTCALL_FUEL);
         // Arm the epoch deadline. The dispatch loop refreshes it every
         // turn (see below), so a healthy worker never trips it; a guest
         // that runs away in pure wasm does.

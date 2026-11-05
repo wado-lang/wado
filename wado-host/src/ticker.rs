@@ -27,15 +27,19 @@ impl Ticker {
             let control = Arc::clone(&control);
             move || {
                 let (state, wake) = &*control;
-                let mut state = lock(state);
-                while !state.stopped {
-                    let (guard, wait) = wake
-                        .wait_timeout_while(state, interval, |state| {
+                loop {
+                    let (mut held, wait) = wake
+                        .wait_timeout_while(lock(state), interval, |state| {
                             !state.stopped && !state.restarted
                         })
                         .unwrap_or_else(PoisonError::into_inner);
-                    state = guard;
-                    state.restarted = false;
+                    if held.stopped {
+                        return;
+                    }
+                    held.restarted = false;
+                    // A wait of no interval never lets the lock go, and a drop
+                    // needs it to stop this thread.
+                    drop(held);
                     if wait.timed_out() {
                         tick();
                     }
@@ -82,6 +86,20 @@ mod tests {
         let started = Instant::now();
         drop(ticker);
         assert!(started.elapsed() < Duration::from_secs(10));
+    }
+
+    #[test]
+    fn a_ticker_with_no_interval_ticks_and_still_drops() {
+        let ticks = Arc::new(std::sync::atomic::AtomicU32::new(0));
+        let ticker = Ticker::start(Duration::ZERO, {
+            let ticks = Arc::clone(&ticks);
+            move || {
+                ticks.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            }
+        });
+        std::thread::sleep(Duration::from_millis(50));
+        drop(ticker);
+        assert!(ticks.load(std::sync::atomic::Ordering::Relaxed) > 0);
     }
 
     #[test]

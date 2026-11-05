@@ -38,15 +38,8 @@ nothing. Correctness and speed come first.
 
 Each semantics is written once per device: `Cpu`, `WebGpuBackend`, and
 `PjrtBackend`. Generated code reaches all of them, so a change can break code
-it never touched. Test outward from the change, and run the whole package once,
-last:
-
-1. The test beside the file changed, such as `src/runtime/recorded_test.wado`.
-2. `cargo test --test compute loam` in `wado-run-webgpu/`, for a change
-   `WebGpuBackend` runs. It checks each result against `Cpu`'s.
-3. `mise run test-pjrt`, for a change `PjrtBackend` or the StableHLO writer
-   runs. It does the same on XLA's CPU plugin, and compiles for a TPU.
-4. `wado test package-loam`.
+it never touched. Test outward from the change, as
+[tools.md](./tools.md#testing) lists, and run the whole package once, last.
 
 CI tests the logic on every device with very small programs, which should
 reach as many operations and paths as they can. A real model such as Gemma 3

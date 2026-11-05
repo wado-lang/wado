@@ -457,7 +457,7 @@ impl Executable {
     pub fn execute(&self, arguments: &[&Buffer], kept: &[i64]) -> Result<Vec<Buffer>, String> {
         let raw: Vec<Opaque> = arguments.iter().map(|b| b.raw).collect();
         let lists: [*const Opaque; 1] = [raw.as_ptr()];
-        let mut results: Vec<Opaque> = vec![null_mut(); self.outputs];
+        let mut results: Vec<Opaque> = Vec::with_capacity(self.outputs);
         let result_lists: [*mut Opaque; 1] = [results.as_mut_ptr()];
         let mut options = ffi::ExecuteOptions::new();
         options.non_donatable_input_indices = kept.as_ptr();
@@ -470,10 +470,11 @@ impl Executable {
         execute.num_args = raw.len();
         execute.output_lists = result_lists.as_ptr();
         // SAFETY: the struct is the one the slot takes, and what it points to
-        // outlives the call.
+        // outlives the call, which fills an entry for each of `self.outputs`.
         unsafe {
             self.plugin
                 .call(Slot::LoadedExecutableExecute, &mut execute)?;
+            results.set_len(self.outputs);
         }
         Ok(results
             .into_iter()
