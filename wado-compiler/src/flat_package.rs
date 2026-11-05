@@ -23,7 +23,7 @@ use crate::tir::{
     TirVariantDecl, TypeId,
 };
 use crate::tir_visitor::TirMutVisitor;
-use crate::type_table::{InstanceKey, TypeTable};
+use crate::type_table::TypeTable;
 use crate::wir_build::component_plan::ComponentPlan;
 use crate::world_registry::{self, WorldRegistry};
 
@@ -133,13 +133,9 @@ impl FlatPackage {
         def: StructDef,
         type_args: &[TypeId],
     ) -> Option<&TirStruct> {
-        let keys = |args: &[TypeId]| -> Vec<InstanceKey> {
-            args.iter().map(|&a| type_table.instance_key(a)).collect()
-        };
-        let wanted = keys(type_args);
         self.structs
             .iter()
-            .find(|s| s.def == def && keys(&s.type_args) == wanted)
+            .find(|s| s.def == def && type_table.same_instance_args(&s.type_args, type_args))
     }
 
     /// Walk every function body with `visitor`, which may rewrite it in place.

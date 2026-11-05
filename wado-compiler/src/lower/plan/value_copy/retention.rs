@@ -1058,7 +1058,9 @@ impl RefCarrying<'_> {
                 let fields = self
                     .structs
                     .iter()
-                    .find(|s| s.def == def && s.type_args == type_args)
+                    .find(|s| {
+                        s.def == def && self.type_table.same_instance_args(&s.type_args, &type_args)
+                    })
                     .map(|s| s.fields.iter().map(|f| f.type_id).collect::<Vec<_>>());
                 match fields {
                     Some(fields) => self.any(fields, walk),

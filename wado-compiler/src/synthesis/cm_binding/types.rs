@@ -534,13 +534,15 @@ fn check_cm_boundary_representable_inner(
                     return recurse(value, Slot::Value, visited);
                 }
                 let name = type_table.struct_head_mangled_name(*def);
-                match struct_decl_of(*def, type_args, tir_modules) {
+                match struct_decl_of(type_table, *def, type_args, tir_modules) {
                     // Only the declaration stands for an instance no
                     // monomorphization listed.
-                    Some(decl) if decl.type_args != *type_args => Err(format!(
-                        "generic type `{}` has no Component Model value representation",
-                        type_table.name(type_id)
-                    )),
+                    Some(decl) if !type_table.same_instance_args(&decl.type_args, type_args) => {
+                        Err(format!(
+                            "generic type `{}` has no Component Model value representation",
+                            type_table.name(type_id)
+                        ))
+                    }
                     Some(decl) if decl.fields.is_empty() => Err(format!(
                         "record `{name}` has no fields; an empty record has no \
                          Component Model representation — add at least one field"
@@ -949,7 +951,9 @@ fn flat_types_from_type_id_inner(
             if type_table.is_string(type_id) {
                 out.push(cm_abi::CmValType::I32); // ptr
                 out.push(cm_abi::CmValType::I32); // len
-            } else if let Some(struct_decl) = struct_decl_of(*def, type_args, tir_modules) {
+            } else if let Some(struct_decl) =
+                struct_decl_of(type_table, *def, type_args, tir_modules)
+            {
                 flatten_struct_type(&struct_decl, out, tir_modules, type_table, names);
             } else {
                 // A record with no TIR declaration has no known field layout;
@@ -1060,6 +1064,7 @@ fn declares_no_case(def: DefId, tir_modules: &IndexMap<ModuleSource, TirModule>)
 /// that instantiation and at the declaration otherwise. Keyed by identity, for
 /// the reason [`variant_decl_of`] is.
 pub(super) fn struct_decl_of(
+    type_table: &TypeTable,
     def: StructDef,
     type_args: &[TypeId],
     tir_modules: &IndexMap<ModuleSource, TirModule>,
@@ -1069,7 +1074,7 @@ pub(super) fn struct_decl_of(
         if s.def != def {
             continue;
         }
-        if s.type_args == type_args {
+        if type_table.same_instance_args(&s.type_args, type_args) {
             return Some(s.clone());
         }
         if s.type_args.is_empty() {

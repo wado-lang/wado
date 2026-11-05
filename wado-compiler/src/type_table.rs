@@ -2947,15 +2947,23 @@ impl TypeTable {
             .copied()
     }
 
-    /// The interned instance of `def` at `type_args`, if one exists.
-    pub fn find_generic_instance(&self, def: DefId, type_args: &[TypeId]) -> Option<TypeId> {
+    /// The interned instance of `def` at `type_args`, if one exists: what
+    /// [`Self::make_generic_instance`] would answer without interning.
+    pub fn find_generic_instance(&mut self, def: DefId, type_args: &[TypeId]) -> Option<TypeId> {
         let spelling = self.instance_spelling(def, type_args.to_vec());
         self.intern_map.get(&spelling).copied()
     }
 
-    /// `def` applied to `type_args`, in the kind that carries its arguments.
-    fn instance_spelling(&self, def: DefId, type_args: Vec<TypeId>) -> ResolvedType {
-        match self.defs.kind(def) {
+    /// `def` applied to `type_args`, in the kind that carries its arguments,
+    /// a struct's as [`Self::struct_instance_args`] interns them.
+    fn instance_spelling(&mut self, def: DefId, type_args: Vec<TypeId>) -> ResolvedType {
+        let kind = self.defs.kind(def);
+        let type_args = if kind == DefKind::Struct {
+            self.struct_instance_args(type_args)
+        } else {
+            type_args
+        };
+        match kind {
             DefKind::Resource => ResolvedType::Resource { def, type_args },
             DefKind::Variant => ResolvedType::Variant { def, type_args },
             DefKind::Struct => ResolvedType::Struct {
@@ -3844,6 +3852,15 @@ impl TypeTable {
     /// `trait_`'s frame, where it is built.
     pub fn trait_frame(&self, trait_: DefId) -> Option<&Arc<TraitFrame>> {
         self.trait_frames.get(&trait_)
+    }
+
+    /// Whether two argument lists instantiate a declaration as one instance.
+    #[must_use]
+    pub fn same_instance_args(&self, a: &[TypeId], b: &[TypeId]) -> bool {
+        a.len() == b.len()
+            && a.iter()
+                .zip(b)
+                .all(|(&x, &y)| self.instance_key(x) == self.instance_key(y))
     }
 
     /// The [`InstanceKey`] of `id`.
@@ -5062,11 +5079,6 @@ impl TypeTable {
             !self.is_compiler_item(def, CompilerItem::Tuple),
             "a tuple is interned by `make_tuple`"
         );
-        let type_args = if self.defs.kind(def) == DefKind::Struct {
-            self.struct_instance_args(type_args)
-        } else {
-            type_args
-        };
         let spelling = self.instance_spelling(def, type_args);
         self.intern(spelling)
     }
@@ -6162,94 +6174,6 @@ impl TypeTable {
                 mangle_builtin_array_type(&elem_name)
             }
             _ => self.mangle_type_name(base),
-        }
-    }
-
-    /// Recursively resolve newtypes inside compound types (tuples, generics, arrays).
-    /// Returns the same `TypeId` if no newtypes are found, or a new `TypeId` with all
-    /// newtypes replaced by their base types.
-    pub fn resolve_newtypes_deep(&mut self, id: TypeId) -> TypeId {
-        let base = self.representation_head(id);
-        match self.get(base).clone() {
-            ResolvedType::Struct {
-                def: StructDef::Decl(def),
-                type_args,
-            }
-            | ResolvedType::Resource { def, type_args }
-            | ResolvedType::Variant { def, type_args } => {
-                let resolved: Vec<TypeId> = type_args
-                    .iter()
-                    .map(|t| self.resolve_newtypes_deep(*t))
-                    .collect();
-                if resolved == type_args {
-                    base
-                } else {
-                    self.make_generic_instance(def, resolved)
-                }
-            }
-            ResolvedType::Tuple(elems) => {
-                let resolved: Vec<TypeId> = elems
-                    .iter()
-                    .map(|t| self.resolve_newtypes_deep(*t))
-                    .collect();
-                if resolved == elems {
-                    base
-                } else {
-                    self.make_tuple(resolved)
-                }
-            }
-            ResolvedType::BuiltinArray(elem) => {
-                let resolved = self.resolve_newtypes_deep(elem);
-                if resolved == elem {
-                    base
-                } else {
-                    self.intern(ResolvedType::BuiltinArray(resolved))
-                }
-            }
-            _ => base,
-        }
-    }
-
-    /// Like `resolve_newtypes_deep` but non-mutating — only resolves if all
-    /// intermediate types already exist. Returns the original `TypeId` if resolution
-    /// would require creating new types.
-    #[must_use]
-    pub fn resolve_newtypes_deep_readonly(&self, id: TypeId) -> TypeId {
-        let base = self.representation_head(id);
-        match self.get(base) {
-            ResolvedType::Struct {
-                def: StructDef::Decl(def),
-                type_args,
-            }
-            | ResolvedType::Resource { def, type_args }
-            | ResolvedType::Variant { def, type_args } => {
-                let resolved: Vec<TypeId> = type_args
-                    .iter()
-                    .map(|t| self.resolve_newtypes_deep_readonly(*t))
-                    .collect();
-                if resolved == *type_args {
-                    base
-                } else if let Some(existing) = self.find_generic_instance(*def, &resolved) {
-                    existing
-                } else {
-                    id // Can't create new type, return original
-                }
-            }
-            ResolvedType::Tuple(elems) => {
-                let resolved: Vec<TypeId> = elems
-                    .iter()
-                    .map(|t| self.resolve_newtypes_deep_readonly(*t))
-                    .collect();
-                if resolved == *elems {
-                    base
-                } else {
-                    self.intern_map
-                        .get(&ResolvedType::Tuple(resolved))
-                        .copied()
-                        .unwrap_or(id)
-                }
-            }
-            _ => base,
         }
     }
 
