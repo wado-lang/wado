@@ -100,10 +100,10 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<RunOptions, CliExit> {
 
 pub async fn run(opts: RunOptions) -> Result<(), CliExit> {
     let opt_level = opts.knobs.opt_level.to_wasmtime();
-    // `run` is a driver on the build tier (like `cargo run`): in a project it
-    // builds the cli/command world through the shared build core (metadata
-    // embedded, written to build/), then executes it; a bare file with no
-    // project stays on the in-memory compile primitive.
+    // `run` is a driver on the build tier (like `cargo run`): a project's
+    // declared entry builds the cli/command world through the shared build core
+    // (metadata embedded, written to build/), then executes it; any other file
+    // stays on the in-memory compile primitive.
     let wasm = Box::pin(build_for_driver(
         &opts.input,
         manifest::EntryPointKind::Command,

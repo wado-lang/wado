@@ -1252,10 +1252,10 @@ async fn run_http_server(
 
 pub async fn run(opts: ServeOptions) -> Result<(), CliExit> {
     let cranelift_opt = opts.knobs.opt_level.to_wasmtime();
-    // `serve` is a driver on the build tier: in a project it builds the
-    // http/service world through the shared build core (metadata embedded,
-    // written to build/), then serves it; a bare file with no project stays on
-    // the in-memory compile primitive.
+    // `serve` is a driver on the build tier: a project's declared entry builds
+    // the http/service world through the shared build core (metadata embedded,
+    // written to build/), then serves it; any other file stays on the in-memory
+    // compile primitive.
     let wasm = Box::pin(build_for_driver(
         &opts.input,
         manifest::EntryPointKind::Service,

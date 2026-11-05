@@ -385,6 +385,17 @@ pub fn world_declaring(project: &ProjectManifest, path: &Path) -> Option<String>
         .map(|(world, _)| world.clone())
 }
 
+/// Whether `path` is the entry `project` declares for `world`, in the frame
+/// [`world_declaring`] compares in. One file may enter several worlds.
+#[must_use]
+pub fn declares_entry(project: &ProjectManifest, world: &str, path: &Path) -> bool {
+    project
+        .manifest
+        .world
+        .get(world)
+        .is_some_and(|entry| absolutize(&project.root.join(&entry.entry)) == absolutize(path))
+}
+
 /// Load a `wado.toml` directly from `dir` (does not walk parents).
 ///
 /// Returns an error if the directory has no `wado.toml` or the file is invalid.

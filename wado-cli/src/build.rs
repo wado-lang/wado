@@ -468,12 +468,13 @@ pub async fn build_world_component(
     compile::compile_to_artifact(opts).await
 }
 
-/// Produce the runnable component for a driver (`run` / `serve`). In a project
-/// (a nearby `wado.toml`), build the world through the shared core — metadata
-/// embedded, written to `build/<world segment>.wasm`, matching `wado build`.
-/// With no project, fall back to the standalone compile primitive (in-memory,
-/// no artifact on disk). Metadata and WIT embed at their defaults, matching
-/// `wado build`, so a run/serve artifact is identical to a built one.
+/// Produce the runnable component for a driver (`run` / `serve`). For the entry
+/// a nearby `wado.toml` declares for the world, build it through the shared
+/// core — metadata embedded, written to `build/<world segment>.wasm`, matching
+/// `wado build`. Any other file falls back to the standalone compile primitive
+/// (in-memory, no artifact on disk), so `build/` holds only declared worlds.
+/// Metadata and WIT embed at their defaults, matching `wado build`, so a
+/// run/serve artifact is identical to a built one.
 ///
 /// A component built before, from sources unchanged since and with the same
 /// metadata to embed, is taken from the cache instead, and nothing is written.
@@ -490,7 +491,9 @@ pub async fn build_for_driver(
         ..CompileFlags::default()
     };
     let entry_path = Path::new(entry);
-    let project = compile::load_nearest_manifest(entry_path, &Disk).map_err(CliExit::error)?;
+    let project = compile::load_nearest_manifest(entry_path, &Disk)
+        .map_err(CliExit::error)?
+        .filter(|project| manifest::declares_entry(project, target_world, entry_path));
     let metadata = project.as_ref().map_or_else(String::new, |project| {
         let sections = compile::package_metadata(project, EmbedOptions::default(), &flags.knobs);
         sha256_hex(format!("{sections:?}").as_bytes())

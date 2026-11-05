@@ -107,6 +107,40 @@ fn test_build_to_stdout_takes_its_entry_from_the_manifest() {
     assert!(entry.ends_with("main.wado"), "entry: {entry}");
 }
 
+/// `build/<world>.wasm` is the world the manifest declares: a driver given
+/// another file runs it without taking that path.
+#[test]
+fn test_run_of_an_undeclared_file_leaves_the_worlds_artifact_alone() {
+    let tmp = tempfile::tempdir().unwrap();
+    std::fs::write(
+        tmp.path().join("wado.toml"),
+        "[package]\nname = \"app\"\nversion = \"0.1.0\"\n\n\
+         [world]\n\"wasi:cli/command\" = \"main.wado\"\n",
+    )
+    .unwrap();
+    std::fs::write(tmp.path().join("main.wado"), "export fn run() { }\n").unwrap();
+    std::fs::write(tmp.path().join("tool.wado"), "export fn run() { }\n").unwrap();
+    let artifact = tmp.path().join("build/wasi-cli-command.wasm");
+
+    wado_in(tmp.path())
+        .args(["run", "tool.wado"])
+        .assert()
+        .success();
+    assert!(
+        !artifact.exists(),
+        "tool.wado took the declared world's path"
+    );
+
+    wado_in(tmp.path())
+        .args(["run", "main.wado"])
+        .assert()
+        .success();
+    assert!(
+        artifact.exists(),
+        "the declared entry should build its world"
+    );
+}
+
 /// A compile that succeeds prints nothing, and says what it wrote only at
 /// `--log-level debug`. A runner's build leaves its program's stderr alone
 /// because of this.
