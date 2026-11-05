@@ -70,6 +70,11 @@ test "top k draws among the greatest only" {
     assert counts[1] > 0 && counts[2] > 0 && counts[4] > 0;
 }
 
+test "top k filters beside a token no probability reaches" {
+    let counts = drawn([f32::NEG_INFINITY, 1.0, 1.1, 1.2], &Sampling { temperature: 1.0, top_k: 1, seed: 9 }, 100);
+    assert counts == [0, 0, 0, 100];
+}
+
 test "top k of one picks the greatest whatever the draw" {
     let counts = drawn([1.0, 3.0, 2.0], &Sampling { temperature: 5.0, top_k: 1, seed: 9 }, 50);
     assert counts == [0, 50, 0];
@@ -160,7 +165,7 @@ test "a mask opens the position a step reads" {
     assert opened::<Cpu, [Slots, Picks]>(&mut cpu, &mask, &at).data == [1, 1, 1, 0];
 }
 
-test "a length advances by its share of each step" {
+test "a length advances by each step" {
     let mut cpu = Cpu {};
     let length = Tensor::<i64, []> {
         data: [5],
@@ -170,5 +175,5 @@ test "a length advances by its share of each step" {
         data: [3],
         extents: [],
     };
-    assert advanced(&mut cpu, &length, &step, 2).data == [11];
+    assert advanced(&mut cpu, &length, &step).data == [8];
 }

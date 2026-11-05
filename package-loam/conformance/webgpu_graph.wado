@@ -386,6 +386,17 @@ export fn run() with (Stdout, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuC
     );
     assert gpu.download(&converted).data == reckoned.data;
 
+    // A sum with a device's index is one only where an f32 holds it.
+    let ranked: Placed<i64, [cases::A]> = gpu.arg_max(&gpu.upload(&Tensor::<f32, [cases::A]> {
+        data: [0.0, 1.0],
+        extents: [2],
+    }), 0);
+    let far = Tensor::<i64, [cases::A]> {
+        data: [16777216],
+        extents: [1],
+    };
+    assert gpu.download(&gpu.binary(Binary::Add, &ranked, &gpu.upload(&far))).data == [16777217] as List<i64>;
+
     for let [k, sampling] of samplers().into_iter().enumerate() {
         let want = stepped_tokens(cpu, [2, 6, 1], 8, &sampling);
         let read_before = gpu.read_backs();

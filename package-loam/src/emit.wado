@@ -1279,8 +1279,9 @@ fn prepared_entry(
         let mut moving: List<String> = [r.symbol];
         moving.extend(&owed.into_iter().map(|o| o.0.symbol).collect());
         for let symbol of moving {
-            let moves = per_step(&symbol, &r.symbol, owed)?;
-            at_end.idents[symbol] = `(${symbols.idents[symbol]} + ${moves} * ${r.spelled})`;
+            if moves_a_step(&symbol, &r.symbol, owed)? {
+                at_end.idents[symbol] = `(${symbols.idents[symbol]} + ${r.spelled})`;
+            }
         }
         let mut checks = owed_checks(checked, &mut at_end)?;
         checks.extend(&branch_checks(graph, checked, names, conditions, &mut at_end)?);
@@ -1426,6 +1427,9 @@ fn decoding_axes(
         }
         if checked.primitives[name] != "i64" || checked.shapes[name].rank() != 2 {
             return refused(`${name} must be an i64 tensor of rows and positions`);
+        }
+        if checked.shapes[name].axes[0].extent.lone_symbol() matches { Some(rows) && padded.contains(&rows) } {
+            return refused(`the rows of ${name} must not be held at a capacity`);
         }
     }
     if !crossing.returned.contains(&decode.logits) || checked.primitives[decode.logits] != "f32" {
@@ -1595,11 +1599,10 @@ fn emit_decoded(
         let mut fields: List<String> = [];
         for let symbol of *read {
             let ident = names.get(&symbol_key(&symbol));
-            let moves = per_step(&symbol, &axes.total, owed)?;
-            fields.push(if moves == 0 {
-                `${ident}: lengths.${ident}`;
+            fields.push(if moves_a_step(&symbol, &axes.total, owed)? {
+                `${ident}: advanced(backend, &lengths.${ident}, step)`;
             } else {
-                `${ident}: advanced(backend, &lengths.${ident}, step, ${moves})`;
+                `${ident}: lengths.${ident}`;
             });
         }
         w.line(`    let moved = ${LENGTHS}::<${bk}> { ${fields.join(", ")} };`);
@@ -1640,24 +1643,24 @@ fn emit_decoded(
     return Result::Ok(());
 }
 
-/// How far `symbol` moves in a step, as `total` moves by 1. One that no past's
+/// Whether `symbol` moves in a step, by 1 as `total` does. One that no past's
 /// arithmetic ties to `total` is an input's other than the mask's, which no
 /// step changes.
-fn per_step(symbol: &String, total: &String, owed: &List<[Grown, Option<Poly>]>) -> Result<i64, EmitError> {
+fn moves_a_step(symbol: &String, total: &String, owed: &List<[Grown, Option<Poly>]>) -> Result<bool, EmitError> {
     if symbol == total {
-        return Result::Ok(1);
+        return Result::Ok(true);
     }
     let Some([_, Some(v)]) = owed.into_iter().find(|o| o.0.symbol == *symbol) else {
-        return Result::Ok(0);
+        return Result::Ok(false);
     };
     if !v.symbols().contains(total) {
-        return Result::Ok(0);
+        return Result::Ok(false);
     }
-    let Some([moves, _]) = v.linear_in(total) else {
+    if !v.linear_in(total) matches { Some([1, _]) } {
         builtin::cold_path();
-        return Result::Err(EmitError::Undecodable(`${*symbol} does not move by a fixed amount a step`));
-    };
-    return Result::Ok(moves);
+        return Result::Err(EmitError::Undecodable(`${*symbol} must move one position a step`));
+    }
+    return Result::Ok(true);
 }
 
 /// `least_extents`: the extents `recorded` takes where each length an input

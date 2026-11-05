@@ -655,6 +655,9 @@ model, and it does not price 94 and 93 of each program's operations
   `compute` knows on the host. A caller of `build` vouches for it.
 - `compute` takes no capacities from the caller, beyond the `room` of a model
   built with `decode`.
+- A pass cuts its cache to the capacity its own call needs, so the `room` one
+  call asked for lasts only through calls that ask as much. A later call that
+  asks more copies the cache to a larger buffer again.
 - `decode` reads the prompt's logits back to pick the first token on the host. A
   program over the prompt and its steps would need the prompt's capacity and the
   step's in one graph, and an `If` model's branches apart.
@@ -665,8 +668,9 @@ model, and it does not price 94 and 93 of each program's operations
 - Backends add up a row's probabilities in their own order, so a draw landing
   within rounding of a token's edge can pick apart on two of them. Greedy cannot.
 - On WebGPU a device-held `i64` is an index `arg_max` ranked, as the f32 it
-  equals, so an id is below 2²⁴, and only `Add`, `Subtract`, `Minimum` and
-  `Maximum` run on one there. Another operation reads it back.
+  equals, so an id is below 2²³, where the sum of two is still exact. Only
+  `Add`, `Subtract`, `Minimum` and `Maximum` run on one there, and only with a
+  value below the same bound. Anything else reads it back.
 - WGSL lets an implementation assume no infinity or NaN at run time, and a
   shader still starts a maximum at negative infinity and masks attention with
   it.

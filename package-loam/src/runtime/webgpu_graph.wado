@@ -1433,19 +1433,22 @@ fn elementwise_on<Axes>(
     return g.fused_on(operands, op);
 }
 
+/// Below this an i64 is exact in an f32, and so is the sum of two.
+global INDEX_BOUND: i64 = 8388608;
+
 /// Whether an operation that moves or picks `E`s runs on the device over `a`
 /// and `b`: an `E` it holds, or an i64 one of them already holds as an f32, a
-/// token a kernel ranked, where the other's values lose nothing in one.
+/// token a kernel ranked, where the other's values stay within [`INDEX_BOUND`].
 fn held_as_f32<E: Element, A, B>(a: &Placed<E, A>, b: &Placed<E, B>) -> bool {
     let on_device = a matches { Device(_) } || b matches { Device(_) };
-    return E::exact_in_f32() || on_device && exact_in_f32(a) && exact_in_f32(b);
+    return E::exact_in_f32() || on_device && within_index_bound(a) && within_index_bound(b);
 }
 
-fn exact_in_f32<E: Element, Axes>(t: &Placed<E, Axes>) -> bool {
+fn within_index_bound<E: Element, Axes>(t: &Placed<E, Axes>) -> bool {
     let Host(h) = t else {
         return true;
     };
-    return h.data.into_iter().all(|v| v.cast_to::<f32>().cast_to::<i64>() == v.cast_to::<i64>());
+    return h.data.into_iter().all(|v| -INDEX_BOUND < v.cast_to::<i64>() < INDEX_BOUND);
 }
 
 /// An f32 result as the element `E` it computed, which the device holds as

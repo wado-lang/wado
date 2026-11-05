@@ -1642,6 +1642,17 @@ test "decode refuses logits of more than one position" {
     assert refused_for(decoded("input_ids", "attention_mask", "logits"), "must hold one position");
 }
 
+test "decode refuses rows a pass holds at a capacity" {
+    let many = #include_str("../conformance/decoder.onnxtext").replace("[1, ", "[B, ");
+    let mut graph = read(&many).unwrap();
+    keep_last(&mut graph, &infer(&graph).unwrap(), &"logits", 1).unwrap();
+    let decode = Decode { ids: "input_ids", mask: "attention_mask", logits: "logits" };
+    assert refused_for(
+        emit(&graph, &infer(&graph).unwrap(), &RUNTIME, Placement::File, Option::Some(decode)),
+        "must not be held at a capacity",
+    );
+}
+
 test "decode refuses a graph with no cache" {
     let graph = read(
         &"<ir_version: 8, opset_import: [ \"\" : 17 ]>\nplain (int64[1, N] ids) => (float[1, N] Y)\n{\n    Y = Cast<to = 1>(ids)\n}\n",

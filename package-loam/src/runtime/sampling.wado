@@ -35,6 +35,10 @@ pub struct Picks {
 /// tells apart, between any two values a logit takes.
 global BISECTIONS: i32 = 32;
 
+/// How far below a row's greatest logit a token's probability is 0 in an f32:
+/// `exp(-128)` underflows.
+global NEGLIGIBLE: f32 = 128.0;
+
 /// How a decoding program picks each token, and which tokens end a row.
 pub struct Sampling {
     /// How far each logit is divided before the draw. At 0 no draw is made,
@@ -84,16 +88,17 @@ impl Sampling {
         return tokens.into_iter().map(|t| self.ends.contains(t)).collect();
     }
 
-    /// The draws of `held` positions from `at`, `rows` of them each, in `[0,
-    /// 1)`. A position's draw is the keyed hash of it and the row, so it does
-    /// not depend on how a call splits its steps, and no device's random source
-    /// is read. Every step's are written up front, as a keyed hash is cheap on
-    /// the host and has no operation in `Graph`. 24 bits fill an f32 exactly.
-    fn draws(&self, at: i64, held: i32, rows: i32) -> Tensor<f32, [Picks, Slots]> {
+    /// The draws of `steps` positions from `at`, `rows` of them each, in `[0,
+    /// 1)`, in a table of `held` positions. A position's draw is the keyed hash
+    /// of it and the row, so it does not depend on how a call splits its steps,
+    /// and no device's random source is read. Every step's are written up front,
+    /// as a keyed hash is cheap on the host and has no operation in `Graph`. 24
+    /// bits fill an f32 exactly.
+    fn draws(&self, at: i64, steps: i32, held: i32, rows: i32) -> Tensor<f32, [Picks, Slots]> {
         let mut data = List::<f32>::filled(held * rows, 0.0);
         if self.temperature != 0.0 {
             let keyed = Squares64::from_seed(Seed::from_u64(self.seed));
-            for let i of 0..<held * rows {
+            for let i of 0..<steps * rows {
                 let position = at + (i / rows) as i64;
                 let hash = keyed.at((position << 32 | (i % rows) as i64) as u64);
                 data[i] = (hash >> 40) as f32 / (1 << 24) as f32;
@@ -156,7 +161,7 @@ impl<affine G: Graph> Decoding<G> {
             temperature: scalar(g, sampling.temperature),
             top_k: scalar(g, sampling.top_k as f32),
             top_p: scalar(g, sampling.top_p),
-            draws: g.upload(&sampling.draws(at, held, rows)),
+            draws: g.upload(&sampling.draws(at, steps, held, rows)),
             ends: sampling.ends.into_iter().map(|end| scalar(g, end)).collect(),
             sampler: sampling.sampler(),
         };
@@ -283,14 +288,13 @@ pub fn opened<affine G: Graph, Axes>(
     return written_at::<G, i64, Axes, [Slots, One]>(g, mask, &ones, 1, at);
 }
 
-/// `length` `step` steps on, each adding `per_step`.
+/// `length` `step` steps on.
 pub fn advanced<affine G: Graph>(
     g: &mut G,
     length: &G::Tensor<i64, []>,
     step: &G::Tensor<i64, []>,
-    per_step: i64,
 ) -> G::Tensor<i64, []> with _ {
-    return g.binary(Binary::Add, length, &g.binary(Binary::Multiply, step, &scalar(g, per_step)));
+    return g.binary(Binary::Add, length, step);
 }
 
 /// The token each row of `logits` picks for the step `step`: its greatest
@@ -312,20 +316,30 @@ fn picked<affine G: Graph>(
     if decoding.sampler.filters_top_k {
         let ones = full::<G, f32, [Slots, Tokens]>(g, 1.0, extents);
         let wanted: G::Tensor<f32, [Slots]> = g.broadcast_in_dim(&decoding.top_k, rows, []);
-        let least = threshold(g, &scaled, &ones, &wanted);
-        let kept = g.compare(Comparison::Ge, &scaled, &by_row(g, &least, &extents));
-        let held = g.binary(Binary::Multiply, &probabilities, &g.convert::<bool, f32, [Slots, Tokens]>(&kept));
-        let total: G::Tensor<f32, [Slots]> = g.reduce(&held, Binary::Add, 0.0, [1]);
-        probabilities = g.binary(Binary::Divide, &held, &by_row(g, &total, &extents));
+        probabilities = kept_from(g, &probabilities, &scaled, &ones, &wanted);
     }
     if decoding.sampler.filters_top_p {
         let wanted: G::Tensor<f32, [Slots]> = g.broadcast_in_dim(&decoding.top_p, rows, []);
-        let least = threshold(g, &probabilities, &probabilities, &wanted);
-        let kept = g.compare(Comparison::Ge, &probabilities, &by_row(g, &least, &extents));
-        probabilities = g.binary(Binary::Multiply, &probabilities, &g.convert::<bool, f32, [Slots, Tokens]>(&kept));
+        probabilities = kept_from(g, &probabilities, &probabilities, &probabilities, &wanted);
     }
     let draw = strided_gather::<G, f32, [Picks, Slots], [One, Slots]>(g, &decoding.draws, 0, step, 1, 1);
     return categorical(g, &probabilities, &g.reshape(&draw, rows));
+}
+
+/// `probabilities`, summing to 1 over the elements of `x` that reach their row's
+/// [`threshold`].
+fn kept_from<affine G: Graph>(
+    g: &mut G,
+    probabilities: &G::Tensor<f32, [Slots, Tokens]>,
+    x: &G::Tensor<f32, [Slots, Tokens]>,
+    weights: &G::Tensor<f32, [Slots, Tokens]>,
+    wanted: &G::Tensor<f32, [Slots]>,
+) -> G::Tensor<f32, [Slots, Tokens]> with _ {
+    let extents = g.extents_of(x);
+    let kept = g.compare(Comparison::Ge, x, &by_row(g, &threshold(g, x, weights, wanted), &extents));
+    let held = g.binary(Binary::Multiply, probabilities, &g.convert::<bool, f32, [Slots, Tokens]>(&kept));
+    let total: G::Tensor<f32, [Slots]> = g.reduce(&held, Binary::Add, 0.0, [1]);
+    return g.binary(Binary::Divide, &held, &by_row(g, &total, &extents));
 }
 
 /// `x`, one value a row, at each element of a row of `extents`.
@@ -354,16 +368,20 @@ fn sum_where<affine G: Graph>(
 /// Each row's largest value at or below which the `weights` of the elements of
 /// `x` that reach it still sum to `wanted`, found by halving the range the row's
 /// values span, so no sort is needed. Each row's weights must reach `wanted`.
+/// The range ends [`NEGLIGIBLE`] below the row's greatest, as `-inf` would leave
+/// nothing to halve.
 fn threshold<affine G: Graph>(
     g: &mut G,
     x: &G::Tensor<f32, [Slots, Tokens]>,
     weights: &G::Tensor<f32, [Slots, Tokens]>,
     wanted: &G::Tensor<f32, [Slots]>,
 ) -> G::Tensor<f32, [Slots]> with _ {
-    let half = full::<G, f32, [Slots]>(g, 0.5, [g.extents_of(x)[0]]);
+    let rows = [g.extents_of(x)[0]] as List<i32>;
+    let half = full::<G, f32, [Slots]>(g, 0.5, rows);
     let mut high: G::Tensor<f32, [Slots]> = g.reduce(x, Binary::Maximum, f32::NEG_INFINITY, [1]);
     let lowest: G::Tensor<f32, [Slots]> = g.reduce(&g.unary(Unary::Negate, x), Binary::Maximum, f32::NEG_INFINITY, [1]);
-    let mut low = g.unary(Unary::Negate, &lowest);
+    let floor = g.binary(Binary::Subtract, &high, &full::<G, f32, [Slots]>(g, NEGLIGIBLE, rows));
+    let mut low = g.binary(Binary::Maximum, &g.unary(Unary::Negate, &lowest), &floor);
     for let _ of 0..<BISECTIONS {
         let middle = g.binary(Binary::Multiply, &g.binary(Binary::Add, &low, &high), &half);
         let held = sum_where(g, Comparison::Ge, x, &middle, weights);
