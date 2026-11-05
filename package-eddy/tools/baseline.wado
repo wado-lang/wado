@@ -147,6 +147,10 @@ export fn run() with (Stderr, Environment, Preopens, Process, Client) {
             continue;
         }
         assert fix_result(&census, c.fix).blamed[0].pr == c.culprit, "the census must still blame the checked culprit";
+        if ONLY != 0 && c.fix != ONLY && let Some(e) = earlier.get(c.fix) {
+            out.entries.push(e);
+            continue;
+        }
         let mut entry = Entry { fix: c.fix, culprit: c.culprit, defect: judged_defect(&judged, c.fix), runs: [] };
         if let Some(e) = earlier.get(c.fix) && e.culprit == entry.culprit && e.defect == entry.defect {
             for let graded of e.runs {
@@ -157,7 +161,6 @@ export fn run() with (Stderr, Environment, Preopens, Process, Client) {
         }
         out.entries.push(entry);
     }
-    // An entry `only` passes over keeps what `out_path` held for it.
     for let i of 0..<out.entries.len() {
         if out.entries[i].runs.len() >= RUNS || ONLY != 0 && out.entries[i].fix != ONLY {
             continue;
@@ -184,7 +187,7 @@ ${fix_diff}
         let ws: Option<Workspace> = if TOOLS { Some(workspace(&culprit.sha)) } else { null };
         while out.entries[i].runs.len() < RUNS {
             if RUN && let Some(w) = &ws {
-                reset_snapshot(&w.root);
+                reset_snapshot(&w.root, &culprit.sha);
             }
             out.entries[i].runs.push(review_once(&api_key, &review_prompt, &known, &ws));
             // Written after every run, so a run that dies keeps what it paid for.
@@ -203,12 +206,12 @@ ${fix_diff}
 /// build when `run` is.
 fn workspace(sha: &String) -> Workspace with (Process, Preopens, Environment) {
     let root = snapshot(sha);
-    let symbols: Option<SymbolIndex> = if SYMBOLS { Some(load(&index(&root, &WADO)).unwrap()) } else { null };
-    let mut runner: Option<Runner> = null;
+    // Before indexing, so the index sees the tree Run builds.
     if RUN {
         add_build_submodules(&root);
-        runner = Some(home_runner());
     }
+    let symbols: Option<SymbolIndex> = if SYMBOLS { Some(load(&index(&root, &WADO)).unwrap()) } else { null };
+    let runner: Option<Runner> = if RUN { Some(home_runner()) } else { null };
     return Workspace { root, symbols, runner };
 }
 
@@ -248,6 +251,9 @@ fn review_once(
 ${to_string(&reviewed.findings).unwrap()}
 </findings>`;
     match ask_json::<Grade>(api_key, GRADER, GRADE, grade_prompt, 16_000) {
+        Ok(g) && g.hit && !(0 <= g.finding < reviewed.findings.len()) => reviewed.error = Some(
+            `the grader's hit names finding ${g.finding} of ${reviewed.findings.len()}`,
+        ),
         Ok(g) => reviewed.grade = Some(g),
         Err(e) => reviewed.error = Some(e),
     }
@@ -298,6 +304,7 @@ fn earlier_entries(path: &String) -> TreeMap<i32, Entry> with Preopens {
         || earlier.run != RUN
         || earlier.diff_limit != LIMIT
         || TOOLS && earlier.max_turns != MAX_TURNS {
+        assert ONLY == 0, `only= keeps the other entries of ${*path}, so it must hold runs with these settings`;
         return by_fix;
     }
     for let e of earlier.entries {

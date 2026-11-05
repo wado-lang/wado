@@ -220,19 +220,20 @@ pub fn add_build_submodules(root: &String) with (Process, Preopens) {
     }
 }
 
-/// The submodules `root`'s `Cargo.toml` names by path, as path and commit. The
-/// manifest is read as checked out, so a reviewer's edit to it changes nothing.
+/// The submodules `root`'s `Cargo.toml` names by path, as path and the commit
+/// HEAD records. Both are read from HEAD, so a reviewer's edit to the manifest
+/// or a commit checked out in a submodule changes nothing.
 fn build_submodules(root: &String) -> List<[String, String]> with Process {
     let manifest = git(["-C", *root, "show", "HEAD:Cargo.toml"]);
     let mut found: List<[String, String]> = [];
-    // A line is a status flag, the commit, and the path: `-<sha> vendor/x`.
+    // A line is a status flag, a commit, and the path: `-<sha> vendor/x`.
     for let line of git(["-C", *root, "submodule", "status"]).lines() {
-        let fields = line.slice(1, line.len()).split(" ").collect();
-        let path = fields[1].to_string();
+        let path = line.slice(1, line.len()).split(" ").collect()[1].to_string();
         // A path is matched to its end, or `vendor/wasm` would match
         // `vendor/wasmtime/...` too.
         if manifest.contains(`${path}/`) || manifest.contains(`${path}"`) {
-            found.push([path, fields[0].to_string()]);
+            let recorded = git(["-C", *root, "rev-parse", `HEAD:${path}`]).trim().to_string();
+            found.push([path, recorded]);
         }
     }
     return found;
@@ -255,17 +256,19 @@ pub fn home_runner() -> Runner with Environment {
     };
 }
 
-/// The snapshot at `root`, its submodules included, with what a reviewer wrote
-/// into it undone.
-pub fn reset_snapshot(root: &String) with Process {
-    let mut dirs = [*root] as List<String>;
-    for let [path, _] of build_submodules(root) {
-        dirs.push(`${*root}/${path}`);
+/// The snapshot of `sha` at `root`, its submodules included, back as checked
+/// out: a run may have written, committed or checked out anything in it.
+pub fn reset_snapshot(root: &String, sha: &String) with Process {
+    reset_checkout(root, sha);
+    // Read once the tree is back at `sha`, so HEAD records what it checked out.
+    for let [path, recorded] of build_submodules(root) {
+        reset_checkout(&`${*root}/${path}`, &recorded);
     }
-    for let dir of dirs {
-        tree_git(&dir, ["reset", "--hard", "--quiet"]);
-        tree_git(&dir, ["clean", "-fdx", "--quiet"]);
-    }
+}
+
+fn reset_checkout(dir: &String, commit: &String) with Process {
+    tree_git(dir, ["reset", "--hard", "--quiet", *commit]);
+    tree_git(dir, ["clean", "-fdx", "--quiet"]);
 }
 
 pub fn drop_snapshot(root: &String) with (Process, Preopens) {

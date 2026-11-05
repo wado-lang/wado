@@ -16,6 +16,7 @@ use fs from "core:fs";
 use { Preopens } from "core:fs";
 use { Client } from "wasi:http";
 use { to_bytes_pretty, to_string, from_string } from "core:json";
+use { TreeSet } from "core:collections";
 use { ask_json, Baseline, Finding, Run } from "./eval.wado";
 
 #[param(name = "grader")]
@@ -74,6 +75,9 @@ export fn run() with (Stderr, Environment, Preopens, Client) {
             let mut confirmed = ConfirmedRun { fix: e.fix, run: i, findings: r.findings, hit };
             let prompt = `<findings>\n${to_string(&r.findings).unwrap()}\n</findings>\n${runs}`;
             match ask_json::<Confirmations>(&api_key, GRADER, CONFIRM, prompt, 16_000) {
+                Ok(c) && !judges_each_once(&c.findings, r.findings.len()) => confirmed.error = Some(
+                    "the grader did not judge each finding exactly once",
+                ),
                 Ok(c) => confirmed.confirmations = c.findings,
                 Err(error) => confirmed.error = Some(error),
             }
@@ -83,6 +87,16 @@ export fn run() with (Stderr, Environment, Preopens, Client) {
         }
     }
     report(&out);
+}
+
+fn judges_each_once(judged: &List<Confirmation>, count: i32) -> bool {
+    let mut seen = TreeSet::<i32>::new();
+    for let c of judged {
+        if !(0 <= c.finding < count) || !seen.insert(c.finding) {
+            return false;
+        }
+    }
+    return seen.len() == count;
 }
 
 /// Each Run call of `r` with what it output, or empty when it ran nothing.
@@ -97,7 +111,7 @@ fn run_outputs(r: &Run) -> String {
 }
 
 /// The totals over the runs graded. A run whose grading failed is left out and
-/// counted apart, and a finding counts once however often the grader names it.
+/// counted apart.
 fn report(out: &Confirmed) with Stderr {
     let [mut findings, mut reproduced, mut hits, mut hits_reproduced, mut errors] = [0, 0, 0, 0, 0];
     for let r of &out.runs {
@@ -109,10 +123,10 @@ fn report(out: &Confirmed) with Stderr {
         if r.hit >= 0 {
             hits += 1;
         }
-        for let i of 0..<r.findings.len() {
-            if r.confirmations.into_iter().any(|c| c.finding == i && c.reproduced) {
+        for let c of &r.confirmations {
+            if c.reproduced {
                 reproduced += 1;
-                if i == r.hit {
+                if c.finding == r.hit {
                     hits_reproduced += 1;
                 }
             }

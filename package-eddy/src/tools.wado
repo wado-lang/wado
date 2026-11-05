@@ -329,7 +329,7 @@ impl Workspace {
             "export CARGO_TARGET_DIR=\"$PWD/$1\"; cd \"$0\" && shift && exec cargo \"$@\"", self.root, runner.target_dir,
         ] as List<String>;
         args.extend(&input.args);
-        let out = Command::new("timeout").args(args).env("CARGO_HOME", runner.cargo_home).env(
+        let run = Command::new("timeout").args(args).env("CARGO_HOME", runner.cargo_home).env(
             "RUSTUP_HOME",
             runner.rustup_home,
         ).env("CARGO_TERM_COLOR", "never").env(
@@ -337,7 +337,17 @@ impl Workspace {
             // would cost disk, gigabytes per toolchain, for no time saved.
             "CARGO_INCREMENTAL",
             "0",
-        ).output().map_err(|e| `${e}`)?;
+        ).output();
+        let out = match run {
+            Ok(out) => out,
+            // It ran, so it is an answer and spends a run, not an error.
+            Err(e) && e.kind matches { OutputTooLarge } => {
+                return Ok("killed: its stdout passed the capture limit, so nothing it printed is kept");
+            },
+            Err(e) => {
+                return Err(`${e}`);
+            },
+        };
         let ended = match out.status {
             Exited(124) => `timed out after ${input.timeout} seconds`,
             // What `timeout` exits with once it kills a command that outlived
