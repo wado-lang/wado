@@ -24,6 +24,7 @@ use wasmtime_wasi::p3::bindings::Command;
 use wasmtime_wasi::{FsPerms, WasiCtx, WasiView};
 
 use crate::engine::default_config;
+use crate::sync::lock;
 
 /// The usage of the runner `wado <command>`. `own` lists what it adds to the
 /// options every runner takes.
@@ -53,12 +54,18 @@ Arguments after the input file go to the program.
 }
 
 /// An optimization level `wado` accepts, so no other spelling reaches a caller.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
 pub enum OptLevel {
     O0,
+    /// All passes on a small budget, and contract checks on. Iterations: 2,
+    /// inline threshold: 4.
     O1,
+    /// Production: contract checks off. Iterations: 15, inline threshold: 16.
+    #[default]
     O2,
+    /// Aggressive. Iterations: 20, inline threshold: 26.
     O3,
+    /// `O2` plus name-section stripping.
     Os,
 }
 
@@ -86,11 +93,27 @@ impl OptLevel {
         }
     }
 
-    fn cranelift(self) -> wasmtime::OptLevel {
+    /// wasmtime exposes only `None`/`Speed`/`SpeedAndSize`, so `O1`/`O2`/
+    /// `O3` collapse to `Speed` — mirroring the `wasmtime` CLI's own `-O`
+    /// mapping.
+    #[must_use]
+    pub const fn to_wasmtime(self) -> wasmtime::OptLevel {
         match self {
             Self::O0 => wasmtime::OptLevel::None,
             Self::O1 | Self::O2 | Self::O3 => wasmtime::OptLevel::Speed,
             Self::Os => wasmtime::OptLevel::SpeedAndSize,
+        }
+    }
+
+    #[cfg(feature = "toolchain")]
+    #[must_use]
+    pub const fn to_compiler(self) -> wado_compiler::OptLevel {
+        match self {
+            Self::O0 => wado_compiler::OptLevel::O0,
+            Self::O1 => wado_compiler::OptLevel::O1,
+            Self::O2 => wado_compiler::OptLevel::O2,
+            Self::O3 => wado_compiler::OptLevel::O3,
+            Self::Os => wado_compiler::OptLevel::Os,
         }
     }
 }
@@ -195,7 +218,7 @@ impl RunOptions {
     {
         let mut parser = Parser::from_args(argv);
         let mut input = None;
-        let mut opt_level = OptLevel::O2;
+        let mut opt_level = OptLevel::default();
         let mut log_level = LogLevel::Warn;
         let mut profile = None;
         let mut preopens = Vec::new();
@@ -365,7 +388,7 @@ pub async fn run<H>(
 where
     H: WasiView + Send + 'static,
 {
-    let mut config = default_config(options.opt_level.cranelift());
+    let mut config = default_config(options.opt_level.to_wasmtime());
     config.epoch_interruption(options.profile.is_some());
     let engine = Engine::new(&config)?;
     let component = Component::from_file(&engine, component)?;
@@ -455,7 +478,7 @@ impl Sampling {
         let over_budget = Arc::new(AtomicBool::new(false));
         let budget_reached = Arc::clone(&over_budget);
         store.epoch_deadline_callback(move |store| {
-            if let Some(p) = sampled.lock().expect("the profiler lock").as_mut() {
+            if let Some(p) = lock(&sampled).as_mut() {
                 p.sample(&store, interval);
             }
             if budget_reached.load(Ordering::Relaxed) {
@@ -492,18 +515,11 @@ impl Sampling {
     /// # Errors
     ///
     /// Fails when the profile cannot be written.
-    ///
-    /// # Panics
-    ///
-    /// Panics when the sampling callback panicked holding the profiler.
     pub fn finish(self) -> Result<()> {
         self.stop.store(true, Ordering::Relaxed);
-        let profiler = self
-            .profiler
-            .lock()
-            .expect("the profiler lock")
-            .take()
-            .expect("sampling finishes once");
+        let Some(profiler) = lock(&self.profiler).take() else {
+            unreachable!("`finish` takes the sampling by value, so it runs once");
+        };
         write_guest_profile(profiler, self.file)?;
         eprintln!("Profile written to {}", self.path.display());
         eprintln!("View at https://profiler.firefox.com/");

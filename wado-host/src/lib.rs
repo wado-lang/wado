@@ -17,7 +17,6 @@ pub mod runner;
 pub mod sandbox;
 #[cfg(feature = "toolchain")]
 pub mod stub_host;
-#[cfg(feature = "toolchain")]
 pub mod sync;
 #[cfg(feature = "toolchain")]
 pub mod timezone;
