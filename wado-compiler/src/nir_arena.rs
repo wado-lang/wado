@@ -917,6 +917,15 @@ impl Body {
         e
     }
 
+    /// Whether `pat` matches every value of its type.
+    pub fn pattern_is_catch_all(&self, pat: PatId) -> bool {
+        match &self.pats[pat].kind {
+            PatKind::Wildcard | PatKind::Binding { .. } => true,
+            PatKind::Or(alts) => alts.iter().any(|&p| self.pattern_is_catch_all(p)),
+            _ => false,
+        }
+    }
+
     /// The raw integer bit pattern of a constant-int `Operand::Value`. `None` for
     /// an `Operand::Expr` or any non-int-constant operand. Width-agnostic (no type
     /// filter): callers that only need the value (capacities, zero-tests) avoid
@@ -1086,15 +1095,6 @@ impl ExprBody {
 
 /// Arena -> tree lowering.
 impl Body {
-    /// Whether `pat` matches every value of its type.
-    pub fn pattern_is_catch_all(&self, pat: PatId) -> bool {
-        match &self.pats[pat].kind {
-            PatKind::Wildcard | PatKind::Binding { .. } => true,
-            PatKind::Or(alts) => alts.iter().any(|&p| self.pattern_is_catch_all(p)),
-            _ => false,
-        }
-    }
-
     /// Deep-copy the expression subtree rooted at `id` into fresh arena nodes,
     /// returning the new root. The arena is a tree (one parent per node), so a
     /// rewrite that needs two references to one subtree must clone it rather

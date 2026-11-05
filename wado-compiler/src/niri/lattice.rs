@@ -10,9 +10,7 @@ use crate::compiler_item::SeqField;
 use crate::const_eval::{MAX_SEQ_ELEMENTS, Value, eval_binary, eval_cast, eval_unary, prim_of};
 use crate::module_source::ModuleSource;
 use crate::nir::{NirBinaryOp, NirUnaryOp};
-use crate::nir_arena::{
-    ArmData, BlockId, Body, ExprId, ExprKind, Operand, PatId, StmtKind,
-};
+use crate::nir_arena::{ArmData, BlockId, Body, ExprId, ExprKind, Operand, PatId, StmtKind};
 use crate::nir_value_graph::{ValueId, ValueKind, value_kind_to_const};
 use crate::primitive::PrimitiveType;
 use crate::tir::{ResolvedType, TypeId};
