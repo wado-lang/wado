@@ -16,6 +16,8 @@ use {
     attention_case,
     branching,
     branching_inputs,
+    elementwise,
+    elementwise_inputs,
     mixed,
     mixed_inputs,
     windowed,
@@ -67,12 +69,12 @@ test "an arg max records as one node, which a run computes as the backend's kern
 
 test "every recorded elementwise operation computes the CPU's" {
     let cpu = &mut Cpu {};
-    let [x, y] = cases::elementwise_inputs();
-    let want = cases::elementwise(cpu, &x, &y);
+    let [x, y] = elementwise_inputs();
+    let want = elementwise(cpu, &x, &y);
     let mut r = Recorder::new();
-    let rx = r.parameter::<f32, [cases::A]>(x.extents);
-    let ry = r.parameter::<f32, [cases::A]>(y.extents);
-    let recorded = r.finished([cases::elementwise(&mut r, &rx, &ry).id]);
+    let rx = r.parameter::<f32, [A]>(x.extents);
+    let ry = r.parameter::<f32, [A]>(y.extents);
+    let recorded = r.finished([elementwise(&mut r, &rx, &ry).id]);
     assert run(cpu, &recorded, &[
         host_of(&x),
         host_of(&y),
