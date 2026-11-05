@@ -342,7 +342,10 @@ impl ResourceScan<'_> {
                     self.collect(member, out, visited);
                 }
             }
-            ResolvedType::Tuple(elems) => {
+            ResolvedType::Resource {
+                type_args: elems, ..
+            }
+            | ResolvedType::Tuple(elems) => {
                 for elem in elems {
                     self.collect(*elem, out, visited);
                 }

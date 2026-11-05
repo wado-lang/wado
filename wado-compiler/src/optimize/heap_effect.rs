@@ -730,7 +730,6 @@ impl HeapEffects<'_> {
                     }
                 }
             }
-            ResolvedType::GenericInstance { def, .. } if tt.is_resource_def(*def) => {}
             ResolvedType::Tuple(elems) => {
                 out.insert(tt.type_key(ty));
                 for &elem in elems {

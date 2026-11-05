@@ -486,7 +486,6 @@ fn needs_copy_walked(
         // the `Box<T>` shortcut whose semantics intentionally share
         // the underlying cell.
         ResolvedType::Struct { .. } => !is_box,
-        ResolvedType::GenericInstance { def, .. } if type_table.is_resource_def(*def) => false,
         // Empty tuples are unit-shaped; non-empty tuples need element-wise
         // deep copy.
         ResolvedType::Tuple(elems) => !is_box && !elems.is_empty(),

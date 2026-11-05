@@ -904,9 +904,6 @@ fn slot_shape(payload: TypeId, type_table: &TypeTable) -> Option<SlotShape> {
             PrimitiveType::V128 => None,
         },
         _ if type_table.is_resource_object(payload) => Some(SlotShape::Wrapped),
-        ResolvedType::GenericInstance { def, .. } if type_table.is_resource_def(*def) => {
-            Some(SlotShape::Direct(Pad::Int(payload)))
-        }
         ResolvedType::Resource { .. } | ResolvedType::Enum { .. } | ResolvedType::Flags { .. } => {
             Some(SlotShape::Direct(Pad::Int(payload)))
         }
@@ -945,9 +942,6 @@ fn slot_shape(payload: TypeId, type_table: &TypeTable) -> Option<SlotShape> {
 fn is_gc_ref(type_id: TypeId, type_table: &TypeTable) -> bool {
     match type_table.get(type_id) {
         ResolvedType::Resource { .. } => type_table.is_resource_object(type_id),
-        ResolvedType::GenericInstance { def, .. } if type_table.is_resource_def(*def) => {
-            type_table.is_resource_object(type_id)
-        }
         ResolvedType::Struct { .. }
         | ResolvedType::Variant { .. }
         | ResolvedType::GenericInstance { .. }

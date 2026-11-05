@@ -679,9 +679,11 @@ pub enum ResolvedType {
     Enum {
         def: DefId,
     },
-    /// Resource type - opaque handle (i32) to a Component Model resource
+    /// A Component Model resource: an opaque handle (i32), whose type
+    /// arguments (`Stream<u8>`) last to codegen.
     Resource {
         def: DefId,
+        type_args: Vec<TypeId>,
     },
     Variant {
         def: DefId,
@@ -769,10 +771,9 @@ pub enum ResolvedType {
     /// A tuple, `[i32, String]`: the elements, among which a
     /// [`ResolvedType::TypePack`] stands for the run it expands to.
     Tuple(Vec<TypeId>),
-    /// An application of a generic declaration (`Box<i32>`, `Option<T>`,
-    /// `Stream<u8>`). A struct's or a variant's is replaced by its
-    /// monomorphized `Struct` / `Variant`; a resource's is the handle type
-    /// itself and lasts to codegen ([`TypeTable::is_resource_def`]).
+    /// An application of a generic struct or variant (`Box<i32>`,
+    /// `Option<T>`). A struct's or a variant's is replaced by its monomorphized `Struct` /
+    /// `Variant`.
     GenericInstance {
         /// The generic declaration this instantiates.
         def: DefId,

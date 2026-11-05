@@ -332,6 +332,7 @@ impl TypeSystem {
                 match tt.get(ultimate) {
                     ResolvedType::Struct { .. }
                     | ResolvedType::GenericInstance { .. }
+                    | ResolvedType::Resource { .. }
                     | ResolvedType::Tuple(_) => true,
                     // SIMD aliases (`type f32x4 = v128`) and half aliases —
                     // see the `Primitive` arm below.
@@ -486,6 +487,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let struct_name = match &left_type {
                 ResolvedType::Struct { .. }
                 | ResolvedType::GenericInstance { .. }
+                | ResolvedType::Resource { .. }
                 | ResolvedType::Tuple(_)
                 | ResolvedType::Variant { .. }
                 // `fq_base_type_name` spells a raw GC array `Array` and the
@@ -521,6 +523,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     match tt.get(ultimate) {
                         ResolvedType::Struct { .. }
                         | ResolvedType::GenericInstance { .. }
+                        | ResolvedType::Resource { .. }
                         | ResolvedType::Tuple(_)
                         | ResolvedType::Variant { .. } => {
                             Some(tt.fq_base_type_name(ultimate).into_string())
@@ -1390,6 +1393,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         match tt.get(base_type_id) {
             ResolvedType::Struct { .. }
             | ResolvedType::GenericInstance { .. }
+            | ResolvedType::Resource { .. }
             | ResolvedType::Tuple(_)
             | ResolvedType::Newtype { .. }
             | ResolvedType::Flags { .. } => Some(tt.base_type_name(base_type_id)),

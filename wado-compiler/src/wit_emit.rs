@@ -952,14 +952,16 @@ impl<'a> Emitter<'a> {
         match self.types.get(id) {
             ResolvedType::BuiltinArray(inner) => CmShape::List(*inner),
             ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
-                if self.is_resource(*inner) {
+                if self.is_named_resource(*inner) {
                     CmShape::Leaf
                 } else {
                     self.classify_resolved(*inner)
                 }
             }
             ResolvedType::Tuple(elems) => CmShape::Tuple(elems.clone()),
-            ResolvedType::GenericInstance { def, type_args } => {
+            ResolvedType::Resource { .. } if self.is_named_resource(id) => CmShape::Leaf,
+            ResolvedType::GenericInstance { def, type_args }
+            | ResolvedType::Resource { def, type_args } => {
                 match (self.types.compiler_type_item(*def), type_args.as_slice()) {
                     (Some(CompilerItem::Option), [arg]) => CmShape::Option(*arg),
                     (Some(CompilerItem::List), [arg]) => CmShape::List(*arg),
@@ -999,15 +1001,16 @@ impl<'a> Emitter<'a> {
                     .expect("a nominal type names a declaration");
                 Ok(self.named(def))
             }
-            ResolvedType::Resource { def } => {
+            ResolvedType::Resource { def, .. } if self.is_named_resource(id) => {
                 Ok(Type::named(to_cm_name(self.types.decl_name(*def))))
             }
             ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
                 let inner = *inner;
                 if self.types.is_unrestricted_handle(inner) {
                     Ok(Type::F64)
-                } else if let ResolvedType::Resource { def } = self.types.get(inner) {
-                    Ok(Type::borrow(to_cm_name(self.types.decl_name(*def))))
+                } else if self.is_named_resource(inner) {
+                    let def = self.types.nominal_def(inner).expect("a resource names a declaration");
+                    Ok(Type::borrow(to_cm_name(self.types.decl_name(def))))
                 } else {
                     self.map_type(inner)
                 }
@@ -1028,8 +1031,10 @@ impl<'a> Emitter<'a> {
         }
     }
 
-    fn is_resource(&self, id: TypeId) -> bool {
-        matches!(self.types.get(id), ResolvedType::Resource { .. })
+    /// Whether `id` is a resource rendered by name, `borrow<R>` behind a
+    /// reference. A stream's or a future's is a shape of its own.
+    fn is_named_resource(&self, id: TypeId) -> bool {
+        matches!(self.types.get(id), ResolvedType::Resource { type_args, .. } if type_args.is_empty())
     }
 
     /// A `Result` arm: a unit arm is absent (`_`).

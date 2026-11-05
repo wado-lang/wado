@@ -814,9 +814,7 @@ pub(super) fn synthesize_lift_from_flat_params(
                     )
                 }
                 ResolvedType::Enum { .. } | ResolvedType::Flags { .. } => flat(TypeTable::I32),
-                ResolvedType::Resource { .. } | ResolvedType::GenericInstance { .. }
-                    if type_table_cell.borrow().is_resource_type(target_type_id) =>
-                {
+                ResolvedType::Resource { .. } => {
                     let handle = flat(cm_val_type_to_type_id(flat_types[0]));
                     if type_table_cell
                         .borrow()
@@ -827,7 +825,6 @@ pub(super) fn synthesize_lift_from_flat_params(
                     (cast(handle.0, target_type_id), handle.1)
                 }
                 other @ (ResolvedType::Never
-                | ResolvedType::Resource { .. }
                 | ResolvedType::Newtype { .. }
                 | ResolvedType::GenericInstance { .. }
                 | ResolvedType::Tuple(_)

@@ -3207,6 +3207,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 | ResolvedType::Tuple(type_args) => {
                     (tt.fq_type_name(effective_id).head_only(), type_args)
                 }
+                ResolvedType::Resource { type_args, .. } if !type_args.is_empty() => {
+                    (tt.fq_type_name(effective_id).head_only(), type_args)
+                }
                 // Primitives (`i32`, `f64`, `bool`, ...) can implement traits
                 // with associated types just like structs. Without this arm,
                 // a generic call like `parse_range::<i32>(...)` would skip

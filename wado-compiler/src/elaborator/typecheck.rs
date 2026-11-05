@@ -298,8 +298,8 @@ fn check_at(
 
     // Rule 9: `resource Child extends Parent`, where the position admits it.
     if position == Position::Covariant
-        && let ResolvedType::Resource { def: actual_def } = type_table.get(actual_inner)
-        && let ResolvedType::Resource { def: expected_def } = type_table.get(expected_inner)
+        && let ResolvedType::Resource { def: actual_def, .. } = type_table.get(actual_inner)
+        && let ResolvedType::Resource { def: expected_def, .. } = type_table.get(expected_inner)
         && type_table.is_resource_subtype(*actual_def, *expected_def)
     {
         return TypeCheckResult::Compatible;
@@ -362,6 +362,7 @@ fn needs_rebuild(actual: TypeId, expected: TypeId, fixed: bool) -> bool {
 fn declaration_instance(id: TypeId, type_table: &TypeTable) -> Option<(DefId, &[TypeId])> {
     match type_table.get(id) {
         ResolvedType::GenericInstance { def, type_args }
+        | ResolvedType::Resource { def, type_args }
         | ResolvedType::Newtype { def, type_args, .. } => Some((*def, type_args.as_slice())),
         _ => None,
     }

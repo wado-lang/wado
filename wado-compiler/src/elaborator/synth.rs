@@ -705,6 +705,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             ResolvedType::GenericInstance { type_args, .. } | ResolvedType::Tuple(type_args) => {
                 Some(type_args.clone())
             }
+            ResolvedType::Resource { type_args, .. } if !type_args.is_empty() => {
+                Some(type_args.clone())
+            }
             _ => None,
         };
         let ref_kind =
@@ -1029,9 +1032,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
         let tt = self.tysys.type_table.borrow();
         match tt.get(type_id) {
-            ResolvedType::GenericInstance { .. } | ResolvedType::Tuple(_) => {
-                ArgClass::Head(tt.fq_base_type_name(type_id))
-            }
+            ResolvedType::GenericInstance { .. }
+            | ResolvedType::Resource { .. }
+            | ResolvedType::Tuple(_) => ArgClass::Head(tt.fq_base_type_name(type_id)),
             _ => ArgClass::Opaque(OpaqueReason::Inference),
         }
     }

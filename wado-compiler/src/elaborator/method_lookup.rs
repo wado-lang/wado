@@ -718,7 +718,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // For primitives, module_source is None to trigger "search all loaded modules" logic
         let (struct_name, struct_module_source, receiver_type_args, newtype_base) = match &base_type
         {
-            ResolvedType::Struct { .. } | ResolvedType::Resource { .. } => {
+            ResolvedType::Struct { .. } => {
                 let (name, module_source) = self
                     .tysys
                     .type_table
@@ -726,6 +726,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .nominal_head(base_type_id)
                     .expect("a nominal type names a declaration");
                 (name, Some(module_source), None, None)
+            }
+            ResolvedType::Resource { type_args, .. } => {
+                let (name, module_source) = self
+                    .tysys
+                    .type_table
+                    .borrow()
+                    .nominal_head(base_type_id)
+                    .expect("a resource names a declaration");
+                let type_args = (!type_args.is_empty()).then(|| type_args.clone());
+                (name, Some(module_source), type_args, None)
             }
             ResolvedType::Tuple(elems) => {
                 if method_name == "len" {
@@ -914,7 +924,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         // Instance methods declared on a resource. A resource receiver's
-        // `ResolvedType::Resource` / `GenericInstance` always carries the
+        // `ResolvedType::Resource` always carries the
         // resource's defining `module_source` (resolved through imports,
         // re-export chains included), so the method is found in that module
         // directly — no global scan. `None`-module receivers (primitives,
@@ -1281,9 +1291,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ) -> Vec<(DefId, TargetBinding)> {
         let (key, args) = {
             let tt = self.tysys.type_table.borrow();
-            let ResolvedType::GenericInstance { def, type_args } = tt.get(receiver) else {
+            let (ResolvedType::GenericInstance { def, type_args }
+            | ResolvedType::Resource { def, type_args }) = tt.get(receiver)
+            else {
                 return Vec::new();
             };
+            if type_args.is_empty() && tt.is_resource_type(receiver) {
+                return Vec::new();
+            }
             let key = self.impl_target_of(receiver, &DeclName::new(tt.decl_name(*def)));
             (key, type_args.clone())
         };
@@ -3051,6 +3066,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // A generic newtype's own impls bind its own arguments.
                 args
             } else if let ResolvedType::GenericInstance { type_args, .. }
+            | ResolvedType::Resource { type_args, .. }
             | ResolvedType::Tuple(type_args) = table.get(receiver)
             {
                 type_args.clone()
@@ -3315,6 +3331,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let head = match self.tysys.type_table.borrow().get(base_type_id).clone() {
             ResolvedType::Struct { .. }
             | ResolvedType::GenericInstance { .. }
+            | ResolvedType::Resource { .. }
             | ResolvedType::Tuple(_)
             | ResolvedType::Newtype { .. }
             | ResolvedType::Flags { .. } => self
@@ -3409,25 +3426,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .expect("a struct names a declaration");
                 (n, m, None)
             }
-            ResolvedType::GenericInstance { type_args, .. } | ResolvedType::Tuple(type_args) => (
-                self.tysys
+            ResolvedType::GenericInstance { type_args, .. }
+            | ResolvedType::Resource { type_args, .. }
+            | ResolvedType::Tuple(type_args) => {
+                let (n, m) = self
+                    .tysys
                     .type_table
                     .borrow()
                     .nominal_head(output_base_type_id)
-                    .expect("a generic instance names a declaration")
-                    .0,
-                self.tysys
-                    .type_table
-                    .borrow()
-                    .nominal_head(output_base_type_id)
-                    .expect("a generic instance names a declaration")
-                    .1,
-                if type_args.is_empty() {
-                    None
-                } else {
-                    Some(type_args)
-                },
-            ),
+                    .expect("an instance names a declaration");
+                (n, m, (!type_args.is_empty()).then_some(type_args))
+            }
             _ => (
                 self.tysys
                     .type_table

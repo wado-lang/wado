@@ -1054,9 +1054,7 @@ impl<'a> DceWalker<'a> {
                 ));
                 self.analysis.callees.insert(method_id);
             }
-            ResolvedType::GenericInstance { def, type_args }
-                if self.type_table.is_resource_def(def) =>
-            {
+            ResolvedType::Resource { def, type_args } if !type_args.is_empty() => {
                 let name = self.type_table.decl_name(def).to_string();
                 // Generic resource method, e.g. `Future<T>^Inspect::inspect`.
                 let resource_args: Vec<FqTypeName> = type_args
@@ -1460,7 +1458,7 @@ impl DceAnalysis {
                 ResolvedType::Variant { def } | ResolvedType::Enum { def } => {
                     self.nominal_defs.insert(*def);
                 }
-                ResolvedType::GenericInstance { def, .. } if !type_table.is_resource_def(*def) => {
+                ResolvedType::GenericInstance { def, .. } => {
                     self.nominal_defs.insert(*def);
                 }
                 _ => {}
@@ -1728,7 +1726,9 @@ fn collect_type_dependencies(
             }
             collect_type_transitive(*return_type, type_table, reachable);
         }
-        ResolvedType::GenericInstance { type_args, .. } | ResolvedType::Tuple(type_args) => {
+        ResolvedType::GenericInstance { type_args, .. }
+        | ResolvedType::Resource { type_args, .. }
+        | ResolvedType::Tuple(type_args) => {
             for arg in type_args {
                 collect_type_transitive(*arg, type_table, reachable);
             }
@@ -1759,7 +1759,6 @@ fn collect_type_dependencies(
         | ResolvedType::Struct { .. }
         | ResolvedType::Enum { .. }
         | ResolvedType::Variant { .. }
-        | ResolvedType::Resource { .. }
         | ResolvedType::TypeParam { .. }
         | ResolvedType::AssocParam { .. }
         | ResolvedType::TypePack { .. }

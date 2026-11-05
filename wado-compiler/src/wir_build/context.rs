@@ -864,9 +864,7 @@ impl<'a> WirContext<'a> {
             // A `Never`-typed expression diverges, so it leaves no value behind —
             // the same absence `Unit` denotes.
             ResolvedType::Never => WirType::Unit,
-            ResolvedType::Resource { .. } | ResolvedType::GenericInstance { .. }
-                if type_table.is_resource_type(type_id) =>
-            {
+            ResolvedType::Resource { .. } => {
                 if type_table.is_unrestricted_handle(type_id) {
                     self.lookup_wir_type(type_table, TypeTable::U64)?
                 } else {
@@ -1006,7 +1004,6 @@ impl<'a> WirContext<'a> {
             }
             // Flags are bitmasks stored as i32
             ResolvedType::Flags { .. } => WirType::I32,
-            ResolvedType::Resource { .. } => unreachable!("a resource is handled above"),
             // These should never reach codegen — must be resolved by monomorphization
             ResolvedType::TypeParam { name, index } => {
                 panic!("unsubstituted TypeParam `{name}` (index {index}) reached codegen")

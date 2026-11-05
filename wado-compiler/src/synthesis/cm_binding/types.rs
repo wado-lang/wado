@@ -479,13 +479,12 @@ fn check_cm_boundary_representable_inner(
                     type_table.name(type_id)
                 ))
             }
-            // Scalars, plain discriminants, bitflags, and plain resource
-            // handles lower to an i32 handle identically in every world.
+            // Scalars, plain discriminants and bitflags lower identically in
+            // every world.
             ResolvedType::Primitive(_)
             | ResolvedType::Unit
             | ResolvedType::Enum { .. }
-            | ResolvedType::Flags { .. }
-            | ResolvedType::Resource { .. } => Ok(()),
+            | ResolvedType::Flags { .. } => Ok(()),
             ResolvedType::Tuple(elems) if elems.is_empty() => Err(
                 "the empty tuple `[]` has no Component Model representation — a `tuple` \
                  carries at least one type, and `()` is the type that carries none"
@@ -497,12 +496,11 @@ fn check_cm_boundary_representable_inner(
                 }
                 Ok(())
             }
-            // The handle is an i32, but its payload is lifted and lowered by
-            // value, so it must be classifiable too — `()` is representable
-            // yet has no payload type.
-            ResolvedType::GenericInstance { def, type_args }
-                if type_table.is_resource_def(*def) =>
-            {
+            // A resource lowers to an i32 handle in every world, but a
+            // stream's or a future's payload is lifted and lowered by value, so
+            // it must be classifiable too — `()` is representable yet has no
+            // payload type.
+            ResolvedType::Resource { def, type_args } => {
                 let item = type_table.compiler_type_item(*def);
                 let args = type_args.clone();
                 for &a in &args {

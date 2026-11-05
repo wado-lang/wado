@@ -140,6 +140,16 @@ pub(super) fn unify(
             },
         )
         | (
+            ResolvedType::Resource {
+                def: expected_def,
+                type_args: expected_args,
+            },
+            ResolvedType::Resource {
+                def: actual_def,
+                type_args: actual_args,
+            },
+        )
+        | (
             ResolvedType::Newtype {
                 def: expected_def,
                 type_args: expected_args,

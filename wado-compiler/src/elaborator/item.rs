@@ -1653,9 +1653,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             {
                 fields.into_iter().map(|(_, t)| t).collect()
             }
-            ResolvedType::GenericInstance { type_args, .. } | ResolvedType::Tuple(type_args) => {
-                type_args
-            }
+            ResolvedType::GenericInstance { type_args, .. }
+            | ResolvedType::Resource { type_args, .. }
+            | ResolvedType::Tuple(type_args) => type_args,
             _ => Vec::new(),
         };
         within

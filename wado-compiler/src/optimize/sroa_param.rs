@@ -494,7 +494,6 @@ fn by_value_structs(
         return;
     }
     match type_table.get(ty) {
-        ResolvedType::GenericInstance { def, .. } if type_table.is_resource_def(*def) => {}
         ResolvedType::GenericInstance { type_args, .. } | ResolvedType::Tuple(type_args) => {
             if out.insert(type_table.type_key(ty)) {
                 for &arg in type_args {

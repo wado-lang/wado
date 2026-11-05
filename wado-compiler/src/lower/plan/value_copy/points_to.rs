@@ -293,7 +293,6 @@ impl<'a> HoldsHandle<'a> {
             | ResolvedType::Enum { .. }
             | ResolvedType::Flags { .. }
             | ResolvedType::Resource { .. } => false,
-            ResolvedType::GenericInstance { def, .. } if tt.is_resource_def(*def) => false,
             ResolvedType::Newtype { base_type, .. } => self.walk(*base_type, env, under_way, next),
             ResolvedType::BuiltinArray(element) => self.walk(*element, env, under_way, next),
             ResolvedType::Struct { def, type_args } => {

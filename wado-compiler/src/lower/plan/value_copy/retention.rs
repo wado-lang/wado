@@ -1067,9 +1067,6 @@ impl RefCarrying<'_> {
                     None => true,
                 }
             }
-            ResolvedType::GenericInstance { def, .. } if self.type_table.is_resource_def(*def) => {
-                false
-            }
             ResolvedType::Tuple(elems) => {
                 let elems = elems.clone();
                 self.any(elems, walk)

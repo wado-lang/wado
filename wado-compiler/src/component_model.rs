@@ -317,7 +317,7 @@ pub fn cm_payload_type_from_type_id(
         // Unlike the records above, a WASI-owned resource is included: its
         // component type is aliased from the defining interface, so `own<…>`
         // has one to point at.
-        ResolvedType::Resource { def } => Some(CmPayloadType::Resource(CmDecl::new(
+        ResolvedType::Resource { def, type_args } if type_args.is_empty() => Some(CmPayloadType::Resource(CmDecl::new(
             type_table.defs(),
             *def,
         ))),

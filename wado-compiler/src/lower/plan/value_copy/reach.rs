@@ -265,9 +265,6 @@ impl<'a> StorageReach<'a> {
                     None => Members::Unknown,
                 }
             }
-            ResolvedType::GenericInstance { def, .. } if tt.is_resource_def(*def) => {
-                Members::Held(Vec::new())
-            }
             ResolvedType::Tuple(elems) => Members::Held(elems.clone()),
             ResolvedType::GenericInstance { def, type_args } => {
                 match tt.variant_template_cases(*def) {

@@ -2764,13 +2764,14 @@ impl Monomorphizer {
                 ResolvedType::Newtype { base_type, .. } => *base_type,
                 _ => base,
             };
-            matches!(
-                type_table.get(effective),
+            match type_table.get(effective) {
                 ResolvedType::GenericInstance { .. }
-                    | ResolvedType::Tuple(_)
-                    | ResolvedType::BuiltinArray(_)
-                    | ResolvedType::Struct { .. }
-            )
+                | ResolvedType::Tuple(_)
+                | ResolvedType::BuiltinArray(_)
+                | ResolvedType::Struct { .. } => true,
+                ResolvedType::Resource { type_args, .. } => !type_args.is_empty(),
+                _ => false,
+            }
         };
         // Newtype-override guard: when the method already names a newtype with
         // its OWN impl of this trait (e.g. `ByteList^Serialize::serialize`) and
@@ -2989,12 +2990,9 @@ impl Monomorphizer {
             let resolved = type_table.representation_head(inner);
             matches!(
                 type_table.get(resolved),
-                ResolvedType::GenericInstance {
-                    def,
-                    type_args: args,
-                } if !args.is_empty() && !type_table.is_resource_def(*def)
-            ) || matches!(type_table.get(resolved), ResolvedType::Tuple(elems) if !elems.is_empty())
-                || matches!(type_table.get(resolved), ResolvedType::BuiltinArray(_))
+                ResolvedType::GenericInstance { type_args: elems, .. }
+                    | ResolvedType::Tuple(elems) if !elems.is_empty()
+            ) || matches!(type_table.get(resolved), ResolvedType::BuiltinArray(_))
         };
         // A generic-instance receiver normally reaches a generic impl on its
         // own type, which the receiver scan instantiates. Reaching a blanket
