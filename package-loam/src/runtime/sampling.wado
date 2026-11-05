@@ -1,0 +1,366 @@
+//! What a decoding program does past the model: the token each step picks from
+//! its logits, and what it hands the next step. All of it is a graph, so every
+//! backend picks the same token from the same logits.
+
+use { Seed, Seedable, Squares64 } from "core:prng";
+use { Binary, Comparison, Graph, One, Unary, capacity_of, full, softmax, strided_gather, written_at } from "./hlo.wado";
+use { Cpu, Element, Holds, Tensor } from "./tensor.wado";
+use { Any, Recorder, Untyped } from "./recorded.wado";
+
+/// One row of a batch.
+pub struct Slots {
+}
+
+/// One token of the vocabulary.
+struct Tokens {
+}
+
+/// One position of the tokens a decoding program returns.
+pub struct Picks {
+}
+
+/// The halvings that find a threshold among a row's values: past what an f32
+/// tells apart, between any two values a logit takes.
+global BISECTIONS: i32 = 32;
+
+/// How a decoding program picks each token, and which tokens end a row.
+pub struct Sampling {
+    /// How far each logit is divided before the draw. At 0 no draw is made,
+    /// and each step picks the greatest logit.
+    pub temperature: f32 = 0.0,
+    /// How many of the greatest logits the draw keeps, every one that ties
+    /// with the last of them, or all of them at 0.
+    pub top_k: i32 = 0,
+    /// The least share of the probability the draw keeps, from the likeliest
+    /// token down, or all of it at 1.
+    pub top_p: f32 = 1.0,
+    pub seed: u64 = 0,
+    /// The tokens after which a row keeps returning its first one.
+    pub ends: List<i64> = [],
+}
+
+impl Sampling {
+    /// What a program's graph differs by between samplers: the rest are
+    /// values each call gives it.
+    pub fn class(&self) -> List<i32> {
+        return [
+            if self.temperature == 0.0 { 1 } else { 0 },
+            if self.top_k > 0 { 1 } else { 0 },
+            if self.top_p < 1.0 { 1 } else { 0 },
+            self.ends.len(),
+        ];
+    }
+
+    /// The draws of `count` positions from `at`, `rows` of them each, in `[0,
+    /// 1)`. A position's draw is the keyed hash of it and the row, so it does
+    /// not depend on how a call splits its steps, and no device's random source
+    /// is read. Every step's are written up front, as a keyed hash is cheap on
+    /// the host and has no operation in `Graph`. 24 bits fill an f32 exactly.
+    fn draws(&self, at: i64, held: i32, rows: i32) -> Tensor<f32, [Picks, Slots]> {
+        let mut data = List::<f32>::filled(held * rows, 0.0);
+        if self.temperature != 0.0 {
+            let keyed = Squares64::from_seed(Seed::from_u64(self.seed));
+            for let i of 0..<held * rows {
+                let position = at + (i / rows) as i64;
+                let hash = keyed.at((position << 32 | (i % rows) as i64) as u64);
+                data[i] = (hash >> 40) as f32 / (1 << 24) as f32;
+            }
+        }
+        return Tensor {
+            data,
+            extents: [held, rows],
+        };
+    }
+
+    /// The tokens `logits` picks for the position `at`, on the host, of `[..,
+    /// tokens]`: what a pass over a prompt leaves to the program after it.
+    pub fn first_tokens<Axes>(&self, logits: &Tensor<f32, Axes>, at: i64) -> List<i64> {
+        let mut cpu = Cpu {};
+        let extents = logits.extents;
+        let rows = extents[0];
+        let decoding = Decoding::new(&mut cpu, self, 1, at, rows);
+        let flat: Tensor<f32, [Slots, Tokens]> = cpu.reshape(logits, [rows, extents[extents.len() - 1]]);
+        let picked = picked(&mut cpu, &flat, &decoding, &full::<Cpu, i64, []>(&mut cpu, 0, []));
+        return picked.data;
+    }
+}
+
+/// The values a decoding program takes beside the model's: how many steps it
+/// runs, the position its first token picks, each row's tokens so far and
+/// whether an end token has ended it, then the sampler. The sampler's bools say
+/// which of those a step reads.
+pub struct Decoding<affine G: Holds> {
+    pub steps: G::Tensor<i64, []>,
+    pub position: G::Tensor<i64, []>,
+    pub tokens: G::Tensor<i64, [Slots, Picks]>,
+    pub finished: G::Tensor<bool, [Slots]>,
+    temperature: G::Tensor<f32, []>,
+    top_k: G::Tensor<f32, []>,
+    top_p: G::Tensor<f32, []>,
+    draws: G::Tensor<f32, [Picks, Slots]>,
+    ends: List<G::Tensor<i64, []>>,
+    greedy: bool,
+    filters_top_k: bool,
+    filters_top_p: bool,
+}
+
+/// `value` as a scalar `g` holds.
+fn scalar<affine G: Holds, E: Element>(g: &mut G, value: E) -> G::Tensor<E, []> with _ {
+    return g.upload(&Tensor::<E, []> {
+        data: [value],
+        extents: [],
+    });
+}
+
+impl<affine G: Graph> Decoding<G> {
+    /// `steps` steps of `rows` rows from the position `at`, sampled as
+    /// `sampling` says. The tokens hold a capacity, so a program serves every
+    /// number of steps below it.
+    pub fn new(g: &mut G, sampling: &Sampling, steps: i32, at: i64, rows: i32) -> Decoding<G> with _ {
+        let held = capacity_of(steps);
+        let class = sampling.class();
+        return Decoding {
+            steps: scalar(g, steps as i64),
+            position: scalar(g, at),
+            tokens: g.upload(&Tensor::<i64, [Slots, Picks]> {
+                data: List::<i64>::filled(rows * held, 0),
+                extents: [rows, held],
+            }),
+            finished: g.upload(&Tensor::<bool, [Slots]> {
+                data: List::<bool>::filled(rows, false),
+                extents: [rows],
+            }),
+            temperature: scalar(g, sampling.temperature),
+            top_k: scalar(g, sampling.top_k as f32),
+            top_p: scalar(g, sampling.top_p),
+            draws: g.upload(&sampling.draws(at, held, rows)),
+            ends: sampling.ends.into_iter().map(|end| scalar(g, end)).collect(),
+            greedy: class[0] == 1,
+            filters_top_k: class[1] == 1,
+            filters_top_p: class[2] == 1,
+        };
+    }
+
+    /// The values as a program takes them, in the order `recorded` makes its
+    /// parameters.
+    pub fn erased(&self, g: &G) -> List<Any<G>> {
+        let mut all: List<Any<G>> = [
+            Any::I64(g.relabeled::<i64, [], Untyped>(&self.steps)),
+            Any::I64(g.relabeled::<i64, [], Untyped>(&self.position)),
+            Any::I64(g.relabeled::<i64, [Slots, Picks], Untyped>(&self.tokens)),
+            Any::Bool(g.relabeled::<bool, [Slots], Untyped>(&self.finished)),
+            Any::F32(g.relabeled::<f32, [], Untyped>(&self.temperature)),
+            Any::F32(g.relabeled::<f32, [], Untyped>(&self.top_k)),
+            Any::F32(g.relabeled::<f32, [], Untyped>(&self.top_p)),
+            Any::F32(g.relabeled::<f32, [Picks, Slots], Untyped>(&self.draws)),
+        ];
+        for let end of &self.ends {
+            all.push(Any::I64(g.relabeled::<i64, [], Untyped>(end)));
+        }
+        return all;
+    }
+}
+
+impl Decoding<Recorder> {
+    /// The parameters of a program taking what `erased` gives, the next ones
+    /// `recorder` makes, of `extents` from `first` on, for a sampler of `class`.
+    pub fn recorded(
+        recorder: &mut Recorder,
+        extents: &List<List<i32>>,
+        first: i32,
+        class: &List<i32>,
+    ) -> Decoding<Recorder> {
+        let mut at = first;
+        let mut next = || {
+            at += 1;
+            return extents[at - 1];
+        };
+        return Decoding {
+            steps: recorder.parameter::<i64, []>(next()),
+            position: recorder.parameter::<i64, []>(next()),
+            tokens: recorder.parameter::<i64, [Slots, Picks]>(next()),
+            finished: recorder.parameter::<bool, [Slots]>(next()),
+            temperature: recorder.parameter::<f32, []>(next()),
+            top_k: recorder.parameter::<f32, []>(next()),
+            top_p: recorder.parameter::<f32, []>(next()),
+            draws: recorder.parameter::<f32, [Picks, Slots]>(next()),
+            ends: (0..<class[3]).map(|_| recorder.parameter::<i64, []>(next())).collect(),
+            greedy: class[0] == 1,
+            filters_top_k: class[1] == 1,
+            filters_top_p: class[2] == 1,
+        };
+    }
+}
+
+/// What a step hands the next: the token it picked, by row, and the tokens and
+/// the ended rows with that one in them.
+pub struct Stepped<affine G: Holds> {
+    pub token: G::Tensor<i64, [Slots, One]>,
+    pub tokens: G::Tensor<i64, [Slots, Picks]>,
+    pub finished: G::Tensor<bool, [Slots]>,
+}
+
+/// The step `step` of `decoding`, over a pass's `logits`, of `[rows, .., tokens]`
+/// with one element along the rest, and the `tokens` and `finished` it carries.
+pub fn stepped<affine G: Graph, Axes>(
+    g: &mut G,
+    logits: &G::Tensor<f32, Axes>,
+    decoding: &Decoding<G>,
+    tokens: &G::Tensor<i64, [Slots, Picks]>,
+    finished: &G::Tensor<bool, [Slots]>,
+    step: &G::Tensor<i64, []>,
+) -> Stepped<G> with _ {
+    let extents = g.extents_of(logits);
+    let rows = extents[0];
+    let flat: G::Tensor<f32, [Slots, Tokens]> = g.reshape(logits, [rows, extents[extents.len() - 1]]);
+    let mut token = picked(g, &flat, decoding, step);
+    let mut ended = *finished;
+    if !decoding.ends.is_empty() {
+        let first: G::Tensor<i64, [Slots]> = g.broadcast_in_dim(&decoding.ends[0], [rows], []);
+        token = g.select(finished, &first, &token);
+    }
+    for let end of &decoding.ends {
+        let matched = g.compare(Comparison::Eq, &token, &g.broadcast_in_dim(end, [rows], []));
+        ended = g.select(&matched, &full::<G, bool, [Slots]>(g, true, [rows]), &ended);
+    }
+    let column: G::Tensor<i64, [Slots, One]> = g.reshape(&token, [rows, 1]);
+    return Stepped {
+        token: column,
+        tokens: written_at::<G, i64, [Slots, Picks], [Slots, One]>(g, tokens, &column, 1, step),
+        finished: ended,
+    };
+}
+
+/// `mask` with its position `at` open, for the step that reads the token there.
+pub fn opened<affine G: Graph, Axes>(
+    g: &mut G,
+    mask: &G::Tensor<i64, Axes>,
+    at: &G::Tensor<i64, []>,
+) -> G::Tensor<i64, Axes> with _ {
+    let ones = full::<G, i64, [Slots, One]>(g, 1, [g.extents_of(mask)[0], 1]);
+    return written_at::<G, i64, Axes, [Slots, One]>(g, mask, &ones, 1, at);
+}
+
+/// `length` `step` steps on, each adding `per_step`.
+pub fn advanced<affine G: Graph>(
+    g: &mut G,
+    length: &G::Tensor<i64, []>,
+    step: &G::Tensor<i64, []>,
+    per_step: i64,
+) -> G::Tensor<i64, []> with _ {
+    return g.binary(Binary::Add, length, &g.binary(Binary::Multiply, step, &full::<G, i64, []>(g, per_step, [])));
+}
+
+/// The token each row of `logits` picks for the step `step`: its greatest
+/// logit, or the step's draw among those `decoding` keeps.
+fn picked<affine G: Graph>(
+    g: &mut G,
+    logits: &G::Tensor<f32, [Slots, Tokens]>,
+    decoding: &Decoding<G>,
+    step: &G::Tensor<i64, []>,
+) -> G::Tensor<i64, [Slots]> with _ {
+    let extents = g.extents_of(logits);
+    let rows = [extents[0]] as List<i32>;
+    if decoding.greedy {
+        let first: G::Tensor<i64, [Slots, Tokens]> = g.arg_max(logits, 1);
+        return g.reshape(&first, rows);
+    }
+    let mut scaled = g.binary(Binary::Divide, logits, &g.broadcast_in_dim(&decoding.temperature, extents, []));
+    if decoding.filters_top_k {
+        let ones = full::<G, f32, [Slots, Tokens]>(g, 1.0, extents);
+        let wanted: G::Tensor<f32, [Slots]> = g.broadcast_in_dim(&decoding.top_k, rows, []);
+        let least = threshold(g, &scaled, &ones, &wanted);
+        let kept = g.compare(Comparison::Ge, &scaled, &by_row(g, &least, &extents));
+        scaled = g.select(&kept, &scaled, &full::<G, f32, [Slots, Tokens]>(g, f32::NEG_INFINITY, extents));
+    }
+    let mut probabilities = softmax::<G, [Slots, Tokens]>(g, &scaled, 1);
+    if decoding.filters_top_p {
+        let wanted: G::Tensor<f32, [Slots]> = g.broadcast_in_dim(&decoding.top_p, rows, []);
+        let least = threshold(g, &probabilities, &probabilities, &wanted);
+        let kept = g.compare(Comparison::Ge, &probabilities, &by_row(g, &least, &extents));
+        probabilities = g.binary(Binary::Multiply, &probabilities, &g.convert::<bool, f32, [Slots, Tokens]>(&kept));
+    }
+    let draw = strided_gather::<G, f32, [Picks, Slots], [One, Slots]>(g, &decoding.draws, 0, step, 1, 1);
+    return categorical(g, &probabilities, &g.reshape(&draw, rows));
+}
+
+/// `x`, one value a row, at each element of a row of `extents`.
+fn by_row<affine G: Graph>(
+    g: &mut G,
+    x: &G::Tensor<f32, [Slots]>,
+    extents: &List<i32>,
+) -> G::Tensor<f32, [Slots, Tokens]> with _ {
+    return g.broadcast_in_dim(x, *extents, [0]);
+}
+
+/// Each row's largest value at or below which the `weights` of the elements of
+/// `x` that reach it still sum to `wanted`, found by halving the range the row's
+/// values span, so no sort is needed. Each row's weights must reach `wanted`.
+fn threshold<affine G: Graph>(
+    g: &mut G,
+    x: &G::Tensor<f32, [Slots, Tokens]>,
+    weights: &G::Tensor<f32, [Slots, Tokens]>,
+    wanted: &G::Tensor<f32, [Slots]>,
+) -> G::Tensor<f32, [Slots]> with _ {
+    let extents = g.extents_of(x);
+    let half = full::<G, f32, [Slots]>(g, 0.5, [extents[0]]);
+    let mut high: G::Tensor<f32, [Slots]> = g.reduce(x, Binary::Maximum, f32::NEG_INFINITY, [1]);
+    let lowest: G::Tensor<f32, [Slots]> = g.reduce(&g.unary(Unary::Negate, x), Binary::Maximum, f32::NEG_INFINITY, [1]);
+    let mut low = g.unary(Unary::Negate, &lowest);
+    for let _ of 0..<BISECTIONS {
+        let middle = g.binary(Binary::Multiply, &g.binary(Binary::Add, &low, &high), &half);
+        let reaches = g.convert::<bool, f32, [Slots, Tokens]>(&g.compare(Comparison::Ge, x, &by_row(
+            g,
+            &middle,
+            &extents,
+        )));
+        let held: G::Tensor<f32, [Slots]> = g.reduce(&g.binary(Binary::Multiply, &reaches, weights), Binary::Add, 0.0, [
+            1,
+        ]);
+        let enough = g.compare(Comparison::Ge, &held, wanted);
+        low = g.select(&enough, &middle, &low);
+        high = g.select(&enough, &high, &middle);
+    }
+    return low;
+}
+
+/// The index each row of `weights` lands `draw`, in `[0, 1)`, of the way along
+/// their running sum: the last one whose sum before it is within that share,
+/// found a bit at a time from the top, so no running sum is computed.
+fn categorical<affine G: Graph>(
+    g: &mut G,
+    weights: &G::Tensor<f32, [Slots, Tokens]>,
+    draw: &G::Tensor<f32, [Slots]>,
+) -> G::Tensor<i64, [Slots]> with _ {
+    let extents = g.extents_of(weights);
+    let rows = [extents[0]] as List<i32>;
+    let vocabulary = extents[1];
+    let positions: G::Tensor<f32, [Slots, Tokens]> = g.iota(extents, 1);
+    let total: G::Tensor<f32, [Slots]> = g.reduce(weights, Binary::Add, 0.0, [1]);
+    let target = g.binary(Binary::Multiply, draw, &total);
+    let mut at = full::<G, f32, [Slots]>(g, 0.0, rows);
+    let mut bit = 1;
+    while bit * 2 < vocabulary {
+        bit *= 2;
+    }
+    while bit > 0 {
+        let further = g.binary(Binary::Add, &at, &full::<G, f32, [Slots]>(g, bit as f32, rows));
+        let before = g.convert::<bool, f32, [Slots, Tokens]>(&g.compare(Comparison::Lt, &positions, &by_row(
+            g,
+            &further,
+            &extents,
+        )));
+        let sum: G::Tensor<f32, [Slots]> = g.reduce(
+            &g.binary(Binary::Multiply, &before, weights),
+            Binary::Add,
+            0.0,
+            [1],
+        );
+        let fits = g.compare(Comparison::Le, &sum, &target);
+        at = g.select(&fits, &further, &at);
+        bit /= 2;
+    }
+    // A draw rounding up to the whole sum lands past the end.
+    let last = full::<G, f32, [Slots]>(g, (vocabulary - 1) as f32, rows);
+    return g.convert::<f32, i64, [Slots]>(&g.binary(Binary::Minimum, &at, &last));
+}

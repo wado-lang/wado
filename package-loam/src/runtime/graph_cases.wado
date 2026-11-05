@@ -2,6 +2,7 @@
 //! device's conformance program compute on `Cpu` to compare against.
 
 use { Binary, Comparison, Convolution, DotDims, GatherDims, Graph, ScatterDims, Unary, WindowReduce } from "./hlo.wado";
+use { Any, Untyped, f32_of, i64_of } from "./recorded.wado";
 use { Attention, Tensor, element_count } from "./tensor.wado";
 use { noise } from "../../example/webgpu/compare.wado";
 
@@ -294,4 +295,51 @@ pub fn attention_case() -> AttentionCase {
 
 fn noisy<Axes>(extents: List<i32>, seed: u32) -> Tensor<f32, Axes> {
     return Tensor { data: noise(element_count(&extents), seed, 1.0), extents };
+}
+
+/// A loop of `count` runs, one value doubling by what it reads from outside the
+/// loop, the other adding up the runs' numbers, over `x` and `ids` of one shape.
+pub fn repeating<affine G: Graph>(
+    g: &mut G,
+    count: &G::Tensor<i64, []>,
+    x: &G::Tensor<f32, [A]>,
+    ids: &G::Tensor<i64, [A]>,
+) -> [G::Tensor<f32, [A]>, G::Tensor<i64, [A]>] with _ {
+    let scale = g.binary(Binary::Add, x, x);
+    let start: List<Any<G>> = [
+        Any::F32(g.relabeled::<f32, [A], Untyped>(x)),
+        Any::I64(g.relabeled::<i64, [A], Untyped>(ids)),
+    ];
+    let last = g.repeated(count, &start, |step, state| {
+        let held = f32_of::<G, [A]>(g, &state[0]);
+        let tally = i64_of::<G, [A]>(g, &state[1]);
+        let doubled = g.binary(Binary::Multiply, &held, &scale);
+        let added = g.binary(Binary::Add, &tally, &g.broadcast_in_dim(step, g.extents_of(&held), []));
+        return [
+            Any::F32(g.relabeled::<f32, [A], Untyped>(&doubled)),
+            Any::I64(g.relabeled::<i64, [A], Untyped>(&added)),
+        ];
+    });
+    return [
+        f32_of::<G, [A]>(g, &last[0]),
+        i64_of::<G, [A]>(g, &last[1]),
+    ];
+}
+
+/// `repeating`'s arguments, for `count` runs.
+pub fn repeating_inputs(count: i64) -> [Tensor<i64, []>, Tensor<f32, [A]>, Tensor<i64, [A]>] {
+    return [
+        Tensor {
+            data: [count],
+            extents: [],
+        },
+        Tensor {
+            data: [1.0, -3.0],
+            extents: [2],
+        },
+        Tensor {
+            data: [5, 7],
+            extents: [2],
+        },
+    ];
 }

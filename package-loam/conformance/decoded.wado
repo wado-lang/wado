@@ -1,0 +1,111 @@
+//! A small decoder driven through `decode` and, for what that must equal, a pass
+//! at a time through `compute`, on any backend.
+
+use { Graph, Sampling, Tensor } from "lib:loam";
+use { AttentionMask0, Cache, InputIds0, Model, Params, S, T, compute, decode } from "./decoder.onnxtext"
+    with {
+        type: "onnxtext",
+        generator: {
+            module: "lib:loam",
+            options: {
+                last: { logits: 1 },
+                decode: { ids: "input_ids", mask: "attention_mask", logits: "logits" },
+            },
+        },
+    };
+
+fn ids(data: List<i64>) -> Tensor<i64, [InputIds0, S]> {
+    return Tensor {
+        data,
+        extents: [1, data.len()],
+    };
+}
+
+fn mask(length: i32) -> Tensor<i64, [AttentionMask0, T]> {
+    return Tensor {
+        data: List::<i64>::filled(length, 1),
+        extents: [1, length],
+    };
+}
+
+/// `count` tokens after `prompt`, one pass and one host pick each.
+pub fn stepped_tokens<affine Bk: Graph>(
+    g: &mut Bk,
+    prompt: List<i64>,
+    count: i32,
+    sampling: &Sampling,
+) -> List<i64> with _ {
+    let mut model = Model::new(Params::embedded(g));
+    let mut seen = prompt.len();
+    let first = compute(g, &ids(prompt), &mask(seen), &Cache::empty(g), count - 1, &mut model);
+    let mut tokens = sampling.first_tokens(&first.logits, seen as i64);
+    let mut cache = first.cache;
+    for let _ of 1..<count {
+        seen += 1;
+        let next = compute(g, &ids([tokens[tokens.len() - 1]]), &mask(seen), &cache, 0, &mut model);
+        tokens.extend(&sampling.first_tokens(&next.logits, seen as i64));
+        cache = next.cache;
+    }
+    return tokens;
+}
+
+/// The tokens after `prompt`, the first picked on the host and the rest by a
+/// program for each of `calls`, how many steps it takes.
+pub fn decoded_tokens<affine Bk: Graph>(
+    g: &mut Bk,
+    prompt: List<i64>,
+    calls: List<i32>,
+    sampling: &Sampling,
+) -> List<i64> with _ {
+    let mut model = Model::new(Params::embedded(g));
+    let mut seen = prompt.len();
+    let count = calls.into_iter().fold(0, |sum, steps| sum + steps);
+    let first = compute(g, &ids(prompt), &mask(seen), &Cache::empty(g), count, &mut model);
+    let mut tokens = sampling.first_tokens(&first.logits, seen as i64);
+    let mut cache = first.cache;
+    for let steps of calls {
+        seen += 1;
+        let next = decode(g, &ids([tokens[tokens.len() - 1]]), &mask(seen), &cache, steps, sampling, &mut model);
+        tokens.extend(&next.tokens.data);
+        cache = next.cache;
+        seen += steps - 1;
+    }
+    return tokens;
+}
+
+/// How many steps `decode` took from a three token past, where the prompt left
+/// its cache no room.
+pub fn steps_taken<affine Bk: Graph>(g: &mut Bk, steps: i32) -> i32 with _ {
+    let mut model = Model::new(Params::embedded(g));
+    let first = compute(g, &ids([1, 2]), &mask(2), &Cache::empty(g), 0, &mut model);
+    return decode(g, &ids([3]), &mask(3), &first.cache, steps, &Sampling {}, &mut model).tokens.extents[1];
+}
+
+/// A sampler of each kind a program tells apart.
+pub fn samplers() -> List<Sampling> {
+    return [
+        Sampling {},
+        Sampling { temperature: 0.8, seed: 7 },
+        Sampling { temperature: 1.5, top_k: 3, seed: 11 },
+        Sampling { temperature: 1.0, top_p: 0.7, seed: 13 },
+        Sampling {
+            temperature: 0.5,
+            top_k: 4,
+            top_p: 0.9,
+            seed: 17,
+            ends: [3, 5],
+        },
+    ];
+}
+
+/// How many of `a` and `b` differ.
+pub fn tokens_apart(a: &List<i64>, b: &List<i64>) -> f32 {
+    assert a.len() == b.len();
+    let mut apart = 0;
+    for let i of 0..<a.len() {
+        if a[i] != b[i] {
+            apart += 1;
+        }
+    }
+    return apart as f32;
+}

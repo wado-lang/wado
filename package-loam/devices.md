@@ -394,25 +394,29 @@ for each row.
 
 ### The loop around the model runs on the device
 
-The generated module offers a decoding program beside `compute`. It composes the
-model with a sampler and feeds the token the sampler picks back into the next
-step, for a number of steps the caller gives. It returns the token ids and
-nothing else.
+The generator's `decode` option offers a decoding program beside `compute`.
+`decode` takes one token a row, composes the model with a sampler, and feeds the
+token the sampler picks back into the next step, for a number of steps the
+caller gives. It returns the token ids and the cache, and reads the ids back
+once. `Graph::repeated` is the counted loop, and `compute` then takes `room`,
+how many positions past its own its cache holds for the steps to come.
 
 - The sampler is a graph too: the greatest logit, or a temperature, a top-k or a
-  top-p, drawn by a keyed counter hash of the seed, the slot and the step.
-  `core:prng`'s `Squares64` is one. The draw depends on no device's random
-  source, so every backend picks the same token from the same logits.
+  top-p, drawn from a table the host writes once a call. Each entry is
+  `core:prng`'s `Squares64` of the seed, the position and the row, so a call's
+  splitting of its steps changes no draw, and no device's random source is read.
+  Bisection finds a top-k's or a top-p's threshold, and a walk down the bits of
+  the index lands the draw, so neither needs a sort or a running sum.
 - On PJRT the steps are a `while` loop in one program, with one execution and
   one read back for all of them.
-- On WebGPU the steps are the pass's list encoded once per step in one
-  submission. The sampler writes its token where the next step's gather reads
-  it. Positions and valid lengths go up by one a step, so the parameter buffer
-  holds a block of them for each step, at known offsets. The host writes the
-  blocks in one write before it submits, and each step binds its own by a
-  dynamic offset.
-- A slot that picks an end token stops writing its cache and keeps returning
-  the end token. The host discards what follows it.
+- On WebGPU the steps are the pass's launches encoded once per step in one pass.
+  The sampler writes its token where the next step's gather reads it, as the f32
+  it equals. Each dispatch's parameters take a span of the pass's buffer, and
+  the host writes the spans once per submission. A loop keeps `SUBMIT_EVERY`'s
+  submissions, since [the device then runs while the host records](#gemma-3-on-webgpu).
+- A slot that picks an end token keeps returning that token, and its cache goes
+  on being written past the valid length, where nothing reads it. The loop is
+  counted on every backend, and the host cuts the row at its first end token.
 
 ### The device compiler lays out the weights
 
@@ -510,7 +514,7 @@ and a program for each shape class it has met. The caller owns it, and
    as the composite on `WebGpuBackend` with onnxruntime's tokens, and its
    dispatches a layer are recorded beside the ten
    [Loam on WebGPU](./webgpu.md#what-a-layer-costs) counts.
-6. [ ] The loop on the device. The sampler, the decoding program, and each
+6. [x] The loop on the device. The sampler, the decoding program, and each
    step's per-call values in one write. It starts by recording the host's time
    per token beside the device's, which says what the loop can win. Finished
    when Gemma 3 decodes several tokens per read back on both devices, with the
@@ -556,20 +560,33 @@ was measured before its deletion, by the same program running it:
 | ------------------------------------------------- | ----------------------------------------- | ------------------ | ------------------ |
 | the kernel pass                                   | 0.17–0.20                                 | 204                | 1                  |
 | `compute`, the compiled program at the capacities | 0.15–0.23                                 | 203                | 1                  |
+| `decode`, a step a call                           | 0.15–0.24                                 | 207                | 1                  |
+| `decode`, 7 steps a call                          | 0.14–0.15                                 | 210                | 0.14               |
+| `decode`, 7 steps a call, submitted once          | 0.21–0.22                                 | 210                | 0.14               |
 | onnxruntime on WebGPU                             | 0.34–0.75                                 |                    |                    |
 | onnxruntime on the CPU                            | 1                                         |                    |                    |
 
-onnxruntime on WebGPU reads near 0.35 on the first prompt, and near 0.35 or
-near 0.75 on the second from one run to the next. Both Loam entries rank the
-logits on the device and read back one index, through the generator's
-`arg_max` option. `compute` runs the products of one input as one, and replays
-each fused kernel's dispatches as the call before encoded them. It replays the
-attention too, with the positions' parameters set anew, where a decode step
-appends to the cache in place. It encodes the gather again on every call, since
-it reads a value on the host.
+Before the loop existed, timing the wait on `on-submitted-work-done` put about
+two thirds of a token's time on the host, encoding, and the rest on the device.
+The loop spares a read back's wait and nothing the host encodes, so a token's
+time stays near a step a call's, on the prompt whose steps each cost the least.
 
-`compute`'s entry is `example/gemma3-270m/webgpu.wado`, which prints each
-prompt's time a token beside onnxruntime's on both:
+Submitting a loop's dispatches once costs more than it spares: the device then
+starts only when the host has finished encoding, where `SUBMIT_EVERY`'s
+submissions let the two overlap.
+
+onnxruntime on WebGPU reads near 0.35 on the first prompt, and near 0.35 or
+near 0.75 on the second from one run to the next. The `compute` entries rank the
+logits on the device and read back one index, through the generator's `arg_max`
+option. `decode` reads back the prompt's logits, whose first token the host
+picks, and its token ids. `compute` runs the products of one input as one, and
+replays each fused kernel's dispatches as the call before encoded them. It
+replays the attention too, with the positions' parameters set anew, where a
+decode step appends to the cache in place. It encodes the gather again on every
+call, since it reads a value on the host.
+
+Each entry is `example/gemma3-270m/webgpu.wado`, which prints each prompt's time
+a token beside onnxruntime's on both:
 
 ```sh
 cd package-loam/example/gemma3-270m
@@ -594,9 +611,18 @@ measured:
 ### Gemma 3 on PJRT
 
 `example/gemma3-270m/pjrt.wado` on XLA's CPU plugin picks onnxruntime's tokens
-on both prompts. Under the `dev` build a token takes 9 to 15 times onnxruntime's
-time on the CPU, each new capacity's compile included. It reads back the tensors
-of a cache that outgrows its capacity, which `compute` grows on the host.
+on both prompts, at `-O2` under the `dev` build:
+
+| Entry                    | Time a token, onnxruntime on the CPU as 1 | Device runs a token | Read backs a token |
+| ------------------------ | ----------------------------------------- | ------------------- | ------------------ |
+| `decode`, a step a call  | 9–16                                      | 1                   | 1–16               |
+| `decode`, 7 steps a call | 5                                         | 0.14                | 0.14               |
+| onnxruntime on the CPU   | 1                                         |                     |                    |
+
+A step a call is the most a capacity is crossed: it reads back the tensors of a
+cache that outgrows its capacity, which `compute` grows on the host. Each new
+capacity's compile is included. 7 steps a call runs the program the prompt's
+`room` left capacity for, so nothing crosses one.
 
 `example/gemma3-270m/analyzed.wado` compiles the same programs for a `v5e:1x1`
 through `libtpu.so`, on a machine with no TPU. The prompt has 8 positions, and the
@@ -623,7 +649,20 @@ model, and it does not price 94 and 93 of each program's operations
   slots (step 7) give each row its own.
 - `build` cannot check what the graph owes over a padded length, which only
   `compute` knows on the host. A caller of `build` vouches for it.
-- `compute` takes no capacities from the caller.
+- `compute` takes no capacities from the caller, beyond the `room` of a model
+  built with `decode`.
+- `decode` reads the prompt's logits back to pick the first token on the host. A
+  program over the prompt and its steps would need the prompt's capacity and the
+  step's in one graph, and an `If` model's branches apart.
+- `decode` takes every input but its ids and mask as it is, so it refuses a model
+  with another input a step changes, such as `position_ids`.
+- A loop has no early exit, so a row that ends keeps running to the last step of
+  its call, on every backend.
+- Backends add up a row's probabilities in their own order, so a draw landing
+  within rounding of a token's edge can pick apart on two of them. Greedy cannot.
+- On WebGPU a device-held `i64` is the f32 it equals, so an id is below 2²⁴, and
+  only `Add`, `Subtract`, `Minimum` and `Maximum` run on one there. Another
+  operation reads it back.
 - GPT-2 (124M)'s `compute` on `WebGpuBackend` takes 2.5 times the kernel
   pass's time a token, and on `Cpu` 1.9 times; Gemma 3's on `Cpu` 4 times
   ([measured](./webgpu.md#measurements)). `Cpu` reads each weight from a

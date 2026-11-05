@@ -267,6 +267,25 @@ pub affine trait Graph: Holds with _ {
     fn yielded<E: Element, Axes>(&mut self, x: &Self::Tensor<E, Axes>) -> Self::Tensor<E, Axes> {
         return *x;
     }
+    /// StableHLO's `while` over a count: `body` run `count` times, each given
+    /// which run it is, from 0, and what the run before returned, the first
+    /// `initial`, and what the last returned. `body` adds its operations through
+    /// the graph it captured, which this call has set to record into the loop.
+    fn repeated(
+        &mut self,
+        count: &Self::Tensor<i64, []>,
+        initial: &List<Any<Self>>,
+        body: fn(&Self::Tensor<i64, []>, &List<Any<Self>>) -> List<Any<Self>> with _,
+    ) -> List<Any<Self>> with _ {
+        let mut state = *initial;
+        for let at of 0..<self.download(count).data[0] {
+            state = body(&self.upload(&Tensor::<i64, []> {
+                data: [at],
+                extents: [],
+            }), &state);
+        }
+        return state;
+    }
     /// `x` with `axis` grown to `extent`, what it holds past its own extent
     /// unspecified: a cache moved to a larger capacity, whose attention reads
     /// none of those positions. Zeros, where the graph keeps no room there.

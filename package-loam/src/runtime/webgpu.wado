@@ -2176,6 +2176,40 @@ impl WebGpuBackend {
         return Option::Some(contiguous(out.slot, 0, extents));
     }
 
+    /// [`Self::gathered`] by `indices` on the device, each an f32 clamped into
+    /// the axis, or `None` where the data or the output outgrows a binding.
+    internal fn gathered_by(
+        &mut self,
+        data: &DeviceTensor,
+        indices: &DeviceTensor,
+        axis: i32,
+    ) -> Option<DeviceTensor> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
+        let count = element_count(&indices.extents);
+        let mut flat = data.extents;
+        flat[axis] = count;
+        let source = self.span_of(data)?;
+        self.span_of(&contiguous(PENDING, 0, flat))?;
+        let whole = self.materialized(indices);
+        let by = self.span_of(&whole)?;
+        let out = contiguous(self.allocated(element_count(&flat), false), 0, flat);
+        let target = self.span_of(&out)?;
+        let total = element_count(&flat);
+        let [x, y] = grid(total);
+        let mut params = element_params(total, x, &flat);
+        let mut across = data.strides;
+        across[axis] = 0;
+        push_view(&mut params, rebased(data, &source), &across);
+        push_signed(&mut params, data.strides[axis]);
+        params.push(rebased(&whole, &by) as u32);
+        push_view(&mut params, 0, &out.strides);
+        params.push((data.extents[axis] - 1) as u32);
+        self.dispatch(ShaderKey::Gather([flat.len(), axis, data.half, true]), [source, by, target], params, [x, y, 1]);
+        let mut extents = data.extents[0..<axis].to_list();
+        extents.extend(&indices.extents);
+        extents.extend(&data.extents[axis + 1..<data.extents.len()].to_list());
+        return Option::Some(contiguous(out.slot, 0, extents));
+    }
+
     /// Writes `out`'s rows `lo..<hi` along `axis`, the data's rows `words`
     /// picks there: in one dispatch, or in halves where the data's rows they
     /// pick outgrow a binding.
@@ -2212,7 +2246,7 @@ impl WebGpuBackend {
             push_view(&mut params, rebased(&part, &target), &part.strides);
             let indices = Span { slot: index_slot, first: 0, count: words.len() };
             self.dispatch(
-                ShaderKey::Gather([part.extents.len(), axis, data.half]),
+                ShaderKey::Gather([part.extents.len(), axis, data.half, false]),
                 [source, indices, target],
                 params,
                 [x, y, 1],
@@ -2770,8 +2804,8 @@ impl Holds for WebGpuBackend {
 
 impl WebGpuBackend {
     /// `Graph::arg_max`: one workgroup per part of a lane, then one per
-    /// lane over the parts' winners, each index read back as an f32, which
-    /// holds it exactly: an `i64` tensor lives on the host.
+    /// lane over the parts' winners, each index left on the device as an f32,
+    /// which holds it exactly, for a step after it to read.
     internal fn arg_max_kernel<Axes>(
         &mut self,
         t: &Placed<f32, Axes>,
@@ -2822,11 +2856,33 @@ impl WebGpuBackend {
         }
         let mut extents = view.extents;
         extents[axis] = 1;
-        let mut data = List::<i64>::with_capacity(lanes);
-        for let i of self.read_back(&contiguous(out, 0, [lanes])) {
-            data.push(i as i64);
+        return Placed::Device(contiguous(out, 0, extents));
+    }
+
+    /// Whether a launch makes its next run's buffer at `slot` where it made
+    /// this one's: one it owns, but for an attention cache, which a run
+    /// appends to.
+    internal fn remade(&self, slot: i32) -> bool {
+        if slot >= 0 || self.filled.contains_key(slot) {
+            return false;
         }
-        return Placed::Host(Tensor { data, extents });
+        for let [_, owned] of self.owned.entries() {
+            if owned.into_iter().any(|o| o.slot == slot) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /// `t` copied to a buffer of the pass, which no launch makes again.
+    internal fn moved_to_pass(
+        &mut self,
+        t: &DeviceTensor,
+    ) -> DeviceTensor with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
+        self.running = null;
+        let to = contiguous(self.pass_buffer(element_count(&t.extents)), 0, t.extents);
+        self.copy(t, &to);
+        return to;
     }
 }
 
@@ -3292,7 +3348,7 @@ variant ShaderKey {
     /// [`narrow_product_shader`]'s arguments.
     NarrowProduct([Expr, List<i32>, i32, bool, bool, bool, i32, i32, bool, Option<Staged>]),
     /// [`gather_shader`]'s arguments.
-    Gather([i32, i32, bool]),
+    Gather([i32, i32, bool, bool]),
     /// [`append_shader`]'s arguments.
     Append([List<i32>, bool]),
     /// [`attend_shader`]'s arguments.
@@ -3330,7 +3386,7 @@ impl ShaderKey {
                 *paired,
                 staged,
             ),
-            Gather([rank, axis, half]) => gather_shader(*rank, *axis, *half),
+            Gather([rank, axis, half, ranked]) => gather_shader(*rank, *axis, *half, *ranked),
             Append([bindings, rotary]) => append_shader(bindings, *rotary),
             Attend([bindings, head, rotary, biased, part]) => attend_shader(bindings, *head, *rotary, *biased, *part),
             AttendJoin(bindings) => attend_join_shader(bindings),
@@ -3811,15 +3867,19 @@ ${coords_wgsl("i", 2, 0, rank, "c", "    ")}    dst[u32(${index_wgsl(to, 0, rank
 /// Parameters: the count, the invocations per row, the output's extents, the
 /// data's offset and its stride along each output axis, 0 along `axis`, its
 /// stride along `axis`, the index the output's first row along `axis` reads,
-/// then the output's offset and strides. A `half` data is widened.
-fn gather_shader(rank: i32, axis: i32, half: bool) -> String {
+/// then the output's offset and strides. A `half` data is widened. A `ranked`
+/// index is an f32 a kernel left, which the last parameter, the axis's last
+/// index, clamps as StableHLO does; the host has clamped any other.
+fn gather_shader(rank: i32, axis: i32, half: bool, ranked: bool) -> String {
     let data = 2 + rank;
     let along = data + rank + 1;
     let first = along + 1;
     let out = first + 1;
     let source = index_wgsl(data, 0, rank, "c", `bitcast<i32>(p[${data}])`);
+    let index = `indices[p[${first}] + c${axis}]`;
+    let picked = if ranked { `clamp(${index}, 0.0, f32(p[${out + rank + 1}]))` } else { index };
     return `@group(0) @binding(0) var<storage, read> data: array<${word_wgsl(half)}>;
-@group(0) @binding(1) var<storage, read> indices: array<u32>;
+@group(0) @binding(1) var<storage, read> indices: array<${if ranked { "f32" } else { "u32" }}>;
 @group(0) @binding(2) var<storage, read_write> out: array<f32>;
 @group(0) @binding(3) var<storage, read> p: array<u32>;
 
@@ -3829,7 +3889,7 @@ fn main(@builtin(global_invocation_id) id: vec3<u32>) {
     if i >= p[0] {
         return;
     }
-${coords_wgsl("i", 2, 0, rank, "c", "    ")}    let picked = i32(indices[p[${first}] + c${axis}]);
+${coords_wgsl("i", 2, 0, rank, "c", "    ")}    let picked = i32(${picked});
     out[u32(${index_wgsl(out, 0, rank, "c", `bitcast<i32>(p[${out}])`)})] = ${element_wgsl(
         "data",
         `u32(${source} + picked * bitcast<i32>(p[${along}]))`,
@@ -4291,6 +4351,7 @@ fn unary_wgsl(op: UnaryOp, v: String) -> String {
         Sqrt => `sqrt(${v})`,
         Neg => `-(${v})`,
         Abs => `abs(${v})`,
+        Trunc => `trunc(${v})`,
     };
 }
 

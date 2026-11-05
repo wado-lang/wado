@@ -1,0 +1,46 @@
+//! `decode`: the loop around a decoder, held to the same decoder run a pass at
+//! a time through `compute`.
+
+use { Cpu, Sampling } from "lib:loam";
+use { decoded_tokens, samplers, stepped_tokens, steps_taken } from "./decoded.wado";
+
+test "decode picks each token a pass at a time would" {
+    let cpu = &mut Cpu {};
+    for let sampling of samplers() {
+        let want = stepped_tokens(cpu, [2, 6, 1], 8, &sampling);
+        assert decoded_tokens(cpu, [2, 6, 1], [7], &sampling) == want;
+    }
+}
+
+test "decode picks the same tokens however its steps are split" {
+    let cpu = &mut Cpu {};
+    for let sampling of samplers() {
+        let want = decoded_tokens(cpu, [3, 4], [7], &sampling);
+        assert decoded_tokens(cpu, [3, 4], [3, 4], &sampling) == want;
+        assert decoded_tokens(cpu, [3, 4], [1, 1, 5], &sampling) == want;
+    }
+}
+
+test "decode reaches the last position the graph's tables hold" {
+    assert steps_taken(&mut Cpu {}, 14) == 14;
+}
+
+#[expect_trap]
+test "decode refuses steps past what the graph's tables reach" {
+    steps_taken(&mut Cpu {}, 15);
+}
+
+test "a row that picks an end token keeps returning it" {
+    let cpu = &mut Cpu {};
+    let tokens = decoded_tokens(cpu, [1, 2], [9], &Sampling { temperature: 1.0, seed: 3 });
+    let end = tokens[3];
+    let first = tokens.into_iter().position(|t| t == end).unwrap();
+    let ended = decoded_tokens(cpu, [1, 2], [9], &Sampling {
+        temperature: 1.0,
+        seed: 3,
+        ends: [end],
+    });
+    for let [at, token] of ended.into_iter().enumerate() {
+        assert token == if at <= first { tokens[at] } else { end };
+    }
+}

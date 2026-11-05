@@ -1,0 +1,170 @@
+use { Decoding, Picks, Sampling, Slots, advanced, opened, stepped } from "./sampling.wado";
+use { One } from "./hlo.wado";
+use { Cpu, Tensor } from "./tensor.wado";
+
+/// Tokens of a row, as a test spells its logits.
+struct Vocabulary {
+}
+
+fn logits(rows: List<List<f32>>) -> Tensor<f32, [Slots, One, Vocabulary]> {
+    let mut data: List<f32> = [];
+    for let row of &rows {
+        data.extend(row);
+    }
+    return Tensor {
+        data,
+        extents: [
+            rows.len(),
+            1,
+            rows[0].len(),
+        ],
+    };
+}
+
+/// What one step picks from `rows`, as the position `at` draws.
+fn picked(rows: List<List<f32>>, sampling: &Sampling, at: i64) -> List<i64> {
+    return sampling.first_tokens(&logits(rows), at);
+}
+
+/// How often each of `vocabulary` tokens is drawn from `row` over `count`
+/// positions.
+fn drawn(row: List<f32>, sampling: &Sampling, count: i32) -> List<i32> {
+    let mut counts = List::<i32>::filled(row.len(), 0);
+    for let at of 0..<count {
+        let token = picked([row], sampling, at as i64)[0];
+        counts[token as i32] += 1;
+    }
+    return counts;
+}
+
+test "greedy picks each row's greatest logit" {
+    assert picked([
+        [0.1, 0.9, 0.2],
+        [3.0, 1.0, 2.0],
+    ], &Sampling {}, 0) == [1, 0];
+}
+
+test "a draw follows the probabilities its temperature leaves" {
+    let row: List<f32> = [0.0, f32::ln(3.0)];
+    let counts = drawn(row, &Sampling { temperature: 1.0, seed: 5 }, 400);
+    assert 240 < counts[1] < 360;
+}
+
+test "a low temperature all but picks the greatest" {
+    let counts = drawn([0.0, 1.0, 0.5], &Sampling { temperature: 0.01, seed: 5 }, 100);
+    assert counts[1] == 100;
+}
+
+test "a position's draw depends on the seed and the row" {
+    let row: List<f32> = [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0];
+    let a = (0..<16).map(|at| picked([row, row], &Sampling { temperature: 1.0, seed: 1 }, at as i64)).collect();
+    let b = (0..<16).map(|at| picked([row, row], &Sampling { temperature: 1.0, seed: 2 }, at as i64)).collect();
+    assert a != b;
+    assert a.into_iter().any(|tokens| tokens[0] != tokens[1]);
+}
+
+test "top k draws among the greatest only" {
+    let row: List<f32> = [1.0, 3.0, 2.0, 0.0, 2.5];
+    let counts = drawn(row, &Sampling { temperature: 2.0, top_k: 3, seed: 9 }, 200);
+    assert counts[0] == 0 && counts[3] == 0;
+    assert counts[1] > 0 && counts[2] > 0 && counts[4] > 0;
+}
+
+test "top k of one picks the greatest whatever the draw" {
+    let counts = drawn([1.0, 3.0, 2.0], &Sampling { temperature: 5.0, top_k: 1, seed: 9 }, 50);
+    assert counts == [0, 50, 0];
+}
+
+test "top p keeps the likeliest that reach its share" {
+    // 0.7, 0.2 and 0.1: a share of 0.8 needs the first two, and never the last.
+    let row: List<f32> = [
+        f32::ln(0.7),
+        f32::ln(0.2),
+        f32::ln(0.1),
+    ];
+    let counts = drawn(row, &Sampling { temperature: 1.0, top_p: 0.8, seed: 21 }, 200);
+    assert counts[2] == 0;
+    assert counts[0] > counts[1] && counts[1] > 0;
+}
+
+test "a small top p picks the likeliest" {
+    let row: List<f32> = [
+        f32::ln(0.6),
+        f32::ln(0.3),
+        f32::ln(0.1),
+    ];
+    let counts = drawn(row, &Sampling { temperature: 1.0, top_p: 0.01, seed: 21 }, 50);
+    assert counts == [50, 0, 0];
+}
+
+test "a token no probability reaches is never drawn" {
+    let counts = drawn([f32::NEG_INFINITY, 1.0, f32::NEG_INFINITY, 1.0], &Sampling { temperature: 1.0, seed: 2 }, 100);
+    assert counts[0] == 0 && counts[2] == 0;
+}
+
+test "an ended row keeps returning its first end token" {
+    let mut cpu = Cpu {};
+    let sampling = Sampling {
+        ends: [2, 3],
+    };
+    let decoding = Decoding::new(&mut cpu, &sampling, 3, 0, 2);
+    let scores = logits([
+        [0.0, 0.0, 1.0, 0.0],
+        [1.0, 0.0, 0.0, 0.0],
+    ]);
+    let step = |at: i64| Tensor::<i64, []> {
+        data: [at],
+        extents: [],
+    };
+    let first = stepped::<Cpu, [Slots, One, Vocabulary]>(
+        &mut cpu,
+        &scores,
+        &decoding,
+        &decoding.tokens,
+        &decoding.finished,
+        &step(0),
+    );
+    assert first.token.data == [2, 0];
+    assert first.finished.data == [true, false];
+    let later = logits([
+        [0.0, 1.0, 0.0, 0.0],
+        [0.0, 0.0, 0.0, 1.0],
+    ]);
+    let second = stepped::<Cpu, [Slots, One, Vocabulary]>(
+        &mut cpu,
+        &later,
+        &decoding,
+        &first.tokens,
+        &first.finished,
+        &step(1),
+    );
+    assert second.token.data == [2, 3];
+    assert second.finished.data == [true, true];
+    assert second.tokens.data == [2, 2, 0, 0, 3, 0];
+}
+
+test "a mask opens the position a step reads" {
+    let mut cpu = Cpu {};
+    let mask = Tensor::<i64, [Slots, Picks]> {
+        data: [1, 1, 0, 0],
+        extents: [1, 4],
+    };
+    let at = Tensor::<i64, []> {
+        data: [2],
+        extents: [],
+    };
+    assert opened::<Cpu, [Slots, Picks]>(&mut cpu, &mask, &at).data == [1, 1, 1, 0];
+}
+
+test "a length advances by its share of each step" {
+    let mut cpu = Cpu {};
+    let length = Tensor::<i64, []> {
+        data: [5],
+        extents: [],
+    };
+    let step = Tensor::<i64, []> {
+        data: [3],
+        extents: [],
+    };
+    assert advanced(&mut cpu, &length, &step, 2).data == [11];
+}

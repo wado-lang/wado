@@ -72,7 +72,13 @@ pub variant Operation {
     /// A `case` on its operand, the condition. Outside the node, each result
     /// of the first branch names the result of whichever branch ran.
     Case([Region, Region]),
-    /// A branch's result: its operand, in the branch's order of results.
+    /// `Graph::repeated`, whose operands are the count and each carried value's
+    /// start. Outside the node, each result of the body names what the last
+    /// run left there.
+    Repeat(Repeat),
+    /// A value of the loop whose body holds it, which each run gives it.
+    Carried,
+    /// A branch's or a loop's result: its operand, in the order of results.
     Yield,
     /// The attention composite. Its value is the attended queries, and its
     /// presents are the `Part`s that read it.
@@ -99,6 +105,14 @@ impl Region {
     fn empty() -> Region {
         return Region { nodes: [], results: [] };
     }
+}
+
+/// A loop: its body, the node holding which run it is, and the nodes holding
+/// what it carries, one for each result of the body.
+pub struct Repeat {
+    pub body: Region,
+    pub step: i32,
+    pub carried: List<i32>,
 }
 
 /// A recorded pass: every node by its id, the body that runs them, how many
@@ -388,6 +402,38 @@ impl Graph for Recorder {
         return Value { id };
     }
 
+    /// Records the body into a region of its own, over a node for which run it
+    /// is and one for each carried value, each result yielded, so it names
+    /// the loop's outside it whatever the body returns.
+    fn repeated(
+        &mut self,
+        count: &Value<i64, []>,
+        initial: &List<Any<Recorder>>,
+        body: fn(&Value<i64, []>, &List<Any<Recorder>>) -> List<Any<Recorder>> with _,
+    ) -> List<Any<Recorder>> with _ {
+        let outer = self.current;
+        self.current = Region::empty();
+        let step = self.added(Operation::Carried, [], ElementKind::I64, []);
+        let mut carried: List<i32> = [];
+        for let start of initial {
+            let node = &self.nodes[node_of(start)];
+            carried.push(self.added(Operation::Carried, [], node.kind, node.extents));
+        }
+        let state: List<Any<Recorder>> = carried.into_iter().map(|id| any_at(self.nodes[id].kind, id)).collect();
+        for let r of body(&Value { id: step }, &state) {
+            let node = &self.nodes[node_of(&r)];
+            self.current.results.push(self.added(Operation::Yield, [node_of(&r)], node.kind, node.extents));
+        }
+        let region = self.current;
+        self.current = outer;
+        let mut operands: List<i32> = [count.id];
+        for let start of initial {
+            operands.push(node_of(start));
+        }
+        self.added(Operation::Repeat(Repeat { body: region, step, carried }), operands, ElementKind::Bool, []);
+        return region.results.into_iter().map(|id| any_at(self.nodes[id].kind, id)).collect();
+    }
+
     fn group_query_attention<B, S, Q, K, H, P, T, D, Pos, Half, BB, BH>(
         &mut self,
         q: &Value<f32, [B, S, Q]>,
@@ -447,6 +493,24 @@ impl Graph for Recorder {
             self.value(Operation::Part(2), [attended], ElementKind::F32, present),
         ];
     }
+}
+
+/// The node `a` is the value of.
+fn node_of(a: &Any<Recorder>) -> i32 {
+    return match a {
+        F32(v) => v.id,
+        I64(v) => v.id,
+        Bool(v) => v.id,
+    };
+}
+
+/// The node `id`, of an element of `kind`.
+fn any_at(kind: ElementKind, id: i32) -> Any<Recorder> {
+    return match kind {
+        F32 => Any::F32(Value { id }),
+        I64 => Any::I64(Value { id }),
+        Bool => Any::Bool(Value { id }),
+    };
 }
 
 /// The axes every tensor `run` computes with, which a `Graph` reads only
@@ -593,7 +657,7 @@ pub fn constants(recorded: &Recorded) -> HashMap<i32, Any<Cpu>> {
     for let id of 0..<recorded.nodes.len() {
         let node = &recorded.nodes[id];
         let reads_none = match &node.op {
-            Parameter(_) | Case(_) | Yield | Attention(_) | Part(_) => false,
+            Parameter(_) | Case(_) | Repeat(_) | Carried | Yield | Attention(_) | Part(_) => false,
             _ => node.operands.into_iter().all(|o| state.values.holds(o)),
         };
         if reads_none {
@@ -702,6 +766,23 @@ impl<affine G: Graph> Run<G> {
                 }
                 continue;
             }
+            if let Repeat(repeat) = &node.op {
+                let initial: List<Any<G>> = node.operands[1..<node.operands.len()].to_list().into_iter().map(
+                    |o| self.values[o],
+                ).collect();
+                let count = g.relabeled::<i64, Untyped, []>(i64s(&self.values[node.operands[0]]));
+                let last = g.repeated(&count, &initial, |step, state| {
+                    self.values[repeat.step] = Any::I64(g.relabeled::<i64, [], Untyped>(step));
+                    for let [k, carried] of repeat.carried.into_iter().enumerate() {
+                        self.values[carried] = state[k];
+                    }
+                    return self.region(g, recorded, &repeat.body);
+                });
+                for let [k, result] of repeat.body.results.into_iter().enumerate() {
+                    self.values[result] = last[k];
+                }
+                continue;
+            }
             self.ran(g, id, node);
         }
         return region.results.into_iter().map(|r| self.values[r]).collect();
@@ -712,7 +793,7 @@ impl<affine G: Graph> Run<G> {
     /// computed.
     internal fn ran(&mut self, g: &mut G, id: i32, node: &RecordedNode) with _ {
         match &node.op {
-            Parameter(_) => {
+            Parameter(_) | Carried => {
             },
             Part(k) => {
                 self.values[id] = self.parts[node.operands[0]][*k - 1];
@@ -852,7 +933,7 @@ impl<affine G: Graph> Run<G> {
                 self.parts[id] = [present_k, present_v];
                 attended;
             },
-            Parameter(_) | Part(_) | Yield | Case(_) => unreachable(),
+            Parameter(_) | Part(_) | Yield | Case(_) | Repeat(_) | Carried => unreachable(),
         };
     }
 

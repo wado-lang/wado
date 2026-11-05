@@ -3,6 +3,7 @@
 //! runs it from inputs on the host.
 
 use { HashMap, HashSet } from "core:collections";
+use { Deserialize } from "core:serde";
 use { CodeWriter, FnSpec, ImplSpec, StructSpec, Vis, byte_string_literal, wado } from "lib:wadopoet";
 use { Extent, Solved, solved } from "./extent.wado";
 use {
@@ -10,6 +11,9 @@ use {
     CACHE,
     CHECKPOINT_PARAM,
     CHOSEN,
+    DECODE,
+    DECODED,
+    DECODED_TYPE,
     KEPT,
     LEAST_EXTENTS,
     LENGTHS,
@@ -18,6 +22,7 @@ use {
     OUTPUTS,
     PARAMS,
     PASSED,
+    RECORDED_DECODED,
     RECORDED,
     RUNTIME_NAMES,
     is_bound,
@@ -94,6 +99,8 @@ pub variant EmitError {
     /// An `If`, by its first output, whose branches owe the lengths conditions
     /// `compute` checks on the host, where the host does not hold its condition.
     HiddenCondition(String),
+    /// Why a graph takes no `decode`.
+    Undecodable(String),
 }
 
 impl Display for UnmappedDtype {
@@ -121,6 +128,7 @@ impl Display for EmitError {
             HiddenCondition(node) => f.write_str(
                 `${node} = If: its branches owe the lengths conditions, and its condition is no input the host holds to check them by`,
             ),
+            Undecodable(why) => f.write_str(`decode: ${why}`),
         }
     }
 }
@@ -143,14 +151,26 @@ pub variant Placement {
     InPlace(InPlace),
 }
 
+/// The tensors a `decode` entry loops over: the input taking each row's token,
+/// the mask of the positions so far, and the output a step picks from.
+export struct Decode {
+    pub ids: String,
+    pub mask: String,
+    pub logits: String,
+}
+
+impl Deserialize for Decode;
+
 /// The generated module's source, importing the runtime from the package spec
 /// `runtime`. Every axis the graph mentions becomes a marker type, so two
-/// tensors sharing an axis share one type.
+/// tensors sharing an axis share one type. `decode` offers `decode` beside
+/// `compute`.
 pub fn emit(
     graph: &Graph,
     checked: &Checked,
     runtime: &String,
     placement: Placement = Placement::File,
+    decode: Option<Decode> = null,
 ) -> Result<String, EmitError> {
     let shapes = &checked.shapes;
     if let Shards(placed) = &placement {
@@ -235,21 +255,27 @@ pub fn emit(
     } else {
         `${*input}.extents[${axis}]`;
     });
-    emit_compute(
-        &mut w,
+    let mut decoding: Option<DecodingAxes> = null;
+    if let Some(d) = &decode {
+        decoding = Option::Some(decoding_axes(d, graph, checked, &crossing, &padded, &grown, &conditions)?);
+    }
+    let context = EntryContext {
         graph,
         checked,
-        &names,
-        &held,
-        &carriers,
-        host_symbols,
-        &padded,
-        &read,
-        &kept,
-        &crossing,
-        &grown,
-        &conditions,
-    )?;
+        names: &names,
+        held: &held,
+        carriers: &carriers,
+        padded: &padded,
+        read: &read,
+        kept: &kept,
+        crossing: &crossing,
+        owed: &grown,
+        conditions: &conditions,
+    };
+    emit_compute(&mut w, &context, host_symbols, &decoding)?;
+    if let Some(axes) = &decoding {
+        emit_decode(&mut w, &context, host_symbols, axes)?;
+    }
     return Result::Ok(w.to_string());
 }
 
@@ -1058,131 +1084,30 @@ fn emit_build(
 /// inputs on the host, and `read` lists those `build` reads as values.
 fn emit_compute(
     w: &mut CodeWriter,
-    graph: &Graph,
-    checked: &Checked,
-    names: &Names,
-    held: &HashMap<String, String>,
-    carriers: &List<Carrier>,
-    mut symbols: Symbols,
-    padded: &List<String>,
-    read: &List<String>,
-    kept: &List<String>,
-    crossing: &Crossing,
-    owed: &List<[Grown, Option<Poly>]>,
-    conditions: &List<String>,
+    context: &EntryContext,
+    given: Symbols,
+    decoding: &Option<DecodingAxes>,
 ) -> Result<(), EmitError> {
+    let EntryContext { graph, checked, names, held, carriers, padded, kept, crossing, owed, .. } = *context;
     let shapes = &checked.shapes;
     let returned = crossing.returned;
     let has_cache = crossing.has_cache();
-    // The cache holds a past at a capacity, so its length is what the graph
-    // owes it to be, given the other inputs'.
-    symbols.derive_owed(owed);
     let mut compute = FnSpec::new("compute", Vis::Pub);
-    compute.add_generic(GRAPH_BOUND).add_param("backend", `&mut ${BACKEND_PARAM}`);
-    let mut lines: List<String> = [];
-    let taken: List<ValueInfo> = graph.inputs.into_iter().filter(|vi| !crossing.cached.contains(vi.name)).collect();
-    // Every symbolic axis is its symbols' arithmetic over the lengths, but for
-    // the axis a symbol is read from as itself. One spelling arithmetic over it
-    // may hold no length the arithmetic gives.
-    for let vi of &taken {
-        let ident = names.get(&vi.name);
-        compute.add_param(ident, `&${tensor_type(checked, held, &vi.name)}`);
-        for let [i, axis] of shapes[vi.name].axes.into_iter().enumerate() {
-            let Symbolic(length) = axis.extent else {
-                continue;
-            };
-            let carries = carriers.into_iter().any(|c| c.input == vi.name && c.axis == i);
-            if carries && axis.extent.lone_symbol() matches { Some(_) } {
-                continue;
-            }
-            lines.push(
-                wado`refuse(extent_mismatch("${vi.name}", "${axis.name}", ${ident}.extents[${i}], "${length}", ${symbols.spell(
-                    &length,
-                )?}));`,
-            );
-        }
+    let mut room: Option<Room> = null;
+    let mut extra: List<[String, String]> = [];
+    if let Some(axes) = decoding {
+        room = Option::Some(Room { symbol: axes.total, spelled: "room as i64" });
+        extra.push(["room", "i32"]);
     }
-    if has_cache {
-        compute.add_param("cache", `&${CACHE}<${BACKEND_PARAM}>`);
-    }
-    lines.extend(&owed_checks(checked, &mut symbols)?);
-    lines.extend(&branch_checks(graph, checked, names, conditions, &mut symbols)?);
-    // Each `If` on an input takes its branch on the host, so the program holds
-    // the one branch, at lengths it holds at.
-    let chosen: List<String> = conditions.into_iter().map(|c| names.get(c)).collect();
-    if !chosen.is_empty() {
-        let fields: List<String> = chosen.into_iter().map(|c| `${c}: Option::Some(${c}.data[0])`).collect();
-        lines.push(`let chosen = ${CHOSEN} { ${fields.join(", ")} };`);
-    }
-    let mut nonnegative = HashSet::<String>::new();
-    for let [g, _] of *owed {
-        let past = symbols.spell(&Poly::symbol(&g.symbol))?;
-        let held_extent = `backend.extents_of(&cache.${names.get(&g.past)})[${g.axis}] as i64`;
-        if nonnegative.insert(g.symbol) {
-            lines.push(wado`refuse(unmet(${past}, "${g.symbol} must not be negative"));`);
-        }
-        lines.push(wado`refuse(unmet(${held_extent} - ${past}, "${g.past} holds fewer positions than ${g.symbol}"));`);
-    }
-    let mut capacities = at_capacities(&mut symbols, &mut lines, padded, owed, names)?;
-    // The cache was computed before the pass this call begins.
-    if has_cache {
-        lines.push("cache.retain(backend);");
-    }
-    lines.push("backend.begin();");
-    let mut arguments: List<String> = ["backend"];
-    for let vi of &taken {
-        let ident = names.get(&vi.name);
-        let padded_to = `&resized(${ident}, ${capacities.spell_shape(&shapes[vi.name])?})`;
-        lines.push(`let ${ident} = ${uploaded(checked, held, &vi.name, padded_to)};`);
-        arguments.push(`&${ident}`);
-    }
-    // The cache at the capacities, both as the pass takes it and as it returns it.
-    let fitted_cache = fitted_at_capacities(checked, names, crossing, owed, padded, &mut capacities)?;
-    if has_cache {
-        lines.push(`let cache = ${fitted_cache};`);
-        arguments.push("&cache");
-    }
-    // A capacity reads its length, and an unpadded symbol is its own capacity.
-    for let symbol of capacities.used {
-        symbols.used.insert(symbol);
-    }
-    // What the program takes, in the order `recorded` makes its parameters:
-    // the inputs and the cache, whose extents are the shape class, then the
-    // lengths and the weights.
-    let mut taken_args: List<ProgramArgument> = [];
-    for let vi of &taken {
-        taken_args.push(ProgramArgument::of(checked, names, &vi.name, Crossed::Input));
-    }
-    for let [past, _] of crossing.pairs {
-        taken_args.push(ProgramArgument::of(checked, names, &past, Crossed::Cache));
-    }
-    let mut class: List<String> = taken_args.into_iter().map(|a| `backend.extents_of(&${a.held()})`).collect();
-    // The branches the host took tell the programs apart too.
-    for let c of chosen {
-        class.push(`[chosen.${c}.unwrap() as i32]`);
-    }
-    if !read.is_empty() {
-        let mut fields: List<String> = [];
-        for let symbol of *read {
-            let ident = symbols.idents[symbol];
-            fields.push(`${ident}: backend.upload(&Tensor::<i64, []> { data: [${symbols.spell(
-                &Poly::symbol(&symbol),
-            )?}], extents: [] })`);
-            taken_args.push(ProgramArgument {
-                crossed: Crossed::Length,
-                tensor: symbol,
-                ident,
-                element: "i64",
-                axes: "[]",
-            });
-        }
-        lines.push(`let lengths = ${LENGTHS} { ${fields.join(", ")} };`);
-        arguments.push("&lengths");
-    }
-    let first_weight = taken_args.len();
-    for let weight of weight_names(graph, kept) {
-        taken_args.push(ProgramArgument::of(checked, names, &weight, Crossed::Weight));
-    }
+    let entry = prepared_entry(context, &mut compute, given, &room, &extra)?;
+    let mut lines = entry.lines;
+    let mut symbols = entry.symbols;
+    let mut arguments = entry.arguments;
+    let taken_args = entry.taken_args;
+    let first_weight = entry.first_weight;
+    let class = entry.class;
+    let chosen = entry.chosen;
+    let fitted_cache = entry.fitted_cache;
     // `build` and `recorded` take the branches where they take the lengths.
     let [record, least] = if chosen.is_empty() {
         [RECORDED, `${RECORDED}(recorder, &${LEAST_EXTENTS}())`];
@@ -1263,17 +1188,506 @@ fn emit_compute(
     w.line("/// [`build`] over inputs on the host, each length padded to a capacity, its");
     w.line("/// outputs read back cut to their lengths. A backend that compiles its");
     w.line("/// pass runs the program it compiled for the capacities.");
+    if decoding matches { Some(_) } {
+        w.line("/// The cache holds `room` positions past these, for the steps to come.");
+    }
     compute.emit_begin(w);
-    // The checks come first, as a binding reads an extent they check is there.
-    let checks = input_checks(graph, shapes, names, &crossing.cached).host;
-    for let line of checks.into_iter().chain(symbols.bindings().into_iter()).chain(lines.into_iter()) {
+    if decoding matches { Some(_) } {
+        w.line(`refuse(unmet(room as i64, "room must not be negative"));`);
+    }
+    for let line of entry_lines(context, &symbols, &lines) {
         w.line(&line);
     }
     w.end();
-    emit_recorded(w, names, &taken_args, &returned, crossing, !chosen.is_empty());
+    emit_recorded(w, names, &taken_args, first_weight, &returned, crossing, !chosen.is_empty(), false);
     emit_least_extents(w, checked, carriers, names, owed, padded, &taken_args)?;
     emit_held(w, graph, checked, names, kept, first_weight, least);
     return Result::Ok(());
+}
+
+/// A length a call asks a capacity to hold more of: `symbol`, and every past
+/// that grows, read as `spelled` more.
+struct Room {
+    symbol: String,
+    spelled: String,
+}
+
+/// What `compute` and `decode` each read of the graph.
+struct EntryContext {
+    graph: &Graph,
+    checked: &Checked,
+    names: &Names,
+    held: &HashMap<String, String>,
+    carriers: &List<Carrier>,
+    padded: &List<String>,
+    read: &List<String>,
+    kept: &List<String>,
+    crossing: &Crossing,
+    owed: &List<[Grown, Option<Poly>]>,
+    conditions: &List<String>,
+}
+
+/// What an entry has made by the time it can run its program: its `lines`, the
+/// lengths as they are and at their capacities, what `build` is passed, what
+/// the program takes, its weights from `first_weight` on, what tells its
+/// programs apart, the fields of `chosen`, and the cache at the capacities.
+struct Entry {
+    lines: List<String>,
+    symbols: Symbols,
+    capacities: Symbols,
+    arguments: List<String>,
+    taken_args: List<ProgramArgument>,
+    first_weight: i32,
+    class: List<String>,
+    chosen: List<String>,
+    fitted_cache: String,
+}
+
+/// The entry `spec`, its inputs and the cache given, then the parameters
+/// `extra` names, up to the program it runs.
+fn prepared_entry(
+    context: &EntryContext,
+    spec: &mut FnSpec,
+    mut symbols: Symbols,
+    room: &Option<Room>,
+    extra: &List<[String, String]>,
+) -> Result<Entry, EmitError> {
+    let EntryContext { graph, checked, names, held, carriers, padded, read, kept, crossing, owed, conditions } = *context;
+    let shapes = &checked.shapes;
+    let has_cache = crossing.has_cache();
+    // The cache holds a past at a capacity, so its length is what the graph
+    // owes it to be, given the other inputs'.
+    symbols.derive_owed(owed);
+    spec.add_generic(GRAPH_BOUND).add_param("backend", `&mut ${BACKEND_PARAM}`);
+    let mut lines: List<String> = [];
+    let taken: List<ValueInfo> = graph.inputs.into_iter().filter(|vi| !crossing.cached.contains(vi.name)).collect();
+    // Every symbolic axis is its symbols' arithmetic over the lengths, but for
+    // the axis a symbol is read from as itself. One spelling arithmetic over it
+    // may hold no length the arithmetic gives.
+    for let vi of &taken {
+        let ident = names.get(&vi.name);
+        spec.add_param(ident, `&${tensor_type(checked, held, &vi.name)}`);
+        for let [i, axis] of shapes[vi.name].axes.into_iter().enumerate() {
+            let Symbolic(length) = axis.extent else {
+                continue;
+            };
+            let carries = carriers.into_iter().any(|c| c.input == vi.name && c.axis == i);
+            if carries && axis.extent.lone_symbol() matches { Some(_) } {
+                continue;
+            }
+            lines.push(
+                wado`refuse(extent_mismatch("${vi.name}", "${axis.name}", ${ident}.extents[${i}], "${length}", ${symbols.spell(
+                    &length,
+                )?}));`,
+            );
+        }
+    }
+    if has_cache {
+        spec.add_param("cache", `&${CACHE}<${BACKEND_PARAM}>`);
+    }
+    for let [name, ty] of *extra {
+        spec.add_param(name, ty);
+    }
+    lines.extend(&owed_checks(checked, &mut symbols)?);
+    lines.extend(&branch_checks(graph, checked, names, conditions, &mut symbols)?);
+    if let Some(r) = room {
+        // A step past what the graph owes reads past a table, and answers anyway.
+        let mut at_end = symbols;
+        let mut moving: List<String> = [r.symbol];
+        moving.extend(&owed.into_iter().map(|o| o.0.symbol).collect());
+        for let symbol of moving {
+            let moves = per_step(&symbol, &r.symbol, owed)?;
+            at_end.idents[symbol] = `(${symbols.idents[symbol]} + ${moves} * ${r.spelled})`;
+        }
+        let mut checks = owed_checks(checked, &mut at_end)?;
+        checks.extend(&branch_checks(graph, checked, names, conditions, &mut at_end)?);
+        lines.extend(&checks.into_iter().filter(|c| !lines.contains(&c)).collect());
+        for let symbol of at_end.used {
+            symbols.used.insert(symbol);
+        }
+    }
+    // Each `If` on an input takes its branch on the host, so the program holds
+    // the one branch, at lengths it holds at.
+    let chosen: List<String> = conditions.into_iter().map(|c| names.get(c)).collect();
+    if !chosen.is_empty() {
+        let fields: List<String> = chosen.into_iter().map(|c| `${c}: Option::Some(${c}.data[0])`).collect();
+        lines.push(`let chosen = ${CHOSEN} { ${fields.join(", ")} };`);
+    }
+    let mut nonnegative = HashSet::<String>::new();
+    for let [g, _] of *owed {
+        let past = symbols.spell(&Poly::symbol(&g.symbol))?;
+        let held_extent = `backend.extents_of(&cache.${names.get(&g.past)})[${g.axis}] as i64`;
+        if nonnegative.insert(g.symbol) {
+            lines.push(wado`refuse(unmet(${past}, "${g.symbol} must not be negative"));`);
+        }
+        lines.push(wado`refuse(unmet(${held_extent} - ${past}, "${g.past} holds fewer positions than ${g.symbol}"));`);
+    }
+    let mut capacities = at_capacities(&mut symbols, &mut lines, padded, owed, names, room)?;
+    // The cache was computed before the pass this call begins.
+    if has_cache {
+        lines.push("cache.retain(backend);");
+    }
+    lines.push("backend.begin();");
+    let mut arguments: List<String> = ["backend"];
+    for let vi of &taken {
+        let ident = names.get(&vi.name);
+        let padded_to = `&resized(${ident}, ${capacities.spell_shape(&shapes[vi.name])?})`;
+        lines.push(`let ${ident} = ${uploaded(checked, held, &vi.name, padded_to)};`);
+        arguments.push(`&${ident}`);
+    }
+    // The cache at the capacities, both as the pass takes it and as it returns it.
+    let fitted_cache = fitted_at_capacities(checked, names, crossing, owed, padded, &mut capacities)?;
+    if has_cache {
+        lines.push(`let cache = ${fitted_cache};`);
+        arguments.push("&cache");
+    }
+    // A capacity reads its length, and an unpadded symbol is its own capacity.
+    for let symbol of capacities.used {
+        symbols.used.insert(symbol);
+    }
+    // What the program takes, in the order `recorded` makes its parameters:
+    // the inputs and the cache, whose extents are the shape class, then the
+    // lengths and the weights.
+    let mut taken_args: List<ProgramArgument> = [];
+    for let vi of &taken {
+        taken_args.push(ProgramArgument::of(checked, names, &vi.name, Crossed::Input));
+    }
+    for let [past, _] of crossing.pairs {
+        taken_args.push(ProgramArgument::of(checked, names, &past, Crossed::Cache));
+    }
+    let mut class: List<String> = taken_args.into_iter().map(|a| `backend.extents_of(&${a.held()})`).collect();
+    // The branches the host took tell the programs apart too.
+    for let c of chosen {
+        class.push(`[chosen.${c}.unwrap() as i32]`);
+    }
+    if !read.is_empty() {
+        let mut fields: List<String> = [];
+        for let symbol of *read {
+            let ident = symbols.idents[symbol];
+            fields.push(`${ident}: backend.upload(&Tensor::<i64, []> { data: [${symbols.spell(
+                &Poly::symbol(&symbol),
+            )?}], extents: [] })`);
+            taken_args.push(ProgramArgument {
+                crossed: Crossed::Length,
+                tensor: symbol,
+                ident,
+                element: "i64",
+                axes: "[]",
+            });
+        }
+        lines.push(`let lengths = ${LENGTHS} { ${fields.join(", ")} };`);
+        arguments.push("&lengths");
+    }
+    let first_weight = taken_args.len();
+    for let weight of weight_names(graph, kept) {
+        taken_args.push(ProgramArgument::of(checked, names, &weight, Crossed::Weight));
+    }
+    return Result::Ok(Entry {
+        lines,
+        symbols,
+        capacities,
+        arguments,
+        taken_args,
+        first_weight,
+        class,
+        chosen,
+        fitted_cache,
+    });
+}
+
+/// An entry's body: the checks first, as a binding reads an extent they check
+/// is there.
+fn entry_lines(context: &EntryContext, symbols: &Symbols, lines: &List<String>) -> List<String> {
+    let mut all = input_checks(context.graph, &context.checked.shapes, context.names, &context.crossing.cached).host;
+    all.extend(&symbols.bindings());
+    all.extend(lines);
+    return all;
+}
+
+/// The input a decoding program feeds its picks to and the input it opens a
+/// position of, the output it picks from, and the length a step adds 1 to.
+struct DecodingAxes {
+    ids: String,
+    mask: String,
+    logits: String,
+    total: String,
+}
+
+/// What `decode` names, once the graph is known to loop: a step must feed
+/// nothing but its token and its mask to the next, and the cache must keep its
+/// extents through a step.
+fn decoding_axes(
+    decode: &Decode,
+    graph: &Graph,
+    checked: &Checked,
+    crossing: &Crossing,
+    padded: &List<String>,
+    owed: &List<[Grown, Option<Poly>]>,
+    conditions: &List<String>,
+) -> Result<DecodingAxes, EmitError> {
+    let refused = |why: String| Result::<DecodingAxes, EmitError>::Err(EmitError::Undecodable(why));
+    if !crossing.has_cache() {
+        return refused("the graph holds no cache to carry its positions from one step to the next");
+    }
+    for let vi of &graph.inputs {
+        if crossing.cached.contains(vi.name)
+            || vi.name == decode.ids
+            || vi.name == decode.mask
+            || conditions.contains(&vi.name) {
+            continue;
+        }
+        return refused(`${vi.name} is an input no step knows how to advance`);
+    }
+    for let name of [decode.ids, decode.mask] {
+        if !graph.inputs.into_iter().any(|vi| vi.name == name) || crossing.cached.contains(name) {
+            return refused(`${name} is no input outside the cache`);
+        }
+        if checked.primitives[name] != "i64" || checked.shapes[name].rank() != 2 {
+            return refused(`${name} must be an i64 tensor of rows and positions`);
+        }
+    }
+    if !crossing.returned.contains(&decode.logits) || checked.primitives[decode.logits] != "f32" {
+        return refused(`${decode.logits} is no f32 output a pass returns`);
+    }
+    let logits = checked.shapes[decode.logits].axes;
+    if logits.len() < 2 || logits.into_iter().skip(1).take(logits.len() - 2).any(|a| !a.extent matches { Static(1) }) {
+        return refused(`${decode.logits} must hold one position a row: name it in \`last\``);
+    }
+    let Some(total) = checked.shapes[decode.mask].axes[1].extent.lone_symbol() else {
+        return refused(`${decode.mask} must be one length long`);
+    };
+    if !padded.contains(&total) {
+        return refused(`${total} must be a length held at a capacity`);
+    }
+    for let [g, _] of *owed {
+        if !padded.contains(&g.symbol) {
+            return refused(`${g.past} must be a buffer the pass writes in place, as ${g.symbol} grows`);
+        }
+    }
+    return Result::Ok(DecodingAxes { ids: decode.ids, mask: decode.mask, logits: decode.logits, total });
+}
+
+/// `decode`: [`DECODED`] over inputs on the host, its tokens read back. A
+/// backend that compiles its pass runs the program `RECORDED_DECODED` records.
+fn emit_decode(w: &mut CodeWriter, context: &EntryContext, given: Symbols, axes: &DecodingAxes) -> Result<(), EmitError> {
+    let EntryContext { checked, names, crossing, .. } = *context;
+    let mut decode = FnSpec::new(DECODE, Vis::Pub);
+    let room = Option::Some(Room { symbol: axes.total, spelled: "(steps - 1) as i64" });
+    let extra: List<[String, String]> = [
+        ["steps", "i32"],
+        ["sampling", "&Sampling"],
+    ];
+    let entry = prepared_entry(context, &mut decode, given, &room, &extra)?;
+    let mut symbols = entry.symbols;
+    let mut lines = entry.lines;
+    let ids = names.get(&axes.ids);
+    let chooses = !entry.chosen.is_empty();
+    lines.push(`let rows = backend.extents_of(&${ids})[0];`);
+    lines.push(
+        `let decoding = Decoding::new(backend, sampling, steps, ${symbols.spell(&Poly::symbol(&axes.total))?}, rows);`,
+    );
+    lines.push("let sampler = sampling.class();");
+    let mut arguments = entry.arguments;
+    if chooses {
+        arguments.push("&chosen");
+    }
+    arguments.push("&model.weights");
+    arguments.push("&decoding");
+    let mut class = entry.class;
+    class.push("sampler");
+    class.push("backend.extents_of(&decoding.tokens)");
+    let taken = entry.taken_args;
+    let erased: List<String> = taken.into_iter().take(entry.first_weight).map(|a| a.erased()).collect();
+    let erased_weights: List<String> = taken.into_iter().skip(entry.first_weight).map(|a| a.erased()).collect();
+    let chosen_argument = if chooses { ", &chosen" } else { "" };
+    let mut fields: List<String> = [];
+    for let [k, [past, _]] of crossing.pairs.into_iter().enumerate() {
+        fields.push(`${names.get(&past)}: ${typed_result(checked, &past, k + 1)}`);
+    }
+    lines.push(
+        `let [tokens, cache] = match model.programs.run(backend, [${class.join(
+            ", ",
+        )}], |recorder, extents| ${RECORDED_DECODED}(recorder, extents, &sampler${chosen_argument}), || {`,
+    );
+    lines.push(`    let mut all: List<Any<${BACKEND_PARAM}>> = [${erased.join(", ")}];`);
+    lines.push("    all.extend(&decoding.erased(backend));");
+    lines.push("    return all;");
+    lines.push(`}, || [${erased_weights.join(", ")}]) {`);
+    lines.push(
+        `    Some(results) => [i64_of::<${BACKEND_PARAM}, [Slots, Picks]>(backend, &results[0]), ${CACHE}::<${BACKEND_PARAM}> { ${fields.join(
+            ", ",
+        )} }],`,
+    );
+    lines.push(`    None => ${DECODED}(${arguments.join(", ")}),`);
+    lines.push("};");
+    lines.push(`return ${DECODED_TYPE} { tokens: resized(&backend.download(&tokens), [rows, steps]), cache };`);
+    decode.add_param("model", `&mut ${MODEL}<${BACKEND_PARAM}>`).set_return_type(`${DECODED_TYPE}<${BACKEND_PARAM}>`).add_effect(
+        "_",
+    );
+
+    let mut decoded_type = StructSpec::new(DECODED_TYPE, Vis::Pub);
+    decoded_type.add_generic(HOLDS_BOUND);
+    decoded_type.add_pub_field("tokens", "Tensor<i64, [Slots, Picks]>");
+    decoded_type.add_pub_field("cache", `${CACHE}<${BACKEND_PARAM}>`);
+    w.blank();
+    w.line("/// What `decode` picked, by row, and the cache, which holds each of them but the last.");
+    decoded_type.emit(w);
+    w.blank();
+    w.line("/// `steps` tokens after the one token each row of the input holds, all read");
+    w.line("/// back once the last is picked. The mask holds the positions so far, that");
+    w.line("/// token's among them, and the cache the ones before it.");
+    decode.emit_begin(w);
+    let ids_axis = checked.shapes[axes.ids].axes[1].name;
+    w.line(`refuse(unmet(steps as i64 - 1, "decode takes at least one step"));`);
+    w.line(wado`refuse(extent_mismatch("${axes.ids}", "${ids_axis}", ${ids}.extents[1], "1", 1));`);
+    for let line of entry_lines(context, &symbols, &lines) {
+        w.line(&line);
+    }
+    w.end();
+    emit_decoded(w, context, axes, &taken, chooses, &symbols)?;
+    emit_recorded(w, names, &taken, entry.first_weight, &[], crossing, chooses, true);
+    return Result::Ok(());
+}
+
+/// `decoded`: [`build`] run a step at a time around the sampler, each step's
+/// token the next's input, its mask one position longer, and the lengths moved
+/// as that moves them.
+fn emit_decoded(
+    w: &mut CodeWriter,
+    context: &EntryContext,
+    axes: &DecodingAxes,
+    taken: &List<ProgramArgument>,
+    chooses: bool,
+    symbols: &Symbols,
+) -> Result<(), EmitError> {
+    let EntryContext { names, read, crossing, owed, .. } = *context;
+    let bk = BACKEND_PARAM;
+    let mut decoded = FnSpec::new(DECODED);
+    decoded.add_generic(GRAPH_BOUND).add_param("backend", `&mut ${bk}`);
+    // What a step changes, as the first of them takes it and the rest the step
+    // before returned it.
+    let mut start: List<String> = [];
+    let mut carried: List<ProgramArgument> = [];
+    let mut build_arguments: List<String> = ["backend"];
+    let mut cache_fields: List<String> = [];
+    for let a of *taken {
+        if a.crossed matches { Input } {
+            decoded.add_param(a.ident, `&${bk}::Tensor<${a.element}, ${a.axes}>`);
+            if a.tensor != axes.ids && a.tensor != axes.mask {
+                build_arguments.push(a.ident);
+                continue;
+            }
+            start.push(a.erased_from(a.ident));
+        } else if a.crossed matches { Cache } {
+            start.push(a.erased_from(`&cache.${a.ident}`));
+        } else {
+            continue;
+        }
+        let now = a.step_value(carried.len());
+        if a.crossed matches { Cache } {
+            cache_fields.push(`${a.ident}: ${now}`);
+        } else {
+            build_arguments.push(`&${now}`);
+        }
+        carried.push(a);
+    }
+    decoded.add_param("cache", `&${CACHE}<${bk}>`);
+    build_arguments.push("&held");
+    if !read.is_empty() {
+        decoded.add_param("lengths", `&${LENGTHS}<${bk}>`);
+        build_arguments.push("&moved");
+    }
+    if chooses {
+        decoded.add_param("chosen", `&${CHOSEN}`);
+        build_arguments.push("chosen");
+    }
+    decoded.add_param("weights", `&${PARAMS_TYPE}`);
+    build_arguments.push("weights");
+    decoded.add_param("decoding", `&Decoding<${bk}>`);
+    decoded.set_return_type(`[${bk}::Tensor<i64, [Slots, Picks]>, ${CACHE}<${bk}>]`).add_effect("_");
+    w.blank();
+    w.line("/// [`build`] a step at a time, each step's token the next's input: the tokens");
+    w.line("/// picked, by row, and the cache after the last step.");
+    decoded.emit_begin(w);
+    let count = carried.len();
+    start.push(`Any::I64(backend.relabeled::<i64, [Slots, Picks], Untyped>(&decoding.tokens))`);
+    start.push(`Any::Bool(backend.relabeled::<bool, [Slots], Untyped>(&decoding.finished))`);
+    w.line(`let start: List<Any<${bk}>> = [${start.join(", ")}];`);
+    w.line("let last = backend.repeated(&decoding.steps, &start, |step, state| {");
+    w.line(`    let held = ${CACHE}::<${bk}> { ${cache_fields.join(", ")} };`);
+    if !read.is_empty() {
+        let mut fields: List<String> = [];
+        for let symbol of *read {
+            let ident = symbols.idents[symbol];
+            let moves = per_step(&symbol, &axes.total, owed)?;
+            fields.push(if moves == 0 {
+                `${ident}: lengths.${ident}`;
+            } else {
+                `${ident}: advanced(backend, &lengths.${ident}, step, ${moves})`;
+            });
+        }
+        w.line(`    let moved = ${LENGTHS}::<${bk}> { ${fields.join(", ")} };`);
+    }
+    w.line(`    let passed = build(${build_arguments.join(", ")});`);
+    let logits = if crossing.several() { `passed.${names.get(&axes.logits)}` } else { "passed" };
+    w.line(`    let tokens = i64_of::<${bk}, [Slots, Picks]>(backend, &state[${count}]);`);
+    w.line(`    let finished = bool_of::<${bk}, [Slots]>(backend, &state[${count + 1}]);`);
+    let logits_axes = axis_list(&context.checked.shapes[axes.logits]);
+    w.line(
+        `    let next = stepped::<${bk}, [${logits_axes}]>(backend, &${logits}, decoding, &tokens, &finished, step);`,
+    );
+    let mut returned: List<String> = [];
+    for let [k, a] of carried.into_iter().enumerate() {
+        returned.push(if a.tensor == axes.ids {
+            "Any::I64(backend.relabeled::<i64, [Slots, One], Untyped>(&next.token))";
+        } else if a.tensor == axes.mask {
+            w.line("    let at = backend.binary::<i64, []>(Binary::Add, &decoding.position, step);");
+            a.erased_from(`&opened::<${bk}, ${a.axes}>(backend, &${a.step_value(k)}, &at)`);
+        } else {
+            a.erased_from(`&passed.cache.${a.ident}`);
+        });
+    }
+    returned.push("Any::I64(backend.relabeled::<i64, [Slots, Picks], Untyped>(&next.tokens))");
+    returned.push("Any::Bool(backend.relabeled::<bool, [Slots], Untyped>(&next.finished))");
+    w.line(`    return [${returned.join(", ")}];`);
+    w.line("});");
+    let mut last_fields: List<String> = [];
+    for let [k, a] of carried.into_iter().enumerate() {
+        if a.crossed matches { Cache } {
+            last_fields.push(`${a.ident}: ${a.element}_of::<${bk}, ${a.axes}>(backend, &last[${k}])`);
+        }
+    }
+    w.line(`return [i64_of::<${bk}, [Slots, Picks]>(backend, &last[${count}]), ${CACHE}::<${bk}> { ${last_fields.join(
+        ", ",
+    )} }];`);
+    w.end();
+    return Result::Ok(());
+}
+
+/// How far `symbol` moves in a step, as `total` moves by 1. One that no past's
+/// arithmetic ties to `total` is an input's other than the mask's, which no
+/// step changes.
+fn per_step(symbol: &String, total: &String, owed: &List<[Grown, Option<Poly>]>) -> Result<i64, EmitError> {
+    if symbol == total {
+        return Result::Ok(1);
+    }
+    for let [g, value] of *owed {
+        if g.symbol != *symbol {
+            continue;
+        }
+        let Some(v) = value else {
+            return Result::Ok(0);
+        };
+        if !v.symbols().contains(total) {
+            return Result::Ok(0);
+        }
+        let Some([moves, _]) = v.linear_in(total) else {
+            builtin::cold_path();
+            return Result::Err(EmitError::Undecodable(`${*symbol} does not move by a fixed amount a step`));
+        };
+        return Result::Ok(moves);
+    }
+    return Result::Ok(0);
 }
 
 /// `least_extents`: the extents `recorded` takes where each length an input
@@ -1290,7 +1704,7 @@ fn emit_least_extents(
     let mut symbols = Symbols::at_one(carriers, names);
     symbols.derive_owed(owed);
     let mut lines: List<String> = [];
-    let mut capacities = at_capacities(&mut symbols, &mut lines, padded, owed, names)?;
+    let mut capacities = at_capacities(&mut symbols, &mut lines, padded, owed, names, &null)?;
     let mut extents: List<String> = [];
     for let a of *taken {
         extents.push(if a.crossed matches { Length } {
@@ -1363,20 +1777,30 @@ fn at_capacities(
     padded: &List<String>,
     owed: &List<[Grown, Option<Poly>]>,
     names: &Names,
+    room: &Option<Room>,
 ) -> Result<Symbols, EmitError> {
     let mut capacities = *symbols;
     let grows = |symbol: &String| owed.into_iter().find(|o| o.0.symbol == *symbol);
+    let with_room = |length: String| if let Some(r) = room {
+        `${length} + ${r.spelled}`;
+    } else {
+        length;
+    };
     // The rest of a present is spelled at the capacities of the lengths it reads.
     let mut ordered: List<String> = padded.into_iter().filter(|s| grows(s) matches { None }).map(|s| *s).collect();
     ordered.extend(&padded.into_iter().filter(|s| grows(s) matches { Some(_) }).map(|s| *s).collect());
     for let symbol of ordered {
         let capacity = names.get(&capacity_key(&symbol));
         let Some([g, _]) = grows(&symbol) else {
-            lines.push(`let ${capacity} = capacity_of(to_extent(${symbols.spell(&Poly::symbol(&symbol))?})) as i64;`);
+            let mut length = symbols.spell(&Poly::symbol(&symbol))?;
+            if room matches { Some(r) && r.symbol == symbol } {
+                length = with_room(length);
+            }
+            lines.push(`let ${capacity} = capacity_of(to_extent(${length})) as i64;`);
             capacities.idents[symbol] = capacity;
             continue;
         };
-        let present = `capacity_of(to_extent(${symbols.spell(&g.present)?})) as i64`;
+        let present = `capacity_of(to_extent(${with_room(symbols.spell(&g.present)?)})) as i64`;
         lines.push(match g.present.linear_in(&symbol) {
             Some([1, rest]) => `let ${capacity} = ${present} - (${capacities.spell(&rest)?});`,
             _ => `let ${capacity} = ${present};`,
@@ -1428,12 +1852,23 @@ impl ProgramArgument {
 
     /// The argument as the program takes it.
     fn erased(&self) -> String {
-        return `Any::${any_case(&self.element)}(backend.relabeled::<${self.element}, ${self.axes}, Untyped>(&${self.held()}))`;
+        return self.erased_from(`&${self.held()}`);
     }
 
-    /// The parameter `recorded` makes of the argument.
-    fn parameter(&self, at: i32) -> String {
-        return `recorder.parameter::<${self.element}, ${self.axes}>(extents[${at}])`;
+    /// `place`, a reference to a value of the argument's type, as the program
+    /// takes it.
+    fn erased_from(&self, place: String) -> String {
+        return `Any::${any_case(&self.element)}(backend.relabeled::<${self.element}, ${self.axes}, Untyped>(${place}))`;
+    }
+
+    /// The argument as a step of `decoded` holds it, at `at` of what it carries.
+    fn step_value(&self, at: i32) -> String {
+        return `${self.element}_of::<${BACKEND_PARAM}, ${self.axes}>(backend, &state[${at}])`;
+    }
+
+    /// The parameter `recorded` makes of the argument, of the extents at `at`.
+    fn parameter(&self, at: &String) -> String {
+        return `recorder.parameter::<${self.element}, ${self.axes}>(extents[${*at}])`;
     }
 }
 
@@ -1483,24 +1918,35 @@ fn emit_model(w: &mut CodeWriter) {
 
 /// `recorded`: [`build`] recorded over parameters, one for each of `taken`,
 /// in its order, for a backend to compile, taking the branches `chosen` where
-/// `chooses`.
+/// `chooses`. `decoding` records [`DECODED`] as `RECORDED_DECODED` instead,
+/// over what `Decoding` takes between `taken` and its weights.
 fn emit_recorded(
     w: &mut CodeWriter,
     names: &Names,
     taken: &List<ProgramArgument>,
+    first_weight: i32,
     returned: &List<String>,
     crossing: &Crossing,
     chooses: bool,
+    decoding: bool,
 ) {
     w.blank();
     w.line("/// [`build`] recorded over parameters of `extents`, in the order `compute`");
     w.line("/// passes its program the arguments.");
     let chosen = if chooses { `, chosen: &${CHOSEN}` } else { "" };
-    w.begin(`fn ${RECORDED}(recorder: &mut Recorder, extents: &List<List<i32>>${chosen}) -> Recorded`);
+    let name = if decoding { RECORDED_DECODED } else { RECORDED };
+    let class = if decoding { ", class: &List<i32>" } else { "" };
+    w.begin(`fn ${name}(recorder: &mut Recorder, extents: &List<List<i32>>${class}${chosen}) -> Recorded`);
+    // The weights come last, past however many values the sampler takes.
+    let extents_at = |at: i32| if decoding && at >= first_weight {
+        `extents.len() - ${taken.len() - at}`;
+    } else {
+        `${at}`;
+    };
     let mut arguments: List<String> = ["recorder"];
     for let [at, a] of taken.into_iter().enumerate() {
         if a.crossed matches { Input } {
-            w.line(`let ${a.ident} = ${a.parameter(at)};`);
+            w.line(`let ${a.ident} = ${a.parameter(&extents_at(at))};`);
             arguments.push(`&${a.ident}`);
         }
     }
@@ -1512,20 +1958,33 @@ fn emit_recorded(
         let mut fields: List<String> = [];
         for let [at, a] of taken.into_iter().enumerate() {
             if a.crossed == crossed {
-                fields.push(`${a.ident}: ${a.parameter(at)}`);
+                fields.push(`${a.ident}: ${a.parameter(&extents_at(at))}`);
             }
         }
-        if crossed matches { Weight } && chooses {
-            arguments.push("chosen");
+        if crossed matches { Weight } {
+            if decoding {
+                w.line(`let decoding = Decoding::recorded(recorder, extents, ${first_weight}, class);`);
+            }
+            if chooses {
+                arguments.push("chosen");
+            }
         }
         if !fields.is_empty() || crossed matches { Weight } {
             w.line(`let ${local} = ${ty}::<Recorder> { ${fields.join(", ")} };`);
             arguments.push(`&${local}`);
         }
     }
-    w.line(`let passed = build(${arguments.join(", ")});`);
+    if decoding {
+        arguments.push("&decoding");
+    }
+    w.line(`let passed = ${if decoding { DECODED } else { "build" }}(${arguments.join(", ")});`);
     let mut results: List<String> = [];
-    if crossing.several() {
+    if decoding {
+        results.push("passed.0.id");
+        for let [past, _] of crossing.pairs {
+            results.push(`passed.1.${names.get(&past)}.id`);
+        }
+    } else if crossing.several() {
         for let output of *returned {
             results.push(`passed.${names.get(&output)}.id`);
         }
@@ -2640,7 +3099,7 @@ fn built_call(
         return Result::Ok(`backend.binary::<f32, [${axes}]>(Binary::Maximum, ${operand(0)}, ${zero})`);
     }
     let name = match unary {
-        Relu => unreachable(),
+        Relu | Trunc => unreachable(),
         Sigmoid => "Logistic",
         Tanh => "Tanh",
         Erf => "Erf",

@@ -50,6 +50,7 @@ use {
     Prologue,
     RowOp,
     Tensor,
+    UnaryOp,
     constant,
     element_count,
     interleaved,
@@ -252,15 +253,19 @@ impl Graph for WebGpuBackend {
         &mut self,
         x: &Placed<A, Axes>,
     ) -> Placed<B, Axes> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
-        if let Device(d) = x && A::exact_in_f32() && B::exact_in_f32() {
-            // A device holds a bool as the f32 it converts to.
-            if B::is_f32() || !A::is_f32() {
-                return Placed::Device(*d);
-            }
-            let nonzero = operand(0).binary(BinaryOp::Ne, &constant(0.0));
-            return as_element(self, self.fused_on::<Axes>(&([*d] as List<DeviceTensor>), &nonzero));
+        let Device(d) = x else {
+            return Placed::Host(self.cpu.convert(&self.host(x)));
+        };
+        // A device holds a bool or an i64 as the f32 it converts to.
+        if A::kind() == B::kind() || B::is_f32() || A::kind() matches { Bool } {
+            return Placed::Device(*d);
         }
-        return Placed::Host(self.cpu.convert(&self.host(x)));
+        let op = if B::kind() matches { Bool } {
+            operand(0).binary(BinaryOp::Ne, &constant(0.0));
+        } else {
+            operand(0).unary(UnaryOp::Trunc);
+        };
+        return as_element(self, self.fused_on::<Axes>(&([*d] as List<DeviceTensor>), &op));
     }
 
     fn unary<Axes>(
@@ -277,7 +282,10 @@ impl Graph for WebGpuBackend {
         a: &Placed<E, Axes>,
         b: &Placed<E, Axes>,
     ) -> Placed<E, Axes> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
-        if !E::is_f32() {
+        // On the device an `i64` is the index it holds as an f32, and those
+        // four stay one: a product might not, and a quotient would not truncate.
+        let index_reckoning = op matches { Add | Subtract | Minimum | Maximum } && held_as_f32(a, b);
+        if !E::is_f32() && !index_reckoning {
             return Placed::Host(self.cpu.binary(op, &self.host(a), &self.host(b)));
         }
         let operands = [
@@ -293,7 +301,7 @@ impl Graph for WebGpuBackend {
         a: &Placed<E, Axes>,
         b: &Placed<E, Axes>,
     ) -> Placed<bool, Axes> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
-        if !E::exact_in_f32() {
+        if !held_as_f32(a, b) {
             return Placed::Host(self.cpu.compare(direction, &self.host(a), &self.host(b)));
         }
         let operands = [
@@ -310,7 +318,7 @@ impl Graph for WebGpuBackend {
         on_true: &Placed<E, Axes>,
         on_false: &Placed<E, Axes>,
     ) -> Placed<E, Axes> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
-        if !E::exact_in_f32() {
+        if !held_as_f32(on_true, on_false) {
             return Placed::Host(self.cpu.select(&self.host(pred), &self.host(on_true), &self.host(on_false)));
         }
         let operands = [
@@ -461,8 +469,14 @@ impl Graph for WebGpuBackend {
         indices: &Placed<i64, I>,
         dims: &GatherDims,
     ) -> Placed<E, Out> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
-        let index = self.host(indices);
         let extents = self.extents_of(data);
+        if let Device(by) = indices
+            && E::exact_in_f32()
+            && let Some(axis) = taken_axis(&extents, by.extents.len(), dims)
+            && let Some(out) = self.gathered_by(&self.device_view(data), by, axis) {
+            return Placed::Device(out);
+        }
+        let index = self.host(indices);
         if E::exact_in_f32() && let Some(axis) = taken_axis(&extents, index.extents.len(), dims) {
             let last = extents[axis] as i64 - 1;
             let mut starts = List::<i64>::with_capacity(index.data.len());
@@ -488,7 +502,7 @@ impl Graph for WebGpuBackend {
         dims: &ScatterDims,
     ) -> Placed<E, D> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
         let index = self.host(indices);
-        if !E::exact_in_f32() {
+        if !held_as_f32(base, updates) {
             return Placed::Host(self.cpu.scatter(&self.host(base), &index, &self.host(updates), dims));
         }
         let source = self.device_view(base);
@@ -775,7 +789,7 @@ fn launched(
     let recorded = &program.recorded;
     for let launch of &plan.launches {
         let root = match launch {
-            Node(id) | Case([id, _, _]) => *id,
+            Node(id) | Case([id, _, _]) | Repeat([id, _]) => *id,
             Kernel(k) => k.root,
             Joined(ks) => ks[0].root,
             Paired(p) => p.second.root,
@@ -819,9 +833,50 @@ fn launched(
                     state.values[result] = yielded[k];
                 }
             },
+            Repeat([id, body]) => repeated_launch(g, state, program, *id, body),
         }
     }
     return plan.results.into_iter().map(|r| state.values[r]).collect();
+}
+
+/// Runs the `Repeat` node `id`'s `body` its count of times, each run's commands
+/// after the last's: one pass, read back from no more than the count. A launch
+/// makes the buffers of its next run in those of its last, so what the runs
+/// carry leaves those, but for a cache, which each run writes in place.
+fn repeated_launch(
+    g: &mut WebGpuBackend,
+    state: &mut Run<WebGpuBackend>,
+    program: &WebGpuProgram,
+    id: i32,
+    body: &Plan,
+) with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
+    let node = &program.recorded.nodes[id];
+    let Repeat(repeat) = &node.op else {
+        unreachable();
+    };
+    let I64(count) = &state.values[node.operands[0]] else {
+        unreachable();
+    };
+    let mut carried: List<Any<WebGpuBackend>> = node.operands[1..<node.operands.len()].to_list().into_iter().map(
+        |o| state.values[o],
+    ).collect();
+    for let at of 0..<g.host(count).data[0] {
+        state.values[repeat.step] = Any::I64(Placed::Host(Tensor {
+            data: [at],
+            extents: [],
+        }));
+        for let [k, c] of repeat.carried.into_iter().enumerate() {
+            state.values[c] = carried[k];
+        }
+        let returned = launched(g, state, program, body);
+        carried = returned.into_iter().map(|value| match on_device(&value) {
+            Some(d) && g.remade(d.slot) => at_slot(&value, g.moved_to_pass(d).slot),
+            _ => value,
+        }).collect();
+    }
+    for let [k, result] of repeat.body.results.into_iter().enumerate() {
+        state.values[result] = carried[k];
+    }
 }
 
 /// What every shape class of one graph records alike: each node's operation,
@@ -870,6 +925,7 @@ fn keyed(g: &mut WebGpuBackend, recorded: &Recorded, serial: i32, plan: &Plan, r
                 keyed(g, recorded, serial, first, replays);
                 keyed(g, recorded, serial, second, replays);
             },
+            Repeat([_, body]) => keyed(g, recorded, serial, body, replays),
         }
     }
 }
@@ -1006,7 +1062,7 @@ fn apart(
 /// The view `value` is, where it is on the device.
 fn on_device(value: &Any<WebGpuBackend>) -> Option<&DeviceTensor> {
     return match value {
-        F32(Device(d)) | Bool(Device(d)) => Option::Some(d),
+        F32(Device(d)) | I64(Device(d)) | Bool(Device(d)) => Option::Some(d),
         _ => null,
     };
 }
@@ -1015,6 +1071,7 @@ fn on_device(value: &Any<WebGpuBackend>) -> Option<&DeviceTensor> {
 fn at_slot(value: &Any<WebGpuBackend>, slot: i32) -> Any<WebGpuBackend> {
     return match value {
         F32(Device(d)) => Any::F32(Placed::Device(DeviceTensor { ..*d, slot })),
+        I64(Device(d)) => Any::I64(Placed::Device(DeviceTensor { ..*d, slot })),
         Bool(Device(d)) => Any::Bool(Placed::Device(DeviceTensor { ..*d, slot })),
         _ => unreachable(),
     };
@@ -1360,6 +1417,21 @@ fn elementwise_on<Axes>(
 ) -> Placed<f32, Axes> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
     let _ = elementwise_extents(operands.into_iter().map(|o| o.extents).collect());
     return g.fused_on(operands, op);
+}
+
+/// Whether an operation that moves or picks `E`s runs on the device over `a`
+/// and `b`: an `E` it holds, or an i64 one of them already holds as an f32, a
+/// token a kernel ranked, where the other's values lose nothing in one.
+fn held_as_f32<E: Element, A, B>(a: &Placed<E, A>, b: &Placed<E, B>) -> bool {
+    let on_device = a matches { Device(_) } || b matches { Device(_) };
+    return E::exact_in_f32() || on_device && exact_in_f32(a) && exact_in_f32(b);
+}
+
+fn exact_in_f32<E: Element, Axes>(t: &Placed<E, Axes>) -> bool {
+    let Host(h) = t else {
+        return true;
+    };
+    return h.data.into_iter().all(|v| v.cast_to::<f32>().cast_to::<i64>() == v.cast_to::<i64>());
 }
 
 /// An f32 result as the element `E` it computed, which the device holds as

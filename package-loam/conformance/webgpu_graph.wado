@@ -25,6 +25,7 @@ use {
 use { Comparison, Cpu, Element, full, Graph, Holds, Placed, strided_gather, Tensor, WebGpuBackend } from "lib:loam";
 use cases from "lib:loam/src/runtime/graph_cases.wado";
 use { deviation } from "lib:loam/example/webgpu/compare.wado";
+use { decoded_tokens, samplers, stepped_tokens, tokens_apart } from "./decoded.wado";
 use gated from "./gated.onnxtext"
     with {
         type: "onnxtext",
@@ -326,6 +327,24 @@ export fn run() with (Stdout, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuC
         println(`compiled merged ${length} ${deviation(&stepped.logits.data, &wanted.logits.data)}`);
         past_gpu = stepped.cache;
         past_cpu = wanted.cache;
+    }
+
+    for let times of [0, 1, 4] as List<i64> {
+        let [count, xs, tallies] = cases::repeating_inputs(times);
+        let want = cases::repeating(cpu, &count, &xs, &tallies);
+        let ran = cases::repeating(&mut gpu, &gpu.upload(&count), &gpu.upload(&xs), &gpu.upload(&tallies));
+        println(`repeated ${times} carried ${apart(&mut gpu, &ran.0, &want.0)}`);
+        println(`repeated ${times} tally ${apart(&mut gpu, &ran.1, &want.1)}`);
+    }
+
+    for let [k, sampling] of samplers().into_iter().enumerate() {
+        let want = stepped_tokens(cpu, [2, 6, 1], 8, &sampling);
+        let read_before = gpu.read_backs();
+        let whole = decoded_tokens(&mut gpu, [2, 6, 1], [7], &sampling);
+        assert gpu.read_backs() - read_before == 2, "the prompt's logits, then every step's tokens at once";
+        let split = decoded_tokens(&mut gpu, [2, 6, 1], [3, 4], &sampling);
+        println(`decoded ${k} ${tokens_apart(&whole, &want)}`);
+        println(`decoded split ${k} ${tokens_apart(&split, &want)}`);
     }
 }
 

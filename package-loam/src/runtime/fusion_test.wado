@@ -20,6 +20,7 @@ fn spelled(plan: &Plan) -> List<String> {
         Joined(ks) => `joined ${ks.into_iter().map(|k| `${k.root}`).collect().join(" ")}${from(&ks[0])}`,
         Paired(p) => `paired ${p.first.root} ${p.second.root}${from(&p.first)}`,
         Case([id, _, _]) => `case ${id}`,
+        Repeat([id, _]) => `repeat ${id}`,
     }).collect();
 }
 
