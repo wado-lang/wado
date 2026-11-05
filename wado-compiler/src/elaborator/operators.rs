@@ -332,8 +332,8 @@ impl TypeSystem {
                 match tt.get(ultimate) {
                     ResolvedType::Struct { .. }
                     | ResolvedType::GenericInstance { .. }
-                    | ResolvedType::Resource { .. }
                     | ResolvedType::Tuple(_) => true,
+                    ResolvedType::Resource { type_args, .. } => !type_args.is_empty(),
                     // SIMD aliases (`type f32x4 = v128`) and half aliases —
                     // see the `Primitive` arm below.
                     ResolvedType::Primitive(p) => *p == PrimitiveType::V128 || p.is_half(),
@@ -487,13 +487,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let struct_name = match &left_type {
                 ResolvedType::Struct { .. }
                 | ResolvedType::GenericInstance { .. }
-                | ResolvedType::Resource { .. }
                 | ResolvedType::Tuple(_)
                 | ResolvedType::Variant { .. }
                 // `fq_base_type_name` spells a raw GC array `Array` and the
                 // unit type `()`, the names their `Eq` / `Ord` impls attach to.
                 | ResolvedType::BuiltinArray(_)
                 | ResolvedType::Unit => Some(
+                    self.tysys
+                        .type_table
+                        .borrow()
+                        .fq_base_type_name(left)
+                        .into_string(),
+                ),
+                // A generic resource's `Eq` is synthesized per instance.
+                ResolvedType::Resource { type_args, .. } if !type_args.is_empty() => Some(
                     self.tysys
                         .type_table
                         .borrow()
@@ -523,9 +530,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     match tt.get(ultimate) {
                         ResolvedType::Struct { .. }
                         | ResolvedType::GenericInstance { .. }
-                        | ResolvedType::Resource { .. }
                         | ResolvedType::Tuple(_)
                         | ResolvedType::Variant { .. } => {
+                            Some(tt.fq_base_type_name(ultimate).into_string())
+                        }
+                        ResolvedType::Resource { type_args, .. } if !type_args.is_empty() => {
                             Some(tt.fq_base_type_name(ultimate).into_string())
                         }
                         _ => self.tysys.primitive_op_receiver(left, ultimate),
