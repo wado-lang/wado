@@ -188,7 +188,9 @@ import fn wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode f
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
-global global:core:prelude/string.wado::$const_obj_3: ref Array<u8> = array.new_fixed<u8>(32);
+global global:licm_reloadable_hoist_nonunit.wado::$const_obj_0: ref "core:prelude/list.wado//List<i32>" = struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(7, 7, 7), used: 3 };
+global global:licm_reloadable_hoist_nonunit.wado::$const_obj_1: ref "core:prelude/list.wado//List<i32>" = struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(1, 2, 3), used: 3 };
+global global:core:prelude/string.wado::$const_obj_5: ref Array<u8> = array.new_fixed<u8>(32);
 
 fn "licm_reloadable_hoist_nonunit.wado/probe"(sink, b, out) {
     let $load_0: ref "core:prelude/list.wado//List<i32>";
@@ -268,7 +270,7 @@ fn "licm_reloadable_hoist_nonunit.wado/run"() with Stdout {
     let $cm_pair_7: i64;
     let $sroa_$iter_0_repr_49: ref Array<i32>;
     let $sroa_$iter_0_index_50: i32;
-    bag = struct.new "licm_reloadable_hoist_nonunit.wado//Bag" { items: struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(1, 2, 3), used: 3 } };
+    bag = struct.new "licm_reloadable_hoist_nonunit.wado//Bag" { items: global:licm_reloadable_hoist_nonunit.wado::$const_obj_1 };
     out_1 = struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(), used: 0 };
     "licm_reloadable_hoist_nonunit.wado/probe"(bag, bag, out_1);
     s = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
@@ -710,7 +712,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/StrSlice^core:prelude/stri
 }
 
 fn "licm_reloadable_hoist_nonunit.wado/licm_reloadable_hoist_nonunit.wado/Bag::swap_out$dae[return]"(self) {
-    self.items = struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(7, 7, 7), used: 3 };
+    self.items = global:licm_reloadable_hoist_nonunit.wado::$const_obj_0;
     return;
 }
 
@@ -1309,7 +1311,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<licm_reload
     if t > start_153 {
         builtin::array_set_u8($load_6, start_153, 48 + builtin::i32_wrap_i64(x %u 10_i64));
     }
-    $sroa_view_repr_498 = global:core:prelude/string.wado::$const_obj_3;
+    $sroa_view_repr_498 = global:core:prelude/string.wado::$const_obj_5;
     if @unlikely(local.tee t(out_3.used + 1) > builtin::array_len($load_6)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_3, t);

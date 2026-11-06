@@ -1,0 +1,45 @@
+// A constant assigned into a field hoists as one a struct literal writes there
+// does (`const_object_globalization_struct_field.wado`), on the same check that
+// nothing writes through the field.
+
+use { println, Stdout } from "core:cli";
+
+struct Node {
+    weights: List<f64>,
+}
+
+fn reset(node: &mut Node) {
+    node.weights = [3.0, 4.0];
+}
+
+export fn run() with Stdout {
+    let n = builtin::black_box(2);
+    let mut keep: List<Node> = [];
+    for let i of 0..<n {
+        let mut node = Node { weights: List::with_capacity(i + 1) };
+        reset(&mut node);
+        keep.push(node);
+    }
+    let mut total = 0.0;
+    for let node of &keep {
+        total += node.weights[0] + node.weights[1];
+    }
+    println(`${total}`);
+
+    // Overwriting a field stores into `a` and leaves the shared list alone.
+    let mut a = Node { weights: [] };
+    reset(&mut a);
+    let mut b = Node { weights: [] };
+    reset(&mut b);
+    a.weights = List::with_capacity(n);
+    println(`${a.weights.len()} ${b.weights.len()}`);
+}
+
+__DATA__
+{
+    "stdout": "14\n0 2\n",
+    "wir_pass": {"O2": ["wir/promote_const_global_inits"]},
+    "wir_expect:O2": [
+        "global:const_object_globalization_field_assign.wado::$const_obj_{}: ref \"core:prelude/list.wado//List<f64>\" = struct.new"
+    ]
+}

@@ -191,10 +191,12 @@ import fn wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode f
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
-global global:licm_reload_after_field_writer_only.wado::$const_obj_0: ref Array<u8> = array.new_fixed<u8>(32);
+global global:licm_reload_after_field_writer_only.wado::$const_obj_0: ref "core:prelude/list.wado//List<i32>" = struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(5, 6, 7, 8), used: 4 };
+global global:licm_reload_after_field_writer_only.wado::$const_obj_1: ref Array<u8> = array.new_fixed<u8>(32);
+global global:licm_reload_after_field_writer_only.wado::$const_obj_2: ref "core:prelude/list.wado//List<i32>" = struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(1, -1, 0, 2), used: 4 };
 
 fn "licm_reload_after_field_writer_only.wado/regrow"(a) {
-    a.items = struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(5, 6, 7, 8), used: 4 };
+    a.items = global:licm_reload_after_field_writer_only.wado::$const_obj_0;
 }
 
 fn "licm_reload_after_field_writer_only.wado/miss"(a) {
@@ -244,7 +246,7 @@ fn "licm_reload_after_field_writer_only.wado/run"() with Stdout {
     let $sroa_view_repr_203: ref Array<u8>;
     let $sroa_t_h0_242: i32;
     let $sroa_t_h1_243: i32;
-    $sroa_t_h0_242 = "licm_reload_after_field_writer_only.wado/scan"(local.tee a(struct.new "licm_reload_after_field_writer_only.wado//Acc" { items: ref.as_non_null(black_box(struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(1, -1, 0, 2), used: 4 })), misses: 0 }), black_box(8));
+    $sroa_t_h0_242 = "licm_reload_after_field_writer_only.wado/scan"(local.tee a(struct.new "licm_reload_after_field_writer_only.wado//Acc" { items: ref.as_non_null(black_box(global:licm_reload_after_field_writer_only.wado::$const_obj_2)), misses: 0 }), black_box(8));
     $sroa_t_h1_243 = a.misses;
     out_21 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 };
     $inline_core_prelude_string_wado_String__format_licm_reload_after_field_writer_only_wado__tmpl_8db8629cb9c7db93__i32_i32___spec0_spec0_0__$inline_core_prelude_string_wado_String__internal_push_view_22: block {
@@ -254,7 +256,7 @@ fn "licm_reload_after_field_writer_only.wado/run"() with Stdout {
     $sroa_t_h0_242 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_92(x_92 = builtin::i64_extend_i32_s($sroa_t_h0_242); select i64(x_92 < 0_i64, 0_i64 - x_92, x_92)));
     is_negative_88 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"(out_21, is_negative_88, $sroa_t_h0_242);
     "core:prelude/primitive.wado/write_decimal_digits"(local.tee $load_1(out_21.repr), is_negative_88, x_92, $sroa_t_h0_242);
-    $sroa_view_repr_203 = global:licm_reload_after_field_writer_only.wado::$const_obj_0;
+    $sroa_view_repr_203 = global:licm_reload_after_field_writer_only.wado::$const_obj_1;
     if @unlikely(local.tee $sroa_t_h0_242(out_21.used + 1) > builtin::array_len($load_1)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_21, $sroa_t_h0_242);

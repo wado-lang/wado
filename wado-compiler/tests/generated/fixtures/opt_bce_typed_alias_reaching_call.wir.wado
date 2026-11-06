@@ -213,6 +213,8 @@ import fn wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode f
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
+global global:opt_bce_typed_alias_reaching_call.wado::$const_obj_0: ref "core:prelude/list.wado//List<i32>" = struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(1, 2, 3), used: 3 };
+
 fn "opt_bce_typed_alias_reaching_call.wado/clear"(h) {
     h.buf.len = 0;
 }
@@ -251,7 +253,7 @@ fn "opt_bce_typed_alias_reaching_call.wado/run"() with Stdout {
     let tens: i32;
     let $sroa_t_h0_125: i32;
     let start_164: i32;
-    h_1 = struct.new "opt_bce_typed_alias_reaching_call.wado//Holder" { buf: local.tee x_0(struct.new "opt_bce_typed_alias_reaching_call.wado//Buf" { data: struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(1, 2, 3), used: 3 }, len: black_box(3) }) };
+    h_1 = struct.new "opt_bce_typed_alias_reaching_call.wado//Holder" { buf: local.tee x_0(struct.new "opt_bce_typed_alias_reaching_call.wado//Buf" { data: global:opt_bce_typed_alias_reaching_call.wado::$const_obj_0, len: black_box(3) }) };
     $sroa_t_h0_125 = "opt_bce_typed_alias_reaching_call.wado/read_after_clear"(x_0, h_1, black_box(1));
     out_16 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
     $inline_core_prelude_string_wado_String__internal_push_view_24: block {

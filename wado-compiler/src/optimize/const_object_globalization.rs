@@ -2,7 +2,7 @@
 //! shared module global, so Wasm 3.0 GC builds it once at instantiation. Two
 //! gates carry the soundness: the initializer must be a side-effect-free
 //! constant with no free locals, and every use a reading position — including
-//! the callee's parameter, a by-value constant crossing uncopied.
+//! the callee's parameter or the field a by-value constant lands in, uncopied.
 
 use cranelift_entity::EntityRef;
 use std::cell::{OnceCell, RefCell};
@@ -91,7 +91,9 @@ enum CandidateKind {
     /// uncopied because the literal is fresh, so hoisting it is sound only
     /// when the callee cannot write the value it receives; see
     /// [`Gate::callee_param_readonly`]. Hoisted in place like [`Self::InlineRef`],
-    /// wrapping the argument itself instead of a `&`'s operand.
+    /// wrapping the argument itself instead of a `&`'s operand. A constant
+    /// written straight into a field takes the same shape; see
+    /// [`field_value_candidate`].
     ValueArg {
         /// The argument node whose value is hoisted.
         arg_expr: ExprId,
@@ -398,10 +400,9 @@ fn collect_candidates(
         {
             let inner = *inner;
             let inner_ty = body.exprs[inner].type_id;
-            if gate.is_reference_type(inner_ty)
-                && !leaked_ref_args.contains(&id)
+            if !leaked_ref_args.contains(&id)
                 && !immediate_args.contains(&id)
-                && is_globalizable_const(body, inner, gate, &mut siblings.set.clone())
+                && is_closed_const_aggregate(body, inner, gate, &siblings)
                 // A reference that survives the call is in `leaked_ref_args`, so
                 // what reaches here is read and dropped.
                 && worth_hoisting(body, inner, gate, Reach::Transient)
@@ -678,23 +679,79 @@ fn immediate_operands(body: &Body, gate: &Gate<'_>) -> (IndexSet<ExprId>, IndexS
     (exprs, locals)
 }
 
-/// The arguments of the call at `expr` that qualify for by-value hoisting.
-///
-/// An argument qualifies when it is a closed constant aggregate (the gate the
-/// `let` and `&` cases use) *and* the callee's matching parameter is read-only
-/// in the callee's own body. That second gate is what makes sharing sound: a
-/// fresh literal is handed over uncopied, so a callee that writes its parameter
-/// would write the shared global.
+/// The operands of `expr` that qualify for by-value hoisting: the arguments of
+/// a call, or a value written into a field.
 fn value_arg_candidates(
     body: &Body,
     expr: ExprId,
     gate: &Gate<'_>,
     siblings: &SiblingConsts,
 ) -> Vec<ExprId> {
-    let (func_id, args) = match &body.exprs[expr].kind {
-        ExprKind::Call { func_id, args, .. } => (*func_id, args),
-        _ => return Vec::new(),
-    };
+    match &body.exprs[expr].kind {
+        ExprKind::Call { func_id, args, .. } => {
+            call_arg_candidates(body, *func_id, args, gate, siblings)
+        }
+        ExprKind::StructLiteral { fields, .. } => fields
+            .iter()
+            .filter_map(|f| field_value_candidate(body, &f.name, f.value, gate, siblings))
+            .collect(),
+        ExprKind::Assign { target, value } => match &body.exprs[*target].kind {
+            ExprKind::FieldAccess { field_name, .. } => {
+                field_value_candidate(body, field_name, *value, gate, siblings)
+                    .into_iter()
+                    .collect()
+            }
+            _ => Vec::new(),
+        },
+        _ => Vec::new(),
+    }
+}
+
+/// `value` if it qualifies as what a field holds: a closed constant aggregate,
+/// in a field nothing in the program writes through. That is the check a
+/// callee's stashed parameter answers to, and inlining the callee is what
+/// leaves the constant here.
+///
+/// The struct around it may die or scalarize, so unlike a stashed argument a
+/// constant pays only if it owns storage.
+fn field_value_candidate(
+    body: &Body,
+    field: &str,
+    value: Operand,
+    gate: &Gate<'_>,
+    siblings: &SiblingConsts,
+) -> Option<ExprId> {
+    let value = value.as_expr()?;
+    (is_closed_const_aggregate(body, value, gate, siblings)
+        && worth_hoisting(body, value, gate, Reach::Transient)
+        && gate.shared_escape.field_shareable(field))
+    .then_some(value)
+}
+
+fn is_closed_const_aggregate(
+    body: &Body,
+    expr: ExprId,
+    gate: &Gate<'_>,
+    siblings: &SiblingConsts,
+) -> bool {
+    gate.is_reference_type(body.exprs[expr].type_id)
+        && is_globalizable_const(body, expr, gate, &mut siblings.set.clone())
+}
+
+/// The arguments of a call to `func_id` that qualify.
+///
+/// An argument qualifies when it is a closed constant aggregate (the gate the
+/// `let` and `&` cases use) *and* the callee's matching parameter is read-only
+/// in the callee's own body. That second gate is what makes sharing sound: a
+/// fresh literal is handed over uncopied, so a callee that writes its parameter
+/// would write the shared global.
+fn call_arg_candidates(
+    body: &Body,
+    func_id: FuncId,
+    args: &[ArenaCallArg],
+    gate: &Gate<'_>,
+    siblings: &SiblingConsts,
+) -> Vec<ExprId> {
     args.iter()
         .enumerate()
         .filter(|(_, arg)| !arg.is_mut)
@@ -711,8 +768,7 @@ fn value_arg_candidates(
         })
         .filter(|&(pos, arg)| {
             if gate.is_immediate_param(func_id, pos)
-                || !gate.is_reference_type(body.exprs[arg].type_id)
-                || !is_globalizable_const(body, arg, gate, &mut siblings.set.clone())
+                || !is_closed_const_aggregate(body, arg, gate, siblings)
             {
                 return false;
             }
@@ -1571,10 +1627,17 @@ impl Gate<'_> {
             | ResolvedType::Newtype {
                 base_type: inner, ..
             } => Some(*inner),
-            // Struct / tuple: decided by the fields below. Anything else
-            // (a variant and its payloads, a generic instance) cannot be
-            // walked here, so assume it owns storage — `Option<String>` and
-            // friends live there.
+            ResolvedType::Variant { def, type_args } => {
+                return tt
+                    .variant_instance_payloads(*def, type_args)
+                    .is_none_or(|payloads| {
+                        payloads.into_iter().any(|p| {
+                            tt.contains_type_param(p) || self.owns_heap_storage_inner(p, seen)
+                        })
+                    });
+            }
+            // Struct / tuple: decided by the fields below. Anything else cannot
+            // be walked here, so assume it owns storage.
             _ => None,
         };
         if let Some(inner) = inner {

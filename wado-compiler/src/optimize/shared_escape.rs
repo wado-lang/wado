@@ -89,6 +89,12 @@ impl<'a> SharedEscape<'a> {
         self.slot_ok(&Slot::Param(func_id, pos))
     }
 
+    /// Whether a constant written into a field called `name` may be shared by
+    /// every write: no write reaches it through a read of that field.
+    pub(super) fn field_shareable(&self, name: &str) -> bool {
+        self.slot_ok(&Slot::Field(name.to_string()))
+    }
+
     /// Settled without holding the lock: a verdict another thread publishes
     /// meanwhile is the same exact answer this one would reach.
     fn slot_ok(&self, slot: &Slot) -> bool {
@@ -275,10 +281,7 @@ impl<'a> SharedEscape<'a> {
             // `v.grad = …` names an `f64`, which no taint ever reaches, while
             // the `v` it writes through may be the shared object.
             ExprKind::Assign { target, value } => {
-                // Filling a bare local renames, it does not write: the local
-                // the walk tracks keeps naming the same object.
-                let bare_local = matches!(body.exprs[*target].kind, ExprKind::Local { .. });
-                if !bare_local && place_writes_taint(taint, *target) {
+                if place_writes_taint(taint, *target) {
                     return false;
                 }
                 if taint.operand(*value) {
@@ -594,16 +597,17 @@ impl Taint<'_> {
 
 /// Whether assigning to `target` writes through a tainted value: any step of
 /// its receiver chain is the shared object. The target's own type says nothing
-/// — a scalar field of a tainted receiver is still a write of it.
+/// — a scalar field of a tainted receiver is still a write of it. Nor does its
+/// own name: `x.seed = …` stores into `x` and leaves what the field held alone.
 fn place_writes_taint(taint: &Taint<'_>, target: ExprId) -> bool {
-    if taint.expr(target) {
-        return true;
-    }
     let inner = match &taint.body.exprs[target].kind {
         ExprKind::FieldAccess { expr, .. }
         | ExprKind::Index { expr, .. }
         | ExprKind::Unary { expr, .. } => *expr,
-        _ => return false,
+        // Filling a bare local renames, it does not write: the local the walk
+        // tracks keeps naming the same object.
+        ExprKind::Local { .. } => return false,
+        _ => return taint.expr(target),
     };
     if taint.operand(inner) {
         return true;
