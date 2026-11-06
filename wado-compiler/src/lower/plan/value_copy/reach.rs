@@ -209,16 +209,15 @@ impl<'a> StorageReach<'a> {
     /// copies on every read.
     fn storage_of(&self, ty: TypeId) -> Vec<Storage> {
         let tt = self.type_table;
-        if tt.is_resource_type(ty)
-            || matches!(
-                tt.get(ty),
-                ResolvedType::Primitive(_)
-                    | ResolvedType::Unit
-                    | ResolvedType::Never
-                    | ResolvedType::Enum { .. }
-                    | ResolvedType::Flags { .. }
-            )
-        {
+        if matches!(
+            tt.get(ty),
+            ResolvedType::Primitive(_)
+                | ResolvedType::Unit
+                | ResolvedType::Never
+                | ResolvedType::Enum { .. }
+                | ResolvedType::Flags { .. }
+                | ResolvedType::Resource { .. }
+        ) {
             return Vec::new();
         }
         let mut out = vec![Storage::Of(tt.type_key(ty))];
@@ -263,6 +262,7 @@ impl<'a> StorageReach<'a> {
             ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => Members::Reference(*inner),
             ResolvedType::BuiltinArray(inner) => Members::Held(vec![*inner]),
             ResolvedType::Newtype { base_type, .. } => Members::Held(vec![*base_type]),
+<<<<<<< HEAD
             ResolvedType::Struct { .. } => Members::Unknown,
             ResolvedType::GenericInstance { def, .. } if tt.is_resource_def(*def) => {
                 Members::Held(Vec::new())
@@ -278,15 +278,43 @@ impl<'a> StorageReach<'a> {
                             })
                             .collect(),
                     ),
+||||||| acf18acea98
+            ResolvedType::Struct { def, type_args } => {
+                match self.fields.get(&(*def, type_args.clone())) {
+                    Some(fields) => Members::Held(fields.iter().map(|f| f.type_id).collect()),
+                    None => Members::Unknown,
+                }
+            }
+            ResolvedType::GenericInstance { def, .. } if tt.is_resource_def(*def) => {
+                Members::Held(Vec::new())
+            }
+            ResolvedType::GenericInstance { def, type_args } => {
+                match tt.variant_template_cases(*def) {
+                    Some(cases) => Members::Held(
+                        cases
+                            .iter()
+                            .map(|&(_, _, payload)| match tt.get(payload) {
+                                ResolvedType::TypeParam { index, .. } => type_args[*index as usize],
+                                _ => payload,
+                            })
+                            .collect(),
+                    ),
+=======
+            ResolvedType::Struct { def, type_args } => {
+                match self.fields.get(&(*def, type_args.clone())) {
+                    Some(fields) => Members::Held(fields.iter().map(|f| f.type_id).collect()),
+                    None => Members::Unknown,
+                }
+            }
+            ResolvedType::Tuple(elems) => Members::Held(elems.clone()),
+            ResolvedType::Variant { def, type_args } => {
+                match tt.variant_instance_payloads(*def, type_args) {
+                    Some(payloads) => Members::Held(payloads),
+                    None if type_args.is_empty() => Members::Unknown,
+>>>>>>> origin/main
                     None => Members::Held(type_args.clone()),
                 }
             }
-            ResolvedType::Variant { def } => match tt.variant_template_cases(*def) {
-                Some(cases) => {
-                    Members::Held(cases.iter().map(|&(_, _, payload)| payload).collect())
-                }
-                None => Members::Unknown,
-            },
             // A closure holds what it captured, which its type does not name:
             // whatever any closure of its shape captured.
             ResolvedType::Function { .. } => Members::Held(self.captures.of(ty, tt).to_vec()),

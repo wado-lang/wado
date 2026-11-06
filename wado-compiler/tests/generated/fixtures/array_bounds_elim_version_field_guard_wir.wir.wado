@@ -53,7 +53,7 @@ struct core:prelude/format.wado//Formatter {  // TypeId(7)
 
 array Array<i32> (mut i32);  // TypeId(8)
 
-struct core:prelude//List<i32> {  // TypeId(9)
+struct core:prelude/list.wado//List<i32> {  // TypeId(9)
     mut repr: ref Array<i32>,
     mut used: i32,
 }
@@ -78,7 +78,7 @@ type "functype//array_bounds_elim_version_field_guard_wir.wado/run" = fn();  // 
 
 type "functype//array_bounds_elim_version_field_guard_wir.wado/$cm_export__run" = fn();  // TypeId(19)
 
-type "functype//array_bounds_elim_version_field_guard_wir.wado/first_row$sroa[shape.per_row]" = fn(ref "core:prelude//List<i32>", i32) -> i32;  // TypeId(20)
+type "functype//array_bounds_elim_version_field_guard_wir.wado/first_row$sroa[shape.per_row]$spec0" = fn(ref "core:prelude/list.wado//List<i32>", i32) -> i32;  // TypeId(20)
 
 type "functype//core:prelude/list.wado/$template_segment$core:prelude/list.wado/$tmpl$59e16269228f9c88" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", i32) -> ref "core:prelude/string.wado//String";  // TypeId(21)
 
@@ -176,7 +176,7 @@ import fn wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode f
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
-global global:array_bounds_elim_version_field_guard_wir.wado::$const_obj_0: ref "core:prelude//List<i32>" = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(1, 2, 3, 4, 5, 6), used: 6 };
+global global:array_bounds_elim_version_field_guard_wir.wado::$const_obj_0: ref "core:prelude/list.wado//List<i32>" = struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(1, 2, 3, 4, 5, 6), used: 6 };
 
 fn "array_bounds_elim_version_field_guard_wir.wado/run"() with Stdout {
     let out_15: ref "core:prelude/string.wado//String";
@@ -187,7 +187,7 @@ fn "array_bounds_elim_version_field_guard_wir.wado/run"() with Stdout {
     let tens: i32;
     let $sroa_t_h0_124: i32;
     let start_163: i32;
-    $sroa_t_h0_124 = "array_bounds_elim_version_field_guard_wir.wado/first_row$sroa[shape.per_row]"(global:array_bounds_elim_version_field_guard_wir.wado::$const_obj_0, black_box(5));
+    $sroa_t_h0_124 = "array_bounds_elim_version_field_guard_wir.wado/first_row$sroa[shape.per_row]$spec0"(global:array_bounds_elim_version_field_guard_wir.wado::$const_obj_0, black_box(5));
     out_15 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
     $inline_core_prelude_string_wado_String__internal_push_view_24: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_24;
@@ -307,26 +307,24 @@ fn "array_bounds_elim_version_field_guard_wir.wado/$cm_export__run"() {
     "wasi/task-return"(0);
 }
 
-fn "array_bounds_elim_version_field_guard_wir.wado/first_row$sroa[shape.per_row]"(xs, shape) {
+fn "array_bounds_elim_version_field_guard_wir.wado/first_row$sroa[shape.per_row]$spec0"(xs, shape) {
     let sum: i32;
     let v: i32;
-    let $licm_used_28: i32;
-    let $licm_repr_29: ref Array<i32>;
+    let $licm_repr_28: ref Array<i32>;
     sum = 0;
     v = 0;
-    $licm_used_28 = xs.used;
-    $licm_repr_29 = xs.repr;
-    if (((((builtin::i64_extend_i32_s(shape) + -2_i64) + 1_i64) < builtin::i64_extend_i32_s($licm_used_28)) & (v >= 0)) & (v <= 2147483646)) & (shape <= 2147483645) {
+    $licm_repr_28 = xs.repr;
+    if (((((builtin::i64_extend_i32_s(shape) + -2_i64) + 1_i64) < 6_i64) & (v >= 0)) & (v <= 2147483646)) & (shape <= 2147483645) {
         b26: block {
             l27: loop {
                 break_if b26 ((((v + 1) >= shape) | (((v + 2) + 1) >= shape)) | ((((v + 2) + 2) + 1) >= shape)) | (((((v + 2) + 2) + 2) + 1) >= shape);
-                sum = sum + (builtin::array_get_value<i32>($licm_repr_29, v) + sum = v + 1; builtin::array_get_value<i32>($licm_repr_29, sum));
+                sum = sum + (builtin::array_get_value<i32>($licm_repr_28, v) + sum = v + 1; builtin::array_get_value<i32>($licm_repr_28, sum));
                 v = v + 2;
-                sum = sum + (builtin::array_get_value<i32>($licm_repr_29, v) + sum = v + 1; builtin::array_get_value<i32>($licm_repr_29, sum));
+                sum = sum + (builtin::array_get_value<i32>($licm_repr_28, v) + sum = v + 1; builtin::array_get_value<i32>($licm_repr_28, sum));
                 v = v + 2;
-                sum = sum + (builtin::array_get_value<i32>($licm_repr_29, v) + sum = v + 1; builtin::array_get_value<i32>($licm_repr_29, sum));
+                sum = sum + (builtin::array_get_value<i32>($licm_repr_28, v) + sum = v + 1; builtin::array_get_value<i32>($licm_repr_28, sum));
                 v = v + 2;
-                sum = sum + (builtin::array_get_value<i32>($licm_repr_29, v) + sum = v + 1; builtin::array_get_value<i32>($licm_repr_29, sum));
+                sum = sum + (builtin::array_get_value<i32>($licm_repr_28, v) + sum = v + 1; builtin::array_get_value<i32>($licm_repr_28, sum));
                 v = v + 2;
                 continue l27;
             };
@@ -334,7 +332,7 @@ fn "array_bounds_elim_version_field_guard_wir.wado/first_row$sroa[shape.per_row]
         b28: block {
             l29: loop {
                 break_if b28 (v + 1) >= shape;
-                sum = sum + (builtin::array_get_value<i32>($licm_repr_29, v) + sum = v + 1; builtin::array_get_value<i32>($licm_repr_29, sum));
+                sum = sum + (builtin::array_get_value<i32>($licm_repr_28, v) + sum = v + 1; builtin::array_get_value<i32>($licm_repr_28, sum));
                 v = v + 2;
                 continue l29;
             };
@@ -343,11 +341,11 @@ fn "array_bounds_elim_version_field_guard_wir.wado/first_row$sroa[shape.per_row]
         b30: block {
             l31: loop {
                 break_if b30 (v + 1) >= shape;
-                sum = sum + (if @unlikely(((0 <= v) & (v < ($licm_used_28 - 1))) == 0) {
+                sum = sum + (if @unlikely(((0 <= v) & (v < 5)) == 0) {
                     cold_path;
-                    "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(v, $licm_used_28, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("array_bounds_elim_version_field_guard_wir.wado:16"), used: 49 });
+                    "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(v, 6, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("array_bounds_elim_version_field_guard_wir.wado:16"), used: 49 });
                     unreachable;
-                }; builtin::array_get_value<i32>($licm_repr_29, v) + sum = v + 1; builtin::array_get_value<i32>($licm_repr_29, sum));
+                }; builtin::array_get_value<i32>($licm_repr_28, v) + sum = v + 1; builtin::array_get_value<i32>($licm_repr_28, sum));
                 v = v + 2;
                 continue l31;
             };

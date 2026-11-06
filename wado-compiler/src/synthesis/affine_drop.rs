@@ -312,8 +312,6 @@ impl<'a> AffineTypes<'a> {
                 drop_impl: None,
             };
         }
-        // A generic struct's instance is a `GenericInstance`, as a generic
-        // variant's is.
         let (def, args) = match resolved {
             ResolvedType::Struct { def, type_args } => (def, type_args),
             _ => match tt.nominal_def(base) {

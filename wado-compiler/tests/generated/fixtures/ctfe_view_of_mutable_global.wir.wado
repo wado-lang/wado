@@ -80,12 +80,12 @@ struct ctfe_view_of_mutable_global.wado//$tmpl$746b3bd30636aac0 {  // TypeId(9)
 }
 
 struct ctfe_view_of_mutable_global.wado//Buf {  // TypeId(10)
-    mut items: ref "core:prelude//List<i32>",
+    mut items: ref "core:prelude/list.wado//List<i32>",
 }
 
 array Array<i32> (mut i32);  // TypeId(11)
 
-struct core:prelude//List<i32> {  // TypeId(12)
+struct core:prelude/list.wado//List<i32> {  // TypeId(12)
     mut repr: ref Array<i32>,
     mut used: i32,
 }
@@ -182,15 +182,15 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/String::format
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::format<core:prelude/list.wado/$tmpl$4432d2d1cbeba55c,[i32,i32]>" = fn(ref "core:prelude/list.wado//$tmpl$4432d2d1cbeba55c") -> ref "core:prelude/string.wado//String";  // TypeId(58)
 
-type "functype//core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow" = fn(ref "core:prelude//List<i32>");  // TypeId(59)
+type "functype//core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow" = fn(ref "core:prelude/list.wado//List<i32>");  // TypeId(59)
 
 type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/StrSlice>" = fn(ref "core:prelude/format.wado//Formatter", ref "core:prelude/string.wado//StrSlice");  // TypeId(60)
 
 type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>" = fn(ref "core:prelude/format.wado//Formatter", ref "core:prelude/string.wado//String");  // TypeId(61)
 
-type "functype//core:prelude/string.wado/&core:prelude/string.wado/StrSlice^core:prelude/string.wado/AsStrSlice::internal_append_to$sroa[self.value]" = fn(ref "core:prelude/string.wado//StrSlice", ref "core:prelude/string.wado//String");  // TypeId(62)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::write_char_n$sroa[self.buf]" = fn(ref "core:prelude/string.wado//String", char, i32);  // TypeId(62)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::write_char_n$sroa[self.buf]" = fn(ref "core:prelude/string.wado//String", char, i32);  // TypeId(63)
+type "functype//core:prelude/string.wado/&core:prelude/string.wado/StrSlice^core:prelude/string.wado/AsStrSlice::internal_append_to$sroa[self.value]" = fn(ref "core:prelude/string.wado//StrSlice", ref "core:prelude/string.wado//String");  // TypeId(63)
 
 type "functype//core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(64)
 
@@ -236,9 +236,9 @@ global mut global:ctfe_view_of_mutable_global.wado::$modules_initialized: bool =
 fn "ctfe_view_of_mutable_global.wado/run"() with Stdout {
     let $load_0: i32;
     let $load_1: ref Array<i32>;
-    let r: ref "core:prelude//List<i32>";
+    let r: ref "core:prelude/list.wado//List<i32>";
     let before: i32;
-    let self_24: ref "core:prelude//List<i32>";
+    let self_24: ref "core:prelude/list.wado//List<i32>";
     let $v1_29: i32;
     let used: i32;
     let message_49: ref "core:prelude/string.wado//String";
@@ -292,7 +292,7 @@ fn "ctfe_view_of_mutable_global.wado/$cm_export__run"() {
 }
 
 fn "ctfe_view_of_mutable_global.wado/$initialize_module"() {
-    global:ctfe_view_of_mutable_global.wado::G = struct.new "ctfe_view_of_mutable_global.wado//Buf" { items: struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(1, 2, 3), used: 3 } };
+    global:ctfe_view_of_mutable_global.wado::G = struct.new "ctfe_view_of_mutable_global.wado//Buf" { items: struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(1, 2, 3), used: 3 } };
 }
 
 fn "ctfe_view_of_mutable_global.wado/run$cold1$dae[$contract_arg_0]"($v1) with Stdout {
@@ -1044,6 +1044,19 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelud
     }
 }
 
+fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_char_n$sroa[self.buf]"(self, c, n) {
+    let i: i32;
+    i = 0;
+    b102: block {
+        l103: loop {
+            break_if b102 i >= n;
+            "core:prelude/string.wado/core:prelude/string.wado/String::push"(self, c);
+            i = i + 1;
+            continue l103;
+        };
+    };
+}
+
 fn "core:prelude/string.wado/&core:prelude/string.wado/StrSlice^core:prelude/string.wado/AsStrSlice::internal_append_to$sroa[self.value]"(self, out) {
     let n_8: i32;
     let new_used: i32;
@@ -1057,19 +1070,6 @@ fn "core:prelude/string.wado/&core:prelude/string.wado/StrSlice^core:prelude/str
         start_14 = out.used;
         out.used = new_used;
         builtin::array_copy<u8>(out.repr, start_14, self.repr, self.start, n_8);
-    };
-}
-
-fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_char_n$sroa[self.buf]"(self, c, n) {
-    let i: i32;
-    i = 0;
-    b103: block {
-        l104: loop {
-            break_if b103 i >= n;
-            "core:prelude/string.wado/core:prelude/string.wado/String::push"(self, c);
-            i = i + 1;
-            continue l104;
-        };
     };
 }
 

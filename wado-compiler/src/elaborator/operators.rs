@@ -324,11 +324,14 @@ impl TypeSystem {
     fn binop_operand_requires_trait(&self, type_id: TypeId) -> bool {
         let tt = self.type_table.borrow();
         match tt.get(type_id) {
-            ResolvedType::Struct { .. } | ResolvedType::GenericInstance { .. } => true,
+            ResolvedType::Struct { .. } | ResolvedType::Tuple(_) => true,
+            ResolvedType::Variant { type_args, .. } => !type_args.is_empty(),
             ResolvedType::Newtype { base_type, .. } => {
                 let ultimate = tt.representation_head(*base_type);
                 match tt.get(ultimate) {
-                    ResolvedType::Struct { .. } | ResolvedType::GenericInstance { .. } => true,
+                    ResolvedType::Struct { .. } | ResolvedType::Tuple(_) => true,
+                    ResolvedType::Resource { type_args, .. }
+                    | ResolvedType::Variant { type_args, .. } => !type_args.is_empty(),
                     // SIMD aliases (`type f32x4 = v128`) and half aliases —
                     // see the `Primitive` arm below.
                     ResolvedType::Primitive(p) => *p == PrimitiveType::V128 || p.is_half(),
@@ -481,12 +484,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // bound-driven synthesis request, and synthesis has already run.
             let struct_name = match &left_type {
                 ResolvedType::Struct { .. }
-                | ResolvedType::GenericInstance { .. }
+                | ResolvedType::Tuple(_)
                 | ResolvedType::Variant { .. }
                 // `fq_base_type_name` spells a raw GC array `Array` and the
                 // unit type `()`, the names their `Eq` / `Ord` impls attach to.
                 | ResolvedType::BuiltinArray(_)
                 | ResolvedType::Unit => Some(
+                    self.tysys
+                        .type_table
+                        .borrow()
+                        .fq_base_type_name(left)
+                        .into_string(),
+                ),
+                // A generic resource's `Eq` is synthesized per instance.
+                ResolvedType::Resource { type_args, .. } if !type_args.is_empty() => Some(
                     self.tysys
                         .type_table
                         .borrow()
@@ -515,8 +526,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     let ultimate = tt.representation_head(*base_type);
                     match tt.get(ultimate) {
                         ResolvedType::Struct { .. }
-                        | ResolvedType::GenericInstance { .. }
+                        | ResolvedType::Tuple(_)
                         | ResolvedType::Variant { .. } => {
+                            Some(tt.fq_base_type_name(ultimate).into_string())
+                        }
+                        ResolvedType::Resource { type_args, .. } if !type_args.is_empty() => {
                             Some(tt.fq_base_type_name(ultimate).into_string())
                         }
                         _ => self.tysys.primitive_op_receiver(left, ultimate),
@@ -1382,8 +1396,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     fn index_dispatch_head(&self, base_type_id: TypeId) -> Option<String> {
         let tt = self.tysys.type_table.borrow();
         match tt.get(base_type_id) {
+            ResolvedType::Variant { type_args, .. } if type_args.is_empty() => None,
             ResolvedType::Struct { .. }
-            | ResolvedType::GenericInstance { .. }
+            | ResolvedType::Variant { .. }
+            | ResolvedType::Resource { .. }
+            | ResolvedType::Tuple(_)
             | ResolvedType::Newtype { .. }
             | ResolvedType::Flags { .. } => Some(tt.base_type_name(base_type_id)),
             // `arr[i]` dispatches through `impl … for Array<T>`, keyed by the

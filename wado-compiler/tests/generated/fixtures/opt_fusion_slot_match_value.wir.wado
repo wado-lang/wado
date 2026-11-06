@@ -52,7 +52,7 @@ struct core:prelude/format.wado//Formatter {  // TypeId(7)
 }
 
 struct opt_fusion_slot_match_value.wado//Reader {  // TypeId(8)
-    mut input: ref "core:prelude//List<u8>",
+    mut input: ref "core:prelude/list.wado//List<u8>",
     mut pos: i32,
 }
 
@@ -60,7 +60,7 @@ struct opt_fusion_slot_match_value.wado//Eof {  // TypeId(9)
     mut at: i32,
 }
 
-struct core:prelude//List<u8> {  // TypeId(10)
+struct core:prelude/list.wado//List<u8> {  // TypeId(10)
     mut repr: ref Array<u8>,
     mut used: i32,
 }
@@ -212,8 +212,8 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode";
 
-global global:opt_fusion_slot_match_value.wado::$const_obj_0: ref "core:prelude//List<u8>" = struct.new "core:prelude//List<u8>" { repr: array.new_fixed<u8>(245), used: 1 };
-global global:opt_fusion_slot_match_value.wado::$const_obj_1: ref "core:prelude//List<u8>" = struct.new "core:prelude//List<u8>" { repr: array.new_fixed<u8>(244, 245, 245), used: 3 };
+global global:opt_fusion_slot_match_value.wado::$const_obj_0: ref "core:prelude/list.wado//List<u8>" = struct.new "core:prelude/list.wado//List<u8>" { repr: array.new_fixed<u8>(245), used: 1 };
+global global:opt_fusion_slot_match_value.wado::$const_obj_1: ref "core:prelude/list.wado//List<u8>" = struct.new "core:prelude/list.wado//List<u8>" { repr: array.new_fixed<u8>(244, 245, 245), used: 3 };
 global global:core:prelude/primitive.wado::$const_obj_2: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
 
 fn "opt_fusion_slot_match_value.wado/count_true$sroa[return]"(r) {
@@ -836,7 +836,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/StrSlice::chars"($mv$self$
 
 fn "opt_fusion_slot_match_value.wado/opt_fusion_slot_match_value.wado/Reader::read_bool$sroa[return]"(self) {
     let $load_0: i32;
-    let $load_1: ref "core:prelude//List<u8>";
+    let $load_1: ref "core:prelude/list.wado//List<u8>";
     let $load_2: i32;
     let $qm_e: ref "opt_fusion_slot_match_value.wado//Eof";
     if @unlikely(local.tee $load_0(self.pos) >= local.tee $load_2(local.tee $load_1(self.input).used)) {

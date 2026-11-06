@@ -41,7 +41,7 @@ struct assign_to_field_or_global_copies.wado//$tmpl$ebaa20f4a908b504 {  // TypeI
 
 array Array<i32> (mut i32);  // TypeId(7)
 
-struct core:prelude//List<i32> {  // TypeId(8)
+struct core:prelude/list.wado//List<i32> {  // TypeId(8)
     mut repr: ref Array<i32>,
     mut used: i32,
 }
@@ -68,7 +68,7 @@ type "functype//assign_to_field_or_global_copies.wado/$cm_export__run" = fn();  
 
 type "functype//assign_to_field_or_global_copies.wado/$initialize_module" = fn();  // TypeId(19)
 
-type "functype//assign_to_field_or_global_copies.wado/$value_copy$core:prelude/list.wado/List<i32>" = fn(ref "core:prelude//List<i32>") -> ref "core:prelude//List<i32>";  // TypeId(20)
+type "functype//assign_to_field_or_global_copies.wado/$value_copy$core:prelude/list.wado/List<i32>" = fn(ref "core:prelude/list.wado//List<i32>") -> ref "core:prelude/list.wado//List<i32>";  // TypeId(20)
 
 type "functype//assign_to_field_or_global_copies.wado/run$cold1" = fn(i32);  // TypeId(21)
 
@@ -128,15 +128,15 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/String::push_a
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::format<assign_to_field_or_global_copies.wado/$tmpl$ebaa20f4a908b504,[i32]>" = fn(ref "assign_to_field_or_global_copies.wado//$tmpl$ebaa20f4a908b504") -> ref "core:prelude/string.wado//String";  // TypeId(49)
 
-type "functype//core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow" = fn(ref "core:prelude//List<i32>");  // TypeId(50)
+type "functype//core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow" = fn(ref "core:prelude/list.wado//List<i32>");  // TypeId(50)
 
 type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(51)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::write_char_n$sroa[self.buf]" = fn(ref "core:prelude/string.wado//String", char, i32);  // TypeId(52)
+type "functype//core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<assign_to_field_or_global_copies.wado/$tmpl$ebaa20f4a908b504,i32>::lit$sroa[self.index]" = fn(i32, ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//StrSlice";  // TypeId(52)
 
-type "functype//core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(53)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::write_char_n$sroa[self.buf]" = fn(ref "core:prelude/string.wado//String", char, i32);  // TypeId(53)
 
-type "functype//core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<assign_to_field_or_global_copies.wado/$tmpl$ebaa20f4a908b504,i32>::lit$sroa[self.index]" = fn(i32, ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//StrSlice";  // TypeId(54)
+type "functype//core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(54)
 
 type "functype//wasi/task-return" = fn(i32);  // TypeId(55)
 
@@ -161,13 +161,13 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode";
 
-global mut global:assign_to_field_or_global_copies.wado::A: ref null "core:prelude//List<i32>" = ref.null none;
-global mut global:assign_to_field_or_global_copies.wado::B: ref null "core:prelude//List<i32>" = ref.null none;
+global mut global:assign_to_field_or_global_copies.wado::A: ref null "core:prelude/list.wado//List<i32>" = ref.null none;
+global mut global:assign_to_field_or_global_copies.wado::B: ref null "core:prelude/list.wado//List<i32>" = ref.null none;
 global mut global:assign_to_field_or_global_copies.wado::$modules_initialized: bool = 0;
 global global:core:prelude/primitive.wado::$const_obj_0: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
 
 fn "assign_to_field_or_global_copies.wado/run"() {
-    let self_16: ref "core:prelude//List<i32>";
+    let self_16: ref "core:prelude/list.wado//List<i32>";
     let used_18: i32;
     $inline__initialize_modules_0: block {
         break_if $inline__initialize_modules_0 @likely(global:assign_to_field_or_global_copies.wado::$modules_initialized);
@@ -217,13 +217,14 @@ fn "assign_to_field_or_global_copies.wado/$cm_export__run"() {
 }
 
 fn "assign_to_field_or_global_copies.wado/$initialize_module"() {
-    global:assign_to_field_or_global_copies.wado::A = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(1, 2, 3), used: 3 };
+    global:assign_to_field_or_global_copies.wado::A = struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(1, 2, 3), used: 3 };
     global:assign_to_field_or_global_copies.wado::B = "assign_to_field_or_global_copies.wado/$value_copy$core:prelude/list.wado/List<i32>"(global:assign_to_field_or_global_copies.wado::A);
 }
 
 fn "assign_to_field_or_global_copies.wado/$value_copy$core:prelude/list.wado/List<i32>"(v) {
-    let $load_1: i32;
-    return struct.new "core:prelude//List<i32>" { repr: let $array_clone_src_1: ref Array<i32>; $array_clone_src_1 = v.repr; $load_1 = v.used; let $array_clone_dst_2: ref Array<i32>; builtin::array_copy<i32>(local.tee $array_clone_dst_2(builtin::array_new<i32>($load_1)), 0, $array_clone_src_1, 0, $load_1); $array_clone_dst_2, used: $load_1 };
+    let $av_1: i32;
+    $av_1 = v.used;
+    return struct.new "core:prelude/list.wado//List<i32>" { repr: let $array_clone_src_1: ref Array<i32>; $array_clone_src_1 = v.repr; let $array_clone_dst_2: ref Array<i32>; builtin::array_copy<i32>(local.tee $array_clone_dst_2(builtin::array_new<i32>($av_1)), 0, $array_clone_src_1, 0, $av_1); $array_clone_dst_2, used: $av_1 };
 }
 
 fn "assign_to_field_or_global_copies.wado/run$cold1"($v0) {
@@ -685,15 +686,21 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
     }
 }
 
+fn "core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<assign_to_field_or_global_copies.wado/$tmpl$ebaa20f4a908b504,i32>::lit$sroa[self.index]"(self, $mv$t$s0, $mv$t$r0, $mv$t$s1, $mv$t$r1) {
+    return block -> ref "core:prelude/string.wado//StrSlice" {
+        "core:prelude/string.wado/core:prelude/string.wado/String::internal_view"(local.tee $mv$t$s0("assign_to_field_or_global_copies.wado/$template_segment$assign_to_field_or_global_copies.wado/$tmpl$ebaa20f4a908b504"($mv$t$s0, $mv$t$r0, $mv$t$s1, $mv$t$r1, 2 * self)).repr, $mv$t$s0.used);
+    };
+}
+
 fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_char_n$sroa[self.buf]"(self, c, n) {
     let i: i32;
     i = 0;
-    b67: block {
-        l68: loop {
-            break_if b67 i >= n;
+    b68: block {
+        l69: loop {
+            break_if b68 i >= n;
             "core:prelude/string.wado/core:prelude/string.wado/String::push"(self, c);
             i = i + 1;
-            continue l68;
+            continue l69;
         };
     };
 }
@@ -705,12 +712,6 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(self, f) {
     self = "core:prelude/primitive.wado/count_digits_u64"(local.tee abs_val("core:prelude/primitive.wado/i64::abs"(builtin::i64_extend_i32_s(self))));
     is_negative = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>"(f, is_negative, global:core:prelude/primitive.wado::$const_obj_0, self);
     "core:prelude/primitive.wado/write_decimal_digits"(f.buf.repr, is_negative, abs_val, self);
-}
-
-fn "core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<assign_to_field_or_global_copies.wado/$tmpl$ebaa20f4a908b504,i32>::lit$sroa[self.index]"(self, $mv$t$s0, $mv$t$r0, $mv$t$s1, $mv$t$r1) {
-    return block -> ref "core:prelude/string.wado//StrSlice" {
-        "core:prelude/string.wado/core:prelude/string.wado/String::internal_view"(local.tee $mv$t$s0("assign_to_field_or_global_copies.wado/$template_segment$assign_to_field_or_global_copies.wado/$tmpl$ebaa20f4a908b504"($mv$t$s0, $mv$t$r0, $mv$t$s1, $mv$t$r1, 2 * self)).repr, $mv$t$s0.used);
-    };
 }
 
 export fn "assign_to_field_or_global_copies.wado/$cm_export__run" as "run"

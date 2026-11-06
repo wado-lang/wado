@@ -7,7 +7,7 @@
 
 use crate::ast;
 use crate::compiler_host::CompilerHost;
-use crate::tir::{EffectRef, ResolvedType, TypeId};
+use crate::tir::{EffectRef, ResolvedType, StructDef, TypeId};
 use crate::type_table::TypeKey;
 
 use super::Elaborator;
@@ -18,7 +18,7 @@ use crate::elaborator::sem::types::{HandlerBindingFacts, HandlerEffectEntry};
 use crate::elaborator::solver_bridge::{InstanceBody, InstanceImpl, InstanceOrder};
 use crate::elaborator::trait_env::ImplTargetKey;
 use crate::hashmap;
-use crate::name::{DeclName, DeclaredHead, FqTypeName};
+use crate::name::{DeclName, DeclaredHead, FqTypeName, TUPLE_TYPE_NAME};
 
 impl<H: CompilerHost> Elaborator<'_, H> {
     /// Annotate `with E1 => h1, ... do { body }`. Walks each handler
@@ -222,7 +222,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             | ResolvedType::Newtype { .. }
             | ResolvedType::Flags { .. }
             | ResolvedType::Resource { .. }
-            | ResolvedType::GenericInstance { .. }
+            | ResolvedType::Tuple(_)
             | ResolvedType::Primitive(_) => {}
             // Anything else can't be the target of an `impl Effect for T`
             // block. These cases are reachable from user code — the most
@@ -414,9 +414,17 @@ impl TypeSystem {
     fn handler_impl_target_name(&self, handler_type: TypeId) -> String {
         let resolved = self.type_table.borrow().get(handler_type).clone();
         match &resolved {
-            ResolvedType::GenericInstance { def, .. } => {
+            ResolvedType::Variant { type_args, .. } if type_args.is_empty() => {
+                self.type_table.borrow().name(handler_type)
+            }
+            ResolvedType::Struct {
+                def: StructDef::Decl(def),
+                type_args,
+            } if !type_args.is_empty() => self.type_table.borrow().decl_name(*def).to_string(),
+            ResolvedType::Variant { def, .. } | ResolvedType::Resource { def, .. } => {
                 self.type_table.borrow().decl_name(*def).to_string()
             }
+            ResolvedType::Tuple(_) => TUPLE_TYPE_NAME.to_string(),
             _ => self.type_table.borrow().name(handler_type),
         }
     }

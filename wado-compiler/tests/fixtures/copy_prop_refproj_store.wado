@@ -2,8 +2,9 @@
 // the root is only mutated *after* that use. Here `xs[i] = …` inlines to
 // `let r = &mut xs.repr; array_set(r, i, v)`, and the root `xs` is next mutated
 // by the recursive `fill` call — after the store. The store's receiver must
-// end up as `xs.repr` inline, not a `&mut xs.repr` ref-temp binding. The
-// recursion keeps `fill` from being inlined away.
+// end up as `xs.repr` inline, not a `&mut xs.repr` ref-temp binding, which
+// leaves `sroa_param` free to pass `xs.repr` itself as `xs`. The recursion
+// keeps `fill` from being inlined away.
 use { println, Stdout } from "core:cli";
 
 fn fill(xs: &mut List<i32>, i: i32) {
@@ -24,5 +25,5 @@ __DATA__
 {
     "stdout": "6\n",
     "wir_pass": {"O2": ["nir/inline"]},
-    "wir_expect:O2": ["array_set<i32>(xs.repr, i,"]
+    "wir_expect:O2": ["array_set<i32>(xs, i,"]
 }

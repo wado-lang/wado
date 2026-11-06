@@ -392,13 +392,9 @@ from traps stay, since they read no marker. The two flags give three builds of
 one program: `-f no-cold-paths` has no markers, `-f no-pgo` has the author's
 and the compiler's, and the default adds the profile's.
 
-Reify and lowering spell a marker that states a guess `builtin::cold_path()`,
-as the author does, and any other that states both halves
-`builtin::$known_cold_path()`, which lowering turns into `cold_path()`. The
-marker on a `?` propagating a failure is a guess. A global's once-guard runs
-once, and the profile's marker states a measurement. The spelling decides
-nothing about the profile, which overrides the author's and the `?`'s markers
-alike.
+Every marker stating both halves is spelled `builtin::cold_path()`, whoever
+placed it. The profile finds the author's and the `?`s' markers in the source,
+so nothing after reify needs to tell them from the compiler's.
 
 The existing `-f no-branch-hinting` is a different cut. Every pass sees the
 same markers and hints with it as without, and only the emitter leaves out the
@@ -496,10 +492,6 @@ output at every level. It is a nightly campaign, not a gate.
 
 ## Known gaps
 
-- [ ] The profile finds the author's markers and the `?`s in the source,
-  where the plan finds its regions, so nothing reads the difference
-  `$known_cold_path` keeps through TIR. The distinction may have no reader
-  left.
 - [ ] An author's `cold_path()`, or a `?`, in the right operand of `&&` or
   `||` keeps its marker when the profile measured it, since the profile has no
   statement position there for a marker of its own.

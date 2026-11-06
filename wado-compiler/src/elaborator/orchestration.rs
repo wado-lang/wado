@@ -64,7 +64,7 @@ use crate::elaborator::{
 use crate::hashmap;
 use crate::kiln::InvocationIndex;
 use crate::name::{
-    NEVER_TYPE_NAME, UNIT_TYPE_NAME, contract_holder_name, namespace_member_alias,
+    NEVER_TYPE_NAME, RefKind, UNIT_TYPE_NAME, contract_holder_name, namespace_member_alias,
     resolve_import_with_invocations, split_namespace_member,
 };
 use crate::primitive::PrimitiveType;
@@ -2225,6 +2225,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     if let Some(base_decl) = base_decl {
                         type_table.borrow_mut().register_generic_assoc_type_def(
                             base_decl,
+                            RefKind::from_ast(&impl_block.ty),
                             TraitRef::bare(trait_key),
                             binding.name.clone(),
                             type_param_id,

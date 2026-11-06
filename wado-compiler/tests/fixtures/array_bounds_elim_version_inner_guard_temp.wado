@@ -1,0 +1,27 @@
+// A check an in-body guard proves holds only under that guard, so the
+// comparison temp it reads keeps its value where the guard does not hold.
+use { println, Stdout } from "core:cli";
+
+#[inline(never)]
+fn count(m: i32, h: i32) -> i32 {
+    let mut hits = 0;
+    for let mut i = 0; i < h; i += 1 {
+        let ok = i < m;
+        if i + 1 < m {
+            assert ok;
+        }
+        if ok {
+            hits += 1;
+        }
+    }
+    return hits;
+}
+
+export fn run() with Stdout {
+    println(`${count(builtin::black_box(3), builtin::black_box(10))}`);
+}
+
+__DATA__
+{
+    "stdout": "3\n"
+}

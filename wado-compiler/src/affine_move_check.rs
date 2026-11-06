@@ -614,8 +614,7 @@ impl BodyFacts for SemFacts<'_> {
     fn indexes_tuple(&self, base: &Expr) -> bool {
         self.sem.expression_type(base.id()).is_some_and(|ty| {
             let types = &self.sem.types;
-            matches!(types.get(types.peel_refs(ty)), ResolvedType::GenericInstance { def, .. }
-                if types.is_tuple_def(*def))
+            types.is_tuple(types.peel_refs(ty))
         })
     }
 

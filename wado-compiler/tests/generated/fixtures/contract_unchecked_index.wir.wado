@@ -57,14 +57,14 @@ array Array<i32> (mut i32);  // TypeId(9)
 
 array Array<core:prelude/string.wado/String> (mut ref "core:prelude/string.wado//String");  // TypeId(10)
 
-struct core:prelude/traits.wado//IterMap<core:prelude/string.wado/StrCharIter,fn mut(char)->char> {  // TypeId(11)
-    mut inner: ref "core:prelude/string.wado//StrCharIter",
-    mut f: ref struct,
-}
-
-struct core:prelude//List<i32> {  // TypeId(12)
+struct core:prelude/list.wado//List<i32> {  // TypeId(11)
     mut repr: ref Array<i32>,
     mut used: i32,
+}
+
+struct core:prelude/traits.wado//IterMap<core:prelude/string.wado/StrCharIter,fn mut(char)->char> {  // TypeId(12)
+    mut inner: ref "core:prelude/string.wado//StrCharIter",
+    mut f: ref struct,
 }
 
 type "functype/$canonical_closure_fn_0" = fn(ref null struct, char) -> char;  // TypeId(13)
@@ -158,9 +158,9 @@ type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::pad
 
 type "functype//contract_unchecked_index.wado/contract_unchecked_index.wado/$Closure_0::$call$dae[self]" = fn(char) -> char;  // TypeId(56)
 
-type "functype//core:prelude/string.wado/&core:prelude/string.wado/StrSlice^core:prelude/string.wado/AsStrSlice::internal_append_to$sroa[self.value]" = fn(ref "core:prelude/string.wado//StrSlice", ref "core:prelude/string.wado//String");  // TypeId(57)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::write_char_n$sroa[self.buf]" = fn(ref "core:prelude/string.wado//String", char, i32);  // TypeId(57)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::write_char_n$sroa[self.buf]" = fn(ref "core:prelude/string.wado//String", char, i32);  // TypeId(58)
+type "functype//core:prelude/string.wado/&core:prelude/string.wado/StrSlice^core:prelude/string.wado/AsStrSlice::internal_append_to$sroa[self.value]" = fn(ref "core:prelude/string.wado//StrSlice", ref "core:prelude/string.wado//String");  // TypeId(58)
 
 type "functype//core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(59)
 
@@ -204,14 +204,14 @@ global global:contract_unchecked_index.wado::$const_obj_0: ref "Array<core:prelu
 
 fn "contract_unchecked_index.wado/run"() with Stdout {
     let $load_0: ref Array<i32>;
-    let xs: ref "core:prelude//List<i32>";
+    let xs: ref "core:prelude/list.wado//List<i32>";
     let index_23: i32;
     let self_43: ref "core:prelude/string.wado//StrCharIter";
     let f: ref "contract_unchecked_index.wado//$Closure_0";
     let message_55: ref "core:prelude/string.wado//String";
     let $cm_pair_7_62: i64;
     let $sroa_$pattern_temp_0_1_14_69: i32;
-    builtin::array_set<i32>(local.tee $load_0(local.tee xs(struct.new "core:prelude//List<i32>" { repr: builtin::array_new<i32>(8), used: 0 }).repr), 0, 10);
+    builtin::array_set<i32>(local.tee $load_0(local.tee xs(struct.new "core:prelude/list.wado//List<i32>" { repr: builtin::array_new<i32>(8), used: 0 }).repr), 0, 10);
     xs.used = 1;
     builtin::array_set<i32>($load_0, 1, 20);
     xs.used = 2;
@@ -852,6 +852,19 @@ fn "contract_unchecked_index.wado/contract_unchecked_index.wado/$Closure_0::$cal
     return c ^ (((c - 97) <u 26) * 32);
 }
 
+fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_char_n$sroa[self.buf]"(self, c, n) {
+    let i: i32;
+    i = 0;
+    b75: block {
+        l76: loop {
+            break_if b75 i >= n;
+            "core:prelude/string.wado/core:prelude/string.wado/String::push"(self, c);
+            i = i + 1;
+            continue l76;
+        };
+    };
+}
+
 fn "core:prelude/string.wado/&core:prelude/string.wado/StrSlice^core:prelude/string.wado/AsStrSlice::internal_append_to$sroa[self.value]"(self, out) {
     let n_8: i32;
     let new_used: i32;
@@ -865,19 +878,6 @@ fn "core:prelude/string.wado/&core:prelude/string.wado/StrSlice^core:prelude/str
         start_14 = out.used;
         out.used = new_used;
         builtin::array_copy<u8>(out.repr, start_14, self.repr, self.start, n_8);
-    };
-}
-
-fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_char_n$sroa[self.buf]"(self, c, n) {
-    let i: i32;
-    i = 0;
-    b76: block {
-        l77: loop {
-            break_if b76 i >= n;
-            "core:prelude/string.wado/core:prelude/string.wado/String::push"(self, c);
-            i = i + 1;
-            continue l77;
-        };
     };
 }
 

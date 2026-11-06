@@ -15,7 +15,7 @@ use std::cell::RefCell;
 
 use crate::ast::{BinaryOp, Visibility};
 use crate::module_source::ModuleSource;
-use crate::name::{COLD_PATH_INTRINSIC, FqTypeName, KNOWN_COLD_PATH_INTRINSIC, LocalMethodName};
+use crate::name::{FqTypeName, LocalMethodName};
 use crate::rarity::Mark;
 use crate::tir;
 use crate::tir::{
@@ -72,35 +72,18 @@ pub fn builtin_call(name: &str, args: Vec<TirExpr>, return_type: TypeId) -> TirE
     )
 }
 
-/// `builtin::$known_cold_path();`, the marker the compiler places where the
-/// program itself makes the path rare.
-pub fn known_cold_path_stmt(span: Span) -> TirStmt {
-    marker_stmt(KNOWN_COLD_PATH_INTRINSIC, span)
-}
-
-/// `builtin::cold_path();`, for a path the compiler guesses is rare as an
-/// author would.
 pub fn cold_path_stmt(span: Span) -> TirStmt {
-    marker_stmt(COLD_PATH_INTRINSIC, span)
+    marker_stmt(Mark::ColdPath, span)
 }
 
-fn marker_stmt(intrinsic: &str, span: Span) -> TirStmt {
+pub fn marker_stmt(mark: Mark, span: Span) -> TirStmt {
     TirStmt::new(
-        TirStmtKind::Expr(builtin_call(intrinsic, Vec::new(), TypeTable::UNIT)),
+        TirStmtKind::Expr(builtin_call(mark.builtin(), Vec::new(), TypeTable::UNIT)),
         span,
     )
 }
 
-/// The marker a profile writes for `mark`: a measurement, so the one stating
-/// both halves is spelled as the compiler's own.
-pub fn profile_marker_stmt(mark: Mark, span: Span) -> TirStmt {
-    match mark {
-        Mark::ColdPath => known_cold_path_stmt(span),
-        Mark::Unlikely | Mark::Cold => marker_stmt(mark.builtin(), span),
-    }
-}
-
-/// What `stmt` states, where it is a marker, whoever placed it.
+/// What `stmt` states, where it is a marker.
 pub fn marker_stmt_mark(stmt: &TirStmt) -> Option<Mark> {
     match &stmt.kind {
         TirStmtKind::Expr(expr) => marker_mark(expr),
@@ -108,7 +91,7 @@ pub fn marker_stmt_mark(stmt: &TirStmt) -> Option<Mark> {
     }
 }
 
-/// What `expr` states, where it is a call to a marker, whoever placed it.
+/// What `expr` states, where it is a call to a marker.
 pub fn marker_mark(expr: &TirExpr) -> Option<Mark> {
     match &expr.kind {
         TirExprKind::Call { func, .. } => func.intrinsic().and_then(Mark::of_builtin),

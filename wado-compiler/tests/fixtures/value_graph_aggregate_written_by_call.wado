@@ -1,0 +1,52 @@
+// A local bound to a struct literal and then written through a `&mut` call
+// holds a new value: copied into `Holder` and read back through another
+// local, `items.len()` must be the length after the push, not the literal's 0.
+use { println, Stdout } from "core:cli";
+
+struct Holder {
+    items: List<i32>,
+}
+
+#[inline(never)]
+fn add(items: &mut List<i32>, n: i32) {
+    items.push(n);
+}
+
+#[inline(never)]
+fn count(n: i32) -> [Holder, i32] {
+    let mut items: List<i32> = [];
+    add(&mut items, n);
+    let h = Holder { items };
+    let mut total = 0;
+    for let mut k = 0; k < h.items.len(); k += 1 {
+        total += 1;
+    }
+    return [h, total];
+}
+
+fn count_in_loop(n: i32) -> [Holder, i32] {
+    let mut items: List<i32> = [];
+    let mut i = 0;
+    while i < n {
+        builtin::cold_path();
+        items.push(i);
+        i += 1;
+    }
+    let h = Holder { items };
+    let mut total = 0;
+    for let mut k = 0; k < h.items.len(); k += 1 {
+        total += 1;
+    }
+    return [h, total];
+}
+
+export fn run() with Stdout {
+    let [_a, once] = count(builtin::black_box(4));
+    let [_b, looped] = count_in_loop(builtin::black_box(3));
+    println(`${once} ${looped}`);
+}
+
+__DATA__
+{
+  "stdout": "1 3\n"
+}

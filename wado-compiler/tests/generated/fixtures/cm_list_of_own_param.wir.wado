@@ -12,8 +12,8 @@ array Array<u8> (mut u8);  // TypeId(2)
 
 array Array<cm_list_of_own_param.wado/Device> (mut ref null "core:prelude//$Resource");  // TypeId(3)
 
-struct core:prelude//List<cm_list_of_own_param.wado/Device> {  // TypeId(4)
-    mut repr: ref "Array<cm_list_of_own_param.wado/Device>",
+struct core:prelude/list.wado//List<cm_list_of_own_param.wado/Device> {  // TypeId(4)
+    mut repr: ref null "Array<cm_list_of_own_param.wado/Device>",
     mut used: i32,
 }
 
@@ -35,7 +35,7 @@ type "functype//wasi/$wasi:demo/gfx@0.1.0#get-device" = fn() -> i32;  // TypeId(
 
 type "functype//wasi/$wasi:demo/gfx@0.1.0#pick" = fn(i32, i32) -> i32;  // TypeId(13)
 
-type "functype//cm_list_of_own_param.wado/$cm_binding__wasi:demo/gfx@0.1.0#pick" = fn(ref null "core:prelude//List<cm_list_of_own_param.wado/Device>") -> u32;  // TypeId(14)
+type "functype//cm_list_of_own_param.wado/$cm_binding__wasi:demo/gfx@0.1.0#pick" = fn(ref null "core:prelude/list.wado//List<cm_list_of_own_param.wado/Device>") -> u32;  // TypeId(14)
 
 type "functype//cm_list_of_own_param.wado/$cm_binding__wasi:demo/gfx@0.1.0#get-device" = fn() -> ref null "core:prelude//$Resource";  // TypeId(15)
 
@@ -89,24 +89,24 @@ import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode";
 
 fn "cm_list_of_own_param.wado/$cm_binding__wasi:demo/gfx@0.1.0#pick"(ds) with Gfx {
-    let $ds_len: i32;
     let $ds_base: i32;
     let $ds_i: i32;
     let $ds_addr: i32;
     let $ds_elem: ref null "core:prelude//$Resource";
+    let self_15: i32;
     let $licm_repr_26: ref null "Array<cm_list_of_own_param.wado/Device>";
-    $ds_len = ds.used;
-    if @unlikely(536870911 <u $ds_len) {
+    self_15 = ds.used;
+    if @unlikely(536870911 <u self_15) {
         cold_path;
         "core:rt/panic"(array.new_data<u8>("a buffer's length is negative or past what linear memory can address"), 68);
         unreachable;
     }
-    $ds_base = "mem/realloc"(0, 0, 4, $ds_len * 4);
+    $ds_base = "mem/realloc"(0, 0, 4, self_15 * 4);
     $ds_i = 0;
     $licm_repr_26 = ds.repr;
     b1: block {
         l2: loop {
-            break_if b1 ((($ds_i >= $ds_len) | (($ds_i + 1) >= $ds_len)) | ((($ds_i + 1) + 1) >= $ds_len)) | (((($ds_i + 1) + 1) + 1) >= $ds_len);
+            break_if b1 ((($ds_i >= self_15) | (($ds_i + 1) >= self_15)) | ((($ds_i + 1) + 1) >= self_15)) | (((($ds_i + 1) + 1) + 1) >= self_15);
             $ds_addr = $ds_base + ($ds_i * 4);
             $ds_elem = builtin::array_get_value<ref null "core:prelude//$Resource">($licm_repr_26, $ds_i);
             builtin::store_i32($ds_addr, $ds_elem.value);
@@ -128,7 +128,7 @@ fn "cm_list_of_own_param.wado/$cm_binding__wasi:demo/gfx@0.1.0#pick"(ds) with Gf
     };
     b3: block {
         l4: loop {
-            break_if b3 $ds_i >= $ds_len;
+            break_if b3 $ds_i >= self_15;
             $ds_addr = $ds_base + ($ds_i * 4);
             $ds_elem = builtin::array_get_value<ref null "core:prelude//$Resource">($licm_repr_26, $ds_i);
             builtin::store_i32($ds_addr, $ds_elem.value);
@@ -136,9 +136,9 @@ fn "cm_list_of_own_param.wado/$cm_binding__wasi:demo/gfx@0.1.0#pick"(ds) with Gf
             continue l4;
         };
     };
-    $ds_i = "wasi/$wasi:demo/gfx@0.1.0#pick"($ds_base, $ds_len);
-    if $ds_len > 0 {
-        drop("mem/realloc"($ds_base, $ds_len * 4, 4, 0));
+    $ds_i = "wasi/$wasi:demo/gfx@0.1.0#pick"($ds_base, self_15);
+    if self_15 > 0 {
+        drop("mem/realloc"($ds_base, self_15 * 4, 4, 0));
     }
     return $ds_i;
 }
@@ -151,7 +151,7 @@ fn "cm_list_of_own_param.wado/$cm_export__run"() {
     let elements: ref null "Array<cm_list_of_own_param.wado/Device>";
     let used: i32;
     used = builtin::array_len(local.tee elements(array.new_fixed<ref null "core:prelude//$Resource">("cm_list_of_own_param.wado/$cm_binding__wasi:demo/gfx@0.1.0#get-device"(), "cm_list_of_own_param.wado/$cm_binding__wasi:demo/gfx@0.1.0#get-device"())));
-    drop("cm_list_of_own_param.wado/$cm_binding__wasi:demo/gfx@0.1.0#pick"(struct.new "core:prelude//List<cm_list_of_own_param.wado/Device>" { repr: ref.as_non_null(elements), used: used }));
+    drop("cm_list_of_own_param.wado/$cm_binding__wasi:demo/gfx@0.1.0#pick"(struct.new "core:prelude/list.wado//List<cm_list_of_own_param.wado/Device>" { repr: elements, used: used }));
     "wasi/task-return"(0);
 }
 

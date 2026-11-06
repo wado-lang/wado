@@ -11,7 +11,8 @@ use crate::name::{
 };
 use crate::primitive::PrimitiveType;
 use crate::tir::{
-    FunctionRef, MonomorphInfo, ResolvedType, SubstitutionContext, TemplateId, TupleSlot, TypeId,
+    FunctionRef, MonomorphInfo, ResolvedType, StructDef, SubstitutionContext, TemplateId,
+    TupleSlot, TypeId,
 };
 use crate::token::Span;
 use crate::type_table::TypeTable;
@@ -417,7 +418,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Get struct name and module source from base type
         // The struct_module is where the struct is defined (and inherent methods live)
         let (struct_name, struct_module) = match self.tysys.type_table.borrow().get(base_type_id) {
-            ResolvedType::Struct { .. } | ResolvedType::GenericInstance { .. } => self
+            ResolvedType::Struct { .. } | ResolvedType::Tuple(_) => self
                 .tysys
                 .type_table
                 .borrow()
@@ -988,11 +989,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .get(method_impl_type_id)
             .clone()
         {
-            ResolvedType::GenericInstance { .. } | ResolvedType::BuiltinArray(_) => {
+            ResolvedType::Struct { .. }
+            | ResolvedType::Variant { .. }
+            | ResolvedType::Resource { .. }
+            | ResolvedType::Tuple(_)
+            | ResolvedType::BuiltinArray(_)
+                if let Some(type_args) = self
+                    .tysys
+                    .type_table
+                    .borrow()
+                    .nominal_type_args(method_impl_type_id) =>
+            {
                 let tt = self.tysys.type_table.borrow();
-                let type_args = tt
-                    .nominal_type_args(method_impl_type_id)
-                    .expect("an instantiation carries its arguments");
                 // Qualify the base and the arguments alike, so a concrete-generic
                 // impl's method name matches its definition (issue #1348). A
                 // tuple keeps the `[a,b]` spelling every other namespace gives it.
@@ -1161,7 +1169,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 owner.inherited().and_then(|base_id| {
                     match self.tysys.type_table.borrow().get(base_id) {
                         ResolvedType::Struct { .. }
-                        | ResolvedType::GenericInstance { .. }
+                        | ResolvedType::Tuple(_)
                         | ResolvedType::Enum { .. }
                         | ResolvedType::Variant { .. }
                         | ResolvedType::Newtype { .. }
@@ -1515,8 +1523,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// [`Self::with_written_args`] can apply to others.
     fn applies_written_args(&self, target: TypeId) -> bool {
         match self.tysys.type_table.borrow().get(target) {
-            ResolvedType::GenericInstance { .. } => true,
-            ResolvedType::Newtype { type_args, .. } => !type_args.is_empty(),
+            ResolvedType::Struct {
+                def: StructDef::Decl(_),
+                type_args,
+            }
+            | ResolvedType::Resource { type_args, .. }
+            | ResolvedType::Variant { type_args, .. }
+            | ResolvedType::Newtype { type_args, .. } => !type_args.is_empty(),
             _ => false,
         }
     }
@@ -1526,7 +1539,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     fn with_written_args(&mut self, target: TypeId, args: &[TypeId]) -> TypeId {
         let shape = self.tysys.type_table.borrow().get(target).clone();
         match shape {
-            ResolvedType::GenericInstance { def, .. } => self
+            ResolvedType::Struct {
+                def: StructDef::Decl(def),
+                ..
+            }
+            | ResolvedType::Variant { def, .. }
+            | ResolvedType::Resource { def, .. } => self
                 .tysys
                 .type_table
                 .borrow_mut()
@@ -2235,7 +2253,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             | ResolvedType::Resource { .. }
             | ResolvedType::Enum { .. }
             | ResolvedType::Variant { .. }
-            | ResolvedType::GenericInstance { .. } => {
+            | ResolvedType::Tuple(_) => {
                 nominal_receiver(&self.tysys.type_table.borrow(), target_type_id)
             }
             ResolvedType::Primitive(prim) => primitive_receiver(prim),
@@ -2793,8 +2811,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if own_static.is_some() {
             return own;
         }
+        if type_table.instance_parts(base).is_some() {
+            return nominal_receiver(&type_table, base);
+        }
         match type_table.get(base) {
-            ResolvedType::GenericInstance { .. } => nominal_receiver(&type_table, base),
             ResolvedType::Primitive(prim) => primitive_receiver(*prim),
             ResolvedType::Struct { .. } | ResolvedType::Newtype { .. } => {
                 let head = type_table.representation_head(base);

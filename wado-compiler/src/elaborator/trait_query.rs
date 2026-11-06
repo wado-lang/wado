@@ -13,7 +13,7 @@ use crate::defs::DefId;
 use crate::module_source::ModuleSource;
 use crate::name::{FqTypeName, Receiver, TypeHead, display_generic_name};
 use crate::primitive::PrimitiveType;
-use crate::tir::{ResolvedType, TypeId};
+use crate::tir::{ResolvedType, StructDef, TypeId};
 use crate::token::Span;
 use crate::type_table::TypeTable;
 
@@ -1282,6 +1282,13 @@ impl TypeSystem {
             ResolvedType::Enum { .. } => Some(true),
             // A bitmask has no members to recurse into, like a plain `enum`.
             ResolvedType::Flags { .. } => Some(true),
+            ResolvedType::Struct {
+                def: StructDef::Decl(def),
+                type_args,
+            } if !type_args.is_empty() => {
+                let info = scope.struct_fields_of(*def)?;
+                Some(walk_struct(info, type_args, visit))
+            }
             ResolvedType::Struct { def, .. } => {
                 // An anonymous struct has fields to walk like any other; it
                 // just has no declaration to reach them through. Asking the
@@ -1290,17 +1297,9 @@ impl TypeSystem {
                 let info = scope.struct_fields_of_head(*def)?;
                 Some(walk_struct(info, &[], visit))
             }
-            ResolvedType::Variant { def } => {
+            ResolvedType::Variant { def, type_args } => {
                 let info = scope.variant_cases_of(*def)?;
-                Some(walk_variant(info, &[], visit))
-            }
-            ResolvedType::GenericInstance { def, type_args } => {
-                if let Some(info) = scope.struct_fields_of(*def) {
-                    Some(walk_struct(info, type_args, visit))
-                } else {
-                    let info = scope.variant_cases_of(*def)?;
-                    Some(walk_variant(info, type_args, visit))
-                }
+                Some(walk_variant(info, type_args, visit))
             }
             _ => None,
         }
@@ -1408,7 +1407,7 @@ impl TypeSystem {
             ResolvedType::Primitive(_) => false,
             ResolvedType::Struct { .. }
             | ResolvedType::Variant { .. }
-            | ResolvedType::GenericInstance { .. }
+            | ResolvedType::Tuple(_)
             | ResolvedType::BuiltinArray(_)
             | ResolvedType::Function { .. }
             | ResolvedType::Ref(_)
@@ -1438,26 +1437,15 @@ impl TypeSystem {
     /// a reference are `Ref` but boxed (replace-on-assign, WEP 2026-06-13), so a
     /// `&mut` cannot write through them; every other `Ref` type qualifies. A
     /// `Newtype` follows its base.
-    pub(super) fn is_ref_mut_identity(
-        &self,
-        is_variant: &dyn Fn(DefId) -> bool,
-        resolved: &ResolvedType,
-    ) -> bool {
+    pub(super) fn is_ref_mut_identity(&self, resolved: &ResolvedType) -> bool {
         match resolved {
             ResolvedType::Variant { .. }
             | ResolvedType::Function { .. }
             | ResolvedType::Ref(_)
             | ResolvedType::MutRef(_) => false,
-            ResolvedType::GenericInstance { def, .. } => {
-                if is_variant(*def) {
-                    false
-                } else {
-                    self.is_ref_identity(resolved)
-                }
-            }
             ResolvedType::Newtype { base_type, .. } => {
                 let base = self.type_table.borrow().get(*base_type).clone();
-                self.is_ref_mut_identity(is_variant, &base)
+                self.is_ref_mut_identity(&base)
             }
             _ => self.is_ref_identity(resolved),
         }
@@ -3201,20 +3189,24 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let tt = self.tysys.type_table.borrow();
             let effective_id = tt.representation_head(concrete_type_id);
             let list_name = tt.compiler_struct_fq_name(CompilerItem::List);
-            match tt.get(effective_id).clone() {
-                ResolvedType::GenericInstance { type_args, .. } => {
-                    (tt.fq_type_name(effective_id).head_only(), type_args)
+            if let Some((_, type_args)) = tt.instance_parts(effective_id) {
+                (
+                    tt.fq_type_name(effective_id).head_only(),
+                    type_args.to_vec(),
+                )
+            } else {
+                match tt.get(effective_id).clone() {
+                    // Primitives (`i32`, `f64`, `bool`, ...) can implement traits
+                    // with associated types just like structs. Without this arm,
+                    // a generic call like `parse_range::<i32>(...)` would skip
+                    // the `i32::Err = ParseIntError` registration and leave
+                    // `T::Err` unresolved at the caller's binding site.
+                    ResolvedType::Struct { .. } | ResolvedType::Primitive(_) => {
+                        (tt.fq_type_name(effective_id), vec![])
+                    }
+                    ResolvedType::BuiltinArray(elem) => (list_name, vec![elem]),
+                    _ => return,
                 }
-                // Primitives (`i32`, `f64`, `bool`, ...) can implement traits
-                // with associated types just like structs. Without this arm,
-                // a generic call like `parse_range::<i32>(...)` would skip
-                // the `i32::Err = ParseIntError` registration and leave
-                // `T::Err` unresolved at the caller's binding site.
-                ResolvedType::Struct { .. } | ResolvedType::Primitive(_) => {
-                    (tt.fq_type_name(effective_id), vec![])
-                }
-                ResolvedType::BuiltinArray(elem) => (list_name, vec![elem]),
-                _ => return,
             }
         };
 

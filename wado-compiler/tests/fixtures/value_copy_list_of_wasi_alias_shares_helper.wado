@@ -1,0 +1,35 @@
+// A copy helper is named by its type with newtypes erased, so `List<u32>` and
+// `List<GpuBufferDynamicOffset>` share `$value_copy$List<u32>`. The binding
+// synthesized for `bind` copies a `List<GpuBufferDynamicOffset>`, an instance
+// monomorphization never listed: it lowers as the listed `List<u32>`. Matching
+// listed instances by argument identity missed it and wrote the shared helper
+// as the identity, so `grown` pushed onto the caller's list.
+use { GpuBufferDynamicOffset } from "wasi:webgpu";
+
+interface Api {
+    #[cm("wasi:demo/gfx@0.1.0#bind")]
+    #[cm_params("offsets")]
+    fn bind(offsets: Option<List<GpuBufferDynamicOffset>>);
+}
+
+fn grown(a: &List<u32>) -> List<u32> {
+    let mut b = *a;
+    b.push(3);
+    return b;
+}
+
+export fn run() with Api {
+    let a: List<u32> = [1, 2];
+    Api::bind(null);
+    assert grown(&a).len() == a.len() + 1;
+}
+
+__DATA__
+{
+    "compile_only": true,
+    "wir_scope": "$value_copy$core:prelude/list.wado/List<u32>\"",
+    "wir_expect:O0": ["builtin::array_copy<u32>"],
+    "wir_contrast": {"O0": [
+        {"    let mut b = *a;": "    let mut b: List<u32> = [1, 2];", "    Api::bind(null);\n": ""}
+    ]}
+}

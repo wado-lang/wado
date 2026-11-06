@@ -168,8 +168,8 @@ pub(super) struct Lowering {
     /// it by.
     effects: IndexMap<EffectRef, TypeDeclId>,
     modules: IndexMap<ModuleSource, u32>,
-    /// The declaration a tuple type is an instance of. An impl writes a tuple
-    /// as `[..T]`, so an instance lowers to [`SolverType::Tuple`] as well.
+    /// The tuple family's declaration, which every tuple's methods are declared
+    /// on.
     tuple: Option<DefId>,
     /// A trait's associated types, by the trait and the name.
     assocs: IndexMap<(TraitDeclId, String), u32>,
@@ -652,9 +652,6 @@ impl Lowering {
             }
         };
         let instance = |def: DefId, type_args: &[TypeId]| {
-            if self.tuple == Some(def) {
-                return said(type_args.iter().map(|&a| tuple_elem(a))).map(SolverType::Tuple);
-            }
             decl(
                 DeclKey::Def(def),
                 said(type_args.iter().map(|&a| self.type_id(table, a, param)))?,
@@ -706,12 +703,13 @@ impl Lowering {
                 )?;
                 decl(DeclKey::AnonymousStruct, vec![SolverType::Tuple(fields)])
             }
-            ResolvedType::Enum { def }
-            | ResolvedType::Resource { def }
-            | ResolvedType::Variant { def }
-            | ResolvedType::Flags { def } => instance(*def, &[]),
-            ResolvedType::GenericInstance { def, type_args }
+            ResolvedType::Enum { def } | ResolvedType::Flags { def } => instance(*def, &[]),
+            ResolvedType::Resource { def, type_args }
+            | ResolvedType::Variant { def, type_args }
             | ResolvedType::Newtype { def, type_args, .. } => instance(*def, type_args),
+            ResolvedType::Tuple(elems) => {
+                said(elems.iter().map(|&a| tuple_elem(a))).map(SolverType::Tuple)
+            }
             ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => Ok(SolverType::Ref {
                 is_mut: matches!(table.get(id), ResolvedType::MutRef(_)),
                 inner: Box::new(self.type_id(table, *inner, param)?),
@@ -945,12 +943,8 @@ fn representative(
     key: &DeclKey,
 ) -> Option<ResolvedType> {
     match key {
-        // The tuple declaration registers no type of its own; an instance of
-        // it is what a tuple type is.
-        DeclKey::Def(def) if Some(*def) == tuple => Some(ResolvedType::GenericInstance {
-            def: *def,
-            type_args: Vec::new(),
-        }),
+        // The tuple declaration registers no type of its own.
+        DeclKey::Def(def) if Some(*def) == tuple => Some(ResolvedType::Tuple(Vec::new())),
         DeclKey::Def(def) => {
             let defs = tysys.resolutions.defs();
             match defs.kind(*def) {
@@ -1906,7 +1900,6 @@ impl SolverBridge {
         else {
             return;
         };
-        let is_variant = |def: DefId| tysys.data.variant_cases.contains_key(&def);
         for &head in heads {
             let key = lowering.decl_key(head);
             let (is_ref, is_ref_mut) = match key {
@@ -1919,7 +1912,7 @@ impl SolverBridge {
                     };
                     (
                         tysys.is_ref_identity(&shape),
-                        tysys.is_ref_mut_identity(&is_variant, &shape),
+                        tysys.is_ref_mut_identity(&shape),
                     )
                 }
                 // A literal's shape is a struct, which both predicates read as
@@ -2296,7 +2289,9 @@ impl SolverBridge {
                 def: StructDef::Decl(_),
                 type_args,
             }
-            | ResolvedType::GenericInstance { type_args, .. }
+            | ResolvedType::Resource { type_args, .. }
+            | ResolvedType::Variant { type_args, .. }
+            | ResolvedType::Tuple(type_args)
             | ResolvedType::Newtype { type_args, .. } => each(type_args),
             ResolvedType::BuiltinArray(inner)
             | ResolvedType::Ref(inner)

@@ -284,25 +284,12 @@ impl FunctionEntry {
 #[derive(Default, PartialEq)]
 struct Layouts {
     struct_fields: StructFieldTypes,
-    /// Every array type by its element, for the backing array a `List<T>` hides.
-    arrays_of: IndexMap<TypeKey, Vec<TypeKey>>,
 }
 
 impl Layouts {
     fn of(project: &NirPackage, type_table: &TypeTable) -> Self {
-        let struct_fields = StructFieldTypes::new(&project.structs, type_table);
-        let mut arrays_of: IndexMap<TypeKey, Vec<TypeKey>> = IndexMap::default();
-        for (id, ty) in type_table.all_types() {
-            if let ResolvedType::BuiltinArray(element) = ty {
-                arrays_of
-                    .entry(type_table.type_key(*element))
-                    .or_default()
-                    .push(type_table.type_key(id));
-            }
-        }
         Self {
-            struct_fields,
-            arrays_of,
+            struct_fields: StructFieldTypes::new(&project.structs, type_table),
         }
     }
 }
@@ -684,7 +671,7 @@ impl HeapEffects<'_> {
     pub(super) fn element_reach(&self, ty: TypeId) -> Option<Arc<ObjectTypes>> {
         let tt = self.type_table;
         let ty = tt.strip_handles(ty);
-        let ResolvedType::GenericInstance { type_args, .. } = tt.get(ty) else {
+        let ResolvedType::Struct { type_args, .. } = tt.get(ty) else {
             return None;
         };
         let [element] = type_args.as_slice() else {
@@ -717,61 +704,28 @@ impl HeapEffects<'_> {
             return;
         }
         match tt.get(ty) {
-            ResolvedType::Struct { .. } => {
+            ResolvedType::Tuple(elems) => {
                 out.insert(tt.type_key(ty));
-                match self.struct_field_types(ty) {
-                    Some(fields) => {
-                        for &f in fields {
-                            self.reach_into(f, seen, out);
-                        }
-                    }
-                    None => {
-                        out.set_any();
-                    }
+                for &elem in elems {
+                    self.reach_into(elem, seen, out);
                 }
             }
-            ResolvedType::GenericInstance { def, .. } if tt.is_resource_def(*def) => {}
-            ResolvedType::GenericInstance { def, type_args } => {
+            ResolvedType::Struct { .. } => {
+                out.insert(tt.type_key(ty));
                 if let Some(fields) = self.struct_field_types(ty) {
-                    out.insert(tt.type_key(ty));
                     for &f in fields {
                         self.reach_into(f, seen, out);
-                    }
-                } else if let [element] = type_args.as_slice()
-                    && tt.is_list(ty)
-                {
-                    out.insert(tt.type_key(ty));
-                    for &array in self
-                        .cache
-                        .layouts
-                        .arrays_of
-                        .get(&tt.type_key(*element))
-                        .into_iter()
-                        .flatten()
-                    {
-                        out.insert(array);
-                    }
-                    self.reach_into(*element, seen, out);
-                } else if let Some(elements) = tt.as_tuple(ty) {
-                    out.insert(tt.type_key(ty));
-                    for e in elements {
-                        self.reach_into(e, seen, out);
-                    }
-                } else if let Some(cases) = tt.variant_template_cases(*def) {
-                    out.insert(tt.type_key(ty));
-                    for &(_, _, payload) in cases {
-                        self.reach_template(payload, type_args, seen, out);
                     }
                 } else {
                     out.set_any();
                 }
             }
-            ResolvedType::Variant { def } => {
+            ResolvedType::Variant { def, type_args } => {
                 out.insert(tt.type_key(ty));
                 match tt.variant_template_cases(*def) {
                     Some(cases) => {
                         for &(_, _, payload) in cases {
-                            self.reach_template(payload, &[], seen, out);
+                            self.reach_template(payload, type_args, seen, out);
                         }
                     }
                     None => {

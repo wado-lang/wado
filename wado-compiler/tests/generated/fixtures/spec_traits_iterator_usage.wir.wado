@@ -129,7 +129,7 @@ struct spec_traits_iterator_usage.wado//$tmpl$c4c0fa392eab2b1b {  // TypeId(14)
 }
 
 struct spec_traits_iterator_usage.wado//$tmpl$7ab51489603b688b {  // TypeId(15)
-    mut h0: ref "core:prelude//List<i32>",
+    mut h0: ref "core:prelude/list.wado//List<i32>",
     mut s0: ref "core:prelude/string.wado//String",
     mut r0: ref "core:prelude/string.wado//String",
     mut s1: ref "core:prelude/string.wado//String",
@@ -138,30 +138,30 @@ struct spec_traits_iterator_usage.wado//$tmpl$7ab51489603b688b {  // TypeId(15)
 
 array Array<i32> (mut i32);  // TypeId(16)
 
-struct core:prelude/traits.wado//IterFilter<core:prelude/slice.wado/SliceValueIter<i32>,fn mut(i32)->bool> {  // TypeId(17)
+struct core:prelude/list.wado//List<i32> {  // TypeId(17)
+    mut repr: ref Array<i32>,
+    mut used: i32,
+}
+
+struct core:prelude/traits.wado//IterFilter<core:prelude/slice.wado/SliceValueIter<i32>,fn mut(i32)->bool> {  // TypeId(18)
     mut inner: ref "core:prelude/slice.wado//SliceValueIter<i32>",
     mut pred: ref struct,
 }
 
-struct core:prelude/slice.wado//SliceValueIter<i32> {  // TypeId(18)
+struct core:prelude/slice.wado//SliceValueIter<i32> {  // TypeId(19)
     mut repr: ref Array<i32>,
     mut index: i32,
     mut end: i32,
 }
 
-variant core:prelude/types.wado//Option<i32> {  // TypeId(19)
+variant core:prelude/types.wado//Option<i32> {  // TypeId(20)
     None,
     Some(i32),
 }
 
-struct core:prelude/types.wado//Option<i32>::Some {  // TypeId(20)
+struct core:prelude/types.wado//Option<i32>::Some {  // TypeId(21)
     discriminant: i32,
     payload_0: i32,
-}
-
-struct core:prelude//List<i32> {  // TypeId(21)
-    mut repr: ref Array<i32>,
-    mut used: i32,
 }
 
 type "functype/$canonical_closure_fn_0" = fn(ref null struct, i32) -> bool;  // TypeId(22)
@@ -333,7 +333,7 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/String::format
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::format<core:prelude/string.wado/$tmpl$59e16269228f9c88,[core:prelude/string.wado/String,i32,i32]>" = fn(ref "core:prelude/string.wado//$tmpl$59e16269228f9c88") -> ref "core:prelude/string.wado//String";  // TypeId(104)
 
-type "functype//core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/Inspect::inspect" = fn(ref "core:prelude//List<i32>", ref "core:prelude/format.wado//Formatter");  // TypeId(105)
+type "functype//core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/Inspect::inspect" = fn(ref Array<i32>, i32, ref "core:prelude/format.wado//Formatter");  // TypeId(105)
 
 type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/StrSlice>" = fn(ref "core:prelude/format.wado//Formatter", ref "core:prelude/string.wado//StrSlice");  // TypeId(106)
 
@@ -449,7 +449,7 @@ global global:core:prelude/traits.wado::$const_obj_18: ref "core:prelude/string.
 global global:core:builtin::$unit_case$core:prelude/types.wado//Option<i32>$0: ref "core:prelude/types.wado//Option<i32>" = struct.new "core:prelude/types.wado//Option<i32>" { 0 };
 
 fn "spec_traits_iterator_usage.wado/$test_0"() {
-    let rest: ref "core:prelude//List<i32>";
+    let rest: ref "core:prelude/list.wado//List<i32>";
     let item_20: i32;
     let repr_45: ref Array<i32>;
     let self_64: ref "core:prelude/slice.wado//SliceValueIter<i32>";
@@ -492,7 +492,7 @@ fn "spec_traits_iterator_usage.wado/$test_0"() {
         };
     };
     builtin::array_copy<i32>(local.tee repr_45(builtin::array_new<i32>(4)), 0, $sroa_arr_repr_117, 1, 4);
-    rest = struct.new "core:prelude//List<i32>" { repr: repr_45, used: 4 };
+    rest = struct.new "core:prelude/list.wado//List<i32>" { repr: repr_45, used: 4 };
     if @unlikely($inline_core_prelude_array_wado_seq_eq_i32__21: block -> bool {
         $sroa_$iter_0_index_120 = 0;
         repr_45 = rest.repr;
@@ -1778,10 +1778,11 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<spec_traits
     let out: ref "core:prelude/string.wado//String";
     let self_9: ref "core:prelude/string.wado//StrSlice";
     let $temp_inline_core_prelude_traits_wado_TemplateHole_spec_traits_iterator_usage_wado__tmpl_7ab51489603b688b_core_prelude_list_wado_List_i32____fmt_4_0: ref "core:prelude/format.wado//Formatter";
+    let t_18: ref "core:prelude/list.wado//List<i32>";
     out = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>((local.tee self_9("spec_traits_iterator_usage.wado/spec_traits_iterator_usage.wado/$tmpl$7ab51489603b688b^core:prelude/traits.wado/ReflectTemplate::tail"(t)).end - self_9.start) + (local.tee self_9("core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<spec_traits_iterator_usage.wado/$tmpl$7ab51489603b688b,core:prelude/list.wado/List<i32>>::lit$sroa[self.index]"(0, local.tee $load_2(t.s0), local.tee $load_3(t.r0), local.tee $load_4(t.s1), local.tee $load_5(t.r1))).end - self_9.start + 16)), used: 0 };
     "core:prelude/string.wado/&core:prelude/string.wado/StrSlice^core:prelude/string.wado/AsStrSlice::internal_append_to$sroa[self.value]"("core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<spec_traits_iterator_usage.wado/$tmpl$7ab51489603b688b,core:prelude/list.wado/List<i32>>::lit$sroa[self.index]"(0, $load_2, $load_3, $load_4, $load_5), out);
     $temp_inline_core_prelude_traits_wado_TemplateHole_spec_traits_iterator_usage_wado__tmpl_7ab51489603b688b_core_prelude_list_wado_List_i32____fmt_4_0 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"(out);
-    "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/Inspect::inspect"(t.h0, $temp_inline_core_prelude_traits_wado_TemplateHole_spec_traits_iterator_usage_wado__tmpl_7ab51489603b688b_core_prelude_list_wado_List_i32____fmt_4_0);
+    "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/Inspect::inspect"(local.tee t_18(t.h0).repr, t_18.used, $temp_inline_core_prelude_traits_wado_TemplateHole_spec_traits_iterator_usage_wado__tmpl_7ab51489603b688b_core_prelude_list_wado_List_i32____fmt_4_0);
     "core:prelude/string.wado/&core:prelude/string.wado/StrSlice^core:prelude/string.wado/AsStrSlice::internal_append_to$sroa[self.value]"("spec_traits_iterator_usage.wado/spec_traits_iterator_usage.wado/$tmpl$7ab51489603b688b^core:prelude/traits.wado/ReflectTemplate::tail"(t), out);
     return out;
 }
@@ -1821,13 +1822,12 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<core:prelud
     return out;
 }
 
-fn "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/Inspect::inspect"(self, f) {
-    let self_2: i32;
-    "core:prelude/array.wado/core:prelude/array.wado/write_seq_inspect<i32>$dae[start,marker]"(self.repr, self.used, f, $inline_core_prelude_format_wado_Formatter__resolved_seq_limit_sroa_self_precision__0: block -> i32 {
-        if local.tee self_2(f.precision) == -2 {
+fn "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/Inspect::inspect"($mv$self$repr, $mv$self$used, f) {
+    "core:prelude/array.wado/core:prelude/array.wado/write_seq_inspect<i32>$dae[start,marker]"($mv$self$repr, $mv$self$used, f, $inline_core_prelude_format_wado_Formatter__resolved_seq_limit_sroa_self_precision__0: block -> i32 {
+        if local.tee $mv$self$used(f.precision) == -2 {
             break $inline_core_prelude_format_wado_Formatter__resolved_seq_limit_sroa_self_precision__0: 256;
         }
-        break $inline_core_prelude_format_wado_Formatter__resolved_seq_limit_sroa_self_precision__0: self_2;
+        break $inline_core_prelude_format_wado_Formatter__resolved_seq_limit_sroa_self_precision__0: $mv$self$used;
     });
 }
 

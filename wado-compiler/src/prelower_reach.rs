@@ -156,7 +156,7 @@ pub(crate) fn type_head(type_table: &TypeTable, id: TypeId) -> Option<TypeHead> 
         | ResolvedType::Enum { .. }
         | ResolvedType::Variant { .. }
         | ResolvedType::Resource { .. }
-        | ResolvedType::GenericInstance { .. }
+        | ResolvedType::Tuple(_)
         | ResolvedType::Newtype { .. }
         | ResolvedType::Flags { .. }
         | ResolvedType::BuiltinArray(_)

@@ -1100,10 +1100,11 @@ pub(super) fn operand_values_may_trap(body: &Body, node: NodeRef) -> bool {
 /// a walker consults while it recurses itself.
 ///
 /// A `FieldAccess` traps only on a null receiver, and every type a field access
-/// can name is a non-null heap value in NIR — a struct, a reference, or a
-/// generic instance (tuple / `Box` / `List` / user generic). `Option` is the one
-/// nullable type, and it is read via `VariantPayload`, never `FieldAccess`; its
-/// null niche is a WIR representation, chosen after the NIR optimizer has run.
+/// can name is a non-null heap value in NIR — a struct, a tuple, a reference, or
+/// a generic struct instance (`Box` / `List` / user generic). `Option` is the
+/// one nullable type, and it is read via `VariantPayload`, never `FieldAccess`;
+/// its null niche is a WIR representation, chosen after the NIR optimizer has
+/// run.
 /// Provable only with a type table.
 pub(super) fn field_receiver_nonnull(
     body: &Body,
@@ -1114,11 +1115,15 @@ pub(super) fn field_receiver_nonnull(
         return false;
     };
     let ty = body.operand_type(receiver);
-    match types.get_pruned(ty) {
-        Some(ResolvedType::Struct { .. } | ResolvedType::Ref(_) | ResolvedType::MutRef(_)) => true,
-        Some(ResolvedType::GenericInstance { .. }) => types.as_option(ty).is_none(),
-        _ => false,
-    }
+    matches!(
+        types.get_pruned(ty),
+        Some(
+            ResolvedType::Struct { .. }
+                | ResolvedType::Tuple(_)
+                | ResolvedType::Ref(_)
+                | ResolvedType::MutRef(_),
+        )
+    )
 }
 
 /// Without a type table `FieldAccess` is conservatively trap-capable.
@@ -1511,30 +1516,25 @@ pub(super) fn for_each_mutated_root(
     });
 }
 
-/// Every local possibly mutated anywhere in the subtree at `node` — the
+/// Every mutation of a local root anywhere in the subtree at `node` — the
 /// consolidation query for pass-local "loop write" / "modifies" scans.
-// Canonical implementation ahead of its consumers: `const_folding`'s
-// `record_loop_write` and `condition_implication`'s `node_modifies` migrate
-// onto it next.
-#[allow(dead_code)]
-pub(super) fn locals_possibly_mutated(
+// `const_folding`'s `record_loop_write` and `condition_implication`'s
+// `node_modifies` are such scans still to migrate onto it.
+pub(super) fn for_each_mutation_under(
     body: &Body,
     node: NodeRef,
     type_table: &TypeTable,
     oracle: &MutationOracle<'_>,
     aliases: &MutRefAliases,
-) -> IndexSet<u32> {
-    let mut out = IndexSet::default();
+    sink: &mut impl FnMut(RootMutation),
+) {
     let mut stack = vec![node];
     while let Some(n) = stack.pop() {
         if let NodeRef::Expr(e) = n {
-            for_each_mutated_root(body, e, type_table, oracle, aliases, &mut |rm| {
-                out.insert(rm.local());
-            });
+            for_each_mutated_root(body, e, type_table, oracle, aliases, sink);
         }
         body.for_each_child(n, |c| stack.push(c));
     }
-    out
 }
 
 /// Whether WIR will expect a value from `block`'s tail. Walks the parent map,

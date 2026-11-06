@@ -15,11 +15,8 @@
 // element type and failing Wasm GC validation with
 //   "type mismatch: expected (ref null $T), found (ref (exact $T))".
 //
-// The fix qualifies `Struct` and `GenericInstance` in
-// `mangle_type_arg_for_generic` (by `ModuleSource`) so the two arrays
-// get distinct fqs, and aligns `wir_build::context`'s `List<T>`
-// lookup arm to use the same qualifier so registration and lookup
-// keys agree.
+// The fix qualifies struct arguments in `mangle_type_arg_for_generic`
+// (by `ModuleSource`) so the two instances get distinct fqs.
 
 use { Outer, Pair } from "./sub/cross_module_same_name_struct_iter_b.wado";
 

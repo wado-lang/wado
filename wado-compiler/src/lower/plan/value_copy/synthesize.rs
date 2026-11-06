@@ -13,9 +13,9 @@ use crate::flat_package::FlatPackage;
 use crate::hashmap::IndexSet;
 use crate::module_source::ModuleSource;
 use crate::tir::{
-    CallArg, FunctionKind, FunctionRef, InlineHint, MonomorphInfo, ResolvedType, StructDef,
-    TirBlock, TirExpr, TirExprKind, TirField, TirFunction, TirLocal, TirMatchArm, TirParam,
-    TirPattern, TirStmt, TirStmtKind, TirStruct, TirStructField, TirUnaryOp, TypeId,
+    CallArg, FunctionKind, FunctionRef, InlineHint, MonomorphInfo, ResolvedType, TirBlock, TirExpr,
+    TirExprKind, TirField, TirFunction, TirLocal, TirMatchArm, TirParam, TirPattern, TirStmt,
+    TirStmtKind, TirStruct, TirStructField, TirUnaryOp, TypeId,
 };
 use crate::tir_visitor::TirRefVisitor;
 use crate::token::Span;
@@ -23,7 +23,6 @@ use crate::type_table::TypeTable;
 
 use super::{ValueCopyHelpers, needs_value_copy};
 use crate::ast::Visibility;
-use crate::compiler_item::CompilerItem;
 use crate::lower::plan::value_copy;
 use crate::lower::plan::value_copy::{copied_element_type_arg, copy_value_type_arg};
 use crate::name::value_copy_helper_name;
@@ -252,11 +251,7 @@ fn variant_cases_concrete(
     type_table: &Rc<RefCell<TypeTable>>,
 ) -> Option<Vec<(String, u32, TypeId)>> {
     match resolved {
-        ResolvedType::Variant { def } => type_table
-            .borrow()
-            .variant_template_cases(*def)
-            .map(<[_]>::to_vec),
-        ResolvedType::GenericInstance { def, type_args } => {
+        ResolvedType::Variant { def, type_args } => {
             let cases = type_table
                 .borrow()
                 .variant_template_cases(*def)
@@ -377,50 +372,39 @@ fn build_copy_return_expr(
     type_table: &Rc<RefCell<TypeTable>>,
     span: Span,
 ) -> Option<TirExpr> {
+    let mangled = || {
+        type_table
+            .borrow()
+            .struct_list_name(type_id)
+            .expect("struct-shaped type has a stored struct name")
+    };
     let (def, type_args) = match resolved {
         ResolvedType::Struct { def, type_args } => (*def, type_args),
-        ResolvedType::GenericInstance { def, type_args } => (StructDef::Decl(*def), type_args),
+        ResolvedType::Tuple(elems) => {
+            return Some(build_tuple_copy(
+                type_id,
+                &mangled(),
+                elems,
+                v_local,
+                type_table,
+                span,
+            ));
+        }
         _ => return None,
     };
-    let mangled = type_table
-        .borrow()
-        .struct_list_name(type_id)
-        .expect("struct-shaped type has a stored struct name");
-    let listed = project.listed_struct(&type_table.borrow(), def, type_args);
-    if let Some(struct_def) = listed {
-        let right_size_backing = type_table.borrow().is_seq_container(type_id);
-        return Some(build_struct_copy(
-            type_id,
-            &mangled,
-            struct_def,
-            v_local,
-            type_table,
-            span,
-            right_size_backing,
-        ));
-    }
     // An unlisted instance lowers to `AbstractRef(Struct)`, which WIR-build
-    // rejects in a `StructLiteral`; only `List<T>` and tuples copy without one.
-    if matches!(resolved, ResolvedType::GenericInstance { .. })
-        && type_table.borrow().is_list(type_id)
-        && type_args.len() == 1
-        && is_synth_safe_element(type_args[0], type_table, project)
-    {
-        return Some(build_list_wrapper_copy(
-            type_id,
-            &mangled,
-            type_args[0],
-            v_local,
-            type_table,
-            span,
-        ));
-    }
-    if type_table.borrow().is_tuple(type_id) {
-        return Some(build_tuple_copy(
-            type_id, &mangled, type_args, v_local, type_table, span,
-        ));
-    }
-    None
+    // rejects in a `StructLiteral`.
+    let struct_def = project.listed_struct(&type_table.borrow(), def, type_args)?;
+    let right_size_backing = type_table.borrow().is_seq_container(type_id);
+    Some(build_struct_copy(
+        type_id,
+        &mangled(),
+        struct_def,
+        v_local,
+        type_table,
+        span,
+        right_size_backing,
+    ))
 }
 
 fn single_return_block(value: TirExpr, span: Span) -> TirBlock {
@@ -429,91 +413,6 @@ fn single_return_block(value: TirExpr, span: Span) -> TirBlock {
             TirStmtKind::Return { value: Some(value) },
             span,
         )],
-        span,
-    )
-}
-
-/// `List<T>`'s deep-copy emits a `StructLiteral` typed `List<T>`, which resolves
-/// to `AbstractRef(Struct)` whenever `T` is a shape the WIR struct registry
-/// never materialises — a resource, a function type, an unmaterialised generic
-/// instance. Downstream only handles a concrete `WirType::Ref`, so those `T`s
-/// fall through to identity; everything with a WIR registration is copied.
-fn is_synth_safe_element(
-    elem_type: TypeId,
-    type_table: &Rc<RefCell<TypeTable>>,
-    project: &FlatPackage,
-) -> bool {
-    let resolved = type_table.borrow().get(elem_type).clone();
-    match resolved {
-        ResolvedType::Resource { .. }
-        | ResolvedType::Function { .. }
-        | ResolvedType::TypeParam { .. }
-        | ResolvedType::TypePack { .. } => false,
-        ResolvedType::Variant { .. } => true,
-        ResolvedType::GenericInstance { def, type_args } => {
-            let tt = type_table.borrow();
-            // Any other instance needs a monomorphized struct for WIR to point at.
-            tt.is_tuple(elem_type)
-                || tt.is_list(elem_type)
-                || tt.is_compiler_struct_instance(elem_type, CompilerItem::Box)
-                || project.variants.iter().any(|v| v.def == def)
-                || project
-                    .listed_struct(&tt, StructDef::Decl(def), &type_args)
-                    .is_some()
-        }
-        _ => true,
-    }
-}
-
-fn build_list_wrapper_copy(
-    type_id: TypeId,
-    mangled_name: &str,
-    elem_type: TypeId,
-    v_local: &TirExpr,
-    type_table: &Rc<RefCell<TypeTable>>,
-    span: Span,
-) -> TirExpr {
-    let raw_array_ty = type_table.borrow_mut().make_builtin_array(elem_type);
-    let repr_field = TirField::plain(
-        SeqField::Backing.field_name().to_string(),
-        Visibility::Private,
-        raw_array_ty,
-        0,
-        span,
-    );
-    let used_field = TirField::plain(
-        SeqField::Len.field_name().to_string(),
-        Visibility::Private,
-        TypeTable::I32,
-        1,
-        span,
-    );
-    let fields = vec![
-        TirStructField {
-            name: SeqField::Backing.field_name().to_string(),
-            value: build_array_clone(
-                make_field_access(v_local, &repr_field, span),
-                raw_array_ty,
-                elem_type,
-                Some(make_field_access(v_local, &used_field, span)),
-                type_table,
-                span,
-            ),
-            field_index: 0,
-        },
-        TirStructField {
-            name: SeqField::Len.field_name().to_string(),
-            value: make_field_copy(v_local.clone(), &used_field, type_table, span),
-            field_index: 1,
-        },
-    ];
-    TirExpr::new(
-        TirExprKind::StructLiteral {
-            struct_type: type_id,
-            struct_name: mangled_name.to_string(),
-            fields,
-        },
-        type_id,
         span,
     )
 }

@@ -899,8 +899,8 @@ impl FunctionTranslator<'_, '_> {
 
         // Get the raw GC array type. Element name must match the
         // key `register_raw_array_type` uses
-        // (`mangle_type_arg_rowless`, qualifies Struct /
-        // GenericInstance args by `ModuleSource`).
+        // (`mangle_type_arg_rowless`, qualifies struct args by
+        // `ModuleSource`).
         let elem_name = self.type_table.mangle_type_arg_rowless(element_type_id);
         let raw_array_type = self
             .ctx
@@ -926,16 +926,15 @@ impl FunctionTranslator<'_, '_> {
 
         // Determine appropriate array get instruction based on element type
         let elem_resolved = self.type_table.get(element_type_id);
-        let is_ref = !self.type_table.is_resource_type(element_type_id)
-            && matches!(
-                elem_resolved,
-                ResolvedType::GenericInstance { .. }
-                    | ResolvedType::Struct { .. }
-                    | ResolvedType::Function { .. }
-                    | ResolvedType::Ref(_)
-                    | ResolvedType::MutRef(_)
-                    | ResolvedType::Variant { .. }
-            );
+        let is_ref = matches!(
+            elem_resolved,
+            ResolvedType::Tuple(_)
+                | ResolvedType::Struct { .. }
+                | ResolvedType::Function { .. }
+                | ResolvedType::Ref(_)
+                | ResolvedType::MutRef(_)
+                | ResolvedType::Variant { .. }
+        );
 
         let elem_result_ty = self.array_element_wir_type(&raw_type);
         let get_instr = if matches!(

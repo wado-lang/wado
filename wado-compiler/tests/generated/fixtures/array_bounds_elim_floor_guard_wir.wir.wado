@@ -53,7 +53,7 @@ struct core:prelude/format.wado//Formatter {  // TypeId(7)
 
 array Array<i32> (mut i32);  // TypeId(8)
 
-struct core:prelude//List<i32> {  // TypeId(9)
+struct core:prelude/list.wado//List<i32> {  // TypeId(9)
     mut repr: ref Array<i32>,
     mut used: i32,
 }
@@ -74,11 +74,11 @@ type "functype//wasi/$wasi:cli/stderr@0.3.0#write-via-stream" = fn(i32) -> i32; 
 
 type "functype//wasi/$wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(17)
 
-type "functype//array_bounds_elim_floor_guard_wir.wado/sum_back" = fn(ref "core:prelude//List<i32>", i32) -> i32;  // TypeId(18)
+type "functype//array_bounds_elim_floor_guard_wir.wado/run" = fn();  // TypeId(18)
 
-type "functype//array_bounds_elim_floor_guard_wir.wado/run" = fn();  // TypeId(19)
+type "functype//array_bounds_elim_floor_guard_wir.wado/$cm_export__run" = fn();  // TypeId(19)
 
-type "functype//array_bounds_elim_floor_guard_wir.wado/$cm_export__run" = fn();  // TypeId(20)
+type "functype//array_bounds_elim_floor_guard_wir.wado/sum_back$spec0" = fn(ref "core:prelude/list.wado//List<i32>", i32) -> i32;  // TypeId(20)
 
 type "functype//core:prelude/list.wado/$template_segment$core:prelude/list.wado/$tmpl$59e16269228f9c88" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", i32) -> ref "core:prelude/string.wado//String";  // TypeId(21)
 
@@ -176,29 +176,7 @@ import fn wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode f
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
-global global:array_bounds_elim_floor_guard_wir.wado::$const_obj_0: ref "core:prelude//List<i32>" = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(1, 2, 3), used: 3 };
-
-fn "array_bounds_elim_floor_guard_wir.wado/sum_back"(xs, from) {
-    let s: i32;
-    let $licm_used_15: i32;
-    let $licm_repr_16: ref Array<i32>;
-    s = 0;
-    $licm_used_15 = xs.used;
-    $licm_repr_16 = xs.repr;
-    b0: block {
-        l1: loop {
-            break_if b0 from < 0;
-            s = s + if @unlikely(from >= $licm_used_15) {
-                cold_path;
-                "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(from, $licm_used_15, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("array_bounds_elim_floor_guard_wir.wado:10"), used: 41 });
-                unreachable;
-            }; builtin::array_get_value<i32>($licm_repr_16, from);
-            from = from - 1;
-            continue l1;
-        };
-    };
-    return s;
-}
+global global:array_bounds_elim_floor_guard_wir.wado::$const_obj_0: ref "core:prelude/list.wado//List<i32>" = struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(1, 2, 3), used: 3 };
 
 fn "array_bounds_elim_floor_guard_wir.wado/run"() with Stdout {
     let out_15: ref "core:prelude/string.wado//String";
@@ -209,7 +187,7 @@ fn "array_bounds_elim_floor_guard_wir.wado/run"() with Stdout {
     let tens: i32;
     let $sroa_t_h0_124: i32;
     let start_163: i32;
-    $sroa_t_h0_124 = "array_bounds_elim_floor_guard_wir.wado/sum_back"(global:array_bounds_elim_floor_guard_wir.wado::$const_obj_0, black_box(2));
+    $sroa_t_h0_124 = "array_bounds_elim_floor_guard_wir.wado/sum_back$spec0"(global:array_bounds_elim_floor_guard_wir.wado::$const_obj_0, black_box(2));
     out_15 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
     $inline_core_prelude_string_wado_String__internal_push_view_24: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_24;
@@ -295,16 +273,16 @@ fn "array_bounds_elim_floor_guard_wir.wado/run"() with Stdout {
     out_15.used = is_negative_77;
     arr = out_15.repr;
     $sroa_t_h0_124 = start_163 + $sroa_t_h0_124;
-    b25: block {
-        l26: loop {
-            break_if b25 ($sroa_t_h0_124 - start_163) < 2;
+    b22: block {
+        l23: loop {
+            break_if b22 ($sroa_t_h0_124 - start_163) < 2;
             q = x /u 100_i64;
             tens = local.tee is_negative_77(builtin::i32_wrap_i64(x - (q * 100_i64))) / 10;
             builtin::array_set_u8(arr, $sroa_t_h0_124 - 1, (48 + is_negative_77) - (tens * 10));
             builtin::array_set_u8(arr, $sroa_t_h0_124 - 2, 48 + tens);
             $sroa_t_h0_124 = $sroa_t_h0_124 - 2;
             x = q;
-            continue l26;
+            continue l23;
         };
     };
     if $sroa_t_h0_124 > start_163 {
@@ -327,6 +305,26 @@ fn "array_bounds_elim_floor_guard_wir.wado/$cm_binding__wasi:cli/stdout@0.3.0#wr
 fn "array_bounds_elim_floor_guard_wir.wado/$cm_export__run"() {
     "array_bounds_elim_floor_guard_wir.wado/run"();
     "wasi/task-return"(0);
+}
+
+fn "array_bounds_elim_floor_guard_wir.wado/sum_back$spec0"(xs, from) {
+    let s: i32;
+    let $licm_repr_15: ref Array<i32>;
+    s = 0;
+    $licm_repr_15 = xs.repr;
+    b25: block {
+        l26: loop {
+            break_if b25 from < 0;
+            s = s + if @unlikely(from >= 3) {
+                cold_path;
+                "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(from, 3, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("array_bounds_elim_floor_guard_wir.wado:10"), used: 41 });
+                unreachable;
+            }; builtin::array_get_value<i32>($licm_repr_15, from);
+            from = from - 1;
+            continue l26;
+        };
+    };
+    return s;
 }
 
 fn "core:prelude/list.wado/$template_segment$core:prelude/list.wado/$tmpl$59e16269228f9c88"($mv$v$s0, $mv$v$r0, $mv$v$s1, $mv$v$r1, $mv$v$s2, $mv$v$r2, $mv$v$s3, $mv$v$r3, index) {

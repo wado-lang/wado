@@ -69,15 +69,15 @@ struct opt_multi_value_param_block_argument.wado//$tmpl$d305285d70b582f5 {  // T
     mut r3: ref "core:prelude/string.wado//String",
 }
 
-struct core:prelude/slice.wado//Slice<u8> {  // TypeId(10)
+struct core:prelude/list.wado//List<u8> {  // TypeId(10)
+    mut repr: ref Array<u8>,
+    mut used: i32,
+}
+
+struct core:prelude/slice.wado//Slice<u8> {  // TypeId(11)
     mut repr: ref Array<u8>,
     mut start: i32,
     mut end: i32,
-}
-
-struct core:prelude//List<u8> {  // TypeId(11)
-    mut repr: ref Array<u8>,
-    mut used: i32,
 }
 
 type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(12)
@@ -290,11 +290,11 @@ global global:core:prelude/traits.wado::$const_obj_20: ref "core:prelude/string.
 global global:core:prelude/primitive.wado::$const_obj_21: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
 
 fn "opt_multi_value_param_block_argument.wado/run"() {
-    let bytes: ref "core:prelude//List<u8>";
+    let bytes: ref "core:prelude/list.wado//List<u8>";
     let h: ref "opt_multi_value_param_block_argument.wado//Holder";
     let $v1_2: i32;
     let $v2_3: i32;
-    if @unlikely((local.tee $v2_3("opt_multi_value_param_block_argument.wado/opt_multi_value_param_block_argument.wado/key_index<opt_multi_value_param_block_argument.wado/Keys>$spec0$dae[end]"(local.tee h(struct.new "opt_multi_value_param_block_argument.wado//Holder" { input: struct.new "core:prelude/slice.wado//Slice<u8>" { repr: local.tee bytes(black_box(struct.new "core:prelude//List<u8>" { repr: array.new_data<u8>("abcdef"), used: 6 })).repr, start: 0, end: bytes.used } }), local.tee $v1_2(black_box(1)))) == 0) == 0) {
+    if @unlikely((local.tee $v2_3("opt_multi_value_param_block_argument.wado/opt_multi_value_param_block_argument.wado/key_index<opt_multi_value_param_block_argument.wado/Keys>$spec0$dae[end]"(local.tee h(struct.new "opt_multi_value_param_block_argument.wado//Holder" { input: struct.new "core:prelude/slice.wado//Slice<u8>" { repr: local.tee bytes(black_box(struct.new "core:prelude/list.wado//List<u8>" { repr: array.new_data<u8>("abcdef"), used: 6 })).repr, start: 0, end: bytes.used } }), local.tee $v1_2(black_box(1)))) == 0) == 0) {
         cold_path;
         let $mv_arg_1: ref "core:prelude/string.wado//String";
         "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<opt_multi_value_param_block_argument.wado/$tmpl$d305285d70b582f5,[opt_multi_value_param_block_argument.wado/Holder,i32,i32]>"(struct.new "opt_multi_value_param_block_argument.wado//$tmpl$d305285d70b582f5" { h0: h, h1: $v1_2, h2: $v2_3, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in run at opt_multi_value_param_block_argument.wado:47

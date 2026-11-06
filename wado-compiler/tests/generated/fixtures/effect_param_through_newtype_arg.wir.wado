@@ -6,37 +6,46 @@ enum core:prelude/types.wado//enum:CopyResult { Completed = 0, Dropped = 1, Canc
 
 array Array<u8> (mut u8);  // TypeId(1)
 
-type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(2)
+struct effect_param_through_newtype_arg.wado//$Closure_0 {  // TypeId(2)}
 
-type "functype//wasi/stream-write" = fn(i32, i32, i32) -> i32;  // TypeId(3)
+type "functype/$canonical_closure_fn_0" = fn(ref null struct);  // TypeId(3)
 
-type "functype//wasi/waitable-join" = fn(i32, i32);  // TypeId(4)
+struct canonical//CanonicalClosure_0 {  // TypeId(4)
+    env: ref null struct,
+    func: ref "functype/$canonical_closure_fn_0",
+}
 
-type "functype//wasi/waitable-set-drop" = fn(i32);  // TypeId(5)
+type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(5)
 
-type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(6)
+type "functype//wasi/stream-write" = fn(i32, i32, i32) -> i32;  // TypeId(6)
 
-type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(7)
+type "functype//wasi/waitable-join" = fn(i32, i32);  // TypeId(7)
 
-type "functype//wasi/$wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(8)
+type "functype//wasi/waitable-set-drop" = fn(i32);  // TypeId(8)
 
-type "functype//effect_param_through_newtype_arg.wado/$cm_export__run" = fn();  // TypeId(9)
+type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(9)
 
-type "functype//core:rt/unreachable" = fn();  // TypeId(10)
+type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(10)
 
-type "functype//core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]$dae[return]" = fn(i32, ref Array<u8>);  // TypeId(11)
+type "functype//wasi/$wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(11)
 
-type "functype//effect_param_through_newtype_arg.wado/effect_param_through_newtype_arg.wado/$Closure_0::$call$dae[self]" = fn();  // TypeId(12)
+type "functype//effect_param_through_newtype_arg.wado/$cm_export__run" = fn();  // TypeId(12)
 
-type "functype//wasi/task-return" = fn(i32);  // TypeId(13)
+type "functype//core:rt/unreachable" = fn();  // TypeId(13)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(14)
+type "functype//core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]$dae[return]" = fn(i32, ref Array<u8>);  // TypeId(14)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(15)
+type "functype//effect_param_through_newtype_arg.wado/effect_param_through_newtype_arg.wado/$Closure_0::$call$dae[self]" = fn();  // TypeId(15)
 
-type "functype//wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode" = fn(i32);  // TypeId(16)
+type "functype//wasi/task-return" = fn(i32);  // TypeId(16)
 
-type "functype//effect_param_through_newtype_arg.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(17)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(17)
+
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(18)
+
+type "functype//wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode" = fn(i32);  // TypeId(19)
+
+type "functype//effect_param_through_newtype_arg.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(20)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -58,7 +67,10 @@ fn "effect_param_through_newtype_arg.wado/$cm_binding__wasi:cli/stdout@0.3.0#wri
 }
 
 fn "effect_param_through_newtype_arg.wado/$cm_export__run"() {
-    "effect_param_through_newtype_arg.wado/effect_param_through_newtype_arg.wado/$Closure_0::$call$dae[self]"();
+    let f_2: ref struct;
+    f_2 = struct.new "canonical//CanonicalClosure_0" { env: struct.new "effect_param_through_newtype_arg.wado//$Closure_0" {}, func: ref.func "closure/effect_param_through_newtype_arg.wado/$closure_wrapper_0" };
+    let $indirect_call_1: ref "canonical//CanonicalClosure_0";
+    call_ref "functype/$canonical_closure_fn_0"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_0"(f_2)).env);
     "wasi/task-return"(0);
 }
 
@@ -155,6 +167,10 @@ fn "effect_param_through_newtype_arg.wado/effect_param_through_newtype_arg.wado/
     "core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]$dae[return]"($sroa_$pattern_temp_0_1_15, new_repr);
     "wasi/stream-drop-writable"($sroa_$pattern_temp_0_1_15);
     "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_14);
+}
+
+fn "closure/effect_param_through_newtype_arg.wado/$closure_wrapper_0"($env) {
+    "effect_param_through_newtype_arg.wado/effect_param_through_newtype_arg.wado/$Closure_0::$call$dae[self]"();
 }
 
 export fn "effect_param_through_newtype_arg.wado/$cm_export__run" as "run"

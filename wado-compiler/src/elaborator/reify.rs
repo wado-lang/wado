@@ -91,8 +91,8 @@ use crate::pgo::MarkMap;
 use crate::rarity::Mark;
 use crate::symbol::{Symbol, SymbolKind};
 use crate::synthesis::common::{
-    bare_cast, bool_lit, builtin_call, cold_path_stmt, handle_bits, known_cold_path_stmt,
-    marker_stmt_mark, not_expr, ord_bool_from_cmp, rt_call,
+    bare_cast, bool_lit, builtin_call, cold_path_stmt, handle_bits, marker_stmt_mark, not_expr,
+    ord_bool_from_cmp, rt_call,
 };
 use crate::tir::{
     EffectRef, ExitScope, StructDef, TemplateId, TirEffectOp, TirField, TirImpl, TirParam,
@@ -574,8 +574,7 @@ impl ownership::BodyFacts for ReifyFacts<'_, '_> {
             .ann_recorded_expression_type(base.id())
             .is_some_and(|ty| {
                 let tt = self.reify.tysys.type_table.borrow();
-                matches!(tt.get(tt.peel_refs(ty)), ResolvedType::GenericInstance { def, .. }
-                if tt.is_tuple_def(*def))
+                tt.is_tuple(tt.peel_refs(ty))
             })
     }
 
@@ -1385,7 +1384,7 @@ impl<'a> Reify<'a> {
 
     /// Reify a `resource R<T> { … }` declaration. Resource methods take
     /// a synthesised `self` parameter (`&Self` or `&mut Self`) at index
-    /// 0; for generic resources `Self` is a `GenericInstance` with the
+    /// 0; for generic resources `Self` is a `Resource` with the
     /// decl's own `TypeParam`s as type args. The op signatures are read
     /// from the facts the body walk recorded.
     fn reify_resource_decl(&mut self, decl: &ast::ResourceDecl) -> tir::TirResource {
@@ -2127,7 +2126,7 @@ impl<'a> Reify<'a> {
             .any(|s| marker_stmt_mark(s) == Some(Mark::ColdPath))
         {
             let span = stmts[first].span;
-            stmts.insert(first, known_cold_path_stmt(span));
+            stmts.insert(first, cold_path_stmt(span));
         }
         stmts
     }
@@ -3384,7 +3383,7 @@ impl<'a> Reify<'a> {
         );
 
         let mut then_stmts = Vec::with_capacity(text_lets.len() + 2);
-        then_stmts.push(known_cold_path_stmt(span));
+        then_stmts.push(cold_path_stmt(span));
         then_stmts.extend(text_lets);
         then_stmts.push(TirStmt::new(TirStmtKind::Expr(panic_call), span));
         let then_block = TirBlock::new(then_stmts, span);
@@ -4912,7 +4911,7 @@ impl<'a> Reify<'a> {
     /// `RangeInclusive` struct literals; reify
     /// produces the same shape by reading the element type from
     /// the reified `start` expression and interning the
-    /// `GenericInstance` via `make_generic_instance`.
+    /// instance via `make_generic_instance`.
     fn reify_range(&mut self, range: &ast::RangeExpr, ctx: &mut FunctionContext) -> TirExpr {
         // Annotate has unified the endpoints, so either type is the element
         // type — but only in the order the elaborator resolved them in.
@@ -5627,7 +5626,8 @@ impl<'a> Reify<'a> {
                 tt.as_option(inner_type).is_some(),
                 matches!(
                     tt.get(inner_type),
-                    ResolvedType::GenericInstance { .. } if tt.is_result(inner_type)
+                    ResolvedType::Variant { type_args, .. }
+                        if !type_args.is_empty() && tt.is_result(inner_type)
                 ),
             )
         };
@@ -5768,13 +5768,13 @@ impl<'a> Reify<'a> {
         let return_type = ctx.return_type;
 
         let (ok_type, inner_err_type) = match self.tysys.type_table.borrow().get(inner_type) {
-            ResolvedType::GenericInstance { type_args, .. } if type_args.len() == 2 => {
+            ResolvedType::Variant { type_args, .. } if type_args.len() == 2 => {
                 (type_args[0], type_args[1])
             }
             _ => panic!("reify_question_mark_result: ? operand must be Result<T, E>"),
         };
         let outer_err_type = match self.tysys.type_table.borrow().get(return_type) {
-            ResolvedType::GenericInstance { type_args, .. } if type_args.len() == 2 => type_args[1],
+            ResolvedType::Variant { type_args, .. } if type_args.len() == 2 => type_args[1],
             _ => panic!("reify_question_mark_result: ? return type must be Result<U, F>"),
         };
 
@@ -6391,12 +6391,7 @@ impl<'a> Reify<'a> {
                         mapped,
                         elem.span(),
                     ));
-                } else if let ResolvedType::GenericInstance {
-                    def,
-                    type_args: inner_elems,
-                } = spread_type
-                    && self.tysys.type_table.borrow().is_tuple_def(def)
-                {
+                } else if let ResolvedType::Tuple(inner_elems) = spread_type {
                     // Concrete tuple: expand inline via FieldAccess. Bind a
                     // non-trivial operand to a temporary for single evaluation.
                     let spread_ref = if matches!(spread_expr.kind, TirExprKind::Local { .. }) {
@@ -8146,23 +8141,16 @@ impl<'a> Reify<'a> {
         // modules reach their own fields, and an anonymous shape — which no
         // spelling names — reaches its own.
         let (head, type_args): (Option<StructDef>, Vec<TypeId>) = match resolved {
-            ResolvedType::Struct { def, .. } => (Some(def), vec![]),
-            ResolvedType::GenericInstance { type_args, .. } => {
-                // Tuple projection (`t.0`): a tuple has no struct decl, so the
-                // struct-fields lookup below misses and the `(0, …)` fallback
-                // would collapse every `t.N` onto field 0. Resolve the numeric
-                // field name into the element index directly.
-                let is_tuple = self.tysys.type_table.borrow().is_tuple(receiver_type);
-                if is_tuple
-                    && let Ok(index) = field_name.parse::<usize>()
-                    && let Ok(elem) = self.tysys.tuple_literal_index_type(&type_args, index)
+            ResolvedType::Struct { def, type_args } => (Some(def), type_args),
+            // Tuple projection (`t.0`): a tuple has no struct decl, so the
+            // `(0, …)` fallback would collapse every `t.N` onto field 0.
+            ResolvedType::Tuple(elems) => {
+                if let Ok(index) = field_name.parse::<usize>()
+                    && let Ok(elem) = self.tysys.tuple_literal_index_type(&elems, index)
                 {
                     return (index as u32, field_name.to_string(), Some(elem));
                 }
-                (
-                    self.tysys.type_def(receiver_type).map(StructDef::Decl),
-                    type_args,
-                )
+                return (0, field_name.to_string(), None);
             }
             // Peel references and newtypes and recurse, mirroring the
             // elaborator's `lookup_field_type`: `&Point`, `&mut Point`, a
@@ -8990,8 +8978,7 @@ impl<'a> Reify<'a> {
             .copied()
     }
 
-    /// True when `scrutinee_type` is a variant (directly or as a generic
-    /// instance) whose cases include `case_name`.
+    /// True when `scrutinee_type` is a variant whose cases include `case_name`.
     fn scrutinee_has_variant_case(&self, scrutinee_type: TypeId, case_name: &str) -> bool {
         let peeled = self
             .tysys
@@ -9000,7 +8987,7 @@ impl<'a> Reify<'a> {
             .scrutinee_structure_head(scrutinee_type);
         if !matches!(
             self.tysys.type_table.borrow().get(peeled),
-            ResolvedType::Variant { .. } | ResolvedType::GenericInstance { .. }
+            ResolvedType::Variant { .. }
         ) {
             return false;
         }
@@ -9532,9 +9519,6 @@ impl<'a> Reify<'a> {
         // falls back to UNKNOWN-typed sub-patterns, matching annotate.
         let scrutinee_head = match self.tysys.type_table.borrow().get(peeled_scrutinee) {
             ResolvedType::Struct { def, .. } => Some(*def),
-            ResolvedType::GenericInstance { .. } => {
-                self.tysys.type_def(peeled_scrutinee).map(StructDef::Decl)
-            }
             _ => None,
         };
         let field_info: hashmap::IndexMap<String, (u32, TypeId)> = {
@@ -9699,7 +9683,7 @@ impl<'a> Reify<'a> {
         case_name: &str,
     ) -> (Option<u32>, TypeId) {
         let type_args = match self.tysys.type_table.borrow().get(variant_type).clone() {
-            ResolvedType::GenericInstance { type_args, .. } => type_args,
+            ResolvedType::Variant { type_args, .. } => type_args,
             _ => Vec::new(),
         };
         let (case_index, payload, type_param_indices): (u32, TypeId, Vec<u32>) = {
@@ -9725,7 +9709,7 @@ impl<'a> Reify<'a> {
             return (Some(case_index), payload);
         }
         // Map TypeParam{index} → concrete `type_args[index]`. Recurse
-        // through containers (`Ref`, `BuiltinArray`, `GenericInstance`,
+        // through containers (`Ref`, `BuiltinArray`, a generic instance,
         // `Function`, …) via `TypeTable::substitute_type_params`.
         let substitution: hashmap::IndexMap<u32, TypeId> = type_param_indices
             .iter()
@@ -9830,9 +9814,16 @@ impl TypeSystem {
         if table.contains_type_param(expected) {
             return None;
         }
-        let recorded_is_concrete =
-            matches!(table.get(recorded), ResolvedType::GenericInstance { .. })
-                && !table.contains_type_param(recorded);
+        let recorded_is_instance = match table.get(recorded) {
+            ResolvedType::Tuple(_) => true,
+            ResolvedType::Struct {
+                def: tir::StructDef::Decl(_),
+                type_args,
+            }
+            | ResolvedType::Variant { type_args, .. } => !type_args.is_empty(),
+            _ => false,
+        };
+        let recorded_is_concrete = recorded_is_instance && !table.contains_type_param(recorded);
         if recorded_is_concrete {
             return None;
         }

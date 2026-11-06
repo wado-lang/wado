@@ -808,7 +808,9 @@ fn holds_element(type_table: &TypeTable, ty: TypeId, element: TypeKey) -> bool {
         | ResolvedType::MutRef(inner)
         | ResolvedType::BuiltinArray(inner) => holds_element(type_table, *inner, element),
         ResolvedType::Struct { type_args, .. }
-        | ResolvedType::GenericInstance { type_args, .. } => type_args
+        | ResolvedType::Tuple(type_args)
+        | ResolvedType::Variant { type_args, .. }
+        | ResolvedType::Resource { type_args, .. } => type_args
             .iter()
             .any(|t| holds_element(type_table, *t, element)),
         ResolvedType::Newtype {
@@ -835,8 +837,6 @@ fn holds_element(type_table: &TypeTable, ty: TypeId, element: TypeKey) -> bool {
         | ResolvedType::Unit
         | ResolvedType::Never
         | ResolvedType::Enum { .. }
-        | ResolvedType::Resource { .. }
-        | ResolvedType::Variant { .. }
         | ResolvedType::TypeParam { .. }
         | ResolvedType::AssocParam { .. }
         | ResolvedType::InferVar(_)

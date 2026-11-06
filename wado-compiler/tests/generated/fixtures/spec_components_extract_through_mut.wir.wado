@@ -12,19 +12,19 @@ array Array<u8> (mut u8);  // TypeId(2)
 
 array Array<wasi:http/types.wado/Fields> (mut ref null "core:prelude//$Resource");  // TypeId(3)
 
-variant core:prelude/types.wado//Option<wasi:http/types.wado/Fields> {  // TypeId(4)
+struct core:prelude/list.wado//List<wasi:http/types.wado/Fields> {  // TypeId(4)
+    mut repr: ref null "Array<wasi:http/types.wado/Fields>",
+    mut used: i32,
+}
+
+variant core:prelude/types.wado//Option<wasi:http/types.wado/Fields> {  // TypeId(5)
     None,
     Some(ref null "core:prelude//$Resource"),
 }
 
-struct core:prelude/types.wado//Option<wasi:http/types.wado/Fields>::Some {  // TypeId(5)
+struct core:prelude/types.wado//Option<wasi:http/types.wado/Fields>::Some {  // TypeId(6)
     discriminant: i32,
     payload_0: ref null "core:prelude//$Resource",
-}
-
-struct core:prelude//List<wasi:http/types.wado/Fields> {  // TypeId(6)
-    mut repr: ref "Array<wasi:http/types.wado/Fields>",
-    mut used: i32,
 }
 
 type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(7)
@@ -43,7 +43,7 @@ type "functype//wasi/$wasi:cli/stderr@0.3.0#write-via-stream" = fn(i32) -> i32; 
 
 type "functype//spec_components_extract_through_mut.wado/$test_0" = fn();  // TypeId(14)
 
-type "functype//spec_components_extract_through_mut.wado/$drop$core:prelude/list.wado/List<wasi:http/types.wado/Fields>" = fn(ref null "core:prelude//List<wasi:http/types.wado/Fields>");  // TypeId(15)
+type "functype//spec_components_extract_through_mut.wado/$drop$core:prelude/list.wado/List<wasi:http/types.wado/Fields>" = fn(ref null "Array<wasi:http/types.wado/Fields>", i32);  // TypeId(15)
 
 type "functype//spec_components_extract_through_mut.wado/$cm_export__$test_0" = fn();  // TypeId(16)
 
@@ -98,13 +98,13 @@ import fn wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode f
 global global:core:builtin::$unit_case$core:prelude/types.wado//Option<wasi:http/types.wado/Fields>$0: ref "core:prelude/types.wado//Option<wasi:http/types.wado/Fields>" = struct.new "core:prelude/types.wado//Option<wasi:http/types.wado/Fields>" { 0 };
 
 fn "spec_components_extract_through_mut.wado/$test_0"() {
-    let list_0: ref null "core:prelude//List<wasi:http/types.wado/Fields>";
+    let list_0: ref null "core:prelude/list.wado//List<wasi:http/types.wado/Fields>";
     let $discarded_2: ref null "core:prelude/types.wado//Option<wasi:http/types.wado/Fields>";
     let elements: ref null "Array<wasi:http/types.wado/Fields>";
     let used: i32;
     let $taken_3: ref null "core:prelude//$Resource";
     used = builtin::array_len(local.tee elements(array.new_fixed<ref null "core:prelude//$Resource">()));
-    list_0 = struct.new "core:prelude//List<wasi:http/types.wado/Fields>" { repr: ref.as_non_null(elements), used: used };
+    list_0 = struct.new "core:prelude/list.wado//List<wasi:http/types.wado/Fields>" { repr: elements, used: used };
     if local.tee $discarded_2($inline_core_prelude_list_wado_List_wasi_http_types_wado_Fields___pop_2: block -> ref null "core:prelude/types.wado//Option<wasi:http/types.wado/Fields>" {
         if used == 0 {
             break $inline_core_prelude_list_wado_List_wasi_http_types_wado_Fields___pop_2: global:core:builtin::$unit_case$core:prelude/types.wado//Option<wasi:http/types.wado/Fields>$0;
@@ -117,26 +117,22 @@ fn "spec_components_extract_through_mut.wado/$test_0"() {
         $taken_3.value = 0;
         "wasi/resource-drop:wasi:http/types.wado#Fields"(used);
     }
-    if @unlikely((list_0.used == 0) == 0) {
+    if @unlikely((local.tee used(list_0.used) == 0) == 0) {
         cold_path;
         "spec_components_extract_through_mut.wado/$test_0$cold0"();
         unreachable;
     }
-    "spec_components_extract_through_mut.wado/$drop$core:prelude/list.wado/List<wasi:http/types.wado/Fields>"(list_0);
+    "spec_components_extract_through_mut.wado/$drop$core:prelude/list.wado/List<wasi:http/types.wado/Fields>"(list_0.repr, used);
 }
 
-fn "spec_components_extract_through_mut.wado/$drop$core:prelude/list.wado/List<wasi:http/types.wado/Fields>"(value) {
-    let $slots_1: ref null "Array<wasi:http/types.wado/Fields>";
-    let $end_2: i32;
+fn "spec_components_extract_through_mut.wado/$drop$core:prelude/list.wado/List<wasi:http/types.wado/Fields>"($mv$value$repr, $mv$value$used) {
     let $index_3: i32;
     let $slot_4: ref null "core:prelude//$Resource";
-    $slots_1 = value.repr;
-    $end_2 = value.used;
     $index_3 = 0;
     b3: block {
         l4: loop {
-            break_if b3 $index_3 >= $end_2;
-            if ref.is_null(local.tee $slot_4(builtin::array_get_value<ref null "core:prelude//$Resource">($slots_1, $index_3))) == 0 {
+            break_if b3 $index_3 >= $mv$value$used;
+            if ref.is_null(local.tee $slot_4(builtin::array_get_value<ref null "core:prelude//$Resource">($mv$value$repr, $index_3))) == 0 {
                 let $cm_handle_2: i32;
                 $cm_handle_2 = $slot_4.value;
                 $slot_4.value = 0;

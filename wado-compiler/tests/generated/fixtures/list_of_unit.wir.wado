@@ -41,7 +41,7 @@ struct list_of_unit.wado//$tmpl$ebaa20f4a908b504 {  // TypeId(6)
 
 array Array<()> (mut ());  // TypeId(7)
 
-struct core:prelude//List<()> {  // TypeId(8)
+struct core:prelude/list.wado//List<()> {  // TypeId(8)
     mut repr: ref Array<()>,
     mut used: i32,
 }
@@ -112,17 +112,17 @@ type "functype//list_of_unit.wado/list_of_unit.wado/$tmpl$ebaa20f4a908b504^core:
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::format<list_of_unit.wado/$tmpl$ebaa20f4a908b504,[i32]>" = fn(ref "list_of_unit.wado//$tmpl$ebaa20f4a908b504") -> ref "core:prelude/string.wado//String";  // TypeId(41)
 
-type "functype//core:prelude/list.wado/core:prelude/list.wado/List<()>::grow" = fn(ref "core:prelude//List<()>");  // TypeId(42)
+type "functype//core:prelude/list.wado/core:prelude/list.wado/List<()>::grow" = fn(ref "core:prelude/list.wado//List<()>");  // TypeId(42)
 
-type "functype//core:prelude/list.wado/core:prelude/list.wado/List<()>::grow_to" = fn(ref "core:prelude//List<()>", i32);  // TypeId(43)
+type "functype//core:prelude/list.wado/core:prelude/list.wado/List<()>::grow_to" = fn(ref "core:prelude/list.wado//List<()>", i32);  // TypeId(43)
 
 type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(44)
 
 type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::write_char_n$sroa[self.buf]" = fn(ref "core:prelude/string.wado//String", char, i32);  // TypeId(45)
 
-type "functype//core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<list_of_unit.wado/$tmpl$ebaa20f4a908b504,i32>::lit$sroa[self.index]" = fn(i32, ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//StrSlice";  // TypeId(46)
+type "functype//core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(46)
 
-type "functype//core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(47)
+type "functype//core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<list_of_unit.wado/$tmpl$ebaa20f4a908b504,i32>::lit$sroa[self.index]" = fn(i32, ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//StrSlice";  // TypeId(47)
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(48)
 
@@ -151,17 +151,17 @@ import fn wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode f
 import fn wasi/task-return from "wasi/task-return";
 
 global global:list_of_unit.wado::$const_obj_0: ref Array<u8> = array.new_fixed<u8>(111, 107);
-global global:core:prelude/primitive.wado::$const_obj_1: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
+global global:core:prelude/primitive.wado::$const_obj_2: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
 
 fn "list_of_unit.wado/run"() with Stdout {
     let $load_1: ref Array<()>;
     let $load_4: ref Array<()>;
-    let units: ref "core:prelude//List<()>";
+    let units: ref "core:prelude/list.wado//List<()>";
     let count: i32;
     let $cm_pair_7: i64;
     let new_repr: ref Array<u8>;
     let $sroa_$iter_4_index_127: i32;
-    units = struct.new "core:prelude//List<()>" { repr: array.new_fixed<()>(), used: 0 };
+    units = struct.new "core:prelude/list.wado//List<()>" { repr: array.new_fixed<()>(), used: 0 };
     if @unlikely(0 >= builtin::array_len(units.repr)) {
         cold_path;
         "core:prelude/list.wado/core:prelude/list.wado/List<()>::grow"(units);
@@ -193,7 +193,7 @@ fn "list_of_unit.wado/run"() with Stdout {
         unreachable;
     }
     builtin::array_fill<()>(local.tee $load_1(builtin::array_new<()>(4)), 0, nop, 4);
-    units = struct.new "core:prelude//List<()>" { repr: array.new_fixed<()>(nop, nop, nop), used: 3 };
+    units = struct.new "core:prelude/list.wado//List<()>" { repr: array.new_fixed<()>(nop, nop, nop), used: 3 };
     if @unlikely(3 >= builtin::array_len(units.repr)) {
         cold_path;
         "core:prelude/list.wado/core:prelude/list.wado/List<()>::grow"(units);
@@ -750,19 +750,19 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_char_n$sr
     };
 }
 
-fn "core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<list_of_unit.wado/$tmpl$ebaa20f4a908b504,i32>::lit$sroa[self.index]"(self, $mv$t$s0, $mv$t$r0, $mv$t$s1, $mv$t$r1) {
-    return block -> ref "core:prelude/string.wado//StrSlice" {
-        "core:prelude/string.wado/core:prelude/string.wado/String::internal_view"(local.tee $mv$t$s0("list_of_unit.wado/$template_segment$list_of_unit.wado/$tmpl$ebaa20f4a908b504"($mv$t$s0, $mv$t$r0, $mv$t$s1, $mv$t$r1, 2 * self)).repr, $mv$t$s0.used);
-    };
-}
-
 fn "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(self, f) {
     let is_negative: bool;
     let abs_val: u64;
     is_negative = self < 0;
     self = "core:prelude/primitive.wado/count_digits_u64"(local.tee abs_val("core:prelude/primitive.wado/i64::abs"(builtin::i64_extend_i32_s(self))));
-    is_negative = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>"(f, is_negative, global:core:prelude/primitive.wado::$const_obj_1, self);
+    is_negative = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>"(f, is_negative, global:core:prelude/primitive.wado::$const_obj_2, self);
     "core:prelude/primitive.wado/write_decimal_digits"(f.buf.repr, is_negative, abs_val, self);
+}
+
+fn "core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<list_of_unit.wado/$tmpl$ebaa20f4a908b504,i32>::lit$sroa[self.index]"(self, $mv$t$s0, $mv$t$r0, $mv$t$s1, $mv$t$r1) {
+    return block -> ref "core:prelude/string.wado//StrSlice" {
+        "core:prelude/string.wado/core:prelude/string.wado/String::internal_view"(local.tee $mv$t$s0("list_of_unit.wado/$template_segment$list_of_unit.wado/$tmpl$ebaa20f4a908b504"($mv$t$s0, $mv$t$r0, $mv$t$s1, $mv$t$r1, 2 * self)).repr, $mv$t$s0.used);
+    };
 }
 
 export fn "list_of_unit.wado/$cm_export__run" as "run"
