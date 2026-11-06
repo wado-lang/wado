@@ -242,10 +242,9 @@ export fn run() with (Stdout, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuC
         let normalized = if positions > 8 { 1 } else { 0 };
         assert gpu.dispatches() - before == 3 + copied + normalized, "products of one input are one dispatch";
         let reference = projected::compute(cpu, &input, &mut projected_cpu);
-        println(`compiled projected ${positions} ${deviation(&on_device.Y.data, &reference.Y.data)} ${deviation(
-            &on_device.K.data,
-            &reference.K.data,
-        )} ${deviation(&on_device.Z.data, &reference.Z.data)}`);
+        println(`compiled projected ${positions} Y ${deviation(&on_device.Y.data, &reference.Y.data)}`);
+        println(`compiled projected ${positions} K ${deviation(&on_device.K.data, &reference.K.data)}`);
+        println(`compiled projected ${positions} Z ${deviation(&on_device.Z.data, &reference.Z.data)}`);
     }
 
     // The second normalization's products launch one by one, after it.
@@ -256,10 +255,10 @@ export fn run() with (Stdout, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuC
     let on_device = shared::compute(&mut gpu, &input, &mut shared_gpu);
     assert gpu.dispatches() - before == 4, "products whose weights lie apart launch apart";
     let reference = shared::compute(cpu, &input, &mut shared_cpu);
-    println(`compiled shared ${deviation(&on_device.P.data, &reference.P.data)} ${deviation(
-        &on_device.Q.data,
-        &reference.Q.data,
-    )} ${deviation(&on_device.R.data, &reference.R.data)} ${deviation(&on_device.T.data, &reference.T.data)}`);
+    println(`compiled shared P ${deviation(&on_device.P.data, &reference.P.data)}`);
+    println(`compiled shared Q ${deviation(&on_device.Q.data, &reference.Q.data)}`);
+    println(`compiled shared R ${deviation(&on_device.R.data, &reference.R.data)}`);
+    println(`compiled shared T ${deviation(&on_device.T.data, &reference.T.data)}`);
 
     let mut attended_gpu = attended::Model::new(attended::Params::embedded(&mut gpu));
     let mut attended_cpu = attended::Model::new(attended::Params::embedded(cpu));
