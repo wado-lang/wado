@@ -8,9 +8,7 @@ use std::sync::Mutex;
 use crate::compiler_trace;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::nir::{FuncId, FuncRef, NirFunction};
-use crate::nir_arena::{
-    ArenaStructPatternField, Body, ExprId, ExprKind, NodeRef, Operand, PatId, PatKind, StmtKind,
-};
+use crate::nir_arena::{Body, ExprId, ExprKind, NodeRef, Operand, PatId, PatKind, StmtKind};
 use crate::nir_package::NirPackage;
 use crate::parallel::lock;
 use crate::tir::{BuiltinDeclarations, DeclarationLookup};
@@ -641,25 +639,32 @@ fn promoted_reference(body: &Body, type_table: &TypeTable, op: Operand) -> Promo
     PromotedRef::Unknown
 }
 
-/// The fields `pat` names. Destructuring reads a field by naming it here,
-/// leaving no `ExprKind::FieldAccess` to match.
-fn struct_pattern_fields(body: &Body, pat: PatId) -> &[ArenaStructPatternField] {
+/// The fields `pat` reads, each with the sub-pattern it binds. Destructuring
+/// reads a field by naming or positioning it here, leaving no
+/// `ExprKind::FieldAccess` to match. A tuple's `..` only ever trails, so a
+/// position is its field's name.
+fn pattern_fields(body: &Body, pat: PatId) -> Vec<(String, PatId)> {
     match &body.pats[pat].kind {
-        PatKind::Struct { fields, .. } => fields,
-        _ => &[],
+        PatKind::Struct { fields, .. } => fields
+            .iter()
+            .map(|f| (f.field_name.clone(), f.pattern))
+            .collect(),
+        PatKind::Tuple(elements, _) => elements
+            .iter()
+            .enumerate()
+            .map(|(i, &p)| (i.to_string(), p))
+            .collect(),
+        _ => Vec::new(),
     }
 }
 
 /// The sub-patterns `pat` binds out of the field named `field`.
-fn pattern_field_reads<'a>(
-    body: &'a Body,
-    pat: PatId,
-    field: Option<&'a str>,
-) -> impl Iterator<Item = PatId> + 'a {
-    struct_pattern_fields(body, pat)
-        .iter()
-        .filter(move |f| field == Some(f.field_name.as_str()))
-        .map(|f| f.pattern)
+fn pattern_field_reads(body: &Body, pat: PatId, field: Option<&str>) -> Vec<PatId> {
+    pattern_fields(body, pat)
+        .into_iter()
+        .filter(|(name, _)| field == Some(name.as_str()))
+        .map(|(_, p)| p)
+        .collect()
 }
 
 /// What one body can read, as the sets every seed question is asked against.
@@ -688,9 +693,9 @@ impl BodyCensus {
                     _ => {}
                 },
                 NodeRef::Pat(p) => {
-                    for f in struct_pattern_fields(body, p) {
-                        census.fields_read.insert(f.field_name.clone());
-                    }
+                    census
+                        .fields_read
+                        .extend(pattern_fields(body, p).into_iter().map(|(name, _)| name));
                 }
                 NodeRef::Stmt(_) | NodeRef::Block(_) => {}
             }

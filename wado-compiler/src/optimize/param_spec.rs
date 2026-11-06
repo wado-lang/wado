@@ -1242,6 +1242,9 @@ struct Site {
     /// that rarely runs buys no time for its size, unless it binds a field:
     /// see [`Site::binds_field`].
     cold: bool,
+    /// Returns `!`, so it runs at most once per call of its caller and never
+    /// has a clone minted for it, whatever it binds.
+    diverges: bool,
 }
 
 impl Site {
@@ -1350,6 +1353,7 @@ fn select_sites(
             callee,
             bindings,
             cold: false,
+            diverges: false,
         });
     });
     sites
@@ -1672,11 +1676,9 @@ fn collect_sites(
             constants,
             state,
         );
-        // A call returning `!` runs at most once per call of its caller, so a
-        // clone for it buys nothing, wherever it sits.
         for site in &mut sites {
-            site.cold =
-                cold_calls.contains(&site.call) || types.is_never(body.exprs[site.call].type_id);
+            site.diverges = types.is_never(body.exprs[site.call].type_id);
+            site.cold = cold_calls.contains(&site.call) || site.diverges;
         }
         (!sites.is_empty()).then_some((index, sites))
     })
@@ -1725,7 +1727,9 @@ fn plan_clones<'s>(
             continue;
         }
         let ordinal = state.per_callee.get(&site.callee).copied().unwrap_or(0);
-        if (site.cold && !site.binds_field()) || body_exprs(project, site.callee) > MAX_CLONE_EXPRS
+        if site.diverges
+            || (site.cold && !site.binds_field())
+            || body_exprs(project, site.callee) > MAX_CLONE_EXPRS
         {
             continue;
         }
@@ -1735,9 +1739,10 @@ fn plan_clones<'s>(
         }
         compiler_trace!(
             "param_spec",
-            "specialized {} on {} binding(s)",
+            "specialized {} on {} binding(s){}",
             project.functions[site.callee.index()].borrow().name,
-            site.bindings.len()
+            site.bindings.len(),
+            if site.cold { " for a cold call" } else { "" }
         );
         let id = FuncId::new(next_id);
         next_id += 1;

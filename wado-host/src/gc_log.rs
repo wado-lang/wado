@@ -4,6 +4,7 @@
 //! log, so this installs a logger and reads that text. The workspace pins
 //! wasmtime, and a change to the text panics in `--gc-log`'s integration test.
 
+use std::fmt::{self, Write as _};
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
@@ -58,6 +59,41 @@ pub fn finish() {
     );
 }
 
+/// The first bytes of a record. `do_gc` traces every stack slot it walks, inside
+/// the pause this log times, so a record pays for no more text than a marker.
+struct Head {
+    bytes: [u8; BEGIN_GC.len()],
+    len: usize,
+}
+
+impl Default for Head {
+    fn default() -> Self {
+        Self {
+            bytes: [0; BEGIN_GC.len()],
+            len: 0,
+        }
+    }
+}
+
+impl Head {
+    fn starts_with(&self, marker: &str) -> bool {
+        self.bytes[..self.len].starts_with(marker.as_bytes())
+    }
+}
+
+impl fmt::Write for Head {
+    fn write_str(&mut self, text: &str) -> fmt::Result {
+        let taken = text.len().min(self.bytes.len() - self.len);
+        self.bytes[self.len..self.len + taken].copy_from_slice(&text.as_bytes()[..taken]);
+        self.len += taken;
+        if self.len == self.bytes.len() {
+            Err(fmt::Error)
+        } else {
+            Ok(())
+        }
+    }
+}
+
 impl Log for GcLogger {
     fn enabled(&self, metadata: &Metadata<'_>) -> bool {
         metadata.level() == Level::Trace && metadata.target() == GC_TARGET
@@ -69,12 +105,14 @@ impl Log for GcLogger {
             return;
         }
         let now = Instant::now();
-        let text = record.args().to_string();
+        let mut head = Head::default();
+        // `Head` stops the formatting with an error once it is full.
+        let _ = head.write_fmt(*record.args());
         let mut tally = lock(&TALLY);
         let tally = tally.as_mut().expect("--gc-log started the log");
-        if text.starts_with(BEGIN_GC) {
+        if head.starts_with(BEGIN_GC) {
             tally.collection_started = Some(now);
-        } else if text.starts_with(END_GC) {
+        } else if head.starts_with(END_GC) {
             let started = tally
                 .collection_started
                 .take()
@@ -82,7 +120,7 @@ impl Log for GcLogger {
             let paused = now - started;
             tally.collections += 1;
             tally.paused += paused;
-            let (live, capacity) = end_of_gc_sizes(&text);
+            let (live, capacity) = end_of_gc_sizes(&record.args().to_string());
             eprintln!(
                 "gc {} at {:.1} ms: paused {:.2} ms, live {:.1} MiB of {:.1} MiB",
                 tally.collections,
@@ -140,5 +178,17 @@ mod tests {
                       \tpost-GC live-set size = 0x00768330 bytes\n\
                       \t  GC heap utilization = 2.89%";
         assert_eq!(end_of_gc_sizes(report), (0x0076_8330, 0x1000_0000));
+    }
+
+    #[test]
+    fn a_head_keeps_what_fits_and_stops_the_formatting() {
+        let mut head = Head::default();
+        assert!(write!(head, "{END_GC}").is_ok());
+        assert!(head.starts_with(END_GC));
+        assert!(!head.starts_with(BEGIN_GC));
+
+        let mut head = Head::default();
+        assert!(write!(head, "{BEGIN_GC} and the rest").is_err());
+        assert!(head.starts_with(BEGIN_GC));
     }
 }

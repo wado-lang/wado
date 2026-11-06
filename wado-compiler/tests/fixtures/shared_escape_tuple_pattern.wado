@@ -1,0 +1,62 @@
+// A tuple pattern reads a field by position and leaves no field access behind,
+// so a write through what it binds must keep a constant out of that field. Each
+// shape below reads a position of its own, since a read of any one position
+// refuses that position's name everywhere.
+
+use { println, Stdout } from "core:cli";
+
+fn reset(row: &mut [List<f64>, List<f64>, [i32, i32, i32, List<f64>]]) {
+    row.0 = [3.0];
+    row.1 = [3.0];
+    row.2.3 = [3.0];
+}
+
+#[inline("never")]
+fn write_matched(row: &mut [List<f64>, List<f64>, [i32, i32, i32, List<f64>]], v: f64) {
+    match row {
+        [a, ..] => {
+            a[0] = v;
+        },
+    }
+}
+
+#[inline("never")]
+fn write_destructured(row: &mut [List<f64>, List<f64>, [i32, i32, i32, List<f64>]], v: f64) {
+    let [_, b, ..] = row;
+    b[0] = v;
+}
+
+#[inline("never")]
+fn write_nested(row: &mut [List<f64>, List<f64>, [i32, i32, i32, List<f64>]], v: f64) {
+    match row {
+        [_, _, [_, _, _, c]] => {
+            c[0] = v;
+        },
+    }
+}
+
+export fn run() with Stdout {
+    let n = builtin::black_box(2);
+    let mut rows: List<[List<f64>, List<f64>, [i32, i32, i32, List<f64>]]> = [];
+    for let i of 0..<n {
+        let mut row: [List<f64>, List<f64>, [i32, i32, i32, List<f64>]] = [
+            List::with_capacity(i + 1),
+            List::with_capacity(i + 1),
+            [i, i, i, []],
+        ];
+        reset(&mut row);
+        rows.push(row);
+    }
+    write_matched(&mut rows[0], 8.0);
+    write_destructured(&mut rows[0], 8.0);
+    write_nested(&mut rows[0], 8.0);
+    for let row of &rows {
+        println(`${row.0[0]} ${row.1[0]} ${row.2.3[0]}`);
+    }
+}
+
+__DATA__
+{
+    "stdout": "8 8 8\n3 3 3\n",
+    "exitCode": 0
+}

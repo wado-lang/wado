@@ -379,3 +379,8 @@ loop, and a pure call building a heap value from literals.
   constant is retained hoists all of them, and nothing bounds what that adds to
   the module-lifetime live set — which the WasmGC cost model says is the tax
   paid at every collection.
+- A constant written into a field is always priced as transient, because the
+  object around it may die or scalarize, which only a later pass settles. So a
+  struct of scalars stored in an object that does live on is allocated once per
+  object rather than shared. Pricing it as retained costs the scalarization
+  `opt_multi_value_one_field_slot_flatten` states.

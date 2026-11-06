@@ -94,9 +94,9 @@ enum CandidateKind {
     /// wrapping the argument itself instead of a `&`'s operand. A constant
     /// written straight into a field takes the same shape; see
     /// [`field_value_candidate`].
-    ValueArg {
-        /// The argument node whose value is hoisted.
-        arg_expr: ExprId,
+    InPlaceValue {
+        /// The node whose value is hoisted.
+        value_expr: ExprId,
         sibling_lets: Vec<StmtId>,
     },
 }
@@ -107,7 +107,7 @@ impl CandidateKind {
         match self {
             CandidateKind::LetBinding { sibling_lets, .. }
             | CandidateKind::InlineRef { sibling_lets, .. }
-            | CandidateKind::ValueArg { sibling_lets, .. } => sibling_lets,
+            | CandidateKind::InPlaceValue { sibling_lets, .. } => sibling_lets,
         }
     }
 
@@ -116,7 +116,7 @@ impl CandidateKind {
         match self {
             CandidateKind::LetBinding { local_index, .. } => format!("local {local_index}"),
             CandidateKind::InlineRef { .. } => "an `&` literal".to_string(),
-            CandidateKind::ValueArg { .. } => "a by-value argument".to_string(),
+            CandidateKind::InPlaceValue { .. } => "a value in place".to_string(),
         }
     }
 
@@ -124,7 +124,7 @@ impl CandidateKind {
     fn own_stmt(&self) -> Option<StmtId> {
         match self {
             CandidateKind::LetBinding { stmt, .. } => Some(*stmt),
-            CandidateKind::InlineRef { .. } | CandidateKind::ValueArg { .. } => None,
+            CandidateKind::InlineRef { .. } | CandidateKind::InPlaceValue { .. } => None,
         }
     }
 }
@@ -324,19 +324,20 @@ fn hoist_candidate(body: &mut Body, name: &str, cand: &Candidate, is_uninitializ
             hoist_inline_ref(body, *ref_expr, module_source, name, ty, guard);
             substitute_sibling_lets(body, sibling_lets, module_source, name);
         }
-        CandidateKind::ValueArg {
-            arg_expr,
+        CandidateKind::InPlaceValue {
+            value_expr,
             sibling_lets,
         } => {
-            hoist_value_arg(body, *arg_expr, module_source, name, ty, guard);
+            hoist_in_place_value(body, *value_expr, module_source, name, ty, guard);
             substitute_sibling_lets(body, sibling_lets, module_source, name);
         }
     }
 }
 
 /// Find every hoisting candidate in `body`: a qualifying `let` binding
-/// ([`let_stmt_qualifies`]) or an unnested `Unary { op: Ref, expr: <closed
-/// const aggregate> }` node. Neither is recursed into further.
+/// ([`let_stmt_qualifies`]), an unnested `Unary { op: Ref, expr: <closed
+/// const aggregate> }` node, or a value in place ([`in_place_value_candidates`]).
+/// None is recursed into further.
 fn collect_candidates(
     body: &Body,
     gate: &Gate<'_>,
@@ -425,22 +426,22 @@ fn collect_candidates(
             }
         }
         if let NodeRef::Expr(id) = node {
-            let hoisted = value_arg_candidates(body, id, gate, &siblings);
+            let hoisted = in_place_value_candidates(body, id, gate, &siblings);
             if !hoisted.is_empty() {
-                for &arg in &hoisted {
+                for &value_expr in &hoisted {
                     let Some(sibling_lets) =
-                        substitutable_sibling_lets(body, Operand::Expr(arg), &siblings)
+                        substitutable_sibling_lets(body, Operand::Expr(value_expr), &siblings)
                     else {
                         continue;
                     };
-                    let kind = CandidateKind::ValueArg {
-                        arg_expr: arg,
+                    let kind = CandidateKind::InPlaceValue {
+                        value_expr,
                         sibling_lets,
                     };
-                    let guarded = needs_lazy_guard(body, arg, gate);
+                    let guarded = needs_lazy_guard(body, value_expr, gate);
                     out.push(Candidate {
                         func_idx,
-                        ty: body.exprs[arg].type_id,
+                        ty: body.exprs[value_expr].type_id,
                         module_source: module_source.clone(),
                         kind,
                         guarded,
@@ -679,9 +680,9 @@ fn immediate_operands(body: &Body, gate: &Gate<'_>) -> (IndexSet<ExprId>, IndexS
     (exprs, locals)
 }
 
-/// The operands of `expr` that qualify for by-value hoisting: the arguments of
-/// a call, or a value written into a field.
-fn value_arg_candidates(
+/// The operands of `expr` that hoist where they stand: the arguments of a call,
+/// or a value written into a field.
+fn in_place_value_candidates(
     body: &Body,
     expr: ExprId,
     gate: &Gate<'_>,
@@ -788,22 +789,22 @@ fn call_arg_candidates(
         .collect()
 }
 
-/// Rewrite a `ValueArg` candidate in place: the argument node `E` becomes
+/// Rewrite an `InPlaceValue` candidate: the node `E` becomes
 /// `{ GlobalVarSet(name, E); GlobalVarGet(name) }`. The original subtree moves
-/// into the set, keeping its evaluation position, and the call now reads the
+/// into the set, keeping its evaluation position, and its user now reads the
 /// named global — which `wir_optimize::const_global` promotes to a Wasm
 /// instantiation-time constant when `E` is const-expressible.
-fn hoist_value_arg(
+fn hoist_in_place_value(
     body: &mut Body,
-    arg_expr: ExprId,
+    value_expr: ExprId,
     module_source: &ModuleSource,
     name: &str,
     ty: TypeId,
     guarded: Option<FuncId>,
 ) {
-    let span = body.exprs[arg_expr].span;
+    let span = body.exprs[value_expr].span;
     let inner_kind = std::mem::replace(
-        &mut body.exprs[arg_expr].kind,
+        &mut body.exprs[value_expr].kind,
         ExprKind::GlobalVarGet {
             module_source: module_source.clone(),
             name: name.to_string(),
@@ -816,7 +817,7 @@ fn hoist_value_arg(
     });
 
     let wrap_block = set_then_get_block(body, inner, module_source, name, ty, guarded, span);
-    body.exprs[arg_expr].kind = ExprKind::plain_block(wrap_block, ty, "globalize");
+    body.exprs[value_expr].kind = ExprKind::plain_block(wrap_block, ty, "globalize");
 }
 
 /// `{ GlobalVarSet(name, inner); GlobalVarGet(name) }` — the block that gives
