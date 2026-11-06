@@ -1780,7 +1780,7 @@ test "a Value read reports a missing or malformed token" {
 
 test "JsonDeserializer reads a token stream by hand" {
     let text = ` [-2147483648, 18446744073709551615, -9223372036854775808, -1.5e+3, 0.1, {"k": [true]}]`;
-    let mut de = JsonDeserializer { input: text.as_bytes(), pos: 0 };
+    let mut de = JsonDeserializer::new(text.as_bytes());
     assert de.peek() == b' ';
     assert de.peek_after_whitespace() == b'[';
     de.advance();
@@ -1798,7 +1798,7 @@ test "JsonDeserializer reads a token stream by hand" {
     assert de.expect_char(b']') matches { Ok };
     assert de.peek() == -1;
 
-    let mut huge = JsonDeserializer { input: "1e400".as_bytes(), pos: 0 };
+    let mut huge = JsonDeserializer::new("1e400".as_bytes());
     assert huge.parse_f64_direct() matches { Err(_) };
     assert huge.parse_f32_direct() matches { Err(_) };
 }
@@ -1887,14 +1887,15 @@ test "a skipped number is held to the read path's grammar" {
     );
     assert de_err::<Utf8Rec>(`{"skip":-,"a":"x"}`) == DeserializeError::unexpected_type("expected number", 9);
 
-    let mut number = JsonDeserializer { input: "-1.5e+3,".as_bytes(), pos: 0 };
+    let mut number = JsonDeserializer::new("-1.5e+3,".as_bytes());
     assert number.skip_number() matches { Ok };
     assert number.pos == 7;
-    let mut zeros = JsonDeserializer { input: "00".as_bytes(), pos: 0 };
+    let mut zeros = JsonDeserializer::new("00".as_bytes());
     assert zeros.skip_number().unwrap_err() == DeserializeError::malformed("leading zero in number", 0);
-    let mut point = JsonDeserializer { input: " 1.e5".as_bytes(), pos: 0 };
+    let mut point = JsonDeserializer::new(" 1.e5".as_bytes());
     assert point.skip_value(0).unwrap_err() == DeserializeError::malformed("expected digit after '.'", 3);
-    let mut exponent = JsonDeserializer { input: "[1e+]".as_bytes(), pos: 1 };
+    let mut exponent = JsonDeserializer::new("[1e+]".as_bytes());
+    exponent.advance();
     assert exponent.skip_number().unwrap_err() == DeserializeError::malformed("expected digit in exponent", 4);
 }
 

@@ -1199,7 +1199,7 @@ fn parse_integral<T: FromStr<Err = ParseIntError>>(
 /// number the token spells but `T` refuses (out of range, a fraction for an
 /// integer) is that error, at `offset`.
 fn read_number_text<T: Deserialize>(text: ByteSlice, offset: i64) -> Result<Option<T>, DeserializeError> {
-    let mut de = JsonDeserializer { input: text, pos: 0 };
+    let mut de = JsonDeserializer::new(text);
     // The lead is checked here, since a reader skips whitespace first.
     let lead = de.peek();
     if lead != b'-' && !(b'0' <= lead <= b'9') {
@@ -1223,6 +1223,11 @@ struct StringRunScan {
 }
 
 impl JsonDeserializer {
+    /// A reader at the start of `input`, nesting at most `max_depth` deep.
+    pub fn new(input: ByteSlice, max_depth: i32 = DEFAULT_MAX_DEPTH) -> JsonDeserializer {
+        return JsonDeserializer { input, pos: 0, max_depth };
+    }
+
     /// Consumes a container's opening byte `open` and descends into it.
     fn open_container(&mut self, open: i32) -> Result<(), DeserializeError> {
         self.expect_char(open)?;
@@ -3110,11 +3115,7 @@ pub fn from_bytes<T: Deserialize, S: AsByteSlice>(
     input: S,
     max_depth: i32 = DEFAULT_MAX_DEPTH,
 ) -> Result<T, DeserializeError> {
-    let mut de = JsonDeserializer {
-        input: input.as_byte_slice(),
-        pos: 0,
-        max_depth,
-    };
+    let mut de = JsonDeserializer::new(input.as_byte_slice(), max_depth);
     let v = T::deserialize(&mut de)?;
     if de.peek_after_whitespace() >= 0 {
         builtin::cold_path();
