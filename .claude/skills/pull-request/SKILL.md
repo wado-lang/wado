@@ -19,8 +19,8 @@ Check mergeability by exit status, before any step below. Run it alone and read
 the result before going on: chained to a later step, it stops nothing.
 
 ```sh
-git fetch origin main
-git merge-tree --write-tree --no-messages --name-only HEAD origin/main
+git fetch origin main &&
+  git merge-tree --write-tree --no-messages --name-only HEAD origin/main
 ```
 
 Exit 0 = mergeable; exit 1 = conflicts, printing the merged tree OID followed
