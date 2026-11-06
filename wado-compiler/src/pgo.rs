@@ -48,7 +48,7 @@ pub fn to_text(coverage: &Coverage) -> String {
                 .or_insert_with(|| vec![0; ids.len()]);
             assert_eq!(runs.len(), ids.len(), "a hash covers the region plan");
             for (sum, id) in runs.iter_mut().zip(ids) {
-                *sum += file.count(id);
+                *sum = sum.saturating_add(file.count(id));
             }
         }
     }
