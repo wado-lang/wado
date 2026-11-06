@@ -1602,14 +1602,27 @@ test "a constant one branch folds is spelled in that branch" {
     assert body.find("let Y = branched::<").unwrap() < k < body.find("}, || {").unwrap();
 }
 
-/// Why `decoder.onnxtext` takes no `decode` of these tensors, the output named
-/// in `last` where one is, or the module where it does.
-fn decoded(ids: String, mask: String, logits: String, last: Option<String> = null) -> Result<String, EmitError> {
-    let mut graph = read(&#include_str("../conformance/decoder.onnxtext")).unwrap();
+global DECODER: String = #include_str("../conformance/decoder.onnxtext");
+
+/// Why `source` takes no `decode` of these tensors, the output named in `last`
+/// where one is, or the module where it does.
+fn decoded(
+    ids: String,
+    mask: String,
+    logits: String,
+    last: Option<String> = null,
+    source: String = DECODER,
+) -> Result<String, EmitError> {
+    let mut graph = read(&source).unwrap();
     if let Some(output) = last {
         keep_last(&mut graph, &infer(&graph).unwrap(), &output, 1).unwrap();
     }
     return emit(&graph, &infer(&graph).unwrap(), &RUNTIME, Placement::File, Option::Some(Decode { ids, mask, logits }));
+}
+
+/// `decoded` of `source`, an edit of `DECODER`, by its usual tensors.
+fn decoded_from(source: String) -> Result<String, EmitError> {
+    return decoded("input_ids", "attention_mask", "logits", Option::Some("logits"), source);
 }
 
 fn refused_for(result: Result<String, EmitError>, reason: String) -> bool {
@@ -1617,7 +1630,7 @@ fn refused_for(result: Result<String, EmitError>, reason: String) -> bool {
 }
 
 test "decode offers a program beside compute, whose cache keeps room for its steps" {
-    let out = decoded("input_ids", "attention_mask", "logits", Option::Some("logits")).unwrap();
+    let out = decoded_from(DECODER).unwrap();
     assert out.contains("pub fn decode<affine Bk: Graph>(");
     assert out.contains("cache: &Cache<Bk>, room: i32, model: &mut Model<Bk>)");
     assert out.contains("cache: &Cache<Bk>, steps: i32, sampling: &Sampling, model: &mut Model<Bk>)");
@@ -1643,22 +1656,7 @@ test "decode refuses logits of more than one position" {
 }
 
 test "decode refuses rows a pass holds at a capacity" {
-    let many = #include_str("../conformance/decoder.onnxtext").replace("[1, ", "[B, ");
-    let mut graph = read(&many).unwrap();
-    keep_last(&mut graph, &infer(&graph).unwrap(), &"logits", 1).unwrap();
-    let decode = Decode { ids: "input_ids", mask: "attention_mask", logits: "logits" };
-    assert refused_for(
-        emit(&graph, &infer(&graph).unwrap(), &RUNTIME, Placement::File, Option::Some(decode)),
-        "must not be held at a capacity",
-    );
-}
-
-/// Why `source`, an edit of `decoder.onnxtext`, takes no `decode`.
-fn decoded_from(source: String) -> Result<String, EmitError> {
-    let mut graph = read(&source).unwrap();
-    keep_last(&mut graph, &infer(&graph).unwrap(), &"logits", 1).unwrap();
-    let decode = Decode { ids: "input_ids", mask: "attention_mask", logits: "logits" };
-    return emit(&graph, &infer(&graph).unwrap(), &RUNTIME, Placement::File, Option::Some(decode));
+    assert refused_for(decoded_from(DECODER.replace("[1, ", "[B, ")), "must not be held at a capacity");
 }
 
 test "decode refuses one input as both its token and its mask" {
@@ -1669,8 +1667,7 @@ test "decode refuses one input as both its token and its mask" {
 }
 
 test "decode refuses ids of more than one position" {
-    let source = #include_str("../conformance/decoder.onnxtext");
-    let two = source.replace("int64[1, S] input_ids", "int64[1, 2] input_ids").replace(
+    let two = DECODER.replace("int64[1, S] input_ids", "int64[1, 2] input_ids").replace(
         "float[1, S, 8] logits",
         "float[1, 2, 8] logits",
     );
@@ -1678,8 +1675,7 @@ test "decode refuses ids of more than one position" {
 }
 
 test "decode refuses logits of rows other than the token's" {
-    let source = #include_str("../conformance/decoder.onnxtext");
-    let wide = source.replace("float[1, S, 8] logits", "float[2, S, 8] logits").replace(
+    let wide = DECODER.replace("float[1, S, 8] logits", "float[2, S, 8] logits").replace(
         "logits = Add(raw, tilt)",
         "rows = Constant <value = float[2, 1, 1] { 0.0, 0.0 }> ()\n    logits = Add(raw, rows)",
     );
@@ -1687,15 +1683,14 @@ test "decode refuses logits of rows other than the token's" {
 }
 
 test "decode refuses a past whose extent a pass changes uncounted" {
-    let source = #include_str("../conformance/decoder.onnxtext");
     assert refused_for(
-        decoded_from(source.replace("float[1, 1, P, 16] past", "float[1, 1, 2, 16] past")),
+        decoded_from(DECODER.replace("float[1, 1, P, 16] past", "float[1, 1, 2, 16] past")),
         "keep its extents through a step",
     );
 }
 
 test "decode checks its ids' token after their shape" {
-    let out = decoded("input_ids", "attention_mask", "logits", Option::Some("logits")).unwrap();
+    let out = decoded_from(DECODER).unwrap();
     let body = out.substr_bytes(out.find("pub fn decode<affine Bk: Graph>(").unwrap(), out.len());
     assert body.find("input_mismatch(input_ids").unwrap() < body.find("extent_mismatch(\"input_ids\"").unwrap();
 }
