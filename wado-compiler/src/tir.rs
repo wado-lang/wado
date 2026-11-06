@@ -3605,12 +3605,18 @@ pub struct TirStruct {
 }
 
 impl TirStruct {
-    /// Whether `def` at `type_args` lowers as this struct: the one under that
-    /// instance's name, which erases newtypes the way WIR building and the
-    /// value-copy helpers name it.
+    /// Whether `def` at `type_args` lowers as this struct. `self.name` is
+    /// spelled before the boxing rewrite respells a `&mut` argument, so the
+    /// arguments are compared by key instead.
     #[must_use]
     pub fn represents(&self, type_table: &TypeTable, def: StructDef, type_args: &[TypeId]) -> bool {
-        self.def == def && self.name == type_table.struct_mangled_name(def, type_args)
+        self.def == def
+            && self.type_args.len() == type_args.len()
+            && self
+                .type_args
+                .iter()
+                .zip(type_args)
+                .all(|(&own, &wanted)| type_table.type_key(own) == type_table.type_key(wanted))
     }
 
     /// The struct of anonymous shape `shape`, holding `fields`.

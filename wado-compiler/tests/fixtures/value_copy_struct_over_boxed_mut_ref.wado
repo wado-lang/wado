@@ -1,0 +1,27 @@
+// A struct instantiated at `&mut T` is respelled at `Box<T>` by the boxing
+// rewrite; its value-copy helper must still copy the struct.
+use { println, Stdout } from "core:cli";
+
+struct Holder<T> {
+    r: T,
+    n: i32,
+}
+
+#[inline(never)]
+fn bumped(h: &Holder<&mut i32>) -> Holder<&mut i32> {
+    let mut c = *h;
+    c.n = c.n + 1;
+    return c;
+}
+
+export fn run() with Stdout {
+    let mut x = 1;
+    let h = Holder { r: &mut x, n: 1 };
+    let c = bumped(&h);
+    println(`${h.n} ${c.n}`);
+}
+
+__DATA__
+{
+    "stdout": "1 2\n"
+}
