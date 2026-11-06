@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1793912098800,
+  "lastUpdate": 1793936007275,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -75009,6 +75009,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 375757,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "12873c09e493b153770d80d05ad07fbcb205bc4e",
+          "message": "Merge pull request #2562 from wado-lang/claude/typeid-typekey-naming-ysw38w\n\nrefactor(types): a generic instance is its own kind with its arguments",
+          "timestamp": "2026-11-06T12:16:48+09:00",
+          "tree_id": "4f0d803f724d82109a854a69e436e09179cb053f",
+          "url": "https://github.com/wado-lang/wado/commit/12873c09e493b153770d80d05ad07fbcb205bc4e"
+        },
+        "date": 1793936006463,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3099,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7303,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21998,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 382703,
             "unit": "bytes"
           }
         ]
