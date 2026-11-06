@@ -1437,6 +1437,45 @@ fn test_run_reports_no_fuel_unasked() {
         .stderr(predicate::str::contains("fuel").not());
 }
 
+/// A heap this small fills many times over, so every line a collection writes
+/// shows up, and the total counts them.
+#[test]
+fn test_run_gc_log_reports_each_collection() {
+    let out = wado()
+        .args([
+            "run",
+            "--gc-log",
+            "--gc-heap-initial",
+            "1m",
+            "wado-cli/tests/fixtures/run_allocates.wado",
+        ])
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+    let stderr = String::from_utf8(out.stderr).unwrap();
+    let collections = stderr
+        .lines()
+        .filter(|l| l.starts_with("gc ") && l.contains(": paused "))
+        .count();
+    assert!(collections > 1, "no collection on stderr:\n{stderr}");
+    let total = format!("gc total: {collections} collections, paused ");
+    assert!(stderr.contains(&total), "no `{total}` on stderr:\n{stderr}");
+}
+
+#[test]
+fn test_run_reports_no_gc_unasked() {
+    wado()
+        .args([
+            "run",
+            "--gc-heap-initial",
+            "1m",
+            "wado-cli/tests/fixtures/run_allocates.wado",
+        ])
+        .assert()
+        .success()
+        .stderr(predicate::str::contains("gc ").not());
+}
+
 /// The program name is what `wado run` was given, never `wado` itself, and
 /// `args()` holds what follows it.
 #[test]

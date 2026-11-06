@@ -84,6 +84,31 @@ so no per-record term is left for the growth to be:
 Hold everything but the dimension under test — a sweep that varies two answers
 about neither.
 
+### Seeing the collector
+
+Neither the guest profile nor fuel sees the collector. `--gc-log` writes a line
+to stderr per collection, and the total at the end:
+
+```sh
+wado run -O2 --gc-log prog.wado
+# gc 3 at 214.1 ms: paused 14.62 ms, live 25.8 MiB of 256.0 MiB
+# gc total: 35 collections, paused 374.0 ms
+```
+
+Under the copying collector, the bytes allocated between two collections are half
+the capacity minus the last live set.
+
+To see which function allocates, count page faults under the null collector. It
+never reuses a page, so a fault is 4 KiB of allocation charged to the function
+that made it. The heap must outlast the run, and inlining moves a charge from
+callee to caller, so compare the totals of a function group.
+
+```sh
+perf record -q -e page-faults -c 1 -o scratchpad/pf.perf -- \
+  wado run -O2 --profile perfmap --collector null --gc-heap-initial 6g prog.wado
+perf report -i scratchpad/pf.perf --no-children --sort sym --stdio
+```
+
 ## 2. Read the WIR — allocations and copies first
 
 ```sh
@@ -183,6 +208,19 @@ paid on a benchmark `fts` never touched.
   read it faster.
   On an allocation-heavy row, sweep `--gc-heap-initial` and compare geometric
   means (`dead-ends.md`).
+- **A collection copies what is live where it lands, and it can land at the same
+  place every time.** microgpt's sample graph stays live until the sample ends,
+  so the live set is a sawtooth. When a semi-space holds a whole number of
+  samples, every collection lands at the same phase of a sample. Landing at a
+  sample's end copied six times what landing near its start did, and made infer
+  twice as slow at 256 MiB. A change that alters what a sample allocates moves
+  that phase, so the ranking of two builds flips with the heap size.
+- **The first pass through the heap pays a page fault per 4 KiB.** Wasmtime does
+  not ask for huge pages, so a page costs a fault the first time a semi-space
+  reaches it, and never again. A heap larger than the program allocates stays in
+  that first pass: microgpt's train ran 2.2× slower at 2 GiB than at 256 MiB,
+  with user time flat and system time tripled. Read `sys` and the minor faults
+  (`/usr/bin/time -f '%R %S %U'`) before calling a larger heap faster.
 - **`with_capacity` zero-fills.** `List::with_capacity(n)` is an
   `array.new_default`, so an over-sized arena pays for every slot it never uses —
   once badly enough to turn a 2× faster build into a 4× slower one. Growing from
@@ -522,8 +560,9 @@ regressed, turning 3.6% down on cbor-catalog into 2.1% up. Delete the overrides 
 committing: read per node visit, `std::env::var` is itself a compile-time cost.
 
 A runtime setting one benchmark wants becomes a CLI option with a conservative
-default, and that benchmark opts in through `gc_heap_flags` in
-`benchmark/wado.sh`. Sweep a candidate below the default as well as above it.
+default, and that benchmark gets a second row at its own value, as
+`GALE_GEN_BIG_HEAP` in `benchmark/wado.sh` does. Sweep a candidate below the
+default as well as above it.
 
 **What decides adoption**, in priority order:
 
