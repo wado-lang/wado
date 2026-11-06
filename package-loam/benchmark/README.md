@@ -106,12 +106,3 @@ example's `generate.json` records.
 | onnxruntime CUDA                | 142.65 tokens/s |   224.322 ms | 2.01x   |
 | onnxruntime WebGPU              | 100.19 tokens/s |   319.407 ms | 2.86x   |
 | **Loam** `Cpu`                  |   3.01 tokens/s | 10633.566 ms | 95.10x  |
-
-Loam ran a generated sequence of kernel calls before it ran `compute`. On Wado
-2026-10-24 and wasmtime 50.0.0, the rest of the environment as above, that
-kernel pass took, over 8 tokens a run:
-
-| Implementation                            |      Throughput |     ms/iter |
-| ----------------------------------------- | --------------: | ----------: |
-| **Loam** `WebGpuBackend`, the kernel pass | 246.02 tokens/s |   32.517 ms |
-| **Loam** `Cpu`, the kernel pass           |   6.80 tokens/s | 1177.114 ms |

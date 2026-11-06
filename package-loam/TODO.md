@@ -92,9 +92,9 @@ leaves this file, and `design.md` states what it built.
     `operators_test.wado` holds each to onnxruntime, a rotation of part of each
     head by `rotary_embedding_dim` and one by position ids among the cases.
 12. [ ] Loading a tensor at a time. `load` reads the checkpoint from a source
-    that yields one tensor's bytes at a time, rather than from one `ByteList`
-    the host holds whole. Finished when a checkpoint larger than the guest's
-    heap loads onto `WebGpuBackend`.
+    that yields one tensor's bytes at a time, rather than from the whole file
+    the guest holds. Finished when a checkpoint larger than the guest's memory
+    loads onto `WebGpuBackend`.
 13. [ ] onnxruntime's int4 operators, `MatMulNBits` and `GatherBlockQuantized`,
     which onnx-community's `q4` exports use. A weight stays packed on the
     device, read by the quantized product composite or by a quantized gather
@@ -165,32 +165,21 @@ leaves this file, and `design.md` states what it built.
 
 ### Operators
 
-The operator set is `MatMul`, the binary and unary elementwise operators,
-`Transpose`, a `Gemm` lowered to those kernels rather than to one of its own,
-`Reshape`, `Flatten`, `Unsqueeze` and `Squeeze`, `Split`, `Concat`, `MaxPool`
-and `Conv` over any number of spatial axes, `Softmax`, `ReduceMean` and
-`ReduceSum`, `Where`, `Gather`, `Slice`, `Range`, `ConstantOfShape`, `Cast`,
-`Identity`, `Expand` and `If`. `Gelu` and onnxruntime's
-`SimplifiedLayerNormalization` are read as the functions they are defined as,
-over the operators above. One operator outside ONNX's default domain is
-lowered, onnxruntime's `com.microsoft.GroupQueryAttention`, without position
-ids, interleaved rotation or a quantized cache. Gemma 3 (270M), in
-`example/gemma3-270m/`, needs all of these.
+`conformance/operators_test.wado` lists the operators Loam lowers. One outside
+ONNX's default domain is among them, onnxruntime's
+`com.microsoft.GroupQueryAttention`, without position ids, interleaved rotation
+or a quantized cache. ONNX's `Attention` is not. Any other operator stops the
+build naming itself.
 
 A node other than `Split`, `If` and `GroupQueryAttention` produces one output.
 `TopK` and the recurrent operators name several, and stage 0 gives only those
 three a shape per output.
 
 An operator reads only the attributes its shape rule, fold or kernel consults,
-and is checked as if the rest were absent. The readers carry every attribute as
-the text it was written as, and whether it was written as strings, since a
-string may read as `3`. An attribute of the wrong kind stops the build. A tensor
-attribute is carried when its elements are float, float16, bfloat16, int32,
-int64 or bool. A half is widened to f32, which holds each of its values exactly.
-It keeps the type it is stored as, so the printer writes it back as bit
-patterns. A `Constant` or `ConstantOfShape` whose `value` holds any other type
-stops the build. A `double` would narrow to f32, which is the element-type gap
-under Element types and precision.
+and is checked as if the rest were absent. A `Constant` or `ConstantOfShape`
+whose `value` holds a type other than float, float16, bfloat16, int32, int64 or
+bool stops the build. A `double` would narrow to f32, which is the element-type
+gap under Element types and precision.
 
 ONNX local functions. The textual format lets a model carry its own function
 definitions and call them as operators, and the grammar covers neither, nor the
@@ -200,22 +189,18 @@ rather than one Loam knows, which the shape algebra has no account of.
 
 ### Stage 0
 
-Where no generic signature relates a kernel's operands to its result, the kernel
-takes the axis lists as type parameters and trusts them, as `reshape` does. The
-generated call spells the lists stage 0 computed. A permutation of three or more
-axes is one such kernel, `permute`, since each of the `n!` orders is its own
-type. So is `matmul_broadcast`, which serves every product whose operands drop
-a rank-1 operand's axis or stretch a batch axis of 1. So is `lift`, which reads
-an elementwise operand under the axes it meets where it stretches an axis of 1,
-which stays an axis of its own.
+Where no generic signature relates an operation's operands to its result, the
+operation takes the axis lists as type parameters and trusts them, as `reshape`
+does, and the generated call spells the lists stage 0 computed. A permutation of
+three or more axes is one such operation, since each of the `n!` orders is its
+own type. So is a product that drops a rank-1 operand's axis or stretches a batch
+axis of 1, and an elementwise operand that stretches an axis of 1.
 
-Stage 0 evaluates `Shape`, and no kernel computes it, so it stops the build
-where the build does not know its operand. `Concat` has a kernel, and stage 0
-evaluates one whose operands the build knows. `Slice`, `Range` and
-`ConstantOfShape` have kernels, but read their bounds or their shape at build
-time, so one the run computes stops the build as well. So does a `Range` whose
-delta has a sign the build cannot tell, since that decides which way it counts.
-Every other operator stops the build naming itself.
+Stage 0 evaluates `Shape`, so one whose operand the build does not know stops
+the build. `Slice`, `Range` and `ConstantOfShape` read their bounds or their
+shape at build time, so one the run computes stops the build as well. So does a
+`Range` whose delta has a sign the build cannot tell, since that decides which
+way it counts.
 
 Stage 0 bounds each term of a condition apart, takes a bound past 2^64 as none,
 and stops comparing through derived symbols after a fixed number of failures. So
@@ -331,12 +316,6 @@ part of a concatenation is strided by the whole product's row, so a `reshape`
 merging its rows with an axis after them copies it, as Gemma 3's query and key
 normalization over heads does on a prompt.
 
-A buffer of the pass is released when the next pass begins, never while this
-one runs, so a pass holds every tensor it computes at once.
-
-A shader may assume no NaN reaches it, as WGSL allows. Where the CPU keeps a
-NaN, `Relu` among them, the device may give a number.
-
 WGSL leaves a value past a half's range indeterminate, whether `pack2x16float`
 stores it or f16 arithmetic computes it. So a half graph that reaches one, a
 mask of negative infinity stored in a half among them, gets whatever the device
@@ -344,28 +323,22 @@ makes of it.
 
 A buffer crosses the component boundary as a `list<u8>`, which the guest
 converts from or to f32 one element at a time, so crossing costs more than the
-device's own copy. Under `wado run-webgpu`, a loop allocating per element (`map`
-and `collect`) ran twenty times slower than under `wado run`, on a wasmtime a
-generation behind it. The backend writes its own loops for that reason.
-
-Gemma 3 (270M) generates about 2% slower on `WebGpuBackend` than at
-`73611c2bfc0`, where the `loam-cpu-perf` branch began, while it loads in half
-the time. That is `mise run gemma3-270m` in `benchmark/`, best of three, with
-both trees on one host; the three runs of each do not overlap. The cause is
-not known.
+device's own copy.
 
 No Loam model has run on a phone, and no host runs a Wado guest with
 `wasi:webgpu` on one.
 
-Every `WebGpuBackend` method spells the same ten `wasi:webgpu` resources, since
-an impl method's `with _` resolves to nothing at a caller.
-
 Whether the backend should be an effect after all. The trait is chosen because
-its cost is known to be zero and the effect's is unmeasured. Once a device
-builds the graph once per shape class ([Loam on TPU and WebGPU](./devices.md)),
-either cost falls only on the first call of a shape class, which builds it.
+its cost is known to be zero and the effect's is unmeasured. A device builds the
+graph once per shape class, so on one either cost falls only on a shape class's
+first call.
 
-### Beyond tier 1
+### Devices
+
+[Loam on TPU and WebGPU](./devices.md#known-gaps) lists the gaps of the device
+design.
+
+### Beyond tier 2
 
 Tier 3, dynamic dispatch. Speculative decoding and early exit are
 data-dependent and no bucketing covers them. Closing it needs the escalation
