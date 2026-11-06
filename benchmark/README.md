@@ -30,19 +30,23 @@ depth-first, and accumulates gradients back through them.
 
 Train — 32 steps, one per document, of forward, backward and Adam:
 
-| Implementation |      Throughput |    ms/iter | vs best |
-| -------------- | --------------: | ---------: | ------- |
-| Rust           | 2.46 k tokens/s |  92.403 ms | 1.00x   |
-| **Wado**       | 1.85 k tokens/s | 122.867 ms | 1.33x   |
-| JavaScript     | 1.23 k tokens/s | 184.032 ms | 1.99x   |
+| Implementation             |      Throughput |    ms/iter | vs best |
+| -------------------------- | --------------: | ---------: | ------- |
+| Rust                       | 2.45 k tokens/s |  92.518 ms | 1.00x   |
+| **Wado** (256 MiB default) | 2.15 k tokens/s | 105.747 ms | 1.14x   |
+| **Wado** (320 MiB heap)    | 2.13 k tokens/s | 106.398 ms | 1.15x   |
+| JavaScript                 | 1.27 k tokens/s | 178.169 ms | 1.93x   |
 
 Infer — 24 samples of the forward path alone, no gradients:
 
-| Implementation |      Throughput |    ms/iter | vs best |
-| -------------- | --------------: | ---------: | ------- |
-| **Wado**       | 4.28 k tokens/s |  89.668 ms | 1.00x   |
-| JavaScript     | 3.29 k tokens/s | 116.873 ms | 1.30x   |
-| Rust           | 2.99 k tokens/s | 128.625 ms | 1.43x   |
+| Implementation             |      Throughput |    ms/iter | vs best |
+| -------------------------- | --------------: | ---------: | ------- |
+| **Wado** (320 MiB heap)    | 5.13 k tokens/s |  74.826 ms | 1.00x   |
+| JavaScript                 | 4.33 k tokens/s |  88.755 ms | 1.19x   |
+| Rust                       | 2.99 k tokens/s | 128.618 ms | 1.72x   |
+| **Wado** (256 MiB default) | 2.68 k tokens/s | 143.471 ms | 1.92x   |
+
+[GC heap size](#gc-heap-size) says why two heaps differ this much on infer.
 
 Training spends most of its time in the backward pass, which
 sorts the whole graph topologically and then walks every edge again. That is
@@ -404,32 +408,34 @@ Wall clock, ms/iter, best of three, with the builds interleaved in each round
 (`WADO_BENCH_FLAGS="-f no-pgo" mise run -C benchmark all-wado`, and so on). The last column
 reads `noise` where the two builds' ranges overlap, as `ab.ts` judges:
 
-| Benchmark                      | `no-cold-paths` | `no-pgo` |     PGO | PGO vs `no-pgo` |
-| ------------------------------ | --------------: | -------: | ------: | --------------: |
-| microgpt / Wado / train        |         119.626 |  118.633 | 120.135 |           -1.3% |
-| microgpt / Wado / infer        |          90.315 |   69.687 |  90.242 |          -29.5% |
-| mandelbrot / Wado              |         103.462 |  103.407 | 103.395 |           +0.0% |
-| sieve / Wado                   |           3.754 |    4.856 |   3.762 |          +22.5% |
-| fts / Wado                     |          37.328 |   36.593 |  37.950 |           -3.7% |
-| json_twitter / Wado / ser      |           0.530 |    0.555 |   0.554 |           noise |
-| json_twitter / Wado / de       |           1.905 |    1.898 |   1.843 |           +2.9% |
-| cbor_twitter / Wado / ser      |           0.295 |    0.360 |   0.306 |          +15.0% |
-| cbor_twitter / Wado / de       |           0.992 |    1.025 |   0.968 |           +5.6% |
-| cbor_canada / Wado / ser       |           1.934 |    2.457 |   1.907 |          +22.4% |
-| cbor_canada / Wado / de        |           3.335 |    4.160 |   3.247 |          +21.9% |
-| cbor_catalog / Wado / ser      |           0.502 |    0.634 |   0.516 |          +18.6% |
-| cbor_catalog / Wado / de       |           1.302 |    1.568 |   1.337 |          +14.7% |
-| json_canada / Wado / ser       |           6.310 |    5.990 |   6.611 |          -10.4% |
-| json_canada / Wado / de        |           7.927 |    8.829 |   8.291 |           +6.1% |
-| json_catalog / Wado / ser      |           0.683 |    0.702 |   0.664 |           +5.4% |
-| json_catalog / Wado / de       |           3.110 |    3.383 |   3.210 |           +5.1% |
-| zlib_bench / Wado / compress   |           4.704 |    4.990 |   4.979 |           noise |
-| zlib_bench / Wado / decompress |           0.909 |    0.989 |   0.908 |           +8.2% |
-| sqlite_parse / Wado            |           0.697 |    0.579 |   0.593 |           -2.4% |
-| syntax_highlight / Wado        |           1.002 |    0.856 |   0.890 |           -4.0% |
-| gale_gen / Wado                |          77.611 |   75.748 |  82.092 |           -8.4% |
-| gale_gen / Wado (1 GiB heap)   |          74.018 |   71.988 |  78.165 |           -8.6% |
-| gale_html / Wado               |           9.163 |    8.280 |   8.491 |           noise |
+| Benchmark                              | `no-cold-paths` | `no-pgo` |     PGO | PGO vs `no-pgo` |
+| -------------------------------------- | --------------: | -------: | ------: | --------------: |
+| microgpt / Wado / train                |         105.583 |   96.545 | 106.097 |           -9.9% |
+| microgpt / Wado / infer                |         144.348 |   70.513 | 143.914 |         -104.1% |
+| microgpt / Wado (320 MiB heap) / train |         105.707 |   95.971 | 106.566 |          -11.0% |
+| microgpt / Wado (320 MiB heap) / infer |          75.438 |   86.904 |  75.056 |          +13.6% |
+| mandelbrot / Wado                      |         103.462 |  103.407 | 103.395 |           +0.0% |
+| sieve / Wado                           |           3.754 |    4.856 |   3.762 |          +22.5% |
+| fts / Wado                             |          37.328 |   36.593 |  37.950 |           -3.7% |
+| json_twitter / Wado / ser              |           0.530 |    0.555 |   0.554 |           noise |
+| json_twitter / Wado / de               |           1.905 |    1.898 |   1.843 |           +2.9% |
+| cbor_twitter / Wado / ser              |           0.295 |    0.360 |   0.306 |          +15.0% |
+| cbor_twitter / Wado / de               |           0.992 |    1.025 |   0.968 |           +5.6% |
+| cbor_canada / Wado / ser               |           1.934 |    2.457 |   1.907 |          +22.4% |
+| cbor_canada / Wado / de                |           3.335 |    4.160 |   3.247 |          +21.9% |
+| cbor_catalog / Wado / ser              |           0.502 |    0.634 |   0.516 |          +18.6% |
+| cbor_catalog / Wado / de               |           1.302 |    1.568 |   1.337 |          +14.7% |
+| json_canada / Wado / ser               |           6.310 |    5.990 |   6.611 |          -10.4% |
+| json_canada / Wado / de                |           7.927 |    8.829 |   8.291 |           +6.1% |
+| json_catalog / Wado / ser              |           0.683 |    0.702 |   0.664 |           +5.4% |
+| json_catalog / Wado / de               |           3.110 |    3.383 |   3.210 |           +5.1% |
+| zlib_bench / Wado / compress           |           4.704 |    4.990 |   4.979 |           noise |
+| zlib_bench / Wado / decompress         |           0.909 |    0.989 |   0.908 |           +8.2% |
+| sqlite_parse / Wado                    |           0.697 |    0.579 |   0.593 |           -2.4% |
+| syntax_highlight / Wado                |           1.002 |    0.856 |   0.890 |           -4.0% |
+| gale_gen / Wado                        |          77.611 |   75.748 |  82.092 |           -8.4% |
+| gale_gen / Wado (1 GiB heap)           |          74.018 |   71.988 |  78.165 |           -8.6% |
+| gale_html / Wado                       |           9.163 |    8.280 |   8.491 |           noise |
 
 ## Running
 
@@ -474,22 +480,28 @@ both import, so the two codecs are compared over identical data types.
 `wado run` starts a guest with a 256 MiB GC heap, and `--gc-heap-initial`
 changes it. The copying collector splits that into two semi-spaces, so a
 program allocates through half of it between collections. A larger heap trades
-resident memory for fewer of them.
+resident memory for fewer of them, and `wado run --gc-log` shows each one.
 
-Two benchmarks measure faster with a larger heap. microgpt holds a whole
-autograd graph live, so it pays for every collection. It runs at 512 MiB, which
-`gc_heap_flags` in `wado.sh` sets.
+Two benchmarks run at the default, which is what a program gets, and again at a
+size of their own, as a second row.
 
 gale_gen allocates enough that its time depends on where its collections land,
 and its ranking against another build can flip between two nearby heap sizes.
-It runs at the default and again at 1 GiB (`GALE_GEN_BIG_HEAP`), as two rows:
-the default is what a program gets, and 1 GiB shows the time once collections
-are rare.
+Its second row runs at 1 GiB (`GALE_GEN_BIG_HEAP`), which shows the time once
+collections are rare.
+
+microgpt's second row runs at 320 MiB (`MICROGPT_TUNED_HEAP`), the size where
+train and infer cost least together. A sample's graph stays live until the
+sample ends, so a collection copies as much of that graph as exists where it
+lands. A semi-space that holds a whole number of samples lands every collection
+at the same point of a sample. At the default that point is near a sample's end,
+so each collection copies almost the whole graph. The size that avoids this
+moves with what a sample allocates. A much larger heap is no cure: the program
+never leaves its first pass through the heap, and each new page costs a fault.
 
 Every other row takes the default. At 512 MiB json-catalog, zlib and
 sqlite-parse are all slower and the rest are flat, and `wado serve` measures
-the same at either size. Below the default nothing improves: microgpt loses
-2.1x at 128 MiB, where its live set no longer fits.
+the same at either size.
 
 ## Profiling
 

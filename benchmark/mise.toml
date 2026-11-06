@@ -19,9 +19,9 @@
 #   WADO_BENCH_FLAGS="--optimize-inline-threshold 20" mise run all
 #   WADO_BIN="$(mise run benchmark-baseline)" mise run all
 #
-# `wado.sh`'s `gc_heap_flags` raises the guest's initial GC heap where a
-# benchmark's live set earns it, measured against the 256 MiB default.
-# gale_gen runs again at `GALE_GEN_BIG_HEAP`, as a row of its own.
+# Every row runs at the 256 MiB default GC heap. gale_gen and microgpt run again
+# at `GALE_GEN_BIG_HEAP` and `MICROGPT_TUNED_HEAP` from `wado.sh`, as rows of
+# their own.
 
 [settings]
 lockfile = true
@@ -49,7 +49,10 @@ echo "=== JavaScript ==="
 node microgpt/microgpt.js
 
 echo "=== Wado ==="
-wado run -O2 $WADO_BENCH_FLAGS $(gc_heap_flags microgpt) microgpt/microgpt.wado
+wado run -O2 $WADO_BENCH_FLAGS microgpt/microgpt.wado
+
+echo "=== Wado (320 MiB heap) ==="
+wado run -O2 $WADO_BENCH_FLAGS $MICROGPT_TUNED_HEAP microgpt/microgpt.wado
 """
 
 [tasks.mandelbrot]
@@ -404,11 +407,15 @@ for f in $FILES; do
     name=${f##*/}
     echo "[${name%.wado}] \\$ wado run -O2 $f"
     echo "=== Wado ==="
-    wado run -O2 $WADO_BENCH_FLAGS $(gc_heap_flags "$f") "$f"
+    wado run -O2 $WADO_BENCH_FLAGS "$f"
     case "$f" in
         *gale_gen*)
             echo "=== Wado (1 GiB heap) ==="
             wado run -O2 $WADO_BENCH_FLAGS $GALE_GEN_BIG_HEAP "$f"
+            ;;
+        *microgpt*)
+            echo "=== Wado (320 MiB heap) ==="
+            wado run -O2 $WADO_BENCH_FLAGS $MICROGPT_TUNED_HEAP "$f"
             ;;
     esac
 done
