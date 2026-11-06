@@ -61,9 +61,9 @@ runs.
   weight a workgroup takes the most columns that still leave 128 workgroups. A
   layer's products of 256 to 2048 columns ran in 32 to 256 workgroups of 8
   columns, too few reads at once for the device, and took 1.2 times as long.
-- `arg_max` reads back one index per lane, as an f32, which holds a
+- `arg_max` leaves one index per lane on the device, as an f32, which holds a
   vocabulary's indices exactly. A language model picking its next token then
-  reads back one index, not the vocabulary's logits.
+  reads back at most one index, not the vocabulary's logits.
 - The device's limits are requested at the adapter's own, and a dispatch binds
   only the span of a buffer its views reach. GPT-2's token embedding is 154 MB,
   past WebGPU's default binding of 128 MiB, which is all llvmpipe offers. A
@@ -262,7 +262,7 @@ weight being the 154 MB embedding.
 Gemma's token cost the host more than the device until the dispatches shared
 one compute pass and one parameter buffer, `wado run-webgpu` built wasmtime and
 wgpu-core optimized, and `arg_max` replaced reading back the logits. Each
-roughly halved it. Then the device set the time at the last row. The figures are
+roughly halved it. By the table's last row the device set the time. The figures are
 against onnxruntime on the CPU timed with the prompt's token included, and the
 build of `wado-run-webgpu` behind them is not recorded.
 
