@@ -27,7 +27,7 @@ mise run on-task-started
 
 1. Run `mise run benchmark-all` **three times**, each to its own log in
    `scratchpad/`, then pick per row with
-   `node benchmark/pick.ts scratchpad/run{1,2,3}.log` (throttling
+   `mise exec -- node benchmark/pick.ts scratchpad/run{1,2,3}.log` (throttling
    only ever slows things down). Use that tool rather than reading the logs by
    eye: it keys rows by (task, implementation, phase) and selects on ms/iter, so
    a rate that rounds to a tie across runs cannot pair with the wrong ms/iter.
@@ -39,13 +39,42 @@ mise run on-task-started
    measures one worker shape per entry in `SHAPES`. Add `HEADROOM_CHECK=1` when
    `CONNECTIONS_PER_WORKER`, `OHA_CORE_COUNT` or `SHAPES` changed, to confirm
    `oha` was not the ceiling.
-3. Refresh the README Environment line versions: `mise exec -- node --version`,
-   `mise exec -- bun --version`, `rustc --version`, `cc --version | head -1`
-   (wasmtime version is the vendored `vendor/wasmtime` workspace version).
-4. Update the tables, following README.md's existing layout. http-routing is
+3. Measure the three PGO builds for the README's Profile-Guided Optimization
+   section (see [PGO](#pgo)).
+4. Refresh the README Environment line versions: `mise exec -- node --version`,
+   `mise -C benchmark exec -- bun --version`, `rustc --version`,
+   `cc --version | head -1`. `mise -C benchmark ls` names wasi-sdk, and wasmtime's
+   version is the `vendor/wasmtime` workspace version.
+5. Update the tables, following README.md's existing layout. http-routing is
    req/s (higher is better), one table per worker shape. Keep measured figures
-   inside tables — prose around them is not re-measured and drifts.
-5. wasm-size: `mise run report-wasm-size`, then update `wasm-size/README.md`.
+   inside tables — prose around them is not re-measured and drifts. An input
+   size in the prose comes from the program's own header line, such as
+   `gale-gen (Rust): 42786 bytes`, so compare each one with the log.
+6. wasm-size: `mise run report-wasm-size`, then update `wasm-size/README.md`.
+   `mise -C wasm-size ls` names Zig, and `moon version` names Moonbit.
+7. Compare every Wado row with the README's previous figure, and attribute each
+   one that moved (see [PGO](#pgo)). Report those to the user.
+
+## PGO
+
+Every Wado row in the procedure is a PGO build: `wado run` and `wado compile`
+apply the profile in the benchmark's `pgo/` by default. wasm-size has no
+profile, so a size change is the compiler's or the program's.
+
+The README's PGO section compares three builds, and its commands stand beside
+its tables. Take the wall clock from three rounds that change the order of the
+builds. `all-wado` leaves out the table's `gale_html` row, so run
+`mise run -C benchmark gale-highlight-html` the same way.
+
+Compare two builds with
+`mise exec -- node benchmark/ab.ts --base <no-pgo logs> --head <PGO logs>`. Its
+verdict gives the table's `noise`.
+
+A Wado row that moved may have moved through the profile and not the compiler.
+Before naming a cause, compare the row's `-f no-pgo` figure with the README's
+previous one. If they match, the profile moved it, and `git log` on the row's
+`pgo/` file shows when. Whether to record the profile again is a separate
+decision, and `benchmark/AGENTS.md` says what a re-recording commits.
 
 ## Sweeping a compiler knob
 
@@ -57,7 +86,7 @@ set -e  # a failed arm would leave pick.ts choosing among the rest
 for t in 13 20 32; do
   WADO_BENCH_FLAGS="--optimize-inline-threshold $t" mise run benchmark-all > scratchpad/thr$t.log 2>&1
 done
-node benchmark/pick.ts scratchpad/thr{13,20,32}.log
+mise exec -- node benchmark/pick.ts scratchpad/thr{13,20,32}.log
 ```
 
 Read the sweep with `pick.ts` the same way as a best-of-three: it keys rows by

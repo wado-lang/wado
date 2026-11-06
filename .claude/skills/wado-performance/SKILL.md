@@ -386,7 +386,7 @@ cp "$(mise run benchmark-baseline)" scratchpad/wado-main   # slow the first time
 # alternate, so neither arm always goes second
 WADO_BIN="$PWD/scratchpad/wado-main" mise run benchmark-all > scratchpad/b1.log 2>&1
 mise run benchmark-all > scratchpad/h1.log 2>&1  # …and so on, 3 each
-node benchmark/ab.ts --base scratchpad/b{1,2,3}.log --head scratchpad/h{1,2,3}.log
+mise exec -- node benchmark/ab.ts --base scratchpad/b{1,2,3}.log --head scratchpad/h{1,2,3}.log
 ```
 
 **Time the Wado rows alone, with `mise run all-wado`.** The reference arms (C,
