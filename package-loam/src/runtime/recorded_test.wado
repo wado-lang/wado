@@ -152,6 +152,25 @@ test "a loop's body returns what it carries, at its extents" {
 }
 
 #[expect_trap]
+test "a loop on Cpu holds its body to what it carries, as a recording does" {
+    let cpu = &mut Cpu {};
+    let count = Tensor::<i64, []> {
+        data: [1],
+        extents: [],
+    };
+    let x = Tensor::<f32, [A]> {
+        data: [1.0],
+        extents: [1],
+    };
+    let wider = Tensor::<f32, [A]> {
+        data: [1.0, 2.0],
+        extents: [2],
+    };
+    let start: List<Any<Cpu>> = [Any::F32(cpu.relabeled::<f32, [A], Untyped>(&x))];
+    cpu.repeated(&count, &start, |_, _| [Any::F32(cpu.relabeled::<f32, [A], Untyped>(&wider))]);
+}
+
+#[expect_trap]
 test "a recorded graph holds no element to download" {
     let mut r = Recorder::new();
     let x = r.parameter::<f32, [A]>([2]);

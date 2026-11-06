@@ -20,7 +20,7 @@ use {
     stretched_strides,
     walked,
 } from "./tensor.wado";
-use { Any, Recorded, Recorder, kept_any } from "./recorded.wado";
+use { Any, Recorded, Recorder, assert_carries, kept_any } from "./recorded.wado";
 
 /// A StableHLO elementwise operation of one operand. `Erf` is CHLO's, as
 /// StableHLO has no error function.
@@ -279,7 +279,9 @@ pub affine trait Graph: Holds with _ {
     ) -> List<Any<Self>> with _ {
         let mut state = *initial;
         for let at of 0..<self.download(count).data[0] {
-            state = body(&scalar(self, at), &state);
+            let returned = body(&scalar(self, at), &state);
+            assert_carries(self, &state, &returned);
+            state = returned;
         }
         return state;
     }

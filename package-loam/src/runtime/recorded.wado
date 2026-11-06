@@ -426,12 +426,10 @@ impl Graph for Recorder {
         }
         let state: List<Any<Recorder>> = carried.into_iter().map(|id| any_at(self.nodes[id].kind, id)).collect();
         let returned = body(&Value { id: step }, &state);
-        assert returned.len() == carried.len(), "a loop's body returns each value it carries";
-        for let [k, r] of returned.into_iter().enumerate() {
-            let node = &self.nodes[node_of(&r)];
-            let held = &self.nodes[carried[k]];
-            assert node.kind == held.kind && node.extents == held.extents, "a run returns what the next one takes";
-            self.current.results.push(self.added(Operation::Yield, [node_of(&r)], node.kind, node.extents));
+        assert_carries(self, &state, &returned);
+        for let r of &returned {
+            let node = &self.nodes[node_of(r)];
+            self.current.results.push(self.added(Operation::Yield, [node_of(r)], node.kind, node.extents));
         }
         let region = self.current;
         self.current = outer;
@@ -591,6 +589,18 @@ fn extents_of_any<affine G: Graph>(g: &G, a: &Any<G>) -> List<i32> with _ {
         I64(t) => g.extents_of(t),
         Bool(t) => g.extents_of(t),
     };
+}
+
+/// Holds a loop's body, which took `held`, to the values it `returned`.
+pub fn assert_carries<affine G: Graph>(g: &G, held: &List<Any<G>>, returned: &List<Any<G>>) with _ {
+    assert returned.len() == held.len(), "a loop's body returns each value it carries";
+    for let [k, r] of returned.into_iter().enumerate() {
+        let same_element = match [r, &held[k]] {
+            [F32(_), F32(_)] | [I64(_), I64(_)] | [Bool(_), Bool(_)] => true,
+            _ => false,
+        };
+        assert same_element && extents_of_any(g, r) == extents_of_any(g, &held[k]), "a run returns what the next one takes";
+    }
 }
 
 /// The programs a backend compiled, one for each shape class: the extents of
