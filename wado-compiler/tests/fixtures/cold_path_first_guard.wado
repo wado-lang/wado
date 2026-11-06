@@ -36,6 +36,9 @@ __DATA__
 {
   "wir_scope": "cold_path_first_guard.wado/f",
   "wir_expect:O2": ["\"cold_path_first_guard.wado/h\"("],
-  "wir_contrast": {"O2": [{"builtin::cold_path(); v > 100": "v > 100"}]},
+  "wir_contrast": {"O2": [
+    {"builtin::cold_path(); v > 100": "v > 100"},
+    {"v && marked: { builtin::cold_path(); v > 100 } => h(v)": "500 && marked: { builtin::cold_path(); x > 100 } => h(x)"}
+  ]},
   "stdout": "3359304\n"
 }
