@@ -1,4 +1,4 @@
-use { Json, JsonTypes, Schema, SchemaObject, pointer_token } from "../src/lib.wado";
+use { Document, JsonTypes, Schema, SchemaObject, pointer_token } from "../src/lib.wado";
 use { to_string } from "core:json";
 
 fn reread(text: String) -> String {
@@ -11,7 +11,7 @@ fn error_of(text: String) -> String {
 
 test "an absent keyword is left out" {
     assert to_string(&SchemaObject {}).unwrap() == "{}";
-    assert to_string(&SchemaObject::constant(Json::of(&()).unwrap())).unwrap() == `{"const":null}`;
+    assert to_string(&SchemaObject::constant(Document::of(&()).unwrap())).unwrap() == `{"const":null}`;
 }
 
 test "a boolean schema is a boolean" {

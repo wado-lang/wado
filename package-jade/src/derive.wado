@@ -3,7 +3,7 @@
 
 use { Serialize, wire_name } from "core:serde";
 use { TreeMap, TreeSet } from "core:collections";
-use { Json } from "./json.wado";
+use { Document } from "./document.wado";
 use { JsonTypes, Schema, SchemaObject } from "./schema.wado";
 
 /// A type whose JSON form a schema describes. Every value `core:json` writes
@@ -79,7 +79,7 @@ fn struct_schema<T: ReflectStruct<FieldTypes = [..F]>, ..F: JsonSchema + Seriali
         let name = wire_name(&f, policy);
         let mut field = field_schema(&f, gen).into_object();
         if let Some(fallback) = ReflectStruct::<T>::default_slot(i)[i] {
-            field.default_ = Option::Some(Json::of(&fallback).expect("a field's default serializes"));
+            field.default_ = Option::Some(Document::of(&fallback).expect("a field's default serializes"));
         } else {
             s.required.push(name);
         }
@@ -120,12 +120,12 @@ fn case_schema<V, P: JsonSchema>(
 ) -> Schema {
     if let Some(tag) = tag {
         let mut s = if case.is_unit() { SchemaObject::of_type(JsonTypes::Object) } else { P::json_schema(gen).into_object() };
-        s.properties[*tag] = Schema::Object(SchemaObject::constant(Json::string(name)));
+        s.properties[*tag] = Schema::Object(SchemaObject::constant(Document::string(name)));
         s.required.push(*tag);
         return Schema::Object(s);
     }
     if case.is_unit() {
-        return Schema::Object(SchemaObject::constant(Json::string(name)));
+        return Schema::Object(SchemaObject::constant(Document::string(name)));
     }
     return one_property(name, P::json_schema(gen));
 }
@@ -148,9 +148,9 @@ impl<E: ReflectEnum<Members = [..M]>, ..M> JsonSchema for E {
 
 fn enum_schema<E: ReflectEnum<Members = [..M]>, ..M>() -> Schema {
     let policy = Reflect::<E>::wire_name_policy();
-    let mut names: List<Json> = [];
+    let mut names: List<Document> = [];
     for let case of ReflectEnum::<E>::members() {
-        names.push(Json::string(wire_name(&case, policy)));
+        names.push(Document::string(wire_name(&case, policy)));
     }
     return Schema::Object(SchemaObject { type: JsonTypes::String, enum_: Option::Some(names) });
 }
@@ -163,9 +163,9 @@ impl<L: ReflectFlags<Members = [..M]>, ..M> JsonSchema for L {
 
 fn flags_schema<L: ReflectFlags<Members = [..M]>, ..M>() -> Schema {
     let policy = Reflect::<L>::wire_name_policy();
-    let mut names: List<Json> = [];
+    let mut names: List<Document> = [];
     for let bit of ReflectFlags::<L>::members() {
-        names.push(Json::string(wire_name(&bit, policy)));
+        names.push(Document::string(wire_name(&bit, policy)));
     }
     let member = SchemaObject { type: JsonTypes::String, enum_: Option::Some(names) };
     return Schema::Object(SchemaObject { ..array_of(Schema::Object(member)), unique_items: true });

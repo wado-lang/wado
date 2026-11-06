@@ -8,7 +8,7 @@ use { JsonDeserializer, to_bytes } from "core:json";
 use { TreeSet } from "core:collections";
 
 /// What a JSON value is.
-pub enum JsonKind {
+pub enum NodeKind {
     Null,
     Bool,
     Number,
@@ -20,8 +20,8 @@ pub enum JsonKind {
 /// A JSON document. A node is an index into its arrays, in document order: a
 /// container's members follow it, an object's as a key node and a value node
 /// in turn, and `ends` says where its subtree stops. Node 0 is the root.
-pub struct Json {
-    kinds: List<JsonKind> = [],
+pub struct Document {
+    kinds: List<NodeKind> = [],
     /// A bool's value as 0 or 1, the index of a number in `numbers` or of a
     /// string in `strings`, or a container's member count.
     slots: List<i32> = [],
@@ -35,13 +35,13 @@ pub struct Json {
 /// rather than by comparing it with each earlier key.
 global LINEAR_KEY_CHECK: i32 = 8;
 
-impl Json {
+impl Document {
     /// Reads the JSON text `text`. A repeated key is an error, as in
     /// `core:json`, and so are a lone surrogate and a number that rounds to
     /// infinity. `max_depth` bounds nesting.
-    pub fn parse<S: AsByteSlice>(text: S, max_depth: i32 = DEFAULT_MAX_DEPTH) -> Result<Json, DeserializeError> {
+    pub fn parse<S: AsByteSlice>(text: S, max_depth: i32 = DEFAULT_MAX_DEPTH) -> Result<Document, DeserializeError> {
         let mut r = Reader {
-            doc: Json {},
+            doc: Document {},
             de: JsonDeserializer::new(text.as_byte_slice(), max_depth),
         };
         r.value()?;
@@ -52,23 +52,23 @@ impl Json {
     }
 
     /// The document `core:json` writes for `value`.
-    pub fn of<T: Serialize>(value: &T) -> Result<Json, SerializeError> {
+    pub fn of<T: Serialize>(value: &T) -> Result<Document, SerializeError> {
         let text = to_bytes(value)?;
-        return Result::Ok(Json::parse(text).expect("core:json writes JSON"));
+        return Result::Ok(Document::parse(text).expect("core:json writes JSON"));
     }
 
     /// A string, without the trip through JSON text `of` takes.
-    pub fn string<S: AsStrSlice>(value: S) -> Json {
-        let mut doc = Json {};
+    pub fn string<S: AsStrSlice>(value: S) -> Document {
+        let mut doc = Document {};
         doc.push_string(value.to_string());
         return doc;
     }
 
-    pub fn root(&self) -> JsonNode {
-        return JsonNode { doc: self, at: 0 };
+    pub fn root(&self) -> Node {
+        return Node { doc: self, at: 0 };
     }
 
-    fn push(&mut self, kind: JsonKind, slot: i32) -> i32 {
+    fn push(&mut self, kind: NodeKind, slot: i32) -> i32 {
         let at = self.kinds.len();
         self.kinds.push(kind);
         self.slots.push(slot);
@@ -77,17 +77,17 @@ impl Json {
     }
 
     fn push_number(&mut self, value: f64) {
-        self.push(JsonKind::Number, self.numbers.len());
+        self.push(NodeKind::Number, self.numbers.len());
         self.numbers.push(value);
     }
 
     fn push_string(&mut self, value: String) {
-        self.push(JsonKind::String, self.strings.len());
+        self.push(NodeKind::String, self.strings.len());
         self.strings.push(value);
     }
 
     /// Appends the subtree of `node`, from whatever document holds it.
-    fn push_tree(&mut self, node: &JsonNode) {
+    fn push_tree(&mut self, node: &Node) {
         let src = node.doc;
         let shift = self.kinds.len() - node.at;
         for let i of node.at..<src.ends[node.at] {
@@ -110,27 +110,27 @@ impl Json {
     }
 }
 
-/// Two documents are equal when their roots are, as `JsonNode` compares them.
-impl Eq for Json {
-    fn eq(&self, other: &Json) -> bool {
+/// Two documents are equal when their roots are, as `Node` compares them.
+impl Eq for Document {
+    fn eq(&self, other: &Document) -> bool {
         return self.root() == other.root();
     }
 }
 
-impl Serialize for Json {
+impl Serialize for Document {
     fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError> {
         return self.root().serialize(s);
     }
 }
 
-/// A value inside a `Json` document.
-pub struct JsonNode {
-    doc: &Json,
+/// A value inside a `Document` document.
+pub struct Node {
+    doc: &Document,
     at: i32,
 }
 
-impl JsonNode {
-    pub fn kind(&self) -> JsonKind {
+impl Node {
+    pub fn kind(&self) -> NodeKind {
         return self.doc.kinds[self.at];
     }
 
@@ -165,20 +165,20 @@ impl JsonNode {
     }
 
     /// An array's elements in order; nothing for any other value.
-    pub fn items(&self) -> JsonItems {
+    pub fn items(&self) -> Elements {
         let n = if self.kind() matches { Array } { self.len() } else { 0 };
-        return JsonItems { doc: self.doc, next: self.at + 1, left: n };
+        return Elements { doc: self.doc, next: self.at + 1, left: n };
     }
 
     /// An object's members as key and value, in document order; nothing for any
     /// other value.
-    pub fn entries(&self) -> JsonEntries {
+    pub fn entries(&self) -> Members {
         let n = if self.kind() matches { Object } { self.len() } else { 0 };
-        return JsonEntries { doc: self.doc, next: self.at + 1, left: n };
+        return Members { doc: self.doc, next: self.at + 1, left: n };
     }
 
     /// The value of an object's member `key`.
-    pub fn get<S: AsStrSlice>(&self, key: S) -> Option<JsonNode> {
+    pub fn get<S: AsStrSlice>(&self, key: S) -> Option<Node> {
         let key = key.as_str_slice();
         for let [k, v] of self.entries() {
             if k == key {
@@ -189,8 +189,8 @@ impl JsonNode {
     }
 
     /// This value as a document of its own.
-    pub fn to_json(&self) -> Json {
-        let mut doc = Json {};
+    pub fn to_document(&self) -> Document {
+        let mut doc = Document {};
         doc.push_tree(self);
         return doc;
     }
@@ -198,8 +198,8 @@ impl JsonNode {
 
 /// JSON Schema's equality: numbers by value, so `1` equals `1.0`; arrays
 /// element by element; objects by their members, whatever their order.
-impl Eq for JsonNode {
-    fn eq(&self, other: &JsonNode) -> bool {
+impl Eq for Node {
+    fn eq(&self, other: &Node) -> bool {
         let kind = self.kind();
         if kind != other.kind() {
             return false;
@@ -239,7 +239,7 @@ impl Eq for JsonNode {
     }
 }
 
-impl Serialize for JsonNode {
+impl Serialize for Node {
     fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError> {
         return match self.kind() {
             Null => s.serialize_null(),
@@ -265,36 +265,36 @@ impl Serialize for JsonNode {
     }
 }
 
-pub struct JsonItems {
-    doc: &Json,
+pub struct Elements {
+    doc: &Document,
     next: i32,
     left: i32,
 }
 
-impl Iterator for JsonItems {
-    type Item = JsonNode;
+impl Iterator for Elements {
+    type Item = Node;
 
-    fn next(&mut self) -> Option<JsonNode> {
+    fn next(&mut self) -> Option<Node> {
         if self.left == 0 {
             return null;
         }
         let at = self.next;
         self.next = self.doc.ends[at];
         self.left -= 1;
-        return Option::Some(JsonNode { doc: self.doc, at });
+        return Option::Some(Node { doc: self.doc, at });
     }
 }
 
-pub struct JsonEntries {
-    doc: &Json,
+pub struct Members {
+    doc: &Document,
     next: i32,
     left: i32,
 }
 
-impl Iterator for JsonEntries {
-    type Item = [StrSlice, JsonNode];
+impl Iterator for Members {
+    type Item = [StrSlice, Node];
 
-    fn next(&mut self) -> Option<[StrSlice, JsonNode]> {
+    fn next(&mut self) -> Option<[StrSlice, Node]> {
         if self.left == 0 {
             return null;
         }
@@ -302,13 +302,13 @@ impl Iterator for JsonEntries {
         let at = self.next + 1;
         self.next = self.doc.ends[at];
         self.left -= 1;
-        return Option::Some([key, JsonNode { doc: self.doc, at }]);
+        return Option::Some([key, Node { doc: self.doc, at }]);
     }
 }
 
-/// Reads JSON text into a `Json`, through `core:json`'s lexer.
+/// Reads JSON text into a `Document`, through `core:json`'s lexer.
 struct Reader {
-    doc: Json,
+    doc: Document,
     de: JsonDeserializer,
 }
 
@@ -328,17 +328,17 @@ impl Reader {
         }
         if b == b't' {
             self.literal("true")?;
-            self.doc.push(JsonKind::Bool, 1);
+            self.doc.push(NodeKind::Bool, 1);
             return Result::Ok(());
         }
         if b == b'f' {
             self.literal("false")?;
-            self.doc.push(JsonKind::Bool, 0);
+            self.doc.push(NodeKind::Bool, 0);
             return Result::Ok(());
         }
         if b == b'n' {
             self.literal("null")?;
-            self.doc.push(JsonKind::Null, 0);
+            self.doc.push(NodeKind::Null, 0);
             return Result::Ok(());
         }
         if b < 0 {
@@ -361,7 +361,7 @@ impl Reader {
 
     /// Opens the container whose opening byte is under the cursor, as a node of
     /// `kind`.
-    fn open(&mut self, kind: JsonKind) -> Result<i32, DeserializeError> {
+    fn open(&mut self, kind: NodeKind) -> Result<i32, DeserializeError> {
         self.de.depth = deeper(self.de.depth, self.de.max_depth, self.de.pos as i64)?;
         self.de.advance();
         return Result::Ok(self.doc.push(kind, 0));
@@ -391,7 +391,7 @@ impl Reader {
     }
 
     fn array(&mut self) -> Result<(), DeserializeError> {
-        let at = self.open(JsonKind::Array)?;
+        let at = self.open(NodeKind::Array)?;
         let mut count = 0;
         if self.de.peek_after_whitespace() == b']' {
             self.de.advance();
@@ -409,7 +409,7 @@ impl Reader {
     }
 
     fn object(&mut self) -> Result<(), DeserializeError> {
-        let at = self.open(JsonKind::Object)?;
+        let at = self.open(NodeKind::Object)?;
         let mut keys: List<i32> = [];
         let mut seen = TreeSet::<String>::new();
         if self.de.peek_after_whitespace() == b'}' {

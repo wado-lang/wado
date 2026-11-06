@@ -3,7 +3,7 @@
 
 use { Serialize, SerializeError, SerializeMap, Serializer } from "core:serde";
 use { TreeMap } from "core:collections";
-use { Json, JsonNode } from "./json.wado";
+use { Document, Node } from "./document.wado";
 
 /// A JSON Schema: `true` admits every instance, `false` none, and an object
 /// asserts its keywords.
@@ -53,8 +53,8 @@ pub struct SchemaObject {
     pub content_encoding: Option<String> = null,
     pub content_media_type: Option<String> = null,
     pub content_schema: Option<Schema> = null,
-    pub const_: Option<Json> = null,
-    pub enum_: Option<List<Json>> = null,
+    pub const_: Option<Document> = null,
+    pub enum_: Option<List<Document>> = null,
     pub all_of: List<Schema> = [],
     pub any_of: List<Schema> = [],
     pub one_of: List<Schema> = [],
@@ -89,14 +89,14 @@ pub struct SchemaObject {
     pub min_properties: Option<i32> = null,
     pub max_properties: Option<i32> = null,
     pub unevaluated_properties: Option<Schema> = null,
-    pub default_: Option<Json> = null,
-    pub examples: List<Json> = [],
+    pub default_: Option<Document> = null,
+    pub examples: List<Document> = [],
     pub deprecated: bool = false,
     pub read_only: bool = false,
     pub write_only: bool = false,
     /// `$defs`
     pub defs: TreeMap<String, Schema> = TreeMap::new(),
-    pub extra: TreeMap<String, Json> = TreeMap::new(),
+    pub extra: TreeMap<String, Document> = TreeMap::new(),
 }
 
 impl Schema {
@@ -105,17 +105,17 @@ impl Schema {
 
     /// Reads the schema the JSON text `text` holds.
     pub fn parse<S: AsByteSlice>(text: S) -> Result<Schema, SchemaError> {
-        let doc = match Json::parse(text) {
+        let doc = match Document::parse(text) {
             Ok(doc) => doc,
             Err(e) => {
                 return Result::Err(SchemaError { pointer: "", message: `${e}` });
             },
         };
-        return Schema::from_json(&doc.root());
+        return Schema::from_node(&doc.root());
     }
 
     /// Reads the schema `node` holds, as a document's root.
-    pub fn from_json(node: &JsonNode) -> Result<Schema, SchemaError> {
+    pub fn from_node(node: &Node) -> Result<Schema, SchemaError> {
         return read_schema(node, "");
     }
 
@@ -137,7 +137,7 @@ impl SchemaObject {
     }
 
     /// A schema admitting the single value `value`.
-    pub fn constant(value: Json) -> SchemaObject {
+    pub fn constant(value: Document) -> SchemaObject {
         return SchemaObject { const_: Option::Some(value) };
     }
 
@@ -343,7 +343,7 @@ fn fail<T>(at: &String, message: String) -> Result<T, SchemaError> {
     return Result::Err(SchemaError { pointer: *at, message });
 }
 
-fn read_schema(node: &JsonNode, at: String) -> Result<Schema, SchemaError> {
+fn read_schema(node: &Node, at: String) -> Result<Schema, SchemaError> {
     return match node.kind() {
         Bool => Result::Ok(Schema::Bool(node.as_bool().unwrap())),
         Object => Result::Ok(Schema::Object(read_object(node, &at)?)),
@@ -351,7 +351,7 @@ fn read_schema(node: &JsonNode, at: String) -> Result<Schema, SchemaError> {
     };
 }
 
-fn read_object(node: &JsonNode, at: &String) -> Result<SchemaObject, SchemaError> {
+fn read_object(node: &Node, at: &String) -> Result<SchemaObject, SchemaError> {
     let mut s = SchemaObject {};
     for let [key, value] of node.entries() {
         let here = `${*at}/${pointer_token(key)}`;
@@ -373,7 +373,7 @@ fn read_object(node: &JsonNode, at: &String) -> Result<SchemaObject, SchemaError
             "contentEncoding" => s.content_encoding = Option::Some(read_string(v, &here)?),
             "contentMediaType" => s.content_media_type = Option::Some(read_string(v, &here)?),
             "contentSchema" => s.content_schema = Option::Some(read_schema(v, here)?),
-            "const" => s.const_ = Option::Some(value.to_json()),
+            "const" => s.const_ = Option::Some(value.to_document()),
             "enum" => s.enum_ = Option::Some(read_values(v, &here)?),
             "allOf" => s.all_of = read_schema_list(v, &here)?,
             "anyOf" => s.any_of = read_schema_list(v, &here)?,
@@ -415,32 +415,32 @@ fn read_object(node: &JsonNode, at: &String) -> Result<SchemaObject, SchemaError
             "minProperties" => s.min_properties = Option::Some(read_count(v, &here)?),
             "maxProperties" => s.max_properties = Option::Some(read_count(v, &here)?),
             "unevaluatedProperties" => s.unevaluated_properties = Option::Some(read_schema(v, here)?),
-            "default" => s.default_ = Option::Some(value.to_json()),
+            "default" => s.default_ = Option::Some(value.to_document()),
             "examples" => s.examples = read_values(v, &here)?,
             "deprecated" => s.deprecated = read_bool(v, &here)?,
             "readOnly" => s.read_only = read_bool(v, &here)?,
             "writeOnly" => s.write_only = read_bool(v, &here)?,
-            _ => s.extra[key.to_string()] = value.to_json(),
+            _ => s.extra[key.to_string()] = value.to_document(),
         }
     }
     return Result::Ok(s);
 }
 
-fn read_string(v: &JsonNode, at: &String) -> Result<String, SchemaError> {
+fn read_string(v: &Node, at: &String) -> Result<String, SchemaError> {
     if let Some(s) = v.as_str() {
         return Result::Ok(s.to_string());
     }
     return fail(at, "must be a string");
 }
 
-fn read_bool(v: &JsonNode, at: &String) -> Result<bool, SchemaError> {
+fn read_bool(v: &Node, at: &String) -> Result<bool, SchemaError> {
     if let Some(b) = v.as_bool() {
         return Result::Ok(b);
     }
     return fail(at, "must be a boolean");
 }
 
-fn read_number(v: &JsonNode, at: &String) -> Result<f64, SchemaError> {
+fn read_number(v: &Node, at: &String) -> Result<f64, SchemaError> {
     if let Some(n) = v.as_f64() {
         return Result::Ok(n);
     }
@@ -450,7 +450,7 @@ fn read_number(v: &JsonNode, at: &String) -> Result<f64, SchemaError> {
 /// A non-negative integer, which may be spelled with a fraction of zero. One
 /// past `i32::MAX` is held at `i32::MAX`, past every length a list or string
 /// can have.
-fn read_count(v: &JsonNode, at: &String) -> Result<i32, SchemaError> {
+fn read_count(v: &Node, at: &String) -> Result<i32, SchemaError> {
     let Some(n) = v.as_f64() else {
         return fail(at, "must be a non-negative integer");
     };
@@ -460,18 +460,18 @@ fn read_count(v: &JsonNode, at: &String) -> Result<i32, SchemaError> {
     return Result::Ok(if n > i32::MAX as f64 { i32::MAX } else { n as i32 });
 }
 
-fn read_values(v: &JsonNode, at: &String) -> Result<List<Json>, SchemaError> {
+fn read_values(v: &Node, at: &String) -> Result<List<Document>, SchemaError> {
     if !(v.kind() matches { Array }) {
         return fail(at, "must be an array");
     }
-    let mut out: List<Json> = [];
+    let mut out: List<Document> = [];
     for let item of v.items() {
-        out.push(item.to_json());
+        out.push(item.to_document());
     }
     return Result::Ok(out);
 }
 
-fn read_types(v: &JsonNode, at: &String) -> Result<JsonTypes, SchemaError> {
+fn read_types(v: &Node, at: &String) -> Result<JsonTypes, SchemaError> {
     if let Some(name) = v.as_str() {
         return type_named(name, at);
     }
@@ -503,7 +503,7 @@ fn type_named(name: StrSlice, at: &String) -> Result<JsonTypes, SchemaError> {
 }
 
 /// An array of distinct strings, as `required` and `dependentRequired` hold.
-fn read_names(v: &JsonNode, at: &String) -> Result<List<String>, SchemaError> {
+fn read_names(v: &Node, at: &String) -> Result<List<String>, SchemaError> {
     if !(v.kind() matches { Array }) {
         return fail(at, "must be an array of strings");
     }
@@ -519,7 +519,7 @@ fn read_names(v: &JsonNode, at: &String) -> Result<List<String>, SchemaError> {
     return Result::Ok(names);
 }
 
-fn read_schema_list(v: &JsonNode, at: &String) -> Result<List<Schema>, SchemaError> {
+fn read_schema_list(v: &Node, at: &String) -> Result<List<Schema>, SchemaError> {
     if !(v.kind() matches { Array }) || v.len() == 0 {
         return fail(at, "must be a non-empty array of schemas");
     }
@@ -530,7 +530,7 @@ fn read_schema_list(v: &JsonNode, at: &String) -> Result<List<Schema>, SchemaErr
     return Result::Ok(out);
 }
 
-fn read_schema_map(v: &JsonNode, at: &String) -> Result<TreeMap<String, Schema>, SchemaError> {
+fn read_schema_map(v: &Node, at: &String) -> Result<TreeMap<String, Schema>, SchemaError> {
     if !(v.kind() matches { Object }) {
         return fail(at, "must be an object of schemas");
     }
@@ -541,7 +541,7 @@ fn read_schema_map(v: &JsonNode, at: &String) -> Result<TreeMap<String, Schema>,
     return Result::Ok(out);
 }
 
-fn read_dependent_required(v: &JsonNode, at: &String) -> Result<TreeMap<String, List<String>>, SchemaError> {
+fn read_dependent_required(v: &Node, at: &String) -> Result<TreeMap<String, List<String>>, SchemaError> {
     if !(v.kind() matches { Object }) {
         return fail(at, "must be an object of string arrays");
     }
@@ -552,7 +552,7 @@ fn read_dependent_required(v: &JsonNode, at: &String) -> Result<TreeMap<String, 
     return Result::Ok(out);
 }
 
-fn read_vocabulary(v: &JsonNode, at: &String) -> Result<TreeMap<String, bool>, SchemaError> {
+fn read_vocabulary(v: &Node, at: &String) -> Result<TreeMap<String, bool>, SchemaError> {
     if !(v.kind() matches { Object }) {
         return fail(at, "must be an object of booleans");
     }
