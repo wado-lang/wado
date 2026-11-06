@@ -537,12 +537,10 @@ fn check_cm_boundary_representable_inner(
                 match struct_decl_of(type_table, *def, type_args, tir_modules) {
                     // Only the declaration stands for an instance no
                     // monomorphization listed.
-                    Some(decl) if !decl.lists(type_table, *def, type_args) => {
-                        Err(format!(
-                            "generic type `{}` has no Component Model value representation",
-                            type_table.name(type_id)
-                        ))
-                    }
+                    Some(decl) if !decl.represents(type_table, *def, type_args) => Err(format!(
+                        "generic type `{}` has no Component Model value representation",
+                        type_table.name(type_id)
+                    )),
                     Some(decl) if decl.fields.is_empty() => Err(format!(
                         "record `{name}` has no fields; an empty record has no \
                          Component Model representation — add at least one field"
@@ -1071,7 +1069,7 @@ pub(super) fn struct_decl_of(
 ) -> Option<TirStruct> {
     let mut declaration = None;
     for s in tir_modules.values().flat_map(|module| &module.structs) {
-        if s.lists(type_table, def, type_args) {
+        if s.represents(type_table, def, type_args) {
             return Some(s.clone());
         }
         if s.def == def && s.type_args.is_empty() {

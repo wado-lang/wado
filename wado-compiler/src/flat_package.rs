@@ -134,7 +134,7 @@ impl FlatPackage {
     ) -> Option<&TirStruct> {
         self.structs
             .iter()
-            .find(|s| s.lists(type_table, def, type_args))
+            .find(|s| s.represents(type_table, def, type_args))
     }
 
     /// Walk every function body with `visitor`, which may rewrite it in place.

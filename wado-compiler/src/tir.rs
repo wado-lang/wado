@@ -3605,11 +3605,11 @@ pub struct TirStruct {
 }
 
 impl TirStruct {
-    /// Whether this is the listed struct `def` at `type_args` lowers as: the
-    /// one under that instance's name, which erases newtypes the way WIR
-    /// building and the value-copy helpers name it.
+    /// Whether `def` at `type_args` lowers as this struct: the one under that
+    /// instance's name, which erases newtypes the way WIR building and the
+    /// value-copy helpers name it.
     #[must_use]
-    pub fn lists(&self, type_table: &TypeTable, def: StructDef, type_args: &[TypeId]) -> bool {
+    pub fn represents(&self, type_table: &TypeTable, def: StructDef, type_args: &[TypeId]) -> bool {
         self.def == def && self.name == type_table.struct_mangled_name(def, type_args)
     }
 
