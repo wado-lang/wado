@@ -3,9 +3,19 @@ name: pull-request
 description: The rules for opening a PR you must read before creating or editing any pull request.
 ---
 
-## First: check mergeability
+## First: a question you asked is a stop
 
-Check mergeability by exit status, before any other step:
+If even one question you put to the user is still unanswered, stop here. Do not
+open a pull request, do not edit one, do not write a title or a description.
+End the turn by asking for the answer.
+
+A pull request never goes out with an open question behind it. "The rest is
+ready" is not a reason to proceed, and neither is a question that looks minor:
+the user decides what is minor.
+
+## Check mergeability
+
+Check mergeability by exit status, before any step below:
 
 ```sh
 git fetch origin main
@@ -17,16 +27,6 @@ by one conflicted path per line. This runs the real (ort) merge in memory and
 touches neither the worktree nor the index.
 
 If conflicting, resolve with the `git-upstream-sync` skill.
-
-## A question you asked is a stop
-
-If even one question you put to the user is still unanswered, stop here. Do not
-open a pull request, do not edit one, do not write a title or a description.
-End the turn by asking for the answer.
-
-A pull request never goes out with an open question behind it. "The rest is
-ready" is not a reason to proceed, and neither is a question that looks minor:
-the user decides what is minor.
 
 ## Before writing
 
@@ -106,8 +106,7 @@ and cut every sentence a reader would skip.
 
 ## Just before opening
 
-Check mergeability again, as in the first step: `main` moves while the steps
-above run.
+Check mergeability again, as above: `main` moves while these steps run.
 
 ## After opening
 
