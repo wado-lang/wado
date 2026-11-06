@@ -211,10 +211,10 @@ paid on a benchmark `fts` never touched.
 - **A collection copies what is live where it lands, and it can land at the same
   place every time.** microgpt's sample graph stays live until the sample ends,
   so the live set is a sawtooth. When a semi-space holds a whole number of
-  samples, every collection lands at the same phase of a sample. Landing at a
-  sample's end copied six times what landing near its start did, and made infer
-  twice as slow at 256 MiB. A change that alters what a sample allocates moves
-  that phase, so the ranking of two builds flips with the heap size.
+  samples, every collection lands at the same phase of a sample. Landing late in
+  a sample paused 3.6 times as long as landing early did, and made infer 1.5×
+  slower at 288 MiB than at 256 MiB. A change that alters what a sample allocates
+  moves that phase, so the ranking of two builds flips with the heap size.
 - **The first pass through the heap pays a page fault per 4 KiB.** Wasmtime does
   not ask for huge pages, so a page costs a fault the first time a semi-space
   reaches it, and never again. A heap larger than the program allocates stays in

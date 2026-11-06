@@ -72,7 +72,8 @@ verdict gives the table's `noise`.
 
 A profile can move a row through what the program allocates, because a change of
 allocation moves where collections land. `wado run --gc-log` shows that, and
-`MICROGPT_TUNED_HEAP` needs a new sweep when it happens.
+`microgpt` needs a new heap sweep when it happens. A size that beats the default
+gets a second row, as `GALE_GEN_BIG_HEAP` does.
 
 A Wado row that moved may have moved through the profile and not the compiler.
 Before naming a cause, compare the row's `-f no-pgo` figure with the README's

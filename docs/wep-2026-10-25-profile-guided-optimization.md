@@ -526,3 +526,19 @@ Coverage does not explain the other rows that read slower than `-f no-pgo`.
 Trained on the input it measures, `syntax_highlight` stayed where it was, as
 `fts` did on a hundred times its `fts_run`, and `json_canada`'s serialization
 ran 3% slower.
+
+### Reading a zero count as not cold
+
+A region that never ran could be only unlikely, so that code the workloads miss
+would keep its inlining. It moved fuel by at most 0.5%, and the mean over the
+wall clock rows by under 0.1%. Against the marks as they stand, over three
+alternating rounds of `mise run all-wado`, these rows moved most:
+
+| Row                | Wall clock |
+| ------------------ | ---------: |
+| `json_catalog` de  |      +4.1% |
+| `cbor_twitter` ser |      +4.0% |
+| `gale_gen`         |      +2.2% |
+| `cbor_twitter` de  |      -2.6% |
+| `fts`              |      -3.2% |
+| `json_canada` de   |      -3.5% |
