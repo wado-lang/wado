@@ -1759,7 +1759,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         state.marks = profile.map(|profile| {
             MarkMap::build(
                 snapshot.and_then(|s| s.marks.as_ref()),
-                modules,
+                modules
+                    .iter()
+                    .filter(|(source, _)| !is_stdlib_snapshot_hit(snapshot, source)),
                 profile,
                 &unreachable_calls,
             )

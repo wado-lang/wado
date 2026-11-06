@@ -3909,6 +3909,19 @@ pub fn unparse_assoc_const_signature(c: &AssociatedConst) -> String {
     out
 }
 
+/// An `impl` block's head, up to its body: `impl<T: Eq> Eq for &T`.
+pub fn unparse_impl_head(b: &ImplBlock) -> String {
+    let mut out = String::from("impl");
+    unparse_generic_params_into(&b.type_params, &mut out);
+    out.push(' ');
+    if let Some(trait_type) = &b.trait_type {
+        unparse_type_into(trait_type, &mut out);
+        out.push_str(" for ");
+    }
+    unparse_type_into(&b.ty, &mut out);
+    out
+}
+
 /// Render an `impl` block as Wado with member **signatures** only, for type
 /// overviews. Under `public_only` an inherent `impl` shows only `pub` members,
 /// while a trait `impl`'s are always shown, being the trait's public surface.
@@ -3942,14 +3955,7 @@ pub fn unparse_impl_block_signature(
         return String::new();
     }
 
-    let mut out = String::from("impl");
-    unparse_generic_params_into(&b.type_params, &mut out);
-    out.push(' ');
-    if let Some(trait_type) = &b.trait_type {
-        unparse_type_into(trait_type, &mut out);
-        out.push_str(" for ");
-    }
-    unparse_type_into(&b.ty, &mut out);
+    let mut out = unparse_impl_head(b);
     out.push_str(" {\n");
     for line in lines {
         out.push_str("    ");

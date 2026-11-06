@@ -57,7 +57,7 @@ fn only_the_workloads_are_recorded_into_the_package_profile() {
         .stdout(predicate::str::contains("pgo: wrote pgo/default.pgo"));
 
     let profile = fs::read_to_string(tmp.path().join("pgo/default.pgo")).unwrap();
-    assert!(profile.starts_with("wado-pgo 1\n"), "{profile}");
+    assert!(profile.starts_with("wado-pgo 2\n"), "{profile}");
     assert!(profile.contains("\nmodule core:prelude\n"), "{profile}");
     let lib = section(&profile, "acme:app@0.1.0/lib.wado");
     assert_eq!(lib.len(), 5, "{profile}");

@@ -258,6 +258,36 @@ pub fn packaged_module_name(coordinate: &str, path: &str) -> String {
     format!("{coordinate}/{path}")
 }
 
+/// How coverage and a profile name a function `name` declared under `owner`,
+/// the type or trait its methods' block names.
+#[must_use]
+pub fn coverage_function_name(owner: Option<&str>, name: &str) -> String {
+    match owner {
+        Some(owner) => format!("{owner}::{name}"),
+        None => name.to_string(),
+    }
+}
+
+/// How coverage and a profile name a closure written in the function named
+/// `outer`, at `line`.
+#[must_use]
+pub fn coverage_closure_name(outer: &str, line: usize) -> String {
+    format!("{outer}::{{closure:{line}}}")
+}
+
+/// `name` without the version a [`packaged_module_name`]'s coordinate spells:
+/// what one module of a package is named under each of its versions.
+#[must_use]
+pub fn unversioned_module_name(name: &str) -> String {
+    let Some((head, path)) = name.split_once('/') else {
+        return name.to_string();
+    };
+    match head.split_once('@') {
+        Some((package, _version)) => format!("{package}/{path}"),
+        None => name.to_string(),
+    }
+}
+
 /// `name` with the module paths in its type arguments dropped and its clone
 /// suffix cut. A synthesized name opens with [`INTERNAL_PREFIX`], which is its
 /// own first character rather than a suffix marker; so may a type argument.
@@ -3160,6 +3190,22 @@ mod tests {
         // replacement for it: readers ask the declaration, so nothing reads
         // the declared name back out of this string.
         assert!(a.starts_with("UserId"));
+    }
+
+    #[test]
+    fn a_packaged_module_keeps_its_unversioned_name_across_versions() {
+        assert_eq!(
+            unversioned_module_name("acme:app@1.0.0+build.5/src/lib.wado"),
+            "acme:app/src/lib.wado"
+        );
+        for name in [
+            "core:collections/hashmap.wado",
+            "src/lib.wado",
+            "app.wado",
+            "https://user@example.com/lib.wado",
+        ] {
+            assert_eq!(unversioned_module_name(name), name);
+        }
     }
 
     #[test]
