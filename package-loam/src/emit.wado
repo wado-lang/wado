@@ -1412,6 +1412,9 @@ fn decoding_axes(
     if !crossing.has_cache() {
         return refused("the graph holds no cache to carry its positions from one step to the next");
     }
+    if decode.ids == decode.mask {
+        return refused(`${decode.ids} cannot be both the token and the mask`);
+    }
     for let vi of &graph.inputs {
         if crossing.cached.contains(vi.name)
             || vi.name == decode.ids
@@ -1439,7 +1442,14 @@ fn decoding_axes(
     if logits.len() < 2 || logits.into_iter().skip(1).take(logits.len() - 2).any(|a| !a.extent matches { Static(1) }) {
         return refused(`${decode.logits} must hold one position a row: name it in \`last\``);
     }
-    let Some(total) = checked.shapes[decode.mask].axes[1].extent.lone_symbol() else {
+    let [ids, mask] = [checked.shapes[decode.ids].axes, checked.shapes[decode.mask].axes];
+    if ids[1].extent matches { Static(n) && n != 1 } {
+        return refused(`${decode.ids} must take one token a row`);
+    }
+    if !mask[0].extent.agrees(&ids[0].extent) || !logits[0].extent.agrees(&ids[0].extent) {
+        return refused(`${decode.mask} and ${decode.logits} must hold as many rows as ${decode.ids}`);
+    }
+    let Some(total) = mask[1].extent.lone_symbol() else {
         return refused(`${decode.mask} must be one length long`);
     };
     if !padded.contains(&total) {
@@ -1448,6 +1458,15 @@ fn decoding_axes(
     for let [g, _] of *owed {
         if !padded.contains(&g.symbol) {
             return refused(`${g.past} must be a buffer the pass writes in place, as ${g.symbol} grows`);
+        }
+    }
+    for let [past, present] of crossing.pairs {
+        let held = checked.shapes[present].axes;
+        for let [i, axis] of checked.shapes[past].axes.into_iter().enumerate() {
+            let grows = owed.into_iter().any(|o| o.0.past == past && o.0.axis == i);
+            if !grows && !axis.extent.agrees(&held[i].extent) {
+                return refused(`${past} must keep its extents through a step, as ${present} does not`);
+            }
         }
     }
     return Result::Ok(DecodingAxes { ids: decode.ids, mask: decode.mask, logits: decode.logits, total });
