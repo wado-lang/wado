@@ -598,7 +598,8 @@ wado run-webgpu -O2 webgpu.wado
 ```
 
 [The benchmarks](./benchmark/README.md#gemma-3-270m) time the first prompt on
-release builds, `compute` beside the kernel pass's last time.
+release builds, `compute` and `decode` over 32 tokens beside the kernel pass's
+last time over 8.
 
 ### Gemma 3's device memory
 
