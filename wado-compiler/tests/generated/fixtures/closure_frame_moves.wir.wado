@@ -101,7 +101,7 @@ type "functype//closure_frame_moves.wado/$cm_export__run" = fn();  // TypeId(23)
 
 type "functype//closure_frame_moves.wado/run$cold0" = fn(i32);  // TypeId(24)
 
-type "functype//closure_frame_moves.wado/build$spec0$spec0$dae[tokens]" = fn(ref "Array<closure_frame_moves.wado/Cfg>", i32) -> ref "core:prelude/list.wado//List<closure_frame_moves.wado/Cfg>";  // TypeId(25)
+type "functype//closure_frame_moves.wado/build$spec0$sroa[tokens.repr]" = fn(ref "Array<closure_frame_moves.wado/Cfg>", i32, ref Array<i32>) -> ref "core:prelude/list.wado//List<closure_frame_moves.wado/Cfg>";  // TypeId(25)
 
 type "functype//core:prelude/list.wado/$template_segment$core:prelude/list.wado/$tmpl$59e16269228f9c88" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", i32) -> ref "core:prelude/string.wado//String";  // TypeId(26)
 
@@ -231,7 +231,6 @@ import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode";
 
 global global:core:prelude/primitive.wado::$const_obj_0: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
-global global:closure_frame_moves.wado::$const_obj_1: ref Array<i32> = array.new_fixed<i32>(1);
 
 fn "closure_frame_moves.wado/advance"(c, tk) {
     let $load_3: i32;
@@ -257,7 +256,7 @@ fn "closure_frame_moves.wado/$template_segment$closure_frame_moves.wado/$tmpl$eb
 
 fn "closure_frame_moves.wado/$cm_export__run"() {
     let self: i32;
-    if @unlikely(local.tee self("closure_frame_moves.wado/build$spec0$spec0$dae[tokens]"(struct.new "core:prelude/list.wado//List<closure_frame_moves.wado/Cfg>" { repr: array.new_fixed<ref "closure_frame_moves.wado//Cfg">(struct.new "closure_frame_moves.wado//Cfg" { alt: 0, elems: struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(1), used: 1 }, pos: 1 }), used: 1 }.repr, 1).used) != 1) {
+    if @unlikely(local.tee self("closure_frame_moves.wado/build$spec0$sroa[tokens.repr]"(struct.new "core:prelude/list.wado//List<closure_frame_moves.wado/Cfg>" { repr: array.new_fixed<ref "closure_frame_moves.wado//Cfg">(struct.new "closure_frame_moves.wado//Cfg" { alt: 0, elems: struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(1), used: 1 }, pos: 1 }), used: 1 }.repr, 1, array.new_fixed<i32>(1)).used) != 1) {
         cold_path;
         "closure_frame_moves.wado/run$cold0"(self);
         unreachable;
@@ -275,35 +274,35 @@ build(&closed, &[1]).len(): "), used: 126 }, s1: struct.new "core:prelude/string
     unreachable;
 }
 
-fn "closure_frame_moves.wado/build$spec0$spec0$dae[tokens]"($mv$closed$repr, $mv$closed$used) {
+fn "closure_frame_moves.wado/build$spec0$sroa[tokens.repr]"($mv$closed$repr, $mv$closed$used, tokens) {
     let $load_11: i32;
     let next: ref "core:prelude/list.wado//List<closure_frame_moves.wado/Cfg>";
     let opaque: ref "core:prelude/list.wado//List<i32>";
     let result: ref "core:prelude/list.wado//List<i32>";
     let ref_val: ref "closure_frame_moves.wado//Cfg";
-    let used_42: i32;
-    let i_86: i32;
+    let used_43: i32;
+    let i_87: i32;
     let $fused_slot_106: i32;
     let $licm_repr_113: ref Array<i32>;
     let $sroa_$iter_2_index_124: i32;
-    let $sroa_self_index_132: i32;
+    let $sroa_self_index_131: i32;
     let $av_133: i32;
-    $sroa_self_index_132 = 0;
+    $sroa_self_index_131 = 0;
     result = struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(), used: 0 };
     b5: block {
         l6: loop {
             $fused_$inline_core_prelude_traits_wado_IterMap_core_prelude_slice_wado_SliceRefIter_closure_frame_moves_wado_Cfg__fn_mut__closure_frame_moves_wado_Cfg___i32__core_prelude_traits_wado_Iterator__next_sroa_return__6: block {
                 $fused_$inline_core_prelude_slice_wado_SliceRefIter_closure_frame_moves_wado_Cfg__core_prelude_traits_wado_Iterator__next_7: block {
-                    break_if $fused_$inline_core_prelude_slice_wado_SliceRefIter_closure_frame_moves_wado_Cfg__core_prelude_traits_wado_Iterator__next_7 $sroa_self_index_132 >= $mv$closed$used;
-                    ref_val = builtin::array_get_value<ref "closure_frame_moves.wado//Cfg">($mv$closed$repr, $sroa_self_index_132);
-                    $sroa_self_index_132 = $sroa_self_index_132 + 1;
+                    break_if $fused_$inline_core_prelude_slice_wado_SliceRefIter_closure_frame_moves_wado_Cfg__core_prelude_traits_wado_Iterator__next_7 $sroa_self_index_131 >= $mv$closed$used;
+                    ref_val = builtin::array_get_value<ref "closure_frame_moves.wado//Cfg">($mv$closed$repr, $sroa_self_index_131);
+                    $sroa_self_index_131 = $sroa_self_index_131 + 1;
                     $fused_slot_106 = ref_val.pos + 1;
-                    if @unlikely(local.tee used_42(result.used) >= builtin::array_len(result.repr)) {
+                    if @unlikely(local.tee used_43(result.used) >= builtin::array_len(result.repr)) {
                         cold_path;
                         "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(result);
                     }
-                    builtin::array_set<i32>(result.repr, used_42, $fused_slot_106);
-                    result.used = used_42 + 1;
+                    builtin::array_set<i32>(result.repr, used_43, $fused_slot_106);
+                    result.used = used_43 + 1;
                     break $fused_$inline_core_prelude_traits_wado_IterMap_core_prelude_slice_wado_SliceRefIter_closure_frame_moves_wado_Cfg__fn_mut__closure_frame_moves_wado_Cfg___i32__core_prelude_traits_wado_Iterator__next_sroa_return__6;
                 };
                 break b5;
@@ -313,24 +312,24 @@ fn "closure_frame_moves.wado/build$spec0$spec0$dae[tokens]"($mv$closed$repr, $mv
     };
     next = struct.new "core:prelude/list.wado//List<closure_frame_moves.wado/Cfg>" { repr: array.new_fixed<ref "closure_frame_moves.wado//Cfg">(), used: 0 };
     opaque = struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(), used: 0 };
-    $sroa_self_index_132 = 0;
+    $sroa_self_index_131 = 0;
     $fused_slot_106 = result.used;
     $licm_repr_113 = result.repr;
     b8: block {
         l9: loop {
-            break_if b8 $sroa_self_index_132 >= 1;
-            used_42 = 0;
+            break_if b8 $sroa_self_index_131 >= 1;
+            used_43 = 0;
             b10: block {
                 l11: loop {
-                    break_if b10 used_42 >= $mv$closed$used;
-                    if if @unlikely(used_42 >= $fused_slot_106) {
+                    break_if b10 used_43 >= $mv$closed$used;
+                    if if @unlikely(used_43 >= $fused_slot_106) {
                         cold_path;
-                        "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(used_42, $fused_slot_106, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("closure_frame_moves.wado:21"), used: 27 });
+                        "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(used_43, $fused_slot_106, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("closure_frame_moves.wado:21"), used: 27 });
                         unreachable;
-                    }; builtin::array_get_value<i32>($licm_repr_113, used_42) > 0 {
+                    }; builtin::array_get_value<i32>($licm_repr_113, used_43) > 0 {
                         let $mv_repr_1: ref "Array<closure_frame_moves.wado/Cfg>";
                         let $mv_used_2: i32;
-                        multivalue_bind [$mv_repr_1, $mv_used_2] = "closure_frame_moves.wado/advance"(builtin::array_get_value<ref "closure_frame_moves.wado//Cfg">($mv$closed$repr, used_42), builtin::array_get_value<i32>(global:closure_frame_moves.wado::$const_obj_1, $sroa_self_index_132));
+                        multivalue_bind [$mv_repr_1, $mv_used_2] = "closure_frame_moves.wado/advance"(builtin::array_get_value<ref "closure_frame_moves.wado//Cfg">($mv$closed$repr, used_43), builtin::array_get_value<i32>(tokens, $sroa_self_index_131));
                         $mv_repr_1 = struct.new "core:prelude/list.wado//List<closure_frame_moves.wado/Cfg>" { repr: $mv_repr_1, used: $mv_used_2 }.repr;
                         $sroa_$iter_2_index_124 = 0;
                         b14: block {
@@ -343,36 +342,36 @@ fn "closure_frame_moves.wado/build$spec0$spec0$dae[tokens]"($mv$closed$repr, $mv
                                     if $av_133 = ref_val.alt; $inline_core_prelude_slice_wado_Slice_i32___contains_sroa_value_value__27: block -> bool {
                                         $load_11 = opaque.used;
                                         $array_clone_src_3 = opaque.repr;
-                                        i_86 = 0;
+                                        i_87 = 0;
                                         b18: block {
                                             l19: loop {
-                                                break_if b18 (((i_86 >= $load_11) | ((i_86 + 1) >= $load_11)) | (((i_86 + 1) + 1) >= $load_11)) | ((((i_86 + 1) + 1) + 1) >= $load_11);
-                                                if builtin::array_get_value<i32>($array_clone_src_3, i_86) == $av_133 {
+                                                break_if b18 (((i_87 >= $load_11) | ((i_87 + 1) >= $load_11)) | (((i_87 + 1) + 1) >= $load_11)) | ((((i_87 + 1) + 1) + 1) >= $load_11);
+                                                if builtin::array_get_value<i32>($array_clone_src_3, i_87) == $av_133 {
                                                     break $inline_core_prelude_slice_wado_Slice_i32___contains_sroa_value_value__27: 1;
                                                 }
-                                                i_86 = i_86 + 1;
-                                                if builtin::array_get_value<i32>($array_clone_src_3, i_86) == $av_133 {
+                                                i_87 = i_87 + 1;
+                                                if builtin::array_get_value<i32>($array_clone_src_3, i_87) == $av_133 {
                                                     break $inline_core_prelude_slice_wado_Slice_i32___contains_sroa_value_value__27: 1;
                                                 }
-                                                i_86 = i_86 + 1;
-                                                if builtin::array_get_value<i32>($array_clone_src_3, i_86) == $av_133 {
+                                                i_87 = i_87 + 1;
+                                                if builtin::array_get_value<i32>($array_clone_src_3, i_87) == $av_133 {
                                                     break $inline_core_prelude_slice_wado_Slice_i32___contains_sroa_value_value__27: 1;
                                                 }
-                                                i_86 = i_86 + 1;
-                                                if builtin::array_get_value<i32>($array_clone_src_3, i_86) == $av_133 {
+                                                i_87 = i_87 + 1;
+                                                if builtin::array_get_value<i32>($array_clone_src_3, i_87) == $av_133 {
                                                     break $inline_core_prelude_slice_wado_Slice_i32___contains_sroa_value_value__27: 1;
                                                 }
-                                                i_86 = i_86 + 1;
+                                                i_87 = i_87 + 1;
                                                 continue l19;
                                             };
                                         };
                                         b24: block {
                                             l25: loop {
-                                                break_if b24 i_86 >= $load_11;
-                                                if builtin::array_get_value<i32>($array_clone_src_3, i_86) == $av_133 {
+                                                break_if b24 i_87 >= $load_11;
+                                                if builtin::array_get_value<i32>($array_clone_src_3, i_87) == $av_133 {
                                                     break $inline_core_prelude_slice_wado_Slice_i32___contains_sroa_value_value__27: 1;
                                                 }
-                                                i_86 = i_86 + 1;
+                                                i_87 = i_87 + 1;
                                                 continue l25;
                                             };
                                         };
@@ -397,11 +396,11 @@ fn "closure_frame_moves.wado/build$spec0$spec0$dae[tokens]"($mv$closed$repr, $mv
                             };
                         };
                     }
-                    used_42 = used_42 + 1;
+                    used_43 = used_43 + 1;
                     continue l11;
                 };
             };
-            $sroa_self_index_132 = $sroa_self_index_132 + 1;
+            $sroa_self_index_131 = $sroa_self_index_131 + 1;
             continue l9;
         };
     };

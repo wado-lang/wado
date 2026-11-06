@@ -23,7 +23,7 @@ type "functype//wasi/task-return" = fn(i32);  // TypeId(7)
 
 type "functype//cm_list_param_resource_return.wado/$cm_binding__wasi:demo/gfx@0.1.0#[method]layout.id" = fn(i32) -> u32;  // TypeId(8)
 
-type "functype//cm_list_param_resource_return.wado/$cm_binding__wasi:demo/gfx@0.1.0#make-layout$spec0$spec0" = fn(ref "core:prelude/list.wado//List<u32>") -> i32;  // TypeId(9)
+type "functype//cm_list_param_resource_return.wado/$cm_binding__wasi:demo/gfx@0.1.0#make-layout$spec0" = fn(ref "core:prelude/list.wado//List<u32>") -> i32;  // TypeId(9)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/$wasi:demo/gfx@0.1.0#make-layout from "wasi/$wasi:demo/gfx@0.1.0#make-layout";
@@ -38,30 +38,52 @@ fn "cm_list_param_resource_return.wado/$cm_binding__wasi:demo/gfx@0.1.0#[method]
 
 fn "cm_list_param_resource_return.wado/$cm_export__run"() {
     let l: i32;
-    drop("cm_list_param_resource_return.wado/$cm_binding__wasi:demo/gfx@0.1.0#[method]layout.id"(local.tee l("cm_list_param_resource_return.wado/$cm_binding__wasi:demo/gfx@0.1.0#make-layout$spec0$spec0"(struct.new "core:prelude/list.wado//List<u32>" { repr: array.new_fixed<u32>(1, 2), used: 2 }))));
+    drop("cm_list_param_resource_return.wado/$cm_binding__wasi:demo/gfx@0.1.0#[method]layout.id"(local.tee l("cm_list_param_resource_return.wado/$cm_binding__wasi:demo/gfx@0.1.0#make-layout$spec0"(struct.new "core:prelude/list.wado//List<u32>" { repr: array.new_fixed<u32>(1, 2), used: 2 }))));
     if (l == 0) == 0 {
         "wasi/resource-drop:cm_list_param_resource_return.wado#Layout"(l);
     }
     "wasi/task-return"(0);
 }
 
-fn "cm_list_param_resource_return.wado/$cm_binding__wasi:demo/gfx@0.1.0#make-layout$spec0$spec0"(entries) with Api {
+fn "cm_list_param_resource_return.wado/$cm_binding__wasi:demo/gfx@0.1.0#make-layout$spec0"(entries) with Api {
     let $entries_base: i32;
     let $entries_i: i32;
     let $entries_addr: i32;
     let $entries_elem: u32;
-    let $bound_26: ref Array<u32>;
-    $bound_26 = array.new_fixed<u32>(1, 2);
+    let $licm_repr_25: ref Array<u32>;
     $entries_base = "mem/realloc"(0, 0, 4, 8);
     $entries_i = 0;
+    $licm_repr_25 = entries.repr;
     b1: block {
         l2: loop {
-            break_if b1 $entries_i >= 2;
+            break_if b1 ((($entries_i >= 2) | (($entries_i + 1) >= 2)) | ((($entries_i + 1) + 1) >= 2)) | (((($entries_i + 1) + 1) + 1) >= 2);
             $entries_addr = $entries_base + ($entries_i * 4);
-            $entries_elem = builtin::array_get_value<u32>($bound_26, $entries_i);
+            $entries_elem = builtin::array_get_value<u32>($licm_repr_25, $entries_i);
+            builtin::store_i32($entries_addr, $entries_elem);
+            $entries_i = $entries_i + 1;
+            $entries_addr = $entries_base + ($entries_i * 4);
+            $entries_elem = builtin::array_get_value<u32>($licm_repr_25, $entries_i);
+            builtin::store_i32($entries_addr, $entries_elem);
+            $entries_i = $entries_i + 1;
+            $entries_addr = $entries_base + ($entries_i * 4);
+            $entries_elem = builtin::array_get_value<u32>($licm_repr_25, $entries_i);
+            builtin::store_i32($entries_addr, $entries_elem);
+            $entries_i = $entries_i + 1;
+            $entries_addr = $entries_base + ($entries_i * 4);
+            $entries_elem = builtin::array_get_value<u32>($licm_repr_25, $entries_i);
             builtin::store_i32($entries_addr, $entries_elem);
             $entries_i = $entries_i + 1;
             continue l2;
+        };
+    };
+    b3: block {
+        l4: loop {
+            break_if b3 $entries_i >= 2;
+            $entries_addr = $entries_base + ($entries_i * 4);
+            $entries_elem = builtin::array_get_value<u32>($licm_repr_25, $entries_i);
+            builtin::store_i32($entries_addr, $entries_elem);
+            $entries_i = $entries_i + 1;
+            continue l4;
         };
     };
     $entries_i = "wasi/$wasi:demo/gfx@0.1.0#make-layout"($entries_base, 2);

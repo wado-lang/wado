@@ -690,7 +690,7 @@ fn "core:prelude/traits.wado/core:prelude/types.wado/Option<&i32>^core:prelude/t
     let start_24: i32;
     let payload: ref "core:prelude/types.wado//Box<i32>";
     let x_286: i64;
-    let start_368: i32;
+    let start_410: i32;
     let q: u64;
     let tens: i32;
     if ref.is_null(self) {
@@ -824,22 +824,22 @@ fn "core:prelude/traits.wado/core:prelude/types.wado/Option<&i32>^core:prelude/t
                 cold_path;
                 "core:prelude/string.wado/core:prelude/string.wado/String::grow"(f, start_24);
             }
-            start_368 = f.used;
+            start_410 = f.used;
             f.used = start_24;
-            builtin::array_set_u8(f.repr, start_368, 45);
+            builtin::array_set_u8(f.repr, start_410, 45);
         } else {
         }
         if @unlikely(local.tee start_24(f.used + new_used_23) > builtin::array_len(f.repr)) {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(f, start_24);
         }
-        start_368 = f.used;
+        start_410 = f.used;
         f.used = start_24;
         $load_3 = f.repr;
-        new_used_23 = start_368 + new_used_23;
+        new_used_23 = start_410 + new_used_23;
         b111: block {
             l112: loop {
-                break_if b111 (new_used_23 - start_368) < 2;
+                break_if b111 (new_used_23 - start_410) < 2;
                 q = x_286 /u 100_i64;
                 tens = local.tee start_24(builtin::i32_wrap_i64(x_286 - (q * 100_i64))) / 10;
                 builtin::array_set_u8($load_3, new_used_23 - 1, (48 + start_24) - (tens * 10));
@@ -849,8 +849,8 @@ fn "core:prelude/traits.wado/core:prelude/types.wado/Option<&i32>^core:prelude/t
                 continue l112;
             };
         };
-        if new_used_23 > start_368 {
-            builtin::array_set_u8($load_3, start_368, 48 + builtin::i32_wrap_i64(x_286 %u 10_i64));
+        if new_used_23 > start_410 {
+            builtin::array_set_u8($load_3, start_410, 48 + builtin::i32_wrap_i64(x_286 %u 10_i64));
         }
         if @unlikely(local.tee new_used_23(f.used + 1) > builtin::array_len($load_3)) {
             cold_path;
