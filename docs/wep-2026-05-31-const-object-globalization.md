@@ -319,8 +319,8 @@ classifier deletes its assignment outright.
 A global created from an in-place case — the inline `&`, the by-value argument
 or the field value — is marked `NirGlobal::prefer_fixed_string_repr`, a field
 rather than a name-prefix guess, so it cannot misidentify a user-declared global
-sharing the pass's `$const_obj_*` naming convention. WIR build gives only such a global's
-`GlobalVarSet` value a size-bounded override
+sharing the pass's `$const_obj_*` naming convention. WIR build gives only such a
+global's `GlobalVarSet` value a size-bounded override
 (`name::INLINE_REF_EAGER_MAX_BYTES`, 64 bytes) of `string_inline_max_bytes`, so
 a realistic field name promotes eager without forcing arbitrarily large literals
 eager too. `wir_optimize::prune_dead_data` drops any passive data segment
