@@ -1,6 +1,8 @@
 // A parameter that is only assigned to is not dead: dropping it must not leave
-// its assignment naming a slot that no longer exists (a handler closure at -O1
-// assigns to its receiver, which no read keeps alive).
+// its assignment naming a slot that no longer exists (a handler closure's
+// receiver, which no read keeps alive). Only -O1 reaches the shape, and only
+// with both install forms and both `black_box` loops; remove any one and the
+// crash is gone.
 
 use { println, Stdout } from "core:cli";
 
