@@ -16,6 +16,9 @@ Two measures live here, and they answer different questions:
   `mise run update-baselines`. Fuel leaves out GC and other host work by
   design: the wall clock is what shows them.
 
+Report a change between two measurements with an improvement as `+%` and a
+regression as `-%`, whichever way the raw number moved.
+
 Each benchmark's `#[workload]` test trains the profile in its `pgo/` on a
 smaller input than either measure runs, so neither judges a profile on the run
 that trained it. `wado test --pgo benchmark package-gale-highlight-html`
