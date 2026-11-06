@@ -61,18 +61,10 @@ pub fn finish() {
 
 /// The first bytes of a record. `do_gc` traces every stack slot it walks, inside
 /// the pause this log times, so a record pays for no more text than a marker.
+#[derive(Default)]
 struct Head {
     bytes: [u8; BEGIN_GC.len()],
     len: usize,
-}
-
-impl Default for Head {
-    fn default() -> Self {
-        Self {
-            bytes: [0; BEGIN_GC.len()],
-            len: 0,
-        }
-    }
 }
 
 impl Head {

@@ -498,8 +498,12 @@ impl Taint<'_> {
                 }
             }
             NodeRef::Pat(p) => {
-                for sub in pattern_field_reads(body, p, self.seed_field) {
-                    collect_pattern_bindings(body, sub, &mut found_locals);
+                if let Some(field) = self.seed_field {
+                    for (name, sub) in pattern_fields(body, p) {
+                        if name == field {
+                            collect_pattern_bindings(body, sub, &mut found_locals);
+                        }
+                    }
                 }
             }
             NodeRef::Stmt(s) => match &body.stmts[s].kind {
@@ -656,15 +660,6 @@ fn pattern_fields(body: &Body, pat: PatId) -> Vec<(String, PatId)> {
             .collect(),
         _ => Vec::new(),
     }
-}
-
-/// The sub-patterns `pat` binds out of the field named `field`.
-fn pattern_field_reads(body: &Body, pat: PatId, field: Option<&str>) -> Vec<PatId> {
-    pattern_fields(body, pat)
-        .into_iter()
-        .filter(|(name, _)| field == Some(name.as_str()))
-        .map(|(_, p)| p)
-        .collect()
 }
 
 /// What one body can read, as the sets every seed question is asked against.
