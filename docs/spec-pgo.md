@@ -51,8 +51,9 @@ the function's source text from its name to the end of its body, a CRLF read as
 LF, and its regions' kinds and positions relative to it. It also covers where
 the function is declared. For a method, that is the head of its `impl`, written
 out as `impl<T: Eq> Eq for &T`, or the trait, interface or resource it is
-declared in. For a closure, it is the function the closure is written in. The
-lines after it give how often each of the function's regions ran,
+declared in. For a closure, it is the function the closure is written in, and
+the line and column it starts at relative to that function's start. The lines
+after it give how often each of the function's regions ran,
 the regions numbered from zero within the function. A region not listed never
 ran.
 

@@ -1130,10 +1130,18 @@ impl AstVisitor<'_> for Planner<'_> {
             Expr::Closure(c) => {
                 let outer_name = &self.plan.functions[self.function as usize].name;
                 let name = format!("{outer_name}::{{closure:{}}}", c.span.line);
-                let outer = &self.texts[self.function as usize].declared.scope;
+                let outer = &self.texts[self.function as usize];
+                // Where in its function the closure is written keeps apart
+                // two closures of one text there, which may run apart.
+                let place = format!(
+                    "{}::{{closure@{}:{}}}",
+                    outer.declared.scope,
+                    c.span.line as u32 - outer.start.line,
+                    c.span.column
+                );
                 let declared = Declared {
-                    owner: Some(outer.clone()),
-                    scope: format!("{outer}::{{closure}}"),
+                    owner: Some(place.clone()),
+                    scope: place,
                 };
                 let saved = (self.function, self.region);
                 let region =
@@ -1745,9 +1753,12 @@ mod tests {
         impls("impl<T> P for &T", "impl<T> P for &mut T");
         let closures = hashes(
             "fn f() -> i32 { let c = |x: i32| x + 1; return c(1); }\n\
-             fn g() -> i32 { let c = |x: i32| x + 1; return c(1); }\n",
+             fn g() -> i32 { let c = |x: i32| x + 1; return c(1); }\n\
+             fn h() -> i32 {\n    let c = |x: i32| x + 1;\n    let d = |x: i32| x + 1;\n    \
+             return c(d(1));\n}\n",
         );
         assert_ne!(closures["f::{closure:1}"], closures["g::{closure:2}"]);
+        assert_ne!(closures["h::{closure:4}"], closures["h::{closure:5}"]);
     }
 
     /// The kinds of the regions `body` plans as `fn f`'s, with every callee

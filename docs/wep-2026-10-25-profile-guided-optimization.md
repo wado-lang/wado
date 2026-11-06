@@ -191,13 +191,16 @@ alone cannot:
 
 - A method's `impl` head, in full. Its type's name alone left `impl P for &T`
   and `impl P for &mut T` one owner, and so the two traits' `end` of one type.
-- A closure's enclosing function. Short closures such as `|e| e.kind == K`
-  recur across functions. On `gale_gen` the type-name owner folded a closure
-  no workload entered into one that ran, and cost 1167 fuel against matching
-  by name.
+- A closure's place: its enclosing function, and its line and column relative
+  to that function's start, as the function's regions are placed. Short
+  closures recur, and one of the same text and types runs as often as the
+  place it is written in. On `gale_gen` the type-name owner folded
+  `|alt: &Alternative| self.alt_has_gate(alt)` in `rule_overlap`, which no
+  workload entered, into the one in `choice_route`, which ran, and cost 1167
+  fuel against matching by name. Gale's `keyword_chars_admitted` passes one
+  closure text to `all` on one branch and to `any` on the other.
 
-What still shares counts is one text in one place twice: a closure written
-twice in one function, or a function copied into two modules under one name.
+What still shares counts is a function copied into two modules under one name.
 
 ### A function whose source or plan changed has no profile
 
@@ -531,8 +534,8 @@ output at every level. It is a nightly campaign, not a gate.
 
 - [ ] A region is measured once for all of a generic function's
   instantiations, so an instantiation the workload never ran shares the counts
-  of one it ran. So does a function of another's text, declared in the same
-  place.
+  of one it ran. So does a function copied into another module under its
+  name.
 - [ ] On the `benchmark/` pilot the profile is mixed. Against `-f no-pgo` it buys
   up to 19% of fuel on the serde rows. But `microgpt`'s inference runs 46%
   longer by the wall clock for 4% more fuel: with a 2 GiB heap the PGO build is
