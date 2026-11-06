@@ -975,10 +975,16 @@ fn shared_object_key(type_id: TypeId, type_table: &TypeTable) -> Option<TypeKey>
                 under_ref,
                 type_table,
             ),
+            // A value tuple, and a `List`, is copied on assignment, so only a
+            // handle to one shares it.
+            ResolvedType::Struct { .. } if type_table.is_list(type_id) => {
+                under_ref.then(|| type_table.type_key(type_id))
+            }
             ResolvedType::Struct { .. } => Some(type_table.type_key(type_id)),
-            ResolvedType::GenericInstance { def, .. } if type_table.is_resource_def(*def) => None,
-            // A value tuple is copied on assignment, so only a handle to one shares it.
-            ResolvedType::GenericInstance { .. } | ResolvedType::BuiltinArray(_) => {
+            ResolvedType::Variant { type_args, .. } if !type_args.is_empty() => {
+                under_ref.then(|| type_table.type_key(type_id))
+            }
+            ResolvedType::Tuple(_) | ResolvedType::BuiltinArray(_) => {
                 under_ref.then(|| type_table.type_key(type_id))
             }
             ResolvedType::Primitive(_)
@@ -1067,9 +1073,7 @@ fn is_box_or_list(type_id: TypeId, type_table: &TypeTable) -> bool {
 fn type_creates_alias(type_id: TypeId, type_table: &TypeTable) -> bool {
     match type_table.get(type_id) {
         ResolvedType::Ref(_) => true,
-        ResolvedType::GenericInstance { .. } | ResolvedType::Struct { .. } => {
-            is_box_or_list(type_id, type_table)
-        }
+        ResolvedType::Struct { .. } => is_box_or_list(type_id, type_table),
         ResolvedType::Primitive(_)
         | ResolvedType::Unit
         | ResolvedType::Never
@@ -1078,6 +1082,7 @@ fn type_creates_alias(type_id: TypeId, type_table: &TypeTable) -> bool {
         | ResolvedType::Resource { .. }
         | ResolvedType::Variant { .. }
         | ResolvedType::Function { .. }
+        | ResolvedType::Tuple(_)
         | ResolvedType::TypeParam { .. }
         | ResolvedType::AssocParam { .. }
         | ResolvedType::TypePack { .. }

@@ -15,19 +15,19 @@ struct core:prelude/string.wado//String {  // TypeId(3)
     mut used: i32,
 }
 
-variant core:prelude/types.wado//Option<cm_option_of_own_param.wado/Device> {  // TypeId(4)
+struct core:prelude/list.wado//List<u8> {  // TypeId(4)
+    mut repr: ref Array<u8>,
+    mut used: i32,
+}
+
+variant core:prelude/types.wado//Option<cm_option_of_own_param.wado/Device> {  // TypeId(5)
     None,
     Some(ref null "core:prelude//$Resource"),
 }
 
-struct core:prelude/types.wado//Option<cm_option_of_own_param.wado/Device>::Some {  // TypeId(5)
+struct core:prelude/types.wado//Option<cm_option_of_own_param.wado/Device>::Some {  // TypeId(6)
     discriminant: i32,
     payload_0: ref null "core:prelude//$Resource",
-}
-
-struct core:prelude//List<u8> {  // TypeId(6)
-    mut repr: ref Array<u8>,
-    mut used: i32,
 }
 
 type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(7)
@@ -48,7 +48,7 @@ type "functype//wasi/$wasi:demo/gfx@0.1.0#get-device" = fn() -> i32;  // TypeId(
 
 type "functype//wasi/$wasi:demo/gfx@0.1.0#pick" = fn(i32, i32, i32, i32, i32, i32, i32, i32) -> i32;  // TypeId(15)
 
-type "functype//cm_option_of_own_param.wado/$cm_binding__wasi:demo/gfx@0.1.0#pick" = fn(ref null "core:prelude/types.wado//Option<cm_option_of_own_param.wado/Device>", ref null "core:prelude/string.wado//String", ref null "core:prelude//List<u8>") -> u32;  // TypeId(16)
+type "functype//cm_option_of_own_param.wado/$cm_binding__wasi:demo/gfx@0.1.0#pick" = fn(ref null "core:prelude/types.wado//Option<cm_option_of_own_param.wado/Device>", ref null "core:prelude/string.wado//String", ref null "core:prelude/list.wado//List<u8>") -> u32;  // TypeId(16)
 
 type "functype//cm_option_of_own_param.wado/$cm_binding__wasi:demo/gfx@0.1.0#get-device" = fn() -> ref null "core:prelude//$Resource";  // TypeId(17)
 
@@ -116,7 +116,7 @@ fn "cm_option_of_own_param.wado/$cm_binding__wasi:demo/gfx@0.1.0#pick"(d, label,
     let $bytes_disc: i32;
     let $bytes_inner0: i32;
     let $bytes_inner1: i32;
-    let $local_17: ref "core:prelude//List<u8>";
+    let $local_17: ref "core:prelude/list.wado//List<u8>";
     let $local_21: i32;
     let $local_22: i32;
     let $local_23: u8;

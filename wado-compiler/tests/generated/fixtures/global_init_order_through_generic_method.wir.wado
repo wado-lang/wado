@@ -17,14 +17,14 @@ struct global_init_order_through_generic_method.wado//Seed {  // TypeId(3)
 
 array Array<i64> (mut i64);  // TypeId(4)
 
-struct core:prelude//List<i64> {  // TypeId(5)
+struct core:prelude/list.wado//List<i64> {  // TypeId(5)
     mut repr: ref Array<i64>,
     mut used: i32,
 }
 
 struct global_init_order_through_generic_method.wado//Holder<i64> {  // TypeId(6)
     mut k: i64,
-    mut items: ref "core:prelude//List<i64>",
+    mut items: ref "core:prelude/list.wado//List<i64>",
 }
 
 type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(7)
@@ -57,9 +57,9 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/String::reallo
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(21)
 
-type "functype//global_init_order_through_generic_method.wado/global_init_order_through_generic_method.wado/Holder<i64>::new" = fn() -> [i64, ref "core:prelude//List<i64>"];  // TypeId(22)
+type "functype//global_init_order_through_generic_method.wado/global_init_order_through_generic_method.wado/Holder<i64>::new" = fn() -> [i64, ref "core:prelude/list.wado//List<i64>"];  // TypeId(22)
 
-type "functype//core:prelude/list.wado/core:prelude/list.wado/List<i64>^core:prelude/traits.wado/From<Array<T>>::from" = fn(ref Array<i64>) -> ref "core:prelude//List<i64>";  // TypeId(23)
+type "functype//core:prelude/list.wado/core:prelude/list.wado/List<i64>^core:prelude/traits.wado/From<Array<T>>::from" = fn(ref Array<i64>) -> ref "core:prelude/list.wado//List<i64>";  // TypeId(23)
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(24)
 
@@ -235,7 +235,7 @@ fn "global_init_order_through_generic_method.wado/$cm_export__run"() {
 fn "global_init_order_through_generic_method.wado/$initialize_module"() {
     global:global_init_order_through_generic_method.wado::SEED = struct.new "global_init_order_through_generic_method.wado//Seed" { k: black_box(7_i64) };
     let $mv_k_1: i64;
-    let $mv_items_2: ref "core:prelude//List<i64>";
+    let $mv_items_2: ref "core:prelude/list.wado//List<i64>";
     multivalue_bind [$mv_k_1, $mv_items_2] = "global_init_order_through_generic_method.wado/global_init_order_through_generic_method.wado/Holder<i64>::new"();
     global:global_init_order_through_generic_method.wado::HOLD = struct.new "global_init_order_through_generic_method.wado//Holder<i64>" { k: $mv_k_1, items: $mv_items_2 };
 }
@@ -363,7 +363,7 @@ fn "global_init_order_through_generic_method.wado/global_init_order_through_gene
 fn "core:prelude/list.wado/core:prelude/list.wado/List<i64>^core:prelude/traits.wado/From<Array<T>>::from"(elements) {
     let used: i32;
     used = builtin::array_len(elements);
-    return struct.new "core:prelude//List<i64>" { repr: elements, used: used };
+    return struct.new "core:prelude/list.wado//List<i64>" { repr: elements, used: used };
 }
 
 export fn "global_init_order_through_generic_method.wado/$cm_export__run" as "run"

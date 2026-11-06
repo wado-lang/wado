@@ -64,9 +64,9 @@ struct assert_receiver_not_captured.wado//$tmpl$4432d2d1cbeba55c {  // TypeId(8)
 
 array Array<i32> (mut i32);  // TypeId(9)
 
-array Array<core:prelude/list.wado/List<i32>> (mut ref "core:prelude//List<i32>");  // TypeId(10)
+array Array<core:prelude/list.wado/List<i32>> (mut ref "core:prelude/list.wado//List<i32>");  // TypeId(10)
 
-struct core:prelude//List<i32> {  // TypeId(11)
+struct core:prelude/list.wado//List<i32> {  // TypeId(11)
     mut repr: ref Array<i32>,
     mut used: i32,
 }
@@ -214,20 +214,20 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode";
 
-global global:assert_receiver_not_captured.wado::$const_obj_0: ref "Array<core:prelude/list.wado/List<i32>>" = array.new_fixed<ref "core:prelude//List<i32>">(struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(1), used: 1 }, struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(2, 3), used: 2 });
+global global:assert_receiver_not_captured.wado::$const_obj_0: ref "Array<core:prelude/list.wado/List<i32>>" = array.new_fixed<ref "core:prelude/list.wado//List<i32>">(struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(1), used: 1 }, struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(2, 3), used: 2 });
 global global:core:prelude/primitive.wado::$const_obj_1: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
 
 fn "assert_receiver_not_captured.wado/run"() {
     let i: i32;
-    let $v1_2: i32;
+    let self_14: i32;
     if @unlikely(local.tee i(black_box(1)) >=u 2) {
         cold_path;
         "assert_receiver_not_captured.wado/run$cold1$dae[$v1]"(i);
         unreachable;
     }
-    if @unlikely(local.tee $v1_2(builtin::array_get_value<ref "core:prelude//List<i32>">(global:assert_receiver_not_captured.wado::$const_obj_0, i).used) != 5) {
+    if @unlikely(local.tee self_14(builtin::array_get_value<ref "core:prelude/list.wado//List<i32>">(global:assert_receiver_not_captured.wado::$const_obj_0, i).used) != 5) {
         cold_path;
-        "assert_receiver_not_captured.wado/run$cold0"(i, $v1_2);
+        "assert_receiver_not_captured.wado/run$cold0"(i, self_14);
         unreachable;
     }
 }

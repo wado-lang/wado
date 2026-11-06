@@ -109,7 +109,8 @@ fn collect_struct_bridges(flat: &FlatPackage, generated: &mut Vec<Rc<RefCell<Tir
 
 /// `$case_extract$V$P` / `$case_construct$V$P` for each instantiation of a
 /// `ReflectVariant`-derived generic variant. A generic variant keeps a single
-/// declaration, so the instantiations are the `GenericInstance` types naming it.
+/// declaration, so the instantiations are the `Variant` types naming it with
+/// arguments.
 fn collect_variant_bridges(flat: &FlatPackage, generated: &mut Vec<Rc<RefCell<TirFunction>>>) {
     // The subject's mangle is the bridge's identity, so a type interned twice
     // collapses onto one helper.
@@ -118,9 +119,12 @@ fn collect_variant_bridges(flat: &FlatPackage, generated: &mut Vec<Rc<RefCell<Ti
         let tt = flat.type_table.borrow();
         tt.iter_type_ids()
             .filter_map(|id| {
-                let ResolvedType::GenericInstance { def, type_args } = tt.get(id) else {
+                let ResolvedType::Variant { def, type_args } = tt.get(id) else {
                     return None;
                 };
+                if type_args.is_empty() {
+                    return None;
+                }
                 // An unsubstituted parameter or projection prints as itself
                 // (`Option<V>`), so instances from different callers would
                 // collide on one bridge name.

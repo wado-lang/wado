@@ -1058,7 +1058,7 @@ impl RefCarrying<'_> {
                 let fields = self
                     .structs
                     .iter()
-                    .find(|s| s.def == def && s.type_args == type_args)
+                    .find(|s| s.represents(self.type_table, def, &type_args))
                     .map(|s| s.fields.iter().map(|f| f.type_id).collect::<Vec<_>>());
                 match fields {
                     Some(fields) => self.any(fields, walk),
@@ -1067,34 +1067,22 @@ impl RefCarrying<'_> {
                     None => true,
                 }
             }
-            ResolvedType::GenericInstance { def, .. } if self.type_table.is_resource_def(*def) => {
-                false
+            ResolvedType::Tuple(elems) => {
+                let elems = elems.clone();
+                self.any(elems, walk)
             }
-            ResolvedType::GenericInstance { def, type_args } => {
-                let (def, type_args) = (*def, type_args.clone());
-                // A payload that is one of the template's parameters is the
-                // argument there; any other still reads its parameters as unknown.
-                let payloads = self.type_table.variant_template_cases(def).map(|cases| {
-                    cases
-                        .iter()
-                        .map(|&(_, _, payload)| match self.type_table.get(payload) {
-                            ResolvedType::TypeParam { index, .. } => type_args[*index as usize],
-                            _ => payload,
-                        })
-                        .collect()
-                });
-                self.any(payloads.unwrap_or(type_args), walk)
-            }
-            ResolvedType::Variant { def } => {
-                let def = *def;
-                match self.type_table.variant_template_cases(def) {
-                    Some(cases) => {
-                        let payloads = cases.iter().map(|(_, _, payload)| *payload).collect();
-                        self.any(payloads, walk)
-                    }
+            // A payload that is not one of the template's parameters still
+            // reads its parameters as unknown.
+            ResolvedType::Variant { def, type_args } => {
+                match self.type_table.variant_instance_payloads(*def, type_args) {
+                    Some(payloads) => self.any(payloads, walk),
                     // A declaration the plan phase cannot see is read as
                     // holding one, which only widens the carrier set.
-                    None => true,
+                    None if type_args.is_empty() => true,
+                    None => {
+                        let type_args = type_args.clone();
+                        self.any(type_args, walk)
+                    }
                 }
             }
             // What the pack stands for is not known here, as a type parameter

@@ -20,13 +20,13 @@ array Array<core:prelude/string.wado/String> (mut ref "core:prelude/string.wado/
 
 array Array<[core:prelude/string.wado/String,core:prelude/string.wado/String]> (mut ref "tuple//[core:prelude/string.wado/String, core:prelude/string.wado/String]");  // TypeId(5)
 
-struct core:prelude//List<core:prelude/string.wado/String> {  // TypeId(6)
-    mut repr: ref "Array<core:prelude/string.wado/String>",
+struct core:prelude/list.wado//List<[core:prelude/string.wado/String,core:prelude/string.wado/String]> {  // TypeId(6)
+    mut repr: ref "Array<[core:prelude/string.wado/String,core:prelude/string.wado/String]>",
     mut used: i32,
 }
 
-struct core:prelude//List<[core:prelude/string.wado/String,core:prelude/string.wado/String]> {  // TypeId(7)
-    mut repr: ref "Array<[core:prelude/string.wado/String,core:prelude/string.wado/String]>",
+struct core:prelude/list.wado//List<core:prelude/string.wado/String> {  // TypeId(7)
+    mut repr: ref "Array<core:prelude/string.wado/String>",
     mut used: i32,
 }
 
@@ -52,9 +52,9 @@ type "functype//wasi/$wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32; 
 
 type "functype//wasi_cli.wado/run" = fn();  // TypeId(18)
 
-type "functype//wasi_cli.wado/$cm_binding__wasi:cli/environment@0.3.0#get-environment" = fn() -> ref "core:prelude//List<[core:prelude/string.wado/String,core:prelude/string.wado/String]>";  // TypeId(19)
+type "functype//wasi_cli.wado/$cm_binding__wasi:cli/environment@0.3.0#get-environment" = fn() -> ref "core:prelude/list.wado//List<[core:prelude/string.wado/String,core:prelude/string.wado/String]>";  // TypeId(19)
 
-type "functype//wasi_cli.wado/$cm_binding__wasi:cli/environment@0.3.0#get-arguments" = fn() -> ref "core:prelude//List<core:prelude/string.wado/String>";  // TypeId(20)
+type "functype//wasi_cli.wado/$cm_binding__wasi:cli/environment@0.3.0#get-arguments" = fn() -> ref "core:prelude/list.wado//List<core:prelude/string.wado/String>";  // TypeId(20)
 
 type "functype//wasi_cli.wado/$cm_export__run" = fn();  // TypeId(21)
 
@@ -72,9 +72,9 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/String::reallo
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(28)
 
-type "functype//core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>::grow" = fn(ref "core:prelude//List<core:prelude/string.wado/String>");  // TypeId(29)
+type "functype//core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>::grow" = fn(ref "core:prelude/list.wado//List<core:prelude/string.wado/String>");  // TypeId(29)
 
-type "functype//core:prelude/list.wado/core:prelude/list.wado/List<[core:prelude/string.wado/String,core:prelude/string.wado/String]>::grow" = fn(ref "core:prelude//List<[core:prelude/string.wado/String,core:prelude/string.wado/String]>");  // TypeId(30)
+type "functype//core:prelude/list.wado/core:prelude/list.wado/List<[core:prelude/string.wado/String,core:prelude/string.wado/String]>::grow" = fn(ref "core:prelude/list.wado//List<[core:prelude/string.wado/String,core:prelude/string.wado/String]>");  // TypeId(30)
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::format<wasi_cli.wado/$tmpl$fb51c04d54491732,[i32]>$spec0$spec1$sroa[t.h0]" = fn(i32) -> ref "core:prelude/string.wado//String";  // TypeId(31)
 
@@ -172,7 +172,7 @@ fn "wasi_cli.wado/$cm_binding__wasi:cli/environment@0.3.0#get-environment"() wit
     let $outptr: i32;
     let $base: i32;
     let $count: i32;
-    let $result: ref "core:prelude//List<[core:prelude/string.wado/String,core:prelude/string.wado/String]>";
+    let $result: ref "core:prelude/list.wado//List<[core:prelude/string.wado/String,core:prelude/string.wado/String]>";
     let $i: i32;
     let $elem_addr: i32;
     let $str_ptr_6: i32;
@@ -183,7 +183,7 @@ fn "wasi_cli.wado/$cm_binding__wasi:cli/environment@0.3.0#get-environment"() wit
     let value_30: ref "tuple//[core:prelude/string.wado/String, core:prelude/string.wado/String]";
     "wasi/$wasi:cli/environment@0.3.0#get-environment"(local.tee $outptr("mem/realloc"(0, 0, 4, 8)));
     $base = builtin::load_i32($outptr);
-    $result = struct.new "core:prelude//List<[core:prelude/string.wado/String,core:prelude/string.wado/String]>" { repr: builtin::array_new<ref "tuple//[core:prelude/string.wado/String, core:prelude/string.wado/String]">(local.tee $count(builtin::load_i32($outptr + 4))), used: 0 };
+    $result = struct.new "core:prelude/list.wado//List<[core:prelude/string.wado/String,core:prelude/string.wado/String]>" { repr: builtin::array_new<ref "tuple//[core:prelude/string.wado/String, core:prelude/string.wado/String]">(local.tee $count(builtin::load_i32($outptr + 4))), used: 0 };
     $i = 0;
     b0: block {
         l1: loop {
@@ -222,7 +222,7 @@ fn "wasi_cli.wado/$cm_binding__wasi:cli/environment@0.3.0#get-arguments"() with 
     let $outptr: i32;
     let $base: i32;
     let $count: i32;
-    let $result: ref "core:prelude//List<core:prelude/string.wado/String>";
+    let $result: ref "core:prelude/list.wado//List<core:prelude/string.wado/String>";
     let $i: i32;
     let $elem_addr: i32;
     let $str_ptr: i32;
@@ -230,7 +230,7 @@ fn "wasi_cli.wado/$cm_binding__wasi:cli/environment@0.3.0#get-arguments"() with 
     let arr_15: ref Array<u8>;
     "wasi/$wasi:cli/environment@0.3.0#get-arguments"(local.tee $outptr("mem/realloc"(0, 0, 4, 8)));
     $base = builtin::load_i32($outptr);
-    $result = struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: builtin::array_new<ref "core:prelude/string.wado//String">(local.tee $count(builtin::load_i32($outptr + 4))), used: 0 };
+    $result = struct.new "core:prelude/list.wado//List<core:prelude/string.wado/String>" { repr: builtin::array_new<ref "core:prelude/string.wado//String">(local.tee $count(builtin::load_i32($outptr + 4))), used: 0 };
     $i = 0;
     b6: block {
         l7: loop {

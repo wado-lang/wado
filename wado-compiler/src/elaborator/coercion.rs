@@ -23,7 +23,7 @@ use crate::hashmap::{IndexMap, IndexSet};
 use crate::lexer::{defaults_to_float, has_decimal_point};
 use crate::module_source::ModuleSource;
 use crate::name::FqTraitName;
-use crate::tir::{InferVarId, ResolvedType, TypeId};
+use crate::tir::{InferVarId, ResolvedType, StructDef, TypeId};
 use crate::token::Span;
 use crate::type_table::TypeTable;
 
@@ -1309,10 +1309,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // from no pair array here: say what is missing where it is written.
         if let Expr::StructLiteral(struct_lit) = expr
             && struct_lit.name.is_none()
-            && matches!(
-                self.tysys.type_table.borrow().get(target_type),
-                ResolvedType::GenericInstance { .. }
-            )
+            && match self.tysys.type_table.borrow().get(target_type) {
+                ResolvedType::Tuple(_) => true,
+                ResolvedType::Struct {
+                    def: StructDef::Decl(_),
+                    type_args,
+                }
+                | ResolvedType::Variant { type_args, .. } => !type_args.is_empty(),
+                _ => false,
+            }
             && self.implicit_struct_target(Some(target_type)).is_none()
         {
             self.report_if_not_a_map_target(target_type, expr.span());

@@ -15,49 +15,11 @@ impl Monomorphizer {
         type_table: &mut TypeTable,
     ) -> Option<TirStruct> {
         let mangled_name = self.structs.instantiated.get(key)?.clone();
-
-        // Register the concrete struct type in the type table BEFORE substituting field types.
-        // This is critical for self-referential structs like:
-        //   struct Node<T> { left: Option<&mut Node<T>>, right: Option<&mut Node<T>> }
-        // When substituting field types, the inner Node<T> needs to resolve to the
-        // monomorphized struct type, not a GenericInstance.
         let concrete_type_id =
             type_table.make_monomorphized_struct_from_args(generic.def, key.impl_type_args.clone());
-
-        // Record the substitution before substituting fields, so a
-        // self-referential struct resolves to the concrete type.
-        //
-        // Matched on the declaration, not on `(name, module)`: sibling
-        // functions each declaring a `struct Box<T>` mint one `GenericInstance`
-        // apiece, and a spelling claims all of them.
         let head_def = key
             .def
             .expect("a struct instantiation names its declaration");
-        // Every instance whose arguments differ from the key's only in rows is
-        // this struct: a row selects no representation.
-        let key_args: Vec<TypeId> = key
-            .impl_type_args
-            .iter()
-            .map(|&arg| type_table.without_rows(arg))
-            .collect();
-        let candidates: Vec<(TypeId, Vec<TypeId>)> = type_table
-            .generic_instances_of(head_def)
-            .map(|(id, type_args)| (id, type_args.to_vec()))
-            .collect();
-        let mut instance_ids = Vec::new();
-        for (id, type_args) in candidates {
-            let args: Vec<TypeId> = type_args
-                .iter()
-                .map(|&arg| type_table.without_rows(arg))
-                .collect();
-            if args == key_args {
-                self.structs.type_substitutions.insert(id, concrete_type_id);
-                self.structs
-                    .type_to_mangled_name
-                    .insert(id, mangled_name.clone());
-                instance_ids.push(id);
-            }
-        }
 
         // Build substitution map: type param index -> concrete type
         let substitution: IndexMap<u32, TypeId> = generic
@@ -85,16 +47,7 @@ impl Monomorphizer {
             );
         }
 
-        // Register them on the `GenericInstance` spelling too: a reflect
-        // projection is read off receivers this pass has not yet substituted,
-        // by readers that hold the table immutably.
-        if let Some(base_decl) = base_decl {
-            for id in instance_ids {
-                type_table.register_monomorphized_assoc_types(id, base_decl, &substitution);
-            }
-        }
-
-        // Substitute types in fields (now self-references can be resolved)
+        // Substitute types in fields
         let fields: Vec<TirField> = generic
             .fields
             .iter()

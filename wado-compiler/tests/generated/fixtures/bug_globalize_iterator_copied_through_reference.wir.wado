@@ -60,7 +60,7 @@ struct core:prelude/traits.wado//IterEnumerate<core:prelude/slice.wado/SliceValu
     mut count: i32,
 }
 
-struct core:prelude//List<core:prelude/string.wado/String> {  // TypeId(11)
+struct core:prelude/list.wado//List<core:prelude/string.wado/String> {  // TypeId(11)
     mut repr: ref "Array<core:prelude/string.wado/String>",
     mut used: i32,
 }
@@ -139,7 +139,7 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/String::format
 
 type "functype//core:prelude/traits.wado/core:prelude/traits.wado/IterEnumerate<core:prelude/slice.wado/SliceValueIter<core:prelude/string.wado/String>>^core:prelude/traits.wado/Iterator::next" = fn(ref "core:prelude/traits.wado//IterEnumerate<core:prelude/slice.wado/SliceValueIter<core:prelude/string.wado/String>>") -> ref null "tuple//[i32, core:prelude/string.wado/String]";  // TypeId(48)
 
-type "functype//core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>^core:prelude/traits.wado/IntoIterator::into_iter" = fn(ref "core:prelude//List<core:prelude/string.wado/String>") -> ref "core:prelude/slice.wado//SliceValueIter<core:prelude/string.wado/String>";  // TypeId(49)
+type "functype//core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>^core:prelude/traits.wado/IntoIterator::into_iter" = fn(ref "Array<core:prelude/string.wado/String>", i32) -> ref "core:prelude/slice.wado//SliceValueIter<core:prelude/string.wado/String>";  // TypeId(49)
 
 type "functype//core:prelude/slice.wado/core:prelude/slice.wado/SliceValueIter<core:prelude/string.wado/String>^core:prelude/traits.wado/Iterator::next" = fn(ref "core:prelude/slice.wado//SliceValueIter<core:prelude/string.wado/String>") -> ref null "core:prelude/string.wado//String";  // TypeId(50)
 
@@ -177,15 +177,15 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 global global:core:prelude/primitive.wado::$const_obj_0: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
 
 fn "bug_globalize_iterator_copied_through_reference.wado/count"() {
-    let names: ref "core:prelude//List<core:prelude/string.wado/String>";
+    let names: ref "core:prelude/list.wado//List<core:prelude/string.wado/String>";
     let n: i32;
     let $iter_0: ref "core:prelude/traits.wado//IterEnumerate<core:prelude/slice.wado/SliceValueIter<core:prelude/string.wado/String>>";
     let i: i32;
     let name: ref "core:prelude/string.wado//String";
     let $match_5: ref null "tuple//[i32, core:prelude/string.wado/String]";
-    names = struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: array.new_fixed<ref "core:prelude/string.wado//String">(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97), used: 1 }, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(98), used: 1 }, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(99), used: 1 }), used: 3 };
+    names = struct.new "core:prelude/list.wado//List<core:prelude/string.wado/String>" { repr: array.new_fixed<ref "core:prelude/string.wado//String">(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97), used: 1 }, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(98), used: 1 }, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(99), used: 1 }), used: 3 };
     n = 0;
-    $iter_0 = struct.new "core:prelude/traits.wado//IterEnumerate<core:prelude/slice.wado/SliceValueIter<core:prelude/string.wado/String>>" { inner: "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>^core:prelude/traits.wado/IntoIterator::into_iter"(names), count: 0 };
+    $iter_0 = struct.new "core:prelude/traits.wado//IterEnumerate<core:prelude/slice.wado/SliceValueIter<core:prelude/string.wado/String>>" { inner: "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>^core:prelude/traits.wado/IntoIterator::into_iter"(names.repr, 3), count: 0 };
     b0: block {
         l1: loop {
             if ref.is_null(local.tee $match_5("core:prelude/traits.wado/core:prelude/traits.wado/IterEnumerate<core:prelude/slice.wado/SliceValueIter<core:prelude/string.wado/String>>^core:prelude/traits.wado/Iterator::next"($iter_0))) == 0 {
@@ -608,8 +608,8 @@ fn "core:prelude/traits.wado/core:prelude/traits.wado/IterEnumerate<core:prelude
     return ref.null none;
 }
 
-fn "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>^core:prelude/traits.wado/IntoIterator::into_iter"(self) {
-    return struct.new "core:prelude/slice.wado//SliceValueIter<core:prelude/string.wado/String>" { repr: self.repr, index: 0, end: self.used };
+fn "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>^core:prelude/traits.wado/IntoIterator::into_iter"($mv$self$repr, $mv$self$used) {
+    return struct.new "core:prelude/slice.wado//SliceValueIter<core:prelude/string.wado/String>" { repr: $mv$self$repr, index: 0, end: $mv$self$used };
 }
 
 fn "core:prelude/slice.wado/core:prelude/slice.wado/SliceValueIter<core:prelude/string.wado/String>^core:prelude/traits.wado/Iterator::next"(self) {

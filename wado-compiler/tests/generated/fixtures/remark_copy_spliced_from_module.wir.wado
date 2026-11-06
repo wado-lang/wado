@@ -15,23 +15,23 @@ array Array<i32> (mut i32);  // TypeId(3)
 
 array Array<core:prelude/string.wado/String> (mut ref "core:prelude/string.wado//String");  // TypeId(4)
 
-struct core:prelude/slice.wado//SliceValueIter<core:prelude/string.wado/String> {  // TypeId(5)
+struct core:prelude/list.wado//List<core:prelude/string.wado/String> {  // TypeId(5)
+    mut repr: ref "Array<core:prelude/string.wado/String>",
+    mut used: i32,
+}
+
+struct core:prelude/slice.wado//SliceValueIter<core:prelude/string.wado/String> {  // TypeId(6)
     mut repr: ref "Array<core:prelude/string.wado/String>",
     mut index: i32,
     mut end: i32,
 }
 
-struct core:prelude/traits.wado//IterSkip<core:prelude/slice.wado/SliceValueIter<core:prelude/string.wado/String>> {  // TypeId(6)
+struct core:prelude/traits.wado//IterSkip<core:prelude/slice.wado/SliceValueIter<core:prelude/string.wado/String>> {  // TypeId(7)
     mut inner: ref "core:prelude/slice.wado//SliceValueIter<core:prelude/string.wado/String>",
     mut remaining: i32,
 }
 
-struct core:prelude//List<core:prelude/string.wado/String> {  // TypeId(7)
-    mut repr: ref "Array<core:prelude/string.wado/String>",
-    mut used: i32,
-}
-
-struct core:prelude//List<i32> {  // TypeId(8)
+struct core:prelude/list.wado//List<i32> {  // TypeId(8)
     mut repr: ref Array<i32>,
     mut used: i32,
 }
@@ -54,7 +54,7 @@ type "functype//wasi/$wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32; 
 
 type "functype//remark_copy_spliced_from_module.wado/run" = fn();  // TypeId(17)
 
-type "functype//remark_copy_spliced_from_module.wado/$cm_binding__wasi:cli/environment@0.3.0#get-arguments" = fn() -> ref "core:prelude//List<core:prelude/string.wado/String>";  // TypeId(18)
+type "functype//remark_copy_spliced_from_module.wado/$cm_binding__wasi:cli/environment@0.3.0#get-arguments" = fn() -> ref "core:prelude/list.wado//List<core:prelude/string.wado/String>";  // TypeId(18)
 
 type "functype//remark_copy_spliced_from_module.wado/$cm_export__run" = fn();  // TypeId(19)
 
@@ -68,9 +68,9 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/String::reallo
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(24)
 
-type "functype//core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow" = fn(ref "core:prelude//List<i32>");  // TypeId(25)
+type "functype//core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow" = fn(ref "core:prelude/list.wado//List<i32>");  // TypeId(25)
 
-type "functype//core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>::grow" = fn(ref "core:prelude//List<core:prelude/string.wado/String>");  // TypeId(26)
+type "functype//core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>::grow" = fn(ref "core:prelude/list.wado//List<core:prelude/string.wado/String>");  // TypeId(26)
 
 type "functype//core:prelude/traits.wado/core:prelude/traits.wado/IterSkip<core:prelude/slice.wado/SliceValueIter<core:prelude/string.wado/String>>^core:prelude/traits.wado/Iterator::next" = fn(ref "core:prelude/traits.wado//IterSkip<core:prelude/slice.wado/SliceValueIter<core:prelude/string.wado/String>>") -> ref null "core:prelude/string.wado//String";  // TypeId(27)
 
@@ -99,9 +99,9 @@ import fn wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode f
 import fn wasi/task-return from "wasi/task-return";
 
 fn "remark_copy_spliced_from_module.wado/run"() with Stdout, Environment {
-    let b: ref "core:prelude//List<i32>";
+    let b: ref "core:prelude/list.wado//List<i32>";
     let $temp_inline_core_prelude_traits_wado_IterSkip_core_prelude_slice_wado_SliceValueIter_core_prelude_string_wado_String___core_prelude_traits_wado_Iterator__collect_core_prelude_list_wado_List_core_prelude_string_wado_String___6_0: ref "core:prelude/traits.wado//IterSkip<core:prelude/slice.wado/SliceValueIter<core:prelude/string.wado/String>>";
-    let self_26: ref "core:prelude//List<core:prelude/string.wado/String>";
+    let self_26: ref "core:prelude/list.wado//List<core:prelude/string.wado/String>";
     let item: ref "core:prelude/string.wado//String";
     let $local_3: ref null "core:prelude/string.wado//String";
     let used_38: i32;
@@ -112,7 +112,7 @@ fn "remark_copy_spliced_from_module.wado/run"() with Stdout, Environment {
     let q: u64;
     let tens: i32;
     let start_214: i32;
-    used_44 = builtin::array_len(local.tee elements_43(array.new_fixed<i32>(local.tee used_38($temp_inline_core_prelude_traits_wado_IterSkip_core_prelude_slice_wado_SliceValueIter_core_prelude_string_wado_String___core_prelude_traits_wado_Iterator__collect_core_prelude_list_wado_List_core_prelude_string_wado_String___6_0 = struct.new "core:prelude/traits.wado//IterSkip<core:prelude/slice.wado/SliceValueIter<core:prelude/string.wado/String>>" { inner: struct.new "core:prelude/slice.wado//SliceValueIter<core:prelude/string.wado/String>" { repr: local.tee self_26("remark_copy_spliced_from_module.wado/$cm_binding__wasi:cli/environment@0.3.0#get-arguments"()).repr, index: 0, end: self_26.used }, remaining: 1 }; self_26 = struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: array.new_fixed<ref "core:prelude/string.wado//String">(), used: 0 }; b0: block {
+    used_44 = builtin::array_len(local.tee elements_43(array.new_fixed<i32>(local.tee used_38($temp_inline_core_prelude_traits_wado_IterSkip_core_prelude_slice_wado_SliceValueIter_core_prelude_string_wado_String___core_prelude_traits_wado_Iterator__collect_core_prelude_list_wado_List_core_prelude_string_wado_String___6_0 = struct.new "core:prelude/traits.wado//IterSkip<core:prelude/slice.wado/SliceValueIter<core:prelude/string.wado/String>>" { inner: struct.new "core:prelude/slice.wado//SliceValueIter<core:prelude/string.wado/String>" { repr: local.tee self_26("remark_copy_spliced_from_module.wado/$cm_binding__wasi:cli/environment@0.3.0#get-arguments"()).repr, index: 0, end: self_26.used }, remaining: 1 }; self_26 = struct.new "core:prelude/list.wado//List<core:prelude/string.wado/String>" { repr: array.new_fixed<ref "core:prelude/string.wado//String">(), used: 0 }; b0: block {
         l1: loop {
             if ref.is_null(local.tee $local_3("core:prelude/traits.wado/core:prelude/traits.wado/IterSkip<core:prelude/slice.wado/SliceValueIter<core:prelude/string.wado/String>>^core:prelude/traits.wado/Iterator::next"($temp_inline_core_prelude_traits_wado_IterSkip_core_prelude_slice_wado_SliceValueIter_core_prelude_string_wado_String___core_prelude_traits_wado_Iterator__collect_core_prelude_list_wado_List_core_prelude_string_wado_String___6_0))) == 0 {
                 item = ref.as_non_null($local_3);
@@ -128,7 +128,7 @@ fn "remark_copy_spliced_from_module.wado/run"() with Stdout, Environment {
             continue l1;
         };
     }; self_26.used), used_38 + 1)));
-    b = struct.new "core:prelude//List<i32>" { repr: let $array_clone_dst_2: ref Array<i32>; builtin::array_copy<i32>(local.tee $array_clone_dst_2(builtin::array_new<i32>(used_44)), 0, elements_43, 0, used_44); $array_clone_dst_2, used: used_44 };
+    b = struct.new "core:prelude/list.wado//List<i32>" { repr: let $array_clone_dst_2: ref Array<i32>; builtin::array_copy<i32>(local.tee $array_clone_dst_2(builtin::array_new<i32>(used_44)), 0, elements_43, 0, used_44); $array_clone_dst_2, used: used_44 };
     used_38 = used_38 + 2;
     if @unlikely(used_44 >= builtin::array_len(b.repr)) {
         cold_path;
@@ -261,7 +261,7 @@ fn "remark_copy_spliced_from_module.wado/$cm_binding__wasi:cli/environment@0.3.0
     let $outptr: i32;
     let $base: i32;
     let $count: i32;
-    let $result: ref "core:prelude//List<core:prelude/string.wado/String>";
+    let $result: ref "core:prelude/list.wado//List<core:prelude/string.wado/String>";
     let $i: i32;
     let $elem_addr: i32;
     let $str_ptr: i32;
@@ -269,7 +269,7 @@ fn "remark_copy_spliced_from_module.wado/$cm_binding__wasi:cli/environment@0.3.0
     let arr_15: ref Array<u8>;
     "wasi/$wasi:cli/environment@0.3.0#get-arguments"(local.tee $outptr("mem/realloc"(0, 0, 4, 8)));
     $base = builtin::load_i32($outptr);
-    $result = struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: builtin::array_new<ref "core:prelude/string.wado//String">(local.tee $count(builtin::load_i32($outptr + 4))), used: 0 };
+    $result = struct.new "core:prelude/list.wado//List<core:prelude/string.wado/String>" { repr: builtin::array_new<ref "core:prelude/string.wado//String">(local.tee $count(builtin::load_i32($outptr + 4))), used: 0 };
     $i = 0;
     b31: block {
         l32: loop {

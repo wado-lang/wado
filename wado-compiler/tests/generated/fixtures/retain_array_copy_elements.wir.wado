@@ -49,7 +49,7 @@ struct retain_array_copy_elements.wado//Slot {  // TypeId(8)
 
 array Array<retain_array_copy_elements.wado/Slot> (mut ref "retain_array_copy_elements.wado//Slot");  // TypeId(9)
 
-struct core:prelude//List<retain_array_copy_elements.wado/Slot> {  // TypeId(10)
+struct core:prelude/list.wado//List<retain_array_copy_elements.wado/Slot> {  // TypeId(10)
     mut repr: ref "Array<retain_array_copy_elements.wado/Slot>",
     mut used: i32,
 }
@@ -132,15 +132,15 @@ type "functype//retain_array_copy_elements.wado/retain_array_copy_elements.wado/
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::format<retain_array_copy_elements.wado/$tmpl$ebaa20f4a908b504,[i32]>" = fn(ref "retain_array_copy_elements.wado//$tmpl$ebaa20f4a908b504") -> ref "core:prelude/string.wado//String";  // TypeId(49)
 
-type "functype//core:prelude/list.wado/core:prelude/list.wado/List<retain_array_copy_elements.wado/Slot>::grow" = fn(ref "core:prelude//List<retain_array_copy_elements.wado/Slot>");  // TypeId(50)
+type "functype//core:prelude/list.wado/core:prelude/list.wado/List<retain_array_copy_elements.wado/Slot>::grow" = fn(ref "core:prelude/list.wado//List<retain_array_copy_elements.wado/Slot>");  // TypeId(50)
 
 type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(51)
 
 type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::write_char_n$sroa[self.buf]" = fn(ref "core:prelude/string.wado//String", char, i32);  // TypeId(52)
 
-type "functype//core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(53)
+type "functype//core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<retain_array_copy_elements.wado/$tmpl$ebaa20f4a908b504,i32>::lit$sroa[self.index]" = fn(i32, ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//StrSlice";  // TypeId(53)
 
-type "functype//core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<retain_array_copy_elements.wado/$tmpl$ebaa20f4a908b504,i32>::lit$sroa[self.index]" = fn(i32, ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//StrSlice";  // TypeId(54)
+type "functype//core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(54)
 
 type "functype//wasi/task-return" = fn(i32);  // TypeId(55)
 
@@ -170,7 +170,7 @@ global global:core:prelude/primitive.wado::$const_obj_0: ref "core:prelude/strin
 fn "retain_array_copy_elements.wado/run"() {
     let x: ref "retain_array_copy_elements.wado//Data";
     let direct: ref "Array<retain_array_copy_elements.wado/Slot>";
-    let grown: ref "core:prelude//List<retain_array_copy_elements.wado/Slot>";
+    let grown: ref "core:prelude/list.wado//List<retain_array_copy_elements.wado/Slot>";
     let staged: ref "Array<retain_array_copy_elements.wado/Slot>";
     let value_19: ref "retain_array_copy_elements.wado//Slot";
     let used_20: i32;
@@ -200,7 +200,7 @@ fn "retain_array_copy_elements.wado/run"() {
         "retain_array_copy_elements.wado/run$cold1"($array_clone_i_6);
         unreachable;
     }
-    grown = struct.new "core:prelude//List<retain_array_copy_elements.wado/Slot>" { repr: array.new_fixed<ref "retain_array_copy_elements.wado//Slot">(), used: 0 };
+    grown = struct.new "core:prelude/list.wado//List<retain_array_copy_elements.wado/Slot>" { repr: array.new_fixed<ref "retain_array_copy_elements.wado//Slot">(), used: 0 };
     $array_clone_i_6 = 0;
     b3: block {
         l4: loop {
@@ -744,6 +744,12 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_char_n$sr
     };
 }
 
+fn "core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<retain_array_copy_elements.wado/$tmpl$ebaa20f4a908b504,i32>::lit$sroa[self.index]"(self, $mv$t$s0, $mv$t$r0, $mv$t$s1, $mv$t$r1) {
+    return block -> ref "core:prelude/string.wado//StrSlice" {
+        "core:prelude/string.wado/core:prelude/string.wado/String::internal_view"(local.tee $mv$t$s0("retain_array_copy_elements.wado/$template_segment$retain_array_copy_elements.wado/$tmpl$ebaa20f4a908b504"($mv$t$s0, $mv$t$r0, $mv$t$s1, $mv$t$r1, 2 * self)).repr, $mv$t$s0.used);
+    };
+}
+
 fn "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(self, f) {
     let is_negative: bool;
     let abs_val: u64;
@@ -751,12 +757,6 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(self, f) {
     self = "core:prelude/primitive.wado/count_digits_u64"(local.tee abs_val("core:prelude/primitive.wado/i64::abs"(builtin::i64_extend_i32_s(self))));
     is_negative = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>"(f, is_negative, global:core:prelude/primitive.wado::$const_obj_0, self);
     "core:prelude/primitive.wado/write_decimal_digits"(f.buf.repr, is_negative, abs_val, self);
-}
-
-fn "core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<retain_array_copy_elements.wado/$tmpl$ebaa20f4a908b504,i32>::lit$sroa[self.index]"(self, $mv$t$s0, $mv$t$r0, $mv$t$s1, $mv$t$r1) {
-    return block -> ref "core:prelude/string.wado//StrSlice" {
-        "core:prelude/string.wado/core:prelude/string.wado/String::internal_view"(local.tee $mv$t$s0("retain_array_copy_elements.wado/$template_segment$retain_array_copy_elements.wado/$tmpl$ebaa20f4a908b504"($mv$t$s0, $mv$t$r0, $mv$t$s1, $mv$t$r1, 2 * self)).repr, $mv$t$s0.used);
-    };
 }
 
 export fn "retain_array_copy_elements.wado/$cm_export__run" as "run"

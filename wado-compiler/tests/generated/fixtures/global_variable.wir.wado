@@ -254,34 +254,34 @@ array Array<i32> (mut i32);  // TypeId(32)
 
 array Array<u64> (mut u64);  // TypeId(33)
 
-variant core:prelude/types.wado//Option<i32> {  // TypeId(34)
-    None,
-    Some(i32),
+struct core:prelude/list.wado//List<i32> {  // TypeId(34)
+    mut repr: ref Array<i32>,
+    mut used: i32,
 }
 
-struct core:prelude/types.wado//Option<i32>::Some {  // TypeId(35)
-    discriminant: i32,
-    payload_0: i32,
-}
-
-variant core:prelude/types.wado//Option<bool> {  // TypeId(36)
-    None,
-    Some(bool),
-}
-
-struct core:prelude/types.wado//Option<bool>::Some {  // TypeId(37)
-    discriminant: i32,
-    payload_0: bool,
-}
-
-struct core:prelude//List<u64> {  // TypeId(38)
+struct core:prelude/list.wado//List<u64> {  // TypeId(35)
     mut repr: ref Array<u64>,
     mut used: i32,
 }
 
-struct core:prelude//List<i32> {  // TypeId(39)
-    mut repr: ref Array<i32>,
-    mut used: i32,
+variant core:prelude/types.wado//Option<i32> {  // TypeId(36)
+    None,
+    Some(i32),
+}
+
+struct core:prelude/types.wado//Option<i32>::Some {  // TypeId(37)
+    discriminant: i32,
+    payload_0: i32,
+}
+
+variant core:prelude/types.wado//Option<bool> {  // TypeId(38)
+    None,
+    Some(bool),
+}
+
+struct core:prelude/types.wado//Option<bool>::Some {  // TypeId(39)
+    discriminant: i32,
+    payload_0: bool,
 }
 
 type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(40)
@@ -678,7 +678,7 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/String::format
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::format<core:prelude/string.wado/$tmpl$59e16269228f9c88,[core:prelude/string.wado/String,i32,i32]>" = fn(ref "core:prelude/string.wado//$tmpl$59e16269228f9c88") -> ref "core:prelude/string.wado//String";  // TypeId(236)
 
-type "functype//core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow" = fn(ref "core:prelude//List<i32>");  // TypeId(237)
+type "functype//core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow" = fn(ref "core:prelude/list.wado//List<i32>");  // TypeId(237)
 
 type "functype//core:prelude/traits.wado/core:prelude/types.wado/Option<core:prelude/string.wado/String>^core:prelude/traits.wado/Inspect::inspect" = fn(ref "core:prelude/types.wado//Box<core:prelude/types.wado/Option<core:prelude/string.wado/String>>", ref "core:prelude/format.wado//Formatter");  // TypeId(238)
 
@@ -821,15 +821,15 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode";
 
-global global:core:prelude/fpfmt.wado::POW10: ref "core:prelude//List<u64>" = struct.new "core:prelude//List<u64>" { repr: array.new_fixed<u64>(1_i64, 10_i64, 100_i64, 1000_i64, 10000_i64, 100000_i64, 1000000_i64, 10000000_i64, 100000000_i64, 1000000000_i64, 10000000000_i64, 100000000000_i64, 1000000000000_i64, 10000000000000_i64, 100000000000000_i64, 1000000000000000_i64, 10000000000000000_i64, 100000000000000000_i64, 1000000000000000000_i64, -8446744073709551616_i64), used: 20 };
-global global:core:prelude/fpfmt.wado::POW10_COARSE: ref "core:prelude//List<u64>" = struct.new "core:prelude//List<u64>" { repr: array.new_fixed<u64>(-9202643304706469458_i64, 2331608335343510136_i64, -6042108180459076852_i64, -3512093806901185046_i64, 5910495864778290617_i64, 5142877117464292731_i64, -6382629663588669919_i64, -5824576295778454962_i64, 7312877456945461815_i64, -8701430062309552536_i64, 6518754469289960081_i64, -3731815170699585832_i64, -2702340141148116920_i64, -5820440219632367202_i64, -6700629690988304797_i64, -5728515861582144020_i64, -4788037454677749837_i64, -138584883311786983_i64, -8173041140997884610_i64, 6088502188546649756_i64, 4733321751740631166_i64, -1848681798185579782_i64, 915538744049291538_i64, -6650301858497657961_i64, -5038936143766954517_i64, -7857851839894723565_i64, 2422963254366584020_i64, -7616003081050118571_i64, 4209185567039092847_i64, -1655021023176300051_i64, -948738275445456222_i64, -368606216923924029_i64, 3933290470431885570_i64, -4311967555482476980_i64, -6154202648235558778_i64, -7600899928388012631_i64, -7028762532061872568_i64, 8601490892183123069_i64, -3870296596451112504_i64, -9223372036854775808_i64, 0_i64, 0_i64, -3545582879861895366_i64, 0_i64, 0_i64, -6409681921289327535_i64, -7381240676301154012_i64, 0_i64, -8723282702051517699_i64, 7611128154919104931_i64, -2332986282734498264_i64, -2737644984756826647_i64, -1725319251657714539_i64, -2933062920969266988_i64, -5757034887131305500_i64, 6827560182880305039_i64, -4590159780262957024_i64, -8196078626372074883_i64, 1466078993672598279_i64, 2575331249103045366_i64, -1885900863153361279_i64, -8136200465769716230_i64, -1101749180790027139_i64, -5069001465015685407_i64, 7896285879677171346_i64, -8579445236126676001_i64, -7640289654143017767_i64, 5385653213018257806_i64, 962163898128633416_i64, -987975350460687153_i64, -4871985254153548564_i64, 4439498980731556221_i64, -4343663012265570553_i64, 758345818024902856_i64, 171258419585080376_i64, -7054365918152680535_i64, 7784369436827535057_i64, 5279584310227164867_i64), used: 78 };
-global global:core:prelude/fpfmt.wado::POW10_FINE: ref "core:prelude//List<u64>" = struct.new "core:prelude//List<u64>" { repr: array.new_fixed<u64>(-9223372036854775808_i64, -6917529027641081856_i64, -4035225266123964416_i64, -432345564227567616_i64, -7187745005283311616_i64, -4372995238176751616_i64, -854558029293551616_i64, -7451627795949551616_i64, -4702848726509551616_i64, -1266874889709551616_i64, -7709325833709551616_i64, -5024971273709551616_i64, -1669528073709551616_i64, -7960984073709551616_i64, -5339544073709551616_i64, -2062744073709551616_i64, -8206744073709551616_i64, -5646744073709551616_i64, -2446744073709551616_i64, -8446744073709551616_i64, -5946744073709551616_i64, -2821744073709551616_i64, -8681119073709551616_i64, -6239712823709551616_i64, -3187955011209551616_i64, -8910000909647051616_i64, -6525815118631426616_i64), used: 27 };
+global global:core:prelude/fpfmt.wado::POW10: ref "core:prelude/list.wado//List<u64>" = struct.new "core:prelude/list.wado//List<u64>" { repr: array.new_fixed<u64>(1_i64, 10_i64, 100_i64, 1000_i64, 10000_i64, 100000_i64, 1000000_i64, 10000000_i64, 100000000_i64, 1000000000_i64, 10000000000_i64, 100000000000_i64, 1000000000000_i64, 10000000000000_i64, 100000000000000_i64, 1000000000000000_i64, 10000000000000000_i64, 100000000000000000_i64, 1000000000000000000_i64, -8446744073709551616_i64), used: 20 };
+global global:core:prelude/fpfmt.wado::POW10_COARSE: ref "core:prelude/list.wado//List<u64>" = struct.new "core:prelude/list.wado//List<u64>" { repr: array.new_fixed<u64>(-9202643304706469458_i64, 2331608335343510136_i64, -6042108180459076852_i64, -3512093806901185046_i64, 5910495864778290617_i64, 5142877117464292731_i64, -6382629663588669919_i64, -5824576295778454962_i64, 7312877456945461815_i64, -8701430062309552536_i64, 6518754469289960081_i64, -3731815170699585832_i64, -2702340141148116920_i64, -5820440219632367202_i64, -6700629690988304797_i64, -5728515861582144020_i64, -4788037454677749837_i64, -138584883311786983_i64, -8173041140997884610_i64, 6088502188546649756_i64, 4733321751740631166_i64, -1848681798185579782_i64, 915538744049291538_i64, -6650301858497657961_i64, -5038936143766954517_i64, -7857851839894723565_i64, 2422963254366584020_i64, -7616003081050118571_i64, 4209185567039092847_i64, -1655021023176300051_i64, -948738275445456222_i64, -368606216923924029_i64, 3933290470431885570_i64, -4311967555482476980_i64, -6154202648235558778_i64, -7600899928388012631_i64, -7028762532061872568_i64, 8601490892183123069_i64, -3870296596451112504_i64, -9223372036854775808_i64, 0_i64, 0_i64, -3545582879861895366_i64, 0_i64, 0_i64, -6409681921289327535_i64, -7381240676301154012_i64, 0_i64, -8723282702051517699_i64, 7611128154919104931_i64, -2332986282734498264_i64, -2737644984756826647_i64, -1725319251657714539_i64, -2933062920969266988_i64, -5757034887131305500_i64, 6827560182880305039_i64, -4590159780262957024_i64, -8196078626372074883_i64, 1466078993672598279_i64, 2575331249103045366_i64, -1885900863153361279_i64, -8136200465769716230_i64, -1101749180790027139_i64, -5069001465015685407_i64, 7896285879677171346_i64, -8579445236126676001_i64, -7640289654143017767_i64, 5385653213018257806_i64, 962163898128633416_i64, -987975350460687153_i64, -4871985254153548564_i64, 4439498980731556221_i64, -4343663012265570553_i64, 758345818024902856_i64, 171258419585080376_i64, -7054365918152680535_i64, 7784369436827535057_i64, 5279584310227164867_i64), used: 78 };
+global global:core:prelude/fpfmt.wado::POW10_FINE: ref "core:prelude/list.wado//List<u64>" = struct.new "core:prelude/list.wado//List<u64>" { repr: array.new_fixed<u64>(-9223372036854775808_i64, -6917529027641081856_i64, -4035225266123964416_i64, -432345564227567616_i64, -7187745005283311616_i64, -4372995238176751616_i64, -854558029293551616_i64, -7451627795949551616_i64, -4702848726509551616_i64, -1266874889709551616_i64, -7709325833709551616_i64, -5024971273709551616_i64, -1669528073709551616_i64, -7960984073709551616_i64, -5339544073709551616_i64, -2062744073709551616_i64, -8206744073709551616_i64, -5646744073709551616_i64, -2446744073709551616_i64, -8446744073709551616_i64, -5946744073709551616_i64, -2821744073709551616_i64, -8681119073709551616_i64, -6239712823709551616_i64, -3187955011209551616_i64, -8910000909647051616_i64, -6525815118631426616_i64), used: 27 };
 global mut global:global_variable.wado::CURRENT: char = 120;
 global mut global:global_variable.wado::counter: i32 = 0;
 global mut global:global_variable.wado::total: i32 = 0;
 global mut global:global_variable.wado::call_count: i32 = 0;
 global mut global:global_variable.wado::shared: i32 = 100;
-global mut global:global_variable.wado::ITEMS: ref null "core:prelude//List<i32>" = ref.null none;
+global mut global:global_variable.wado::ITEMS: ref null "core:prelude/list.wado//List<i32>" = ref.null none;
 global mut global:global_variable.wado::MESSAGE: ref null "core:prelude/string.wado//String" = ref.null none;
 global mut global:global_variable.wado::ORIGIN: ref null "global_variable.wado//GPoint" = ref.null none;
 global global:global_variable.wado::DEFAULT_LEVEL: "global_variable.wado//enum:Level" = 1;
@@ -1162,51 +1162,51 @@ fn "global_variable.wado/$test_5_functions_read_and_write_globals"() {
 }
 
 fn "global_variable.wado/$test_6_globals_of_heap_types"() {
-    let $v0_0: i32;
-    let self_24: ref "core:prelude//List<i32>";
+    let self_23: i32;
+    let self_24: ref "core:prelude/list.wado//List<i32>";
     let self_39: ref "core:prelude/string.wado//String";
     let i_48: i32;
     let $licm_repr_59: ref Array<u8>;
-    global:global_variable.wado::ITEMS = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(1, 2, 3), used: 3 };
-    if @unlikely(local.tee $v0_0(global:global_variable.wado::ITEMS.used) != 3) {
+    global:global_variable.wado::ITEMS = struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(1, 2, 3), used: 3 };
+    if @unlikely(local.tee self_23(global:global_variable.wado::ITEMS.used) != 3) {
         cold_path;
-        "global_variable.wado/$test_6_globals_of_heap_types$cold9"($v0_0);
+        "global_variable.wado/$test_6_globals_of_heap_types$cold9"(self_23);
         unreachable;
     }
     self_24 = global:global_variable.wado::ITEMS;
-    $v0_0 = global:global_variable.wado::ITEMS.used;
-    if @unlikely(0 >= $v0_0) {
+    self_23 = global:global_variable.wado::ITEMS.used;
+    if @unlikely(0 >= self_23) {
         cold_path;
-        "global_variable.wado/$test_6_globals_of_heap_types$cold8$dae[$contract_arg_0]"($v0_0);
+        "global_variable.wado/$test_6_globals_of_heap_types$cold8$dae[$contract_arg_0]"(self_23);
         unreachable;
     }
-    if @unlikely(local.tee $v0_0(builtin::array_get_value<i32>(self_24.repr, 0)) != 1) {
+    if @unlikely(local.tee self_23(builtin::array_get_value<i32>(self_24.repr, 0)) != 1) {
         cold_path;
-        "global_variable.wado/$test_6_globals_of_heap_types$cold7"($v0_0);
+        "global_variable.wado/$test_6_globals_of_heap_types$cold7"(self_23);
         unreachable;
     }
-    if @unlikely(local.tee $v0_0(local.tee self_24(global:global_variable.wado::ITEMS).used) >= builtin::array_len(self_24.repr)) {
+    if @unlikely(local.tee self_23(local.tee self_24(global:global_variable.wado::ITEMS).used) >= builtin::array_len(self_24.repr)) {
         cold_path;
         "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(self_24);
     }
-    builtin::array_set<i32>(self_24.repr, $v0_0, 4);
-    self_24.used = $v0_0 + 1;
-    if @unlikely(local.tee $v0_0(global:global_variable.wado::ITEMS.used) != 4) {
+    builtin::array_set<i32>(self_24.repr, self_23, 4);
+    self_24.used = self_23 + 1;
+    if @unlikely(local.tee self_23(global:global_variable.wado::ITEMS.used) != 4) {
         cold_path;
-        "global_variable.wado/$test_6_globals_of_heap_types$cold6"($v0_0);
+        "global_variable.wado/$test_6_globals_of_heap_types$cold6"(self_23);
         unreachable;
     }
     global:global_variable.wado::MESSAGE = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Hello, World!"), used: 13 };
     self_39 = global:global_variable.wado::MESSAGE;
     if @unlikely($inline_core_prelude_array_wado_seq_eq_u8__9: block -> bool {
-        if local.tee $v0_0(self_39.used) != 13 {
+        if local.tee self_23(self_39.used) != 13 {
             break $inline_core_prelude_array_wado_seq_eq_u8__9: 0;
         }
         i_48 = 0;
         $licm_repr_59 = self_39.repr;
         b54: block {
             l55: loop {
-                break_if b54 (((i_48 >= $v0_0) | ((i_48 + 1) >= $v0_0)) | (((i_48 + 1) + 1) >= $v0_0)) | ((((i_48 + 1) + 1) + 1) >= $v0_0);
+                break_if b54 (((i_48 >= self_23) | ((i_48 + 1) >= self_23)) | (((i_48 + 1) + 1) >= self_23)) | ((((i_48 + 1) + 1) + 1) >= self_23);
                 if builtin::array_get_value<u8>($licm_repr_59, i_48) != builtin::array_get_value<u8>(global:global_variable.wado::$const_obj_6, i_48) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__9: 0;
                 }
@@ -1228,7 +1228,7 @@ fn "global_variable.wado/$test_6_globals_of_heap_types"() {
         };
         b60: block {
             l61: loop {
-                break_if b60 i_48 >= $v0_0;
+                break_if b60 i_48 >= self_23;
                 if builtin::array_get_value<u8>($licm_repr_59, i_48) != builtin::array_get_value<u8>(global:global_variable.wado::$const_obj_6, i_48) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__9: 0;
                 }
@@ -1245,14 +1245,14 @@ fn "global_variable.wado/$test_6_globals_of_heap_types"() {
     global:global_variable.wado::MESSAGE = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Updated!"), used: 8 };
     self_39 = global:global_variable.wado::MESSAGE;
     if @unlikely($inline_core_prelude_array_wado_seq_eq_u8__11: block -> bool {
-        if local.tee $v0_0(self_39.used) != 8 {
+        if local.tee self_23(self_39.used) != 8 {
             break $inline_core_prelude_array_wado_seq_eq_u8__11: 0;
         }
         i_48 = 0;
         $licm_repr_59 = self_39.repr;
         b65: block {
             l66: loop {
-                break_if b65 (((i_48 >= $v0_0) | ((i_48 + 1) >= $v0_0)) | (((i_48 + 1) + 1) >= $v0_0)) | ((((i_48 + 1) + 1) + 1) >= $v0_0);
+                break_if b65 (((i_48 >= self_23) | ((i_48 + 1) >= self_23)) | (((i_48 + 1) + 1) >= self_23)) | ((((i_48 + 1) + 1) + 1) >= self_23);
                 if builtin::array_get_value<u8>($licm_repr_59, i_48) != builtin::array_get_value<u8>(global:global_variable.wado::$const_obj_5, i_48) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__11: 0;
                 }
@@ -1274,7 +1274,7 @@ fn "global_variable.wado/$test_6_globals_of_heap_types"() {
         };
         b71: block {
             l72: loop {
-                break_if b71 i_48 >= $v0_0;
+                break_if b71 i_48 >= self_23;
                 if builtin::array_get_value<u8>($licm_repr_59, i_48) != builtin::array_get_value<u8>(global:global_variable.wado::$const_obj_5, i_48) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__11: 0;
                 }
@@ -1289,25 +1289,25 @@ fn "global_variable.wado/$test_6_globals_of_heap_types"() {
         unreachable;
     }
     global:global_variable.wado::ORIGIN = struct.new "global_variable.wado//GPoint" { x: 0, y: 0 };
-    if @unlikely((local.tee $v0_0(global:global_variable.wado::ORIGIN.x) == 0) == 0) {
+    if @unlikely((local.tee self_23(global:global_variable.wado::ORIGIN.x) == 0) == 0) {
         cold_path;
-        "global_variable.wado/$test_6_globals_of_heap_types$cold3"($v0_0);
+        "global_variable.wado/$test_6_globals_of_heap_types$cold3"(self_23);
         unreachable;
     }
-    if @unlikely((local.tee $v0_0(global:global_variable.wado::ORIGIN.y) == 0) == 0) {
+    if @unlikely((local.tee self_23(global:global_variable.wado::ORIGIN.y) == 0) == 0) {
         cold_path;
-        "global_variable.wado/$test_6_globals_of_heap_types$cold2"($v0_0);
+        "global_variable.wado/$test_6_globals_of_heap_types$cold2"(self_23);
         unreachable;
     }
     global:global_variable.wado::ORIGIN = struct.new "global_variable.wado//GPoint" { x: 10, y: 20 };
-    if @unlikely(local.tee $v0_0(global:global_variable.wado::ORIGIN.x) != 10) {
+    if @unlikely(local.tee self_23(global:global_variable.wado::ORIGIN.x) != 10) {
         cold_path;
-        "global_variable.wado/$test_6_globals_of_heap_types$cold1"($v0_0);
+        "global_variable.wado/$test_6_globals_of_heap_types$cold1"(self_23);
         unreachable;
     }
-    if @unlikely(local.tee $v0_0(global:global_variable.wado::ORIGIN.y) != 20) {
+    if @unlikely(local.tee self_23(global:global_variable.wado::ORIGIN.y) != 20) {
         cold_path;
-        "global_variable.wado/$test_6_globals_of_heap_types$cold0"($v0_0);
+        "global_variable.wado/$test_6_globals_of_heap_types$cold0"(self_23);
         unreachable;
     }
 }
@@ -1683,7 +1683,7 @@ fn "global_variable.wado/$cm_export__$test_12_an_option_global_declared_null_kee
 }
 
 fn "global_variable.wado/$initialize_module"() {
-    global:global_variable.wado::ITEMS = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(1, 2, 3), used: 3 };
+    global:global_variable.wado::ITEMS = struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(1, 2, 3), used: 3 };
     global:global_variable.wado::MESSAGE = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Hello, World!"), used: 13 };
     global:global_variable.wado::ORIGIN = struct.new "global_variable.wado//GPoint" { x: 0, y: 0 };
     global:global_variable.wado::INIT_MARKS = global:global_variable.wado::INIT_MARKS + 1;
@@ -2094,7 +2094,7 @@ fn "core:prelude/fpfmt.wado/mul_pow10"(p) {
     let p1_lo: i64;
     let p1_hi: i64;
     let p0_hi: i64;
-    let self_42: ref "core:prelude//List<u64>";
+    let self_42: ref "core:prelude/list.wado//List<u64>";
     q = p / 27;
     if local.tee p(p % 27) < 0 {
         q = q - 1;
@@ -2143,7 +2143,7 @@ fn "core:prelude/fpfmt.wado/short"(f) {
     let mid_i64_45: i64;
     let hi_tmp_46: i64;
     let sticky_49: u64;
-    let self_121: ref "core:prelude//List<u64>";
+    let self_121: ref "core:prelude/list.wado//List<u64>";
     let $sroa_slot_160: u64;
     let $sroa_slot_161: u64;
     let bits: u64;

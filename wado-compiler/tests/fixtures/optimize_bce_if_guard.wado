@@ -1,5 +1,10 @@
-// Bounds check elimination via dominating if-guard.
-// When `if (i + 2) < n`, then arr[i], arr[i+1], arr[i+2] are all in bounds.
+// Bounds check elimination under a dominating if-guard.
+// `if (i + 2) < n` puts `input[i + 1]` and `input[i + 2]` in bounds only while
+// `i + 2` does not wrap, which `n <= i32::MAX - 1` rules out: the loop is
+// versioned on it, and the fast copy keeps no check. `licm` reuses `n` for the
+// length the checks read, so the guard and the checks bound against one local.
+
+#[inline(never)]
 fn sliding_sum(input: &List<i32>) -> i32 {
     let n = input.len();
     let mut sum = 0;
@@ -12,7 +17,7 @@ fn sliding_sum(input: &List<i32>) -> i32 {
 }
 
 export fn run() {
-    let arr: List<i32> = [10, 20, 30, 40, 50];
+    let arr: List<i32> = builtin::black_box([10, 20, 30, 40, 50]);
     let s = sliding_sum(&arr);
     // (10+20+30) + (20+30+40) + (30+40+50) = 60 + 90 + 120 = 270
     assert s == 270;
@@ -21,6 +26,7 @@ export fn run() {
 __DATA__
 {
     "stdout": "",
-    "wir_pass": {"O2": ["nir/copy_prop"]},
-    "wir_not_expect:O2": ["index < self.len()"]
+    "wir_pass": {"O2": ["nir/licm", "nir/loop_version_bce"]},
+    "wir_scope": "optimize_bce_if_guard.wado/sliding_sum",
+    "wir_expect:O2": ["if $mv$input$used <= 2147483646 {"]
 }

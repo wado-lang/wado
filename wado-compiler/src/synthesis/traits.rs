@@ -742,6 +742,7 @@ fn register_reflect_assoc_types(
             let Some(base_decl) = base_decl else { continue };
             tt.register_generic_assoc_type_def(
                 base_decl,
+                tt.ref_kind(self_type),
                 TraitRef::bare(trait_key),
                 (*assoc_name).to_string(),
                 *resolved,
@@ -4923,7 +4924,7 @@ fn resolve_impl_module_via_env(
         | ResolvedType::Variant { .. }
         | ResolvedType::Newtype { .. }
         | ResolvedType::Flags { .. }
-        | ResolvedType::GenericInstance { .. } => tt.nominal_head(type_id).map(|(_, m)| m),
+        | ResolvedType::Tuple(_) => tt.nominal_head(type_id).map(|(_, m)| m),
         ResolvedType::Primitive(prim) => Some(ModuleSource::of_primitive(*prim)),
         ResolvedType::Unit => Some(ModuleSource::primitive()),
         ResolvedType::BuiltinArray(_) => Some(ModuleSource::array()),
@@ -4945,8 +4946,8 @@ fn resolve_impl_module_via_env(
 fn collect_generic_resource_instances(tt: &TypeTable) -> Vec<(TypeId, DefId, Vec<FqTypeName>)> {
     tt.all_types()
         .filter_map(|(id, resolved)| match resolved {
-            ResolvedType::GenericInstance { def, type_args }
-                if tt.is_resource_def(*def) && type_args.iter().all(|t| tt.is_concrete(*t)) =>
+            ResolvedType::Resource { def, type_args }
+                if !type_args.is_empty() && type_args.iter().all(|t| tt.is_concrete(*t)) =>
             {
                 let args = type_args.iter().map(|t| tt.fq_type_name(*t)).collect();
                 Some((id, *def, args))

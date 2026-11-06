@@ -134,7 +134,7 @@ struct sub/variant_deref_helper.wado//LabelElem {  // TypeId(15)
 
 struct sub/variant_deref_helper.wado//Alt {  // TypeId(16)
     mut label: ref null "core:prelude/string.wado//String",
-    mut elements: ref "core:prelude//List<sub/variant_deref_helper.wado/Elem>",
+    mut elements: ref "core:prelude/list.wado//List<sub/variant_deref_helper.wado/Elem>",
 }
 
 variant sub/variant_deref_helper.wado//Elem {  // TypeId(17)
@@ -142,7 +142,7 @@ variant sub/variant_deref_helper.wado//Elem {  // TypeId(17)
     Literal(ref "core:prelude/string.wado//String"),
     RuleRef(ref "core:prelude/string.wado//String"),
     Repeat(ref "sub/variant_deref_helper.wado//RepeatElem"),
-    Group(ref "core:prelude//List<sub/variant_deref_helper.wado/Alt>"),
+    Group(ref "core:prelude/list.wado//List<sub/variant_deref_helper.wado/Alt>"),
     Label(ref "sub/variant_deref_helper.wado//LabelElem"),
 }
 
@@ -168,7 +168,7 @@ struct sub/variant_deref_helper.wado//Elem::Repeat {  // TypeId(21)
 
 struct sub/variant_deref_helper.wado//Elem::Group {  // TypeId(22)
     discriminant: i32,
-    payload_0: ref "core:prelude//List<sub/variant_deref_helper.wado/Alt>",
+    payload_0: ref "core:prelude/list.wado//List<sub/variant_deref_helper.wado/Alt>",
 }
 
 struct sub/variant_deref_helper.wado//Elem::Label {  // TypeId(23)
@@ -188,13 +188,13 @@ array Array<sub/variant_deref_helper.wado/Alt> (mut ref "sub/variant_deref_helpe
 
 array Array<sub/variant_deref_helper.wado/Elem> (mut ref "sub/variant_deref_helper.wado//Elem");  // TypeId(26)
 
-struct core:prelude//List<sub/variant_deref_helper.wado/Alt> {  // TypeId(27)
-    mut repr: ref "Array<sub/variant_deref_helper.wado/Alt>",
+struct core:prelude/list.wado//List<sub/variant_deref_helper.wado/Elem> {  // TypeId(27)
+    mut repr: ref "Array<sub/variant_deref_helper.wado/Elem>",
     mut used: i32,
 }
 
-struct core:prelude//List<sub/variant_deref_helper.wado/Elem> {  // TypeId(28)
-    mut repr: ref "Array<sub/variant_deref_helper.wado/Elem>",
+struct core:prelude/list.wado//List<sub/variant_deref_helper.wado/Alt> {  // TypeId(28)
+    mut repr: ref "Array<sub/variant_deref_helper.wado/Alt>",
     mut used: i32,
 }
 
@@ -567,13 +567,13 @@ fn "variant_deref_cross_module.wado/$value_copy$sub/variant_deref_helper.wado/Al
     let $load_2: i32;
     let v_1: ref null "core:prelude/string.wado//String";
     let $vc_payload_1: ref "core:prelude/string.wado//String";
-    let v_4: ref "core:prelude//List<sub/variant_deref_helper.wado/Elem>";
+    let v_4: ref "core:prelude/list.wado//List<sub/variant_deref_helper.wado/Elem>";
     return struct.new "sub/variant_deref_helper.wado//Alt" { label: (if ref.is_null(local.tee v_1(v.label)) -> ref null "core:prelude/string.wado//String" {
         v_1;
     } else {
         $vc_payload_1 = ref.as_non_null(v_1);
         struct.new "core:prelude/string.wado//String" { repr: let $array_clone_src_1: ref Array<u8>; $array_clone_src_1 = $vc_payload_1.repr; $load_2 = $vc_payload_1.used; let $array_clone_dst_2: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>($load_2)), 0, $array_clone_src_1, 0, $load_2); $array_clone_dst_2, used: $load_2 };
-    }), elements: v_4 = v.elements; struct.new "core:prelude//List<sub/variant_deref_helper.wado/Elem>" { repr: let $array_clone_src_4: ref "Array<sub/variant_deref_helper.wado/Elem>"; $array_clone_src_4 = v_4.repr; $load_2 = v_4.used; let $array_clone_dst_5: ref "Array<sub/variant_deref_helper.wado/Elem>"; $array_clone_dst_5 = builtin::array_new<ref "sub/variant_deref_helper.wado//Elem">($load_2); let $array_clone_i_7: i32; $array_clone_i_7 = 0; let $array_clone_elem_8: ref null "sub/variant_deref_helper.wado//Elem"; $array_clone_deep_prefix: block {
+    }), elements: v_4 = v.elements; struct.new "core:prelude/list.wado//List<sub/variant_deref_helper.wado/Elem>" { repr: let $array_clone_src_4: ref "Array<sub/variant_deref_helper.wado/Elem>"; $array_clone_src_4 = v_4.repr; $load_2 = v_4.used; let $array_clone_dst_5: ref "Array<sub/variant_deref_helper.wado/Elem>"; $array_clone_dst_5 = builtin::array_new<ref "sub/variant_deref_helper.wado//Elem">($load_2); let $array_clone_i_7: i32; $array_clone_i_7 = 0; let $array_clone_elem_8: ref null "sub/variant_deref_helper.wado//Elem"; $array_clone_deep_prefix: block {
         l20: loop {
             break_if $array_clone_deep_prefix $array_clone_i_7 >= $load_2;
             $array_clone_elem_8 = builtin::array_get_value<ref "sub/variant_deref_helper.wado//Elem">($array_clone_src_4, $array_clone_i_7);
@@ -592,7 +592,7 @@ fn "variant_deref_cross_module.wado/$value_copy$sub/variant_deref_helper.wado/El
     let $load_1: i32;
     let $vc_payload_0: ref "core:prelude/string.wado//String";
     let $vc_payload_3: ref "sub/variant_deref_helper.wado//RepeatElem";
-    let $vc_payload_4: ref "core:prelude//List<sub/variant_deref_helper.wado/Alt>";
+    let $vc_payload_4: ref "core:prelude/list.wado//List<sub/variant_deref_helper.wado/Alt>";
     let $vc_payload_5: ref "sub/variant_deref_helper.wado//LabelElem";
     return (if ref.test "sub/variant_deref_helper.wado//Elem::TokenRef"(v) -> ref "sub/variant_deref_helper.wado//Elem" {
         $vc_payload_0 = ref.cast "sub/variant_deref_helper.wado//Elem::TokenRef"(v).payload_0;
@@ -608,7 +608,7 @@ fn "variant_deref_cross_module.wado/$value_copy$sub/variant_deref_helper.wado/El
         struct.new "sub/variant_deref_helper.wado//Elem::Repeat" { discriminant: 3, payload_0: struct.new "sub/variant_deref_helper.wado//RepeatElem" { element: "variant_deref_cross_module.wado/$value_copy$sub/variant_deref_helper.wado/Elem"($vc_payload_3.element) } };
     } else if ref.test "sub/variant_deref_helper.wado//Elem::Group"(v) -> ref "sub/variant_deref_helper.wado//Elem" {
         $vc_payload_4 = ref.cast "sub/variant_deref_helper.wado//Elem::Group"(v).payload_0;
-        struct.new "sub/variant_deref_helper.wado//Elem::Group" { discriminant: 4, payload_0: struct.new "core:prelude//List<sub/variant_deref_helper.wado/Alt>" { repr: let $array_clone_src_4: ref "Array<sub/variant_deref_helper.wado/Alt>"; $array_clone_src_4 = $vc_payload_4.repr; $load_1 = $vc_payload_4.used; let $array_clone_dst_5: ref "Array<sub/variant_deref_helper.wado/Alt>"; $array_clone_dst_5 = builtin::array_new<ref "sub/variant_deref_helper.wado//Alt">($load_1); let $array_clone_i_7: i32; $array_clone_i_7 = 0; let $array_clone_elem_8: ref null "sub/variant_deref_helper.wado//Alt"; $array_clone_deep_prefix: block {
+        struct.new "sub/variant_deref_helper.wado//Elem::Group" { discriminant: 4, payload_0: struct.new "core:prelude/list.wado//List<sub/variant_deref_helper.wado/Alt>" { repr: let $array_clone_src_4: ref "Array<sub/variant_deref_helper.wado/Alt>"; $array_clone_src_4 = $vc_payload_4.repr; $load_1 = $vc_payload_4.used; let $array_clone_dst_5: ref "Array<sub/variant_deref_helper.wado/Alt>"; $array_clone_dst_5 = builtin::array_new<ref "sub/variant_deref_helper.wado//Alt">($load_1); let $array_clone_i_7: i32; $array_clone_i_7 = 0; let $array_clone_elem_8: ref null "sub/variant_deref_helper.wado//Alt"; $array_clone_deep_prefix: block {
             l27: loop {
                 break_if $array_clone_deep_prefix $array_clone_i_7 >= $load_1;
                 $array_clone_elem_8 = builtin::array_get_value<ref "sub/variant_deref_helper.wado//Alt">($array_clone_src_4, $array_clone_i_7);
@@ -629,13 +629,13 @@ fn "variant_deref_cross_module.wado/$value_copy$sub/variant_deref_helper.wado/El
 
 fn "variant_deref_cross_module.wado/process$sroa[elem.value]"(elem, out) {
     let name_2: ref "core:prelude/string.wado//String";
-    let alts: ref "core:prelude//List<sub/variant_deref_helper.wado/Alt>";
+    let alts: ref "core:prelude/list.wado//List<sub/variant_deref_helper.wado/Alt>";
     let n_25: i32;
     let new_used_29: i32;
     let start_30: i32;
     let v_68: ref "sub/variant_deref_helper.wado//Alt";
     let v_69: ref null "core:prelude/string.wado//String";
-    let v_72: ref "core:prelude//List<sub/variant_deref_helper.wado/Elem>";
+    let v_72: ref "core:prelude/list.wado//List<sub/variant_deref_helper.wado/Elem>";
     let $sroa_$iter_0_repr_90: ref "Array<sub/variant_deref_helper.wado/Alt>";
     if ref.test "sub/variant_deref_helper.wado//Elem::TokenRef"(elem) {
         name_2 = ref.cast "sub/variant_deref_helper.wado//Elem::TokenRef"(elem).payload_0;

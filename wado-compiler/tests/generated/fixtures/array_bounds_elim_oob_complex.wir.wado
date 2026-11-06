@@ -53,7 +53,7 @@ struct core:prelude/format.wado//Formatter {  // TypeId(7)
 
 array Array<i32> (mut i32);  // TypeId(8)
 
-struct core:prelude//List<i32> {  // TypeId(9)
+struct core:prelude/list.wado//List<i32> {  // TypeId(9)
     mut repr: ref Array<i32>,
     mut used: i32,
 }
@@ -154,7 +154,7 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/StrSlice::char
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::format<core:prelude/list.wado/$tmpl$59e16269228f9c88,[core:prelude/string.wado/String,i32,i32]>" = fn(ref "core:prelude/list.wado//$tmpl$59e16269228f9c88") -> ref "core:prelude/string.wado//String";  // TypeId(57)
 
-type "functype//core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow" = fn(ref "core:prelude//List<i32>");  // TypeId(58)
+type "functype//core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow" = fn(ref "core:prelude/list.wado//List<i32>");  // TypeId(58)
 
 type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(59)
 
@@ -199,9 +199,9 @@ global global:core:prelude/primitive.wado::$const_obj_0: ref "core:prelude/strin
 
 fn "array_bounds_elim_oob_complex.wado/run"() with Stdout {
     let $load_1: ref Array<i32>;
-    let arr: ref "core:prelude//List<i32>";
+    let arr: ref "core:prelude/list.wado//List<i32>";
     cold_path;
-    arr = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(), used: 0 };
+    arr = struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(), used: 0 };
     if @unlikely(0 >= builtin::array_len(arr.repr)) {
         cold_path;
         "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(arr);

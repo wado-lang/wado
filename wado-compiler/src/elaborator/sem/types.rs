@@ -937,7 +937,7 @@ impl StaticMethodDispatch {
 /// Generic-instantiation decision at a call, struct-literal, or
 /// variant-construction site. `type_args` holds the concrete type per generic
 /// parameter in declaration order, `instance_type` the resulting
-/// `GenericInstance` id or the call's monomorphic target — recorded together so
+/// instance's id or the call's monomorphic target — recorded together so
 /// reify drops into the TIR slot without re-running `make_generic_instance`.
 #[derive(Clone)]
 pub(crate) struct GenericInstantiation {

@@ -190,8 +190,7 @@ pub(crate) struct WriteTarget<'e> {
     pub indexes: bool,
 }
 
-/// Rewrites each type the TIR holds with every effect variable replaced by its
-/// solved row.
+/// Rewrites each type the TIR holds as [`TypeTable::close_type`] does.
 struct EffectRowWriter<'t> {
     table: &'t mut TypeTable,
     rows: &'t EffectRows,
@@ -203,22 +202,20 @@ impl TirMutVisitor for EffectRowWriter<'_> {
         *type_id = *self
             .written
             .entry(*type_id)
-            .or_insert_with(|| self.table.substitute_effect_rows(*type_id, self.rows));
+            .or_insert_with(|| self.table.close_type(*type_id, self.rows));
     }
 }
 
 impl Semantics {
     /// Write the row the effect check solved each effect variable to into every
-    /// type the TIR holds, so no TIR type names a variable from here on.
+    /// type the TIR holds, so no TIR type names a variable from here on, and no
+    /// struct instance's argument carries a row.
     pub fn write_back_effect_rows(&mut self, solved: &EffectRows) {
         let Some(state) = &self.state else {
             return;
         };
         let mut table = state.tysys.type_table.borrow_mut();
         let rows = table.close_effect_rows(solved);
-        if rows.is_empty() {
-            return;
-        }
         let mut writer = EffectRowWriter {
             table: &mut table,
             rows: &rows,

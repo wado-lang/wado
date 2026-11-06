@@ -148,7 +148,7 @@ struct spec_types_newtype.wado//$tmpl$7a99cb65f6ad01c7 {  // TypeId(15)
     mut r1: ref "core:prelude/string.wado//String",
 }
 
-struct core:prelude//List<u8> {  // TypeId(16)
+struct core:prelude/list.wado//List<u8> {  // TypeId(16)
     mut repr: ref Array<u8>,
     mut used: i32,
 }
@@ -412,10 +412,10 @@ global global:core:prelude/primitive.wado::$const_obj_5: ref "core:prelude/strin
 
 fn "spec_types_newtype.wado/$test_1_inherited_associated_functions"() {
     let $load_0: ref Array<u8>;
-    let b: ref "core:prelude//List<u8>";
+    let b: ref "core:prelude/list.wado//List<u8>";
     let $v2: u8;
     let $v3: bool;
-    builtin::array_set_u8(local.tee $load_0(local.tee b(struct.new "core:prelude//List<u8>" { repr: builtin::array_new<u8>(16), used: 0 }).repr), 0, 255);
+    builtin::array_set_u8(local.tee $load_0(local.tee b(struct.new "core:prelude/list.wado//List<u8>" { repr: builtin::array_new<u8>(16), used: 0 }).repr), 0, 255);
     b.used = 1;
     if @unlikely(local.tee $v3(local.tee $v2(builtin::array_get_value<u8>($load_0, 0)) == 255) == 0) {
         cold_path;

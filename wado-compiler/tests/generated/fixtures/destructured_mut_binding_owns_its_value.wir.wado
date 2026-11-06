@@ -63,12 +63,12 @@ struct core:prelude/format.wado//Formatter {  // TypeId(8)
 }
 
 struct destructured_mut_binding_owns_its_value.wado//Shape {  // TypeId(9)
-    mut axes: ref "core:prelude//List<core:prelude/string.wado/String>",
+    mut axes: ref "core:prelude/list.wado//List<core:prelude/string.wado/String>",
 }
 
 array Array<core:prelude/string.wado/String> (mut ref "core:prelude/string.wado//String");  // TypeId(10)
 
-struct core:prelude//List<core:prelude/string.wado/String> {  // TypeId(11)
+struct core:prelude/list.wado//List<core:prelude/string.wado/String> {  // TypeId(11)
     mut repr: ref "Array<core:prelude/string.wado/String>",
     mut used: i32,
 }
@@ -177,9 +177,9 @@ type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::pad
 
 type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>" = fn(ref "core:prelude/format.wado//Formatter", ref "core:prelude/string.wado//String");  // TypeId(63)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::write_char_n$sroa[self.buf]" = fn(ref "core:prelude/string.wado//String", char, i32);  // TypeId(64)
+type "functype//core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<core:prelude/list.wado/$tmpl$59e16269228f9c88,core:prelude/string.wado/String>::lit$sroa[self.index]" = fn(i32, ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//StrSlice";  // TypeId(64)
 
-type "functype//core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<core:prelude/list.wado/$tmpl$59e16269228f9c88,core:prelude/string.wado/String>::lit$sroa[self.index]" = fn(i32, ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//StrSlice";  // TypeId(65)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::write_char_n$sroa[self.buf]" = fn(ref "core:prelude/string.wado//String", char, i32);  // TypeId(65)
 
 type "functype//core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(66)
 
@@ -218,7 +218,7 @@ global global:core:prelude/primitive.wado::$const_obj_3: ref "core:prelude/strin
 
 fn "destructured_mut_binding_owns_its_value.wado/run"() with Stdout {
     let o: ref null "destructured_mut_binding_owns_its_value.wado//Shape";
-    let v_93: ref "core:prelude//List<core:prelude/string.wado/String>";
+    let v_93: ref "core:prelude/list.wado//List<core:prelude/string.wado/String>";
     let $cm_pair_7_126: i64;
     let $sroa_$pattern_temp_0_0_13_132: i32;
     let $sroa_$pattern_temp_0_1_14_133: i32;
@@ -251,7 +251,7 @@ fn "destructured_mut_binding_owns_its_value.wado/run"() with Stdout {
     "core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]$dae[return]"($sroa_$pattern_temp_0_1_14_133, new_repr_189);
     "wasi/stream-drop-writable"($sroa_$pattern_temp_0_1_14_133);
     "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_13_132);
-    v_93 = local.tee o(struct.new "destructured_mut_binding_owns_its_value.wado//Shape" { axes: struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: array.new_fixed<ref "core:prelude/string.wado//String">(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(80), used: 1 }), used: 1 } }).axes;
+    v_93 = local.tee o(struct.new "destructured_mut_binding_owns_its_value.wado//Shape" { axes: struct.new "core:prelude/list.wado//List<core:prelude/string.wado/String>" { repr: array.new_fixed<ref "core:prelude/string.wado//String">(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(80), used: 1 }), used: 1 } }).axes;
     let $array_clone_src_1: ref "Array<core:prelude/string.wado/String>";
     $array_clone_src_1 = v_93.repr;
     $sroa_$pattern_temp_0_0_13_132 = v_93.used;
@@ -1100,22 +1100,22 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelud
     }
 }
 
-fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_char_n$sroa[self.buf]"(self, c, n) {
-    let i: i32;
-    i = 0;
-    b122: block {
-        l123: loop {
-            break_if b122 i >= n;
-            "core:prelude/string.wado/core:prelude/string.wado/String::push"(self, c);
-            i = i + 1;
-            continue l123;
-        };
-    };
-}
-
 fn "core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<core:prelude/list.wado/$tmpl$59e16269228f9c88,core:prelude/string.wado/String>::lit$sroa[self.index]"(self, $mv$t$s0, $mv$t$r0, $mv$t$s1, $mv$t$r1, $mv$t$s2, $mv$t$r2, $mv$t$s3, $mv$t$r3) {
     return block -> ref "core:prelude/string.wado//StrSlice" {
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_view"(local.tee $mv$t$s0("core:prelude/list.wado/$template_segment$core:prelude/list.wado/$tmpl$59e16269228f9c88"($mv$t$s0, $mv$t$r0, $mv$t$s1, $mv$t$r1, $mv$t$s2, $mv$t$r2, $mv$t$s3, $mv$t$r3, 2 * self)).repr, $mv$t$s0.used);
+    };
+}
+
+fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_char_n$sroa[self.buf]"(self, c, n) {
+    let i: i32;
+    i = 0;
+    b123: block {
+        l124: loop {
+            break_if b123 i >= n;
+            "core:prelude/string.wado/core:prelude/string.wado/String::push"(self, c);
+            i = i + 1;
+            continue l124;
+        };
     };
 }
 

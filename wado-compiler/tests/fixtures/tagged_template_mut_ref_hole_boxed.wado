@@ -1,0 +1,20 @@
+// A template whose hole holds a `&mut bool` names its `TemplateHole` instance
+// before the boxing rewrite respells that argument as `Box<bool>`; the
+// instance must still be found under the rewritten spelling.
+use { println, Stdout } from "core:cli";
+
+fn render(label: String, flag: &mut bool) -> String {
+    *flag = !*flag;
+    return `${label}=${flag}`;
+}
+
+export fn run() with Stdout {
+    let mut on = false;
+    println(render("on", &mut on));
+    println(`${on}`);
+}
+
+__DATA__
+{
+    "stdout": "on=true\ntrue\n"
+}

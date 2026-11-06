@@ -732,7 +732,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .reflect_structure_head(self_ty);
         let (base_name, module_source, type_args) =
             match self.tysys.type_table.borrow().get(self_ty).clone() {
-                ResolvedType::Variant { .. } | ResolvedType::GenericInstance { .. } => {
+                ResolvedType::Variant { .. } => {
                     let type_args = self
                         .tysys
                         .type_table

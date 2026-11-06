@@ -205,10 +205,7 @@ pub(super) fn peel_to_struct(tt: &TypeTable, type_id: TypeId) -> Option<(StructD
         // An anonymous shape names no declaration, so the head is what
         // answers for it — a `DefId` would drop the whole anon-composition
         // path on the floor.
-        ResolvedType::Struct { def, .. } => Some((*def, Vec::new())),
-        ResolvedType::GenericInstance { def, type_args } => {
-            Some((StructDef::Decl(*def), type_args.clone()))
-        }
+        ResolvedType::Struct { def, type_args } => Some((*def, type_args.clone())),
         _ => None,
     }
 }
@@ -539,16 +536,12 @@ const SHARE_NO_REPRESENTATION: &str =
 /// is only ever a newtype step, which shares a base.
 fn aggregate_cast_hint(tt: &TypeTable, source: TypeId, target: TypeId) -> Option<String> {
     // `i128` / `u128` are stored as structs but are scalars to `as`; the
-    // wide-int rules judge them. A tuple is a `GenericInstance` of a tuple
-    // head, so no arm of its own.
+    // wide-int rules judge them.
     let is_aggregate = |id| {
         !tt.is_wide_int(id)
-            && !tt.is_resource_type(tt.representation_head(id))
             && matches!(
                 tt.get(tt.representation_head(id)),
-                ResolvedType::Struct { .. }
-                    | ResolvedType::GenericInstance { .. }
-                    | ResolvedType::Variant { .. }
+                ResolvedType::Struct { .. } | ResolvedType::Tuple(_) | ResolvedType::Variant { .. }
             )
     };
     // Only a settled scalar is known to share nothing with an aggregate: a
@@ -574,9 +567,10 @@ fn aggregate_cast_hint(tt: &TypeTable, source: TypeId, target: TypeId) -> Option
 /// The method replacing a rejected `Slice<T>` ↔ `List<T>` cast.
 fn slice_list_conversion(tt: &TypeTable, source: TypeId, target: TypeId) -> Option<&'static str> {
     let slice_elem = |id| match tt.get(tt.representation_head(id)) {
-        ResolvedType::GenericInstance { def, type_args }
-            if tt.is_compiler_item(*def, CompilerItem::Slice) && type_args.len() == 1 =>
-        {
+        ResolvedType::Struct {
+            def: StructDef::Decl(def),
+            type_args,
+        } if tt.is_compiler_item(*def, CompilerItem::Slice) && type_args.len() == 1 => {
             Some(type_args[0])
         }
         _ => None,
@@ -1911,7 +1905,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let resolved = self.tysys.type_table.borrow().get(receiver_type).clone();
         let struct_head = match resolved {
             ResolvedType::Struct { def, .. } => Some(def),
-            ResolvedType::GenericInstance { def, .. } => Some(StructDef::Decl(def)),
             ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
                 return self.record_field_reference(inner, field_name, use_id);
             }
@@ -1940,6 +1933,35 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Clone the type to avoid borrow issues
         let resolved = self.tysys.type_table.borrow().get(struct_type).clone();
         match resolved {
+            // Generic instance - look up field from generic struct definition
+            // and substitute type parameters with concrete type args.
+            ResolvedType::Struct {
+                def: StructDef::Decl(_),
+                type_args,
+            } if !type_args.is_empty() => {
+                let name = self
+                    .tysys
+                    .type_table
+                    .borrow()
+                    .nominal_head(struct_type)
+                    .expect("a generic instance names a declaration")
+                    .0;
+                // Clone fields to avoid borrow issues. The declaration the
+                // instance names answers first: a function-local generic
+                // struct's fields are keyed by its identity, and the spelling
+                // reaches them only through the local-item render index.
+                let fields_clone = self.struct_fields_of_type(struct_type).cloned();
+                if let Some(struct_info) = fields_clone {
+                    for (index, (fname, ftype, _)) in struct_info.fields.iter().enumerate() {
+                        if fname == field_name {
+                            // Substitute type parameters with concrete types
+                            let concrete_type = self.substitute_in_frame(*ftype, &type_args);
+                            return (index as u32, concrete_type);
+                        }
+                    }
+                    return self.field_not_found(&name, field_name, span);
+                }
+            }
             // Struct field access
             ResolvedType::Struct { def, .. } => {
                 let hit = self.lookup_struct_fields_of(def).map(|info| {
@@ -1966,42 +1988,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             ResolvedType::Newtype { base_type, .. } => {
                 return self.lookup_field_type(base_type, field_name, span);
             }
-            // Generic instance - look up field from generic struct definition
-            // and substitute type parameters with concrete type args.
-            // Tuples use numeric field access (0, 1, 2, ...).
-            ResolvedType::GenericInstance { type_args, .. } => {
-                let name = self
-                    .tysys
-                    .type_table
-                    .borrow()
-                    .nominal_head(struct_type)
-                    .expect("a generic instance names a declaration")
-                    .0;
-                // Tuple field access (numeric field names: 0, 1, 2, ...)
-                let is_tuple = self.tysys.type_table.borrow().is_tuple(struct_type);
-                if is_tuple && let Ok(index) = field_name.parse::<usize>() {
-                    match self.tysys.tuple_literal_index_type(&type_args, index) {
+            ResolvedType::Tuple(elems) => {
+                if let Ok(index) = field_name.parse::<usize>() {
+                    match self.tysys.tuple_literal_index_type(&elems, index) {
                         Ok(elem) => return (index as u32, elem),
                         Err(message) => {
                             let _ = self.emit(TypeError::InvalidLiteral { message, span });
                             return (0, TypeTable::UNKNOWN);
                         }
                     }
-                }
-                // Clone fields to avoid borrow issues. The declaration the
-                // instance names answers first: a function-local generic
-                // struct's fields are keyed by its identity, and the spelling
-                // reaches them only through the local-item render index.
-                let fields_clone = self.struct_fields_of_type(struct_type).cloned();
-                if let Some(struct_info) = fields_clone {
-                    for (index, (fname, ftype, _)) in struct_info.fields.iter().enumerate() {
-                        if fname == field_name {
-                            // Substitute type parameters with concrete types
-                            let concrete_type = self.substitute_in_frame(*ftype, &type_args);
-                            return (index as u32, concrete_type);
-                        }
-                    }
-                    return self.field_not_found(&name, field_name, span);
                 }
             }
             // An unsolved variable is reported where it stays unsolved, and the
@@ -2108,7 +2103,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ) {
         let resolved = self.tysys.type_table.borrow().get(struct_type).clone();
         let (struct_name, module_source) = match resolved {
-            ResolvedType::Struct { .. } | ResolvedType::GenericInstance { .. } => self
+            ResolvedType::Struct { .. } => self
                 .tysys
                 .type_table
                 .borrow()
@@ -2220,12 +2215,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let base_type = self.tysys.type_table.borrow().get(base_type_id).clone();
 
         // Handle tuple indexing: t[0] is equivalent to t.0
-        if let ResolvedType::GenericInstance {
-            def,
-            type_args: ref elements,
-        } = base_type
-            && self.tysys.type_table.borrow().is_tuple_def(def)
-        {
+        if let ResolvedType::Tuple(ref elements) = base_type {
             // Tuple indexing requires a constant integer index
             if let ast::Expr::Literal(ast::LiteralExpr {
                 value: ast::Literal::Number(repr),
@@ -3302,10 +3292,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     pub(super) fn struct_field_types(&self, struct_type: TypeId) -> Option<Vec<(String, TypeId)>> {
         let resolved = self.tysys.type_table.borrow().get(struct_type).clone();
         let (info, type_args) = match resolved {
+            ResolvedType::Struct {
+                def: StructDef::Decl(_),
+                type_args,
+            } if !type_args.is_empty() => (self.struct_fields_of_type(struct_type)?, type_args),
             ResolvedType::Struct { def, .. } => (self.lookup_struct_fields_of(def)?, Vec::new()),
-            ResolvedType::GenericInstance { type_args, .. } => {
-                (self.struct_fields_of_type(struct_type)?, type_args)
-            }
             _ => return None,
         };
         Some(
@@ -3871,12 +3862,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// The struct declaration an unnamed literal's target names, or `None` where
     /// it declares none or builds from key-value pairs.
     pub(super) fn implicit_struct_target(&self, expected_type: Option<TypeId>) -> Option<DefId> {
-        match *self.tysys.type_table.borrow().get(expected_type?) {
+        match self.tysys.type_table.borrow().get(expected_type?) {
             ResolvedType::Struct {
                 def: StructDef::Decl(def),
+                type_args,
+            } if type_args.is_empty() => Some(*def),
+            &ResolvedType::Struct {
+                def: StructDef::Decl(def),
                 ..
-            } => Some(def),
-            ResolvedType::GenericInstance { def, .. } => {
+            } => {
                 let from_pairs = self
                     .tysys
                     .compiler_trait_def(CompilerItem::From)
@@ -4039,9 +4033,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // typed by — it would settle on the default `i32` and then mismatch.
         // A `..base` is a complete instance, so it pins them as well.
         let instance_args = |ty: TypeId| match self.tysys.type_table.borrow().get(ty) {
-            ResolvedType::GenericInstance { def, type_args } if Some(*def) == struct_decl => {
-                Some(type_args.clone())
-            }
+            ResolvedType::Struct {
+                def: StructDef::Decl(def),
+                type_args,
+            } if !type_args.is_empty() && Some(*def) == struct_decl => Some(type_args.clone()),
             _ => None,
         };
         let expected_args = expected_type
@@ -4431,7 +4426,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .collect();
             let mangled_name = mangle_generic_name(&struct_name, &arg_names);
             // WEP 2026-05-26: record the inferred
-            // type_args + the resulting `GenericInstance` + the mangled
+            // type_args + the resulting instance + the mangled
             // name so reify can emit `TirExprKind::StructLiteral { struct_type,
             // struct_name, … }` without re-running `infer_struct_type_args`
             // or `mangle_generic_name`.
@@ -4838,7 +4833,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// Infer a generic struct's type arguments by running [`InferCtx`] over its
     /// declared field types against the literal's values. An `expected_type`
-    /// that is a `GenericInstance` of the same struct is unified in too, so a
+    /// that is an instance of the same struct is unified in too, so a
     /// phantom parameter still lands concrete. Returns the *partial* result: an
     /// unbound parameter keeps its `TypeParam` id for the monomorphizer.
     pub(super) fn infer_struct_type_args(
@@ -4931,15 +4926,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             infer.add(expected_field_type, struct_field.type_id);
         }
 
-        // Back-infer from the caller's expected type: if it's a GenericInstance
-        // of this same struct, unify its type-args against the declaration-order
+        // Back-infer from the caller's expected type: if it's an instance of
+        // this same struct, unify its type-args against the declaration-order
         // type params so phantoms (fields-less params) get concrete bindings.
         if let Some(expected) = expected_type {
             let expected_resolved = self.tysys.type_table.borrow().get(expected).clone();
-            if let ResolvedType::GenericInstance {
-                def,
+            if let ResolvedType::Struct {
+                def: StructDef::Decl(def),
                 type_args: expected_args,
             } = expected_resolved
+                && !expected_args.is_empty()
                 && Some(def) == struct_decl
                 && expected_args.len() == struct_info.type_param_type_ids.len()
             {
@@ -5262,7 +5258,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let tt = self.tysys.type_table.borrow();
             if tt.as_option(return_type).is_some() {
                 None
-            } else if let ResolvedType::GenericInstance { type_args, .. } = tt.get(return_type)
+            } else if let ResolvedType::Variant { type_args, .. } = tt.get(return_type)
                 && tt.is_result(return_type)
                 && type_args.len() == 2
             {
@@ -5378,14 +5374,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Extract T, E from inner Result<T, E>
         let tt = self.tysys.type_table.borrow();
         let (ok_type, inner_err_type) = match tt.get(inner_type) {
-            ResolvedType::GenericInstance { type_args, .. } if type_args.len() == 2 => {
+            ResolvedType::Variant { type_args, .. } if type_args.len() == 2 => {
                 (type_args[0], type_args[1])
             }
             _ => panic!("? operand must be Result<T, E>"),
         };
         // Extract F from return Result<U, F>
         let outer_err_type = match tt.get(return_type) {
-            ResolvedType::GenericInstance { type_args, .. } if type_args.len() == 2 => type_args[1],
+            ResolvedType::Variant { type_args, .. } if type_args.len() == 2 => type_args[1],
             _ => panic!("? return type must be Result<U, F>"),
         };
         drop(tt);

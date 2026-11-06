@@ -52,12 +52,12 @@ struct core:prelude/format.wado//Formatter {  // TypeId(7)
 }
 
 struct licm_reloadable_hoist_nonunit.wado//Bag {  // TypeId(8)
-    mut items: ref "core:prelude//List<i32>",
+    mut items: ref "core:prelude/list.wado//List<i32>",
 }
 
 array Array<i32> (mut i32);  // TypeId(9)
 
-struct core:prelude//List<i32> {  // TypeId(10)
+struct core:prelude/list.wado//List<i32> {  // TypeId(10)
     mut repr: ref Array<i32>,
     mut used: i32,
 }
@@ -78,7 +78,7 @@ type "functype//wasi/$wasi:cli/stderr@0.3.0#write-via-stream" = fn(i32) -> i32; 
 
 type "functype//wasi/$wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(18)
 
-type "functype//licm_reloadable_hoist_nonunit.wado/probe" = fn(ref "licm_reloadable_hoist_nonunit.wado//Bag", ref "licm_reloadable_hoist_nonunit.wado//Bag", ref "core:prelude//List<i32>");  // TypeId(19)
+type "functype//licm_reloadable_hoist_nonunit.wado/probe" = fn(ref "licm_reloadable_hoist_nonunit.wado//Bag", ref "licm_reloadable_hoist_nonunit.wado//Bag", ref "core:prelude/list.wado//List<i32>");  // TypeId(19)
 
 type "functype//licm_reloadable_hoist_nonunit.wado/run" = fn();  // TypeId(20)
 
@@ -140,17 +140,17 @@ type "functype//licm_reloadable_hoist_nonunit.wado/licm_reloadable_hoist_nonunit
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::format<core:prelude/list.wado/$tmpl$59e16269228f9c88,[core:prelude/string.wado/String,i32,i32]>" = fn(ref "core:prelude/list.wado//$tmpl$59e16269228f9c88") -> ref "core:prelude/string.wado//String";  // TypeId(49)
 
-type "functype//core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow" = fn(ref "core:prelude//List<i32>");  // TypeId(50)
+type "functype//core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow" = fn(ref "core:prelude/list.wado//List<i32>");  // TypeId(50)
 
 type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/StrSlice>" = fn(ref "core:prelude/format.wado//Formatter", ref "core:prelude/string.wado//StrSlice");  // TypeId(51)
 
 type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>" = fn(ref "core:prelude/format.wado//Formatter", ref "core:prelude/string.wado//String");  // TypeId(52)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::write_char_n$sroa[self.buf]" = fn(ref "core:prelude/string.wado//String", char, i32);  // TypeId(53)
+type "functype//core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<core:prelude/list.wado/$tmpl$59e16269228f9c88,core:prelude/string.wado/String>::lit$sroa[self.index]" = fn(i32, ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//StrSlice";  // TypeId(53)
 
-type "functype//core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(54)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::write_char_n$sroa[self.buf]" = fn(ref "core:prelude/string.wado//String", char, i32);  // TypeId(54)
 
-type "functype//core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<core:prelude/list.wado/$tmpl$59e16269228f9c88,core:prelude/string.wado/String>::lit$sroa[self.index]" = fn(i32, ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//StrSlice";  // TypeId(55)
+type "functype//core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(55)
 
 type "functype//core:prelude/string.wado/&core:prelude/string.wado/StrSlice^core:prelude/string.wado/AsStrSlice::internal_append_to$sroa[self.value]" = fn(ref "core:prelude/string.wado//StrSlice", ref "core:prelude/string.wado//String");  // TypeId(56)
 
@@ -191,18 +191,18 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 global global:core:prelude/string.wado::$const_obj_3: ref Array<u8> = array.new_fixed<u8>(32);
 
 fn "licm_reloadable_hoist_nonunit.wado/probe"(sink, b, out) {
-    let $load_0: ref "core:prelude//List<i32>";
-    let n: i32;
+    let $load_0: ref "core:prelude/list.wado//List<i32>";
     let i: i32;
+    let self_9: i32;
     let value_11: i32;
     let used: i32;
     let $licm_repr_25: ref Array<i32>;
     let $bce_limit_26: i32;
-    n = local.tee $load_0(b.items).used;
+    self_9 = local.tee $load_0(b.items).used;
     i = 0;
     $licm_repr_25 = out.repr;
-    $bce_limit_26 = n;
-    if n <= $load_0.used {
+    $bce_limit_26 = self_9;
+    if self_9 <= $load_0.used {
         b1: block {
             l2: loop {
                 break_if b1 i >= $bce_limit_26;
@@ -210,7 +210,7 @@ fn "licm_reloadable_hoist_nonunit.wado/probe"(sink, b, out) {
                 if @unlikely(local.tee used(out.used) >= builtin::array_len($licm_repr_25)) {
                     cold_path;
                     "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(out);
-                    if n > $load_0.used {
+                    if self_9 > $load_0.used {
                         $bce_limit_26 = -2147483648;
                     }
                     $licm_repr_25 = out.repr;
@@ -220,7 +220,7 @@ fn "licm_reloadable_hoist_nonunit.wado/probe"(sink, b, out) {
                 if i == 0 {
                     "licm_reloadable_hoist_nonunit.wado/licm_reloadable_hoist_nonunit.wado/Bag::swap_out$dae[return]"(sink);
                     $load_0 = b.items;
-                    if n > $load_0.used {
+                    if self_9 > $load_0.used {
                         $bce_limit_26 = -2147483648;
                     }
                 }
@@ -231,7 +231,7 @@ fn "licm_reloadable_hoist_nonunit.wado/probe"(sink, b, out) {
     }
     b7: block {
         l8: loop {
-            break_if b7 i >= n;
+            break_if b7 i >= self_9;
             $bce_limit_26 = $load_0.used;
             if @unlikely(i >= $bce_limit_26) {
                 cold_path;
@@ -258,7 +258,7 @@ fn "licm_reloadable_hoist_nonunit.wado/probe"(sink, b, out) {
 
 fn "licm_reloadable_hoist_nonunit.wado/run"() with Stdout {
     let bag: ref "licm_reloadable_hoist_nonunit.wado//Bag";
-    let out_1: ref "core:prelude//List<i32>";
+    let out_1: ref "core:prelude/list.wado//List<i32>";
     let s: ref "core:prelude/string.wado//String";
     let end: i32;
     let ref_val: i32;
@@ -268,8 +268,8 @@ fn "licm_reloadable_hoist_nonunit.wado/run"() with Stdout {
     let $cm_pair_7: i64;
     let $sroa_$iter_0_repr_49: ref Array<i32>;
     let $sroa_$iter_0_index_50: i32;
-    bag = struct.new "licm_reloadable_hoist_nonunit.wado//Bag" { items: struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(1, 2, 3), used: 3 } };
-    out_1 = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(), used: 0 };
+    bag = struct.new "licm_reloadable_hoist_nonunit.wado//Bag" { items: struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(1, 2, 3), used: 3 } };
+    out_1 = struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(), used: 0 };
     "licm_reloadable_hoist_nonunit.wado/probe"(bag, bag, out_1);
     s = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
     end = out_1.used;
@@ -710,7 +710,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/StrSlice^core:prelude/stri
 }
 
 fn "licm_reloadable_hoist_nonunit.wado/licm_reloadable_hoist_nonunit.wado/Bag::swap_out$dae[return]"(self) {
-    self.items = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(7, 7, 7), used: 3 };
+    self.items = struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(7, 7, 7), used: 3 };
     return;
 }
 
@@ -843,15 +843,21 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelud
     }
 }
 
+fn "core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<core:prelude/list.wado/$tmpl$59e16269228f9c88,core:prelude/string.wado/String>::lit$sroa[self.index]"(self, $mv$t$s0, $mv$t$r0, $mv$t$s1, $mv$t$r1, $mv$t$s2, $mv$t$r2, $mv$t$s3, $mv$t$r3) {
+    return block -> ref "core:prelude/string.wado//StrSlice" {
+        "core:prelude/string.wado/core:prelude/string.wado/String::internal_view"(local.tee $mv$t$s0("core:prelude/list.wado/$template_segment$core:prelude/list.wado/$tmpl$59e16269228f9c88"($mv$t$s0, $mv$t$r0, $mv$t$s1, $mv$t$r1, $mv$t$s2, $mv$t$r2, $mv$t$s3, $mv$t$r3, 2 * self)).repr, $mv$t$s0.used);
+    };
+}
+
 fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_char_n$sroa[self.buf]"(self, c, n) {
     let i: i32;
     i = 0;
-    b83: block {
-        l84: loop {
-            break_if b83 i >= n;
+    b84: block {
+        l85: loop {
+            break_if b84 i >= n;
             "core:prelude/string.wado/core:prelude/string.wado/String::push"(self, c);
             i = i + 1;
-            continue l84;
+            continue l85;
         };
     };
 }
@@ -929,27 +935,21 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(self, f) {
     is_negative = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$dae[alt_prefix]"(f, is_negative, self);
     arr = f.buf.repr;
     self = is_negative + self;
-    b104: block {
-        l105: loop {
-            break_if b104 (self - is_negative) < 2;
+    b105: block {
+        l106: loop {
+            break_if b105 (self - is_negative) < 2;
             q = x /u 100_i64;
             tens = local.tee pair(builtin::i32_wrap_i64(x - (q * 100_i64))) / 10;
             builtin::array_set_u8(arr, self - 1, (48 + pair) - (tens * 10));
             builtin::array_set_u8(arr, self - 2, 48 + tens);
             self = self - 2;
             x = q;
-            continue l105;
+            continue l106;
         };
     };
     if self > is_negative {
         builtin::array_set_u8(arr, is_negative, 48 + builtin::i32_wrap_i64(x %u 10_i64));
     }
-}
-
-fn "core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<core:prelude/list.wado/$tmpl$59e16269228f9c88,core:prelude/string.wado/String>::lit$sroa[self.index]"(self, $mv$t$s0, $mv$t$r0, $mv$t$s1, $mv$t$r1, $mv$t$s2, $mv$t$r2, $mv$t$s3, $mv$t$r3) {
-    return block -> ref "core:prelude/string.wado//StrSlice" {
-        "core:prelude/string.wado/core:prelude/string.wado/String::internal_view"(local.tee $mv$t$s0("core:prelude/list.wado/$template_segment$core:prelude/list.wado/$tmpl$59e16269228f9c88"($mv$t$s0, $mv$t$r0, $mv$t$s1, $mv$t$r1, $mv$t$s2, $mv$t$r2, $mv$t$s3, $mv$t$r3, 2 * self)).repr, $mv$t$s0.used);
-    };
 }
 
 fn "core:prelude/string.wado/&core:prelude/string.wado/StrSlice^core:prelude/string.wado/AsStrSlice::internal_append_to$sroa[self.value]"(self, out) {

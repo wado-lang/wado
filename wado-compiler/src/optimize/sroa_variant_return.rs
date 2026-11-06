@@ -861,8 +861,7 @@ fn tail_call_callees(body: &Body) -> Vec<FuncId> {
 /// substituted against the instance's type arguments.
 fn variant_cases(project: &NirPackage, type_id: TypeId) -> Option<(Vec<String>, Vec<TypeId>)> {
     let (def, type_args) = match project.type_table.borrow().get(type_id) {
-        ResolvedType::Variant { def } => (*def, Vec::new()),
-        ResolvedType::GenericInstance { def, type_args } => (*def, type_args.clone()),
+        ResolvedType::Variant { def, type_args } => (*def, type_args.clone()),
         _ => return None,
     };
     Some(project.variant_cases(def, &type_args)?.into_iter().unzip())
@@ -904,16 +903,13 @@ fn slot_shape(payload: TypeId, type_table: &TypeTable) -> Option<SlotShape> {
             PrimitiveType::V128 => None,
         },
         _ if type_table.is_resource_object(payload) => Some(SlotShape::Wrapped),
-        ResolvedType::GenericInstance { def, .. } if type_table.is_resource_def(*def) => {
-            Some(SlotShape::Direct(Pad::Int(payload)))
-        }
         ResolvedType::Resource { .. } | ResolvedType::Enum { .. } | ResolvedType::Flags { .. } => {
             Some(SlotShape::Direct(Pad::Int(payload)))
         }
-        ResolvedType::Struct { .. }
-        | ResolvedType::BuiltinArray(_)
-        | ResolvedType::Variant { .. } => Some(SlotShape::Wrapped),
-        ResolvedType::GenericInstance { .. } => {
+        ResolvedType::Struct { .. } | ResolvedType::Tuple(_) | ResolvedType::BuiltinArray(_) => {
+            Some(SlotShape::Wrapped)
+        }
+        ResolvedType::Variant { .. } => {
             // `Option<X>` for a GC-ref `X` is already `ref null X`; wrapping it
             // again yields a variant whose payload is nullable, which
             // `nullable_ref` refuses to erase — so it would cost a real box.
@@ -944,12 +940,9 @@ fn slot_shape(payload: TypeId, type_table: &TypeTable) -> Option<SlotShape> {
 fn is_gc_ref(type_id: TypeId, type_table: &TypeTable) -> bool {
     match type_table.get(type_id) {
         ResolvedType::Resource { .. } => type_table.is_resource_object(type_id),
-        ResolvedType::GenericInstance { def, .. } if type_table.is_resource_def(*def) => {
-            type_table.is_resource_object(type_id)
-        }
         ResolvedType::Struct { .. }
         | ResolvedType::Variant { .. }
-        | ResolvedType::GenericInstance { .. }
+        | ResolvedType::Tuple(_)
         | ResolvedType::BuiltinArray(_) => true,
         ResolvedType::Newtype { base_type, .. } => is_gc_ref(*base_type, type_table),
         ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => is_gc_ref(*inner, type_table),

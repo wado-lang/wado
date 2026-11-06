@@ -41,12 +41,12 @@ struct match_deref_scrutinee_reads_in_place.wado//$tmpl$ebaa20f4a908b504 {  // T
 
 struct match_deref_scrutinee_reads_in_place.wado//Multi {  // TypeId(7)
     mut name: ref "core:prelude/string.wado//String",
-    mut alts: ref "core:prelude//List<core:prelude/string.wado/String>",
+    mut alts: ref "core:prelude/list.wado//List<core:prelude/string.wado/String>",
 }
 
 struct match_deref_scrutinee_reads_in_place.wado//Simple {  // TypeId(8)
     mut name: ref "core:prelude/string.wado//String",
-    mut ids: ref "core:prelude//List<i32>",
+    mut ids: ref "core:prelude/list.wado//List<i32>",
 }
 
 variant match_deref_scrutinee_reads_in_place.wado//Rule {  // TypeId(9)
@@ -66,16 +66,16 @@ struct match_deref_scrutinee_reads_in_place.wado//Rule::M {  // TypeId(11)
 
 array Array<i32> (mut i32);  // TypeId(12)
 
-array Array<match_deref_scrutinee_reads_in_place.wado/Rule> (mut ref "match_deref_scrutinee_reads_in_place.wado//Rule");  // TypeId(13)
+array Array<core:prelude/string.wado/String> (mut ref "core:prelude/string.wado//String");  // TypeId(13)
 
-array Array<core:prelude/string.wado/String> (mut ref "core:prelude/string.wado//String");  // TypeId(14)
+array Array<match_deref_scrutinee_reads_in_place.wado/Rule> (mut ref "match_deref_scrutinee_reads_in_place.wado//Rule");  // TypeId(14)
 
-struct core:prelude//List<core:prelude/string.wado/String> {  // TypeId(15)
+struct core:prelude/list.wado//List<core:prelude/string.wado/String> {  // TypeId(15)
     mut repr: ref "Array<core:prelude/string.wado/String>",
     mut used: i32,
 }
 
-struct core:prelude//List<i32> {  // TypeId(16)
+struct core:prelude/list.wado//List<i32> {  // TypeId(16)
     mut repr: ref Array<i32>,
     mut used: i32,
 }
@@ -185,7 +185,7 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode";
 
-global global:match_deref_scrutinee_reads_in_place.wado::$const_obj_0: ref "Array<match_deref_scrutinee_reads_in_place.wado/Rule>" = array.new_fixed<ref "match_deref_scrutinee_reads_in_place.wado//Rule">(struct.new "match_deref_scrutinee_reads_in_place.wado//Rule::S" { discriminant: 0, payload_0: struct.new "match_deref_scrutinee_reads_in_place.wado//Simple" { name: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97), used: 1 }, ids: struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(1, 2), used: 2 } } });
+global global:match_deref_scrutinee_reads_in_place.wado::$const_obj_0: ref "Array<match_deref_scrutinee_reads_in_place.wado/Rule>" = array.new_fixed<ref "match_deref_scrutinee_reads_in_place.wado//Rule">(struct.new "match_deref_scrutinee_reads_in_place.wado//Rule::S" { discriminant: 0, payload_0: struct.new "match_deref_scrutinee_reads_in_place.wado//Simple" { name: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97), used: 1 }, ids: struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(1, 2), used: 2 } } });
 global global:core:prelude/primitive.wado::$const_obj_1: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
 
 fn "match_deref_scrutinee_reads_in_place.wado/run"() {

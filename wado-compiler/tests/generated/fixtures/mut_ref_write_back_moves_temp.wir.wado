@@ -61,7 +61,7 @@ struct core:prelude/format.wado//Formatter {  // TypeId(9)
 }
 
 struct mut_ref_write_back_moves_temp.wado//Graph {  // TypeId(10)
-    mut data: ref "core:prelude//List<i32>",
+    mut data: ref "core:prelude/list.wado//List<i32>",
     mut sub: ref null "mut_ref_write_back_moves_temp.wado//Graph",
 }
 
@@ -75,7 +75,7 @@ struct mut_ref_write_back_moves_temp.wado//Reader {  // TypeId(12)
 
 array Array<i32> (mut i32);  // TypeId(13)
 
-struct core:prelude//List<i32> {  // TypeId(14)
+struct core:prelude/list.wado//List<i32> {  // TypeId(14)
     mut repr: ref Array<i32>,
     mut used: i32,
 }
@@ -182,7 +182,7 @@ type "functype//mut_ref_write_back_moves_temp.wado/mut_ref_write_back_moves_temp
 
 type "functype//core:prelude/types.wado/core:prelude/types.wado/$tmpl$0a6f357a930e0d85^core:prelude/traits.wado/ReflectTemplate::tail" = fn(ref "core:prelude/types.wado//$tmpl$0a6f357a930e0d85") -> ref "core:prelude/string.wado//StrSlice";  // TypeId(65)
 
-type "functype//core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow" = fn(ref "core:prelude//List<i32>");  // TypeId(66)
+type "functype//core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow" = fn(ref "core:prelude/list.wado//List<i32>");  // TypeId(66)
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::format<core:prelude/types.wado/$tmpl$0a6f357a930e0d85,[core:prelude/string.wado/String,core:prelude/string.wado/String]>" = fn(ref "core:prelude/types.wado//$tmpl$0a6f357a930e0d85") -> ref "core:prelude/string.wado//String";  // TypeId(67)
 
@@ -212,11 +212,11 @@ type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::pre
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/StrSlice::byte_at$unchecked$spec0$dae[index]" = fn(ref Array<u8>, i32) -> u8;  // TypeId(80)
 
-type "functype//core:prelude/traits.wado/core:prelude/types.wado/Option<core:prelude/list.wado/List<i32>>^core:prelude/traits.wado/Inspect::inspect$sroa[self.value]$spec0$sroa[f.buf]" = fn(ref null "core:prelude//List<i32>", ref "core:prelude/string.wado//String");  // TypeId(81)
+type "functype//core:prelude/traits.wado/core:prelude/types.wado/Option<core:prelude/list.wado/List<i32>>^core:prelude/traits.wado/Inspect::inspect$sroa[self.value]$spec0$sroa[f.buf]" = fn(ref null "core:prelude/list.wado//List<i32>", ref "core:prelude/string.wado//String");  // TypeId(81)
 
 type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]" = fn(ref "core:prelude/string.wado//String", bool, i32) -> i32;  // TypeId(82)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::format<mut_ref_write_back_moves_temp.wado/$tmpl$605daa76b525c38b,[core:prelude/types.wado/Option<core:prelude/list.wado/List<i32>>,core:prelude/types.wado/Option<core:prelude/list.wado/List<i32>>]>$spec0$spec0" = fn(ref null "core:prelude//List<i32>", ref null "core:prelude//List<i32>") -> ref "core:prelude/string.wado//String";  // TypeId(83)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::format<mut_ref_write_back_moves_temp.wado/$tmpl$605daa76b525c38b,[core:prelude/types.wado/Option<core:prelude/list.wado/List<i32>>,core:prelude/types.wado/Option<core:prelude/list.wado/List<i32>>]>$spec0$spec0" = fn(ref null "core:prelude/list.wado//List<i32>", ref null "core:prelude/list.wado//List<i32>") -> ref "core:prelude/string.wado//String";  // TypeId(83)
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(84)
 
@@ -259,7 +259,7 @@ global global:core:prelude/traits.wado::$const_obj_48: ref Array<u8> = array.new
 global global:core:prelude/traits.wado::$const_obj_49: ref Array<u8> = array.new_fixed<u8>(78, 111, 110, 101);
 
 fn "mut_ref_write_back_moves_temp.wado/run"() with Stdout {
-    let $load_5: ref Array<u8>;
+    let $load_4: ref Array<u8>;
     let m: ref "mut_ref_write_back_moves_temp.wado//Model";
     let r: ref "mut_ref_write_back_moves_temp.wado//Reader";
     let g: ref "mut_ref_write_back_moves_temp.wado//Graph";
@@ -311,9 +311,9 @@ fn "mut_ref_write_back_moves_temp.wado/run"() with Stdout {
         is_negative_98 = $mv$self_3$0 < 0;
         $mv$self_3$0 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_102(x_102 = builtin::i64_extend_i32_s($mv$self_3$0); select i64(x_102 < 0_i64, 0_i64 - x_102, x_102)));
         is_negative_98 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"(e_5, is_negative_98, $mv$self_3$0);
-        "core:prelude/primitive.wado/write_decimal_digits"(local.tee $load_5(e_5.repr), is_negative_98, x_102, $mv$self_3$0);
+        "core:prelude/primitive.wado/write_decimal_digits"(local.tee $load_4(e_5.repr), is_negative_98, x_102, $mv$self_3$0);
         $sroa_view_repr_203 = global:mut_ref_write_back_moves_temp.wado::$const_obj_0;
-        if @unlikely(local.tee $mv$self_3$0(e_5.used + 1) > builtin::array_len($load_5)) {
+        if @unlikely(local.tee $mv$self_3$0(e_5.used + 1) > builtin::array_len($load_4)) {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(e_5, $mv$self_3$0);
         }
@@ -349,20 +349,20 @@ fn "mut_ref_write_back_moves_temp.wado/$cm_export__run"() {
 
 fn "mut_ref_write_back_moves_temp.wado/result_independent_of_place$spec0$dae[replace]"() with Stdout {
     let $load_1: i32;
-    let $local_6: ref null "core:prelude//List<i32>";
-    let $local_8_7: ref null "core:prelude//List<i32>";
-    let $vc_payload_1: ref "core:prelude//List<i32>";
-    let $sroa_h_o_32: ref null "core:prelude//List<i32>";
-    let $sroa_$write_back_5_value_34: ref null "core:prelude//List<i32>";
+    let $local_6: ref null "core:prelude/list.wado//List<i32>";
+    let $local_8_7: ref null "core:prelude/list.wado//List<i32>";
+    let $vc_payload_1: ref "core:prelude/list.wado//List<i32>";
+    let $sroa_h_o_32: ref null "core:prelude/list.wado//List<i32>";
+    let $sroa_$write_back_5_value_34: ref null "core:prelude/list.wado//List<i32>";
     let message_34: ref "core:prelude/string.wado//String";
     let $cm_pair_7: i64;
     let $sroa_$pattern_temp_0_1_14: i32;
-    $local_6 = local.tee $sroa_h_o_32(struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(7), used: 1 });
-    $local_8_7 = (if ref.is_null(local.tee $sroa_$write_back_5_value_34(struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(1), used: 1 })) -> ref null "core:prelude//List<i32>" {
+    $local_6 = local.tee $sroa_h_o_32(struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(7), used: 1 });
+    $local_8_7 = (if ref.is_null(local.tee $sroa_$write_back_5_value_34(struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(1), used: 1 })) -> ref null "core:prelude/list.wado//List<i32>" {
         $sroa_$write_back_5_value_34;
     } else {
         $vc_payload_1 = ref.as_non_null($sroa_$write_back_5_value_34);
-        struct.new "core:prelude//List<i32>" { repr: let $array_clone_src_1: ref Array<i32>; $array_clone_src_1 = $vc_payload_1.repr; $load_1 = $vc_payload_1.used; let $array_clone_dst_2: ref Array<i32>; builtin::array_copy<i32>(local.tee $array_clone_dst_2(builtin::array_new<i32>($load_1)), 0, $array_clone_src_1, 0, $load_1); $array_clone_dst_2, used: $load_1 };
+        struct.new "core:prelude/list.wado//List<i32>" { repr: let $array_clone_src_1: ref Array<i32>; $array_clone_src_1 = $vc_payload_1.repr; $load_1 = $vc_payload_1.used; let $array_clone_dst_2: ref Array<i32>; builtin::array_copy<i32>(local.tee $array_clone_dst_2(builtin::array_new<i32>($load_1)), 0, $array_clone_src_1, 0, $load_1); $array_clone_dst_2, used: $load_1 };
     });
     if ref.eq($sroa_$write_back_5_value_34, $local_6) == 0 {
         $sroa_h_o_32 = $sroa_$write_back_5_value_34;
@@ -397,17 +397,17 @@ fn "mut_ref_write_back_moves_temp.wado/result_independent_of_place$spec0$dae[rep
 
 fn "mut_ref_write_back_moves_temp.wado/result_independent_of_place$spec1$dae[replace]"() with Stdout {
     let $load_1: i32;
-    let $write_back_result_8: ref null "core:prelude//List<i32>";
-    let $vc_payload_1: ref "core:prelude//List<i32>";
-    let $sroa_h_o_32: ref null "core:prelude//List<i32>";
+    let $write_back_result_8: ref null "core:prelude/list.wado//List<i32>";
+    let $vc_payload_1: ref "core:prelude/list.wado//List<i32>";
+    let $sroa_h_o_32: ref null "core:prelude/list.wado//List<i32>";
     let message_34: ref "core:prelude/string.wado//String";
     let $cm_pair_7: i64;
     let $sroa_$pattern_temp_0_1_14: i32;
-    $write_back_result_8 = (if ref.is_null(local.tee $sroa_h_o_32(struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(7), used: 1 })) -> ref null "core:prelude//List<i32>" {
+    $write_back_result_8 = (if ref.is_null(local.tee $sroa_h_o_32(struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(7), used: 1 })) -> ref null "core:prelude/list.wado//List<i32>" {
         $sroa_h_o_32;
     } else {
         $vc_payload_1 = ref.as_non_null($sroa_h_o_32);
-        struct.new "core:prelude//List<i32>" { repr: let $array_clone_src_1: ref Array<i32>; $array_clone_src_1 = $vc_payload_1.repr; $load_1 = $vc_payload_1.used; let $array_clone_dst_2: ref Array<i32>; builtin::array_copy<i32>(local.tee $array_clone_dst_2(builtin::array_new<i32>($load_1)), 0, $array_clone_src_1, 0, $load_1); $array_clone_dst_2, used: $load_1 };
+        struct.new "core:prelude/list.wado//List<i32>" { repr: let $array_clone_src_1: ref Array<i32>; $array_clone_src_1 = $vc_payload_1.repr; $load_1 = $vc_payload_1.used; let $array_clone_dst_2: ref Array<i32>; builtin::array_copy<i32>(local.tee $array_clone_dst_2(builtin::array_new<i32>($load_1)), 0, $array_clone_src_1, 0, $load_1); $array_clone_dst_2, used: $load_1 };
     });
     if ref.eq($sroa_h_o_32, $sroa_h_o_32) == 0 {
     }
@@ -1220,7 +1220,7 @@ fn "mut_ref_write_back_moves_temp.wado/mut_ref_write_back_moves_temp.wado/Graph^
     let $load_8: ref null "mut_ref_write_back_moves_temp.wado//Graph";
     let $write_back_3: ref "core:prelude/types.wado//Box<core:prelude/types.wado/Option<mut_ref_write_back_moves_temp.wado/Graph>>";
     let $write_back_before_4: ref null "mut_ref_write_back_moves_temp.wado//Graph";
-    let self_7: ref "core:prelude//List<i32>";
+    let self_7: ref "core:prelude/list.wado//List<i32>";
     let value_8: i32;
     let used: i32;
     self_7 = self.data;
@@ -1270,7 +1270,7 @@ fn "mut_ref_write_back_moves_temp.wado/mut_ref_write_back_moves_temp.wado/Reader
     let m: ref "mut_ref_write_back_moves_temp.wado//Graph";
     let $qm_e: ref "core:prelude/string.wado//String";
     if ref.is_null(slot.value) {
-        slot.value = struct.new "mut_ref_write_back_moves_temp.wado//Graph" { data: struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(), used: 0 }, sub: ref.null none };
+        slot.value = struct.new "mut_ref_write_back_moves_temp.wado//Graph" { data: struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(), used: 0 }, sub: ref.null none };
     }
     let $match_scrut_1: ref null "mut_ref_write_back_moves_temp.wado//Graph";
     if ref.is_null(local.tee $match_scrut_1(slot.value)) == 0 {
@@ -1731,7 +1731,7 @@ fn "core:prelude/traits.wado/core:prelude/types.wado/Option<core:prelude/list.wa
     let $load_3: ref Array<u8>;
     let new_used_23: i32;
     let start_24: i32;
-    let payload_273: ref "core:prelude//List<i32>";
+    let payload_273: ref "core:prelude/list.wado//List<i32>";
     if ref.is_null(self) {
         if @unlikely(local.tee new_used_23(f.used + 6) > builtin::array_len(f.repr)) {
             cold_path;

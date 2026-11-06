@@ -17,7 +17,7 @@ struct core:prelude/string.wado//String {  // TypeId(3)
 
 struct tuple//[core:prelude/string.wado/String, core:prelude/list.wado/List<u8>] {  // TypeId(4)
     mut 0: ref "core:prelude/string.wado//String",
-    mut 1: ref "core:prelude//List<u8>",
+    mut 1: ref "core:prelude/list.wado//List<u8>",
 }
 
 struct spec_components_consume_holder.wado//Holder {  // TypeId(5)
@@ -26,12 +26,12 @@ struct spec_components_consume_holder.wado//Holder {  // TypeId(5)
 
 array Array<[core:prelude/string.wado/String,core:prelude/list.wado/List<u8>]> (mut ref "tuple//[core:prelude/string.wado/String, core:prelude/list.wado/List<u8>]");  // TypeId(6)
 
-struct core:prelude//List<u8> {  // TypeId(7)
+struct core:prelude/list.wado//List<u8> {  // TypeId(7)
     mut repr: ref Array<u8>,
     mut used: i32,
 }
 
-struct core:prelude//List<[core:prelude/string.wado/String,core:prelude/list.wado/List<u8>]> {  // TypeId(8)
+struct core:prelude/list.wado//List<[wasi:http/types.wado/FieldName,wasi:http/types.wado/FieldValue]> {  // TypeId(8)
     mut repr: ref "Array<[core:prelude/string.wado/String,core:prelude/list.wado/List<u8>]>",
     mut used: i32,
 }
@@ -58,7 +58,7 @@ type "functype//spec_components_consume_holder.wado/$test_0" = fn();  // TypeId(
 
 type "functype//spec_components_consume_holder.wado/$cm_binding__wasi:http/types@0.3.0#[constructor]fields" = fn() -> ref null "core:prelude//$Resource";  // TypeId(19)
 
-type "functype//spec_components_consume_holder.wado/$cm_binding__wasi:http/types@0.3.0#[method]fields.copy-all" = fn(ref null "core:prelude//$Resource") -> ref "core:prelude//List<[core:prelude/string.wado/String,core:prelude/list.wado/List<u8>]>";  // TypeId(20)
+type "functype//spec_components_consume_holder.wado/$cm_binding__wasi:http/types@0.3.0#[method]fields.copy-all" = fn(ref null "core:prelude//$Resource") -> ref "core:prelude/list.wado//List<[wasi:http/types.wado/FieldName,wasi:http/types.wado/FieldValue]>";  // TypeId(20)
 
 type "functype//spec_components_consume_holder.wado/$cm_export__$test_0" = fn();  // TypeId(21)
 
@@ -86,7 +86,7 @@ type "functype//core:rt/cm_stream_write_once" = fn(i32, i32, i32) -> i32;  // Ty
 
 type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(33)
 
-type "functype//core:prelude/list.wado/core:prelude/list.wado/List<[core:prelude/string.wado/String,core:prelude/list.wado/List<u8>]>::grow" = fn(ref "core:prelude//List<[core:prelude/string.wado/String,core:prelude/list.wado/List<u8>]>");  // TypeId(34)
+type "functype//core:prelude/list.wado/core:prelude/list.wado/List<[core:prelude/string.wado/String,core:prelude/list.wado/List<u8>]>::grow" = fn(ref "core:prelude/list.wado//List<[wasi:http/types.wado/FieldName,wasi:http/types.wado/FieldValue]>");  // TypeId(34)
 
 type "functype//wasi/resource-drop:wasi:http/types.wado#Fields" = fn(i32);  // TypeId(35)
 
@@ -147,19 +147,19 @@ fn "spec_components_consume_holder.wado/$cm_binding__wasi:http/types@0.3.0#[meth
     let $outptr: i32;
     let $base_2: i32;
     let $count_3: i32;
-    let $result_4: ref "core:prelude//List<[core:prelude/string.wado/String,core:prelude/list.wado/List<u8>]>";
+    let $result_4: ref "core:prelude/list.wado//List<[wasi:http/types.wado/FieldName,wasi:http/types.wado/FieldValue]>";
     let $i: i32;
     let $elem_addr: i32;
     let $str_ptr: i32;
     let $str_len: i32;
     let $lifted_string: ref "core:prelude/string.wado//String";
-    let $result_12: ref "core:prelude//List<u8>";
+    let $result_12: ref "core:prelude/list.wado//List<u8>";
     let arr_19: ref Array<u8>;
     let value_30: ref "tuple//[core:prelude/string.wado/String, core:prelude/list.wado/List<u8>]";
     $outptr = "mem/realloc"(0, 0, 4, 8);
     "wasi/$wasi:http/types@0.3.0#[method]fields.copy-all"(self.value, $outptr);
     $base_2 = builtin::load_i32($outptr);
-    $result_4 = struct.new "core:prelude//List<[core:prelude/string.wado/String,core:prelude/list.wado/List<u8>]>" { repr: builtin::array_new<ref "tuple//[core:prelude/string.wado/String, core:prelude/list.wado/List<u8>]">(local.tee $count_3(builtin::load_i32($outptr + 4))), used: 0 };
+    $result_4 = struct.new "core:prelude/list.wado//List<[wasi:http/types.wado/FieldName,wasi:http/types.wado/FieldValue]>" { repr: builtin::array_new<ref "tuple//[core:prelude/string.wado/String, core:prelude/list.wado/List<u8>]">(local.tee $count_3(builtin::load_i32($outptr + 4))), used: 0 };
     $i = 0;
     b3: block {
         l4: loop {
@@ -172,7 +172,7 @@ fn "spec_components_consume_holder.wado/$cm_binding__wasi:http/types@0.3.0#[meth
             }
             $str_ptr = builtin::load_i32($elem_addr + 8);
             "core:rt/memory_into_gc_array$dae[at]"(local.tee arr_19(builtin::array_new<u8>(local.tee $elem_addr(builtin::load_i32(($elem_addr + 8) + 4)))), $str_ptr, $elem_addr);
-            $result_12 = struct.new "core:prelude//List<u8>" { repr: arr_19, used: $elem_addr };
+            $result_12 = struct.new "core:prelude/list.wado//List<u8>" { repr: arr_19, used: $elem_addr };
             if $elem_addr > 0 {
                 drop("mem/realloc"($str_ptr, $elem_addr, 1, 0));
             }

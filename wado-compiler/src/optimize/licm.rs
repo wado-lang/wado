@@ -29,7 +29,7 @@ use crate::nir::NirLocal;
 use crate::nir_arena::PatId;
 use crate::nir_value_graph::ValuePool;
 use crate::optimize::alias::{CallImmutability, builder_alias_sets, first_param_types};
-use crate::optimize::arena_query::storage_root;
+use crate::optimize::arena_query::{is_pure_operand, storage_root};
 use crate::optimize::condition_implication::{
     eliminate_at_root, resolve_panic_ids, resolve_quiet_callee_ids,
 };
@@ -438,7 +438,7 @@ fn licm_block(
         };
 
         if let Some(lb) = loop_body {
-            let preheader = preheader_field_hoists(engine.body, &new_stmts, ctx);
+            let preheader = preheader_field_hoists(engine.body, &new_stmts);
             let (hoist_stmts, loop_changed) = licm_loop(engine, lb, ctx, outer_aliases, &preheader);
             changed |= loop_changed;
             new_stmts.extend(hoist_stmts);
@@ -557,7 +557,10 @@ fn licm_loop(
         let mut replacements = Vec::with_capacity(candidates.len());
         for candidate in candidates {
             if let Some(held) = preheader.iter().find(|h| {
-                h.local_index == candidate.local_index && h.field_index == candidate.field_index
+                h.local_index == candidate.local_index
+                    && h.field_index == candidate.field_index
+                    && !modified_vars.fully.contains(&h.new_local_index)
+                    && !modified_vars.rebound.contains(&h.new_local_index)
             }) {
                 replacements.push(held.clone());
                 continue;
@@ -641,49 +644,49 @@ fn licm_loop(
     (all_hoist_stmts, changed)
 }
 
-/// The field reads an earlier run hoisted into the `let`s directly ahead of a
-/// loop. Only hoists separate them from the loop, so each still holds what a
-/// new hoist of the same field would read, and reusing it keeps the guard and
-/// the checks it dominates reading one local.
-fn preheader_field_hoists(body: &Body, ahead: &[StmtId], ctx: &LicmCtx) -> Vec<HoistedField> {
-    ahead
-        .iter()
-        .rev()
-        .map_while(|&s| {
-            let StmtKind::Let {
-                name,
-                local_index,
-                is_mut,
-                value,
-                ..
-            } = &body.stmts[s].kind
-            else {
-                return None;
-            };
-            // A mutable hoist is a reload target, rewritten inside the loop.
-            if *is_mut || !ctx.hoist_locals.contains(local_index) {
-                return None;
-            }
-            Some((name, *local_index, value.as_expr()))
-        })
-        .filter_map(|(name, new_local_index, value)| {
-            let ExprKind::FieldAccess {
+/// The immutable `let x = r.f`s in the run of pure `let`s directly ahead of a
+/// loop, an earlier hoist or the program's own (`let n = xs.len()` inlined).
+/// Nothing in the run writes, so each still holds what a new hoist of the same
+/// field would read, as long as no later `let` in it rebinds `r` or `x`.
+/// Reusing it keeps the guard and the checks it dominates reading one local.
+fn preheader_field_hoists(body: &Body, ahead: &[StmtId]) -> Vec<HoistedField> {
+    let mut rebound: Vec<u32> = Vec::new();
+    let mut held = Vec::new();
+    for &s in ahead.iter().rev() {
+        let StmtKind::Let {
+            name,
+            local_index,
+            is_mut,
+            value,
+            ..
+        } = &body.stmts[s].kind
+        else {
+            break;
+        };
+        if !is_pure_operand(body, *value) {
+            break;
+        }
+        // A mutable `let` is a reload target, rewritten inside the loop.
+        if !*is_mut
+            && !rebound.contains(local_index)
+            && let Some(value) = value.as_expr()
+            && let ExprKind::FieldAccess {
                 expr, field_index, ..
-            } = &body.exprs[value?].kind
-            else {
-                return None;
-            };
-            let ExprKind::Local { index, .. } = body.exprs[expr.as_expr()?].kind else {
-                return None;
-            };
-            Some(HoistedField {
+            } = &body.exprs[value].kind
+            && let Some(root) = expr.as_expr()
+            && let ExprKind::Local { index, .. } = body.exprs[root].kind
+            && !rebound.contains(&index)
+        {
+            held.push(HoistedField {
                 local_index: index,
                 field_index: *field_index,
-                new_local_index,
+                new_local_index: *local_index,
                 name: name.clone(),
-            })
-        })
-        .collect()
+            });
+        }
+        rebound.push(*local_index);
+    }
+    held
 }
 
 /// Type of the source local a candidate reads, falling back to the field type
@@ -1604,8 +1607,8 @@ fn extract_alias_source(body: &Body, e: ExprId) -> Option<u32> {
 /// Check if a type is a GC heap type whose fields can be mutated by a callee.
 fn is_gc_heap_type(type_id: TypeId, type_table: &TypeTable) -> bool {
     match type_table.get(type_id) {
-        ResolvedType::GenericInstance { def, .. } => !type_table.is_resource_def(*def),
-        ResolvedType::Struct { .. } => true,
+        ResolvedType::Struct { .. } | ResolvedType::Tuple(_) => true,
+        ResolvedType::Variant { type_args, .. } => !type_args.is_empty(),
         ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
             is_gc_heap_type(*inner, type_table)
         }

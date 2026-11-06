@@ -48,8 +48,8 @@ struct affine_index_assign_drops_old_element.wado//Tok {  // TypeId(7)
 
 array Array<affine_index_assign_drops_old_element.wado/Tok> (mut ref null "affine_index_assign_drops_old_element.wado//Tok");  // TypeId(8)
 
-struct core:prelude//List<affine_index_assign_drops_old_element.wado/Tok> {  // TypeId(9)
-    mut repr: ref "Array<affine_index_assign_drops_old_element.wado/Tok>",
+struct core:prelude/list.wado//List<affine_index_assign_drops_old_element.wado/Tok> {  // TypeId(9)
+    mut repr: ref null "Array<affine_index_assign_drops_old_element.wado/Tok>",
     mut used: i32,
 }
 
@@ -71,7 +71,7 @@ type "functype//wasi/$wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32; 
 
 type "functype//affine_index_assign_drops_old_element.wado/run" = fn();  // TypeId(18)
 
-type "functype//affine_index_assign_drops_old_element.wado/$drop$core:prelude/list.wado/List<affine_index_assign_drops_old_element.wado/Tok>" = fn(ref null "core:prelude//List<affine_index_assign_drops_old_element.wado/Tok>");  // TypeId(19)
+type "functype//affine_index_assign_drops_old_element.wado/$drop$core:prelude/list.wado/List<affine_index_assign_drops_old_element.wado/Tok>" = fn(ref null "Array<affine_index_assign_drops_old_element.wado/Tok>", i32);  // TypeId(19)
 
 type "functype//affine_index_assign_drops_old_element.wado/$cm_export__run" = fn();  // TypeId(20)
 
@@ -143,17 +143,18 @@ global global:affine_index_assign_drops_old_element.wado::$const_obj_0: ref Arra
 global global:core:prelude/string.wado::$const_obj_3: ref Array<u8> = array.new_fixed<u8>(100, 114, 111, 112, 32);
 
 fn "affine_index_assign_drops_old_element.wado/run"() with Stdout {
-    let list: ref null "core:prelude//List<affine_index_assign_drops_old_element.wado/Tok>";
+    let list: ref null "core:prelude/list.wado//List<affine_index_assign_drops_old_element.wado/Tok>";
     let elements: ref null "Array<affine_index_assign_drops_old_element.wado/Tok>";
     let used: i32;
     let value_7: ref null "affine_index_assign_drops_old_element.wado//Tok";
     let $held_7: ref null "affine_index_assign_drops_old_element.wado//Tok";
     let message_41: ref "core:prelude/string.wado//String";
     let $cm_pair_7_48: i64;
+    let $sroa_$pattern_temp_0_0_9: i32;
     let $sroa_$pattern_temp_0_1_10: i32;
     let new_repr: ref Array<u8>;
     used = builtin::array_len(local.tee elements(array.new_fixed<ref null "affine_index_assign_drops_old_element.wado//Tok">(struct.new "affine_index_assign_drops_old_element.wado//Tok" { n: 1 }, struct.new "affine_index_assign_drops_old_element.wado//Tok" { n: 2 })));
-    list = struct.new "core:prelude//List<affine_index_assign_drops_old_element.wado/Tok>" { repr: ref.as_non_null(elements), used: used };
+    list = struct.new "core:prelude/list.wado//List<affine_index_assign_drops_old_element.wado/Tok>" { repr: elements, used: used };
     value_7 = struct.new "affine_index_assign_drops_old_element.wado//Tok" { n: 3 };
     if @unlikely(1 >= used) {
         cold_path;
@@ -164,42 +165,38 @@ fn "affine_index_assign_drops_old_element.wado/run"() with Stdout {
         builtin::array_set<ref null "affine_index_assign_drops_old_element.wado//Tok">(elements, 1, value_7);
     } else {
         message_41 = "core:prelude/string.wado/core:prelude/string.wado/String::format<affine_index_assign_drops_old_element.wado/$tmpl$fb51c04d54491732,[i32]>$spec0$spec0$sroa[t.h0]"($held_7.n);
-        used = builtin::i32_wrap_i64(local.tee $cm_pair_7_48("wasi/stream-new"()));
+        $sroa_$pattern_temp_0_0_9 = builtin::i32_wrap_i64(local.tee $cm_pair_7_48("wasi/stream-new"()));
         $sroa_$pattern_temp_0_1_10 = builtin::i32_wrap_i64($cm_pair_7_48 >> 32_i64);
-        used = "wasi/$wasi:cli/stdout@0.3.0#write-via-stream"(used);
+        $sroa_$pattern_temp_0_0_9 = "wasi/$wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$pattern_temp_0_0_9);
         "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_10, message_41.repr, message_41.used);
-        "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(used);
+        "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_9);
         $held_7.n = 3;
     }
-    used = builtin::i32_wrap_i64(local.tee $cm_pair_7_48("wasi/stream-new"()));
+    $sroa_$pattern_temp_0_0_9 = builtin::i32_wrap_i64(local.tee $cm_pair_7_48("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_10 = builtin::i32_wrap_i64($cm_pair_7_48 >> 32_i64);
-    used = "affine_index_assign_drops_old_element.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(used);
+    $sroa_$pattern_temp_0_0_9 = "affine_index_assign_drops_old_element.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$pattern_temp_0_0_9);
     builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>(4)), 0, global:affine_index_assign_drops_old_element.wado::$const_obj_0, 0, 3);
     builtin::array_set_u8(new_repr, 3, 10);
     "core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]$dae[return]"($sroa_$pattern_temp_0_1_10, new_repr);
     "wasi/stream-drop-writable"($sroa_$pattern_temp_0_1_10);
-    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(used);
+    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_9);
     if ref.is_null(list) == 0 {
-        "affine_index_assign_drops_old_element.wado/$drop$core:prelude/list.wado/List<affine_index_assign_drops_old_element.wado/Tok>"(list);
+        "affine_index_assign_drops_old_element.wado/$drop$core:prelude/list.wado/List<affine_index_assign_drops_old_element.wado/Tok>"(list.repr, used);
     }
 }
 
-fn "affine_index_assign_drops_old_element.wado/$drop$core:prelude/list.wado/List<affine_index_assign_drops_old_element.wado/Tok>"(value) {
-    let $slots_1: ref null "Array<affine_index_assign_drops_old_element.wado/Tok>";
-    let $end_2: i32;
+fn "affine_index_assign_drops_old_element.wado/$drop$core:prelude/list.wado/List<affine_index_assign_drops_old_element.wado/Tok>"($mv$value$repr, $mv$value$used) {
     let $index_3: i32;
     let $slot_4: ref null "affine_index_assign_drops_old_element.wado//Tok";
     let message: ref "core:prelude/string.wado//String";
     let $cm_pair_7: i64;
     let $sroa_$pattern_temp_0_0_9: i32;
     let $sroa_$pattern_temp_0_1_10: i32;
-    $slots_1 = value.repr;
-    $end_2 = value.used;
     $index_3 = 0;
     b3: block {
         l4: loop {
-            break_if b3 $index_3 >= $end_2;
-            if ref.is_null(local.tee $slot_4(builtin::array_get_value<ref null "affine_index_assign_drops_old_element.wado//Tok">($slots_1, $index_3))) == 0 {
+            break_if b3 $index_3 >= $mv$value$used;
+            if ref.is_null(local.tee $slot_4(builtin::array_get_value<ref null "affine_index_assign_drops_old_element.wado//Tok">($mv$value$repr, $index_3))) == 0 {
                 message = "core:prelude/string.wado/core:prelude/string.wado/String::format<affine_index_assign_drops_old_element.wado/$tmpl$fb51c04d54491732,[i32]>$spec0$spec0$sroa[t.h0]"($slot_4.n);
                 $sroa_$pattern_temp_0_0_9 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
                 $sroa_$pattern_temp_0_1_10 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);

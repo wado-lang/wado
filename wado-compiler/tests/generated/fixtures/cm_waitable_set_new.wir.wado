@@ -33,14 +33,14 @@ struct core:prelude/string.wado//String {  // TypeId(7)
     mut used: i32,
 }
 
-array Array<core:prelude/types.wado/Subtask> (mut ref null "core:prelude//$Resource");  // TypeId(8)
+array Array<core:prelude/types.wado/Ready<core:prelude/types.wado/Subtask>> (mut ref null "core:prelude/types.wado//Ready<core:prelude/types.wado/Subtask>");  // TypeId(8)
 
-array Array<core:prelude/types.wado/Ready<core:prelude/types.wado/Subtask>> (mut ref null "core:prelude/types.wado//Ready<core:prelude/types.wado/Subtask>");  // TypeId(9)
+array Array<core:prelude/types.wado/Subtask> (mut ref null "core:prelude//$Resource");  // TypeId(9)
 
 struct core:prelude/types.wado//WaitableSet<core:prelude/types.wado/Subtask> {  // TypeId(10)
     mut raw: ref null "core:prelude//$Resource",
-    mut members: ref null "core:prelude//List<core:prelude/types.wado/Subtask>",
-    mut ready: ref null "core:prelude//List<core:prelude/types.wado/Ready<core:prelude/types.wado/Subtask>>",
+    mut members: ref null "core:prelude/list.wado//List<core:prelude/types.wado/Subtask>",
+    mut ready: ref null "core:prelude/list.wado//List<core:prelude/types.wado/Ready<core:prelude/types.wado/Subtask>>",
 }
 
 struct core:prelude/types.wado//Ready<core:prelude/types.wado/Subtask> {  // TypeId(11)
@@ -48,13 +48,13 @@ struct core:prelude/types.wado//Ready<core:prelude/types.wado/Subtask> {  // Typ
     mut event: ref "core:prelude/types.wado//ReadyEvent",
 }
 
-struct core:prelude//List<core:prelude/types.wado/Subtask> {  // TypeId(12)
-    mut repr: ref "Array<core:prelude/types.wado/Subtask>",
+struct core:prelude/list.wado//List<core:prelude/types.wado/Ready<core:prelude/types.wado/Subtask>> {  // TypeId(12)
+    mut repr: ref null "Array<core:prelude/types.wado/Ready<core:prelude/types.wado/Subtask>>",
     mut used: i32,
 }
 
-struct core:prelude//List<core:prelude/types.wado/Ready<core:prelude/types.wado/Subtask>> {  // TypeId(13)
-    mut repr: ref "Array<core:prelude/types.wado/Ready<core:prelude/types.wado/Subtask>>",
+struct core:prelude/list.wado//List<core:prelude/types.wado/Subtask> {  // TypeId(13)
+    mut repr: ref null "Array<core:prelude/types.wado/Subtask>",
     mut used: i32,
 }
 
@@ -84,7 +84,7 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/String::reallo
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(26)
 
-type "functype//core:prelude/types.wado/core:prelude/types.wado/WaitableSet<core:prelude/types.wado/Subtask>^core:prelude/traits.wado/Drop::drop" = fn(ref null "core:prelude//$Resource", ref null "core:prelude//List<core:prelude/types.wado/Subtask>", ref null "core:prelude//List<core:prelude/types.wado/Ready<core:prelude/types.wado/Subtask>>");  // TypeId(27)
+type "functype//core:prelude/types.wado/core:prelude/types.wado/WaitableSet<core:prelude/types.wado/Subtask>^core:prelude/traits.wado/Drop::drop" = fn(ref null "core:prelude//$Resource", ref null "core:prelude/list.wado//List<core:prelude/types.wado/Subtask>", ref null "core:prelude/list.wado//List<core:prelude/types.wado/Ready<core:prelude/types.wado/Subtask>>");  // TypeId(27)
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(28)
 
@@ -120,7 +120,7 @@ fn "cm_waitable_set_new.wado/run"() with Stdout {
     let new_used_159: i32;
     let start_160: i32;
     let $sroa_view_repr_407: ref Array<u8>;
-    $sroa_t_h0_129 = (local.tee set(struct.new "core:prelude/types.wado//WaitableSet<core:prelude/types.wado/Subtask>" { raw: struct.new "core:prelude//$Resource" { value: "wasi/waitable-set-new"() }, members: struct.new "core:prelude//List<core:prelude/types.wado/Subtask>" { repr: array.new_fixed<ref null "core:prelude//$Resource">(), used: 0 }, ready: struct.new "core:prelude//List<core:prelude/types.wado/Ready<core:prelude/types.wado/Subtask>>" { repr: array.new_fixed<ref null "core:prelude/types.wado//Ready<core:prelude/types.wado/Subtask>">(), used: 0 } }).members.used + set.ready.used) == 0;
+    $sroa_t_h0_129 = (local.tee set(struct.new "core:prelude/types.wado//WaitableSet<core:prelude/types.wado/Subtask>" { raw: struct.new "core:prelude//$Resource" { value: "wasi/waitable-set-new"() }, members: struct.new "core:prelude/list.wado//List<core:prelude/types.wado/Subtask>" { repr: array.new_fixed<ref null "core:prelude//$Resource">(), used: 0 }, ready: struct.new "core:prelude/list.wado//List<core:prelude/types.wado/Ready<core:prelude/types.wado/Subtask>>" { repr: array.new_fixed<ref null "core:prelude/types.wado//Ready<core:prelude/types.wado/Subtask>">(), used: 0 } }).members.used + set.ready.used) == 0;
     out_17 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(23), used: 0 };
     $sroa_view_repr_407 = global:cm_waitable_set_new.wado::$const_obj_0;
     out_17.used = 7;

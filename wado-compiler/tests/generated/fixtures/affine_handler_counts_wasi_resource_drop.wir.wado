@@ -30,7 +30,7 @@ struct wasi:http/types.wado//HeaderError::Other {  // TypeId(5)
 
 struct tuple//[core:prelude/string.wado/String, core:prelude/list.wado/List<u8>] {  // TypeId(6)
     mut 0: ref "core:prelude/string.wado//String",
-    mut 1: ref "core:prelude//List<u8>",
+    mut 1: ref "core:prelude/list.wado//List<u8>",
 }
 
 struct affine_handler_counts_wasi_resource_drop.wado//$Closure_9 {  // TypeId(7)}
@@ -78,48 +78,48 @@ struct affine_handler_counts_wasi_resource_drop.wado//$Closure_0 {  // TypeId(19
     mut $capture_0: ref "affine_handler_counts_wasi_resource_drop.wado//CountingFields",
 }
 
-variant core:prelude/types.wado//Result<wasi:http/types.wado/Fields,wasi:http/types.wado/HeaderError> {  // TypeId(20)
-    Ok(ref null "core:prelude//$Resource"),
-    Err(ref "wasi:http/types.wado//HeaderError"),
-}
+array Array<[core:prelude/string.wado/String,core:prelude/list.wado/List<u8>]> (mut ref "tuple//[core:prelude/string.wado/String, core:prelude/list.wado/List<u8>]");  // TypeId(20)
 
-struct core:prelude/types.wado//Result<wasi:http/types.wado/Fields,wasi:http/types.wado/HeaderError>::Ok {  // TypeId(21)
-    discriminant: i32,
-    payload_0: ref null "core:prelude//$Resource",
-}
+array Array<core:prelude/list.wado/List<u8>> (mut ref "core:prelude/list.wado//List<u8>");  // TypeId(21)
 
-struct core:prelude/types.wado//Result<wasi:http/types.wado/Fields,wasi:http/types.wado/HeaderError>::Err {  // TypeId(22)
-    discriminant: i32,
-    payload_0: ref "wasi:http/types.wado//HeaderError",
-}
-
-struct core:prelude//List<u8> {  // TypeId(23)
-    mut repr: ref Array<u8>,
-    mut used: i32,
-}
-
-array Array<[core:prelude/string.wado/String,core:prelude/list.wado/List<u8>]> (mut ref "tuple//[core:prelude/string.wado/String, core:prelude/list.wado/List<u8>]");  // TypeId(24)
-
-struct core:prelude//List<[core:prelude/string.wado/String,core:prelude/list.wado/List<u8>]> {  // TypeId(25)
-    mut repr: ref "Array<[core:prelude/string.wado/String,core:prelude/list.wado/List<u8>]>",
-    mut used: i32,
-}
-
-array Array<core:prelude/list.wado/List<u8>> (mut ref "core:prelude//List<u8>");  // TypeId(26)
-
-struct core:prelude//List<core:prelude/list.wado/List<u8>> {  // TypeId(27)
+struct core:prelude/list.wado//List<wasi:http/types.wado/FieldValue> {  // TypeId(22)
     mut repr: ref "Array<core:prelude/list.wado/List<u8>>",
     mut used: i32,
 }
 
+struct core:prelude/list.wado//List<u8> {  // TypeId(23)
+    mut repr: ref Array<u8>,
+    mut used: i32,
+}
+
+struct core:prelude/list.wado//List<[wasi:http/types.wado/FieldName,wasi:http/types.wado/FieldValue]> {  // TypeId(24)
+    mut repr: ref "Array<[core:prelude/string.wado/String,core:prelude/list.wado/List<u8>]>",
+    mut used: i32,
+}
+
+variant core:prelude/types.wado//Result<wasi:http/types.wado/Fields,wasi:http/types.wado/HeaderError> {  // TypeId(25)
+    Ok(ref null "core:prelude//$Resource"),
+    Err(ref "wasi:http/types.wado//HeaderError"),
+}
+
+struct core:prelude/types.wado//Result<wasi:http/types.wado/Fields,wasi:http/types.wado/HeaderError>::Ok {  // TypeId(26)
+    discriminant: i32,
+    payload_0: ref null "core:prelude//$Resource",
+}
+
+struct core:prelude/types.wado//Result<wasi:http/types.wado/Fields,wasi:http/types.wado/HeaderError>::Err {  // TypeId(27)
+    discriminant: i32,
+    payload_0: ref "wasi:http/types.wado//HeaderError",
+}
+
 variant core:prelude/types.wado//Result<core:prelude/list.wado/List<core:prelude/list.wado/List<u8>>,wasi:http/types.wado/HeaderError> {  // TypeId(28)
-    Ok(ref "core:prelude//List<core:prelude/list.wado/List<u8>>"),
+    Ok(ref "core:prelude/list.wado//List<wasi:http/types.wado/FieldValue>"),
     Err(ref "wasi:http/types.wado//HeaderError"),
 }
 
 struct core:prelude/types.wado//Result<core:prelude/list.wado/List<core:prelude/list.wado/List<u8>>,wasi:http/types.wado/HeaderError>::Ok {  // TypeId(29)
     discriminant: i32,
-    payload_0: ref "core:prelude//List<core:prelude/list.wado/List<u8>>",
+    payload_0: ref "core:prelude/list.wado//List<wasi:http/types.wado/FieldValue>",
 }
 
 struct core:prelude/types.wado//Result<core:prelude/list.wado/List<core:prelude/list.wado/List<u8>>,wasi:http/types.wado/HeaderError>::Err {  // TypeId(30)
@@ -134,14 +134,14 @@ struct canonical//CanonicalClosure_0 {  // TypeId(32)
     func: ref "functype/$canonical_closure_fn_0",
 }
 
-type "functype/$canonical_closure_fn_1" = fn(ref null struct, ref "core:prelude//List<[core:prelude/string.wado/String,core:prelude/list.wado/List<u8>]>") -> ref null "core:prelude/types.wado//Result<wasi:http/types.wado/Fields,wasi:http/types.wado/HeaderError>";  // TypeId(33)
+type "functype/$canonical_closure_fn_1" = fn(ref null struct, ref "core:prelude/list.wado//List<[wasi:http/types.wado/FieldName,wasi:http/types.wado/FieldValue]>") -> ref null "core:prelude/types.wado//Result<wasi:http/types.wado/Fields,wasi:http/types.wado/HeaderError>";  // TypeId(33)
 
 struct canonical//CanonicalClosure_1 {  // TypeId(34)
     env: ref null struct,
     func: ref "functype/$canonical_closure_fn_1",
 }
 
-type "functype/$canonical_closure_fn_2" = fn(ref null struct, ref null "core:prelude//$Resource", ref "core:prelude/string.wado//String") -> ref "core:prelude//List<core:prelude/list.wado/List<u8>>";  // TypeId(35)
+type "functype/$canonical_closure_fn_2" = fn(ref null struct, ref null "core:prelude//$Resource", ref "core:prelude/string.wado//String") -> ref "core:prelude/list.wado//List<wasi:http/types.wado/FieldValue>";  // TypeId(35)
 
 struct canonical//CanonicalClosure_2 {  // TypeId(36)
     env: ref null struct,
@@ -155,7 +155,7 @@ struct canonical//CanonicalClosure_3 {  // TypeId(38)
     func: ref "functype/$canonical_closure_fn_3",
 }
 
-type "functype/$canonical_closure_fn_4" = fn(ref null struct, ref null "core:prelude//$Resource", ref "core:prelude/string.wado//String", ref "core:prelude//List<core:prelude/list.wado/List<u8>>") -> ref null "wasi:http/types.wado//HeaderError";  // TypeId(39)
+type "functype/$canonical_closure_fn_4" = fn(ref null struct, ref null "core:prelude//$Resource", ref "core:prelude/string.wado//String", ref "core:prelude/list.wado//List<wasi:http/types.wado/FieldValue>") -> ref null "wasi:http/types.wado//HeaderError";  // TypeId(39)
 
 struct canonical//CanonicalClosure_4 {  // TypeId(40)
     env: ref null struct,
@@ -176,14 +176,14 @@ struct canonical//CanonicalClosure_6 {  // TypeId(44)
     func: ref "functype/$canonical_closure_fn_6",
 }
 
-type "functype/$canonical_closure_fn_7" = fn(ref null struct, ref null "core:prelude//$Resource", ref "core:prelude/string.wado//String", ref "core:prelude//List<u8>") -> ref null "wasi:http/types.wado//HeaderError";  // TypeId(45)
+type "functype/$canonical_closure_fn_7" = fn(ref null struct, ref null "core:prelude//$Resource", ref "core:prelude/string.wado//String", ref "core:prelude/list.wado//List<u8>") -> ref null "wasi:http/types.wado//HeaderError";  // TypeId(45)
 
 struct canonical//CanonicalClosure_7 {  // TypeId(46)
     env: ref null struct,
     func: ref "functype/$canonical_closure_fn_7",
 }
 
-type "functype/$canonical_closure_fn_8" = fn(ref null struct, ref null "core:prelude//$Resource") -> ref "core:prelude//List<[core:prelude/string.wado/String,core:prelude/list.wado/List<u8>]>";  // TypeId(47)
+type "functype/$canonical_closure_fn_8" = fn(ref null struct, ref null "core:prelude//$Resource") -> ref "core:prelude/list.wado//List<[wasi:http/types.wado/FieldName,wasi:http/types.wado/FieldValue]>";  // TypeId(47)
 
 struct canonical//CanonicalClosure_8 {  // TypeId(48)
     env: ref null struct,
@@ -240,7 +240,7 @@ type "functype//affine_handler_counts_wasi_resource_drop.wado/affine_handler_cou
 
 type "functype//affine_handler_counts_wasi_resource_drop.wado/affine_handler_counts_wasi_resource_drop.wado/$Closure_1::$call$dae[self,entries]" = fn() -> ref null "core:prelude/types.wado//Result<wasi:http/types.wado/Fields,wasi:http/types.wado/HeaderError>";  // TypeId(70)
 
-type "functype//affine_handler_counts_wasi_resource_drop.wado/affine_handler_counts_wasi_resource_drop.wado/$Closure_2::$call$dae[self#0,self#1,name]" = fn() -> ref "core:prelude//List<core:prelude/list.wado/List<u8>>";  // TypeId(71)
+type "functype//affine_handler_counts_wasi_resource_drop.wado/affine_handler_counts_wasi_resource_drop.wado/$Closure_2::$call$dae[self#0,self#1,name]" = fn() -> ref "core:prelude/list.wado//List<wasi:http/types.wado/FieldValue>";  // TypeId(71)
 
 type "functype//affine_handler_counts_wasi_resource_drop.wado/affine_handler_counts_wasi_resource_drop.wado/$Closure_3::$call$dae[self#0,self#1,name]" = fn() -> bool;  // TypeId(72)
 
@@ -252,7 +252,7 @@ type "functype//affine_handler_counts_wasi_resource_drop.wado/affine_handler_cou
 
 type "functype//affine_handler_counts_wasi_resource_drop.wado/affine_handler_counts_wasi_resource_drop.wado/$Closure_7::$call$dae[self#0,self#1,name,value]" = fn() -> ref null "wasi:http/types.wado//HeaderError";  // TypeId(76)
 
-type "functype//affine_handler_counts_wasi_resource_drop.wado/affine_handler_counts_wasi_resource_drop.wado/$Closure_8::$call$dae[self#0,self#1]" = fn() -> ref "core:prelude//List<[core:prelude/string.wado/String,core:prelude/list.wado/List<u8>]>";  // TypeId(77)
+type "functype//affine_handler_counts_wasi_resource_drop.wado/affine_handler_counts_wasi_resource_drop.wado/$Closure_8::$call$dae[self#0,self#1]" = fn() -> ref "core:prelude/list.wado//List<[wasi:http/types.wado/FieldName,wasi:http/types.wado/FieldValue]>";  // TypeId(77)
 
 type "functype//affine_handler_counts_wasi_resource_drop.wado/affine_handler_counts_wasi_resource_drop.wado/$Closure_9::$call$dae[self#0,self#1]" = fn() -> ref null "core:prelude//$Resource";  // TypeId(78)
 

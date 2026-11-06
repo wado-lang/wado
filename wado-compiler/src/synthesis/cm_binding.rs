@@ -378,7 +378,7 @@ fn unresolvable_record_in_payload(
             .iter()
             .find_map(|&e| unresolvable_record_in_payload(tt, registry, e));
     }
-    if let ResolvedType::GenericInstance { type_args, .. } = tt.get(type_id)
+    if let ResolvedType::Variant { type_args, .. } = tt.get(type_id)
         && tt.is_result(type_id)
     {
         return type_args
@@ -393,9 +393,8 @@ fn unresolvable_record_in_payload(
 fn named_decl_of(ty: &ResolvedType) -> Option<DefId> {
     match ty {
         ResolvedType::Struct { def, .. } => def.decl(),
-        ResolvedType::Enum { def }
-        | ResolvedType::Variant { def }
-        | ResolvedType::Flags { def } => Some(*def),
+        ResolvedType::Variant { def, type_args } if type_args.is_empty() => Some(*def),
+        ResolvedType::Enum { def } | ResolvedType::Flags { def } => Some(*def),
         _ => None,
     }
 }
