@@ -9,8 +9,9 @@ that rarely runs, and every pass that reads the marker acts on it:
 - `nir/inline` prices a callee without its cold code. It does not inline at a
   cold call site, nor anywhere in a function that runs only once a cold path
   is taken.
-- `param_spec` mints no specialized clone for a cold call site, and
-  `const_object_globalization` skips a function that runs only on a cold path.
+- `param_spec` mints no specialized clone for a cold call site unless it binds
+  a field, and `const_object_globalization` skips a function that runs only on
+  a cold path.
 - `wir_build` turns the marker into a Wasm branch hint, and wasmtime lays out
   the cold side out of line.
 
