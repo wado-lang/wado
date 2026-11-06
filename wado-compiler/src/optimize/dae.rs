@@ -139,6 +139,25 @@ pub(super) fn is_dae_sroa_eligible(func: &NirFunction, relax_closure_call: bool)
     true
 }
 
+/// Every local the body names. A write-only local is no read, yet its
+/// assignment still names the slot, which dropping it would leave dangling.
+fn mentioned_locals(body: &Body) -> IndexSet<u32> {
+    let mut mentioned: IndexSet<u32> = IndexSet::default();
+    arena_query::collect_reads(body, &mut mentioned);
+    // A promoted `Opaque(Local idx)` value reads `idx` from the value pool, not
+    // the skeleton, so a param read only through one is not dead.
+    arena_query::promoted_local_reads(body, &mut mentioned);
+    body.for_each_reachable_node(|node| {
+        if let NodeRef::Expr(id) = node
+            && let ExprKind::Assign { target, .. } = &body.exprs[id].kind
+            && let ExprKind::Local { index, .. } = &body.exprs[*target].kind
+        {
+            mentioned.insert(*index);
+        }
+    });
+    mentioned
+}
+
 /// Returns one bool per parameter: `true` means the parameter is unused and
 /// safe-to-remove. The receiver position (index 0 for methods) gets no special
 /// pin: `apply_dae` drops a dead `self` as it drops any other argument.
@@ -148,12 +167,7 @@ fn find_dead_params(func: &NirFunction) -> Vec<bool> {
     }
 
     let body = func.body.as_ref().unwrap();
-    let mut reads: IndexSet<u32> = IndexSet::default();
-    arena_query::collect_reads(body, &mut reads);
-    // A promoted `Opaque(Local idx)` value reads `idx` from the value pool, not
-    // the skeleton — count those so a param read only through a promoted value
-    // is not seen as dead.
-    arena_query::promoted_local_reads(body, &mut reads);
+    let reads = mentioned_locals(body);
     // Neither `retains` nor `address_taken_locals` is consulted: keeping a
     // parameter, or a reference to it, takes a read of it. Both are carried
     // through rewrites that can delete that read, such as a specialization
@@ -508,13 +522,10 @@ fn shrink_params_and_renumber(func: &mut NirFunction, dead: &[bool]) {
     // local namespace to skip.
     if let Some(body) = func.body.as_mut() {
         debug_assert!(
-            {
-                let mut reads = IndexSet::default();
-                arena_query::collect_reads(body, &mut reads);
-                arena_query::promoted_local_reads(body, &mut reads);
-                reads.iter().all(|r| remap[*r as usize].is_some())
-            },
-            "[NIR] dae: dropping a local that is still read"
+            mentioned_locals(body)
+                .iter()
+                .all(|r| remap[*r as usize].is_some()),
+            "[NIR] dae: dropping a local that is still named"
         );
         remap_locals(body, &remap);
         // Promoted `Opaque(Local idx)` values (extracted as `local.get idx`)
