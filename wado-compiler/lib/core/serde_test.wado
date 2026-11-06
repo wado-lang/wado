@@ -309,6 +309,11 @@ test "serialize string" {
     assert mock_serialize(&s) == `"hello"`;
 }
 
+test "a string view serializes as the text it views" {
+    let v = "a hello b".as_str_slice().slice(2, 7);
+    assert mock_serialize(&v) == `"hello"`;
+}
+
 test "serialize Option Some" {
     let opt: Option<i32> = Option::Some(42);
     assert mock_serialize(&opt) == "42";

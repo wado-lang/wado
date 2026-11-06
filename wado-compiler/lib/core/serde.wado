@@ -773,6 +773,12 @@ impl Serialize for String {
     }
 }
 
+impl Serialize for StrSlice {
+    fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError> {
+        return s.serialize_string(*self);
+    }
+}
+
 /// Writes null, which `Deserialize for ()` reads back. A unit variant case
 /// carries `()` and so needs this impl to satisfy its payload-pack bound, but
 /// never reaches it: the derived paths answer `is_unit()` and write a bare tag.
