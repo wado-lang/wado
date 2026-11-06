@@ -1,0 +1,564 @@
+//! The schema model: one field per Draft 2020-12 keyword, written to JSON and
+//! read from it.
+
+use { Serialize, SerializeError, SerializeMap, Serializer } from "core:serde";
+use { TreeMap } from "core:collections";
+use { Json, JsonNode } from "./json.wado";
+
+/// A JSON Schema: `true` admits every instance, `false` none, and an object
+/// asserts its keywords.
+pub variant Schema {
+    Bool(bool),
+    Object(SchemaObject),
+}
+
+impl From<SchemaObject> for Schema;
+
+/// The JSON types `type` names. `Integer` is the subset of `Number` whose
+/// values have no fractional part.
+pub flags JsonTypes {
+    Null,
+    Boolean,
+    Object,
+    Array,
+    Number,
+    String,
+    Integer,
+}
+
+/// A schema object, one field per keyword. A keyword that is `null`, empty or
+/// `false` is absent. `extra` holds the keywords Draft 2020-12 does not
+/// define, as written.
+pub struct SchemaObject {
+    /// `$schema`
+    pub dialect: Option<String> = null,
+    /// `$id`
+    pub id: Option<String> = null,
+    /// `$vocabulary`
+    pub vocabulary: TreeMap<String, bool> = TreeMap::new(),
+    /// `$anchor`
+    pub anchor: Option<String> = null,
+    /// `$dynamicAnchor`
+    pub dynamic_anchor: Option<String> = null,
+    /// `$ref`
+    pub reference: Option<String> = null,
+    /// `$dynamicRef`
+    pub dynamic_ref: Option<String> = null,
+    /// `$comment`
+    pub comment: Option<String> = null,
+    pub title: Option<String> = null,
+    pub description: Option<String> = null,
+    pub type: JsonTypes = JsonTypes::none(),
+    pub format: Option<String> = null,
+    pub content_encoding: Option<String> = null,
+    pub content_media_type: Option<String> = null,
+    pub content_schema: Option<Schema> = null,
+    pub const_: Option<Json> = null,
+    pub enum_: Option<List<Json>> = null,
+    pub all_of: List<Schema> = [],
+    pub any_of: List<Schema> = [],
+    pub one_of: List<Schema> = [],
+    pub not: Option<Schema> = null,
+    pub if_: Option<Schema> = null,
+    pub then: Option<Schema> = null,
+    pub else_: Option<Schema> = null,
+    pub multiple_of: Option<f64> = null,
+    pub minimum: Option<f64> = null,
+    pub exclusive_minimum: Option<f64> = null,
+    pub maximum: Option<f64> = null,
+    pub exclusive_maximum: Option<f64> = null,
+    pub min_length: Option<i32> = null,
+    pub max_length: Option<i32> = null,
+    pub pattern: Option<String> = null,
+    pub items: Option<Schema> = null,
+    pub prefix_items: List<Schema> = [],
+    pub contains: Option<Schema> = null,
+    pub min_contains: Option<i32> = null,
+    pub max_contains: Option<i32> = null,
+    pub min_items: Option<i32> = null,
+    pub max_items: Option<i32> = null,
+    pub unique_items: bool = false,
+    pub unevaluated_items: Option<Schema> = null,
+    pub properties: TreeMap<String, Schema> = TreeMap::new(),
+    pub pattern_properties: TreeMap<String, Schema> = TreeMap::new(),
+    pub required: List<String> = [],
+    pub dependent_required: TreeMap<String, List<String>> = TreeMap::new(),
+    pub dependent_schemas: TreeMap<String, Schema> = TreeMap::new(),
+    pub additional_properties: Option<Schema> = null,
+    pub property_names: Option<Schema> = null,
+    pub min_properties: Option<i32> = null,
+    pub max_properties: Option<i32> = null,
+    pub unevaluated_properties: Option<Schema> = null,
+    pub default_: Option<Json> = null,
+    pub examples: List<Json> = [],
+    pub deprecated: bool = false,
+    pub read_only: bool = false,
+    pub write_only: bool = false,
+    /// `$defs`
+    pub defs: TreeMap<String, Schema> = TreeMap::new(),
+    pub extra: TreeMap<String, Json> = TreeMap::new(),
+}
+
+impl Schema {
+    /// The `$schema` dialect Jade reads and writes.
+    pub const DRAFT: String = "https://json-schema.org/draft/2020-12/schema";
+
+    /// Reads the schema the JSON text `text` holds.
+    pub fn parse<S: AsByteSlice>(text: S) -> Result<Schema, SchemaError> {
+        let doc = match Json::parse(text) {
+            Ok(doc) => doc,
+            Err(e) => {
+                return Result::Err(SchemaError { pointer: "", message: `${e}` });
+            },
+        };
+        return Schema::from_json(&doc.root());
+    }
+
+    /// Reads the schema `node` holds, as a document's root.
+    pub fn from_json(node: &JsonNode) -> Result<Schema, SchemaError> {
+        return read_schema(node, "");
+    }
+
+    /// This schema as an object: `true` is the empty object, and `false` the
+    /// object whose `not` admits everything.
+    pub fn into_object(&self) -> SchemaObject {
+        return match self {
+            Bool(true) => SchemaObject {},
+            Bool(false) => SchemaObject { not: Option::Some(Schema::Bool(true)) },
+            Object(o) => *o,
+        };
+    }
+}
+
+impl SchemaObject {
+    /// A schema admitting one JSON type.
+    pub fn of_type(t: JsonTypes) -> SchemaObject {
+        return SchemaObject { type: t };
+    }
+
+    /// A schema admitting the single value `value`.
+    pub fn constant(value: Json) -> SchemaObject {
+        return SchemaObject { const_: Option::Some(value) };
+    }
+
+    fn each_keyword<K: KeywordSink>(&self, k: &mut K) -> Result<(), SerializeError> {
+        k.some("$schema", &self.dialect)?;
+        k.some("$id", &self.id)?;
+        k.map("$vocabulary", &self.vocabulary)?;
+        k.some("$anchor", &self.anchor)?;
+        k.some("$dynamicAnchor", &self.dynamic_anchor)?;
+        k.some("$ref", &self.reference)?;
+        k.some("$dynamicRef", &self.dynamic_ref)?;
+        k.some("$comment", &self.comment)?;
+        k.some("title", &self.title)?;
+        k.some("description", &self.description)?;
+        if self.type != JsonTypes::none() {
+            k.put("type", &TypeKeyword { types: self.type })?;
+        }
+        k.some("format", &self.format)?;
+        k.some("contentEncoding", &self.content_encoding)?;
+        k.some("contentMediaType", &self.content_media_type)?;
+        k.some("contentSchema", &self.content_schema)?;
+        k.some("const", &self.const_)?;
+        k.some("enum", &self.enum_)?;
+        k.list("allOf", &self.all_of)?;
+        k.list("anyOf", &self.any_of)?;
+        k.list("oneOf", &self.one_of)?;
+        k.some("not", &self.not)?;
+        k.some("if", &self.if_)?;
+        k.some("then", &self.then)?;
+        k.some("else", &self.else_)?;
+        k.some("multipleOf", &self.multiple_of)?;
+        k.some("minimum", &self.minimum)?;
+        k.some("exclusiveMinimum", &self.exclusive_minimum)?;
+        k.some("maximum", &self.maximum)?;
+        k.some("exclusiveMaximum", &self.exclusive_maximum)?;
+        k.some("minLength", &self.min_length)?;
+        k.some("maxLength", &self.max_length)?;
+        k.some("pattern", &self.pattern)?;
+        k.some("items", &self.items)?;
+        k.list("prefixItems", &self.prefix_items)?;
+        k.some("contains", &self.contains)?;
+        k.some("minContains", &self.min_contains)?;
+        k.some("maxContains", &self.max_contains)?;
+        k.some("minItems", &self.min_items)?;
+        k.some("maxItems", &self.max_items)?;
+        k.flag("uniqueItems", self.unique_items)?;
+        k.some("unevaluatedItems", &self.unevaluated_items)?;
+        k.map("properties", &self.properties)?;
+        k.map("patternProperties", &self.pattern_properties)?;
+        k.list("required", &self.required)?;
+        k.map("dependentRequired", &self.dependent_required)?;
+        k.map("dependentSchemas", &self.dependent_schemas)?;
+        k.some("additionalProperties", &self.additional_properties)?;
+        k.some("propertyNames", &self.property_names)?;
+        k.some("minProperties", &self.min_properties)?;
+        k.some("maxProperties", &self.max_properties)?;
+        k.some("unevaluatedProperties", &self.unevaluated_properties)?;
+        k.some("default", &self.default_)?;
+        k.list("examples", &self.examples)?;
+        k.flag("deprecated", self.deprecated)?;
+        k.flag("readOnly", self.read_only)?;
+        k.flag("writeOnly", self.write_only)?;
+        k.map("$defs", &self.defs)?;
+        for let [key, value] of self.extra.entries() {
+            k.put(*key, value)?;
+        }
+        return Result::Ok(());
+    }
+}
+
+/// Where `SchemaObject::each_keyword` sends each keyword it writes: once to
+/// count them, as a map must know its length before its first entry, and once
+/// to write them.
+trait KeywordSink with () {
+    fn put<V: Serialize>(&mut self, key: String, value: &V) -> Result<(), SerializeError>;
+
+    fn some<V: Serialize>(&mut self, key: String, value: &Option<V>) -> Result<(), SerializeError> {
+        if let Some(v) = value {
+            return self.put(key, v);
+        }
+        return Result::Ok(());
+    }
+
+    fn list<V: Serialize>(&mut self, key: String, value: &List<V>) -> Result<(), SerializeError> {
+        if value.is_empty() {
+            return Result::Ok(());
+        }
+        return self.put(key, value);
+    }
+
+    fn map<V: Serialize>(&mut self, key: String, value: &TreeMap<String, V>) -> Result<(), SerializeError> {
+        if value.is_empty() {
+            return Result::Ok(());
+        }
+        return self.put(key, value);
+    }
+
+    fn flag(&mut self, key: String, value: bool) -> Result<(), SerializeError> {
+        if value {
+            return self.put(key, &true);
+        }
+        return Result::Ok(());
+    }
+}
+
+struct KeywordCount {
+    n: i32,
+}
+
+impl KeywordSink for KeywordCount {
+    fn put<V: Serialize>(&mut self, key: String, value: &V) -> Result<(), SerializeError> {
+        self.n += 1;
+        return Result::Ok(());
+    }
+}
+
+struct KeywordWriter<M> {
+    map: M,
+}
+
+impl<M: SerializeMap> KeywordSink for KeywordWriter<M> {
+    fn put<V: Serialize>(&mut self, key: String, value: &V) -> Result<(), SerializeError> {
+        self.map.key(&key)?;
+        return self.map.value(value);
+    }
+}
+
+impl Serialize for SchemaObject {
+    fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError> {
+        let mut count = KeywordCount { n: 0 };
+        self.each_keyword(&mut count)?;
+        let mut writer = KeywordWriter { map: s.begin_map(count.n)? };
+        self.each_keyword(&mut writer)?;
+        return writer.map.end();
+    }
+}
+
+impl Serialize for Schema {
+    fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError> {
+        return match self {
+            Bool(b) => s.serialize_bool(*b),
+            Object(o) => o.serialize(s),
+        };
+    }
+}
+
+global TYPE_NAMES: List<String> = ["null", "boolean", "object", "array", "number", "string", "integer"];
+
+fn type_bit(i: i32) -> JsonTypes {
+    return (1 << i) as u32 as JsonTypes;
+}
+
+/// `type`'s value: one name as a string, more as an array of them.
+struct TypeKeyword {
+    types: JsonTypes,
+}
+
+impl Serialize for TypeKeyword {
+    fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError> {
+        let mut names: List<String> = [];
+        for let i of 0..<TYPE_NAMES.len() {
+            if self.types & type_bit(i) != JsonTypes::none() {
+                names.push(TYPE_NAMES[i]);
+            }
+        }
+        if names.len() == 1 {
+            return s.serialize_string(&names[0]);
+        }
+        return names.serialize(s);
+    }
+}
+
+/// A schema that breaks Draft 2020-12's rules for a keyword's value, at the
+/// JSON Pointer `pointer` into the schema document.
+pub struct SchemaError {
+    pub pointer: String,
+    pub message: String,
+}
+
+impl Display for SchemaError {
+    fn fmt(&self, f: &mut Formatter) {
+        if !self.pointer.is_empty() {
+            f.write_str(&self.pointer);
+            f.write_str(": ");
+        }
+        f.write_str(&self.message);
+    }
+}
+
+impl Error for SchemaError {
+}
+
+/// `token` escaped as one reference token of a JSON Pointer (RFC 6901).
+pub fn pointer_token<S: AsStrSlice>(token: S) -> String {
+    let s = token.to_string();
+    if !s.contains("~") && !s.contains("/") {
+        return s;
+    }
+    return s.replace("~", "~0").replace("/", "~1");
+}
+
+fn fail<T>(at: &String, message: String) -> Result<T, SchemaError> {
+    return Result::Err(SchemaError { pointer: *at, message });
+}
+
+fn read_schema(node: &JsonNode, at: String) -> Result<Schema, SchemaError> {
+    return match node.kind() {
+        Bool => Result::Ok(Schema::Bool(node.as_bool().unwrap())),
+        Object => Result::Ok(Schema::Object(read_object(node, &at)?)),
+        Null | Number | String | Array => fail(&at, "a schema must be an object or a boolean"),
+    };
+}
+
+fn read_object(node: &JsonNode, at: &String) -> Result<SchemaObject, SchemaError> {
+    let mut s = SchemaObject {};
+    for let [key, value] of node.entries() {
+        let here = `${*at}/${pointer_token(key)}`;
+        let v = &value;
+        match key {
+            "$schema" => s.dialect = Option::Some(read_string(v, &here)?),
+            "$id" => s.id = Option::Some(read_string(v, &here)?),
+            "$vocabulary" => s.vocabulary = read_vocabulary(v, &here)?,
+            "$anchor" => s.anchor = Option::Some(read_string(v, &here)?),
+            "$dynamicAnchor" => s.dynamic_anchor = Option::Some(read_string(v, &here)?),
+            "$ref" => s.reference = Option::Some(read_string(v, &here)?),
+            "$dynamicRef" => s.dynamic_ref = Option::Some(read_string(v, &here)?),
+            "$comment" => s.comment = Option::Some(read_string(v, &here)?),
+            "$defs" => s.defs = read_schema_map(v, &here)?,
+            "title" => s.title = Option::Some(read_string(v, &here)?),
+            "description" => s.description = Option::Some(read_string(v, &here)?),
+            "type" => s.type = read_types(v, &here)?,
+            "format" => s.format = Option::Some(read_string(v, &here)?),
+            "contentEncoding" => s.content_encoding = Option::Some(read_string(v, &here)?),
+            "contentMediaType" => s.content_media_type = Option::Some(read_string(v, &here)?),
+            "contentSchema" => s.content_schema = Option::Some(read_schema(v, here)?),
+            "const" => s.const_ = Option::Some(value.to_json()),
+            "enum" => s.enum_ = Option::Some(read_values(v, &here)?),
+            "allOf" => s.all_of = read_schema_list(v, &here)?,
+            "anyOf" => s.any_of = read_schema_list(v, &here)?,
+            "oneOf" => s.one_of = read_schema_list(v, &here)?,
+            "not" => s.not = Option::Some(read_schema(v, here)?),
+            "if" => s.if_ = Option::Some(read_schema(v, here)?),
+            "then" => s.then = Option::Some(read_schema(v, here)?),
+            "else" => s.else_ = Option::Some(read_schema(v, here)?),
+            "multipleOf" => {
+                let m = read_number(v, &here)?;
+                if m <= 0.0 {
+                    return fail(&here, "must be greater than 0");
+                }
+                s.multiple_of = Option::Some(m);
+            },
+            "minimum" => s.minimum = Option::Some(read_number(v, &here)?),
+            "exclusiveMinimum" => s.exclusive_minimum = Option::Some(read_number(v, &here)?),
+            "maximum" => s.maximum = Option::Some(read_number(v, &here)?),
+            "exclusiveMaximum" => s.exclusive_maximum = Option::Some(read_number(v, &here)?),
+            "minLength" => s.min_length = Option::Some(read_count(v, &here)?),
+            "maxLength" => s.max_length = Option::Some(read_count(v, &here)?),
+            "pattern" => s.pattern = Option::Some(read_string(v, &here)?),
+            "items" => s.items = Option::Some(read_schema(v, here)?),
+            "prefixItems" => s.prefix_items = read_schema_list(v, &here)?,
+            "contains" => s.contains = Option::Some(read_schema(v, here)?),
+            "minContains" => s.min_contains = Option::Some(read_count(v, &here)?),
+            "maxContains" => s.max_contains = Option::Some(read_count(v, &here)?),
+            "minItems" => s.min_items = Option::Some(read_count(v, &here)?),
+            "maxItems" => s.max_items = Option::Some(read_count(v, &here)?),
+            "uniqueItems" => s.unique_items = read_bool(v, &here)?,
+            "unevaluatedItems" => s.unevaluated_items = Option::Some(read_schema(v, here)?),
+            "properties" => s.properties = read_schema_map(v, &here)?,
+            "patternProperties" => s.pattern_properties = read_schema_map(v, &here)?,
+            "required" => s.required = read_names(v, &here)?,
+            "dependentRequired" => s.dependent_required = read_dependent_required(v, &here)?,
+            "dependentSchemas" => s.dependent_schemas = read_schema_map(v, &here)?,
+            "additionalProperties" => s.additional_properties = Option::Some(read_schema(v, here)?),
+            "propertyNames" => s.property_names = Option::Some(read_schema(v, here)?),
+            "minProperties" => s.min_properties = Option::Some(read_count(v, &here)?),
+            "maxProperties" => s.max_properties = Option::Some(read_count(v, &here)?),
+            "unevaluatedProperties" => s.unevaluated_properties = Option::Some(read_schema(v, here)?),
+            "default" => s.default_ = Option::Some(value.to_json()),
+            "examples" => s.examples = read_values(v, &here)?,
+            "deprecated" => s.deprecated = read_bool(v, &here)?,
+            "readOnly" => s.read_only = read_bool(v, &here)?,
+            "writeOnly" => s.write_only = read_bool(v, &here)?,
+            _ => s.extra[key.to_string()] = value.to_json(),
+        }
+    }
+    return Result::Ok(s);
+}
+
+fn read_string(v: &JsonNode, at: &String) -> Result<String, SchemaError> {
+    if let Some(s) = v.as_str() {
+        return Result::Ok(s.to_string());
+    }
+    return fail(at, "must be a string");
+}
+
+fn read_bool(v: &JsonNode, at: &String) -> Result<bool, SchemaError> {
+    if let Some(b) = v.as_bool() {
+        return Result::Ok(b);
+    }
+    return fail(at, "must be a boolean");
+}
+
+fn read_number(v: &JsonNode, at: &String) -> Result<f64, SchemaError> {
+    if let Some(n) = v.as_f64() {
+        return Result::Ok(n);
+    }
+    return fail(at, "must be a number");
+}
+
+/// A non-negative integer, which may be spelled with a fraction of zero. One
+/// past `i32::MAX` is held at `i32::MAX`, past every length a list or string
+/// can have.
+fn read_count(v: &JsonNode, at: &String) -> Result<i32, SchemaError> {
+    let Some(n) = v.as_f64() else {
+        return fail(at, "must be a non-negative integer");
+    };
+    if n < 0.0 || n != f64::trunc(n) {
+        return fail(at, "must be a non-negative integer");
+    }
+    return Result::Ok(if n > i32::MAX as f64 { i32::MAX } else { n as i32 });
+}
+
+fn read_values(v: &JsonNode, at: &String) -> Result<List<Json>, SchemaError> {
+    if !(v.kind() matches { Array }) {
+        return fail(at, "must be an array");
+    }
+    let mut out: List<Json> = [];
+    for let item of v.items() {
+        out.push(item.to_json());
+    }
+    return Result::Ok(out);
+}
+
+fn read_types(v: &JsonNode, at: &String) -> Result<JsonTypes, SchemaError> {
+    if let Some(name) = v.as_str() {
+        return type_named(name, at);
+    }
+    if !(v.kind() matches { Array }) || v.len() == 0 {
+        return fail(at, "must be a type name or a non-empty array of them");
+    }
+    let mut types = JsonTypes::none();
+    for let [i, item] of v.items().enumerate() {
+        let item_at = `${*at}/${i}`;
+        let Some(name) = item.as_str() else {
+            return fail(&item_at, "must be a type name");
+        };
+        let t = type_named(name, &item_at)?;
+        if types & t != JsonTypes::none() {
+            return fail(&item_at, "repeats a type");
+        }
+        types = types | t;
+    }
+    return Result::Ok(types);
+}
+
+fn type_named(name: StrSlice, at: &String) -> Result<JsonTypes, SchemaError> {
+    for let i of 0..<TYPE_NAMES.len() {
+        if name == TYPE_NAMES[i] {
+            return Result::Ok(type_bit(i));
+        }
+    }
+    return fail(at, `names no type: ${name:?}`);
+}
+
+/// An array of distinct strings, as `required` and `dependentRequired` hold.
+fn read_names(v: &JsonNode, at: &String) -> Result<List<String>, SchemaError> {
+    if !(v.kind() matches { Array }) {
+        return fail(at, "must be an array of strings");
+    }
+    let mut names: List<String> = [];
+    for let [i, item] of v.items().enumerate() {
+        let item_at = `${*at}/${i}`;
+        let name = read_string(&item, &item_at)?;
+        if names.contains(&name) {
+            return fail(&item_at, "repeats a name");
+        }
+        names.push(name);
+    }
+    return Result::Ok(names);
+}
+
+fn read_schema_list(v: &JsonNode, at: &String) -> Result<List<Schema>, SchemaError> {
+    if !(v.kind() matches { Array }) || v.len() == 0 {
+        return fail(at, "must be a non-empty array of schemas");
+    }
+    let mut out: List<Schema> = [];
+    for let [i, item] of v.items().enumerate() {
+        out.push(read_schema(&item, `${*at}/${i}`)?);
+    }
+    return Result::Ok(out);
+}
+
+fn read_schema_map(v: &JsonNode, at: &String) -> Result<TreeMap<String, Schema>, SchemaError> {
+    if !(v.kind() matches { Object }) {
+        return fail(at, "must be an object of schemas");
+    }
+    let mut out = TreeMap::<String, Schema>::new();
+    for let [key, value] of v.entries() {
+        out[key.to_string()] = read_schema(&value, `${*at}/${pointer_token(key)}`)?;
+    }
+    return Result::Ok(out);
+}
+
+fn read_dependent_required(v: &JsonNode, at: &String) -> Result<TreeMap<String, List<String>>, SchemaError> {
+    if !(v.kind() matches { Object }) {
+        return fail(at, "must be an object of string arrays");
+    }
+    let mut out = TreeMap::<String, List<String>>::new();
+    for let [key, value] of v.entries() {
+        out[key.to_string()] = read_names(&value, &`${*at}/${pointer_token(key)}`)?;
+    }
+    return Result::Ok(out);
+}
+
+fn read_vocabulary(v: &JsonNode, at: &String) -> Result<TreeMap<String, bool>, SchemaError> {
+    if !(v.kind() matches { Object }) {
+        return fail(at, "must be an object of booleans");
+    }
+    let mut out = TreeMap::<String, bool>::new();
+    for let [key, value] of v.entries() {
+        out[key.to_string()] = read_bool(&value, &`${*at}/${pointer_token(key)}`)?;
+    }
+    return Result::Ok(out);
+}
