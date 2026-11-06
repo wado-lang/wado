@@ -1239,8 +1239,22 @@ struct Site {
     bindings: Vec<Binding>,
     /// In a cold run. Such a call is pointed at a clone
     /// other calls pay for, and never has one minted for it: a clone for a call
-    /// that rarely runs buys no time for its size.
+    /// that rarely runs buys no time for its size, unless it binds a field:
+    /// see [`Site::binds_field`].
     cold: bool,
+}
+
+impl Site {
+    /// Whether the clone replaces a field of an argument passed by reference.
+    /// A cold call is free where it stands but not where it reaches: passing
+    /// the whole object keeps `sroa_param` off that parameter in every hot
+    /// caller, so the object is allocated on the hot path for a field the
+    /// clone would have folded away.
+    fn binds_field(&self) -> bool {
+        self.bindings
+            .iter()
+            .any(|(_, slot, _)| matches!(slot, Slot::Field(_)))
+    }
 }
 
 fn select_sites(
@@ -1711,7 +1725,8 @@ fn plan_clones<'s>(
             continue;
         }
         let ordinal = state.per_callee.get(&site.callee).copied().unwrap_or(0);
-        if site.cold || body_exprs(project, site.callee) > MAX_CLONE_EXPRS {
+        if (site.cold && !site.binds_field()) || body_exprs(project, site.callee) > MAX_CLONE_EXPRS
+        {
             continue;
         }
         if state.budget_exhausted() {

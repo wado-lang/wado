@@ -51,35 +51,37 @@ type "functype//derived_ord_reaches_blanket_bound.wado/$cm_export__run" = fn(); 
 
 type "functype//derived_ord_reaches_blanket_bound.wado/run$cold1" = fn();  // TypeId(19)
 
-type "functype//core:rt/log_stderr" = fn(ref Array<u8>, i32);  // TypeId(20)
+type "functype//core:rt/unreachable" = fn();  // TypeId(20)
 
-type "functype//core:rt/panic" = fn(ref Array<u8>, i32);  // TypeId(21)
+type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(21)
 
-type "functype//core:rt/unreachable" = fn();  // TypeId(22)
+type "functype//core:rt/panic$spec1" = fn(ref Array<u8>, i32);  // TypeId(22)
 
-type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(23)
+type "functype//core:rt/panic$cold0$spec1" = fn(ref Array<u8>, i32);  // TypeId(23)
 
-type "functype//core:rt/panic$cold0" = fn(ref Array<u8>, i32);  // TypeId(24)
+type "functype//core:rt/log_stderr$spec1" = fn(ref Array<u8>, i32);  // TypeId(24)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::realloc_to" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(25)
+type "functype//core:rt/cm_stream_write_raw_all_u8$spec1$sroa[data.repr]$dae[return]" = fn(i32, ref Array<u8>);  // TypeId(25)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(26)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::realloc_to" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(26)
 
-type "functype//derived_ord_reaches_blanket_bound.wado/core:prelude/slice.wado/SliceValueIter<derived_ord_reaches_blanket_bound.wado/P>^core:prelude/traits.wado/Iterator::max_by$$Closure_0$dae[cmp]$spec0" = fn(ref "core:prelude/slice.wado//SliceValueIter<derived_ord_reaches_blanket_bound.wado/P>") -> ref null "derived_ord_reaches_blanket_bound.wado//P";  // TypeId(27)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(27)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::format<derived_ord_reaches_blanket_bound.wado/$tmpl$aec43b331a40fe7d,[bool,bool]>$spec0$spec0" = fn(bool, bool) -> ref "core:prelude/string.wado//String";  // TypeId(28)
+type "functype//derived_ord_reaches_blanket_bound.wado/core:prelude/slice.wado/SliceValueIter<derived_ord_reaches_blanket_bound.wado/P>^core:prelude/traits.wado/Iterator::max_by$$Closure_0$dae[cmp]$spec0" = fn(ref "core:prelude/slice.wado//SliceValueIter<derived_ord_reaches_blanket_bound.wado/P>") -> ref null "derived_ord_reaches_blanket_bound.wado//P";  // TypeId(28)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(29)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::format<derived_ord_reaches_blanket_bound.wado/$tmpl$aec43b331a40fe7d,[bool,bool]>$spec0$spec0" = fn(bool, bool) -> ref "core:prelude/string.wado//String";  // TypeId(29)
 
-type "functype//wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode" = fn(i32);  // TypeId(30)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(30)
 
-type "functype//wasi/task-return" = fn(i32);  // TypeId(31)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(31)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(32)
+type "functype//wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode" = fn(i32);  // TypeId(32)
 
-type "functype//derived_ord_reaches_blanket_bound.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(33)
+type "functype//wasi/task-return" = fn(i32);  // TypeId(33)
 
-type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(34)
+type "functype//derived_ord_reaches_blanket_bound.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(34)
+
+type "functype//core:rt/write_string_to_stream$spec1$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(35)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -91,9 +93,9 @@ import fn wasi/$wasi:cli/stderr@0.3.0#write-via-stream from "wasi/$wasi:cli/stde
 import fn wasi/$wasi:cli/stdout@0.3.0#write-via-stream from "wasi/$wasi:cli/stdout@0.3.0#write-via-stream";
 import memory (1) from "mem/memory";
 import fn wasi/stream-new from "wasi/stream-new";
+import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode";
 import fn wasi/task-return from "wasi/task-return";
-import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
 global global:derived_ord_reaches_blanket_bound.wado::$const_obj_0: ref "Array<derived_ord_reaches_blanket_bound.wado/Color>" = array.new_fixed<"derived_ord_reaches_blanket_bound.wado//enum:Color">(0, 1);
 global global:core:prelude/string.wado::$const_obj_2: ref Array<u8> = array.new_fixed<u8>(32);
@@ -105,11 +107,12 @@ fn "derived_ord_reaches_blanket_bound.wado/run"() with Stdout {
     let item_84: "derived_ord_reaches_blanket_bound.wado//enum:Color";
     let $sroa_best_value_20: "derived_ord_reaches_blanket_bound.wado//enum:Color";
     let item_108: "derived_ord_reaches_blanket_bound.wado//enum:Color";
-    let $sroa_xs_repr_124: ref "Array<derived_ord_reaches_blanket_bound.wado/P>";
-    let $sroa_$temp_inline_core_prelude_slice_wado_SliceValueIter_derived_ord_reaches_blanket_bound_wado_Color__core_prelude_traits_wado_Iterator__max_derived_ord_reaches_blanket_bound_wado_Color__sroa_return__10_0_index_129: i32;
-    $sroa_xs_repr_124 = array.new_fixed<ref "derived_ord_reaches_blanket_bound.wado//P">(struct.new "derived_ord_reaches_blanket_bound.wado//P" { n: 1 }, struct.new "derived_ord_reaches_blanket_bound.wado//P" { n: 3 });
+    let new_repr: ref Array<u8>;
+    let $sroa_xs_repr_139: ref "Array<derived_ord_reaches_blanket_bound.wado/P>";
+    let $sroa_$temp_inline_core_prelude_slice_wado_SliceValueIter_derived_ord_reaches_blanket_bound_wado_Color__core_prelude_traits_wado_Iterator__max_derived_ord_reaches_blanket_bound_wado_Color__sroa_return__10_0_index_144: i32;
+    $sroa_xs_repr_139 = array.new_fixed<ref "derived_ord_reaches_blanket_bound.wado//P">(struct.new "derived_ord_reaches_blanket_bound.wado//P" { n: 1 }, struct.new "derived_ord_reaches_blanket_bound.wado//P" { n: 3 });
     let $match_scrut_0: ref null "derived_ord_reaches_blanket_bound.wado//P";
-    if @unlikely((if ref.is_null(local.tee $match_scrut_0("derived_ord_reaches_blanket_bound.wado/core:prelude/slice.wado/SliceValueIter<derived_ord_reaches_blanket_bound.wado/P>^core:prelude/traits.wado/Iterator::max_by$$Closure_0$dae[cmp]$spec0"(struct.new "core:prelude/slice.wado//SliceValueIter<derived_ord_reaches_blanket_bound.wado/P>" { repr: $sroa_xs_repr_124, index: 0, end: 2 }))) == 0 -> bool {
+    if @unlikely((if ref.is_null(local.tee $match_scrut_0("derived_ord_reaches_blanket_bound.wado/core:prelude/slice.wado/SliceValueIter<derived_ord_reaches_blanket_bound.wado/P>^core:prelude/traits.wado/Iterator::max_by$$Closure_0$dae[cmp]$spec0"(struct.new "core:prelude/slice.wado//SliceValueIter<derived_ord_reaches_blanket_bound.wado/P>" { repr: $sroa_xs_repr_139, index: 0, end: 2 }))) == 0 -> bool {
         $match_scrut_0.n == 3;
     } else {
         0;
@@ -119,13 +122,13 @@ fn "derived_ord_reaches_blanket_bound.wado/run"() with Stdout {
         unreachable;
     }
     repr_32 = global:derived_ord_reaches_blanket_bound.wado::$const_obj_0;
-    $sroa_$temp_inline_core_prelude_slice_wado_SliceValueIter_derived_ord_reaches_blanket_bound_wado_Color__core_prelude_traits_wado_Iterator__max_derived_ord_reaches_blanket_bound_wado_Color__sroa_return__10_0_index_129 = 1;
+    $sroa_$temp_inline_core_prelude_slice_wado_SliceValueIter_derived_ord_reaches_blanket_bound_wado_Color__core_prelude_traits_wado_Iterator__max_derived_ord_reaches_blanket_bound_wado_Color__sroa_return__10_0_index_144 = 1;
     $sroa_best_value_20 = 0;
     b2: block {
         l3: loop {
-            break_if b2 ((($sroa_$temp_inline_core_prelude_slice_wado_SliceValueIter_derived_ord_reaches_blanket_bound_wado_Color__core_prelude_traits_wado_Iterator__max_derived_ord_reaches_blanket_bound_wado_Color__sroa_return__10_0_index_129 >= 2) | (($sroa_$temp_inline_core_prelude_slice_wado_SliceValueIter_derived_ord_reaches_blanket_bound_wado_Color__core_prelude_traits_wado_Iterator__max_derived_ord_reaches_blanket_bound_wado_Color__sroa_return__10_0_index_129 + 1) >= 2)) | ((($sroa_$temp_inline_core_prelude_slice_wado_SliceValueIter_derived_ord_reaches_blanket_bound_wado_Color__core_prelude_traits_wado_Iterator__max_derived_ord_reaches_blanket_bound_wado_Color__sroa_return__10_0_index_129 + 1) + 1) >= 2)) | (((($sroa_$temp_inline_core_prelude_slice_wado_SliceValueIter_derived_ord_reaches_blanket_bound_wado_Color__core_prelude_traits_wado_Iterator__max_derived_ord_reaches_blanket_bound_wado_Color__sroa_return__10_0_index_129 + 1) + 1) + 1) >= 2);
-            item_84 = builtin::array_get_value<"derived_ord_reaches_blanket_bound.wado//enum:Color">(repr_32, $sroa_$temp_inline_core_prelude_slice_wado_SliceValueIter_derived_ord_reaches_blanket_bound_wado_Color__core_prelude_traits_wado_Iterator__max_derived_ord_reaches_blanket_bound_wado_Color__sroa_return__10_0_index_129);
-            $sroa_$temp_inline_core_prelude_slice_wado_SliceValueIter_derived_ord_reaches_blanket_bound_wado_Color__core_prelude_traits_wado_Iterator__max_derived_ord_reaches_blanket_bound_wado_Color__sroa_return__10_0_index_129 = $sroa_$temp_inline_core_prelude_slice_wado_SliceValueIter_derived_ord_reaches_blanket_bound_wado_Color__core_prelude_traits_wado_Iterator__max_derived_ord_reaches_blanket_bound_wado_Color__sroa_return__10_0_index_129 + 1;
+            break_if b2 ((($sroa_$temp_inline_core_prelude_slice_wado_SliceValueIter_derived_ord_reaches_blanket_bound_wado_Color__core_prelude_traits_wado_Iterator__max_derived_ord_reaches_blanket_bound_wado_Color__sroa_return__10_0_index_144 >= 2) | (($sroa_$temp_inline_core_prelude_slice_wado_SliceValueIter_derived_ord_reaches_blanket_bound_wado_Color__core_prelude_traits_wado_Iterator__max_derived_ord_reaches_blanket_bound_wado_Color__sroa_return__10_0_index_144 + 1) >= 2)) | ((($sroa_$temp_inline_core_prelude_slice_wado_SliceValueIter_derived_ord_reaches_blanket_bound_wado_Color__core_prelude_traits_wado_Iterator__max_derived_ord_reaches_blanket_bound_wado_Color__sroa_return__10_0_index_144 + 1) + 1) >= 2)) | (((($sroa_$temp_inline_core_prelude_slice_wado_SliceValueIter_derived_ord_reaches_blanket_bound_wado_Color__core_prelude_traits_wado_Iterator__max_derived_ord_reaches_blanket_bound_wado_Color__sroa_return__10_0_index_144 + 1) + 1) + 1) >= 2);
+            item_84 = builtin::array_get_value<"derived_ord_reaches_blanket_bound.wado//enum:Color">(repr_32, $sroa_$temp_inline_core_prelude_slice_wado_SliceValueIter_derived_ord_reaches_blanket_bound_wado_Color__core_prelude_traits_wado_Iterator__max_derived_ord_reaches_blanket_bound_wado_Color__sroa_return__10_0_index_144);
+            $sroa_$temp_inline_core_prelude_slice_wado_SliceValueIter_derived_ord_reaches_blanket_bound_wado_Color__core_prelude_traits_wado_Iterator__max_derived_ord_reaches_blanket_bound_wado_Color__sroa_return__10_0_index_144 = $sroa_$temp_inline_core_prelude_slice_wado_SliceValueIter_derived_ord_reaches_blanket_bound_wado_Color__core_prelude_traits_wado_Iterator__max_derived_ord_reaches_blanket_bound_wado_Color__sroa_return__10_0_index_144 + 1;
             if $inline_core_prelude_slice_wado_SliceValueIter_derived_ord_reaches_blanket_bound_wado_Color__core_prelude_traits_wado_Iterator__max_by__Closure_1_sroa_return__dae_cmp__1__$inline_derived_ord_reaches_blanket_bound_wado_Color_core_prelude_traits_wado_Ord__cmp_sroa_self_value_other_value__3: block -> "core:prelude/traits.wado//enum:Ordering" {
                 if $sroa_best_value_20 < item_84 {
                     break $inline_core_prelude_slice_wado_SliceValueIter_derived_ord_reaches_blanket_bound_wado_Color__core_prelude_traits_wado_Iterator__max_by__Closure_1_sroa_return__dae_cmp__1__$inline_derived_ord_reaches_blanket_bound_wado_Color_core_prelude_traits_wado_Ord__cmp_sroa_self_value_other_value__3: 0;
@@ -137,8 +140,8 @@ fn "derived_ord_reaches_blanket_bound.wado/run"() with Stdout {
             } != 2 {
                 $sroa_best_value_20 = item_84;
             }
-            item_84 = builtin::array_get_value<"derived_ord_reaches_blanket_bound.wado//enum:Color">(repr_32, $sroa_$temp_inline_core_prelude_slice_wado_SliceValueIter_derived_ord_reaches_blanket_bound_wado_Color__core_prelude_traits_wado_Iterator__max_derived_ord_reaches_blanket_bound_wado_Color__sroa_return__10_0_index_129);
-            $sroa_$temp_inline_core_prelude_slice_wado_SliceValueIter_derived_ord_reaches_blanket_bound_wado_Color__core_prelude_traits_wado_Iterator__max_derived_ord_reaches_blanket_bound_wado_Color__sroa_return__10_0_index_129 = $sroa_$temp_inline_core_prelude_slice_wado_SliceValueIter_derived_ord_reaches_blanket_bound_wado_Color__core_prelude_traits_wado_Iterator__max_derived_ord_reaches_blanket_bound_wado_Color__sroa_return__10_0_index_129 + 1;
+            item_84 = builtin::array_get_value<"derived_ord_reaches_blanket_bound.wado//enum:Color">(repr_32, $sroa_$temp_inline_core_prelude_slice_wado_SliceValueIter_derived_ord_reaches_blanket_bound_wado_Color__core_prelude_traits_wado_Iterator__max_derived_ord_reaches_blanket_bound_wado_Color__sroa_return__10_0_index_144);
+            $sroa_$temp_inline_core_prelude_slice_wado_SliceValueIter_derived_ord_reaches_blanket_bound_wado_Color__core_prelude_traits_wado_Iterator__max_derived_ord_reaches_blanket_bound_wado_Color__sroa_return__10_0_index_144 = $sroa_$temp_inline_core_prelude_slice_wado_SliceValueIter_derived_ord_reaches_blanket_bound_wado_Color__core_prelude_traits_wado_Iterator__max_derived_ord_reaches_blanket_bound_wado_Color__sroa_return__10_0_index_144 + 1;
             if $inline_core_prelude_slice_wado_SliceValueIter_derived_ord_reaches_blanket_bound_wado_Color__core_prelude_traits_wado_Iterator__max_by__Closure_1_sroa_return__dae_cmp__1__$inline_derived_ord_reaches_blanket_bound_wado_Color_core_prelude_traits_wado_Ord__cmp_sroa_self_value_other_value__3: block -> "core:prelude/traits.wado//enum:Ordering" {
                 if $sroa_best_value_20 < item_84 {
                     break $inline_core_prelude_slice_wado_SliceValueIter_derived_ord_reaches_blanket_bound_wado_Color__core_prelude_traits_wado_Iterator__max_by__Closure_1_sroa_return__dae_cmp__1__$inline_derived_ord_reaches_blanket_bound_wado_Color_core_prelude_traits_wado_Ord__cmp_sroa_self_value_other_value__3: 0;
@@ -150,8 +153,8 @@ fn "derived_ord_reaches_blanket_bound.wado/run"() with Stdout {
             } != 2 {
                 $sroa_best_value_20 = item_84;
             }
-            item_84 = builtin::array_get_value<"derived_ord_reaches_blanket_bound.wado//enum:Color">(repr_32, $sroa_$temp_inline_core_prelude_slice_wado_SliceValueIter_derived_ord_reaches_blanket_bound_wado_Color__core_prelude_traits_wado_Iterator__max_derived_ord_reaches_blanket_bound_wado_Color__sroa_return__10_0_index_129);
-            $sroa_$temp_inline_core_prelude_slice_wado_SliceValueIter_derived_ord_reaches_blanket_bound_wado_Color__core_prelude_traits_wado_Iterator__max_derived_ord_reaches_blanket_bound_wado_Color__sroa_return__10_0_index_129 = $sroa_$temp_inline_core_prelude_slice_wado_SliceValueIter_derived_ord_reaches_blanket_bound_wado_Color__core_prelude_traits_wado_Iterator__max_derived_ord_reaches_blanket_bound_wado_Color__sroa_return__10_0_index_129 + 1;
+            item_84 = builtin::array_get_value<"derived_ord_reaches_blanket_bound.wado//enum:Color">(repr_32, $sroa_$temp_inline_core_prelude_slice_wado_SliceValueIter_derived_ord_reaches_blanket_bound_wado_Color__core_prelude_traits_wado_Iterator__max_derived_ord_reaches_blanket_bound_wado_Color__sroa_return__10_0_index_144);
+            $sroa_$temp_inline_core_prelude_slice_wado_SliceValueIter_derived_ord_reaches_blanket_bound_wado_Color__core_prelude_traits_wado_Iterator__max_derived_ord_reaches_blanket_bound_wado_Color__sroa_return__10_0_index_144 = $sroa_$temp_inline_core_prelude_slice_wado_SliceValueIter_derived_ord_reaches_blanket_bound_wado_Color__core_prelude_traits_wado_Iterator__max_derived_ord_reaches_blanket_bound_wado_Color__sroa_return__10_0_index_144 + 1;
             if $inline_core_prelude_slice_wado_SliceValueIter_derived_ord_reaches_blanket_bound_wado_Color__core_prelude_traits_wado_Iterator__max_by__Closure_1_sroa_return__dae_cmp__1__$inline_derived_ord_reaches_blanket_bound_wado_Color_core_prelude_traits_wado_Ord__cmp_sroa_self_value_other_value__3: block -> "core:prelude/traits.wado//enum:Ordering" {
                 if $sroa_best_value_20 < item_84 {
                     break $inline_core_prelude_slice_wado_SliceValueIter_derived_ord_reaches_blanket_bound_wado_Color__core_prelude_traits_wado_Iterator__max_by__Closure_1_sroa_return__dae_cmp__1__$inline_derived_ord_reaches_blanket_bound_wado_Color_core_prelude_traits_wado_Ord__cmp_sroa_self_value_other_value__3: 0;
@@ -163,8 +166,8 @@ fn "derived_ord_reaches_blanket_bound.wado/run"() with Stdout {
             } != 2 {
                 $sroa_best_value_20 = item_84;
             }
-            item_84 = builtin::array_get_value<"derived_ord_reaches_blanket_bound.wado//enum:Color">(repr_32, $sroa_$temp_inline_core_prelude_slice_wado_SliceValueIter_derived_ord_reaches_blanket_bound_wado_Color__core_prelude_traits_wado_Iterator__max_derived_ord_reaches_blanket_bound_wado_Color__sroa_return__10_0_index_129);
-            $sroa_$temp_inline_core_prelude_slice_wado_SliceValueIter_derived_ord_reaches_blanket_bound_wado_Color__core_prelude_traits_wado_Iterator__max_derived_ord_reaches_blanket_bound_wado_Color__sroa_return__10_0_index_129 = $sroa_$temp_inline_core_prelude_slice_wado_SliceValueIter_derived_ord_reaches_blanket_bound_wado_Color__core_prelude_traits_wado_Iterator__max_derived_ord_reaches_blanket_bound_wado_Color__sroa_return__10_0_index_129 + 1;
+            item_84 = builtin::array_get_value<"derived_ord_reaches_blanket_bound.wado//enum:Color">(repr_32, $sroa_$temp_inline_core_prelude_slice_wado_SliceValueIter_derived_ord_reaches_blanket_bound_wado_Color__core_prelude_traits_wado_Iterator__max_derived_ord_reaches_blanket_bound_wado_Color__sroa_return__10_0_index_144);
+            $sroa_$temp_inline_core_prelude_slice_wado_SliceValueIter_derived_ord_reaches_blanket_bound_wado_Color__core_prelude_traits_wado_Iterator__max_derived_ord_reaches_blanket_bound_wado_Color__sroa_return__10_0_index_144 = $sroa_$temp_inline_core_prelude_slice_wado_SliceValueIter_derived_ord_reaches_blanket_bound_wado_Color__core_prelude_traits_wado_Iterator__max_derived_ord_reaches_blanket_bound_wado_Color__sroa_return__10_0_index_144 + 1;
             if $inline_core_prelude_slice_wado_SliceValueIter_derived_ord_reaches_blanket_bound_wado_Color__core_prelude_traits_wado_Iterator__max_by__Closure_1_sroa_return__dae_cmp__1__$inline_derived_ord_reaches_blanket_bound_wado_Color_core_prelude_traits_wado_Ord__cmp_sroa_self_value_other_value__3: block -> "core:prelude/traits.wado//enum:Ordering" {
                 if $sroa_best_value_20 < item_84 {
                     break $inline_core_prelude_slice_wado_SliceValueIter_derived_ord_reaches_blanket_bound_wado_Color__core_prelude_traits_wado_Iterator__max_by__Closure_1_sroa_return__dae_cmp__1__$inline_derived_ord_reaches_blanket_bound_wado_Color_core_prelude_traits_wado_Ord__cmp_sroa_self_value_other_value__3: 0;
@@ -181,9 +184,9 @@ fn "derived_ord_reaches_blanket_bound.wado/run"() with Stdout {
     };
     b16: block {
         l17: loop {
-            break_if b16 $sroa_$temp_inline_core_prelude_slice_wado_SliceValueIter_derived_ord_reaches_blanket_bound_wado_Color__core_prelude_traits_wado_Iterator__max_derived_ord_reaches_blanket_bound_wado_Color__sroa_return__10_0_index_129 >= 2;
-            item_84 = builtin::array_get_value<"derived_ord_reaches_blanket_bound.wado//enum:Color">(repr_32, $sroa_$temp_inline_core_prelude_slice_wado_SliceValueIter_derived_ord_reaches_blanket_bound_wado_Color__core_prelude_traits_wado_Iterator__max_derived_ord_reaches_blanket_bound_wado_Color__sroa_return__10_0_index_129);
-            $sroa_$temp_inline_core_prelude_slice_wado_SliceValueIter_derived_ord_reaches_blanket_bound_wado_Color__core_prelude_traits_wado_Iterator__max_derived_ord_reaches_blanket_bound_wado_Color__sroa_return__10_0_index_129 = $sroa_$temp_inline_core_prelude_slice_wado_SliceValueIter_derived_ord_reaches_blanket_bound_wado_Color__core_prelude_traits_wado_Iterator__max_derived_ord_reaches_blanket_bound_wado_Color__sroa_return__10_0_index_129 + 1;
+            break_if b16 $sroa_$temp_inline_core_prelude_slice_wado_SliceValueIter_derived_ord_reaches_blanket_bound_wado_Color__core_prelude_traits_wado_Iterator__max_derived_ord_reaches_blanket_bound_wado_Color__sroa_return__10_0_index_144 >= 2;
+            item_84 = builtin::array_get_value<"derived_ord_reaches_blanket_bound.wado//enum:Color">(repr_32, $sroa_$temp_inline_core_prelude_slice_wado_SliceValueIter_derived_ord_reaches_blanket_bound_wado_Color__core_prelude_traits_wado_Iterator__max_derived_ord_reaches_blanket_bound_wado_Color__sroa_return__10_0_index_144);
+            $sroa_$temp_inline_core_prelude_slice_wado_SliceValueIter_derived_ord_reaches_blanket_bound_wado_Color__core_prelude_traits_wado_Iterator__max_derived_ord_reaches_blanket_bound_wado_Color__sroa_return__10_0_index_144 = $sroa_$temp_inline_core_prelude_slice_wado_SliceValueIter_derived_ord_reaches_blanket_bound_wado_Color__core_prelude_traits_wado_Iterator__max_derived_ord_reaches_blanket_bound_wado_Color__sroa_return__10_0_index_144 + 1;
             if $inline_core_prelude_slice_wado_SliceValueIter_derived_ord_reaches_blanket_bound_wado_Color__core_prelude_traits_wado_Iterator__max_by__Closure_1_sroa_return__dae_cmp__1__$inline_derived_ord_reaches_blanket_bound_wado_Color_core_prelude_traits_wado_Ord__cmp_sroa_self_value_other_value__3: block -> "core:prelude/traits.wado//enum:Ordering" {
                 if $sroa_best_value_20 < item_84 {
                     break $inline_core_prelude_slice_wado_SliceValueIter_derived_ord_reaches_blanket_bound_wado_Color__core_prelude_traits_wado_Iterator__max_by__Closure_1_sroa_return__dae_cmp__1__$inline_derived_ord_reaches_blanket_bound_wado_Color_core_prelude_traits_wado_Ord__cmp_sroa_self_value_other_value__3: 0;
@@ -199,7 +202,7 @@ fn "derived_ord_reaches_blanket_bound.wado/run"() with Stdout {
         };
     };
     message_36 = block -> ref "core:prelude/string.wado//String" {
-        $sroa_$temp_inline_core_prelude_slice_wado_SliceValueIter_derived_ord_reaches_blanket_bound_wado_Color__core_prelude_traits_wado_Iterator__max_derived_ord_reaches_blanket_bound_wado_Color__sroa_return__10_0_index_129 = (if ref.is_null(local.tee $match_scrut_0("derived_ord_reaches_blanket_bound.wado/core:prelude/slice.wado/SliceValueIter<derived_ord_reaches_blanket_bound.wado/P>^core:prelude/traits.wado/Iterator::max_by$$Closure_0$dae[cmp]$spec0"(struct.new "core:prelude/slice.wado//SliceValueIter<derived_ord_reaches_blanket_bound.wado/P>" { repr: $sroa_xs_repr_124, index: 0, end: 2 }))) == 0 -> bool {
+        $sroa_$temp_inline_core_prelude_slice_wado_SliceValueIter_derived_ord_reaches_blanket_bound_wado_Color__core_prelude_traits_wado_Iterator__max_derived_ord_reaches_blanket_bound_wado_Color__sroa_return__10_0_index_144 = (if ref.is_null(local.tee $match_scrut_0("derived_ord_reaches_blanket_bound.wado/core:prelude/slice.wado/SliceValueIter<derived_ord_reaches_blanket_bound.wado/P>^core:prelude/traits.wado/Iterator::max_by$$Closure_0$dae[cmp]$spec0"(struct.new "core:prelude/slice.wado//SliceValueIter<derived_ord_reaches_blanket_bound.wado/P>" { repr: $sroa_xs_repr_139, index: 0, end: 2 }))) == 0 -> bool {
             $match_scrut_0.n == 3;
         } else {
             0;
@@ -289,13 +292,19 @@ fn "derived_ord_reaches_blanket_bound.wado/run"() with Stdout {
                 continue l38;
             };
         };
-        "core:prelude/string.wado/core:prelude/string.wado/String::format<derived_ord_reaches_blanket_bound.wado/$tmpl$aec43b331a40fe7d,[bool,bool]>$spec0$spec0"($sroa_$temp_inline_core_prelude_slice_wado_SliceValueIter_derived_ord_reaches_blanket_bound_wado_Color__core_prelude_traits_wado_Iterator__max_derived_ord_reaches_blanket_bound_wado_Color__sroa_return__10_0_index_129, 1);
+        "core:prelude/string.wado/core:prelude/string.wado/String::format<derived_ord_reaches_blanket_bound.wado/$tmpl$aec43b331a40fe7d,[bool,bool]>$spec0$spec0"($sroa_$temp_inline_core_prelude_slice_wado_SliceValueIter_derived_ord_reaches_blanket_bound_wado_Color__core_prelude_traits_wado_Iterator__max_derived_ord_reaches_blanket_bound_wado_Color__sroa_return__10_0_index_144, 1);
     };
-    $sroa_$temp_inline_core_prelude_slice_wado_SliceValueIter_derived_ord_reaches_blanket_bound_wado_Color__core_prelude_traits_wado_Iterator__max_derived_ord_reaches_blanket_bound_wado_Color__sroa_return__10_0_index_129 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
+    $sroa_$temp_inline_core_prelude_slice_wado_SliceValueIter_derived_ord_reaches_blanket_bound_wado_Color__core_prelude_traits_wado_Iterator__max_derived_ord_reaches_blanket_bound_wado_Color__sroa_return__10_0_index_144 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
     $sroa_best_value_20 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
-    $sroa_$temp_inline_core_prelude_slice_wado_SliceValueIter_derived_ord_reaches_blanket_bound_wado_Color__core_prelude_traits_wado_Iterator__max_derived_ord_reaches_blanket_bound_wado_Color__sroa_return__10_0_index_129 = "derived_ord_reaches_blanket_bound.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$temp_inline_core_prelude_slice_wado_SliceValueIter_derived_ord_reaches_blanket_bound_wado_Color__core_prelude_traits_wado_Iterator__max_derived_ord_reaches_blanket_bound_wado_Color__sroa_return__10_0_index_129);
-    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_best_value_20, message_36.repr, message_36.used);
-    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_$temp_inline_core_prelude_slice_wado_SliceValueIter_derived_ord_reaches_blanket_bound_wado_Color__core_prelude_traits_wado_Iterator__max_derived_ord_reaches_blanket_bound_wado_Color__sroa_return__10_0_index_129);
+    $sroa_$temp_inline_core_prelude_slice_wado_SliceValueIter_derived_ord_reaches_blanket_bound_wado_Color__core_prelude_traits_wado_Iterator__max_derived_ord_reaches_blanket_bound_wado_Color__sroa_return__10_0_index_144 = "derived_ord_reaches_blanket_bound.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$temp_inline_core_prelude_slice_wado_SliceValueIter_derived_ord_reaches_blanket_bound_wado_Color__core_prelude_traits_wado_Iterator__max_derived_ord_reaches_blanket_bound_wado_Color__sroa_return__10_0_index_144);
+    builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>(local.tee item_84(message_36.used) + 1)), 0, message_36.repr, 0, item_84);
+    builtin::array_set_u8(new_repr, item_84, 10);
+    drop(block -> "core:prelude/types.wado//enum:CopyResult" {
+        item_84 = item_84 + 1;
+        "core:rt/cm_stream_write_raw_all_u8"($sroa_best_value_20, new_repr, 0, item_84);
+    });
+    "wasi/stream-drop-writable"($sroa_best_value_20);
+    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_$temp_inline_core_prelude_slice_wado_SliceValueIter_derived_ord_reaches_blanket_bound_wado_Color__core_prelude_traits_wado_Iterator__max_derived_ord_reaches_blanket_bound_wado_Color__sroa_return__10_0_index_144);
 }
 
 fn "derived_ord_reaches_blanket_bound.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {
@@ -308,37 +317,9 @@ fn "derived_ord_reaches_blanket_bound.wado/$cm_export__run"() {
 }
 
 fn "derived_ord_reaches_blanket_bound.wado/run$cold1"() with Stdout {
-    "core:rt/panic"(array.new_data<u8>("Assertion failed in run at derived_ord_reaches_blanket_bound.wado:18
+    "core:rt/panic$spec1"(array.new_data<u8>("Assertion failed in run at derived_ord_reaches_blanket_bound.wado:18
 condition: xs.iter_value().max() matches { Some(p) && p.n == 3 }
 "), 134);
-    unreachable;
-}
-
-fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$message$used) {
-    let new_repr: ref Array<u8>;
-    builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>($mv$message$used + 1)), 0, $mv$message$repr, 0, $mv$message$used);
-    builtin::array_set_u8(new_repr, $mv$message$used, 10);
-    drop(block -> "core:prelude/types.wado//enum:CopyResult" {
-        $mv$message$used = $mv$message$used + 1;
-        "core:rt/cm_stream_write_raw_all_u8"(tx, new_repr, 0, $mv$message$used);
-    });
-    "wasi/stream-drop-writable"(tx);
-}
-
-fn "core:rt/log_stderr"($mv$message$repr, $mv$message$used) {
-    let $cm_pair_7: i64;
-    let $sroa_$pattern_temp_0_0_9: i32;
-    let $sroa_$pattern_temp_0_1_10: i32;
-    $sroa_$pattern_temp_0_0_9 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
-    $sroa_$pattern_temp_0_1_10 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
-    $sroa_$pattern_temp_0_0_9 = "wasi/$wasi:cli/stderr@0.3.0#write-via-stream"($sroa_$pattern_temp_0_0_9);
-    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_10, $mv$message$repr, $mv$message$used);
-    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_9);
-}
-
-fn "core:rt/panic"($mv$message$repr, $mv$message$used) {
-    cold_path;
-    "core:rt/panic$cold0"($mv$message$repr, $mv$message$used);
     unreachable;
 }
 
@@ -438,9 +419,120 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
     };
 }
 
-fn "core:rt/panic$cold0"($mv$message$repr, $mv$message$used) {
-    "core:rt/log_stderr"($mv$message$repr, $mv$message$used);
+fn "core:rt/panic$spec1"($mv$message$repr, $mv$message$used) {
+    cold_path;
+    "core:rt/panic$cold0$spec1"($mv$message$repr, $mv$message$used);
     unreachable;
+}
+
+fn "core:rt/panic$cold0$spec1"($mv$message$repr, $mv$message$used) {
+    "core:rt/log_stderr$spec1"($mv$message$repr, $mv$message$used);
+    unreachable;
+}
+
+fn "core:rt/log_stderr$spec1"($mv$message$repr, $mv$message$used) {
+    let $cm_pair_7: i64;
+    let $sroa_$pattern_temp_0_0_9: i32;
+    let $sroa_$pattern_temp_0_1_10: i32;
+    $sroa_$pattern_temp_0_0_9 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
+    $sroa_$pattern_temp_0_1_10 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
+    $sroa_$pattern_temp_0_0_9 = "wasi/$wasi:cli/stderr@0.3.0#write-via-stream"($sroa_$pattern_temp_0_0_9);
+    "core:rt/write_string_to_stream$spec1$dae[add_newline]"($sroa_$pattern_temp_0_1_10, $mv$message$repr, $mv$message$used);
+    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_9);
+}
+
+fn "core:rt/write_string_to_stream$spec1$dae[add_newline]"(tx, $mv$message$repr, $mv$message$used) {
+    let new_repr: ref Array<u8>;
+    builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>(135)), 0, $mv$message$repr, 0, 134);
+    builtin::array_set_u8(new_repr, 134, 10);
+    "core:rt/cm_stream_write_raw_all_u8$spec1$sroa[data.repr]$dae[return]"(tx, new_repr);
+    "wasi/stream-drop-writable"(tx);
+}
+
+fn "core:rt/cm_stream_write_raw_all_u8$spec1$sroa[data.repr]$dae[return]"(handle, data) {
+    let ptr_13: i32;
+    let ptr_19: i32;
+    let count_20: i32;
+    let status: i32;
+    let i: i32;
+    let w: i64;
+    ptr_13 = builtin::i32_wrap_i64(ptr_13 = "mem/realloc"(0, 0, 1, 135); i = 0; b59: block {
+        l60: loop {
+            break_if b59 (i > 127) | ((i + 8) > 127);
+            w = ((((((builtin::i64_extend_i32_u(builtin::array_get_value_u8(data, i)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(data, i + 1)) << 8_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(data, i + 2)) << 16_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(data, i + 3)) << 24_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(data, i + 4)) << 32_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(data, i + 5)) << 40_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(data, i + 6)) << 48_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(data, i + 7)) << 56_i64);
+            builtin::store_i64(ptr_13 + i, w);
+            i = i + 8;
+            w = ((((((builtin::i64_extend_i32_u(builtin::array_get_value_u8(data, i)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(data, i + 1)) << 8_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(data, i + 2)) << 16_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(data, i + 3)) << 24_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(data, i + 4)) << 32_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(data, i + 5)) << 40_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(data, i + 6)) << 48_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(data, i + 7)) << 56_i64);
+            builtin::store_i64(ptr_13 + i, w);
+            i = i + 8;
+            continue l60;
+        };
+    }; b61: block {
+        l62: loop {
+            break_if b61 i > 127;
+            w = ((((((builtin::i64_extend_i32_u(builtin::array_get_value_u8(data, i)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(data, i + 1)) << 8_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(data, i + 2)) << 16_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(data, i + 3)) << 24_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(data, i + 4)) << 32_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(data, i + 5)) << 40_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(data, i + 6)) << 48_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(data, i + 7)) << 56_i64);
+            builtin::store_i64(ptr_13 + i, w);
+            i = i + 8;
+            continue l62;
+        };
+    }; b63: block {
+        l64: loop {
+            break_if b63 (((i >= 135) | ((i + 1) >= 135)) | (((i + 1) + 1) >= 135)) | ((((i + 1) + 1) + 1) >= 135);
+            builtin::store_u8(ptr_13 + i, builtin::array_get_value_u8(data, i));
+            i = i + 1;
+            builtin::store_u8(ptr_13 + i, builtin::array_get_value_u8(data, i));
+            i = i + 1;
+            builtin::store_u8(ptr_13 + i, builtin::array_get_value_u8(data, i));
+            i = i + 1;
+            builtin::store_u8(ptr_13 + i, builtin::array_get_value_u8(data, i));
+            i = i + 1;
+            continue l64;
+        };
+    }; b65: block {
+        l66: loop {
+            break_if b65 i >= 135;
+            builtin::store_u8(ptr_13 + i, builtin::array_get_value_u8(data, i));
+            i = i + 1;
+            continue l66;
+        };
+    }; builtin::i64_extend_i32_u(ptr_13) | 579820584960_i64);
+    i = 0;
+    block {
+        l68: loop {
+            ptr_19 = ptr_13 + i;
+            count_20 = 135 - i;
+            count_20 = local.tee ptr_19($inline_cm_await_blocked_6: block -> i32 {
+                if local.tee ptr_19("wasi/stream-write"(handle, ptr_19, select i32(count_20 < 268435455, count_20, 268435455))) != -1 {
+                    break $inline_cm_await_blocked_6: ptr_19;
+                }
+                ptr_19 = "wasi/waitable-set-new"();
+                "wasi/waitable-join"(handle, ptr_19);
+                count_20 = "mem/realloc"(0, 0, 4, 8);
+                drop("wasi/waitable-set-wait"(ptr_19, count_20));
+                status = builtin::load_i32(count_20 + 4);
+                drop("mem/realloc"(count_20, 8, 4, 0));
+                "wasi/waitable-join"(handle, 0);
+                "wasi/waitable-set-drop"(ptr_19);
+                break $inline_cm_await_blocked_6: status;
+            }) >>u 4;
+            ptr_19 = (if local.tee ptr_19(ptr_19 & 15) == 0 -> "core:prelude/types.wado//enum:CopyResult" {
+                0;
+            } else if ptr_19 == 1 -> "core:prelude/types.wado//enum:CopyResult" {
+                1;
+            } else if @likely(ptr_19 == 2) -> "core:prelude/types.wado//enum:CopyResult" {
+                2;
+            } else {
+                "core:rt/unreachable"();
+                unreachable;
+            });
+            i = i + count_20;
+            if ((ptr_19 != 0) | (count_20 <= 0)) | (i >= 135) {
+                drop("mem/realloc"(ptr_13, 135, 1, 0));
+                return;
+            }
+            continue l68;
+        };
+    };
 }
 
 fn "core:prelude/string.wado/core:prelude/string.wado/String::realloc_to"(self, new_capacity) {
@@ -469,11 +561,11 @@ fn "derived_ord_reaches_blanket_bound.wado/core:prelude/slice.wado/SliceValueIte
         $sroa_item_n_26 = builtin::array_get_value<ref "derived_ord_reaches_blanket_bound.wado//P">(local.tee $load_1(self.repr), $av_29).n;
         self.index = $av_29 + 1;
         $av_29 = self.index;
-        b60: block {
-            l61: loop {
+        b75: block {
+            l76: loop {
                 if $av_29 >= 2 {
                     self.index = $av_29;
-                    break b60;
+                    break b75;
                 }
                 $sroa_item_n_27 = builtin::array_get_value<ref "derived_ord_reaches_blanket_bound.wado//P">($load_1, $av_29).n;
                 $av_29 = $av_29 + 1;
@@ -493,7 +585,7 @@ fn "derived_ord_reaches_blanket_bound.wado/core:prelude/slice.wado/SliceValueIte
                 } != 2 {
                     $sroa_item_n_26 = $sroa_item_n_27;
                 }
-                continue l61;
+                continue l76;
             };
         };
         return struct.new "derived_ord_reaches_blanket_bound.wado//P" { n: $sroa_item_n_26 };

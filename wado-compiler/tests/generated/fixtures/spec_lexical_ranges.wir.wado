@@ -646,9 +646,9 @@ type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::clo
 
 type "functype//core:prelude/format.wado/&f64^core:prelude/traits.wado/Inspect::inspect$sroa[self.value.value]" = fn(f64, ref "core:prelude/format.wado//Formatter");  // TypeId(229)
 
-type "functype//core:prelude/format.wado/&i32^core:prelude/traits.wado/Inspect::inspect$sroa[self.value.value]" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(230)
+type "functype//core:prelude/format.wado/&char^core:prelude/traits.wado/Inspect::inspect$sroa[self.value.value,f.buf]" = fn(char, ref "core:prelude/string.wado//String");  // TypeId(230)
 
-type "functype//core:prelude/format.wado/&char^core:prelude/traits.wado/Inspect::inspect$sroa[self.value.value,f.buf]" = fn(char, ref "core:prelude/string.wado//String");  // TypeId(231)
+type "functype//core:prelude/format.wado/&i32^core:prelude/traits.wado/Inspect::inspect$sroa[self.value.value]" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(231)
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/StrSlice::slice$unchecked$spec0$dae[start]" = fn(ref Array<u8>, i32, i32) -> ref "core:prelude/string.wado//StrSlice";  // TypeId(232)
 
@@ -5117,14 +5117,14 @@ fn "core:prelude/format.wado/&f64^core:prelude/traits.wado/Inspect::inspect$sroa
     "core:prelude/primitive.wado/f64::inspect_into$sroa[self.value]"(self, f);
 }
 
-fn "core:prelude/format.wado/&i32^core:prelude/traits.wado/Inspect::inspect$sroa[self.value.value]"(self, f) {
-    "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec1"(f.buf, global:core:prelude/format.wado::$const_obj_27);
-    "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(self, f);
-}
-
 fn "core:prelude/format.wado/&char^core:prelude/traits.wado/Inspect::inspect$sroa[self.value.value,f.buf]"(self, f) {
     "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec1"(f, global:core:prelude/format.wado::$const_obj_27);
     "core:prelude/primitive.wado/char^core:prelude/traits.wado/Inspect::inspect$sroa[self.value,f.buf]"(self, f);
+}
+
+fn "core:prelude/format.wado/&i32^core:prelude/traits.wado/Inspect::inspect$sroa[self.value.value]"(self, f) {
+    "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec1"(f.buf, global:core:prelude/format.wado::$const_obj_27);
+    "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(self, f);
 }
 
 fn "core:prelude/string.wado/core:prelude/string.wado/StrSlice::slice$unchecked$spec0$dae[start]"($mv$self$repr, $mv$self$start, end) {
