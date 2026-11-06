@@ -3237,7 +3237,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 start, end, kind, ..
             } => return self.exh_range(start, end, *kind, scrutinee_type),
             ast::Pattern::Tuple(patterns, _) => {
-                let types = self.tysys.type_table.borrow().as_tuple(scrutinee_type)?;
+                let types = self
+                    .tysys
+                    .type_table
+                    .borrow()
+                    .tuple_pattern_elements(scrutinee_type)?;
                 let elements = types
                     .iter()
                     .enumerate()

@@ -27,6 +27,7 @@ parameters. The statements themselves are in [Control Flow](./spec-control-flow.
 A tuple pattern names every element of the tuple, or ends in `..` after at most
 that many. Over a tuple carrying a variadic pack, only the elements ahead of the
 pack have a fixed position, so the pattern names at most those and ends in `..`.
+A newtype over a tuple matches as that tuple does.
 
 A struct pattern names a field as a struct literal does: by an identifier, a
 keyword, or a string literal (`P { true: t, "x": a }`). A shorthand field binds

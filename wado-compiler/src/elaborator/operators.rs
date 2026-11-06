@@ -1184,7 +1184,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .tysys
             .type_table
             .borrow()
-            .as_tuple(value_type)
+            .tuple_pattern_elements(value_type)
             .filter(|elements| elements.len() == targets.len());
         let Some(element_types) = element_types else {
             let found = self.tysys.type_table.borrow().name(value_type);

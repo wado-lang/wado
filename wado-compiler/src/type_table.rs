@@ -2434,6 +2434,12 @@ impl TypeTable {
         }
     }
 
+    /// The elements a tuple pattern reads from `id`: a tuple's, or those of the
+    /// tuple a newtype wraps.
+    pub fn tuple_pattern_elements(&self, id: TypeId) -> Option<Vec<TypeId>> {
+        self.as_tuple(self.representation_head(id))
+    }
+
     /// The element types `id` stands for: a tuple's own, and otherwise the one
     /// type itself. This is what a spread splices into the tuple holding it.
     pub fn elem_types_or_self(&self, id: TypeId) -> Vec<TypeId> {
