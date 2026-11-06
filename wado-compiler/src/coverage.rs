@@ -651,8 +651,9 @@ struct FunctionText {
 
 /// Where a function is declared, beyond its own text.
 struct Declared {
-    /// What a method is declared in, as [`Planner::declared_in`] says, and
-    /// the [`Self::scope`] of the function a closure is written in.
+    /// What a method is declared in, as [`Planner::declared_in`] says, and a
+    /// closure's place: the [`Self::scope`] of the function it is written in,
+    /// and where it starts there.
     owner: Option<String>,
     /// What a closure written in the function is declared in.
     scope: String,
@@ -661,8 +662,8 @@ struct Declared {
 /// What a profile's counts for a function were recorded against, and all a
 /// compile finds them by: its text and owner, and each of its `regions`' kind
 /// and span relative to where the text starts. The text catches an edit that
-/// changes which region runs, the owner keeps one text apart in two impls or
-/// two enclosing functions, and the regions catch what decides them from
+/// changes which region runs, the owner keeps one text apart in two places it
+/// may run apart from, and the regions catch what decides them from
 /// outside the text, such as a `#[coverage(off)]` on the enclosing `impl`. See
 /// WEP 2026-10-25 (Profile-Guided Optimization).
 fn function_hash<'r>(
