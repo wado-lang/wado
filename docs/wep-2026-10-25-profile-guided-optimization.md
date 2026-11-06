@@ -194,9 +194,9 @@ alone cannot:
 - A closure's place: the hash of its enclosing function, and its line relative
   to that function's start and its column, as the function's regions are
   placed. The function's name would not do, since two modules may each have a
-  `parse` with the same closure in the same place. Short
-  closures recur, and one of the same text and types runs as often as the
-  place it is written in. On `gale_gen` the type-name owner folded
+  `parse` with the same closure in the same place. Short closures recur, and
+  one of the same text and types runs as often as the place it is written in.
+  On `gale_gen` the type-name owner folded
   `|alt: &Alternative| self.alt_has_gate(alt)` in `rule_overlap`, which no
   workload entered, into the one in `choice_route`, which ran, and cost 1167
   fuel against matching by name. Gale's `keyword_chars_admitted` passes one

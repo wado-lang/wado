@@ -55,9 +55,9 @@ the function is declared. For a method, that is the head of its `impl`, written
 out as `impl<T: Eq> Eq for &T`, or the trait, interface or resource it is
 declared in. For a closure, it is the hash of the function the closure is
 written in, the line the closure starts at relative to that function's start,
-and its column. The lines after it give how often each of the function's regions ran,
-the regions numbered from zero within the function. A region not listed never
-ran.
+and its column. The lines after it give how often each of the function's
+regions ran, the regions numbered from zero within the function. A region not
+listed never ran.
 
 Functions of one hash share one set of counts, the sum of what each of them
 ran, as a generic function's instances do. Each module lists such a function
@@ -75,8 +75,8 @@ A build applies its entry's profile, the one `wado test --pgo` records the
 entry's workloads into. It finds each function's counts by the function's hash
 alone. A `module` line and a function's name and line are for a reader, so a
 profile still applies after the function's module moves, or its package takes
-another version. `-f pgo` turns this on and `-f no-pgo` off. It is on
-by default in every world, the test world included, so a test runs the code a
+another version. `-f pgo` turns this on and `-f no-pgo` off. It is on by
+default in every world, the test world included, so a test runs the code a
 build ships. A build that finds no profile compiles without one, and under
 `-f pgo` says so at `--log-level info`.
 
@@ -100,8 +100,8 @@ build's own entry, and whatever only it reaches, never runs under them. Nor is
 one whose hash the profile does not give. Where the profile lists a function of
 the same name in the same module, under any version of its package, the
 function is new or changed since the recording, and the compile says so at
-`--log-level info`. Each is compiled as without a profile, with the
-markers its source states.
+`--log-level info`. Each is compiled as without a profile, with the markers its
+source states.
 
 ### Markers
 

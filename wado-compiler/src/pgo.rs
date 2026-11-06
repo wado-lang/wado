@@ -26,8 +26,6 @@ use crate::token::Span;
 /// version.
 pub const HEADER: &str = "wado-pgo 2";
 
-const FORMAT: &str = "wado-pgo";
-
 /// The runs of each region of a function that ran, by its number within the
 /// function.
 type Counts = BTreeMap<u32, i64>;
@@ -79,8 +77,9 @@ pub fn to_text(coverage: &Coverage) -> String {
 pub struct Profile {
     counts: BTreeMap<u64, Counts>,
     /// The functions each module lists, by their names and by the module's
-    /// [`unversioned_module_name`]. They tell a function whose source changed
-    /// from one no workload measured, and the stdlib's from the rest.
+    /// [`unversioned_module_name`]. They tell a function new or changed since
+    /// the recording from one the profile never listed, and the stdlib's from
+    /// the rest.
     listed: BTreeMap<String, Vec<(String, u64)>>,
 }
 
@@ -305,11 +304,14 @@ pub fn parse(text: &str) -> Result<Profile, ParseError> {
         .lines()
         .enumerate()
         .map(|(index, line)| (index + 1, line));
+    fn format(header: &str) -> Option<&str> {
+        header.split_once(' ').map(|(format, _)| format)
+    }
     match lines.next().map(|(_, line)| line) {
         Some(HEADER) => {}
-        // A profile of another format hashes its functions otherwise, so
-        // none of its counts would apply.
-        Some(other) if other.split_once(' ').map(|(name, _)| name) == Some(FORMAT) => {
+        // Another version hashes its functions otherwise, so none of its
+        // counts would apply.
+        Some(other) if format(other) == format(HEADER) => {
             return Err(error(
                 1,
                 &format!(
@@ -812,8 +814,9 @@ mod tests {
         );
     }
 
-    /// A module's name without its package's version tells a function whose
-    /// source changed from one no workload measured, across an upgrade too.
+    /// A module's name without its package's version tells a function new or
+    /// changed since the recording from one the profile never listed, across
+    /// an upgrade too.
     #[test]
     fn a_profile_lists_a_function_under_any_version_of_its_package() {
         let profile = parse(
