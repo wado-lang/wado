@@ -7,6 +7,7 @@
 //! [The Profile Format](../../docs/spec-pgo.md#the-profile-format). A `module`
 //! line is a [`Coverage::files`] key, which `--pgo` makes the module's name.
 
+use std::collections::btree_map::Entry;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::{self, Write as _};
 
@@ -21,8 +22,11 @@ use crate::rarity::Mark;
 use crate::stdlib::core_module_file;
 use crate::token::Span;
 
-/// The first line of every profile, naming its format.
-pub const HEADER: &str = "wado-pgo 1";
+/// The first line of every profile, naming its format and the format's
+/// version.
+pub const HEADER: &str = "wado-pgo 2";
+
+const FORMAT: &str = "wado-pgo";
 
 /// The runs of each region of a function that ran, by its number within the
 /// function.
@@ -103,12 +107,15 @@ impl Profile {
         self.counts.is_empty()
     }
 
-    /// Whether the profile lists a function named `name` in `module`, under
-    /// any version of its package.
-    fn lists(&self, module: &str, name: &str) -> bool {
+    /// The names of the functions the profile lists in `module`, under any
+    /// version of its package.
+    fn names_in(&self, module: &str) -> BTreeSet<&str> {
         self.listed
             .get(&unversioned_module_name(module))
-            .is_some_and(|functions| functions.iter().any(|(listed, _)| listed == name))
+            .into_iter()
+            .flatten()
+            .map(|(name, _)| name.as_str())
+            .collect()
     }
 
     /// This profile read under `thresholds`, against its own hot line.
@@ -298,8 +305,20 @@ pub fn parse(text: &str) -> Result<Profile, ParseError> {
         .lines()
         .enumerate()
         .map(|(index, line)| (index + 1, line));
-    if lines.next().map(|(_, line)| line) != Some(HEADER) {
-        return Err(error(1, &format!("a profile starts with `{HEADER}`")));
+    match lines.next().map(|(_, line)| line) {
+        Some(HEADER) => {}
+        // A profile of another format hashes its functions otherwise, so
+        // none of its counts would apply.
+        Some(other) if other.split_once(' ').map(|(name, _)| name) == Some(FORMAT) => {
+            return Err(error(
+                1,
+                &format!(
+                    "`{other}` is a format this compiler does not read: record the workloads \
+                     again with `wado test --pgo`"
+                ),
+            ));
+        }
+        _ => return Err(error(1, &format!("a profile starts with `{HEADER}`"))),
     }
     let mut profile = Profile::default();
     let mut modules = BTreeSet::new();
@@ -311,12 +330,16 @@ pub fn parse(text: &str) -> Result<Profile, ParseError> {
         let Some((number, hash, counts)) = function else {
             return Ok(());
         };
-        match profile.counts.insert(hash, counts.clone()) {
-            Some(listed) if listed != counts => Err(error(
+        match profile.counts.entry(hash) {
+            Entry::Vacant(entry) => {
+                entry.insert(counts);
+                Ok(())
+            }
+            Entry::Occupied(listed) if *listed.get() == counts => Ok(()),
+            Entry::Occupied(_) => Err(error(
                 number,
                 "a function's counts are the same wherever its hash is listed",
             )),
-            _ => Ok(()),
         }
     };
     for (number, line) in lines {
@@ -494,6 +517,7 @@ impl MarkMap {
             ..
         } = planned;
         let mut counts: Vec<Option<i64>> = vec![None; plan.regions.len()];
+        let listed = profile.names_in(&plan.name);
         for ((function, ids), &name) in plan
             .functions
             .iter()
@@ -501,12 +525,15 @@ impl MarkMap {
             .zip(&names)
         {
             let Some(recorded) = profile.counts.get(&function.hash) else {
-                if profile.lists(&plan.name, &function.name) {
+                // A name may stand for more than one function, so a listed
+                // one says only that the profile is behind this module.
+                if listed.contains(function.name.as_str()) {
                     self.remarks.push((
                         name,
                         format!(
-                            "the profile's counts for `{}` are discarded: its source or region \
-                             plan changed since they were recorded",
+                            "the profile has no counts for `{}` as it stands, though it measured \
+                             a function of that name here: it is new or changed since the \
+                             recording, so record the workloads again",
                             function.name
                         ),
                     ));
@@ -724,7 +751,7 @@ mod tests {
     fn a_profile_lists_every_function_and_the_regions_that_ran() {
         assert_eq!(
             to_text(&recorded()),
-            "wado-pgo 1\n\
+            "wado-pgo 2\n\
              module src/a.wado\n\
              fn 00000000000000ab 1 f\n\
              0 5\n\
@@ -773,7 +800,7 @@ mod tests {
         coverage.record(&registered, &BTreeMap::from([(0, 3), (2, 2), (3, 2)]), None);
         assert_eq!(
             to_text(&coverage),
-            "wado-pgo 1\n\
+            "wado-pgo 2\n\
              module src/a.wado\n\
              fn 00000000000000ab 1 f\n\
              0 5\n\
@@ -790,15 +817,17 @@ mod tests {
     #[test]
     fn a_profile_lists_a_function_under_any_version_of_its_package() {
         let profile = parse(
-            "wado-pgo 1\n\
+            "wado-pgo 2\n\
              module acme:app@0.1.0/src/lib.wado\n\
              fn 00000000000000ab 1 f\n\
              0 1\n",
         )
         .expect("it parses");
-        assert!(profile.lists("acme:app@0.2.0/src/lib.wado", "f"));
-        assert!(!profile.lists("acme:app@0.2.0/src/lib.wado", "g"));
-        assert!(!profile.lists("acme:app@0.2.0/src/main.wado", "f"));
+        assert_eq!(
+            profile.names_in("acme:app@0.2.0/src/lib.wado"),
+            BTreeSet::from(["f"])
+        );
+        assert!(profile.names_in("acme:app@0.2.0/src/main.wado").is_empty());
     }
 
     /// LLVM's default: a branch is predictable when one side takes 99% of its
@@ -817,7 +846,7 @@ mod tests {
     #[test]
     fn a_count_line_is_the_smallest_count_inside_the_cutoff() {
         let profile = parse(
-            "wado-pgo 1\n\
+            "wado-pgo 2\n\
              module src/a.wado\n\
              fn 0000000000000001 1 f\n\
              0 900\n\
@@ -840,7 +869,7 @@ mod tests {
     #[test]
     fn an_empty_hot_share_heats_nothing() {
         let profile = parse(
-            "wado-pgo 1\n\
+            "wado-pgo 2\n\
              module src/a.wado\n\
              fn 0000000000000001 1 f\n\
              0 900\n\
@@ -904,18 +933,19 @@ mod tests {
     #[test]
     fn a_malformed_profile_names_its_line() {
         let cases = [
-            ("wado-pgo 2\n", 1),
-            ("wado-pgo 1\nfn 00000000000000ab 1 f\n", 2),
-            ("wado-pgo 1\nmodule a\n0 5\n", 3),
-            ("wado-pgo 1\nmodule a\nfn ab 1 f\n", 3),
-            ("wado-pgo 1\nmodule a\nfn 00000000000000ab 1 f\n0 0\n", 4),
+            ("wado-pgo 1\n", 1),
+            ("wado-cov 2\n", 1),
+            ("wado-pgo 2\nfn 00000000000000ab 1 f\n", 2),
+            ("wado-pgo 2\nmodule a\n0 5\n", 3),
+            ("wado-pgo 2\nmodule a\nfn ab 1 f\n", 3),
+            ("wado-pgo 2\nmodule a\nfn 00000000000000ab 1 f\n0 0\n", 4),
             (
-                "wado-pgo 1\nmodule a\nfn 00000000000000ab 1 f\n0 1\n0 2\n",
+                "wado-pgo 2\nmodule a\nfn 00000000000000ab 1 f\n0 1\n0 2\n",
                 5,
             ),
-            ("wado-pgo 1\nmodule a\nmodule a\n", 3),
+            ("wado-pgo 2\nmodule a\nmodule a\n", 3),
             (
-                "wado-pgo 1\nmodule a\nfn 00000000000000ab 1 f\n0 1\n\
+                "wado-pgo 2\nmodule a\nfn 00000000000000ab 1 f\n0 1\n\
                  module b\nfn 00000000000000ab 1 f\n0 2\n",
                 6,
             ),
@@ -923,5 +953,7 @@ mod tests {
         for (text, line) in cases {
             assert_eq!(parse(text).map_err(|e| e.line), Err(line), "{text}");
         }
+        let older = parse("wado-pgo 1\n").expect_err("an older format");
+        assert!(older.reason.contains("wado test --pgo"), "{}", older.reason);
     }
 }

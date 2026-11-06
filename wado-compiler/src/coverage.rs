@@ -21,7 +21,7 @@ use crate::attribute;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::lexer::normalize_line_breaks;
 use crate::module_source::ModuleSource;
-use crate::name::COLD_PATH_INTRINSIC;
+use crate::name::{self, COLD_PATH_INTRINSIC};
 use crate::token::Span;
 use crate::unparse::unparse_impl_head;
 
@@ -609,7 +609,14 @@ pub(crate) fn plan_module(
     } = planner;
     for (index, ids) in plan.regions_by_function().iter().enumerate() {
         let regions = ids.iter().map(|&id| &plan.regions[id as usize]);
-        plan.functions[index].hash = function_hash(module.source(), &texts[index], regions);
+        let hashed = |function: u32| {
+            assert!(
+                (function as usize) < index,
+                "a closure is planned after the function it is written in"
+            );
+            plan.functions[function as usize].hash
+        };
+        plan.functions[index].hash = function_hash(module.source(), &texts[index], hashed, regions);
     }
     PlannedModule {
         plan,
@@ -649,34 +656,57 @@ struct FunctionText {
     declared: Declared,
 }
 
-/// Where a function is declared, beyond its own text.
-struct Declared {
-    /// What a method is declared in, as [`Planner::declared_in`] says, and a
-    /// closure's place: the [`Self::scope`] of the function it is written in,
-    /// and where it starts there.
-    owner: Option<String>,
-    /// What a closure written in the function is declared in.
-    scope: String,
+/// Where a function is declared, beyond what its own text says: what keeps
+/// one text apart in two places it may run apart from.
+enum Declared {
+    /// At a module's top level, or in a function there.
+    Free,
+    /// In an `impl`, by its head as [`unparse_impl_head`] writes it, or in a
+    /// trait, interface or resource.
+    In(String),
+    /// In the function planned at `function`, starting at `line`, relative to
+    /// that function's start, and `column`.
+    Closure {
+        function: u32,
+        line: u32,
+        column: u32,
+    },
 }
 
 /// What a profile's counts for a function were recorded against, and all a
-/// compile finds them by: its text and owner, and each of its `regions`' kind
-/// and span relative to where the text starts. The text catches an edit that
-/// changes which region runs, the owner keeps one text apart in two places it
-/// may run apart from, and the regions catch what decides them from
-/// outside the text, such as a `#[coverage(off)]` on the enclosing `impl`. See
-/// WEP 2026-10-25 (Profile-Guided Optimization).
+/// compile finds them by: its text, where it is declared, and each of its
+/// `regions`' kind and span relative to where the text starts. The text
+/// catches an edit that changes which region runs, the declaration keeps one
+/// text apart in two places it may run apart from, and the regions catch what
+/// decides them from outside the text, such as a `#[coverage(off)]` on the
+/// enclosing `impl`. A closure is declared in its function's hash, as `hashed`
+/// answers it. See WEP 2026-10-25 (Profile-Guided Optimization).
 fn function_hash<'r>(
     source: &str,
     text: &FunctionText,
+    hashed: impl Fn(u32) -> u64,
     regions: impl Iterator<Item = &'r Region>,
 ) -> u64 {
     let mut h = Sha256::new();
-    // Text starts at a name or a closure's `|`, never at a length's first
-    // byte, so an owner cannot read as the start of a free function's text.
-    if let Some(owner) = &text.declared.owner {
-        h.update((owner.len() as u32).to_le_bytes());
-        h.update(owner.as_bytes());
+    // Text starts at a name or a closure's `|`, never at a control byte, so a
+    // tag cannot read as the start of a free function's text.
+    match &text.declared {
+        Declared::Free => {}
+        Declared::In(owner) => {
+            h.update([1]);
+            h.update((owner.len() as u32).to_le_bytes());
+            h.update(owner.as_bytes());
+        }
+        &Declared::Closure {
+            function,
+            line,
+            column,
+        } => {
+            h.update([2]);
+            h.update(hashed(function).to_le_bytes());
+            h.update(line.to_le_bytes());
+            h.update(column.to_le_bytes());
+        }
     }
     h.update(normalize_line_breaks(&source[text.bytes.clone()]).as_bytes());
     for region in regions {
@@ -732,19 +762,14 @@ impl Planner<'_> {
         {
             return;
         }
-        let name = match &self.owner {
-            Some(owner) => format!("{owner}::{}", f.name),
-            None => f.name.clone(),
-        };
+        let name = name::coverage_function_name(self.owner.as_deref(), &f.name);
         // A local item nests a function in another, so the walk's position is
         // saved around it.
         let saved = (self.function, self.region);
-        let owner = self.declared_in.clone();
-        let scope = match &owner {
-            Some(owner) => format!("{owner}::{}", f.name),
-            None => f.name.clone(),
-        };
-        let declared = Declared { owner, scope };
+        let declared = self
+            .declared_in
+            .clone()
+            .map_or(Declared::Free, Declared::In);
         let region =
             self.new_function(name, f.name_span, declared, RegionKind::Function, body.span);
         self.sites.push((ProbeSite::BlockStart, body.id, region));
@@ -1130,19 +1155,11 @@ impl AstVisitor<'_> for Planner<'_> {
             Expr::Closure(c) if self.expr_reaches_only_unreachable(&c.body, false) => {}
             Expr::Closure(c) => {
                 let outer_name = &self.plan.functions[self.function as usize].name;
-                let name = format!("{outer_name}::{{closure:{}}}", c.span.line);
-                let outer = &self.texts[self.function as usize];
-                // Where in its function the closure is written keeps apart
-                // two closures of one text there, which may run apart.
-                let place = format!(
-                    "{}::{{closure@{}:{}}}",
-                    outer.declared.scope,
-                    c.span.line as u32 - outer.start.line,
-                    c.span.column
-                );
-                let declared = Declared {
-                    owner: Some(place.clone()),
-                    scope: place,
+                let name = name::coverage_closure_name(outer_name, c.span.line);
+                let declared = Declared::Closure {
+                    function: self.function,
+                    line: c.span.line as u32 - self.texts[self.function as usize].start.line,
+                    column: c.span.column as u32,
                 };
                 let saved = (self.function, self.region);
                 let region =
@@ -1760,6 +1777,16 @@ mod tests {
         );
         assert_ne!(closures["f::{closure:1}"], closures["g::{closure:2}"]);
         assert_ne!(closures["h::{closure:4}"], closures["h::{closure:5}"]);
+        // Two modules' functions of one name, each with the closure in one place.
+        let parse = |n: i32| {
+            hashes(&format!(
+                "fn parse() -> i32 {{ let c = |x: i32| x + 1; return c({n}); }}\n"
+            ))
+        };
+        assert_ne!(
+            parse(1)["parse::{closure:1}"],
+            parse(2)["parse::{closure:1}"]
+        );
     }
 
     /// The kinds of the regions `body` plans as `fn f`'s, with every callee

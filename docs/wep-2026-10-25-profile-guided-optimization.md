@@ -191,8 +191,10 @@ alone cannot:
 
 - A method's `impl` head, in full. Its type's name alone left `impl P for &T`
   and `impl P for &mut T` one owner, and so the two traits' `end` of one type.
-- A closure's place: its enclosing function, and its line and column relative
-  to that function's start, as the function's regions are placed. Short
+- A closure's place: the hash of its enclosing function, and its line relative
+  to that function's start and its column, as the function's regions are
+  placed. The function's name would not do, since two modules may each have a
+  `parse` with the same closure in the same place. Short
   closures recur, and one of the same text and types runs as often as the
   place it is written in. On `gale_gen` the type-name owner folded
   `|alt: &Alternative| self.alt_has_gate(alt)` in `rule_overlap`, which no
@@ -219,10 +221,16 @@ edit elsewhere, such as a caller that now passes other values, and only
 recording again refreshes them.
 
 A compile that discards a function's counts says so at `--log-level info`, so
-an author learns when to record again. With matching by hash, a changed
-function is one whose hash the profile lacks while the profile lists a function
-of its name in its module. The module is compared without its package's
-version, so a bump does not hide an edit.
+an author learns when to record again. With matching by hash, the compile says
+so of a function whose hash the profile lacks while the profile lists a
+function of its name in its module. The module is compared without its
+package's version, so a bump does not hide an edit. A name may stand for two
+functions, two impls' `fmt` of one type say, so the remark calls the function
+new or changed rather than claiming it changed.
+
+Changing what a hash covers changes the format's version in the header: a
+profile of another version would apply none of its counts, so the compile
+refuses it and says to record again.
 
 ### Rarity is two questions, as in LLVM and GCC
 

@@ -26,10 +26,12 @@ workloads that are gone.
 
 ## The Profile Format
 
-A profile is text, one record per line:
+A profile is text, one record per line, after a header naming the format's
+version. A compile refuses a profile of another version, and says to record
+the workloads again:
 
 ```text
-wado-pgo 1
+wado-pgo 2
 module acme:app@0.1.0/src/lib.wado
 fn 3f2a9c0d1e2b4a59 12 pick
 0 5
@@ -51,9 +53,9 @@ the function's source text from its name to the end of its body, a CRLF read as
 LF, and its regions' kinds and positions relative to it. It also covers where
 the function is declared. For a method, that is the head of its `impl`, written
 out as `impl<T: Eq> Eq for &T`, or the trait, interface or resource it is
-declared in. For a closure, it is the function the closure is written in, and
-the line and column it starts at relative to that function's start. The lines
-after it give how often each of the function's regions ran,
+declared in. For a closure, it is the hash of the function the closure is
+written in, the line the closure starts at relative to that function's start,
+and its column. The lines after it give how often each of the function's regions ran,
 the regions numbered from zero within the function. A region not listed never
 ran.
 
@@ -97,8 +99,8 @@ A function the workloads never entered is not judged: workloads are tests, so a
 build's own entry, and whatever only it reaches, never runs under them. Nor is
 one whose hash the profile does not give. Where the profile lists a function of
 the same name in the same module, under any version of its package, the
-function's source or region plan changed since the recording, and the compile
-says so at `--log-level info`. Each is compiled as without a profile, with the
+function is new or changed since the recording, and the compile says so at
+`--log-level info`. Each is compiled as without a profile, with the
 markers its source states.
 
 ### Markers

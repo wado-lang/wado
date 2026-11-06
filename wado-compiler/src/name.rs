@@ -258,6 +258,23 @@ pub fn packaged_module_name(coordinate: &str, path: &str) -> String {
     format!("{coordinate}/{path}")
 }
 
+/// How coverage and a profile name a function `name` declared under `owner`,
+/// the type or trait its methods' block names.
+#[must_use]
+pub fn coverage_function_name(owner: Option<&str>, name: &str) -> String {
+    match owner {
+        Some(owner) => format!("{owner}::{name}"),
+        None => name.to_string(),
+    }
+}
+
+/// How coverage and a profile name a closure written in the function named
+/// `outer`, at `line`.
+#[must_use]
+pub fn coverage_closure_name(outer: &str, line: usize) -> String {
+    format!("{outer}::{{closure:{line}}}")
+}
+
 /// `name` without the version a [`packaged_module_name`]'s coordinate spells:
 /// what one module of a package is named under each of its versions.
 #[must_use]
