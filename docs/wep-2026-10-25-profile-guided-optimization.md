@@ -447,7 +447,7 @@ output at every level. It is a nightly campaign, not a gate.
 8. [x] The random-profile differential test, as EMI's profile stage.
 9. [x] The `benchmark/` pilot. Each benchmark gains a workload and a committed
    profile, `http_routing` a test to carry it first, and a table compares the
-   three builds the flags give. A workload runs a smaller input than the
+   three builds the flags give. A workload runs another input than the
    benchmark measures, so the table does not judge a profile on the run that
    trained it.
 10. [ ] The design weighed against LLVM, GCC and Go. Each option below is

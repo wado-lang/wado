@@ -34,7 +34,15 @@ fn gen_rust() -> i32 {
 #[workload]
 test "workload" {
     assert gen(&[
-        ["JSON.g4", #include_str("../../package-gale/tests/grammars/JSON.g4")],
+        ["SQLite.g4", #include_str("../../package-gale/tests/grammars/SQLite.g4")],
+    ]) > 0;
+    assert gen(&[
+        ["TypeScriptLexer.g4", #include_str("../../package-gale/tests/grammars/TypeScriptLexer.g4")],
+        ["TypeScriptParser.g4", #include_str("../../package-gale/tests/grammars/TypeScriptParser.g4")],
+    ]) > 0;
+    assert gen(&[
+        ["css3Lexer.g4", #include_str("../../package-gale/tests/grammars/css3Lexer.g4")],
+        ["css3Parser.g4", #include_str("../../package-gale/tests/grammars/css3Parser.g4")],
     ]) > 0;
 }
 
