@@ -586,9 +586,6 @@ struct Builder<'a> {
     /// Which sequence builtin each callee id is, so `array_len` over an array
     /// this walk saw `array_new` allocate folds to the length it was given.
     ctfe_builtins: CtfeBuiltinMap,
-    /// Locals a struct literal bound, whose value therefore names an object
-    /// rather than a datum. See [`Builder::bump_call_effects`].
-    seeded_aggregates: IndexSet<u32>,
     /// `array value → its length value`, for the arrays this walk allocated.
     /// The array is a fresh opaque per call, so a second allocation is a second
     /// entry and a reassignment reaches neither.
@@ -653,7 +650,6 @@ impl<'a> Builder<'a> {
             field_ref_targets: IndexMap::default(),
             assigned_fields: assigned_field_indices(body),
             ctfe_builtins: CtfeBuiltinMap::default(),
-            seeded_aggregates: IndexSet::default(),
             array_lengths: IndexMap::default(),
             type_table,
             loop_entry_values: IndexMap::default(),
@@ -997,16 +993,6 @@ impl<'a> Builder<'a> {
             noted
         };
         for l in locals {
-            // A local bound to an aggregate literal keeps its value across the
-            // call: the local *is* the storage, so a callee writing through a
-            // `&mut` of it changes fields, never which object it names. The
-            // version bump above already says the fields may have moved, and
-            // `field_store` is keyed by the receiver — so re-opaquing the
-            // receiver on top would lose every seeded field at the first call
-            // and leave the version saying nothing.
-            if self.seeded_aggregates.contains(&l) {
-                continue;
-            }
             self.invalidate_local_with(l, |pool| pool.fresh_opaque_local(l));
         }
     }
@@ -1626,9 +1612,6 @@ impl<'a> Builder<'a> {
                 self.field_store.insert((recv, field_index, ver), fv);
                 seeded += 1;
             }
-        }
-        if seeded > 0 {
-            self.seeded_aggregates.insert(root);
         }
         compiler_trace!(
             "vg_field",

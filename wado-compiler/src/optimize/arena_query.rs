@@ -1516,30 +1516,25 @@ pub(super) fn for_each_mutated_root(
     });
 }
 
-/// Every local possibly mutated anywhere in the subtree at `node` — the
+/// Every mutation of a local root anywhere in the subtree at `node` — the
 /// consolidation query for pass-local "loop write" / "modifies" scans.
-// Canonical implementation ahead of its consumers: `const_folding`'s
-// `record_loop_write` and `condition_implication`'s `node_modifies` migrate
-// onto it next.
-#[allow(dead_code)]
-pub(super) fn locals_possibly_mutated(
+// `const_folding`'s `record_loop_write` and `condition_implication`'s
+// `node_modifies` are such scans still to migrate onto it.
+pub(super) fn for_each_mutation_under(
     body: &Body,
     node: NodeRef,
     type_table: &TypeTable,
     oracle: &MutationOracle<'_>,
     aliases: &MutRefAliases,
-) -> IndexSet<u32> {
-    let mut out = IndexSet::default();
+    sink: &mut impl FnMut(RootMutation),
+) {
     let mut stack = vec![node];
     while let Some(n) = stack.pop() {
         if let NodeRef::Expr(e) = n {
-            for_each_mutated_root(body, e, type_table, oracle, aliases, &mut |rm| {
-                out.insert(rm.local());
-            });
+            for_each_mutated_root(body, e, type_table, oracle, aliases, sink);
         }
         body.for_each_child(n, |c| stack.push(c));
     }
-    out
 }
 
 /// Whether WIR will expect a value from `block`'s tail. Walks the parent map,

@@ -1,0 +1,49 @@
+// A cold region that writes a local its frame keeps, through a `&mut self`
+// call or a field store, must write the frame's own storage: an outlined
+// helper handed the value would write a copy, and the caller would read 0.
+use { println, Stdout } from "core:cli";
+
+struct Acc {
+    total: i32,
+}
+
+impl Acc {
+    fn add(&mut self, n: i32) {
+        self.total = self.total + n;
+    }
+}
+
+fn through_receiver(n: i32) -> i32 {
+    let mut acc = Acc { total: 0 };
+    if n > 0 {
+        acc.add(n);
+        acc.add(n * 2);
+        acc.add(n * 3);
+    }
+    return acc.total;
+}
+
+fn through_field(n: i32) -> i32 {
+    let mut acc = Acc { total: 0 };
+    if n > 0 {
+        acc.total = acc.total + n;
+        acc.total = acc.total + n * 2;
+        acc.total = acc.total + n * 3;
+    }
+    return acc.total;
+}
+
+export fn run() with Stdout {
+    let n = builtin::black_box(1);
+    println(`${through_receiver(n)} ${through_field(n)}`);
+}
+
+__DATA__
+{
+  "profile": "testdata/pgo_cold_region_writes_kept_local.pgo",
+  "marked_regions": [
+    "pgo_cold_region_writes_kept_local.wado:18:14 then unlikely cold",
+    "pgo_cold_region_writes_kept_local.wado:28:14 then unlikely cold"
+  ],
+  "stdout": "6 6\n"
+}

@@ -1934,10 +1934,20 @@ mock.calls: "), used: 109 }, s1: struct.new "core:prelude/string.wado//String" {
     if ref.is_null(_tx_future) == 0 {
         "wasi/future-drop-readable:transmission-wasi:http/types.wado#ErrorCode"(_tx_future.value);
     }
+<<<<<<< HEAD
     if ref.is_null(local.tee $load_28(mock.ends)) == 0 {
         "effect_handler_forward_async_op.wado/$drop$core:prelude/list.wado/List<core:prelude/types.wado/FutureWritable<core:prelude/types.wado/Result<core:prelude/types.wado/Option<wasi:http/types.wado/Trailers>,wasi:http/types.wado/ErrorCode>>>"($load_28.repr, $load_28.used);
+||||||| acf18acea98
+    if ref.is_null(local.tee $load_26(mock.ends)) == 0 {
+        "effect_handler_forward_async_op.wado/$drop$core:prelude/list.wado/List<core:prelude/types.wado/FutureWritable<core:prelude/types.wado/Result<core:prelude/types.wado/Option<wasi:http/types.wado/Trailers>,wasi:http/types.wado/ErrorCode>>>"($load_26);
+=======
+    if ref.is_null(mock) == 0 {
+        if ref.is_null(local.tee $load_26(mock.ends)) == 0 {
+            "effect_handler_forward_async_op.wado/$drop$core:prelude/list.wado/List<core:prelude/types.wado/FutureWritable<core:prelude/types.wado/Result<core:prelude/types.wado/Option<wasi:http/types.wado/Trailers>,wasi:http/types.wado/ErrorCode>>>"($load_26);
+        }
+        mock.ends = ref.null none;
+>>>>>>> origin/main
     }
-    mock.ends = ref.null none;
     if (request == 0) == 0 {
         "wasi/resource-drop:wasi:http/types.wado#Request"(request);
     }
@@ -2342,7 +2352,16 @@ fn "core:prelude/types.wado/settled_copy"(handle, packed) {
     b300: block {
         l301: loop {
             break_if b300 packed >= global:core:prelude/types.wado::SETTLED_COPIES.used;
+<<<<<<< HEAD
             if self_23 = global:core:prelude/types.wado::SETTLED_COPIES; self_29 = global:core:prelude/types.wado::SETTLED_COPIES.used; if @unlikely(((0 <= packed) & (packed < self_29)) == 0) {
+||||||| acf18acea98
+    b299: block {
+        l300: loop {
+            break_if b299 packed >= global:core:prelude/types.wado::SETTLED_COPIES.used;
+            if self_23 = global:core:prelude/types.wado::SETTLED_COPIES; $v1_20 = global:core:prelude/types.wado::SETTLED_COPIES.used; if @unlikely(packed >=u $v1_20) {
+=======
+            if self_23 = global:core:prelude/types.wado::SETTLED_COPIES; $v1_20 = global:core:prelude/types.wado::SETTLED_COPIES.used; if @unlikely(packed >=u $v1_20) {
+>>>>>>> origin/main
                 cold_path;
                 "core:prelude/types.wado/settled_copy_at$cold0$dae[handle]"(packed, self_29);
                 unreachable;
@@ -2391,7 +2410,16 @@ fn "core:prelude/types.wado/delivered_at$sroa[return]"(handle) {
     b305: block {
         l306: loop {
             break_if b305 at >= global:core:prelude/types.wado::DELIVERED.used;
+<<<<<<< HEAD
             if self_7 = global:core:prelude/types.wado::DELIVERED; self_13 = global:core:prelude/types.wado::DELIVERED.used; if @unlikely(((0 <= at) & (at < self_13)) == 0) {
+||||||| acf18acea98
+    b304: block {
+        l305: loop {
+            break_if b304 at >= global:core:prelude/types.wado::DELIVERED.used;
+            if self_7 = global:core:prelude/types.wado::DELIVERED; $v1_4 = global:core:prelude/types.wado::DELIVERED.used; if @unlikely(at >=u $v1_4) {
+=======
+            if self_7 = global:core:prelude/types.wado::DELIVERED; $v1_4 = global:core:prelude/types.wado::DELIVERED.used; if @unlikely(at >=u $v1_4) {
+>>>>>>> origin/main
                 cold_path;
                 "core:prelude/types.wado/delivered_at$cold0$dae[handle]"(at, self_13);
                 unreachable;
@@ -3132,11 +3160,26 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_al
     pending = struct.new "core:prelude/list.wado//List<u8>" { repr: let $array_clone_dst_2: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>($mv$data$used)), 0, $mv$data$repr, 0, $mv$data$used); $array_clone_dst_2, used: $mv$data$used };
     block {
         l389: loop {
+<<<<<<< HEAD
             $mv$data$used = pending.used;
             ptr_18 = builtin::i32_wrap_i64(ptr_18 = "mem/realloc"(0, 0, 1, $mv$data$used); $mv$data$repr = pending.repr; i = 0; $licm_arith_39 = $mv$data$used - 8; b390: block {
                 l391: loop {
                     break_if b390 (i > $licm_arith_39) | ((i + 8) > $licm_arith_39);
                     w = ((((((builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, i)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, i + 1)) << 8_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, i + 2)) << 16_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, i + 3)) << 24_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, i + 4)) << 32_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, i + 5)) << 40_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, i + 6)) << 48_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, i + 7)) << 56_i64);
+||||||| acf18acea98
+        l388: loop {
+            $load_0 = data.used;
+            ptr_18 = builtin::i32_wrap_i64(ptr_18 = "mem/realloc"(0, 0, 1, $load_0); $array_clone_src_1 = data.repr; i = 0; $licm_arith_39 = $load_0 - 8; b389: block {
+                l390: loop {
+                    break_if b389 (i > $licm_arith_39) | ((i + 8) > $licm_arith_39);
+                    w = ((((((builtin::i64_extend_i32_u(builtin::array_get_value_u8($array_clone_src_1, i)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($array_clone_src_1, i + 1)) << 8_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($array_clone_src_1, i + 2)) << 16_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($array_clone_src_1, i + 3)) << 24_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($array_clone_src_1, i + 4)) << 32_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($array_clone_src_1, i + 5)) << 40_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($array_clone_src_1, i + 6)) << 48_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($array_clone_src_1, i + 7)) << 56_i64);
+=======
+            $load_0 = data.used;
+            ptr_18 = builtin::i32_wrap_i64(ptr_18 = "mem/realloc"(0, 0, 1, $load_0); $array_clone_src_1 = data.repr; i = 0; $licm_arith_39 = $load_0 - 8; b390: block {
+                l391: loop {
+                    break_if b390 (i > $licm_arith_39) | ((i + 8) > $licm_arith_39);
+                    w = ((((((builtin::i64_extend_i32_u(builtin::array_get_value_u8($array_clone_src_1, i)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($array_clone_src_1, i + 1)) << 8_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($array_clone_src_1, i + 2)) << 16_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($array_clone_src_1, i + 3)) << 24_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($array_clone_src_1, i + 4)) << 32_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($array_clone_src_1, i + 5)) << 40_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($array_clone_src_1, i + 6)) << 48_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($array_clone_src_1, i + 7)) << 56_i64);
+>>>>>>> origin/main
                     builtin::store_i64(ptr_18 + i, w);
                     i = i + 8;
                     w = ((((((builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, i)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, i + 1)) << 8_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, i + 2)) << 16_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, i + 3)) << 24_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, i + 4)) << 32_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, i + 5)) << 40_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, i + 6)) << 48_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, i + 7)) << 56_i64);
@@ -3147,15 +3190,34 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_al
             }; b392: block {
                 l393: loop {
                     break_if b392 i > $licm_arith_39;
+<<<<<<< HEAD
                     w = ((((((builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, i)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, i + 1)) << 8_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, i + 2)) << 16_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, i + 3)) << 24_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, i + 4)) << 32_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, i + 5)) << 40_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, i + 6)) << 48_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, i + 7)) << 56_i64);
+||||||| acf18acea98
+            }; b391: block {
+                l392: loop {
+                    break_if b391 i > $licm_arith_39;
+                    w = ((((((builtin::i64_extend_i32_u(builtin::array_get_value_u8($array_clone_src_1, i)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($array_clone_src_1, i + 1)) << 8_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($array_clone_src_1, i + 2)) << 16_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($array_clone_src_1, i + 3)) << 24_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($array_clone_src_1, i + 4)) << 32_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($array_clone_src_1, i + 5)) << 40_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($array_clone_src_1, i + 6)) << 48_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($array_clone_src_1, i + 7)) << 56_i64);
+=======
+                    w = ((((((builtin::i64_extend_i32_u(builtin::array_get_value_u8($array_clone_src_1, i)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($array_clone_src_1, i + 1)) << 8_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($array_clone_src_1, i + 2)) << 16_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($array_clone_src_1, i + 3)) << 24_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($array_clone_src_1, i + 4)) << 32_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($array_clone_src_1, i + 5)) << 40_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($array_clone_src_1, i + 6)) << 48_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($array_clone_src_1, i + 7)) << 56_i64);
+>>>>>>> origin/main
                     builtin::store_i64(ptr_18 + i, w);
                     i = i + 8;
                     continue l393;
                 };
             }; b394: block {
                 l395: loop {
+<<<<<<< HEAD
                     break_if b394 (((i >= $mv$data$used) | ((i + 1) >= $mv$data$used)) | (((i + 1) + 1) >= $mv$data$used)) | ((((i + 1) + 1) + 1) >= $mv$data$used);
                     builtin::store_u8(ptr_18 + i, builtin::array_get_value_u8($mv$data$repr, i));
+||||||| acf18acea98
+            }; b393: block {
+                l394: loop {
+                    break_if b393 (((i >= $load_0) | ((i + 1) >= $load_0)) | (((i + 1) + 1) >= $load_0)) | ((((i + 1) + 1) + 1) >= $load_0);
+                    builtin::store_u8(ptr_18 + i, builtin::array_get_value_u8($array_clone_src_1, i));
+=======
+                    break_if b394 (((i >= $load_0) | ((i + 1) >= $load_0)) | (((i + 1) + 1) >= $load_0)) | ((((i + 1) + 1) + 1) >= $load_0);
+                    builtin::store_u8(ptr_18 + i, builtin::array_get_value_u8($array_clone_src_1, i));
+>>>>>>> origin/main
                     i = i + 1;
                     builtin::store_u8(ptr_18 + i, builtin::array_get_value_u8($mv$data$repr, i));
                     i = i + 1;
@@ -3167,8 +3229,18 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_al
                 };
             }; b396: block {
                 l397: loop {
+<<<<<<< HEAD
                     break_if b396 i >= $mv$data$used;
                     builtin::store_u8(ptr_18 + i, builtin::array_get_value_u8($mv$data$repr, i));
+||||||| acf18acea98
+            }; b395: block {
+                l396: loop {
+                    break_if b395 i >= $load_0;
+                    builtin::store_u8(ptr_18 + i, builtin::array_get_value_u8($array_clone_src_1, i));
+=======
+                    break_if b396 i >= $load_0;
+                    builtin::store_u8(ptr_18 + i, builtin::array_get_value_u8($array_clone_src_1, i));
+>>>>>>> origin/main
                     i = i + 1;
                     continue l397;
                 };
@@ -3182,7 +3254,14 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_al
             if (local.tee i($drop_spill_3.result) != 0) | (ptr_18 <= 0) | ($mv$data$used == 0) {
                 return i;
             }
+<<<<<<< HEAD
             pending = struct.new "core:prelude/list.wado//List<u8>" { repr: $mv$data$repr = pending.repr; builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>(local.tee $mv$data$used(pending.used))), 0, $mv$data$repr, 0, $mv$data$used); $array_clone_dst_2, used: $mv$data$used };
+||||||| acf18acea98
+            data = struct.new "core:prelude//List<u8>" { repr: $array_clone_src_1 = data.repr; builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>(local.tee $load_0(data.used))), 0, $array_clone_src_1, 0, $load_0); $array_clone_dst_2, used: $load_0 };
+            continue l388;
+=======
+            data = struct.new "core:prelude//List<u8>" { repr: $array_clone_src_1 = data.repr; builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>(local.tee $load_0(data.used))), 0, $array_clone_src_1, 0, $load_0); $array_clone_dst_2, used: $load_0 };
+>>>>>>> origin/main
             continue l389;
         };
     };
@@ -3614,6 +3693,7 @@ fn "core:prelude/types.wado/core:prelude/types.wado/WaitableSet<core:prelude/typ
     $slots_1_4 = $mv$self$members.repr;
     $end_2_5 = $mv$self$members.used;
     $index_3_6 = 0;
+<<<<<<< HEAD
     b453: block {
         l454: loop {
             break_if b453 ((($index_3_6 >= $end_2_5) | (($index_3_6 + 1) >= $end_2_5)) | ((($index_3_6 + 1) + 1) >= $end_2_5)) | (((($index_3_6 + 1) + 1) + 1) >= $end_2_5);
@@ -3623,19 +3703,87 @@ fn "core:prelude/types.wado/core:prelude/types.wado/WaitableSet<core:prelude/typ
             $index_3_6 = $index_3_6 + 1;
             drop(builtin::array_get_value<ref null "core:prelude//$Resource">($slots_1_4, $index_3_6));
             $index_3_6 = $index_3_6 + 1;
+||||||| acf18acea98
+    b451: block {
+        l452: loop {
+            break_if b451 ((($index_3_6 >= $end_2_5) | (($index_3_6 + 1) >= $end_2_5)) | ((($index_3_6 + 1) + 1) >= $end_2_5)) | (((($index_3_6 + 1) + 1) + 1) >= $end_2_5);
             drop(builtin::array_get_value<ref null "core:prelude//$Resource">($slots_1_4, $index_3_6));
             $index_3_6 = $index_3_6 + 1;
-            continue l454;
+            drop(builtin::array_get_value<ref null "core:prelude//$Resource">($slots_1_4, $index_3_6));
+            $index_3_6 = $index_3_6 + 1;
+            drop(builtin::array_get_value<ref null "core:prelude//$Resource">($slots_1_4, $index_3_6));
+            $index_3_6 = $index_3_6 + 1;
+            drop(builtin::array_get_value<ref null "core:prelude//$Resource">($slots_1_4, $index_3_6));
+            $index_3_6 = $index_3_6 + 1;
+            continue l452;
         };
     };
+    b453: block {
+        l454: loop {
+            break_if b453 $index_3_6 >= $end_2_5;
+=======
+    b452: block {
+        l453: loop {
+            break_if b452 ((($index_3_6 >= $end_2_5) | (($index_3_6 + 1) >= $end_2_5)) | ((($index_3_6 + 1) + 1) >= $end_2_5)) | (((($index_3_6 + 1) + 1) + 1) >= $end_2_5);
+            drop(builtin::array_get_value<ref null "core:prelude//$Resource">($slots_1_4, $index_3_6));
+            $index_3_6 = $index_3_6 + 1;
+            drop(builtin::array_get_value<ref null "core:prelude//$Resource">($slots_1_4, $index_3_6));
+            $index_3_6 = $index_3_6 + 1;
+            drop(builtin::array_get_value<ref null "core:prelude//$Resource">($slots_1_4, $index_3_6));
+            $index_3_6 = $index_3_6 + 1;
+            drop(builtin::array_get_value<ref null "core:prelude//$Resource">($slots_1_4, $index_3_6));
+            $index_3_6 = $index_3_6 + 1;
+            continue l453;
+        };
+    };
+    b454: block {
+        l455: loop {
+            break_if b454 $index_3_6 >= $end_2_5;
+>>>>>>> origin/main
+            drop(builtin::array_get_value<ref null "core:prelude//$Resource">($slots_1_4, $index_3_6));
+            $index_3_6 = $index_3_6 + 1;
+            continue l455;
+        };
+    };
+<<<<<<< HEAD
     b455: block {
         l456: loop {
             break_if b455 $index_3_6 >= $end_2_5;
             drop(builtin::array_get_value<ref null "core:prelude//$Resource">($slots_1_4, $index_3_6));
+||||||| acf18acea98
+    $slots_1_9 = $mv$self$ready.repr;
+    $end_2_5 = $mv$self$ready.used;
+    $index_3_6 = 0;
+    b455: block {
+        l456: loop {
+            break_if b455 ((($index_3_6 >= $end_2_5) | (($index_3_6 + 1) >= $end_2_5)) | ((($index_3_6 + 1) + 1) >= $end_2_5)) | (((($index_3_6 + 1) + 1) + 1) >= $end_2_5);
+            drop(builtin::array_get_value<ref null "core:prelude/types.wado//Ready<core:prelude/types.wado/Subtask>">($slots_1_9, $index_3_6));
             $index_3_6 = $index_3_6 + 1;
-            continue l456;
+            drop(builtin::array_get_value<ref null "core:prelude/types.wado//Ready<core:prelude/types.wado/Subtask>">($slots_1_9, $index_3_6));
+            $index_3_6 = $index_3_6 + 1;
+            drop(builtin::array_get_value<ref null "core:prelude/types.wado//Ready<core:prelude/types.wado/Subtask>">($slots_1_9, $index_3_6));
+            $index_3_6 = $index_3_6 + 1;
+            drop(builtin::array_get_value<ref null "core:prelude/types.wado//Ready<core:prelude/types.wado/Subtask>">($slots_1_9, $index_3_6));
+=======
+    $slots_1_9 = $mv$self$ready.repr;
+    $end_2_5 = $mv$self$ready.used;
+    $index_3_6 = 0;
+    b456: block {
+        l457: loop {
+            break_if b456 ((($index_3_6 >= $end_2_5) | (($index_3_6 + 1) >= $end_2_5)) | ((($index_3_6 + 1) + 1) >= $end_2_5)) | (((($index_3_6 + 1) + 1) + 1) >= $end_2_5);
+            drop(builtin::array_get_value<ref null "core:prelude/types.wado//Ready<core:prelude/types.wado/Subtask>">($slots_1_9, $index_3_6));
+            $index_3_6 = $index_3_6 + 1;
+            drop(builtin::array_get_value<ref null "core:prelude/types.wado//Ready<core:prelude/types.wado/Subtask>">($slots_1_9, $index_3_6));
+            $index_3_6 = $index_3_6 + 1;
+            drop(builtin::array_get_value<ref null "core:prelude/types.wado//Ready<core:prelude/types.wado/Subtask>">($slots_1_9, $index_3_6));
+            $index_3_6 = $index_3_6 + 1;
+            drop(builtin::array_get_value<ref null "core:prelude/types.wado//Ready<core:prelude/types.wado/Subtask>">($slots_1_9, $index_3_6));
+>>>>>>> origin/main
+            $index_3_6 = $index_3_6 + 1;
+            continue l457;
         };
     };
+<<<<<<< HEAD
     $slots_1_9 = $mv$self$ready.repr;
     $end_2_5 = $mv$self$ready.used;
     $index_3_6 = 0;
@@ -3648,9 +3796,18 @@ fn "core:prelude/types.wado/core:prelude/types.wado/WaitableSet<core:prelude/typ
             $index_3_6 = $index_3_6 + 1;
             drop(builtin::array_get_value<ref null "core:prelude/types.wado//Ready<core:prelude/types.wado/Subtask>">($slots_1_9, $index_3_6));
             $index_3_6 = $index_3_6 + 1;
+||||||| acf18acea98
+    b457: block {
+        l458: loop {
+            break_if b457 $index_3_6 >= $end_2_5;
+=======
+    b458: block {
+        l459: loop {
+            break_if b458 $index_3_6 >= $end_2_5;
+>>>>>>> origin/main
             drop(builtin::array_get_value<ref null "core:prelude/types.wado//Ready<core:prelude/types.wado/Subtask>">($slots_1_9, $index_3_6));
             $index_3_6 = $index_3_6 + 1;
-            continue l458;
+            continue l459;
         };
     };
     b459: block {
@@ -3756,12 +3913,28 @@ fn "effect_handler_forward_async_op.wado/effect_handler_forward_async_op.wado/$C
 fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_char_n$sroa[self.buf]"(self, c, n) {
     let i: i32;
     i = 0;
+<<<<<<< HEAD
     b470: block {
         l471: loop {
             break_if b470 i >= n;
+||||||| acf18acea98
+    b468: block {
+        l469: loop {
+            break_if b468 i >= n;
+=======
+    b469: block {
+        l470: loop {
+            break_if b469 i >= n;
+>>>>>>> origin/main
             "core:prelude/string.wado/core:prelude/string.wado/String::push"(self, c);
             i = i + 1;
+<<<<<<< HEAD
             continue l471;
+||||||| acf18acea98
+            continue l469;
+=======
+            continue l470;
+>>>>>>> origin/main
         };
     };
 }
@@ -3866,6 +4039,192 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(self, f) {
     }
 }
 
+<<<<<<< HEAD
+||||||| acf18acea98
+fn "effect_handler_forward_async_op.wado/effect_handler_forward_async_op.wado/MockClient::end_writes$sroa[&mut(self.ends)]"(self) {
+    let $load_1: i32;
+    let $load_6: ref null "core:prelude/types.wado//Box<core:prelude/types.wado/Option<core:prelude/types.wado/Result<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>>>";
+    let $temp_2: ref null "core:prelude/types.wado//Option<core:prelude/types.wado/FutureWritable<core:prelude/types.wado/Result<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>>>";
+    let $discarded_6: ref null "core:prelude/types.wado//FutureWrite<core:prelude/types.wado/Result<core:prelude/types.wado/Option<wasi:http/types.wado/Trailers>,wasi:http/types.wado/ErrorCode>>";
+    let $drop_v_7: ref null "core:prelude/types.wado//Result<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>";
+    let $drop_v_8: ref null "core:prelude/types.wado//Option<wasi:http/types.wado/Fields>";
+    let $taken_3: ref null "core:prelude//$Resource";
+    let $licm_repr_15: ref null "Array<core:prelude/types.wado/FutureWritable<core:prelude/types.wado/Result<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>>>";
+    $licm_repr_15 = self.repr;
+    block {
+        l495: loop {
+            if ref.is_null((if ref.is_null(local.tee $load_6(local.tee $discarded_6((if ref.test "core:prelude/types.wado//Option<core:prelude/types.wado/FutureWritable<core:prelude/types.wado/Result<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>>>::Some"(local.tee $temp_2($inline_core_prelude_list_wado_List_core_prelude_types_wado_FutureWritable_core_prelude_types_wado_Result_core_prelude_types_wado_Option_wasi_http_types_wado_Trailers__wasi_http_types_wado_ErrorCode_____pop_0: block -> ref null "core:prelude/types.wado//Option<core:prelude/types.wado/FutureWritable<core:prelude/types.wado/Result<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>>>" {
+                if local.tee $load_1(self.used) == 0 {
+                    break $inline_core_prelude_list_wado_List_core_prelude_types_wado_FutureWritable_core_prelude_types_wado_Result_core_prelude_types_wado_Option_wasi_http_types_wado_Trailers__wasi_http_types_wado_ErrorCode_____pop_0: global:core:builtin::$unit_case$core:prelude/types.wado//Option<core:prelude/types.wado/FutureWritable<core:prelude/types.wado/Result<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>>>$0;
+                }
+                self.used = $load_1 - 1;
+                break $inline_core_prelude_list_wado_List_core_prelude_types_wado_FutureWritable_core_prelude_types_wado_Result_core_prelude_types_wado_Option_wasi_http_types_wado_Trailers__wasi_http_types_wado_ErrorCode_____pop_0: struct.new "core:prelude/types.wado//Option<core:prelude/types.wado/FutureWritable<core:prelude/types.wado/Result<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>>>::Some" { discriminant: 1, payload_0: $load_1 = self.used; $taken_3 = builtin::array_get_value<ref null "core:prelude//$Resource">($licm_repr_15, $load_1); builtin::array_set<ref null "core:prelude//$Resource">($licm_repr_15, $load_1, ref.null none); $taken_3 };
+            })) -> ref null "core:prelude/types.wado//FutureWrite<core:prelude/types.wado/Result<core:prelude/types.wado/Option<wasi:http/types.wado/Trailers>,wasi:http/types.wado/ErrorCode>>" {
+                $taken_3 = ref.cast "core:prelude/types.wado//Option<core:prelude/types.wado/FutureWritable<core:prelude/types.wado/Result<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>>>::Some"($temp_2).payload_0;
+                $temp_2 = global:core:builtin::$unit_case$core:prelude/types.wado//Option<core:prelude/types.wado/FutureWritable<core:prelude/types.wado/Result<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>>>$0;
+                "effect_handler_forward_async_op.wado/$cm_future_write_core:prelude/types.wado/Result<core:prelude/types.wado/Option<wasi:http/types.wado/Trailers>,wasi:http/types.wado/ErrorCode>"($taken_3.value, struct.new "core:prelude/types.wado//Result<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>::Ok" { discriminant: 0, payload_0: struct.new "core:prelude/types.wado//Box<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>>" { value: global:core:builtin::$unit_case$core:prelude/types.wado//Option<wasi:http/types.wado/Fields>$0 } });
+            } else {
+                if ref.is_null($temp_2) == 0 {
+                    if @likely($temp_2.discriminant == 0) {
+                    } else {
+                        drop(ref.cast "core:prelude/types.wado//Option<core:prelude/types.wado/FutureWritable<core:prelude/types.wado/Result<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>>>::Some"($temp_2).payload_0);
+                        let $mv_arg_1: ref "core:prelude/string.wado//String";
+                        if ref.is_null(global:effect_handler_forward_async_op.wado::$const_obj_8) {
+                            global:effect_handler_forward_async_op.wado::$const_obj_8 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("`FutureWritable<Result<Option<Trailers>, ErrorCode>>` dropped before its write: its reader would wait forever"), used: 109 };
+                        }
+                        "core:rt/panic"(local.tee $mv_arg_1(global:effect_handler_forward_async_op.wado::$const_obj_8).repr, $mv_arg_1.used);
+                        unreachable;
+                    }
+                }
+                break _i496;
+            })).rest)) -> ref null "core:prelude/types.wado//Option<core:prelude/types.wado/Result<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>>" {
+                ref.null none;
+            } else {
+                $load_6.value;
+            })) == 0 {
+                let $match_scrut_2: ref null "core:prelude/types.wado//Option<core:prelude/types.wado/Result<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>>";
+                if local.tee $match_scrut_2((if ref.is_null($load_6) -> ref null "core:prelude/types.wado//Option<core:prelude/types.wado/Result<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>>" {
+                    ref.null none;
+                } else {
+                    $load_6.value;
+                })).discriminant == 0 {
+                } else {
+                    let $slot_box_4: ref null "core:prelude/types.wado//Box<core:prelude/types.wado/Result<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>>";
+                    if ref.test "core:prelude/types.wado//Result<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>::Ok"(local.tee $drop_v_7((if ref.is_null(local.tee $slot_box_4(ref.cast "core:prelude/types.wado//Option<core:prelude/types.wado/Result<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>>::Some"($match_scrut_2).payload_0)) -> ref null "core:prelude/types.wado//Result<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>" {
+                        ref.null none;
+                    } else {
+                        $slot_box_4.value;
+                    }))) {
+                        let $slot_box_5: ref null "core:prelude/types.wado//Box<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>>";
+                        if local.tee $drop_v_8((if ref.is_null(local.tee $slot_box_5(ref.cast "core:prelude/types.wado//Result<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>::Ok"($drop_v_7).payload_0)) -> ref null "core:prelude/types.wado//Option<wasi:http/types.wado/Fields>" {
+                            ref.null none;
+                        } else {
+                            $slot_box_5.value;
+                        })).discriminant == 0 {
+                        } else {
+                            $load_1 = local.tee $taken_3(ref.cast "core:prelude/types.wado//Option<wasi:http/types.wado/Fields>::Some"($drop_v_8).payload_0).value;
+                            $taken_3.value = 0;
+                            "wasi/resource-drop:wasi:http/types.wado#Fields"($load_1);
+                        }
+                    } else {
+                    }
+                }
+            }
+            $match_scrut_2 = global:core:builtin::$unit_case$core:prelude/types.wado//Option<core:prelude/types.wado/Result<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>>$0;
+            if ref.is_null(local.tee $load_6($discarded_6.rest)) {
+                $discarded_6.rest = struct.new "core:prelude/types.wado//Box<core:prelude/types.wado/Option<core:prelude/types.wado/Result<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>>>" { value: $match_scrut_2 };
+            } else {
+                $load_6.value = $match_scrut_2;
+            }
+            if ref.is_null($temp_2) == 0 {
+                if @likely($temp_2.discriminant == 0) {
+                } else {
+                    drop(ref.cast "core:prelude/types.wado//Option<core:prelude/types.wado/FutureWritable<core:prelude/types.wado/Result<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>>>::Some"($temp_2).payload_0);
+                    if ref.is_null(global:effect_handler_forward_async_op.wado::$const_obj_7) {
+                        global:effect_handler_forward_async_op.wado::$const_obj_7 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("`FutureWritable<Result<Option<Trailers>, ErrorCode>>` dropped before its write: its reader would wait forever"), used: 109 };
+                    }
+                    "core:rt/panic"(local.tee $mv_arg_1(global:effect_handler_forward_async_op.wado::$const_obj_7).repr, $mv_arg_1.used);
+                    unreachable;
+                }
+            }
+            continue l495;
+        };
+    };
+}
+
+=======
+fn "effect_handler_forward_async_op.wado/effect_handler_forward_async_op.wado/MockClient::end_writes$sroa[&mut(self.ends)]"(self) {
+    let $load_1: i32;
+    let $load_6: ref null "core:prelude/types.wado//Box<core:prelude/types.wado/Option<core:prelude/types.wado/Result<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>>>";
+    let $temp_2: ref null "core:prelude/types.wado//Option<core:prelude/types.wado/FutureWritable<core:prelude/types.wado/Result<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>>>";
+    let $discarded_6: ref null "core:prelude/types.wado//FutureWrite<core:prelude/types.wado/Result<core:prelude/types.wado/Option<wasi:http/types.wado/Trailers>,wasi:http/types.wado/ErrorCode>>";
+    let $drop_v_7: ref null "core:prelude/types.wado//Result<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>";
+    let $drop_v_8: ref null "core:prelude/types.wado//Option<wasi:http/types.wado/Fields>";
+    let $taken_3: ref null "core:prelude//$Resource";
+    let $licm_repr_15: ref null "Array<core:prelude/types.wado/FutureWritable<core:prelude/types.wado/Result<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>>>";
+    $licm_repr_15 = self.repr;
+    block {
+        l496: loop {
+            if ref.is_null((if ref.is_null(local.tee $load_6(local.tee $discarded_6((if ref.test "core:prelude/types.wado//Option<core:prelude/types.wado/FutureWritable<core:prelude/types.wado/Result<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>>>::Some"(local.tee $temp_2($inline_core_prelude_list_wado_List_core_prelude_types_wado_FutureWritable_core_prelude_types_wado_Result_core_prelude_types_wado_Option_wasi_http_types_wado_Trailers__wasi_http_types_wado_ErrorCode_____pop_0: block -> ref null "core:prelude/types.wado//Option<core:prelude/types.wado/FutureWritable<core:prelude/types.wado/Result<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>>>" {
+                if local.tee $load_1(self.used) == 0 {
+                    break $inline_core_prelude_list_wado_List_core_prelude_types_wado_FutureWritable_core_prelude_types_wado_Result_core_prelude_types_wado_Option_wasi_http_types_wado_Trailers__wasi_http_types_wado_ErrorCode_____pop_0: global:core:builtin::$unit_case$core:prelude/types.wado//Option<core:prelude/types.wado/FutureWritable<core:prelude/types.wado/Result<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>>>$0;
+                }
+                self.used = $load_1 - 1;
+                break $inline_core_prelude_list_wado_List_core_prelude_types_wado_FutureWritable_core_prelude_types_wado_Result_core_prelude_types_wado_Option_wasi_http_types_wado_Trailers__wasi_http_types_wado_ErrorCode_____pop_0: struct.new "core:prelude/types.wado//Option<core:prelude/types.wado/FutureWritable<core:prelude/types.wado/Result<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>>>::Some" { discriminant: 1, payload_0: $load_1 = self.used; $taken_3 = builtin::array_get_value<ref null "core:prelude//$Resource">($licm_repr_15, $load_1); builtin::array_set<ref null "core:prelude//$Resource">($licm_repr_15, $load_1, ref.null none); $taken_3 };
+            })) -> ref null "core:prelude/types.wado//FutureWrite<core:prelude/types.wado/Result<core:prelude/types.wado/Option<wasi:http/types.wado/Trailers>,wasi:http/types.wado/ErrorCode>>" {
+                $taken_3 = ref.cast "core:prelude/types.wado//Option<core:prelude/types.wado/FutureWritable<core:prelude/types.wado/Result<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>>>::Some"($temp_2).payload_0;
+                $temp_2 = global:core:builtin::$unit_case$core:prelude/types.wado//Option<core:prelude/types.wado/FutureWritable<core:prelude/types.wado/Result<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>>>$0;
+                "effect_handler_forward_async_op.wado/$cm_future_write_core:prelude/types.wado/Result<core:prelude/types.wado/Option<wasi:http/types.wado/Trailers>,wasi:http/types.wado/ErrorCode>"($taken_3.value, struct.new "core:prelude/types.wado//Result<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>::Ok" { discriminant: 0, payload_0: struct.new "core:prelude/types.wado//Box<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>>" { value: global:core:builtin::$unit_case$core:prelude/types.wado//Option<wasi:http/types.wado/Fields>$0 } });
+            } else {
+                if ref.is_null($temp_2) == 0 {
+                    if @likely($temp_2.discriminant == 0) {
+                    } else {
+                        drop(ref.cast "core:prelude/types.wado//Option<core:prelude/types.wado/FutureWritable<core:prelude/types.wado/Result<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>>>::Some"($temp_2).payload_0);
+                        let $mv_arg_1: ref "core:prelude/string.wado//String";
+                        if ref.is_null(global:effect_handler_forward_async_op.wado::$const_obj_8) {
+                            global:effect_handler_forward_async_op.wado::$const_obj_8 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("`FutureWritable<Result<Option<Trailers>, ErrorCode>>` dropped before its write: its reader would wait forever"), used: 109 };
+                        }
+                        "core:rt/panic"(local.tee $mv_arg_1(global:effect_handler_forward_async_op.wado::$const_obj_8).repr, $mv_arg_1.used);
+                        unreachable;
+                    }
+                }
+                break _i497;
+            })).rest)) -> ref null "core:prelude/types.wado//Option<core:prelude/types.wado/Result<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>>" {
+                ref.null none;
+            } else {
+                $load_6.value;
+            })) == 0 {
+                let $match_scrut_2: ref null "core:prelude/types.wado//Option<core:prelude/types.wado/Result<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>>";
+                if local.tee $match_scrut_2((if ref.is_null($load_6) -> ref null "core:prelude/types.wado//Option<core:prelude/types.wado/Result<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>>" {
+                    ref.null none;
+                } else {
+                    $load_6.value;
+                })).discriminant == 0 {
+                } else {
+                    let $slot_box_4: ref null "core:prelude/types.wado//Box<core:prelude/types.wado/Result<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>>";
+                    if ref.test "core:prelude/types.wado//Result<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>::Ok"(local.tee $drop_v_7((if ref.is_null(local.tee $slot_box_4(ref.cast "core:prelude/types.wado//Option<core:prelude/types.wado/Result<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>>::Some"($match_scrut_2).payload_0)) -> ref null "core:prelude/types.wado//Result<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>" {
+                        ref.null none;
+                    } else {
+                        $slot_box_4.value;
+                    }))) {
+                        let $slot_box_5: ref null "core:prelude/types.wado//Box<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>>";
+                        if local.tee $drop_v_8((if ref.is_null(local.tee $slot_box_5(ref.cast "core:prelude/types.wado//Result<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>::Ok"($drop_v_7).payload_0)) -> ref null "core:prelude/types.wado//Option<wasi:http/types.wado/Fields>" {
+                            ref.null none;
+                        } else {
+                            $slot_box_5.value;
+                        })).discriminant == 0 {
+                        } else {
+                            $load_1 = local.tee $taken_3(ref.cast "core:prelude/types.wado//Option<wasi:http/types.wado/Fields>::Some"($drop_v_8).payload_0).value;
+                            $taken_3.value = 0;
+                            "wasi/resource-drop:wasi:http/types.wado#Fields"($load_1);
+                        }
+                    } else {
+                    }
+                }
+            }
+            $match_scrut_2 = global:core:builtin::$unit_case$core:prelude/types.wado//Option<core:prelude/types.wado/Result<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>>$0;
+            if ref.is_null(local.tee $load_6($discarded_6.rest)) {
+                $discarded_6.rest = struct.new "core:prelude/types.wado//Box<core:prelude/types.wado/Option<core:prelude/types.wado/Result<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>>>" { value: $match_scrut_2 };
+            } else {
+                $load_6.value = $match_scrut_2;
+            }
+            if ref.is_null($temp_2) == 0 {
+                if @likely($temp_2.discriminant == 0) {
+                } else {
+                    drop(ref.cast "core:prelude/types.wado//Option<core:prelude/types.wado/FutureWritable<core:prelude/types.wado/Result<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>>>::Some"($temp_2).payload_0);
+                    if ref.is_null(global:effect_handler_forward_async_op.wado::$const_obj_7) {
+                        global:effect_handler_forward_async_op.wado::$const_obj_7 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("`FutureWritable<Result<Option<Trailers>, ErrorCode>>` dropped before its write: its reader would wait forever"), used: 109 };
+                    }
+                    "core:rt/panic"(local.tee $mv_arg_1(global:effect_handler_forward_async_op.wado::$const_obj_7).repr, $mv_arg_1.used);
+                    unreachable;
+                }
+            }
+            continue l496;
+        };
+    };
+}
+
+>>>>>>> origin/main
 fn "core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<core:prelude/types.wado/$tmpl$ac8fec2d6428d13b,core:prelude/string.wado/String>::lit$sroa[self.index]"(self, $mv$t$s0, $mv$t$r0, $mv$t$s1, $mv$t$r1, $mv$t$s2, $mv$t$r2) {
     return block -> ref "core:prelude/string.wado//StrSlice" {
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_view"(local.tee $mv$t$s0("core:prelude/types.wado/$template_segment$core:prelude/types.wado/$tmpl$ac8fec2d6428d13b"($mv$t$s0, $mv$t$r0, $mv$t$s1, $mv$t$r1, $mv$t$s2, $mv$t$r2, 2 * self)).repr, $mv$t$s0.used);
@@ -4073,9 +4432,19 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
         self_21 = self.buf;
         is_negative = 0;
         $licm_repr_389 = self_21.repr;
+<<<<<<< HEAD
         b532: block {
             l533: loop {
                 break_if b532 is_negative >= sign_len;
+||||||| acf18acea98
+        b530: block {
+            l531: loop {
+                break_if b530 is_negative >= sign_len;
+=======
+        b531: block {
+            l532: loop {
+                break_if b531 is_negative >= sign_len;
+>>>>>>> origin/main
                 if @unlikely(local.tee $load_0(self_21.used + 1) > builtin::array_len($licm_repr_389)) {
                     cold_path;
                     "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_21, $load_0);
@@ -4085,7 +4454,13 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
                 self_21.used = $load_0;
                 builtin::array_set_u8($licm_repr_389, prefix_len, 48);
                 is_negative = is_negative + 1;
+<<<<<<< HEAD
                 continue l533;
+||||||| acf18acea98
+                continue l531;
+=======
+                continue l532;
+>>>>>>> origin/main
             };
         };
         if @unlikely(local.tee is_negative(local.tee self_21(self.buf).used + digit_count) > builtin::array_len(self_21.repr)) {
@@ -4128,12 +4503,28 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
         self_21 = self.buf;
         is_negative = self.fill;
         $load_0 = 0;
+<<<<<<< HEAD
         b543: block {
             l544: loop {
                 break_if b543 $load_0 >= sign_len;
+||||||| acf18acea98
+        b541: block {
+            l542: loop {
+                break_if b541 $load_0 >= sign_len;
+=======
+        b542: block {
+            l543: loop {
+                break_if b542 $load_0 >= sign_len;
+>>>>>>> origin/main
                 "core:prelude/string.wado/core:prelude/string.wado/String::push"(self_21, is_negative);
                 $load_0 = $load_0 + 1;
+<<<<<<< HEAD
                 continue l544;
+||||||| acf18acea98
+                continue l542;
+=======
+                continue l543;
+>>>>>>> origin/main
             };
         };
         return digit_count;
@@ -4143,12 +4534,28 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
         self_21 = self.buf;
         c_223 = self.fill;
         i_225 = 0;
+<<<<<<< HEAD
         b546: block {
             l547: loop {
                 break_if b546 i_225 >= $load_2;
+||||||| acf18acea98
+        b544: block {
+            l545: loop {
+                break_if b544 i_225 >= $load_2;
+=======
+        b545: block {
+            l546: loop {
+                break_if b545 i_225 >= $load_2;
+>>>>>>> origin/main
                 "core:prelude/string.wado/core:prelude/string.wado/String::push"(self_21, c_223);
                 i_225 = i_225 + 1;
+<<<<<<< HEAD
                 continue l547;
+||||||| acf18acea98
+                continue l545;
+=======
+                continue l546;
+>>>>>>> origin/main
             };
         };
         if is_negative {
@@ -4182,12 +4589,28 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
         self_21 = self.buf;
         is_negative = self.fill;
         $load_0 = 0;
+<<<<<<< HEAD
         b554: block {
             l555: loop {
                 break_if b554 $load_0 >= sign_len;
+||||||| acf18acea98
+        b552: block {
+            l553: loop {
+                break_if b552 $load_0 >= sign_len;
+=======
+        b553: block {
+            l554: loop {
+                break_if b553 $load_0 >= sign_len;
+>>>>>>> origin/main
                 "core:prelude/string.wado/core:prelude/string.wado/String::push"(self_21, is_negative);
                 $load_0 = $load_0 + 1;
+<<<<<<< HEAD
                 continue l555;
+||||||| acf18acea98
+                continue l553;
+=======
+                continue l554;
+>>>>>>> origin/main
             };
         };
         return digit_count;
@@ -4195,12 +4618,28 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
         self_21 = self.buf;
         $load_2 = self.fill;
         c_223 = 0;
+<<<<<<< HEAD
         b556: block {
             l557: loop {
                 break_if b556 c_223 >= sign_len;
+||||||| acf18acea98
+        b554: block {
+            l555: loop {
+                break_if b554 c_223 >= sign_len;
+=======
+        b555: block {
+            l556: loop {
+                break_if b555 c_223 >= sign_len;
+>>>>>>> origin/main
                 "core:prelude/string.wado/core:prelude/string.wado/String::push"(self_21, $load_2);
                 c_223 = c_223 + 1;
+<<<<<<< HEAD
                 continue l557;
+||||||| acf18acea98
+                continue l555;
+=======
+                continue l556;
+>>>>>>> origin/main
             };
         };
         if is_negative {
@@ -4249,10 +4688,22 @@ fn "core:prelude/types.wado/core:prelude/types.wado/WaitableSet<core:prelude/typ
     let $sroa_$iter_0_index_18: i32;
     at = 0;
     $sroa_$iter_0_index_18 = 0;
+<<<<<<< HEAD
     b564: block {
         l565: loop {
             break_if b564 $sroa_$iter_0_index_18 >= $mv$self$used;
             ref_val = builtin::array_get_value<ref null "core:prelude//$Resource">($mv$self$repr, $sroa_$iter_0_index_18);
+||||||| acf18acea98
+    b562: block {
+        l563: loop {
+            break_if b562 $sroa_$iter_0_index_18 >= end;
+            ref_val = builtin::array_get_value<ref null "core:prelude//$Resource">($sroa_$iter_0_repr_17, $sroa_$iter_0_index_18);
+=======
+    b563: block {
+        l564: loop {
+            break_if b563 $sroa_$iter_0_index_18 >= end;
+            ref_val = builtin::array_get_value<ref null "core:prelude//$Resource">($sroa_$iter_0_repr_17, $sroa_$iter_0_index_18);
+>>>>>>> origin/main
             $sroa_$iter_0_index_18 = $sroa_$iter_0_index_18 + 1;
             let $mv$$vr_7$0: i32;
             let $mv$$vr_7$1: ref null "core:prelude/types.wado//ResourceId";
@@ -4266,7 +4717,13 @@ fn "core:prelude/types.wado/core:prelude/types.wado/WaitableSet<core:prelude/typ
                 return at;
             }
             at = at + 1;
+<<<<<<< HEAD
             continue l565;
+||||||| acf18acea98
+            continue l563;
+=======
+            continue l564;
+>>>>>>> origin/main
         };
     };
     cold_path;
