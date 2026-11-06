@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1793944703524,
+  "lastUpdate": 1793950859928,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -75121,6 +75121,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/c489d986f34cb0fb182e6fb9db2d3f6d45a0acff"
         },
         "date": 1793944702591,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3099,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7303,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21998,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 382703,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "648fe5563d105833ee6b8c76c1424d7f6d9370de",
+          "message": "Merge pull request #2565 from wado-lang/loam/device-loop\n\nfeat(loam): the decoding loop runs on the device, one read back for all its tokens",
+          "timestamp": "2026-11-06T16:25:52+09:00",
+          "tree_id": "809ed528f27141687fd39976e89fd753de330b58",
+          "url": "https://github.com/wado-lang/wado/commit/648fe5563d105833ee6b8c76c1424d7f6d9370de"
+        },
+        "date": 1793950859320,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
