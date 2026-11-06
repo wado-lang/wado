@@ -39,7 +39,7 @@ struct newtype_static_method_inheritance.wado//$tmpl$7a99cb65f6ad01c7 {  // Type
     mut r1: ref "core:prelude/string.wado//String",
 }
 
-struct core:prelude//List<u8> {  // TypeId(7)
+struct core:prelude/list.wado//List<u8> {  // TypeId(7)
     mut repr: ref Array<u8>,
     mut used: i32,
 }
@@ -155,19 +155,19 @@ global global:core:prelude/primitive.wado::$const_obj_10: ref "core:prelude/stri
 
 fn "newtype_static_method_inheritance.wado/run"() {
     let $load_0: ref Array<u8>;
-    let a: ref "core:prelude//List<u8>";
+    let a: ref "core:prelude/list.wado//List<u8>";
     let $v0_8: u8;
-    builtin::array_set_u8(local.tee $load_0(local.tee a(struct.new "core:prelude//List<u8>" { repr: builtin::array_new<u8>(4), used: 0 }).repr), 0, 1);
+    builtin::array_set_u8(local.tee $load_0(local.tee a(struct.new "core:prelude/list.wado//List<u8>" { repr: builtin::array_new<u8>(4), used: 0 }).repr), 0, 1);
     a.used = 1;
     builtin::array_set_u8($load_0, 1, 2);
     a.used = 2;
     builtin::array_fill<u8>(local.tee $load_0(builtin::array_new<u8>(3)), 0, 7, 3);
-    if @unlikely(local.tee $v0_8(builtin::array_get_value<u8>(struct.new "core:prelude//List<u8>" { repr: $load_0, used: 3 }.repr, 0)) != 7) {
+    if @unlikely(local.tee $v0_8(builtin::array_get_value<u8>(struct.new "core:prelude/list.wado//List<u8>" { repr: $load_0, used: 3 }.repr, 0)) != 7) {
         cold_path;
         "newtype_static_method_inheritance.wado/run$cold3"($v0_8);
         unreachable;
     }
-    builtin::array_set_u8(local.tee $load_0(local.tee a(struct.new "core:prelude//List<u8>" { repr: builtin::array_new<u8>(2), used: 0 }).repr), 0, 9);
+    builtin::array_set_u8(local.tee $load_0(local.tee a(struct.new "core:prelude/list.wado//List<u8>" { repr: builtin::array_new<u8>(2), used: 0 }).repr), 0, 9);
     a.used = 1;
     if @unlikely(local.tee $v0_8(builtin::array_get_value<u8>($load_0, 0)) != 9) {
         cold_path;

@@ -209,16 +209,15 @@ impl<'a> StorageReach<'a> {
     /// copies on every read.
     fn storage_of(&self, ty: TypeId) -> Vec<Storage> {
         let tt = self.type_table;
-        if tt.is_resource_type(ty)
-            || matches!(
-                tt.get(ty),
-                ResolvedType::Primitive(_)
-                    | ResolvedType::Unit
-                    | ResolvedType::Never
-                    | ResolvedType::Enum { .. }
-                    | ResolvedType::Flags { .. }
-            )
-        {
+        if matches!(
+            tt.get(ty),
+            ResolvedType::Primitive(_)
+                | ResolvedType::Unit
+                | ResolvedType::Never
+                | ResolvedType::Enum { .. }
+                | ResolvedType::Flags { .. }
+                | ResolvedType::Resource { .. }
+        ) {
             return Vec::new();
         }
         let mut out = vec![Storage::Of(tt.type_key(ty))];
@@ -265,29 +264,14 @@ impl<'a> StorageReach<'a> {
                     None => Members::Unknown,
                 }
             }
-            ResolvedType::GenericInstance { def, .. } if tt.is_resource_def(*def) => {
-                Members::Held(Vec::new())
-            }
-            ResolvedType::GenericInstance { def, type_args } => {
-                match tt.variant_template_cases(*def) {
-                    Some(cases) => Members::Held(
-                        cases
-                            .iter()
-                            .map(|&(_, _, payload)| match tt.get(payload) {
-                                ResolvedType::TypeParam { index, .. } => type_args[*index as usize],
-                                _ => payload,
-                            })
-                            .collect(),
-                    ),
+            ResolvedType::Tuple(elems) => Members::Held(elems.clone()),
+            ResolvedType::Variant { def, type_args } => {
+                match tt.variant_instance_payloads(*def, type_args) {
+                    Some(payloads) => Members::Held(payloads),
+                    None if type_args.is_empty() => Members::Unknown,
                     None => Members::Held(type_args.clone()),
                 }
             }
-            ResolvedType::Variant { def } => match tt.variant_template_cases(*def) {
-                Some(cases) => {
-                    Members::Held(cases.iter().map(|&(_, _, payload)| payload).collect())
-                }
-                None => Members::Unknown,
-            },
             // A closure holds what it captured, which its type does not name:
             // whatever any closure of its shape captured.
             ResolvedType::Function { .. } => Members::Held(self.captures.of(ty, tt).to_vec()),

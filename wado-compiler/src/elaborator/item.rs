@@ -40,7 +40,7 @@ use crate::elaborator::sig::{ImplSig, TraitMethod, TraitSig, own_params_of};
 use crate::elaborator::trait_env::get_type_name_static;
 use crate::hashmap;
 use crate::name::{FqTraitName, test_function_name};
-use crate::tir::{ResolvedType, TirTypeParam};
+use crate::tir::{ResolvedType, StructDef, TirTypeParam};
 
 /// Extract the [`CompilerItem`] marker — if any — from a declaration's
 /// `#[compiler_item("...")]` attributes, emitting a diagnostic for
@@ -1366,20 +1366,18 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     }
 
     /// A by-value `self` transfers ownership, so a concrete aggregate takes it
-    /// only when it is affine. Generic aggregates resolve to `GenericInstance`
-    /// rather than a concrete value type, so they are already permitted.
+    /// only when it is affine. A generic aggregate's instance may be affine
+    /// through its arguments, so it is permitted.
     fn check_self_by_value(&mut self, self_ty: TypeId, span: Span) {
         let (is_concrete_value, type_name) = {
             let tt = self.tysys.type_table.borrow();
-            (
-                matches!(
-                    tt.get(self_ty),
-                    ResolvedType::Struct { .. }
-                        | ResolvedType::Enum { .. }
-                        | ResolvedType::Variant { .. }
-                ),
-                tt.name(self_ty),
-            )
+            let is_concrete_value = match tt.get(self_ty) {
+                ResolvedType::Enum { .. } => true,
+                ResolvedType::Struct { type_args, .. }
+                | ResolvedType::Variant { type_args, .. } => type_args.is_empty(),
+                _ => false,
+            };
+            (is_concrete_value, tt.name(self_ty))
         };
         if is_concrete_value && !self.tysys.carries_affine(self_ty) {
             let _ = self.emit(TypeError::SelfByValueOnCopyable { type_name, span });
@@ -1514,14 +1512,15 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     ) -> Option<TypeId> {
         self.first_type_within(type_id, true, &|scope: &Self, t| {
             let tt = scope.tysys.type_table.borrow();
-            if !matches!(
-                tt.get(t),
-                ResolvedType::Struct { .. }
-                    | ResolvedType::Enum { .. }
-                    | ResolvedType::Variant { .. }
-                    | ResolvedType::Flags { .. }
-                    | ResolvedType::Newtype { .. }
-            ) {
+            let named = match tt.get(t) {
+                ResolvedType::Enum { .. }
+                | ResolvedType::Flags { .. }
+                | ResolvedType::Newtype { .. } => true,
+                ResolvedType::Struct { type_args, .. }
+                | ResolvedType::Variant { type_args, .. } => type_args.is_empty(),
+                _ => false,
+            };
+            if !named {
                 return false;
             }
             tt.nominal_def(t).is_some_and(|def| {
@@ -1565,7 +1564,10 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         let head = {
             let tt = self.tysys.type_table.borrow();
             let head = tt.representation_head(type_id);
-            if let ResolvedType::GenericInstance { def, .. } = tt.get(head)
+            if let ResolvedType::Struct {
+                def: StructDef::Decl(def),
+                ..
+            } = tt.get(head)
                 && tt.is_compiler_item(*def, CompilerItem::Slice)
             {
                 return true;
@@ -1636,24 +1638,32 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             ResolvedType::Ref(t) | ResolvedType::MutRef(t) | ResolvedType::BuiltinArray(t) => {
                 vec![t]
             }
-            ResolvedType::Variant { .. } => self.tysys.case_payload_types(head).unwrap_or_default(),
-            ResolvedType::Struct { .. } if into_fields => self
-                .struct_field_types(head)
-                .map(|fields| fields.into_iter().map(|(_, t)| t).collect())
-                .unwrap_or_default(),
-            ResolvedType::GenericInstance { def, .. }
-                if into_fields
+            ResolvedType::Variant { type_args, .. } if type_args.is_empty() => {
+                self.tysys.case_payload_types(head).unwrap_or_default()
+            }
+            ResolvedType::Struct {
+                def: StructDef::Decl(def),
+                type_args,
+            } if !type_args.is_empty() => {
+                let own_fields = into_fields
                     && self
                         .tysys
                         .type_table
                         .borrow()
                         .compiler_type_item(def)
-                        .is_none()
-                    && let Some(fields) = self.struct_field_types(head) =>
-            {
-                fields.into_iter().map(|(_, t)| t).collect()
+                        .is_none();
+                match own_fields.then(|| self.struct_field_types(head)).flatten() {
+                    Some(fields) => fields.into_iter().map(|(_, t)| t).collect(),
+                    None => type_args,
+                }
             }
-            ResolvedType::GenericInstance { type_args, .. } => type_args,
+            ResolvedType::Struct { .. } if into_fields => self
+                .struct_field_types(head)
+                .map(|fields| fields.into_iter().map(|(_, t)| t).collect())
+                .unwrap_or_default(),
+            ResolvedType::Variant { type_args, .. }
+            | ResolvedType::Resource { type_args, .. }
+            | ResolvedType::Tuple(type_args) => type_args,
             _ => Vec::new(),
         };
         within
@@ -2131,9 +2141,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// resource. That `Self` type comes back too, because it is the receiver's.
     ///
     /// It is constructed after the type params are in scope, so a generic
-    /// resource's `GenericInstance` can reference its own `TypeParam`s
-    /// (which gap-2 substitution then specialises per impl-block instantiation).
-    /// A non-generic resource is a plain `Resource { def }`.
+    /// resource's `Self` can take its own `TypeParam`s as arguments (which
+    /// gap-2 substitution then specialises per impl-block instantiation).
     fn enter_operation_scope(
         &mut self,
         type_params: &[ast::GenericParam],

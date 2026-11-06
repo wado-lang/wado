@@ -12,13 +12,13 @@ struct core:prelude/string.wado//String {  // TypeId(2)
 }
 
 struct tuple//[core:prelude/list.wado/List<i32>, i32] {  // TypeId(3)
-    mut 0: ref "core:prelude//List<i32>",
+    mut 0: ref "core:prelude/list.wado//List<i32>",
     mut 1: i32,
 }
 
 variant opt_value_copy_or_pattern_reads_in_place.wado//Op {  // TypeId(4)
     Leaf(i32),
-    Dims(ref "core:prelude//List<i32>"),
+    Dims(ref "core:prelude/list.wado//List<i32>"),
     Pair(ref "tuple//[core:prelude/list.wado/List<i32>, i32]"),
 }
 
@@ -29,7 +29,7 @@ struct opt_value_copy_or_pattern_reads_in_place.wado//Op::Leaf {  // TypeId(5)
 
 struct opt_value_copy_or_pattern_reads_in_place.wado//Op::Dims {  // TypeId(6)
     discriminant: i32,
-    payload_0: ref "core:prelude//List<i32>",
+    payload_0: ref "core:prelude/list.wado//List<i32>",
 }
 
 struct opt_value_copy_or_pattern_reads_in_place.wado//Op::Pair {  // TypeId(7)
@@ -39,14 +39,14 @@ struct opt_value_copy_or_pattern_reads_in_place.wado//Op::Pair {  // TypeId(7)
 
 struct opt_value_copy_or_pattern_reads_in_place.wado//Node {  // TypeId(8)
     mut op: ref "opt_value_copy_or_pattern_reads_in_place.wado//Op",
-    mut operands: ref "core:prelude//List<i32>",
+    mut operands: ref "core:prelude/list.wado//List<i32>",
 }
 
 array Array<i32> (mut i32);  // TypeId(9)
 
 array Array<opt_value_copy_or_pattern_reads_in_place.wado/Node> (mut ref "opt_value_copy_or_pattern_reads_in_place.wado//Node");  // TypeId(10)
 
-struct core:prelude//List<i32> {  // TypeId(11)
+struct core:prelude/list.wado//List<i32> {  // TypeId(11)
     mut repr: ref Array<i32>,
     mut used: i32,
 }
@@ -107,7 +107,7 @@ import fn wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode f
 import fn wasi/task-return from "wasi/task-return";
 
 global global:opt_value_copy_or_pattern_reads_in_place.wado::$const_obj_0: ref Array<u8> = array.new_fixed<u8>(32);
-global global:opt_value_copy_or_pattern_reads_in_place.wado::$const_obj_1: ref "Array<opt_value_copy_or_pattern_reads_in_place.wado/Node>" = array.new_fixed<ref "opt_value_copy_or_pattern_reads_in_place.wado//Node">(struct.new "opt_value_copy_or_pattern_reads_in_place.wado//Node" { op: struct.new "opt_value_copy_or_pattern_reads_in_place.wado//Op::Leaf" { discriminant: 0, payload_0: 1 }, operands: struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(), used: 0 } }, struct.new "opt_value_copy_or_pattern_reads_in_place.wado//Node" { op: struct.new "opt_value_copy_or_pattern_reads_in_place.wado//Op::Dims" { discriminant: 1, payload_0: struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(1, 2, 3), used: 3 } }, operands: struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(0), used: 1 } }, struct.new "opt_value_copy_or_pattern_reads_in_place.wado//Node" { op: struct.new "opt_value_copy_or_pattern_reads_in_place.wado//Op::Pair" { discriminant: 2, payload_0: struct.new "tuple//[core:prelude/list.wado/List<i32>, i32]" { 0: struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(4, 5), used: 2 }, 1: 6 } }, operands: struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(1, 2), used: 2 } });
+global global:opt_value_copy_or_pattern_reads_in_place.wado::$const_obj_1: ref "Array<opt_value_copy_or_pattern_reads_in_place.wado/Node>" = array.new_fixed<ref "opt_value_copy_or_pattern_reads_in_place.wado//Node">(struct.new "opt_value_copy_or_pattern_reads_in_place.wado//Node" { op: struct.new "opt_value_copy_or_pattern_reads_in_place.wado//Op::Leaf" { discriminant: 0, payload_0: 1 }, operands: struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(), used: 0 } }, struct.new "opt_value_copy_or_pattern_reads_in_place.wado//Node" { op: struct.new "opt_value_copy_or_pattern_reads_in_place.wado//Op::Dims" { discriminant: 1, payload_0: struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(1, 2, 3), used: 3 } }, operands: struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(0), used: 1 } }, struct.new "opt_value_copy_or_pattern_reads_in_place.wado//Node" { op: struct.new "opt_value_copy_or_pattern_reads_in_place.wado//Op::Pair" { discriminant: 2, payload_0: struct.new "tuple//[core:prelude/list.wado/List<i32>, i32]" { 0: struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(4, 5), used: 2 }, 1: 6 } }, operands: struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(1, 2), used: 2 } });
 
 fn "opt_value_copy_or_pattern_reads_in_place.wado/run"() with Stdout {
     let $load_3: ref Array<u8>;

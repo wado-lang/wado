@@ -308,7 +308,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             self.tysys.type_table.borrow_mut().mark_affine_decl(def);
         }
         // Mirrors `intern_all_decl_types`'s "base entry" for a module-level
-        // generic struct: its usage sites mint separate `GenericInstance`
+        // generic struct: its usage sites mint separate instance
         // TypeIds, and this one exists so `type_id_of_decl` has something to
         // find. The head is the declaration, not the `Foo@AstId` storage
         // spelling, which names none.
@@ -1025,7 +1025,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .tysys
                 .enum_of_type(type_id)
                 .is_some_and(|info| info.cases.iter().any(|c| c.name == case_name)),
-            ResolvedType::Variant { .. } | ResolvedType::GenericInstance { .. } => self
+            ResolvedType::Variant { .. } => self
                 .tysys
                 .variant_of_type(type_id)
                 .is_some_and(|info| info.case_named(case_name).is_some()),
@@ -1049,8 +1049,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .borrow()
             .scrutinee_structure_head(scrutinee_type);
         let scrutinee_args = match self.tysys.type_table.borrow().get(base_type) {
-            ResolvedType::Enum { .. } | ResolvedType::Variant { .. } => None,
-            ResolvedType::GenericInstance { type_args, .. } => Some(type_args.clone()),
+            ResolvedType::Enum { .. } => None,
+            ResolvedType::Variant { type_args, .. } => {
+                (!type_args.is_empty()).then(|| type_args.clone())
+            }
+            ResolvedType::Struct {
+                def: StructDef::Decl(_),
+                type_args,
+            } if !type_args.is_empty() => Some(type_args.clone()),
             _ => return false,
         };
         // Every name on the chain qualifies the same cases: `C::Green`,
@@ -1230,13 +1236,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let head = {
             let tt = self.tysys.type_table.borrow();
             match tt.get(tt.reflect_structure_head(scrutinee)) {
-                ResolvedType::Struct { def, .. } => Some(*def),
                 // A generic struct over a parameter its function has yet to
                 // fill, as `Pair<T>` is inside `fn f<T>`.
-                ResolvedType::GenericInstance { def, .. } => self
+                ResolvedType::Struct {
+                    def: StructDef::Decl(def),
+                    type_args,
+                } if !type_args.is_empty() => self
                     .lookup_struct_fields_of_decl(*def)
                     .is_some()
                     .then_some(StructDef::Decl(*def)),
+                ResolvedType::Struct { def, .. } => Some(*def),
                 _ => None,
             }
         };
@@ -1858,7 +1867,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     let scrutinee_name = self.tysys.type_table.borrow().name(scrutinee_type);
                     let expected = match &resolved_type {
                         ResolvedType::Enum { .. } => format!("valid case of enum {scrutinee_name}"),
-                        ResolvedType::Variant { .. } | ResolvedType::GenericInstance { .. } => {
+                        ResolvedType::Variant { .. } => {
+                            format!("valid case of variant {scrutinee_name}")
+                        }
+                        ResolvedType::Struct {
+                            def: StructDef::Decl(_),
+                            type_args,
+                        } if !type_args.is_empty() => {
                             format!("valid case of variant {scrutinee_name}")
                         }
                         _ => "variant or enum case".to_string(),
@@ -1935,34 +1950,23 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // declaration asked for the payload type is that structure's.
                 let scrutinee_decl = self.tysys.type_def(base_type);
                 let payload_type: TypeId = match &resolved_type {
-                    // Non-generic variant
-                    ResolvedType::Variant { .. } => self.get_variant_case_payload_type(
+                    ResolvedType::Variant { type_args, .. } => self.get_variant_case_payload_type(
                         scrutinee_decl.expect("a variant answers with its declaration"),
                         normalized_variant_name,
-                        &[],
+                        type_args,
                         *span,
                     ),
-                    // Generic variant instantiation
-                    ResolvedType::GenericInstance { type_args, .. } => {
-                        // Check if this is a variant (not a struct)
-                        let is_variant = scrutinee_decl
-                            .is_some_and(|def| self.type_lookup().variant_cases_of(def).is_some());
-                        if is_variant {
-                            self.get_variant_case_payload_type(
-                                scrutinee_decl.expect("a variant answers with its declaration"),
-                                normalized_variant_name,
-                                type_args,
-                                *span,
-                            )
-                        } else {
-                            let found = self.tysys.type_table.borrow().name(scrutinee_type);
-                            let _ = self.emit(TypeError::PatternTypeMismatch {
-                                expected: "variant type".to_string(),
-                                found,
-                                span: *span,
-                            });
-                            TypeTable::UNKNOWN
-                        }
+                    ResolvedType::Struct {
+                        def: StructDef::Decl(_),
+                        type_args,
+                    } if !type_args.is_empty() => {
+                        let found = self.tysys.type_table.borrow().name(scrutinee_type);
+                        let _ = self.emit(TypeError::PatternTypeMismatch {
+                            expected: "variant type".to_string(),
+                            found,
+                            span: *span,
+                        });
+                        TypeTable::UNKNOWN
                     }
                     _ => {
                         let _ = self.emit(TypeError::PatternTypeMismatch {
@@ -3013,22 +3017,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // `.next()` returns `Option<Item>`. Extract the `Some` payload type
         // for the binding scrutinee. Bind out of the borrow first so the
         // `get_variant_case_payload_type` call below can re-borrow `&mut self`.
-        let option_shape: Option<(DefId, Vec<TypeId>)> = {
-            let decl = self.tysys.type_def(option_type);
-            let is_variant =
-                decl.is_some_and(|def| self.type_lookup().variant_cases_of(def).is_some());
+        let option_shape: Option<(DefId, Vec<TypeId>)> =
             match self.tysys.type_table.borrow().get(option_type).clone() {
-                ResolvedType::GenericInstance { type_args, .. } if is_variant => Some((
-                    decl.expect("a variant answers with its declaration"),
-                    type_args,
-                )),
-                ResolvedType::Variant { .. } if is_variant => Some((
-                    decl.expect("a variant answers with its declaration"),
-                    vec![],
-                )),
+                ResolvedType::Variant { def, type_args } => Some((def, type_args)),
                 _ => None,
-            }
-        };
+            };
         let item_type = match option_shape {
             Some((def, type_args)) => {
                 self.get_variant_case_payload_type(def, &some_case_name, &type_args, span)
@@ -3110,10 +3103,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             | ResolvedType::Flags { .. }
             | ResolvedType::Function { .. }
             | ResolvedType::Resource { .. } => true,
-            // The instance's own declaration, not its name looked up again.
-            ResolvedType::GenericInstance { def, .. } => {
-                self.lookup_variant_case_of_decl(def).is_some()
-            }
             ResolvedType::Newtype { base_type, .. } => self.is_replace_on_assign_element(base_type),
             _ => false,
         }

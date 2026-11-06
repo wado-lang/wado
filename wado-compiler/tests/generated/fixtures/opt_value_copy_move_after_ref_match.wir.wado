@@ -12,7 +12,7 @@ struct core:prelude/string.wado//String {  // TypeId(2)
 }
 
 struct opt_value_copy_move_after_ref_match.wado//Rep {  // TypeId(3)
-    mut tags: ref "core:prelude//List<core:prelude/string.wado/String>",
+    mut tags: ref "core:prelude/list.wado//List<core:prelude/string.wado/String>",
 }
 
 variant opt_value_copy_move_after_ref_match.wado//Op {  // TypeId(4)
@@ -34,12 +34,12 @@ array Array<core:prelude/string.wado/String> (mut ref "core:prelude/string.wado/
 
 array Array<opt_value_copy_move_after_ref_match.wado/Op> (mut ref "opt_value_copy_move_after_ref_match.wado//Op");  // TypeId(8)
 
-struct core:prelude//List<core:prelude/string.wado/String> {  // TypeId(9)
+struct core:prelude/list.wado//List<core:prelude/string.wado/String> {  // TypeId(9)
     mut repr: ref "Array<core:prelude/string.wado/String>",
     mut used: i32,
 }
 
-struct core:prelude//List<opt_value_copy_move_after_ref_match.wado/Op> {  // TypeId(10)
+struct core:prelude/list.wado//List<opt_value_copy_move_after_ref_match.wado/Op> {  // TypeId(10)
     mut repr: ref "Array<opt_value_copy_move_after_ref_match.wado/Op>",
     mut used: i32,
 }
@@ -72,7 +72,7 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/String::reallo
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(24)
 
-type "functype//core:prelude/list.wado/core:prelude/list.wado/List<opt_value_copy_move_after_ref_match.wado/Op>::grow" = fn(ref "core:prelude//List<opt_value_copy_move_after_ref_match.wado/Op>");  // TypeId(25)
+type "functype//core:prelude/list.wado/core:prelude/list.wado/List<opt_value_copy_move_after_ref_match.wado/Op>::grow" = fn(ref "core:prelude/list.wado//List<opt_value_copy_move_after_ref_match.wado/Op>");  // TypeId(25)
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::format<opt_value_copy_move_after_ref_match.wado/$tmpl$fb51c04d54491732,[i32]>$spec0$spec0$sroa[t.h0]" = fn(i32) -> ref "core:prelude/string.wado//String";  // TypeId(26)
 
@@ -102,13 +102,13 @@ import fn wasi/task-return from "wasi/task-return";
 global mut global:opt_value_copy_move_after_ref_match.wado::$const_obj_0: ref null "core:prelude/string.wado//String" = ref.null none;
 
 fn "opt_value_copy_move_after_ref_match.wado/build$dae[n]"() {
-    let ops: ref "core:prelude//List<opt_value_copy_move_after_ref_match.wado/Op>";
+    let ops: ref "core:prelude/list.wado//List<opt_value_copy_move_after_ref_match.wado/Op>";
     let tagged: i32;
     let i_2: i32;
     let rep: ref "opt_value_copy_move_after_ref_match.wado//Rep";
     let used_13: i32;
     let $sroa_op_value_20: ref "opt_value_copy_move_after_ref_match.wado//Op";
-    ops = struct.new "core:prelude//List<opt_value_copy_move_after_ref_match.wado/Op>" { repr: array.new_fixed<ref "opt_value_copy_move_after_ref_match.wado//Op">(), used: 0 };
+    ops = struct.new "core:prelude/list.wado//List<opt_value_copy_move_after_ref_match.wado/Op>" { repr: array.new_fixed<ref "opt_value_copy_move_after_ref_match.wado//Op">(), used: 0 };
     tagged = 0;
     i_2 = 0;
     b0: block {
@@ -116,7 +116,7 @@ fn "opt_value_copy_move_after_ref_match.wado/build$dae[n]"() {
             break_if b0 i_2 >= 4;
             if ref.test "opt_value_copy_move_after_ref_match.wado//Op::Repeat"(local.tee $sroa_op_value_20($inline_make_1: block -> ref "opt_value_copy_move_after_ref_match.wado//Op" {
                 if (i_2 % 2) == 0 {
-                    break $inline_make_1: struct.new "opt_value_copy_move_after_ref_match.wado//Op::Repeat" { discriminant: 1, payload_0: struct.new "opt_value_copy_move_after_ref_match.wado//Rep" { tags: struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: array.new_fixed<ref "core:prelude/string.wado//String">(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97), used: 1 }, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(98), used: 1 }), used: 2 } } };
+                    break $inline_make_1: struct.new "opt_value_copy_move_after_ref_match.wado//Op::Repeat" { discriminant: 1, payload_0: struct.new "opt_value_copy_move_after_ref_match.wado//Rep" { tags: struct.new "core:prelude/list.wado//List<core:prelude/string.wado/String>" { repr: array.new_fixed<ref "core:prelude/string.wado//String">(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97), used: 1 }, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(98), used: 1 }), used: 2 } } };
                 }
                 break $inline_make_1: struct.new "opt_value_copy_move_after_ref_match.wado//Op::Plain" { discriminant: 0, payload_0: i_2 };
             })) {

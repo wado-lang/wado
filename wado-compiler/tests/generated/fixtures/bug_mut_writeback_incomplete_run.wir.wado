@@ -11,7 +11,7 @@ struct core:prelude/string.wado//String {  // TypeId(2)
     mut used: i32,
 }
 
-struct core:prelude//List<u8> {  // TypeId(3)
+struct core:prelude/list.wado//List<u8> {  // TypeId(3)
     mut repr: ref Array<u8>,
     mut used: i32,
 }
@@ -30,13 +30,13 @@ type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(9)
 
 type "functype//wasi/$wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(10)
 
-type "functype//bug_mut_writeback_incomplete_run.wado/leaf" = fn(ref "core:prelude//List<u8>") -> i32;  // TypeId(11)
+type "functype//bug_mut_writeback_incomplete_run.wado/leaf" = fn(ref "core:prelude/list.wado//List<u8>") -> i32;  // TypeId(11)
 
-type "functype//bug_mut_writeback_incomplete_run.wado/outer" = fn(ref "core:prelude//List<u8>") -> i32;  // TypeId(12)
+type "functype//bug_mut_writeback_incomplete_run.wado/outer" = fn(ref "core:prelude/list.wado//List<u8>") -> i32;  // TypeId(12)
 
 type "functype//bug_mut_writeback_incomplete_run.wado/stepped_over" = fn() -> i32;  // TypeId(13)
 
-type "functype//bug_mut_writeback_incomplete_run.wado/two" = fn(ref "core:prelude//List<u8>", ref "core:prelude//List<u8>");  // TypeId(14)
+type "functype//bug_mut_writeback_incomplete_run.wado/two" = fn(ref "core:prelude/list.wado//List<u8>", ref "core:prelude/list.wado//List<u8>");  // TypeId(14)
 
 type "functype//bug_mut_writeback_incomplete_run.wado/aliased" = fn() -> i32;  // TypeId(15)
 
@@ -56,7 +56,7 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/String::reallo
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(23)
 
-type "functype//core:prelude/list.wado/core:prelude/list.wado/List<u8>::grow" = fn(ref "core:prelude//List<u8>");  // TypeId(24)
+type "functype//core:prelude/list.wado/core:prelude/list.wado/List<u8>::grow" = fn(ref "core:prelude/list.wado//List<u8>");  // TypeId(24)
 
 type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]" = fn(ref "core:prelude/string.wado//String", bool, i32) -> i32;  // TypeId(25)
 
@@ -101,8 +101,8 @@ fn "bug_mut_writeback_incomplete_run.wado/outer"(dst) {
 }
 
 fn "bug_mut_writeback_incomplete_run.wado/stepped_over"() {
-    let v: ref "core:prelude//List<u8>";
-    drop("bug_mut_writeback_incomplete_run.wado/outer"(local.tee v(struct.new "core:prelude//List<u8>" { repr: array.new_fixed<u8>(), used: 0 })));
+    let v: ref "core:prelude/list.wado//List<u8>";
+    drop("bug_mut_writeback_incomplete_run.wado/outer"(local.tee v(struct.new "core:prelude/list.wado//List<u8>" { repr: array.new_fixed<u8>(), used: 0 })));
     return v.used;
 }
 
@@ -123,8 +123,8 @@ fn "bug_mut_writeback_incomplete_run.wado/two"(a, b) {
 }
 
 fn "bug_mut_writeback_incomplete_run.wado/aliased"() {
-    let v: ref "core:prelude//List<u8>";
-    "bug_mut_writeback_incomplete_run.wado/two"(local.tee v(struct.new "core:prelude//List<u8>" { repr: array.new_fixed<u8>(), used: 0 }), v);
+    let v: ref "core:prelude/list.wado//List<u8>";
+    "bug_mut_writeback_incomplete_run.wado/two"(local.tee v(struct.new "core:prelude/list.wado//List<u8>" { repr: array.new_fixed<u8>(), used: 0 }), v);
     return v.used;
 }
 

@@ -30,17 +30,17 @@ struct wasi:http/types.wado//HeaderError::Other {  // TypeId(5)
 
 struct tuple//[core:prelude/string.wado/String, core:prelude/list.wado/List<u8>] {  // TypeId(6)
     mut 0: ref "core:prelude/string.wado//String",
-    mut 1: ref "core:prelude//List<u8>",
+    mut 1: ref "core:prelude/list.wado//List<u8>",
 }
 
 array Array<[core:prelude/string.wado/String,core:prelude/list.wado/List<u8>]> (mut ref "tuple//[core:prelude/string.wado/String, core:prelude/list.wado/List<u8>]");  // TypeId(7)
 
-struct core:prelude//List<u8> {  // TypeId(8)
+struct core:prelude/list.wado//List<u8> {  // TypeId(8)
     mut repr: ref Array<u8>,
     mut used: i32,
 }
 
-struct core:prelude//List<[core:prelude/string.wado/String,core:prelude/list.wado/List<u8>]> {  // TypeId(9)
+struct core:prelude/list.wado//List<[wasi:http/types.wado/FieldName,wasi:http/types.wado/FieldValue]> {  // TypeId(9)
     mut repr: ref "Array<[core:prelude/string.wado/String,core:prelude/list.wado/List<u8>]>",
     mut used: i32,
 }
@@ -69,13 +69,13 @@ type "functype//resource_store_through_mut_ref.wado/$test_0" = fn();  // TypeId(
 
 type "functype//resource_store_through_mut_ref.wado/$cm_binding__wasi:http/types@0.3.0#[constructor]fields" = fn() -> ref null "core:prelude//$Resource";  // TypeId(21)
 
-type "functype//resource_store_through_mut_ref.wado/$cm_binding__wasi:http/types@0.3.0#[method]fields.copy-all" = fn(ref null "core:prelude//$Resource") -> ref "core:prelude//List<[core:prelude/string.wado/String,core:prelude/list.wado/List<u8>]>";  // TypeId(22)
+type "functype//resource_store_through_mut_ref.wado/$cm_binding__wasi:http/types@0.3.0#[method]fields.copy-all" = fn(ref null "core:prelude//$Resource") -> ref "core:prelude/list.wado//List<[wasi:http/types.wado/FieldName,wasi:http/types.wado/FieldValue]>";  // TypeId(22)
 
 type "functype//resource_store_through_mut_ref.wado/$cm_export__$test_0" = fn();  // TypeId(23)
 
 type "functype//resource_store_through_mut_ref.wado/$test_0$cold0" = fn();  // TypeId(24)
 
-type "functype//resource_store_through_mut_ref.wado/$cm_binding__wasi:http/types@0.3.0#[method]fields.append$spec0" = fn(ref null "core:prelude//$Resource", ref "core:prelude/string.wado//String", ref "core:prelude//List<u8>") -> ref null "wasi:http/types.wado//HeaderError";  // TypeId(25)
+type "functype//resource_store_through_mut_ref.wado/$cm_binding__wasi:http/types@0.3.0#[method]fields.append$spec0" = fn(ref null "core:prelude//$Resource", ref "core:prelude/string.wado//String", ref "core:prelude/list.wado//List<u8>") -> ref null "wasi:http/types.wado//HeaderError";  // TypeId(25)
 
 type "functype//core:prelude/types.wado/copy_result" = fn(i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(26)
 
@@ -103,21 +103,19 @@ type "functype//core:rt/panic$cold0" = fn(ref Array<u8>, i32);  // TypeId(37)
 
 type "functype//core:rt/gc_array_to_memory$spec0$dae[src_start]" = fn(ref Array<u8>, i32, i32);  // TypeId(38)
 
-type "functype//core:rt/gc_array_to_memory$spec0$dae[src_start]$spec0$dae[len]" = fn(ref Array<u8>, i32);  // TypeId(39)
+type "functype//core:prelude/list.wado/core:prelude/list.wado/List<[core:prelude/string.wado/String,core:prelude/list.wado/List<u8>]>::grow" = fn(ref "core:prelude/list.wado//List<[wasi:http/types.wado/FieldName,wasi:http/types.wado/FieldValue]>");  // TypeId(39)
 
-type "functype//core:prelude/list.wado/core:prelude/list.wado/List<[core:prelude/string.wado/String,core:prelude/list.wado/List<u8>]>::grow" = fn(ref "core:prelude//List<[core:prelude/string.wado/String,core:prelude/list.wado/List<u8>]>");  // TypeId(40)
+type "functype//wasi/resource-drop:wasi:http/types.wado#Fields" = fn(i32);  // TypeId(40)
 
-type "functype//wasi/resource-drop:wasi:http/types.wado#Fields" = fn(i32);  // TypeId(41)
+type "functype//wasi/task-return" = fn(i32);  // TypeId(41)
 
-type "functype//wasi/task-return" = fn(i32);  // TypeId(42)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(42)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(43)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(43)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(44)
+type "functype//wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode" = fn(i32);  // TypeId(44)
 
-type "functype//wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode" = fn(i32);  // TypeId(45)
-
-type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(46)
+type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(45)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -138,7 +136,7 @@ import fn wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode f
 
 global mut global:resource_store_through_mut_ref.wado::$const_obj_0: ref null "core:prelude/string.wado//String" = ref.null none;
 global global:resource_store_through_mut_ref.wado::$const_obj_1: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(120), used: 1 };
-global global:resource_store_through_mut_ref.wado::$const_obj_2: ref "core:prelude//List<u8>" = struct.new "core:prelude//List<u8>" { repr: array.new_fixed<u8>(1), used: 1 };
+global global:resource_store_through_mut_ref.wado::$const_obj_2: ref "core:prelude/list.wado//List<u8>" = struct.new "core:prelude/list.wado//List<u8>" { repr: array.new_fixed<u8>(1), used: 1 };
 global global:core:builtin::$unit_case$wasi:http/types.wado//HeaderError$0: ref "wasi:http/types.wado//HeaderError" = struct.new "wasi:http/types.wado//HeaderError" { 0 };
 global global:core:builtin::$unit_case$wasi:http/types.wado//HeaderError$1: ref "wasi:http/types.wado//HeaderError" = struct.new "wasi:http/types.wado//HeaderError" { 1 };
 global global:core:builtin::$unit_case$wasi:http/types.wado//HeaderError$2: ref "wasi:http/types.wado//HeaderError" = struct.new "wasi:http/types.wado//HeaderError" { 2 };
@@ -185,19 +183,19 @@ fn "resource_store_through_mut_ref.wado/$cm_binding__wasi:http/types@0.3.0#[meth
     let $outptr: i32;
     let $base_2: i32;
     let $count_3: i32;
-    let $result_4: ref "core:prelude//List<[core:prelude/string.wado/String,core:prelude/list.wado/List<u8>]>";
+    let $result_4: ref "core:prelude/list.wado//List<[wasi:http/types.wado/FieldName,wasi:http/types.wado/FieldValue]>";
     let $i: i32;
     let $elem_addr: i32;
     let $str_ptr: i32;
     let $str_len: i32;
     let $lifted_string: ref "core:prelude/string.wado//String";
-    let $result_12: ref "core:prelude//List<u8>";
+    let $result_12: ref "core:prelude/list.wado//List<u8>";
     let arr_19: ref Array<u8>;
     let value_30: ref "tuple//[core:prelude/string.wado/String, core:prelude/list.wado/List<u8>]";
     $outptr = "mem/realloc"(0, 0, 4, 8);
     "wasi/$wasi:http/types@0.3.0#[method]fields.copy-all"(self.value, $outptr);
     $base_2 = builtin::load_i32($outptr);
-    $result_4 = struct.new "core:prelude//List<[core:prelude/string.wado/String,core:prelude/list.wado/List<u8>]>" { repr: builtin::array_new<ref "tuple//[core:prelude/string.wado/String, core:prelude/list.wado/List<u8>]">(local.tee $count_3(builtin::load_i32($outptr + 4))), used: 0 };
+    $result_4 = struct.new "core:prelude/list.wado//List<[wasi:http/types.wado/FieldName,wasi:http/types.wado/FieldValue]>" { repr: builtin::array_new<ref "tuple//[core:prelude/string.wado/String, core:prelude/list.wado/List<u8>]">(local.tee $count_3(builtin::load_i32($outptr + 4))), used: 0 };
     $i = 0;
     b5: block {
         l6: loop {
@@ -210,7 +208,7 @@ fn "resource_store_through_mut_ref.wado/$cm_binding__wasi:http/types@0.3.0#[meth
             }
             $str_ptr = builtin::load_i32($elem_addr + 8);
             "core:rt/memory_into_gc_array$dae[at]"(local.tee arr_19(builtin::array_new<u8>(local.tee $elem_addr(builtin::load_i32(($elem_addr + 8) + 4)))), $str_ptr, $elem_addr);
-            $result_12 = struct.new "core:prelude//List<u8>" { repr: arr_19, used: $elem_addr };
+            $result_12 = struct.new "core:prelude/list.wado//List<u8>" { repr: arr_19, used: $elem_addr };
             if $elem_addr > 0 {
                 drop("mem/realloc"($str_ptr, $elem_addr, 1, 0));
             }
@@ -247,29 +245,28 @@ condition: fields.copy_all().is_empty()
 fn "resource_store_through_mut_ref.wado/$cm_binding__wasi:http/types@0.3.0#[method]fields.append$spec0"(self, name, value) with Fields {
     let $name_packed: i64;
     let $value_packed: i64;
+    let $name_flat1: i32;
     let $value_flat0: i32;
     let $value_flat1: i32;
     let $outptr: i32;
     let $result_val: ref null "wasi:http/types.wado//HeaderError";
     let $local_19: ref null "core:prelude/string.wado//String";
     let ptr_26: i32;
-    let ptr_37: i32;
     let arr_46: ref Array<u8>;
     ptr_26 = "mem/realloc"(0, 0, 1, 1);
-    "core:rt/gc_array_to_memory$spec0$dae[src_start]$spec0$dae[len]"(name.repr, ptr_26);
+    "core:rt/gc_array_to_memory$spec0$dae[src_start]"(name.repr, ptr_26, 1);
     $name_packed = builtin::i64_extend_i32_u(ptr_26) | 4294967296_i64;
-    ptr_26 = value.used;
-    ptr_37 = "mem/realloc"(0, 0, 1, ptr_26);
-    "core:rt/gc_array_to_memory$spec0$dae[src_start]"(value.repr, ptr_37, ptr_26);
-    $value_packed = builtin::i64_extend_i32_u(ptr_37) | (builtin::i64_extend_i32_s(ptr_26) << 32_i64);
+    ptr_26 = "mem/realloc"(0, 0, 1, 1);
+    "core:rt/gc_array_to_memory$spec0$dae[src_start]"(value.repr, ptr_26, 1);
+    $value_packed = builtin::i64_extend_i32_u(ptr_26) | 4294967296_i64;
     ptr_26 = builtin::i32_wrap_i64($name_packed);
-    ptr_37 = builtin::i32_wrap_i64($name_packed >> 32_i64);
+    $name_flat1 = builtin::i32_wrap_i64($name_packed >> 32_i64);
     $value_flat0 = builtin::i32_wrap_i64($value_packed);
     $value_flat1 = builtin::i32_wrap_i64($value_packed >> 32_i64);
     $outptr = "mem/realloc"(0, 0, 4, 20);
-    "wasi/$wasi:http/types@0.3.0#[method]fields.append"(self.value, ptr_26, ptr_37, $value_flat0, $value_flat1, $outptr);
-    if ptr_37 > 0 {
-        drop("mem/realloc"(ptr_26, ptr_37, 1, 0));
+    "wasi/$wasi:http/types@0.3.0#[method]fields.append"(self.value, ptr_26, $name_flat1, $value_flat0, $value_flat1, $outptr);
+    if $name_flat1 > 0 {
+        drop("mem/realloc"(ptr_26, $name_flat1, 1, 0));
     }
     if $value_flat1 > 0 {
         drop("mem/realloc"($value_flat0, $value_flat1, 1, 0));
@@ -289,10 +286,10 @@ fn "resource_store_through_mut_ref.wado/$cm_binding__wasi:http/types@0.3.0#[meth
         $local_19 = ref.null none;
         if ptr_26 != 0 {
             ptr_26 = builtin::load_i32((($outptr + 4) + 4) + 4);
-            "core:rt/memory_into_gc_array$dae[at]"(local.tee arr_46(builtin::array_new<u8>(local.tee ptr_37(builtin::load_i32(((($outptr + 4) + 4) + 4) + 4)))), ptr_26, ptr_37);
-            name = struct.new "core:prelude/string.wado//String" { repr: arr_46, used: ptr_37 };
-            if ptr_37 > 0 {
-                drop("mem/realloc"(ptr_26, ptr_37, 1, 0));
+            "core:rt/memory_into_gc_array$dae[at]"(local.tee arr_46(builtin::array_new<u8>(local.tee $name_flat1(builtin::load_i32(((($outptr + 4) + 4) + 4) + 4)))), ptr_26, $name_flat1);
+            name = struct.new "core:prelude/string.wado//String" { repr: arr_46, used: $name_flat1 };
+            if $name_flat1 > 0 {
+                drop("mem/realloc"(ptr_26, $name_flat1, 1, 0));
             }
             $local_19 = name;
         }
@@ -543,43 +540,6 @@ fn "core:rt/gc_array_to_memory$spec0$dae[src_start]"(arr, ptr, len) {
             builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, i));
             i = i + 1;
             continue l48;
-        };
-    };
-}
-
-fn "core:rt/gc_array_to_memory$spec0$dae[src_start]$spec0$dae[len]"(arr, ptr) {
-    let i: i32;
-    let w: i64;
-    i = 0;
-    b49: block {
-        l50: loop {
-            break_if b49 i > -7;
-            w = ((((((builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, i)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, i + 1)) << 8_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, i + 2)) << 16_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, i + 3)) << 24_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, i + 4)) << 32_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, i + 5)) << 40_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, i + 6)) << 48_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, i + 7)) << 56_i64);
-            builtin::store_i64(ptr + i, w);
-            i = i + 8;
-            continue l50;
-        };
-    };
-    b51: block {
-        l52: loop {
-            break_if b51 (((i >= 1) | ((i + 1) >= 1)) | (((i + 1) + 1) >= 1)) | ((((i + 1) + 1) + 1) >= 1);
-            builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, i));
-            i = i + 1;
-            builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, i));
-            i = i + 1;
-            builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, i));
-            i = i + 1;
-            builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, i));
-            i = i + 1;
-            continue l52;
-        };
-    };
-    b53: block {
-        l54: loop {
-            break_if b53 i >= 1;
-            builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, i));
-            i = i + 1;
-            continue l54;
         };
     };
 }

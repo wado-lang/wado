@@ -493,19 +493,18 @@ fn by_value_structs(
         }
         return;
     }
-    match type_table.get(ty) {
-        ResolvedType::GenericInstance { def, .. } if type_table.is_resource_def(*def) => {}
-        ResolvedType::GenericInstance { type_args, .. } => {
-            if out.insert(type_table.type_key(ty)) {
-                for &arg in type_args {
-                    by_value_structs(arg, type_table, struct_fields, out);
-                }
+    // An instance with no listed struct may hold its arguments by value; a
+    // resource is a handle, holding none.
+    if let Some((_, type_args)) = type_table.instance_parts(ty)
+        && !matches!(type_table.get(ty), ResolvedType::Resource { .. })
+    {
+        if out.insert(type_table.type_key(ty)) {
+            for &arg in type_args {
+                by_value_structs(arg, type_table, struct_fields, out);
             }
         }
-        ResolvedType::Newtype { base_type, .. } => {
-            by_value_structs(*base_type, type_table, struct_fields, out);
-        }
-        _ => {}
+    } else if let ResolvedType::Newtype { base_type, .. } = type_table.get(ty) {
+        by_value_structs(*base_type, type_table, struct_fields, out);
     }
 }
 
@@ -573,6 +572,14 @@ fn mut_reachable_contains(
             )
         });
     }
+    if let Some((_, type_args)) = type_table.instance_parts(ty) {
+        if writable && type_table.type_key(ty) == target {
+            return true;
+        }
+        return type_args.iter().any(|&t| {
+            mut_reachable_contains(t, writable, target, type_table, struct_fields, visited)
+        });
+    }
     let (inner, inner_writable) = match type_table.get(ty) {
         ResolvedType::MutRef(inner) => (*inner, true),
         ResolvedType::Ref(inner) => (*inner, false),
@@ -580,14 +587,6 @@ fn mut_reachable_contains(
         | ResolvedType::Newtype {
             base_type: inner, ..
         } => (*inner, writable),
-        ResolvedType::GenericInstance { def, type_args } => {
-            if writable && !type_table.is_resource_def(*def) && type_table.type_key(ty) == target {
-                return true;
-            }
-            return type_args.iter().any(|&t| {
-                mut_reachable_contains(t, writable, target, type_table, struct_fields, visited)
-            });
-        }
         _ => return false,
     };
     mut_reachable_contains(

@@ -12,8 +12,8 @@ use crate::flat_package::FlatPackage;
 use crate::hashmap::IndexSet;
 use crate::name::widen_helper_name;
 use crate::tir::{
-    ResolvedType, StructDef, TirBinaryOp, TirBlock, TirExpr, TirExprKind, TirFunction, TirLocal,
-    TirStmt, TypeId,
+    ResolvedType, TirBinaryOp, TirBlock, TirExpr, TirExprKind, TirFunction, TirLocal, TirStmt,
+    TypeId,
 };
 use crate::tir_visitor::TirMutVisitor;
 use crate::type_table::TypeTable;
@@ -331,15 +331,11 @@ impl Widener<'_> {
     /// The listed struct instance's fields.
     fn fields_of(&self, id: TypeId) -> Vec<(u32, String, TypeId)> {
         let tt = self.tt.borrow();
-        let (def, type_args) = match tt.get(id) {
-            ResolvedType::Struct { def, type_args } => (*def, type_args.as_slice()),
-            ResolvedType::GenericInstance { def, type_args } => {
-                (StructDef::Decl(*def), type_args.as_slice())
-            }
-            _ => unreachable!("only a value holding an `Option<!>` widens"),
+        let ResolvedType::Struct { def, type_args } = tt.get(id) else {
+            unreachable!("only a value holding an `Option<!>` widens")
         };
         self.flat
-            .listed_struct(&tt, def, type_args)
+            .listed_struct(&tt, *def, type_args)
             .expect("monomorphization lists each struct instance")
             .fields
             .iter()

@@ -32,7 +32,7 @@ struct core:prelude/format.wado//Formatter {  // TypeId(5)
 }
 
 struct opt_copy_prop_nested_variant.wado//$tmpl$bf35c06f94276816 {  // TypeId(6)
-    mut h0: ref "core:prelude//List<i32>",
+    mut h0: ref "core:prelude/list.wado//List<i32>",
     mut h1: i32,
     mut s0: ref "core:prelude/string.wado//String",
     mut r0: ref "core:prelude/string.wado//String",
@@ -44,19 +44,19 @@ struct opt_copy_prop_nested_variant.wado//$tmpl$bf35c06f94276816 {  // TypeId(6)
 
 array Array<i32> (mut i32);  // TypeId(7)
 
-variant core:prelude/types.wado//Option<i32> {  // TypeId(8)
+struct core:prelude/list.wado//List<i32> {  // TypeId(8)
+    mut repr: ref Array<i32>,
+    mut used: i32,
+}
+
+variant core:prelude/types.wado//Option<i32> {  // TypeId(9)
     None,
     Some(i32),
 }
 
-struct core:prelude/types.wado//Option<i32>::Some {  // TypeId(9)
+struct core:prelude/types.wado//Option<i32>::Some {  // TypeId(10)
     discriminant: i32,
     payload_0: i32,
-}
-
-struct core:prelude//List<i32> {  // TypeId(10)
-    mut repr: ref Array<i32>,
-    mut used: i32,
 }
 
 type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(11)
@@ -75,7 +75,7 @@ type "functype//wasi/$wasi:cli/stderr@0.3.0#write-via-stream" = fn(i32) -> i32; 
 
 type "functype//opt_copy_prop_nested_variant.wado/find_item$sroa[return]" = fn(i32) -> [i32, ref null "core:prelude/types.wado//Option<i32>", ref null "core:prelude/string.wado//String"];  // TypeId(18)
 
-type "functype//opt_copy_prop_nested_variant.wado/sum_until_none" = fn(ref "core:prelude//List<i32>") -> i32;  // TypeId(19)
+type "functype//opt_copy_prop_nested_variant.wado/sum_until_none" = fn(ref Array<i32>, i32) -> i32;  // TypeId(19)
 
 type "functype//opt_copy_prop_nested_variant.wado/$template_segment$opt_copy_prop_nested_variant.wado/$tmpl$bf35c06f94276816" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", i32) -> ref "core:prelude/string.wado//String";  // TypeId(20)
 
@@ -141,7 +141,7 @@ type "functype//opt_copy_prop_nested_variant.wado/opt_copy_prop_nested_variant.w
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::format<opt_copy_prop_nested_variant.wado/$tmpl$bf35c06f94276816,[core:prelude/list.wado/List<i32>,i32]>" = fn(ref "opt_copy_prop_nested_variant.wado//$tmpl$bf35c06f94276816") -> ref "core:prelude/string.wado//String";  // TypeId(51)
 
-type "functype//core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/Inspect::inspect" = fn(ref "core:prelude//List<i32>", ref "core:prelude/format.wado//Formatter");  // TypeId(52)
+type "functype//core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/Inspect::inspect" = fn(ref Array<i32>, i32, ref "core:prelude/format.wado//Formatter");  // TypeId(52)
 
 type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(53)
 
@@ -208,21 +208,17 @@ fn "opt_copy_prop_nested_variant.wado/find_item$sroa[return]"(key) {
     return 0, struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 1, payload_0: key * 10 }, ref.null none;
 }
 
-fn "opt_copy_prop_nested_variant.wado/sum_until_none"(keys) {
+fn "opt_copy_prop_nested_variant.wado/sum_until_none"($mv$keys$repr, $mv$keys$used) {
     let sum: i32;
     let opt: ref "core:prelude/types.wado//Option<i32>";
-    let end: i32;
     let item: i32;
-    let $sroa_$iter_0_repr_17: ref Array<i32>;
     let $sroa_$iter_0_index_18: i32;
     sum = 0;
-    end = keys.used;
-    $sroa_$iter_0_repr_17 = keys.repr;
     $sroa_$iter_0_index_18 = 0;
     b2: block {
         l3: loop {
-            break_if b2 $sroa_$iter_0_index_18 >= end;
-            item = builtin::array_get_value<i32>($sroa_$iter_0_repr_17, $sroa_$iter_0_index_18);
+            break_if b2 $sroa_$iter_0_index_18 >= $mv$keys$used;
+            item = builtin::array_get_value<i32>($mv$keys$repr, $sroa_$iter_0_index_18);
             $sroa_$iter_0_index_18 = $sroa_$iter_0_index_18 + 1;
             let $mv$result$1: ref null "core:prelude/types.wado//Option<i32>";
             let $mv$result$2: ref null "core:prelude/string.wado//String";
@@ -263,9 +259,9 @@ fn "opt_copy_prop_nested_variant.wado/$template_segment$opt_copy_prop_nested_var
 }
 
 fn "opt_copy_prop_nested_variant.wado/$cm_export__run"() {
-    let keys: ref "core:prelude//List<i32>";
+    let keys: ref "core:prelude/list.wado//List<i32>";
     let $v1_13: i32;
-    if @unlikely(local.tee $v1_13("opt_copy_prop_nested_variant.wado/sum_until_none"(local.tee keys(struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(1, 2, 0, 3), used: 4 }))) != 30) {
+    if @unlikely(local.tee $v1_13("opt_copy_prop_nested_variant.wado/sum_until_none"(local.tee keys(struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(1, 2, 0, 3), used: 4 }).repr, 4)) != 30) {
         cold_path;
         let $mv_arg_1: ref "core:prelude/string.wado//String";
         "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<opt_copy_prop_nested_variant.wado/$tmpl$bf35c06f94276816,[core:prelude/list.wado/List<i32>,i32]>"(struct.new "opt_copy_prop_nested_variant.wado//$tmpl$bf35c06f94276816" { h0: keys, h1: $v1_13, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in run at opt_copy_prop_nested_variant.wado:136
@@ -744,7 +740,8 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<opt_copy_pr
     self_11 = "core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<opt_copy_prop_nested_variant.wado/$tmpl$bf35c06f94276816,core:prelude/list.wado/List<i32>>::lit$sroa[self.index]"(0, $load_2, $load_3, $load_4, $load_5, $load_6, $load_7);
     "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_view"(out_3, self_11.repr, self_11.start, self_11.end);
     $temp_inline_core_prelude_traits_wado_TemplateHole_opt_copy_prop_nested_variant_wado__tmpl_bf35c06f94276816_core_prelude_list_wado_List_i32____fmt_6_0 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"(out_3);
-    "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/Inspect::inspect"(t.h0, $temp_inline_core_prelude_traits_wado_TemplateHole_opt_copy_prop_nested_variant_wado__tmpl_bf35c06f94276816_core_prelude_list_wado_List_i32____fmt_6_0);
+    let $mv_arg_1: ref "core:prelude/list.wado//List<i32>";
+    "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/Inspect::inspect"(local.tee $mv_arg_1(t.h0).repr, $mv_arg_1.used, $temp_inline_core_prelude_traits_wado_TemplateHole_opt_copy_prop_nested_variant_wado__tmpl_bf35c06f94276816_core_prelude_list_wado_List_i32____fmt_6_0);
     self_11 = "core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<opt_copy_prop_nested_variant.wado/$tmpl$bf35c06f94276816,i32>::lit$sroa[self.index]"(1, $load_2, $load_3, $load_4, $load_5, $load_6, $load_7);
     "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_view"(out_3, self_11.repr, self_11.start, self_11.end);
     $temp_inline_core_prelude_traits_wado_TemplateHole_opt_copy_prop_nested_variant_wado__tmpl_bf35c06f94276816_core_prelude_list_wado_List_i32____fmt_6_0 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"(out_3);
@@ -754,13 +751,12 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<opt_copy_pr
     return out_3;
 }
 
-fn "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/Inspect::inspect"(self, f) {
-    let self_2: i32;
-    "core:prelude/array.wado/core:prelude/array.wado/write_seq_inspect<i32>$dae[start,marker]"(self.repr, self.used, f, $inline_core_prelude_format_wado_Formatter__resolved_seq_limit_sroa_self_precision__0: block -> i32 {
-        if local.tee self_2(f.precision) == -2 {
+fn "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/Inspect::inspect"($mv$self$repr, $mv$self$used, f) {
+    "core:prelude/array.wado/core:prelude/array.wado/write_seq_inspect<i32>$dae[start,marker]"($mv$self$repr, $mv$self$used, f, $inline_core_prelude_format_wado_Formatter__resolved_seq_limit_sroa_self_precision__0: block -> i32 {
+        if local.tee $mv$self$used(f.precision) == -2 {
             break $inline_core_prelude_format_wado_Formatter__resolved_seq_limit_sroa_self_precision__0: 256;
         }
-        break $inline_core_prelude_format_wado_Formatter__resolved_seq_limit_sroa_self_precision__0: self_2;
+        break $inline_core_prelude_format_wado_Formatter__resolved_seq_limit_sroa_self_precision__0: $mv$self$used;
     });
 }
 

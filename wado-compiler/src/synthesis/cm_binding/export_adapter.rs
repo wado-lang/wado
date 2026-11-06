@@ -173,7 +173,7 @@ fn lower_to_flat_inner(
             ]
         }
         ResolvedType::Unit => vec![],
-        ResolvedType::GenericInstance { type_args, .. }
+        ResolvedType::Struct { type_args, .. }
             if type_args.len() == 1 && ctx.type_table.borrow().is_list(type_id) =>
         {
             // List<T> flat ABI: (ptr: i32, len: i32) pointing at
@@ -315,7 +315,7 @@ fn lower_to_flat_inner(
                 },
             ]
         }
-        ResolvedType::GenericInstance { type_args, .. }
+        ResolvedType::Variant { type_args, .. }
             if ctx.type_table.borrow().as_option(type_id).is_some() =>
         {
             // Option<T> → disc(i32) + flat(T)
@@ -409,7 +409,7 @@ fn lower_to_flat_inner(
 
             result
         }
-        ResolvedType::GenericInstance { .. }
+        ResolvedType::Struct { .. }
             if let Some((key, value_type)) = ctx.type_table.borrow().as_tree_map(type_id) =>
         {
             // `map<K, V>` flattens as the `list<tuple<K, V>>` it despecializes to.
@@ -440,7 +440,7 @@ fn lower_to_flat_inner(
                 },
             ]
         }
-        ResolvedType::GenericInstance { type_args, .. }
+        ResolvedType::Variant { type_args, .. }
             if type_args.len() == 2 && ctx.type_table.borrow().is_result(type_id) =>
         {
             // Result<T, E> → disc(i32) + join(flat(T), flat(E)). disc 0 = Ok,
@@ -551,7 +551,7 @@ fn lower_to_flat_inner(
 
             result
         }
-        ResolvedType::Variant { def } => {
+        ResolvedType::Variant { def, type_args } if type_args.is_empty() => {
             let name = &ctx.type_table.borrow().decl_name(*def).to_string();
             // Named variant → disc(i32) + join of the case payload flats, per
             // the Canonical ABI. Reuses the same discriminant-plus-Match
@@ -605,7 +605,9 @@ fn lower_to_flat_inner(
         ResolvedType::Struct { def, type_args } if !ctx.type_table.borrow().is_string(type_id) => {
             let name = &ctx.type_table.borrow().struct_head_mangled_name(*def);
             // Struct: concatenation of field flat types
-            if let Some(struct_decl) = struct_decl_of(*def, type_args, tir_modules) {
+            let struct_decl =
+                struct_decl_of(&ctx.type_table.borrow(), *def, type_args, tir_modules);
+            if let Some(struct_decl) = struct_decl {
                 let mut result = Vec::new();
 
                 // Save value to a local
@@ -784,8 +786,9 @@ pub(super) fn synthesize_lift_from_flat_params(
                     (unit, 0)
                 }
                 ResolvedType::Struct { def, type_args } => {
-                    let struct_decl = struct_decl_of(def, &type_args, tir_modules)
-                        .expect("an export's record type has a declaration");
+                    let struct_decl =
+                        struct_decl_of(&type_table_cell.borrow(), def, &type_args, tir_modules)
+                            .expect("an export's record type has a declaration");
                     lift_struct_from_flat_params(
                         &struct_decl,
                         flat_param_locals,
@@ -798,7 +801,7 @@ pub(super) fn synthesize_lift_from_flat_params(
                         lift_ctx,
                     )
                 }
-                ResolvedType::Variant { def } => {
+                ResolvedType::Variant { def, type_args } if type_args.is_empty() => {
                     let variant_decl = variant_decl_of(def, tir_modules)
                         .expect("an export's variant type has a declaration");
                     lift_variant_from_flat_params(
@@ -814,9 +817,7 @@ pub(super) fn synthesize_lift_from_flat_params(
                     )
                 }
                 ResolvedType::Enum { .. } | ResolvedType::Flags { .. } => flat(TypeTable::I32),
-                ResolvedType::Resource { .. } | ResolvedType::GenericInstance { .. }
-                    if type_table_cell.borrow().is_resource_type(target_type_id) =>
-                {
+                ResolvedType::Resource { .. } => {
                     let handle = flat(cm_val_type_to_type_id(flat_types[0]));
                     if type_table_cell
                         .borrow()
@@ -827,9 +828,9 @@ pub(super) fn synthesize_lift_from_flat_params(
                     (cast(handle.0, target_type_id), handle.1)
                 }
                 other @ (ResolvedType::Never
-                | ResolvedType::Resource { .. }
                 | ResolvedType::Newtype { .. }
-                | ResolvedType::GenericInstance { .. }
+                | ResolvedType::Variant { .. }
+                | ResolvedType::Tuple(_)
                 | ResolvedType::Ref(_)
                 | ResolvedType::MutRef(_)
                 | ResolvedType::Function { .. }
@@ -1020,7 +1021,7 @@ pub(super) fn synthesize_lift_from_flat_params(
 /// variant (Ok=0, Err=1); its arm payload types are the instance's type args.
 fn synthetic_result_variant_decl(type_table: &TypeTable, result_type_id: TypeId) -> TirVariantDecl {
     let (ok_tid, err_tid) = match type_table.get(result_type_id) {
-        ResolvedType::GenericInstance { type_args, .. } if type_args.len() == 2 => {
+        ResolvedType::Variant { type_args, .. } if type_args.len() == 2 => {
             (type_args[0], type_args[1])
         }
         _ => (TypeTable::UNIT, TypeTable::UNIT),
@@ -1799,7 +1800,7 @@ fn push_result_task_return_epilogue(
 
     let tt = env.type_table.borrow();
     let (ok_type_id, err_type_id) = match tt.get(user_return_type) {
-        ResolvedType::GenericInstance { type_args, .. } if type_args.len() == 2 => {
+        ResolvedType::Variant { type_args, .. } if type_args.len() == 2 => {
             (type_args[0], type_args[1])
         }
         other => panic!("expected Result type for export binding return, got: {other:?}"),
@@ -1955,7 +1956,9 @@ fn lower_result_arm(
     )));
 
     let payload_resolved = lift_ctx.type_table.borrow().get(payload_type_id).clone();
-    if let ResolvedType::Variant { def } = &payload_resolved {
+    if let ResolvedType::Variant { def, type_args } = &payload_resolved
+        && type_args.is_empty()
+    {
         if let Some(variant_decl) = variant_decl_of(*def, tir_modules) {
             synthesize_variant_lower_to_flat(
                 payload_local,

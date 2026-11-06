@@ -7,7 +7,7 @@
 use crate::ast::{AstId, Expr};
 use crate::compiler_host::CompilerHost;
 use crate::defs::DefId;
-use crate::tir::{EffectRef, ResolvedType, RowFlow, TupleSlot, TypeId};
+use crate::tir::{EffectRef, ResolvedType, RowFlow, StructDef, TupleSlot, TypeId};
 use crate::token::Span;
 use crate::type_table::TypeTable;
 
@@ -159,16 +159,21 @@ fn check_at(
         return TypeCheckResult::Compatible;
     }
 
-    // Two instances of one declaration compare by their arguments (Rule 8),
-    // whatever their slots.
-    let same_declaration = match (
-        declaration_instance(actual_inner, type_table),
-        declaration_instance(expected_inner, type_table),
-    ) {
-        (Some((a, actual_args)), Some((e, expected_args))) if a == e => {
-            Some((actual_args, expected_args))
+    // Two instances of one declaration, or two tuples, compare by their
+    // arguments (Rule 8), whatever their slots.
+    let same_declaration = match (type_table.get(actual_inner), type_table.get(expected_inner)) {
+        (ResolvedType::Tuple(actual_elems), ResolvedType::Tuple(expected_elems)) => {
+            Some((actual_elems.as_slice(), expected_elems.as_slice()))
         }
-        _ => None,
+        _ => match (
+            declaration_instance(actual_inner, type_table),
+            declaration_instance(expected_inner, type_table),
+        ) {
+            (Some((a, actual_args)), Some((e, expected_args))) if a == e => {
+                Some((actual_args, expected_args))
+            }
+            _ => None,
+        },
     };
 
     // Rule 5: Newtype/flags distinctness, but for two instances of one newtype.
@@ -284,17 +289,21 @@ fn check_at(
         return TypeCheckResult::Incompatible;
     }
 
-    // Rule 8: Instances of one generic struct, resource or newtype -- compare
-    // their type args, so an argument's effect row is the effect check's to
-    // resolve.
+    // Rule 8: Instances of one generic struct, resource or newtype, or two
+    // tuples -- compare their type args, so an argument's effect row is the
+    // effect check's to resolve.
     if let Some((actual_args, expected_args)) = same_declaration {
         return check_type_args(actual_args, expected_args, type_table, fixed);
     }
 
     // Rule 9: `resource Child extends Parent`, where the position admits it.
     if position == Position::Covariant
-        && let ResolvedType::Resource { def: actual_def } = type_table.get(actual_inner)
-        && let ResolvedType::Resource { def: expected_def } = type_table.get(expected_inner)
+        && let ResolvedType::Resource {
+            def: actual_def, ..
+        } = type_table.get(actual_inner)
+        && let ResolvedType::Resource {
+            def: expected_def, ..
+        } = type_table.get(expected_inner)
         && type_table.is_resource_subtype(*actual_def, *expected_def)
     {
         return TypeCheckResult::Compatible;
@@ -321,7 +330,7 @@ fn heads_apart(actual: TypeId, expected: TypeId, type_table: &TypeTable) -> bool
         | ResolvedType::Enum { .. }
         | ResolvedType::Variant { .. }
         | ResolvedType::Function { .. }
-        | ResolvedType::GenericInstance { .. }
+        | ResolvedType::Tuple(_)
         | ResolvedType::BuiltinArray(_)
         | ResolvedType::Newtype { .. }
         | ResolvedType::Flags { .. } => Some(type_table.get(id)),
@@ -333,13 +342,21 @@ fn heads_apart(actual: TypeId, expected: TypeId, type_table: &TypeTable) -> bool
     match (a, e) {
         (ResolvedType::Primitive(a), ResolvedType::Primitive(e)) => a != e,
         (ResolvedType::Enum { def: a }, ResolvedType::Enum { def: e })
-        | (ResolvedType::Variant { def: a }, ResolvedType::Variant { def: e })
-        | (
-            ResolvedType::GenericInstance { def: a, .. },
-            ResolvedType::GenericInstance { def: e, .. },
-        )
+        | (ResolvedType::Variant { def: a, .. }, ResolvedType::Variant { def: e, .. })
         | (ResolvedType::Newtype { def: a, .. }, ResolvedType::Newtype { def: e, .. })
         | (ResolvedType::Flags { def: a }, ResolvedType::Flags { def: e }) => a != e,
+        (
+            ResolvedType::Struct {
+                def: a,
+                type_args: a_args,
+            },
+            ResolvedType::Struct {
+                def: e,
+                type_args: e_args,
+            },
+        ) if !a_args.is_empty() || !e_args.is_empty() => {
+            a_args.is_empty() || e_args.is_empty() || a != e
+        }
         (a, e) => std::mem::discriminant(a) != std::mem::discriminant(e),
     }
 }
@@ -351,11 +368,16 @@ fn needs_rebuild(actual: TypeId, expected: TypeId, fixed: bool) -> bool {
 }
 
 /// The declaration `id` instantiates and its type arguments, where it is a
-/// generic struct, a generic resource or a newtype; a non-generic newtype has
+/// generic struct, resource or variant, or a newtype; a non-generic one has
 /// none.
 fn declaration_instance(id: TypeId, type_table: &TypeTable) -> Option<(DefId, &[TypeId])> {
     match type_table.get(id) {
-        ResolvedType::GenericInstance { def, type_args }
+        ResolvedType::Struct {
+            def: StructDef::Decl(def),
+            type_args,
+        }
+        | ResolvedType::Resource { def, type_args }
+        | ResolvedType::Variant { def, type_args }
         | ResolvedType::Newtype { def, type_args, .. } => Some((*def, type_args.as_slice())),
         _ => None,
     }

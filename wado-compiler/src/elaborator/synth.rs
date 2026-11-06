@@ -701,10 +701,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     fn method_return_type(&mut self, receiver: TypeId, method: &str, span: Span) -> Option<TypeId> {
         let base = self.tysys.get_base_type(receiver);
         let name = self.tysys.struct_name_for_type(base)?;
-        let type_args = match self.tysys.type_table.borrow().get(base) {
-            ResolvedType::GenericInstance { type_args, .. } => Some(type_args.clone()),
-            _ => None,
-        };
+        let type_args = self
+            .tysys
+            .type_table
+            .borrow()
+            .instance_parts(base)
+            .map(|(_, args)| args.to_vec());
         let ref_kind =
             RefKind::from_resolved(&self.tysys.type_table.borrow().get(receiver).clone());
         if let Some(ref_kind) = ref_kind
@@ -1027,7 +1029,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
         let tt = self.tysys.type_table.borrow();
         match tt.get(type_id) {
-            ResolvedType::GenericInstance { .. } => ArgClass::Head(tt.fq_base_type_name(type_id)),
+            ResolvedType::Struct {
+                def: StructDef::Decl(_),
+                ..
+            }
+            | ResolvedType::Variant { .. }
+            | ResolvedType::Resource { .. }
+            | ResolvedType::Tuple(_) => ArgClass::Head(tt.fq_base_type_name(type_id)),
             _ => ArgClass::Opaque(OpaqueReason::Inference),
         }
     }

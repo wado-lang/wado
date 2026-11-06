@@ -21,10 +21,6 @@ pub(super) struct StructInstState {
     pub instantiated: IndexMap<InstantiationKey, String>,
     /// Work queue of pending struct instantiations
     pub pending: Vec<InstantiationKey>,
-    /// Map from `GenericInstance` `TypeId` to monomorphized Struct `TypeId`
-    pub type_substitutions: IndexMap<TypeId, TypeId>,
-    /// Map from `GenericInstance` `TypeId` to mangled struct name
-    pub type_to_mangled_name: IndexMap<TypeId, String>,
     /// Each written anonymous shape's site, which a shape substituted from it
     /// reports too.
     pub anon_sites: IndexMap<AnonStructId, Span>,
@@ -33,7 +29,7 @@ pub(super) struct StructInstState {
     pub anon_scanned: usize,
     /// Every generic struct a scan has tested the types against.
     pub sites_tested: IndexSet<DefId>,
-    /// The held `GenericInstance`s that named no generic struct when read. A
+    /// The held struct instances that named no generic struct when read. A
     /// type is immutable once interned, so only a generic struct missing from
     /// [`Self::sites_tested`] can turn one into a site.
     pub unmatched: Vec<TypeId>,
@@ -169,8 +165,6 @@ impl Monomorphizer {
             structs: StructInstState {
                 instantiated: IndexMap::default(),
                 pending: Vec::new(),
-                type_substitutions: IndexMap::default(),
-                type_to_mangled_name: IndexMap::default(),
                 anon_sites: IndexMap::default(),
                 anon_scanned: 0,
                 sites_tested: IndexSet::default(),
@@ -337,35 +331,6 @@ impl Monomorphizer {
             .iter()
             .chain(&key.method_type_args)
             .any(|&arg| type_table.outgrows(arg, MAX_INSTANCE_TYPE_DEPTH, MAX_INSTANCE_TYPE_SIZE))
-    }
-
-    /// Index every queued instance under its canonical key as well, so a site
-    /// asking with a `GenericInstance` and one with its `Struct` reach one body.
-    pub fn alias_canonical_keys(&mut self, type_table: &mut TypeTable) {
-        let entries: Vec<(InstantiationKey, String)> = self
-            .functions
-            .instantiated
-            .iter()
-            .map(|(key, name)| (key.clone(), name.clone()))
-            .collect();
-        for (key, name) in entries {
-            let impl_type_args = key
-                .impl_type_args
-                .iter()
-                .map(|&t| self.rewrite_type_id(t, type_table))
-                .collect();
-            let method_type_args = key
-                .method_type_args
-                .iter()
-                .map(|&t| self.rewrite_type_id(t, type_table))
-                .collect();
-            let canonical = InstantiationKey {
-                impl_type_args,
-                method_type_args,
-                ..key
-            };
-            self.functions.instantiated.entry(canonical).or_insert(name);
-        }
     }
 
     /// Generate a monomorphized struct name: `Box` + `[i32]` → `"Box<i32>"`.

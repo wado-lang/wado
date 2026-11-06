@@ -64,19 +64,19 @@ struct result_unwrap_fresh_elision.wado//$tmpl$ebaa20f4a908b504 {  // TypeId(9)
     mut r1: ref "core:prelude/string.wado//String",
 }
 
-struct core:prelude//List<u8> {  // TypeId(10)
+struct core:prelude/list.wado//List<u8> {  // TypeId(10)
     mut repr: ref Array<u8>,
     mut used: i32,
 }
 
 variant core:prelude/types.wado//Result<core:prelude/list.wado/List<u8>,core:prelude/string.wado/String> {  // TypeId(11)
-    Ok(ref "core:prelude//List<u8>"),
+    Ok(ref "core:prelude/list.wado//List<u8>"),
     Err(ref "core:prelude/string.wado//String"),
 }
 
 struct core:prelude/types.wado//Result<core:prelude/list.wado/List<u8>,core:prelude/string.wado/String>::Ok {  // TypeId(12)
     discriminant: i32,
-    payload_0: ref "core:prelude//List<u8>",
+    payload_0: ref "core:prelude/list.wado//List<u8>",
 }
 
 struct core:prelude/types.wado//Result<core:prelude/list.wado/List<u8>,core:prelude/string.wado/String>::Err {  // TypeId(13)
@@ -188,7 +188,7 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/String::format
 
 type "functype//core:prelude/types.wado/core:prelude/types.wado/$tmpl$0a6f357a930e0d85^core:prelude/traits.wado/ReflectTemplate::tail" = fn(ref "core:prelude/types.wado//$tmpl$0a6f357a930e0d85") -> ref "core:prelude/string.wado//StrSlice";  // TypeId(65)
 
-type "functype//core:prelude/list.wado/core:prelude/list.wado/List<u8>::grow" = fn(ref "core:prelude//List<u8>");  // TypeId(66)
+type "functype//core:prelude/list.wado/core:prelude/list.wado/List<u8>::grow" = fn(ref "core:prelude/list.wado//List<u8>");  // TypeId(66)
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::format<core:prelude/types.wado/$tmpl$0a6f357a930e0d85,[core:prelude/string.wado/String,core:prelude/string.wado/String]>" = fn(ref "core:prelude/types.wado//$tmpl$0a6f357a930e0d85") -> ref "core:prelude/string.wado//String";  // TypeId(67)
 
@@ -271,14 +271,14 @@ fn "result_unwrap_fresh_elision.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-vi
 
 fn "result_unwrap_fresh_elision.wado/$cm_export__run"() {
     let $load_1: ref Array<u8>;
-    let $v0: i32;
     let self_3: ref "core:prelude/types.wado//Result<core:prelude/list.wado/List<u8>,core:prelude/string.wado/String>";
     let e: ref "core:prelude/string.wado//String";
-    let arr: ref "core:prelude//List<u8>";
+    let arr: ref "core:prelude/list.wado//List<u8>";
+    let self_30: i32;
     let $cm_pair_7: i64;
     let $sroa_$pattern_temp_0_1_14: i32;
     let new_repr: ref Array<u8>;
-    arr = struct.new "core:prelude//List<u8>" { repr: array.new_fixed<u8>(), used: 0 };
+    arr = struct.new "core:prelude/list.wado//List<u8>" { repr: array.new_fixed<u8>(), used: 0 };
     if @unlikely(0 >= builtin::array_len(arr.repr)) {
         cold_path;
         "core:prelude/list.wado/core:prelude/list.wado/List<u8>::grow"(arr);
@@ -297,7 +297,7 @@ fn "result_unwrap_fresh_elision.wado/$cm_export__run"() {
     }
     builtin::array_set_u8(arr.repr, 2, 3);
     arr.used = 3;
-    if @unlikely(local.tee $v0((if @likely(ref.test "core:prelude/types.wado//Result<core:prelude/list.wado/List<u8>,core:prelude/string.wado/String>::Ok"(local.tee self_3(struct.new "core:prelude/types.wado//Result<core:prelude/list.wado/List<u8>,core:prelude/string.wado/String>::Ok" { discriminant: 0, payload_0: arr }))) -> ref "core:prelude//List<u8>" {
+    if @unlikely(local.tee self_30((if @likely(ref.test "core:prelude/types.wado//Result<core:prelude/list.wado/List<u8>,core:prelude/string.wado/String>::Ok"(local.tee self_3(struct.new "core:prelude/types.wado//Result<core:prelude/list.wado/List<u8>,core:prelude/string.wado/String>::Ok" { discriminant: 0, payload_0: arr }))) -> ref "core:prelude/list.wado//List<u8>" {
         ref.cast "core:prelude/types.wado//Result<core:prelude/list.wado/List<u8>,core:prelude/string.wado/String>::Ok"(self_3).payload_0;
     } else {
         e = ref.cast "core:prelude/types.wado//Result<core:prelude/list.wado/List<u8>,core:prelude/string.wado/String>::Err"(self_3).payload_0;
@@ -305,18 +305,18 @@ fn "result_unwrap_fresh_elision.wado/$cm_export__run"() {
         unreachable;
     }).used) != 3) {
         cold_path;
-        "result_unwrap_fresh_elision.wado/run$cold0"($v0);
+        "result_unwrap_fresh_elision.wado/run$cold0"(self_30);
         unreachable;
     }
-    $v0 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
+    self_30 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_14 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
-    $v0 = "result_unwrap_fresh_elision.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($v0);
+    self_30 = "result_unwrap_fresh_elision.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(self_30);
     $load_1 = array.new_fixed<u8>(111, 107);
     builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>(3)), 0, $load_1, 0, 2);
     builtin::array_set_u8(new_repr, 2, 10);
     "core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]$dae[return]"($sroa_$pattern_temp_0_1_14, new_repr);
     "wasi/stream-drop-writable"($sroa_$pattern_temp_0_1_14);
-    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($v0);
+    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(self_30);
     "wasi/task-return"(0);
 }
 

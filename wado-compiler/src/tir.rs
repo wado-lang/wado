@@ -243,31 +243,41 @@ impl SubstitutionContext {
                 let new_inner = self.substitute(inner, type_table);
                 type_table.make_mut_ref(new_inner)
             }
-            ResolvedType::GenericInstance { def, type_args } => {
-                let splices_packs = type_table.is_tuple_def(def);
-                let mut new_args: Vec<TypeId> = Vec::new();
-                for &arg in &type_args {
+            ResolvedType::Tuple(elems) => {
+                let mut new_elems: Vec<TypeId> = Vec::new();
+                for &elem in &elems {
                     // A pack in a tuple stands for the elements it took, not
                     // for the tuple holding them: `[..T]` with `T = [i32,
                     // bool]` is `[i32, bool]`, never `[[i32, bool]]`.
-                    let is_plain_pack = splices_packs
-                        && matches!(
-                            type_table.get(arg),
-                            ResolvedType::TypePack {
-                                mapped_elem: None,
-                                ..
-                            }
-                        );
-                    let substituted = self.substitute(arg, type_table);
+                    let is_plain_pack = matches!(
+                        type_table.get(elem),
+                        ResolvedType::TypePack {
+                            mapped_elem: None,
+                            ..
+                        }
+                    );
+                    let substituted = self.substitute(elem, type_table);
                     if is_plain_pack
-                        && substituted != arg
+                        && substituted != elem
                         && let Some(elements) = type_table.as_tuple(substituted)
                     {
-                        new_args.extend(elements);
+                        new_elems.extend(elements);
                         continue;
                     }
-                    new_args.push(substituted);
+                    new_elems.push(substituted);
                 }
+                type_table.make_tuple(new_elems)
+            }
+            ResolvedType::Struct {
+                def: StructDef::Decl(def),
+                type_args,
+            }
+            | ResolvedType::Variant { def, type_args }
+            | ResolvedType::Resource { def, type_args } => {
+                let new_args: Vec<TypeId> = type_args
+                    .iter()
+                    .map(|&arg| self.substitute(arg, type_table))
+                    .collect();
                 type_table.make_generic_instance(def, new_args)
             }
             ResolvedType::Function {
@@ -501,8 +511,8 @@ impl TemplateShape {
 pub fn hold_hole(field: &mut TirStructField, hole_ty: TypeId, tt: &mut TypeTable) -> Option<u32> {
     let field_ty = tt.hole_field_type(hole_ty);
     // Monomorphization holds a substituted shape before its instances are
-    // drained, while one generic instance may still be spelled both as a
-    // `GenericInstance` and as its struct.
+    // drained, while one generic instance may still be spelled by two ids of
+    // its arguments.
     let same = |tt: &TypeTable, a: TypeId, b: TypeId| {
         tt.same_type(a, b) || tt.instance_key(a) == tt.instance_key(b)
     };
@@ -674,16 +684,19 @@ pub enum ResolvedType {
     Enum {
         def: DefId,
     },
-    /// Resource type - opaque handle (i32) to a Component Model resource
+    /// A Component Model resource: an opaque handle (i32), whose type
+    /// arguments (`Stream<u8>`) last to codegen.
     Resource {
         def: DefId,
+        type_args: Vec<TypeId>,
     },
+    /// A variant, applied to its type arguments (`Option<i32>`); none for the
+    /// declaration itself. A generic variant keeps one declaration, so its
+    /// instances are never monomorphized into types of their own.
     Variant {
         def: DefId,
+        type_args: Vec<TypeId>,
     },
-    // `Option<T>` is a `GenericInstance`, not a variant here — see
-    // `TypeTable::as_option`.
-    //
     // TODO: represent `Option<T>` as `ref null T` when `T` is a non-nullable
     // reference, dropping the discriminant struct. `Option<Option<T>>` must not
     // take that route — its null would be ambiguous.
@@ -761,16 +774,9 @@ pub enum ResolvedType {
         /// The declaration's spelling, for messages.
         name: String,
     },
-    /// An application of a generic declaration (`Box<i32>`, `Option<T>`,
-    /// `Stream<u8>`). A struct's or a variant's is replaced by its
-    /// monomorphized `Struct` / `Variant`; a resource's is the handle type
-    /// itself and lasts to codegen ([`TypeTable::is_resource_def`]).
-    GenericInstance {
-        /// The generic declaration this instantiates.
-        def: DefId,
-        /// Concrete type arguments (e.g., [i32])
-        type_args: Vec<TypeId>,
-    },
+    /// A tuple, `[i32, String]`: the elements, among which a
+    /// [`ResolvedType::TypePack`] stands for the run it expands to.
+    Tuple(Vec<TypeId>),
     /// Associated type projection: `T::X` where T is a type parameter with a trait bound.
     /// During concrete instantiation this is resolved to the concrete associated type.
     AssocTypeProjection {
@@ -3599,6 +3605,20 @@ pub struct TirStruct {
 }
 
 impl TirStruct {
+    /// Whether `def` at `type_args` lowers as this struct. `self.name` is
+    /// spelled before the boxing rewrite respells a `&mut` argument, so the
+    /// arguments are compared by key instead.
+    #[must_use]
+    pub fn represents(&self, type_table: &TypeTable, def: StructDef, type_args: &[TypeId]) -> bool {
+        self.def == def
+            && self.type_args.len() == type_args.len()
+            && self
+                .type_args
+                .iter()
+                .zip(type_args)
+                .all(|(&own, &wanted)| type_table.type_key(own) == type_table.type_key(wanted))
+    }
+
     /// The struct of anonymous shape `shape`, holding `fields`.
     pub fn anonymous(
         shape: AnonStructId,

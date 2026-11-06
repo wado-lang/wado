@@ -437,12 +437,12 @@ fn generate_inline_task_return(
     let tt = type_table.borrow();
     let is_result = matches!(
         tt.get(value_type_id),
-        ResolvedType::GenericInstance { .. } if tt.is_result(value_type_id)
+        ResolvedType::Variant { type_args, .. } if !type_args.is_empty() && tt.is_result(value_type_id)
     );
 
     if is_result && !flat_return_types.is_empty() {
         let (ok_type_id, err_type_id) = match tt.get(value_type_id) {
-            ResolvedType::GenericInstance { type_args, .. } if type_args.len() == 2 => {
+            ResolvedType::Variant { type_args, .. } if type_args.len() == 2 => {
                 (type_args[0], type_args[1])
             }
             _ => panic!("Expected Result<T, E> type"),
@@ -546,7 +546,9 @@ fn generate_inline_task_return(
             i32_const(1),
         )));
         let err_resolved = type_table.borrow().get(err_type_id).clone();
-        if let ResolvedType::Variant { def } = &err_resolved {
+        if let ResolvedType::Variant { def, type_args } = &err_resolved
+            && type_args.is_empty()
+        {
             if let Some(variant_decl) = variant_decl_of(*def, tir_modules) {
                 synthesize_variant_lower_to_flat(
                     err_payload_local,

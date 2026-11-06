@@ -191,7 +191,7 @@ fn collect_synthesised_impls(project: &Package) -> SynthesisedImpls {
 fn receiver_is_per_module_synth(receiver_type_id: tir::TypeId, tt: &TypeTable) -> bool {
     match tt.get(tt.peel_refs(receiver_type_id)) {
         ResolvedType::Function { .. } => true,
-        ResolvedType::GenericInstance { def, .. } => tt.is_resource_def(*def),
+        ResolvedType::Resource { type_args, .. } => !type_args.is_empty(),
         _ => false,
     }
 }
