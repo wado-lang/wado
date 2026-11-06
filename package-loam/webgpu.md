@@ -45,7 +45,8 @@ runs.
   an f32, so a token a loop feeds back needs no read back.
 - `group_query_attention`, which Gemma 3 has and GPT-2 does not, is three
   dispatches. One appends the new keys, turned by the rotary tables, and values
-  to the attention cache, writing only the step's own positions. The next
+  to the attention cache. The cache holds a power of two of positions, so a step
+  writes only its own positions and binds what the step before bound. The next
   attends each query row over each part of 4 positions in a workgroup of its
   own, 64 lanes splitting each position's dot. The last joins a row's parts,
   rescaling each to the row's greatest score. Gemma's step over one token has 4

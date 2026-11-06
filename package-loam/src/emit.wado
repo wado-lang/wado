@@ -1519,10 +1519,13 @@ fn emit_decode(w: &mut CodeWriter, context: &EntryContext, given: Symbols, axes:
     w.line("/// token's among them, and the cache the ones before it.");
     decode.emit_begin(w);
     let ids_axis = checked.shapes[axes.ids].axes[1].name;
-    w.line(`refuse(unmet(steps as i64 - 1, "decode takes at least one step"));`);
-    w.line(wado`refuse(extent_mismatch("${axes.ids}", "${ids_axis}", ${ids}.extents[1], "1", 1));`);
-    w.line(`let ended = sampling.ended(&${ids}.data);`);
-    for let line of entry_lines(context, &symbols, &lines) {
+    let mut body: List<String> = [
+        `refuse(unmet(steps as i64 - 1, "decode takes at least one step"));`,
+        wado`refuse(extent_mismatch("${axes.ids}", "${ids_axis}", ${ids}.extents[1], "1", 1));`,
+        `let ended = sampling.ended(&${ids}.data);`,
+    ];
+    body.extend(&lines);
+    for let line of entry_lines(context, &symbols, &body) {
         w.line(&line);
     }
     w.end();
@@ -1608,7 +1611,7 @@ fn emit_decoded(
         w.line(`    let moved = ${LENGTHS}::<${bk}> { ${fields.join(", ")} };`);
     }
     w.line(`    let passed = build(${build_arguments.join(", ")});`);
-    let logits = if crossing.several() { `passed.${names.get(&axes.logits)}` } else { "passed" };
+    let logits = `passed.${names.get(&axes.logits)}`;
     w.line(`    let tokens = i64_of::<${bk}, [Slots, Picks]>(backend, &state[${count}]);`);
     w.line(`    let finished = bool_of::<${bk}, [Slots]>(backend, &state[${count + 1}]);`);
     let logits_axes = axis_list(&checked.shapes[axes.logits]);

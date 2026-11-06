@@ -1,7 +1,18 @@
 //! Graphs built through any `Graph`, which the recorder's tests and each
 //! device's conformance program compute on `Cpu` to compare against.
 
-use { Binary, Comparison, Convolution, DotDims, GatherDims, Graph, ScatterDims, Unary, WindowReduce } from "./hlo.wado";
+use {
+    Binary,
+    Comparison,
+    Convolution,
+    DotDims,
+    GatherDims,
+    Graph,
+    ScatterDims,
+    Unary,
+    WindowReduce,
+    scalar,
+} from "./hlo.wado";
 use { Any, Untyped, f32_of, i64_of } from "./recorded.wado";
 use { Attention, Tensor, element_count } from "./tensor.wado";
 use { noise } from "../../example/webgpu/compare.wado";
@@ -341,6 +352,75 @@ pub fn repeating_view<affine G: Graph>(
         return [Any::F32(g.relabeled::<f32, [A, A], Untyped>(&turned))];
     });
     return f32_of::<G, [A, A]>(g, &last[0]);
+}
+
+/// A loop of `count` runs of a shared cache's attention, each attending what the
+/// run before did, from a past of one position: the last run's queries.
+pub fn repeating_attention<affine G: Graph>(
+    g: &mut G,
+    count: &G::Tensor<i64, []>,
+    q: &G::Tensor<f32, [Bt, St, Qt]>,
+    k: &G::Tensor<f32, [Bt, St, Kt]>,
+    v: &G::Tensor<f32, [Bt, St, Kt]>,
+    past: &G::Tensor<f32, [Bt, Ht, Pt, Dt]>,
+) -> G::Tensor<f32, [Bt, St, Qt]> with _ {
+    let start: List<Any<G>> = [
+        Any::F32(g.relabeled::<f32, [Bt, St, Qt], Untyped>(q)),
+        Any::F32(g.relabeled::<f32, [Bt, Ht, Pt, Dt], Untyped>(past)),
+        Any::F32(g.relabeled::<f32, [Bt, Ht, Pt, Dt], Untyped>(past)),
+    ];
+    let first = scalar(g, 1 as i64);
+    let last = g.repeated(count, &start, |step, state| {
+        let attended = f32_of::<G, [Bt, St, Qt]>(g, &state[0]);
+        let keys = f32_of::<G, [Bt, Ht, Pt, Dt]>(g, &state[1]);
+        let values = f32_of::<G, [Bt, Ht, Pt, Dt]>(g, &state[2]);
+        let length = g.binary(Binary::Add, &first, step);
+        let [out, present_k, present_v] = g.group_query_attention::<Bt, St, Qt, Kt, Ht, Pt, Pt, Dt, Pos, Half, Bt, Ht>(
+            &attended,
+            k,
+            v,
+            &keys,
+            &values,
+            Option::Some(&length),
+            null,
+            null,
+            null,
+            &LOOPED_ATTENTION,
+        );
+        return [
+            Any::F32(g.relabeled::<f32, [Bt, St, Qt], Untyped>(&out)),
+            Any::F32(g.relabeled::<f32, [Bt, Ht, Pt, Dt], Untyped>(&present_k)),
+            Any::F32(g.relabeled::<f32, [Bt, Ht, Pt, Dt], Untyped>(&present_v)),
+        ];
+    });
+    return f32_of::<G, [Bt, St, Qt]>(g, &last[0]);
+}
+
+/// Six heads over one of 6 elements, which on a device makes the parts of a step
+/// over one position as many words as the cache it attends.
+global LOOPED_ATTENTION: Attention = Attention {
+    heads: 6,
+    kv_heads: 1,
+    scale: 0.5,
+    softcap: 0.0,
+    window: -1,
+    causal: true,
+};
+
+/// `repeating_attention`'s arguments, for `count` runs.
+pub fn repeating_attention_inputs(
+    count: i64,
+) -> [Tensor<i64, []>, Tensor<f32, [Bt, St, Qt]>, Tensor<f32, [Bt, St, Kt]>, Tensor<f32, [Bt, St, Kt]>, Tensor<f32, [Bt, Ht, Pt, Dt]>] {
+    return [
+        Tensor {
+            data: [count],
+            extents: [],
+        },
+        noisy([1, 1, 36], 8),
+        noisy([1, 1, 6], 9),
+        noisy([1, 1, 6], 10),
+        noisy([1, 1, 4, 6], 11),
+    ];
 }
 
 /// `repeating`'s arguments, for `count` runs.

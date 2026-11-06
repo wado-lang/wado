@@ -1653,6 +1653,12 @@ test "decode refuses rows a pass holds at a capacity" {
     );
 }
 
+test "decode checks its ids' token after their shape" {
+    let out = decoded("input_ids", "attention_mask", "logits", Option::Some("logits")).unwrap();
+    let body = out.substr_bytes(out.find("pub fn decode<affine Bk: Graph>(").unwrap(), out.len());
+    assert body.find("input_mismatch(input_ids").unwrap() < body.find("extent_mismatch(\"input_ids\"").unwrap();
+}
+
 test "decode refuses a graph with no cache" {
     let graph = read(
         &"<ir_version: 8, opset_import: [ \"\" : 17 ]>\nplain (int64[1, N] ids) => (float[1, N] Y)\n{\n    Y = Cast<to = 1>(ids)\n}\n",

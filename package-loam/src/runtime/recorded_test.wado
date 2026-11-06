@@ -25,7 +25,7 @@ use {
     windowed,
     windowed_input,
 } from "./graph_cases.wado";
-use { Any, Recorder, host_of, run } from "./recorded.wado";
+use { Any, Recorder, Untyped, host_of, run } from "./recorded.wado";
 use { Graph } from "./hlo.wado";
 use { Cpu, Holds, Tensor } from "./tensor.wado";
 
@@ -139,6 +139,16 @@ test "a loop's body runs on the values the run before returned" {
     let got = repeating(&mut Cpu {}, &count, &x, &ids);
     assert got.0.data == [8.0, 648.0] as List<f32>;
     assert got.1.data == [8, 10] as List<i64>;
+}
+
+#[expect_trap]
+test "a loop's body returns what it carries, at its extents" {
+    let mut r = Recorder::new();
+    let count = r.parameter::<i64, []>([]);
+    let x = r.parameter::<f32, [A]>([2]);
+    let wider = r.parameter::<f32, [A]>([3]);
+    let start: List<Any<Recorder>> = [Any::F32(r.relabeled::<f32, [A], Untyped>(&x))];
+    r.repeated(&count, &start, |_, _| [Any::F32(r.relabeled::<f32, [A], Untyped>(&wider))]);
 }
 
 #[expect_trap]

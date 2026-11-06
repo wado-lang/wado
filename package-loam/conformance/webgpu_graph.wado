@@ -372,6 +372,32 @@ export fn run() with (Stdout, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuC
     let turned = f32_of::<WebGpuBackend, [cases::A, cases::A]>(&gpu, &viewed[0]);
     println(`repeated view ${apart(&mut gpu, &turned, &cases::repeating_view(cpu, &turns, &square))}`);
 
+    let [runs, query, key, value, looped_past] = cases::repeating_attention_inputs(3);
+    let attending = gpu.compiled(|r| {
+        let rruns = r.parameter::<i64, []>(runs.extents);
+        let rquery = r.parameter::<f32, [cases::Bt, cases::St, cases::Qt]>(query.extents);
+        let rkey = r.parameter::<f32, [cases::Bt, cases::St, cases::Kt]>(key.extents);
+        let rvalue = r.parameter::<f32, [cases::Bt, cases::St, cases::Kt]>(value.extents);
+        let rpast = r.parameter::<f32, [cases::Bt, cases::Ht, cases::Pt, cases::Dt]>(looped_past.extents);
+        return r.finished([cases::repeating_attention(r, &rruns, &rquery, &rkey, &rvalue, &rpast).id]);
+    }, &[], &[]).unwrap();
+    let looped = gpu.executed(
+        &attending,
+        &[
+            Any::I64(gpu.relabeled::<i64, [], Untyped>(&gpu.upload(&runs))),
+            Any::F32(gpu.relabeled::<f32, [cases::Bt, cases::St, cases::Qt], Untyped>(&gpu.upload(&query))),
+            Any::F32(gpu.relabeled::<f32, [cases::Bt, cases::St, cases::Kt], Untyped>(&gpu.upload(&key))),
+            Any::F32(gpu.relabeled::<f32, [cases::Bt, cases::St, cases::Kt], Untyped>(&gpu.upload(&value))),
+            Any::F32(gpu.relabeled::<f32, [cases::Bt, cases::Ht, cases::Pt, cases::Dt], Untyped>(&gpu.upload(
+                &looped_past,
+            ))),
+        ],
+        &[],
+    );
+    let looped_out = f32_of::<WebGpuBackend, [cases::Bt, cases::St, cases::Qt]>(&gpu, &looped[0]);
+    let looped_want = cases::repeating_attention(cpu, &runs, &query, &key, &value, &looped_past);
+    println(`repeated attention ${apart(&mut gpu, &looped_out, &looped_want)}`);
+
     // An i64 converted from an f32 is no index, which alone a device holds.
     let wide = Tensor::<f32, [cases::A]> {
         data: [3.0e7, f32::NAN],

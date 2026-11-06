@@ -503,12 +503,12 @@ encoding, timed by the wait on `on-submitted-work-done`. The loop spares a read
 back's wait and nothing the host encodes, and its gain reaches its limit near 7
 steps a call. Over 100 tokens:
 
-| Steps a call | ms a token | Dispatches a token |
-| ------------ | ---------- | ------------------ |
-| 1            | 3.7–4.9    | 210                |
-| 7            | 3.4        | 210                |
-| 32           | 3.3–3.4    | 210                |
-| 99           | 3.2–3.3    | 210                |
+| Steps a call | Time a token, the least as 1 | Dispatches a token |
+| ------------ | ---------------------------- | ------------------ |
+| 1            | 1.16–1.53                    | 210                |
+| 7            | 1.06                         | 210                |
+| 32           | 1.03–1.06                    | 210                |
+| 99           | 1–1.03                       | 210                |
 
 [The benchmarks](./benchmark/README.md#gemma-3-270m) time the first prompt
 against onnxruntime on CUDA and on WebGPU, and against llama.cpp.
@@ -586,6 +586,9 @@ model, and it does not price 94 and 93 of each program's operations
   with another input a step changes, such as `position_ids`.
 - A loop has no early exit, so a row that ends keeps running to the last step of
   its call, on every backend.
+- `Graph` has no running sum, so each filter of a drawn step takes `BISECTIONS`
+  sums over the vocabulary, and the draw one for each bit of the vocabulary's
+  size. A greedy step takes none.
 - Backends add up a row's probabilities in their own order, so a draw landing
   within rounding of a token's edge can pick apart on two of them. Greedy cannot.
 - On WebGPU a device-held `i64` is an index `arg_max` ranked, as the f32 it

@@ -69,13 +69,16 @@ impl<affine Bk: Graph> Model<Bk> {
         return self.next_tokens(ids, 1, &Sampling {})[0];
     }
 
-    /// `count` tokens after `ids`, picked as `sampling` says. Where `ids`
-    /// extends the ids of the last call, only the new ones run, against the
+    /// `count` tokens after `ids`, picked as `sampling` says, the first of its
+    /// ends each where the last of `ids` is one of them. Where `ids` extends the ids of the last call, only the new ones run, against the
     /// cached keys and values of the rest. One new id runs them on the device,
     /// with one read back. A pass over several reads its logits back for the
     /// first token, and leaves its cache room for `room` tokens after these.
     pub fn next_tokens(&mut self, ids: &List<i32>, count: i32, sampling: &Sampling, room: i32 = 0) -> List<i32> with _ {
         assert_readable(ids);
+        if sampling.ended(&[ids[ids.len() - 1] as i64])[0] {
+            return List::<i32>::filled(count, sampling.ends[0] as i32);
+        }
         if !extends(&self.seen, ids) {
             self.forget();
         }

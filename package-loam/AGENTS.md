@@ -47,5 +47,6 @@ runs by hand, and its figures go in a measurement table.
 
 ## Oracles
 
-A case in `conformance/operators_test.wado` or `semantics_test.wado` that Loam
-does not match yet is a `#[TODO]` test, so the run lists where the two part.
+A case in `conformance/operators_test.wado` or `semantics_test.wado` where Loam
+does not match onnxruntime yet is a `#[TODO]` test, so the run lists where the
+two part.

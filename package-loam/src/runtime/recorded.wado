@@ -425,8 +425,12 @@ impl Graph for Recorder {
             carried.push(self.added(Operation::Carried, [], node.kind, node.extents));
         }
         let state: List<Any<Recorder>> = carried.into_iter().map(|id| any_at(self.nodes[id].kind, id)).collect();
-        for let r of body(&Value { id: step }, &state) {
+        let returned = body(&Value { id: step }, &state);
+        assert returned.len() == carried.len(), "a loop's body returns each value it carries";
+        for let [k, r] of returned.into_iter().enumerate() {
             let node = &self.nodes[node_of(&r)];
+            let held = &self.nodes[carried[k]];
+            assert node.kind == held.kind && node.extents == held.extents, "a run returns what the next one takes";
             self.current.results.push(self.added(Operation::Yield, [node_of(&r)], node.kind, node.extents));
         }
         let region = self.current;

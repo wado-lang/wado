@@ -784,6 +784,14 @@ impl WebGpuBackend {
         return Option::Some(slot);
     }
 
+    /// Passes over the buffer of `count` words the running launch makes next,
+    /// which this run already holds, so each one after it stays the one it was.
+    fn made_elsewhere(&mut self, count: i32) {
+        if let Some(r) = &mut self.running {
+            occurrence(&mut r.made, count);
+        }
+    }
+
     /// A new buffer of `count` 32-bit words that outlives a pass, and its
     /// slot.
     fn held_buffer(&mut self, count: i32) -> i32 with (GpuDevice, GpuBuffer) {
@@ -2380,6 +2388,9 @@ impl WebGpuBackend {
             },
         ];
         let appending = self.appendable(past_k, past_v, capacity, n, &strides, past, shared);
+        if appending matches { Some(_) } {
+            self.made_elsewhere(2 * n);
+        }
         // Recorded where a later call can do it again: over the cache it
         // appends to in place, in a launch, outside another recording.
         let key = if appending matches { Some(_) } && self.taping matches { None } {
@@ -3390,7 +3401,7 @@ impl ShaderKey {
             AttendJoin(bindings) => attend_join_shader(bindings),
             ArgMax([bindings, rank, stage]) => arg_max_shader(bindings, *rank, *stage),
         };
-        return if source.contains("non_finite(") { `${NON_FINITE_WGSL}${source}` } else { source };
+        return `${NON_FINITE_WGSL}${source}`;
     }
 }
 
@@ -3407,9 +3418,7 @@ test "an infinity in a kernel is no const-expression" {
         [0],
         1,
     ]).source();
-    assert source.contains("fn non_finite");
     assert source.contains("non_finite(4286578688u)");
-    assert !ShaderKey::Copy([1, false]).source().contains("non_finite");
 }
 
 /// The element of operand `k`, read from binding `bindings[k]`, whose view's
