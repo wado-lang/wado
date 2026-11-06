@@ -10,7 +10,7 @@ use { MonotonicClock } from "wasi:clocks";
 pub global PROMPT: String = "Hello, my name is";
 
 /// The tokens each run generates, which the throughput counts.
-pub global STEPS: i32 = 8;
+pub global STEPS: i32 = 32;
 
 /// A model as these benchmarks drive it.
 pub affine trait Generator with _ {
@@ -25,9 +25,19 @@ pub affine trait Generator with _ {
     fn decode(ids: &List<i32>) -> String;
 }
 
-/// Continues `PROMPT` on `model` and reports the throughput, then what was
-/// generated, so a divergence between arms shows.
+/// Continues `PROMPT` on `model` a token a step.
 pub fn timed<affine G: Generator>(name: String, model: &mut G) with (Stdout, MonotonicClock, _) {
+    timed_by(name, model, |m, ids| continued(m, ids));
+}
+
+/// Continues `PROMPT` on `model` by `generate`, which picks `STEPS` tokens after
+/// the ids it is given, and reports the throughput, then what was generated, so
+/// a divergence between arms shows.
+pub fn timed_by<affine G: Generator>(
+    name: String,
+    model: &mut G,
+    generate: fn(&mut G, &List<i32>) -> List<i32> with _,
+) with (Stdout, MonotonicClock, _) {
     let ids = G::encode(&PROMPT);
     let mut b = Benchmark {
         name,
@@ -36,7 +46,10 @@ pub fn timed<affine G: Generator>(name: String, model: &mut G) with (Stdout, Mon
         work_per_iter: Option::Some(STEPS as f64),
         unit: "tokens",
     };
-    let generated = b.run("generate", || continued(model, &ids));
+    let generated = b.run("generate", || {
+        model.reset();
+        return generate(model, &ids);
+    });
     let mut all = ids;
     all.extend(&generated);
     b.println(`generated = ${generated:?} ${G::decode(&all):?}`);
@@ -44,7 +57,6 @@ pub fn timed<affine G: Generator>(name: String, model: &mut G) with (Stdout, Mon
 
 /// The `STEPS` tokens `model` picks greedily after `ids`.
 fn continued<affine G: Generator>(model: &mut G, ids: &List<i32>) -> List<i32> with _ {
-    model.reset();
     let mut all = *ids;
     for let _ of 0..<STEPS {
         all.push(model.step(&all));

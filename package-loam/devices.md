@@ -647,6 +647,30 @@ vectors and scalars that bf16 would round. A topology's `optimal_seconds` is a
 model, and it does not price 94 and 93 of each program's operations
 ([research §7](../docs/research-tpu.md#7-the-compilers-cost-model)).
 
+### Gemma 3 over 32 tokens
+
+The sections above continue each prompt by 8 tokens. `generate.json` now records
+32, which leaves a loop more steps to run per read back. Each entry picks
+onnxruntime's tokens on both prompts, at `-O2`. Times are for each token after
+the prompt's first, and a range spans the two prompts. WebGPU ran the release
+build of `wado-run-webgpu`, and PJRT the `dev` build on XLA's CPU plugin.
+
+| Entry                   | Time a token, onnxruntime on the CPU as 1 | Device runs a token | Read backs a token |
+| ----------------------- | ----------------------------------------- | ------------------- | ------------------ |
+| WebGPU, a step a call   | 0.12–0.16                                 | 207                 | 1                  |
+| WebGPU, 31 steps a call | 0.11–0.12                                 | 210                 | 0.03               |
+| PJRT, a step a call     | 6.1–10.7                                  | 1                   | 4.5–8.0            |
+| PJRT, 31 steps a call   | 1.1–1.9                                   | 0.03                | 0.03               |
+| onnxruntime on WebGPU   | 0.35–0.41                                 |                     |                    |
+| onnxruntime on the CPU  | 1                                         |                     |                    |
+
+The loop's gain on WebGPU reaches its limit near 7 steps a call. A sweep over
+100 tokens took 3.7 to 4.9 ms a token at 1 step a call, 3.4 at 7, 3.3 to 3.4 at
+32, and 3.2 to 3.3 at 99, each with about 210 dispatches a token.
+
+[The benchmarks](./benchmark/README.md#gemma-3-270m) time the same 32 tokens
+against onnxruntime on CUDA and on WebGPU, and against llama.cpp.
+
 ## Known gaps
 
 - A valid length is one value for every row, which is a batch of one, until

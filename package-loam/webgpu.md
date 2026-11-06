@@ -319,9 +319,10 @@ is a [known gap](./devices.md#known-gaps) of Loam on TPU and WebGPU.
 
 ## Measurements
 
-`example/gpt2-124m/webgpu.wado` continues "Hello, my name is" with eight
-greedy tokens on each backend, and `example/gemma3-270m/webgpu.wado` continues
-two prompts with eight each. Both run one token a call against the attention
+`example/gpt2-124m/webgpu.wado` continued "Hello, my name is" with eight
+greedy tokens on each backend, and `example/gemma3-270m/webgpu.wado` continued
+two prompts with eight each. `generate.json` holds 32 a prompt now, and
+[the benchmarks](./benchmark/README.md) time that length. Both run one token a call against the attention
 cache, pick onnxruntime's tokens, and time each token after the prompt's first.
 The device is an RTX 4060 Ti under Vulkan, and `wado run-webgpu` is the `dev`
 build of `wado-run-webgpu`. GPT-2's `Cpu` runs under `wado run-webgpu`'s

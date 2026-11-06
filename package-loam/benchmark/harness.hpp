@@ -15,7 +15,7 @@
 namespace harness {
 
 inline const char* const PROMPT = "Hello, my name is";
-inline constexpr int STEPS = 8;
+inline constexpr int STEPS = 32;
 inline constexpr int WARMUP = 1;
 inline constexpr int ITERATIONS = 3;
 
