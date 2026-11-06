@@ -201,7 +201,7 @@ struct bug_refutable_pattern_under_reference_payload.wado//$tmpl$ebaa20f4a908b50
 }
 
 struct bug_refutable_pattern_under_reference_payload.wado//$tmpl$d9dcfc8c23dcb72e {  // TypeId(28)
-    mut h0: ref "core:prelude//List<[i32,core:prelude/types.wado/Option<i64>]>",
+    mut h0: ref "core:prelude/list.wado//List<[i32,core:prelude/types.wado/Option<i64>]>",
     mut h1: i64,
     mut s0: ref "core:prelude/string.wado//String",
     mut r0: ref "core:prelude/string.wado//String",
@@ -337,19 +337,19 @@ struct bug_refutable_pattern_under_reference_payload.wado//Holder {  // TypeId(3
 
 array Array<[i32,core:prelude/types.wado/Option<i64>]> (mut ref "tuple//[i32, core:prelude/types.wado/Option<i64>]");  // TypeId(39)
 
-variant core:prelude/types.wado//Option<i64> {  // TypeId(40)
+struct core:prelude/list.wado//List<[i32,core:prelude/types.wado/Option<i64>]> {  // TypeId(40)
+    mut repr: ref "Array<[i32,core:prelude/types.wado/Option<i64>]>",
+    mut used: i32,
+}
+
+variant core:prelude/types.wado//Option<i64> {  // TypeId(41)
     None,
     Some(i64),
 }
 
-struct core:prelude/types.wado//Option<i64>::Some {  // TypeId(41)
+struct core:prelude/types.wado//Option<i64>::Some {  // TypeId(42)
     discriminant: i32,
     payload_0: i64,
-}
-
-struct core:prelude//List<[i32,core:prelude/types.wado/Option<i64>]> {  // TypeId(42)
-    mut repr: ref "Array<[i32,core:prelude/types.wado/Option<i64>]>",
-    mut used: i32,
 }
 
 type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(43)
@@ -652,7 +652,7 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/String::format
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::format<bug_refutable_pattern_under_reference_payload.wado/$tmpl$c637099490ed9ff1,[core:prelude/types.wado/Option<i64>,&[i32,core:prelude/types.wado/Option<i64>],core:prelude/types.wado/Option<&[i32,core:prelude/types.wado/Option<i64>]>,i64]>" = fn(ref "bug_refutable_pattern_under_reference_payload.wado//$tmpl$c637099490ed9ff1") -> ref "core:prelude/string.wado//String";  // TypeId(192)
 
-type "functype//core:prelude/list.wado/core:prelude/list.wado/List<[i32,core:prelude/types.wado/Option<i64>]>^core:prelude/traits.wado/Inspect::inspect" = fn(ref "core:prelude//List<[i32,core:prelude/types.wado/Option<i64>]>", ref "core:prelude/format.wado//Formatter");  // TypeId(193)
+type "functype//core:prelude/list.wado/core:prelude/list.wado/List<[i32,core:prelude/types.wado/Option<i64>]>^core:prelude/traits.wado/Inspect::inspect" = fn(ref "Array<[i32,core:prelude/types.wado/Option<i64>]>", i32, ref "core:prelude/format.wado//Formatter");  // TypeId(193)
 
 type "functype//core:prelude/traits.wado/core:prelude/types.wado/Option<&[i32,[i32,core:prelude/types.wado/Option<i64>]]>^core:prelude/traits.wado/Inspect::inspect" = fn(ref "core:prelude/types.wado//Box<core:prelude/types.wado/Option<&[i32,[i32,core:prelude/types.wado/Option<i64>]]>>", ref "core:prelude/format.wado//Formatter");  // TypeId(194)
 
@@ -1024,7 +1024,7 @@ nested_tuple(Option::Some(&[ 1, [2, null], ])): "), used: 49 }, s3: struct.new "
 
 fn "bug_refutable_pattern_under_reference_payload.wado/$test_5_what_an_iterator_finds_by_reference"() {
     let $load_3: ref "core:prelude/types.wado//Option<i64>";
-    let pairs_0: ref "core:prelude//List<[i32,core:prelude/types.wado/Option<i64>]>";
+    let pairs_0: ref "core:prelude/list.wado//List<[i32,core:prelude/types.wado/Option<i64>]>";
     let $local_3_12: ref null "tuple//[i32, core:prelude/types.wado/Option<i64>]";
     let $sroa_v_value_5_14: i64;
     let ref_val_20: ref "tuple//[i32, core:prelude/types.wado/Option<i64>]";
@@ -1032,7 +1032,7 @@ fn "bug_refutable_pattern_under_reference_payload.wado/$test_5_what_an_iterator_
     let $sroa_v_value_5_58: i64;
     let $sroa_$temp_inline_core_prelude_slice_wado_SliceRefIter__i32_core_prelude_types_wado_Option_i64____core_prelude_traits_wado_Iterator__find__Closure_0_spec0_sroa_pred__capture_0__1_0_repr_75: ref "Array<[i32,core:prelude/types.wado/Option<i64>]>";
     let $sroa_$temp_inline_core_prelude_slice_wado_SliceRefIter__i32_core_prelude_types_wado_Option_i64____core_prelude_traits_wado_Iterator__find__Closure_0_spec0_sroa_pred__capture_0__1_0_index_76: i32;
-    pairs_0 = struct.new "core:prelude//List<[i32,core:prelude/types.wado/Option<i64>]>" { repr: array.new_fixed<ref "tuple//[i32, core:prelude/types.wado/Option<i64>]">(struct.new "tuple//[i32, core:prelude/types.wado/Option<i64>]" { 0: 1, 1: struct.new "core:prelude/types.wado//Option<i64>::Some" { discriminant: 1, payload_0: 3_i64 } }, struct.new "tuple//[i32, core:prelude/types.wado/Option<i64>]" { 0: 2, 1: global:core:builtin::$unit_case$core:prelude/types.wado//Option<i64>$0 }), used: 2 };
+    pairs_0 = struct.new "core:prelude/list.wado//List<[i32,core:prelude/types.wado/Option<i64>]>" { repr: array.new_fixed<ref "tuple//[i32, core:prelude/types.wado/Option<i64>]">(struct.new "tuple//[i32, core:prelude/types.wado/Option<i64>]" { 0: 1, 1: struct.new "core:prelude/types.wado//Option<i64>::Some" { discriminant: 1, payload_0: 3_i64 } }, struct.new "tuple//[i32, core:prelude/types.wado/Option<i64>]" { 0: 2, 1: global:core:builtin::$unit_case$core:prelude/types.wado//Option<i64>$0 }), used: 2 };
     if @unlikely(local.tee $sroa_v_value_5_14($inline_found_spec0_0: block -> i64 {
         if (if ref.is_null(local.tee $local_3_12($inline_core_prelude_slice_wado_SliceRefIter__i32_core_prelude_types_wado_Option_i64____core_prelude_traits_wado_Iterator__find__Closure_0_spec0_sroa_pred__capture_0__1: block -> ref null "tuple//[i32, core:prelude/types.wado/Option<i64>]" {
             $sroa_$temp_inline_core_prelude_slice_wado_SliceRefIter__i32_core_prelude_types_wado_Option_i64____core_prelude_traits_wado_Iterator__find__Closure_0_spec0_sroa_pred__capture_0__1_0_repr_75 = pairs_0.repr;
@@ -3295,7 +3295,8 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<bug_refutab
     self_11 = "core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<bug_refutable_pattern_under_reference_payload.wado/$tmpl$d9dcfc8c23dcb72e,core:prelude/list.wado/List<[i32,core:prelude/types.wado/Option<i64>]>>::lit$sroa[self.index]"(0, $load_2, $load_3, $load_4, $load_5, $load_6, $load_7);
     "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_view"(out_3, self_11.repr, self_11.start, self_11.end);
     $temp_inline_core_prelude_traits_wado_TemplateHole_bug_refutable_pattern_under_reference_payload_wado__tmpl_d9dcfc8c23dcb72e_core_prelude_list_wado_List__i32_core_prelude_types_wado_Option_i64______fmt_6_0 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"(out_3);
-    "core:prelude/list.wado/core:prelude/list.wado/List<[i32,core:prelude/types.wado/Option<i64>]>^core:prelude/traits.wado/Inspect::inspect"(t.h0, $temp_inline_core_prelude_traits_wado_TemplateHole_bug_refutable_pattern_under_reference_payload_wado__tmpl_d9dcfc8c23dcb72e_core_prelude_list_wado_List__i32_core_prelude_types_wado_Option_i64______fmt_6_0);
+    let $mv_arg_1: ref "core:prelude/list.wado//List<[i32,core:prelude/types.wado/Option<i64>]>";
+    "core:prelude/list.wado/core:prelude/list.wado/List<[i32,core:prelude/types.wado/Option<i64>]>^core:prelude/traits.wado/Inspect::inspect"(local.tee $mv_arg_1(t.h0).repr, $mv_arg_1.used, $temp_inline_core_prelude_traits_wado_TemplateHole_bug_refutable_pattern_under_reference_payload_wado__tmpl_d9dcfc8c23dcb72e_core_prelude_list_wado_List__i32_core_prelude_types_wado_Option_i64______fmt_6_0);
     self_11 = "core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<bug_refutable_pattern_under_reference_payload.wado/$tmpl$d9dcfc8c23dcb72e,i64>::lit$sroa[self.index]"(1, t.s0, t.r0, t.s1, t.r1, t.s2, t.r2);
     "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_view"(out_3, self_11.repr, self_11.start, self_11.end);
     $temp_inline_core_prelude_traits_wado_TemplateHole_bug_refutable_pattern_under_reference_payload_wado__tmpl_d9dcfc8c23dcb72e_core_prelude_list_wado_List__i32_core_prelude_types_wado_Option_i64______fmt_6_0 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"(out_3);
@@ -3547,13 +3548,12 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<bug_refutab
     return out_3;
 }
 
-fn "core:prelude/list.wado/core:prelude/list.wado/List<[i32,core:prelude/types.wado/Option<i64>]>^core:prelude/traits.wado/Inspect::inspect"(self, f) {
-    let self_2: i32;
-    "core:prelude/array.wado/core:prelude/array.wado/write_seq_inspect<[i32,core:prelude/types.wado/Option<i64>]>$dae[start,marker]"(self.repr, self.used, f, $inline_core_prelude_format_wado_Formatter__resolved_seq_limit_sroa_self_precision__0: block -> i32 {
-        if local.tee self_2(f.precision) == -2 {
+fn "core:prelude/list.wado/core:prelude/list.wado/List<[i32,core:prelude/types.wado/Option<i64>]>^core:prelude/traits.wado/Inspect::inspect"($mv$self$repr, $mv$self$used, f) {
+    "core:prelude/array.wado/core:prelude/array.wado/write_seq_inspect<[i32,core:prelude/types.wado/Option<i64>]>$dae[start,marker]"($mv$self$repr, $mv$self$used, f, $inline_core_prelude_format_wado_Formatter__resolved_seq_limit_sroa_self_precision__0: block -> i32 {
+        if local.tee $mv$self$used(f.precision) == -2 {
             break $inline_core_prelude_format_wado_Formatter__resolved_seq_limit_sroa_self_precision__0: 256;
         }
-        break $inline_core_prelude_format_wado_Formatter__resolved_seq_limit_sroa_self_precision__0: self_2;
+        break $inline_core_prelude_format_wado_Formatter__resolved_seq_limit_sroa_self_precision__0: $mv$self$used;
     });
 }
 

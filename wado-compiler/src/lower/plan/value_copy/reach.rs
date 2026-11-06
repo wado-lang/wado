@@ -239,8 +239,10 @@ impl<'a> StorageReach<'a> {
     /// How many fields a struct `owner` has, `None` for any other type.
     #[must_use]
     pub fn field_count(&self, owner: TypeId) -> Option<u32> {
-        let (def, type_args) = self.type_table.monomorphized_struct_parts(owner)?;
-        let fields = self.fields.get(&(def, type_args.to_vec()))?;
+        let ResolvedType::Struct { def, type_args } = self.type_table.get(owner) else {
+            return None;
+        };
+        let fields = self.fields.get(&(*def, type_args.clone()))?;
         Some(u32::try_from(fields.len()).unwrap())
     }
 
@@ -252,54 +254,10 @@ impl<'a> StorageReach<'a> {
         if let Some(element) = tt.list_element(ty) {
             return Members::Held(vec![element]);
         }
-        // A `List`'s instance has no declaration, and its element is read above.
-        if let Some((def, type_args)) = tt.monomorphized_struct_parts(ty)
-            && let Some(fields) = self.fields.get(&(def, type_args.to_vec()))
-        {
-            return Members::Held(fields.iter().map(|f| f.type_id).collect());
-        }
         match tt.get(ty) {
             ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => Members::Reference(*inner),
             ResolvedType::BuiltinArray(inner) => Members::Held(vec![*inner]),
             ResolvedType::Newtype { base_type, .. } => Members::Held(vec![*base_type]),
-<<<<<<< HEAD
-            ResolvedType::Struct { .. } => Members::Unknown,
-            ResolvedType::GenericInstance { def, .. } if tt.is_resource_def(*def) => {
-                Members::Held(Vec::new())
-            }
-            ResolvedType::GenericInstance { def, type_args } => {
-                match tt.variant_template_cases(*def) {
-                    Some(cases) => Members::Held(
-                        cases
-                            .iter()
-                            .map(|&(_, _, payload)| match tt.get(payload) {
-                                ResolvedType::TypeParam { index, .. } => type_args[*index as usize],
-                                _ => payload,
-                            })
-                            .collect(),
-                    ),
-||||||| acf18acea98
-            ResolvedType::Struct { def, type_args } => {
-                match self.fields.get(&(*def, type_args.clone())) {
-                    Some(fields) => Members::Held(fields.iter().map(|f| f.type_id).collect()),
-                    None => Members::Unknown,
-                }
-            }
-            ResolvedType::GenericInstance { def, .. } if tt.is_resource_def(*def) => {
-                Members::Held(Vec::new())
-            }
-            ResolvedType::GenericInstance { def, type_args } => {
-                match tt.variant_template_cases(*def) {
-                    Some(cases) => Members::Held(
-                        cases
-                            .iter()
-                            .map(|&(_, _, payload)| match tt.get(payload) {
-                                ResolvedType::TypeParam { index, .. } => type_args[*index as usize],
-                                _ => payload,
-                            })
-                            .collect(),
-                    ),
-=======
             ResolvedType::Struct { def, type_args } => {
                 match self.fields.get(&(*def, type_args.clone())) {
                     Some(fields) => Members::Held(fields.iter().map(|f| f.type_id).collect()),
@@ -311,7 +269,6 @@ impl<'a> StorageReach<'a> {
                 match tt.variant_instance_payloads(*def, type_args) {
                     Some(payloads) => Members::Held(payloads),
                     None if type_args.is_empty() => Members::Unknown,
->>>>>>> origin/main
                     None => Members::Held(type_args.clone()),
                 }
             }

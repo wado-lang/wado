@@ -1418,11 +1418,11 @@ impl FunctionTranslator<'_, '_> {
     /// proved the pattern names a field this struct has.
     #[track_caller]
     fn resolve_struct_field_type(&self, struct_type: TypeId, field_name: &str) -> TypeId {
-        let Some((def, type_args)) = self.type_table.monomorphized_struct_parts(struct_type) else {
+        let ResolvedType::Struct { def, type_args } = self.type_table.get(struct_type) else {
             panic!("[WIR] struct pattern on non-struct {struct_type:?}");
         };
-        let name = self.type_table.struct_mangled_name(def, type_args);
-        let module_source = self.type_table.struct_head_module(def).clone();
+        let name = self.type_table.struct_mangled_name(*def, type_args);
+        let module_source = self.type_table.struct_head_module(*def).clone();
         self.ctx
             .package
             .structs
