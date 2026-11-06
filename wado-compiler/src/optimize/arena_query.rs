@@ -747,17 +747,17 @@ impl RunScan<'_> {
                     .first()
                     .filter(|arm| body.pattern_is_catch_all(arm.pattern))
                     .and_then(|arm| arm.guard?.as_expr());
-                let head: Vec<ExprId> = [expr.as_expr(), first_guard]
+                let leaves = expr
+                    .as_expr()
                     .into_iter()
-                    .flatten()
-                    .collect();
-                let guards: Vec<ExprId> =
-                    arms.iter().filter_map(|arm| arm.guard?.as_expr()).collect();
-                let leaves = head
-                    .iter()
-                    .chain(&guards)
-                    .any(|&e| node_escapes(body, NodeRef::Expr(e)));
-                let head = self.in_order(head);
+                    .chain(arms.iter().filter_map(|arm| arm.guard?.as_expr()))
+                    .any(|e| node_escapes(body, NodeRef::Expr(e)));
+                let head = self.in_order(
+                    [expr.as_expr(), first_guard]
+                        .into_iter()
+                        .flatten()
+                        .collect(),
+                );
                 let mut every_arm = !leaves;
                 for arm in arms {
                     if let Some(guard) = arm.guard.and_then(Operand::as_expr)
