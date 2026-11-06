@@ -525,7 +525,7 @@ fn shrink_params_and_renumber(func: &mut NirFunction, dead: &[bool]) {
             mentioned_locals(body)
                 .iter()
                 .all(|r| remap[*r as usize].is_some()),
-            "[NIR] dae: dropping a local that is still read"
+            "[NIR] dae: dropping a local that is still named"
         );
         remap_locals(body, &remap);
         // Promoted `Opaque(Local idx)` values (extracted as `local.get idx`)
