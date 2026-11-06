@@ -917,6 +917,23 @@ impl Body {
         e
     }
 
+    /// Whether `pat` matches every value of its type.
+    pub fn pattern_is_catch_all(&self, pat: PatId) -> bool {
+        match &self.pats[pat].kind {
+            PatKind::Wildcard | PatKind::Binding { .. } => true,
+            PatKind::Or(alts) => alts.iter().any(|&p| self.pattern_is_catch_all(p)),
+            PatKind::Tuple(elems, _) => elems.iter().all(|&p| self.pattern_is_catch_all(p)),
+            PatKind::Struct { fields, .. } => {
+                fields.iter().all(|f| self.pattern_is_catch_all(f.pattern))
+            }
+            PatKind::Literal(_)
+            | PatKind::Variant { .. }
+            | PatKind::Enum { .. }
+            | PatKind::ConstantValue { .. }
+            | PatKind::Range { .. } => false,
+        }
+    }
+
     /// The raw integer bit pattern of a constant-int `Operand::Value`. `None` for
     /// an `Operand::Expr` or any non-int-constant operand. Width-agnostic (no type
     /// filter): callers that only need the value (capacities, zero-tests) avoid

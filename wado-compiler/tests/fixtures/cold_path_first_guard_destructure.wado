@@ -1,0 +1,43 @@
+// A pattern that only destructures matches every value, so a marker in the
+// first arm's guard behind one covers the `match` as it does behind a binding.
+use { println, Stdout } from "core:cli";
+
+struct Pair { a: i32, b: i32 }
+
+fn h(x: i32) -> i32 {
+    let mut s = x;
+    s = s * 31 + builtin::black_box(7);
+    s = s ^ (s >> 3);
+    s = s * 17 + builtin::black_box(5);
+    s = s ^ (s >> 5);
+    s = s * 13 + builtin::black_box(3);
+    s = s ^ (s >> 7);
+    return s;
+}
+
+#[inline("never")]
+fn f(p: [Pair, i32]) -> i32 {
+    return match p {
+        [{ a, .. }, _] && marked: { builtin::cold_path(); a > 100 } => h(a),
+        _ => 3,
+    };
+}
+
+// A second site, so `h` is not admitted at its one site.
+#[inline("never")]
+fn other(x: i32) -> i32 {
+    return h(x) + 1;
+}
+
+export fn run() with Stdout {
+    let p = [Pair { a: builtin::black_box(500), b: 0 }, 1];
+    println(`${f(p) + other(builtin::black_box(2))}`);
+}
+
+__DATA__
+{
+  "wir_scope": "cold_path_first_guard_destructure.wado/f",
+  "wir_expect:O2": ["\"cold_path_first_guard_destructure.wado/h\"("],
+  "wir_contrast": {"O2": [{"builtin::cold_path(); a > 100": "a > 100"}]},
+  "stdout": "3359304\n"
+}

@@ -1,0 +1,42 @@
+// Every arm of the `match` passes a marker, but its guard can return first, so
+// a path through the `match` misses them and the call ahead of it is not cold:
+// it prices as any call, and is inlined.
+use { println, Stdout } from "core:cli";
+
+fn h(x: i32) -> i32 {
+    let mut s = x;
+    s = s * 31 + builtin::black_box(7);
+    s = s ^ (s >> 3);
+    s = s * 17 + builtin::black_box(5);
+    s = s ^ (s >> 5);
+    s = s * 13 + builtin::black_box(3);
+    s = s ^ (s >> 7);
+    return s;
+}
+
+#[inline("never")]
+fn f(x: i32, c: bool) -> i32 {
+    let y = h(x);
+    return match x {
+        v && leave: { if v > 0 { return y; } c } => { builtin::cold_path(); y + 1 },
+        _ => { builtin::cold_path(); y + 2 },
+    };
+}
+
+// A second site, so `h` is not admitted at its one site.
+#[inline("never")]
+fn other(x: i32) -> i32 {
+    return h(x) + 1;
+}
+
+export fn run() with Stdout {
+    println(`${f(builtin::black_box(500), builtin::black_box(true)) + other(builtin::black_box(2))}`);
+}
+
+__DATA__
+{
+  "wir_scope": "cold_path_branch_head_escape.wado/f",
+  "wir_not_expect:O2": ["\"cold_path_branch_head_escape.wado/h\"("],
+  "wir_contrast": {"O2": [{"if v > 0 { return y; } c": "v > 0 && c"}]},
+  "stdout": "3359304\n"
+}

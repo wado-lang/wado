@@ -691,10 +691,7 @@ impl RunScan<'_> {
                 condition,
                 then_block,
                 else_block,
-            } => {
-                let cond = self.operand(*condition);
-                self.branches(cond, std::iter::once(*then_block), *else_block)
-            }
+            } => self.branches(*condition, std::iter::once(*then_block), *else_block),
             StmtKind::Loop { body: b } | StmtKind::LabeledBlock { block: b, .. } => self.block(*b),
             StmtKind::Let { value: op, .. }
             | StmtKind::LetDestructure { value: op, .. }
@@ -732,33 +729,45 @@ impl RunScan<'_> {
                 condition,
                 then_branch,
                 else_branch,
-            } => {
-                let cond = self.operand(*condition);
-                self.branches(cond, std::iter::once(*then_branch), *else_branch)
-            }
+            } => self.branches(*condition, std::iter::once(*then_branch), *else_branch),
             ExprKind::Switch {
                 scrutinee,
                 arms,
                 default,
                 ..
-            } => {
-                let scrutinee = self.operand(*scrutinee);
-                self.branches(scrutinee, arms.iter().copied(), Some(*default))
-            }
+            } => self.branches(*scrutinee, arms.iter().copied(), Some(*default)),
             ExprKind::LabeledBlock { block, .. } => self.block(*block),
-            // A guard runs only when the arms before it fail to match, and an
-            // arm's body only when its own pattern and guard pass; the match is
-            // exhaustive, so every path enters one body.
+            // A guard runs only when the arms before it fail to match and its
+            // own pattern matches, so the first arm's runs on every path when
+            // that pattern is a catch-all. An arm's body runs only when its
+            // pattern and guard pass; the match is exhaustive, so every path
+            // that no guard leaves enters one body.
             ExprKind::Match { expr, arms } => {
-                let scrutinee = self.operand(*expr);
-                let mut every_arm = true;
+                let first_guard = arms
+                    .first()
+                    .filter(|arm| body.pattern_is_catch_all(arm.pattern))
+                    .and_then(|arm| arm.guard?.as_expr());
+                let leaves = expr
+                    .as_expr()
+                    .into_iter()
+                    .chain(arms.iter().filter_map(|arm| arm.guard?.as_expr()))
+                    .any(|e| node_escapes(body, NodeRef::Expr(e)));
+                let head = self.in_order(
+                    [expr.as_expr(), first_guard]
+                        .into_iter()
+                        .flatten()
+                        .collect(),
+                );
+                let mut every_arm = !leaves;
                 for arm in arms {
-                    if let Some(guard) = arm.guard {
-                        self.operand(guard);
+                    if let Some(guard) = arm.guard.and_then(Operand::as_expr)
+                        && Some(guard) != first_guard
+                    {
+                        self.expr(guard);
                     }
                     every_arm &= self.operand(arm.body);
                 }
-                scrutinee || every_arm
+                head || every_arm
             }
             ExprKind::Dead
             | ExprKind::PackedArray(_)
@@ -811,14 +820,19 @@ impl RunScan<'_> {
 
     /// Whether every path through a branch passes a marker: through the part
     /// every path runs (`head`), or through each arm. A missing `otherwise`
-    /// falls through without entering an arm.
+    /// falls through without entering an arm, and a `head` that can leave
+    /// ends a path before any.
     fn branches(
         &mut self,
-        head: bool,
+        head: Operand,
         arms: impl Iterator<Item = BlockId>,
         otherwise: Option<BlockId>,
     ) -> bool {
-        let mut every_arm = otherwise.is_some();
+        let leaves = head
+            .as_expr()
+            .is_some_and(|e| node_escapes(self.body, NodeRef::Expr(e)));
+        let head = self.operand(head);
+        let mut every_arm = otherwise.is_some() && !leaves;
         for arm in arms.chain(otherwise) {
             every_arm &= self.block(arm);
         }

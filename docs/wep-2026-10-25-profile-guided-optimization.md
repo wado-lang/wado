@@ -492,18 +492,9 @@ output at every level. It is a nightly campaign, not a gate.
 
 ## Known gaps
 
-- [ ] An author's `cold_path()`, or a `?`, in the right operand of `&&` or
-  `||` keeps its marker when the profile measured it, since the profile has no
-  statement position there for a marker of its own.
-- [ ] A region that starts in an expression, the right operand of `&&` or
-  `||`, has no statement position for a marker, so the regions inside one that
-  never ran are marked in its place.
 - [ ] A region is measured once for all of a generic function's
   instantiations, so an instantiation the workload never ran shares the counts
   of one it ran.
-- [ ] A NIR `match` is read as if every arm's guard ran only on some paths. The
-  first arm's guard runs on every path through the `match`, so a marker under
-  it covers the `match` but is not read that way.
 - [ ] On the `benchmark/` pilot the profile is mixed. Against `-f no-pgo` it buys
   up to 19% of fuel on the serde rows. But `microgpt`'s inference runs 46%
   longer by the wall clock for 4% more fuel: with a 2 GiB heap the PGO build is
