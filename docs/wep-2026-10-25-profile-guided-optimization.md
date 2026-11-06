@@ -182,13 +182,22 @@ carries a profile across a version bump, a file move and a rename of a module.
 Two versions of one package in one build need no rule either.
 
 Functions of one hash share their counts, summed, as a generic function's
-instances already did. A method's hash covers the type or trait it is declared
-under, so two impls' methods of one text stay apart. What still shares counts
-is code of one text under one owner, such as a helper copied into two modules.
-Sharing cannot make cold what ran: a region is cold only where the sum is zero,
-so none of the copies ran it. It can blur unlikeliness: a branch rare in one
-copy and common in another is judged on the sum. That costs speed, never
-correctness, as every profile error does.
+instances already did. Sharing cannot make cold what ran: a region is cold only
+where the sum is zero, so none of the copies ran it. But it costs speed. A copy
+no workload entered is judged by another's runs, a branch rare in one copy and
+common in another is judged on the sum, and the summary's hot and cold lines
+move. So the hash covers where a function is declared, keeping apart what text
+alone cannot:
+
+- A method's `impl` head, in full. Its type's name alone left `impl P for &T`
+  and `impl P for &mut T` one owner, and so the two traits' `end` of one type.
+- A closure's enclosing function. Short closures such as `|e| e.kind == K`
+  recur across functions. On `gale_gen` the type-name owner folded a closure
+  no workload entered into one that ran, and cost 1167 fuel against matching
+  by name.
+
+What still shares counts is one text in one place twice: a closure written
+twice in one function, or a function copied into two modules under one name.
 
 ### A function whose source or plan changed has no profile
 
@@ -514,15 +523,16 @@ output at every level. It is a nightly campaign, not a gate.
       wait holds only while some site this round visits may admit it, judged
       from the site's loop depth and heat, so a candidate that never moves
       takes the hot price (`pgo_unmoved_caller_hot_site`).
-12. [x] Matching by hash alone. A function's hash covers its owner, a profile
-    sums the counts of one hash, and a compile finds counts by the hash
-    (`pgo_hash_matched`).
+12. [x] Matching by hash alone. A function's hash covers where it is declared,
+    a profile sums the counts of one hash, and a compile finds counts by the
+    hash (`pgo_hash_matched`).
 
 ## Known gaps
 
 - [ ] A region is measured once for all of a generic function's
   instantiations, so an instantiation the workload never ran shares the counts
-  of one it ran. So does a function of another's text and owner.
+  of one it ran. So does a function of another's text, declared in the same
+  place.
 - [ ] On the `benchmark/` pilot the profile is mixed. Against `-f no-pgo` it buys
   up to 19% of fuel on the serde rows. But `microgpt`'s inference runs 46%
   longer by the wall clock for 4% more fuel: with a 2 GiB heap the PGO build is
