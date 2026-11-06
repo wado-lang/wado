@@ -154,6 +154,16 @@ fn find_dead_params(func: &NirFunction) -> Vec<bool> {
     // the skeleton — count those so a param read only through a promoted value
     // is not seen as dead.
     arena_query::promoted_local_reads(body, &mut reads);
+    // A write-only parameter is no read, yet its assignment still names the
+    // slot, which dropping the parameter would leave dangling.
+    body.for_each_reachable_node(|node| {
+        if let NodeRef::Expr(id) = node
+            && let ExprKind::Assign { target, .. } = &body.exprs[id].kind
+            && let ExprKind::Local { index, .. } = &body.exprs[*target].kind
+        {
+            reads.insert(*index);
+        }
+    });
     // Neither `retains` nor `address_taken_locals` is consulted: keeping a
     // parameter, or a reference to it, takes a read of it. Both are carried
     // through rewrites that can delete that read, such as a specialization
