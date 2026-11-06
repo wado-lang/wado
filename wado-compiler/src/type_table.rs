@@ -2434,9 +2434,8 @@ impl TypeTable {
         }
     }
 
-    /// The elements a tuple pattern reads from `id`: a tuple's, or those of the
-    /// tuple a newtype wraps.
-    pub fn tuple_pattern_elements(&self, id: TypeId) -> Option<Vec<TypeId>> {
+    /// The elements of a tuple, or of the tuple a newtype wraps.
+    pub fn tuple_representation(&self, id: TypeId) -> Option<Vec<TypeId>> {
         self.as_tuple(self.representation_head(id))
     }
 

@@ -3241,7 +3241,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .tysys
                     .type_table
                     .borrow()
-                    .tuple_pattern_elements(scrutinee_type)?;
+                    .tuple_representation(scrutinee_type)?;
                 let elements = types
                     .iter()
                     .enumerate()

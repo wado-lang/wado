@@ -387,10 +387,7 @@ impl<'a> AffineTypes<'a> {
             Layout::Holder {
                 parts: Parts::Fields(_),
                 ..
-            } => {
-                let tt = self.tt.borrow();
-                tt.as_tuple(tt.representation_head(type_id)).is_none()
-            }
+            } => self.tt.borrow().tuple_representation(type_id).is_none(),
             Layout::Array { .. } | Layout::Holder { .. } | Layout::Opaque => false,
         }
     }

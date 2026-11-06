@@ -1,6 +1,6 @@
-// A tuple pattern reaches through a newtype as a struct pattern does, whether
-// it matches, destructures, or walks one, through a reference and a second
-// newtype alike.
+// A tuple pattern reaches through a newtype as a struct pattern does, in a
+// match, a `let`, a `for` and a destructuring assignment, and through a
+// reference, a second newtype or a generic one alike.
 
 use { println, Stdout } from "core:cli";
 
@@ -13,7 +13,7 @@ export fn run() with Stdout {
     let [n, s] = pair;
     println(`${n} ${s}`);
 
-    // Exhaustive: the wildcard elements cover the whole newtype.
+    // Exhaustive, so a pattern has to count as covering the newtype.
     match &pair {
         [first, ..] => println(`${*first}`),
     }
