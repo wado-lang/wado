@@ -26,6 +26,10 @@ fn picked(rows: List<List<f32>>, sampling: &Sampling, at: i64) -> List<i64> {
     return sampling.first_tokens(&logits(rows), at);
 }
 
+fn one_bits() -> u32 {
+    return (1.0 as f32).to_bits();
+}
+
 /// How often each of `vocabulary` tokens is drawn from `row` over `count`
 /// positions.
 fn drawn(row: List<f32>, sampling: &Sampling, count: i32) -> List<i32> {
@@ -73,6 +77,17 @@ test "top k draws among the greatest only" {
 test "top k filters beside a token no probability reaches" {
     let counts = drawn([f32::NEG_INFINITY, 1.0, 1.1, 1.2], &Sampling { temperature: 1.0, top_k: 1, seed: 9 }, 100);
     assert counts == [0, 0, 0, 100];
+}
+
+test "top k tells adjacent values apart" {
+    let row: List<f32> = [1.0, f32::from_bits(one_bits() + 1)];
+    let counts = drawn(row, &Sampling { temperature: 1.0, top_k: 1, seed: 9 }, 50);
+    assert counts == [0, 50];
+}
+
+test "a temperature that overflows the logits still ranks them" {
+    let counts = drawn([1.0, 4.0], &Sampling { temperature: 1.0e-38, seed: 9 }, 20);
+    assert counts == [0, 20];
 }
 
 test "top k of one picks the greatest whatever the draw" {

@@ -302,7 +302,10 @@ fn picked<affine G: Graph>(
         let first: G::Tensor<i64, [Slots, Tokens]> = g.arg_max(logits, 1);
         return g.reshape(&first, rows);
     }
-    let scaled = g.binary(Binary::Divide, logits, &g.broadcast_in_dim(&decoding.temperature, extents, []));
+    // Less the row's greatest first, or a small temperature overflows an f32.
+    let greatest: G::Tensor<f32, [Slots]> = g.reduce(logits, Binary::Maximum, f32::NEG_INFINITY, [1]);
+    let below = g.binary(Binary::Subtract, logits, &by_row(g, &greatest, &extents));
+    let scaled = g.binary(Binary::Divide, &below, &g.broadcast_in_dim(&decoding.temperature, extents, []));
     let mut probabilities = softmax::<G, [Slots, Tokens]>(g, &scaled, 1);
     if decoding.sampler.filters_top_k {
         let ones = full::<G, f32, [Slots, Tokens]>(g, 1.0, extents);
@@ -380,7 +383,10 @@ fn threshold<affine G: Graph>(
         low = g.select(&enough, &middle, &low);
         high = g.select(&enough, &high, &middle);
     }
-    return low;
+    // The midpoint of two adjacent values rounds to one of them, so `high` may
+    // be the answer and no halving tried it.
+    let at_high = sum_where(g, Comparison::Ge, x, &high, weights);
+    return g.select(&g.compare(Comparison::Ge, &at_high, wanted), &high, &low);
 }
 
 /// The index each row of `weights` lands `draw`, in `[0, 1)`, of the way along
