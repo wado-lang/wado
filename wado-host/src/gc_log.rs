@@ -64,6 +64,7 @@ impl Log for GcLogger {
     }
 
     fn log(&self, record: &Record<'_>) {
+        // `log::trace!` checks only the global level, never `enabled`.
         if !self.enabled(record.metadata()) {
             return;
         }

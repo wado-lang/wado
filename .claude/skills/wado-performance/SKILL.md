@@ -91,8 +91,8 @@ to stderr per collection, and the total at the end:
 
 ```sh
 wado run -O2 --gc-log prog.wado
-# gc 3 at 214.1 ms: paused 14.62 ms, live 25.8 MiB of 256.0 MiB
-# gc total: 35 collections, paused 374.0 ms
+# gc 34 at 1066.6 ms: paused 13.58 ms, live 25.8 MiB of 256.0 MiB
+# gc total: 35 collections, paused 337.4 ms
 ```
 
 Under the copying collector, the bytes allocated between two collections are half
