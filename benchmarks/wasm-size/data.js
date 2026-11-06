@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1793936007275,
+  "lastUpdate": 1793940923100,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -75033,6 +75033,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/12873c09e493b153770d80d05ad07fbcb205bc4e"
         },
         "date": 1793936006463,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3099,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7303,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21998,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 382703,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "7b1feb8d53f74e781189cf8a5c1ca5942f51bfdd",
+          "message": "Merge pull request #2563 from wado-lang/ccr-52b7fd41-lzjtwq\n\nfix(pgo): place rarity markers in short-circuit operands and match guards",
+          "timestamp": "2026-11-06T13:40:21+09:00",
+          "tree_id": "d738d3bd24b91dbed5d2b262dcc48bb5c1d6b97c",
+          "url": "https://github.com/wado-lang/wado/commit/7b1feb8d53f74e781189cf8a5c1ca5942f51bfdd"
+        },
+        "date": 1793940921997,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
