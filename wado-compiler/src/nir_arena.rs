@@ -922,7 +922,15 @@ impl Body {
         match &self.pats[pat].kind {
             PatKind::Wildcard | PatKind::Binding { .. } => true,
             PatKind::Or(alts) => alts.iter().any(|&p| self.pattern_is_catch_all(p)),
-            _ => false,
+            PatKind::Tuple(elems, _) => elems.iter().all(|&p| self.pattern_is_catch_all(p)),
+            PatKind::Struct { fields, .. } => {
+                fields.iter().all(|f| self.pattern_is_catch_all(f.pattern))
+            }
+            PatKind::Literal(_)
+            | PatKind::Variant { .. }
+            | PatKind::Enum { .. }
+            | PatKind::ConstantValue { .. }
+            | PatKind::Range { .. } => false,
         }
     }
 
