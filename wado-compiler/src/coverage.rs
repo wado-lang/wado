@@ -641,19 +641,30 @@ struct Planner<'a> {
 struct FunctionText {
     bytes: Range<usize>,
     start: Pos,
+    /// The type or trait the function is declared under, or the one its
+    /// enclosing method is, for a closure.
+    owner: Option<String>,
 }
 
-/// What a profile's counts for a function were recorded against: its text,
-/// and each of its `regions`' kind and span relative to where the text starts.
-/// The text catches an edit that changes which region runs, the regions what
-/// decides them from outside the text, such as a `#[coverage(off)]` on the
-/// enclosing `impl`. See WEP 2026-10-25 (Profile-Guided Optimization).
+/// What a profile's counts for a function were recorded against, and all a
+/// compile finds them by: its text and owner, and each of its `regions`' kind
+/// and span relative to where the text starts. The text catches an edit that
+/// changes which region runs, the owner keeps two impls' methods of one text
+/// apart, and the regions catch what decides them from outside the text, such
+/// as a `#[coverage(off)]` on the enclosing `impl`. See WEP 2026-10-25
+/// (Profile-Guided Optimization).
 fn function_hash<'r>(
     source: &str,
     text: &FunctionText,
     regions: impl Iterator<Item = &'r Region>,
 ) -> u64 {
     let mut h = Sha256::new();
+    // Text starts at a name, never at a length's first byte, so a method's
+    // owner cannot read as the start of a free function's text.
+    if let Some(owner) = &text.owner {
+        h.update((owner.len() as u32).to_le_bytes());
+        h.update(owner.as_bytes());
+    }
     h.update(normalize_line_breaks(&source[text.bytes.clone()]).as_bytes());
     for region in regions {
         h.update([region.kind.code()]);
@@ -725,6 +736,7 @@ impl Planner<'_> {
         self.texts.push(FunctionText {
             bytes: at.start..body.end,
             start: Pos::start(at),
+            owner: self.owner.clone(),
         });
         self.names.push(at);
         let region = self.new_region(kind, Pos::start(body), Pos::end(body), None);
@@ -1675,6 +1687,18 @@ mod tests {
         assert_eq!(base, moved);
         let crlf = hashes(&format!("{f}{g}").replace('\n', "\r\n"));
         assert_eq!(base, crlf);
+    }
+
+    /// A profile finds a function by its hash alone, so two impls' methods of
+    /// one text must hash apart.
+    #[test]
+    fn a_method_hash_follows_its_owner() {
+        let hashes = hashes(
+            "struct A {}\nstruct B {}\n\
+             impl A { fn get(&self) -> i32 { return 1; } }\n\
+             impl B { fn get(&self) -> i32 { return 1; } }\n",
+        );
+        assert_ne!(hashes["A::get"], hashes["B::get"]);
     }
 
     /// The kinds of the regions `body` plans as `fn f`'s, with every callee

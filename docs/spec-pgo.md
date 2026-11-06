@@ -47,22 +47,30 @@ of one package:
 - A `core:` module is its import path, and a remote module its URL.
 
 Each `fn` line gives a function's hash, its line and its name. The hash covers
-the function's source text, a CRLF read as LF, and its regions' kinds and
-positions relative to it. The lines after it give how often each of the
-function's regions ran, the regions numbered from zero within the function. A
-region not listed never ran.
+the function's source text from its name to the end of its body, a CRLF read as
+LF, and its regions' kinds and positions relative to it. For a method, and for
+a closure inside one, it also covers the type or trait the method is declared
+under. The lines after it give how often each of the function's regions ran,
+the regions numbered from zero within the function. A region not listed never
+ran.
+
+Functions of one hash share one set of counts, the sum of what each of them
+ran, as a generic function's instances do. Each module lists such a function
+under its own `fn` line, with the summed counts.
 
 A count of zero and no profile are different things. Every function of a
 module the profile lists has a `fn` line, one the workloads never ran
 included, and each of its regions has a count, zero where no line gives one.
-A function with no `fn` line has no profile at all, and neither does one whose
-hash differs from its current source's: nothing measured it as it stands, so
-no count applies to it.
+A function whose hash no `fn` line gives has no profile at all: nothing
+measured it as it stands, so no count applies to it.
 
 ## Applying a Profile
 
 A build applies its entry's profile, the one `wado test --pgo` records the
-entry's workloads into. `-f pgo` turns this on and `-f no-pgo` off. It is on
+entry's workloads into. It finds each function's counts by the function's hash
+alone. A `module` line and a function's name and line are for a reader, so a
+profile still applies after the function's module moves, or its package takes
+another version. `-f pgo` turns this on and `-f no-pgo` off. It is on
 by default in every world, the test world included, so a test runs the code a
 build ships. A build that finds no profile compiles without one, and under
 `-f pgo` says so at `--log-level info`.
@@ -84,8 +92,11 @@ entered, and whose hash matches, on two questions:
 
 A function the workloads never entered is not judged: workloads are tests, so a
 build's own entry, and whatever only it reaches, never runs under them. Nor is
-one whose hash differs, and the compile says so at `--log-level info`. Each is
-compiled as without a profile, with the markers its source states.
+one whose hash the profile does not give. Where the profile lists a function of
+the same name in the same module, under any version of its package, the
+function's source or region plan changed since the recording, and the compile
+says so at `--log-level info`. Each is compiled as without a profile, with the
+markers its source states.
 
 ### Markers
 

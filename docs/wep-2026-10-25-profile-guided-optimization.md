@@ -153,9 +153,7 @@ everywhere (see
 so every name resolves the same on any machine and from any entry of one
 package. A packaged
 module's name holds its package's name and version, never the cache path it was
-fetched to. Two versions of one package can be two packages in one build, so the
-version keeps their names apart. After an upgrade the profile holds no counts
-for the dependency until the workloads are recorded again.
+fetched to.
 
 Under each module the profile lists each function that holds a measured region,
 with:
@@ -167,6 +165,30 @@ with:
 Coverage numbers regions across the whole program, so editing one function
 would move every later function's numbers. Numbering within the function keeps
 an edit to one from reaching the counts of another.
+
+### A compile finds a function's counts by its hash alone
+
+A compile matches a function to its counts by the hash and nothing else. The
+module, the name and the line are for a reader.
+
+The first design matched a function by its module's name and then by its own.
+A packaged module's name holds the package's version, so every version bump
+cut the profile off from the code it measured. The bump left the code itself
+unchanged. A release raises the version of every package in this repository,
+so each release built its packages without their profiles, and the fuel
+benchmarks failed on the release pull request. The hash already decides whether
+counts apply, so the name added nothing but this. Matching by hash alone
+carries a profile across a version bump, a file move and a rename of a module.
+Two versions of one package in one build need no rule either.
+
+Functions of one hash share their counts, summed, as a generic function's
+instances already did. A method's hash covers the type or trait it is declared
+under, so two impls' methods of one text stay apart. What still shares counts
+is code of one text under one owner, such as a helper copied into two modules.
+Sharing cannot make cold what ran: a region is cold only where the sum is zero,
+so none of the copies ran it. It can blur unlikeliness: a branch rare in one
+copy and common in another is judged on the sum. That costs speed, never
+correctness, as every profile error does.
 
 ### A function whose source or plan changed has no profile
 
@@ -185,7 +207,10 @@ edit elsewhere, such as a caller that now passes other values, and only
 recording again refreshes them.
 
 A compile that discards a function's counts says so at `--log-level info`, so
-an author learns when to record again.
+an author learns when to record again. With matching by hash, a changed
+function is one whose hash the profile lacks while the profile lists a function
+of its name in its module. The module is compared without its package's
+version, so a bump does not hide an edit.
 
 ### Rarity is two questions, as in LLVM and GCC
 
@@ -431,7 +456,7 @@ output at every level. It is a nightly campaign, not a gate.
    fixture can name a profile in its `__DATA__`, so a fixture states which
    regions end up cold.
 5. [x] `-f pgo` and `-f no-pgo`. The CLI hands a compile the entry's profile,
-   and the compile looks each module up by its name.
+   and the compile looks each function up by its hash.
 6. [x] Unlikely and cold. A compile judges each region unlikely under
    `--optimize-predictable-branch-threshold`, and cold where it never ran. It
    writes
@@ -489,12 +514,15 @@ output at every level. It is a nightly campaign, not a gate.
       wait holds only while some site this round visits may admit it, judged
       from the site's loop depth and heat, so a candidate that never moves
       takes the hot price (`pgo_unmoved_caller_hot_site`).
+12. [x] Matching by hash alone. A function's hash covers its owner, a profile
+    sums the counts of one hash, and a compile finds counts by the hash
+    (`pgo_hash_matched`).
 
 ## Known gaps
 
 - [ ] A region is measured once for all of a generic function's
   instantiations, so an instantiation the workload never ran shares the counts
-  of one it ran.
+  of one it ran. So does a function of another's text and owner.
 - [ ] On the `benchmark/` pilot the profile is mixed. Against `-f no-pgo` it buys
   up to 19% of fuel on the serde rows. But `microgpt`'s inference runs 46%
   longer by the wall clock for 4% more fuel: with a 2 GiB heap the PGO build is
