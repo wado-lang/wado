@@ -3,7 +3,22 @@ name: pull-request
 description: The rules for opening a PR you must read before creating or editing any pull request.
 ---
 
-## First: a question you asked is a stop
+## First: check mergeability
+
+Check mergeability by exit status, before any other step:
+
+```sh
+git fetch origin main
+git merge-tree --write-tree --no-messages --name-only HEAD origin/main
+```
+
+Exit 0 = mergeable; exit 1 = conflicts, printing the merged tree OID followed
+by one conflicted path per line. This runs the real (ort) merge in memory and
+touches neither the worktree nor the index.
+
+If conflicting, resolve with the `git-upstream-sync` skill.
+
+## A question you asked is a stop
 
 If even one question you put to the user is still unanswered, stop here. Do not
 open a pull request, do not edit one, do not write a title or a description.
@@ -30,18 +45,6 @@ inside it.
 
 Revise the branch while you are there: clean up comments and docs according to
 the project rules.
-
-Check mergeability by exit status (after `git fetch origin main`):
-
-```sh
-git merge-tree --write-tree --no-messages --name-only HEAD origin/main
-```
-
-Exit 0 = mergeable; exit 1 = conflicts, printing the merged tree OID followed
-by one conflicted path per line. This runs the real (ort) merge in memory and
-touches neither the worktree nor the index.
-
-If conflicting, resolve with the `git-upstream-sync` skill.
 
 If the branch touches what the stdlib tests or the benchmarks compile or run
 on, run `mise run update-baselines` and commit the update: the compiler, the
@@ -100,6 +103,11 @@ never rewrite prose to work around it.
 Cut the draft before posting. A first draft follows the shape of the work: a
 heading for each thing that happened, at the length it took to do. Read it back
 and cut every sentence a reader would skip.
+
+## Just before opening
+
+Check mergeability again, as in the first step: `main` moves while the steps
+above run.
 
 ## After opening
 
