@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1793950859928,
+  "lastUpdate": 1794003894168,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -75165,6 +75165,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/648fe5563d105833ee6b8c76c1424d7f6d9370de"
         },
         "date": 1793950859320,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3099,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7303,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21998,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 382703,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "9fcb50da169126f9dd65d061f1e56bbc8afbc950",
+          "message": "Merge pull request #2566 from wado-lang/ccr-ac8e7cbe-t05txu\n\nfeat(pgo)!: keep a profile applying across version bumps and file moves",
+          "timestamp": "2026-11-07T07:10:42+09:00",
+          "tree_id": "105b56beb43792ad7f7818dfedb5e5da643e6336",
+          "url": "https://github.com/wado-lang/wado/commit/9fcb50da169126f9dd65d061f1e56bbc8afbc950"
+        },
+        "date": 1794003893036,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
