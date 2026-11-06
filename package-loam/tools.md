@@ -48,11 +48,12 @@ Each example's `generate.mjs` writes its model's `generate.json` through
 `tools/greedy.mjs`: the tokens onnxruntime picks greedily, and its time a token
 on the CPU and on its WebGPU provider, which must pick the same tokens.
 
-`package.json` pins the Node runtimes the oracle scripts (`*.mjs`) run, and
-`mise run loam-oracle-deps` installs them. `mise run loam-ort-inspect <model.onnx> [--dim name=extent]...` reports what onnxruntime makes of a model:
-the graph transformers that changed it, where each node runs, the optimized
-graph with its inferred shapes, and one profiled run. It is the reference a
-Loam fusion decision is measured against, as `loam dump` reports one.
+`package-lock.json` pins the Node runtimes the oracle scripts (`*.mjs`) run, and
+`mise run loam-oracle-deps` installs them.
+
+`mise run loam-ort-inspect <model.onnx> [--dim name=extent]...` reports what
+onnxruntime makes of a model: the graph transformers that changed it, where each
+node runs, the optimized graph with its inferred shapes, and one profiled run.
 
 ## Benchmarks
 

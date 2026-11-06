@@ -361,10 +361,11 @@ fn loams_webgpu_attention_computes_what_its_cpu_attention_does() {
 /// mask's rows on the device, a branch either way, attention through a shared
 /// cache, and a model's `compute` through the program compiled for each shape
 /// class, a second call replaying what the first recorded, products of one
-/// input joined into one, and a decoder branching on an input along its steps.
+/// input joined into one, a decoder branching on an input along its steps, a
+/// counted loop, and a decoding program under each kind of sampler.
 #[test]
 fn loams_webgpu_graph_computes_what_its_cpu_graph_does() {
-    assert_loam_conformance("webgpu_graph.wado", 34);
+    assert_loam_conformance("webgpu_graph.wado", 62);
 }
 
 /// A whole model's `compute` stays on the device: each sequence length reads

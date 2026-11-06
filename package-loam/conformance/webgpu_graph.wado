@@ -22,9 +22,25 @@ use {
     GpuSupportedLimits,
     RecordOptionGpuSize64,
 } from "wasi:webgpu";
-use { Comparison, Cpu, Element, full, Graph, Holds, Placed, strided_gather, Tensor, WebGpuBackend } from "lib:loam";
+use {
+    Any,
+    Binary,
+    Comparison,
+    Cpu,
+    Element,
+    f32_of,
+    full,
+    Graph,
+    Holds,
+    Placed,
+    strided_gather,
+    Tensor,
+    Untyped,
+    WebGpuBackend,
+} from "lib:loam";
 use cases from "lib:loam/src/runtime/graph_cases.wado";
 use { deviation } from "lib:loam/example/webgpu/compare.wado";
+use { decoded_tokens, samplers, stepped_tokens, tokens_apart } from "./decoded.wado";
 use gated from "./gated.onnxtext"
     with {
         type: "onnxtext",
@@ -226,10 +242,9 @@ export fn run() with (Stdout, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuC
         let normalized = if positions > 8 { 1 } else { 0 };
         assert gpu.dispatches() - before == 3 + copied + normalized, "products of one input are one dispatch";
         let reference = projected::compute(cpu, &input, &mut projected_cpu);
-        println(`compiled projected ${positions} ${deviation(&on_device.Y.data, &reference.Y.data)} ${deviation(
-            &on_device.K.data,
-            &reference.K.data,
-        )} ${deviation(&on_device.Z.data, &reference.Z.data)}`);
+        println(`compiled projected ${positions} Y ${deviation(&on_device.Y.data, &reference.Y.data)}`);
+        println(`compiled projected ${positions} K ${deviation(&on_device.K.data, &reference.K.data)}`);
+        println(`compiled projected ${positions} Z ${deviation(&on_device.Z.data, &reference.Z.data)}`);
     }
 
     // The second normalization's products launch one by one, after it.
@@ -240,10 +255,10 @@ export fn run() with (Stdout, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuC
     let on_device = shared::compute(&mut gpu, &input, &mut shared_gpu);
     assert gpu.dispatches() - before == 4, "products whose weights lie apart launch apart";
     let reference = shared::compute(cpu, &input, &mut shared_cpu);
-    println(`compiled shared ${deviation(&on_device.P.data, &reference.P.data)} ${deviation(
-        &on_device.Q.data,
-        &reference.Q.data,
-    )} ${deviation(&on_device.R.data, &reference.R.data)} ${deviation(&on_device.T.data, &reference.T.data)}`);
+    println(`compiled shared P ${deviation(&on_device.P.data, &reference.P.data)}`);
+    println(`compiled shared Q ${deviation(&on_device.Q.data, &reference.Q.data)}`);
+    println(`compiled shared R ${deviation(&on_device.R.data, &reference.R.data)}`);
+    println(`compiled shared T ${deviation(&on_device.T.data, &reference.T.data)}`);
 
     let mut attended_gpu = attended::Model::new(attended::Params::embedded(&mut gpu));
     let mut attended_cpu = attended::Model::new(attended::Params::embedded(cpu));
@@ -326,6 +341,97 @@ export fn run() with (Stdout, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuC
         println(`compiled merged ${length} ${deviation(&stepped.logits.data, &wanted.logits.data)}`);
         past_gpu = stepped.cache;
         past_cpu = wanted.cache;
+    }
+
+    for let times of [0, 1, 4] as List<i64> {
+        let [count, xs, tallies] = cases::repeating_inputs(times);
+        let want = cases::repeating(cpu, &count, &xs, &tallies);
+        let ran = cases::repeating(&mut gpu, &gpu.upload(&count), &gpu.upload(&xs), &gpu.upload(&tallies));
+        println(`repeated ${times} carried ${apart(&mut gpu, &ran.0, &want.0)}`);
+        println(`repeated ${times} tally ${apart(&mut gpu, &ran.1, &want.1)}`);
+    }
+
+    let square = Tensor::<f32, [cases::A, cases::A]> {
+        data: [1.0, 2.0, 3.0, 4.0],
+        extents: [2, 2],
+    };
+    let viewing = gpu.compiled(|r| {
+        let rturns = r.parameter::<i64, []>([]);
+        let rsquare = r.parameter::<f32, [cases::A, cases::A]>(square.extents);
+        return r.finished([cases::repeating_view(r, &rturns, &rsquare).id]);
+    }, &[], &[]).unwrap();
+    for let times of [0, 3] as List<i64> {
+        let turns = Tensor::<i64, []> {
+            data: [times],
+            extents: [],
+        };
+        let viewed = gpu.executed(&viewing, &[
+            Any::I64(gpu.relabeled::<i64, [], Untyped>(&gpu.upload(&turns))),
+            Any::F32(gpu.relabeled::<f32, [cases::A, cases::A], Untyped>(&gpu.upload(&square))),
+        ], &[]);
+        let turned = f32_of::<WebGpuBackend, [cases::A, cases::A]>(&gpu, &viewed[0]);
+        println(`repeated view ${times} ${apart(&mut gpu, &turned, &cases::repeating_view(cpu, &turns, &square))}`);
+    }
+
+    let [runs, query, key, value, looped_past] = cases::repeating_attention_inputs(3);
+    let attending = gpu.compiled(|r| {
+        let rruns = r.parameter::<i64, []>(runs.extents);
+        let rquery = r.parameter::<f32, [cases::Bt, cases::St, cases::Qt]>(query.extents);
+        let rkey = r.parameter::<f32, [cases::Bt, cases::St, cases::Kt]>(key.extents);
+        let rvalue = r.parameter::<f32, [cases::Bt, cases::St, cases::Kt]>(value.extents);
+        let rpast = r.parameter::<f32, [cases::Bt, cases::Ht, cases::Pt, cases::Dt]>(looped_past.extents);
+        return r.finished([cases::repeating_attention(r, &rruns, &rquery, &rkey, &rvalue, &rpast).id]);
+    }, &[], &[]).unwrap();
+    let looped = gpu.executed(
+        &attending,
+        &[
+            Any::I64(gpu.relabeled::<i64, [], Untyped>(&gpu.upload(&runs))),
+            Any::F32(gpu.relabeled::<f32, [cases::Bt, cases::St, cases::Qt], Untyped>(&gpu.upload(&query))),
+            Any::F32(gpu.relabeled::<f32, [cases::Bt, cases::St, cases::Kt], Untyped>(&gpu.upload(&key))),
+            Any::F32(gpu.relabeled::<f32, [cases::Bt, cases::St, cases::Kt], Untyped>(&gpu.upload(&value))),
+            Any::F32(gpu.relabeled::<f32, [cases::Bt, cases::Ht, cases::Pt, cases::Dt], Untyped>(&gpu.upload(
+                &looped_past,
+            ))),
+        ],
+        &[],
+    );
+    let looped_out = f32_of::<WebGpuBackend, [cases::Bt, cases::St, cases::Qt]>(&gpu, &looped[0]);
+    let looped_want = cases::repeating_attention(cpu, &runs, &query, &key, &value, &looped_past);
+    println(`repeated attention ${apart(&mut gpu, &looped_out, &looped_want)}`);
+
+    // An i64 converted from an f32 is no index, which alone a device holds.
+    let wide = Tensor::<f32, [cases::A]> {
+        data: [3.0e7, f32::NAN],
+        extents: [2],
+    };
+    let ones = full::<Cpu, i64, [cases::A]>(cpu, 1, [2]);
+    let reckoned = cpu.binary(Binary::Add, &cpu.convert::<f32, i64, [cases::A]>(&wide), &ones);
+    let converted = gpu.binary(
+        Binary::Add,
+        &gpu.convert::<f32, i64, [cases::A]>(&gpu.upload(&wide)),
+        &gpu.upload(&ones),
+    );
+    assert gpu.download(&converted).data == reckoned.data;
+
+    // A sum with a device's index is one only where an f32 holds it.
+    let ranked: Placed<i64, [cases::A]> = gpu.arg_max(&gpu.upload(&Tensor::<f32, [cases::A]> {
+        data: [0.0, 1.0],
+        extents: [2],
+    }), 0);
+    let far = Tensor::<i64, [cases::A]> {
+        data: [16777216],
+        extents: [1],
+    };
+    assert gpu.download(&gpu.binary(Binary::Add, &ranked, &gpu.upload(&far))).data == [16777217] as List<i64>;
+
+    for let [k, sampling] of samplers().into_iter().enumerate() {
+        let want = stepped_tokens(cpu, [2, 6, 1], 8, &sampling);
+        let read_before = gpu.read_backs();
+        let whole = decoded_tokens(&mut gpu, [2, 6, 1], [7], &sampling);
+        assert gpu.read_backs() - read_before == 2, "the prompt's logits, then every step's tokens at once";
+        let split = decoded_tokens(&mut gpu, [2, 6, 1], [3, 4], &sampling);
+        println(`decoded ${k} ${tokens_apart(&whole, &want)}`);
+        println(`decoded split ${k} ${tokens_apart(&split, &want)}`);
     }
 }
 

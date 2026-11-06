@@ -41,19 +41,32 @@ pub global LEAST_EXTENTS: String = "least_extents";
 /// The functions the constructor of `Params` keeps each folded literal with.
 pub global KEPT: String = "Kept";
 
+/// The decoding entry, which runs `DECODED`'s program.
+pub global DECODE: String = "decode";
+
+/// What `DECODE` returns.
+pub global DECODED_TYPE: String = "Decoded";
+
+/// `build`'s steps around a sampler, for `Cpu`, which compiles no program.
+pub global DECODED: String = "decoded";
+
+/// `DECODED` recorded for a backend to compile.
+pub global RECORDED_DECODED: String = "recorded_decoded";
+
 /// The map a sharded `load` takes the shards in, keyed by file name.
 pub global MAP: String = "HashMap";
 
 /// What the generated module imports from the runtime: every name its code
 /// spells, whether or not one graph's code reads it.
 pub global RUNTIME_NAMES: List<String> = [
-    "Any", "Attention", "Binary", "CheckpointBytes", "Convolution", "Cpu", "DotDims", "Expected", "GatherDims", "Graph",
-    "Holds", "LoadError", "Merged", "Programs", "Recorded", "Recorder", "Tensor", "Unary", "Untyped", "WindowReduce",
-    "assembled", "axis_mismatch", "bool_host", "bool_of", "branched", "capacity_of", "expect_len", "extent_mismatch",
-    "extents_mismatch", "f32_host", "f32_of", "fitted", "from_end", "from_end_indices", "full", "i64_host", "i64_of",
-    "input_mismatch", "joined_at", "lifted", "masked", "narrow", "payload_at", "quotient", "range_i64",
-    "read_checkpoint", "read_shards", "reduce_mean", "refuse", "resized", "softmax", "softmax_flattened",
-    "strided_gather", "to_extent", "unmet", "widen", "written_at",
+    "Any", "Attention", "Binary", "CheckpointBytes", "Convolution", "Cpu", "Decoding", "DotDims", "Expected",
+    "GatherDims", "Graph", "Holds", "LoadError", "Merged", "One", "Picks", "Programs", "Recorded", "Recorder", "Sampler",
+    "Sampling", "Slots", "Tensor", "Unary", "Untyped", "WindowReduce", "assembled", "axis_mismatch", "bool_host",
+    "bool_of", "branched", "capacity_of", "expect_len", "extent_mismatch", "extents_mismatch", "f32_host", "f32_of",
+    "fitted", "from_end", "from_end_indices", "full", "i64_host", "i64_of", "input_mismatch", "joined_at", "lifted",
+    "masked", "narrow", "opened", "payload_at", "quotient", "range_i64", "read_checkpoint", "read_shards", "reduce_mean",
+    "refuse", "resized", "scalar", "softmax", "softmax_flattened", "stepped", "strided_gather", "to_extent", "unmet",
+    "widen", "written_at",
 ];
 
 /// Whether `name` already means something in the generated module.
@@ -86,11 +99,17 @@ pub fn module_idents() -> HashSet<String> {
     reserved.insert("model");
     reserved.insert(RECORDED);
     reserved.insert(LEAST_EXTENTS);
-    // The locals `compute` and `recorded` bind.
-    reserved.insert("recorder");
-    reserved.insert("extents");
-    reserved.insert("results");
-    reserved.insert("passed");
+    reserved.insert(DECODE);
+    reserved.insert(DECODED_TYPE);
+    reserved.insert(DECODED);
+    reserved.insert(RECORDED_DECODED);
+    // The parameters and locals the entries and what they record bind.
+    for let name of [
+        "at", "decoding", "ended", "extents", "finished", "last", "moved", "next", "passed", "recorder", "results",
+        "returned", "room", "rows", "sampler", "sampling", "start", "state", "step", "steps", "tokens",
+    ] as List<String> {
+        reserved.insert(name);
+    }
     // The methods `Weights`, `Params` and `Cache` carry, which a
     // field must not share.
     reserved.insert("empty");

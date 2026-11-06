@@ -1,0 +1,28 @@
+// A variant's payload holds an instance of a generic struct, whose type
+// arguments do not name what its fields hold. The reference inside must
+// still count as one a call's result keeps, or the assignment it observes
+// replaces the list rather than writing it in place.
+
+struct Held<T> {
+    r: &List<i32>,
+    t: T,
+}
+
+struct S {
+    v: List<i32>,
+}
+
+fn wrap(x: &List<i32>) -> Option<Held<i32>> {
+    return Option::Some(Held { r: x, t: 0 });
+}
+
+fn over(s: &mut S) {
+    s.v = [9, 9];
+}
+
+test "a result keeps the reference of the struct in its payload" {
+    let mut s = S { v: [1] };
+    let o = wrap(&s.v);
+    over(&mut s);
+    assert o.unwrap().r.len() == 2;
+}

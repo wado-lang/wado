@@ -55,13 +55,10 @@ interpret at run time:
   written once in the runtime. Unicode classes such as `\p{L}` come from
   `core:icu`.
 - The vocabulary and the merges are embedded as data in byte literals, as
-  `Params::embedded` embeds a graph's weights. The tokens are separated by
-  NUL, which no supported vocabulary holds. Each merge is resolved at build
-  time to three ids: the two it joins and the one they join to.
+  `Params::embedded` embeds a graph's weights. Each merge is resolved to ids at
+  build time.
 
-The stages run in Loam's runtime library beside the tensor kernels
-(`BpeTokenizer` in `src/runtime/tokenizer.wado`), and the generated module
-imports them as it imports those.
+The stages run in Loam's runtime library, which the generated module imports.
 
 ### Support grows by the models that need it
 
@@ -82,17 +79,11 @@ belongs where the model is trained.
 
 ## Roadmap
 
-- [x] GPT-2's pipeline. Both GPT-2 examples encode and decode through a
-  `Tokenizer` generated from their `tokenizer.json`, with the ids Hugging Face's
-  tokenizer gives: `conformance/tiny_gpt2_tokenizer_test.wado` against the tiny
-  GPT-2's `generate.json`, and `example/gpt2-124m/tokenizer_test.wado` against
-  `tokenize.json`. `src/tokenizer_json.wado` refuses every other stage and
-  setting by name.
+- [x] GPT-2's pipeline.
 - [x] Gemma 3's pipeline, SentencePiece's spelling: the `Replace` normalizer
   that spells a space as `▁`, no pre-tokenizer, BPE that falls back to `<0xXX>`
   byte tokens, a `TemplateProcessing` that puts `<bos>` first, and the decoder
   that reverses them. Under it the decoder runs over added tokens too, so `▁▁`
-  decodes as two spaces. `example/gemma3-270m/tokenizer_test.wado` checks it
-  against `tokenize.json`.
+  decodes as two spaces.
 - [ ] Load time. Building the maps of Gemma's 262144 tokens and 514906 merges
   dominates the first call.

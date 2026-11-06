@@ -3,7 +3,7 @@
 
 use { TreeMap } from "core:collections";
 use { Deserialize } from "core:serde";
-use { Placement, emit } from "./emit.wado";
+use { Decode, Placement, emit } from "./emit.wado";
 use { emit_tokenizer } from "./emit_tokenizer.wado";
 use { read as read_tokenizer } from "./tokenizer_json.wado";
 use fs from "core:fs";
@@ -31,6 +31,9 @@ export struct Options {
     /// the axis it ranks along, kept at extent 1: a greedy pick reads one
     /// index rather than a vocabulary's scores. Applied after `last`.
     pub arg_max: TreeMap<String, i32> = {},
+    /// The tensors a `decode` entry loops over, beside `compute`, which then
+    /// takes how many positions its cache keeps room for.
+    pub decode: Option<Decode> = null,
     /// Whether the weights a `type: "onnx"` file carries are compiled into the
     /// module. Off, the build reads past them, and `Params::load` reads them
     /// out of that file where the build found them, so a model too large to
@@ -78,6 +81,7 @@ fn read_graph(path: &String, spelling: Spelling, bytes: ByteList) -> Result<Grap
 pub struct Model {
     pub graph: Graph,
     pub checked: Checked,
+    pub decode: Option<Decode> = null,
 }
 
 /// The graph at `path`, specialized by `options` and checked.
@@ -99,7 +103,7 @@ pub fn check(path: &String, spelling: Spelling, bytes: ByteList, options: &Optio
         take_arg_max(&mut graph, &checked, output, *axis).map_err(|e| at(path, &e))?;
         checked = infer(&graph).map_err(|e| at(path, &e))?;
     }
-    return Result::Ok(Model { graph, checked });
+    return Result::Ok(Model { graph, checked, decode: options.decode });
 }
 
 /// The graph read off `content` with its weights' payloads left in the file at
@@ -182,7 +186,7 @@ pub fn generate_model(model: &Model, path: &String, weights: Weights, runtime: &
     let shapes = &model.checked.shapes;
     // Emitting first refuses an element type no tensor holds, which the checks
     // below take as given.
-    let emit_with = |weights_from: Placement| emit(graph, &model.checked, runtime, weights_from).map_err(
+    let emit_with = |weights_from: Placement| emit(graph, &model.checked, runtime, weights_from, model.decode).map_err(
         |e| at(path, &e),
     );
     if let Some(in_place) = graph.in_place {

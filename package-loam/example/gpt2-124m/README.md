@@ -41,11 +41,10 @@ from that commit:
 SHA-256. The graph branches on whether it is given a past, so the prompt and
 each token after it run through one set of weights, and the model keeps the
 attention cache between calls. The build downloads it once into Wado's cache.
-Its weights are in the file, so
-`embed: false` leaves them there: the build reads past them, and
-`Params::load` reads them from the same file at run time. A program reaches no
-file the build read, so `fetch.sh` downloads the model as `model.onnx`, which
-Git ignores.
+Its weights are in the file, so `embed: false` leaves them there: the build
+reads past them, and `Params::load` reads them from the same file at run time.
+A program reaches no file the build read, so `fetch.sh` downloads the model as
+`model.onnx`, which Git ignores.
 
 `wado test` leaves out the files naming the model, since building one downloads
 it. `tokenizer_test.wado` needs no download and runs. `generate_test.wado`

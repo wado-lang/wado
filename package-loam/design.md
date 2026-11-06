@@ -1,15 +1,15 @@
 # Loam Design
 
-This file holds the design of what was built after
-[WEP: Loam](../docs/wep-2026-09-20-loam.md) was completed. The design before
-that is in three documents:
+[WEP: Loam](../docs/wep-2026-09-20-loam.md) holds the design up to its
+completion, and this file what was built after it. These documents hold a part
+each:
 
-- [WEP: Loam](../docs/wep-2026-09-20-loam.md), the design up to its completion.
-- [Loam on WebGPU](./webgpu.md), the design of its WebGPU backend.
-- [Loam Tokenizer](./tokenizer.md), the design of its tokenizer.
-
-[Loam on TPU and WebGPU](./devices.md) is the design that runs Loam at its best
-speed on both devices, which the roadmap builds.
+- [Loam on TPU and WebGPU](./devices.md): running at the best speed on both
+  devices, which the roadmap builds.
+- [Loam on WebGPU](./webgpu.md): how a pass runs on a WebGPU device.
+- [Loam Tokenizer](./tokenizer.md): the tokenizer.
+- [Runtime Assets](./remote-import.md): files a program reads at run time, not
+  settled.
 
 A roadmap item in [TODO.md](./TODO.md) writes its design here when it is
 finished. Where it changes a decision the WEP made, it names the WEP's section.
@@ -22,17 +22,16 @@ input's extent runs through the end of its header, whose length its first eight
 bytes give, so the probe reads those eight. Every other input, a graph or a
 tokenizer, is schema throughout, and its extent is the whole file.
 
-The probe is half of it. A Kiln host used to read every input whole and cut it
-to the extent afterwards. It now serves the probe's stream a range at a time,
-then reads each input to its extent and no further, for `generate`, the cache
-key and the cache check alike. `wado test`'s result cache and the run's source
-watch record such an input as the prefix it is. The protocol is in
+A Kiln host serves the probe's stream a range at a time, then reads each input
+to its extent and no further, for `generate`, the cache key and the cache check
+alike. `wado test`'s result cache and the run's source watch record such an
+input as the prefix it is. The protocol is in
 [the Kiln spec](../docs/spec-kiln.md#the-probe).
 
-What a build reads of each checkpoint, counted with
-`strace -f -y -e trace=read,pread64` over `wado check [--no-cache] <model.wado>`
-in `example/`, summing the reads of the `.safetensors` file, when the examples
-named the checkpoint `tools/onnx_split.wado` writes:
+What a build reads of the checkpoint `tools/onnx_split.wado` writes for each
+model, counted with `strace -f -y -e trace=read,pread64` over
+`wado check [--no-cache]` of a module naming it, summing the reads of the
+`.safetensors` file:
 
 | Checkpoint     | File size     | Build that runs the generator | Build that hits the cache |
 | -------------- | ------------- | ----------------------------- | ------------------------- |
@@ -48,11 +47,8 @@ the header.
 publishes by its URL, pinned by its SHA-256, and read its weights in place as
 [Weights read in place](#weights-read-in-place) says. Nothing is split or
 committed. A program reaches no file its build read, so each `fetch.sh`
-downloads the file the weights load from.
-[Runtime Assets](./remote-import.md) is the design that lets a program read
-it from the cache instead. Building a model downloads it, so
-`wado test` leaves the files naming one out. GPT-2's tokenizer test takes its
-`Tokenizer` from the committed `tokenizer.json`, so it runs without a download.
+downloads the file the weights load from. Building a model downloads it, so
+`wado test` leaves the files naming one out.
 
 ## Inferred Axis Names
 
@@ -69,7 +65,7 @@ example that wants a word of its own renames the axis where it imports it.
 
 `Cache<Bk>` is built as
 [WEP: Loam § A Decoder's Cache Is One Value](../docs/wep-2026-09-20-loam.md#a-decoders-cache-is-one-value)
-decided, but for two departures, and with three choices it left open.
+decided, but for two departures.
 
 The WEP stops the build at a past no present pairs with, or the reverse. Such
 a tensor is not a mistake in the export: a decoder's encoder keys are pasts
@@ -78,20 +74,12 @@ only the names that pair are the cache, and the rest stay inputs and outputs.
 
 The WEP's `Cache::empty(&mut backend)` takes nothing but the backend. Most
 exports leave the batch open, so `empty` also takes the length of each axis the
-graph leaves open beside the past's own, as `Cache::empty(&mut backend, batch_size)`. A graph whose `dims` fix every such axis keeps the WEP's
-signature.
+graph leaves open beside the past's own, as
+`Cache::empty(&mut backend, batch_size)`. A graph whose `dims` fix every such
+axis keeps the WEP's signature.
 
-- A field holds each past under the past's axes. A present's length axis is
-  minted apart from the past's, so `build` relabels each present to its past's
-  axes, which moves no element, before it returns the cache.
-- `Cache::empty` takes the length axis to be the one symbolic axis on which
-  the past and its present differ, and gives it 0.
-- `compute` retains the cache before it begins. A caller that drives `build`
-  itself calls `cache.retain(&mut backend)` there.
-
-The GPT-2 (124M) example builds from `decoder_model_merged.onnx`, whose graph
-branches on whether it is given a past, so one set of weights runs the prompt
-and each token after it. No line of the examples names a layer.
+`compute` retains the cache before it begins. A caller that drives `build`
+itself calls `cache.retain(&mut backend)` there.
 
 ## Sharded Checkpoints
 
@@ -143,8 +131,7 @@ the shard. A single file's use site and loader are unchanged.
 
 `tools/onnx_split.wado --max-shard-bytes <n>` writes the shards and the index.
 It fills each shard in the graph's order up to `n` payload bytes, and a tensor
-larger than that goes alone. `conformance/tiny_gpt2_sharded_test.wado` loads
-the tiny GPT-2 from three shards and reproduces the logits of its single file.
+larger than that goes alone.
 
 ### Weights read in place
 
@@ -171,16 +158,10 @@ Params::load(backend: &mut Bk, checkpoint: &Ck) -> Result<Params<Bk>, LoadError>
 A file shorter than a range is a `LoadError` naming the tensor. A build
 refuses a weight with no length, a range past what a module can address,
 weights in two files, and a checkpoint given beside them.
-`tools/onnx_split.wado --external-data` writes a model this way, and
-`conformance/tiny_gpt2_external_test.wado` reproduces the tiny GPT-2's logits
-from one.
+`tools/onnx_split.wado --external-data` writes a model this way.
 
 A model under 2 GiB is published with its weights in the protobuf, each in a
 `raw_data` field. `embed: false` in the options leaves them there: the build
-copies the model field by field off its stream, records where each weight's
-`raw_data` sits, and lets the payload stream past unheld. The loader is handed
-the model file itself, and checks its length against the one the build read
-before reading a weight. A constant's `raw_data` is copied, since the build
-reads it, and so is any whose `data_type` comes after it, since the walk cannot
-know it is a weight's until then. `conformance/tiny_gpt2_in_place_test.wado`
-reproduces the tiny GPT-2's logits from its own `model.onnx` this way.
+records where each weight's `raw_data` sits, and holds no payload it does not
+read. The loader is handed the model file itself, and checks its length against
+the one the build read before reading a weight.

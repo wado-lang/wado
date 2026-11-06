@@ -15,7 +15,7 @@ use {
     reduced_extents,
 } from "./hlo.wado";
 use { ElementKind } from "./tensor.wado";
-use { Data, Recorded, RecordedNode, Region } from "./recorded.wado";
+use { Data, Recorded, RecordedNode, Region, Repeat, carried_starts } from "./recorded.wado";
 
 /// `recorded` as a module whose `main` takes its parameters and returns its
 /// results. The parameters `halved` holds are bf16 on the way in. An attention
@@ -55,14 +55,31 @@ pub fn le_bytes(data: &Data) -> ByteList {
 /// shared attention buffer it takes and returns. A cache's parameter is the
 /// past itself only where it reaches the attention untouched.
 pub fn in_place(recorded: &Recorded) -> List<[i32, i32]> {
+    let mut starts = HashMap::<i32, i32>::new();
+    let mut looped = HashSet::<i32>::new();
+    for let node of &recorded.nodes {
+        if let Repeat(repeat) = &node.op {
+            let start_of = carried_starts(node);
+            for let [k, carried] of repeat.carried.into_iter().enumerate() {
+                starts[carried] = start_of[k];
+            }
+            for let result of repeat.body.results {
+                looped.insert(result);
+            }
+        }
+    }
     let mut pairs: List<[i32, i32]> = [];
     for let [past, present] of recorded.appended {
-        let Parameter(parameter) = &recorded.nodes[past].op else {
+        let mut source = past;
+        while let Some(start) = starts.get(source) {
+            source = start;
+        }
+        let Parameter(parameter) = &recorded.nodes[source].op else {
             continue;
         };
-        let updated = relabeled_from(recorded, present);
+        let updated = relabeled_from(recorded, &looped, present);
         for let [result, id] of recorded.body.results.into_iter().enumerate() {
-            if relabeled_from(recorded, id) == updated {
+            if relabeled_from(recorded, &looped, id) == updated {
                 pairs.push([*parameter, result]);
             }
         }
@@ -70,14 +87,14 @@ pub fn in_place(recorded: &Recorded) -> List<[i32, i32]> {
     return pairs;
 }
 
-/// The node `id` holds the elements of, past reshapes that move no axis, which
-/// a decomposed attention and a generated pass write to relabel axes.
-fn relabeled_from(recorded: &Recorded, id: i32) -> i32 {
+/// The node `id` holds the elements of, past the results of a loop, `looped`,
+/// and reshapes that move no axis, which a decomposed attention and a generated
+/// pass write to relabel axes.
+fn relabeled_from(recorded: &Recorded, looped: &HashSet<i32>, id: i32) -> i32 {
     let node = &recorded.nodes[id];
-    if node.op matches { Reshape } && recorded.nodes[node.operands[0]].extents == node.extents {
-        return relabeled_from(recorded, node.operands[0]);
-    }
-    return id;
+    let relabels = looped.contains(id)
+        || node.op matches { Reshape } && recorded.nodes[node.operands[0]].extents == node.extents;
+    return if relabels { relabeled_from(recorded, looped, node.operands[0]) } else { id };
 }
 
 fn push_le(bytes: &mut ByteList, bits: u64, width: i32) {
@@ -343,6 +360,9 @@ impl Writer {
             Reverse(dims) => self.line(id, node, "stablehlo.reverse", "", ` {dimensions = ${dense_array(dims)}}`),
             ArgMax(axis) => self.arg_max(id, node, *axis),
             Case([first, second]) => self.branched(id, node, first, second),
+            Repeat(repeat) => self.repeated(id, node, repeat),
+            Carried => {
+            },
             Yield => {
                 self.names[id] = self.name(node.operands[0]);
             },
@@ -477,6 +497,46 @@ impl Writer {
         self.text.push_str(`}) : (tensor<i1>) -> (${self.types_of(&first.results)})\n`);
         for let [k, result] of first.results.into_iter().enumerate() {
             self.names[result] = `${n}#${k}`;
+        }
+    }
+
+    /// A `while` over the run's number, then each carried value. The body reads
+    /// what lies outside the loop as a branch does.
+    fn repeated(&mut self, id: i32, node: &RecordedNode, repeat: &Repeat) {
+        let n = node_name(id);
+        let i = "tensor<i64>";
+        let carried_types: List<String> = repeat.carried.into_iter().map(|c| self.type_at(c)).collect();
+        let mut types: List<String> = [i];
+        types.extend(&carried_types);
+        let all = types.join(", ");
+        let arguments = |prefix: String| {
+            let mut declared = [`${prefix}s: ${i}`] as List<String>;
+            for let [k, ty] of carried_types.into_iter().enumerate() {
+                declared.push(`${prefix}${k}: ${ty}`);
+            }
+            return declared.join(", ");
+        };
+        self.scalar(`${n}z`, "0", i);
+        let mut operands = [`${n}z`] as List<String>;
+        operands.extend(&carried_starts(node).into_iter().map(|s| self.name(s)).collect());
+        self.text.push_str(`${n}:${types.len()} = "stablehlo.while"(${operands.join(", ")}) ({\n`);
+        self.text.push_str(`^bb0(${arguments(`${n}c`)}):\n`);
+        self.text.push_str(scalar_compared(`${n}l`, "LT", ElementKind::I64, `${n}cs`, self.name(node.operands[0])));
+        self.text.push_str(`"stablehlo.return"(${n}l) : (tensor<i1>) -> ()\n`);
+        self.text.push_str(`}, {\n^bb0(${arguments(`${n}b`)}):\n`);
+        self.names[repeat.step] = `${n}bs`;
+        for let [k, carried] of repeat.carried.into_iter().enumerate() {
+            self.names[carried] = `${n}b${k}`;
+        }
+        self.region(&repeat.body);
+        self.scalar(`${n}o`, "1", i);
+        self.text.push_str(`${n}n = "stablehlo.add"(${n}bs, ${n}o) : (${i}, ${i}) -> ${i}\n`);
+        let mut returned = [`${n}n`] as List<String>;
+        returned.extend(&repeat.body.results.into_iter().map(|r| self.name(r)).collect());
+        self.text.push_str(`"stablehlo.return"(${returned.join(", ")}) : (${all}) -> ()\n`);
+        self.text.push_str(`}) : (${all}) -> (${all})\n`);
+        for let [k, result] of repeat.body.results.into_iter().enumerate() {
+            self.names[result] = `${n}#${k + 1}`;
         }
     }
 }

@@ -13,6 +13,22 @@ A pull request never goes out with an open question behind it. "The rest is
 ready" is not a reason to proceed, and neither is a question that looks minor:
 the user decides what is minor.
 
+## Check mergeability
+
+Check mergeability by exit status, before any step below. Run it alone and read
+the result before going on: chained to a later step, it stops nothing.
+
+```sh
+git fetch origin main &&
+  git merge-tree --write-tree --no-messages --name-only HEAD origin/main
+```
+
+Exit 0 = mergeable; exit 1 = conflicts, printing the merged tree OID followed
+by one conflicted path per line. This runs the real (ort) merge in memory and
+touches neither the worktree nor the index.
+
+If conflicting, resolve with the `git-upstream-sync` skill.
+
 ## Before writing
 
 Read the branch's own changes, generated files left out:
@@ -30,18 +46,6 @@ inside it.
 
 Revise the branch while you are there: clean up comments and docs according to
 the project rules.
-
-Check mergeability by exit status (after `git fetch origin main`):
-
-```sh
-git merge-tree --write-tree --no-messages --name-only HEAD origin/main
-```
-
-Exit 0 = mergeable; exit 1 = conflicts, printing the merged tree OID followed
-by one conflicted path per line. This runs the real (ort) merge in memory and
-touches neither the worktree nor the index.
-
-If conflicting, resolve with the `git-upstream-sync` skill.
 
 If the branch touches what the stdlib tests or the benchmarks compile or run
 on, run `mise run update-baselines` and commit the update: the compiler, the
@@ -100,6 +104,10 @@ never rewrite prose to work around it.
 Cut the draft before posting. A first draft follows the shape of the work: a
 heading for each thing that happened, at the length it took to do. Read it back
 and cut every sentence a reader would skip.
+
+## Just before opening
+
+Check mergeability again, as above: `main` moves while these steps run.
 
 ## After opening
 

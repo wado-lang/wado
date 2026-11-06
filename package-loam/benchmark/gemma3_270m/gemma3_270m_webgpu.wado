@@ -2,8 +2,11 @@
 //! model's directory as the one grant, as `mise run gemma3-270m` does:
 //!
 //!     wado run-webgpu --dir ../example/gemma3-270m gemma3_270m/gemma3_270m_webgpu.wado
+//!
+//! The argument `decode` picks the tokens after the first in one call of
+//! `decode`, rather than a read back each.
 
-use { eprintln, Stderr, Stdout } from "core:cli";
+use { args, eprintln, Environment, Stderr, Stdout } from "core:cli";
 use fs from "core:fs";
 use { Preopens } from "core:fs";
 use { MonotonicClock } from "wasi:clocks";
@@ -24,11 +27,11 @@ use {
     GpuSupportedLimits,
     RecordOptionGpuSize64,
 } from "wasi:webgpu";
-use { WebGpuBackend } from "lib:loam";
+use { Sampling, WebGpuBackend } from "lib:loam";
 use { Model } from "../../example/gemma3-270m/model.wado";
-use { timed } from "./generate.wado";
+use { STEPS, timed, timed_by } from "./generate.wado";
 
-export fn run() with (Stdout, Stderr, Preopens, MonotonicClock, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder, GpuSupportedLimits, RecordOptionGpuSize64) {
+export fn run() with (Environment, Stdout, Stderr, Preopens, MonotonicClock, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder, GpuSupportedLimits, RecordOptionGpuSize64) {
     let Ok(checkpoint) = fs::read_linear("build/model.onnx_data") else {
         eprintln("build/model.onnx_data is missing; run package-loam/example/gemma3-270m/fetch.sh");
         return;
@@ -38,5 +41,9 @@ export fn run() with (Stdout, Stderr, Preopens, MonotonicClock, Webgpu, Gpu, Gpu
         return;
     };
     let mut model = Model::load(gpu, &checkpoint).unwrap();
-    timed("Gemma 3 (270M), Loam WebGPU", &mut model);
+    if args().contains_str("decode") {
+        timed_by("Gemma 3 (270M), Loam WebGPU decode", &mut model, |m, ids| m.next_tokens(ids, STEPS, &Sampling {}));
+    } else {
+        timed("Gemma 3 (270M), Loam WebGPU", &mut model);
+    }
 }

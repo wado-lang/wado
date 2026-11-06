@@ -166,17 +166,17 @@ import fn wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode f
 global global:core:prelude/primitive.wado::$const_obj_0: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
 
 fn "value_copy_case_test_takes_nothing.wado/run"() {
+    let $load_0: ref "value_copy_case_test_takes_nothing.wado//Tree";
     let a: i32;
     let b: i32;
     let $local_5: ref "tuple//[value_copy_case_test_takes_nothing.wado/Tree, value_copy_case_test_takes_nothing.wado/Tree]";
-    let $local_8: ref "value_copy_case_test_takes_nothing.wado//Tree";
-    let $sroa_tree_2_11: ref null "tuple//[value_copy_case_test_takes_nothing.wado/Tree, value_copy_case_test_takes_nothing.wado/Tree]";
-    $sroa_tree_2_11 = struct.new "tuple//[value_copy_case_test_takes_nothing.wado/Tree, value_copy_case_test_takes_nothing.wado/Tree]" { 0: struct.new "value_copy_case_test_takes_nothing.wado//Tree::Leaf" { discriminant: 0, payload_0: 10 }, 1: struct.new "value_copy_case_test_takes_nothing.wado//Tree::Leaf" { discriminant: 0, payload_0: 20 } };
+    let $sroa_tree_2_8: ref null "tuple//[value_copy_case_test_takes_nothing.wado/Tree, value_copy_case_test_takes_nothing.wado/Tree]";
+    $sroa_tree_2_8 = struct.new "tuple//[value_copy_case_test_takes_nothing.wado/Tree, value_copy_case_test_takes_nothing.wado/Tree]" { 0: struct.new "value_copy_case_test_takes_nothing.wado//Tree::Leaf" { discriminant: 0, payload_0: 10 }, 1: struct.new "value_copy_case_test_takes_nothing.wado//Tree::Leaf" { discriminant: 0, payload_0: 20 } };
     if @unlikely(local.tee a((if block -> i32 {
-        if ref.test "value_copy_case_test_takes_nothing.wado//Tree::Leaf"(local.tee $local_8(local.tee $local_5(ref.as_non_null($sroa_tree_2_11)).0)) -> i32 {
-            a = ref.cast "value_copy_case_test_takes_nothing.wado//Tree::Leaf"($local_8).payload_0;
-            if ref.test "value_copy_case_test_takes_nothing.wado//Tree::Leaf"(local.tee $local_8($local_5.1)) -> i32 {
-                b = ref.cast "value_copy_case_test_takes_nothing.wado//Tree::Leaf"($local_8).payload_0;
+        if ref.test "value_copy_case_test_takes_nothing.wado//Tree::Leaf"(local.tee $load_0(local.tee $local_5(ref.as_non_null($sroa_tree_2_8)).0)) -> i32 {
+            a = ref.cast "value_copy_case_test_takes_nothing.wado//Tree::Leaf"($load_0).payload_0;
+            if ref.test "value_copy_case_test_takes_nothing.wado//Tree::Leaf"(local.tee $load_0($local_5.1)) -> i32 {
+                b = ref.cast "value_copy_case_test_takes_nothing.wado//Tree::Leaf"($load_0).payload_0;
                 1;
             } else {
                 0;
@@ -185,7 +185,7 @@ fn "value_copy_case_test_takes_nothing.wado/run"() {
             0;
         }
     } -> i32 {
-        drop(ref.as_non_null($sroa_tree_2_11));
+        drop(ref.as_non_null($sroa_tree_2_8));
         a + b;
     } else {
         0;

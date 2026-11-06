@@ -1,8 +1,9 @@
 use { HashMap, TreeMap } from "core:collections";
-use { EmitError, NameCollision, Placement, UnmappedDtype, emit } from "./emit.wado";
+use { Decode, EmitError, NameCollision, Placement, UnmappedDtype, emit } from "./emit.wado";
 use { Attr, Dim, Elements, Graph, InPlace, Known, Node, Rank, ValueInfo } from "./graph.wado";
 use { infer } from "./infer.wado";
 use { read } from "./onnx_text.wado";
+use { keep_last } from "./specialize.wado";
 
 /// The package spec the generated module imports the runtime from.
 global RUNTIME: String = "lib:loam";
@@ -789,7 +790,7 @@ g (float[1, T, 8] P, float[1, 1, 8] N) => (float[1, U, 8] Y)
     let out = generate(source).unwrap();
 
     assert out.contains(
-        "let Y = joined_at::<Bk, f32, [P0, U, P2], [P0, N1, P2], [P0, U, P2]>(backend, &joined_at::<Bk, f32, [P0, T, P2], [P0, N1, P2], [P0, U, P2]>(backend, P, N, 1, &lengths.dim_T), N, 1, &backend.binary::<i64, []>(Binary::Add, &lengths.dim_T, &full::<Bk, i64, []>(backend, 1, [])));",
+        "let Y = joined_at::<Bk, f32, [P0, U, P2], [P0, N1, P2], [P0, U, P2]>(backend, &joined_at::<Bk, f32, [P0, T, P2], [P0, N1, P2], [P0, U, P2]>(backend, P, N, 1, &lengths.dim_T), N, 1, &backend.binary::<i64, []>(Binary::Add, &lengths.dim_T, &scalar::<Bk, i64>(backend, 1)));",
     );
 }
 
@@ -863,7 +864,7 @@ g (float[2, 4, 8] X) => (float[2, 4, 8] Y)
     let out = generate(source).unwrap();
 
     assert out.contains(
-        "let M = backend.reshape::<f32, [X0, X1], [X0, X1, X2]>(&reduce_mean::<Bk, [X0, X1, X2], [X0, X1]>(backend, X, [2], &full::<Bk, i64, []>(backend, 8, [])), [2, 4, 1]);",
+        "let M = backend.reshape::<f32, [X0, X1], [X0, X1, X2]>(&reduce_mean::<Bk, [X0, X1, X2], [X0, X1]>(backend, X, [2], &scalar::<Bk, i64>(backend, 8)), [2, 4, 1]);",
     );
     assert out.contains(
         "let Y = backend.binary::<f32, [X0, X1, X2]>(Binary::Subtract, X, &backend.broadcast_in_dim::<f32, [X0, X1, X2], [X0, X1, X2]>(&M, [2, 4, 8], [0, 1, 2]));",
@@ -894,7 +895,7 @@ g (float[2, 4, 8] X) => (float[2, 4] Y)
     let out = generate(source).unwrap();
 
     assert out.contains(
-        "let Y = reduce_mean::<Bk, [X0, X1, X2], [X0, X1]>(backend, X, [2], &full::<Bk, i64, []>(backend, 8, []));",
+        "let Y = reduce_mean::<Bk, [X0, X1, X2], [X0, X1]>(backend, X, [2], &scalar::<Bk, i64>(backend, 8));",
     );
 }
 
@@ -1292,7 +1293,7 @@ test "a Range over a symbolic length is computed on the backend" {
     }`;
     let out = generate(source).unwrap();
     assert out.contains(
-        "let Y = range_i64::<Bk, N>(backend, &full::<Bk, i64, []>(backend, 0, []), to_extent(dim_N), &full::<Bk, i64, []>(backend, 1, []));",
+        "let Y = range_i64::<Bk, N>(backend, &scalar::<Bk, i64>(backend, 0), to_extent(dim_N), &scalar::<Bk, i64>(backend, 1));",
     );
 }
 
@@ -1328,7 +1329,7 @@ test "a Slice by a negative step walks back from its start" {
     }`;
     let out = generate(source).unwrap();
     assert out.contains(
-        "let Y = strided_gather::<Bk, f32, [N], [Y0]>(backend, X, 0, &backend.binary::<i64, []>(Binary::Add, &lengths.dim_N, &full::<Bk, i64, []>(backend, -1, [])), to_extent(dim_N), -1);",
+        "let Y = strided_gather::<Bk, f32, [N], [Y0]>(backend, X, 0, &backend.binary::<i64, []>(Binary::Add, &lengths.dim_N, &scalar::<Bk, i64>(backend, -1)), to_extent(dim_N), -1);",
     );
 }
 
@@ -1353,7 +1354,7 @@ test "an embedding lookup is a gather of rows, and a folded index tensor is a li
     }`;
     let out = generate(source).unwrap();
     assert out.contains(
-        "let E = backend.gather::<f32, [W0, Y2], [I0, I1], [I0, I1, Y2]>(&weights.W, &from_end_indices::<Bk, [I0, I1]>(backend, I, &full::<Bk, i64, []>(backend, 16, [])), &GatherDims { offset_dims: [2], collapsed_slice_dims: [0], start_index_map: [0], index_vector_dim: 2, slice_sizes: [1, 8] });",
+        "let E = backend.gather::<f32, [W0, Y2], [I0, I1], [I0, I1, Y2]>(&weights.W, &from_end_indices::<Bk, [I0, I1]>(backend, I, &scalar::<Bk, i64>(backend, 16)), &GatherDims { offset_dims: [2], collapsed_slice_dims: [0], start_index_map: [0], index_vector_dim: 2, slice_sizes: [1, 8] });",
     );
     assert out.contains("return backend.keep(&Tensor::<i64, [I0, I1]> { data: [0, 1, 2, 3], extents: [1, 4] });");
     assert out.contains(
@@ -1392,7 +1393,7 @@ test "Gather along any axis but the first gathers along it, the axes spelled" {
     }`;
     let out = generate(source).unwrap();
     assert out.contains(
-        "let Y = backend.gather::<f32, [Y0, W1], [I0], [Y0, I0]>(&weights.W, &from_end_indices::<Bk, [I0]>(backend, I, &full::<Bk, i64, []>(backend, 8, [])), &GatherDims { offset_dims: [0], collapsed_slice_dims: [1], start_index_map: [1], index_vector_dim: 1, slice_sizes: [16, 1] });",
+        "let Y = backend.gather::<f32, [Y0, W1], [I0], [Y0, I0]>(&weights.W, &from_end_indices::<Bk, [I0]>(backend, I, &scalar::<Bk, i64>(backend, 8)), &GatherDims { offset_dims: [0], collapsed_slice_dims: [1], start_index_map: [1], index_vector_dim: 1, slice_sizes: [16, 1] });",
     );
 }
 
@@ -1599,4 +1600,108 @@ test "a constant one branch folds is spelled in that branch" {
     let body = generate(source).unwrap();
     let k = body.find("let K = ").unwrap();
     assert body.find("let Y = branched::<").unwrap() < k < body.find("}, || {").unwrap();
+}
+
+global DECODER: String = #include_str("../conformance/decoder.onnxtext");
+
+/// Why `source` takes no `decode` of these tensors, the output named in `last`
+/// where one is, or the module where it does.
+fn decoded(
+    ids: String,
+    mask: String,
+    logits: String,
+    last: Option<String> = null,
+    source: String = DECODER,
+) -> Result<String, EmitError> {
+    let mut graph = read(&source).unwrap();
+    if let Some(output) = last {
+        keep_last(&mut graph, &infer(&graph).unwrap(), &output, 1).unwrap();
+    }
+    return emit(&graph, &infer(&graph).unwrap(), &RUNTIME, Placement::File, Option::Some(Decode { ids, mask, logits }));
+}
+
+/// `decoded` of `source`, an edit of `DECODER`, by its usual tensors.
+fn decoded_from(source: String) -> Result<String, EmitError> {
+    return decoded("input_ids", "attention_mask", "logits", Option::Some("logits"), source);
+}
+
+fn refused_for(result: Result<String, EmitError>, reason: String) -> bool {
+    return result matches { Err(Undecodable(why)) && why.contains(reason.as_str_slice()) };
+}
+
+test "decode offers a program beside compute, whose cache keeps room for its steps" {
+    let out = decoded_from(DECODER).unwrap();
+    assert out.contains("pub fn decode<affine Bk: Graph>(");
+    assert out.contains("cache: &Cache<Bk>, room: i32, model: &mut Model<Bk>)");
+    assert out.contains("cache: &Cache<Bk>, steps: i32, sampling: &Sampling, model: &mut Model<Bk>)");
+}
+
+test "a module built without decode takes no room" {
+    let out = generate(decoder("past_key", "present_key")).unwrap();
+    assert !out.contains("room");
+    assert !out.contains("pub fn decode");
+}
+
+test "decode refuses tensors a loop cannot feed" {
+    let logits = Option::Some("logits") as Option<String>;
+    assert refused_for(decoded("ids", "attention_mask", "logits", logits), "input_ids is an input no step");
+    assert refused_for(decoded("input_ids", "mask", "logits", logits), "attention_mask is an input no step");
+    assert refused_for(decoded("input_ids", "attention_mask", "out", logits), "out is no f32 output");
+    assert refused_for(decoded("input_ids", "attention_mask", "present_key", logits), "present_key is no f32 output");
+    assert refused_for(decoded("past_key", "attention_mask", "logits", logits), "input_ids is an input no step");
+}
+
+test "decode refuses logits of more than one position" {
+    assert refused_for(decoded("input_ids", "attention_mask", "logits"), "must hold one position");
+}
+
+test "decode refuses rows a pass holds at a capacity" {
+    assert refused_for(decoded_from(DECODER.replace("[1, ", "[B, ")), "must not be held at a capacity");
+}
+
+test "decode refuses one input as both its token and its mask" {
+    assert refused_for(
+        decoded("attention_mask", "attention_mask", "logits", Option::Some("logits")),
+        "both the token and the mask",
+    );
+}
+
+test "decode refuses ids of more than one position" {
+    let two = DECODER.replace("int64[1, S] input_ids", "int64[1, 2] input_ids").replace(
+        "float[1, S, 8] logits",
+        "float[1, 2, 8] logits",
+    );
+    assert refused_for(decoded_from(two), "must take one token");
+}
+
+test "decode refuses logits of rows other than the token's" {
+    let wide = DECODER.replace("float[1, S, 8] logits", "float[2, S, 8] logits").replace(
+        "logits = Add(raw, tilt)",
+        "rows = Constant <value = float[2, 1, 1] { 0.0, 0.0 }> ()\n    logits = Add(raw, rows)",
+    );
+    assert refused_for(decoded_from(wide), "as many rows");
+}
+
+test "decode refuses a past whose extent a pass changes uncounted" {
+    assert refused_for(
+        decoded_from(DECODER.replace("float[1, 1, P, 16] past", "float[1, 1, 2, 16] past")),
+        "keep its extents through a step",
+    );
+}
+
+test "decode checks its ids' token after their shape" {
+    let out = decoded_from(DECODER).unwrap();
+    let body = out.substr_bytes(out.find("pub fn decode<affine Bk: Graph>(").unwrap(), out.len());
+    assert body.find("input_mismatch(input_ids").unwrap() < body.find("extent_mismatch(\"input_ids\"").unwrap();
+}
+
+test "decode refuses a graph with no cache" {
+    let graph = read(
+        &"<ir_version: 8, opset_import: [ \"\" : 17 ]>\nplain (int64[1, N] ids) => (float[1, N] Y)\n{\n    Y = Cast<to = 1>(ids)\n}\n",
+    ).unwrap();
+    let decode = Decode { ids: "ids", mask: "ids", logits: "Y" };
+    assert refused_for(
+        emit(&graph, &infer(&graph).unwrap(), &RUNTIME, Placement::File, Option::Some(decode)),
+        "no cache",
+    );
 }

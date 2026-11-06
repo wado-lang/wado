@@ -20,7 +20,7 @@ use {
     stretched_strides,
     walked,
 } from "./tensor.wado";
-use { Any, Recorded, Recorder, kept_any } from "./recorded.wado";
+use { Any, Recorded, Recorder, assert_carries, kept_any } from "./recorded.wado";
 
 /// A StableHLO elementwise operation of one operand. `Erf` is CHLO's, as
 /// StableHLO has no error function.
@@ -267,6 +267,24 @@ pub affine trait Graph: Holds with _ {
     fn yielded<E: Element, Axes>(&mut self, x: &Self::Tensor<E, Axes>) -> Self::Tensor<E, Axes> {
         return *x;
     }
+    /// StableHLO's `while` over a count: `body` run `count` times, each given
+    /// which run it is, from 0, and what the run before returned, the first
+    /// `initial`, and what the last returned. `body` adds its operations through
+    /// the graph it captured, which this call has set to record into the loop.
+    fn repeated(
+        &mut self,
+        count: &Self::Tensor<i64, []>,
+        initial: &List<Any<Self>>,
+        body: fn(&Self::Tensor<i64, []>, &List<Any<Self>>) -> List<Any<Self>> with _,
+    ) -> List<Any<Self>> with _ {
+        let mut state = *initial;
+        for let at of 0..<self.download(count).data[0] {
+            let returned = body(&scalar(self, at), &state);
+            assert_carries(self, &state, &returned);
+            state = returned;
+        }
+        return state;
+    }
     /// `x` with `axis` grown to `extent`, what it holds past its own extent
     /// unspecified: a cache moved to a larger capacity, whose attention reads
     /// none of those positions. Zeros, where the graph keeps no room there.
@@ -355,7 +373,7 @@ pub fn decomposed_attention<affine G: Graph, B, S, Q, K, H, P, T, D, Pos, Half, 
     let [heads, kv] = [options.heads, options.kv_heads];
     let [first, total] = match past_length {
         Some(l) => [*l, past],
-        None => [full::<G, i64, []>(g, past as i64, []), past + s],
+        None => [scalar(g, past as i64), past + s],
     };
     let mut query = heads_first::<G, B, S, Q, Heads, D>(g, q, heads, d);
     let mut key = heads_first::<G, B, S, K, H, D>(g, k, kv, d);
@@ -454,14 +472,18 @@ fn unpacked4(extents: &List<i32>) -> [i32, i32, i32, i32] {
     return [extents[0], extents[1], extents[2], extents[3]];
 }
 
-/// `value` at every position of `extents`: a constant broadcast, as StableHLO
-/// spells one.
-pub fn full<affine G: Graph, E: Element, Axes>(g: &mut G, value: E, extents: List<i32>) -> G::Tensor<E, Axes> with _ {
-    let scalar: G::Tensor<E, []> = g.upload(&Tensor::<E, []> {
+/// `value` as a scalar `g` holds.
+pub fn scalar<affine G: Holds, E: Element>(g: &mut G, value: E) -> G::Tensor<E, []> with _ {
+    return g.upload(&Tensor::<E, []> {
         data: [value],
         extents: [],
     });
-    return g.broadcast_in_dim(&scalar, extents, []);
+}
+
+/// `value` at every position of `extents`: a constant broadcast, as StableHLO
+/// spells one.
+pub fn full<affine G: Graph, E: Element, Axes>(g: &mut G, value: E, extents: List<i32>) -> G::Tensor<E, Axes> with _ {
+    return g.broadcast_in_dim(&scalar(g, value), extents, []);
 }
 
 /// ONNX's `Softmax` along `axis`: less the greatest along it, exponentiated,
@@ -679,7 +701,7 @@ pub fn strided_gather<affine G: Graph, E: Element, In, Out>(
     count: i32,
     step: i64,
 ) -> G::Tensor<E, Out> with _ {
-    let indices = range_i64::<G, Row>(g, start, count, &full::<G, i64, []>(g, step, []));
+    let indices = range_i64::<G, Row>(g, start, count, &scalar(g, step));
     let mut sizes = g.extents_of(x);
     sizes[axis] = 1;
     let dims = GatherDims {

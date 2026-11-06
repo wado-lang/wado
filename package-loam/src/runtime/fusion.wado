@@ -28,6 +28,8 @@ pub variant Launch {
     Paired(Pair),
     /// A `Case` node, each branch planned on its own.
     Case([i32, Plan, Plan]),
+    /// A `Repeat` node, its body planned on its own.
+    Repeat([i32, Plan]),
 }
 
 /// One kernel: `op` over `operands` at each element of `extents`, row by row
@@ -93,18 +95,27 @@ impl Plan {
                     reads.extend(&first.reads(recorded));
                     reads.extend(&second.reads(recorded));
                 },
+                Repeat([id, body]) => {
+                    reads.extend(&recorded.nodes[*id].operands);
+                    reads.extend(&body.reads(recorded));
+                },
             }
         }
         return reads;
     }
 
-    /// Its launches, and those of each branch within it.
+    /// Its launches, and those of each branch and loop within it.
     pub fn flattened(&self) -> List<Launch> {
         let mut all: List<Launch> = [];
         for let launch of self.launches {
-            if let Case([_, first, second]) = launch {
-                all.extend(&first.flattened());
-                all.extend(&second.flattened());
+            match launch {
+                Case([_, first, second]) => {
+                    all.extend(&first.flattened());
+                    all.extend(&second.flattened());
+                },
+                Repeat([_, body]) => all.extend(&body.flattened()),
+                _ => {
+                },
             }
             all.push(launch);
         }
@@ -205,7 +216,7 @@ pub fn replanned(
 /// `Expr` holds them.
 fn planned_apart(a: &Operation, b: &Operation) -> bool {
     return match a {
-        Parameter(_) | Unary(_) | Binary(_) | Compare(_) | BroadcastInDim(_) | Reduce(_) | DotGeneral(_) | Case(_) => a != b,
+        Parameter(_) | Unary(_) | Binary(_) | Compare(_) | BroadcastInDim(_) | Reduce(_) | DotGeneral(_) | Case(_) | Repeat(_) => a != b,
         _ => false,
     };
 }
@@ -243,6 +254,7 @@ fn mapped_plan(plan: &Plan, to: &HashMap<i32, i32>) -> Plan {
             mapped_plan(&first, to),
             mapped_plan(&second, to),
         ]),
+        Repeat([id, body]) => Launch::Repeat([id, mapped_plan(&body, to)]),
     }).collect();
     return Plan { launches, results: plan.results };
 }
@@ -291,6 +303,11 @@ fn planned_region(recorded: &Recorded, region: &Region, splats: &HashMap<i32, Op
         }
         if let Case([first, second]) = &node.op {
             for let o of branch_reads(recorded, first).into_iter().chain(branch_reads(recorded, second).into_iter()) {
+                read_by(&mut readers, o, OUTSIDE);
+            }
+        }
+        if let Repeat(repeat) = &node.op {
+            for let o of branch_reads(recorded, &repeat.body) {
                 read_by(&mut readers, o, OUTSIDE);
             }
         }
@@ -352,6 +369,8 @@ fn planned_region(recorded: &Recorded, region: &Region, splats: &HashMap<i32, Op
                 planned_region(recorded, first, splats),
                 planned_region(recorded, second, splats),
             ]));
+        } else if let Repeat(repeat) = &recorded.nodes[id].op {
+            launches.push(Launch::Repeat([id, planned_region(recorded, &repeat.body, splats)]));
         } else if let Some(g) = group_of.get(id) {
             if groups[g].root == id {
                 launches.push(Launch::Kernel(kernel_of(recorded, &groups[g], splats)));
@@ -622,6 +641,9 @@ fn branch_reads(recorded: &Recorded, region: &Region) -> List<i32> {
         if let Case([first, second]) = &node.op {
             reads.extend(&branch_reads(recorded, first));
             reads.extend(&branch_reads(recorded, second));
+        }
+        if let Repeat(repeat) = &node.op {
+            reads.extend(&branch_reads(recorded, &repeat.body));
         }
     }
     return reads;

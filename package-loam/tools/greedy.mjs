@@ -11,7 +11,7 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import * as ort from 'onnxruntime-node';
 
-export const STEPS = 8;
+export const STEPS = 32;
 
 /**
  * Writes `dir`/generate.json for `decoder`, continuing each of `prompts`.
