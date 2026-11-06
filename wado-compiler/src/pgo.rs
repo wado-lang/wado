@@ -103,9 +103,9 @@ impl Profile {
         self.counts.is_empty()
     }
 
-    /// Whether a workload measured a function named `name` in `module`, under
+    /// Whether the profile lists a function named `name` in `module`, under
     /// any version of its package.
-    fn measured(&self, module: &str, name: &str) -> bool {
+    fn lists(&self, module: &str, name: &str) -> bool {
         self.listed
             .get(&unversioned_module_name(module))
             .is_some_and(|functions| functions.iter().any(|(listed, _)| listed == name))
@@ -304,7 +304,8 @@ pub fn parse(text: &str) -> Result<Profile, ParseError> {
     let mut profile = Profile::default();
     let mut modules = BTreeSet::new();
     let mut module: Option<String> = None;
-    // The function the count lines read belong to: its `fn` line and hash.
+    // The function the count lines belong to: its `fn` line's number, its
+    // hash, and the counts read so far.
     let mut function: Option<(usize, u64, Counts)> = None;
     let close = |profile: &mut Profile, function: Option<(usize, u64, Counts)>| {
         let Some((number, hash, counts)) = function else {
@@ -500,7 +501,7 @@ impl MarkMap {
             .zip(&names)
         {
             let Some(recorded) = profile.counts.get(&function.hash) else {
-                if profile.measured(&plan.name, &function.name) {
+                if profile.lists(&plan.name, &function.name) {
                     self.remarks.push((
                         name,
                         format!(
@@ -787,7 +788,7 @@ mod tests {
     /// A module's name without its package's version tells a function whose
     /// source changed from one no workload measured, across an upgrade too.
     #[test]
-    fn a_profile_knows_what_it_measured_under_another_version() {
+    fn a_profile_lists_a_function_under_any_version_of_its_package() {
         let profile = parse(
             "wado-pgo 1\n\
              module acme:app@0.1.0/src/lib.wado\n\
@@ -795,9 +796,9 @@ mod tests {
              0 1\n",
         )
         .expect("it parses");
-        assert!(profile.measured("acme:app@0.2.0/src/lib.wado", "f"));
-        assert!(!profile.measured("acme:app@0.2.0/src/lib.wado", "g"));
-        assert!(!profile.measured("acme:app@0.2.0/src/main.wado", "f"));
+        assert!(profile.lists("acme:app@0.2.0/src/lib.wado", "f"));
+        assert!(!profile.lists("acme:app@0.2.0/src/lib.wado", "g"));
+        assert!(!profile.lists("acme:app@0.2.0/src/main.wado", "f"));
     }
 
     /// LLVM's default: a branch is predictable when one side takes 99% of its
