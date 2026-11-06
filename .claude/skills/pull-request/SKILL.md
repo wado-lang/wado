@@ -15,7 +15,8 @@ the user decides what is minor.
 
 ## Check mergeability
 
-Check mergeability by exit status, before any step below:
+Check mergeability by exit status, before any step below. Run it alone and read
+the result before going on: chained to a later step, it stops nothing.
 
 ```sh
 git fetch origin main
