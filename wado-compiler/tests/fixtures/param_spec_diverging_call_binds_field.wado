@@ -8,6 +8,7 @@ struct Limits {
     name: String,
 }
 
+#[inline("never")]
 fn over(limits: &Limits, value: i32) -> ! {
     if limits.width > 0 {
         panic(`${value} over ${limits.width} for ${limits.name}`);
@@ -38,10 +39,10 @@ export fn run() with Stdout {
 __DATA__
 {
     "stdout": "3\n",
-    "wir_expect:O2": [
-        "fn \"param_spec_diverging_call_binds_field.wado/over\"("
-    ],
     "wir_not_expect:O2": [
         "param_spec_diverging_call_binds_field.wado/over$spec"
-    ]
+    ],
+    "wir_contrast": {"O2": [
+        {"value: i32) -> ! {": "value: i32) -> i32 {"}
+    ]}
 }
