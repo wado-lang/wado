@@ -352,25 +352,27 @@ export fn run() with (Stdout, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuC
         println(`repeated ${times} tally ${apart(&mut gpu, &ran.1, &want.1)}`);
     }
 
-    let turns = Tensor::<i64, []> {
-        data: [3],
-        extents: [],
-    };
     let square = Tensor::<f32, [cases::A, cases::A]> {
         data: [1.0, 2.0, 3.0, 4.0],
         extents: [2, 2],
     };
     let viewing = gpu.compiled(|r| {
-        let rturns = r.parameter::<i64, []>(turns.extents);
+        let rturns = r.parameter::<i64, []>([]);
         let rsquare = r.parameter::<f32, [cases::A, cases::A]>(square.extents);
         return r.finished([cases::repeating_view(r, &rturns, &rsquare).id]);
     }, &[], &[]).unwrap();
-    let viewed = gpu.executed(&viewing, &[
-        Any::I64(gpu.relabeled::<i64, [], Untyped>(&gpu.upload(&turns))),
-        Any::F32(gpu.relabeled::<f32, [cases::A, cases::A], Untyped>(&gpu.upload(&square))),
-    ], &[]);
-    let turned = f32_of::<WebGpuBackend, [cases::A, cases::A]>(&gpu, &viewed[0]);
-    println(`repeated view ${apart(&mut gpu, &turned, &cases::repeating_view(cpu, &turns, &square))}`);
+    for let times of [0, 3] as List<i64> {
+        let turns = Tensor::<i64, []> {
+            data: [times],
+            extents: [],
+        };
+        let viewed = gpu.executed(&viewing, &[
+            Any::I64(gpu.relabeled::<i64, [], Untyped>(&gpu.upload(&turns))),
+            Any::F32(gpu.relabeled::<f32, [cases::A, cases::A], Untyped>(&gpu.upload(&square))),
+        ], &[]);
+        let turned = f32_of::<WebGpuBackend, [cases::A, cases::A]>(&gpu, &viewed[0]);
+        println(`repeated view ${times} ${apart(&mut gpu, &turned, &cases::repeating_view(cpu, &turns, &square))}`);
+    }
 
     let [runs, query, key, value, looped_past] = cases::repeating_attention_inputs(3);
     let attending = gpu.compiled(|r| {
