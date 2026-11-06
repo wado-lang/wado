@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1793940923100,
+  "lastUpdate": 1793944703524,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -75077,6 +75077,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/7b1feb8d53f74e781189cf8a5c1ca5942f51bfdd"
         },
         "date": 1793940921997,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3099,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7303,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21998,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 382703,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "c489d986f34cb0fb182e6fb9db2d3f6d45a0acff",
+          "message": "Merge pull request #2564 from wado-lang/claude/emi-fix-20261106\n\nfix(EMI): keep a write-only parameter in dead argument elimination",
+          "timestamp": "2026-11-06T14:43:14+09:00",
+          "tree_id": "65a2d7df5251bdd2b5f1e5f7815cdc2670bb6e1a",
+          "url": "https://github.com/wado-lang/wado/commit/c489d986f34cb0fb182e6fb9db2d3f6d45a0acff"
+        },
+        "date": 1793944702591,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
