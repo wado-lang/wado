@@ -21,7 +21,7 @@ Compares WebAssembly binary sizes across different languages.
 
 ## Results
 
-Measured 2026-10-28 with rustc 1.99.1, Zig 0.17.0, wasi-sdk 34.0, and Moonbit
+Measured 2026-11-06 with rustc 1.99.1, Zig 0.17.0, wasi-sdk 34.0, and Moonbit
 0.1.20260920 (`peter-jerry-ye/wasi` 0.25.0). Sizes are toolchain- but not
 host-dependent, so a row whose toolchain has not moved does not need
 remeasuring.
@@ -30,7 +30,7 @@ remeasuring.
 
 | Language | Size (bytes) |
 | -------- | -----------: |
-| wado     |        3,149 |
+| wado     |        3,099 |
 | c        |        4,195 |
 | moonbit  |        9,313 |
 | zig      |       31,421 |
@@ -40,7 +40,7 @@ remeasuring.
 
 | Language | Size (bytes) |
 | -------- | -----------: |
-| wado     |        7,463 |
+| wado     |        7,303 |
 | c        |       17,988 |
 | moonbit  |       23,593 |
 | zig      |       36,087 |
@@ -52,7 +52,7 @@ Reads gzip data from stdin and decompresses it.
 
 | Language | Size (bytes) | Notes                                  |
 | -------- | -----------: | -------------------------------------- |
-| wado     |       22,091 | stdin + gzip decompress (core:zlib)    |
+| wado     |       21,998 | stdin + gzip decompress (core:zlib)    |
 | c        |       34,571 | stdin + gzip decompress (zlib 1.3.1)   |
 | zig      |       47,393 | stdin + gzip decompress (std.compress) |
 | rust     |       91,218 | stdin + gzip decompress (zlib-rs)      |
@@ -63,7 +63,7 @@ Reads SQL from stdin and writes syntax-highlighted HTML to stdout.
 
 | Language | Size (bytes) | Notes                                       |
 | -------- | -----------: | ------------------------------------------- |
-| wado     |      318,467 | Gale-generated highlighter from `SQLite.g4` |
+| wado     |      382,703 | Gale-generated highlighter from `SQLite.g4` |
 | rust     |    3,487,688 | tree-sitter + tree-sitter-sequel            |
 
 ## Usage
