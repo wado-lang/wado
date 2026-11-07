@@ -1907,8 +1907,9 @@ fn lower_scan_group(
         Transparent => {
             // The wrapper adds nothing, so the outer follow, its exactness and
             // the enclosing suffix pass through — the parse side reads them
-            // here too (invariant 9).
-            return lower_scan_element(
+            // here too (invariant 9). A predicate on the alternative is what
+            // keeps the wrapper: its body is where the scan answers it.
+            let walk = lower_scan_element(
                 &alts[0].elements[0],
                 ctx,
                 outer_follow,
@@ -1917,6 +1918,15 @@ fn lower_scan_group(
                 follow_is_exact,
                 outer_suffix,
             );
+            let body = alt_scan_body(&alts[0], [walk], ctx);
+            if body.gates.is_empty() && body.gate_cond.is_empty() {
+                return body.elements[0];
+            }
+            return ScanElement::Group(ScanGroupElement {
+                alts: [body],
+                lenient: false,
+                alt_classes: [alt_class_of(&alts[0], &mut ctx.analysis)],
+            });
         },
         SingleAlt => {
             let alt = &alts[0];
@@ -2926,7 +2936,7 @@ fn lower_group_op<S: AsStrSlice>(
     match classify_group(alts) {
         Transparent => {
             return lower_transparent_group(
-                &alts[0].elements[0],
+                &alts[0],
                 name_counts,
                 rule_name,
                 ctx,
@@ -2999,7 +3009,7 @@ fn group_atn_check_site(g: &GroupElement, classes: &List<AltClass>, ctx: &mut Lo
 /// Single-element single-alt: `(e)` lowers to `e` with no struct of
 /// its own. The binding nests in the surrounding alt's name table.
 fn lower_transparent_group<S: AsStrSlice>(
-    inner: &Element,
+    alt: &Alternative,
     name_counts: &mut List<[String, i32]>,
     rule_name: S,
     ctx: &mut LowerContext,
@@ -3017,6 +3027,7 @@ fn lower_transparent_group<S: AsStrSlice>(
     // gates on the caller's continuation. Conservative `NoFollow`/`false`
     // for now (a transparent-wrapped tail is greedy, the pre-repair
     // behaviour); thread once `lower_group_op` carries the two args.
+    let inner = &alt.elements[0];
     let inner_op = lower_op(
         inner,
         name_counts,
@@ -3042,12 +3053,11 @@ fn lower_transparent_group<S: AsStrSlice>(
     // emit recognises `GroupShape::Transparent` and skips the
     // dispatch step, running the body unconditionally. The empty
     // `Direct` placeholder is the cheapest valid `MultiAltDispatch`.
-    let surface = Alternative::new([*inner]);
-    let scan_body = alt_scan_body(&surface, [walk], ctx);
+    let scan_body = alt_scan_body(alt, [walk], ctx);
     return Op::Group(GroupOp {
         shape: GroupShape::Transparent,
         alts: [body],
-        scan_group: group_op_scan_group(&[scan_body], &[surface], &null, ctx),
+        scan_group: group_op_scan_group(&[scan_body], &[*alt], &null, ctx),
         dispatch: empty_direct_dispatch(),
         empty_alt_admits: null,
     });

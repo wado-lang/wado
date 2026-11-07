@@ -113,9 +113,7 @@ pub fn classify_group(alts: &List<Alternative>) -> GroupClass
 {
     if alts.len() == 1 {
         assert alts[0].elements.len() > 0, "Group with empty alt is not a valid lowering input";
-        // A Transparent group lowers to its element alone, so an alternative
-        // with an action or a predicate keeps the body that carries it.
-        if alts[0].elements.len() == 1 && alts[0].actions.is_empty() {
+        if alts[0].elements.len() == 1 {
             return GroupClass::Transparent;
         }
         return GroupClass::SingleAlt;
