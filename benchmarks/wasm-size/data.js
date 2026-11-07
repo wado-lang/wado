@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1794031880716,
+  "lastUpdate": 1794038233012,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -75317,6 +75317,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 382703,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "c23dbdbed099fab8e9bef371aa2434c02aa03171",
+          "message": "Merge pull request #2569 from wado-lang/benchmark/refresh-2026-11-06\n\nperf(pgo): make the profiled build faster than no-pgo on most benchmarks",
+          "timestamp": "2026-11-07T16:44:11+09:00",
+          "tree_id": "b387f3576c4da0ddb84e3e59402ebdbbb9cb0d1a",
+          "url": "https://github.com/wado-lang/wado/commit/c23dbdbed099fab8e9bef371aa2434c02aa03171"
+        },
+        "date": 1794038232397,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3099,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7303,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 22002,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 385142,
             "unit": "bytes"
           }
         ]
