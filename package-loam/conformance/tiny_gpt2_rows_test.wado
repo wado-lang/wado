@@ -93,7 +93,10 @@ test "each row of a batch computes the logits it computes alone, its prompt and 
 
 /// Each of `lengths` as a length of its row.
 fn each_row(lengths: &List<i32>) -> Tensor<i64, [Slots]> {
-    return Tensor { data: lengths.into_iter().map(|l| l as i64).collect(), extents: [lengths.len()] };
+    return Tensor {
+        data: lengths.into_iter().map(|l| l as i64).collect(),
+        extents: [lengths.len()],
+    };
 }
 
 /// `tokens`, a list per row each `width` long, padded with 0 past each row's.
@@ -146,14 +149,23 @@ test "rows of their own lengths in one buffer each compute the logits they compu
     let width = 5;
     let o = merged::build(
         cpu,
-        &Tensor::<i64, [merged::BatchSize, merged::SequenceLength]> { data: padded_rows(&prompts, width), extents: [2, width] },
+        &Tensor::<i64, [merged::BatchSize, merged::SequenceLength]> {
+            data: padded_rows(&prompts, width),
+            extents: [2, width],
+        },
         &Tensor::<i64, [merged::BatchSize, merged::SequenceLength]> {
             data: padded_rows(&prompts.into_iter().map(|p| List::<i64>::filled(p.len(), 1)).collect(), width),
             extents: [2, width],
         },
-        &Tensor::<bool, [merged::UseCacheBranch0]> { data: [false], extents: [1] },
+        &Tensor::<bool, [merged::UseCacheBranch0]> {
+            data: [false],
+            extents: [1],
+        },
         &merged::Cache::empty(cpu, 2),
-        &merged::Lengths { dim_sequence_length: each_row(&lengths), dim_past_sequence_length: each_row(&[0, 0]) },
+        &merged::Lengths {
+            dim_sequence_length: each_row(&lengths),
+            dim_past_sequence_length: each_row(&[0, 0]),
+        },
         &merged::Chosen { use_cache_branch: Option::Some(false) },
         &params,
     );
@@ -171,17 +183,29 @@ test "rows of their own lengths in one buffer each compute the logits they compu
     for let at of 0..<steps[0].len() {
         let pasts = lengths;
         lengths = pasts.into_iter().map(|l| l + 1).collect();
-        let tokens: List<List<i64>> = [[steps[0][at]], [steps[1][at]]];
+        let tokens: List<List<i64>> = [
+            [steps[0][at]],
+            [steps[1][at]],
+        ];
         let o = merged::build(
             cpu,
-            &Tensor::<i64, [merged::BatchSize, merged::SequenceLength]> { data: [steps[0][at], steps[1][at]], extents: [2, 1] },
+            &Tensor::<i64, [merged::BatchSize, merged::SequenceLength]> {
+                data: [steps[0][at], steps[1][at]],
+                extents: [2, 1],
+            },
             &Tensor::<i64, [merged::BatchSize, merged::SequenceLength]> {
                 data: padded_rows(&lengths.into_iter().map(|l| List::<i64>::filled(l, 1)).collect(), capacity),
                 extents: [2, capacity],
             },
-            &Tensor::<bool, [merged::UseCacheBranch0]> { data: [true], extents: [1] },
+            &Tensor::<bool, [merged::UseCacheBranch0]> {
+                data: [true],
+                extents: [1],
+            },
             &both,
-            &merged::Lengths { dim_sequence_length: each_row(&[1, 1]), dim_past_sequence_length: each_row(&pasts) },
+            &merged::Lengths {
+                dim_sequence_length: each_row(&[1, 1]),
+                dim_past_sequence_length: each_row(&pasts),
+            },
             &merged::Chosen { use_cache_branch: Option::Some(true) },
             &params,
         );

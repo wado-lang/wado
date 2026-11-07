@@ -847,7 +847,10 @@ fn rows_of_both<affine G: Graph>(
     b: &G::Tensor<i64, [Slots]>,
 ) -> [G::Tensor<i64, [Slots]>, G::Tensor<i64, [Slots]>] with _ {
     let rows = i32::max(g.extents_of(a)[0], g.extents_of(b)[0]);
-    return [g.broadcast_in_dim(a, [rows], [0]), g.broadcast_in_dim(b, [rows], [0])];
+    return [
+        g.broadcast_in_dim(a, [rows], [0]),
+        g.broadcast_in_dim(b, [rows], [0]),
+    ];
 }
 
 /// `op` of each row's `a` and `b`.

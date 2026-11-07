@@ -197,7 +197,9 @@ pub fn emit(
         match emitted(graph, checked, runtime, placement, decode, Option::Some(rows)) {
             Err(Shared(_)) => {
             },
-            done => return done,
+            done => {
+                return done;
+            },
         }
     }
     return emitted(graph, checked, runtime, placement, decode, null);
@@ -211,26 +213,31 @@ pub fn rows_judged(graph: &Graph, checked: &Checked) -> Result<Option<String>, E
         return Result::Ok(null);
     };
     emitted(graph, checked, &"lib:loam", Placement::File, null, Option::Some(rows))?;
-    return Result::Ok(Option::Some(rows));
+    return Result::Ok(Option::Some(rows.name));
 }
 
 /// The axis the rows of a batch run along: the first of every input padding a
 /// length behind it. `null` where no input pads one, or that axis holds one
 /// row and no more.
-fn row_axis(graph: &Graph, checked: &Checked) -> Result<Option<String>, RowRefusal> {
-    let padded = padded_symbols(graph, checked, &symbol_carriers(graph, &checked.shapes, &Crossing::of(graph, cache_pairs(graph)).cached));
+fn row_axis(graph: &Graph, checked: &Checked) -> Result<Option<Axis>, RowRefusal> {
+    let padded = padded_symbols(graph, checked, &symbol_carriers(graph, &checked.shapes, &Crossing::of(
+        graph,
+        cache_pairs(graph),
+    ).cached));
     let pads = |axis: &Axis| axis.extent.poly().symbols().into_iter().any(|s| padded.contains(&s));
-    let mut rows: Option<String> = null;
+    let mut rows: Option<Axis> = null;
     for let vi of &graph.inputs {
         let axes = checked.shapes[vi.name].axes;
         if !axes.into_iter().skip(1).any(|a| pads(&a)) {
             continue;
         }
         let first = axes[0];
-        if let Some(r) = rows && r != first.name {
-            return Result::Err(RowRefusal { why: `the inputs padding a length lead with two axes, ${r} and ${first.name}` });
+        if let Some(r) = rows && r.name != first.name {
+            return Result::Err(
+                RowRefusal { why: `the inputs padding a length lead with two axes, ${r.name} and ${first.name}` },
+            );
         }
-        rows = Option::Some(first.name);
+        rows = Option::Some(first);
         if first.extent matches { Static(1) } {
             return Result::Ok(null);
         }
@@ -245,7 +252,7 @@ fn padded_symbols(graph: &Graph, checked: &Checked, carriers: &List<Carrier>) ->
         && carriers.into_iter().any(|c| c.solved.symbol == j.symbol)).map(|j| j.symbol).collect();
 }
 
-/// `emit`'s source, each row's lengths its own along `rows` where it names an
+/// `emit`'s source, each row's lengths its own along `rows` where it is an
 /// axis.
 fn emitted(
     graph: &Graph,
@@ -253,7 +260,7 @@ fn emitted(
     runtime: &String,
     placement: Placement,
     decode: Option<Decode>,
-    rows: Option<String>,
+    rows: Option<Axis>,
 ) -> Result<String, EmitError> {
     let shapes = &checked.shapes;
     if let Shards(placed) = &placement {
@@ -320,14 +327,9 @@ fn emitted(
     let held_symbols = Symbols::of(&carriers, &names, |input, axis| `backend.extents_of(${*input})[${axis}]`);
     let mut built = held_symbols.padded(&padded, &grown, &conditions, &names);
     if let Some(r) = rows {
-        built.rows = Option::Some(r);
+        built.rows = Option::Some(r.name);
+        built.counting = r.extent.poly().symbols();
         built.idents[SLOTS] = "slots";
-        for let vi of &graph.inputs {
-            let first = checked.shapes[vi.name].axes[0];
-            if first.name == r {
-                built.counting = first.extent.poly().symbols();
-            }
-        }
     }
     let read = emit_build(&mut w, graph, checked, &names, &literals, &kept, built, &crossing, &conditions)?;
     let per_row = rows matches { Some(_) };
@@ -949,7 +951,8 @@ impl Symbols {
             return Result::Ok(value_of(self.spell(p)?));
         }
         self.computable(p)?;
-        if let Some(rows) = self.rows && p.symbols().into_iter().any(|s| self.counting.contains(&s) && self.lengths.contains_key(s)) {
+        if let Some(rows) = self.rows
+            && p.symbols().into_iter().any(|s| self.counting.contains(&s) && self.lengths.contains_key(s)) {
             return Result::Err(self.refused(`it reads how many rows ${rows} holds, which no row holds apart`));
         }
         return Result::Ok(p.lowered(self));
@@ -976,31 +979,38 @@ impl Symbols {
         return p.symbols().into_iter().any(|s| self.lengths.contains_key(s));
     }
 
+    /// Whether each row holds lengths of its own.
+    fn per_row(&self) -> bool {
+        return self.rows matches { Some(_) };
+    }
+
     /// `p` as the value of `[Slots]` a length helper takes: each row's, or the
     /// one every row shares.
     fn row_lengths(&mut self, p: &Poly) -> Result<String, EmitError> {
-        if self.rows matches { Some(_) } && self.reads_lengths(p) {
+        if self.per_row() && self.reads_lengths(p) {
             return self.value(p);
         }
         return Result::Ok(`shared::<${BACKEND_PARAM}>(backend, &${self.value(p)?})`);
     }
 
+    /// The length and the rows a length helper takes for `p` over an operand
+    /// of axes `shape`: where `p` is each row's own, the axis the rows run
+    /// along.
+    fn lengths_along(&mut self, p: &Poly, shape: &Shape) -> Result<String, EmitError> {
+        let rows = match self.rows_axis(shape, p)? {
+            Some(at) => `Option::Some(${at})`,
+            None => "null",
+        };
+        return Result::Ok(`&${self.row_lengths(p)?}, ${rows}`);
+    }
+
     /// `p` as a value of `[]`, where an operation takes one length for every
     /// row; `why` refuses a valid length each row holds apart.
     fn scalar_value(&mut self, p: &Poly, why: String) -> Result<String, EmitError> {
-        if self.rows matches { Some(_) } && self.reads_lengths(p) {
+        if self.per_row() && self.reads_lengths(p) {
             return Result::Err(self.refused(why));
         }
         return self.value(p);
-    }
-
-    /// The `rows` a length helper takes with `p` over an operand of axes
-    /// `shape`: where `p` is each row's own, the axis the rows run along.
-    fn rows_argument(&self, shape: &Shape, p: &Poly) -> Result<String, EmitError> {
-        return Result::Ok(match self.rows_axis(shape, p)? {
-            Some(at) => `Option::Some(${at})`,
-            None => "null",
-        });
     }
 
     /// Where `p` is each row's own, the axis of `shape` the rows run along.
@@ -1032,7 +1042,9 @@ impl Symbols {
             return Result::Ok("null");
         }
         if self.rows_axis(query, p)? matches { Some(at) && at != 0 } {
-            return Result::Err(self.refused("it attends with each row's lengths, and its query's rows are not its first axis"));
+            return Result::Err(self.refused(
+                "it attends with each row's lengths, and its query's rows are not its first axis",
+            ));
         }
         return Result::Ok(`Option::Some(&${self.row_lengths(p)?})`);
     }
@@ -1121,7 +1133,7 @@ impl Lowers for Symbols {
             Min => self.binary("Minimum", a, operands[1]),
             Max => self.binary("Maximum", a, operands[1]),
             CeilDiv | FloorDiv => self.quotient(a, operands[1], op matches { CeilDiv }),
-            FromEnd => if self.rows matches { Some(_) } {
+            FromEnd => if self.per_row() {
                 `row_from_end::<${BACKEND_PARAM}>(backend, &${a}, &${operands[1]})`;
             } else {
                 `from_end_indices::<${BACKEND_PARAM}, []>(backend, &${a}, &${operands[1]})`;
@@ -1141,21 +1153,21 @@ impl Symbols {
     /// The `i64` the host computes as `host`, as a length value: one every row
     /// shares, where each row holds lengths of its own.
     fn held(&self, host: String) -> String {
-        if self.rows matches { Some(_) } {
+        if self.per_row() {
             return `shared::<${BACKEND_PARAM}>(backend, &${value_of(host)})`;
         }
         return value_of(host);
     }
 
     fn binary(&self, op: String, a: String, b: String) -> String {
-        if self.rows matches { Some(_) } {
+        if self.per_row() {
             return `row_binary::<${BACKEND_PARAM}>(backend, Binary::${op}, &${a}, &${b})`;
         }
         return `backend.binary::<i64, []>(Binary::${op}, &${a}, &${b})`;
     }
 
     fn quotient(&self, a: String, d: String, up: bool) -> String {
-        if self.rows matches { Some(_) } {
+        if self.per_row() {
             return `row_quotient::<${BACKEND_PARAM}>(backend, &${a}, &${d}, ${up})`;
         }
         return `quotient::<${BACKEND_PARAM}, []>(backend, &${a}, &${d}, ${up})`;
@@ -1242,7 +1254,7 @@ fn emit_build(
     conditions: &List<String>,
 ) -> Result<List<String>, EmitError> {
     let idents = symbols.idents;
-    let axes = if symbols.rows matches { Some(_) } { "[Slots]" } else { "[]" };
+    let axes = if symbols.per_row() { "[Slots]" } else { "[]" };
     w.blank();
     w.line("/// The graph's pass, each operation added to the graph `backend` builds,");
     w.line("/// over inputs it holds.");
@@ -1284,7 +1296,7 @@ fn emit_compute(
     given: Symbols,
     decoding: &Option<DecodingAxes>,
 ) -> Result<(), EmitError> {
-    let EntryContext { graph, checked, names, held, carriers, padded, kept, crossing, owed, .. } = *context;
+    let EntryContext { graph, checked, names, held, carriers, padded, kept, crossing, owed, per_row, .. } = *context;
     let shapes = &checked.shapes;
     let returned = crossing.returned;
     let has_cache = crossing.has_cache();
@@ -1385,7 +1397,7 @@ fn emit_compute(
     }
     w.end();
     emit_recorded(w, names, &taken_args, first_weight, &returned, crossing, !chosen.is_empty(), false);
-    emit_least_extents(w, checked, carriers, names, owed, padded, &taken_args)?;
+    emit_least_extents(w, checked, carriers, names, owed, padded, &taken_args, per_row)?;
     emit_held(w, graph, checked, names, kept, first_weight, least);
     return Result::Ok(());
 }
@@ -1821,15 +1833,17 @@ fn emit_decoded(
         let mut fields: List<String> = [];
         for let symbol of *read {
             let ident = names.get(&symbol_key(&symbol));
-            fields.push(if moves_a_step(&symbol, &axes.total, owed)? {
-                if per_row {
-                    `${ident}: row_binary::<${bk}>(backend, Binary::Add, &lengths.${ident}, &shared::<${bk}>(backend, step))`;
+            fields.push(
+                if moves_a_step(&symbol, &axes.total, owed)? {
+                    if per_row {
+                        `${ident}: row_binary::<${bk}>(backend, Binary::Add, &lengths.${ident}, &shared::<${bk}>(backend, step))`;
+                    } else {
+                        `${ident}: backend.binary::<i64, []>(Binary::Add, &lengths.${ident}, step)`;
+                    }
                 } else {
-                    `${ident}: backend.binary::<i64, []>(Binary::Add, &lengths.${ident}, step)`;
-                };
-            } else {
-                `${ident}: lengths.${ident}`;
-            });
+                    `${ident}: lengths.${ident}`;
+                },
+            );
         }
         w.line(`    let moved = ${LENGTHS}::<${bk}> { ${fields.join(", ")} };`);
     }
@@ -1899,6 +1913,7 @@ fn emit_least_extents(
     owed: &List<[Grown, Option<Poly>]>,
     padded: &List<String>,
     taken: &List<ProgramArgument>,
+    per_row: bool,
 ) -> Result<(), EmitError> {
     let mut symbols = Symbols::at_one(carriers, names);
     symbols.derive_owed(owed);
@@ -1908,7 +1923,11 @@ fn emit_least_extents(
     for let a of *taken {
         extents.push(if a.crossed matches { Length } {
             // One length every row shares, where each row holds its own.
-            if a.axes == "[]" { "[]" } else { "[1]" };
+            if per_row {
+                "[1]";
+            } else {
+                "[]";
+            }
         } else {
             capacities.spell_shape(&checked.shapes[a.tensor])?;
         });
@@ -2425,7 +2444,9 @@ fn emit_entry(
     let body = scope_body(graph, checked, names, &mut exprs, literals, &mut symbols)?;
     for let tensor of returned.into_iter().chain(crossing.pairs.into_iter().map(|p| p.1)) {
         if exprs.lifted.contains(tensor) {
-            return Result::Err(EmitError::Shared(RowRefusal { why: `the pass returns ${tensor}, which each row's lengths computed` }));
+            return Result::Err(EmitError::Shared(
+                RowRefusal { why: `the pass returns ${tensor}, which each row's lengths computed` },
+            ));
         }
     }
     let read: List<String> = symbols.order.into_iter().filter(|s| symbols.read.contains(s)).collect();
@@ -2830,15 +2851,20 @@ fn lifted_call(
             ),
         );
     }
-    let read: List<String> = graph_operands(node).into_iter().filter(|i| i < node.inputs.len()).map(|i| node.inputs[i]).filter(|t| exprs.lifted.contains(t)).collect();
+    let read: List<String> = graph_operands(node).into_iter().filter(|i| i < node.inputs.len()).map(|i| node.inputs[i]).filter(
+        |t| exprs.lifted.contains(t),
+    ).collect();
     if read.is_empty() {
         return Result::Ok(null);
     }
     let op = node.op;
-    let elementwise = op == "Where" || op == "Cast" || case_named::<UnaryOp>(&op) matches { Some(_) }
+    let elementwise = op == "Where"
+        || op == "Cast"
+        || case_named::<UnaryOp>(&op) matches { Some(_) }
         || case_named::<BinaryOp>(&op) matches { Some(_) } && node.attr("axis") matches { None };
     let reshape = op == "Reshape" || op == "Flatten" || op == "Unsqueeze" || op == "Squeeze";
-    let gathered = op == "Gather" && !read.contains(&node.inputs[0])
+    let gathered = op == "Gather"
+        && !read.contains(&node.inputs[0])
         && settled(gather_axis(node, shapes[node.inputs[0]].rank())) == 0;
     if !elementwise && !reshape && !gathered {
         return Result::Err(symbols.refused(`it reads ${read[0]}, which each row's lengths computed`));
@@ -2874,7 +2900,9 @@ fn lifted_call(
             continue;
         }
         let Some(folded) = folded_rows(&shapes[tensor], &out, &rows) else {
-            return Result::Err(symbols.refused(`it meets the rows of ${rows} with ${tensor}, which holds more than one element ahead of them`));
+            return Result::Err(symbols.refused(
+                `it meets the rows of ${rows} with ${tensor}, which holds more than one element ahead of them`,
+            ));
         };
         operands.values[tensor] = `backend.reshape::<${checked.primitives[tensor]}, [${axis_list(&lifted)}], [${axis_list(
             &folded,
@@ -2891,7 +2919,9 @@ fn lifted_call(
 
 /// `shape` with the rows of `[Slots]` ahead of its axes.
 fn lifted_shape(shape: &Shape) -> Shape {
-    let mut axes: List<Axis> = [Axis { name: "Slots", extent: Extent::symbol(&SLOTS) }];
+    let mut axes: List<Axis> = [
+        Axis { name: "Slots", extent: Extent::symbol(&SLOTS) },
+    ];
     axes.extend(&shape.axes);
     return Shape { axes };
 }
@@ -2914,7 +2944,7 @@ fn folded_rows(shape: &Shape, out: &Shape, rows: &String) -> Option<Shape> {
         }
         let own = shape.axes[p - offset];
         if at < 0 || p == at {
-            if !(own.extent matches { Static(1) }) {
+            if !own.extent matches { Static(1) } {
                 return null;
             }
         }
@@ -3331,7 +3361,10 @@ fn literal_tensor(checked: &Checked, tensor: &String, symbols: &mut Symbols) -> 
             if v.into_iter().any(|p| symbols.reads_lengths(&p)) {
                 let mut values: List<String> = [];
                 for let p of v {
-                    values.push(symbols.scalar_value(&p, "it spells a folded tensor from a valid length, which takes one for every row")?);
+                    values.push(symbols.scalar_value(
+                        &p,
+                        "it spells a folded tensor from a valid length, which takes one for every row",
+                    )?);
                 }
                 let typed = `${checked.primitives[*tensor]}, [${axis_list(&shape)}]`;
                 return Result::Ok(
@@ -3938,9 +3971,10 @@ fn built_concat(node: &Node, checked: &Checked, exprs: &Operands, symbols: &mut 
         let into = `backend.relabeled::<${element}, [${axis_list(&past)}], [${out}]>(${exprs.reference(&node.inputs[0])})`;
         let types = `${element}, [${out}], [${axis_list(&shapes[node.inputs[1]])}]`;
         return Result::Ok(
-            `written_at::<${BACKEND_PARAM}, ${types}>(backend, &${into}, ${exprs.reference(&node.inputs[1])}, ${axis}, &${symbols.row_lengths(
+            `written_at::<${BACKEND_PARAM}, ${types}>(backend, &${into}, ${exprs.reference(&node.inputs[1])}, ${axis}, ${symbols.lengths_along(
                 &length,
-            )?}, ${symbols.rows_argument(&past, &length)?})`,
+                &past,
+            )?})`,
         );
     }
     // A single operand is joined to nothing, and every result is bound as a value.
@@ -3953,9 +3987,9 @@ fn built_concat(node: &Node, checked: &Checked, exprs: &Operands, symbols: &mut 
         let types = `${element}, [${left_axes}], [${axis_list(&right)}], [${out}]`;
         let operands = `${left}, ${exprs.reference(&input)}, ${axis}`;
         call = if symbols.reads_lengths(&length) {
-            `joined_at::<${BACKEND_PARAM}, ${types}>(backend, ${operands}, &${symbols.row_lengths(&length)?}, ${symbols.rows_argument(
-                &shapes[node.outputs[0]],
+            `joined_at::<${BACKEND_PARAM}, ${types}>(backend, ${operands}, ${symbols.lengths_along(
                 &length,
+                &shapes[node.outputs[0]],
             )?})`;
         } else {
             `backend.concatenate::<${types}>(${operands})`;
@@ -3982,10 +4016,7 @@ fn masked_along(
     }
     let typed = `${KERNEL_ELEMENT}, [${axis_list(shape)}]`;
     return Result::Ok(
-        `&masked::<${BACKEND_PARAM}, ${typed}>(backend, ${operand}, ${axis}, &${symbols.row_lengths(&extent)?}, ${symbols.rows_argument(
-            shape,
-            &extent,
-        )?}, ${fill})`,
+        `&masked::<${BACKEND_PARAM}, ${typed}>(backend, ${operand}, ${axis}, ${symbols.lengths_along(&extent, shape)?}, ${fill})`,
     );
 }
 

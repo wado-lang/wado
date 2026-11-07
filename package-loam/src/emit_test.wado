@@ -1259,7 +1259,9 @@ global ROWS_ATTENTION: String = `g (float[B, S, 8] Q, float[B, S, 8] K, float[B,
 test "each row of a batch holds lengths of its own, which compute gives every row as one" {
     let out = generate(ROWS_ATTENTION).unwrap();
     assert out.contains("pub dim_P: Bk::Tensor<i64, [Slots]>,");
-    assert build_of(&out).contains("(Q, K, V, PK, PV, Option::Some(&lengths.dim_P), null, null, null, null, &Attention {");
+    assert build_of(&out).contains(
+        "(Q, K, V, PK, PV, Option::Some(&lengths.dim_P), null, null, null, null, &Attention {",
+    );
     assert compute_of(&out).contains("dim_P: backend.upload(&Tensor::<i64, [Slots]> { data: [dim_P], extents: [1] })");
 }
 
