@@ -18,14 +18,17 @@ The middle two come from a probe under `wado run -O2` timing each step with
 `core:benchmark`; the per-file figure from `wado query scip` over 200 e2e
 fixtures.
 
-The load now reads the index a document at a time. Measured later against
-`fs::read` of the Rust index, which that did not change, with a probe under
-`wado run -O2` timing each step with `wasi:clocks`:
+The load now reads the index a document at a time, out of linear memory.
+Measured later against `fs::read` of the Rust index, which that did not
+change, with a probe under `wado run -O2` timing each step with `wasi:clocks`
+(`--gc-heap-initial 1g` for the 1 GiB heap):
 
 | Part                                                       | Cost |
 | ---------------------------------------------------------- | ---- |
-| `SymbolIndex::add`, a document at a time                   | 3.3× |
-| The same, the guest started at a 1 GiB heap                | 2.1× |
+| `fs::read_linear` of the Rust index, which the load reads  | 0.8× |
+| `SymbolIndex::add`, a document at a time                   | 2.3× |
+| The same, the guest started at a 1 GiB heap                | 1.9× |
+| The same read out of a GC `ByteList`, before linear memory | 3.3× |
 | `grog::decode` of the whole index, which the load replaced | 19×  |
 
 - [ ] `wado query scip`: each file is an entry of its own, so each analysis
@@ -37,8 +40,8 @@ The load now reads the index a document at a time. Measured later against
 - [ ] `fs::read`: reading one whole file is far below what the host reads.
   Find where the stdlib or the host spends it.
 - [ ] `SymbolIndex::add`: the gap between the default heap and a 1 GiB one is
-  the copying GC re-copying the live set on each cycle. What stays live is the
-  input bytes, which Grog reads only from a GC `ByteSlice`, and a `Site`
+  the copying GC re-copying the live set on each cycle. The input bytes are
+  out of the GC heap now; what stays live is the index itself, a `Site`
   object per occurrence.
 - [ ] Reuse an entry's indexes across evaluation runs instead of rebuilding
   them with each snapshot. `rust-analyzer scip` dominates and cannot be made
