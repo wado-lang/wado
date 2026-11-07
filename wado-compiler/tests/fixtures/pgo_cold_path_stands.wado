@@ -1,0 +1,37 @@
+// A path that ran stays rare while it runs under a tenth as often as the code
+// around it, so it keeps its `cold_path()` and `cold_outline` still takes it.
+use { println, Stdout } from "core:cli";
+
+fn step(xs: &mut List<i32>, i: i32) {
+    if i % 33 == 0 {
+        builtin::cold_path();
+        xs.push(i);
+        xs.push(i + 1);
+        xs.push(i + 2);
+    }
+    xs[0] += i;
+}
+
+fn walk(n: i32) -> List<i32> {
+    let mut xs: List<i32> = [0];
+    for let i of 0..<n {
+        step(&mut xs, i);
+    }
+    return xs;
+}
+
+export fn run() with Stdout {
+    let xs = walk(builtin::black_box(100));
+    println(`${xs.len()} ${xs[0]}`);
+}
+
+__DATA__
+{
+  "profile": "testdata/pgo_cold_path_stands.pgo",
+  "marked_regions": [],
+  "wir_pass": {"O2": ["nir/cold_outline"]},
+  "wir_expect:O2": [
+    "fn \"pgo_cold_path_stands.wado/step$cold0\"("
+  ],
+  "stdout": "13 4950\n"
+}

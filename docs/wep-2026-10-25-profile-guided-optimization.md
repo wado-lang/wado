@@ -327,12 +327,36 @@ splice, and the hot loop then calls the helper instead of its callee.
 `json/catalog/ser` cost 32% more fuel that way, with `write_json_i64` grown
 fifteenfold.
 
+### A profile drops a marker only where it refutes it
+
+A marker on a path that ran is dropped only when the path ran at least a tenth
+as often as the code around it. A count of zero is what cold reads, but it is
+the wrong test for a marker. `List::push`'s growth path ran in 1.4% of pushes,
+over the 1% that is unlikely, so dropping its `cold_path()` left it unmarked.
+`grow` was then spliced at every push, and JITted code ran 2.2% more
+instructions on `syntax_highlight` with no change in fuel.
+
+Against dropping every marker that ran, over three rotated rounds of
+`mise run all-wado`, with `+` meaning faster and `noise` where the ranges
+overlap:
+
+| Marker dropped at | `syntax_highlight` | `cbor_catalog` ser | `microgpt` infer | `json_twitter` de |
+| ----------------- | -----------------: | -----------------: | ---------------: | ----------------: |
+| 5%                |              +2.1% |              -0.7% |            -0.6% |             +2.8% |
+| 10%               |              +2.9% |              +4.9% |            -0.9% |             +2.7% |
+| 20%               |              +2.6% |              +4.6% |            noise |             +2.8% |
+| 50%               |              +2.5% |              +4.9% |            -0.5% |             +2.6% |
+| Never             |              +2.5% |              +4.9% |            -1.4% |             noise |
+
+Fuel cannot place this line. It leaves out what the JIT makes of a splice, so it
+ranked 2% above 5%, where the wall clock ranked them the other way.
+
 ### A remark audits the source's markers
 
-Where the profile finds a marker's region not both unlikely and cold, the
-compile says so in an optimizer remark at `--log-level info`. It names the
-marker, the region's count and the count of the code around it, and what the
-region was found to be. The remark audits a guess against measurement, as LLVM's
+Where the profile drops the marker of a path that ran, the compile says so in an
+optimizer remark at `--log-level info`. It names the marker, the region's count
+and the count of the code around it, and what the region was found to be. The
+remark audits a guess against measurement, as LLVM's
 [`-pgo-warn-misexpect`][llvm-misexpect] does, so an author learns which markers
 the workload contradicts.
 
@@ -543,3 +567,19 @@ alternating rounds of `mise run all-wado`, these rows moved most:
 | `cbor_twitter` de  |      -2.6% |
 | `fts`              |      -3.2% |
 | `json_canada` de   |      -3.5% |
+
+### Reading a rare path as cold
+
+A path under a share of the code around it could count as cold and unlikely,
+whether or not the source marks it, so a marker would decide nothing. It
+recovered `syntax_highlight`, but cold covers what a region calls, and the
+serializers and deserializers paid. Against the marks as they stood, over three
+rotated rounds of `mise run all-wado`, with `+` meaning faster:
+
+| Row                | Marker dropped at 10% | Cold under 5% | Cold under 10% | Cold under 20% |
+| ------------------ | --------------------: | ------------: | -------------: | -------------: |
+| `syntax_highlight` |                 +2.6% |         +2.2% |          +2.4% |          +1.9% |
+| `gale_gen`         |                 +2.1% |         -0.6% |          -1.0% |          -5.0% |
+| `json_twitter` de  |                 noise |        -29.1% |         -35.0% |         -39.9% |
+| `cbor_twitter` de  |                 noise |        -71.8% |         -73.4% |         -79.4% |
+| `json_twitter` ser |                 +4.2% |        -82.1% |         -83.7% |         -85.7% |

@@ -97,10 +97,12 @@ unlikely region that is not cold gets the hint alone, and a cold region that is
 not unlikely gets the treatment alone. A region under one that never ran is
 left to that region's marker.
 
-In a function it judges, the profile overrides the markers the source states:
+In a function it judges, the profile can override the markers the source states:
 an author's `cold_path()`, and the one the compiler puts on the failure path of
-a `?`. Such a marker is dropped, and the region's own marks stand. Where the
-profile's answers are not both yes, the compile names the marker, the count,
-and what the region was found to be at `--log-level info`.
+a `?`. It drops such a marker where the path never ran, or ran at least a tenth
+as often as the code around it, and the region's own marks stand. A marker on a
+path that ran less often than that stands beside them. Where it drops the marker
+of a path that ran, the compile names the marker, the count, and what the region
+was found to be at `--log-level info`.
 
 Rationale: [WEP: Profile-Guided Optimization](./wep-2026-10-25-profile-guided-optimization.md).
