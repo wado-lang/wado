@@ -2174,8 +2174,9 @@ mod tests {
         assert_eq!(heat.heat(call), pgo::Heat::Plain);
     }
 
-    /// A profile replaces a `?`'s guess with what it measured: unlikely
-    /// against the branch's runs, cold where it never ran.
+    /// A profile marks a `?` with what it measured: unlikely against the
+    /// branch's runs, cold where it never ran. A path that rare keeps the
+    /// `?`'s guess beside that mark.
     #[test]
     fn a_profile_overrides_the_guess_of_a_try() {
         let source = "fn half(x: i32) -> Option<i32> { if x % 2 == 0 { return Option::Some(x / 2); } return null; }
@@ -2212,7 +2213,7 @@ mod tests {
         let sem = analyzed(source, None, Some(&profile));
         let markers = markers([&sem.tir_modules[&sem.entry_module_source]]);
         assert_eq!(markers["rarely"], ["cold_path"]);
-        assert_eq!(markers["often"], ["unlikely_path"]);
+        assert_eq!(markers["often"], ["unlikely_path", "cold_path"]);
         // Entered once, so not cold: its calls may reach what ran a million
         // times.
         assert_eq!(markers["run"], [] as [String; 0]);
