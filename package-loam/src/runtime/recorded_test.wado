@@ -1,5 +1,6 @@
 use {
     A,
+    AttentionCase,
     B,
     Bt,
     C,
@@ -14,6 +15,7 @@ use {
     Tt,
     attending,
     attention_case,
+    attention_rows,
     branching,
     branching_inputs,
     elementwise,
@@ -26,7 +28,7 @@ use {
     windowed_input,
 } from "./graph_cases.wado";
 use { Any, Recorder, Untyped, host_of, run } from "./recorded.wado";
-use { Graph } from "./hlo.wado";
+use { Graph, Slots } from "./hlo.wado";
 use { Cpu, Holds, Tensor } from "./tensor.wado";
 
 test "a recorded graph run on the CPU computes what the CPU computes as each operation is added" {
@@ -178,7 +180,15 @@ test "a recorded graph holds no element to download" {
 }
 
 test "a recorded attention composite computes the CPU's, its presents the buffer it shares" {
-    let case = attention_case();
+    for let case of [
+        attention_case(),
+        attention_rows([1, 2]),
+    ] as List<AttentionCase> {
+        recorded_attention(&case);
+    }
+}
+
+fn recorded_attention(case: &AttentionCase) {
     let [q, k, v] = case.inputs;
     let [past_k, past_v, length] = case.past;
     let [cos, sin] = case.rotation;
@@ -193,7 +203,7 @@ test "a recorded attention composite computes the CPU's, its presents the buffer
     let past = [
         r.parameter::<f32, [Bt, Ht, Pt, Dt]>(past_k.extents),
         r.parameter::<f32, [Bt, Ht, Pt, Dt]>(past_v.extents),
-        r.parameter::<i64, []>(length.extents),
+        r.parameter::<i64, [Slots]>(length.extents),
     ];
     let rotation = [
         r.parameter::<f32, [Pos, Half]>(cos.extents),

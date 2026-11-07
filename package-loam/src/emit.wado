@@ -878,13 +878,19 @@ impl Symbols {
         return p.symbols().into_iter().any(|s| self.lengths.contains_key(s));
     }
 
+    /// `p` as the value of `[Slots]` a length helper takes, the one length
+    /// every row shares.
+    fn row_lengths(&mut self, p: &Poly) -> Result<String, EmitError> {
+        return Result::Ok(`shared::<${BACKEND_PARAM}>(backend, &${self.value(p)?})`);
+    }
+
     /// `p` as an optional operand: its value where it reads a padded symbol,
     /// and `null` where the extent says it.
     fn length_operand(&mut self, p: &Poly) -> Result<String, EmitError> {
         if !self.reads_lengths(p) {
             return Result::Ok("null");
         }
-        return Result::Ok(`Option::Some(&${self.value(p)?})`);
+        return Result::Ok(`Option::Some(&${self.row_lengths(p)?})`);
     }
 
     /// A symbolic integer as the `i64` expression the host computes it by.
@@ -3561,9 +3567,9 @@ fn built_concat(node: &Node, checked: &Checked, exprs: &Operands, symbols: &mut 
         let into = `backend.relabeled::<${element}, [${axis_list(&past)}], [${out}]>(${exprs.reference(&node.inputs[0])})`;
         let types = `${element}, [${out}], [${axis_list(&shapes[node.inputs[1]])}]`;
         return Result::Ok(
-            `written_at::<${BACKEND_PARAM}, ${types}>(backend, &${into}, ${exprs.reference(&node.inputs[1])}, ${axis}, &${symbols.value(
+            `written_at::<${BACKEND_PARAM}, ${types}>(backend, &${into}, ${exprs.reference(&node.inputs[1])}, ${axis}, &${symbols.row_lengths(
                 &length,
-            )?})`,
+            )?}, null)`,
         );
     }
     // A single operand is joined to nothing, and every result is bound as a value.
@@ -3576,7 +3582,7 @@ fn built_concat(node: &Node, checked: &Checked, exprs: &Operands, symbols: &mut 
         let types = `${element}, [${left_axes}], [${axis_list(&right)}], [${out}]`;
         let operands = `${left}, ${exprs.reference(&input)}, ${axis}`;
         call = if symbols.reads_lengths(&length) {
-            `joined_at::<${BACKEND_PARAM}, ${types}>(backend, ${operands}, &${symbols.value(&length)?})`;
+            `joined_at::<${BACKEND_PARAM}, ${types}>(backend, ${operands}, &${symbols.row_lengths(&length)?}, null)`;
         } else {
             `backend.concatenate::<${types}>(${operands})`;
         };
@@ -3602,7 +3608,7 @@ fn masked_along(
     }
     let typed = `${KERNEL_ELEMENT}, [${axis_list(shape)}]`;
     return Result::Ok(
-        `&masked::<${BACKEND_PARAM}, ${typed}>(backend, ${operand}, ${axis}, &${symbols.value(&extent)?}, ${fill})`,
+        `&masked::<${BACKEND_PARAM}, ${typed}>(backend, ${operand}, ${axis}, &${symbols.row_lengths(&extent)?}, null, ${fill})`,
     );
 }
 

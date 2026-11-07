@@ -25,6 +25,7 @@ use {
     GatherDims,
     Graph,
     ScatterDims,
+    Slots,
     Unary,
     WindowReduce,
     broadcast_in_dim_extents,
@@ -583,12 +584,12 @@ impl Graph for WebGpuBackend {
     }
 
     /// The backend's attention kernels, and the decomposition where they
-    /// cannot run it. A shared past holds `past_length` valid positions, the
-    /// kernels attend over those and the new ones, or the first `reach` of
-    /// them, as many columns of the bias, and the present is the past's buffer
-    /// with the new ones written after the valid ones. Past the valid ones a
-    /// causal attention reads none, so the kernels compute what the
-    /// decomposition does.
+    /// cannot run it, rows of different lengths among those. A shared past
+    /// holds `past_length` valid positions, the kernels attend over those and
+    /// the new ones, or the first `reach` of them, as many columns of the bias,
+    /// and the present is the past's buffer with the new ones written after the
+    /// valid ones. Past the valid ones a causal attention reads none, so the
+    /// kernels compute what the decomposition does.
     fn group_query_attention<B, S, Q, K, H, P, T, D, Pos, Half, BB, BH, BS>(
         &mut self,
         q: &Placed<f32, [B, S, Q]>,
@@ -596,15 +597,18 @@ impl Graph for WebGpuBackend {
         v: &Placed<f32, [B, S, K]>,
         past_k: &Placed<f32, [B, H, P, D]>,
         past_v: &Placed<f32, [B, H, P, D]>,
-        past_length: Option<&Placed<i64, []>>,
-        reach: Option<&Placed<i64, []>>,
+        past_length: Option<&Placed<i64, [Slots]>>,
+        reach: Option<&Placed<i64, [Slots]>>,
         cos: Option<&Placed<f32, [Pos, Half]>>,
         sin: Option<&Placed<f32, [Pos, Half]>>,
         bias: Option<&Placed<f32, [BB, BH, BS, T]>>,
         options: &Attention,
     ) -> [Placed<f32, [B, S, Q]>, Placed<f32, [B, H, T, D]>, Placed<f32, [B, H, T, D]>] with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
         let shared = past_length matches { Some(_) };
-        if !shared || options.causal {
+        kernels: {
+            if shared && !options.causal {
+                break kernels;
+            }
             let rotary = match [cos, sin] {
                 [Some(c), Some(s)] => Option::Some([
                     self.device_view(c),
@@ -619,7 +623,12 @@ impl Graph for WebGpuBackend {
             let positions = held_k.extents[2];
             let query = self.device_view(q);
             let valid = match past_length {
-                Some(l) => self.host(l).data[0] as i32,
+                Some(l) => {
+                    let Some(length) = one_length(&self.host(l).data) else {
+                        break kernels;
+                    };
+                    length;
+                },
                 None => positions,
             };
             assert !shared || valid + query.extents[1] <= positions, "a shared past holds the new positions after its valid ones";
@@ -628,7 +637,12 @@ impl Graph for WebGpuBackend {
                 None => null,
             };
             let attended = match reach {
-                Some(l) => self.host(l).data[0] as i32,
+                Some(l) => {
+                    let Some(length) = one_length(&self.host(l).data) else {
+                        break kernels;
+                    };
+                    length;
+                },
                 None => valid + query.extents[1],
             };
             if let Some([out, present_k, present_v]) = self.attended(
@@ -667,6 +681,16 @@ impl Graph for WebGpuBackend {
             options,
         );
     }
+}
+
+/// The length every row of `rows` holds, where they hold one.
+fn one_length(rows: &List<i64>) -> Option<i32> {
+    for let row of rows {
+        if *row != rows[0] {
+            return null;
+        }
+    }
+    return Option::Some(rows[0] as i32);
 }
 
 /// For each of the `count` weights `recorded` takes from its parameter

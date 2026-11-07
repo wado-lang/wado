@@ -11,6 +11,7 @@ use {
     GatherDims,
     Graph,
     ScatterDims,
+    Slots,
     Unary,
     WindowReduce,
     broadcast_in_dim_extents,
@@ -449,8 +450,8 @@ impl Graph for Recorder {
         v: &Value<f32, [B, S, K]>,
         past_k: &Value<f32, [B, H, P, D]>,
         past_v: &Value<f32, [B, H, P, D]>,
-        past_length: Option<&Value<i64, []>>,
-        reach: Option<&Value<i64, []>>,
+        past_length: Option<&Value<i64, [Slots]>>,
+        reach: Option<&Value<i64, [Slots]>>,
         cos: Option<&Value<f32, [Pos, Half]>>,
         sin: Option<&Value<f32, [Pos, Half]>>,
         bias: Option<&Value<f32, [BB, BH, BS, T]>>,
@@ -969,12 +970,12 @@ impl<affine G: Graph> Run<G> {
         node: &RecordedNode,
         given: bool,
         next: &mut i32,
-    ) -> Option<G::Tensor<i64, []>> with _ {
+    ) -> Option<G::Tensor<i64, [Slots]>> with _ {
         if !given {
             return null;
         }
         *next += 1;
-        return Option::Some(i64_of::<G, []>(g, self.operand(node, *next - 1)));
+        return Option::Some(i64_of::<G, [Slots]>(g, self.operand(node, *next - 1)));
     }
 
     /// An attention node's attended queries and presents, by `g`'s

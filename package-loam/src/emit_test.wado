@@ -790,7 +790,7 @@ g (float[1, T, 8] P, float[1, 1, 8] N) => (float[1, U, 8] Y)
     let out = generate(source).unwrap();
 
     assert out.contains(
-        "let Y = joined_at::<Bk, f32, [P0, U, P2], [P0, N1, P2], [P0, U, P2]>(backend, &joined_at::<Bk, f32, [P0, T, P2], [P0, N1, P2], [P0, U, P2]>(backend, P, N, 1, &lengths.dim_T), N, 1, &backend.binary::<i64, []>(Binary::Add, &lengths.dim_T, &scalar::<Bk, i64>(backend, 1)));",
+        "let Y = joined_at::<Bk, f32, [P0, U, P2], [P0, N1, P2], [P0, U, P2]>(backend, &joined_at::<Bk, f32, [P0, T, P2], [P0, N1, P2], [P0, U, P2]>(backend, P, N, 1, &shared::<Bk>(backend, &lengths.dim_T), null), N, 1, &shared::<Bk>(backend, &backend.binary::<i64, []>(Binary::Add, &lengths.dim_T, &scalar::<Bk, i64>(backend, 1))), null);",
     );
 }
 
@@ -1213,10 +1213,16 @@ test "a build reads the valid length where it sums, normalizes, contracts or joi
     }`;
     let built = build_of(&generate(source).unwrap());
     assert built.contains("lengths: &Lengths<Bk>");
-    assert built.contains("masked::<Bk, f32, [N]>(backend, X, 0, &lengths.dim_N, 0 as f32)");
-    assert built.contains("masked::<Bk, f32, [N]>(backend, X, 0, &lengths.dim_N, -f32::INFINITY)");
-    assert built.contains("masked::<Bk, f32, [N, P1]>(backend, P, 0, &lengths.dim_N, 0 as f32)");
-    assert built.contains("(backend, X, X, 0, &lengths.dim_N)");
+    assert built.contains(
+        "masked::<Bk, f32, [N]>(backend, X, 0, &shared::<Bk>(backend, &lengths.dim_N), null, 0 as f32)",
+    );
+    assert built.contains(
+        "masked::<Bk, f32, [N]>(backend, X, 0, &shared::<Bk>(backend, &lengths.dim_N), null, -f32::INFINITY)",
+    );
+    assert built.contains(
+        "masked::<Bk, f32, [N, P1]>(backend, P, 0, &shared::<Bk>(backend, &lengths.dim_N), null, 0 as f32)",
+    );
+    assert built.contains("(backend, X, X, 0, &shared::<Bk>(backend, &lengths.dim_N), null)");
 }
 
 test "a build takes a padded past to its attention as a buffer of fixed capacity, with its valid length" {
@@ -1232,7 +1238,9 @@ test "a build takes a padded past to its attention as a buffer of fixed capacity
         Y, PY, VY = com.microsoft.GroupQueryAttention<num_heads = 1, kv_num_heads = 1>(Q, K, V, PK, PV, L, T32)
     }`;
     let built = build_of(&generate(source).unwrap());
-    assert built.contains("(Q, K, V, PK, PV, Option::Some(&lengths.dim_P), null, null, null, null, &Attention {");
+    assert built.contains(
+        "(Q, K, V, PK, PV, Option::Some(&shared::<Bk>(backend, &lengths.dim_P)), null, null, null, null, &Attention {",
+    );
 }
 
 test "compute holds a cache at the capacity of the total, its past's length what the graph owes it" {

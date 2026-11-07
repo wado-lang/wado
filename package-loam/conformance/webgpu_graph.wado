@@ -175,6 +175,43 @@ export fn run() with (Stdout, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuC
         );
     }
 
+    // Rows of different pasts in one buffer.
+    let ragged = cases::attention_rows([1, 2]);
+    let ragged_want = cases::attending(
+        cpu,
+        &ragged.inputs,
+        &ragged.past,
+        &ragged.rotation,
+        &ragged.bias,
+        &ragged.options,
+    );
+    let ragged_got = cases::attending(
+        &mut gpu,
+        &[
+            gpu.upload(&ragged.inputs.0),
+            gpu.upload(&ragged.inputs.1),
+            gpu.upload(&ragged.inputs.2),
+        ],
+        &[
+            gpu.upload(&ragged.past.0),
+            gpu.upload(&ragged.past.1),
+            gpu.upload(&ragged.past.2),
+        ],
+        &[
+            gpu.upload(&ragged.rotation.0),
+            gpu.upload(&ragged.rotation.1),
+        ],
+        &gpu.upload(&ragged.bias),
+        &ragged.options,
+    );
+    for let [name, got, want] of [
+        ["out", ragged_got.0, ragged_want.0],
+        ["present_k", ragged_got.1, ragged_want.1],
+        ["present_v", ragged_got.2, ragged_want.2],
+    ] {
+        println(`attending rows ${name} ${apart(&mut gpu, &got, &want)}`);
+    }
+
     // `compute` compiles one program per shape class and replays it: 5 and 6
     // positions share a capacity, 7 takes the next. A program's second call
     // does again what its first recorded of each kernel, and so does a call

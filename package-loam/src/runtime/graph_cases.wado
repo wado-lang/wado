@@ -9,9 +9,11 @@ use {
     GatherDims,
     Graph,
     ScatterDims,
+    Slots,
     Unary,
     WindowReduce,
     scalar,
+    shared,
 } from "./hlo.wado";
 use { Any, Untyped, f32_of, i64_of } from "./recorded.wado";
 use { Attention, Tensor, element_count } from "./tensor.wado";
@@ -194,12 +196,12 @@ pub struct Pos {
 pub struct Half {
 }
 
-/// Attention over a past of `past.2` positions in a shared buffer, turned by
-/// `rotation`, biased over the buffer's positions by `bias`.
+/// Attention over a past of `past.2` positions in each row of a shared buffer,
+/// turned by `rotation`, biased over the buffer's positions by `bias`.
 pub fn attending<affine G: Graph>(
     g: &mut G,
     inputs: &[G::Tensor<f32, [Bt, St, Qt]>, G::Tensor<f32, [Bt, St, Kt]>, G::Tensor<f32, [Bt, St, Kt]>],
-    past: &[G::Tensor<f32, [Bt, Ht, Pt, Dt]>, G::Tensor<f32, [Bt, Ht, Pt, Dt]>, G::Tensor<i64, []>],
+    past: &[G::Tensor<f32, [Bt, Ht, Pt, Dt]>, G::Tensor<f32, [Bt, Ht, Pt, Dt]>, G::Tensor<i64, [Slots]>],
     rotation: &[G::Tensor<f32, [Pos, Half]>, G::Tensor<f32, [Pos, Half]>],
     bias: &G::Tensor<f32, [Bt, Ht, St, Tt]>,
     options: &Attention,
@@ -265,18 +267,26 @@ pub fn branching_inputs(p: bool) -> [Tensor<bool, [C]>, Tensor<f32, [A]>] {
     ];
 }
 
-/// `attending`'s arguments: a past of one position in a buffer of four, and a
-/// bias shared by the heads, as a decoder makes one of its attention mask.
+/// `attending`'s arguments: pasts in a buffer of four, and a bias shared by the
+/// rows and the heads, as a decoder makes one of its attention mask.
 pub struct AttentionCase {
     pub inputs: [Tensor<f32, [Bt, St, Qt]>, Tensor<f32, [Bt, St, Kt]>, Tensor<f32, [Bt, St, Kt]>],
-    pub past: [Tensor<f32, [Bt, Ht, Pt, Dt]>, Tensor<f32, [Bt, Ht, Pt, Dt]>, Tensor<i64, []>],
+    pub past: [Tensor<f32, [Bt, Ht, Pt, Dt]>, Tensor<f32, [Bt, Ht, Pt, Dt]>, Tensor<i64, [Slots]>],
     pub rotation: [Tensor<f32, [Pos, Half]>, Tensor<f32, [Pos, Half]>],
     pub bias: Tensor<f32, [Bt, Ht, St, Tt]>,
     pub options: Attention,
 }
 
+/// A past of one position.
 pub fn attention_case() -> AttentionCase {
-    let [batch, s, heads, kv, capacity, d, positions] = [1, 2, 4, 2, 4, 4, 8];
+    return attention_rows([1]);
+}
+
+/// `attention_case` over a row for each of `pasts`, each holding that many
+/// positions of its buffer.
+pub fn attention_rows(pasts: List<i64>) -> AttentionCase {
+    let [s, heads, kv, capacity, d, positions] = [2, 4, 2, 4, 4, 8];
+    let batch = pasts.len();
     return AttentionCase {
         inputs: [
             noisy([batch, s, heads * d], 1),
@@ -287,19 +297,20 @@ pub fn attention_case() -> AttentionCase {
             noisy([batch, kv, capacity, d], 4),
             noisy([batch, kv, capacity, d], 5),
             Tensor {
-                data: [1],
-                extents: [],
+                data: pasts,
+                extents: [batch],
             },
         ],
         rotation: [
             noisy([positions, d / 2], 6),
             noisy([positions, d / 2], 7),
         ],
-        // The past position, the two new ones, then padding, which a causal
-        // attention never reads, so a large bias there shows a read of it.
+        // Over a past of one position: that position, the two new ones, then
+        // padding, which a causal attention never reads, so a large bias there
+        // shows a read of it.
         bias: Tensor {
             data: [0.25, -0.5, 0.0, 7.0, -0.75, 0.5, 0.3, 7.0],
-            extents: [batch, 1, s, capacity],
+            extents: [1, 1, s, capacity],
         },
         options: Attention { heads, kv_heads: kv, scale: 0.5, softcap: 0.0, window: -1, causal: true },
     };
@@ -385,7 +396,7 @@ pub fn repeating_attention<affine G: Graph>(
                 v,
                 &keys,
                 &values,
-                Option::Some(&length),
+                Option::Some(&shared(g, &length)),
                 null,
                 null,
                 null,

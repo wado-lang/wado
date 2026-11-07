@@ -8,20 +8,18 @@ use {
     Comparison,
     Graph,
     One,
+    Slots,
     Unary,
     capacity_of,
     full,
     scalar,
+    shared,
     softmax,
     strided_gather,
     written_at,
 } from "./hlo.wado";
 use { Cpu, Holds, Tensor } from "./tensor.wado";
 use { Any, Recorder, Untyped } from "./recorded.wado";
-
-/// One row of a batch.
-pub struct Slots {
-}
 
 /// One token of the vocabulary.
 struct Tokens {
@@ -273,7 +271,7 @@ pub fn stepped<affine G: Graph, Axes>(
     let column: G::Tensor<i64, [Slots, One]> = g.reshape(&token, [rows, 1]);
     return Stepped {
         token: column,
-        tokens: written_at::<G, i64, [Slots, Picks], [Slots, One]>(g, tokens, &column, 1, step),
+        tokens: written_at::<G, i64, [Slots, Picks], [Slots, One]>(g, tokens, &column, 1, &shared(g, step), null),
         finished: ended,
     };
 }
@@ -285,7 +283,7 @@ pub fn opened<affine G: Graph, Axes>(
     at: &G::Tensor<i64, []>,
 ) -> G::Tensor<i64, Axes> with _ {
     let ones = full::<G, i64, [Slots, One]>(g, 1, [g.extents_of(mask)[0], 1]);
-    return written_at::<G, i64, Axes, [Slots, One]>(g, mask, &ones, 1, at);
+    return written_at::<G, i64, Axes, [Slots, One]>(g, mask, &ones, 1, &shared(g, at), null);
 }
 
 /// The token each row of `logits` picks for the step `step`: its greatest
