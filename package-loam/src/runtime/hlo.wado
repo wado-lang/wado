@@ -590,8 +590,22 @@ pub fn masked<affine G: Graph, E: Element, Axes>(
     fill: E,
 ) -> G::Tensor<E, Axes> with _ {
     let extents = g.extents_of(x);
-    let positions: G::Tensor<i64, Axes> = g.iota(extents, axis);
-    let valid = g.compare(Comparison::Lt, &positions, &along_rows::<G, Axes>(g, length, &extents, rows));
+    let count = g.extents_of(length)[0];
+    // The mask varies along `axis` and the rows alone, so it is built over those
+    // and broadcast to the rest.
+    let mut varying: List<i32> = [axis];
+    if count > 1 {
+        varying.push(rows_axis(rows, &extents, count));
+        varying.sort();
+    }
+    let plane: List<i32> = varying.into_iter().map(|d| extents[d]).collect();
+    let positions: G::Tensor<i64, [Slots, Row]> = g.iota(plane, varying.position(|d| d == axis).unwrap());
+    let lengths: G::Tensor<i64, [Slots, Row]> = if count == 1 {
+        g.broadcast_in_dim(&g.reshape::<i64, [Slots], []>(length, []), plane, []);
+    } else {
+        g.broadcast_in_dim(length, plane, [varying.position(|d| d != axis).unwrap()]);
+    };
+    let valid: G::Tensor<bool, Axes> = g.broadcast_in_dim(&g.compare(Comparison::Lt, &positions, &lengths), extents, varying);
     return g.select(&valid, x, &full::<G, E, Axes>(g, fill, extents));
 }
 
@@ -947,22 +961,6 @@ pub fn row_range<affine G: Graph, A>(
     let steps: G::Tensor<i64, [Slots, A]> = g.iota(plane, 1);
     let scaled = g.binary(Binary::Multiply, &steps, &g.broadcast_in_dim(&step, plane, [0]));
     return g.binary(Binary::Add, &scaled, &g.broadcast_in_dim(&first, plane, [0]));
-}
-
-/// `length` at each position of `extents`: the row's own, where `rows` is the
-/// axis the rows run along, or the one every row shares.
-fn along_rows<affine G: Graph, Axes>(
-    g: &mut G,
-    length: &G::Tensor<i64, [Slots]>,
-    extents: &List<i32>,
-    rows: Option<i32>,
-) -> G::Tensor<i64, Axes> with _ {
-    let count = g.extents_of(length)[0];
-    if count == 1 {
-        let one: G::Tensor<i64, []> = g.reshape(length, []);
-        return g.broadcast_in_dim(&one, *extents, []);
-    }
-    return g.broadcast_in_dim(length, *extents, [rows_axis(rows, extents, count)]);
 }
 
 /// The axis `rows` names, along which a tensor of `extents` holds a row for

@@ -85,7 +85,7 @@ impl Display for Judged {
 pub fn padding(graph: &Graph, checked: &Checked) -> List<Judged> {
     let mut refusals = HashMap::<String, PadRefusal>::new();
     let mut ties: List<Poly> = [];
-    judge_scope(graph, checked, &mut refusals, &mut ties, &mut HashMap::<String, Merges>::new());
+    judge_scope(graph, checked, &mut refusals, &mut ties, &mut HashMap::<String, Merged>::new());
     // A refusal spreads to every length it is owed equal to a sum with,
     // through as many equalities as link them.
     let mut spread = true;
@@ -123,6 +123,13 @@ pub fn padding(graph: &Graph, checked: &Checked) -> List<Judged> {
 /// valid elements are a prefix.
 type Merges = List<Option<List<Poly>>>;
 
+/// What a tensor merged, and the operator of the node that output it, which
+/// may sit outside the branch that passes the tensor out.
+struct Merged {
+    merges: Merges,
+    op: String,
+}
+
 /// Each refusal the nodes of a scope make, the first one per symbol kept, and
 /// each slack the scope owes to be 0. `merged` holds the tensors with an axis
 /// that merged lengths behind its first extent: each row's padding lies inside
@@ -133,7 +140,7 @@ fn judge_scope(
     checked: &Checked,
     refusals: &mut HashMap<String, PadRefusal>,
     ties: &mut List<Poly>,
-    merged: &mut HashMap<String, Merges>,
+    merged: &mut HashMap<String, Merged>,
 ) {
     ties.extend(&equalities(&checked.owed));
     for let node of &graph.nodes {
@@ -147,7 +154,7 @@ fn judge_scope(
         if !folded {
             match carried(node, checked, merged) {
                 Ok(Some(merges)) && merges.into_iter().any(|m| m matches { Some(_) }) => {
-                    merged[node.outputs[0]] = merges;
+                    merged[node.outputs[0]] = Merged { merges, op: node.op };
                 },
                 Ok(_) => {
                 },
@@ -165,11 +172,10 @@ fn judge_scope(
     // Read back cut to their lengths, the outputs keep their valid elements a
     // prefix.
     for let vi of &graph.outputs {
-        let Some(merges) = merged.get(vi.name) else {
+        let Some(m) = merged.get(vi.name) else {
             continue;
         };
-        let node = graph.nodes.into_iter().find(|n| n.outputs.contains(&vi.name)).unwrap();
-        first_refusals(refusals, behind(&merges), PadRefusal { node: vi.name, op: node.op, why: Why::MergedBehind });
+        first_refusals(refusals, behind(&m.merges), PadRefusal { node: vi.name, op: m.op, why: Why::MergedBehind });
     }
 }
 
@@ -201,7 +207,7 @@ fn behind(merges: &Merges) -> List<String> {
 fn carried(
     node: &Node,
     checked: &Checked,
-    merged: &HashMap<String, Merges>,
+    merged: &HashMap<String, Merged>,
 ) -> Result<Option<Merges>, [List<String>, Why]> {
     let op = node.op;
     let shapes = &checked.shapes;
@@ -210,12 +216,12 @@ fn carried(
         let Some(x) = shapes.get(node.inputs[0]) else {
             return Result::Ok(null);
         };
-        return regrouped(&x, merged.get(node.inputs[0]), &shapes[node.outputs[0]]);
+        return regrouped(&x, merged.get(node.inputs[0]).map(|m| m.merges), &shapes[node.outputs[0]]);
     }
     let mut operands: List<[i32, Merges]> = [];
     for let [at, t] of node.inputs.into_iter().enumerate() {
         if let Some(m) = merged.get(t) {
-            operands.push([at, m]);
+            operands.push([at, m.merges]);
         }
     }
     if operands.is_empty() {
@@ -251,7 +257,7 @@ fn carried(
                     continue;
                 }
                 let own = match merged.get(*t) {
-                    Some(m) => m[at],
+                    Some(m) => m.merges[at],
                     None => null,
                 };
                 if agreed matches { Some(a) && a != own } {

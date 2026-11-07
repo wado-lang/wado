@@ -197,3 +197,14 @@ test "a branch's nodes are judged as the graph's are" {
     }`;
     assert judged(source) == ["S: refused at T = Reshape: it merges behind an axis before it", "M: padded"] as List<String>;
 }
+
+test "a branch that passes an outer tensor's merged lengths out refuses them" {
+    let source = `g (bool[1] C, float[2, S, 4] X, float[M, 4] Z) => (float[?, 4] Y) <int64[2] Flat = {-1, 4}> {
+        F = Reshape(X, Flat)
+        Y = If <then_branch = passed () => (float[?, 4] F) {
+        }, else_branch = kept () => (float[M, 4] E) {
+            E = Relu(Z)
+        }> (C)
+    }`;
+    assert judged(source) == ["S: refused at F = Reshape: it merges behind an axis before it", "M: padded"] as List<String>;
+}

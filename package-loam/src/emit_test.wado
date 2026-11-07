@@ -1,6 +1,7 @@
-use { HashMap, TreeMap } from "core:collections";
+use { HashMap, HashSet, TreeMap } from "core:collections";
 use { Decode, EmitError, NameCollision, Placement, UnmappedDtype, emit, rows_judged } from "./emit.wado";
 use { Attr, Dim, Elements, Graph, InPlace, Known, Node, Rank, ValueInfo } from "./graph.wado";
+use { module_idents } from "./idents.wado";
 use { infer } from "./infer.wado";
 use { read } from "./onnx_text.wado";
 use { keep_last } from "./specialize.wado";
@@ -1795,6 +1796,65 @@ test "rows of their own lengths decode at pasts of their own, which requests in 
     assert out.contains(
         "pub fn decode(&mut self, backend: &mut Bk, steps: i32, sampling: &Sampling, model: &mut Model<Bk>) -> Tensor<i64, [Slots, Picks]>",
     );
+}
+
+test "a past that does not grow keeps rows of their own lengths from taking requests in slots" {
+    let stateful = ROWS_DECODER.replace(
+        "float[B, 1, P, 16] past_value)",
+        "float[B, 1, P, 16] past_value, float[B, 4] past_state)",
+    ).replace("float[B, 1, ?, 16] present_value)", "float[B, 1, ?, 16] present_value, float[B, 4] present_state)").replace(
+        "    logits = Add(raw, tilt)",
+        "    logits = Add(raw, tilt)\n    present_state = Neg(past_state)",
+    );
+    let out = decoded_from(stateful).unwrap();
+    assert out.contains("pub fn decode_rows<affine Bk: Graph>(");
+    assert !out.contains("Requests");
+}
+
+test "every local the entries bind is a name no graph tensor takes" {
+    // Renamed so that no tensor shares a name with a local, which would hide it.
+    let source = ROWS_DECODER.replace("open", "unmasked");
+    let graph = read(&source).unwrap();
+    let mut tensors = HashSet::<String>::new();
+    for let declared of [&graph.inputs, &graph.outputs, &graph.initializers] {
+        for let vi of *declared {
+            tensors.insert(vi.name);
+        }
+    }
+    for let node of graph.nodes {
+        for let t of node.outputs {
+            tensors.insert(t);
+        }
+    }
+    // What the emitter spells from a symbol or a tensor.
+    let derived = |name: &String| name.starts_with("dim_")
+        || name.starts_with("capacity_")
+        || tensors.contains(*name)
+        || tensors.into_iter().any(|t| name.starts_with(`${t}_`));
+    let reserved = module_idents();
+    let out = decoded_from(source).unwrap();
+    let mut unreserved: List<String> = [];
+    for let line of out.split("\n") {
+        let mut rest = line.as_str_slice();
+        while let Some(at) = rest.find("let ") {
+            rest = rest.slice(at + 4, rest.len());
+            if rest.starts_with("mut ") {
+                rest = rest.slice(4, rest.len());
+            }
+            let mut end = 0;
+            for let c of rest.chars() {
+                if !c.is_ascii_alphanumeric() && c != '_' {
+                    break;
+                }
+                end += c.len_utf8();
+            }
+            let name = rest.slice(0, end).to_string();
+            if end > 0 && !reserved.contains(name) && !derived(&name) && !unreserved.contains(&name) {
+                unreserved.push(name);
+            }
+        }
+    }
+    assert unreserved == [] as List<String>, unreserved.join(", ");
 }
 
 test "rows that share their lengths decode no request apart" {
