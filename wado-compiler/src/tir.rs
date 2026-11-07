@@ -1439,6 +1439,9 @@ pub enum TirExprKind {
     /// (pre-monomorphize) expands it to `&ListArg::lowered(&value)`.
     ListViewOf {
         value: Box<TirExpr>,
+        /// The type whose impl answers: `value`'s own, or for a `&mut` value
+        /// the `&` it passes for.
+        answering: TypeId,
     },
 
     /// A value whose type holds an `Option<!>` where the node's type holds an

@@ -46,6 +46,21 @@ test "a view passes on unconverted" {
     assert pass_on([1, 1]) == 2;
 }
 
+fn through_bound<T: ListArg<u8>>(data: &T) -> i32 {
+    return sum(data);
+}
+
+fn through_mut_bound<T: ListArg<u8>>(data: &mut T) -> i32 {
+    return sum(data);
+}
+
+test "a reference to a bounded parameter converts as the parameter" {
+    let list: List<u8> = [1, 2, 3];
+    assert through_bound(&list) == 6;
+    let mut more: List<u8> = [5];
+    assert through_mut_bound(&mut more) == 5;
+}
+
 struct Summer {}
 
 impl Summer {

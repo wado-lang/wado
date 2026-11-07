@@ -61,7 +61,7 @@ use crate::elaborator::float_literal::{FloatFormat, float_literal_bits};
 use crate::elaborator::method_lookup::adjusted_receiver_type;
 use crate::elaborator::sem::types::{
     BodyFacts, CoercionKind, DeclaredAttrs, DesugarKind, ForOfIteratorInfo, FromCallFacts,
-    ImplFacts, IndirectCallee, KeyValueCoercionFacts, LiteralCallee, LiteralFromCall,
+    ImplFacts, IndirectCallee, KeyValueCoercionFacts, ListViewConversion, LiteralCallee, LiteralFromCall,
     MethodDispatch, MethodNames, OperatorDispatch, SequenceCoercionFacts, StaticMethodDispatch,
     impl_self_layers, with_body_facts,
 };
@@ -2500,14 +2500,40 @@ impl<'a> Reify<'a> {
             return tir.clone();
         }
 
-        let view = self.ann_list_view_conversions(expr.id());
-        let tir = self.reify_unmoved(expr, ctx, if view.is_some() { None } else { expected_type });
-        let tir = if self.moves(expr) { tir.moved() } else { tir };
+        let conversion = self.ann_list_view_conversions(expr.id());
+        let tir = self.reify_unmoved(
+            expr,
+            ctx,
+            if conversion.is_some() { None } else { expected_type },
+        );
+        let mut tir = if self.moves(expr) { tir.moved() } else { tir };
         let span = tir.span;
-        if let Some(view) = view {
+        if let Some(ListViewConversion {
+            view,
+            depth,
+            answering,
+        }) = conversion
+        {
+            for _ in 0..depth {
+                let pointee = self
+                    .tysys
+                    .type_table
+                    .borrow()
+                    .ref_pointee(tir.type_id)
+                    .expect("a conversion's layer lies under a reference");
+                tir = TirExpr::new(
+                    TirExprKind::Unary {
+                        op: TirUnaryOp::Deref,
+                        expr: Box::new(tir),
+                    },
+                    pointee,
+                    span,
+                );
+            }
             return TirExpr::new(
                 TirExprKind::ListViewOf {
                     value: Box::new(tir),
+                    answering,
                 },
                 view,
                 span,

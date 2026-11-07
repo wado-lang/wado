@@ -9,7 +9,7 @@ use crate::compiler_host::CompilerHost;
 use crate::hashmap::IndexMap;
 use crate::module_source::ModuleSource;
 use crate::name::{
-    FqTypeName, LocalMethodName, MethodName, RefKind, display_generic_name,
+    FqTraitName, FqTypeName, LocalMethodName, MethodName, RefKind, display_generic_name,
     unalias_namespace_member,
 };
 use crate::tir::{
@@ -17,8 +17,8 @@ use crate::tir::{
 };
 use crate::type_table::TypeTable;
 
-use super::Elaborator;
 use super::callee::{CalleeRef, StaticMethodRef};
+use super::{Elaborator, InstanceImpl, InstanceOrder};
 use super::coercion::{ExpectedReturn, PendingLiterals, answers_last};
 use super::expr::BareCase;
 use super::infer::{InferCtx, unify};
@@ -26,7 +26,9 @@ use super::infer_hole::uninferable_type_param;
 use super::instantiate::{InstanceKind, Instantiated, Instantiation};
 use super::method_call::{PreselectedArg, StaticReceiver};
 use super::scope::{BinderInScope, Scope, ScopedBound, TraitContext};
-use super::sem::types::{BodyFacts, CalleeParams, IndirectCallee, StaticMethodDispatch};
+use super::sem::types::{
+    BodyFacts, CalleeParams, IndirectCallee, ListViewConversion, StaticMethodDispatch,
+};
 use super::sig::{DeclSig, MethodSig, Param};
 use super::static_call::StaticQuery;
 use super::trait_env;
@@ -828,36 +830,62 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let literal_list = matches!(arg, Expr::TupleLiteral(_))
             .then(|| self.tysys.type_table.borrow_mut().make_list(element));
         let resolved = self.resolve_expr(arg, ctx, literal_list);
-        if !self.converts_to_list_view(view, resolved) {
+        let Some((depth, answering)) = self.list_view_layer(view, resolved) else {
             return resolved;
-        }
-        self.sem.types.list_view_conversions.insert(arg.id(), view);
+        };
+        self.sem.types.list_view_conversions.insert(
+            arg.id(),
+            ListViewConversion {
+                view,
+                depth,
+                answering,
+            },
+        );
         view
     }
 
-    /// Whether an `arg` argument converts to the parameter `param` through
-    /// `ListArg<T>`, `param` being a `&ListView<T>` and `arg` not already one.
-    /// A `T` still being inferred names no trait to ask, and the argument says
-    /// nothing of it: the call names it.
-    pub(super) fn converts_to_list_view(&self, param: TypeId, arg: TypeId) -> bool {
+    /// The layer of an `arg` argument whose `ListArg<T>` impl converts it to
+    /// the parameter `param`, `param` being a `&ListView<T>` and `arg` not
+    /// already one: how many times to dereference it, and the type answering.
+    /// A reference answers by an impl of its own before its pointee's, and a
+    /// `&mut` as the `&` it passes for before that. A `T` still being inferred
+    /// names no trait to ask, and the argument says nothing of it: the call
+    /// names it.
+    pub(super) fn list_view_layer(&self, param: TypeId, arg: TypeId) -> Option<(usize, TypeId)> {
         let list_arg = {
             let tt = self.tysys.type_table.borrow();
-            let Some(element) = tt.list_view_ref_element(param) else {
-                return false;
-            };
+            let element = tt.list_view_ref_element(param)?;
             if tt.is_compiler_item_type(arg, CompilerItem::ListView)
                 || tt.contains_infer_var(element)
             {
-                return false;
+                return None;
             }
             tt.compiler_trait_fq(CompilerItem::ListArg)
                 .with_args(vec![tt.fq_type_name(element)])
         };
         let layers = self.tysys.type_table.borrow_mut().reference_layers(arg);
-        layers.into_iter().any(|(_, ty)| {
+        layers
+            .into_iter()
+            .find(|&(_, ty)| self.answers_at_layer(ty, &list_arg))
+    }
+
+    /// Whether `layer` answers `trait_` itself: a reference only by an impl of
+    /// its own, since one holds every trait its pointee holds.
+    fn answers_at_layer(&self, layer: TypeId, trait_: &FqTraitName) -> bool {
+        let tt = self.tysys.type_table.borrow();
+        if tt.ref_pointee(layer).is_none() {
+            drop(tt);
+            return self
+                .tysys
+                .type_implements_trait(&self.annotate_ctx, layer, trait_);
+        }
+        let decl = trait_.canonical().expect("a compiler trait is declared");
+        matches!(
             self.tysys
-                .type_implements_trait(&self.annotate_ctx, ty, &list_arg)
-        })
+                .solver()
+                .instance_order(&tt, layer, decl, trait_.args()),
+            Some(InstanceOrder::One(InstanceImpl { depth: 0, .. }))
+        )
     }
 }
 

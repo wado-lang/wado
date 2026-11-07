@@ -111,6 +111,16 @@ pub(crate) struct CoercionChoice {
     pub(crate) target_type: TypeId,
 }
 
+/// A call argument converting to the `&ListView<T>` parameter `view`: the
+/// argument dereferenced `depth` times holds `answering`, the type whose
+/// `ListArg<T>` impl answers.
+#[derive(Clone)]
+pub(crate) struct ListViewConversion {
+    pub(crate) view: TypeId,
+    pub(crate) depth: usize,
+    pub(crate) answering: TypeId,
+}
+
 /// The maps one walk of a body records, keyed by the node's `AstId`, named
 /// once: the struct, its lens, the split, the count and reify's `ann_*`
 /// accessors are all generated from this list, so a map added here is peeled
@@ -148,11 +158,11 @@ macro_rules! with_body_facts {
             /// supplied) leave no entry. See [`CoercionChoice`] /
             /// [`CoercionKind`] for the variants.
             ann_coercions => coercions: $crate::elaborator::sem::types::CoercionChoice,
-            /// The `&ListView<T>` parameter type a call argument converts to
-            /// through its `ListArg<T>` impl, keyed by the argument's
-            /// [`AstId`]. `expression_types` keeps the argument's own type,
-            /// which is what reify builds the value at.
-            ann_list_view_conversions => list_view_conversions: $crate::tir::TypeId,
+            /// How a call argument converts to the `&ListView<T>` parameter it
+            /// meets, keyed by the argument's [`AstId`]. `expression_types`
+            /// keeps the argument's own type, which is what reify builds the
+            /// value at. See [`ListViewConversion`].
+            ann_list_view_conversions => list_view_conversions: $crate::elaborator::sem::types::ListViewConversion,
             /// The slot a value meets where its type holds, or may yet hold, an
             /// `Option<!>`, keyed by the value's [`AstId`]. Reify rebuilds the
             /// value as the slot's type where that holds an `Option<T>` there.
