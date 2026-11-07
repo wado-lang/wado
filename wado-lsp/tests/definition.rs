@@ -639,6 +639,28 @@ fn imported_item_use_definition() {
 }
 
 #[test]
+fn namespaced_type_and_bound_definitions() {
+    futures::executor::block_on(async {
+        let lib = "pub struct Point {}\npub trait Show {}\n";
+        let entry = concat!(
+            "use geo from \"./lib.wado\";\n",
+            "fn f<T: geo::Show>(p: geo::Point, t: T) {}\n",
+        );
+        let files = [("./lib.wado", lib), ("/test.wado", entry)];
+        let point = def_at_in(&files, "/test.wado", 1, 28)
+            .await
+            .expect("cursor on `Point` after `geo::`");
+        assert_eq!(point.uri, "file:///lib.wado");
+        assert_range(&point, 0, 11, 16);
+        let show = def_at_in(&files, "/test.wado", 1, 13)
+            .await
+            .expect("cursor on `Show` after `geo::`");
+        assert_eq!(show.uri, "file:///lib.wado");
+        assert_range(&show, 1, 10, 14);
+    });
+}
+
+#[test]
 fn use_specifier_definition() {
     futures::executor::block_on(async {
         let lib = "pub fn helper() -> i32 { return 42; }\n";

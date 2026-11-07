@@ -1058,7 +1058,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// where it is the only prefix, else under the `effective` name it reached.
     fn record_receiver_reference(&mut self, ident: &ast::IdentExpr, effective: &str) {
         match ident.segments.as_slice() {
-            [receiver, _] => self.record_type_name_reference(receiver.id, &receiver.name),
+            [receiver, _] => self.record_type_name_reference(receiver.id),
             [first, ..] => self.record_item_reference_by_name(first.id, effective),
             [] => {}
         }

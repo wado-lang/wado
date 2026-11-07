@@ -1209,7 +1209,7 @@ pub fn walk_type<'ast, V: AstVisitor<'ast>>(v: &mut V, ty: &'ast Type) {
             }
         }
         Type::NamespacedGeneric(t) => {
-            v.visit_id(t.id, t.span);
+            v.visit_id(t.id, t.name_span);
             for a in &t.args {
                 v.visit_type(a);
             }
