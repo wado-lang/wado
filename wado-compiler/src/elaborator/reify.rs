@@ -2341,13 +2341,16 @@ impl<'a> Reify<'a> {
     fn reify_let(&mut self, let_stmt: &ast::LetStmt, ctx: &mut FunctionContext) -> TirStmt {
         // Uninitialised `let x: T;` — the parser guarantees `ty`
         // is present, and annotate that the pattern is a single name or `_`.
+        // The WIR builder zero-initialises the slot; reify emits a Unit
+        // placeholder as the `value` and the `type_id` field carries the
+        // user-declared type.
         let Some(ast_value) = let_stmt.value.as_ref() else {
+            let placeholder = TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, let_stmt.span);
             let Some(binding) = let_stmt.pattern.as_name() else {
                 assert!(
                     matches!(let_stmt.pattern, ast::Pattern::Wildcard),
                     "annotate rejects an uninitialized `let` that destructures"
                 );
-                let placeholder = TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, let_stmt.span);
                 return TirStmt::new(TirStmtKind::Expr(placeholder), let_stmt.span);
             };
             let type_id = self
@@ -2361,11 +2364,15 @@ impl<'a> Reify<'a> {
                 Some(binding.id),
                 binding.span,
             );
-            return tir::declare_stmt(
-                binding.name.to_string(),
-                local_index,
-                is_mut,
-                type_id,
+            return TirStmt::new(
+                TirStmtKind::Let {
+                    name: binding.name.to_string(),
+                    local_index,
+                    is_mut,
+                    type_id,
+                    value: placeholder,
+                    storage: LetStorage::Planned,
+                },
                 let_stmt.span,
             );
         };
@@ -2951,7 +2958,7 @@ impl<'a> Reify<'a> {
         // `defining_ast_id = None` keeps synthetic locals out of
         // `local_symbols` (LSP hover / go-to-def).
         let local_index =
-            (!rereads).then(|| ctx.add_local(cap_name.clone(), type_id, !hoisted, None));
+            (!rereads).then(|| ctx.add_local(cap_name.clone(), type_id, false, None));
         let local_ref = local_index.map(|index| {
             TirExpr::new(
                 TirExprKind::Local {
@@ -2965,6 +2972,19 @@ impl<'a> Reify<'a> {
         let seen_local_index = conditional
             .then(|| ctx.add_local(seen_local_name(&cap_name), TypeTable::BOOL, true, None));
 
+        let binding = |value: TirExpr| {
+            TirStmt::new(
+                TirStmtKind::Let {
+                    name: cap_name.clone(),
+                    local_index: local_index.expect("bound with its reference"),
+                    is_mut: false,
+                    type_id,
+                    value,
+                    storage: LetStorage::Planned,
+                },
+                cap_span,
+            )
+        };
         let mut decls = Vec::new();
         let spliced = if hoisted {
             // A hoisted slot binds ahead of the condition, its scope reaching
@@ -2975,17 +2995,7 @@ impl<'a> Reify<'a> {
                 "a conditional slot is never hoisted"
             );
             let local_ref = local_ref.expect("a hoisted slot is never a place");
-            decls.push(TirStmt::new(
-                TirStmtKind::Let {
-                    name: cap_name,
-                    local_index: local_index.expect("bound with its reference"),
-                    is_mut: false,
-                    type_id,
-                    value: resolved,
-                    storage: LetStorage::Planned,
-                },
-                cap_span,
-            ));
+            decls.push(binding(resolved));
             // The capture stands where the operand did: what consumed the
             // operand moves the local.
             if self.takes(expr) {
@@ -3004,7 +3014,7 @@ impl<'a> Reify<'a> {
                 // The local hands on what the operand evaluated to, which it
                 // owns if the value is affine.
                 Some(local_ref) => {
-                    stmts.push(assign_stmt(local_ref.clone(), resolved, cap_span));
+                    stmts.push(binding(resolved));
                     if self.is_affine(expr) {
                         local_ref.clone().moved()
                     } else {

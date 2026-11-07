@@ -1867,30 +1867,6 @@ impl TirBlock {
 }
 
 /// `target = value;`
-/// `let name: type_id;`: a local declared without a value, as the WIR builder
-/// zero-initialises it. A local assigned before any `let` binds it is
-/// declared this way first, so an assignment that writes in place knows its
-/// first write has no storage to write into.
-pub fn declare_stmt(
-    name: String,
-    local_index: u32,
-    is_mut: bool,
-    type_id: TypeId,
-    span: Span,
-) -> TirStmt {
-    TirStmt::new(
-        TirStmtKind::Let {
-            name,
-            local_index,
-            is_mut,
-            type_id,
-            value: TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, span),
-            storage: LetStorage::Planned,
-        },
-        span,
-    )
-}
-
 pub fn assign_stmt(target: TirExpr, value: TirExpr, span: Span) -> TirStmt {
     TirStmt::new(
         TirStmtKind::Expr(TirExpr::new(
