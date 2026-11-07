@@ -1,0 +1,60 @@
+// A cold call passing a whole object is free where it stands but not where it
+// reaches: while `special` reads `style.width`, `write` needs the whole `Style`
+// and `emit` builds one per value on its hot path. A clone binding that constant
+// field folds `pad` away, so only `buf` is left and `sroa_param` takes the rest.
+
+use { println, Stdout } from "core:cli";
+
+struct Style {
+    width: i32,
+    fill: char,
+    buf: &mut String,
+}
+
+fn pad_slow(style: &mut Style) {
+    for let _ of 0..<style.width {
+        style.buf.push(style.fill);
+    }
+}
+
+fn pad(style: &mut Style) {
+    if style.width > 0 {
+        pad_slow(style);
+    }
+}
+
+fn special(style: &mut Style) {
+    style.buf.push_str("nan");
+    pad(style);
+}
+
+fn write(value: i32, style: &mut Style) {
+    if value < 0 {
+        builtin::cold_path();
+        special(style);
+        return;
+    }
+    style.buf.push_str(`${value}`);
+}
+
+fn emit(out: &mut String, value: i32) {
+    let mut style = Style { width: -1, fill: ' ', buf: out };
+    write(value, &mut style);
+}
+
+export fn run() with Stdout {
+    let mut out = "";
+    for let v of [1, -1, 2] as List<i32> {
+        emit(&mut out, builtin::black_box(v));
+    }
+    println(out);
+}
+
+__DATA__
+{
+    "stdout": "1nan2\n",
+    "wir_pass": {"O2": ["nir/param_spec"]},
+    "wir_not_expect:O2": [
+        ".wado//Style\" { width"
+    ]
+}

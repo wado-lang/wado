@@ -65,6 +65,8 @@ The native host pieces that `wado-cli`, `wado-dev-tools`, the runners, and
 - `runner.rs` — what `wado run` and each `wado run-*` subcommand share, so a
   program behaves the same under all of them: the command line, the compile
   (`wado build -o -`), the run and the guest profile.
+- `gc_log.rs` — `--gc-log`, read off wasmtime's trace log, the only place it
+  reports a collection.
 - `fuel.rs` — the price of each Wasm operator in fuel, which every metered
   engine takes. See
   [WEP: Fuel Benchmarks](../docs/wep-2026-10-25-fuel-benchmarks.md).

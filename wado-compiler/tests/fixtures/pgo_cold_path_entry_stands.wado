@@ -1,0 +1,38 @@
+// A marker at the top of a function has no code around it to be measured
+// against, so a run does not refute it and no remark says the profile did.
+use { println, Stdout } from "core:cli";
+
+fn note(xs: &mut List<i32>, i: i32) {
+    builtin::cold_path();
+    xs.push(i);
+}
+
+fn walk(n: i32) -> List<i32> {
+    let mut xs: List<i32> = [];
+    for let i of 0..<n {
+        if i % 33 == 0 {
+            note(&mut xs, i);
+        }
+    }
+    return xs;
+}
+
+export fn run() with Stdout {
+    let xs = walk(builtin::black_box(100));
+    println(`${xs.len()}`);
+}
+
+__DATA__
+{
+  "profile": "testdata/pgo_cold_path_entry_stands.pgo",
+  "marked_regions": [],
+  "remarks": {
+    "O2": [
+      {
+        "contains": ["`cold_path()` marks this path rare"],
+        "count": 0
+      }
+    ]
+  },
+  "stdout": "4\n"
+}

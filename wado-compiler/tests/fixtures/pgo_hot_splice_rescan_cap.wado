@@ -1,0 +1,285 @@
+// The re-scan of a splice at a hot site spends hot prices, so a cap sized for a
+// plain site runs out inside one hot callee. The site left over is not retried
+// on the same terms: `last` grows by its own splices, and by the next round it
+// is past what any site takes. The calls it was to bring stay calls in the
+// hottest loop of the program.
+
+use { println, Stdout } from "core:cli";
+
+fn leaf_a(x: i32) -> i32 {
+    let mut v = x;
+    v = (v * 3) ^ (v >> 1);
+    v = (v * 5) ^ (v >> 2);
+    v = (v * 7) ^ (v >> 3);
+    v = (v * 9) ^ (v >> 4);
+    v = (v * 11) ^ (v >> 5);
+    v = (v * 13) ^ (v >> 6);
+    v = (v * 15) ^ (v >> 7);
+    v = (v * 17) ^ (v >> 1);
+    v = (v * 19) ^ (v >> 2);
+    v = (v * 21) ^ (v >> 3);
+    v = (v * 23) ^ (v >> 4);
+    v = (v * 25) ^ (v >> 5);
+    return v;
+}
+
+fn leaf_b(x: i32) -> i32 {
+    let mut v = x;
+    v = (v * 3) ^ (v >> 1);
+    v = (v * 5) ^ (v >> 2);
+    v = (v * 7) ^ (v >> 3);
+    v = (v * 9) ^ (v >> 4);
+    v = (v * 11) ^ (v >> 5);
+    v = (v * 13) ^ (v >> 6);
+    v = (v * 15) ^ (v >> 7);
+    v = (v * 17) ^ (v >> 1);
+    v = (v * 19) ^ (v >> 2);
+    v = (v * 21) ^ (v >> 3);
+    v = (v * 23) ^ (v >> 4);
+    v = (v * 25) ^ (v >> 5);
+    return v;
+}
+
+fn leaf_c(x: i32) -> i32 {
+    let mut v = x;
+    v = (v * 3) ^ (v >> 1);
+    v = (v * 5) ^ (v >> 2);
+    v = (v * 7) ^ (v >> 3);
+    v = (v * 9) ^ (v >> 4);
+    v = (v * 11) ^ (v >> 5);
+    v = (v * 13) ^ (v >> 6);
+    v = (v * 15) ^ (v >> 7);
+    v = (v * 17) ^ (v >> 1);
+    v = (v * 19) ^ (v >> 2);
+    v = (v * 21) ^ (v >> 3);
+    v = (v * 23) ^ (v >> 4);
+    v = (v * 25) ^ (v >> 5);
+    return v;
+}
+
+fn leaf_d(x: i32) -> i32 {
+    let mut v = x;
+    v = (v * 3) ^ (v >> 1);
+    v = (v * 5) ^ (v >> 2);
+    v = (v * 7) ^ (v >> 3);
+    v = (v * 9) ^ (v >> 4);
+    v = (v * 11) ^ (v >> 5);
+    v = (v * 13) ^ (v >> 6);
+    v = (v * 15) ^ (v >> 7);
+    v = (v * 17) ^ (v >> 1);
+    v = (v * 19) ^ (v >> 2);
+    v = (v * 21) ^ (v >> 3);
+    v = (v * 23) ^ (v >> 4);
+    v = (v * 25) ^ (v >> 5);
+    return v;
+}
+
+fn leaf_e(x: i32) -> i32 {
+    let mut v = x;
+    v = (v * 3) ^ (v >> 1);
+    v = (v * 5) ^ (v >> 2);
+    v = (v * 7) ^ (v >> 3);
+    v = (v * 9) ^ (v >> 4);
+    v = (v * 11) ^ (v >> 5);
+    v = (v * 13) ^ (v >> 6);
+    v = (v * 15) ^ (v >> 7);
+    v = (v * 17) ^ (v >> 1);
+    v = (v * 19) ^ (v >> 2);
+    v = (v * 21) ^ (v >> 3);
+    v = (v * 23) ^ (v >> 4);
+    v = (v * 25) ^ (v >> 5);
+    return v;
+}
+
+fn leaf_f(x: i32) -> i32 {
+    let mut v = x;
+    v = (v * 3) ^ (v >> 1);
+    v = (v * 5) ^ (v >> 2);
+    v = (v * 7) ^ (v >> 3);
+    v = (v * 9) ^ (v >> 4);
+    v = (v * 11) ^ (v >> 5);
+    v = (v * 13) ^ (v >> 6);
+    v = (v * 15) ^ (v >> 7);
+    v = (v * 17) ^ (v >> 1);
+    v = (v * 19) ^ (v >> 2);
+    v = (v * 21) ^ (v >> 3);
+    v = (v * 23) ^ (v >> 4);
+    v = (v * 25) ^ (v >> 5);
+    return v;
+}
+
+fn leaf_g(x: i32) -> i32 {
+    let mut v = x;
+    v = (v * 3) ^ (v >> 1);
+    v = (v * 5) ^ (v >> 2);
+    v = (v * 7) ^ (v >> 3);
+    v = (v * 9) ^ (v >> 4);
+    v = (v * 11) ^ (v >> 5);
+    v = (v * 13) ^ (v >> 6);
+    v = (v * 15) ^ (v >> 7);
+    v = (v * 17) ^ (v >> 1);
+    v = (v * 19) ^ (v >> 2);
+    v = (v * 21) ^ (v >> 3);
+    v = (v * 23) ^ (v >> 4);
+    v = (v * 25) ^ (v >> 5);
+    return v;
+}
+
+fn leaf_h(x: i32) -> i32 {
+    let mut v = x;
+    v = (v * 3) ^ (v >> 1);
+    v = (v * 5) ^ (v >> 2);
+    v = (v * 7) ^ (v >> 3);
+    v = (v * 9) ^ (v >> 4);
+    v = (v * 11) ^ (v >> 5);
+    v = (v * 13) ^ (v >> 6);
+    v = (v * 15) ^ (v >> 7);
+    v = (v * 17) ^ (v >> 1);
+    v = (v * 19) ^ (v >> 2);
+    v = (v * 21) ^ (v >> 3);
+    v = (v * 23) ^ (v >> 4);
+    v = (v * 25) ^ (v >> 5);
+    return v;
+}
+
+fn grow_a(x: i32) -> i32 {
+    let mut v = x;
+    v = (v * 3) ^ (v >> 1);
+    v = (v * 5) ^ (v >> 2);
+    return v;
+}
+
+fn grow_b(x: i32) -> i32 {
+    let mut v = x;
+    v = (v * 3) ^ (v >> 1);
+    v = (v * 5) ^ (v >> 2);
+    return v;
+}
+
+fn grow_c(x: i32) -> i32 {
+    let mut v = x;
+    v = (v * 3) ^ (v >> 1);
+    v = (v * 5) ^ (v >> 2);
+    return v;
+}
+
+fn grow_d(x: i32) -> i32 {
+    let mut v = x;
+    v = (v * 3) ^ (v >> 1);
+    v = (v * 5) ^ (v >> 2);
+    return v;
+}
+
+fn grow_e(x: i32) -> i32 {
+    let mut v = x;
+    v = (v * 3) ^ (v >> 1);
+    v = (v * 5) ^ (v >> 2);
+    return v;
+}
+
+fn grow_f(x: i32) -> i32 {
+    let mut v = x;
+    v = (v * 3) ^ (v >> 1);
+    v = (v * 5) ^ (v >> 2);
+    return v;
+}
+
+fn grow_g(x: i32) -> i32 {
+    let mut v = x;
+    v = (v * 3) ^ (v >> 1);
+    v = (v * 5) ^ (v >> 2);
+    return v;
+}
+
+fn grow_h(x: i32) -> i32 {
+    let mut v = x;
+    v = (v * 3) ^ (v >> 1);
+    v = (v * 5) ^ (v >> 2);
+    return v;
+}
+
+fn grow_i(x: i32) -> i32 {
+    let mut v = x;
+    v = (v * 3) ^ (v >> 1);
+    v = (v * 5) ^ (v >> 2);
+    return v;
+}
+
+fn grow_j(x: i32) -> i32 {
+    let mut v = x;
+    v = (v * 3) ^ (v >> 1);
+    v = (v * 5) ^ (v >> 2);
+    return v;
+}
+
+fn grow_k(x: i32) -> i32 {
+    let mut v = x;
+    v = (v * 3) ^ (v >> 1);
+    v = (v * 5) ^ (v >> 2);
+    return v;
+}
+
+fn grow_l(x: i32) -> i32 {
+    let mut v = x;
+    v = (v * 3) ^ (v >> 1);
+    v = (v * 5) ^ (v >> 2);
+    return v;
+}
+
+#[inline("never")]
+fn note(x: i32) -> i32 {
+    return x + 1;
+}
+
+fn last(x: i32) -> i32 {
+    return note(x) ^ grow_a(x) ^ grow_b(x) ^ grow_c(x) ^ grow_d(x) ^ grow_e(x) ^ grow_f(x)
+        ^ grow_g(x) ^ grow_h(x) ^ grow_i(x) ^ grow_j(x) ^ grow_k(x) ^ grow_l(x);
+}
+
+fn hub(x: i32) -> i32 {
+    let mut s = x;
+    s = leaf_a(s);
+    s = leaf_b(s);
+    s = leaf_c(s);
+    s = leaf_d(s);
+    s = leaf_e(s);
+    s = leaf_f(s);
+    s = leaf_g(s);
+    s = leaf_h(s);
+    return last(s);
+}
+
+// Second sites, so each splice copies its callee rather than moving it.
+#[inline("never")]
+fn other(x: i32) -> i32 {
+    return leaf_a(x)
+        + leaf_b(x)
+        + leaf_c(x)
+        + leaf_d(x)
+        + leaf_e(x)
+        + leaf_f(x)
+        + leaf_g(x)
+        + leaf_h(x)
+        + last(x) + hub(x);
+}
+
+fn work(n: i32) -> i32 {
+    let mut total = 0;
+    for let i of 0..<n {
+        total = total ^ hub(i);
+    }
+    return total + other(n);
+}
+
+export fn run() with Stdout {
+    println(`${work(builtin::black_box(2000))}`);
+}
+
+__DATA__
+{
+  "profile": "testdata/pgo_hot_splice_rescan_cap.pgo",
+  "wir_pass": {"O2": ["nir/inline"]},
+  "wir_scope": "pgo_hot_splice_rescan_cap.wado/work",
+  "wir_expect:O2": ["\"pgo_hot_splice_rescan_cap.wado/note\""],
+  "stdout": "-1088958994\n"
+}

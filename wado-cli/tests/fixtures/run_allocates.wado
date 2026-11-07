@@ -1,0 +1,14 @@
+use { println, Stdout } from "core:cli";
+
+// Allocates far past a 1 MiB GC heap, keeping only the last list.
+export fn run() with Stdout {
+    let mut kept: List<i32> = [];
+    for let round of 0..<2000 {
+        let mut fresh = List::<i32>::with_capacity(1000);
+        for let i of 0..<1000 {
+            fresh.push(round + i);
+        }
+        kept = fresh;
+    }
+    println(`${kept[0]}`);
+}

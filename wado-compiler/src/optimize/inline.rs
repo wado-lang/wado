@@ -2457,7 +2457,9 @@ struct Candidates<'a> {
     /// Whether a call the engine may fold is still left to it: until the loop
     /// first converges ([`InlineHolds::release`]).
     fold_pending: bool,
-    rescan_cap: usize,
+    /// What the re-scan of a splice may add, by the heat of the site that
+    /// started it: a hot site's own callee may spend a plain cap by itself.
+    rescan_cap: ByHeat<usize>,
     /// What the re-scan under way may still splice, or `None` outside one.
     rescan_left: Option<&'a Cell<usize>>,
 }
@@ -2964,8 +2966,10 @@ fn inline_round(
             ctfe_eligible: &ctfe_eligible,
             fold_pending,
             // A threshold's worth of threshold-sized callees: a call tree that
-            // doubles per level exceeds it within a few levels.
-            rescan_cap: inline_threshold * inline_threshold,
+            // doubles per level exceeds it within a few levels. A cold site
+            // splices less, but what it spliced recurses as far as a plain one.
+            rescan_cap: thresholds
+                .map(|threshold| threshold.max(&thresholds.plain).saturating_pow(2)),
             rescan_left: None,
         };
         let mut func = functions[fid.index()].borrow_mut();
@@ -3728,7 +3732,7 @@ fn try_inline_call_expr(
     labels: &mut InlineLabels,
     reval: &mut Vec<InlineRevalInfo>,
     site: Site,
-) -> Option<(ExprId, FuncId)> {
+) -> Option<(ExprId, FuncId, Heat)> {
     let ExprKind::Call { func_id, .. } = caller.exprs[call_id].kind else {
         return None;
     };
@@ -3864,7 +3868,7 @@ fn try_inline_call_expr(
         labels,
         reval,
     );
-    Some((inlined, func_id))
+    Some((inlined, func_id, heat))
 }
 
 /// Remap a local index from the callee frame into the caller frame.
@@ -4519,7 +4523,7 @@ fn inline_calls_in_expr(
     reval: &mut Vec<InlineRevalInfo>,
     site: Site,
 ) {
-    if let Some((new_id, inlined_key)) =
+    if let Some((new_id, inlined_key, heat)) =
         try_inline_call_expr(body, e, candidates, frame, type_table, labels, reval, site)
     {
         // Move the inlined labeled-block node into the call slot and null out
@@ -4540,7 +4544,7 @@ fn inline_calls_in_expr(
             inlined_funcs.push(inlined_key);
         }
         runs.add_under(body, e);
-        let left = Cell::new(candidates.rescan_cap);
+        let left = Cell::new(*candidates.rescan_cap.at(heat));
         inline_calls_in_expr(
             body,
             e,

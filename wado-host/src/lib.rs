@@ -7,6 +7,7 @@ pub mod engine;
 #[cfg(feature = "toolchain")]
 pub mod fixture;
 pub mod fuel;
+pub mod gc_log;
 pub mod guest;
 pub mod http_hooks;
 #[cfg(feature = "toolchain")]

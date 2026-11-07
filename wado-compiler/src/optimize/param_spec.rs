@@ -1239,8 +1239,25 @@ struct Site {
     bindings: Vec<Binding>,
     /// In a cold run. Such a call is pointed at a clone
     /// other calls pay for, and never has one minted for it: a clone for a call
-    /// that rarely runs buys no time for its size.
+    /// that rarely runs buys no time for its size, unless it binds a field:
+    /// see [`Site::binds_field`].
     cold: bool,
+    /// Returns `!`, so it runs at most once per call of its caller and never
+    /// has a clone minted for it, whatever it binds.
+    diverges: bool,
+}
+
+impl Site {
+    /// Whether the clone replaces a field of an argument passed by reference.
+    /// A cold call is free where it stands but not where it reaches: passing
+    /// the whole object keeps `sroa_param` off that parameter in every hot
+    /// caller, so the object is allocated on the hot path for a field the
+    /// clone would have folded away.
+    fn binds_field(&self) -> bool {
+        self.bindings
+            .iter()
+            .any(|(_, slot, _)| matches!(slot, Slot::Field(_)))
+    }
 }
 
 fn select_sites(
@@ -1336,6 +1353,7 @@ fn select_sites(
             callee,
             bindings,
             cold: false,
+            diverges: false,
         });
     });
     sites
@@ -1658,11 +1676,9 @@ fn collect_sites(
             constants,
             state,
         );
-        // A call returning `!` runs at most once per call of its caller, so a
-        // clone for it buys nothing, wherever it sits.
         for site in &mut sites {
-            site.cold =
-                cold_calls.contains(&site.call) || types.is_never(body.exprs[site.call].type_id);
+            site.diverges = types.is_never(body.exprs[site.call].type_id);
+            site.cold = cold_calls.contains(&site.call) || site.diverges;
         }
         (!sites.is_empty()).then_some((index, sites))
     })
@@ -1711,7 +1727,10 @@ fn plan_clones<'s>(
             continue;
         }
         let ordinal = state.per_callee.get(&site.callee).copied().unwrap_or(0);
-        if site.cold || body_exprs(project, site.callee) > MAX_CLONE_EXPRS {
+        if site.diverges
+            || (site.cold && !site.binds_field())
+            || body_exprs(project, site.callee) > MAX_CLONE_EXPRS
+        {
             continue;
         }
         if state.budget_exhausted() {
@@ -1720,9 +1739,10 @@ fn plan_clones<'s>(
         }
         compiler_trace!(
             "param_spec",
-            "specialized {} on {} binding(s)",
+            "specialized {} on {} binding(s){}",
             project.functions[site.callee.index()].borrow().name,
-            site.bindings.len()
+            site.bindings.len(),
+            if site.cold { " for a cold call" } else { "" }
         );
         let id = FuncId::new(next_id);
         next_id += 1;

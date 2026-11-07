@@ -99,7 +99,8 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode";
 import fn wasi/task-return from "wasi/task-return";
 
-global mut global:opt_value_copy_move_after_ref_match.wado::$const_obj_0: ref null "core:prelude/string.wado//String" = ref.null none;
+global global:opt_value_copy_move_after_ref_match.wado::$const_obj_0: ref "core:prelude/list.wado//List<core:prelude/string.wado/String>" = struct.new "core:prelude/list.wado//List<core:prelude/string.wado/String>" { repr: array.new_fixed<ref "core:prelude/string.wado//String">(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97), used: 1 }, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(98), used: 1 }), used: 2 };
+global mut global:opt_value_copy_move_after_ref_match.wado::$const_obj_1: ref null "core:prelude/string.wado//String" = ref.null none;
 
 fn "opt_value_copy_move_after_ref_match.wado/build$dae[n]"() {
     let ops: ref "core:prelude/list.wado//List<opt_value_copy_move_after_ref_match.wado/Op>";
@@ -116,7 +117,7 @@ fn "opt_value_copy_move_after_ref_match.wado/build$dae[n]"() {
             break_if b0 i_2 >= 4;
             if ref.test "opt_value_copy_move_after_ref_match.wado//Op::Repeat"(local.tee $sroa_op_value_20($inline_make_1: block -> ref "opt_value_copy_move_after_ref_match.wado//Op" {
                 if (i_2 % 2) == 0 {
-                    break $inline_make_1: struct.new "opt_value_copy_move_after_ref_match.wado//Op::Repeat" { discriminant: 1, payload_0: struct.new "opt_value_copy_move_after_ref_match.wado//Rep" { tags: struct.new "core:prelude/list.wado//List<core:prelude/string.wado/String>" { repr: array.new_fixed<ref "core:prelude/string.wado//String">(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97), used: 1 }, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(98), used: 1 }), used: 2 } } };
+                    break $inline_make_1: struct.new "opt_value_copy_move_after_ref_match.wado//Op::Repeat" { discriminant: 1, payload_0: struct.new "opt_value_copy_move_after_ref_match.wado//Rep" { tags: global:opt_value_copy_move_after_ref_match.wado::$const_obj_0 } };
                 }
                 break $inline_make_1: struct.new "opt_value_copy_move_after_ref_match.wado//Op::Plain" { discriminant: 0, payload_0: i_2 };
             })) {
@@ -143,13 +144,13 @@ fn "opt_value_copy_move_after_ref_match.wado/run"() with Stdout {
     let $sroa_$pattern_temp_0_1_14: i32;
     let new_repr: ref Array<u8>;
     let self_21: i32;
-    if ref.is_null(global:opt_value_copy_move_after_ref_match.wado::$const_obj_0) {
-        global:opt_value_copy_move_after_ref_match.wado::$const_obj_0 = "core:prelude/string.wado/core:prelude/string.wado/String::format<opt_value_copy_move_after_ref_match.wado/$tmpl$fb51c04d54491732,[i32]>$spec0$spec0$sroa[t.h0]"("opt_value_copy_move_after_ref_match.wado/build$dae[n]"());
+    if ref.is_null(global:opt_value_copy_move_after_ref_match.wado::$const_obj_1) {
+        global:opt_value_copy_move_after_ref_match.wado::$const_obj_1 = "core:prelude/string.wado/core:prelude/string.wado/String::format<opt_value_copy_move_after_ref_match.wado/$tmpl$fb51c04d54491732,[i32]>$spec0$spec0$sroa[t.h0]"("opt_value_copy_move_after_ref_match.wado/build$dae[n]"());
     }
     $sroa_$pattern_temp_0_0_13 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_14 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
     $sroa_$pattern_temp_0_0_13 = "opt_value_copy_move_after_ref_match.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$pattern_temp_0_0_13);
-    builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>(local.tee self_21(global:opt_value_copy_move_after_ref_match.wado::$const_obj_0.used) + 1)), 0, global:opt_value_copy_move_after_ref_match.wado::$const_obj_0.repr, 0, self_21);
+    builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>(local.tee self_21(global:opt_value_copy_move_after_ref_match.wado::$const_obj_1.used) + 1)), 0, global:opt_value_copy_move_after_ref_match.wado::$const_obj_1.repr, 0, self_21);
     builtin::array_set_u8(new_repr, self_21, 10);
     drop(block -> "core:prelude/types.wado//enum:CopyResult" {
         self_21 = self_21 + 1;

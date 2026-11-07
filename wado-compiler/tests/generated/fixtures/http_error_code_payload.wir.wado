@@ -198,6 +198,8 @@ import memory (1) from "mem/memory";
 import fn wasi/task-return:handle from "wasi/task-return:handle";
 import fn wasi/resource-drop:wasi:http/types.wado#Request from "wasi/resource-drop:wasi:http/types.wado#Request";
 
+global global:http_error_code_payload.wado::$const_obj_0: ref Array<u8> = array.new_fixed<u8>(99, 117, 115, 116, 111, 109, 32, 101, 114, 114, 111, 114);
+
 fn "http_error_code_payload.wado/$cm_export__handle"($p0) {
     "http_error_code_payload.wado/$cm_task_entry__handle"($p0);
 }
@@ -223,7 +225,7 @@ fn "http_error_code_payload.wado/$cm_task_entry__handle"(request) {
     let $local_57: ref "wasi:http/types.wado//FieldSizePayload";
     let s_171: ref "core:prelude/string.wado//String";
     let $sroa_$task_ret_2_245: ref null "wasi:http/types.wado//ErrorCode";
-    $sroa_$task_ret_2_245 = struct.new "wasi:http/types.wado//ErrorCode::InternalError" { discriminant: 38, payload_0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("custom error"), used: 12 } };
+    $sroa_$task_ret_2_245 = struct.new "wasi:http/types.wado//ErrorCode::InternalError" { discriminant: 38, payload_0: struct.new "core:prelude/string.wado//String" { repr: global:http_error_code_payload.wado::$const_obj_0, used: 12 } };
     $tv_2 = 0;
     $tv_3 = 0_i64;
     $tv_4 = 0;

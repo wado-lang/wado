@@ -430,13 +430,14 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode";
 
-global global:core:prelude/primitive.wado::$const_obj_0: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
+global global:bug_shared_field_write_reaches_every_name.wado::$const_obj_0: ref "core:prelude/list.wado//List<i32>" = struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(), used: 0 };
+global global:core:prelude/primitive.wado::$const_obj_1: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
 
 fn "bug_shared_field_write_reaches_every_name.wado/fresh"() {
     let elements_0: ref Array<i32>;
     let used_1: i32;
     let elements_2: ref "Array<core:prelude/list.wado/List<i32>>";
-    return struct.new "bug_shared_field_write_reaches_every_name.wado//Holder" { inner: struct.new "bug_shared_field_write_reaches_every_name.wado//Inner" { x: used_1 = builtin::array_len(local.tee elements_0(array.new_fixed<i32>(1, 2, black_box(3)))); struct.new "core:prelude/list.wado//List<i32>" { repr: elements_0, used: used_1 } }, rows: used_1 = builtin::array_len(local.tee elements_2(array.new_fixed<ref "core:prelude/list.wado//List<i32>">(used_1 = builtin::array_len(local.tee elements_0(array.new_fixed<i32>(1, 2, black_box(3)))); struct.new "core:prelude/list.wado//List<i32>" { repr: elements_0, used: used_1 }))); struct.new "core:prelude/list.wado//List<core:prelude/list.wado/List<i32>>" { repr: elements_2, used: used_1 }, items: struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(), used: 0 } };
+    return struct.new "bug_shared_field_write_reaches_every_name.wado//Holder" { inner: struct.new "bug_shared_field_write_reaches_every_name.wado//Inner" { x: used_1 = builtin::array_len(local.tee elements_0(array.new_fixed<i32>(1, 2, black_box(3)))); struct.new "core:prelude/list.wado//List<i32>" { repr: elements_0, used: used_1 } }, rows: used_1 = builtin::array_len(local.tee elements_2(array.new_fixed<ref "core:prelude/list.wado//List<i32>">(used_1 = builtin::array_len(local.tee elements_0(array.new_fixed<i32>(1, 2, black_box(3)))); struct.new "core:prelude/list.wado//List<i32>" { repr: elements_0, used: used_1 }))); struct.new "core:prelude/list.wado//List<core:prelude/list.wado/List<i32>>" { repr: elements_2, used: used_1 }, items: global:bug_shared_field_write_reaches_every_name.wado::$const_obj_0 };
 }
 
 fn "bug_shared_field_write_reaches_every_name.wado/$template_segment$bug_shared_field_write_reaches_every_name.wado/$tmpl$ebaa20f4a908b504"($mv$v$s0, $mv$v$r0, $mv$v$s1, $mv$v$r1, index) {
@@ -2151,7 +2152,7 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(self, f) {
     let abs_val: u64;
     is_negative = self < 0;
     self = "core:prelude/primitive.wado/count_digits_u64"(local.tee abs_val("core:prelude/primitive.wado/i64::abs"(builtin::i64_extend_i32_s(self))));
-    is_negative = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>"(f, is_negative, global:core:prelude/primitive.wado::$const_obj_0, self);
+    is_negative = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>"(f, is_negative, global:core:prelude/primitive.wado::$const_obj_1, self);
     "core:prelude/primitive.wado/write_decimal_digits"(f.buf.repr, is_negative, abs_val, self);
 }
 
@@ -2159,7 +2160,7 @@ fn "core:prelude/primitive.wado/u32::fmt_decimal$sroa[self.value]"(self, f) {
     let value: u64;
     let offset: i32;
     self = "core:prelude/primitive.wado/count_digits_u64"(local.tee value(builtin::i64_extend_i32_u(self)));
-    offset = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>"(f, 0, global:core:prelude/primitive.wado::$const_obj_0, self);
+    offset = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>"(f, 0, global:core:prelude/primitive.wado::$const_obj_1, self);
     "core:prelude/primitive.wado/write_decimal_digits"(f.buf.repr, offset, value, self);
 }
 

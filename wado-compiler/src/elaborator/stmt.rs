@@ -1761,17 +1761,21 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             Pattern::Tuple(patterns, has_rest) => {
                 let (scrutinee_type, ref_binding) =
                     self.tysys.peel_scrutinee_refs(scrutinee_type, ref_binding);
-                let element_types =
-                    if let Some(types) = self.tysys.type_table.borrow().as_tuple(scrutinee_type) {
-                        types
-                    } else {
-                        let _ = self.emit(TypeError::PatternTypeMismatch {
-                            expected: "tuple type".to_string(),
-                            found: self.tysys.type_table.borrow().name(scrutinee_type),
-                            span,
-                        });
-                        vec![TypeTable::UNKNOWN; patterns.len()]
-                    };
+                let elements = self
+                    .tysys
+                    .type_table
+                    .borrow()
+                    .tuple_representation(scrutinee_type);
+                let element_types = if let Some(types) = elements {
+                    types
+                } else {
+                    let _ = self.emit(TypeError::PatternTypeMismatch {
+                        expected: "tuple type".to_string(),
+                        found: self.tysys.type_table.borrow().name(scrutinee_type),
+                        span,
+                    });
+                    vec![TypeTable::UNKNOWN; patterns.len()]
+                };
                 let element_types = self.tuple_pattern_element_types(
                     patterns.len(),
                     *has_rest,

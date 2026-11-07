@@ -1,0 +1,48 @@
+// A call returning `!` runs at most once per call of its caller, so it takes no
+// clone even for a constant field that would fold a read in the callee.
+
+use { println, Stdout } from "core:cli";
+
+struct Limits {
+    width: i32,
+    name: String,
+}
+
+#[inline("never")]
+fn over(limits: &Limits, value: i32) -> ! {
+    if limits.width > 0 {
+        panic(`${value} over ${limits.width} for ${limits.name}`);
+    }
+    panic(`${value} over the limit of ${limits.name}`);
+}
+
+fn check(value: i32, limits: &Limits) -> i32 {
+    if value > 10 {
+        over(limits, value);
+    }
+    return value + limits.width;
+}
+
+fn sum(value: i32) -> i32 {
+    let limits = Limits { width: -1, name: `row ${value}` };
+    return check(value, &limits);
+}
+
+export fn run() with Stdout {
+    let mut total = 0;
+    for let v of [1, 2, 3] as List<i32> {
+        total += sum(builtin::black_box(v));
+    }
+    println(`${total}`);
+}
+
+__DATA__
+{
+    "stdout": "3\n",
+    "wir_not_expect:O2": [
+        "param_spec_diverging_call_binds_field.wado/over$spec"
+    ],
+    "wir_contrast": {"O2": [
+        {"value: i32) -> ! {": "value: i32) -> i32 {"}
+    ]}
+}

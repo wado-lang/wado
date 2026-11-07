@@ -22,6 +22,7 @@ use wasmtime::{Engine, GuestProfiler, Store, UpdateDeadline};
 use wasmtime_wasi::I32Exit;
 use wasmtime_wasi::p3::bindings::Command;
 
+use crate::gc_log;
 use crate::guest::{Guest, GuestState, create_config, fuel_spent, host_linker, new_store};
 use crate::options::{
     CliExit, CompileKnobOpt, DirGrants, HELP_SPEC, HostKnobOpt, LogLevel, NO_DIR_SPEC, OptLevel,
@@ -40,11 +41,18 @@ enum RunOpt {
     Dir,
     NoDir,
     Profile,
+    GcLog,
     Help,
 }
 
 impl RunOpt {
-    const ALL: &[Self] = &[Self::Dir, Self::NoDir, Self::Profile, Self::Help];
+    const ALL: &[Self] = &[
+        Self::Dir,
+        Self::NoDir,
+        Self::Profile,
+        Self::GcLog,
+        Self::Help,
+    ];
 
     const fn spec(self) -> OptSpec {
         match self {
@@ -62,6 +70,12 @@ impl RunOpt {
                 short: None,
                 value: Some("<mode>"),
                 desc: "Enable profiling:\n  guest[,path[,interval_ms]]  Cross-platform guest profiling\n                               (default: profile.json, 10ms)\n  jitdump   Linux perf jitdump (use with perf record -k mono)\n  perfmap   Linux perf map (use with perf record -k mono)",
+            },
+            Self::GcLog => OptSpec {
+                long: Some("gc-log"),
+                short: None,
+                value: None,
+                desc: "Write a line to stderr for each GC collection: when it began,\nhow long it paused the guest, and the live set it left, then\nthe total when the program ends",
             },
             Self::Help => HELP_SPEC,
         }
@@ -138,6 +152,7 @@ pub struct RunCommand {
     /// The `.wado` source or `.wasm` component to run, where one is named.
     pub input: Option<String>,
     pub profile: ProfileMode,
+    pub gc_log: bool,
     /// `(host_path, guest_path)` pairs from `--dir host[::guest]`.
     pub preopened_dirs: Vec<(String, String)>,
     /// The arguments after the input file, which belong to the program.
@@ -167,6 +182,7 @@ pub fn parse_run_command(
 ) -> Result<Parsed, CliExit> {
     let mut input = None;
     let mut profile = ProfileMode::None;
+    let mut gc_log = false;
     let mut dirs = DirGrants::default();
     let mut program_args = Vec::new();
     let mut runtime = RuntimeKnobs::default();
@@ -192,6 +208,7 @@ pub fn parse_run_command(
                 RunOpt::Dir => dirs.add(parser)?,
                 RunOpt::NoDir => dirs.suppress_default(),
                 RunOpt::Profile => profile = parse_profile(&require_string(parser)?)?,
+                RunOpt::GcLog => gc_log = true,
                 RunOpt::Help => return Ok(Parsed::Help),
             }
         } else if let Value(value) = arg {
@@ -217,6 +234,7 @@ pub fn parse_run_command(
     Ok(Parsed::Run(RunCommand {
         input,
         profile,
+        gc_log,
         preopened_dirs: dirs.finish(),
         program_args,
         runtime,
@@ -342,6 +360,7 @@ impl RunOptions {
         RunEngine {
             opt_level: self.opt_level.to_wasmtime(),
             profile: &self.command.profile,
+            gc_log: self.command.gc_log,
             knobs: &self.command.runtime,
         }
     }
@@ -528,6 +547,7 @@ fn wado_binary() -> Result<PathBuf, CliExit> {
 pub struct RunEngine<'a> {
     pub opt_level: wasmtime::OptLevel,
     pub profile: &'a ProfileMode,
+    pub gc_log: bool,
     pub knobs: &'a RuntimeKnobs,
 }
 
@@ -567,6 +587,9 @@ async fn run_component<T: Guest>(
     linker.define_unknown_imports_as_traps(&component)?;
 
     let mut store = new_store(&engine, state);
+    if run_engine.gc_log {
+        gc_log::start();
+    }
     let sampling = if let ProfileMode::Guest(profile) = run_engine.profile {
         Some(Sampling::start(
             runner,
@@ -591,6 +614,9 @@ async fn run_component<T: Guest>(
     };
     if let Some(fuel) = fuel_spent(&store) {
         eprintln!("fuel {fuel}");
+    }
+    if run_engine.gc_log {
+        gc_log::finish();
     }
     let outcome = (|| match ran?? {
         Ok(()) => Ok(()),

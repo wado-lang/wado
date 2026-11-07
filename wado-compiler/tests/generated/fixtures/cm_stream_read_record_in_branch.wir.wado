@@ -381,9 +381,8 @@ global mut global:cm_stream_read_record_in_branch.wado::$modules_initialized: bo
 global global:cm_stream_read_record_in_branch.wado::$const_obj_0: ref Array<u8> = array.new_fixed<u8>(109, 105, 115, 115, 105, 110, 103, 32, 104, 101, 108, 108, 111, 46, 116, 120, 116);
 global global:cm_stream_read_record_in_branch.wado::$const_obj_1: ref Array<u8> = array.new_fixed<u8>(102, 111, 117, 110, 100, 32, 104, 101, 108, 108, 111, 46, 116, 120, 116);
 global global:cm_stream_read_record_in_branch.wado::$const_obj_2: ref Array<u8> = array.new_fixed<u8>(104, 101, 108, 108, 111, 46, 116, 120, 116);
-global global:cm_stream_read_record_in_branch.wado::$const_obj_3: ref "core:prelude/types.wado//ReadInto" = struct.new "core:prelude/types.wado//ReadInto" { ptr: 0, room: 0, lending: ref.null none };
-global global:cm_stream_read_record_in_branch.wado::$const_obj_5: ref Array<u8> = array.new_fixed<u8>(110, 111, 32, 112, 114, 101, 111, 112, 101, 110, 101, 100, 32, 100, 105, 114, 101, 99, 116, 111, 114, 105, 101, 115, 32, 97, 118, 97, 105, 108, 97, 98, 108, 101);
-global global:core:prelude/primitive.wado::$const_obj_6: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
+global global:cm_stream_read_record_in_branch.wado::$const_obj_3: ref Array<u8> = array.new_fixed<u8>(110, 111, 32, 112, 114, 101, 111, 112, 101, 110, 101, 100, 32, 100, 105, 114, 101, 99, 116, 111, 114, 105, 101, 115, 32, 97, 118, 97, 105, 108, 97, 98, 108, 101);
+global global:core:prelude/primitive.wado::$const_obj_4: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
 global global:core:builtin::$unit_case$wasi:filesystem/types.wado//DescriptorType$0: ref "wasi:filesystem/types.wado//DescriptorType" = struct.new "wasi:filesystem/types.wado//DescriptorType" { 0 };
 global global:core:builtin::$unit_case$wasi:filesystem/types.wado//DescriptorType$1: ref "wasi:filesystem/types.wado//DescriptorType" = struct.new "wasi:filesystem/types.wado//DescriptorType" { 1 };
 global global:core:builtin::$unit_case$wasi:filesystem/types.wado//DescriptorType$2: ref "wasi:filesystem/types.wado//DescriptorType" = struct.new "wasi:filesystem/types.wado//DescriptorType" { 2 };
@@ -425,7 +424,7 @@ fn "cm_stream_read_record_in_branch.wado/run"() with Stdout, Stderr, Preopens {
         $load_0 = builtin::i32_wrap_i64(local.tee $cm_pair_7_78("wasi/stream-new"()));
         $sroa_$pattern_temp_0_1_14_85 = builtin::i32_wrap_i64($cm_pair_7_78 >> 32_i64);
         $load_0 = "cm_stream_read_record_in_branch.wado/$cm_binding__wasi:cli/stderr@0.3.0#write-via-stream"($load_0);
-        builtin::array_copy<u8>(local.tee new_repr_140(builtin::array_new<u8>(35)), 0, global:cm_stream_read_record_in_branch.wado::$const_obj_5, 0, 34);
+        builtin::array_copy<u8>(local.tee new_repr_140(builtin::array_new<u8>(35)), 0, global:cm_stream_read_record_in_branch.wado::$const_obj_3, 0, 34);
         builtin::array_set_u8(new_repr_140, 34, 10);
         "core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]$dae[return]"($sroa_$pattern_temp_0_1_14_85, new_repr_140);
         "wasi/stream-drop-writable"($sroa_$pattern_temp_0_1_14_85);
@@ -449,12 +448,12 @@ fn "cm_stream_read_record_in_branch.wado/run"() with Stdout, Stderr, Preopens {
     $moved_13 = local.tee $pattern_temp_1((if $load_0 > 0 -> ref null "tuple//[core:prelude/types.wado/Stream<wasi:filesystem/types.wado/DirectoryEntry>, core:prelude/types.wado/StreamChunk<wasi:filesystem/types.wado/DirectoryEntry>]" {
         $moved_13 = dir_stream_3;
         dir_stream_3 = ref.null none;
-        started_88 = "cm_stream_read_record_in_branch.wado/$cm_stream_read_DirectoryEntry$spec0"($moved_13.value, 100, global:cm_stream_read_record_in_branch.wado::$const_obj_3);
+        started_88 = "cm_stream_read_record_in_branch.wado/$cm_stream_read_DirectoryEntry$spec0"($moved_13.value, 100, struct.new "core:prelude/types.wado//ReadInto" { ptr: 0, room: 0, lending: ref.null none });
         "core:prelude/types.wado/core:prelude/types.wado/ReadCopy<wasi:filesystem/types.wado/DirectoryEntry>::finish"(struct.new "core:prelude/types.wado//ReadCopy<wasi:filesystem/types.wado/DirectoryEntry>" { copy: struct.new "core:prelude/types.wado//Box<core:prelude/types.wado/Option<[core:prelude/types.wado/Stream<wasi:filesystem/types.wado/DirectoryEntry>,core:prelude/types.wado/StartedRead<wasi:filesystem/types.wado/DirectoryEntry>]>>" { value: struct.new "core:prelude/types.wado//Option<[core:prelude/types.wado/Stream<wasi:filesystem/types.wado/DirectoryEntry>,core:prelude/types.wado/StartedRead<wasi:filesystem/types.wado/DirectoryEntry>]>::Some" { discriminant: 1, payload_0: struct.new "tuple//[core:prelude/types.wado/Stream<wasi:filesystem/types.wado/DirectoryEntry>, core:prelude/types.wado/StartedRead<wasi:filesystem/types.wado/DirectoryEntry>]" { 0: $moved_13, 1: started_88 } } } });
     } else {
         $moved_13 = dir_stream_3;
         dir_stream_3 = ref.null none;
-        started_88 = "cm_stream_read_record_in_branch.wado/$cm_stream_read_DirectoryEntry$spec1"($moved_13.value, 0, global:cm_stream_read_record_in_branch.wado::$const_obj_3);
+        started_88 = "cm_stream_read_record_in_branch.wado/$cm_stream_read_DirectoryEntry$spec1"($moved_13.value, 0, struct.new "core:prelude/types.wado//ReadInto" { ptr: 0, room: 0, lending: ref.null none });
         "core:prelude/types.wado/core:prelude/types.wado/ReadCopy<wasi:filesystem/types.wado/DirectoryEntry>::finish"(struct.new "core:prelude/types.wado//ReadCopy<wasi:filesystem/types.wado/DirectoryEntry>" { copy: struct.new "core:prelude/types.wado//Box<core:prelude/types.wado/Option<[core:prelude/types.wado/Stream<wasi:filesystem/types.wado/DirectoryEntry>,core:prelude/types.wado/StartedRead<wasi:filesystem/types.wado/DirectoryEntry>]>>" { value: struct.new "core:prelude/types.wado//Option<[core:prelude/types.wado/Stream<wasi:filesystem/types.wado/DirectoryEntry>,core:prelude/types.wado/StartedRead<wasi:filesystem/types.wado/DirectoryEntry>]>::Some" { discriminant: 1, payload_0: struct.new "tuple//[core:prelude/types.wado/Stream<wasi:filesystem/types.wado/DirectoryEntry>, core:prelude/types.wado/StartedRead<wasi:filesystem/types.wado/DirectoryEntry>]" { 0: $moved_13, 1: started_88 } } } });
     })).0;
     entries = $pattern_temp_1.1.items;
@@ -2110,7 +2109,7 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(self, f) {
     let abs_val: u64;
     is_negative = self < 0;
     self = "core:prelude/primitive.wado/count_digits_u64"(local.tee abs_val("core:prelude/primitive.wado/i64::abs"(builtin::i64_extend_i32_s(self))));
-    is_negative = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>"(f, is_negative, global:core:prelude/primitive.wado::$const_obj_6, self);
+    is_negative = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>"(f, is_negative, global:core:prelude/primitive.wado::$const_obj_4, self);
     "core:prelude/primitive.wado/write_decimal_digits"(f.buf.repr, is_negative, abs_val, self);
 }
 

@@ -9,8 +9,9 @@ that rarely runs, and every pass that reads the marker acts on it:
 - `nir/inline` prices a callee without its cold code. It does not inline at a
   cold call site, nor anywhere in a function that runs only once a cold path
   is taken.
-- `param_spec` mints no specialized clone for a cold call site, and
-  `const_object_globalization` skips a function that runs only on a cold path.
+- `param_spec` mints no specialized clone for a cold call site unless the call
+  returns and binds a field, and `const_object_globalization` skips a function
+  that runs only on a cold path.
 - `wir_build` turns the marker into a Wasm branch hint, and wasmtime lays out
   the cold side out of line.
 
@@ -57,10 +58,9 @@ fails the suite instead of rotting. The attribute combines with
 module marked `#![TODO]`, it is a compile error: such a test traps by design,
 and a workload that traps fails the recording (below).
 
-A workload should be deterministic and small. Its counts then come out the same
-on every run, so the committed profile changes only when the code or the
-workload does. A workload that reads a clock or randomness still works, but its
-profile churns.
+A deterministic workload's counts come out the same on every run, so the
+committed profile changes only when the code or the workload does. A workload
+that reads a clock or randomness still works, but its profile churns.
 
 An attribute was chosen over a new `workload` block. A block would add a
 keyword to the reserved vocabulary, and it would not run under `wado test`.
@@ -276,17 +276,11 @@ nothing about a branch: a profile of under a million runs puts the cold line on
 about its smallest count, so a ratio of 0.1% and one of 50% look the same to
 it.
 
-So a compile asks both. A region is unlikely when it ran at most 1% of the
-times the code around it did, under
-`--optimize-predictable-branch-threshold`, LLVM's name and default. It is cold
-when it never ran, as GCC's `probably_never_executed` holds.
-[Rarity](./spec-pgo.md#rarity) states both rules. For a path past a branch, or
-past a statement that can leave, that ratio is the branch's probability. A
-loop's test also runs once per pass through its body, so for a loop's body the
-ratio bounds the probability from above, and a body it calls unlikely is. A
-ratio stays put when a workload runs twice, so a workload need not be large,
-only like real use. The threshold is LLVM's for now; the benchmark machine
-settles Wado's own.
+So a compile asks both, and [Rarity](./spec-pgo.md#rarity) states the rules. For
+a path past a branch, or past a statement that can leave, the ratio behind
+"unlikely" is the branch's probability. A loop's test also runs once per pass
+through its body, so for a loop's body the ratio bounds the probability from
+above, and a body it calls unlikely is.
 
 A region that ran is not cold, however rarely it ran. The optimizer reads a
 cold region as rarely run together with everything it calls: it inlines into
@@ -296,8 +290,7 @@ once per document and calls the whole serializer. A cold line placed as LLVM's
 `ProfileSummaryInfo` places one, at the smallest counts of the profile, marked
 it cold. Then nothing under it was inlined, and serializing cost up to 2.9
 times the fuel it costs without a profile, even trained on the input it
-measured. A count of zero says the same of the callees: from a region that
-never ran, they never ran either.
+measured.
 
 ### The profile marks each region by its answers
 
@@ -311,9 +304,8 @@ states, so a WIR pass reads the one it needs as a NIR pass does. The two halves 
 writes one. Reify is where coverage inserts its probes, so a region means the
 same thing to both.
 
-A marker covers what follows it in its block. Everything under a region that
-never ran never ran either, so one marker at the outermost such region covers
-it all.
+A marker covers what follows it in its block, so one marker at the outermost
+cold region covers everything under it.
 
 A function whose body region never ran gets no marker. Workloads are tests, so
 a build's own entry never runs under them, and neither does whatever only it
@@ -321,9 +313,7 @@ reaches, such as a benchmark's timing loop: a function they never entered says
 nothing about how often it runs. Marking such functions at their start made
 every benchmark slower, by 24% to 74%. The optimizer does not inline into a
 function only cold sites reach, and that took in the whole path the benchmark
-measures. A closure the workloads never called, in a function they entered, is
-another matter: no branch leads into it, so it is cold without being unlikely,
-and it gets `cold_code()` at its start.
+measures.
 
 Each worker thread seeds its compiles from a snapshot of the reified standard
 library, built once. The thread builds it with the `core:` counts already
@@ -382,29 +372,46 @@ splice, and the hot loop then calls the helper instead of its callee.
 `json/catalog/ser` cost 32% more fuel that way, with `write_json_i64` grown
 fifteenfold.
 
-### The profile overrides the source's markers
+### A profile drops a marker only where it refutes it
 
-An author's `cold_path()` and the marker the compiler puts on a `?`'s failure
-path are both guesses, and a workload modelled on real use measures better than
-either. So in a region the profile has a count for, both are dropped, and the
-region's own marks stand. GCC does the same: `-fprofile-use` replaces the
-probability a `__builtin_expect` gives with the measured one. So does LLVM's
-[IR profile][llvm-pgo-use], which overwrites the weights an expect lowered to.
-Clang's front-end profile is the exception: there
-[`LowerExpectIntrinsic`][llvm-lower-expect] replaces the measured weights with
-the expect's.
+A marker on a path that ran is dropped only when the path ran at least a tenth
+as often as the code around it. A count of zero is what cold reads, but it is
+the wrong test for a marker. `List::push`'s growth path ran in 1.4% of pushes,
+over the 1% that is unlikely, so dropping its `cold_path()` left it unmarked.
+`grow` was then spliced at every push, and JITted code ran 2.2% more
+instructions on `syntax_highlight` with no change in fuel.
 
-Where what the profile found is not both unlikely and cold, the compile says so
-in an optimizer remark at `--log-level info`. It names the marker, the region's
-count and the count of the code around it, and what the region was found to be. The remark audits
-a guess against measurement, as LLVM's [`-pgo-warn-misexpect`][llvm-misexpect]
-does, so an author learns which markers the workload contradicts. A `?`'s guess
-is usually right, since an HTTP service answers well under 1% of its requests
-with a 4xx or 5xx, and then the profile marks the failure path as the guess did
-and says nothing.
+Against dropping every marker that ran, over three rotated rounds of
+`mise run all-wado`, with `+` meaning faster and `noise` where the ranges
+overlap:
 
-[llvm-pgo-use]: https://github.com/llvm/llvm-project/blob/main/llvm/lib/Transforms/Instrumentation/PGOInstrumentation.cpp
-[llvm-lower-expect]: https://github.com/llvm/llvm-project/blob/main/llvm/lib/Transforms/Scalar/LowerExpectIntrinsic.cpp
+| Marker dropped at | `syntax_highlight` | `cbor_catalog` ser | `microgpt` infer | `json_twitter` de |
+| ----------------- | -----------------: | -----------------: | ---------------: | ----------------: |
+| 5%                |              +2.1% |              -0.7% |            -0.6% |             +2.8% |
+| 10%               |              +2.9% |              +4.9% |            -0.9% |             +2.7% |
+| 20%               |              +2.6% |              +4.6% |            noise |             +2.8% |
+| 50%               |              +2.5% |              +4.9% |            -0.5% |             +2.6% |
+| Never             |              +2.5% |              +4.9% |            -1.4% |             noise |
+
+Fuel cannot place this line. It leaves out what the JIT makes of a splice, so it
+ranked 2% above 5%, where the wall clock ranked them the other way.
+
+A marker at the top of a function or closure body has no count around it, so a
+run cannot refute it and only a count of zero overrides it. A marker that stands
+keeps what it means: the path stays cold, along with every function only it
+reaches, even if such a function runs often. That is the cost of this rule, and
+[Reading a rare path as cold](#reading-a-rare-path-as-cold) is why a count alone
+does not grant the same reading.
+
+### A remark audits the source's markers
+
+Where the profile drops the marker of a path that ran, the compile says so in an
+optimizer remark at `--log-level info`. It names the marker, the region's count
+and the count of the code around it, and what the region was found to be. The
+remark audits a guess against measurement, as LLVM's
+[`-pgo-warn-misexpect`][llvm-misexpect] does, so an author learns which markers
+the workload contradicts.
+
 [llvm-misexpect]: https://github.com/llvm/llvm-project/blob/main/llvm/lib/Transforms/Utils/MisExpect.cpp
 
 The other markers the compiler places sit ahead of a trap, or past a global's
@@ -447,13 +454,6 @@ hint section, the trap-derived hints included. It answers what branch hints are
 worth to wasmtime; `-f no-cold-paths` answers what the markers are worth to the
 whole pipeline.
 
-A marker in an arm that `match_to_switch` turns into a `br_table` target still
-reaches every optimizer pass, but no hint: Wasm's branch-hint section has no
-form for `br_table`. That is accepted. A hint only moves a block in wasmtime's
-code layout, and across every shape tried, branch hints have not made wasmtime's
-code measurably faster. Carrying one there would take a guard ahead of the
-table, a compare on every dispatch, for a gain nobody has measured.
-
 ### A profile changes no output
 
 A profile, stale or wrong, only moves where the optimizer spends its effort. It
@@ -492,9 +492,7 @@ output at every level. It is a nightly campaign, not a gate.
 8. [x] The random-profile differential test, as EMI's profile stage.
 9. [x] The `benchmark/` pilot. Each benchmark gains a workload and a committed
    profile, `http_routing` a test to carry it first, and a table compares the
-   three builds the flags give. A workload runs a smaller input than the
-   benchmark measures, so the table does not judge a profile on the run that
-   trained it.
+   three builds the flags give.
 10. [ ] The design weighed against LLVM, GCC and Go. Each option below is
     measured on the pilot's table, then adopted, or recorded as a known gap
     with what it lost to. These are options, not the decision.
@@ -544,12 +542,10 @@ output at every level. It is a nightly campaign, not a gate.
   instantiations, so an instantiation the workload never ran shares the counts
   of one it ran. So does a function copied into another module under its
   name.
-- [ ] On the `benchmark/` pilot the profile is mixed. Against `-f no-pgo` it buys
-  up to 19% of fuel on the serde rows. But `microgpt`'s inference runs 46%
-  longer by the wall clock for 4% more fuel: with a 2 GiB heap the PGO build is
-  faster, so the hot splices make its collections dearer, and why is not known.
-  `zlib` decompression and `json_twitter` serialization run about 10% longer
-  for slightly less fuel. The tables are in
+- [ ] On the `benchmark/` pilot `fts` and `json_canada` ser run longer by the
+  wall clock than `-f no-pgo`, for less fuel. In `fts` a hot site splices
+  `f64::fmt_fixed` into a loop: native instructions fall and cycles rise, and
+  what the splice costs is not known. The tables are in
   [the benchmark README](../benchmark/README.md#profile-guided-optimization).
   `http_routing` records a profile but is in neither table: its `oha` run was
   not repeated under the three builds.
@@ -590,3 +586,76 @@ with `+` meaning less fuel, measured by
 | Table per heat, hot threshold 96    |           -1.26% |          -0.43% |             +0.84% |
 | Table per heat, hot threshold 128   |          -10.49% |          -0.45% |             +0.22% |
 | Table per heat, hot price cold-free |           +0.00% |          -1.68% |             +0.87% |
+
+### Holding a hot site to the safepoint rule
+
+A plain site keeps a callee that reaches a safepoint out of a loop. A hot site
+admits one on its price alone, which is how `f64::fmt_fixed`, priced 62 against
+the hot threshold of 64, reaches the loop in `fts_run`. Every way of refusing
+that splice cost more elsewhere than it gained. Against the build with the
+splice, with `+` meaning faster and `-` where a row was not measured:
+
+| Variant                                | `fts` | `json_canada` ser | `json_canada` de | `cbor_twitter` ser | `cbor_catalog` ser | `zlib` compress | Mean over the rows |
+| -------------------------------------- | ----: | ----------------: | ---------------: | -----------------: | -----------------: | --------------: | -----------------: |
+| Refuse any callee over the plain price |  3.8% |              0.3% |             -24% |                  - |                  - |               - |                  - |
+| Only one returning a scalar or nothing |  3.8% |              4.5% |             -16% |                  - |                  - |               - |                  - |
+| Only one returning nothing             |  3.6% |              0.9% |            -0.5% |             -16.0% |             -23.6% |           -3.3% |             -1.89% |
+| Hot threshold 48                       |  2.2% |              0.3% |            -5.5% |               0.0% |              -0.7% |           -4.5% |             -1.30% |
+| Hot threshold 60                       |  0.2% |              0.0% |            -5.5% |               0.4% |               0.5% |           -1.0% |              0.06% |
+
+The first two rows are three or four alternating `wado run`s of those benchmarks
+alone. The others are the best of two `mise run benchmark-all`.
+
+### Training on little of the program
+
+A region the workloads never ran is cold, so what they miss costs the run that
+reaches it. `gale_gen` measures the Rust grammar, and its `-f no-pgo` build
+spends 1,169M fuel. Trained on each input below, by
+`wado test -O2 --allocator freelist --report-fuel --test-name fuel benchmark/gale_gen/gale_gen.wado`
+and three alternating `wado run`s, with `+` meaning better than `-f no-pgo`:
+
+| Workload                   |  Fuel | Wall clock |
+| -------------------------- | ----: | ---------: |
+| `JSON.g4`                  | -3.1% |      -7.5% |
+| `SQLite.g4`                | -1.0% |      -4.6% |
+| SQLite, TypeScript and CSS | +1.2% |      -1.5% |
+| The Rust grammar itself    | +1.7% |       0.0% |
+
+### Training on the measured input
+
+Coverage does not explain the other rows that read slower than `-f no-pgo`.
+Trained on the input it measures, `syntax_highlight` stayed where it was, as
+`fts` did on a hundred times its `fts_run`, and `json_canada`'s serialization
+ran 3% slower.
+
+### Reading a zero count as not cold
+
+A region that never ran could be only unlikely, so that code the workloads miss
+would keep its inlining. It moved fuel by at most 0.5%, and the mean over the
+wall clock rows by under 0.1%. Against the marks as they stand, over three
+alternating rounds of `mise run all-wado`, these rows moved most:
+
+| Row                | Wall clock |
+| ------------------ | ---------: |
+| `json_catalog` de  |      +4.1% |
+| `cbor_twitter` ser |      +4.0% |
+| `gale_gen`         |      +2.2% |
+| `cbor_twitter` de  |      -2.6% |
+| `fts`              |      -3.2% |
+| `json_canada` de   |      -3.5% |
+
+### Reading a rare path as cold
+
+A path under a share of the code around it could count as cold and unlikely,
+whether or not the source marks it, so a marker would decide nothing. It
+recovered `syntax_highlight`, but cold covers what a region calls, and the
+serializers and deserializers paid. Against the marks as they stood, over three
+rotated rounds of `mise run all-wado`, with `+` meaning faster:
+
+| Row                | Marker dropped at 10% | Cold under 5% | Cold under 10% | Cold under 20% |
+| ------------------ | --------------------: | ------------: | -------------: | -------------: |
+| `syntax_highlight` |                 +2.6% |         +2.2% |          +2.4% |          +1.9% |
+| `gale_gen`         |                 +2.1% |         -0.6% |          -1.0% |          -5.0% |
+| `json_twitter` de  |                 noise |        -29.1% |         -35.0% |         -39.9% |
+| `cbor_twitter` de  |                 noise |        -71.8% |         -73.4% |         -79.4% |
+| `json_twitter` ser |                 +4.2% |        -82.1% |         -83.7% |         -85.7% |

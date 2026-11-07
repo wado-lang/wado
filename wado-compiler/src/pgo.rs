@@ -172,6 +172,10 @@ impl Cutoff {
     }
 }
 
+/// The share of the code around it a path must run at to refute a marker
+/// calling it rare. See WEP: Profile-Guided Optimization.
+const MARKER_REFUTED_PERCENT: u32 = 10;
+
 /// A share of a branch's runs, in percent.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Percent(u32);
@@ -260,6 +264,15 @@ impl Thresholds {
     /// ran, however rarely, may call what runs a million times.
     fn is_cold(runs: i64) -> bool {
         runs == 0
+    }
+
+    /// Whether a path that ran `runs` times, where the code around it ran
+    /// `around` times, ran too often for the source's marker to stand. A marker
+    /// that stands keeps a path that ran cold, callees included, which no count
+    /// alone earns from [`Self::is_cold`]: the author's claim decides there.
+    fn refutes_marker(runs: i64, around: i64) -> bool {
+        runs as u128 * u128::from(Percent::WHOLE)
+            >= around as u128 * u128::from(MARKER_REFUTED_PERCENT)
     }
 
     /// Whether a region the profile ran `runs` times, where the code around it
@@ -623,12 +636,18 @@ impl MarkMap {
             let Some(runs) = counts[region] else {
                 continue;
             };
-            self.overridden.insert(marker.node());
-            // A path that never ran is unlikely and cold, which the marker
-            // said; one that ran is not cold.
+            // A path that never ran is unlikely and cold, which the marker said.
             if Thresholds::is_cold(runs) {
+                self.overridden.insert(marker.node());
                 continue;
             }
+            // A marker at the top of a body has no count around it to refute it.
+            let Some(around) = count_of(parents[region])
+                .filter(|&around| Thresholds::refutes_marker(runs, around))
+            else {
+                continue;
+            };
+            self.overridden.insert(marker.node());
             let verdict = if unlikely(region) {
                 "unlikely but not cold"
             } else {
@@ -638,22 +657,13 @@ impl MarkMap {
                 SourceMarker::ColdPath(_) => "`cold_path()` marks this path rare",
                 SourceMarker::Try(_) => "`?` marks its failure path rare",
             };
-            // A loop's body may run more often than the code around it.
-            let measured = match count_of(parents[region]) {
-                Some(around) => {
-                    format!(
-                        "{} where the code around it ran {}",
-                        times(runs),
-                        times(around)
-                    )
-                }
-                None => times(runs),
-            };
             self.remarks.push((
                 span,
                 format!(
-                    "{subject}, but the profile ran it {measured}, so it is {verdict}; the \
-                     profile overrides the marker"
+                    "{subject}, but the profile ran it {} where the code around it ran {}, so it \
+                     is {verdict}; the profile overrides the marker",
+                    times(runs),
+                    times(around)
                 ),
             ));
         }
@@ -772,6 +782,12 @@ mod tests {
                 (0xcd, BTreeMap::new()),
             ])
         );
+    }
+
+    #[test]
+    fn a_tenth_of_the_code_around_a_path_refutes_its_marker() {
+        assert!(Thresholds::refutes_marker(100, 1000));
+        assert!(!Thresholds::refutes_marker(99, 1000));
     }
 
     /// Functions of one hash share their counts, as a generic function's

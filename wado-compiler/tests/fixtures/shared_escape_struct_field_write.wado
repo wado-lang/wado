@@ -1,0 +1,58 @@
+// A constant in a struct field may be shared only while nothing in the program
+// writes through that field. `weights` is written through `bump`, so every
+// `Node` needs a list of its own, `count` shows the same for a `push`, and
+// `refill` for a constant assigned into a field.
+
+use { println, Stdout } from "core:cli";
+
+struct Node {
+    weights: List<f64>,
+}
+
+struct Tally {
+    seen: List<i32>,
+}
+
+fn edge() -> Node {
+    return Node { weights: [1.0, 2.0] };
+}
+
+fn tally() -> Tally {
+    return Tally { seen: [1, 2] };
+}
+
+fn bump(node: &mut Node) {
+    node.weights[0] = 9.0;
+}
+
+fn count(t: &mut Tally) {
+    t.seen.push(3);
+}
+
+fn refill(node: &mut Node) {
+    node.weights = [5.0, 6.0];
+}
+
+export fn run() with Stdout {
+    let mut a = edge();
+    bump(&mut a);
+    let b = edge();
+    println(`${a.weights[0]} ${b.weights[0]}`);
+
+    let mut c = tally();
+    count(&mut c);
+    let d = tally();
+    println(`${c.seen.len()} ${d.seen.len()}`);
+
+    let mut e = Node { weights: [] };
+    refill(&mut e);
+    bump(&mut e);
+    let mut f = Node { weights: [] };
+    refill(&mut f);
+    println(`${e.weights[0]} ${f.weights[0]}`);
+}
+
+__DATA__
+{
+    "stdout": "9 1\n3 2\n9 5\n"
+}

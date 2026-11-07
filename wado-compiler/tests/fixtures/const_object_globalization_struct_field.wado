@@ -1,0 +1,38 @@
+// A constant written straight into a struct field is the constant a callee
+// stashes through a parameter (`const_object_globalization_retained_scalar_struct.wado`)
+// once inlining has spliced that callee, so it hoists on the same program-wide
+// check. Otherwise inlining `edge` turns one shared `List` per program into one
+// per `Node`, and every collection copies them.
+
+use { println, Stdout } from "core:cli";
+
+struct Node {
+    id: i32,
+    weights: List<f64>,
+}
+
+fn edge(id: i32) -> Node {
+    return Node { id, weights: [1.0, 2.0] };
+}
+
+export fn run() with Stdout {
+    let n = builtin::black_box(3);
+    let mut keep: List<Node> = [];
+    for let i of 0..<n {
+        keep.push(edge(i));
+    }
+    let mut total = 0.0;
+    for let node of &keep {
+        total += node.weights[0] + node.weights[1] + node.id as f64;
+    }
+    println(`${total}`);
+}
+
+__DATA__
+{
+    "stdout": "12\n",
+    "wir_pass": {"O2": ["wir/promote_const_global_inits"]},
+    "wir_expect:O2": [
+        "global:const_object_globalization_struct_field.wado::$const_obj_{}: ref \"core:prelude/list.wado//List<f64>\" = struct.new"
+    ]
+}

@@ -9,17 +9,15 @@ wado() {
     fi
 }
 
-# The `wado run` flags a benchmark wants for the guest's GC heap, keyed by its
-# source path. Only microgpt beats the CLI's 256 MiB default: it holds a whole
-# autograd graph live, so it pays for every collection and wants room to
-# allocate between them. Every other row is flat at 512 MiB or slower, so it
-# takes the default. gale_gen runs at the default and again at
-# `GALE_GEN_BIG_HEAP` as a row of its own.
-gc_heap_flags() {
-    case "$1" in
-        *microgpt*) echo "--gc-heap-initial 512m" ;;
-    esac
-}
+# The semi-space size, in MiB, that the README's sweep found best for microgpt's
+# JavaScript row. V8 left to resize it makes that row swing between runs.
+MICROGPT_NODE_SEMI_SPACE=128
 
-# gale_gen's second row: how far its time falls once collections are rare.
-GALE_GEN_BIG_HEAP="--gc-heap-initial 1g"
+# One benchmark's two Wado rows: `$1` with its recorded profile, and again
+# without one, which is how the C and Rust rows beside it are built.
+wado_rows() {
+    echo "=== $1 ==="
+    wado run -O2 $WADO_BENCH_FLAGS "$2"
+    echo "=== $1 (no-pgo) ==="
+    wado run -O2 $WADO_BENCH_FLAGS -f no-pgo "$2"
+}

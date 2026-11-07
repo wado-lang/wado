@@ -241,12 +241,13 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode";
 
-global global:core:prelude/primitive.wado::$const_obj_0: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
+global global:opt_hfs_defer_callclean_writeback.wado::$const_obj_0: ref "core:prelude/list.wado//List<u8>" = struct.new "core:prelude/list.wado//List<u8>" { repr: array.new_fixed<u8>(32, 32, 32, 65, 66, 32, 67), used: 7 };
+global global:core:prelude/primitive.wado::$const_obj_1: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
 
 fn "opt_hfs_defer_callclean_writeback.wado/run"() {
     let $load_0: i32;
     let c: ref "opt_hfs_defer_callclean_writeback.wado//Cursor";
-    "opt_hfs_defer_callclean_writeback.wado/opt_hfs_defer_callclean_writeback.wado/Cursor::skip_spaces"(local.tee c(struct.new "opt_hfs_defer_callclean_writeback.wado//Cursor" { data: struct.new "core:prelude/list.wado//List<u8>" { repr: array.new_data<u8>("   AB C"), used: 7 }, pos: 0 }));
+    "opt_hfs_defer_callclean_writeback.wado/opt_hfs_defer_callclean_writeback.wado/Cursor::skip_spaces"(local.tee c(struct.new "opt_hfs_defer_callclean_writeback.wado//Cursor" { data: global:opt_hfs_defer_callclean_writeback.wado::$const_obj_0, pos: 0 }));
     if @unlikely(local.tee $load_0(c.pos) != 3) {
         cold_path;
         "opt_hfs_defer_callclean_writeback.wado/run$cold1"(c.data, $load_0, $load_0);
@@ -1141,7 +1142,7 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(self, f) {
     let abs_val: u64;
     is_negative = self < 0;
     self = "core:prelude/primitive.wado/count_digits_u64"(local.tee abs_val("core:prelude/primitive.wado/i64::abs"(builtin::i64_extend_i32_s(self))));
-    is_negative = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>"(f, is_negative, global:core:prelude/primitive.wado::$const_obj_0, self);
+    is_negative = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>"(f, is_negative, global:core:prelude/primitive.wado::$const_obj_1, self);
     "core:prelude/primitive.wado/write_decimal_digits"(f.buf.repr, is_negative, abs_val, self);
 }
 

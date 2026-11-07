@@ -207,7 +207,8 @@ import fn wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode f
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
-global global:opt_bce_typed_alias_same_type.wado::$const_obj_0: ref Array<i32> = array.new_fixed<i32>(1, 2, 3);
+global global:opt_bce_typed_alias_same_type.wado::$const_obj_0: ref "core:prelude/list.wado//List<i32>" = struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(1, 2, 3), used: 3 };
+global global:opt_bce_typed_alias_same_type.wado::$const_obj_1: ref Array<i32> = array.new_fixed<i32>(1, 2, 3);
 
 fn "opt_bce_typed_alias_same_type.wado/run"() with Stdout {
     let x_0: ref "opt_bce_typed_alias_same_type.wado//Buf";
@@ -219,7 +220,7 @@ fn "opt_bce_typed_alias_same_type.wado/run"() with Stdout {
     let tens: i32;
     let $sroa_t_h0_124: i32;
     let start_163: i32;
-    $sroa_t_h0_124 = "opt_bce_typed_alias_same_type.wado/sum_shrinking$spec0"(local.tee x_0(struct.new "opt_bce_typed_alias_same_type.wado//Buf" { data: struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(1, 2, 3), used: 3 }, len: black_box(3) }), x_0);
+    $sroa_t_h0_124 = "opt_bce_typed_alias_same_type.wado/sum_shrinking$spec0"(local.tee x_0(struct.new "opt_bce_typed_alias_same_type.wado//Buf" { data: global:opt_bce_typed_alias_same_type.wado::$const_obj_0, len: black_box(3) }), x_0);
     out_15 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
     $inline_core_prelude_string_wado_String__internal_push_view_24: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_24;
@@ -392,7 +393,7 @@ fn "opt_bce_typed_alias_same_type.wado/sum_shrinking$spec0"(a, b) {
                 cold_path;
                 "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(current, 3, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("opt_bce_typed_alias_same_type.wado:15"), used: 37 });
                 unreachable;
-            }; builtin::array_get_value<i32>(global:opt_bce_typed_alias_same_type.wado::$const_obj_0, current);
+            }; builtin::array_get_value<i32>(global:opt_bce_typed_alias_same_type.wado::$const_obj_1, current);
             b.len = 0;
             continue l34;
         };

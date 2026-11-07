@@ -94,7 +94,7 @@ promotes the global and drops the assignment. Soundness therefore rests on the
 gates alone: a value that turns out not to be const-expressible merely leaves
 the global assigned at runtime, still correct.
 
-Three shapes are matched, collected in a single exhaustive walk:
+Four shapes are matched, collected in a single exhaustive walk:
 
 - A `let` binding of a qualifying value.
 - A qualifying value referenced via `&` directly at an expression position with
@@ -105,6 +105,10 @@ Three shapes are matched, collected in a single exhaustive walk:
   handed straight to `Fields::append`. Rewritten in place like the `&` shape,
   wrapping the argument node itself, and gated additionally on the callee (see
   below).
+- A qualifying value written into a field, by a struct literal or an assignment.
+  This is what inlining a stashing callee leaves behind, so it is rewritten as
+  the by-value argument is, gated on nothing writing through that field. The
+  struct around it may die or scalarize, so the value must own storage to pay.
 
 The walk skips into a qualifying `let`'s own value and into a hoisted argument,
 because hoisting both would nest one global's `GlobalVarSet` inside another's
@@ -312,12 +316,11 @@ classifier deletes its assignment outright.
 
 #### Representation and scope
 
-A global created from either in-place case — the inline `&` or the by-value
-argument — is marked `NirGlobal::prefer_fixed_string_repr`, a field rather than
-a name-prefix guess,
-so it cannot misidentify a user-declared global sharing the pass's
-`$const_obj_*` naming convention. WIR build gives only such a global's
-`GlobalVarSet` value a size-bounded override
+A global created from an in-place case — the inline `&`, the by-value argument
+or the field value — is marked `NirGlobal::prefer_fixed_string_repr`, a field
+rather than a name-prefix guess, so it cannot misidentify a user-declared global
+sharing the pass's `$const_obj_*` naming convention. WIR build gives only such a
+global's `GlobalVarSet` value a size-bounded override
 (`name::INLINE_REF_EAGER_MAX_BYTES`, 64 bytes) of `string_inline_max_bytes`, so
 a realistic field name promotes eager without forcing arbitrarily large literals
 eager too. `wir_optimize::prune_dead_data` drops any passive data segment
@@ -376,3 +379,8 @@ loop, and a pure call building a heap value from literals.
   constant is retained hoists all of them, and nothing bounds what that adds to
   the module-lifetime live set — which the WasmGC cost model says is the tax
   paid at every collection.
+- A constant written into a field is always priced as transient, because the
+  object around it may die or scalarize, which only a later pass settles. So a
+  struct of scalars stored in an object that does live on is allocated once per
+  object rather than shared. Pricing it as retained costs the scalarization
+  `opt_multi_value_one_field_slot_flatten` states.

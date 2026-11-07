@@ -27,7 +27,7 @@ mise run on-task-started
 
 1. Run `mise run benchmark-all` **three times**, each to its own log in
    `scratchpad/`, then pick per row with
-   `node benchmark/pick.ts scratchpad/run{1,2,3}.log` (throttling
+   `mise exec -- node benchmark/pick.ts scratchpad/run{1,2,3}.log` (throttling
    only ever slows things down). Use that tool rather than reading the logs by
    eye: it keys rows by (task, implementation, phase) and selects on ms/iter, so
    a rate that rounds to a tie across runs cannot pair with the wrong ms/iter.
@@ -39,13 +39,58 @@ mise run on-task-started
    measures one worker shape per entry in `SHAPES`. Add `HEADROOM_CHECK=1` when
    `CONNECTIONS_PER_WORKER`, `OHA_CORE_COUNT` or `SHAPES` changed, to confirm
    `oha` was not the ceiling.
-3. Refresh the README Environment line versions: `mise exec -- node --version`,
-   `mise exec -- bun --version`, `rustc --version`, `cc --version | head -1`
-   (wasmtime version is the vendored `vendor/wasmtime` workspace version).
-4. Update the tables, following README.md's existing layout. http-routing is
+3. Measure the three PGO builds for the README's Profile-Guided Optimization
+   section (see [PGO](#pgo)).
+4. Refresh the README Environment line versions: `mise exec -- node --version`,
+   `mise -C benchmark exec -- bun --version`, `rustc --version`,
+   `cc --version | head -1`. `mise -C benchmark ls` names wasi-sdk, and wasmtime's
+   version is the `vendor/wasmtime` workspace version.
+5. Update the tables, following README.md's existing layout. http-routing is
    req/s (higher is better), one table per worker shape. Keep measured figures
-   inside tables — prose around them is not re-measured and drifts.
-5. wasm-size: `mise run report-wasm-size`, then update `wasm-size/README.md`.
+   inside tables — prose around them is not re-measured and drifts. An input
+   size in the prose comes from the program's own header line, such as
+   `gale-gen (Rust): 42786 bytes`, so compare each one with the log.
+6. wasm-size: `mise run report-wasm-size`, then update `wasm-size/README.md`.
+   `mise -C wasm-size ls` names Zig, and `moon version` names Moonbit.
+7. Compare every Wado row with the README's previous figure, and attribute each
+   one that moved (see [PGO](#pgo)). Report those to the user.
+
+## PGO
+
+A Wado row in the procedure is a PGO build: `wado run` and `wado compile` apply
+the profile in the benchmark's `pgo/` by default. `benchmark-all` runs each one
+again as its `(no-pgo)` row, which `wado_rows` in `benchmark/wado.sh` prints, and
+the tables list both. http-routing has no such row, and the README says so.
+wasm-size has no profile, so a size change is the compiler's or the program's.
+
+The README's PGO section compares three builds, and its commands stand beside
+its tables. The `no-cold-paths` wall clock comes from three more runs, alternated
+with the three of the procedure. `benchmark-all` and `all-wado` leave out the
+table's `gale_html` row, so run `mise run -C benchmark gale-highlight-html` the
+same way.
+
+Compare two builds with
+`mise exec -- node benchmark/ab.ts --base <no-pgo logs> --head <PGO logs>`. Its
+verdict gives the table's `noise`. It keys rows by implementation, so split a
+`benchmark-all` log into one log per build first.
+
+A profile can move a row through what the program allocates, because a change of
+allocation moves where collections land. `wado run --gc-log` shows that, and
+`microgpt` needs a new heap sweep when it happens.
+
+Two figures from different sessions can differ by noise alone, so attribute a
+Wado row that moved by an A/B in one session: the compiler that measured the
+README against this one, with `WADO_BIN` and `ab.ts` (see the `wado-performance`
+skill). If the verdict is `noise`, the row did not move. Otherwise read the
+verdict on its `(no-pgo)` row. If that moved too, the compiler moved it apart
+from PGO. If not, PGO moved it: either the row's `pgo/` file, or how the compiler
+uses a profile, such as the thresholds in `pgo.rs` or the inliner's hot price.
+`git log` on each shows what changed, and when both did, isolate them before
+naming one. http-routing has no `(no-pgo)` row, so its A/B, which
+`benchmark/http_routing/README.md` states, ends at the first verdict.
+
+Whether to record the profile again is a separate decision, and
+`benchmark/AGENTS.md` says what a re-recording commits.
 
 ## Sweeping a compiler knob
 
@@ -57,7 +102,7 @@ set -e  # a failed arm would leave pick.ts choosing among the rest
 for t in 13 20 32; do
   WADO_BENCH_FLAGS="--optimize-inline-threshold $t" mise run benchmark-all > scratchpad/thr$t.log 2>&1
 done
-node benchmark/pick.ts scratchpad/thr{13,20,32}.log
+mise exec -- node benchmark/pick.ts scratchpad/thr{13,20,32}.log
 ```
 
 Read the sweep with `pick.ts` the same way as a best-of-three: it keys rows by

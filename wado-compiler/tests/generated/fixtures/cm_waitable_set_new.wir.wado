@@ -110,6 +110,8 @@ import fn wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode f
 import fn wasi/task-return from "wasi/task-return";
 
 global global:cm_waitable_set_new.wado::$const_obj_0: ref Array<u8> = array.new_fixed<u8>(101, 109, 112, 116, 121, 58, 32);
+global global:cm_waitable_set_new.wado::$const_obj_1: ref "core:prelude/list.wado//List<core:prelude/types.wado/Subtask>" = struct.new "core:prelude/list.wado//List<core:prelude/types.wado/Subtask>" { repr: array.new_fixed<ref null "core:prelude//$Resource">(), used: 0 };
+global global:cm_waitable_set_new.wado::$const_obj_2: ref "core:prelude/list.wado//List<core:prelude/types.wado/Ready<core:prelude/types.wado/Subtask>>" = struct.new "core:prelude/list.wado//List<core:prelude/types.wado/Ready<core:prelude/types.wado/Subtask>>" { repr: array.new_fixed<ref null "core:prelude/types.wado//Ready<core:prelude/types.wado/Subtask>">(), used: 0 };
 
 fn "cm_waitable_set_new.wado/run"() with Stdout {
     let set: ref null "core:prelude/types.wado//WaitableSet<core:prelude/types.wado/Subtask>";
@@ -120,7 +122,7 @@ fn "cm_waitable_set_new.wado/run"() with Stdout {
     let new_used_159: i32;
     let start_160: i32;
     let $sroa_view_repr_407: ref Array<u8>;
-    $sroa_t_h0_129 = (local.tee set(struct.new "core:prelude/types.wado//WaitableSet<core:prelude/types.wado/Subtask>" { raw: struct.new "core:prelude//$Resource" { value: "wasi/waitable-set-new"() }, members: struct.new "core:prelude/list.wado//List<core:prelude/types.wado/Subtask>" { repr: array.new_fixed<ref null "core:prelude//$Resource">(), used: 0 }, ready: struct.new "core:prelude/list.wado//List<core:prelude/types.wado/Ready<core:prelude/types.wado/Subtask>>" { repr: array.new_fixed<ref null "core:prelude/types.wado//Ready<core:prelude/types.wado/Subtask>">(), used: 0 } }).members.used + set.ready.used) == 0;
+    $sroa_t_h0_129 = (local.tee set(struct.new "core:prelude/types.wado//WaitableSet<core:prelude/types.wado/Subtask>" { raw: struct.new "core:prelude//$Resource" { value: "wasi/waitable-set-new"() }, members: global:cm_waitable_set_new.wado::$const_obj_1, ready: global:cm_waitable_set_new.wado::$const_obj_2 }).members.used + set.ready.used) == 0;
     out_17 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(23), used: 0 };
     $sroa_view_repr_407 = global:cm_waitable_set_new.wado::$const_obj_0;
     out_17.used = 7;

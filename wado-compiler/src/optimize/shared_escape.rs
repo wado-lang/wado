@@ -8,9 +8,7 @@ use std::sync::Mutex;
 use crate::compiler_trace;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::nir::{FuncId, FuncRef, NirFunction};
-use crate::nir_arena::{
-    ArenaStructPatternField, Body, ExprId, ExprKind, NodeRef, Operand, PatId, PatKind, StmtKind,
-};
+use crate::nir_arena::{Body, ExprId, ExprKind, NodeRef, Operand, PatId, PatKind, StmtKind};
 use crate::nir_package::NirPackage;
 use crate::parallel::lock;
 use crate::tir::{BuiltinDeclarations, DeclarationLookup};
@@ -87,6 +85,12 @@ impl<'a> SharedEscape<'a> {
     /// through anywhere the callee leaves it.
     pub(super) fn param_shareable(&self, func_id: FuncId, pos: usize) -> bool {
         self.slot_ok(&Slot::Param(func_id, pos))
+    }
+
+    /// Whether a constant written into a field called `name` may be shared by
+    /// every write: no write reaches it through a read of that field.
+    pub(super) fn field_shareable(&self, name: &str) -> bool {
+        self.slot_ok(&Slot::Field(name.to_string()))
     }
 
     /// Settled without holding the lock: a verdict another thread publishes
@@ -275,10 +279,7 @@ impl<'a> SharedEscape<'a> {
             // `v.grad = …` names an `f64`, which no taint ever reaches, while
             // the `v` it writes through may be the shared object.
             ExprKind::Assign { target, value } => {
-                // Filling a bare local renames, it does not write: the local
-                // the walk tracks keeps naming the same object.
-                let bare_local = matches!(body.exprs[*target].kind, ExprKind::Local { .. });
-                if !bare_local && place_writes_taint(taint, *target) {
+                if place_writes_taint(taint, *target) {
                     return false;
                 }
                 if taint.operand(*value) {
@@ -497,8 +498,12 @@ impl Taint<'_> {
                 }
             }
             NodeRef::Pat(p) => {
-                for sub in pattern_field_reads(body, p, self.seed_field) {
-                    collect_pattern_bindings(body, sub, &mut found_locals);
+                if let Some(field) = self.seed_field {
+                    for_each_pattern_field(body, p, |name, sub| {
+                        if name == field {
+                            collect_pattern_bindings(body, sub, &mut found_locals);
+                        }
+                    });
                 }
             }
             NodeRef::Stmt(s) => match &body.stmts[s].kind {
@@ -594,16 +599,17 @@ impl Taint<'_> {
 
 /// Whether assigning to `target` writes through a tainted value: any step of
 /// its receiver chain is the shared object. The target's own type says nothing
-/// — a scalar field of a tainted receiver is still a write of it.
+/// — a scalar field of a tainted receiver is still a write of it. Nor does its
+/// own name: `x.seed = …` stores into `x` and leaves what the field held alone.
 fn place_writes_taint(taint: &Taint<'_>, target: ExprId) -> bool {
-    if taint.expr(target) {
-        return true;
-    }
     let inner = match &taint.body.exprs[target].kind {
         ExprKind::FieldAccess { expr, .. }
         | ExprKind::Index { expr, .. }
         | ExprKind::Unary { expr, .. } => *expr,
-        _ => return false,
+        // Filling a bare local renames, it does not write: the local the walk
+        // tracks keeps naming the same object.
+        ExprKind::Local { .. } => return false,
+        _ => return taint.expr(target),
     };
     if taint.operand(inner) {
         return true;
@@ -637,25 +643,24 @@ fn promoted_reference(body: &Body, type_table: &TypeTable, op: Operand) -> Promo
     PromotedRef::Unknown
 }
 
-/// The fields `pat` names. Destructuring reads a field by naming it here,
-/// leaving no `ExprKind::FieldAccess` to match.
-fn struct_pattern_fields(body: &Body, pat: PatId) -> &[ArenaStructPatternField] {
+/// Visits the fields `pat` reads, each with the sub-pattern it binds.
+/// Destructuring reads a field by naming or positioning it here, leaving no
+/// `ExprKind::FieldAccess` to match. A tuple's `..` only ever trails, so a
+/// position is its field's name.
+fn for_each_pattern_field(body: &Body, pat: PatId, mut visit: impl FnMut(&str, PatId)) {
     match &body.pats[pat].kind {
-        PatKind::Struct { fields, .. } => fields,
-        _ => &[],
+        PatKind::Struct { fields, .. } => {
+            for field in fields {
+                visit(&field.field_name, field.pattern);
+            }
+        }
+        PatKind::Tuple(elements, _) => {
+            for (position, &element) in elements.iter().enumerate() {
+                visit(&position.to_string(), element);
+            }
+        }
+        _ => {}
     }
-}
-
-/// The sub-patterns `pat` binds out of the field named `field`.
-fn pattern_field_reads<'a>(
-    body: &'a Body,
-    pat: PatId,
-    field: Option<&'a str>,
-) -> impl Iterator<Item = PatId> + 'a {
-    struct_pattern_fields(body, pat)
-        .iter()
-        .filter(move |f| field == Some(f.field_name.as_str()))
-        .map(|f| f.pattern)
 }
 
 /// What one body can read, as the sets every seed question is asked against.
@@ -684,9 +689,9 @@ impl BodyCensus {
                     _ => {}
                 },
                 NodeRef::Pat(p) => {
-                    for f in struct_pattern_fields(body, p) {
-                        census.fields_read.insert(f.field_name.clone());
-                    }
+                    for_each_pattern_field(body, p, |name, _| {
+                        census.fields_read.insert(name.to_owned());
+                    });
                 }
                 NodeRef::Stmt(_) | NodeRef::Block(_) => {}
             }

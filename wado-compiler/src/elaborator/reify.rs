@@ -5358,7 +5358,7 @@ impl<'a> Reify<'a> {
             .tysys
             .type_table
             .borrow()
-            .as_tuple(value.type_id)
+            .tuple_representation(value.type_id)
             .expect("annotate checked the value is a tuple of one element per target");
         assert_eq!(element_types.len(), targets.len());
         let ctx = &mut ctx.enter_scope();
@@ -9215,7 +9215,7 @@ impl<'a> Reify<'a> {
             ast::Pattern::Tuple(elements, has_rest) => {
                 // Tuple patterns destructure into the scrutinee's
                 // element types. The elaborator already validated
-                // arity; reify reads `tysys.type_table.as_tuple` to
+                // arity; reify reads `tuple_representation` to
                 // get the per-element types, falling back to
                 // UNKNOWN-typed inner walks for type-pack scrutinees.
                 // Destructuring through a reference (`let [a, b] = &t`)
@@ -9226,7 +9226,7 @@ impl<'a> Reify<'a> {
                     .tysys
                     .type_table
                     .borrow()
-                    .as_tuple(peeled)
+                    .tuple_representation(peeled)
                     .unwrap_or_default();
                 let sub_patterns: Vec<TirPattern> = elements
                     .iter()

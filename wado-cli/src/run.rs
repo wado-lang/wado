@@ -14,6 +14,7 @@ pub struct RunOptions {
     pub knobs: CompileKnobs,
     pub host: HostKnobs,
     pub profile: ProfileMode,
+    pub gc_log: bool,
     /// `(host_path, guest_path)` pairs from `--dir host[::guest]`.
     pub preopened_dirs: Vec<(String, String)>,
     /// The guest's arguments, which `get-arguments` answers after the program name.
@@ -92,6 +93,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<RunOptions, CliExit> {
         knobs,
         host,
         profile: command.profile,
+        gc_log: command.gc_log,
         preopened_dirs: command.preopened_dirs,
         program_args: command.program_args,
         runtime: command.runtime,
@@ -120,6 +122,7 @@ pub async fn run(opts: RunOptions) -> Result<(), CliExit> {
     let engine = RunEngine {
         opt_level,
         profile: &opts.profile,
+        gc_log: opts.gc_log,
         knobs: &opts.runtime,
     };
     runner::run("wado", &wasm, &engine, guest, |_, _, _| Ok(())).await

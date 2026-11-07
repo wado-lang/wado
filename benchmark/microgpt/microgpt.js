@@ -12,7 +12,7 @@
 // and can be checked against each other.
 //
 // How to run:
-//   node benchmark/microgpt/microgpt.js
+//   mise run benchmark-microgpt
 
 const ITERATIONS = 3;
 const WARMUP = 1;

@@ -1,0 +1,44 @@
+// A tuple pattern reaches through a newtype as a struct pattern does, in a
+// match, a `let`, a `for` and a destructuring assignment, and through a
+// reference, a second newtype or a generic one alike.
+
+use { println, Stdout } from "core:cli";
+
+type Pair = [i32, String];
+type Named = Pair;
+type Twin<T> = [T, T];
+
+export fn run() with Stdout {
+    let pair: Pair = [1, "one"];
+    let [n, s] = pair;
+    println(`${n} ${s}`);
+
+    // Exhaustive, so a pattern has to count as covering the newtype.
+    match &pair {
+        [first, ..] => println(`${*first}`),
+    }
+
+    let named: Named = [2, "two"];
+    let [m, _] = named;
+    println(`${m}`);
+
+    let twin: Twin<i32> = [3, 4];
+    let [a, b] = twin;
+    println(`${a + b}`);
+
+    let mut count = 0;
+    let mut text = "";
+    [count, text] = pair;
+    println(`${count} ${text}`);
+
+    let mut pairs: List<Pair> = [[5, "five"]];
+    for let [_, word] of &mut pairs {
+        word.push_str("!");
+    }
+    println(pairs[0].1);
+}
+
+__DATA__
+{
+    "stdout": "1 one\n1\n2\n7\n1 one\nfive!\n"
+}
