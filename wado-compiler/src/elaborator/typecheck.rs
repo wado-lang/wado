@@ -30,11 +30,11 @@ pub(super) enum TypeCheckResult {
 
 /// Whether a value of `type_id` may stand where a condition is read: a `bool`,
 /// a `!` that never yields one, or a type already diagnosed or yet unknown.
-pub(super) fn admits_condition(type_table: &TypeTable, type_id: TypeId) -> bool {
+pub(super) fn admits_condition(type_id: TypeId) -> bool {
     matches!(
         type_id,
-        TypeTable::NEVER | TypeTable::UNKNOWN | TypeTable::ERROR
-    ) || type_table.same_type(type_id, TypeTable::BOOL)
+        TypeTable::NEVER | TypeTable::UNKNOWN | TypeTable::ERROR | TypeTable::BOOL
+    )
 }
 
 /// Pure type compatibility check, emitting no errors. Rules apply in order:
@@ -58,7 +58,7 @@ pub(super) fn check_assignable(
 pub(super) fn widens(actual: TypeId, expected: TypeId, type_table: &TypeTable) -> bool {
     type_table.holds_never_arg_by_value(actual)
         && !type_table.is_indefinite(expected)
-        && !type_table.same_type(actual, expected)
+        && actual != expected
         && check_assignable(actual, expected, type_table) == TypeCheckResult::Compatible
 }
 

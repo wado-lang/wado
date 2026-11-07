@@ -513,9 +513,8 @@ pub fn hold_hole(field: &mut TirStructField, hole_ty: TypeId, tt: &mut TypeTable
     // Monomorphization holds a substituted shape before its instances are
     // drained, while one generic instance may still be spelled by two ids of
     // its arguments.
-    let same = |tt: &TypeTable, a: TypeId, b: TypeId| {
-        tt.same_type(a, b) || tt.instance_key(a) == tt.instance_key(b)
-    };
+    let same =
+        |tt: &TypeTable, a: TypeId, b: TypeId| a == b || tt.instance_key(a) == tt.instance_key(b);
     if same(tt, field_ty, hole_ty) || same(tt, field.value.type_id, field_ty) {
         return None;
     }

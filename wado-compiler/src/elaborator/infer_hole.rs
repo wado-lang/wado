@@ -358,9 +358,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Whether `t` is a bare parameter or variable that is not one of the
     /// enclosing declaration's `scope_params`.
     fn is_open_slot(&self, t: TypeId, scope_params: &[TypeId]) -> bool {
-        let table = self.tysys.type_table.borrow();
-        self.tysys.is_unbound_type_param(t)
-            && !table.type_keys(scope_params).contains(&table.type_key(t))
+        self.tysys.is_unbound_type_param(t) && !scope_params.contains(&t)
     }
 
     pub(super) fn type_has_infer_hole(&self, ty: TypeId) -> bool {
@@ -410,12 +408,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// written `!` answers it, where an inferred one, a diverging arm's, says
     /// nothing.
     pub(super) fn solve_infer_var_as_written(&mut self, var: TypeId, written: TypeId) {
-        let never = self
-            .tysys
-            .type_table
-            .borrow()
-            .same_type(written, TypeTable::NEVER);
-        if !never {
+        if written != TypeTable::NEVER {
             self.solve_infer_var(var, written);
         } else if let Some(slot @ None) = self.infer_holes.solutions.get_mut(&var) {
             *slot = Some(written);
@@ -427,11 +420,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Refused where `answer` reaches `var` itself, which no type satisfies.
     pub(super) fn chain_infer_var(&mut self, var: TypeId, answer: TypeId) {
         let answer = self.apply_infer_holes(answer);
-        let table = self.tysys.type_table.borrow();
-        if says_nothing(&table, answer) || table.infer_vars_in(answer).contains(&var) {
+        if says_nothing(answer)
+            || self
+                .tysys
+                .type_table
+                .borrow()
+                .infer_vars_in(answer)
+                .contains(&var)
+        {
             return;
         }
-        drop(table);
         if let Some(slot @ None) = self.infer_holes.solutions.get_mut(&var) {
             *slot = Some(answer);
         }
@@ -766,17 +764,17 @@ impl TypeSystem {
     /// Whether `answer` can stand as a variable's solution: not another variable,
     /// nor one of the [`says_nothing`] types.
     pub(super) fn is_usable_answer(&self, answer: TypeId) -> bool {
-        let table = self.type_table.borrow();
-        !says_nothing(&table, answer) && !table.contains_infer_var(answer)
+        !says_nothing(answer) && !self.type_table.borrow().contains_infer_var(answer)
     }
 }
 
 /// Whether `answer` is `never` / `unknown` / `error`, which every check
 /// accepts anywhere, so it answers no variable.
-fn says_nothing(table: &TypeTable, answer: TypeId) -> bool {
-    [TypeTable::NEVER, TypeTable::UNKNOWN, TypeTable::ERROR]
-        .into_iter()
-        .any(|nothing| table.same_type(answer, nothing))
+fn says_nothing(answer: TypeId) -> bool {
+    matches!(
+        answer,
+        TypeTable::NEVER | TypeTable::UNKNOWN | TypeTable::ERROR
+    )
 }
 
 /// What an unsolved parameter of the `kind` spelled `name` reports.

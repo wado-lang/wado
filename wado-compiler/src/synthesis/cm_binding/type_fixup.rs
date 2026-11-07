@@ -222,10 +222,7 @@ fn fixup_adapter_return_from_call_site(
             call_site_type
         }
     };
-    let same_type = |a, b| type_table.borrow().same_type(a, b);
-    if let Some(prev) =
-        record_applied_return(applied_returns, adapter_key, call_site_type, same_type)
-    {
+    if let Some(prev) = record_applied_return(applied_returns, adapter_key, call_site_type) {
         let tt = type_table.borrow();
         panic!(
             "call sites disagree on the return type of shared CM binding `{}`: \
@@ -249,10 +246,9 @@ fn record_applied_return(
     applied_returns: &mut IndexMap<usize, TypeId>,
     adapter_key: usize,
     call_site_type: TypeId,
-    same_type: impl Fn(TypeId, TypeId) -> bool,
 ) -> Option<TypeId> {
     match applied_returns.get(&adapter_key) {
-        Some(&prev) if !same_type(prev, call_site_type) => Some(prev),
+        Some(&prev) if prev != call_site_type => Some(prev),
         _ => {
             applied_returns.insert(adapter_key, call_site_type);
             None
@@ -370,12 +366,9 @@ impl CallRewriteWalker<'_> {
                 continue;
             }
             // A diverging argument never reaches the call.
-            let table = self.type_table.borrow();
-            if !table.is_never(arg.type_id) {
-                self.callbacks
-                    .insert(table.type_key(arg.type_id), arg.type_id);
+            if !self.type_table.borrow().is_never(arg.type_id) {
+                self.callbacks.insert(arg.type_id);
             }
-            drop(table);
             let erased = erased_callback_type(&mut self.type_table.borrow_mut());
             let closure = std::mem::replace(
                 arg,
@@ -580,17 +573,15 @@ mod tests {
     use crate::tir::TypeId;
 
     fn record(m: &mut IndexMap<usize, TypeId>, key: usize, ty: u32) -> Option<TypeId> {
-        // Slots 10 through 19 hold one type.
-        record_applied_return(m, key, TypeId(ty), |a, b| a.0 / 10 == b.0 / 10)
+        record_applied_return(m, key, TypeId(ty))
     }
 
     #[test]
     fn record_applied_return_first_and_matching_are_ok() {
         let mut m: IndexMap<usize, TypeId> = IndexMap::default();
         assert_eq!(record(&mut m, 1, 10), None);
-        // Same key, same type re-records without conflict, from any slot.
+        // Same key, same type re-records without conflict.
         assert_eq!(record(&mut m, 1, 10), None);
-        assert_eq!(record(&mut m, 1, 12), None);
         // A distinct adapter key is independent.
         assert_eq!(record(&mut m, 2, 20), None);
     }

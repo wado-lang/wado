@@ -36,7 +36,7 @@ use crate::tir::{
     TirStruct, TypeId,
 };
 use crate::tir_visitor::TirRefVisitor;
-use crate::type_table::{AnonStructId, TypeKey, TypeTable};
+use crate::type_table::{AnonStructId, TypeTable};
 
 use state::Monomorphizer;
 
@@ -132,10 +132,10 @@ pub(crate) struct Pool {
     by_template: IndexMap<TemplateId, FreeFunctionName>,
     /// What waits on a type no scanned body has held a value of yet.
     waiting: IndexMap<TypeHead, Vec<FreeFunctionName>>,
-    held: IndexSet<TypeKey>,
+    held: IndexSet<TypeId>,
     /// The types a declaration's members are built over, as [`Self::lay_out`]
     /// has walked them.
-    laid_out: IndexSet<TypeKey>,
+    laid_out: IndexSet<TypeId>,
     /// What a held type released, for the caller to scan.
     released: Vec<Rc<RefCell<TirFunction>>>,
     /// The struct and variant instances held since the drain last read them.
@@ -240,15 +240,15 @@ impl Pool {
 
 /// `id` and every type it is built over that `seen` does not hold yet, which
 /// it then does.
-fn built_over(id: TypeId, type_table: &TypeTable, seen: &mut IndexSet<TypeKey>) -> Vec<TypeId> {
+fn built_over(id: TypeId, type_table: &TypeTable, seen: &mut IndexSet<TypeId>) -> Vec<TypeId> {
     // Most of a body's expressions hold a type held already.
-    if seen.contains(&type_table.type_key(id)) {
+    if seen.contains(&id) {
         return Vec::new();
     }
     let mut found = Vec::new();
     let mut stack = vec![id];
     while let Some(id) = stack.pop() {
-        if !seen.insert(type_table.type_key(id)) {
+        if !seen.insert(id) {
             continue;
         }
         stack.extend(type_table.get_newtype_base(id));

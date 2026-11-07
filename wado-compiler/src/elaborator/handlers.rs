@@ -8,7 +8,6 @@
 use crate::ast;
 use crate::compiler_host::CompilerHost;
 use crate::tir::{EffectRef, ResolvedType, StructDef, TypeId};
-use crate::type_table::TypeKey;
 
 use super::Elaborator;
 use super::types::{FunctionContext, TypeError};
@@ -293,7 +292,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let defs = self.tysys.resolutions.defs();
         let mut out: Vec<HandlerEffectEntry> = Vec::new();
         let mut ties: Vec<Vec<Option<DefId>>> = Vec::new();
-        let mut seen: hashmap::IndexSet<(DefId, Vec<TypeKey>)> = hashmap::IndexSet::default();
+        let mut seen: hashmap::IndexSet<(DefId, Vec<TypeId>)> = hashmap::IndexSet::default();
 
         let trait_env = &self.tysys.trait_env;
         let written = trait_env
@@ -350,8 +349,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             if !selected {
                 continue;
             }
-            let type_keys = self.tysys.type_table.borrow().type_keys(&type_args);
-            if seen.insert((trait_ref, type_keys)) {
+            if seen.insert((trait_ref, type_args.clone())) {
                 out.push(HandlerEffectEntry {
                     impl_def: Some(impl_def),
                     effect: DeclaredHead::new(defs, trait_ref),

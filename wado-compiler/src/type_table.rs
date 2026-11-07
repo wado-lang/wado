@@ -4462,7 +4462,7 @@ impl TypeTable {
     pub fn replace_subterms(
         &mut self,
         type_id: TypeId,
-        replacements: &IndexMap<TypeKey, TypeId>,
+        replacements: &IndexMap<TypeId, TypeId>,
     ) -> TypeId {
         self.subst_rec(
             type_id,
@@ -4475,24 +4475,18 @@ impl TypeTable {
 
     /// The tuples `id` is built over that hold one of `packs` as an element,
     /// the outermost where one holds another.
-    pub fn tuples_holding(&self, id: TypeId, packs: &[TypeId]) -> IndexMap<TypeKey, TypeId> {
-        let packs = self.type_keys(packs);
-        let mut found = IndexMap::default();
-        self.collect_tuples_holding(id, &packs, &mut found);
+    pub fn tuples_holding(&self, id: TypeId, packs: &[TypeId]) -> IndexSet<TypeId> {
+        let mut found = IndexSet::default();
+        self.collect_tuples_holding(id, packs, &mut found);
         found
     }
 
-    fn collect_tuples_holding(
-        &self,
-        id: TypeId,
-        packs: &[TypeKey],
-        found: &mut IndexMap<TypeKey, TypeId>,
-    ) {
+    fn collect_tuples_holding(&self, id: TypeId, packs: &[TypeId], found: &mut IndexSet<TypeId>) {
         if self
             .as_tuple(id)
-            .is_some_and(|elems| elems.iter().any(|&e| packs.contains(&self.type_key(e))))
+            .is_some_and(|elems| elems.iter().any(|e| packs.contains(e)))
         {
-            found.entry(self.type_key(id)).or_insert(id);
+            found.insert(id);
             return;
         }
         self.any_constituent(id, &mut |t| {
@@ -4789,7 +4783,7 @@ impl TypeTable {
             return type_id;
         }
         if !leaves.subterms.is_empty()
-            && let Some(&replaced) = leaves.subterms.get(&self.type_key(type_id))
+            && let Some(&replaced) = leaves.subterms.get(&type_id)
         {
             return replaced;
         }
@@ -7480,7 +7474,7 @@ static NO_PARAMS: IndexMap<u32, TypeId> = IndexMap::with_hasher(FxBuildHasher);
 static NO_VARS: IndexMap<InferVarId, TypeId> = IndexMap::with_hasher(FxBuildHasher);
 static NO_PROJECTIONS: SlotProjections = IndexMap::with_hasher(FxBuildHasher);
 static NO_ROWS: EffectRows = IndexMap::with_hasher(FxBuildHasher);
-static NO_SUBTERMS: IndexMap<TypeKey, TypeId> = IndexMap::with_hasher(FxBuildHasher);
+static NO_SUBTERMS: IndexMap<TypeId, TypeId> = IndexMap::with_hasher(FxBuildHasher);
 static NO_RENAMES: IndexMap<u32, u32> = IndexMap::with_hasher(FxBuildHasher);
 
 /// Where a type's spelling writes its function types' rows. A function value
@@ -7522,7 +7516,7 @@ struct Leaves<'s> {
     /// unchanged, so it takes the spelling interning gives it now.
     reintern_instances: bool,
     /// Whole types replaced wherever they stand, before any leaf inside them.
-    subterms: &'s IndexMap<TypeKey, TypeId>,
+    subterms: &'s IndexMap<TypeId, TypeId>,
     /// Slots moved to another index, name and pack shape kept, where `params`
     /// fills none.
     renames: &'s IndexMap<u32, u32>,
@@ -7631,11 +7625,11 @@ impl PartialOrd for TypeKey {
 
 /// An answer about each type, computed once per [`TypeKey`] so every id naming
 /// one type shares it. Valid while the facts the answer reads stay fixed.
-pub struct TypeMemo<V> {
-    answers: RefCell<IndexMap<TypeKey, V>>,
+pub struct TypeMemo<V, K = TypeKey> {
+    answers: RefCell<IndexMap<K, V>>,
 }
 
-impl<V> Default for TypeMemo<V> {
+impl<V, K> Default for TypeMemo<V, K> {
     fn default() -> Self {
         Self {
             answers: RefCell::default(),
@@ -7643,9 +7637,9 @@ impl<V> Default for TypeMemo<V> {
     }
 }
 
-impl<V: Copy> TypeMemo<V> {
+impl<V: Copy, K: std::hash::Hash + Eq> TypeMemo<V, K> {
     /// `compute` may ask this memo of other types: no borrow is held across it.
-    pub fn get_or_compute(&self, key: TypeKey, compute: impl FnOnce() -> V) -> V {
+    pub fn get_or_compute(&self, key: K, compute: impl FnOnce() -> V) -> V {
         if let Some(&answer) = self.answers.borrow().get(&key) {
             return answer;
         }

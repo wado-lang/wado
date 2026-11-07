@@ -17,7 +17,7 @@ use crate::tir::{
     TirLiteralPattern, TirStruct, TypeId,
 };
 use crate::token::Span;
-use crate::type_table::{TypeKey, TypeTable};
+use crate::type_table::TypeTable;
 
 use super::Elaborator;
 use super::call::{CaseSite, DefaultTypeBinding, DefaultWalk, WalkedDefault, slot_type_bindings};
@@ -576,8 +576,7 @@ fn slice_list_conversion(tt: &TypeTable, source: TypeId, target: TypeId) -> Opti
         _ => None,
     };
     let list_elem = |id| tt.as_list(tt.representation_head(id));
-    let same =
-        |a: Option<TypeId>, b: Option<TypeId>| a.zip(b).is_some_and(|(a, b)| tt.same_type(a, b));
+    let same = |a: Option<TypeId>, b: Option<TypeId>| a.is_some() && a == b;
     if same(slice_elem(source), list_elem(target)) {
         Some("to_list")
     } else if same(slice_elem(target), list_elem(source)) {
@@ -652,7 +651,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         ctx: &mut FunctionContext,
     ) -> TypeId {
         let type_id = self.resolve_expr(expr, ctx, Some(TypeTable::BOOL));
-        if admits_condition(&self.tysys.type_table.borrow(), type_id) {
+        if admits_condition(type_id) {
             return type_id;
         }
         let (expected, found) = self
@@ -3323,16 +3322,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// `walk` holds the types being asked about further out. One met again
     /// inside itself has no finite value, so it answers `true`.
-    fn is_uninhabited_within(&self, ty: TypeId, walk: &mut CutWalk<TypeKey>) -> bool {
-        let (head, key, elems) = {
+    fn is_uninhabited_within(&self, ty: TypeId, walk: &mut CutWalk<TypeId>) -> bool {
+        let (head, elems) = {
             let tt = self.tysys.type_table.borrow();
             let head = tt.representation_head(ty);
             if tt.is_never(head) {
                 return true;
             }
-            (head, tt.type_key(head), tt.as_tuple(head))
+            (head, tt.as_tuple(head))
         };
-        walk.visit(key, |walk| {
+        walk.visit(head, |walk| {
             if let Some(elems) = elems {
                 elems.iter().any(|&t| self.is_uninhabited_within(t, walk))
             } else if let Some(fields) = self.struct_field_types(head) {
@@ -3390,8 +3389,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .find_map(|(guardless, earlier)| match earlier {
                 Pat::Narrow(earlier)
                     if *guardless
-                        && (tt.same_type(*earlier, *target)
-                            || tt.is_resource_narrowing(*earlier, *target)) =>
+                        && (earlier == target || tt.is_resource_narrowing(*earlier, *target)) =>
                 {
                     Some(format!(
                         "unreachable arm: every `{}` is `{}`, which an earlier arm already takes",

@@ -237,9 +237,8 @@ impl Monomorphizer {
 
 /// Whether `outer` is a newtype whose chain of bases passes `inner`.
 fn is_newtype_link_above(outer: TypeId, inner: TypeId, type_table: &TypeTable) -> bool {
-    let inner = type_table.type_key(inner);
     let mut link = outer;
-    while type_table.type_key(link) != inner {
+    while link != inner {
         let ResolvedType::Newtype { base_type, .. } = type_table.get(link) else {
             return false;
         };
