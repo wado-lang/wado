@@ -278,7 +278,7 @@ pub struct RunOptions {
 
 /// What the command line asks for.
 pub enum Invocation {
-    Run(RunOptions),
+    Run(Box<RunOptions>),
     Help,
     Version,
 }
@@ -329,12 +329,12 @@ impl RunOptions {
             },
         )?;
         Ok(match parsed {
-            Parsed::Run(command) => Invocation::Run(Self {
+            Parsed::Run(command) => Invocation::Run(Box::new(Self {
                 command,
                 opt_level,
                 log_level,
                 compile_args,
-            }),
+            })),
             Parsed::Help => Invocation::Help,
             Parsed::Version => Invocation::Version,
         })
@@ -431,7 +431,7 @@ pub async fn command_line<T>(
     run: impl AsyncFnOnce(RunOptions, T) -> Result<(), CliExit>,
 ) -> ExitCode {
     let exit = match parsed {
-        Ok((Invocation::Run(options), own)) => match run(options, own).await {
+        Ok((Invocation::Run(options), own)) => match run(*options, own).await {
             Ok(()) => return ExitCode::SUCCESS,
             Err(exit) => exit,
         },
@@ -758,7 +758,7 @@ mod tests {
 
     fn parse(argv: &[&str]) -> RunOptions {
         match try_parse(argv).expect("parsing") {
-            Invocation::Run(run) => run,
+            Invocation::Run(run) => *run,
             Invocation::Help | Invocation::Version => panic!("no run to make"),
         }
     }
