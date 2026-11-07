@@ -339,11 +339,7 @@ impl TypeTable {
             self.intern_map.insert(ty, id);
             id
         };
-        if self.erased {
-            self.erase_type(id)
-        } else {
-            id
-        }
+        if self.erased { self.erase_type(id) } else { id }
     }
 
     /// Append `ty` at [`TypeMap::next_id`]: the only way a slot is filled.
@@ -388,9 +384,7 @@ impl TypeTable {
             },
             ResolvedType::Ref(inner) => ResolvedType::Ref(self.erase_type(*inner)),
             ResolvedType::MutRef(inner) => ResolvedType::MutRef(self.erase_type(*inner)),
-            ResolvedType::BuiltinArray(elem) => {
-                ResolvedType::BuiltinArray(self.erase_type(*elem))
-            }
+            ResolvedType::BuiltinArray(elem) => ResolvedType::BuiltinArray(self.erase_type(*elem)),
             ResolvedType::Function {
                 is_mut,
                 params,
@@ -447,12 +441,6 @@ impl TypeTable {
         self.redirects.get(id).copied().unwrap_or(id)
     }
 
-    /// [`Self::get`] for a caller holding an id from another table. One this
-    /// table does not carry answers `None` rather than panicking.
-    pub fn try_get(&self, id: TypeId) -> Option<&ResolvedType> {
-        self.types.get(self.resolved_id(id))
-    }
-
     pub fn get(&self, id: TypeId) -> &ResolvedType {
         let id = self.resolved_id(id);
         self.types
@@ -460,39 +448,29 @@ impl TypeTable {
             .unwrap_or_else(|| panic!("TypeId {id:?} not found in TypeTable"))
     }
 
-    /// Where [`Self::redefine_to`] pointed `id`, when `id` is a reference it
-    /// redefined.
-    fn box_redefinition(&self, id: TypeId) -> Option<TypeId> {
-        self.redirects.get(id).copied()
-    }
-
     /// Whether `id` names a newtype.
     pub fn is_newtype(&self, id: TypeId) -> bool {
         matches!(self.get(id), ResolvedType::Newtype { .. })
     }
 
-    /// [`Self::get`] returning `None` for ids pruned by DCE's `retain`.
+    /// [`Self::get`] returning `None` for an id this table does not carry: one
+    /// DCE's `retain` pruned, or one from another table.
     pub fn get_pruned(&self, id: TypeId) -> Option<&ResolvedType> {
         self.types.get(self.resolved_id(id))
     }
 
     /// The [`TypeKey`] for `id`.
     ///
-    /// Newtype erasure and the boxing rewrite both leave many ids resolving to
-    /// one type, so an id is a slot and not a type identity.
+    /// The boxing rewrite leaves many ids resolving to one type, so an id is a
+    /// slot and not a type identity.
     #[must_use]
     pub fn type_key(&self, id: TypeId) -> TypeKey {
         let resolved = self.resolved_id(id);
-        let interned = self
-            .types
-            .get(resolved)
-            .and_then(|ty| self.intern_map.get(ty).copied())
-            .unwrap_or(resolved);
         TypeKey(
-            self.erasures
-                .get(interned)
-                .copied()
-                .unwrap_or(interned),
+            self.types
+                .get(resolved)
+                .and_then(|ty| self.intern_map.get(ty).copied())
+                .unwrap_or(resolved),
         )
     }
 
@@ -638,9 +616,9 @@ impl TypeTable {
     /// Every type the IR may hold: from erasure on, only the ids that are their
     /// own erasure, since the IR holds no other.
     pub fn iter_type_ids(&self) -> impl Iterator<Item = TypeId> + '_ {
-        self.types.ids().filter(|&id| {
-            !self.erased || self.erasures.get(id) == Some(&id)
-        })
+        self.types
+            .ids()
+            .filter(|&id| !self.erased || self.erasures.get(id) == Some(&id))
     }
 
     pub fn mark_unrestricted_resource(&mut self, def: DefId, classes: Option<HandleClasses>) {
@@ -1873,8 +1851,7 @@ impl TypeTable {
         });
         self.slot_boxes
             .retain(|_, wrapper| effective_keep.contains(wrapper));
-        self.erasures
-            .retain(|id, _| effective_keep.contains(&id));
+        self.erasures.retain(|id, _| effective_keep.contains(&id));
         // Retain symbol indices to surviving TypeIds only.
         self.symbol_by_type
             .retain(|id, _| effective_keep.contains(&id));
@@ -1887,15 +1864,12 @@ impl TypeTable {
             // A redefined reference keeps its spelling in the slot alone.
             // Re-interning it would hand a later `intern(&T)` an id that no
             // longer resolves as a reference.
-            if self.box_redefinition(id).is_none() {
+            if self.redirects.get(id).is_none() {
                 self.intern_map.insert(ty.clone(), id);
             }
         }
-        let indexed: Vec<(TypeId, ResolvedType)> = self
-            .types
-            .iter()
-            .map(|(id, ty)| (id, ty.clone()))
-            .collect();
+        let indexed: Vec<(TypeId, ResolvedType)> =
+            self.types.iter().map(|(id, ty)| (id, ty.clone())).collect();
         for (id, ty) in indexed {
             self.index_type(id, &ty);
         }
@@ -2975,7 +2949,7 @@ impl TypeTable {
             .unwrap_or_else(|| panic!("TypeId {id:?} not found in TypeTable"));
         assert!(
             matches!(spelling, ResolvedType::Ref(_) | ResolvedType::MutRef(_)),
-            "only a reference is redefined: `box_redefinition` tells one by that shape"
+            "only a reference is redefined: `spelled_ref` reads its slot"
         );
         if self.intern_map.get(&spelling) == Some(&id) {
             self.intern_map.shift_remove(&spelling);
@@ -3080,11 +3054,11 @@ impl TypeTable {
         type_id
     }
 
-    /// [`Self::peel_refs`] as [`Self::try_get`] is to [`Self::get`]: an id this
+    /// [`Self::peel_refs`] as [`Self::get_pruned`] is to [`Self::get`]: an id this
     /// table does not carry answers `None` rather than panicking.
     pub fn try_peel_refs(&self, mut type_id: TypeId) -> Option<TypeId> {
         loop {
-            match self.try_get(type_id)? {
+            match self.get_pruned(type_id)? {
                 ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => type_id = *inner,
                 _ => return Some(type_id),
             }
@@ -6811,8 +6785,7 @@ impl TypeTable {
     /// targets share one `&` head, so their referents' heads must agree too.
     pub fn impl_reaches_instance(&self, def: DefId, instance: TypeId) -> bool {
         let target = self.impl_target(def);
-        if let ResolvedType::Ref(written) | ResolvedType::MutRef(written) =
-            self.get(target.whole)
+        if let ResolvedType::Ref(written) | ResolvedType::MutRef(written) = self.get(target.whole)
             && let ResolvedType::Ref(asked) | ResolvedType::MutRef(asked) = self.get(instance)
             && self.param_slot(*written).is_none()
         {
