@@ -839,6 +839,65 @@ pub fn shared<affine G: Graph>(g: &mut G, length: &G::Tensor<i64, []>) -> G::Ten
     return g.reshape(length, [1]);
 }
 
+/// `a` and `b`, lengths of `[Slots]`, as many rows each as the one with more:
+/// a length every row shares stands for each.
+fn rows_of_both<affine G: Graph>(
+    g: &mut G,
+    a: &G::Tensor<i64, [Slots]>,
+    b: &G::Tensor<i64, [Slots]>,
+) -> [G::Tensor<i64, [Slots]>, G::Tensor<i64, [Slots]>] with _ {
+    let rows = i32::max(g.extents_of(a)[0], g.extents_of(b)[0]);
+    return [g.broadcast_in_dim(a, [rows], [0]), g.broadcast_in_dim(b, [rows], [0])];
+}
+
+/// `op` of each row's `a` and `b`.
+pub fn row_binary<affine G: Graph>(
+    g: &mut G,
+    op: Binary,
+    a: &G::Tensor<i64, [Slots]>,
+    b: &G::Tensor<i64, [Slots]>,
+) -> G::Tensor<i64, [Slots]> with _ {
+    let [x, y] = rows_of_both(g, a, b);
+    return g.binary(op, &x, &y);
+}
+
+/// `quotient` of each row's `a` and `d`.
+pub fn row_quotient<affine G: Graph>(
+    g: &mut G,
+    a: &G::Tensor<i64, [Slots]>,
+    d: &G::Tensor<i64, [Slots]>,
+    up: bool,
+) -> G::Tensor<i64, [Slots]> with _ {
+    let [x, y] = rows_of_both(g, a, d);
+    return quotient::<G, [Slots]>(g, &x, &y, up);
+}
+
+/// `from_end_indices` of each row's index `a` into its own `extent`.
+pub fn row_from_end<affine G: Graph>(
+    g: &mut G,
+    a: &G::Tensor<i64, [Slots]>,
+    extent: &G::Tensor<i64, [Slots]>,
+) -> G::Tensor<i64, [Slots]> with _ {
+    let [x, e] = rows_of_both(g, a, extent);
+    let rows = g.extents_of(&x);
+    let negative = g.compare(Comparison::Lt, &x, &full::<G, i64, [Slots]>(g, 0, rows));
+    return g.select(&negative, &g.binary(Binary::Add, &x, &e), &x);
+}
+
+/// `range_i64` from each row's `start` by its `delta`, a row each.
+pub fn row_range<affine G: Graph, A>(
+    g: &mut G,
+    start: &G::Tensor<i64, [Slots]>,
+    count: i32,
+    delta: &G::Tensor<i64, [Slots]>,
+) -> G::Tensor<i64, [Slots, A]> with _ {
+    let [first, step] = rows_of_both(g, start, delta);
+    let plane: List<i32> = [g.extents_of(&first)[0], count];
+    let steps: G::Tensor<i64, [Slots, A]> = g.iota(plane, 1);
+    let scaled = g.binary(Binary::Multiply, &steps, &g.broadcast_in_dim(&step, plane, [0]));
+    return g.binary(Binary::Add, &scaled, &g.broadcast_in_dim(&first, plane, [0]));
+}
+
 /// `length` at each position of `extents`: the row's own, where `rows` is the
 /// axis the rows run along, or the one every row shares.
 fn along_rows<affine G: Graph, Axes>(

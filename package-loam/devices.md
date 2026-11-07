@@ -328,13 +328,23 @@ different requests (see
 [Requests share a pass through slots](#requests-share-a-pass-through-slots)).
 So each mask, count and write above reads its row's own.
 
+The rows run along the first axis of every input that pads a length behind it.
+A value computed from each row's lengths, as GPT-2's position ids are, holds
+the rows of `[Slots]` ahead of its axes. An elementwise operation, a reshape
+and a gather by it keep them there, and an elementwise operation whose output
+has the batch axis folds them into it. Where a node takes one length for every
+row, as a `ReduceMean`'s divisor and a `Slice` from a valid length do, reads
+how many rows the batch holds, or reads such a value any other way, the rows
+share their lengths, and `loam dump` says which node made them.
+
 The generated module takes them so:
 
-- `build` takes `lengths: &Lengths<G>`, a value of `[]` for each padded length
-  it reads as a value. A build that reads none takes no `lengths`. Every
-  extent the inputs give is a capacity. A condition the graph owes over a
-  padded length is not checked there, since a capacity need not meet what its
-  length meets.
+- `build` takes `lengths: &Lengths<G>`, a value for each padded length it reads
+  as a value: of `[Slots]` where each row holds its own, either one per row or
+  one every row shares, and of `[]` where the rows share them. A build that
+  reads none takes no `lengths`. Every extent the inputs give is a capacity. A
+  condition the graph owes over a padded length is not checked there, since a
+  capacity need not meet what its length meets.
 - `compute` takes the inputs on the host. It checks them, and what the graph
   owes, against their own lengths. It pads each padded length to its
   capacity, `capacity_of` of it, builds, and cuts the outputs back to their
