@@ -37,6 +37,7 @@ pub fn emit(file: &ProtoFile, runtime: String) -> Result<String, EmitError> {
         taken: TreeMap::new(),
         features: TreeMap::new(),
         uses_map: false,
+        uses_linear: false,
     };
     for let decl of &file.messages {
         e.features[decl.path.join(".")] = decl.features;
@@ -58,6 +59,9 @@ pub fn emit(file: &ProtoFile, runtime: String) -> Result<String, EmitError> {
     w.blank();
     if e.uses_map {
         w.line("use { TreeMap } from \"core:collections\";");
+    }
+    if e.uses_linear {
+        w.line("use { LinearBuffer } from \"core:linear\";");
     }
     w.line(`use ${RUNTIME} from "${runtime}";`);
     for let plan of &enums {
@@ -203,6 +207,8 @@ struct Access {
     take: Take,
     /// The turbofish every call names, or `""`.
     types: String,
+    /// A repeated message field's element type, which it is read one value at a time as.
+    element: Option<String> = null,
 }
 
 /// How `merge_field` reads a field.
@@ -262,6 +268,32 @@ impl MessagePlan {
         }
     }
 
+    /// A function per repeated message field that reads its values out of an
+    /// encoded message one at a time.
+    fn write_each(&self, w: &mut CodeWriter) {
+        let mut opened = false;
+        for let slot of &self.slots {
+            let Field([field, a]) = slot else {
+                continue;
+            };
+            let Some(element) = &a.element else {
+                continue;
+            };
+            w.blank();
+            if !opened {
+                w.begin(`impl ${self.spec.name}`);
+                opened = true;
+            }
+            let wire = if a.put == Call::Groups { "SGroup" } else { "Len" };
+            w.begin(`pub fn ${field}_of(input: LinearBuffer) -> ${RUNTIME}::Messages<${element}>`);
+            w.line(`return ${RUNTIME}::each::<${element}>(input, ${a.number}, ${RUNTIME}::WireType::${wire});`);
+            w.end();
+        }
+        if opened {
+            w.end();
+        }
+    }
+
     fn write(&self, w: &mut CodeWriter) {
         self.spec.emit(w);
         for let v of &self.oneofs {
@@ -269,6 +301,7 @@ impl MessagePlan {
             v.emit(w);
         }
         let name = &self.spec.name;
+        self.write_each(w);
         w.blank();
         w.begin(`impl ${RUNTIME}::Message for ${name}`);
         w.begin(`fn size(&self, s: &mut ${RUNTIME}::Sizer) -> i64`);
@@ -283,7 +316,7 @@ impl MessagePlan {
         w.end();
         w.blank();
         w.begin(
-            `fn merge_field(&mut self, number: i32, r: &mut ${RUNTIME}::Reader) -> Result<bool, ${RUNTIME}::DecodeError>`,
+            `fn merge_field<B: ${RUNTIME}::Input>(&mut self, number: i32, r: &mut ${RUNTIME}::Reader<B>) -> Result<bool, ${RUNTIME}::DecodeError>`,
         );
         if !self.slots.is_empty() {
             w.begin("match number");
@@ -382,6 +415,8 @@ struct Emitter {
     /// Each message's own `features`, keyed by its dotted path.
     features: TreeMap<String, Features>,
     uses_map: bool,
+    /// Whether a field is read one value at a time, through a `LinearBuffer`.
+    uses_linear: bool,
 }
 
 impl Emitter {
@@ -553,7 +588,10 @@ impl Emitter {
                 },
                 Message([wado, group]) => {
                     let put = if group { Call::Groups } else { Call::Messages };
-                    Result::Ok([`List<${wado}>`, "[]", access(n, put, Take::Into(put), "")]);
+                    let mut a = access(n, put, Take::Into(put), "");
+                    a.element = Option::Some(wado);
+                    self.uses_linear = true;
+                    Result::Ok([`List<${wado}>`, "[]", a]);
                 },
             };
         }
@@ -764,7 +802,7 @@ fn claim_field_name(
 
 /// A generated type's name, suffixed where it would shadow what the module imports.
 fn type_name_of(name: String) -> String {
-    if is_reserved(&name) || name == RUNTIME || name == "TreeMap" {
+    if is_reserved(&name) || name == RUNTIME || name == "TreeMap" || name == "LinearBuffer" {
         return `${name}_`;
     }
     return name;

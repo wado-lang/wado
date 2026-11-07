@@ -639,6 +639,43 @@ fn imported_item_use_definition() {
 }
 
 #[test]
+fn self_in_an_impl_for_a_reference_is_the_pointee_definition() {
+    futures::executor::block_on(async {
+        let source = concat!(
+            "struct Point {}\n",
+            "trait Make { fn make() -> Self; }\n",
+            "impl Make for &Point {\n",
+            "    fn make() -> Self { return &Point {}; }\n",
+            "}\n",
+        );
+        let result = def_at(source, 3, 18).await.expect("cursor on `Self`");
+        assert_range(&result, 0, 7, 12);
+    });
+}
+
+#[test]
+fn namespaced_type_and_bound_definitions() {
+    futures::executor::block_on(async {
+        let lib = "pub struct Point {}\npub trait Show {}\n";
+        let entry = concat!(
+            "use geo from \"./lib.wado\";\n",
+            "fn f<T: geo::Show>(p: geo::Point, t: T) {}\n",
+        );
+        let files = [("./lib.wado", lib), ("/test.wado", entry)];
+        let point = def_at_in(&files, "/test.wado", 1, 28)
+            .await
+            .expect("cursor on `Point` after `geo::`");
+        assert_eq!(point.uri, "file:///lib.wado");
+        assert_range(&point, 0, 11, 16);
+        let show = def_at_in(&files, "/test.wado", 1, 13)
+            .await
+            .expect("cursor on `Show` after `geo::`");
+        assert_eq!(show.uri, "file:///lib.wado");
+        assert_range(&show, 1, 10, 14);
+    });
+}
+
+#[test]
 fn use_specifier_definition() {
     futures::executor::block_on(async {
         let lib = "pub fn helper() -> i32 { return 42; }\n";
@@ -890,6 +927,51 @@ fn namespace_import_name_definition() {
         assert_eq!(result.uri, "file:///lib.wado");
         assert_eq!(result.range.start.line, 0);
         assert_eq!(result.range.start.character, 0);
+    });
+}
+
+#[test]
+fn namespaced_bound_trait_definition() {
+    futures::executor::block_on(async {
+        let lib = "pub trait Show {\n    fn show(&self) -> i32;\n}\n";
+        let entry = concat!(
+            "use geo from \"./lib.wado\";\n",
+            "fn shown<T: geo::Show>(t: &T) -> i32 with _ {\n",
+            "    return t.show();\n",
+            "}\n",
+        );
+        let result = def_at_in(
+            &[("./lib.wado", lib), ("/test.wado", entry)],
+            "/test.wado",
+            1,
+            18,
+        )
+        .await
+        .expect("cursor on the trait name");
+        assert_eq!(result.uri, "file:///lib.wado");
+        assert_eq!(result.range.start.line, 0);
+    });
+}
+
+#[test]
+fn bound_trait_definition() {
+    futures::executor::block_on(async {
+        let lib = "pub trait Show {\n    fn show(&self) -> i32;\n}\n";
+        let entry = concat!(
+            "use { Show } from \"./lib.wado\";\n",
+            "fn shown<T: Show>(t: &T) -> i32 with _ {\n",
+            "    return t.show();\n",
+            "}\n",
+        );
+        let result = def_at_in(
+            &[("./lib.wado", lib), ("/test.wado", entry)],
+            "/test.wado",
+            1,
+            13,
+        )
+        .await
+        .expect("cursor on the trait name");
+        assert_eq!(result.uri, "file:///lib.wado");
     });
 }
 

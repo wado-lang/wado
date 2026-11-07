@@ -1834,7 +1834,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     // The trait's own declaration node, which the resolution
                     // walk answers for; a fresh id nothing resolved would not.
                     id,
+                    namespace: None,
                     name: name.to_string(),
+                    name_span: span,
                     type_args: Vec::new(),
                     assoc_types: Vec::new(),
                     span,

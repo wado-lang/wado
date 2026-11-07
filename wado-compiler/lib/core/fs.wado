@@ -167,7 +167,7 @@ pub fn read<S: AsStrSlice>(path: S) -> Result<ByteList, FsError> with Preopens {
 /// `LinearArray<f32>` by `cast`, with no element copied.
 pub fn read_linear<S: AsStrSlice>(path: S) -> Result<LinearArray<u8>, FsError> with Preopens {
     let [stream, done, expected] = open_read(path)?;
-    let array = LinearArray::<u8>::internal_read_stream(&stream, expected);
+    let array = LinearArray::<u8>::read_stream(&stream, expected);
     stream.drop();
     finish(path, done)?;
     return Result::Ok(array);

@@ -260,6 +260,49 @@ the copy's own, so a file as long as it says ends without growing the block. A
 longer one doubles the block, which may then hold more bytes than the array
 uses; `len` bounds every access, `cast` included.
 
+The loop is public as `LinearArray::<u8>::read_stream(stream, expected)`, for
+any `Stream<u8>`: a socket's, a response body's.
+
+### Reading a stream a part at a time
+
+A parser of a stream reads as far as the value it decodes, not to the end.
+`LinearBuffer` serves it. It holds bytes in linear memory and reads more from
+its stream when the parser asks for them:
+
+```text
+pub affine struct LinearBuffer { … }
+
+impl LinearBuffer {
+    pub fn of(bytes: LinearArray<u8>) -> LinearBuffer;
+    pub fn of_stream(stream: Stream<u8>) -> LinearBuffer;
+    pub fn bytes(&self) -> &LinearArray<u8>;
+    pub fn start(&self) -> i32;
+    pub fn len(&self) -> i32;
+    pub fn position(&self) -> i64;
+    pub fn fill(&mut self, n: i32) -> bool
+        contract n >= 0;
+    pub fn consume(&mut self, n: i32);
+}
+```
+
+`bytes()` holds what was read, and the part not yet consumed starts at
+`start()`. `fill(n)` reads until `n` bytes are unconsumed or the stream ends,
+and answers whether `n` are. `consume(n)` drops the next `n`. `position()` is
+how far into the stream `start()` is, for an error to name.
+
+`fill` moves the unconsumed bytes to the front of the block before it reads. It
+grows a full block by 64 KiB or more, never to the `n` it was asked for: a
+parser reads `n` off the stream, so a corrupt length would otherwise reserve
+memory the stream never fills. A host copy lands in the block's own room, as
+`read_stream`'s does.
+
+A buffer over `of(bytes)` has nothing more to read, so one parser serves an
+array read whole and a stream read in parts.
+
+A parser decoding text out of the buffer reads it with
+`to_string_of(start, end)`, which copies the range into a `String` once and
+validates it there.
+
 ## Roadmap
 
 In order:

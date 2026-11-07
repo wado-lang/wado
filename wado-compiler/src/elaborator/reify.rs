@@ -61,9 +61,9 @@ use crate::elaborator::float_literal::{FloatFormat, float_literal_bits};
 use crate::elaborator::method_lookup::adjusted_receiver_type;
 use crate::elaborator::sem::types::{
     BodyFacts, CoercionKind, DeclaredAttrs, DesugarKind, ForOfIteratorInfo, FromCallFacts,
-    ImplFacts, IndirectCallee, KeyValueCoercionFacts, LiteralCallee, LiteralFromCall,
-    MethodDispatch, MethodNames, OperatorDispatch, SequenceCoercionFacts, StaticMethodDispatch,
-    impl_self_layers, with_body_facts,
+    ImplFacts, IndirectCallee, KeyValueCoercionFacts, ListViewConversion, LiteralCallee,
+    LiteralFromCall, MethodDispatch, MethodNames, OperatorDispatch, SequenceCoercionFacts,
+    StaticMethodDispatch, impl_self_layers, with_body_facts,
 };
 use crate::elaborator::stmt::{
     RefBinding, collect_pattern_bindings_with_index, remap_pattern_local,
@@ -2500,14 +2500,31 @@ impl<'a> Reify<'a> {
             return tir.clone();
         }
 
-        let view = self.ann_list_view_conversions(expr.id());
-        let tir = self.reify_unmoved(expr, ctx, if view.is_some() { None } else { expected_type });
+        let conversion = self.ann_list_view_conversions(expr.id());
+        let tir = self.reify_unmoved(
+            expr,
+            ctx,
+            if conversion.is_some() {
+                None
+            } else {
+                expected_type
+            },
+        );
         let tir = if self.moves(expr) { tir.moved() } else { tir };
         let span = tir.span;
-        if let Some(view) = view {
+        if let Some(ListViewConversion {
+            view,
+            depth,
+            answering,
+        }) = conversion
+        {
+            let tt = self.tysys.type_table.borrow();
+            let layers = tt.ref_depth(tir.type_id) - depth;
+            let tir = deref_to_layers(tir, layers, &tt);
             return TirExpr::new(
                 TirExprKind::ListViewOf {
                     value: Box::new(tir),
+                    answering,
                 },
                 view,
                 span,

@@ -287,7 +287,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }
                 let has_slots = tt.contains_type_param(param);
                 drop(tt);
-                if self.converts_to_list_view(param, *t) {
+                if self.list_view_layer(param, *t).is_some() {
                     return true;
                 }
                 has_slots && self.tysys.slots_fill_param_to(param, *t)

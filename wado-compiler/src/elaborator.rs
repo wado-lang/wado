@@ -111,6 +111,42 @@ impl<H: CompilerHost> AstVisitor<'_> for ForwardDefaults<'_, '_, H> {
     fn visit_block(&mut self, _: &ast::Block) {}
 }
 
+/// Records the use→def edge of every type, bound and effect an item writes,
+/// as the resolver answered its site.
+struct TypeReferences<'e, 'a, H: CompilerHost>(&'e mut Elaborator<'a, H>);
+
+impl<H: CompilerHost> AstVisitor<'_> for TypeReferences<'_, '_, H> {
+    fn visit_type(&mut self, ty: &ast::Type) {
+        let site = match ty {
+            ast::Type::Named(t) => Some(t.id),
+            ast::Type::Generic(t) => Some(t.id),
+            ast::Type::NamespacedGeneric(t) => Some(t.id),
+            ast::Type::Function(_)
+            | ast::Type::Tuple(_)
+            | ast::Type::Reference(_)
+            | ast::Type::MutReference(_)
+            | ast::Type::TypePackSpread(..)
+            | ast::Type::Infer(_)
+            | ast::Type::Error(_) => None,
+        };
+        if let Some(site) = site {
+            self.0.record_type_name_reference(site);
+        }
+        ast::walk_type(self, ty);
+    }
+
+    fn visit_trait_bounds(&mut self, bounds: &[ast::TraitBound]) {
+        for bound in bounds {
+            self.0.record_type_name_reference(bound.id);
+        }
+        ast::walk_trait_bounds(self, bounds);
+    }
+
+    fn visit_effect_name(&mut self, effect: &ast::EffectName) {
+        self.0.record_type_name_reference(effect.id);
+    }
+}
+
 /// The sentence every `#[unavailable]` declaration in the program reports,
 /// keyed by the declaration. Only its `impl` or `trait` can qualify the name.
 pub(crate) fn collect_unavailable(
@@ -573,7 +609,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         match ident.segments.as_slice() {
             [] => self.record_reference_to_def(ident.id, case_ast_id),
             [prefix, case] => {
-                self.record_type_name_reference(prefix.id, &prefix.name);
+                self.record_type_name_reference(prefix.id);
                 self.record_reference_to_def(case.id, case_ast_id);
             }
             [.., case] => self.record_reference_to_def(case.id, case_ast_id),
@@ -589,24 +625,28 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         }
     }
 
-    /// Record a use→def edge for a type-name reference (`Type::Named` /
-    /// `Type::Generic`). Generic-parameter names in scope (e.g. `T` in
-    /// `fn f<T>(x: T)`) win over module-level items: jump-to-def lands on
-    /// the `<T>` declaration rather than on a top-level item that happens
-    /// to share the name. Falls through to the symbol-table lookup
-    /// otherwise. `Self` lands on the declaration of the type it stands for.
-    pub(in crate::elaborator) fn record_type_name_reference(&mut self, use_id: AstId, name: &str) {
-        let trait_ctx = &self.annotate_ctx.trait_ctx;
-        if let Some(decl_id) = trait_ctx.type_params.get(name).and_then(|b| b.decl) {
-            self.record_reference(use_id, decl_id);
-        } else if name == "Self" {
-            if let Some(def) = trait_ctx.self_type.and_then(|ty| self.tysys.type_def(ty)) {
-                let node = self.tysys.resolutions.defs().ast_id(def);
-                self.insert_reference(use_id, node);
+    /// Record the use→def edge of a type name written at `site`, as the
+    /// resolver answered it. `Self` inside an `impl` lands on the declaration
+    /// of the type the impl is for; any other binder on its own node.
+    pub(in crate::elaborator) fn record_type_name_reference(&mut self, site: AstId) {
+        let node = match self.tysys.resolutions.get(site) {
+            Resolution::Def(def) => self.tysys.resolutions.defs().ast_id(def),
+            Resolution::Binder(binder) => {
+                let resolutions = &self.tysys.resolutions;
+                let defs = resolutions.defs();
+                match defs.of_ast_id(binder) {
+                    Some(impl_) if defs.kind(impl_) == DefKind::Impl => {
+                        let Some(target) = resolutions.impl_self_decl(binder) else {
+                            return;
+                        };
+                        defs.ast_id(target)
+                    }
+                    Some(_) | None => binder,
+                }
             }
-        } else {
-            self.record_item_reference_by_name(use_id, name);
-        }
+            Resolution::Projection(_) | Resolution::Unresolved => return,
+        };
+        self.insert_reference(site, node);
     }
 
     /// Emit `PrivateNamespacedSymbol` when `name` in `target` is out of this
@@ -1574,8 +1614,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             .collect()
     }
 
-    /// The effect `name` names at `site`, its use recorded; one naming no
-    /// effect is reported.
+    /// The effect `name` names at `site`; one naming no effect is reported.
     pub(crate) fn effect_named_at(
         &mut self,
         site: Option<AstId>,
@@ -1583,12 +1622,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         name: &str,
     ) -> Option<tir::EffectRef> {
         let effect = site.and_then(|site| {
-            match self.tysys.resolutions.get(site) {
-                Resolution::Binder(binder) => self.record_reference(site, binder),
-                Resolution::Def(def) => {
-                    self.record_reference_to_decl(site, def, span);
-                }
-                Resolution::Projection(_) | Resolution::Unresolved => {}
+            if let Resolution::Def(def) = self.tysys.resolutions.get(site) {
+                self.report_unavailable(def, span);
             }
             self.tysys.resolutions.effect_at(site, name)
         });
@@ -1828,6 +1863,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         let mut test_count = 0usize;
         for item in &module.items {
             ForwardDefaults(self).visit_item(item);
+            TypeReferences(self).visit_item(item);
             if let Item::Struct(ast::StructDecl { id, .. })
             | Item::Variant(ast::VariantDecl { id, .. })
             | Item::Newtype(ast::Newtype { id, .. }) = item

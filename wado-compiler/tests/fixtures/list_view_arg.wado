@@ -20,6 +20,7 @@ test "a List, a ByteList, a LinearArray and a list literal convert" {
     assert sum(&linear) == 8;
     linear[0] = 10;
     assert sum(&linear) == 16;
+    assert sum(&mut linear) == 16;
     assert sum([4, 5]) == 9;
 }
 
@@ -43,6 +44,21 @@ test "a view passes on unconverted" {
     let linear = LinearArray::<u8>::filled(3, 7);
     assert pass_on(&linear) == 21;
     assert pass_on([1, 1]) == 2;
+}
+
+fn through_bound<T: ListArg<u8>>(data: &T) -> i32 {
+    return sum(data);
+}
+
+fn through_mut_bound<T: ListArg<u8>>(data: &mut T) -> i32 {
+    return sum(data);
+}
+
+test "a reference to a bounded parameter converts as the parameter" {
+    let list: List<u8> = [1, 2, 3];
+    assert through_bound(&list) == 6;
+    let mut more: List<u8> = [5];
+    assert through_mut_bound(&mut more) == 5;
 }
 
 struct Summer {}
@@ -107,6 +123,20 @@ test "a view pins a generic view parameter's element" {
     let floats: List<f32> = [1.0, 2.0, 3.0];
     let view = floats.lowered();
     assert count(&view) == 3;
+}
+
+test "a reference converts as what it points at" {
+    let mut list: List<u8> = [1, 2, 3];
+    let bytes: ByteList = b"\x01\x02";
+    let mut linear = LinearArray::<u8>::filled(2, 4);
+    let lent = &linear;
+    assert sum(&list) == 6;
+    assert sum(&mut list) == 6;
+    assert sum(&bytes) == 3;
+    assert sum(&lent) == 8;
+    let lent_mut = &mut linear;
+    assert sum(lent_mut) == 8;
+    assert sum(&lent_mut) == 8;
 }
 
 test "a temporary array lives through the call" {

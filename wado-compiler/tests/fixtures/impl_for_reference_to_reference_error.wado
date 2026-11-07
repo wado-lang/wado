@@ -1,0 +1,18 @@
+// An impl is written for a type or for one reference to it. Method lookup
+// reaches neither a reference to a reference nor its default bodies.
+struct Plain {
+    n: i32,
+}
+
+trait Counted with () {
+    fn count(&self) -> i32;
+}
+
+impl Counted for &&Plain {
+    fn count(&self) -> i32 {
+        return self.n;
+    }
+}
+
+__DATA__
+{"compile_error": ":11:18: parse error: an impl is written for a type or one reference to it, not a reference to a reference"}
