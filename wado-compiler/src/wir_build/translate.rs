@@ -40,7 +40,7 @@ pub(super) fn ref_binding_needs_boxing(binding_wir: &WirType, source_wir: &WirTy
     match (binding_wir, source_wir) {
         (WirType::Ref { type_id: bt, .. }, WirType::Ref { type_id: st, .. }) => bt != st,
         // A closure's own handle is an abstract `structref`, so a concrete one
-        // bound over it is its `Box`, as for a scalar.
+        // bound over it is its cell, as for a scalar.
         (WirType::Ref { .. }, _) => true,
         _ => false,
     }

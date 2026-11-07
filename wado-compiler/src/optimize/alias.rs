@@ -350,7 +350,7 @@ fn build_mut_escaped(
 
 /// Memoised "a callee receiving this by value or immutable reference cannot
 /// mutate it" predicate. A value is mutable through a call only if it carries
-/// shared mutable state — a `&mut T`, a `Box` / `List` cell, a raw array, a
+/// shared mutable state — a `&mut T`, a cell, a `List`, a raw array, a
 /// resource handle, or an opaque shape. Anything else is deep-copied on
 /// pass-by-value, so no callee reaches the fields the `ValueGraph` forwards.
 pub(super) struct CallImmutability<'a> {

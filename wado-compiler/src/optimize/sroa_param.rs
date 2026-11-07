@@ -1,5 +1,5 @@
 //! One-field parameter SROA: a function taking `&S` / `&mut S` and
-//! reading exactly one of `S`'s fields — canonically `Box<T>`, but equally an
+//! reading exactly one of `S`'s fields — canonically a cell, but equally an
 //! options record whose other fields `param_spec` already folded away — is
 //! rewritten to take that field, collapsing the call site's `StructLiteral`
 //! allocation to the field's value.

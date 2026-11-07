@@ -983,7 +983,7 @@ fn run_optimization_passes(
                 |p, g| demote_value_copies(p, g, descriptor_cache, &mut heap_effects)
             );
             // Single-field parameter SROA: rewrite functions whose parameter type
-            // is `&S` for a single-field struct (`Box<T>` being the canonical
+            // is `&S` for a single-field struct (a cell being the canonical
             // case) to take the inner scalar directly. Runs before `nir/inline`
             // so the inliner sees post-SROA signatures and can propagate the
             // scalar through call chains. NIR analog of WIR's `sroa_param`; see

@@ -123,7 +123,7 @@ pub(super) fn run_peephole(
                 .map(|b| build_ref_elim(b, LazyHeapFrame::new(effects, params)))
         });
         // Adjacent-use box-local elision runs post-inline only (it collapses the
-        // `Box<T>` shells `sroa_param` / `inline` expose). Its stats come from
+        // cells `sroa_param` / `inline` expose). Its stats come from
         // the pristine post-inline body; the escape set (`address_taken`) is read
         // off the function before its body is borrowed.
         let elide_box_rule = (!pre_inline)
