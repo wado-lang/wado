@@ -48,8 +48,9 @@ pub struct SchemaObject {
     pub comment: Option<String> = null,
     pub title: Option<String> = null,
     pub description: Option<String> = null,
-    /// Empty when `type` is the empty array, which admits nothing.
-    pub type: Option<JsonTypes> = null,
+    /// `none()` when absent, as the meta-schema requires `type` to name at
+    /// least one type.
+    pub type: JsonTypes = JsonTypes::none(),
     pub format: Option<String> = null,
     pub content_encoding: Option<String> = null,
     pub content_media_type: Option<String> = null,
@@ -134,7 +135,7 @@ impl Schema {
 impl SchemaObject {
     /// A schema admitting one JSON type.
     pub fn of_type(t: JsonTypes) -> SchemaObject {
-        return SchemaObject { type: Option::Some(t) };
+        return SchemaObject { type: t };
     }
 
     /// A schema admitting the single value `value`.
@@ -153,7 +154,12 @@ impl SchemaObject {
         k.some("$comment", &self.comment)?;
         k.some("title", &self.title)?;
         k.some("description", &self.description)?;
-        k.some("type", &self.type.map(|types| TypeKeyword { types }))?;
+        let types: Option<TypeKeyword> = if self.type == JsonTypes::none() {
+            null;
+        } else {
+            Option::Some(TypeKeyword { types: self.type });
+        };
+        k.some("type", &types)?;
         k.some("format", &self.format)?;
         k.some("contentEncoding", &self.content_encoding)?;
         k.some("contentMediaType", &self.content_media_type)?;
@@ -418,7 +424,7 @@ internal fn type_names(types: JsonTypes) -> List<String> {
     return names;
 }
 
-/// `type`'s value: one name as a string, any other number as an array of them.
+/// `type`'s value: one name as a string, more as an array of them.
 struct TypeKeyword {
     types: JsonTypes,
 }
@@ -491,7 +497,7 @@ fn read_object(node: &Node, at: &String) -> Result<SchemaObject, SchemaError> {
             "$defs" => s.defs = read_map(v, &here, "schemas", read_schema)?,
             "title" => s.title = Option::Some(read_string(v, &here)?),
             "description" => s.description = Option::Some(read_string(v, &here)?),
-            "type" => s.type = Option::Some(read_types(v, &here)?),
+            "type" => s.type = read_types(v, &here)?,
             "format" => s.format = Option::Some(read_string(v, &here)?),
             "contentEncoding" => s.content_encoding = Option::Some(read_string(v, &here)?),
             "contentMediaType" => s.content_media_type = Option::Some(read_string(v, &here)?),
@@ -592,6 +598,9 @@ fn read_types(v: &Node, at: &String) -> Result<JsonTypes, SchemaError> {
     }
     if !v.kind() matches { Array } {
         return fail(at, "must be a type name or an array of them");
+    }
+    if v.len() == 0 {
+        return fail(at, "must name at least one type");
     }
     let mut types = JsonTypes::none();
     for let [i, item] of v.items().enumerate() {

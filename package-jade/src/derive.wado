@@ -178,7 +178,7 @@ fn enum_schema<E: ReflectEnum<Members = [..M]>, ..M>() -> Schema {
         names.push(Document::string(wire_name(&case, policy)));
     }
     return Schema::Object(SchemaObject {
-        type: Option::Some(JsonTypes::String),
+        type: JsonTypes::String,
         enum: Option::Some(names),
     });
 }
@@ -196,7 +196,7 @@ fn flags_schema<L: ReflectFlags<Members = [..M]>, ..M>() -> Schema {
         names.push(Document::string(wire_name(&bit, policy)));
     }
     let member = SchemaObject {
-        type: Option::Some(JsonTypes::String),
+        type: JsonTypes::String,
         enum: Option::Some(names),
     };
     return set_of(Schema::Object(member));
@@ -204,7 +204,7 @@ fn flags_schema<L: ReflectFlags<Members = [..M]>, ..M>() -> Schema {
 
 fn array_of(items: Schema) -> SchemaObject {
     return SchemaObject {
-        type: Option::Some(JsonTypes::Array),
+        type: JsonTypes::Array,
         items: Option::Some(items),
     };
 }
@@ -223,7 +223,7 @@ impl JsonSchema for bool {
 
 fn integer(minimum: f64, maximum: f64) -> Schema {
     return Schema::Object(SchemaObject {
-        type: Option::Some(JsonTypes::Integer),
+        type: JsonTypes::Integer,
         minimum: Option::Some(minimum),
         maximum: Option::Some(maximum),
     });
@@ -304,7 +304,7 @@ impl JsonSchema for u128 {
 
 fn decimal_string(pattern: String) -> Schema {
     return Schema::Object(SchemaObject {
-        type: Option::Some(JsonTypes::String),
+        type: JsonTypes::String,
         pattern: Option::Some(pattern),
     });
 }
@@ -401,7 +401,7 @@ impl JsonSchema for bf16 {
 impl JsonSchema for char {
     fn json_schema(gen: &mut SchemaGenerator) -> Schema {
         return Schema::Object(SchemaObject {
-            type: Option::Some(JsonTypes::String),
+            type: JsonTypes::String,
             min_length: Option::Some(1),
             max_length: Option::Some(1),
         });
@@ -418,7 +418,7 @@ impl JsonSchema for String {
 /// `x-wado-format` holds, with the standard `format` only when every text the
 /// type writes meets it.
 fn text_of(wado_format: String, format: Option<String> = null) -> Schema {
-    let mut s = SchemaObject { type: Option::Some(JsonTypes::String), format };
+    let mut s = SchemaObject { type: JsonTypes::String, format };
     s.extra["x-wado-format"] = Document::string(wado_format);
     return Schema::Object(s);
 }
@@ -497,7 +497,7 @@ impl JsonSchema for Url {
 
 fn base64url() -> Schema {
     return Schema::Object(SchemaObject {
-        type: Option::Some(JsonTypes::String),
+        type: JsonTypes::String,
         content_encoding: Option::Some("base64url"),
     });
 }
@@ -561,7 +561,7 @@ fn set_of(items: Schema) -> Schema {
 
 fn string_keyed(values: Schema) -> Schema {
     return Schema::Object(SchemaObject {
-        type: Option::Some(JsonTypes::Object),
+        type: JsonTypes::Object,
         additional_properties: Option::Some(values),
     });
 }

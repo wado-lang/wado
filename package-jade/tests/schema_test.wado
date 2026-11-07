@@ -28,11 +28,11 @@ test "one type is a string, more an array" {
     let Schema::Object(o) = Schema::parse(`{"type": ["number", "boolean"]}`).unwrap() else {
         unreachable();
     };
-    assert o.type == Option::Some(JsonTypes::Number | JsonTypes::Boolean);
+    assert o.type == JsonTypes::Number | JsonTypes::Boolean;
 }
 
-test "an empty type array is kept, as it admits nothing" {
-    assert reread(`{"type": []}`) == `{"type":[]}`;
+test "type names at least one type" {
+    assert error_of(`{"type": []}`) == "/type: must name at least one type";
     assert error_of(`{"type": 1}`) == "/type: must be a type name or an array of them";
 }
 

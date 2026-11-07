@@ -149,13 +149,8 @@ impl Validator {
     /// The keywords that assert on the instance's value: `type`, `const`,
     /// `enum`, and those on a number or a string.
     fn assert_value(&self, n: &Compiled, inst: &Node, ip: &String, run: &mut Run) {
-        if let Some(types) = n.type && !has_type(inst, types) {
-            let message = if types == JsonTypes::none() {
-                "no value is valid against an empty `type`";
-            } else {
-                `must be ${type_names(types).join(" or ")}`;
-            };
-            run.fail(ip, &n.at, "type", message);
+        if n.type != JsonTypes::none() && !has_type(inst, n.type) {
+            run.fail(ip, &n.at, "type", `must be ${type_names(n.type).join(" or ")}`);
         }
         if let Some(c) = &n.const && *inst != c.root() {
             run.fail(ip, &n.at, "const", "must equal the constant");
@@ -386,7 +381,7 @@ struct Compiled {
     always: Option<bool> = null,
     reference: Option<i32> = null,
     dynamic_ref: Option<DynamicRef> = null,
-    type: Option<JsonTypes> = null,
+    type: JsonTypes = JsonTypes::none(),
     const: Option<Document> = null,
     enum: Option<List<Document>> = null,
     all_of: List<i32> = [],

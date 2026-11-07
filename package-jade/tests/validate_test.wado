@@ -27,13 +27,6 @@ test "every failing keyword is reported" {
     assert found[1].keyword == "/minimum";
 }
 
-test "an empty type array admits no value" {
-    let found = errors(#"{"type": []}"#, "null");
-    assert found.len() == 1;
-    assert found[0].keyword == "/type";
-    assert found[0].message == "no value is valid against an empty `type`";
-}
-
 test "a reference is followed to its target's keywords" {
     let found = errors(##"{"$defs": {"n": {"type": ["integer", "null"]}}, "$ref": "#/$defs/n"}"##, "1.5");
     assert found[0].keyword == "/$defs/n/type";
