@@ -2341,16 +2341,13 @@ impl<'a> Reify<'a> {
     fn reify_let(&mut self, let_stmt: &ast::LetStmt, ctx: &mut FunctionContext) -> TirStmt {
         // Uninitialised `let x: T;` — the parser guarantees `ty`
         // is present, and annotate that the pattern is a single name or `_`.
-        // The WIR builder zero-initialises the slot; reify emits a Unit
-        // placeholder as the `value` and the `type_id` field carries the
-        // user-declared type.
         let Some(ast_value) = let_stmt.value.as_ref() else {
-            let placeholder = TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, let_stmt.span);
             let Some(binding) = let_stmt.pattern.as_name() else {
                 assert!(
                     matches!(let_stmt.pattern, ast::Pattern::Wildcard),
                     "annotate rejects an uninitialized `let` that destructures"
                 );
+                let placeholder = TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, let_stmt.span);
                 return TirStmt::new(TirStmtKind::Expr(placeholder), let_stmt.span);
             };
             let type_id = self
@@ -2364,15 +2361,11 @@ impl<'a> Reify<'a> {
                 Some(binding.id),
                 binding.span,
             );
-            return TirStmt::new(
-                TirStmtKind::Let {
-                    name: binding.name.to_string(),
-                    local_index,
-                    is_mut,
-                    type_id,
-                    value: placeholder,
-                    storage: LetStorage::Planned,
-                },
+            return tir::declare_stmt(
+                binding.name.to_string(),
+                local_index,
+                is_mut,
+                type_id,
                 let_stmt.span,
             );
         };
@@ -3011,6 +3004,13 @@ impl<'a> Reify<'a> {
                 // The local hands on what the operand evaluated to, which it
                 // owns if the value is affine.
                 Some(local_ref) => {
+                    decls.push(tir::declare_stmt(
+                        cap_name.clone(),
+                        local_index.expect("bound with its reference"),
+                        true,
+                        type_id,
+                        cap_span,
+                    ));
                     stmts.push(assign_stmt(local_ref.clone(), resolved, cap_span));
                     if self.is_affine(expr) {
                         local_ref.clone().moved()

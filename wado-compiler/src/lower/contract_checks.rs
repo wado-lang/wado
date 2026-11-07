@@ -32,7 +32,7 @@ use crate::synthesis::common::{cold_path_stmt, marker_stmt_mark};
 use crate::tir::{
     CallArg, FunctionKind, FunctionRef, LetStorage, LocalFrame, TemplateId, TirBlock, TirExpr,
     TirExprKind, TirFunction, TirLocal, TirParam, TirPattern, TirStmt, TirStmtKind, TirUnaryOp,
-    TypeId, assign_stmt,
+    TypeId, assign_stmt, declare_stmt,
 };
 use crate::tir_visitor::{TirMutVisitor, TirRefVisitor, remap_locals};
 use crate::type_table::TypeTable;
@@ -100,8 +100,11 @@ pub fn lower(flat: &mut FlatPackage) {
             site: None,
             expanding: Vec::new(),
             bound: IndexSet::default(),
+            declared: Vec::new(),
         };
         expander.visit_block(&mut body);
+        let declared = expander.declared;
+        body.stmts.splice(0..0, declared);
         Unwrap.visit_block(&mut body);
         func.body = Some(body);
     }
@@ -657,6 +660,9 @@ struct Expander<'a> {
     expanding: Vec<FunctionId>,
     /// The locals [`Self::bind`] made.
     bound: IndexSet<u32>,
+    /// The declarations of the locals [`Self::bind`] assigns in place, which
+    /// open the body.
+    declared: Vec<TirStmt>,
 }
 
 impl TirMutVisitor for Expander<'_> {
@@ -932,17 +938,21 @@ impl Expander<'_> {
                 ));
                 read.clone()
             }
-            Sink::InPlace => TirExpr::new(
-                TirExprKind::Block(TirBlock::new(
-                    vec![
-                        assign_stmt(read.clone(), value, span),
-                        TirStmt::new(TirStmtKind::Expr(read.clone()), span),
-                    ],
+            Sink::InPlace => {
+                self.declared
+                    .push(declare_stmt(name, index, true, type_id, span));
+                TirExpr::new(
+                    TirExprKind::Block(TirBlock::new(
+                        vec![
+                            assign_stmt(read.clone(), value, span),
+                            TirStmt::new(TirStmtKind::Expr(read.clone()), span),
+                        ],
+                        span,
+                    )),
+                    type_id,
                     span,
-                )),
-                type_id,
-                span,
-            ),
+                )
+            }
         };
         read
     }
