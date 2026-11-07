@@ -78,11 +78,13 @@ A profile can move a row through what the program allocates, because a change of
 allocation moves where collections land. `wado run --gc-log` shows that, and
 `microgpt` needs a new heap sweep when it happens.
 
-A Wado row that moved may have moved through the profile and not the compiler.
+A Wado row that moved may have moved through PGO and not the rest of the compiler.
 Before naming a cause, compare the row's `-f no-pgo` figure with the README's
-previous one. If they match, the profile moved it, and `git log` on the row's
-`pgo/` file shows when. Whether to record the profile again is a separate
-decision, and `benchmark/AGENTS.md` says what a re-recording commits.
+previous one. If they match, PGO moved it: either the row's `pgo/` file, or how
+the compiler uses a profile, such as the thresholds in `pgo.rs` or the inliner's
+hot price. `git log` on each shows what changed, and when both did, isolate them
+before naming one. Whether to record the profile again is a separate decision,
+and `benchmark/AGENTS.md` says what a re-recording commits.
 
 ## Sweeping a compiler knob
 
