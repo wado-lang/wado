@@ -939,6 +939,7 @@ impl FunctionTranslator<'_, '_> {
 
     fn try_boxing_ref(&self, inner: &TirExpr, ref_type: tir::TypeId, span: Span) -> Option<ExprId> {
         let lowering = PlaceRef::of_place(inner, &self.base.type_table.borrow());
+        let new_cell = || Some(self.new_cell(self.convert_operand(inner), ref_type, inner.span));
         match (lowering, &inner.kind) {
             (PlaceRef::Handle, _) => None,
             // `&local` of a cell local: the cell is the address, so collapse to
@@ -955,10 +956,7 @@ impl FunctionTranslator<'_, '_> {
                         cell,
                         span,
                     )),
-                    None => {
-                        let inner_nir = self.convert_operand(inner);
-                        Some(self.new_cell(inner_nir, ref_type, inner.span))
-                    }
+                    None => new_cell(),
                 }
             }
             // `&*r` / `&mut *r` through a cell is the cell: a fresh one would
@@ -986,11 +984,7 @@ impl FunctionTranslator<'_, '_> {
                 },
             ) => Some(self.field_cell(receiver, *field_index, inner.type_id, span)),
             (PlaceRef::FieldCell, _) => unreachable!("a field cell is a field's"),
-            // `&value` of a cell target is a fresh cell holding the value.
-            (PlaceRef::NewCell, _) => {
-                let inner_nir = self.convert_operand(inner);
-                Some(self.new_cell(inner_nir, ref_type, inner.span))
-            }
+            (PlaceRef::NewCell, _) => new_cell(),
         }
     }
 

@@ -11,11 +11,11 @@ use cranelift_entity::EntityRef;
 use crate::builtin_facts::{SideEffect, Storage};
 use crate::graph::{DisjointSets, strongly_connected_components};
 use crate::hashmap::{IndexMap, IndexSet};
+use crate::name::RefKind;
 use crate::nir::StructFieldTypes;
 use crate::nir::{FuncRef, NirFunction, NirUnaryOp};
 use crate::nir_arena::{Body, ExprId, ExprKind, NodeRef, Operand, PatId, PatKind, StmtKind};
 use crate::nir_package::NirPackage;
-use crate::name::RefKind;
 use crate::nir_value_graph::{ValueId, ValueKind};
 use crate::tir::{
     BuiltinDeclaration, BuiltinDeclarations, ObjectTypes, ResolvedType, RetainInto, RetainSpec,

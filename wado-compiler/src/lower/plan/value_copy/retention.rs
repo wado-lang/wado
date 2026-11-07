@@ -15,9 +15,9 @@
 //! can name the function values that reach one, and per functor type — the join
 //! over every expression minting a value of that type — where it cannot.
 
+use super::analyze::{Slot, SlotTypes};
 use super::callgraph::{CallGraph, body_ids};
 use super::funcset::FuncKeyMap;
-use super::analyze::{Slot, SlotTypes};
 use super::place::{PlaceKind, PlaceRef, field_owner, unwrap_ref};
 use super::reach::ClosureCaptures;
 use crate::compiler_trace;
@@ -27,8 +27,8 @@ use crate::hashmap::{IndexMap, IndexSet};
 use crate::lower::plan::value_copy::analyze;
 use crate::tir::{
     BuiltinDeclaration, BuiltinDeclarations, DeclarationTable, FunctionRef, ResolvedType,
-    RetainInto, RetainSpec, ReturnConvention, StructDef, TirBlock, TirExpr, TirExprKind, TirFunction,
-    TirPattern, TirStmt, TirStmtKind, TirUnaryOp, TypeId, capture_source_locals,
+    RetainInto, RetainSpec, ReturnConvention, StructDef, TirBlock, TirExpr, TirExprKind,
+    TirFunction, TirPattern, TirStmt, TirStmtKind, TirUnaryOp, TypeId, capture_source_locals,
 };
 use crate::tir_visitor::TirRefVisitor;
 use crate::token::Span;
@@ -1155,7 +1155,8 @@ impl SlotTypes for RefCarrying<'_> {
     }
 
     fn tuple_elements(&self, tuple: TypeId) -> Option<Vec<TypeId>> {
-        self.type_table.as_tuple(field_owner(tuple, self.type_table))
+        self.type_table
+            .as_tuple(field_owner(tuple, self.type_table))
     }
 }
 
