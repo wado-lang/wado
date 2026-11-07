@@ -191,9 +191,10 @@ impl<M: Message + Default> Each<M> {
                 continue;
             }
             let mut m = M::default();
-            match self.wire_type {
-                Len => r.merge_nested(&mut m)?,
-                _ => r.merge_group(&mut m)?,
+            if self.wire_type == WireType::Len {
+                r.merge_nested(&mut m)?;
+            } else {
+                r.merge_group(&mut m)?;
             }
             return Result::Ok(Option::Some(m));
         }

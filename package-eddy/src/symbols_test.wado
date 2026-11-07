@@ -125,25 +125,27 @@ test "FindReferences tells declarations on one line apart" {
         kind: Function,
     };
     // fn one() -> i32 { return 1; } fn two() -> i32 { return one(); } fn three() -> i32 { return one(); }
-    let symbols = index_of([scip::Index {
-        documents: [
-            scip::Document {
-                relative_path: "oneline.rs",
-                occurrences: [
-                    occ(3, 3, "one().", 1, [0, 0, 29]),
-                    occ(33, 3, "two().", 1, [0, 30, 63]),
-                    occ(55, 3, "one().", 8, []),
-                    occ(67, 5, "three().", 1, [0, 64, 99]),
-                    occ(91, 3, "one().", 8, []),
-                ],
-                symbols: [
-                    info("one().", "one"),
-                    info("two().", "two"),
-                    info("three().", "three"),
-                ],
-            },
-        ],
-    }]);
+    let symbols = index_of([
+        scip::Index {
+            documents: [
+                scip::Document {
+                    relative_path: "oneline.rs",
+                    occurrences: [
+                        occ(3, 3, "one().", 1, [0, 0, 29]),
+                        occ(33, 3, "two().", 1, [0, 30, 63]),
+                        occ(55, 3, "one().", 8, []),
+                        occ(67, 5, "three().", 1, [0, 64, 99]),
+                        occ(91, 3, "one().", 8, []),
+                    ],
+                    symbols: [
+                        info("one().", "one"),
+                        info("two().", "two"),
+                        info("three().", "three"),
+                    ],
+                },
+            ],
+        },
+    ]);
     let ws = Workspace { root: "src", symbols: Some(symbols) };
     let out = ws.call(&"FindReferences", &tool_input(`{"name": "one"}`)).unwrap();
     assert out == "function one (oneline.rs:1): 2 references\noneline.rs:1 in two: \noneline.rs:1 in three: \n";
@@ -167,54 +169,61 @@ test "the symbol tools are offered only with an index" {
 }
 
 test "typed ranges are read as packed ones are" {
-    let symbols = index_of([scip::Index {
-        documents: [
-            scip::Document {
-                relative_path: "typed.rs",
-                occurrences: [
-                    scip::Occurrence {
-                        typed_range: Some(scip::OccurrenceTypedRange::SingleLineRange(scip::SingleLineRange {
-                            line: 1,
-                            start_character: 3,
-                            end_character: 9,
-                        })),
-                        symbol: `${CRATE}target().`,
-                        symbol_roles: 1,
-                        typed_enclosing_range: Some(scip::OccurrenceTypedEnclosingRange::MultiLineEnclosingRange(
-                            scip::MultiLineRange { start_line: 0, start_character: 0, end_line: 3, end_character: 1 },
-                        )),
-                    },
-                    scip::Occurrence {
-                        typed_range: Some(scip::OccurrenceTypedRange::MultiLineRange(scip::MultiLineRange {
-                            start_line: 2,
-                            start_character: 4,
-                            end_line: 2,
-                            end_character: 10,
-                        })),
-                        symbol: `${CRATE}target().`,
-                        symbol_roles: 8,
-                    },
-                    scip::Occurrence {
-                        typed_range: Some(scip::OccurrenceTypedRange::MultiLineRange(scip::MultiLineRange {
-                            start_line: 5,
-                            start_character: 3,
-                            end_line: 5,
-                            end_character: 8,
-                        })),
-                        symbol: `${CRATE}other().`,
-                        symbol_roles: 1,
-                        typed_enclosing_range: Some(scip::OccurrenceTypedEnclosingRange::SingleLineEnclosingRange(
-                            scip::SingleLineRange { line: 5, start_character: 0, end_character: 20 },
-                        )),
-                    },
-                ],
-                symbols: [
-                    scip::SymbolInformation { symbol: `${CRATE}target().`, display_name: "target", kind: Function },
-                    scip::SymbolInformation { symbol: `${CRATE}other().`, display_name: "other", kind: Function },
-                ],
-            },
-        ],
-    }]);
+    let symbols = index_of([
+        scip::Index {
+            documents: [
+                scip::Document {
+                    relative_path: "typed.rs",
+                    occurrences: [
+                        scip::Occurrence {
+                            typed_range: Some(scip::OccurrenceTypedRange::SingleLineRange(scip::SingleLineRange {
+                                line: 1,
+                                start_character: 3,
+                                end_character: 9,
+                            })),
+                            symbol: `${CRATE}target().`,
+                            symbol_roles: 1,
+                            typed_enclosing_range: Some(scip::OccurrenceTypedEnclosingRange::MultiLineEnclosingRange(
+                                scip::MultiLineRange {
+                                    start_line: 0,
+                                    start_character: 0,
+                                    end_line: 3,
+                                    end_character: 1,
+                                },
+                            )),
+                        },
+                        scip::Occurrence {
+                            typed_range: Some(scip::OccurrenceTypedRange::MultiLineRange(scip::MultiLineRange {
+                                start_line: 2,
+                                start_character: 4,
+                                end_line: 2,
+                                end_character: 10,
+                            })),
+                            symbol: `${CRATE}target().`,
+                            symbol_roles: 8,
+                        },
+                        scip::Occurrence {
+                            typed_range: Some(scip::OccurrenceTypedRange::MultiLineRange(scip::MultiLineRange {
+                                start_line: 5,
+                                start_character: 3,
+                                end_line: 5,
+                                end_character: 8,
+                            })),
+                            symbol: `${CRATE}other().`,
+                            symbol_roles: 1,
+                            typed_enclosing_range: Some(scip::OccurrenceTypedEnclosingRange::SingleLineEnclosingRange(
+                                scip::SingleLineRange { line: 5, start_character: 0, end_character: 20 },
+                            )),
+                        },
+                    ],
+                    symbols: [
+                        scip::SymbolInformation { symbol: `${CRATE}target().`, display_name: "target", kind: Function },
+                        scip::SymbolInformation { symbol: `${CRATE}other().`, display_name: "other", kind: Function },
+                    ],
+                },
+            ],
+        },
+    ]);
     let ws = Workspace { root: "src", symbols: Some(symbols) };
     assert ws.call(&"FindSymbol", &tool_input(`{"name": "target"}`)).unwrap() == "typed.rs:2-4: function target\n";
     assert ws.call(&"FindSymbol", &tool_input(`{"name": "other"}`)).unwrap() == "typed.rs:6-6: function other\n";

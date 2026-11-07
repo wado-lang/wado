@@ -275,12 +275,10 @@ impl MessagePlan {
             let Some(element) = &a.element else {
                 continue;
             };
+            w.blank();
             if !opened {
-                w.blank();
                 w.begin(`impl ${self.spec.name}`);
                 opened = true;
-            } else {
-                w.blank();
             }
             let wire = if a.put == Call::Groups { "SGroup" } else { "Len" };
             w.begin(`pub fn ${field}_of<S: AsByteSlice>(input: S) -> ${RUNTIME}::Each<${element}>`);

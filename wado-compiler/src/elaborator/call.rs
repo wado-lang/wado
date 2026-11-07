@@ -5316,12 +5316,11 @@ impl TypeSystem {
 
         let (type_args, bindings) = infer.solve_with_bindings();
 
-        // A slot nothing bound falls back to the bare Variant, which the use
-        // site's expected type answers later. In generic code a bound answer
-        // may name the enclosing parameters, so only the binding map tells an
-        // unbound slot from one bound to an enclosing parameter of its name.
-        // In concrete code any parameter left is unresolved, unless it is a
-        // variable an enclosing call answers.
+        // A slot nothing bound is left to the use site's expected type. Only
+        // the binding map tells it from a slot bound to an enclosing parameter
+        // that shares its name and so its `TypeId`. In concrete code a
+        // parameter left in an answer is unbound too, unless it is a variable
+        // an enclosing call answers.
         let has_unresolved = variant_info
             .type_param_type_ids
             .iter()

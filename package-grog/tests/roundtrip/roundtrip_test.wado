@@ -132,13 +132,13 @@ test "a repeated message field is read one value at a time" {
 
 test "a repeated message read one at a time skips a value of another wire type" {
     // Field 14 as a varint, then as the message `{ zip: 1 }`.
-    let read: List<Result<AccountAddress, grog::DecodeError>> = Account::history_of(&unhex("70057202 1001".replace(" ", ""))).collect();
+    let read: List<Result<AccountAddress, grog::DecodeError>> = Account::history_of(&unhex("700572021001")).collect();
     assert read.len() == 1;
     assert read[0].unwrap().zip == 1;
 }
 
 test "a repeated message read one at a time stops at a malformed input" {
-    let read: List<Result<AccountAddress, grog::DecodeError>> = Account::history_of(&unhex("7203100172")).collect();
+    let read: List<Result<AccountAddress, grog::DecodeError>> = Account::history_of(&unhex("7202100172")).collect();
     assert read.len() == 2;
     assert read[0].unwrap().zip == 1;
     assert read[1] matches { Err(_) };
