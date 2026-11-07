@@ -3,7 +3,17 @@
 //! validate. One allocation per array rather than one per value keeps reading
 //! and walking a document cheap.
 
-use { DEFAULT_MAX_DEPTH, DeserializeError, Serialize, SerializeError, SerializeMap, SerializeSeq, Serializer, deeper } from "core:serde";
+use {
+    DEFAULT_MAX_DEPTH,
+    DeserializeError,
+    Deserializer,
+    Serialize,
+    SerializeError,
+    SerializeMap,
+    SerializeSeq,
+    Serializer,
+    deeper,
+} from "core:serde";
 use { JsonDeserializer, to_bytes } from "core:json";
 use { TreeSet } from "core:collections";
 
@@ -95,11 +105,11 @@ impl Document {
             let slot = match kind {
                 Number => {
                     self.numbers.push(src.numbers[src.slots[i]]);
-                    self.numbers.len() - 1
+                    self.numbers.len() - 1;
                 },
                 String => {
                     self.strings.push(src.strings[src.slots[i]]);
-                    self.strings.len() - 1
+                    self.strings.len() - 1;
                 },
                 Null | Bool | Array | Object => src.slots[i],
             };
@@ -123,7 +133,7 @@ impl Serialize for Document {
     }
 }
 
-/// A value inside a `Document` document.
+/// A value inside a `Document`.
 pub struct Node {
     doc: &Document,
     at: i32,
@@ -219,7 +229,7 @@ impl Eq for Node {
                         return false;
                     }
                 }
-                true
+                true;
             },
             Object => {
                 if self.len() != other.len() {
@@ -233,7 +243,7 @@ impl Eq for Node {
                         return false;
                     }
                 }
-                true
+                true;
             },
         };
     }
@@ -251,7 +261,7 @@ impl Serialize for Node {
                 for let item of self.items() {
                     seq.element(&item)?;
                 }
-                seq.end()
+                seq.end();
             },
             Object => {
                 let mut map = s.begin_map(self.len())?;
@@ -259,7 +269,7 @@ impl Serialize for Node {
                     map.key(&k)?;
                     map.value(&v)?;
                 }
-                map.end()
+                map.end();
             },
         };
     }
@@ -302,7 +312,10 @@ impl Iterator for Members {
         let at = self.next + 1;
         self.next = self.doc.ends[at];
         self.left -= 1;
-        return Option::Some([key, Node { doc: self.doc, at }]);
+        return Option::Some([
+            key,
+            Node { doc: self.doc, at },
+        ]);
     }
 }
 
@@ -326,18 +339,13 @@ impl Reader {
         if b == b'{' {
             return self.object();
         }
-        if b == b't' {
-            self.literal("true")?;
-            self.doc.push(NodeKind::Bool, 1);
-            return Result::Ok(());
-        }
-        if b == b'f' {
-            self.literal("false")?;
-            self.doc.push(NodeKind::Bool, 0);
+        if b == b't' || b == b'f' {
+            let v = self.de.deserialize_bool()?;
+            self.doc.push(NodeKind::Bool, v as i32);
             return Result::Ok(());
         }
         if b == b'n' {
-            self.literal("null")?;
+            self.de.is_null()?;
             self.doc.push(NodeKind::Null, 0);
             return Result::Ok(());
         }
@@ -349,16 +357,6 @@ impl Reader {
         return Result::Ok(());
     }
 
-    fn literal(&mut self, word: String) -> Result<(), DeserializeError> {
-        let start = self.de.pos;
-        let input = self.de.input;
-        if start + word.len() > input.len() || input.slice(start, start + word.len()) != word.as_byte_slice() {
-            return Result::Err(DeserializeError::malformed("invalid literal", start as i64));
-        }
-        self.de.pos = start + word.len();
-        return Result::Ok(());
-    }
-
     /// Opens the container whose opening byte is under the cursor, as a node of
     /// `kind`.
     fn open(&mut self, kind: NodeKind) -> Result<i32, DeserializeError> {
@@ -367,9 +365,8 @@ impl Reader {
         return Result::Ok(self.doc.push(kind, 0));
     }
 
-    fn close(&mut self, at: i32, count: i32) {
+    fn close(&mut self, at: i32) {
         self.de.depth -= 1;
-        self.doc.slots[at] = count;
         self.doc.ends[at] = self.doc.kinds.len();
     }
 
@@ -377,41 +374,39 @@ impl Reader {
     /// the end.
     fn after_member(&mut self, close: i32) -> Result<bool, DeserializeError> {
         let b = self.de.peek_after_whitespace();
-        self.de.advance();
-        if b == b',' {
-            return Result::Ok(false);
-        }
-        if b == close {
-            return Result::Ok(true);
-        }
         if b < 0 {
             return Result::Err(DeserializeError::eof(self.de.pos as i64));
         }
-        return Result::Err(DeserializeError::malformed(`expected ',' or '${close as u8 as char}'`, self.de.pos as i64 - 1));
+        if b != b',' && b != close {
+            return Result::Err(DeserializeError::malformed(
+                `expected ',' or '${close as u8 as char}'`,
+                self.de.pos as i64,
+            ));
+        }
+        self.de.advance();
+        return Result::Ok(b == close);
     }
 
     fn array(&mut self) -> Result<(), DeserializeError> {
         let at = self.open(NodeKind::Array)?;
-        let mut count = 0;
         if self.de.peek_after_whitespace() == b']' {
             self.de.advance();
         } else {
             loop {
                 self.value()?;
-                count += 1;
+                self.doc.slots[at] += 1;
                 if self.after_member(b']')? {
                     break;
                 }
             }
         }
-        self.close(at, count);
+        self.close(at);
         return Result::Ok(());
     }
 
     fn object(&mut self) -> Result<(), DeserializeError> {
         let at = self.open(NodeKind::Object)?;
-        let mut keys: List<i32> = [];
-        let mut seen = TreeSet::<String>::new();
+        let mut seen: Option<TreeSet<String>> = null;
         if self.de.peek_after_whitespace() == b'}' {
             self.de.advance();
         } else {
@@ -425,41 +420,41 @@ impl Reader {
                     return Result::Err(DeserializeError::unexpected_type("expected a string key", start as i64));
                 }
                 let key = self.de.read_json_string()?;
-                if self.repeats(&mut keys, &mut seen, &key) {
+                if self.repeats(at, &mut seen, &key) {
                     let e = DeserializeError::duplicate_field(&key);
                     return Result::Err(DeserializeError { ..e, offset: start as i64 });
                 }
                 self.doc.push_string(key);
                 self.de.expect_char(b':')?;
                 self.value()?;
+                self.doc.slots[at] += 1;
                 if self.after_member(b'}')? {
                     break;
                 }
             }
         }
-        self.close(at, keys.len());
+        self.close(at);
         return Result::Ok(());
     }
 
-    /// Whether `key` repeats one of the keys read so far in this object, which
-    /// are the strings `keys` indexes and, past `LINEAR_KEY_CHECK` of them,
-    /// `seen` too. Records `key` as read.
-    fn repeats(&self, keys: &mut List<i32>, seen: &mut TreeSet<String>, key: &String) -> bool {
-        let n = keys.len();
-        if n == LINEAR_KEY_CHECK {
-            for let i of 0..<n {
-                seen.insert(self.doc.strings[keys[i]]);
-            }
+    /// Whether `key` repeats a key the object at `at` has read so far. Once it
+    /// has read `LINEAR_KEY_CHECK` of them, `seen` holds them all.
+    fn repeats(&self, at: i32, seen: &mut Option<TreeSet<String>>, key: &String) -> bool {
+        if let Some(set) = seen {
+            return !set.insert(*key);
         }
-        keys.push(self.doc.strings.len());
-        if n < LINEAR_KEY_CHECK {
-            for let i of 0..<n {
-                if self.doc.strings[keys[i]] == *key {
-                    return true;
-                }
-            }
-            return false;
+        let object = Node { doc: &self.doc, at };
+        if object.get(key) matches { Some(_) } {
+            return true;
         }
-        return !seen.insert(*key);
+        if object.len() + 1 == LINEAR_KEY_CHECK {
+            let mut set = TreeSet::<String>::new();
+            for let [k, _] of object.entries() {
+                set.insert(k.to_string());
+            }
+            set.insert(*key);
+            *seen = Option::Some(set);
+        }
+        return false;
     }
 }

@@ -1,5 +1,6 @@
 use { Document, NodeKind } from "../src/document.wado";
 use { to_string } from "core:json";
+use { DeserializeError } from "core:serde";
 
 fn round_trip(text: String) -> String {
     return to_string(&Document::parse(text).unwrap()).unwrap();
@@ -68,6 +69,12 @@ test "malformed text is an error" {
     assert Document::parse(`1 2`).is_err();
     assert Document::parse(#`"\uD800"`#).is_err();
     assert Document::parse(`1e400`).is_err();
+}
+
+test "text ending inside a container is an error where it ends" {
+    assert Document::parse(`[1`).unwrap_err() == DeserializeError::eof(2);
+    assert Document::parse(`{"a": 1`).unwrap_err() == DeserializeError::eof(7);
+    assert Document::parse(`{`).unwrap_err() == DeserializeError::eof(1);
 }
 
 test "a repeated key is an error, in a small object and a large one" {

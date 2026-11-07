@@ -116,7 +116,7 @@ impl Schema {
 
     /// Reads the schema `node` holds, as a document's root.
     pub fn from_node(node: &Node) -> Result<Schema, SchemaError> {
-        return read_schema(node, "");
+        return read_schema(node, &"");
     }
 
     /// This schema as an object: `true` is the empty object, and `false` the
@@ -343,11 +343,11 @@ fn fail<T>(at: &String, message: String) -> Result<T, SchemaError> {
     return Result::Err(SchemaError { pointer: *at, message });
 }
 
-fn read_schema(node: &Node, at: String) -> Result<Schema, SchemaError> {
+fn read_schema(node: &Node, at: &String) -> Result<Schema, SchemaError> {
     return match node.kind() {
         Bool => Result::Ok(Schema::Bool(node.as_bool().unwrap())),
-        Object => Result::Ok(Schema::Object(read_object(node, &at)?)),
-        Null | Number | String | Array => fail(&at, "a schema must be an object or a boolean"),
+        Object => Result::Ok(Schema::Object(read_object(node, at)?)),
+        Null | Number | String | Array => fail(at, "a schema must be an object or a boolean"),
     };
 }
 
@@ -359,29 +359,29 @@ fn read_object(node: &Node, at: &String) -> Result<SchemaObject, SchemaError> {
         match key {
             "$schema" => s.dialect = Option::Some(read_string(v, &here)?),
             "$id" => s.id = Option::Some(read_string(v, &here)?),
-            "$vocabulary" => s.vocabulary = read_vocabulary(v, &here)?,
+            "$vocabulary" => s.vocabulary = read_map(v, &here, "booleans", read_bool)?,
             "$anchor" => s.anchor = Option::Some(read_string(v, &here)?),
             "$dynamicAnchor" => s.dynamic_anchor = Option::Some(read_string(v, &here)?),
             "$ref" => s.reference = Option::Some(read_string(v, &here)?),
             "$dynamicRef" => s.dynamic_ref = Option::Some(read_string(v, &here)?),
             "$comment" => s.comment = Option::Some(read_string(v, &here)?),
-            "$defs" => s.defs = read_schema_map(v, &here)?,
+            "$defs" => s.defs = read_map(v, &here, "schemas", read_schema)?,
             "title" => s.title = Option::Some(read_string(v, &here)?),
             "description" => s.description = Option::Some(read_string(v, &here)?),
             "type" => s.type = read_types(v, &here)?,
             "format" => s.format = Option::Some(read_string(v, &here)?),
             "contentEncoding" => s.content_encoding = Option::Some(read_string(v, &here)?),
             "contentMediaType" => s.content_media_type = Option::Some(read_string(v, &here)?),
-            "contentSchema" => s.content_schema = Option::Some(read_schema(v, here)?),
+            "contentSchema" => s.content_schema = Option::Some(read_schema(v, &here)?),
             "const" => s.const_ = Option::Some(value.to_document()),
             "enum" => s.enum_ = Option::Some(read_values(v, &here)?),
             "allOf" => s.all_of = read_schema_list(v, &here)?,
             "anyOf" => s.any_of = read_schema_list(v, &here)?,
             "oneOf" => s.one_of = read_schema_list(v, &here)?,
-            "not" => s.not = Option::Some(read_schema(v, here)?),
-            "if" => s.if_ = Option::Some(read_schema(v, here)?),
-            "then" => s.then = Option::Some(read_schema(v, here)?),
-            "else" => s.else_ = Option::Some(read_schema(v, here)?),
+            "not" => s.not = Option::Some(read_schema(v, &here)?),
+            "if" => s.if_ = Option::Some(read_schema(v, &here)?),
+            "then" => s.then = Option::Some(read_schema(v, &here)?),
+            "else" => s.else_ = Option::Some(read_schema(v, &here)?),
             "multipleOf" => {
                 let m = read_number(v, &here)?;
                 if m <= 0.0 {
@@ -396,25 +396,25 @@ fn read_object(node: &Node, at: &String) -> Result<SchemaObject, SchemaError> {
             "minLength" => s.min_length = Option::Some(read_count(v, &here)?),
             "maxLength" => s.max_length = Option::Some(read_count(v, &here)?),
             "pattern" => s.pattern = Option::Some(read_string(v, &here)?),
-            "items" => s.items = Option::Some(read_schema(v, here)?),
+            "items" => s.items = Option::Some(read_schema(v, &here)?),
             "prefixItems" => s.prefix_items = read_schema_list(v, &here)?,
-            "contains" => s.contains = Option::Some(read_schema(v, here)?),
+            "contains" => s.contains = Option::Some(read_schema(v, &here)?),
             "minContains" => s.min_contains = Option::Some(read_count(v, &here)?),
             "maxContains" => s.max_contains = Option::Some(read_count(v, &here)?),
             "minItems" => s.min_items = Option::Some(read_count(v, &here)?),
             "maxItems" => s.max_items = Option::Some(read_count(v, &here)?),
             "uniqueItems" => s.unique_items = read_bool(v, &here)?,
-            "unevaluatedItems" => s.unevaluated_items = Option::Some(read_schema(v, here)?),
-            "properties" => s.properties = read_schema_map(v, &here)?,
-            "patternProperties" => s.pattern_properties = read_schema_map(v, &here)?,
+            "unevaluatedItems" => s.unevaluated_items = Option::Some(read_schema(v, &here)?),
+            "properties" => s.properties = read_map(v, &here, "schemas", read_schema)?,
+            "patternProperties" => s.pattern_properties = read_map(v, &here, "schemas", read_schema)?,
             "required" => s.required = read_names(v, &here)?,
-            "dependentRequired" => s.dependent_required = read_dependent_required(v, &here)?,
-            "dependentSchemas" => s.dependent_schemas = read_schema_map(v, &here)?,
-            "additionalProperties" => s.additional_properties = Option::Some(read_schema(v, here)?),
-            "propertyNames" => s.property_names = Option::Some(read_schema(v, here)?),
+            "dependentRequired" => s.dependent_required = read_map(v, &here, "string arrays", read_names)?,
+            "dependentSchemas" => s.dependent_schemas = read_map(v, &here, "schemas", read_schema)?,
+            "additionalProperties" => s.additional_properties = Option::Some(read_schema(v, &here)?),
+            "propertyNames" => s.property_names = Option::Some(read_schema(v, &here)?),
             "minProperties" => s.min_properties = Option::Some(read_count(v, &here)?),
             "maxProperties" => s.max_properties = Option::Some(read_count(v, &here)?),
-            "unevaluatedProperties" => s.unevaluated_properties = Option::Some(read_schema(v, here)?),
+            "unevaluatedProperties" => s.unevaluated_properties = Option::Some(read_schema(v, &here)?),
             "default" => s.default_ = Option::Some(value.to_document()),
             "examples" => s.examples = read_values(v, &here)?,
             "deprecated" => s.deprecated = read_bool(v, &here)?,
@@ -447,9 +447,9 @@ fn read_number(v: &Node, at: &String) -> Result<f64, SchemaError> {
     return fail(at, "must be a number");
 }
 
-/// A non-negative integer, which may be spelled with a fraction of zero. One
-/// past `i32::MAX` is held at `i32::MAX`, past every length a list or string
-/// can have.
+/// A non-negative integer, which may be spelled with a fraction of zero. A
+/// count past `i32::MAX` is held at `i32::MAX`, which no list or string length
+/// reaches either.
 fn read_count(v: &Node, at: &String) -> Result<i32, SchemaError> {
     let Some(n) = v.as_f64() else {
         return fail(at, "must be a non-negative integer");
@@ -461,7 +461,7 @@ fn read_count(v: &Node, at: &String) -> Result<i32, SchemaError> {
 }
 
 fn read_values(v: &Node, at: &String) -> Result<List<Document>, SchemaError> {
-    if !(v.kind() matches { Array }) {
+    if !v.kind() matches { Array } {
         return fail(at, "must be an array");
     }
     let mut out: List<Document> = [];
@@ -475,7 +475,7 @@ fn read_types(v: &Node, at: &String) -> Result<JsonTypes, SchemaError> {
     if let Some(name) = v.as_str() {
         return type_named(name, at);
     }
-    if !(v.kind() matches { Array }) || v.len() == 0 {
+    if !v.kind() matches { Array } || v.len() == 0 {
         return fail(at, "must be a type name or a non-empty array of them");
     }
     let mut types = JsonTypes::none();
@@ -504,7 +504,7 @@ fn type_named(name: StrSlice, at: &String) -> Result<JsonTypes, SchemaError> {
 
 /// An array of distinct strings, as `required` and `dependentRequired` hold.
 fn read_names(v: &Node, at: &String) -> Result<List<String>, SchemaError> {
-    if !(v.kind() matches { Array }) {
+    if !v.kind() matches { Array } {
         return fail(at, "must be an array of strings");
     }
     let mut names: List<String> = [];
@@ -520,45 +520,30 @@ fn read_names(v: &Node, at: &String) -> Result<List<String>, SchemaError> {
 }
 
 fn read_schema_list(v: &Node, at: &String) -> Result<List<Schema>, SchemaError> {
-    if !(v.kind() matches { Array }) || v.len() == 0 {
+    if !v.kind() matches { Array } || v.len() == 0 {
         return fail(at, "must be a non-empty array of schemas");
     }
     let mut out: List<Schema> = [];
     for let [i, item] of v.items().enumerate() {
-        out.push(read_schema(&item, `${*at}/${i}`)?);
+        out.push(read_schema(&item, &`${*at}/${i}`)?);
     }
     return Result::Ok(out);
 }
 
-fn read_schema_map(v: &Node, at: &String) -> Result<TreeMap<String, Schema>, SchemaError> {
-    if !(v.kind() matches { Object }) {
-        return fail(at, "must be an object of schemas");
+/// An object whose every member's value `read` reads; `of` names what the
+/// values must be.
+fn read_map<T>(
+    v: &Node,
+    at: &String,
+    of: String,
+    read: fn(&Node, &String) -> Result<T, SchemaError>,
+) -> Result<TreeMap<String, T>, SchemaError> {
+    if !v.kind() matches { Object } {
+        return fail(at, `must be an object of ${of}`);
     }
-    let mut out = TreeMap::<String, Schema>::new();
+    let mut out = TreeMap::<String, T>::new();
     for let [key, value] of v.entries() {
-        out[key.to_string()] = read_schema(&value, `${*at}/${pointer_token(key)}`)?;
-    }
-    return Result::Ok(out);
-}
-
-fn read_dependent_required(v: &Node, at: &String) -> Result<TreeMap<String, List<String>>, SchemaError> {
-    if !(v.kind() matches { Object }) {
-        return fail(at, "must be an object of string arrays");
-    }
-    let mut out = TreeMap::<String, List<String>>::new();
-    for let [key, value] of v.entries() {
-        out[key.to_string()] = read_names(&value, &`${*at}/${pointer_token(key)}`)?;
-    }
-    return Result::Ok(out);
-}
-
-fn read_vocabulary(v: &Node, at: &String) -> Result<TreeMap<String, bool>, SchemaError> {
-    if !(v.kind() matches { Object }) {
-        return fail(at, "must be an object of booleans");
-    }
-    let mut out = TreeMap::<String, bool>::new();
-    for let [key, value] of v.entries() {
-        out[key.to_string()] = read_bool(&value, &`${*at}/${pointer_token(key)}`)?;
+        out[key.to_string()] = read(&value, &`${*at}/${pointer_token(key)}`)?;
     }
     return Result::Ok(out);
 }
