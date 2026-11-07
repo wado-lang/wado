@@ -2039,6 +2039,8 @@ let sig = to_bytes_canonical(&p);            // deterministic, for COSE/CWT
   synchronous import's `list<T>` of numbers is a `&ListView<T>`, which a
   `List<T>` converts to by copying and a `&LinearArray<T>` by lending its block
 - [`core:url`](./stdlib-core-url.md) — WHATWG URL parsing
+- [`core:uri`](./stdlib-core-uri.md) — RFC 3986 URI references as
+  identifiers, any scheme: parse, resolve against a base, write back
 - [`core:prng`](./stdlib-core-prng.md) — seedable, reproducible pseudo-randomness
   for simulation: `Rng`, `VectorRng`, and the keyed `Squares64`
 - [`core:secure_random`](./stdlib-core-secure_random.md) — unpredictable

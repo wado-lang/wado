@@ -160,6 +160,7 @@ stdlib_table! {
     "core:linear" => "core/linear.wado",
     "core:secure_random" => "core/secure_random.wado",
     "core:uuid" => "core/uuid.wado",
+    "core:uri" => "core/uri.wado",
     "core:icu" => "core/icu.wado",
     "core:icu/code_point_set.wado" => "core/icu/code_point_set.wado",
     "core:icu/properties.wado" => "core/icu/properties.wado",
