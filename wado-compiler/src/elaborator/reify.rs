@@ -3004,13 +3004,6 @@ impl<'a> Reify<'a> {
                 // The local hands on what the operand evaluated to, which it
                 // owns if the value is affine.
                 Some(local_ref) => {
-                    decls.push(tir::declare_stmt(
-                        cap_name.clone(),
-                        local_index.expect("bound with its reference"),
-                        true,
-                        type_id,
-                        cap_span,
-                    ));
                     stmts.push(assign_stmt(local_ref.clone(), resolved, cap_span));
                     if self.is_affine(expr) {
                         local_ref.clone().moved()
