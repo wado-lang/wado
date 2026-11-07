@@ -100,7 +100,7 @@ impl Sampling {
             let apart = at.len() > 1;
             for let i of 0..<steps * rows {
                 let row = i % rows;
-                let position = (if apart { at[row] } else { at[0] }) + (i / rows) as i64;
+                let position = if apart { at[row] } else { at[0] } + (i / rows) as i64;
                 let key = if apart { 0 } else { row };
                 let hash = keyed.at((position << 32 | key as i64) as u64);
                 data[i] = (hash >> 40) as f32 / (1 << 24) as f32;
@@ -153,7 +153,10 @@ impl<affine G: Graph> Decoding<G> {
         let rows = ended.len();
         return Decoding {
             steps: scalar(g, steps as i64),
-            position: g.upload(&Tensor::<i64, [Slots]> { data: at, extents: [at.len()] }),
+            position: g.upload(&Tensor::<i64, [Slots]> {
+                data: at,
+                extents: [at.len()],
+            }),
             tokens: g.upload(&Tensor::<i64, [Slots, Picks]> {
                 data: List::<i64>::filled(rows * held, 0),
                 extents: [rows, held],
@@ -321,7 +324,15 @@ fn picked<affine G: Graph>(
         let wanted: G::Tensor<f32, [Slots]> = g.broadcast_in_dim(&decoding.top_p, rows, []);
         probabilities = kept_from(g, &probabilities, &probabilities, &probabilities, &wanted);
     }
-    let draw = strided_gather::<G, f32, [Picks, Slots], [One, Slots]>(g, &decoding.draws, 0, &shared(g, step), null, 1, 1);
+    let draw = strided_gather::<G, f32, [Picks, Slots], [One, Slots]>(
+        g,
+        &decoding.draws,
+        0,
+        &shared(g, step),
+        null,
+        1,
+        1,
+    );
     return categorical(g, &probabilities, &g.reshape(&draw, rows));
 }
 

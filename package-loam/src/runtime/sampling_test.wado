@@ -202,10 +202,17 @@ fn drawn_at(at: List<i64>, rows: i32, steps: i32) -> List<i64> {
     let mut tokens = decoding.tokens;
     let mut finished = decoding.finished;
     for let step of 0..<steps {
-        let next = stepped::<Cpu, [Slots, One, Vocabulary]>(&mut cpu, &even, &decoding, &tokens, &finished, &Tensor::<i64, []> {
-            data: [step as i64],
-            extents: [],
-        });
+        let next = stepped::<Cpu, [Slots, One, Vocabulary]>(
+            &mut cpu,
+            &even,
+            &decoding,
+            &tokens,
+            &finished,
+            &Tensor::<i64, []> {
+                data: [step as i64],
+                extents: [],
+            },
+        );
         tokens = next.tokens;
         finished = next.finished;
     }

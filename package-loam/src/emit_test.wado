@@ -1784,11 +1784,17 @@ test "rows of their own lengths decode at pasts of their own, which requests in 
     let out = decoded_from(ROWS_DECODER).unwrap();
     assert out.contains("pub fn decode_rows<affine Bk: Graph>(");
     assert out.contains(", pasts: &List<i64>, steps: i32, sampling: &Sampling, model: &mut Model<Bk>) -> Decoded<Bk>");
-    assert out.contains("dim_P: backend.upload(&Tensor::<i64, [Slots]> { data: pasts.into_iter().map(|past| dim_P + past - (dim_P)).collect(), extents: [pasts.len()] })");
-    assert out.contains("let decoding = Decoding::new(backend, sampling, ended, steps, pasts.into_iter().map(|past| dim_T + past - (dim_P)).collect());");
+    assert out.contains(
+        "dim_P: backend.upload(&Tensor::<i64, [Slots]> { data: pasts.into_iter().map(|past| dim_P + past - (dim_P)).collect(), extents: [pasts.len()] })",
+    );
+    assert out.contains(
+        "let decoding = Decoding::new(backend, sampling, ended, steps, pasts.into_iter().map(|past| dim_T + past - (dim_P)).collect());",
+    );
     assert out.contains("pub struct Requests<affine Bk: Holds> {");
     assert out.contains("pub fn place(&mut self, backend: &mut Bk, slot: i32, ");
-    assert out.contains("pub fn decode(&mut self, backend: &mut Bk, steps: i32, sampling: &Sampling, model: &mut Model<Bk>) -> Tensor<i64, [Slots, Picks]>");
+    assert out.contains(
+        "pub fn decode(&mut self, backend: &mut Bk, steps: i32, sampling: &Sampling, model: &mut Model<Bk>) -> Tensor<i64, [Slots, Picks]>",
+    );
 }
 
 test "rows that share their lengths decode no request apart" {

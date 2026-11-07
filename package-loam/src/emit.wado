@@ -1580,8 +1580,7 @@ fn prepared_entry(
             let data = match &apart {
                 None => `[${host}]`,
                 Some(total) => if moves_a_step(&symbol, total, owed)? {
-                    let past = symbols.spell(&Poly::symbol(&owed[0].0.symbol))?;
-                    `pasts.into_iter().map(|past| ${host} + past - (${past})).collect()`;
+                    at_each_past(host, symbols.spell(&Poly::symbol(&owed[0].0.symbol))?);
                 } else {
                     `List::<i64>::filled(pasts.len(), ${host})`;
                 },
@@ -1731,9 +1730,17 @@ fn emit_decode(
     let ids = names.get(&axes.ids);
     let chooses = !entry.chosen.is_empty();
     let total = symbols.spell(&Poly::symbol(&axes.total))?;
+    let mut apart_checks: List<String> = [];
     let at = if apart {
+        // `emitted` has seen every grown past share one length.
         let past = symbols.spell(&Poly::symbol(&owed[0].0.symbol))?;
-        `pasts.into_iter().map(|past| ${total} + past - (${past})).collect()`;
+        apart_checks = [
+            `assert pasts.len() == rows, "decode_rows takes a past for each row";`, "for let past of pasts {",
+            `    refuse(unmet(*past, "a row's past must not be negative"));`,
+            `    refuse(unmet(${past} - *past - steps as i64, "a row's past and its steps must fit the mask"));`, "}",
+            "let mut pasts = *pasts;", "while pasts.len() < ended.len() {", "    pasts.push(0);", "}",
+        ];
+        at_each_past(total, past);
     } else {
         `[${total}]`;
     };
@@ -1776,11 +1783,11 @@ fn emit_decode(
         "_",
     );
 
-    let mut decoded_type = StructSpec::new(DECODED_TYPE, Vis::Pub);
-    decoded_type.add_generic(HOLDS_BOUND);
-    decoded_type.add_pub_field("tokens", "Tensor<i64, [Slots, Picks]>");
-    decoded_type.add_pub_field("cache", `${CACHE}<${BACKEND_PARAM}>`);
     if !apart {
+        let mut decoded_type = StructSpec::new(DECODED_TYPE, Vis::Pub);
+        decoded_type.add_generic(HOLDS_BOUND);
+        decoded_type.add_pub_field("tokens", "Tensor<i64, [Slots, Picks]>");
+        decoded_type.add_pub_field("cache", `${CACHE}<${BACKEND_PARAM}>`);
         w.blank();
         w.line("/// What `decode` picked, by row, and the cache, which holds each of them but the last.");
         decoded_type.emit(w);
@@ -1799,26 +1806,18 @@ fn emit_decode(
     let mut body: List<String> = [
         `refuse(unmet(steps as i64 - 1, "decode takes at least one step"));`,
         wado`refuse(extent_mismatch("${axes.ids}", "${ids_axis.name}", ${ids}.extents[1], "1", 1));`,
-        `let rows = ${ids}.extents[0];`,
-        `let mut ended = sampling.ended(&${ids}.data);`,
+        `let rows = ${ids}.extents[0];`, `let mut ended = sampling.ended(&${ids}.data);`,
     ];
     // A row the capacity adds has ended, and its past is empty.
-    let held_rows = if rows_axis.extent.lone_symbol() matches { Some(r) && padded.contains(&r) } { "capacity_of(rows)" } else { "rows" };
+    let held_rows = if rows_axis.extent.lone_symbol() matches { Some(r) && padded.contains(&r) } {
+        "capacity_of(rows)";
+    } else {
+        "rows";
+    };
     body.push(`while ended.len() < ${held_rows} {`);
     body.push("    ended.push(true);");
     body.push("}");
-    if apart {
-        let past = symbols.spell(&Poly::symbol(&owed[0].0.symbol))?;
-        body.push(`assert pasts.len() == rows, "decode_rows takes a past for each row";`);
-        body.push("for let past of pasts {");
-        body.push(`    refuse(unmet(*past, "a row's past must not be negative"));`);
-        body.push(`    refuse(unmet(${past} - *past - steps as i64, "a row's past and its steps must fit the mask"));`);
-        body.push("}");
-        body.push("let mut pasts = *pasts;");
-        body.push("while pasts.len() < ended.len() {");
-        body.push("    pasts.push(0);");
-        body.push("}");
-    }
+    body.extend(&apart_checks);
     body.extend(&lines);
     for let line of entry_lines(context, &symbols, &body) {
         w.line(&line);
@@ -1830,6 +1829,12 @@ fn emit_decode(
         emit_recorded(w, names, &taken, entry.first_weight, &[], crossing, chooses, true);
     }
     return Result::Ok(());
+}
+
+/// `host`, a length the host spells at the past `past`, moved to each row's
+/// own past in the generated `pasts`.
+fn at_each_past(host: String, past: String) -> String {
+    return `pasts.into_iter().map(|past| ${host} + past - (${past})).collect()`;
 }
 
 /// `Requests`: the requests that decode side by side, one in each row of a
@@ -1846,7 +1851,6 @@ fn emit_requests(w: &mut CodeWriter, context: &EntryContext, axes: &DecodingAxes
         let shape = checked.shapes[past];
         let grown = owed.into_iter().find(|o| o.0.past == past).unwrap().0.axis;
         let mut extents: List<String> = [];
-        let mut count: List<String> = [];
         for let [i, axis] of shape.axes.into_iter().enumerate() {
             // The slots are the rows, the one length `Cache::empty` takes.
             let extent = if i == 0 {
@@ -1862,13 +1866,12 @@ fn emit_requests(w: &mut CodeWriter, context: &EntryContext, axes: &DecodingAxes
                 return;
             };
             extents.push(extent);
-            count.push(extent);
         }
         let ident = names.get(&past);
         let primitive = checked.primitives[past];
         let typed = `${bk}, ${primitive}, [${axis_list(&shape)}]`;
         empties.push(
-            `${ident}: backend.upload(&Tensor::<${primitive}, [${axis_list(&shape)}]> { data: List::<${primitive}>::filled(${count.join(
+            `${ident}: backend.upload(&Tensor::<${primitive}, [${axis_list(&shape)}]> { data: List::<${primitive}>::filled(${extents.join(
                 " * ",
             )}, ${zero_of(&primitive)}), extents: [${extents.join(", ")}] }),`,
         );
@@ -1898,8 +1901,9 @@ fn emit_requests(w: &mut CodeWriter, context: &EntryContext, axes: &DecodingAxes
     let mask = names.get(&axes.mask);
     let logits = names.get(&axes.logits);
     let [ids_type, mask_type] = [
-        `Tensor::<i64, [${axis_list(&checked.shapes[axes.ids])}]>`,
-        `Tensor::<i64, [${axis_list(&checked.shapes[axes.mask])}]>`,
+        `Tensor::<i64, [${axis_list(&checked.shapes[axes.ids])}]>`, `Tensor::<i64, [${axis_list(
+            &checked.shapes[axes.mask],
+        )}]>`,
     ];
     let mut requests = StructSpec::new(REQUESTS, Vis::Pub);
     requests.add_generic(HOLDS_BOUND);
@@ -1919,7 +1923,9 @@ fn emit_requests(w: &mut CodeWriter, context: &EntryContext, axes: &DecodingAxes
     held.emit_begin(w);
     w.line("/// `slots` empty slots of `capacity` positions, each a capacity of its own.");
     w.line(`pub fn new(backend: &mut ${bk}, slots: i32, capacity: i32) -> ${REQUESTS}<${bk}> with _ {`);
-    w.line(`    assert capacity_of(slots) == slots && capacity_of(capacity) == capacity, "a slot count and a capacity are each one capacity_of gives";`);
+    w.line(
+        `    assert capacity_of(slots) == slots && capacity_of(capacity) == capacity, "a slot count and a capacity are each one capacity_of gives";`,
+    );
     w.line(`    return ${REQUESTS} {`);
     w.line(`        cache: ${CACHE} {`);
     for let line of empties {
@@ -1936,7 +1942,9 @@ fn emit_requests(w: &mut CodeWriter, context: &EntryContext, axes: &DecodingAxes
     w.line("/// Runs a request's prompt alone through `compute` and puts it in `slot`:");
     w.line("/// its cache, its past, and the token `sampling` picks after it, which this");
     w.line("/// returns.");
-    w.line(`pub fn place(&mut self, backend: &mut ${bk}, slot: i32, ${place_params.join(", ")}, sampling: &Sampling, model: &mut ${MODEL}<${bk}>) -> i64 with _ {`);
+    w.line(
+        `pub fn place(&mut self, backend: &mut ${bk}, slot: i32, ${place_params.join(", ")}, sampling: &Sampling, model: &mut ${MODEL}<${bk}>) -> i64 with _ {`,
+    );
     w.line(`    assert !self.active[slot], "a request is placed in an empty slot";`);
     w.line("    self.cache.retain(backend);");
     w.line(`    let passed = compute(backend, ${compute_args.join(", ")}, &${CACHE}::empty(backend, 1), 0, model);`);
@@ -1962,9 +1970,11 @@ fn emit_requests(w: &mut CodeWriter, context: &EntryContext, axes: &DecodingAxes
     w.blank();
     w.line("/// `steps` tokens after each slot's last, by slot, every slot in one call.");
     w.line("/// An empty slot's are of no request.");
-    let mut params = ([`&mut self`, `backend: &mut ${bk}`] as List<String>);
+    let mut params = [`&mut self`, `backend: &mut ${bk}`] as List<String>;
     params.extend(&decode_params);
-    w.line(`pub fn decode(${params.join(", ")}, steps: i32, sampling: &Sampling, model: &mut ${MODEL}<${bk}>) -> Tensor<i64, [Slots, Picks]> with _ {`);
+    w.line(
+        `pub fn decode(${params.join(", ")}, steps: i32, sampling: &Sampling, model: &mut ${MODEL}<${bk}>) -> Tensor<i64, [Slots, Picks]> with _ {`,
+    );
     w.line("    let slots = self.pasts.len();");
     w.line(`    let ids = ${ids_type} { data: self.tokens, extents: [slots, 1] };`);
     w.line("    let mut open: List<i64> = [];");
@@ -1973,7 +1983,9 @@ fn emit_requests(w: &mut CodeWriter, context: &EntryContext, axes: &DecodingAxes
     w.line("        open.extend(&List::<i64>::filled(self.capacity - to_extent(past + 1), 0));");
     w.line("    }");
     w.line(`    let mask = ${mask_type} { data: open, extents: [slots, self.capacity] };`);
-    w.line(`    let decoded = ${DECODE_ROWS}(backend, ${decode_args.join(", ")}, &self.cache, &self.pasts, steps, sampling, model);`);
+    w.line(
+        `    let decoded = ${DECODE_ROWS}(backend, ${decode_args.join(", ")}, &self.cache, &self.pasts, steps, sampling, model);`,
+    );
     w.line("    self.cache = decoded.cache;");
     w.line("    for let slot of 0..<slots {");
     w.line("        if self.active[slot] {");
@@ -2076,7 +2088,9 @@ fn emit_decoded(
     w.line(
         `    let next = stepped::<${bk}, [${logits_axes}]>(backend, &${logits}, decoding, &tokens, &finished, step);`,
     );
-    w.line(`    let at = row_binary::<${bk}>(backend, Binary::Add, &decoding.position, &shared::<${bk}>(backend, step));`);
+    w.line(
+        `    let at = row_binary::<${bk}>(backend, Binary::Add, &decoding.position, &shared::<${bk}>(backend, step));`,
+    );
     let mut returned: List<String> = [];
     for let [k, a] of carried.into_iter().enumerate() {
         returned.push(if a.tensor == axes.ids {

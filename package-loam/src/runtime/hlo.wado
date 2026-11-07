@@ -769,7 +769,10 @@ pub fn strided_gather<affine G: Graph, E: Element, In, Out>(
     sizes[axis] = 1;
     let dims = GatherDims {
         offset_dims: (2..<rank).collect(),
-        collapsed_slice_dims: [i32::min(r, axis), i32::max(r, axis)],
+        collapsed_slice_dims: [
+            i32::min(r, axis),
+            i32::max(r, axis),
+        ],
         start_index_map: [r, axis],
         index_vector_dim: 2,
         slice_sizes: sizes,
