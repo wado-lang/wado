@@ -31,12 +31,13 @@ Entries state the symptom, how to reproduce it, and anything already measured �
 
 ### Robustness on hostile input
 
+- [ ] **Mid operands nested in each other take time growing as the fourth power of the depth.** With `lr_mid_operand.g4`, `x` followed by `n` × `between y` and then `n` × `and z` takes 0.18M fuel at `n = 4`, 1.1M at 8, 16M at 16 and 349M at 32 under `never`. An `and` or `or` chain after one `between` grows linearly.
 - [ ] **A generated parser exhausts the Wasm call stack on deeply nested input.** It traps instead of reporting a diagnostic. Grog's `Protobuf.g4` parser traps in `scan_message_def` / `scan_message_body` / `scan_message_element` on 20000 nested `message M {` … `}`. The parse has no nesting limit to report against.
 
 ### Pipeline and tooling correctness
 
 - [ ] **`atn: "verify"` leaves part of `never` unchecked.** It builds `never`'s tree and checks against the simulator each rule and group tournament, each contested `?` `*` `+`, and each pick of a static left-recursion loop. A check on input that has no parse can panic where both sides are recovering. Two kinds of decision are still unchecked:
-  - A decision a predicate gates, since the simulator is handed no predicate's verdict.
+  - A decision that meets a predicate at its alternatives' left edge, or at the left edge of a rule one of them opens with, since the simulator is handed no predicate's verdict.
   - A `?` at a rule's end that the caller's FOLLOW gates, which `auto` hands the simulator in a rule that asks it anyway. On `e : e '.' ID | 'new' e args | 'new' e | e args | ID e? | args ; args : '(' e? ')' ;`, every input where `never`'s tree differs from the jar's (`new a b ( ) ( )`, `a new b c ( )`, `new a ( ) . b`) panicked at the atom's tournament check first.
 
   The generated SQLite parser is 1.0 MB under `never`, 2.0 MB under `verify`, 1.8 MB under `auto` and 9.5 MB under `always`.

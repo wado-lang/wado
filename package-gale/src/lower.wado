@@ -755,11 +755,12 @@ fn lower_lr_rule(rule: &ParserRule, ctx: &mut LowerContext) -> LeftRecursiveRule
         stamp_lr_atom_mid_operands(&mut atom, rule, &non_lr_indices, &lr_alts, ctx, &mut cont_rests);
     }
     stamp_lr_self_ref_min_prec(&mut lr_alts, rule, ctx, atn_class, &mut cont_rests);
-    // The simulator is handed no predicate's verdict, so a loop a predicate
-    // gates stays unchecked.
     let loop_checked = !atn_class
         && ctx.settings.atn.verifies()
-        && !lr_alts.iter_ref().any(|a| ctx.alt_has_gate(&rule.alternatives[a.alt_index]));
+        && !lr_alts.iter_ref().any(|a| {
+            let alt = &rule.alternatives[a.alt_index];
+            return ctx.meets_predicate_at(alt, 0) || ctx.meets_predicate_at(alt, 1);
+        });
     if loop_checked {
         ctx.mark_checks_with_simulator();
     }
@@ -969,10 +970,10 @@ fn stamp_lr_self_ref_min_prec(
 }
 
 /// Whether what follows a mid operand, `elements[from..]`, can start with a
-/// token the loop takes, or be empty. The operand's loop could then climb past
-/// what its alternative needs, so it is gated: it stops at the last boundary
-/// where that rest still parses. Elsewhere, as in `'(' e ')'`, the loop stops
-/// by itself.
+/// token the loop takes, with any token (`.`, `~x`), or be empty. The
+/// operand's loop could then climb past what its alternative needs, so it is
+/// gated: it stops at the last boundary where that rest still parses.
+/// Elsewhere, as in `'(' e ')'`, the loop stops by itself.
 fn mid_operand_rest_contested(
     elements: &List<Element>,
     from: i32,
@@ -980,6 +981,7 @@ fn mid_operand_rest_contested(
     ctx: &mut LowerContext,
 ) -> bool {
     return ctx.analysis.tail_is_nullable_deep(elements, from)
+        || ctx.analysis.elements_reach_open_end(elements, from)
         || sets_overlap(&ctx.analysis.first_of_elements_from(elements, from), lr_suffix_first_tokens);
 }
 
@@ -2949,7 +2951,9 @@ fn with_group_atn_site(op: Op, g: &GroupElement, ctx: &mut LowerContext) -> Op {
 /// tournament among alternatives sharing a first token, which `always` hands
 /// the simulator. Else -1.
 fn group_atn_check_site(g: &GroupElement, classes: &List<AltClass>, ctx: &mut LowerContext) -> i32 {
-    if !ctx.settings.atn.verifies() || !decision_partition(classes).iter_ref().any(|b| b.alts.len() > 1) {
+    if !ctx.settings.atn.verifies()
+        || !decision_partition(classes).iter_ref().any(|b| b.alts.len() > 1)
+        || g.alternatives.iter_ref().any(|a| ctx.meets_predicate_at(a, 0)) {
         return -1;
     }
     ctx.mark_checks_with_simulator();
@@ -4302,7 +4306,10 @@ fn lower_repeat_exit_stamps<S: AsStrSlice>(
         && !by_atn
         && repeat_contested(body_admits, caller_follow_first, alt_elements, index, ctx, reaches_rule_tail);
     let contested = contested_somewhere && ctx.settings.atn matches { Always };
-    let checked = contested_somewhere && !non_greedy && ctx.settings.atn.verifies();
+    let checked = contested_somewhere
+        && !non_greedy
+        && ctx.settings.atn.verifies()
+        && !ctx.meets_predicate_at_element(&alt_elements[index]);
     if by_atn {
         ctx.mark_asks_simulator("a non-greedy loop's exit");
     } else if contested {

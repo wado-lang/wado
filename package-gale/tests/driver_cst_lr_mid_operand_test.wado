@@ -3,8 +3,9 @@
 //! alternative can still find its own. Expected trees are the published ANTLR4
 //! jar's (black-box oracle).
 //!
-//! The loop entry is decided per token without the simulator: it scans the
-//! operator's suffix, then checks that the caller's continuation is still there.
+//! The operand's loop is decided without the simulator: it climbs greedily and
+//! stops at the last iteration boundary where a scan of what its alternative
+//! still needs succeeds.
 
 use g from "./grammars/lr_mid_operand.g4"
     with {
@@ -77,4 +78,16 @@ test "a mid operand holding another mid-operand alternative" {
 
 test "binary and chains left-associatively" {
     assert_tree("a and b and c", "(s (e (e (e a) and (e b)) and (e c)))");
+}
+
+// Each operand in the chain stops by itself, so finding where the middle
+// operand stops reads the chain once rather than from every operand.
+test "a long chain after a mid operand parses" {
+    for let op of ["and", "or"] {
+        let mut input = "a between b and c";
+        for let _ of 0..<2000 {
+            input.push_str(` ${op} c`);
+        }
+        assert g::parse(&input).ok();
+    }
 }

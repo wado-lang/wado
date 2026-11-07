@@ -1131,6 +1131,81 @@ new new a ( ) . b ( c ) + d . e => (s (e (e new (e (e new (e a) (args ( ))) . b)
 ";
 }
 
+// `'pre' e '!'?` can end with its operand, so the operand stops where the `new`
+// around it still finds its `args`. The trees are the jar's.
+test "a mid operand whose rest can be empty leaves the enclosing rest its tokens" {
+    let g4 = "grammar N;
+s : e EOF ;
+e : 'new' e args | 'pre' e '!'? | e args | ID ;
+args : '(' e? ')' ;
+ID : [a-z]+ ;
+WS : ' ' -> skip ;
+";
+    assert parses(g4, "s", ["new pre a ( )", "new pre a ( ) ( )"]) == "new pre a ( ) => (s (e new (e pre (e a)) (args ( ))))
+new pre a ( ) ( ) => (s (e new (e pre (e (e a) (args ( )))) (args ( ))))
+";
+}
+
+// The rest `. e` opens with any token, so the operand stops where one is left
+// for the wildcard. The trees are the jar's.
+test "a mid operand whose rest opens with a wildcard leaves it a token" {
+    let g4 = "grammar W;
+s : e EOF ;
+e : e 'x' e . e | e '+' e | ID ;
+ID : [a-z]+ ;
+WS : ' ' -> skip ;
+";
+    assert parses(g4, "s", ["a x b + c", "a x b x c + d + e + f"]) == "a x b + c => (s (e (e a) x (e b) + (e c)))
+a x b x c + d + e + f => (s (e (e a) x (e (e b) x (e (e c) + (e d)) + (e e)) + (e f)))
+";
+}
+
+// The rest is scanned under the gate the operand left: the `flag = 1` ahead of
+// the operand already ran. The trees are the jar's.
+test "a mid operand's rest is scanned under the gate the operand left" {
+    let g4 = "grammar G;
+@members { int flag = 0; }
+s : e EOF ;
+e : 'new' {flag=1;} e args | e args | ID {flag=0;} ;
+args : {flag==0}? '(' ')' ;
+ID : [a-z]+ ;
+WS : ' ' -> skip ;
+";
+    assert parses(g4, "s", ["new a ( ) ( )", "new new a ( ) ( ) ( )"]) == "new a ( ) ( ) => (s (e new (e (e a) (args ( ))) (args ( ))))
+new new a ( ) ( ) ( ) => (s (e new (e new (e (e a) (args ( ))) (args ( ))) (args ( ))))
+";
+}
+
+// The simulator is handed no predicate's verdict, so `atn: \"verify\"` leaves a
+// decision unchecked that meets one through a rule it calls: the loop's `op`,
+// the repeat's `q`, the group's `r`. The trees are the jar's.
+test "atn verify leaves a decision meeting a called rule's predicate unchecked" {
+    let verify = GenerateOptions { atn: AtnMode::Verify };
+    assert parses("grammar P;
+s : e ('+' ID)? EOF ;
+e : e op e | ID ;
+op : {false}? '+' | '-' ;
+ID : [a-z]+ ;
+WS : ' ' -> skip ;
+", "s", ["a + b", "a - b + c"], &verify) == "a + b => (s (e a) + b)
+a - b + c => (s (e (e a) (op -) (e b)) + c)
+";
+    assert parses("grammar R;
+s : q* 'a'? EOF ;
+q : {false}? 'a' | 'b' ;
+WS : ' ' -> skip ;
+", "s", ["a", "b a"], &verify) == "a => (s a)
+b a => (s (q b) a)
+";
+    assert parses("grammar T;
+s : (r | 'a' 'c'?) EOF ;
+r : {false}? 'a' 'c' | 'b' ;
+WS : ' ' -> skip ;
+", "s", ["a c", "b"], &verify) == "a c => (s a c)
+b => (s (r b))
+";
+}
+
 test "atn never refuses a decision only the simulator makes" {
     let never = gen_with("grammar T;
 r : A?? A B ;

@@ -900,9 +900,12 @@ fn gen_scan_lr_functions<S: AsStrSlice>(
 
 /// A gated rule's walk, `walk`: the atom, then the loop up to its cut, the last
 /// iteration boundary at which the invocation's continuation `lr_cont` holds.
-/// The loop goes on past a boundary where it does not, since a later one may
-/// hold. Each iteration hands its suffix the loop's own continuation, so an
-/// operand inside it stops only where the loop cannot go on to a cut.
+/// The loop climbs greedily and then tries its boundaries from the last one
+/// back, so a long chain checks the continuation where it ends, and a loop
+/// that takes no iteration checks nothing. `X__loop` answers only for a
+/// boundary past the atom, or -1. Each iteration hands its suffix the loop's
+/// own continuation, so an operand inside it stops only where the loop cannot
+/// go on to a cut.
 fn gen_scan_lr_cut_walk<S: AsStrSlice, S1: AsStrSlice>(
     w: &mut CodeWriter,
     rule: &ParserRule,
@@ -941,14 +944,22 @@ fn gen_scan_lr_cut_walk<S: AsStrSlice, S1: AsStrSlice>(
     ctx.cursor.begin_ref_frame();
     loop_walk.emit_begin(w);
     w.line("let mut pos = pos;");
-    w.line(
-        `let mut good = if ${lr_cont_holds_call(&fn_name, "pos", ctx)} { pos } else { -1 };`,
-    );
-    gen_scan_gate_save(w, ctx, "good", true);
+    gen_scan_gate_save(w, ctx, "start");
+    w.line("let mut lr_bounds: List<i32> = [];");
+    if ctx.settings.emit_scan_gate() {
+        w.line(`let mut lr_bound_gates: List<${SCAN_GATE_TYPE}> = [];`);
+    }
     bind_lr_loop_cont(w);
     gen_lr_suffix_dispatch(w, fn_name, rule, lr_alts, lr_dispatch, ctx, true);
-    gen_scan_gate_restore(w, ctx, "good");
-    w.line("return good;");
+    w.line("if lr_outer == 0 { return pos; }");
+    w.begin("for let mut i = lr_bounds.len() - 1; i >= 0; i -= 1");
+    if ctx.settings.emit_scan_gate() {
+        w.line(`${ctx.scan_gate_place()} = lr_bound_gates[i];`);
+    }
+    w.line(`if ${lr_cont_holds_call(&fn_name, "lr_bounds[i]", ctx, "lr_outer")} { return lr_bounds[i]; }`);
+    w.end();
+    gen_scan_gate_restore(w, ctx, "start");
+    w.line("return -1;");
     end_fn(w, ctx);
     w.blank();
 }
@@ -1087,7 +1098,10 @@ fn gen_lr_cont_fns<S: AsStrSlice>(
         }
         f.emit_begin(w);
         w.line("let mut pos = pos;");
-        gen_scan_op_elements(w, &body.elements, rests[i].from, body.elements.len(), ctx, "return -1;", &body.gates);
+        // A gate ahead of the operand already ran in the parse that reached it.
+        let from = rests[i].from;
+        let gates: List<ScanGate> = body.gates.iter_ref().filter(|g| g.before_index >= from).map(|g| *g).collect();
+        gen_scan_op_elements(w, &body.elements, from, body.elements.len(), ctx, "return -1;", &gates);
         w.line("return pos;");
         end_fn(w, ctx);
         w.blank();
@@ -1104,7 +1118,10 @@ fn gen_lr_cont_fns<S: AsStrSlice>(
     let state = scan_state_call_args("pos", ctx);
     gen_scan_gate_save(w, ctx, "cont");
     w.begin("let holds = if frame.rest == LR_LOOP_REST");
-    w.line(`${fn_name}__loop(${state.join(", ")}, frame.follow, frame.min_prec, frame.cont) >= 0`);
+    // `__loop` answers for the boundaries past `pos`; `pos` itself is one.
+    w.line(
+        `${lr_cont_holds_call(&fn_name, "pos", ctx, "frame.cont")} || ${fn_name}__loop(${state.join(", ")}, frame.follow, frame.min_prec, frame.cont) >= 0`,
+    );
     w.else_begin("else");
     let mut args = state;
     if ctx.helpers_take_prec() {
@@ -1258,8 +1275,7 @@ fn gen_lr_suffix_dispatch<S: AsStrSlice>(
 
 fn gen_scan_lr_call_with_prec<S: AsStrSlice>(
     w: &mut CodeWriter,
-    scan_fn: S,
-    alt_index: i32,
+    suffix_fn: S,
     prec: i32,
     ctx: &EmitContext,
     may_match_empty: bool,
@@ -1292,14 +1308,15 @@ fn gen_scan_lr_call_with_prec<S: AsStrSlice>(
             gen_scan_rewind_break(w, ctx, "lr_saved_pos", "pos <= lr_saved_pos");
         }
     } else {
-        w.line(
-            `pos = ${scan_fn}_lr_${alt_index}(tokens, pos${scan_trailing_args(ctx)}${lr_cont_forward(mid_operand_gated)});`,
-        );
+        w.line(`pos = ${suffix_fn}(tokens, pos${scan_trailing_args(ctx)}${lr_cont_forward(mid_operand_gated)});`);
         gen_scan_rewind_break(w, ctx, "lr_saved_pos", if may_match_empty { "pos <= lr_saved_pos" } else { "pos < 0" });
     }
     if mid_operand_gated {
-        w.begin(`if ${lr_cont_holds_call(&scan_fn, "pos", ctx, "lr_outer")}`);
-        gen_scan_commit(w, ctx, "good", "pos");
+        w.begin("if lr_outer != 0");
+        w.line("lr_bounds.push(pos);");
+        if ctx.settings.emit_scan_gate() {
+            w.line(`lr_bound_gates.push(${ctx.scan_gate_place()});`);
+        }
         w.end();
     }
     w.else_begin("else");
@@ -1379,8 +1396,7 @@ fn emit_lr_overlap_branch(
         ScanCall => {
             gen_scan_lr_call_with_prec(
                 w,
-                &site.scan_fn,
-                lr.alt_index,
+                `${site.scan_fn}_lr_${lr.alt_index}`,
                 lr.own_prec,
                 ctx,
                 may_match_empty,
