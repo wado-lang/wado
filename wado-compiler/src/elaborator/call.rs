@@ -1967,16 +1967,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 {
                     return TypeTable::ERROR;
                 }
-                let mut substituted: Vec<TypeId> = if generic {
-                    let mut combined_type_args = impl_type_args_inferred.clone();
-                    combined_type_args.extend_from_slice(&method_type_args);
-                    raw_param_types
-                        .iter()
-                        .map(|&t| self.substitute_in_frame(t, &combined_type_args))
-                        .collect()
-                } else {
-                    raw_param_types
-                };
+                let mut substituted = self.static_param_types_at(
+                    raw_param_types,
+                    &impl_type_args_inferred,
+                    &method_type_args,
+                );
                 let block = resolved
                     .found()
                     .and_then(|callee| self.tysys.block_of(&callee.method_ref));
@@ -2318,14 +2313,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         )),
                     };
 
-                    let checked: Vec<TypeId> = if method_type_args.is_empty() {
-                        param_types.clone()
-                    } else {
-                        param_types
-                            .iter()
-                            .map(|&t| self.substitute_in_frame(t, &method_type_args))
-                            .collect()
-                    };
+                    let checked = self.static_param_types_at(
+                        param_types.clone(),
+                        &impl_type_args_inferred,
+                        &method_type_args,
+                    );
                     self.recoerce_literal_args(&call.args, &mut args, &checked);
                     if func_ref.monomorph_info.is_some()
                         && self.report_value_for_reference(
