@@ -41,6 +41,20 @@ test "multipleOf divides the numbers as written" {
     assert errors(#"{"multipleOf": 0.3}"#, "0.1").len() == 1;
 }
 
+test "a reference back to itself at the same instance is an error, not a loop" {
+    let found = errors(##"{"$ref": "#"}"##, "1");
+    assert found.len() == 1;
+    assert found[0].keyword == "/$ref";
+    assert found[0].message == "refers back to itself without moving into the instance";
+    let mutual = errors(
+        ##"{"$defs": {"a": {"$ref": "#/$defs/b"}, "b": {"allOf": [{"$ref": "#/$defs/a"}]}}, "$ref": "#/$defs/a"}"##,
+        "1",
+    );
+    assert mutual.len() == 1;
+    assert mutual[0].keyword == "/$defs/b/allOf/0/$ref";
+    assert errors(##"{"items": {"$ref": "#"}}"##, "[[[1]]]").is_empty();
+}
+
 test "a reference the schema does not hold is an error at compile" {
     let e = Validator::compile(&Schema::parse(#"{"items": {"$ref": "other.json"}}"#).unwrap()).unwrap_err();
     assert e.pointer == "/items/$ref";

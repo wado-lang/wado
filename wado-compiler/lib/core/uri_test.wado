@@ -91,6 +91,29 @@ test "a base path with no slash gives way to the reference's whole path" {
     assert base.resolve(&uri(".")).to_string() == "urn:";
 }
 
+test "a path resolved to start with two slashes keeps them out of the authority" {
+    let r = uri("foo:").resolve(&uri("/.//bar"));
+    assert r.to_string() == "foo:/.//bar";
+    assert uri(r.to_string()) == r;
+}
+
+test "an IP literal is an IPv6 address or an IPvFuture" {
+    for let text of [
+        "http://[::1]/", "http://[::]/", "http://[1:2:3:4:5:6:7:8]/", "http://[1::8]/", "http://[2001:db8::7]/",
+        "http://[::ffff:192.0.2.1]/", "http://[1:2:3:4:5:6:1.2.3.4]/", "http://[v1.fe:x]/", "http://[V1F.a]/",
+    ] as List<String> {
+        assert Uri::from_str(text) matches { Ok(_) }, text;
+    }
+    for let text of [
+        "http://[]/", "http://[zz]/", "http://[v.]/", "http://[v1.]/", "http://[1:2:3:4:5:6:7:8:9]/",
+        "http://[1:2:3:4:5:6:7]/", "http://[1::2::3]/", "http://[12345::]/", "http://[:1::]/", "http://[1::2:]/",
+        "http://[::1.2.3]/", "http://[::256.0.0.1]/", "http://[::01.2.3.4]/", "http://[1.2.3.4::]/",
+        "http://[::zz:1.2.3.4]/", "http://[zz:2:3:4:5:6:1.2.3.4]/",
+    ] as List<String> {
+        assert Uri::from_str(text).unwrap_err().message == "invalid IP literal", text;
+    }
+}
+
 test "a base without an authority merges into its path" {
     let base = uri("urn:uuid:deadbeef");
     assert base.resolve(&uri("#/$defs/a")).to_string() == "urn:uuid:deadbeef#/$defs/a";
@@ -107,7 +130,7 @@ test "text outside the grammar is an error at its offset" {
     assert Uri::from_str("a?b c").unwrap_err().offset == 3;
     assert Uri::from_str("http://a b@c/").unwrap_err().offset == 8;
     assert Uri::from_str("http://a b/").unwrap_err().offset == 8;
-    assert Uri::from_str("http://[a%b]/").unwrap_err().offset == 9;
+    assert Uri::from_str("http://[a%b]/").unwrap_err().offset == 7;
     assert Uri::from_str("http://[::1]x/").unwrap_err().offset == 12;
     assert Uri::from_str("a#b#c").unwrap_err().offset == 3;
     assert Uri::from_str("http://a:8x/").unwrap_err().offset == 10;

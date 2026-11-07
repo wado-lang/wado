@@ -92,7 +92,10 @@ fn struct_schema<T: ReflectStruct<FieldTypes = [..F]>, ..F: JsonSchema + Seriali
         let name = wire_name(&f, policy);
         let mut field = field_schema(&f, gen).into_object();
         if let Some(fallback) = ReflectStruct::<T>::default_slot(i)[i] {
-            field.default_ = Option::Some(Document::of(&fallback).expect("a field's default serializes"));
+            // A default JSON cannot hold, such as NaN, has no `default` to write.
+            if let Ok(doc) = Document::of(&fallback) {
+                field.default_ = Option::Some(doc);
+            }
         } else {
             s.required.push(name);
         }
@@ -295,9 +298,11 @@ fn unsigned_decimal(max: String) -> Schema {
 }
 
 /// A decimal string in `-max - 1..=max`, spelled as `core:json` spells it.
-fn signed_decimal(max: String) -> Schema {
+fn signed_decimal(max: String) -> Schema
+    contract max.byte_at(max.len() - 1) != b'9', "a two's complement maximum never ends in 9"
+{
     // A two's complement range ends one further below zero than above it, and
-    // that one bound's last digit is never 9, so incrementing it carries nothing.
+    // incrementing the maximum's last digit carries nothing.
     let last = max.len() - 1;
     let below = `${max.substr_bytes(0, last)}${(max.byte_at(last) + 1) as char}`;
     return decimal_string(`^(0|-?${one_to(max)}|-${below})$`);

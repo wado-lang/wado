@@ -14,6 +14,7 @@ use { HashSet } from "core:collections";
 use { to_string } from "core:json";
 use { Uri } from "core:uri";
 use { Document, Node } from "../src/lib.wado";
+use { DEFAULT_BASE } from "../src/validate.wado";
 
 global SUITE: String = "vendor/JSON-Schema-Test-Suite/tests/draft2020-12";
 global OUT: String = "package-jade/tests/generated";
@@ -23,9 +24,6 @@ global SKIPPED_FILES: List<[String, String]> = [
     ["refRemote.json", "every case refers to a remote schema"],
     ["vocabulary.json", "every case names a remote meta-schema in `$schema`"],
 ];
-
-/// The base URI of a schema that declares no `$id`.
-global ROOT_BASE: String = "jade:root";
 
 /// The keywords whose value is an instance rather than a schema, so an `$id`
 /// or a `$ref` inside one is data.
@@ -123,7 +121,7 @@ fn raw(text: &String) -> String {
 
 /// The `$ref` and `$dynamicRef` targets of `schema` that no `$id` in it names.
 fn outside(schema: &Node) -> List<String> {
-    let root = Uri::from_str(&ROOT_BASE).unwrap();
+    let root = Uri::from_str(&DEFAULT_BASE).unwrap();
     let mut ids = HashSet::<Uri>::new();
     ids.insert(root);
     let mut refs: List<Uri> = [];

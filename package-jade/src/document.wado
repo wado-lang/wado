@@ -15,7 +15,7 @@ use {
     deeper,
 } from "core:serde";
 use { JsonDeserializer, to_bytes } from "core:json";
-use { HashSet } from "core:collections";
+use { HashMap, HashSet } from "core:collections";
 
 /// What a JSON value is.
 pub enum NodeKind {
@@ -41,8 +41,9 @@ pub struct Document {
     strings: List<String> = [],
 }
 
-/// An object with more members than this checks a repeated key through a set
-/// rather than by comparing it with each earlier key.
+/// An object with more members than this finds a key through a hashed table
+/// rather than by comparing it with each member's: to check for a repeated key,
+/// and to compare two objects.
 global LINEAR_KEY_CHECK: i32 = 8;
 
 impl Document {
@@ -61,10 +62,18 @@ impl Document {
         return Result::Ok(r.doc);
     }
 
-    /// The document `core:json` writes for `value`.
+    /// The document `core:json` writes for `value`, or the error it gives for a
+    /// value JSON cannot hold, such as NaN.
     pub fn of<T: Serialize>(value: &T) -> Result<Document, SerializeError> {
         let text = to_bytes(value)?;
-        return Result::Ok(Document::parse(text).expect("core:json writes JSON"));
+        // Serializing nested as deep as the value does, so reading it back
+        // needs no depth bound of its own.
+        return Result::Ok(Document::parse(text, i32::MAX).expect("core:json writes JSON"));
+    }
+
+    /// Whether `a` and `b` are one node, not merely equal ones.
+    internal fn same_node(a: &Node, b: &Node) -> bool {
+        return ref_eq(a.doc, b.doc) && a.at == b.at;
     }
 
     /// A string, without the trip through JSON text `of` takes.
@@ -235,11 +244,20 @@ impl Eq for Node {
                 if self.len() != other.len() {
                     return false;
                 }
+                if self.len() <= LINEAR_KEY_CHECK {
+                    for let [k, v] of self.entries() {
+                        if !other.get(k) matches { Some(w) && v == w } {
+                            return false;
+                        }
+                    }
+                    return true;
+                }
+                let mut theirs = HashMap::<String, Node>::new();
+                for let [k, w] of other.entries() {
+                    theirs[k.to_string()] = w;
+                }
                 for let [k, v] of self.entries() {
-                    let Some(w) = other.get(k) else {
-                        return false;
-                    };
-                    if v != w {
+                    if !theirs.get_str(k) matches { Some(w) && v == w } {
                         return false;
                     }
                 }

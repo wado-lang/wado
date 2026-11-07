@@ -5,10 +5,10 @@ use { HashMap, HashSet } from "core:collections";
 use { Uri } from "core:uri";
 use { Regex } from "lib:re";
 use { Document, Node } from "./document.wado";
-use { JsonTypes, Schema, SchemaError, TYPE_NAMES, pointer_token, type_bit } from "./schema.wado";
+use { JsonTypes, Schema, SchemaError, pointer_token, type_names } from "./schema.wado";
 
 /// The base URI of a schema that declares no `$id`.
-global DEFAULT_BASE: String = "jade:root";
+internal global DEFAULT_BASE: String = "jade:root";
 
 /// A schema compiled for validation.
 pub struct Validator {
@@ -68,10 +68,10 @@ impl Validator {
             run.scope.push(n.owner);
         }
         if let Some(t) = n.reference {
-            self.apply(t, inst, ip, run, &mut out);
+            self.follow(n, "$ref", t, inst, ip, run, &mut out);
         }
         if let Some(d) = &n.dynamic_ref {
-            self.apply(self.dynamic_target(d, &run.scope), inst, ip, run, &mut out);
+            self.follow(n, "$dynamicRef", self.dynamic_target(d, &run.scope), inst, ip, run, &mut out);
         }
         self.assert_value(n, inst, ip, run);
         self.apply_logic(n, inst, ip, run, &mut out);
@@ -100,6 +100,30 @@ impl Validator {
         return d.target;
     }
 
+    /// Follows `n`'s reference `keyword` to `t`. Reaching `t` again at the same
+    /// instance, with no step into the instance between, would loop forever.
+    fn follow(
+        &self,
+        n: &Compiled,
+        keyword: String,
+        t: i32,
+        inst: &Node,
+        ip: &String,
+        run: &mut Run,
+        out: &mut Evaluated,
+    ) {
+        for let k of 0..<run.following.len() {
+            let [held, at] = run.following[k];
+            if held == t && Document::same_node(&at, inst) {
+                run.fail(ip, &n.at, keyword, "refers back to itself without moving into the instance");
+                return;
+            }
+        }
+        run.following.push([t, *inst]);
+        self.apply(t, inst, ip, run, out);
+        run.following.pop();
+    }
+
     /// Evaluates subschema `t` in place, keeping what it evaluated when it
     /// passes.
     fn apply(&self, t: i32, inst: &Node, ip: &String, run: &mut Run, out: &mut Evaluated) {
@@ -117,7 +141,7 @@ impl Validator {
 
     /// Evaluates subschema `t` without reporting what it fails.
     fn passes(&self, t: i32, inst: &Node, ip: &String, run: &mut Run) -> [bool, Evaluated] {
-        let mut quiet = Run { scope: run.scope };
+        let mut quiet = Run { scope: run.scope, following: run.following };
         let ev = self.eval(t, inst, ip, &mut quiet);
         return [quiet.errors.is_empty(), ev];
     }
@@ -126,7 +150,7 @@ impl Validator {
     /// `enum`, and those on a number or a string.
     fn assert_value(&self, n: &Compiled, inst: &Node, ip: &String, run: &mut Run) {
         if n.type != JsonTypes::none() && !has_type(inst, n.type) {
-            run.fail(ip, &n.at, "type", `must be ${type_names(n.type)}`);
+            run.fail(ip, &n.at, "type", `must be ${type_names(n.type).join(" or ")}`);
         }
         if let Some(c) = &n.const_ && *inst != c.root() {
             run.fail(ip, &n.at, "const", "must equal the constant");
@@ -429,11 +453,13 @@ impl Evaluated {
     }
 }
 
-/// The state of one validation: the errors so far, and the dynamic scope as
-/// the resources entered, outermost first.
+/// The state of one validation: the errors so far, the dynamic scope as the
+/// resources entered, outermost first, and the references being followed, each
+/// as its target and the instance it was followed at.
 struct Run {
     errors: List<ValidationError> = [],
     scope: List<i32> = [],
+    following: List<[i32, Node]> = [],
 }
 
 impl Run {
@@ -691,16 +717,6 @@ fn has_type(inst: &Node, types: JsonTypes) -> bool {
         },
     };
     return types & t != JsonTypes::none();
-}
-
-fn type_names(types: JsonTypes) -> String {
-    let mut names: List<String> = [];
-    for let i of 0..<TYPE_NAMES.len() {
-        if types & type_bit(i) != JsonTypes::none() {
-            names.push(TYPE_NAMES[i]);
-        }
-    }
-    return names.join(" or ");
 }
 
 /// A number as `digits × 10^exp`, from the shortest decimal that reads back as

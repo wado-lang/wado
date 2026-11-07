@@ -289,10 +289,21 @@ impl Serialize for Schema {
     }
 }
 
-internal global TYPE_NAMES: List<String> = ["null", "boolean", "object", "array", "number", "string", "integer"];
+global TYPE_NAMES: List<String> = ["null", "boolean", "object", "array", "number", "string", "integer"];
 
-internal fn type_bit(i: i32) -> JsonTypes {
+fn type_bit(i: i32) -> JsonTypes {
     return (1 << i) as u32 as JsonTypes;
+}
+
+/// The names of the types in `types`, in `JsonTypes`' order.
+internal fn type_names(types: JsonTypes) -> List<String> {
+    let mut names: List<String> = [];
+    for let i of 0..<TYPE_NAMES.len() {
+        if types & type_bit(i) != JsonTypes::none() {
+            names.push(TYPE_NAMES[i]);
+        }
+    }
+    return names;
 }
 
 /// `type`'s value: one name as a string, more as an array of them.
@@ -302,12 +313,7 @@ struct TypeKeyword {
 
 impl Serialize for TypeKeyword {
     fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError> {
-        let mut names: List<String> = [];
-        for let i of 0..<TYPE_NAMES.len() {
-            if self.types & type_bit(i) != JsonTypes::none() {
-                names.push(TYPE_NAMES[i]);
-            }
-        }
+        let names = type_names(self.types);
         if names.len() == 1 {
             return s.serialize_string(&names[0]);
         }

@@ -48,16 +48,10 @@ impl Uri {
         contract self.scheme matches { Some(_) }, "the base must have a scheme"
     {
         let r = reference;
-        if r.scheme matches { Some(_) } {
-            return Uri { ..*r, path: remove_dot_segments(&r.path) };
-        }
-        let mut t = Uri { ..*r, scheme: self.scheme };
-        if r.authority matches { Some(_) } {
+        let mut t = *r;
+        if r.scheme matches { Some(_) } || r.authority matches { Some(_) } {
             t.path = remove_dot_segments(&r.path);
-            return t;
-        }
-        t.authority = self.authority;
-        if r.path.is_empty() {
+        } else if r.path.is_empty() {
             t.path = self.path;
             if r.query matches { None } {
                 t.query = self.query;
@@ -66,6 +60,17 @@ impl Uri {
             t.path = remove_dot_segments(&r.path);
         } else {
             t.path = remove_dot_segments(&self.merge(&r.path));
+        }
+        if r.scheme matches { None } {
+            t.scheme = self.scheme;
+            if r.authority matches { None } {
+                t.authority = self.authority;
+            }
+        }
+        // Without an authority, a path starting `//` would read back as one
+        // (§3.3); `/.` keeps it a path.
+        if t.authority matches { None } && t.path.starts_with("//") {
+            t.path = `/.${t.path}`;
         }
         return t;
     }
@@ -257,7 +262,10 @@ impl Reader {
             if close >= end {
                 return fail(host, "unclosed IP literal");
             }
-            self.check_ip_literal(host + 1, close)?;
+            let literal = self.text.as_str_slice().slice(host + 1, close);
+            if !(is_ipv6(literal) || is_ip_future(literal)) {
+                return fail(host, "invalid IP literal");
+            }
             host_end = close + 1;
             if host_end < end && self.text.byte_at(host_end) != b':' {
                 return fail(host_end, "invalid character in host");
@@ -271,18 +279,6 @@ impl Reader {
         for let i of host_end + 1..<end {
             if !(self.text.byte_at(i) as char).is_ascii_digit() {
                 return fail(i, "invalid character in port");
-            }
-        }
-        return Result::Ok(());
-    }
-
-    /// The inside of an IP literal: an IPv6 address or an `IPvFuture`, held to
-    /// the characters either may hold.
-    fn check_ip_literal(&self, start: i32, end: i32) -> Result<(), UriError> {
-        for let i of start..<end {
-            let c = self.text.byte_at(i);
-            if !(is_unreserved(c) || is_sub_delim(c) || c == b':') {
-                return fail(i, "invalid character in IP literal");
             }
         }
         return Result::Ok(());
@@ -325,6 +321,67 @@ fn is_sub_delim(c: u8) -> bool {
 
 fn is_hex(c: u8) -> bool {
     return (c as char).is_hexdigit();
+}
+
+/// `IPv6address`: eight 16-bit pieces, or fewer around one `::` that stands
+/// for at least one more.
+fn is_ipv6(s: StrSlice) -> bool {
+    let Some(gap) = s.find("::") else {
+        return ipv6_pieces(s, true) == 8;
+    };
+    let before = ipv6_pieces(s.slice(0, gap), false);
+    let after = ipv6_pieces(s.slice(gap + 2, s.len()), true);
+    return before >= 0 && after >= 0 && before + after <= 7;
+}
+
+/// The 16-bit pieces `part` holds as `h16 *( ":" h16 )`, an IPv4 address in
+/// the last place counting two where `v4_last` admits one, or -1 when it holds
+/// anything else. An empty part holds none.
+fn ipv6_pieces(part: StrSlice, v4_last: bool) -> i32 {
+    if part.is_empty() {
+        return 0;
+    }
+    let pieces: List<String> = part.split(":").collect();
+    let last = pieces.len() - 1;
+    for let [i, p] of pieces.iter_ref().enumerate() {
+        if i == last && v4_last && p.find(".") matches { Some(_) } {
+            return if is_ipv4(p) { last + 2 } else { -1 };
+        }
+        if p.is_empty() || p.len() > 4 || !p.bytes().all(|c| is_hex(c)) {
+            return -1;
+        }
+    }
+    return pieces.len();
+}
+
+/// `IPv4address`: four decimal octets, none above 255 or with a leading zero.
+fn is_ipv4(s: &String) -> bool {
+    let octets: List<String> = s.split(".").collect();
+    if octets.len() != 4 {
+        return false;
+    }
+    for let o of octets {
+        if o.is_empty()
+            || o.len() > 3
+            || o.len() > 1 && o.byte_at(0) == b'0'
+            || !o.bytes().all(|c| (c as char).is_ascii_digit())
+            || i32::from_str(o).unwrap() > 255 {
+            return false;
+        }
+    }
+    return true;
+}
+
+/// `IPvFuture = "v" 1*HEXDIG "." 1*( unreserved / sub-delims / ":" )`.
+fn is_ip_future(s: StrSlice) -> bool {
+    let Some(dot) = s.find(".") else {
+        return false;
+    };
+    return dot >= 2
+        && dot + 1 < s.len()
+        && (s.byte_at(0) == b'v' || s.byte_at(0) == b'V')
+        && s.slice(1, dot).bytes().all(|c| is_hex(c))
+        && s.slice(dot + 1, s.len()).bytes().all(|c| is_unreserved(c) || is_sub_delim(c) || c == b':');
 }
 
 #[synopsis]

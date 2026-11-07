@@ -128,6 +128,14 @@ test "a struct is a definition: a field without a default is required" {
     assert standalone::<Point>() == `{"$schema":"https://json-schema.org/draft/2020-12/schema","$ref":"#/$defs/Point","$defs":{"Point":{"type":"object","properties":{"x":{"type":"number"},"y":{"type":"number","default":0}},"required":["x"]}}}`;
 }
 
+struct Unwritable {
+    x: f64 = f64::NAN,
+}
+
+test "a default JSON cannot hold is left out" {
+    assert standalone::<Unwritable>().contains(`"properties":{"x":{"type":"number"}}}`);
+}
+
 test "a bare Option field is required, and one defaulting to null is not" {
     struct Profile {
         nickname: Option<String>,

@@ -53,10 +53,27 @@ test "equality compares numbers by value and objects by members" {
     assert Document::parse(`null`).unwrap() == Document::of(&()).unwrap();
 }
 
+test "a large object equals one holding its members in another order" {
+    let a = `{"a":1,"b":2,"c":3,"d":4,"e":5,"f":6,"g":7,"h":8,"i":9,"j":10}`;
+    let b = `{"j":10,"i":9,"h":8,"g":7,"f":6,"e":5,"d":4,"c":3,"b":2,"a":1}`;
+    let c = `{"j":10,"i":9,"h":8,"g":7,"f":6,"e":5,"d":4,"c":3,"b":2,"z":1}`;
+    assert Document::parse(a).unwrap() == Document::parse(b).unwrap();
+    assert Document::parse(a).unwrap() != Document::parse(c).unwrap();
+}
+
+struct Chain {
+    next: Option<Chain>,
+}
+
 test "a document is built from a string or from what core:json writes" {
     assert to_string(&Document::string("a")).unwrap() == `"a"`;
     assert to_string(&Document::of(&[1, 2]).unwrap()).unwrap() == `[1,2]`;
     assert Document::of(&2.5).unwrap().root().as_f64() == Option::Some(2.5);
+    let mut chain = Chain { next: null };
+    for let _ of 0..<200 {
+        chain = Chain { next: Option::Some(chain) };
+    }
+    assert Document::of(&chain) matches { Ok(_) };
 }
 
 test "malformed text is an error" {
