@@ -137,6 +137,26 @@ impl FlatPackage {
             .find(|s| s.represents(type_table, def, type_args))
     }
 
+    /// Erase newtypes and `flags`, and rewrite every type the functions and
+    /// globals hold to its erased id, so one type has one id there.
+    pub fn erase_newtypes_and_flags(&mut self) {
+        struct Eraser<'t>(&'t mut TypeTable);
+        impl TirMutVisitor for Eraser<'_> {
+            fn visit_type_id(&mut self, type_id: &mut TypeId) {
+                *type_id = self.0.erase_type(*type_id);
+            }
+        }
+        let mut table = self.type_table.borrow_mut();
+        table.erase_newtypes_and_flags();
+        let mut eraser = Eraser(&mut table);
+        for func in &self.functions {
+            eraser.walk_function(&mut func.borrow_mut());
+        }
+        for global in &mut self.globals {
+            eraser.walk_global(global);
+        }
+    }
+
     /// Walk every function body with `visitor`, which may rewrite it in place.
     pub fn visit_bodies_mut(&self, visitor: &mut impl TirMutVisitor) {
         for func_rc in &self.functions {

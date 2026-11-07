@@ -5170,6 +5170,13 @@ impl TypeTable {
         self.settle_instance_spellings();
     }
 
+    /// The type `id` names once newtypes and `flags` are erased, spelled with
+    /// erased arguments: the one id every spelling of that type shares.
+    pub fn erase_type(&mut self, id: TypeId) -> TypeId {
+        assert!(self.instances_settled, "erasure has run");
+        self.settle_spelling(id)
+    }
+
     /// Settle every spelling, and each one interned from here on, now that
     /// erasure redirects: a type argument naming an erased type would
     /// otherwise key apart from the same type naming what it erases to.

@@ -2480,9 +2480,7 @@ fn build_after_load<H: CompilerHost>(
     // === Phase 9a: Erase Newtypes and Flags ===
     // After monomorphize (which needs distinct Newtype/Flags types for trait dispatch)
     // and before lower/optimize/codegen (which expect Newtypes → base type; Flags → u32).
-    {
-        flat.type_table.borrow_mut().erase_newtypes_and_flags();
-    }
+    flat.erase_newtypes_and_flags();
 
     // === Phase 9b: Reflect bridges of monomorphized structs ===
     // The only synthesis that must follow monomorphize: a generic type's value
