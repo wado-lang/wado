@@ -183,7 +183,7 @@ Each step leaves the compiler green and is a commit series of its own.
   declared members and anonymous shapes the table keeps. From erasure on,
   `intern` answers the erased id and `iter_type_ids` yields only erased ids.
   Erasure no longer touches `redirects`, and `get_unerased` is `get`.
-- [ ] Boxing changes no type: cells are references, and WIR build keys them by
+- [x] Boxing changes no type: cells are references, and WIR build keys them by
   representation. Done when `redefine_to`, `redirects`, `box_payload_types`,
   `box_key`, the prelude `Box` and the `is_mut_ref` captures are gone.
 - [ ] Delete `TypeKey`, `same_type`, `TypeMemo`, `InstanceArg`, `box_key`,
