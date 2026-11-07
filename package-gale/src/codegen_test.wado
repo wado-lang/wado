@@ -1068,6 +1068,144 @@ new a < b > ( ) . c => (s (e (e new (e a) (targs < b >) ( )) . c))
     assert out.stderr.contains(": the left-recursion loop picks "), out.stderr;
 }
 
+// The loop of a mid operand nested in another is decided statically, by the
+// continuation gate standing in for the simulator's full context. The trees
+// are the jar's.
+test "atn verify checks a mid operand's loop against the simulator" {
+    let inputs: List<[String, String]> = [
+        ["s", "a between b between c and d and e"],
+        ["s", "a between b between c and d and e and f"],
+        ["s", "a between b and c and d and e"],
+    ];
+    let verify = GenerateOptions { atn: AtnMode::Verify };
+    assert parses_each(#include_str("../tests/grammars/lr_mid_operand.g4"), inputs, &verify) == "a between b between c and d and e => (s (e (e a) between (e (e b) between (e c) and (e d)) and (e e)))
+a between b between c and d and e and f => (s (e (e a) between (e (e b) between (e (e c) and (e d)) and (e e)) and (e f)))
+a between b and c and d and e => (s (e (e a) between (e (e (e b) and (e c)) and (e d)) and (e e)))
+";
+}
+
+// The mid operand's rest opens with a group of loop operators, so it climbs
+// only to where the group and the trailing operand still parse. The trees are
+// the jar's.
+test "a mid operand stops where a rest opening with a group still parses" {
+    let g4 = "grammar M;
+s : e EOF ;
+e : e 'x' e ('y' | 'z') e
+  | e 'y' e
+  | e 'z' e
+  | ID
+  ;
+ID : [a-z]+ ;
+WS : ' ' -> skip ;
+";
+    assert parses_each(g4, [
+        ["s", "a x b z c y d z e"],
+        ["s", "a y b x c z d y e y f y g"],
+    ]) == "a x b z c y d z e => (s (e (e a) x (e (e b) z (e (e c) y (e d))) z (e e)))
+a y b x c z d y e y f y g => (s (e (e a) y (e (e b) x (e (e c) z (e (e (e d) y (e e)) y (e f))) y (e g))))
+";
+}
+
+// An atom's mid operand owes `args` to its `new`, and climbs past a call whose
+// end no `(` follows to the last end one does. The trees are the jar's.
+test "an atom's mid operand climbs to the last boundary its rest parses at" {
+    let g4 = "grammar N;
+s : e EOF ;
+e : 'new' e args
+  | e args
+  | e '.' ID
+  | e '+' e
+  | ID
+  ;
+args : '(' e? ')' ;
+ID : [a-z]+ ;
+WS : ' ' -> skip ;
+";
+    assert parses_each(g4, [
+        ["s", "new a . b ( c . d ) + e + new f ( ) ( g . h )"],
+        ["s", "new a ( b ) . c ( d . e ) ( f )"],
+        ["s", "new new a ( ) . b ( c ) + d . e"],
+    ]) == "new a . b ( c . d ) + e + new f ( ) ( g . h ) => (s (e new (e (e (e (e (e a) . b) (args ( (e (e c) . d) ))) + (e e)) + (e new (e f) (args ( )))) (args ( (e (e g) . h) ))))
+new a ( b ) . c ( d . e ) ( f ) => (s (e new (e (e (e (e a) (args ( (e b) ))) . c) (args ( (e (e d) . e) ))) (args ( (e f) ))))
+new new a ( ) . b ( c ) + d . e => (s (e (e new (e (e new (e a) (args ( ))) . b) (args ( (e c) ))) + (e (e d) . e)))
+";
+}
+
+// `'pre' e '!'?` can end with its operand, so the operand stops where the `new`
+// around it still finds its `args`. The trees are the jar's.
+test "a mid operand whose rest can be empty leaves the enclosing rest its tokens" {
+    let g4 = "grammar N;
+s : e EOF ;
+e : 'new' e args | 'pre' e '!'? | e args | ID ;
+args : '(' e? ')' ;
+ID : [a-z]+ ;
+WS : ' ' -> skip ;
+";
+    assert parses(g4, "s", ["new pre a ( )", "new pre a ( ) ( )"]) == "new pre a ( ) => (s (e new (e pre (e a)) (args ( ))))
+new pre a ( ) ( ) => (s (e new (e pre (e (e a) (args ( )))) (args ( ))))
+";
+}
+
+// The rest `. e` opens with any token, so the operand stops where one is left
+// for the wildcard. The trees are the jar's.
+test "a mid operand whose rest opens with a wildcard leaves it a token" {
+    let g4 = "grammar W;
+s : e EOF ;
+e : e 'x' e . e | e '+' e | ID ;
+ID : [a-z]+ ;
+WS : ' ' -> skip ;
+";
+    assert parses(g4, "s", ["a x b + c", "a x b x c + d + e + f"]) == "a x b + c => (s (e (e a) x (e b) + (e c)))
+a x b x c + d + e + f => (s (e (e a) x (e (e b) x (e (e c) + (e d)) + (e e)) + (e f)))
+";
+}
+
+// The rest is scanned under the gate the operand left: the `flag = 1` ahead of
+// the operand already ran. The trees are the jar's.
+test "a mid operand's rest is scanned under the gate the operand left" {
+    let g4 = "grammar G;
+@members { int flag = 0; }
+s : e EOF ;
+e : 'new' {flag=1;} e args | e args | ID {flag=0;} ;
+args : {flag==0}? '(' ')' ;
+ID : [a-z]+ ;
+WS : ' ' -> skip ;
+";
+    assert parses(g4, "s", ["new a ( ) ( )", "new new a ( ) ( ) ( )"]) == "new a ( ) ( ) => (s (e new (e (e a) (args ( ))) (args ( ))))
+new new a ( ) ( ) ( ) => (s (e new (e new (e (e a) (args ( ))) (args ( ))) (args ( ))))
+";
+}
+
+// The simulator is handed no predicate's verdict, so `atn: \"verify\"` leaves a
+// decision unchecked that meets one through a rule it calls: the loop's `op`,
+// the repeat's `q`, the group's `r`. The trees are the jar's.
+test "atn verify leaves a decision meeting a called rule's predicate unchecked" {
+    let verify = GenerateOptions { atn: AtnMode::Verify };
+    assert parses("grammar P;
+s : e ('+' ID)? EOF ;
+e : e op e | ID ;
+op : {false}? '+' | '-' ;
+ID : [a-z]+ ;
+WS : ' ' -> skip ;
+", "s", ["a + b", "a - b + c"], &verify) == "a + b => (s (e a) + b)
+a - b + c => (s (e (e a) (op -) (e b)) + c)
+";
+    assert parses("grammar R;
+s : q* 'a'? EOF ;
+q : {false}? 'a' | 'b' ;
+WS : ' ' -> skip ;
+", "s", ["a", "b a"], &verify) == "a => (s a)
+b a => (s (q b) a)
+";
+    assert parses("grammar T;
+s : (r | 'a' 'c'?) EOF ;
+r : {false}? 'a' 'c' | 'b' ;
+WS : ' ' -> skip ;
+", "s", ["a c", "b"], &verify) == "a c => (s a c)
+b => (s (r b))
+";
+}
+
 test "atn never refuses a decision only the simulator makes" {
     let never = gen_with("grammar T;
 r : A?? A B ;

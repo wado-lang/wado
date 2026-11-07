@@ -978,6 +978,152 @@ fn emit_lexer_token(
     }
     out.push_str(`${cursor.line}:${first - cursor.line_char}]\n`);
 }
+
+internal global FOLLOW_MAX_DEPTH: i32 = 4;
+
+internal global FOLLOW_SLOT_BITS: i64 = 8;
+
+internal global FOLLOW_ID_MASK: i64 = 127;
+
+internal global FOLLOW_OPENS_BIT: i64 = 128;
+
+internal global FOLLOW_CONT_MASK: i64 = 0x00FF_FFFF_FFFF_FFFF;
+
+internal global FOLLOW_SEQUENCED: i64 = 0x007F_7F7F_7F7F_7F7F;
+
+internal global FOLLOW_OPEN_READING: i64 = 0x0100_0000_0000_0000;
+
+internal global FOLLOW_OPEN_FIELD: i64 = ~0x00FF_FFFF_FFFF_FFFF;
+
+internal global FOLLOW_OPEN_SET_SHIFT: i64 = 57;
+
+internal fn follow_open_mark(cont: i64) -> i64 {
+    return if cont == 0 { FOLLOW_OPEN_READING } else { cont & FOLLOW_OPEN_FIELD };
+}
+
+internal fn follow_open_set(mask: i64) -> i64 {
+    return FOLLOW_OPEN_READING | (mask & FOLLOW_ID_MASK) << FOLLOW_OPEN_SET_SHIFT;
+}
+
+internal fn follow_open_join(a: i64, b: i64) -> i64 {
+    if a == 0 || a == b {
+        return b;
+    }
+    if b == 0 {
+        return a;
+    }
+    return FOLLOW_OPEN_READING;
+}
+
+internal fn follow_open_with(cont: i64, open: i64) -> i64 {
+    return cont & FOLLOW_CONT_MASK | follow_open_join(follow_open_mark(cont), open);
+}
+
+internal fn follow_then(prefix: i64, prefix_bits: i64, cont: i64) -> i64 {
+    return (prefix | (cont & FOLLOW_SEQUENCED) << prefix_bits) & FOLLOW_CONT_MASK;
+}
+
+internal fn follow_then_opening(prefix: i64, prefix_bits: i64, cont: i64) -> i64 {
+    let opened = (cont & FOLLOW_CONT_MASK | FOLLOW_OPENS_BIT) << prefix_bits;
+    return (prefix | opened) & FOLLOW_CONT_MASK | follow_open_mark(cont);
+}
+
+internal fn follow_or(prefix: i64, prefix_bits: i64, alternative: i64) -> i64 {
+    let opened = (alternative | FOLLOW_OPENS_BIT) << prefix_bits;
+    return (prefix | opened) & FOLLOW_CONT_MASK | alternative & FOLLOW_OPEN_FIELD;
+}
+
+internal fn follow_admits(tokens: &Array<i32>, pos: i32, cont: i64, sets: &List<List<i32>>, eof_kind: i32) -> bool {
+    return follow_heads_have(tokens, pos, cont, sets, eof_kind, true);
+}
+
+internal fn follow_resumes(tokens: &Array<i32>, pos: i32, cont: i64, sets: &List<List<i32>>, eof_kind: i32) -> bool {
+    return follow_heads_have(tokens, pos, cont, sets, eof_kind, false);
+}
+
+internal fn follow_exit_viable(tokens: &Array<i32>, pos: i32, cont: i64, sets: &List<List<i32>>, eof_kind: i32) -> bool {
+    if cont == 0 || follow_yields(tokens, pos, cont, sets, eof_kind) {
+        return true;
+    }
+    let kind = follow_kind_at(tokens, pos, eof_kind);
+    return follow_open_has(cont, kind, sets, true);
+}
+
+fn follow_open_has(cont: i64, kind: i32, sets: &List<List<i32>>, unknown_has: bool) -> bool {
+    let open = cont & FOLLOW_OPEN_FIELD;
+    if open == 0 {
+        return false;
+    }
+    let set_id = open >> FOLLOW_OPEN_SET_SHIFT & FOLLOW_ID_MASK;
+    return if set_id == 0 { unknown_has } else { follow_set_has(sets, set_id, kind) };
+}
+
+fn follow_kind_at(tokens: &Array<i32>, pos: i32, eof_kind: i32) -> i32 {
+    return if pos < tokens.len() { tokens[pos] } else { eof_kind };
+}
+
+fn follow_set_has(sets: &List<List<i32>>, id: i64, kind: i32) -> bool {
+    let set = &sets[(id - 1) as i32];
+    return set.is_empty() || kind_set_has(set, kind);
+}
+
+fn follow_heads_have(
+    tokens: &Array<i32>,
+    pos: i32,
+    cont: i64,
+    sets: &List<List<i32>>,
+    eof_kind: i32,
+    unknown_has: bool,
+) -> bool {
+    if cont == 0 {
+        return unknown_has;
+    }
+    let kind = follow_kind_at(tokens, pos, eof_kind);
+    if follow_open_has(cont, kind, sets, unknown_has) {
+        return true;
+    }
+    let mut c = cont & FOLLOW_CONT_MASK;
+    let mut head = true;
+    while c & FOLLOW_ID_MASK != 0 {
+        if c & FOLLOW_OPENS_BIT != 0 {
+            head = true;
+        }
+        if head {
+            if follow_set_has(sets, c & FOLLOW_ID_MASK, kind) {
+                return true;
+            }
+            head = false;
+        }
+        c >>= FOLLOW_SLOT_BITS;
+    }
+    return false;
+}
+
+internal fn follow_yields(tokens: &Array<i32>, pos: i32, cont: i64, sets: &List<List<i32>>, eof_kind: i32) -> bool {
+    let mut c = cont & FOLLOW_CONT_MASK;
+    let mut depth = 0;
+    let mut alive = true;
+    let mut constrained = false;
+    while c & FOLLOW_ID_MASK != 0 {
+        if c & FOLLOW_OPENS_BIT != 0 {
+            if alive && constrained {
+                return true;
+            }
+            depth = 0;
+            alive = true;
+            constrained = false;
+        }
+        if depth < FOLLOW_MAX_DEPTH {
+            constrained = true;
+            if alive {
+                alive = follow_set_has(sets, c & FOLLOW_ID_MASK, follow_kind_at(tokens, pos + depth, eof_kind));
+            }
+            depth += 1;
+        }
+        c >>= FOLLOW_SLOT_BITS;
+    }
+    return alive && constrained;
+}
 internal struct ScanMemo<G> {
     heads: Array<i32>,
     entries: List<ScanMemoEntry<G>>,
@@ -1033,6 +1179,39 @@ impl<G: Eq> ScanMemo<G> {
         self.entries.push(ScanMemoEntry { next: self.heads[pos], rule, min_prec, follow, cont, gate_in, end, gate_out });
         self.heads[pos] = self.entries.len() - 1;
     }
+}
+internal struct LrFrame {
+    internal rest: i32,
+    internal min_prec: i32,
+    internal follow: i64,
+    internal cont: i64,
+}
+
+internal global LR_LOOP_REST: i32 = -1;
+
+global mut LR_FRAMES: List<LrFrame> = [];
+
+internal fn lr_frames_reset() {
+    LR_FRAMES = [];
+}
+
+internal fn lr_loop_frame(min_prec: i32, follow: i64, cont: i64) -> i64 {
+    return if cont == 0 { 0 } else { lr_frame(LR_LOOP_REST, min_prec, follow, cont) };
+}
+
+internal fn lr_frame(rest: i32, min_prec: i32, follow: i64, cont: i64) -> i64 {
+    let frame = LrFrame { rest, min_prec, follow, cont };
+    for let mut i = LR_FRAMES.len() - 1; i >= 0; i -= 1 {
+        if LR_FRAMES[i] == frame {
+            return (i + 1) as i64;
+        }
+    }
+    LR_FRAMES.push(frame);
+    return LR_FRAMES.len() as i64;
+}
+
+internal fn lr_frame_at(cont: i64) -> LrFrame {
+    return LR_FRAMES[(cont - 1) as i32];
 }
 internal global ATN_BASIC: i32 = 1;
 internal global ATN_RULE_START: i32 = 2;
@@ -2848,7 +3027,7 @@ impl Parser {
     }
 }
 
-fn scan_e_atom(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, min_prec: i32) -> i32 {
+fn scan_e_atom(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, min_prec: i32, follow: i64 = 0, lr_cont: i64 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
     let kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
@@ -2856,13 +3035,13 @@ fn scan_e_atom(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut
         pos = start + 1;
         try_0: {
             atn.stack.push(15);
-            pos = scan_e(tokens, pos, atn, memo, 0);
+            pos = scan_e(tokens, pos, atn, memo, FOLLOW_MASK_1, 0);
             atn.stack.pop();
             if pos < 0 { break try_0; }
             if pos >= tokens.len() || tokens[pos] != TK_LIT_then { break try_0; }
             pos += 1;
             atn.stack.push(19);
-            pos = scan_e(tokens, pos, atn, memo, 0);
+            pos = scan_e(tokens, pos, atn, memo, follow_open_with(follow, follow_open_set(FOLLOW_MASK_2)), 0, lr_frame(0, min_prec, follow, lr_cont));
             atn.stack.pop();
             if pos < 0 { break try_0; }
             if atn_decide_1(atn, tokens, pos, min_prec) == 1 {
@@ -2871,7 +3050,7 @@ fn scan_e_atom(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut
                     sg_0: {
                         pos += 1;
                         atn.stack.push(27);
-                        pos = scan_e(tokens, pos, atn, memo, 0);
+                        pos = scan_e(tokens, pos, atn, memo, 0, 0);
                         atn.stack.pop();
                         if pos < 0 { break sg_0; }
                         break sg_0_done;
@@ -2890,39 +3069,96 @@ fn scan_e_atom(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut
     return -1;
 }
 
-fn scan_e_lr_1(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, min_prec: i32) -> i32 {
+fn scan_e_lr_1(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, min_prec: i32, follow: i64 = 0, lr_cont: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_LIT_STAR { return -1; }
     pos += 1;
     atn.stack.push(37);
-    pos = scan_e(tokens, pos, atn, memo, 2);
+    pos = scan_e(tokens, pos, atn, memo, follow, 2, lr_cont);
     atn.stack.pop();
     if pos < 0 { return -1; }
     return pos;
 }
 
-fn scan_e(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, min_prec: i32 = 0) -> i32 {
-    let memo_at = memo.find(1, pos, min_prec, 0, 0, &());
+fn scan_e__rest_0(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, min_prec: i32, follow: i64 = 0, lr_cont: i64 = 0) -> i32 {
+    let mut pos = pos;
+    if atn_decide_1(atn, tokens, pos, min_prec) == 1 {
+        let sp = pos;
+        sg_1_done: {
+            sg_1: {
+                pos += 1;
+                atn.stack.push(27);
+                pos = scan_e(tokens, pos, atn, memo, 0, 0);
+                atn.stack.pop();
+                if pos < 0 { break sg_1; }
+                break sg_1_done;
+            }
+            pos = -1;
+        }
+        if pos < 0 { pos = sp; }
+    }
+    return pos;
+}
+
+fn scan_e__cont_holds(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, lr_cont: i64) -> bool {
+    let frame = lr_frame_at(lr_cont);
+    let holds = if frame.rest == LR_LOOP_REST {
+        (frame.cont == 0 || scan_e__cont_holds(tokens, pos, atn, memo, frame.cont)) || scan_e__loop(tokens, pos, atn, memo, frame.follow, frame.min_prec, frame.cont) >= 0
+    } else {
+        let end = match frame.rest {
+            _ => scan_e__rest_0(tokens, pos, atn, memo, frame.min_prec, frame.follow, frame.cont),
+        };
+        end >= 0 && (frame.cont == 0 || scan_e__cont_holds(tokens, end, atn, memo, frame.cont))
+    };
+    return holds;
+}
+
+fn scan_e(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0, min_prec: i32 = 0, lr_cont: i64 = 0) -> i32 {
+    let memo_at = memo.find(1, pos, min_prec, follow, lr_cont, &());
     if memo_at >= 0 {
         return memo.end_of(memo_at);
     }
     let memo_gate = ();
     let memo_callers = atn.hide_callers();
-    let memo_end = scan_e__walk(tokens, pos, atn, memo, min_prec);
-    if !atn.reveal_callers(memo_callers) { memo.put(1, pos, min_prec, 0, 0, memo_gate, memo_end, ()); }
+    let memo_end = scan_e__walk(tokens, pos, atn, memo, follow, min_prec, lr_cont);
+    if !atn.reveal_callers(memo_callers) { memo.put(1, pos, min_prec, follow, lr_cont, memo_gate, memo_end, ()); }
     return memo_end;
 }
 
-fn scan_e__walk(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, min_prec: i32 = 0) -> i32 {
-    let mut pos = scan_e_atom(tokens, pos, atn, memo, min_prec);
+fn scan_e__walk(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0, min_prec: i32 = 0, lr_cont: i64 = 0) -> i32 {
+    let pos = scan_e_atom(tokens, pos, atn, memo, min_prec, follow, lr_loop_frame(min_prec, follow, lr_cont));
     if pos < 0 { return -1; }
+    let cut = if lr_cont == 0 { scan_e__loop_walk(tokens, pos, atn, memo, follow, min_prec, 0) } else { scan_e__loop(tokens, pos, atn, memo, follow, min_prec, lr_cont) };
+    return if cut >= 0 { cut } else { pos };
+}
+
+fn scan_e__loop(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0, min_prec: i32 = 0, lr_cont: i64 = 0) -> i32 {
+    let memo_at = memo.find(-2, pos, min_prec, follow, lr_cont, &());
+    if memo_at >= 0 {
+        return memo.end_of(memo_at);
+    }
+    let memo_gate = ();
+    let memo_callers = atn.hide_callers();
+    let memo_end = scan_e__loop_walk(tokens, pos, atn, memo, follow, min_prec, lr_cont);
+    if !atn.reveal_callers(memo_callers) { memo.put(-2, pos, min_prec, follow, lr_cont, memo_gate, memo_end, ()); }
+    return memo_end;
+}
+
+fn scan_e__loop_walk(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0, min_prec: i32 = 0, lr_cont: i64 = 0) -> i32 {
+    let mut pos = pos;
+    let mut lr_bounds: List<i32> = [];
+    let lr_outer = lr_cont;
+    let lr_cont = lr_loop_frame(min_prec, follow, lr_cont);
     loop {
         let suffix_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
         if suffix_kind == TK_LIT_STAR {
             if 1 >= min_prec {
                 let lr_saved_pos = pos;
-                pos = scan_e_lr_1(tokens, pos, atn, memo, min_prec);
+                pos = scan_e_lr_1(tokens, pos, atn, memo, min_prec, follow, lr_cont);
                 if pos < 0 { pos = lr_saved_pos; break; }
+                if lr_outer != 0 {
+                    lr_bounds.push(pos);
+                }
             } else {
                 break;
             }
@@ -2930,18 +3166,22 @@ fn scan_e__walk(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mu
             break;
         }
     }
-    return pos;
+    if lr_outer == 0 { return pos; }
+    for let mut i = lr_bounds.len() - 1; i >= 0; i -= 1 {
+        if (lr_outer == 0 || scan_e__cont_holds(tokens, lr_bounds[i], atn, memo, lr_outer)) { return lr_bounds[i]; }
+    }
+    return -1;
 }
 
-fn _parse_prog__inner(p: &mut Parser) -> () {
+fn _parse_prog__inner(p: &mut Parser, follow: i64 = 0) -> () {
     p.site = 0;
     p.atn_ret_pending = 7;
-    _parse_e(p);
+    _parse_e(p, follow_then(FOLLOW_MASK_0, 8, follow));
     p.expect(TK_EOF, &EMPTY_SYNC, true);
     return;
 }
 
-fn _parse_prog(p: &mut Parser) -> () {
+fn _parse_prog(p: &mut Parser, follow: i64 = 0) -> () {
     let _atn_ret = p.atn_ret_pending;
     p.atn_ret_pending = -1;
     if p.recovering { return; }
@@ -2949,30 +3189,30 @@ fn _parse_prog(p: &mut Parser) -> () {
     p.sites.push(p.site);
     let _start = p.peek_start();
     p.b.start_node(RK_PROG, _start);
-    _parse_prog__inner(p);
+    _parse_prog__inner(p, follow);
     if p.recovering { let _ = p.recover_rule(RK_PROG, "prog", -1); }
     p.b.finish_node(p.last_end());
     p.atn.stack.pop();
     p.sites.pop();
 }
 
-fn _parse_e__inner_atom(p: &mut Parser, min_prec: i32 = 0) -> () {
+fn _parse_e__inner_atom(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0, lr_cont: i64 = 0) -> () {
     if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_0, &EXPECTED_0); }
     let kind = p.peek_kind();
     if kind == TK_LIT_if {
         p.take();
         p.site = 1;
         p.atn_ret_pending = 15;
-        _parse_e(p);
+        _parse_e(p, FOLLOW_MASK_1);
         p.expect(TK_LIT_then, &SYNC_0, false);
         p.site = 2;
         p.atn_ret_pending = 19;
-        _parse_e(p);
+        _parse_e(p, follow_open_with(follow, follow_open_set(FOLLOW_MASK_2)), 0, lr_frame(0, min_prec, follow, lr_cont));
         if atn_decide_1(&mut p.atn, &p.kinds, p.pos, min_prec) == 1 {
             p.expect(TK_LIT_else, &SYNC_0, false);
             p.site = 3;
             p.atn_ret_pending = 27;
-            _parse_e(p);
+            _parse_e(p, 0);
         }
         return;
     } else if kind == TK_INT {
@@ -2987,25 +3227,28 @@ fn _parse_e__inner_atom(p: &mut Parser, min_prec: i32 = 0) -> () {
     return;
 }
 
-fn _parse_e__inner(p: &mut Parser, min_prec: i32 = 0) -> () {
+fn _parse_e__inner(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0, lr_cont: i64 = 0) -> () {
     let _cp = p.b.checkpoint();
     let _start = p.peek_start();
     p.b.start_node(RK_E, _start);
-    _parse_e__inner_atom(p, min_prec);
+    let lr_outer = lr_cont;
+    let lr_cont = lr_loop_frame(min_prec, follow, lr_cont);
+    _parse_e__inner_atom(p, follow, min_prec, lr_cont);
     p.b.finish_node(p.last_end());
+    let _lr_cut = if lr_outer == 0 || p.recovering { i32::MAX } else { scan_e__loop(&p.kinds, p.pos, &mut p.atn, &mut p.memo, follow, min_prec, lr_outer) };
     loop {
         if p.recovering { break; }
         let _sk = p.peek_kind();
         if _sk == TK_LIT_STAR {
             if 1 >= min_prec {
-                if scan_e_lr_1(&p.kinds, p.pos, &mut p.atn, &mut p.memo, min_prec) < 0 {
-                    break;
-                }
+                let _lr_end = scan_e_lr_1(&p.kinds, p.pos, &mut p.atn, &mut p.memo, min_prec, follow, lr_cont);
+                if _lr_end < 0 { break; }
+                if _lr_end > _lr_cut { break; }
                 p.b.start_node_at(_cp, RK_E, _start);
                 p.take();
                 p.site = 5;
                 p.atn_ret_pending = 37;
-                _parse_e(p, 2);
+                _parse_e(p, follow, 2, lr_cont);
                 p.b.finish_node(p.last_end());
             } else {
                 break;
@@ -3017,14 +3260,14 @@ fn _parse_e__inner(p: &mut Parser, min_prec: i32 = 0) -> () {
     return;
 }
 
-fn _parse_e(p: &mut Parser, min_prec: i32 = 0) -> () {
+fn _parse_e(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0, lr_cont: i64 = 0) -> () {
     let _atn_ret = p.atn_ret_pending;
     p.atn_ret_pending = -1;
     if p.recovering { return; }
     p.atn.stack.push(_atn_ret);
     p.sites.push(p.site);
     let _row = p.b.checkpoint();
-    _parse_e__inner(p, min_prec);
+    _parse_e__inner(p, follow, min_prec, lr_cont);
     if p.recovering && p.recover_rule(RK_E, "e", _row) { p.b.finish_node(p.last_end()); }
     p.atn.stack.pop();
     p.sites.pop();
@@ -3032,6 +3275,7 @@ fn _parse_e(p: &mut Parser, min_prec: i32 = 0) -> () {
 
 fn _run_parse_entry<S: AsStrSlice>(input: S, max_errors: i32, entry: fn(&mut Parser)) -> ParseResult {
     assert max_errors >= 1;
+    lr_frames_reset();
     let tokens = tokenize(input);
     let mut p = Parser::new(tokens);
     p.max_errors = max_errors;
@@ -3085,6 +3329,11 @@ pub fn to_string_subtree<S: AsStrSlice>(result: &ParseResult, rule: S) -> String
 global EMPTY_SYNC: List<i32> = [];
 global SYNC_0: List<i32> = [17];
 global EXPECTED_0: List<i32> = [TK_INT, TK_LIT_if];
+
+global FOLLOW_SETS: List<List<i32>> = [[4], [32], [17], [64]];
+global FOLLOW_MASK_0: i64 = 1;
+global FOLLOW_MASK_1: i64 = 770;
+global FOLLOW_MASK_2: i64 = 4;
 
 global ATN_SIM: AtnSim = atn_decode(&b"\x02\x00\x03\x00\x26\x00\x08\x00\x00\x00\x02\x00\x0a\x00\x14\x00\x1e\x00\x02\x03\x02\x03\x04\x05\x01\x01\x01\x01\x04\x05\x01\x01\x01\x01\x01\x01\x01\x01\x04\x05\x04\x05\x01\x01\x01\x01\x01\x01\x06\x09\x07\x01\x01\x01\x01\x01\x01\x00\x00\x00\x01\x00\x00\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x02\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x02\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x02\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x00\x00\x00\x00\x04\x00\x01\x00\x00\x00\x00\x01\x00\x04\x00\x01\x00\x04\x00\x00\x00\x00\x00\x00\x01\x00\x04\x00\x01\x00\x05\x00\x00\x00\x00\x01\x00\x04\x00\x05\x00\x0b\x00\x07\x00\x02\x00\x03\x00\x09\x00\x0a\x00\x06\x00\x0d\x00\x1d\x00\x1f\x00\x0e\x00\x0f\x00\x03\x00\x11\x00\x12\x00\x13\x00\x03\x00\x15\x00\x16\x00\x17\x00\x0c\x00\x19\x00\x16\x00\x1a\x00\x1b\x00\x03\x00\x18\x00\x1e\x00\x0c\x00\x22\x00\x20\x00\x04\x00\x1f\x00\x23\x00\x24\x00\x25\x00\x03\x00\x21\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x02\x00\x00\x00\x00\x00\x03\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x05\x00\x00\x00\x00\x00\x02\x00\x00\x00\x00\x00\x06\x00\x00\x00\x00\x00\x02\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x07\x00\x00\x00\x00\x00\x02\x00\x00\x00\x00\x00\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x08\x00\x00\x00\x00\x00\x02\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x08\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x10\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x14\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x1c\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x26\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x02\x00\x00\x00\x00\x00");
 

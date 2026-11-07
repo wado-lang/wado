@@ -1068,13 +1068,17 @@ the compiled fast path:**
    an alternative this operand's precedence excludes (`lr_atn_trailing.g4`).
    The same shape inside an LR alternative (SQLite's
    `expr NOT? BETWEEN expr AND expr`) is **not** routed here, since a hot
-   expression rule cannot pay for that (`perf.md`). It stays static: the mid
-   operand also drops to `expr[0]`, and
-   each loop entry scans the operator's suffix and checks that the enclosing
-   alternative's continuation is still there (`lr_cont`). A trailing operand
-   forwards its caller's continuation and keeps ANTLR4's precedence. Fixture
-   `lr_mid_operand.g4`. The gate sees only one level of continuation, so a mid
-   operand nested in another still fails (`TODO.md`).
+   expression rule cannot pay for that (`perf.md`). It stays static. The mid
+   operand also drops to `expr[0]`, and is handed what it must leave behind
+   (`lr_cont`): the rest of its alternative, then the enclosing invocation's
+   own continuation. Its loop climbs greedily and stops at the last iteration
+   boundary where a scan of that continuation succeeds, which is the boundary
+   ANTLR4's full context picks. Each iteration hands its suffix the loop
+   itself as the continuation, so an operand inside it stops only where the
+   loop can still reach that boundary. A trailing operand keeps ANTLR4's
+   precedence. A mid operand is gated this way wherever what follows it can
+   open with a loop operator or be empty, in an atom (`'new' e args`) as in a
+   suffix. Fixture `lr_mid_operand.g4`.
 2. A **non-greedy `??`**, whose enter-or-skip choice is taken at runtime;
    several `??` in one rule decide independently. Both emit walkers route it
    here — the surface-element walker from `RepeatElement.non_greedy`, the
