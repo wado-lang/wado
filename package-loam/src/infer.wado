@@ -275,6 +275,19 @@ pub struct AxisName {
     pub source: String,
 }
 
+/// `extent` as `Poly::presumed` reads it, where `checked` owes every
+/// condition that reading takes.
+pub fn owed_presumed(extent: &Poly, checked: &Checked) -> Option<Poly> {
+    let mut conditions: List<Condition> = [];
+    let presumed = extent.presumed(&mut conditions)?;
+    for let c of conditions {
+        if !checked.owed.into_iter().any(|o| o.slack == c.slack) {
+            return null;
+        }
+    }
+    return Option::Some(presumed);
+}
+
 /// `owe_at` the node, which a graph wrong for every input stops at.
 fn owe(node: &Node, owed: &mut List<Condition>, slack: Poly, condition: String) -> Result<(), InferError> {
     return owe_at(owed, &node.site(), &slack, condition).map_err(|reason| refusal(node, reason));

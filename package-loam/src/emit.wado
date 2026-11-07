@@ -45,7 +45,7 @@ use {
     trailing_axes,
 } from "./graph.wado";
 use { fill_of } from "./fold.wado";
-use { IfBranch, branches, branches_of, is_alias, lowering_of, lowerings } from "./lowering.wado";
+use { IfBranch, SpelledAttention, branches, branches_of, is_alias, lowerings } from "./lowering.wado";
 use { Expected } from "./runtime/checkpoint.wado";
 use { BinaryOp, UnaryOp } from "./runtime/tensor.wado";
 use { expected } from "./safetensors.wado";
@@ -273,8 +273,8 @@ pub fn emit(
         conditions: &conditions,
     };
     emit_compute(&mut w, &context, host_symbols, &decoding)?;
-    if let Some(axes) = &decoding {
-        emit_decode(&mut w, &context, host_symbols, axes)?;
+    if let Some(decoded) = &decoding {
+        emit_decode(&mut w, &context, host_symbols, decoded)?;
     }
     return Result::Ok(w.to_string());
 }
@@ -1563,7 +1563,7 @@ fn emit_decoded(
     taken: &List<ProgramArgument>,
     chooses: bool,
 ) -> Result<(), EmitError> {
-    let EntryContext { checked, names, read, crossing, owed, .. } = *context;
+    let EntryContext { checked, names, read, owed, .. } = *context;
     let bk = BACKEND_PARAM;
     let mut decoded = FnSpec::new(DECODED);
     decoded.add_generic(GRAPH_BOUND).add_param("backend", `&mut ${bk}`);
@@ -2502,6 +2502,9 @@ fn scope_body(
             },
             Branch => body.extend(&branch_block(&node, checked, names, exprs, symbols)?),
             Operation => body.extend(&node_calls(&node, checked, names, exprs, symbols, graph.opset)?),
+            Attended => {
+            },
+            Attention(a) => body.extend(&spelled_attention_call(&node, &a, checked, names, exprs, symbols)?),
         }
     }
     return Result::Ok(body);
@@ -2575,7 +2578,7 @@ fn attention_call(node: &Node, checked: &Checked, exprs: &Operands, symbols: &mu
     };
     let turbofish = [
         q.axes[0].name, q.axes[1].name, q.axes[2].name, k.axes[2].name, past.axes[1].name, past.axes[2].name, total,
-        past.axes[3].name, pos, half, bias_batch, bias_heads,
+        past.axes[3].name, pos, half, bias_batch, bias_heads, q.axes[1].name,
     ] as List<String>;
     let head = past.axes[3].static_extent();
     let scale = options.scale.unwrap_or(1.0 / f32::sqrt(head as f32));
@@ -2588,6 +2591,8 @@ fn attention_call(node: &Node, checked: &Checked, exprs: &Operands, symbols: &mu
     }
     let length = past.axes[2].extent.poly();
     operands.push(if symbols.reads_lengths(&length) { `Option::Some(&${symbols.value(&length)?})` } else { "null" });
+    // A causal attention reads no padding, whose hidden score is infinite.
+    operands.push("null");
     // The caches are read only where the attribute asks for rotation.
     for let index of [ROTARY_COS, ROTARY_SIN] {
         operands.push(if options.rotary { optional(index) } else { "null" });
@@ -2595,6 +2600,111 @@ fn attention_call(node: &Node, checked: &Checked, exprs: &Operands, symbols: &mu
     operands.push(optional(ATTENTION_BIAS));
     operands.push(attention);
     return Result::Ok(`backend.group_query_attention::<${turbofish.join(", ")}>(${operands.join(", ")})`);
+}
+
+/// An attention spelled in parts as the composite's call, computing what the
+/// node at its end returns and the presents. The composite gives one head's
+/// width one name, so an operand or result under another name crosses by
+/// `relabeled`. With no past it joins the new positions to an empty one.
+fn spelled_attention_call(
+    node: &Node,
+    a: &SpelledAttention,
+    checked: &Checked,
+    names: &Names,
+    exprs: &mut Operands,
+    symbols: &mut Symbols,
+) -> Result<List<String>, EmitError> {
+    let shapes = &checked.shapes;
+    let [q, k] = [shapes[a.query], shapes[a.key]];
+    let present = shapes[a.present_value];
+    let out = shapes[node.outputs[0]];
+    let total = present.axes[2].extent.poly();
+    let as_axes = |tensor: &String, to: &Shape| -> String {
+        let from = shapes[*tensor];
+        if axis_list(&from) == axis_list(to) {
+            return exprs.reference(tensor);
+        }
+        return `&backend.relabeled::<f32, [${axis_list(&from)}], [${axis_list(to)}]>(${exprs.reference(tensor)})`;
+    };
+    let mut operands = [
+        exprs.reference(&a.query),
+        exprs.reference(&a.key),
+        as_axes(&a.value, &k),
+    ] as List<String>;
+    let mut past_length = "null";
+    let positions = match &a.past {
+        Some([past_k, past_v]) => {
+            let mut held = shapes[*past_k];
+            held.axes[1] = present.axes[1];
+            held.axes[3] = present.axes[3];
+            operands.push(as_axes(past_k, &held));
+            operands.push(as_axes(past_v, &held));
+            let length = held.axes[2].extent.poly();
+            if symbols.reads_lengths(&length) {
+                past_length = `Option::Some(&${symbols.value(&length)?})`;
+            }
+            held.axes[2].name;
+        },
+        None => {
+            let extents = [symbols.spell_extent(&present.axes[0].extent.poly())?, `${a.heads}`, "0", `${a.width}`] as List<String>;
+            let empty = `&backend.upload(&Tensor::<f32, [${axis_list(&present)}]> { data: [], extents: [${extents.join(
+                ", ",
+            )}] })`;
+            operands.push(empty);
+            operands.push(empty);
+            present.axes[2].name;
+        },
+    };
+    operands.push(past_length);
+    operands.push(if symbols.reads_lengths(&total) { `Option::Some(&${symbols.value(&total)?})` } else { "null" });
+    operands.push("null");
+    operands.push("null");
+    let bias = match &a.bias {
+        Some(b) => shapes[*b],
+        None => present,
+    };
+    operands.push(match &a.bias {
+        Some(b) => `Option::Some(${exprs.reference(b)})`,
+        None => "null",
+    });
+    operands.push(
+        `&Attention { heads: ${a.heads}, kv_heads: ${a.heads}, scale: ${float_literal(a.scale)}, divides: ${a.divides}, softcap: 0.0, window: -1, causal: true, hidden: Option::Some(${float_literal(
+            a.hidden,
+        )}) }`,
+    );
+    let turbofish = [
+        q.axes[0].name, q.axes[1].name, q.axes[2].name, k.axes[2].name, present.axes[1].name, positions,
+        present.axes[2].name, present.axes[3].name, q.axes[1].name, present.axes[3].name, bias.axes[0].name,
+        bias.axes[1].name, bias.axes[2].name,
+    ] as List<String>;
+    let attended = names.get(&node.outputs[0]);
+    let present_value = names.get(&a.present_value);
+    let present_key = match &a.present_key {
+        Some(key) => names.get(key),
+        None => "_",
+    };
+    let mut lines: List<String> = [
+        `let [${attended}, ${present_key}, ${present_value}] = backend.group_query_attention::<${turbofish.join(", ")}>(${operands.join(
+            ", ",
+        )});`,
+    ];
+    exprs.values[node.outputs[0]] = attended;
+    exprs.values[a.present_value] = present_value;
+    if axis_list(&q) != axis_list(&out) {
+        lines.push(
+            `let ${attended} = backend.relabeled::<f32, [${axis_list(&q)}], [${axis_list(&out)}]>(&${attended});`,
+        );
+    }
+    if let Some(key) = &a.present_key {
+        exprs.values[*key] = present_key;
+        let own = shapes[*key];
+        if axis_list(&own) != axis_list(&present) {
+            lines.push(
+                `let ${present_key} = backend.relabeled::<f32, [${axis_list(&present)}], [${axis_list(&own)}]>(&${present_key});`,
+            );
+        }
+    }
+    return Result::Ok(lines);
 }
 
 /// The statement binding `call` to `output`'s name, which later reads of
@@ -2743,12 +2853,25 @@ fn read_by_graph(read: &mut HashSet<String>, graph: &Graph, checked: &Checked) {
     for let vi of &graph.outputs {
         read.insert(vi.name);
     }
-    for let node of graph.nodes {
-        let lowering = lowering_of(&node, checked);
-        if lowering matches { Folded } {
+    let lowered = lowerings(graph, checked);
+    for let [at, node] of graph.nodes.into_iter().enumerate() {
+        if lowered[at] matches { Folded | Attended } {
             continue;
         }
-        if lowering matches { Branch } {
+        if let Attention(a) = lowered[at] {
+            read.insert(a.query);
+            read.insert(a.key);
+            read.insert(a.value);
+            if let Some([past_k, past_v]) = a.past {
+                read.insert(past_k);
+                read.insert(past_v);
+            }
+            if let Some(b) = a.bias {
+                read.insert(b);
+            }
+            continue;
+        }
+        if lowered[at] matches { Branch } {
             for let b of branches(&node, checked) {
                 read_by_graph(read, &b.graph, &b.checked);
             }

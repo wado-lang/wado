@@ -3,10 +3,12 @@
 
 use { HashMap } from "core:collections";
 use { Graph, Node, data_type, read_at, settled } from "./graph.wado";
-use { Checked, transpose_perm } from "./infer.wado";
+use { Checked, concat_axis, owed_presumed, slice_cuts, softmax_lane, transpose_perm } from "./infer.wado";
+use { Poly } from "./poly.wado";
+use { Shape } from "./shape.wado";
 
 /// What `build` does for one node.
-pub enum Lowering {
+pub variant Lowering {
     /// Nothing: stage 0 computed its outputs, which `build` spells as
     /// literals.
     Folded,
@@ -19,6 +21,31 @@ pub enum Lowering {
     /// Nothing: a weight matrix's `Transpose` that only a `MatMul` reads, as
     /// its right operand, which the product reads by the weight as stored.
     Transposed,
+    /// Nothing: a part of an attention the node ending it computes.
+    Attended,
+    /// The attention composite, whose attended queries are this node's output.
+    Attention(SpelledAttention),
+}
+
+/// A graph's attention in parts, as GPT-2 spells it, as the composite's
+/// operands and the choices its decomposition keeps.
+pub struct SpelledAttention {
+    pub query: String,
+    pub key: String,
+    pub value: String,
+    /// The keys and values the present joins, where a past is given.
+    pub past: Option<[String, String]>,
+    pub bias: Option<String>,
+    /// The present keys, where something reads them.
+    pub present_key: Option<String>,
+    pub present_value: String,
+    pub heads: i32,
+    /// One head's elements.
+    pub width: i32,
+    pub scale: f32,
+    pub divides: bool,
+    /// The score of a position the causal mask hides.
+    pub hidden: f32,
 }
 
 /// How `build` lowers each of `graph`'s nodes, by position.
@@ -40,6 +67,18 @@ pub fn lowerings(graph: &Graph, checked: &Checked) -> List<Lowering> {
     // The scope reads what it returns, at no node's position.
     for let vi of &graph.outputs {
         read_at(&mut read, &vi.name, -1);
+    }
+    for let [at, node] of graph.nodes.into_iter().enumerate() {
+        if node.op != "Softmax" || !lowered[at] matches { Operation } {
+            continue;
+        }
+        let mut walk = Walk { graph, checked, lowered: &lowered, made: &made, read: &read, taken: [] };
+        if let Some([ending, attention]) = walk.attention(at) {
+            for let part of walk.taken {
+                lowered[part] = Lowering::Attended;
+            }
+            lowered[ending] = Lowering::Attention(attention);
+        }
     }
     let only_reader = |tensor: &String| -> Option<i32> {
         let by = read.get(*tensor).unwrap_or([]);
@@ -64,6 +103,344 @@ pub fn lowerings(graph: &Graph, checked: &Checked) -> List<Lowering> {
         }
     }
     return lowered;
+}
+
+/// A walk over the parts of an attention from its softmax, which takes each
+/// node the composite computes.
+struct Walk {
+    graph: &Graph,
+    checked: &Checked,
+    lowered: &List<Lowering>,
+    made: &HashMap<String, i32>,
+    read: &HashMap<String, List<i32>>,
+    taken: List<i32>,
+}
+
+impl Walk {
+    fn node(&self, at: i32) -> &Node {
+        return &self.graph.nodes[at];
+    }
+
+    /// The composite the softmax at `softmax` ends in, with the node computing
+    /// its attended queries.
+    fn attention(&mut self, softmax: i32) -> Option<[i32, SpelledAttention]> {
+        let scores = self.node(softmax);
+        let rank = self.checked.shapes[scores.outputs[0]].rank();
+        let lane = settled(softmax_lane(scores, rank, self.graph.opset));
+        if rank != 4 || lane.flattened || lane.axis != 3 {
+            return null;
+        }
+        self.taken.push(softmax);
+        let weighing = self.reader(&scores.outputs[0], "MatMul")?;
+        let back = self.reader(&self.node(weighing).outputs[0], "Transpose")?;
+        let merged = self.reader(&self.node(back).outputs[0], "Reshape")?;
+        if !self.permutes(back, [0, 2, 1, 3]) || self.shape_of(merged).rank() != 3 {
+            return null;
+        }
+        let mut hidden_by = scores.inputs[0];
+        let mut bias: Option<String> = null;
+        if let Some(add) = self.taking(&hidden_by, "Add") {
+            bias = Option::Some(self.node(add).inputs[1]);
+            hidden_by = self.node(add).inputs[0];
+        }
+        let hiding = self.taking(&hidden_by, "Where")?;
+        let [mask, scored] = [
+            self.node(hiding).inputs[0],
+            self.node(hiding).inputs[1],
+        ];
+        let hidden = self.scalar(&self.node(hiding).inputs[2])?;
+        let scaling = match self.taking(&scored, "Div") {
+            Some(at) => at,
+            None => self.taking(&scored, "Mul")?,
+        };
+        let divides = self.node(scaling).op == "Div";
+        let scale = self.scalar(&self.node(scaling).inputs[1])?;
+        let product = self.taking(&self.node(scaling).inputs[0], "MatMul")?;
+        let [queries, keys] = [
+            self.node(product).inputs[0],
+            self.node(product).inputs[1],
+        ];
+        let [query, heads, width] = self.split_heads(&queries, [0, 2, 1, 3])?;
+
+        let turned = self.taking(&keys, "Transpose")?;
+        let [key_past, key, present_key] = self.keys(turned, heads, width)?;
+        let present_value = self.node(weighing).inputs[1];
+        let [value_past, value, value_heads, value_width] = self.present(&present_value)?;
+        let both_join = key_past matches { Some(_) } == value_past matches { Some(_) };
+        if value_heads != heads || value_width != width || !both_join {
+            return null;
+        }
+        let present = self.checked.shapes[present_value];
+        let total = present.axes[2].extent.poly();
+        let new = self.checked.shapes[query].axes[1].extent.poly();
+        // Keys of another sequence than the queries' are a cross-attention.
+        let attends_itself = self.checked.shapes[key].axes[1].extent.poly() == new
+            && self.checked.shapes[value].axes[1].extent.poly() == new;
+        if !attends_itself || !self.causal(&mask, &total, &new) {
+            return null;
+        }
+        if let Some(b) = &bias && !self.bias_fits(b) {
+            return null;
+        }
+        let mut kept = [self.node(merged).outputs[0], present_value] as List<String>;
+        if let Some(k) = &present_key {
+            kept.push(*k);
+        }
+        if !self.reads_stay_inside(&kept, merged) {
+            return null;
+        }
+        self.taken = self.taken.into_iter().filter(|t| t != merged).collect();
+        let past = match [key_past, value_past] {
+            [Some(k), Some(v)] => Option::Some([k, v]),
+            _ => null,
+        };
+        return Option::Some([
+            merged,
+            SpelledAttention {
+                query,
+                key,
+                value,
+                past,
+                bias,
+                present_key,
+                present_value,
+                heads,
+                width,
+                scale,
+                divides,
+                hidden,
+            },
+        ]);
+    }
+
+    /// What the `Transpose` turning the keys for the scores reads: the past the
+    /// present joins, the new positions' operand, and the present, where
+    /// something reads it. An exporter turns the present, or with no past the
+    /// split it turns into the present as well.
+    fn keys(&mut self, turned: i32, heads: i32, width: i32) -> Option<[Option<String>, String, Option<String>]> {
+        let operand = self.node(turned).inputs[0];
+        if self.permutes(turned, [0, 1, 3, 2]) {
+            let [past, new, h, w] = self.present(&operand)?;
+            return if h == heads && w == width { Option::Some([past, new, Option::Some(operand)]) } else { null };
+        }
+        if !self.permutes(turned, [0, 2, 3, 1]) {
+            return null;
+        }
+        let split = self.taking(&operand, "Reshape")?;
+        if self.head_split(split) != Option::Some([heads, width]) {
+            return null;
+        }
+        return Option::Some([
+            null,
+            self.node(split).inputs[0],
+            self.present_beside(split),
+        ]);
+    }
+
+    /// The node making `tensor` where it is an `op`, past any alias.
+    fn taking(&mut self, tensor: &String, op: String) -> Option<i32> {
+        let mut name = *tensor;
+        let mut passed: List<i32> = [];
+        while let Some(at) = self.made.get(name) {
+            if self.lowered[at] matches { Alias } {
+                passed.push(at);
+                name = self.node(at).inputs[0];
+                continue;
+            }
+            if self.node(at).op != op || !self.lowered[at] matches { Operation } {
+                return null;
+            }
+            self.taken.extend(&passed);
+            self.taken.push(at);
+            return Option::Some(at);
+        }
+        return null;
+    }
+
+    /// The one node reading `tensor`, past any alias, where it is an `op`.
+    fn reader(&mut self, tensor: &String, op: String) -> Option<i32> {
+        let mut name = *tensor;
+        loop {
+            let by = self.read.get(name)?;
+            if by.len() != 1 || by[0] < 0 {
+                return null;
+            }
+            let at = by[0];
+            if !self.lowered[at] matches { Alias } {
+                if self.node(at).op != op {
+                    return null;
+                }
+                self.taken.push(at);
+                return Option::Some(at);
+            }
+            self.taken.push(at);
+            name = self.node(at).outputs[0];
+        }
+    }
+
+    fn shape_of(&self, at: i32) -> &Shape {
+        return &self.checked.shapes[self.node(at).outputs[0]];
+    }
+
+    fn permutes(&self, at: i32, perm: List<i32>) -> bool {
+        return settled(transpose_perm(self.node(at), perm.len())) == perm;
+    }
+
+    /// The operand `tensor` holds turned by `perm` from `[batch, sequence,
+    /// heads × width]`, with the heads and their width.
+    fn split_heads(&mut self, tensor: &String, perm: List<i32>) -> Option<[String, i32, i32]> {
+        let turned = self.taking(tensor, "Transpose")?;
+        if !self.permutes(turned, perm) {
+            return null;
+        }
+        let split = self.taking(&self.node(turned).inputs[0], "Reshape")?;
+        let [heads, width] = self.head_split(split)?;
+        return Option::Some([self.node(split).inputs[0], heads, width]);
+    }
+
+    /// The heads and their width a `Reshape` splits a last axis into.
+    fn head_split(&self, reshape: i32) -> Option<[i32, i32]> {
+        let shapes = &self.checked.shapes;
+        let from = shapes[self.node(reshape).inputs[0]];
+        let to = self.shape_of(reshape);
+        if from.rank() != 3 || to.rank() != 4 {
+            return null;
+        }
+        let heads = to.axes[2].extent.poly().as_constant()?;
+        let width = to.axes[3].extent.poly().as_constant()?;
+        let whole = from.axes[2].extent.poly().as_constant()?;
+        let same_rows = from.axes[0].extent.poly() == to.axes[0].extent.poly()
+            && from.axes[1].extent.poly() == to.axes[1].extent.poly();
+        if heads * width != whole || !same_rows {
+            return null;
+        }
+        return Option::Some([heads as i32, width as i32]);
+    }
+
+    /// What a present holds: the past it joins, where it joins one, then the
+    /// new positions' operand, the heads and their width.
+    fn present(&mut self, tensor: &String) -> Option<[Option<String>, String, i32, i32]> {
+        if let Some(join) = self.taking(tensor, "Concat") {
+            let node = self.node(join);
+            let rank = self.shape_of(join).rank();
+            if node.inputs.len() != 2 || settled(concat_axis(node, rank)) != 2 {
+                return null;
+            }
+            let [new, heads, width] = self.split_heads(&node.inputs[1], [0, 2, 1, 3])?;
+            return Option::Some([Option::Some(node.inputs[0]), new, heads, width]);
+        }
+        let [new, heads, width] = self.split_heads(tensor, [0, 2, 1, 3])?;
+        return Option::Some([null, new, heads, width]);
+    }
+
+    /// The present keys a split's other reader turns it into, where one does.
+    fn present_beside(&mut self, split: i32) -> Option<String> {
+        let by = self.read.get(self.node(split).outputs[0])?;
+        for let at of by {
+            if !self.taken.contains(&at) && self.node(at).op == "Transpose" && self.permutes(at, [0, 2, 1, 3]) {
+                self.taken.push(at);
+                return Option::Some(self.node(at).outputs[0]);
+            }
+        }
+        return null;
+    }
+
+    /// A one-element floating constant's value.
+    fn scalar(&self, tensor: &String) -> Option<f32> {
+        let known = self.checked.known.get(*tensor)?;
+        return match known.elements {
+            Floats(v) && v.len() == 1 => Option::Some(v[0]),
+            _ => null,
+        };
+    }
+
+    /// Whether `mask` shows exactly each position up to the query reading it,
+    /// over `total` positions of which the last `new` query. A mask is known,
+    /// or `Slice`s of a table known, whose every row the proof reads, so what
+    /// a length picks of it is shown causal for any length.
+    fn causal(&mut self, mask: &String, total: &Poly, new: &Poly) -> bool {
+        let mut starts = HashMap::<i32, Poly>::new();
+        let mut extents = HashMap::<i32, Poly>::new();
+        let mut tensor = *mask;
+        while let Some(cut) = self.taking(&tensor, "Slice") {
+            let operand = self.node(cut).inputs[0];
+            let cuts = settled(slice_cuts(self.node(cut), &self.checked.known, &self.checked.shapes[operand]));
+            for let c of cuts {
+                let start = owed_presumed(&c.start, self.checked);
+                let extent = owed_presumed(&c.extent.poly(), self.checked);
+                let [Some(s), Some(e)] = [start, extent] else {
+                    return false;
+                };
+                if c.step != 1 || starts.contains_key(c.axis) {
+                    return false;
+                }
+                starts[c.axis] = s;
+                extents[c.axis] = e;
+            }
+            tensor = operand;
+        }
+        let Some(table) = self.checked.known.get(tensor) else {
+            return false;
+        };
+        let Bools(held) = table.elements else {
+            return false;
+        };
+        let e = table.extents;
+        if e.len() != 4 || e[0] != 1 || e[1] != 1 {
+            return false;
+        }
+        let row_start = starts.get(2).unwrap_or(Poly::constant(0));
+        let rows = extents.get(2).unwrap_or(Poly::constant(e[2] as i64));
+        let columns = extents.get(3).unwrap_or(Poly::constant(e[3] as i64));
+        let Some(first) = total.try_sub(new) else {
+            return false;
+        };
+        let Some(past_first) = first.try_sub(&row_start) else {
+            return false;
+        };
+        // The position of the table's row `r`, less `r`.
+        let Some(before) = past_first.as_constant() else {
+            return false;
+        };
+        if rows != *new || columns != *total || starts.get(3).unwrap_or(Poly::constant(0)) != Poly::constant(0) {
+            return false;
+        }
+        for let row of 0..<e[2] {
+            for let column of 0..<e[3] {
+                if held[row * e[3] + column] != (column as i64 <= row as i64 + before) {
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
+
+    /// Whether `bias` adds to each score as the composite's does, a value for
+    /// each position: stage 0 owes an axis other than 1 the scores' extent.
+    fn bias_fits(&self, bias: &String) -> bool {
+        let Some(shape) = self.checked.shapes.get(*bias) else {
+            return false;
+        };
+        return shape.rank() == 4 && !shape.axes[3].extent.is_one();
+    }
+
+    /// Whether every output of what is taken but `kept` is read only by what
+    /// is taken, and what reads `kept` comes after the node at `ending`.
+    fn reads_stay_inside(&self, kept: &List<String>, ending: i32) -> bool {
+        for let at of &self.taken {
+            for let output of self.node(*at).outputs {
+                for let reader of self.read.get(output).unwrap_or([]) {
+                    if self.taken.contains(&reader) {
+                        continue;
+                    }
+                    if !kept.contains(&output) || reader >= 0 && reader < ending {
+                        return false;
+                    }
+                }
+            }
+        }
+        return true;
+    }
 }
 
 /// How `build` lowers `node`, in the scope `checked`, before a product reads

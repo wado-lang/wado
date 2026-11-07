@@ -726,13 +726,14 @@ test "the attention composite decomposes to what the direct attention computes" 
             null,
             &options,
         );
-        let got = Graph::group_query_attention::<Bt, St, Qt, Kt, Ht, Pt, Tt, Dt, Pos, Half, Bt, Ht>(
+        let got = Graph::group_query_attention::<Bt, St, Qt, Kt, Ht, Pt, Tt, Dt, Pos, Half, Bt, Ht, St>(
             &mut Cpu {},
             &q,
             &k,
             &v,
             &past_k,
             &past_v,
+            null,
             null,
             Option::Some(&cos),
             Option::Some(&sin),
@@ -783,8 +784,20 @@ test "a past of fixed capacity takes the new positions at its valid length, and 
     for let options of [
         Attention { heads, kv_heads: kv, scale: 0.5, softcap: 0.0, window: -1, causal: true },
         Attention { heads, kv_heads: kv, scale: 0.5, softcap: 2.0, window: 2, causal: true },
+        // A hidden position keeps a finite score, so only `reach` keeps a
+        // query from the padding.
+        Attention {
+            heads,
+            kv_heads: kv,
+            scale: 2.0,
+            divides: true,
+            softcap: 0.0,
+            window: -1,
+            causal: true,
+            hidden: Option::Some(-4.0),
+        },
     ] as List<Attention> {
-        let want = Graph::group_query_attention::<Bt, St, Qt, Kt, Ht, Pt, Tt, Dt, Pos, Half, Bt, Ht>(
+        let want = Graph::group_query_attention::<Bt, St, Qt, Kt, Ht, Pt, Tt, Dt, Pos, Half, Bt, Ht, St>(
             g,
             &prefix(g, &q, 1, s),
             &prefix(g, &k, 1, s),
@@ -792,12 +805,13 @@ test "a past of fixed capacity takes the new positions at its valid length, and 
             &prefix(g, &past_k, 2, past),
             &prefix(g, &past_v, 2, past),
             null,
+            null,
             Option::Some(&cos),
             Option::Some(&sin),
             null,
             &options,
         );
-        let got = Graph::group_query_attention::<Bt, St, Qt, Kt, Ht, Pt, Tt, Dt, Pos, Half, Bt, Ht>(
+        let got = Graph::group_query_attention::<Bt, St, Qt, Kt, Ht, Pt, Tt, Dt, Pos, Half, Bt, Ht, St>(
             g,
             &q,
             &k,
@@ -805,6 +819,7 @@ test "a past of fixed capacity takes the new positions at its valid length, and 
             &past_k,
             &past_v,
             Option::Some(&value(past as i64)),
+            Option::Some(&value((past + s) as i64)),
             Option::Some(&cos),
             Option::Some(&sin),
             null,

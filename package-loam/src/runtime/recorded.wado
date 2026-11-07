@@ -38,6 +38,7 @@ pub variant Data {
 pub struct AttentionNode {
     pub options: Attention,
     pub shared: bool,
+    pub bounded: bool,
     pub rotary: bool,
     pub biased: bool,
 }
@@ -441,7 +442,7 @@ impl Graph for Recorder {
         return region.results.into_iter().map(|id| any_at(self.nodes[id].kind, id)).collect();
     }
 
-    fn group_query_attention<B, S, Q, K, H, P, T, D, Pos, Half, BB, BH>(
+    fn group_query_attention<B, S, Q, K, H, P, T, D, Pos, Half, BB, BH, BS>(
         &mut self,
         q: &Value<f32, [B, S, Q]>,
         k: &Value<f32, [B, S, K]>,
@@ -449,13 +450,14 @@ impl Graph for Recorder {
         past_k: &Value<f32, [B, H, P, D]>,
         past_v: &Value<f32, [B, H, P, D]>,
         past_length: Option<&Value<i64, []>>,
+        reach: Option<&Value<i64, []>>,
         cos: Option<&Value<f32, [Pos, Half]>>,
         sin: Option<&Value<f32, [Pos, Half]>>,
-        bias: Option<&Value<f32, [BB, BH, S, T]>>,
+        bias: Option<&Value<f32, [BB, BH, BS, T]>>,
         options: &Attention,
     ) -> [Value<f32, [B, S, Q]>, Value<f32, [B, H, T, D]>, Value<f32, [B, H, T, D]>] {
         if self.decomposes {
-            let attended = decomposed_attention::<Recorder, B, S, Q, K, H, P, T, D, Pos, Half, BB, BH>(
+            let attended = decomposed_attention::<Recorder, B, S, Q, K, H, P, T, D, Pos, Half, BB, BH, BS>(
                 self,
                 q,
                 k,
@@ -463,6 +465,7 @@ impl Graph for Recorder {
                 past_k,
                 past_v,
                 past_length,
+                reach,
                 cos,
                 sin,
                 bias,
@@ -475,10 +478,14 @@ impl Graph for Recorder {
             return attended;
         }
         let mut operands: List<i32> = [q.id, k.id, v.id, past_k.id, past_v.id];
-        let mut node = AttentionNode { options: *options, shared: false, rotary: false, biased: false };
+        let mut node = AttentionNode { options: *options, shared: false, bounded: false, rotary: false, biased: false };
         if let Some(l) = past_length {
             operands.push(l.id);
             node.shared = true;
+        }
+        if let Some(l) = reach {
+            operands.push(l.id);
+            node.bounded = true;
         }
         if let Some(c) = cos && let Some(n) = sin {
             operands.push(c.id);
@@ -960,7 +967,13 @@ impl<affine G: Graph> Run<G> {
         let mut next = 5;
         let past_length: Option<G::Tensor<i64, []>> = if attention.shared {
             next += 1;
-            Option::Some(i64_of::<G, []>(g, self.operand(node, 5)));
+            Option::Some(i64_of::<G, []>(g, self.operand(node, next - 1)));
+        } else {
+            null;
+        };
+        let bound: Option<G::Tensor<i64, []>> = if attention.bounded {
+            next += 1;
+            Option::Some(i64_of::<G, []>(g, self.operand(node, next - 1)));
         } else {
             null;
         };
@@ -978,13 +991,14 @@ impl<affine G: Graph> Run<G> {
         } else {
             null;
         };
-        let [a, k, v] = g.group_query_attention::<Untyped, Untyped, Untyped, Untyped, Untyped, Untyped, Untyped, Untyped, Untyped, Untyped, Untyped, Untyped>(
+        let [a, k, v] = g.group_query_attention::<Untyped, Untyped, Untyped, Untyped, Untyped, Untyped, Untyped, Untyped, Untyped, Untyped, Untyped, Untyped, Untyped>(
             &self.f32_at(g, node, 0),
             &self.f32_at(g, node, 1),
             &self.f32_at(g, node, 2),
             &self.f32_at(g, node, 3),
             &self.f32_at(g, node, 4),
             optional(&past_length),
+            optional(&bound),
             optional(&cos),
             optional(&sin),
             optional(&bias),
