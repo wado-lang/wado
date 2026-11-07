@@ -138,11 +138,7 @@ fn judge_scope(
     ties.extend(&equalities(&checked.owed));
     for let node of &graph.nodes {
         let mut refuse = |read: List<String>, why: Why| {
-            for let symbol of read {
-                if !refusals.contains_key(symbol) {
-                    refusals[symbol] = PadRefusal { node: node.outputs[0], op: node.op, why };
-                }
-            }
+            first_refusals(refusals, read, PadRefusal { node: node.outputs[0], op: node.op, why });
         };
         let folded = node.outputs.into_iter().all(|t| checked.known.contains_key(t));
         if !folded && let Some([read, why]) = refused_by(node, checked) {
@@ -173,10 +169,15 @@ fn judge_scope(
             continue;
         };
         let node = graph.nodes.into_iter().find(|n| n.outputs.contains(&vi.name)).unwrap();
-        for let symbol of behind(&merges) {
-            if !refusals.contains_key(symbol) {
-                refusals[symbol] = PadRefusal { node: vi.name, op: node.op, why: Why::MergedBehind };
-            }
+        first_refusals(refusals, behind(&merges), PadRefusal { node: vi.name, op: node.op, why: Why::MergedBehind });
+    }
+}
+
+/// `refusal` for each of `read` that no node refused before.
+fn first_refusals(refusals: &mut HashMap<String, PadRefusal>, read: List<String>, refusal: PadRefusal) {
+    for let symbol of read {
+        if !refusals.contains_key(symbol) {
+            refusals[symbol] = refusal;
         }
     }
 }
