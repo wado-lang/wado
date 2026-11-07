@@ -258,7 +258,9 @@ impl<F: BodyFacts> ModeWalk<'_, F> {
     /// is a kept borrow's operand.
     fn extend(&mut self, expr: &Expr, place: bool) {
         match expr {
-            Expr::Unary(u) if matches!(u.op, UnaryOp::Ref | UnaryOp::MutRef) => self.extend(&u.expr, true),
+            Expr::Unary(u) if matches!(u.op, UnaryOp::Ref | UnaryOp::MutRef) => {
+                self.extend(&u.expr, true)
+            }
             Expr::Unary(u) if place && u.op == UnaryOp::Deref => self.extend(&u.expr, true),
             Expr::FieldAccess(fa) if place => self.extend(&fa.expr, true),
             Expr::Cast(c) => self.extend(&c.expr, place),
@@ -270,6 +272,7 @@ impl<F: BodyFacts> ModeWalk<'_, F> {
                     self.extend(operand, false);
                 }
             }
+            // An element is a place in what it is read from, not a temporary.
             Expr::Index(_) => {}
             _ if place && place_path(expr, self.facts).is_none() => {
                 self.extended.insert(expr.id());

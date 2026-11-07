@@ -364,7 +364,9 @@ fn emitted(
     if let Some(decoded) = &decoding {
         emit_decode(&mut w, &context, host_symbols, decoded, false)?;
         // Each row's past is one length, which a row of its own holds apart.
-        if per_row && let Some(first) = grown.into_iter().next() && grown.into_iter().all(|g| g.0.symbol == first.0.symbol) {
+        if per_row
+            && let Some(first) = grown.into_iter().next()
+            && grown.into_iter().all(|g| g.0.symbol == first.0.symbol) {
             emit_decode(&mut w, &context, host_symbols, decoded, true)?;
             emit_requests(&mut w, &context, decoded);
         }

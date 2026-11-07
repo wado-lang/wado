@@ -605,7 +605,11 @@ pub fn masked<affine G: Graph, E: Element, Axes>(
     } else {
         g.broadcast_in_dim(length, plane, [varying.position(|d| d != axis).unwrap()]);
     };
-    let valid: G::Tensor<bool, Axes> = g.broadcast_in_dim(&g.compare(Comparison::Lt, &positions, &lengths), extents, varying);
+    let valid: G::Tensor<bool, Axes> = g.broadcast_in_dim(
+        &g.compare(Comparison::Lt, &positions, &lengths),
+        extents,
+        varying,
+    );
     return g.select(&valid, x, &full::<G, E, Axes>(g, fill, extents));
 }
 
