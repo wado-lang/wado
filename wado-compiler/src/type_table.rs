@@ -2468,9 +2468,14 @@ impl TypeTable {
 
     /// The `TypeId` of the declaration itself — not of any instantiation of it.
     pub fn find_struct_type(&self, def: StructDef) -> Option<TypeId> {
+        self.find_struct_instance(def, &[])
+    }
+
+    /// The type of struct `def` at `type_args`, if the table holds it.
+    pub fn find_struct_instance(&self, def: StructDef, type_args: &[TypeId]) -> Option<TypeId> {
         let key = ResolvedType::Struct {
             def,
-            type_args: Vec::new(),
+            type_args: type_args.to_vec(),
         };
         self.intern_map.get(&key).copied()
     }

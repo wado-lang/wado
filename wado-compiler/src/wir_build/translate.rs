@@ -5,7 +5,6 @@
 
 use crate::compiler_item::SeqField;
 use crate::hashmap::{IndexMap, IndexSet};
-use crate::module_source::ModuleSource;
 use crate::name::global_name;
 use crate::nir::{CallParamSource, FuncId, NirBinaryOp, NirFunction, NirParam, NirUnaryOp};
 use crate::optimize::pass_dump;
@@ -18,7 +17,7 @@ use super::context::{SplitParam, WirContext};
 use crate::canonical::CanonicalIntrinsic;
 use crate::compiler_item::CompilerItem;
 use crate::name::{
-    MangledName, StructName, closure_call_wrapper_name, closure_inspect_wrapper_name,
+    MangledName, closure_call_wrapper_name, closure_inspect_wrapper_name,
     multi_value_split_local,
 };
 use crate::nir_arena::{
@@ -498,41 +497,31 @@ fn register_inspect_wrapper(
     let target_func_id = live_wir_func(ctx, &functor.inspect_method);
     let impl_name = functor.inspect_method.borrow().name.clone();
 
-    // Look up the Formatter struct WIR type id once; needed to
-    // refcast the abstract `(ref null struct)` arg to the concrete
-    // `&Formatter` the per-functor impl expects.
-    let formatter_struct_type_id = ctx
-        .struct_type_map
-        .get(&StructName::new(
-            ModuleSource::format(),
-            "Formatter".to_string(),
-        ))
-        .cloned();
-
     // A DCE'd per-functor impl leaves no target: the vtable slot still has to
     // exist so every `CanonicalClosure_K` keeps one schema, and nothing can
-    // reach the wrapper, so its body traps. Once the impl survives, the
-    // `Formatter` it takes must be registered.
+    // reach the wrapper, so its body traps.
     let body = match target_func_id {
         None => vec![WirInstr::Unreachable],
         Some(func_id) => {
-            let formatter_tid = formatter_struct_type_id.unwrap_or_else(|| {
-                panic!(
-                    "[WIR] `{impl_name}` survived DCE but the `Formatter` struct is not registered"
-                )
-            });
             // Its current params, after DAE: only the surviving slots forward.
-            let impl_params: Vec<String> = functor
+            let impl_params: Vec<(String, TypeId)> = functor
                 .inspect_method
                 .borrow()
                 .params
                 .iter()
-                .map(|p| p.name.clone())
+                .map(|p| (p.name.clone(), p.type_id))
                 .collect();
             let typed_env_local = "$typed_env".to_string();
             let typed_formatter_local = "$typed_formatter".to_string();
-            let needs_typed_env = impl_params.iter().any(|n| n == "self");
-            let needs_typed_formatter = impl_params.iter().any(|n| n == "f");
+            let needs_typed_env = impl_params.iter().any(|(n, _)| n == "self");
+            // The `&mut Formatter` the impl takes, which the abstract
+            // `(ref null struct)` argument is cast to.
+            let formatter = impl_params.iter().find(|(n, _)| n == "f").map(|&(_, ty)| {
+                match ctx.type_id_to_wir_type(&ctx.package.type_table.borrow(), ty) {
+                    WirType::Ref { type_id, .. } => type_id,
+                    other => unreachable!("a `Formatter` is a struct, not {other:?}"),
+                }
+            });
 
             let mut body = Vec::new();
             if needs_typed_env {
@@ -555,7 +544,7 @@ fn register_inspect_wrapper(
                     }),
                 });
             }
-            if needs_typed_formatter {
+            if let Some(formatter_tid) = &formatter {
                 body.push(WirInstr::DeclareLocal {
                     name: typed_formatter_local.clone(),
                     ty: WirType::Ref {
@@ -578,7 +567,7 @@ fn register_inspect_wrapper(
 
             let call_args: Vec<WirInstr> = impl_params
                 .iter()
-                .map(|name| match name.as_str() {
+                .map(|(name, _)| match name.as_str() {
                     "self" => WirInstr::LocalGet {
                         name: typed_env_local.clone(),
                         result_ty: WirType::Ref {
@@ -589,7 +578,7 @@ fn register_inspect_wrapper(
                     "f" => WirInstr::LocalGet {
                         name: typed_formatter_local.clone(),
                         result_ty: WirType::Ref {
-                            type_id: formatter_tid.clone(),
+                            type_id: formatter.clone().expect("found with `f`"),
                             nullable: false,
                         },
                     },
@@ -1625,31 +1614,7 @@ impl FunctionTranslator<'_, '_> {
         tuple_type_id: tir::TypeId,
         elements: &[Operand],
     ) -> (WirTypeId, Vec<WirInstr>, Vec<WirInstr>) {
-        let elem_type_ids: Vec<tir::TypeId> =
-            elements.iter().map(|e| self.operand_type_id(*e)).collect();
-        // A tuple interned by CM binding synthesis can carry `TypeId`s the
-        // registrar never saw, so this miss is recoverable: search for a
-        // structurally equal tuple, then define one.
-        let wir_type = self
-            .ctx
-            .try_type_id_to_wir_type(self.type_table, tuple_type_id);
-        let wir_type_id = match &wir_type {
-            Some(WirType::Ref { type_id, .. }) => Some(type_id.clone()),
-            _ if elements.len() >= 2 => self
-                .ctx
-                .find_tuple_type_for_elements(self.type_table, &elem_type_ids)
-                .or_else(|| {
-                    self.ctx
-                        .define_tuple_struct_for_elements(self.type_table, &elem_type_ids)
-                }),
-            _ => None,
-        };
-        let Some(type_id) = wir_type_id else {
-            panic!(
-                "[WIR] tuple literal could not resolve a tuple struct type (expr type_id={tuple_type_id:?}, elements={})",
-                elements.len()
-            );
-        };
+        let type_id = self.ref_type_id(tuple_type_id);
         let value_block = self.prelude_block_holds(tuple_type_id, false);
         let (prelude, raw_fields) = self.translate_args_erasing_unit(elements, value_block);
         let raw_fields = self.as_slots(raw_fields, elements, &type_id);

@@ -696,7 +696,7 @@ fn assign_flat_values_into_slots(
 /// single CM parameter expands to, a `String` becoming `(ptr: i32, len: i32)` —
 /// returning the lifted expression and how many flat params it consumed.
 /// `lift_ctx` carries the CM resolution stack the List and nested-struct lifts
-/// need, plus the `struct_type_map` lookup WIR performs.
+/// need.
 pub(super) fn synthesize_lift_from_flat_params(
     ty: &Type,
     flat_param_locals: &[u32],

@@ -618,29 +618,23 @@ impl FunctionTranslator<'_, '_> {
             "array_get_value_u8" => {
                 let arr = self.translate_operand(args[0].expr);
                 let idx = self.translate_operand(args[1].expr);
-                self.ctx
-                    .array_type_by_name
-                    .get("u8")
-                    .map(|type_id| WirInstr::ArrayGetU {
-                        type_id: type_id.clone(),
-                        array: Box::new(arr),
-                        index: Box::new(idx),
-                        result_ty: WirType::I32,
-                    })
+                Some(WirInstr::ArrayGetU {
+                    type_id: self.ctx.array_type(self.type_table, TypeTable::U8),
+                    array: Box::new(arr),
+                    index: Box::new(idx),
+                    result_ty: WirType::I32,
+                })
             }
             "array_set_u8" => {
                 let arr = self.translate_operand(args[0].expr);
                 let idx = self.translate_operand(args[1].expr);
                 let val = self.translate_operand(args[2].expr);
-                self.ctx
-                    .array_type_by_name
-                    .get("u8")
-                    .map(|type_id| WirInstr::ArraySet {
-                        type_id: type_id.clone(),
-                        array: Box::new(arr),
-                        index: Box::new(idx),
-                        value: Box::new(val),
-                    })
+                Some(WirInstr::ArraySet {
+                    type_id: self.ctx.array_type(self.type_table, TypeTable::U8),
+                    array: Box::new(arr),
+                    index: Box::new(idx),
+                    value: Box::new(val),
+                })
             }
             "array_get_value" => {
                 let arr = self.translate_operand(args[0].expr);
