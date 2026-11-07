@@ -62,13 +62,17 @@ impl Document {
         return Result::Ok(r.doc);
     }
 
-    /// The document `core:json` writes for `value`, or the error it gives for a
-    /// value JSON cannot hold, such as NaN.
+    /// The document `core:json` writes for `value`, or an error for a value
+    /// JSON cannot hold, such as NaN, or one whose `Serialize` writes a key
+    /// twice.
     pub fn of<T: Serialize>(value: &T) -> Result<Document, SerializeError> {
         let text = to_bytes(value)?;
         // Serializing nested as deep as the value does, so reading it back
         // needs no depth bound of its own.
-        return Result::Ok(Document::parse(text, i32::MAX).expect("core:json writes JSON"));
+        return match Document::parse(text, i32::MAX) {
+            Ok(doc) => Result::Ok(doc),
+            Err(e) => Result::Err(SerializeError::unsupported_value(`${e}`)),
+        };
     }
 
     /// Whether `a` and `b` are one node, not merely equal ones.

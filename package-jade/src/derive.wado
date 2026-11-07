@@ -14,10 +14,10 @@ use {
     ZonedDateTime,
 } from "core:temporal";
 use { Uri } from "core:uri";
-use { Url } from "core:url";
+use { Url, percent_encode } from "core:url";
 use { Uuid } from "core:uuid";
 use { Document } from "./document.wado";
-use { JsonTypes, Schema, SchemaObject } from "./schema.wado";
+use { JsonTypes, Schema, SchemaObject, pointer_token } from "./schema.wado";
 
 /// A type whose JSON form a schema describes. Every value `core:json` writes
 /// for the type validates against the schema, and every document that
@@ -62,7 +62,8 @@ impl SchemaGenerator {
             let body = build(self);
             self.definitions[name] = body;
         }
-        return Schema::Object(SchemaObject { reference: Option::Some(`${self.prefix}${name}`) });
+        let token = percent_encode(pointer_token(name));
+        return Schema::Object(SchemaObject { reference: Option::Some(`${self.prefix}${token}`) });
     }
 }
 
@@ -120,6 +121,9 @@ fn variant_schema<V: ReflectVariant<CasePayloads = [..P]>, ..P: JsonSchema>(gen:
     let mut s = SchemaObject {};
     for let case of ReflectVariant::<V>::members() {
         s.one_of.push(case_schema(&case, wire_name(&case, policy), &tag, gen));
+    }
+    if s.one_of.is_empty() {
+        return Schema::Bool(false);
     }
     return Schema::Object(s);
 }

@@ -1,4 +1,4 @@
-use { JsonSchema, SchemaGenerator, schema_for } from "../src/lib.wado";
+use { JsonSchema, Schema, SchemaGenerator, Validator, schema_for } from "../src/lib.wado";
 use { HashMap, HashSet, TreeMap, TreeSet } from "core:collections";
 use { to_string } from "core:json";
 use {
@@ -191,6 +191,13 @@ test "a variant is one of its cases: a name, or an object holding the payload" {
     assert standalone::<Shape>() == `{"$schema":"https://json-schema.org/draft/2020-12/schema","$ref":"#/$defs/Shape","$defs":{"Shape":{"oneOf":[{"type":"object","properties":{"Circle":{"type":"number"}},"required":["Circle"],"maxProperties":1},{"const":"Empty"}]}}}`;
 }
 
+variant Nothing {
+}
+
+test "a variant with no case admits no value" {
+    assert standalone::<Nothing>() == `{"$schema":"https://json-schema.org/draft/2020-12/schema","$ref":"#/$defs/Nothing","$defs":{"Nothing":false}}`;
+}
+
 #[wire(tag = "kind")]
 variant Event {
     Moved(Point),
@@ -205,6 +212,15 @@ type UserName = String;
 
 test "a newtype takes its base's schema" {
     assert inline::<UserName>() == `{"type":"string"}`;
+}
+
+test "a definition's name is escaped in the reference to it" {
+    let mut gen = SchemaGenerator::new();
+    let reference = gen.define("a/b c", |_| Schema::Bool(true));
+    assert to_string(&reference).unwrap() == `{"$ref":"#/$defs/a~1b%20c"}`;
+    let mut root = reference.into_object();
+    root.defs = gen.definitions();
+    assert Validator::compile(&Schema::Object(root)) matches { Ok(_) };
 }
 
 test "an OpenAPI generator refers to its definitions under components" {

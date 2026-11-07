@@ -62,6 +62,20 @@ test "a reference back to itself at the same instance is an error, not a loop" {
     assert errors(##"{"items": {"$ref": "#"}}"##, "[[[1]]]").is_empty();
 }
 
+test "a dynamic reference's fragment is percent-decoded before it names an anchor" {
+    let schema = ##"{
+        "$id": "https://x.test/outer",
+        "$ref": "inner",
+        "$defs": {
+            "node": {"$dynamicAnchor": "node", "type": "integer"},
+            "inner": {"$id": "inner", "$dynamicRef": "#%6eode", "$defs": {"n": {"$dynamicAnchor": "node"}}}
+        }
+    }"##;
+    let found = errors(schema, #""x""#);
+    assert found.len() == 1;
+    assert found[0].keyword == "/$defs/node/type";
+}
+
 test "a reference the schema does not hold is an error at compile" {
     let e = Validator::compile(&Schema::parse(#"{"items": {"$ref": "other.json"}}"#).unwrap()).unwrap_err();
     assert e.pointer == "/items/$ref";

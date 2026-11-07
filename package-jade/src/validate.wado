@@ -634,7 +634,7 @@ impl Compiler {
     fn link(&mut self) -> Result<(), SchemaError> {
         for let r of self.refs {
             let keyword = if r.dynamic { "$dynamicRef" } else { "$ref" };
-            let Some(target) = self.lookup(&r.uri) else {
+            let Some([target, fragment]) = self.lookup(&r.uri) else {
                 return Result::Err(SchemaError {
                     pointer: `${self.nodes[r.node].at}/${keyword}`,
                     message: "refers to no schema this document holds",
@@ -645,10 +645,10 @@ impl Compiler {
                 continue;
             }
             let mut anchor: Option<String> = null;
-            if let Some(name) = r.uri.fragment() && !name.starts_with("/") {
-                let declared = self.resources[self.nodes[target].owner].dynamic_anchors.get_str(name);
+            if !fragment.starts_with("/") {
+                let declared = self.resources[self.nodes[target].owner].dynamic_anchors.get_str(&fragment);
                 if declared matches { Some(t) && t == target } {
-                    anchor = Option::Some(name.to_string());
+                    anchor = Option::Some(fragment);
                 }
             }
             self.nodes[r.node].dynamic_ref = Option::Some(DynamicRef { target, anchor });
@@ -656,7 +656,8 @@ impl Compiler {
         return Result::Ok(());
     }
 
-    fn lookup(&self, uri: &Uri) -> Option<i32> {
+    /// The subschema `uri` names, and its fragment percent-decoded.
+    fn lookup(&self, uri: &Uri) -> Option<[i32, String]> {
         let mut fragment = "";
         if let Some(f) = uri.fragment() {
             let Ok(decoded) = percent_decode(f) else {
@@ -664,7 +665,10 @@ impl Compiler {
             };
             fragment = decoded;
         }
-        return self.targets.get(`${uri.without_fragment()}#${fragment}`);
+        let Some(target) = self.targets.get(`${uri.without_fragment()}#${fragment}`) else {
+            return null;
+        };
+        return Option::Some([target, fragment]);
     }
 }
 

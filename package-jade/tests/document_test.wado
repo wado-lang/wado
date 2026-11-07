@@ -1,6 +1,6 @@
 use { Document, NodeKind } from "../src/document.wado";
 use { to_string } from "core:json";
-use { DeserializeError } from "core:serde";
+use { DeserializeError, Serialize, SerializeError, SerializeMap, Serializer } from "core:serde";
 
 fn round_trip(text: String) -> String {
     return to_string(&Document::parse(text).unwrap()).unwrap();
@@ -74,6 +74,24 @@ test "a document is built from a string or from what core:json writes" {
         chain = Chain { next: Option::Some(chain) };
     }
     assert Document::of(&chain) matches { Ok(_) };
+}
+
+struct Twice {
+}
+
+impl Serialize for Twice {
+    fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError> {
+        let mut m = s.begin_map(2)?;
+        m.key(&"a")?;
+        m.value(&1)?;
+        m.key(&"a")?;
+        m.value(&2)?;
+        return m.end();
+    }
+}
+
+test "a value written with a repeated key is an error" {
+    assert Document::of(&Twice {}).is_err();
 }
 
 test "malformed text is an error" {
