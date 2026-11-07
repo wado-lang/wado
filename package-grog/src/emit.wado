@@ -37,6 +37,7 @@ pub fn emit(file: &ProtoFile, runtime: String) -> Result<String, EmitError> {
         taken: TreeMap::new(),
         features: TreeMap::new(),
         uses_map: false,
+        uses_linear: false,
     };
     for let decl of &file.messages {
         e.features[decl.path.join(".")] = decl.features;
@@ -59,11 +60,8 @@ pub fn emit(file: &ProtoFile, runtime: String) -> Result<String, EmitError> {
     if e.uses_map {
         w.line("use { TreeMap } from \"core:collections\";");
     }
-    for let plan of &messages {
-        if plan.reads_each() {
-            w.line("use { LinearBuffer } from \"core:linear\";");
-            break;
-        }
+    if e.uses_linear {
+        w.line("use { LinearBuffer } from \"core:linear\";");
     }
     w.line(`use ${RUNTIME} from "${runtime}";`);
     for let plan of &enums {
@@ -270,16 +268,6 @@ impl MessagePlan {
         }
     }
 
-    /// Whether a field is read one value at a time, which `write_each` writes.
-    fn reads_each(&self) -> bool {
-        for let slot of &self.slots {
-            if let Field([_, a]) = slot && a.element matches { Some(_) } {
-                return true;
-            }
-        }
-        return false;
-    }
-
     /// A function per repeated message field that reads its values out of an
     /// encoded message one at a time.
     fn write_each(&self, w: &mut CodeWriter) {
@@ -297,7 +285,7 @@ impl MessagePlan {
                 opened = true;
             }
             let wire = if a.put == Call::Groups { "SGroup" } else { "Len" };
-            w.begin(`pub fn ${field}_of(input: LinearBuffer) -> ${RUNTIME}::Each<${element}>`);
+            w.begin(`pub fn ${field}_of(input: LinearBuffer) -> ${RUNTIME}::Messages<${element}>`);
             w.line(`return ${RUNTIME}::each::<${element}>(input, ${a.number}, ${RUNTIME}::WireType::${wire});`);
             w.end();
         }
@@ -427,6 +415,8 @@ struct Emitter {
     /// Each message's own `features`, keyed by its dotted path.
     features: TreeMap<String, Features>,
     uses_map: bool,
+    /// Whether a field is read one value at a time, through a `LinearBuffer`.
+    uses_linear: bool,
 }
 
 impl Emitter {
@@ -600,6 +590,7 @@ impl Emitter {
                     let put = if group { Call::Groups } else { Call::Messages };
                     let mut a = access(n, put, Take::Into(put), "");
                     a.element = Option::Some(wado);
+                    self.uses_linear = true;
                     Result::Ok([`List<${wado}>`, "[]", a]);
                 },
             };

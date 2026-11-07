@@ -290,9 +290,11 @@ impl LinearBuffer {
 and answers whether `n` are. `consume(n)` drops the next `n`. `position()` is
 how far into the stream `start()` is, for an error to name.
 
-`fill` moves the unconsumed bytes to the front of the block before it reads,
-and grows the block only to hold the `n` it was asked for, at least 64 KiB. A
-host copy lands in the block's own room, as `read_stream`'s does.
+`fill` moves the unconsumed bytes to the front of the block before it reads. It
+grows a full block by 64 KiB or more, never to the `n` it was asked for: a
+parser reads `n` off the stream, so a corrupt length would otherwise reserve
+memory the stream never fills. A host copy lands in the block's own room, as
+`read_stream`'s does.
 
 A buffer over `of(bytes)` has nothing more to read, so one parser serves an
 array read whole and a stream read in parts.

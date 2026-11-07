@@ -318,8 +318,8 @@ fn grown(block: &Block, len: i32, more: i32) -> Block {
     return moved;
 }
 
-/// The room a buffer reading a stream takes at least, so a stream of small
-/// copies is read in few of them.
+/// The room a full buffer reading a stream grows by at least, so a stream of
+/// small copies is read in few of them.
 global BUFFER_ROOM: i32 = 65536;
 
 /// Bytes in linear memory, read from a stream a part at a time, or held whole:
@@ -378,7 +378,7 @@ impl LinearBuffer {
         contract n >= 0
     {
         while self.len() < n && let Some(stream) = &self.source {
-            self.make_room(n);
+            self.make_room();
             if self.bytes.read_more(stream) != CopyResult::Completed {
                 self.source = null;
             }
@@ -393,9 +393,10 @@ impl LinearBuffer {
         self.start += n;
     }
 
-    /// Move the bytes not yet consumed to the front of the block, and grow it to
-    /// hold `n` of them.
-    fn make_room(&mut self, n: i32) {
+    /// Move the bytes not yet consumed to the front of the block, and grow a
+    /// full one by `BUFFER_ROOM` or more. Memory follows what the stream
+    /// delivered, never an `n` a parser read off it, which may lie.
+    fn make_room(&mut self) {
         let kept = self.len();
         if self.start > 0 {
             builtin::memory_copy(self.bytes.block.ptr, self.bytes.block.ptr + self.start, kept);
@@ -403,8 +404,8 @@ impl LinearBuffer {
             self.start = 0;
             self.bytes.len = kept;
         }
-        if n > self.bytes.block.bytes {
-            self.bytes.block = grown(&self.bytes.block, kept, i32::max(n, BUFFER_ROOM) - kept);
+        if kept == self.bytes.block.bytes {
+            self.bytes.block = grown(&self.bytes.block, kept, BUFFER_ROOM);
         }
     }
 }

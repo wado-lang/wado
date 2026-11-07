@@ -166,83 +166,79 @@ pub fn merge<M: Message, S: AsByteSlice>(message: &mut M, input: S) -> Result<()
 /// value it decodes. Only that field is checked: the others are skipped, not
 /// decoded. A value of another wire type is skipped, as a decode keeps it as an
 /// unknown field.
-pub fn each<M: Message + Default>(input: LinearBuffer, number: i32, wire_type: WireType) -> Each<M>
+pub fn each<M: Message + Default>(input: LinearBuffer, number: i32, wire_type: WireType) -> Messages<M>
     contract wire_type == WireType::Len || wire_type == WireType::SGroup
 {
-    return Each { input, number, wire_type, done: false };
-}
-
-/// What [`each`] returns: after an error, nothing more.
-pub affine struct Each<M> {
-    input: LinearBuffer,
-    number: i32,
-    wire_type: WireType,
-    done: bool,
-}
-
-impl<M: Message + Default> Iterator for Each<M> {
-    type Item = Result<M, DecodeError>;
-
-    fn next(&mut self) -> Option<Result<M, DecodeError>> {
-        if self.done {
-            return null;
-        }
-        let read = self.read();
-        self.done = !read matches { Ok(Some(_)) };
-        return yielded(read);
-    }
-}
-
-impl<M: Message + Default> Each<M> {
-    fn read(&mut self) -> Result<Option<M>, DecodeError> {
-        while let Some(size) = field_size(&mut self.input)? {
-            let mut r = reader_of(&self.input, size);
-            r.next_field(0)?;
-            if r.number == self.number && r.wire_type == self.wire_type {
-                let mut m = M::default();
-                if self.wire_type == WireType::Len {
-                    r.merge_nested(&mut m)?;
-                } else {
-                    r.merge_group(&mut m)?;
-                }
-                self.input.consume(size);
-                return Result::Ok(Option::Some(m));
-            }
-            r.skip_value()?;
-            self.input.consume(size);
-        }
-        return Result::Ok(null);
-    }
+    return Messages { input, framing: Framing::Field([number, wire_type]), done: false };
 }
 
 /// The messages `input` holds or reads one after another, each behind its
 /// length as a varint: how a stream carries several messages, since an
 /// encoding has no end of its own. [`encode_delimited`] writes one.
-pub fn delimited<M: Message + Default>(input: LinearBuffer) -> Delimited<M> {
-    return Delimited { input, done: false };
+pub fn delimited<M: Message + Default>(input: LinearBuffer) -> Messages<M> {
+    return Messages { input, framing: Framing::Delimited, done: false };
 }
 
-/// What [`delimited`] returns: after an error, nothing more.
-pub affine struct Delimited<M> {
+/// How the messages a [`Messages`] reads sit in its input.
+variant Framing {
+    /// The values of one field, by its number and wire type.
+    Field([i32, WireType]),
+    Delimited,
+}
+
+/// What [`each`] and [`delimited`] return: after an error, nothing more.
+pub affine struct Messages<M> {
     input: LinearBuffer,
+    framing: Framing,
     done: bool,
 }
 
-impl<M: Message + Default> Iterator for Delimited<M> {
+impl<M: Message + Default> Iterator for Messages<M> {
     type Item = Result<M, DecodeError>;
 
     fn next(&mut self) -> Option<Result<M, DecodeError>> {
         if self.done {
             return null;
         }
-        let read = self.read();
-        self.done = !read matches { Ok(Some(_)) };
-        return yielded(read);
+        let read = match self.framing {
+            Field([number, wire_type]) => self.next_value(number, wire_type),
+            Delimited => self.next_delimited(),
+        };
+        return match read {
+            Ok(Some(m)) => Option::Some(Result::Ok(m)),
+            Ok(None) => {
+                self.done = true;
+                null
+            },
+            Err(e) => {
+                self.done = true;
+                Option::Some(Result::Err(e))
+            },
+        };
     }
 }
 
-impl<M: Message + Default> Delimited<M> {
-    fn read(&mut self) -> Result<Option<M>, DecodeError> {
+impl<M: Message + Default> Messages<M> {
+    fn next_value(&mut self, number: i32, wire_type: WireType) -> Result<Option<M>, DecodeError> {
+        while let Some(field) = field_at(&mut self.input)? {
+            if field.number == number && field.wire_type == wire_type {
+                let mut r = reader_of(&self.input, field.size);
+                r.next_field(0)?;
+                let mut m = M::default();
+                if wire_type == WireType::Len {
+                    r.merge_nested(&mut m)?;
+                } else {
+                    r.merge_group(&mut m)?;
+                }
+                self.input.consume(field.size);
+                return Result::Ok(Option::Some(m));
+            }
+            self.input.consume(field.size);
+        }
+        return Result::Ok(null);
+    }
+
+    fn next_delimited(&mut self) -> Result<Option<M>, DecodeError> {
         let input = &mut self.input;
         if !input.fill(1) {
             return Result::Ok(null);
@@ -259,15 +255,6 @@ impl<M: Message + Default> Delimited<M> {
     }
 }
 
-/// An iterator's answer to one read, which is its last but for a value.
-fn yielded<M>(read: Result<Option<M>, DecodeError>) -> Option<Result<M, DecodeError>> {
-    return match read {
-        Ok(Some(m)) => Option::Some(Result::Ok(m)),
-        Ok(None) => null,
-        Err(e) => Option::Some(Result::Err(e)),
-    };
-}
-
 /// A reader over the first `n` bytes `input` has not consumed, counting
 /// offsets from the start of what it reads.
 fn reader_of(input: &LinearBuffer, n: i32) -> Reader<&LinearArray<u8>> {
@@ -275,10 +262,18 @@ fn reader_of(input: &LinearBuffer, n: i32) -> Reader<&LinearArray<u8>> {
     return Reader::new(input.bytes(), start, start + n, input.position() - start as i64);
 }
 
-/// The length of the field `input` starts with, which it then holds all of
-/// that the stream has; `None` at its end. A length the stream cuts short is
-/// left for the decode to refuse, as it refuses one cut short in place.
-fn field_size(input: &mut LinearBuffer) -> Result<Option<i32>, DecodeError> {
+/// A field `input` starts with: its bytes, which `input` then holds, and its
+/// tag's number and wire type.
+struct FieldAt {
+    size: i32,
+    number: i32,
+    wire_type: WireType,
+}
+
+/// The field `input` starts with, its value skipped but not decoded; `None` at
+/// the input's end. A field the stream cuts short is refused where a decode
+/// refuses it.
+fn field_at(input: &mut LinearBuffer) -> Result<Option<FieldAt>, DecodeError> {
     if !input.fill(1) {
         return Result::Ok(null);
     }
@@ -287,27 +282,32 @@ fn field_size(input: &mut LinearBuffer) -> Result<Option<i32>, DecodeError> {
     loop {
         let mut r = reader_of(input, input.len());
         r.next_field(0)?;
-        if r.wire_type == WireType::Len {
+        let [number, wire_type] = [r.number, r.wire_type];
+        let size = if wire_type == WireType::Len {
             let size = r.size_through_length_prefixed(r.tag_start)?;
-            input.fill(size);
-            return Result::Ok(Option::Some(i32::min(size, input.len())));
-        }
-        // Only a group runs on past what the fill guarantees.
-        let group = r.wire_type == WireType::SGroup;
-        let held = input.len();
-        match r.skip_value() {
-            Ok(_) => {
-                return Result::Ok(Option::Some(r.pos - input.start()));
-            },
-            Err(e) => {
-                if group {
-                    input.fill(held * 2);
-                }
-                if input.len() == held {
-                    return Result::Err(e);
-                }
-            },
-        }
+            if !input.fill(size) {
+                r.pos = r.value_start;
+                return Result::Err(r.skip_value().unwrap_err());
+            }
+            size
+        } else {
+            let held = input.len();
+            match r.skip_value() {
+                Ok(_) => r.pos - input.start(),
+                Err(e) => {
+                    // Only a group runs on past what the fill guarantees, and
+                    // the skip reads it again from its tag over twice as much.
+                    if wire_type == WireType::SGroup {
+                        input.fill(held + i32::min(held, i32::MAX - held));
+                    }
+                    if input.len() == held {
+                        return Result::Err(e);
+                    }
+                    continue;
+                },
+            }
+        };
+        return Result::Ok(Option::Some(FieldAt { size, number, wire_type }));
     }
 }
 
@@ -322,7 +322,7 @@ fn merge_fields<M: Message, B: Input>(message: &mut M, r: &mut Reader<B>, group:
             r.number = number;
             r.wire_type = wire_type;
             r.skip_value()?;
-            message.unknown_fields().extend(&r.input.bytes_between(tag_start, r.pos));
+            r.input.append_between(tag_start, r.pos, message.unknown_fields());
         }
         if !r.stray.is_empty() {
             message.unknown_fields().extend(&r.stray);
@@ -664,6 +664,10 @@ pub affine trait Input with () {
     fn bytes_between(&self, start: i32, end: i32) -> ByteList
         contract 0 <= start <= end <= self.size();
 
+    /// The bytes from `start` to `end`, appended to `out`.
+    fn append_between(&self, start: i32, end: i32, out: &mut ByteList)
+        contract 0 <= start <= end <= self.size();
+
     /// The bytes from `start` to `end` as text, copied.
     fn text_between(&self, start: i32, end: i32) -> Result<String, Utf8Error>
         contract 0 <= start <= end <= self.size();
@@ -682,6 +686,10 @@ impl Input for ByteSlice {
         return self.slice(start, end).to_list() as ByteList;
     }
 
+    fn append_between(&self, start: i32, end: i32, out: &mut ByteList) {
+        out.extend_from_slice(self.slice(start, end) as Slice<u8>);
+    }
+
     fn text_between(&self, start: i32, end: i32) -> Result<String, Utf8Error> {
         return String::try_from_utf8(self.slice(start, end));
     }
@@ -698,6 +706,10 @@ impl Input for &LinearArray<u8> {
 
     fn bytes_between(&self, start: i32, end: i32) -> ByteList {
         return self.to_list_of::<u8>(start, end) as ByteList;
+    }
+
+    fn append_between(&self, start: i32, end: i32, out: &mut ByteList) {
+        out.extend(&self.bytes_between(start, end));
     }
 
     fn text_between(&self, start: i32, end: i32) -> Result<String, Utf8Error> {
@@ -944,7 +956,7 @@ impl<B: Input> Reader<B> {
     /// would have been.
     fn keep_unpacked(&mut self, element: WireType, start: i32) {
         push_varint(&mut self.stray, tag_of(self.number, element));
-        self.stray.extend(&self.input.bytes_between(start, self.pos));
+        self.input.append_between(start, self.pos, &mut self.stray);
     }
 
     /// A message field, merged into what `slot` already holds.

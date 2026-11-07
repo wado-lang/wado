@@ -88,6 +88,22 @@ test "a fill past the buffer's room grows it" {
     };
 }
 
+test "a fill takes memory for what the stream delivers, not for what it asks" {
+    // Three asks for 2 GiB at once would not fit the 4 GiB a memory addresses.
+    let mut held: List<LinearBuffer> = [];
+    for let _ of 0..<3 {
+        let [rx, tx] = Stream::<u8>::new();
+        tx.drop();
+        let mut source = Trickle { content: counting(0, 5), at: 0, step: 5 };
+        with &mut source do {
+            let mut buffer = LinearBuffer::of_stream(rx);
+            assert !buffer.fill(i32::MAX);
+            assert buffer.len() == 5;
+            held.push(buffer);
+        };
+    }
+}
+
 test "a buffer lends its own memory to a stream copy" {
     let [rx, tx] = Stream::<u8>::new();
     let writing = tx.start_write([1, 2, 3, 4, 5]);
