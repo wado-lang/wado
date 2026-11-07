@@ -6,6 +6,12 @@ Jade is JSON Schema Draft 2020-12 for Wado.
 - [`research-format.md`](./research-format.md) — what the specifications and
   implementations say about the date and time formats.
 
+## Principles
+
+Compliance with the specification comes first. Whether to comply is never an
+open question: the answer is always yes, because a schema means the same thing
+to every tool only when each one follows the specification.
+
 ## Sources
 
 The rules come from the specification: JSON Schema Core and Validation, Draft
