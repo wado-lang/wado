@@ -911,7 +911,7 @@ impl FunctionTranslator<'_, '_> {
         }
     }
 
-    /// The `Box<T>` each element of an `Array<T>` or `List<T>` of
+    /// The cell each element of an `Array<T>` or `List<T>` of
     /// `sequence_type_id` is held in, where `TypeTable::slot_box` names one.
     pub(super) fn element_box(&self, sequence_type_id: TypeId) -> Option<WirTypeId> {
         let sequence = self.type_table.peel_refs(sequence_type_id);

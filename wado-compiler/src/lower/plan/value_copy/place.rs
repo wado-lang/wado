@@ -329,9 +329,6 @@ impl<'a> Resolver<'a> {
                         index: *field_index,
                     },
                 );
-                // `is_reference`, not a `ResolvedType` match: `boxing` has
-                // already rewritten some `&T` onto `Box<T>` in place, and which
-                // ones it reached says nothing about whether the field is a reference.
                 if !is_reference(expr.type_id, self.type_table) {
                     return names;
                 }

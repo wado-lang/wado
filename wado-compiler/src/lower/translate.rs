@@ -380,7 +380,7 @@ impl BoxedLocals {
 }
 
 /// The locals declared without a value (`let x: T;`, a unit initializer) that an
-/// assignment writing in place replaces whole, or that live in a `Box`.
+/// assignment writing in place replaces whole, or that live in a cell.
 fn guarded_locals(func: &TirFunction, boxed: impl Fn(u32, tir::TypeId) -> bool) -> IndexSet<u32> {
     struct Scan {
         deferred: IndexMap<u32, tir::TypeId>,
@@ -2939,8 +2939,8 @@ impl FunctionTranslator<'_, '_> {
     ) -> Vec<(&'b TirExpr, bool)> {
         // Either source saying the callee writes the caller's storage through
         // this slot settles it. The syntax alone misses a receiver, whose
-        // `is_mut` TIR leaves unset, and a `&mut` boxing rehomed into a `Box<T>`
-        // the callee still writes through. The declared modes alone miss a
+        // `is_mut` TIR leaves unset, and a `&mut` boxing rehomed into a cell the
+        // callee still writes through. The declared modes alone miss a
         // builtin, which has no row in this table.
         let mut_ref_params = self
             .base

@@ -110,10 +110,10 @@ pub fn plan(
         value_copy::confine::compute_confined_params(flat, &pre_boxing_calls, &builtins)
     });
     let ref_receiver_methods = ref_receiver_methods(flat);
-    let mut box_plan = in_span(profiler, "lower/boxing", || boxing::prepare(flat));
-    let lifted_from = flat.functions.len();
     let closure = in_span(profiler, "lower/closure", || closure::plan(flat));
-    box_plan.shadow_functions(flat, lifted_from);
+    // After lifting, so a fn-param specialization, a copy of its callee, is
+    // moved into cells once.
+    let box_plan = in_span(profiler, "lower/boxing", || boxing::prepare(flat));
     globals::build_initialize_modules(flat);
     lift_mut::lift_mut_match_bindings(flat);
     let value_copy = value_copy::plan(

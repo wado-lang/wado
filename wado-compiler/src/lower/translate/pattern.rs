@@ -1995,7 +1995,7 @@ impl<'a> PatternLowerer<'a> {
                     self.lower_expr(&mut arm.body, type_table);
                 }
 
-                // Match ergonomics: peel Ref / MutRef / Box off the scrutinee
+                // Match ergonomics: peel Ref / MutRef off the scrutinee
                 let scrut_span = scrutinee.span;
                 let scrut_type = scrutinee.type_id;
                 let old = std::mem::replace(

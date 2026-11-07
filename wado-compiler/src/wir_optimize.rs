@@ -132,7 +132,7 @@ fn optimize_scoped(
     });
 
     // Phase 2: box-local elimination — substitute `inner` at the single
-    // `StructGet` use of a `Box<T>` local `lower::plan::boxing` minted.
+    // `StructGet` use of a cell local `lower::plan::boxing` minted.
     wir_pass(scope, "elide_adjacent_box_locals", module, profiler, |m| {
         elide_adjacent_box_locals(m);
     });

@@ -2540,7 +2540,7 @@ struct SyncFields {
     /// Tracked only for non-GC field types: a GC field's reference is the
     /// object handle the scalar already shares (in-place mutation, never a
     /// place rebinding), so no state change is needed. Unreachable today —
-    /// the front end lowers non-GC field refs to snapshot `Box` literals —
+    /// the front end lowers non-GC field refs to snapshot cell literals —
     /// but kept so a future lowering change cannot silently lose updates.
     scalar_write: IndexSet<(u32, u32)>,
 }

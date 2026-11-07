@@ -929,15 +929,15 @@ impl TypeTable {
     /// consumer deciding by representation reads this one predicate.
     #[must_use]
     pub fn is_boxed_reference_target(&self, ty: TypeId) -> bool {
-        matches!(
-            self.get(self.representation_head(ty)),
+        match self.get(self.representation_head(ty)) {
             ResolvedType::Primitive(_)
-                | ResolvedType::Enum { .. }
-                | ResolvedType::Variant { .. }
-                | ResolvedType::Function { .. }
-                | ResolvedType::Ref(_)
-                | ResolvedType::MutRef(_)
-        )
+            | ResolvedType::Enum { .. }
+            | ResolvedType::Variant { .. }
+            | ResolvedType::Function { .. } => true,
+            // A reference to nothing holds nothing, so it stays stackless.
+            ResolvedType::Ref(_) | ResolvedType::MutRef(_) => !self.is_stackless(ty),
+            _ => false,
+        }
     }
 
     /// Whether a value of `ty` is mutated in place through a reference to it, so

@@ -454,7 +454,7 @@ pub struct SroaParamProjection {
 /// How a parameter `sroa_param` narrowed holds the field it was narrowed to.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum FieldForm {
-    /// By value: the canonical `Box<T>` case, where a reference would only
+    /// By value: the canonical cell case, where a reference would only
     /// re-box what the unwrap just removed.
     Value,
     /// As `&T`.

@@ -1327,7 +1327,7 @@ impl FunctionTranslator<'_, '_> {
 
     /// Store `source` into a pattern `Binding`'s local, coerced first to the
     /// pattern's own type and then, where `boxing` retagged the local to its
-    /// `Box<T>`, wrapped in that box. A unit binding has no Wasm local.
+    /// cell, wrapped in that cell. A unit binding has no Wasm local.
     fn emit_pattern_binding_set(
         &mut self,
         binding: PatId,
@@ -1557,9 +1557,7 @@ fn pattern_has_bindings(body: &Body, pattern: PatId) -> bool {
     }
 }
 
-/// The declared type of a tuple's `i`-th element. Arity is fixed by type
-/// checking, so an out-of-range index is a lowering bug.
-/// `value` wrapped in the `Box<T>` struct `box_wir` references.
+/// `value` wrapped in the cell `box_wir` references.
 fn box_new(box_wir: &WirType, value: WirInstr) -> WirInstr {
     let WirType::Ref { type_id, .. } = box_wir else {
         unreachable!("a box is a struct reference, not {box_wir:?}")

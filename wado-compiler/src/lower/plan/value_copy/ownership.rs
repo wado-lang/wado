@@ -592,10 +592,6 @@ fn compute_fresh_locals(
     }
     // A by-value parameter is owned, the caller having copied or moved it in,
     // unless the caller passes it uncopied.
-    //
-    // `is_reference`, not a `ResolvedType` match: `boxing` has already rewritten
-    // some `&T` onto `Box<T>` in place, and one it reached would read here as a
-    // parameter the caller handed a copy of.
     for p in params {
         if !is_reference(p.type_id, type_table) && !shared.contains(&p.local_index) {
             fresh.insert(p.local_index);

@@ -31,11 +31,10 @@ impl BoxPlan {
             .get(&(func.module_source.clone(), func.name.clone()))
     }
 
-    /// Move each address-taken local of `flat`'s functions from `start` on
-    /// into a cell.
-    pub fn shadow_functions(&mut self, flat: &FlatPackage, start: usize) {
+    /// Move each address-taken local of `flat`'s functions into a cell.
+    fn shadow_functions(&mut self, flat: &FlatPackage) {
         let mut type_table = flat.type_table.borrow_mut();
-        for func_rc in &flat.functions[start..] {
+        for func_rc in &flat.functions {
             let mut func = func_rc.borrow_mut();
             let cells = shadow_one_function(&mut func, &mut type_table);
             if !cells.is_empty() {
@@ -60,7 +59,7 @@ pub fn prepare(flat: &FlatPackage) -> BoxPlan {
         }
     }
     let mut plan = BoxPlan::default();
-    plan.shadow_functions(flat, 0);
+    plan.shadow_functions(flat);
     plan
 }
 
@@ -208,7 +207,7 @@ impl TirMutVisitor for RemapReferences {
 
 /// Rewrite every `Local { index }` reference in `block` according to
 /// `remap`. Used by [`shadow_one_function`] to redirect an address-taken
-/// `mut` parameter's reads to its `Box`-typed shadow local.
+/// `mut` parameter's reads to its cell shadow local.
 ///
 /// Closure bodies are skipped: closure locals live in their own scope
 /// and reuse the same indices, so descending would cause unrelated

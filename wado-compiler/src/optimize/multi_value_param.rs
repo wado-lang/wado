@@ -23,8 +23,7 @@ use super::multi_value_return::is_eligible_field_type;
 /// call costs more than the aggregate it avoids.
 const MAX_PARAM_FIELDS: usize = 8;
 
-/// One field is `sroa_param`'s, which knows a by-value `Box<T>` for the
-/// reference it is.
+/// One field is `sroa_param`'s, which knows a cell for the reference it is.
 const MIN_PARAM_FIELDS: usize = 2;
 
 /// Set `param_abi` on every parameter that can take one Wasm slot per field.

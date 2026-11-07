@@ -1,4 +1,4 @@
-//! Adjacent-use single-field struct local elimination, for the `Box<T>` pattern
+//! Adjacent-use single-field struct local elimination, for the cell pattern
 //! `wrap_in_box` produces and `sroa_param` exposes. A local defined once as a
 //! single-field `StructLiteral` and read once through `FieldAccess` has its
 //! initializer substituted at the use and its `Let` dropped, if the use is the
