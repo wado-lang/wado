@@ -95,22 +95,6 @@ struct Cx<'a> {
     /// The `self` of a `Drop::drop` body, which drops what it still holds field
     /// by field: dropping it whole would run `drop` again.
     drop_self: Option<u32>,
-    /// How the `let` initializer being elaborated keeps the expression
-    /// [`elab_expr`] takes next.
-    extension: Extension,
-}
-
-/// Rust's temporary lifetime extension: a temporary borrowed where a `let`
-/// keeps the borrow drops when the `let`'s block ends, not its statement.
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum Extension {
-    None,
-    /// The `let` keeps the value: its initializer, or an operand of a literal or
-    /// a cast it keeps.
-    Value,
-    /// The `let` keeps a borrow of the place: the operand of a borrow it keeps,
-    /// or what a field read or a dereference of such a place reads from.
-    Place,
 }
 
 /// The drop glue functions called so far, by name, each with the type it
@@ -677,7 +661,6 @@ fn build_drop_glue(
         glue,
         module: entry.clone(),
         drop_self: None,
-        extension: Extension::None,
     };
     let value = local_ref(0, "value", type_id);
     let stmts = match cx.affine_types.layout(type_id) {
@@ -750,7 +733,6 @@ fn elaborate_function(func: &mut TirFunction, affine_types: AffineTypes, glue: &
         glue,
         module: module_source.clone(),
         drop_self,
-        extension: Extension::None,
     };
     let yields = cx.yields(*return_type);
     elab_scope(body, owned, TemporaryScope::Statement, yields, &mut cx);
@@ -1407,7 +1389,6 @@ fn elab_stmt(stmt: TirStmt, cx: &mut Cx, tail: Tail, out: &mut Vec<TirStmt>) {
             value,
             storage,
         } => {
-            cx.extension = Extension::Value;
             let value = elab_value_expr(value, cx);
             if cx.carries_affine(type_id) {
                 cx.declare(Live {
@@ -1435,7 +1416,6 @@ fn elab_stmt(stmt: TirStmt, cx: &mut Cx, tail: Tail, out: &mut Vec<TirStmt>) {
         TirStmtKind::LetDestructure { pattern, mut value } => {
             let bindings = cx.affine_types.pattern_bindings(&pattern);
             let extracts = !bindings.is_empty();
-            cx.extension = Extension::Value;
             let entry = consumed_scrutinee(&mut value, &[(&pattern, true)], extracts, cx)
                 .map_or_else(Vec::new, |place| consume_matched(&pattern, place, cx));
             for live in bindings {
@@ -1595,17 +1575,12 @@ fn elab_value_expr(mut expr: TirExpr, cx: &mut Cx) -> TirExpr {
 /// The match is exhaustive so a new `TirExprKind` cannot silently escape
 /// ownership accounting: a missed move drops twice, a missed reference leaks.
 fn elab_expr(expr: &mut TirExpr, consuming: bool, cx: &mut Cx) {
-    let extension = std::mem::replace(&mut cx.extension, Extension::None);
-    let extended = extension == Extension::Place;
     if !consuming && is_temporary(expr, cx) && cx.carries_affine(expr.type_id) {
-        if extended {
-            cx.extension = Extension::Value;
-        }
+        let extended = expr.marks().extended;
         elab_expr(expr, true, cx);
         spill_temporary(expr, extended, cx);
         return;
     }
-    let kept = extension != Extension::None;
     let type_id = expr.type_id;
     let span = expr.span;
     let mut dropped = None;
@@ -1636,29 +1611,16 @@ fn elab_expr(expr: &mut TirExpr, consuming: bool, cx: &mut Cx) {
         TirExprKind::Unary {
             op: TirUnaryOp::Ref | TirUnaryOp::MutRef,
             expr: inner,
-        } => {
-            if kept {
-                cx.extension = Extension::Place;
-            }
-            elab_expr(inner, false, cx);
-        }
+        } => elab_expr(inner, false, cx),
         // A dereference reads through a reference, which owns nothing.
         TirExprKind::Unary {
             op: TirUnaryOp::Deref,
             expr: inner,
-        } => {
-            if extended {
-                cx.extension = Extension::Place;
-            }
-            elab_expr(inner, false, cx);
-        }
+        } => elab_expr(inner, false, cx),
         // Casts and projections keep the surrounding ownership context:
         // `&(h as Fields)` must still see `h` as referenced.
-        TirExprKind::Cast { expr: inner, .. } => {
-            cx.extension = extension;
-            elab_expr(inner, consuming, cx);
-        }
         TirExprKind::Unary { expr: inner, .. }
+        | TirExprKind::Cast { expr: inner, .. }
         | TirExprKind::TupleSpread { expr: inner }
         | TirExprKind::TupleZip { expr: inner }
         | TirExprKind::TupleLen { expr: inner } => {
@@ -1682,9 +1644,6 @@ fn elab_expr(expr: &mut TirExpr, consuming: bool, cx: &mut Cx) {
                 take_field(expr, cx);
             } else {
                 // Reading a field that owns nothing leaves the aggregate whole.
-                if extended {
-                    cx.extension = Extension::Place;
-                }
                 elab_expr(inner, false, cx);
             }
         }
@@ -1789,17 +1748,11 @@ fn elab_expr(expr: &mut TirExpr, consuming: bool, cx: &mut Cx) {
         TirExprKind::StructLiteral { fields, .. } => {
             let owns_fields = !cx.affine_types.is_template(type_id);
             for field in fields {
-                if kept && owns_fields {
-                    cx.extension = Extension::Value;
-                }
                 elab_expr(&mut field.value, owns_fields, cx);
             }
         }
         TirExprKind::TupleLiteral { elements } | TirExprKind::ArrayLiteral { elements } => {
             for elem in elements {
-                if kept {
-                    cx.extension = Extension::Value;
-                }
                 elab_expr(elem, true, cx);
             }
         }
@@ -2164,7 +2117,6 @@ fn elab_closure(
         glue: cx.glue,
         module: cx.module.clone(),
         drop_self: None,
-        extension: Extension::None,
     };
     let yields = inner.yields(body.type_id);
     let mut block = into_block(body);

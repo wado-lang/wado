@@ -259,7 +259,7 @@ holding. A trap does not unwind, so it runs no drops.
 A temporary a `let` keeps borrowed stops holding its value when the `let`'s
 scope ends, as a local declared there would, after the `let`'s own bindings.
 The `let` keeps the borrow written as its initializer, or as an operand of a
-struct or tuple literal or of a cast that it keeps, and the temporary borrowed
+struct, tuple or list literal or of a cast that it keeps, and the temporary borrowed
 is the operand of that `&` or `&mut`, or what a field read or a dereference of
 the operand reads from. This is Rust's temporary lifetime extension. A
 temporary only a call's operand borrows is not kept, whatever the call returns.
@@ -275,10 +275,11 @@ test {
         let [c, d] = [&make(3), &make(4)];
         let p = Pair { a: &make(5), b: &make(6) };
         let n = &make(7).n;
+        let xs: List<&Tok> = [&make(8)];
         assert DROPPED.is_empty();
-        assert [a.n, b.n, c.n, d.n, p.a.n, p.b.n, *n] == [1, 12, 3, 4, 5, 6, 7];
+        assert [a.n, b.n, c.n, d.n, p.a.n, p.b.n, *n, xs[0].n] == [1, 12, 3, 4, 5, 6, 7, 8];
     }
-    assert DROPPED == [7, 6, 5, 4, 3, 12, 1] as List<i32>;
+    assert DROPPED == [8, 7, 6, 5, 4, 3, 12, 1] as List<i32>;
 }
 ```
 
@@ -384,7 +385,9 @@ test {
 
 A borrow of an affine temporary refers into it as into a local whose scope is
 the temporary's statement, or the `let`'s scope where a `let` keeps the borrow,
-and the same rules hold.
+and the same rules hold. A temporary is any value no place holds: a call's
+result, a literal, what `?` unwraps. A cast converts for free, so borrowing
+one borrows its operand.
 
 <!-- {"fixture":"affine_temporary_reference_read_after_statement.wado"} -->
 
@@ -392,5 +395,18 @@ and the same rules hold.
 test {
     let r = id(&make(1));
     assert r.n == 1;
+}
+```
+
+<!-- {"fixture":"affine_temporary_reference_through_try_and_cast.wado"} -->
+
+```wado
+fn tried() -> Result<i32, String> {
+    let r = id(&(make(1)? as Alias));
+    return Ok(r.n);
+}
+
+test {
+    assert tried().unwrap() == 1;
 }
 ```

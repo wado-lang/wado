@@ -229,7 +229,6 @@ pub fn check_affine_moves_semantic(sem: &Semantics) -> Vec<AffineMoveError> {
             out: &mut out,
             fallbacks: &fallbacks,
             in_fallback: None,
-            extended: IndexSet::default(),
             regions_opened: 0,
         };
         for item in &module.items {
@@ -286,8 +285,6 @@ struct Checker<'a> {
     /// The falling-back destructuring assignment whose right side is being
     /// walked, where it has a cause to note.
     in_fallback: Option<NotedFallback>,
-    /// The temporaries a `let` keeps borrowed (see [`extended_temporaries`]).
-    extended: IndexSet<AstId>,
     /// The regions opened so far, which number the next.
     regions_opened: u32,
 }
@@ -1712,11 +1709,13 @@ impl MoveWalker<'_, '_> {
             Expr::FieldAccess(fa) if self.place_path(expr).is_none() => {
                 self.borrow_owners(&fa.expr, borrow)
             }
+            // A cast converts for free, so a borrow of one borrows its operand.
+            Expr::Cast(c) => self.borrow_owners(&c.expr, borrow),
             _ => {
                 let Some(place) = self.place_path(expr) else {
+                    // Any other value no place holds is a temporary.
                     let mut owners = self.owners_of(expr);
                     if let Some(writes) = borrow
-                        && is_temporary(expr)
                         && self.expr_is_affine(expr.id())
                     {
                         let (owner, site) = self.temporary_owner(expr, writes);
@@ -1752,7 +1751,7 @@ impl MoveWalker<'_, '_> {
     /// the innermost statement, or the innermost scope where a `let` keeps the
     /// borrow.
     fn temporary_owner(&self, expr: &Expr, writes: bool) -> (Owner, OwnerSite) {
-        let scope = self.checker.extended.contains(&expr.id());
+        let scope = self.modes.extended(expr);
         let region = *self
             .regions
             .iter()
@@ -1968,7 +1967,6 @@ impl MoveWalker<'_, '_> {
             Stmt::Let(l) => {
                 let before = self.flow.clone();
                 if let Some(value) = &l.value {
-                    extended_temporaries(value, Extension::Value, &mut self.checker.extended);
                     self.note_decomposed(value, [&l.pattern]);
                     self.visit_at(value);
                 }
@@ -2302,61 +2300,6 @@ fn keeps_whole(pattern: &Pattern) -> bool {
         | Pattern::Range { .. }
         | Pattern::Error(_) => false,
     }
-}
-
-/// How a `let` keeps what its initializer holds: the value itself, or a borrow
-/// of the place. Drop elaboration extends the same temporaries.
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum Extension {
-    Value,
-    Place,
-}
-
-/// Add to `out` the temporaries `expr` borrows where a `let` keeps the borrow,
-/// Rust's temporary lifetime extension: the operand of a borrow the `let`
-/// keeps, through a literal's operands, a cast, a field read or a dereference.
-fn extended_temporaries(expr: &Expr, extension: Extension, out: &mut IndexSet<AstId>) {
-    let place = extension == Extension::Place;
-    if place && is_temporary(expr) {
-        out.insert(expr.id());
-    }
-    match expr {
-        Expr::Unary(u) if matches!(u.op, ast::UnaryOp::Ref | ast::UnaryOp::MutRef) => {
-            extended_temporaries(&u.expr, Extension::Place, out);
-        }
-        Expr::Unary(u) if place && u.op == ast::UnaryOp::Deref => {
-            extended_temporaries(&u.expr, Extension::Place, out);
-        }
-        Expr::FieldAccess(fa) if place => extended_temporaries(&fa.expr, Extension::Place, out),
-        Expr::Cast(c) => extended_temporaries(&c.expr, extension, out),
-        Expr::StructLiteral(s) => {
-            for field in &s.fields {
-                extended_temporaries(&field.value, Extension::Value, out);
-            }
-        }
-        Expr::TupleLiteral(t) => {
-            for element in &t.elements {
-                extended_temporaries(element, Extension::Value, out);
-            }
-        }
-        _ => {}
-    }
-}
-
-/// Whether evaluating `expr` makes a value no place holds, so a borrow of it
-/// borrows a temporary.
-fn is_temporary(expr: &Expr) -> bool {
-    matches!(
-        expr,
-        Expr::Call(_)
-            | Expr::MethodCall(_)
-            | Expr::StaticMethodCall(_)
-            | Expr::StructLiteral(_)
-            | Expr::TupleLiteral(_)
-            | Expr::If(_)
-            | Expr::Match(_)
-            | Expr::LabeledBlock(_)
-    )
 }
 
 /// The binding a place of `expr` is rooted in, through fields and elements.

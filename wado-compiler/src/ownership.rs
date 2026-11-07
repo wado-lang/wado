@@ -7,7 +7,7 @@ use crate::ast::{
     AssignTarget, AstId, Block, Condition, ConditionElement, Expr, IdentExpr, Literal, MatchArm,
     Stmt, UnaryOp,
 };
-use crate::hashmap::IndexMap;
+use crate::hashmap::{IndexMap, IndexSet};
 use crate::symbol::{Symbol, SymbolKind};
 
 /// Whether `symbol` is a variable, a local or a global: what
@@ -114,9 +114,18 @@ enum Position {
 /// so what it projects from has no mode.
 pub(crate) struct Modes {
     modes: IndexMap<AstId, OperandMode>,
+    extended: IndexSet<AstId>,
 }
 
 impl Modes {
+    /// Whether `expr` is a temporary a `let` keeps borrowed, which lives as
+    /// long as the `let`'s scope rather than its statement: Rust's temporary
+    /// lifetime extension. The move check scopes exactly these, and reify
+    /// marks exactly these for drop elaboration to keep.
+    pub(crate) fn extended(&self, expr: &Expr) -> bool {
+        self.extended.contains(&expr.id())
+    }
+
     /// The mode of `expr`, which the body these modes were taken of
     /// evaluates.
     pub(crate) fn of(&self, expr: &Expr) -> OperandMode {
@@ -147,9 +156,13 @@ pub(crate) fn body_modes(body: &Block, facts: &impl BodyFacts) -> Modes {
     let mut walk = ModeWalk {
         facts,
         modes: IndexMap::default(),
+        extended: IndexSet::default(),
     };
     walk.block(body);
-    Modes { modes: walk.modes }
+    Modes {
+        modes: walk.modes,
+        extended: walk.extended,
+    }
 }
 
 /// The modes of `expr`, evaluated where no body walk reaches it: a default, a
@@ -158,14 +171,19 @@ pub(crate) fn expr_modes(expr: &Expr, facts: &impl BodyFacts) -> Modes {
     let mut walk = ModeWalk {
         facts,
         modes: IndexMap::default(),
+        extended: IndexSet::default(),
     };
     walk.expr(expr, OperandMode::Consume);
-    Modes { modes: walk.modes }
+    Modes {
+        modes: walk.modes,
+        extended: walk.extended,
+    }
 }
 
 struct ModeWalk<'f, F> {
     facts: &'f F,
     modes: IndexMap<AstId, OperandMode>,
+    extended: IndexSet<AstId>,
 }
 
 impl<F: BodyFacts> ModeWalk<'_, F> {
@@ -180,6 +198,7 @@ impl<F: BodyFacts> ModeWalk<'_, F> {
         match stmt {
             Stmt::Let(l) => {
                 if let Some(value) = &l.value {
+                    self.extend(value, false);
                     self.expr(value, Consume);
                 }
                 if let Some(eb) = &l.else_block {
@@ -229,6 +248,33 @@ impl<F: BodyFacts> ModeWalk<'_, F> {
             }
             Stmt::LabeledBlock(lb) => self.block(&lb.block),
             Stmt::Continue(_) | Stmt::Item(_) | Stmt::Error(_) => {}
+        }
+    }
+
+    /// Record the temporaries `expr`, a `let`'s initializer or an operand it
+    /// keeps, borrows where the `let` keeps the borrow: the operand of a
+    /// borrow, through a literal's operands and a cast, and what a field read
+    /// or a dereference of a kept borrow's operand reads from. `place`: `expr`
+    /// is a kept borrow's operand.
+    fn extend(&mut self, expr: &Expr, place: bool) {
+        match expr {
+            Expr::Unary(u) if matches!(u.op, UnaryOp::Ref | UnaryOp::MutRef) => self.extend(&u.expr, true),
+            Expr::Unary(u) if place && u.op == UnaryOp::Deref => self.extend(&u.expr, true),
+            Expr::FieldAccess(fa) if place => self.extend(&fa.expr, true),
+            Expr::Cast(c) => self.extend(&c.expr, place),
+            Expr::StructLiteral(_) | Expr::TupleLiteral(_) => {
+                if place {
+                    self.extended.insert(expr.id());
+                }
+                for (operand, _) in positions(expr) {
+                    self.extend(operand, false);
+                }
+            }
+            Expr::Index(_) => {}
+            _ if place && place_path(expr, self.facts).is_none() => {
+                self.extended.insert(expr.id());
+            }
+            _ => {}
         }
     }
 

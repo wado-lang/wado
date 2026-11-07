@@ -942,6 +942,9 @@ pub struct ExprMarks {
     /// A by-value argument whose storage the call's evaluation may write before
     /// the callee is done with it: a confined parameter still copies it.
     pub written: bool,
+    /// A temporary a `let` keeps borrowed ([`crate::ownership::Modes::extended`]),
+    /// which drops as the `let`'s scope ends rather than its statement.
+    pub extended: bool,
 }
 
 impl TirExpr {

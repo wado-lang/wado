@@ -32,8 +32,9 @@ test {
         let [c, d] = [&make(3), &make(4)];
         let p = Pair { a: &make(5), b: &make(6) };
         let n = &make(7).n;
+        let xs: List<&Tok> = [&make(8)];
         assert DROPPED.is_empty();
-        assert [a.n, b.n, c.n, d.n, p.a.n, p.b.n, *n] == [1, 12, 3, 4, 5, 6, 7];
+        assert [a.n, b.n, c.n, d.n, p.a.n, p.b.n, *n, xs[0].n] == [1, 12, 3, 4, 5, 6, 7, 8];
     }
-    assert DROPPED == [7, 6, 5, 4, 3, 12, 1] as List<i32>;
+    assert DROPPED == [8, 7, 6, 5, 4, 3, 12, 1] as List<i32>;
 }
