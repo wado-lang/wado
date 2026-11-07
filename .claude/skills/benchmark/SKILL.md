@@ -78,13 +78,19 @@ A profile can move a row through what the program allocates, because a change of
 allocation moves where collections land. `wado run --gc-log` shows that, and
 `microgpt` needs a new heap sweep when it happens.
 
-A Wado row that moved may have moved through PGO and not the rest of the
-compiler. Before naming a cause, compare the row's `-f no-pgo` figure with the
-README's previous one. If they match, PGO moved it: either the row's `pgo/`
-file, or how the compiler uses a profile, such as the thresholds in `pgo.rs` or
-the inliner's hot price. `git log` on each shows what changed, and when both
-did, isolate them before naming one. Whether to record the profile again is a
-separate decision, and `benchmark/AGENTS.md` says what a re-recording commits.
+Two figures from different sessions can differ by noise alone, so attribute a
+Wado row that moved by an A/B in one session: the compiler that measured the
+README against this one, with `WADO_BIN` and `ab.ts` (see the `wado-performance`
+skill). If the verdict is `noise`, the row did not move. Otherwise read the
+verdict on its `(no-pgo)` row. If that moved too, the compiler moved it apart
+from PGO. If not, PGO moved it: either the row's `pgo/` file, or how the compiler
+uses a profile, such as the thresholds in `pgo.rs` or the inliner's hot price.
+`git log` on each shows what changed, and when both did, isolate them before
+naming one. http-routing has no `(no-pgo)` row, so its A/B, which
+`benchmark/http_routing/README.md` states, ends at the first verdict.
+
+Whether to record the profile again is a separate decision, and
+`benchmark/AGENTS.md` says what a re-recording commits.
 
 ## Sweeping a compiler knob
 
