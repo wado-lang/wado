@@ -1,5 +1,10 @@
 # Changelog
 
+## [v0.0.39](https://github.com/wado-lang/wado/compare/v0.0.38...v0.0.39) - 2026-11-07
+
+- feat(jade): validate numbers exactly, at any size and precision by @gfx in https://github.com/wado-lang/wado/pull/2575
+- feat(loam): GPT-2's attention runs as the composite on every backend by @gfx in https://github.com/wado-lang/wado/pull/2573
+
 ## [v0.0.38](https://github.com/wado-lang/wado/compare/v0.0.37...v0.0.38) - 2026-11-07
 
 - perf(nir): pass a &S read past an early exit as its fields, so f64::from_str allocates no StrSlice by @gfx in https://github.com/wado-lang/wado/pull/2381
