@@ -84,8 +84,8 @@ being an identity. The second universe needs no slots of its own: `f64` and
 
 ## Decision
 
-The table never changes what a slot means. Lowering rewrites the IR's types
-instead.
+The table never changes what a slot means. Erasure and boxing rewrite the IR's
+types instead, at the points in the pipeline where they run today.
 
 ### 1. The table is append-only
 
@@ -94,48 +94,48 @@ settles one afterwards. An id names one type for the table's whole life, so
 `==` on ids is the identity question and `Hash` on ids is the identity key.
 `TypeKey`, `same_type`, `TypeMemo` and `InstanceArg` have no work left and go.
 
-`Meters` keeps its id after lowering and still means `Meters`. Nothing after
-lowering holds that id, so nothing asks.
+`Meters` keeps its id after erasure and still means `Meters`. Nothing after
+erasure holds that id, so nothing asks.
 
-### 2. One function says what a type lowers to
+### 2. Two functions say what a type becomes
 
-`lower_type(TypeId) -> TypeId`, memoized, is the only place that states
-erasure, dropping rows and boxing:
+Each is memoized, and each is the only place that states its rule:
 
-- a newtype lowers to what its base lowers to, and `flags` to `u32`;
-- a function type keeps its lowered parameters and return type, and drops its
-  row;
-- a reference whose target `is_boxed_reference_target` names lowers to
-  `Box<T>` of the lowered target, and any other reference to a reference to it;
-- every other spelling is rebuilt from what its parts lower to, and interned.
+- `erase_type(TypeId) -> TypeId`: a newtype becomes what its base becomes,
+  `flags` becomes `u32`, and a function type drops its row;
+- `box_type(TypeId) -> TypeId`: a reference whose target
+  `is_boxed_reference_target` names becomes `Box<T>` of its target.
 
-Because it rebuilds structurally, `List<Meters>` lowers to the id `List<f64>`
-already has, with no settling step.
+Both rebuild every other spelling from what its parts become, and intern it.
+`List<Meters>` therefore erases to the id `List<f64>` already has, with no
+settling step.
 
-### 3. Lowering rewrites every type once
+### 3. The IR is rewritten where erasure and boxing run
 
-The TIR → NIR fold already visits every node, and already performs the boxing
-rewrite of bodies. It maps each type it writes into NIR through `lower_type`.
-Erasure stops being a phase, and the boxing pass touches no slot.
+The TIR passes between erasure and the TIR → NIR fold read the erased types, and
+those after boxing (value copy, closure lifting, the write-back) read the boxed
+ones. So each rewrite stays where it runs today, and maps every `TypeId` the
+`FlatPackage` holds through its function: expressions, locals, parameters,
+declarations, and the type-keyed tables beside them. The boxing pass rewrites
+bodies as it does now, and no longer touches a slot.
 
-NIR declares one struct per lowered id. Two TIR instances that lower to one id
-become one NIR declaration, so `List<Meters>` and `List<f64>` need no
-deduplication further down.
+Two TIR struct declarations that erase to one id become one declaration, so
+`List<Meters>` and `List<f64>` need no deduplication further down.
 
-A pass that mints a type after lowering, such as `sroa_param`'s `make_ref` or
-`sroa_variant_return`'s `make_option`, maps it through `lower_type` as well. A
-debug assertion at the end of lowering, and in WIR build, checks that NIR holds
-only lowered types: no newtype, no `flags`, no row, no reference that should be
-a `Box`.
+A pass that mints a type after a rewrite, such as `sroa_param`'s `make_ref` or
+`sroa_variant_return`'s `make_option`, maps it through the same function. A
+debug assertion after each rewrite, and in WIR build, checks that the IR holds
+only rewritten types: no newtype, no `flags`, no row, and after boxing no
+reference that should be a `Box`.
 
-### 4. Source questions are answered before or during lowering
+### 4. Source questions are answered before erasure
 
-After lowering, nothing asks for a type's source identity: `get_unerased` and
+After erasure, nothing asks for a type's source identity: `get_unerased` and
 `is_newtype` are read only by the elaborator, the effect check and synthesis.
-Lowering reads source spellings to mint names (`name_unboxed`,
-`mangle_type_arg_unboxed`), and it still holds the TIR id when it does. The
-synthesis that runs after monomorphization today, reflect bridges and widening,
-names a call from the lowered type by calling `lower_type`.
+What still reads a source spelling after erasure, the names lowering mints
+(`name_unboxed`, `mangle_type_arg_unboxed`) and the reflect bridges that name a
+call from the erased mangle, reads it from what the rewrite leaves: the erased
+type, or a name recorded before the rewrite.
 
 ### 5. One name per type
 
@@ -173,11 +173,12 @@ Each step leaves the compiler green and is a commit series of its own.
 - [x] In the modules that run only before erasure, replace `type_key` and
   `same_type` with `==`. `TypeTable`'s own helpers, which later phases share,
   wait for the step that removes the aliasing.
-- [ ] Add `lower_type` and map every type the TIR → NIR fold writes through it,
-  with the debug assertion. Done when erasure runs inside lowering and
-  `erase_newtypes_and_flags`, `redirects` and `settled_spellings` are gone.
-- [ ] Move the boxing type rewrite into `lower_type`. Done when `redefine_to`,
-  `follow_redefinitions` and `box_payload_types` are gone.
+- [ ] Add `erase_type` and rewrite the `FlatPackage` through it where erasure
+  runs, with the debug assertion. Done when `erase_newtypes_and_flags`,
+  `redirects` and `settled_spellings` are gone.
+- [ ] Add `box_type` and rewrite the `FlatPackage` through it where boxing
+  runs. Done when `redefine_to`, `follow_redefinitions` and
+  `box_payload_types` are gone.
 - [ ] Delete `TypeKey`, `same_type`, `TypeMemo`, `InstanceArg`, `box_key`,
   `get_unerased`, the `_unboxed` and `_resolving_newtypes` renderers, and
   the rule in `wado-compiler/AGENTS.md`.
