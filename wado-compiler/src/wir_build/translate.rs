@@ -646,9 +646,8 @@ fn build_fn_canonical_dispatch_body(
         heap_type: WirAbstractHeapType::Struct,
         nullable: true,
     };
-    // When the boxing pass rewrote `&fn(...)` to `Box<fn(...)>`, the
-    // self parameter holds a wrapper struct whose `.value` field carries
-    // the actual closure ref. Unwrap before refcasting.
+    // A `&fn(...)` self parameter is a cell whose `value` carries the closure
+    // ref. Unwrap before refcasting.
     let self_load: WirInstr = if let Some(box_type_id) = self_box_type_id {
         let type_table = ctx.package.type_table.borrow();
         let wir_box_type = ctx.type_id_to_wir_type(&type_table, box_type_id);
@@ -659,7 +658,7 @@ fn build_fn_canonical_dispatch_body(
         };
         WirInstr::StructGet {
             type_id: box_wir_type_id.clone(),
-            field_name: "value".to_string(),
+            field_name: crate::name::CELL_FIELD.to_string(),
             expr: Box::new(WirInstr::LocalGet {
                 name: self_param_name,
                 result_ty: WirType::Ref {
@@ -850,15 +849,10 @@ pub fn translate_function_bodies(ctx: &mut WirContext<'_>) {
             };
             let self_param_name = param_name(0, "self");
             let formatter_param_name = param_name(1, "f");
-            // After the boxing pass, the synthesized self parameter type
-            // `&fn(...)` is rewritten to `Box<fn(...)>` (a struct wrapping
-            // a closure ref). When that's happened the dispatch body has
-            // to unwrap `.value` before refcasting; consult the type
-            // table's box-wrapper registry to find out.
             let self_box_type_id = tir_func
                 .params
                 .first()
-                .and_then(|p| type_table.box_payload_of(p.type_id).map(|_| p.type_id));
+                .and_then(|p| type_table.cell_payload(p.type_id).map(|_| p.type_id));
             drop(tir_func);
             let body = build_fn_canonical_dispatch_body(
                 ctx,

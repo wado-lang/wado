@@ -942,9 +942,10 @@ impl<'a> Engine<'a> {
         self.buf.uses.get(local as usize).map_or(0, |u| u.defs)
     }
 
-    /// Whether `local` holds a struct, looking through a reference. `false`
-    /// without a type table, and for every other shape a `FieldAccess` can name
-    /// — a tuple above all, whose field index means something else entirely.
+    /// Whether `local` holds a struct or a cell, looking through a reference.
+    /// `false` without a type table, and for every other shape a `FieldAccess`
+    /// can name — a tuple above all, whose field index means something else
+    /// entirely.
     fn local_is_struct_typed(&self, local: u32) -> bool {
         let Some(types) = self.vg_type_table else {
             return false;
@@ -954,6 +955,9 @@ impl<'a> Engine<'a> {
         };
         let mut ty = l.type_id;
         loop {
+            if types.cell_payload(ty).is_some() {
+                return true;
+            }
             match types.get(ty) {
                 ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => ty = *inner,
                 ResolvedType::Struct { .. } => return true,

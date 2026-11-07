@@ -181,8 +181,12 @@ fn collect_candidates(
             if param.is_mut || param.is_mut_ref {
                 continue;
             }
+            // A cell is the aggregate itself, its one field read off the
+            // parameter as a struct's is.
             let (aggregate, through_ref) = match type_table.get(param.type_id) {
-                ResolvedType::Ref(referent) => (*referent, true),
+                ResolvedType::Ref(referent) if type_table.cell_payload(param.type_id).is_none() => {
+                    (*referent, true)
+                }
                 _ => (param.type_id, false),
             };
             let Some((all_types, all_names, _)) =

@@ -279,9 +279,6 @@ fn method_args_at(
         .type_params
         .iter()
         .filter(|param| !param.is_effect)
-        .map(|param| {
-            let ty = *bound.get(&(offset + param.index))?;
-            Some(type_table.as_box(ty).unwrap_or(ty))
-        })
+        .map(|param| bound.get(&(offset + param.index)).copied())
         .collect()
 }

@@ -175,11 +175,11 @@ fn collect_and_validate(
             // parameter is read through its shadow local.
             //
             // A retained parameter keeps its identity, which a field snapshot
-            // drops. A boxed reference's retention is the referent its payload
+            // drops. A cell of a reference retains the referent its payload
             // names, which the rewrite passes on unchanged.
             if func.retains.iter().any(|s| s == &param.name)
                 && types
-                    .box_payload_of(param.type_id)
+                    .cell_payload(param.type_id)
                     .is_none_or(|payload| types.ref_pointee(payload).is_none())
             {
                 continue;
@@ -213,7 +213,10 @@ fn collect_and_validate(
                 type_table: types,
                 struct_fields: &struct_fields,
             };
-            if param_snapshot_unsound(&func, pi, std::slice::from_ref(&info.struct_key), &reach) {
+            let object = types
+                .heap_object_key(info.struct_type)
+                .expect("a struct or a cell is a heap object");
+            if param_snapshot_unsound(&func, pi, &[object], &reach) {
                 continue;
             }
             found.push(((key, pi), info));
@@ -288,16 +291,15 @@ fn collect_and_validate(
         for (k, fi) in &resolved {
             let info = &mut candidates[k];
             let fields = structs
-                .of_type(info.struct_type, types)
-                .expect("a candidate's struct is declared")
-                .fields_in_order();
-            let Some(field) = fields.get(*fi as usize) else {
+                .object_fields(info.struct_type, types)
+                .expect("a candidate's struct is declared");
+            let Some(&(field_name, field_type)) = fields.get(*fi as usize) else {
                 invalid.insert(*k);
                 continue;
             };
             info.field_index = *fi;
-            info.field_name.clone_from(&field.name);
-            info.inner_type_id = field.type_id;
+            field_name.clone_into(&mut info.field_name);
+            info.inner_type_id = field_type;
         }
         for k in &widened {
             candidates[k].form = FieldForm::Mutable;
@@ -367,21 +369,17 @@ fn candidate_info_for(
     structs: &StructDecls<'_>,
 ) -> Option<SroaInfo> {
     let struct_type = struct_behind_ref(param_type, type_table)?;
-    let fields = structs.of_type(struct_type, type_table)?.fields_in_order();
+    let fields = structs.object_fields(struct_type, type_table)?;
     // Seed on field 0; a wider struct has this overwritten once its uses agree.
-    let first = fields.first()?;
-    let (field_name, field_type) = (first.name.clone(), first.type_id);
-    // One `Box` holds `&X` and `&mut X` alike, its field typed by whichever it
-    // met first; the parameter's own payload says which this one holds.
-    let inner_type_id = type_table.box_payload_of(param_type).unwrap_or(field_type);
+    let &(field_name, field_type) = fields.first()?;
     Some(SroaInfo {
         struct_type,
         struct_key: type_table.type_key(struct_type),
-        inner_type_id,
-        field_name,
+        inner_type_id: field_type,
+        field_name: field_name.to_string(),
         field_index: if fields.len() == 1 { 0 } else { u32::MAX },
         form: FieldForm::Value,
-        scalar_type_id: inner_type_id,
+        scalar_type_id: field_type,
     })
 }
 
@@ -399,10 +397,14 @@ fn is_sroa_eligible_inner_type(type_id: TypeId, type_table: &TypeTable) -> bool 
     ty != TypeTable::UNIT && ty != TypeTable::NEVER
 }
 
+/// Whether `type_id` is an object with fields this pass unwraps: a struct, or a
+/// cell, whose one field is `value`.
+fn is_wrapper(type_id: TypeId, type_table: &TypeTable) -> bool {
+    type_table.struct_parts(type_id).is_some() || type_table.cell_payload(type_id).is_some()
+}
+
 fn struct_key_of(type_id: TypeId, type_table: &TypeTable) -> Option<TypeKey> {
-    type_table
-        .struct_parts(type_id)
-        .map(|_| type_table.type_key(type_id))
+    is_wrapper(type_id, type_table).then(|| type_table.type_key(type_id))
 }
 
 /// The struct a reference `type_id` points to.
@@ -417,12 +419,13 @@ fn referenced_struct(type_id: TypeId, type_table: &TypeTable) -> Option<TypeId> 
     }
 }
 
-/// The struct `type_id` names, whether it is the struct or one reference to it.
+/// The wrapper `type_id` names, whether it is the wrapper or one reference to
+/// a struct.
 fn struct_behind_ref(type_id: TypeId, type_table: &TypeTable) -> Option<TypeId> {
-    match type_table.struct_parts(type_id) {
-        Some(_) => Some(type_id),
-        None => referenced_struct(type_id, type_table),
+    if is_wrapper(type_id, type_table) {
+        return Some(type_id);
     }
+    referenced_struct(type_id, type_table)
 }
 
 /// What [`param_snapshot_unsound`] weighs a candidate against: everything the
@@ -437,8 +440,8 @@ struct WriteReach<'a> {
 /// Reject a reference candidate whose call-time snapshot the callee could
 /// invalidate through another access path: a write landing on a `stale` struct
 /// that an aliasing global write or a sibling param can *reach* —
-/// `f(&s.m, &mut s)`, or a `&mut` hidden in a by-value field. A boxed reference
-/// counts, `&x` of an address-taken local lowering to a read of the one box.
+/// `f(&s.m, &mut s)`, or a `&mut` hidden in a by-value field. A cell counts,
+/// `&x` of an address-taken local lowering to a read of the one cell.
 fn param_snapshot_unsound(
     func: &NirFunction,
     pi: usize,
@@ -447,9 +450,9 @@ fn param_snapshot_unsound(
 ) -> bool {
     let type_table = reach.type_table;
     let param_type = func.params[pi].type_id;
-    let candidate_is_ref = referenced_struct(param_type, type_table).is_some();
-    let candidate_is_boxed_ref = type_table.box_payload_of(param_type).is_some();
-    if !candidate_is_ref && !candidate_is_boxed_ref {
+    if referenced_struct(param_type, type_table).is_none()
+        && type_table.cell_payload(param_type).is_none()
+    {
         return false;
     }
     stale.iter().any(|&struct_key| {
@@ -522,27 +525,21 @@ fn struct_contents<'a>(
 }
 
 /// Whether a parameter's *own* storage can be written through: the pointee of a
-/// plain `MutRef`, or a `&mut T` boxing collapsed onto `Box<T>`. Everything else
-/// arrives as a copy or a read-only handle — but its interior may still hand out
-/// a mutable reference, which [`mut_reachable_contains`] picks up.
+/// `&mut`, a cell's included. Everything else arrives as a copy or a read-only
+/// handle — but its interior may still hand out a mutable reference, which
+/// [`mut_reachable_contains`] picks up.
 fn param_root_writable(param_type: TypeId, type_table: &TypeTable) -> bool {
     matches!(type_table.get(param_type), ResolvedType::MutRef(_))
-        || type_table.is_mut_box(param_type)
 }
 
-/// A shared `&T` collapsed onto `Box<T>`: the wrapper may be reachable, but
-/// `*p` cannot be written through it, so its payload is sealed.
-fn is_shared_box(ty: TypeId, type_table: &TypeTable) -> bool {
-    type_table.box_payload_of(ty).is_some() && !type_table.is_mut_box(ty)
-}
-
-/// Whether a write can land on a `target`-typed location reachable from `ty`.
+/// Whether a write can land on a location reachable from `ty` whose heap
+/// object key is `target`.
 ///
 /// `writable` says the location being visited is one the callee can write. That
 /// is a property of the location, not of the walk's depth: a `&mut` pointee and
-/// a mutable box are writable wherever they appear, a shared pointee never is,
+/// a `&mut` cell are writable wherever they appear, a shared pointee never is,
 /// and a component of a writable aggregate inherits it. So a by-value
-/// `Holder { r: &mut i32 }` is a copy whose `r` still writes the caller's box,
+/// `Holder { r: &mut i32 }` is a copy whose `r` still writes the caller's cell,
 /// while a by-value `M` writes nothing.
 fn mut_reachable_contains(
     ty: TypeId,
@@ -556,21 +553,26 @@ fn mut_reachable_contains(
         return false;
     }
     if let Some(contents) = struct_contents(ty, type_table, struct_fields) {
-        let writable_here = writable || type_table.is_mut_box(ty);
-        if writable_here && type_table.type_key(ty) == target {
+        if writable && type_table.type_key(ty) == target {
             return true;
         }
-        let contents_writable = writable_here && !is_shared_box(ty, type_table);
         return contents.iter().any(|&held| {
-            mut_reachable_contains(
-                held,
-                contents_writable,
-                target,
-                type_table,
-                struct_fields,
-                visited,
-            )
+            mut_reachable_contains(held, writable, target, type_table, struct_fields, visited)
         });
+    }
+    if let Some(payload) = type_table.cell_payload(ty) {
+        let cell_writable = matches!(type_table.get(ty), ResolvedType::MutRef(_));
+        if cell_writable && type_table.cell_key(ty) == target {
+            return true;
+        }
+        return mut_reachable_contains(
+            payload,
+            cell_writable,
+            target,
+            type_table,
+            struct_fields,
+            visited,
+        );
     }
     if let Some((_, type_args)) = type_table.instance_parts(ty) {
         if writable && type_table.type_key(ty) == target {
@@ -1564,12 +1566,9 @@ fn peel_one_ref(body: &Body, arg: ExprId) -> ExprId {
     }
 }
 
-/// Whether `ty` names the wrapper struct, directly or behind a reference or box.
+/// Whether `ty` names the wrapper, directly or behind a reference.
 fn denotes_struct(ty: TypeId, key: TypeKey, type_table: &TypeTable) -> bool {
     struct_behind_ref(ty, type_table).map(|s| type_table.type_key(s)) == Some(key)
-        || type_table
-            .box_payload_of(ty)
-            .is_some_and(|p| struct_key_of(p, type_table) == Some(key))
 }
 
 /// The argument operand at a scalarized parameter position. The position exists

@@ -962,7 +962,7 @@ impl<'a> DceWalker<'a> {
             } if !type_args.is_empty() => {
                 let module_source = self.type_table.struct_head_module(*def);
                 let name = &self.type_table.struct_mangled_name(*def, type_args);
-                // Monomorphized struct method (e.g. `Box<i32>::get`):
+                // Monomorphized struct method (e.g. `Pair<i32>::get`):
                 // monomorphized functions live in the *using* module, so
                 // route the callee id through `current_module`.
                 let mangled_func_name = MethodName::format_local(
@@ -975,21 +975,6 @@ impl<'a> DceWalker<'a> {
                     mangled_func_name,
                 ));
                 self.analysis.callees.insert(callee_id);
-
-                // For internal Box<T> types (primitive boxing), the method is
-                // actually defined on the inner type (e.g., i32^Ord::cmp, not
-                // Box<i32>^Ord::cmp). Also mark the FunctionRef's original
-                // method target as reachable.
-                let boxed = self.type_table.is_compiler_struct(*def, CompilerItem::Box);
-                if boxed && let Some(info) = func.method_info.clone() {
-                    let original_method_id = FunctionId::Method(MethodName::new(
-                        func.module_source.clone(),
-                        info.fq_struct_name(),
-                        info.trait_name.clone(),
-                        info.method_name,
-                    ));
-                    self.analysis.callees.insert(original_method_id);
-                }
             }
             ResolvedType::Variant { def, type_args } if !type_args.is_empty() => {
                 let name = self.type_table.decl_name(def).to_string();
@@ -1193,7 +1178,7 @@ impl DceWalker<'_> {
             ..
         } = self
             .type_table
-            .get(self.type_table.peel_refs_and_box(recv_ty))
+            .get(self.type_table.peel_refs(recv_ty))
         {
             self.analysis
                 .inspect_signatures

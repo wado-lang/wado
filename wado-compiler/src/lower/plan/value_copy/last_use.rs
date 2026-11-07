@@ -789,7 +789,8 @@ impl<'a> Analyzer<'a> {
     }
 
     /// Whether assigning to `place` repoints a slot instead of writing the
-    /// referent where it lies, as `*p = v` to an unboxed `&mut` aggregate does.
+    /// referent where it lies, as `*p = v` to a `&mut` aggregate does, rather
+    /// than a cell's.
     fn rebinds_place(&self, place: &TirExpr) -> bool {
         let TirExprKind::Unary {
             op: TirUnaryOp::Deref,
@@ -798,7 +799,7 @@ impl<'a> Analyzer<'a> {
         else {
             return true;
         };
-        self.type_table.box_payload_of(inner.type_id).is_some()
+        self.type_table.cell_payload(inner.type_id).is_some()
     }
 
     fn record_write(

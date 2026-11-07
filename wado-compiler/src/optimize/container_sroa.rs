@@ -1326,14 +1326,13 @@ fn element_layout_of(
         return Some((ElementLayout::Tuple, tuple_elems));
     }
     // User struct element (e.g., `List<Point>`).
-    if let Some(decl) = struct_index.of_type(elem_ty, type_table) {
-        let fields = decl.fields_in_order();
+    if let Some(fields) = struct_index.object_fields(elem_ty, type_table) {
         if fields.is_empty() {
             return None;
         }
-        let field_types: Vec<TypeId> = fields.iter().map(|f| f.type_id).collect();
+        let field_types: Vec<TypeId> = fields.into_iter().map(|(_, ty)| ty).collect();
         let layout = ElementLayout::Struct {
-            key: type_table.type_key(elem_ty),
+            key: type_table.heap_object_key(elem_ty).expect("a struct or cell is a heap object"),
         };
         return Some((layout, field_types));
     }

@@ -17,7 +17,7 @@ use crate::hashmap::{IndexMap, IndexSet};
 
 use crate::module_source::ModuleSource;
 use crate::name::{
-    FunctionId, LocalMethodName, closure_call_method_info, closure_call_name,
+    self, FunctionId, LocalMethodName, closure_call_method_info, closure_call_name,
     diagnostic_function_name, minted_name,
 };
 use crate::nir_arena::{Body, ExprBody, Tracked};
@@ -1083,6 +1083,26 @@ impl<'a> StructDecls<'a> {
         self.0.get(&struct_instance(type_id, type_table)?).copied()
     }
 
+    /// The fields of the object `type_id` names, by name and type in field
+    /// order: a concrete struct's declared ones, or a cell's one.
+    #[must_use]
+    pub fn object_fields(
+        &self,
+        type_id: TypeId,
+        type_table: &TypeTable,
+    ) -> Option<Vec<(&'a str, TypeId)>> {
+        if let Some(payload) = type_table.cell_payload(type_id) {
+            return Some(vec![(name::CELL_FIELD, payload)]);
+        }
+        let decl = self.of_type(type_id, type_table)?;
+        Some(
+            decl.fields_in_order()
+                .iter()
+                .map(|f| (f.name.as_str(), f.type_id))
+                .collect(),
+        )
+    }
+
     /// Each instance with its declaration's fields, in field order.
     pub fn fields(&self) -> impl Iterator<Item = (&StructInstance, &'a [NirField])> {
         self.0
@@ -1113,18 +1133,22 @@ impl StructFieldTypes {
         StructDecls::new(structs, type_table).field_types()
     }
 
-    /// The field types of `type_id`, when it is a concrete struct type.
+    /// The field types of `type_id`, when it is a concrete struct type or a
+    /// cell.
     #[must_use]
-    pub fn of_type(&self, type_id: TypeId, type_table: &TypeTable) -> Option<&[TypeId]> {
+    pub fn of_type<'s>(&'s self, type_id: TypeId, type_table: &'s TypeTable) -> Option<&'s [TypeId]> {
+        if let Some(cell) = type_table.cell_field_types(type_id) {
+            return Some(cell);
+        }
         self.0
             .get(&struct_instance(type_id, type_table)?)
             .map(Vec::as_slice)
     }
 }
 
-/// The field types and names of a tuple or concrete struct type, in field
-/// order (what a field index counts, `()` fields included), and whether it is
-/// a struct. `None` for anything else.
+/// The field types and names of a tuple, a concrete struct type or a cell, in
+/// field order (what a field index counts, `()` fields included), and whether
+/// it is a struct or a cell. `None` for anything else.
 pub fn aggregate_field_info(
     type_id: TypeId,
     type_table: &TypeTable,
@@ -1134,9 +1158,11 @@ pub fn aggregate_field_info(
         let names: Vec<String> = (0..elems.len()).map(|i| i.to_string()).collect();
         return Some((elems, names, false));
     }
-    let fields = structs.of_type(type_id, type_table)?.fields_in_order();
-    let types: Vec<TypeId> = fields.iter().map(|f| f.type_id).collect();
-    let names: Vec<String> = fields.iter().map(|f| f.name.clone()).collect();
+    let (names, types) = structs
+        .object_fields(type_id, type_table)?
+        .into_iter()
+        .map(|(name, ty)| (name.to_string(), ty))
+        .unzip();
     Some((types, names, true))
 }
 

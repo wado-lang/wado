@@ -356,11 +356,11 @@ pub(super) struct FreeRead {
     pub(super) writable_reference: bool,
 }
 
-/// Whether `ty` is a reference something can write through: `&mut`, or a box
-/// not known to stand for a `&`. A `&` only reads.
+/// Whether `ty` is a reference something can write through: `&mut`. A `&` only
+/// reads.
 fn writable_reference(ty: TypeId, type_table: &TypeTable) -> bool {
     matches!(
         RefKind::from_resolved(type_table.get(ty)),
         Some(RefKind::Mut)
-    ) || type_table.is_mut_box(ty)
+    )
 }

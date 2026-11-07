@@ -19,9 +19,8 @@ use crate::wir::{
 use crate::hashmap::{IndexMap, IndexSet};
 
 use super::context::WirContext;
-use crate::compiler_item::CompilerItem;
 use crate::name::{
-    RESOURCE_OBJECT_STRUCT, mangle_builtin_array_type, mangle_generic_name, unqualified_name,
+    CELL_FIELD, RESOURCE_OBJECT_STRUCT, mangle_builtin_array_type, mangle_generic_name, unqualified_name,
     wir_enum_type_key, wir_tuple_type_key, wir_type_key, wir_variant_case_key,
 };
 use crate::wir::{WirAbstractHeapType, WirTypeId};
@@ -192,8 +191,9 @@ pub fn register_types(ctx: &mut WirContext<'_>) {
     // below resolve struct fields typed by one.
     register_enums(ctx);
 
-    // Phase 0.5: Internal Box<T> structs
-    register_box_structs(ctx);
+    // Phase 0.5: The objects a resource and a cell are
+    ctx.handle_box = Some(register_resource_object(ctx));
+    register_cells(ctx);
 
     // Phase 1: Non-mono library structs & variants (topologically sorted)
     register_library_types(ctx);
@@ -298,7 +298,7 @@ fn register_struct(
             if matches!(ty, WirType::Unit) {
                 return None;
             }
-            let ty = field_slot_type(ctx, tir_struct, type_table, f.type_id, ty);
+            let ty = ctx.slot_type(type_table, f.type_id, ty);
             Some(WirField {
                 name: f.name.clone(),
                 ty,
@@ -343,23 +343,7 @@ fn register_struct(
             tir_struct.fields.iter().map(|f| f.name.clone()).collect(),
         );
     }
-    ctx.struct_type_map.insert(struct_name, type_id.clone());
-
-    // The monomorphizer named the struct before the boxing rewrite respelled a
-    // `&mut T` argument as `Box<T>` in place; a lookup spells the rewritten
-    // arguments, so alias that spelling to the instance.
-    if let Some(ref mono) = tir_struct.monomorph_info {
-        let rewritten_args: Vec<String> = mono
-            .impl_type_args
-            .iter()
-            .map(|t| type_table.mangle_type_arg_rowless(*t))
-            .collect();
-        let rewritten_name = mangle_generic_name(&mono.generic_name, &rewritten_args);
-        if rewritten_name != tir_struct.name {
-            let rewritten_sn = StructName::new(effective_module, rewritten_name);
-            ctx.struct_type_map.entry(rewritten_sn).or_insert(type_id);
-        }
-    }
+    ctx.struct_type_map.insert(struct_name, type_id);
 }
 
 /// Register a single variant type.
@@ -514,44 +498,53 @@ fn register_raw_array_type(
     }
 }
 
-/// Whether `s` is an instance of the compiler's `Box<T>`.
-fn is_box_instance(s: &NirStruct, type_table: &TypeTable) -> bool {
-    s.monomorph_info.is_some()
-        && s.def
-            .decl()
-            .is_some_and(|def| type_table.is_compiler_item(def, CompilerItem::Box))
-}
-
-/// `ty`, the WIR type of a field of `s` of type `type_id`, as the field holds
-/// it. A box's `value` holds the value itself, or a box would hold a box.
-fn field_slot_type(
-    ctx: &WirContext<'_>,
-    s: &NirStruct,
-    type_table: &TypeTable,
-    type_id: TypeId,
-    ty: WirType,
-) -> WirType {
-    if is_box_instance(s, type_table) {
-        ctx.unboxed_slot_type(type_table, type_id, ty)
-    } else {
-        ctx.slot_type(type_table, type_id, ty)
-    }
-}
-
-fn register_box_structs(ctx: &mut WirContext<'_>) {
-    // A box of a reference to a resource holds the resource's object.
-    ctx.handle_box = Some(register_resource_object(ctx));
+/// Register a cell struct for every concrete cell type, inner cells first. A
+/// payload registered later leaves a placeholder that
+/// [`fixup_abstract_struct_fields`] re-resolves.
+fn register_cells(ctx: &mut WirContext<'_>) {
     let type_table = &*ctx.package.type_table.borrow();
-    for s in &ctx.package.structs {
-        if is_box_instance(s, type_table) {
-            register_struct(ctx, s, type_table, &s.module_source);
+    let mut cells: Vec<TypeId> = type_table
+        .iter_type_ids()
+        .filter(|&t| type_table.cell_payload(t).is_some() && type_table.is_concrete(t))
+        .collect();
+    cells.sort_by_key(|&t| type_table.ref_depth(t));
+    for cell in cells {
+        let name = type_table.cell_struct_name(cell);
+        if ctx.cell_type_map.contains_key(&name) {
+            continue;
         }
+        let payload = type_table.cell_payload(cell).expect("filtered to cells");
+        let module_source = ModuleSource::prelude();
+        let fq = wir_type_key(&module_source, &name);
+        let field_type = cell_field_type(ctx, type_table, payload);
+        let type_id = ctx.register_type(
+            fq.clone(),
+            WirTypeDef::Struct(WirStructType {
+                name: WirName { fq },
+                fields: vec![WirField {
+                    name: CELL_FIELD.to_string(),
+                    ty: field_type,
+                    mutable: true,
+                }],
+                meta: WirMeta {
+                    module_source: Some(module_source),
+                    ..WirMeta::default()
+                },
+                generic_origin: None,
+                newtype_origin: None,
+                supertype: None,
+            }),
+        );
+        ctx.cell_payloads.insert(type_id.index(), payload);
+        ctx.cell_type_map.insert(name, type_id);
     }
+}
 
-    // Pre-register Box<i32> if not already present. This is needed for Option<Resource>,
-    // Option<Stream>, Option<Future>, etc., where the inner type maps to i32 at the
-    // Wasm level but there's no explicit Option<i32> usage in the source code.
-    ensure_box_type(ctx, "i32", WirType::I32);
+/// The WIR type a cell's `value` holds a `payload` as: the payload itself,
+/// never in a slot's own cell.
+fn cell_field_type(ctx: &WirContext<'_>, type_table: &TypeTable, payload: TypeId) -> WirType {
+    let ty = ctx.type_id_to_wir_type_pending(type_table, payload);
+    ctx.unboxed_slot_type(type_table, payload, ty)
 }
 
 /// The struct an affine resource is (WEP: Affine Types).
@@ -578,44 +571,6 @@ fn register_resource_object(ctx: &mut WirContext<'_>) -> WirTypeId {
     )
 }
 
-/// Ensure a `Box<T>` struct type exists for the given primitive name.
-fn ensure_box_type(ctx: &mut WirContext<'_>, prim_name: &str, wir_type: WirType) {
-    let box_name = mangle_generic_name("Box", std::slice::from_ref(&prim_name.to_string()));
-    let module_source = ctx
-        .package
-        .type_table
-        .borrow()
-        .compiler_struct_module(CompilerItem::Box)
-        .cloned()
-        .unwrap_or_else(ModuleSource::prelude);
-    let struct_name = StructName::new(module_source.clone(), box_name.clone());
-    if ctx.struct_type_map.contains_key(&struct_name) {
-        return;
-    }
-    let fq = wir_type_key(&module_source, &box_name);
-    let type_id = ctx.register_type(
-        fq.clone(),
-        WirTypeDef::Struct(WirStructType {
-            name: WirName { fq },
-            fields: vec![WirField {
-                name: "value".to_string(),
-                ty: wir_type,
-                mutable: true,
-            }],
-            meta: WirMeta {
-                module_source: Some(module_source),
-                ..WirMeta::default()
-            },
-            generic_origin: Some(WirGenericOrigin {
-                base_name: "Box".to_string(),
-                type_args: vec![prim_name.to_string()],
-            }),
-            newtype_origin: None,
-            supertype: None,
-        }),
-    );
-    ctx.struct_type_map.insert(struct_name, type_id);
-}
 
 fn register_library_types(ctx: &mut WirContext<'_>) {
     let entry_source = &ctx.package.entry_module_source;
@@ -797,8 +752,7 @@ fn register_mono_library_types(ctx: &mut WirContext<'_>) {
         if s.module_source == *entry_source {
             continue;
         }
-        // A `Box<T>` was registered in Phase 0.
-        if s.monomorph_info.is_some() && !is_box_instance(s, type_table) {
+        if s.monomorph_info.is_some() {
             register_struct(ctx, s, type_table, &s.module_source);
         }
     }
@@ -826,7 +780,7 @@ fn register_mono_entry_types(ctx: &mut WirContext<'_>) {
         if s.module_source != *entry_source {
             continue;
         }
-        if s.monomorph_info.is_some() && !is_box_instance(s, type_table) {
+        if s.monomorph_info.is_some() {
             register_struct(ctx, s, type_table, &s.module_source);
         }
     }
@@ -1197,6 +1151,15 @@ fn fixup_abstract_struct_fields(ctx: &mut WirContext<'_>) {
                 continue;
             }
 
+            if let Some(&payload) = ctx.cell_payloads.get(&u32::try_from(wir_idx).unwrap()) {
+                let type_table = &*ctx.package.type_table.borrow();
+                let ty = cell_field_type(ctx, type_table, payload);
+                if !is_abstract_ref(&ty) {
+                    struct_fixups.push((wir_idx, field_idx, ty));
+                }
+                continue;
+            }
+
             let module_source = s.meta.module_source.as_ref();
             let struct_name_str = unqualified_name(&s.name.fq, module_source);
 
@@ -1223,13 +1186,7 @@ fn fixup_abstract_struct_fields(ctx: &mut WirContext<'_>) {
                         let field_type_id = tir_field.type_id;
                         let wir_type = ctx.type_id_to_wir_type_pending(type_table, field_type_id);
                         if !is_abstract_ref(&wir_type) {
-                            resolved = Some(field_slot_type(
-                                ctx,
-                                tir_struct,
-                                type_table,
-                                field_type_id,
-                                wir_type,
-                            ));
+                            resolved = Some(ctx.slot_type(type_table, field_type_id, wir_type));
                             break;
                         }
                     }

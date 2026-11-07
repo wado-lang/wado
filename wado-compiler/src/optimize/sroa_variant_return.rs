@@ -23,6 +23,7 @@ use super::arena_query;
 use super::gate::{FunctionGate, GatedPass};
 use crate::compiler_item::CompilerItem;
 use crate::compiler_trace;
+use crate::name;
 use crate::nir_visitor::reachable_exprs;
 use crate::parallel::Executor;
 
@@ -30,10 +31,6 @@ use crate::parallel::Executor;
 /// `super::multi_value_return`'s own cap, so the classifier that turns this
 /// tuple into a Wasm multi-value signature never rejects it on arity.
 const MAX_TUPLE_ARITY: usize = 8;
-
-/// The sole field of the `Box<T>` `lower::plan::boxing` promotes an
-/// address-taken local into.
-const BOX_FIELD: &str = "value";
 
 /// One case of `Option`, as the compiler-item registry declares it.
 #[derive(Clone)]
@@ -1666,82 +1663,49 @@ fn call_callee(body: &Body, op: Operand) -> Option<FuncId> {
 }
 
 /// How a payload binding is re-minted as a `let` at the call site.
-enum Rebound<'a> {
+enum Rebound {
     /// The slot read lands in the local unchanged, under the local's own
     /// declared type.
     Direct { let_type: TypeId },
-    /// The local's address is taken, so `lower::plan::boxing` promoted its slot
-    /// to `Box<T>`; the re-minted binding boxes the slot read as lowering did.
-    Boxed { box_type: TypeId, name: &'a str },
+    /// The local's address is taken, so it lives in a cell; the re-minted
+    /// binding puts the slot read in a cell as lowering did.
+    Celled { cell: TypeId },
 }
 
 /// Per-function facts deciding whether a payload binding can be re-minted, and
 /// in what form. A local a retained parameter aliases cannot: the alias is
 /// established outside this body, and the `let` would not re-establish it.
-/// Neither can one whose declared type is neither the payload nor a `Box` of it
-/// — local indices are pooled, so a declaration matching neither belongs to
+/// Neither can one whose declared type is neither the payload nor its cell —
+/// local indices are pooled, so a declaration matching neither belongs to
 /// another binding.
 struct Rebind<'t> {
-    /// The table the keys below were taken from, so a payload arriving at
-    /// [`Self::rebound`] is keyed the same way.
     type_table: &'t TypeTable,
     local_types: Vec<TypeId>,
-    /// The key of each declared local type, references stripped: `&T` is `T` at
-    /// WIR level (`wir_build::context`), what needs a cell arriving as `Box<T>`.
-    peeled_keys: Vec<TypeKey>,
-    /// Declared `Box<T>` local type → (`T`'s key, the struct's mangled name).
-    boxes: IndexMap<TypeId, (TypeKey, String)>,
 }
 
 impl<'t> Rebind<'t> {
     fn new(func: &NirFunction, type_table: &'t TypeTable) -> Self {
-        let local_types: Vec<TypeId> = func.locals.iter().map(|l| l.type_id).collect();
-        let boxes = local_types
-            .iter()
-            .filter_map(|&declared| match type_table.get(declared) {
-                ResolvedType::Struct { def, type_args }
-                    if type_args.len() == 1
-                        && type_table.is_compiler_struct_instance(declared, CompilerItem::Box) =>
-                {
-                    Some((
-                        declared,
-                        (
-                            type_table.type_key(type_args[0]),
-                            type_table.struct_mangled_name(*def, type_args),
-                        ),
-                    ))
-                }
-                _ => None,
-            })
-            .collect();
-        let peeled_keys = local_types
-            .iter()
-            .map(|&t| type_table.type_key(type_table.peel_refs(t)))
-            .collect();
         Self {
             type_table,
-            local_types,
-            peeled_keys,
-            boxes,
+            local_types: func.locals.iter().map(|l| l.type_id).collect(),
         }
     }
 
-    /// `payload_type` is what the slot read produces. Never pass the pattern's
-    /// own type: `lower::plan::boxing` rewrites it along with the local, so the
-    /// two agreeing says nothing about the value that arrives.
-    fn rebound(&self, local: u32, payload_type: TypeId) -> Option<Rebound<'_>> {
-        let payload = self.type_table.type_key(payload_type);
+    /// `payload_type` is what the slot read produces. A reference to an object
+    /// is the object at WIR level (`wir_build::context`), so it binds the
+    /// object as it is; a cell does not.
+    fn rebound(&self, local: u32, payload_type: TypeId) -> Option<Rebound> {
+        let tt = self.type_table;
+        let payload = tt.type_key(payload_type);
         let declared = self.local_types[local as usize];
-        if self.peeled_keys[local as usize] == payload {
+        if tt.type_key(declared) == payload {
             return Some(Rebound::Direct { let_type: declared });
         }
-        match self.boxes.get(&declared) {
-            Some((inner, name)) if *inner == payload => Some(Rebound::Boxed {
-                box_type: declared,
-                name,
-            }),
-            _ => None,
+        if let Some(held) = tt.cell_payload(declared) {
+            return (tt.type_key(held) == payload).then_some(Rebound::Celled { cell: declared });
         }
+        (tt.type_key(tt.peel_refs(declared)) == payload)
+            .then_some(Rebound::Direct { let_type: declared })
     }
 }
 
@@ -2882,21 +2846,21 @@ fn bind_payload_before(
         .expect("variant-return SROA: arm_is_one_level accepted an unbindable local")
     {
         Rebound::Direct { let_type } => (Operand::Expr(read), let_type),
-        Rebound::Boxed { box_type, name } => (
+        Rebound::Celled { cell } => (
             Operand::Expr(body.exprs.push(ExprNode {
                 kind: ExprKind::StructLiteral {
-                    struct_type: box_type,
-                    struct_name: name.to_string(),
+                    struct_type: cell,
+                    struct_name: name::CELL_STRUCT.to_string(),
                     fields: vec![ArenaStructField {
-                        name: BOX_FIELD.to_string(),
+                        name: name::CELL_FIELD.to_string(),
                         value: Operand::Expr(read),
                         field_index: 0,
                     }],
                 },
-                type_id: box_type,
+                type_id: cell,
                 span: cx.span,
             })),
-            box_type,
+            cell,
         ),
     };
     let let_stmt = body.stmts.push(StmtNode {

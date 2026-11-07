@@ -845,8 +845,25 @@ pub fn cm_name_key(cm_name: &str) -> String {
 pub const CLOSURE_STRUCT_PREFIX: &str = "$Closure_";
 
 /// The WIR struct an affine resource is: the object holding its handle. Not a
-/// `Box<i32>`, which the optimizer scalarizes as a value with no identity.
+/// cell, which the optimizer scalarizes as a value with no identity.
 pub const RESOURCE_OBJECT_STRUCT: &str = "$Resource";
+
+/// The object of one field, `value`, that a reference to a primitive, an enum,
+/// a variant, a function or another reference points at.
+pub const CELL_STRUCT: &str = "$Cell";
+
+/// The one field of a [`CELL_STRUCT`].
+pub const CELL_FIELD: &str = "value";
+
+/// How a cell's name spells a function payload: every function value lowers
+/// to one representation, so its cells are one struct.
+pub const CELL_FN_PAYLOAD: &str = "fn";
+
+/// The WIR struct a cell holding the payload spelled `payload` lowers to.
+#[must_use]
+pub fn cell_struct_name(payload: &str) -> String {
+    mangle_generic_name(CELL_STRUCT, &[payload.to_string()])
+}
 
 /// The name closure `functor_id`'s functor struct is interned under.
 #[must_use]

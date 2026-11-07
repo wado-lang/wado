@@ -31,7 +31,9 @@ use crate::lower::plan::boxing::BoxPlan;
 use crate::lower::plan::string;
 use crate::lower::wide_int_literal::literal_from_repr;
 use crate::lower::{bare_asserts, cold_paths, wide_arith, wide_int_literal};
-use crate::name::{FunctionId, closure_capture_field, variant_tag_helper_name};
+use crate::name::{
+    self, FunctionId, closure_capture_field, variant_tag_helper_name,
+};
 use crate::nir::{
     FuncCell, FuncId, FuncRef, NirEnum, NirEnumCase, NirField, NirFlags, NirFlagsMember,
     NirFunction, NirGlobal, NirLiteralPattern, NirLocal, NirParam, NirStruct, NirTest,
@@ -351,34 +353,29 @@ pub(super) fn tir_function_key(f: &TirFunction) -> FunctionId {
     .function_id()
 }
 
-/// The address-taken locals living in a `Box`, each with that box's type.
+/// The address-taken locals living in a cell, each with its `&mut T` type.
 #[derive(Default)]
 struct BoxedLocals(IndexMap<u32, tir::TypeId>);
 
 impl BoxedLocals {
     fn of(func: &TirFunction, plan: &BoxPlan) -> Self {
-        Self(
-            func.address_taken_locals
+        Self(plan.cell_locals(func).map_or_else(IndexMap::default, |cells| {
+            cells
                 .iter()
                 .map(|&local| (local, func.locals[local as usize].type_id))
-                .filter(|(_, ty)| plan.box_type_ids.contains(ty))
-                .collect(),
-        )
+                .collect()
+        }))
     }
 
-    /// The box `local` lives in, where a read of it typed `ty` reads the value
-    /// the box holds. A read typed as a reference to that value, as a closure
-    /// capture spells one, is the box itself.
-    fn box_of_value(
-        &self,
-        local: u32,
-        ty: tir::TypeId,
-        plan: &BoxPlan,
-        type_table: &TypeTable,
-    ) -> Option<tir::TypeId> {
+    /// The cell `local` lives in, where a read of it typed `ty` reads the value
+    /// the cell holds. A read typed as a reference to that value, as a closure
+    /// capture spells one, is the cell itself.
+    fn box_of_value(&self, local: u32, ty: tir::TypeId, type_table: &TypeTable) -> Option<tir::TypeId> {
         let declared = *self.0.get(&local)?;
-        let holding = *plan.box_struct_types.get(&ty)?;
-        type_table.same_type(holding, declared).then_some(declared)
+        let held = type_table
+            .cell_payload(declared)
+            .expect("a cell local is declared as its cell");
+        (type_table.ref_depth(ty) == type_table.ref_depth(held)).then_some(declared)
     }
 }
 
@@ -504,19 +501,16 @@ impl<'a, 'p> FunctionTranslator<'a, 'p> {
         // The move/share/alias analyses only ever mark copyable-value locals; a
         // function with none has nothing to elide, so all three are empty. Skip
         // them — running them is otherwise pure per-function allocation, and most
-        // functions (scalar/reference-only) hit this path. A referenced local is
-        // already retyped to its box, and the value it holds is what counts, as
-        // is what a reference leads to, which `*r` hands to a call.
+        // functions (scalar/reference-only) hit this path. What a reference
+        // leads to counts, which `*r` hands to a call, and so does what a cell
+        // local holds.
         let needs_copy_analysis = {
             let tt = base.type_table.borrow();
             func.params
                 .iter()
                 .map(|p| p.type_id)
                 .chain(func.locals.iter().map(|l| l.type_id))
-                .map(|tid| {
-                    tt.peel_refs_and_box(base.box_plan.get_box_inner_type(tid).unwrap_or(tid))
-                })
-                .any(|tid| value_copy::needs_value_copy(tid, &tt))
+                .any(|tid| value_copy::needs_value_copy(tt.peel_refs(tid), &tt))
         };
         // One resolver for the body, shared by every question about what an
         // expression names: the ownership walk and the reference-root table.
@@ -572,7 +566,7 @@ impl<'a, 'p> FunctionTranslator<'a, 'p> {
         }
         let guarded_locals = guarded_locals(func, |local, ty| {
             boxed_locals
-                .box_of_value(local, ty, base.box_plan, &base.type_table.borrow())
+                .box_of_value(local, ty, &base.type_table.borrow())
                 .is_some()
         });
         let share_eligible_locals = ownership.share_eligible;
@@ -916,10 +910,9 @@ impl FunctionTranslator<'_, '_> {
             .is_some_and(|root| !self.moved_roots.contains(&root))
     }
 
-    /// Apply a boxing-derived rewrite to `expr`, returning `Some` if
-    /// one fires. Matches raw TIR shapes — see the per-case helpers
-    /// for the four rewrites (`Local` retag, `&local` collapse, `&x`
-    /// wrap, `*box` projection).
+    /// Apply a cell rewrite to `expr`, returning `Some` if one fires. Matches
+    /// raw TIR shapes — see the per-case helpers for the four rewrites (a cell
+    /// local's read, `&local` collapse, `&x` wrap, `*cell` projection).
     fn try_boxing_rewrite(&self, expr: &TirExpr) -> Option<ExprId> {
         match &expr.kind {
             TirExprKind::Local { index, name } => {
@@ -929,7 +922,7 @@ impl FunctionTranslator<'_, '_> {
             TirExprKind::Unary {
                 op: TirUnaryOp::Ref | TirUnaryOp::MutRef,
                 expr: inner,
-            } => self.try_boxing_ref(inner, expr.span),
+            } => self.try_boxing_ref(inner, expr.type_id, expr.span),
             TirExprKind::Unary {
                 op: TirUnaryOp::Deref,
                 expr: inner,
@@ -938,35 +931,46 @@ impl FunctionTranslator<'_, '_> {
         }
     }
 
-    fn try_boxing_ref(&self, inner: &TirExpr, span: Span) -> Option<ExprId> {
-        // `&local` of a boxed local: the Box IS the
-        // address, so collapse to the Local without re-wrapping.
+    fn try_boxing_ref(&self, inner: &TirExpr, ref_type: tir::TypeId, span: Span) -> Option<ExprId> {
+        // `&local` of a cell local: the cell is the address, so collapse to the
+        // local without wrapping it again.
         if let TirExprKind::Local { index, name } = &inner.kind
-            && let Some(box_type_id) = self.box_type_of_local(*index, inner.type_id)
+            && let Some(cell) = self.box_type_of_local(*index, inner.type_id)
         {
             return Some(self.alloc_expr(
                 ExprKind::Local {
                     index: *index,
                     name: name.clone(),
                 },
-                box_type_id,
+                cell,
                 span,
             ));
         }
-        let boxes_slot = self.base.type_table.borrow().boxes_slot(inner.type_id);
-        // `&*r` / `&mut *r` through a box is the box: a fresh one would hold a
+        // `&*r` / `&mut *r` through a cell is the cell: a fresh one would hold a
         // copy, so a write through it would be lost (`|| n.bump()` on a
         // mut-captured `i32`), and an affine variant's slot would be detached.
         if let TirExprKind::Unary {
             op: TirUnaryOp::Deref,
             expr: reference,
         } = &inner.kind
-            && (boxes_slot || self.base.box_plan.box_type_ids.contains(&reference.type_id))
+            && self
+                .base
+                .type_table
+                .borrow()
+                .cell_payload(reference.type_id)
+                .is_some()
         {
             return Some(self.convert_expr(reference));
         }
-        // A slot holding an affine variant holds it in a box, which is the
-        // place: `&s.f` is the box the field holds, read by a builtin rather
+        let (boxes_slot, cell_target) = {
+            let tt = self.base.type_table.borrow();
+            (
+                tt.boxes_slot(inner.type_id),
+                tt.is_boxed_reference_target(inner.type_id),
+            )
+        };
+        // A slot holding an affine variant holds it in a cell, which is the
+        // place: `&s.f` is the cell the field holds, read by a builtin rather
         // than `Unary::Ref`, which the optimizer reads as the referent itself.
         if boxes_slot
             && let TirExprKind::FieldAccess {
@@ -1009,40 +1013,34 @@ impl FunctionTranslator<'_, '_> {
                 .type_table
                 .borrow()
                 .slot_box(inner.type_id)
-                .expect("the boxing plan registers a box for every slot that boxes");
+                .expect("the boxing plan registers a cell for every slot that holds one");
             return Some(self.convert_expr(&builtin_call(
                 "field_slot",
                 vec![holder, field],
                 slot_box,
             )));
         }
-        // `&primitive_expr` → fresh `Box<T> { value: expr }`.
+        if !cell_target {
+            return None;
+        }
+        // `&value` of a cell target is a fresh cell holding the value.
         let inner_nir = self.convert_operand(inner);
-        Some(self.wrap_in_box(
-            inner_nir,
-            *self.base.box_plan.box_struct_types.get(&inner.type_id)?,
-            inner.span,
-        ))
+        Some(self.wrap_in_box(inner_nir, ref_type, inner.span))
     }
 
-    fn wrap_in_box(&self, value: Operand, box_type: tir::TypeId, span: Span) -> ExprId {
-        let box_struct_name = self
-            .base
-            .type_table
-            .borrow()
-            .struct_list_name(box_type)
-            .expect("Box type should be a struct");
+    /// A new cell of type `cell` holding `value`.
+    fn wrap_in_box(&self, value: Operand, cell: tir::TypeId, span: Span) -> ExprId {
         self.alloc_expr(
             ExprKind::StructLiteral {
-                struct_type: box_type,
-                struct_name: box_struct_name,
+                struct_type: cell,
+                struct_name: name::CELL_STRUCT.to_string(),
                 fields: vec![ArenaStructField {
-                    name: "value".to_string(),
+                    name: name::CELL_FIELD.to_string(),
                     value,
                     field_index: 0,
                 }],
             },
-            box_type,
+            cell,
             span,
         )
     }
@@ -1123,10 +1121,10 @@ impl FunctionTranslator<'_, '_> {
     }
 
     /// Expand an assignment that writes into the storage its place holds:
-    /// `*ref = value` through an unboxed `&mut` to an in-place aggregate, and
+    /// `*ref = value` through a `&mut` to an in-place aggregate, and
     /// `place = value` where the ownership walk found a holder of that storage
-    /// (WEP 2026-10-13). A Box-shaped deref-assign lowers as a single statement
-    /// via the regular `try_boxing_rewrite` `Deref` arm.
+    /// (WEP 2026-10-13). A deref-assign through a cell lowers as a single
+    /// statement via the regular `try_boxing_rewrite` `Deref` arm.
     fn try_expand_in_place_assign(&self, expr: &TirExpr) -> Option<Vec<StmtId>> {
         let TirExprKind::Assign { target, value } = &expr.kind else {
             return None;
@@ -1135,7 +1133,7 @@ impl FunctionTranslator<'_, '_> {
             TirExprKind::Unary {
                 op: TirUnaryOp::Deref,
                 expr: ref_expr,
-            } if !self.base.box_plan.box_type_ids.contains(&ref_expr.type_id) => {
+            } => {
                 let ResolvedType::MutRef(inner) =
                     *self.base.type_table.borrow().get(ref_expr.type_id)
                 else {
@@ -1465,28 +1463,27 @@ impl FunctionTranslator<'_, '_> {
         outer_type_id: tir::TypeId,
         span: Span,
     ) -> Option<ExprId> {
-        let inner_type_id = inner.type_id;
-        if !self.base.box_plan.box_type_ids.contains(&inner_type_id) {
-            // For non-box refs (struct refs, etc.) `Deref` is a
-            // transparent no-op at the Wasm level — leave the NIR
-            // `Unary(Deref)` in place via the default path.
-            return None;
-        }
-        let result_type = self
-            .base
-            .box_plan
-            .get_box_inner_type(inner_type_id)
-            .unwrap_or(outer_type_id);
+        // A reference to anything but a cell is its referent's own handle, so
+        // its `Deref` stays a no-op the default path keeps.
+        self.base
+            .type_table
+            .borrow()
+            .cell_payload(inner.type_id)?;
         let inner_nir = self.convert_expr(inner);
-        Some(self.alloc_expr(
+        Some(self.read_cell(inner_nir.into(), outer_type_id, span))
+    }
+
+    /// `cell.value`, typed `held`.
+    fn read_cell(&self, cell: Operand, held: tir::TypeId, span: Span) -> ExprId {
+        self.alloc_expr(
             ExprKind::FieldAccess {
-                expr: inner_nir.into(),
+                expr: cell,
                 field_index: 0,
-                field_name: "value".to_string(),
+                field_name: name::CELL_FIELD.to_string(),
             },
-            result_type,
+            held,
             span,
-        ))
+        )
     }
 
     /// A destination needing no copy passes through. Where one is due, a
@@ -1625,7 +1622,7 @@ impl FunctionTranslator<'_, '_> {
             unreachable!("a guarded assignment writes a local");
         };
         let boxed = self.box_type_of_local(*index, target.type_id);
-        // A boxed local's first assignment allocates its box; every later one
+        // A cell local's first assignment allocates its cell; every later one
         // writes through it, where a reference taken since may read it.
         let first_write = match boxed {
             Some(box_type) => {
@@ -1675,14 +1672,10 @@ impl FunctionTranslator<'_, '_> {
         )]
     }
 
-    /// The `Box` a local holding a `ty` lives in, where its address is taken.
+    /// The cell a local holding a `ty` lives in, where its address is taken.
     fn box_type_of_local(&self, local: u32, ty: tir::TypeId) -> Option<tir::TypeId> {
-        self.boxed_locals.box_of_value(
-            local,
-            ty,
-            self.base.box_plan,
-            &self.base.type_table.borrow(),
-        )
+        self.boxed_locals
+            .box_of_value(local, ty, &self.base.type_table.borrow())
     }
 
     fn convert_stmt(&self, stmt: &TirStmt) -> StmtId {
@@ -2522,33 +2515,14 @@ impl FunctionTranslator<'_, '_> {
             let arg_ty = args[0].expr.type_id;
             let callee = {
                 let tt = self.base.type_table.borrow();
-                // The marker's `&T` argument may already be lowered to `Box<V>`.
-                let peeled = tt.peel_refs(arg_ty);
-                let unboxed = self
-                    .base
-                    .box_plan
-                    .get_box_inner_type(peeled)
-                    .or_else(|| match tt.get(peeled) {
-                        tir::ResolvedType::Struct { def, type_args }
-                            if tt.is_compiler_struct_instance(peeled, CompilerItem::Box) =>
-                        {
-                            self.base
-                                .struct_fields_map
-                                .get(&(*def, type_args.clone()))
-                                .and_then(|fields| fields.first())
-                                .map(|f| f.type_id)
-                        }
-                        _ => None,
-                    })
-                    .unwrap_or(peeled);
-                let variant_ty = tt.peel_refs(unboxed);
+                let variant_ty = tt.peel_refs(arg_ty);
                 // A plain variant carries the tag read as a trait method on its
                 // declaration. A generic one has no instantiated declaration,
                 // so it uses the per-instance helper minted post-monomorphize.
                 let items = tt.compiler_items();
                 let name = match tt.get(variant_ty) {
                     tir::ResolvedType::Variant { type_args, .. } if !type_args.is_empty() => {
-                        variant_tag_helper_name(&tt.mangle_type_arg_unboxed(variant_ty))
+                        variant_tag_helper_name(&tt.mangle_type_arg_rowless(variant_ty))
                     }
                     _ => MethodName::format_local(
                         &tt.fq_type_name(variant_ty),
@@ -2786,9 +2760,8 @@ impl FunctionTranslator<'_, '_> {
         self.alloc_expr(kind, seq_type_id, span)
     }
 
-    /// Read a local, through the box when [`crate::lower::plan::boxing`]
-    /// promoted its slot: the box *is* the storage, so the value stands one
-    /// field in.
+    /// Read a local, through its cell when [`crate::lower::plan::boxing`] moved
+    /// it into one: the cell *is* the storage, so the value stands one field in.
     fn read_local(&self, index: u32, name: &str, type_id: tir::TypeId, span: Span) -> ExprId {
         let boxed = self.box_type_of_local(index, type_id);
         let local = self.alloc_expr(
@@ -2799,16 +2772,10 @@ impl FunctionTranslator<'_, '_> {
             boxed.unwrap_or(type_id),
             span,
         );
-        let Some(_) = boxed else { return local };
-        self.alloc_expr(
-            ExprKind::FieldAccess {
-                expr: local.into(),
-                field_index: 0,
-                field_name: "value".to_string(),
-            },
-            type_id,
-            span,
-        )
+        match boxed {
+            Some(_) => self.read_cell(local.into(), type_id, span),
+            None => local,
+        }
     }
 
     /// Arena struct-field values for a closure's captures. Mirrors the TIR-side
@@ -2891,16 +2858,22 @@ impl FunctionTranslator<'_, '_> {
         let copied = self.wrap_value_copy_operand(self.convert_operand(value), value.type_id);
         let expr = match &receiver.kind {
             // Re-take the elaborator's auto-reference over the copy, in the two
-            // shapes `try_boxing_ref` builds: a `Box<T>` wrapper for a boxed
-            // referent, a plain reference otherwise. Its `&local` collapse
-            // cannot apply, a local being a place.
+            // shapes `try_boxing_ref` builds: a cell for a cell target, a plain
+            // reference otherwise. Its `&local` collapse cannot apply, a local
+            // being a place.
             TirExprKind::Unary {
                 op: op @ (TirUnaryOp::Ref | TirUnaryOp::MutRef),
                 ..
-            } => match self.base.box_plan.box_struct_types.get(&value.type_id) {
-                Some(&box_type) => self.wrap_in_box(copied, box_type, value.span).into(),
-                None => self
-                    .alloc_expr(
+            } => {
+                let cell_target = self
+                    .base
+                    .type_table
+                    .borrow()
+                    .is_boxed_reference_target(value.type_id);
+                let reference = if cell_target {
+                    self.wrap_in_box(copied, receiver.type_id, value.span)
+                } else {
+                    self.alloc_expr(
                         ExprKind::Unary {
                             op: convert_unary_op(*op),
                             expr: copied,
@@ -2908,8 +2881,9 @@ impl FunctionTranslator<'_, '_> {
                         receiver.type_id,
                         receiver.span,
                     )
-                    .into(),
-            },
+                };
+                reference.into()
+            }
             _ => copied,
         };
         ArenaCallArg { expr, is_mut: true }

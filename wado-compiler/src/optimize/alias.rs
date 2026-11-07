@@ -405,8 +405,8 @@ impl<'a> CallImmutability<'a> {
         if let Some(&cached) = lock(&self.memo).get(&type_id) {
             return cached;
         }
-        // A struct can only reach itself through a `Box`/`List`/reference
-        // field (value types cannot be infinite-sized), all of which return
+        // A struct can only reach itself through a `List` or reference field
+        // (value types cannot be infinite-sized), all of which return
         // `false` before recursing, so a cycle implies an immutable shape.
         if stack.contains(&type_id) {
             return true;
@@ -427,7 +427,7 @@ impl<'a> CallImmutability<'a> {
                 self.walk(base, stack)
             }
             _ if self.type_table.struct_parts(type_id).is_some() => {
-                !is_box_or_list(type_id, self.type_table)
+                !is_list(type_id, self.type_table)
                     && self
                         .struct_fields
                         .of_type(type_id, self.type_table)
@@ -687,11 +687,11 @@ fn collect_pattern_locals(body: &Body, pat: PatId, set: &mut IndexSet<u32>, chan
     }
 }
 
-/// Locals whose storage aliases a projection of self (`p0`) through a boxed
-/// handle the syntactic self-write scan misses: the boxing rewrite lowers
-/// `&`/`&mut self.<proj>` to `Box { value: self.<proj> }`, which is then bound
-/// and matched. A least fixpoint over the bindings that hand out such an alias
-/// (a projection of a known self alias, a `Box` literal wrapping one, or a
+/// Locals whose storage aliases a projection of self (`p0`) through a cell the
+/// syntactic self-write scan misses: lowering turns `&`/`&mut self.<proj>` of a
+/// cell target into a cell holding `self.<proj>`, which is then bound and
+/// matched. A least fixpoint over the bindings that hand out such an alias
+/// (a projection of a known self alias, a cell literal wrapping one, or a
 /// match binding of a self-alias scrutinee). Only a later *mutation* of these
 /// counts as a write, so an immutable `&self.field` boxed and read is not
 /// flagged.
@@ -713,7 +713,7 @@ fn self_derived_locals(body: &Body, p0: u32, type_table: &TypeTable) -> IndexSet
             ..
         } = &body.exprs[value].kind
         {
-            return type_table.box_payload_of(*struct_type).is_some()
+            return type_table.cell_payload(*struct_type).is_some()
                 && fields.iter().any(|f| {
                     f.value
                         .as_expr()
@@ -964,11 +964,16 @@ fn collect_mut_escaped_node(
 // Alias group analysis (union-find over reference-typed copies)
 // ──────────────────────────────────────────────────────────────────────────────
 
-/// The key of the heap object a local's value may share: a struct handle, or
-/// an aggregate behind a reference. `None` for scalars.
+/// The key of the heap object a local's value may share: a struct handle, a
+/// cell, or an aggregate behind a reference. `None` for scalars.
 fn shared_object_key(type_id: TypeId, type_table: &TypeTable) -> Option<TypeKey> {
     fn key(type_id: TypeId, under_ref: bool, type_table: &TypeTable) -> Option<TypeKey> {
         match type_table.get(type_id) {
+            ResolvedType::Ref(_) | ResolvedType::MutRef(_)
+                if type_table.cell_payload(type_id).is_some() =>
+            {
+                Some(type_table.cell_key(type_id))
+            }
             ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => key(*inner, true, type_table),
             ResolvedType::Newtype { .. } => key(
                 type_table.representation_head(type_id),
@@ -1060,10 +1065,9 @@ fn alias_groups_from_edges(edges: Vec<(u32, u32)>) -> AliasGroups {
     }
 }
 
-/// The two compiler structs whose value is a shared handle rather than a copy.
-fn is_box_or_list(type_id: TypeId, type_table: &TypeTable) -> bool {
-    type_table.is_compiler_struct_instance(type_id, CompilerItem::Box)
-        || type_table.is_compiler_struct_instance(type_id, CompilerItem::List)
+/// The compiler struct whose value is a shared handle rather than a copy.
+fn is_list(type_id: TypeId, type_table: &TypeTable) -> bool {
+    type_table.is_compiler_struct_instance(type_id, CompilerItem::List)
 }
 
 /// True when copying a `type_id` value between locals aliases them onto one heap
@@ -1073,11 +1077,11 @@ fn is_box_or_list(type_id: TypeId, type_table: &TypeTable) -> bool {
 fn type_creates_alias(type_id: TypeId, type_table: &TypeTable) -> bool {
     match type_table.get(type_id) {
         ResolvedType::Ref(_) => true,
-        ResolvedType::Struct { .. } => is_box_or_list(type_id, type_table),
+        ResolvedType::MutRef(_) => type_table.cell_payload(type_id).is_some(),
+        ResolvedType::Struct { .. } => is_list(type_id, type_table),
         ResolvedType::Primitive(_)
         | ResolvedType::Unit
         | ResolvedType::Never
-        | ResolvedType::MutRef(_)
         | ResolvedType::Enum { .. }
         | ResolvedType::Resource { .. }
         | ResolvedType::Variant { .. }

@@ -103,6 +103,11 @@ pub struct WirContext<'a> {
     /// place, so a reference to the resource sees a store through another
     /// (WEP: Affine Types). Set while types register, before any is looked up.
     pub handle_box: Option<WirTypeId>,
+    /// Each cell struct by [`TypeTable::cell_struct_name`].
+    pub cell_type_map: IndexMap<String, WirTypeId>,
+    /// The payload each cell struct was registered for, by WIR type index, so
+    /// a payload registered after it re-resolves its field.
+    pub cell_payloads: IndexMap<u32, TypeId>,
     /// What [`TypeTable::holds_affine_resource`] has answered, by type.
     affine: TypeMemo<bool>,
     /// Map from element `TypeId` to `WirTypeId` for raw GC array types.
@@ -340,6 +345,8 @@ impl<'a> WirContext<'a> {
             type_map: IndexMap::default(),
             struct_type_map: IndexMap::default(),
             handle_box: None,
+            cell_type_map: IndexMap::default(),
+            cell_payloads: IndexMap::default(),
             affine: TypeMemo::default(),
             array_type_map: IndexMap::default(),
             array_type_by_name: IndexMap::default(),
@@ -813,13 +820,13 @@ impl<'a> WirContext<'a> {
         }
     }
 
-    /// The box a slot holds a `type_id` in, where [`TypeTable::slot_box`]
+    /// The cell a slot holds a `type_id` in, where [`TypeTable::slot_box`]
     /// names one.
     pub fn slot_box(&self, type_table: &TypeTable, type_id: TypeId) -> Option<WirTypeId> {
         let wrapper = type_table.slot_box(type_id)?;
         match self.type_id_to_wir_type(type_table, wrapper) {
             WirType::Ref { type_id, .. } => Some(type_id),
-            other => unreachable!("a slot box is a struct, not {other:?}"),
+            other => unreachable!("a slot cell is a struct, not {other:?}"),
         }
     }
 
@@ -938,18 +945,20 @@ impl<'a> WirContext<'a> {
                 Self::ref_to(type_id)
             }
             ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
-                // `&T` = `T` for a GC type. A value type would need a `Box<T>`
-                // cell, but `lower::plan::boxing` already rewrote those ids to
-                // the struct — what reaches here is the kinds it leaves alone:
-                // opaque handles, whose reference is the handle.
-                let inner_wir = self.lookup_wir_type(type_table, *inner)?;
-                if let ResolvedType::Primitive(prim) = type_table.get(*inner) {
-                    panic!(
-                        "[WIR] `&{prim:?}` survived boxing unrewritten; \
-                         `lower::plan::boxing` owns turning it into `Box<{prim:?}>`"
-                    );
+                if type_table.cell_payload(type_id).is_none() {
+                    // `&T` = `T` for an object, whose reference is its handle.
+                    return self.lookup_wir_type(type_table, *inner);
                 }
-                inner_wir
+                let name = type_table.cell_struct_name(type_id);
+                let Some(cell) = self.cell_type_map.get(&name) else {
+                    return Err(UnregisteredType::struct_ref(format!("cell `{name}`")));
+                };
+                // A reference to an affine value is nullable, as the value is.
+                if self.is_affine(type_table, *inner) {
+                    Self::ref_to(cell).as_nullable()
+                } else {
+                    Self::ref_to(cell)
+                }
             }
             ResolvedType::Function { .. } => {
                 // Function-typed values are canonical closure structs at runtime.

@@ -1610,7 +1610,7 @@ fn is_gc_heap_type(type_id: TypeId, type_table: &TypeTable) -> bool {
         ResolvedType::Struct { .. } | ResolvedType::Tuple(_) => true,
         ResolvedType::Variant { type_args, .. } => !type_args.is_empty(),
         ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
-            is_gc_heap_type(*inner, type_table)
+            type_table.cell_payload(type_id).is_some() || is_gc_heap_type(*inner, type_table)
         }
         _ => false,
     }

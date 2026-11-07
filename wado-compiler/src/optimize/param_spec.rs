@@ -556,14 +556,12 @@ fn is_param_fixed(param: &NirParam) -> bool {
     !param.is_mut && !param.is_mut_ref
 }
 
-/// The struct type a `&T` / `&mut T` points at, looking through newtypes.
-/// `None` for a non-reference type or a reference to a non-struct.
+/// The struct type a `&T` / `&mut T` points at, looking through newtypes, or
+/// the cell it is. `None` for a non-reference type or a reference to a
+/// non-struct.
 fn reference_struct(type_id: TypeId, types: &TypeTable) -> Option<TypeKey> {
     match types.get_pruned(type_id)? {
-        ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
-            let inner = *inner;
-            struct_base(inner, types)
-        }
+        ResolvedType::Ref(_) | ResolvedType::MutRef(_) => struct_base(type_id, types),
         _ => None,
     }
 }
@@ -588,8 +586,12 @@ fn hands_out_object(type_id: TypeId, types: &TypeTable) -> bool {
         )
 }
 
-/// The struct type behind a type, looking through references and newtypes.
+/// The struct type behind a type, looking through references and newtypes, or
+/// the cell a reference is, keyed so `&X` and `&mut X` agree.
 fn struct_base(type_id: TypeId, types: &TypeTable) -> Option<TypeKey> {
+    if types.cell_payload(type_id).is_some() {
+        return Some(types.cell_key(type_id));
+    }
     match types.get_pruned(type_id)? {
         ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => struct_base(*inner, types),
         ResolvedType::Newtype { base_type, .. } => struct_base(*base_type, types),

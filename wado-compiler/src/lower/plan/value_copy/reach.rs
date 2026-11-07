@@ -248,9 +248,6 @@ impl<'a> StorageReach<'a> {
 
     fn members(&self, ty: TypeId) -> Members {
         let tt = self.type_table;
-        if let Some(payload) = tt.box_payload_of(ty) {
-            return Members::Reference(payload);
-        }
         if let Some(element) = tt.list_element(ty) {
             return Members::Held(vec![element]);
         }

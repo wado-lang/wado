@@ -100,8 +100,8 @@ erasure holds that id, so nothing asks.
 ### 2. Erasure is a function on types
 
 `erase_type(TypeId) -> TypeId`, memoized, is the only place that states the
-rule: a newtype becomes what its base becomes, `flags` becomes `u32`, and every
-other spelling is rebuilt from what its parts become and interned. `List<Meters>`
+rule: a newtype becomes what its base becomes, `flags` becomes `u32`, a
+function type drops its row, and every other spelling is rebuilt from what its parts become and interned. `List<Meters>`
 therefore erases to the id `List<f64>` already has, with no settling step.
 
 The erasure rewrites every `TypeId` the `FlatPackage` holds through it:

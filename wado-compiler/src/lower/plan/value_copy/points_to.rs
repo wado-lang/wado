@@ -215,10 +215,10 @@ impl PointsTo {
 /// What a handle held in a value lets its holder do to another local's storage.
 #[derive(Clone, Copy)]
 enum Handle {
-    /// Name it: a `&T`, a box, or a function value.
+    /// Name it: a `&T` or a function value.
     Names,
-    /// Write it: a `&mut T`, a writable box, or a function value, or one of
-    /// those read through a `&T`.
+    /// Write it: a `&mut T` or a function value, or one of those read through
+    /// a `&T`.
     Writes,
 }
 
@@ -275,18 +275,12 @@ impl<'a> HoldsHandle<'a> {
         }
         let tt = self.type_table;
         let next = depth + 1;
-        if tt.is_reference_shaped(ty) {
-            let referent = match tt.get(ty) {
-                ResolvedType::Ref(payload) => Some(*payload),
-                ResolvedType::MutRef(_) => None,
-                _ => tt.box_payload_of(ty).filter(|_| !tt.is_mut_box(ty)),
-            };
-            return match (self.handle, referent) {
-                (Handle::Writes, Some(payload)) => self.walk(payload, env, under_way, next),
-                _ => true,
-            };
-        }
         match tt.get(ty) {
+            ResolvedType::Ref(payload) => match self.handle {
+                Handle::Writes => self.walk(*payload, env, under_way, next),
+                Handle::Names => true,
+            },
+            ResolvedType::MutRef(_) => true,
             ResolvedType::Primitive(_)
             | ResolvedType::Unit
             | ResolvedType::Never
@@ -1443,7 +1437,7 @@ impl Builder<'_> {
     /// How each parameter of a value of type `callee` takes its argument.
     fn fn_slots(&self, callee: TypeId) -> Vec<Slot> {
         let tt = self.type_table;
-        let ResolvedType::Function { params, .. } = tt.get(tt.peel_refs_and_box(callee)) else {
+        let ResolvedType::Function { params, .. } = tt.get(tt.peel_refs(callee)) else {
             unreachable!("an indirect call's callee is a function value");
         };
         params

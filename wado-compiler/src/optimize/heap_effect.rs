@@ -754,8 +754,12 @@ impl HeapEffects<'_> {
             | ResolvedType::Enum { .. }
             | ResolvedType::Resource { .. }
             | ResolvedType::Flags { .. } => {}
-            ResolvedType::Ref(_) | ResolvedType::MutRef(_) | ResolvedType::Newtype { .. } => {
-                unreachable!("strip_handles removes every reference and newtype")
+            ResolvedType::Ref(payload) | ResolvedType::MutRef(payload) => {
+                out.insert(tt.cell_key(ty));
+                self.reach_into(*payload, seen, out);
+            }
+            ResolvedType::Newtype { .. } => {
+                unreachable!("strip_handles removes every newtype")
             }
             ResolvedType::InferVar(var) => panic!("{var} reached heap-effect analysis"),
         }
@@ -770,19 +774,36 @@ impl HeapEffects<'_> {
         out: &mut ObjectTypes,
     ) {
         let tt = self.type_table;
-        if let ResolvedType::TypeParam { index, .. } = tt.get(payload) {
-            match args.get(*index as usize) {
+        if !tt.contains_type_param(payload) {
+            self.reach_into(payload, seen, out);
+            return;
+        }
+        match tt.get(payload) {
+            ResolvedType::TypeParam { index, .. } => match args.get(*index as usize) {
                 Some(&arg) => self.reach_into(arg, seen, out),
                 None => {
                     out.set_any();
                 }
+            },
+            ResolvedType::Ref(_) | ResolvedType::MutRef(_) => {
+                let ResolvedType::TypeParam { index, .. } = tt.get(tt.peel_refs(payload)) else {
+                    out.set_any();
+                    return;
+                };
+                let Some(&arg) = args.get(*index as usize) else {
+                    out.set_any();
+                    return;
+                };
+                // A reference to a cell target, or to another reference, is a
+                // cell, keyed as `TypeTable::cell_key` keys it.
+                if tt.ref_depth(payload) > 1 || tt.is_boxed_reference_target(arg) {
+                    out.insert(tt.type_key(tt.peel_refs(arg)));
+                }
+                self.reach_into(arg, seen, out);
             }
-        } else if let ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) = tt.get(payload) {
-            self.reach_template(*inner, args, seen, out);
-        } else if tt.contains_type_param(payload) {
-            out.set_any();
-        } else {
-            self.reach_into(payload, seen, out);
+            _ => {
+                out.set_any();
+            }
         }
     }
 

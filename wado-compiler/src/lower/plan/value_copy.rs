@@ -480,17 +480,14 @@ fn needs_copy_walked(
     if type_table.holds_affine_resource(type_id) {
         return false;
     }
-    let is_box = type_table.is_compiler_struct_instance(type_id, CompilerItem::Box);
     match type_table.get(type_id) {
-        // Structs need a field-by-field deep copy, except for the `Box<T>`
-        // shortcut whose semantics intentionally share the underlying cell.
-        // An instance is answered without its declaration's fields, which
-        // would need a registry the type table does not keep: a spurious copy
-        // costs, a missed one aliases.
-        ResolvedType::Struct { .. } => !is_box,
+        // Structs need a field-by-field deep copy. An instance is answered
+        // without its declaration's fields, which would need a registry the
+        // type table does not keep: a spurious copy costs, a missed one aliases.
+        ResolvedType::Struct { .. } => true,
         // Empty tuples are unit-shaped; non-empty tuples need element-wise
         // deep copy.
-        ResolvedType::Tuple(elems) => !is_box && !elems.is_empty(),
+        ResolvedType::Tuple(elems) => !elems.is_empty(),
         // A variant is reference-shaped at the WIR level, so copying it
         // shares the payload storage: it needs a deep copy exactly when
         // one of its payloads does.

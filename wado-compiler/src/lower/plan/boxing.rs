@@ -1,113 +1,104 @@
-//! Type-table and parameter-shadow preparation for the boxing
-//! scheme. Body-level rewrites live in the TIR → NIR fold
+//! Address-taken storage. A local whose address is taken, of a type a
+//! reference reaches through a cell (`TypeTable::is_boxed_reference_target`),
+//! lives in one: its declaration becomes `&mut T`, and an address-taken
+//! parameter gets a cell-holding shadow local. No type changes meaning. The
+//! reads and writes through a cell are the TIR → NIR fold's
 //! ([`crate::lower::translate`]).
 
 use crate::flat_package::FlatPackage;
 use crate::hashmap::{IndexMap, IndexSet};
 
-use crate::ast::Visibility;
-use crate::compiler_item::CompilerItem;
 use crate::module_source::ModuleSource;
-use crate::name::mangle_generic_name;
 use crate::tir::{
-    LetStorage, MonomorphInfo, ResolvedType, StructDef, TirBlock, TirExpr, TirExprKind, TirField,
-    TirFunction, TirLocal, TirPattern, TirStmt, TirStmtKind, TirStruct, TirUnaryOp, TypeId,
+    LetStorage, TirBlock, TirExpr, TirExprKind, TirFunction, TirLocal, TirPattern, TirStmt,
+    TirStmtKind, TirUnaryOp, TypeId,
 };
 use crate::tir_visitor::{TirMutVisitor, TirRefVisitor};
 use crate::token::Span;
-use crate::type_table::{TypeKey, TypeTable};
+use crate::type_table::TypeTable;
 
-/// Type-level boxing facts produced by [`prepare_types`].
+/// The locals each function keeps in a cell.
+#[derive(Default)]
 pub struct BoxPlan {
-    /// Inner `TypeId` → canonical `Box<T>` struct `TypeId`.
-    pub box_struct_types: IndexMap<TypeId, TypeId>,
-    /// Every `TypeId` now denoting a `Box<T>` struct: the canonical
-    /// wrapper ids *and* the redefined `Ref` / `MutRef` ids.
-    pub box_type_ids: IndexSet<TypeId>,
+    cell_locals: IndexMap<(ModuleSource, String), IndexSet<u32>>,
 }
 
 impl BoxPlan {
-    /// Reverse lookup: `Box<T>` `TypeId` → `T`.
-    pub fn get_box_inner_type(&self, type_id: TypeId) -> Option<TypeId> {
-        self.box_struct_types
-            .iter()
-            .find_map(|(inner, box_type)| (*box_type == type_id).then_some(*inner))
+    /// The locals `func` keeps in a cell, each declared `&mut T` of the `T` it
+    /// holds.
+    pub fn cell_locals(&self, func: &TirFunction) -> Option<&IndexSet<u32>> {
+        self.cell_locals
+            .get(&(func.module_source.clone(), func.name.clone()))
+    }
+
+    /// Move each address-taken local of `flat`'s functions from `start` on
+    /// into a cell.
+    pub fn shadow_functions(&mut self, flat: &FlatPackage, start: usize) {
+        let mut type_table = flat.type_table.borrow_mut();
+        for func_rc in &flat.functions[start..] {
+            let mut func = func_rc.borrow_mut();
+            let cells = shadow_one_function(&mut func, &mut type_table);
+            if !cells.is_empty() {
+                self.cell_locals
+                    .insert((func.module_source.clone(), func.name.clone()), cells);
+            }
+        }
     }
 }
 
-/// Prepare the type table for boxing, touching no function body: mint a `Box<T>`
-/// struct for every `&primitive` / `&variant` / `&fn` in the program, redefine
-/// the matching `Ref` / `MutRef` `TypeId`s to it — so composites containing one
-/// follow automatically — and append the definitions to `flat.structs`. Body
-/// lowering runs separately off the returned [`BoxPlan`].
-pub fn prepare_types(flat: &mut FlatPackage) -> BoxPlan {
-    let box_module_source = flat
-        .type_table
-        .borrow()
-        .compiler_struct_module(CompilerItem::Box)
-        .cloned()
-        .unwrap_or_else(ModuleSource::prelude);
-    let mut builder = TypeBuilder::new(box_module_source);
-
+/// Mint the cell of each type a slot holds in one, and move every function's
+/// address-taken locals into cells.
+pub fn prepare(flat: &FlatPackage) -> BoxPlan {
     {
         let mut type_table = flat.type_table.borrow_mut();
-        builder.create_needed_box_types(&mut type_table);
-        builder.rewrite_types(&mut type_table);
+        let slots: Vec<TypeId> = type_table
+            .iter_type_ids()
+            .filter(|&ty| type_table.boxes_slot(ty))
+            .collect();
+        for ty in slots {
+            type_table.register_slot_box(ty);
+        }
     }
-
-    flat.structs.append(&mut builder.generated_structs);
-    BoxPlan {
-        box_struct_types: builder.box_struct_types,
-        box_type_ids: builder.box_type_ids,
-    }
+    let mut plan = BoxPlan::default();
+    plan.shadow_functions(flat, 0);
+    plan
 }
 
-/// Per function: for address-taken parameters, allocate a `Box`
-/// shadow local + prelude `Let` + remap the `&` (and a `mut` one's reads); for non-param
-/// address-taken locals, retag the declaration to its box type.
-/// Function bodies are otherwise untouched.
-pub fn shadow_params(flat: &mut FlatPackage, plan: &BoxPlan) {
-    for func_rc in &flat.functions {
-        shadow_one_function(&mut func_rc.borrow_mut(), plan);
-    }
-}
-
-pub fn shadow_new_functions(flat: &mut FlatPackage, plan: &BoxPlan, start: usize) {
-    for func_rc in &flat.functions[start..] {
-        shadow_one_function(&mut func_rc.borrow_mut(), plan);
-    }
-}
-
-fn shadow_one_function(func: &mut TirFunction, plan: &BoxPlan) {
+/// For an address-taken parameter, a cell shadow local, a prelude `Let` and a
+/// remap of its `&` (and a `mut` one's reads); for any other address-taken
+/// local, its declaration retagged to its cell. Answers the cell locals.
+fn shadow_one_function(func: &mut TirFunction, type_table: &mut TypeTable) -> IndexSet<u32> {
     let address_taken = still_taken(func);
     let param_count = u32::try_from(func.params.len()).unwrap();
 
     // (param_idx, shadow_local_idx, original_type_id, name)
     let mut shadowed_params: Vec<(u32, u32, TypeId, String)> = Vec::new();
     let mut effective_address_taken = address_taken.clone();
+    let mut cells = IndexSet::default();
 
     for &local_idx in &address_taken {
         let local_type_id = func.locals[local_idx as usize].type_id;
-        let Some(&box_type_id) = plan.box_struct_types.get(&local_type_id) else {
+        if !type_table.is_boxed_reference_target(local_type_id) {
             continue;
-        };
+        }
+        let cell = type_table.make_mut_ref(local_type_id);
         if local_idx < param_count {
             let shadow_idx = func.local_count;
             func.local_count += 1;
             let name = func.params[local_idx as usize].name.clone();
             func.locals.push(TirLocal {
                 name: format!("$boxed_param_{local_idx}"),
-                type_id: box_type_id,
+                type_id: cell,
                 is_mut: false,
                 span: Span::default(),
             });
             effective_address_taken.swap_remove(&local_idx);
             effective_address_taken.insert(shadow_idx);
             shadowed_params.push((local_idx, shadow_idx, local_type_id, name));
+            cells.insert(shadow_idx);
         } else {
-            // Retag the declaration so `convert_local` sees the box
-            // type without the fold having to consult `BoxPlan`.
-            func.locals[local_idx as usize].type_id = box_type_id;
+            func.locals[local_idx as usize].type_id = cell;
+            cells.insert(local_idx);
         }
     }
 
@@ -124,10 +115,10 @@ fn shadow_one_function(func: &mut TirFunction, plan: &BoxPlan) {
         remap_locals_in_block(body, &mutable.into_iter().collect());
         RemapReferences(immutable.into_iter().collect()).visit_block(body);
 
-        // The shadow is declared as a boxed `let` local is: of the parameter's
-        // own type, which the lowering wraps in the box, sharing the
-        // parameter's storage. A `let` of the box itself, or one that owns its
-        // value, would hide from every analysis that the box holds what the
+        // The shadow is declared as a cell `let` local is: of the parameter's
+        // own type, which the lowering wraps in the cell, sharing the
+        // parameter's storage. A `let` of the cell itself, or one that owns its
+        // value, would hide from every analysis that the cell holds what the
         // parameter does, the caller's storage included.
         let mut prelude_stmts: Vec<TirStmt> = Vec::with_capacity(shadowed_params.len());
         for (param_idx, shadow_idx, original_type_id, name) in &shadowed_params {
@@ -155,11 +146,10 @@ fn shadow_one_function(func: &mut TirFunction, plan: &BoxPlan) {
         body.stmts.splice(0..0, prelude_stmts);
     }
 
-    // Persist the effective set so downstream optimization passes
-    // (`field_forward`, etc.) see shadow locals in place of the
-    // original param indices. The fold's address-taken consumer reads
-    // from `func.address_taken_locals` directly.
+    // Persist the effective set so downstream optimization passes see shadow
+    // locals in place of the original param indices.
     func.address_taken_locals = effective_address_taken;
+    cells
 }
 
 /// The recorded address-taken locals whose `&` the body still takes. A
@@ -190,210 +180,6 @@ fn still_taken(func: &TirFunction) -> IndexSet<u32> {
         .copied()
         .filter(|local| taken.0.contains(local))
         .collect()
-}
-
-/// One `Ref` / `MutRef` `TypeId` about to be redefined onto its `Box<T>` struct.
-struct BoxRewrite {
-    type_id: TypeId,
-    box_type_id: TypeId,
-    payload: TypeId,
-}
-
-struct TypeBuilder {
-    box_struct_types: IndexMap<TypeId, TypeId>,
-    box_type_ids: IndexSet<TypeId>,
-    generated_structs: Vec<TirStruct>,
-    /// `#[compiler_item("box")]` on `struct Box<T>` in the prelude.
-    box_module_source: ModuleSource,
-    /// `(arity, return type)` → the function `TypeId` its `Box` is keyed on.
-    fn_box_repr: IndexMap<(usize, TypeId), TypeId>,
-    /// `(pointee, depth)` → the reference `TypeId` its `Box` is keyed on.
-    ref_box_repr: IndexMap<(TypeKey, usize), TypeId>,
-}
-
-impl TypeBuilder {
-    fn new(box_module_source: ModuleSource) -> Self {
-        Self {
-            fn_box_repr: IndexMap::default(),
-            ref_box_repr: IndexMap::default(),
-            box_struct_types: IndexMap::default(),
-            box_type_ids: IndexSet::default(),
-            generated_structs: Vec::new(),
-            box_module_source,
-        }
-    }
-
-    /// The `TypeId` a `Box` is keyed on: itself, or the first one seen with its
-    /// representation. Every `Box<fn(...)>` holds one `ref struct` field
-    /// whatever the signature, keyed by `(arity, return type)`; a box of `&X`
-    /// and one of `&mut X` hold the same reference, keyed by the pointee and the
-    /// depth, so a `&mut` argument reaches a `&` parameter at any depth.
-    fn box_key(&mut self, inner: TypeId, type_table: &TypeTable) -> TypeId {
-        match type_table.get(inner) {
-            ResolvedType::Function {
-                params,
-                return_type,
-                ..
-            } => *self
-                .fn_box_repr
-                .entry((params.len(), *return_type))
-                .or_insert(inner),
-            ResolvedType::Ref(_) | ResolvedType::MutRef(_) => {
-                let pointee = type_table.type_key(type_table.peel_refs(inner));
-                *self
-                    .ref_box_repr
-                    .entry((pointee, type_table.ref_depth(inner)))
-                    .or_insert(inner)
-            }
-            _ => inner,
-        }
-    }
-
-    fn get_or_create_box_type(
-        &mut self,
-        inner_type_id: TypeId,
-        type_table: &mut TypeTable,
-    ) -> TypeId {
-        if let Some(&box_type) = self.box_struct_types.get(&inner_type_id) {
-            return box_type;
-        }
-
-        // Create the Box struct type name: e.g., "Box<i32>". Use the
-        // module-qualifying, ref-preserving mangler (not `mangle_type_name`,
-        // which peels refs and drops the module qualifier): two modules that
-        // each define a same-named recursive variant produce distinct inner
-        // types (`&./a/Child` vs `&./b/Child`) that must yield distinct Box
-        // names. The unqualified `Box<Child>` collapsed them in `intern`,
-        // making one module's iterator hand back the other module's `Child`
-        // and tripping a WIR ref-nullability ICE. Primitives are unaffected
-        // (`mangle_type_arg_rowless(i32) == "i32"`).
-        let inner_name = type_table.mangle_type_arg_rowless(inner_type_id);
-        let struct_name = mangle_generic_name("Box", &[inner_name]);
-
-        // Register under the Box definition's module source (from #[compiler_item("box")]).
-        let head = StructDef::Decl(
-            type_table
-                .compiler_item_def(CompilerItem::Box)
-                .expect("the `Box` compiler item is declared"),
-        );
-        let struct_type_id =
-            type_table.make_monomorphized_struct_from_args(head, vec![inner_type_id]);
-
-        // Create the TirStruct definition with a single `value` field
-        let tir_struct = TirStruct {
-            def: head,
-            type_args: vec![inner_type_id],
-            name: struct_name,
-            module_source: self.box_module_source.clone(),
-            visibility: Visibility::Public,
-            type_params: Vec::new(),
-            monomorph_info: Some(MonomorphInfo {
-                generic_name: "Box".to_string(),
-                impl_type_args: vec![inner_type_id],
-                method_type_args: vec![],
-                is_blanket: false,
-            }),
-            fields: vec![TirField::plain(
-                "value".to_string(),
-                Visibility::Private,
-                inner_type_id,
-                0,
-                Span::new(0, 0, 0, 0),
-            )],
-            span: Span::new(0, 0, 0, 0),
-            wire_name_policy: None,
-        };
-
-        self.generated_structs.push(tir_struct);
-        self.box_struct_types.insert(inner_type_id, struct_type_id);
-        self.box_type_ids.insert(struct_type_id);
-
-        struct_type_id
-    }
-
-    /// Scan the type table for the referents that need a `Box`, by the one
-    /// predicate `TypeTable::is_boxed_reference_target` states.
-    fn create_needed_box_types(&mut self, type_table: &mut TypeTable) {
-        let mut needs_box_base: IndexSet<TypeId> = IndexSet::default();
-        let mut boxed_slots: Vec<TypeId> = Vec::new();
-
-        for type_id in type_table.iter_type_ids().collect::<Vec<_>>() {
-            if type_table.boxes_slot(type_id) {
-                needs_box_base.insert(type_id);
-                boxed_slots.push(type_id);
-            }
-            if let ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) = *type_table.get(type_id)
-                && type_table.is_boxed_reference_target(inner)
-            {
-                needs_box_base.insert(inner);
-            }
-        }
-
-        // Create Box<T> struct types for each type that needs boxing. A
-        // function type shares its signature's wrapper, but every id still maps
-        // to it: `box_struct_types` is what the body lowering asks, and an id
-        // missing from it is one whose `&` never becomes a box.
-        for base_type_id in needs_box_base {
-            let key = self.box_key(base_type_id, type_table);
-            let box_type = self.get_or_create_box_type(key, type_table);
-            self.box_struct_types.insert(base_type_id, box_type);
-        }
-        // A referent's id need not be the one its `&` spells: a closure local
-        // is `fn(i32) -> i32` while `&f` reads `&fn(i32) -> i32 with($e)`. Each
-        // id sharing a boxed representation maps to that box, or the local
-        // stays unboxed while its `&` reads a box.
-        for type_id in type_table.iter_type_ids().collect::<Vec<_>>() {
-            if self.box_struct_types.contains_key(&type_id)
-                || !type_table.is_boxed_reference_target(type_id)
-            {
-                continue;
-            }
-            let key = self.box_key(type_id, type_table);
-            if let Some(&box_type) = self.box_struct_types.get(&key) {
-                self.box_struct_types.insert(type_id, box_type);
-            }
-        }
-        for ty in boxed_slots {
-            type_table.register_slot_box(ty, self.box_struct_types[&ty]);
-        }
-    }
-
-    /// Redefine every `&T` / `&mut T` `TypeId` onto its `Box<T>` struct.
-    ///
-    /// `Option<T>` keeps its own spelling: pattern matching still reads the
-    /// inner type here, and the nullable-box mapping is codegen's.
-    fn rewrite_types(&mut self, type_table: &mut TypeTable) {
-        let mut replacements: Vec<BoxRewrite> = Vec::new();
-
-        for type_id in type_table.iter_type_ids().collect::<Vec<_>>() {
-            // A newtype over a reference reads as one once erased, but it is
-            // that reference's slot, which is redefined under its own id.
-            let Some((inner, _)) = type_table.spelled_ref(type_id) else {
-                continue;
-            };
-            let key = self.box_key(inner, type_table);
-            if let Some(&box_type_id) = self.box_struct_types.get(&key) {
-                replacements.push(BoxRewrite {
-                    type_id,
-                    box_type_id,
-                    payload: inner,
-                });
-            }
-        }
-
-        // Every redefined id is registered too, not just the canonical wrapper
-        // in `box_struct_types`: `box_type_ids` is what the Deref / Assign
-        // handlers recognise a box by, and the payload entry is what
-        // `TypeTable::peel_refs_and_box` looks through in one step.
-        for r in &replacements {
-            type_table.redefine_to(r.type_id, r.box_type_id);
-            self.box_type_ids.insert(r.type_id);
-            type_table.register_box_payload(r.type_id, r.payload);
-        }
-        for (&inner, &wrapper) in &self.box_struct_types {
-            type_table.register_box_payload(wrapper, inner);
-        }
-    }
 }
 
 /// Point each `&local` and `&mut local` at the local's shadow, leaving its

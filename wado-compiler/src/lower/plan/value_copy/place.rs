@@ -644,26 +644,20 @@ pub fn place_root(expr: &TirExpr) -> Option<u32> {
 }
 
 /// The type a [`Selector::Field`] is keyed by. Minted here alone, so a callee
-/// recording a write and a caller looking it up cannot spell the key apart.
-/// `Box<T>` peels with `Ref`/`MutRef`, since a caller's address-taken local is
-/// boxed by the time this walk runs and the callee's `&mut T` never is. A
+/// recording a write and a caller looking it up cannot spell the key apart. A
 /// newtype peels to its representation head, since it names its base's storage:
 /// `List<u8>::index_assign` records under `List`, and a `ByteList` handle must
 /// find it there.
 #[must_use]
 pub fn field_owner(base_type: TypeId, type_table: &TypeTable) -> TypeId {
-    let peeled = type_table.peel_refs_and_box(base_type);
-    type_table.peel_refs_and_box(type_table.representation_head(peeled))
+    let peeled = type_table.peel_refs(base_type);
+    type_table.peel_refs(type_table.representation_head(peeled))
 }
 
-/// A name for storage someone else owns, as the type table spells it here —
-/// after `boxing::prepare_types`, where a `&primitive` reads as its `Box<T>`.
+/// A name for storage someone else owns.
 #[must_use]
 pub fn is_reference(type_id: TypeId, type_table: &TypeTable) -> bool {
-    matches!(
-        type_table.get(type_id),
-        ResolvedType::Ref(_) | ResolvedType::MutRef(_)
-    ) || type_table.is_reference_shaped(type_id)
+    type_table.is_reference_shaped(type_id)
 }
 
 /// Whether this parameter hands the body storage the caller still reaches, to
@@ -710,15 +704,10 @@ pub fn may_carry_storage(type_id: TypeId, type_table: &TypeTable) -> bool {
         || matches!(type_table.get(type_id), ResolvedType::TypeParam { .. })
 }
 
-/// A handle a callee can write through. A shared `&` cannot be; a box carries
-/// either spelling and answers for both.
+/// A handle a callee can write through. A shared `&` cannot be.
 #[must_use]
 pub fn could_write_through(type_id: TypeId, type_table: &TypeTable) -> bool {
-    match type_table.get(type_id) {
-        ResolvedType::MutRef(_) => true,
-        ResolvedType::Ref(_) => false,
-        _ => type_table.is_reference_shaped(type_id),
-    }
+    matches!(type_table.get(type_id), ResolvedType::MutRef(_))
 }
 
 /// Records what every binder in a body hands out.

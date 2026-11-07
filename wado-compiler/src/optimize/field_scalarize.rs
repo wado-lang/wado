@@ -3233,7 +3233,7 @@ fn is_gc_heap_type(type_id: TypeId, type_table: &TypeTable) -> bool {
     match type_table.get(type_id) {
         ResolvedType::Struct { .. } => true,
         ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
-            is_gc_heap_type(*inner, type_table)
+            type_table.cell_payload(type_id).is_some() || is_gc_heap_type(*inner, type_table)
         }
         _ => false,
     }
