@@ -924,10 +924,9 @@ impl TypeTable {
         }
     }
 
-    /// Whether `&T` / `&mut T` is represented as a `Box<T>` cell rather than
-    /// `T`'s own GC handle (WEP 2026-06-13, Reference Representation). The
-    /// boxing pass and every consumer deciding by representation read this one
-    /// predicate.
+    /// Whether `&T` / `&mut T` points at a cell holding `T` rather than at
+    /// `T`'s own GC object (WEP 2026-06-13, Reference Representation). Every
+    /// consumer deciding by representation reads this one predicate.
     #[must_use]
     pub fn is_boxed_reference_target(&self, ty: TypeId) -> bool {
         matches!(
@@ -946,8 +945,7 @@ impl TypeTable {
     /// a `List` or a tuple. Assigning such a place writes into its storage
     /// wherever a reference to it may be read (WEP 2026-10-13). `i128` / `u128`
     /// are struct-backed but immutable, so their storage may be shared and is
-    /// never written. A reference names storage rather than holding a value,
-    /// whether spelled `&T` or as the `Box<T>` boxing makes of one.
+    /// never written. A reference names storage rather than holding a value.
     pub fn is_in_place_aggregate(&self, ty: TypeId) -> bool {
         if self.is_reference_shaped(ty) {
             return false;

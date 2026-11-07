@@ -343,7 +343,18 @@ fn register_struct(
             tir_struct.fields.iter().map(|f| f.name.clone()).collect(),
         );
     }
-    ctx.struct_type_map.insert(struct_name, type_id);
+    ctx.struct_type_map.insert(struct_name, type_id.clone());
+
+    // The monomorphizer named the instance from its arguments as they read
+    // then; a lookup spells them as they read now, after erasure, so alias
+    // that spelling to the instance.
+    if let Some(ref mono) = tir_struct.monomorph_info {
+        let lookup_name = type_table.struct_mangled_name(tir_struct.def, &mono.impl_type_args);
+        if lookup_name != tir_struct.name {
+            let lookup = StructName::new(effective_module, lookup_name);
+            ctx.struct_type_map.entry(lookup).or_insert(type_id);
+        }
+    }
 }
 
 /// Register a single variant type.
