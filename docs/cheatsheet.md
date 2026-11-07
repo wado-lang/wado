@@ -47,6 +47,7 @@ Namespace imports make all pub symbols from the source module directly available
 use geo from "./geo.wado";
 let p = geo::Point::new(1, 2);      // access via namespace
 impl geo::Show for Local { ... }    // and on either side of an impl head
+fn shown<T: geo::Show>(t: &T) { ... }  // and in a bound
 ```
 
 ### Generated Imports

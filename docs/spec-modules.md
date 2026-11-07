@@ -664,6 +664,37 @@ test {
 }
 ```
 
+A trait bound names a trait through a namespace the same way:
+
+<!-- {"fixture":"spec_modules_namespace_bound.wado"} -->
+
+```wado
+// A bound names a trait through a namespace import, as an `impl` header does.
+use geo from "./sub/spec_modules_geo.wado";
+
+struct Local {}
+
+impl geo::Show for Local {
+    fn show(&self) -> String {
+        return "local";
+    }
+}
+
+fn shown<T: geo::Show>(t: &T) -> String with _ {
+    return t.show();
+}
+
+struct Shelf<T: geo::Show + Eq> {
+    item: T,
+}
+
+test {
+    assert shown(&Local {}) == "local";
+    let shelf = Shelf { item: Local {} };
+    assert shown(&shelf.item) == "local";
+}
+```
+
 Only the members visible at the import site are reachable through a namespace:
 its `pub` items, and its `internal` items when it is in the same package.
 

@@ -4651,6 +4651,8 @@ pub struct TraitBound {
     /// Distinct from the referenced trait's declaration id: one bound is one
     /// reference site, and two modules' `T: Greet` are two of them.
     pub id: AstId,
+    /// The namespace import the trait is named through: `geo` in `geo::Show`.
+    pub namespace: Option<String>,
     pub name: String,
     /// The trait's own arguments, positionally (`String` in `Eq<String>`). A
     /// position the bound leaves out takes the trait's declared default.
@@ -4674,6 +4676,14 @@ impl TraitBound {
     /// none: it is already realised in the bounded parameter's own type.
     pub fn names_a_trait(&self) -> bool {
         self.fn_signature.is_none()
+    }
+
+    /// The trait's name as written, with the namespace it is named through.
+    pub fn written_name(&self) -> String {
+        match &self.namespace {
+            Some(namespace) => format!("{namespace}::{}", self.name),
+            None => self.name.clone(),
+        }
     }
 
     /// Whether any type the bound writes is rooted at `Self`, so reading it

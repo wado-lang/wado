@@ -6107,6 +6107,7 @@ impl Parser {
             let bound_name = if fn_signature.is_mut { "FnMut" } else { "Fn" };
             return Ok(TraitBound {
                 id: self.alloc_ast_id(),
+                namespace: None,
                 name: bound_name.to_string(),
                 type_args: Vec::new(),
                 assoc_types: Vec::new(),
@@ -6116,7 +6117,13 @@ impl Parser {
             });
         }
 
-        let name = self.consume_ident()?;
+        let first = self.consume_ident()?;
+        let (namespace, name) = if self.check(&TokenKind::ColonColon) {
+            self.advance();
+            (Some(first), self.consume_ident()?)
+        } else {
+            (None, first)
+        };
         let mut type_args = Vec::new();
         let mut assoc_types = Vec::new();
         if self.check(&TokenKind::Lt) {
@@ -6156,6 +6163,7 @@ impl Parser {
         }
         Ok(TraitBound {
             id: self.alloc_ast_id(),
+            namespace,
             name,
             type_args,
             assoc_types,

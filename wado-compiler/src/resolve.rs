@@ -1350,7 +1350,14 @@ impl AstVisitor<'_> for Resolver<'_> {
     /// supertrait bound carries a resolved site just like a written one.
     fn visit_trait_bounds(&mut self, bounds: &[ast::TraitBound]) {
         for bound in bounds {
-            self.record_name(bound.id, &bound.name);
+            match &bound.namespace {
+                Some(ns) => self.record(
+                    bound.id,
+                    &namespace_member_alias(ns, &bound.name),
+                    self.namespace_member(ns, &bound.name),
+                ),
+                None => self.record_name(bound.id, &bound.name),
+            }
             for assoc in &bound.assoc_types {
                 // The member is named relative to the bound's trait, not to
                 // this module, so the site is recorded and left for the
