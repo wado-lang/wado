@@ -244,53 +244,72 @@ impl LinearArray<u8> {
         return List::<U>::internal_loaded(self.block.ptr + start, (end - start) / builtin::size_of::<U>());
     }
 
+    /// The bytes from `start` to `end` as text, copied once into a `String`.
+    pub fn to_string_of(&self, start: i32, end: i32) -> Result<String, Utf8Error>
+        contract 0 <= start <= end <= self.len()
+    {
+        let mut text = String::with_capacity(end - start);
+        text.internal_append_from_memory(self.block.ptr + start, end - start);
+        let bytes = text.as_byte_slice();
+        let prefix = String::utf8_valid_prefix(&bytes);
+        if prefix != bytes.len() {
+            builtin::cold_path();
+            return Result::Err(String::utf8_error_at(&bytes, prefix));
+        }
+        return Result::Ok(text);
+    }
+
     /// Every byte `stream` delivers until its writer drops. A host copy lands
     /// in the array's own block, so no byte passes through the GC heap; a
     /// handler's items are copied in. The block takes `expected` bytes up
     /// front and grows only for a stream that runs past them.
-    internal fn internal_read_stream(stream: &Stream<u8>, expected: i32) -> LinearArray<u8>
+    pub fn read_stream(stream: &Stream<u8>, expected: i32 = 0) -> LinearArray<u8>
         contract expected >= 0
     {
-        let mut block = Block { ptr: builtin::realloc(0, 0, ALIGN, expected), bytes: expected };
-        let mut len = 0;
-        loop {
-            // A full block reads into memory of the copy's own, so a stream
-            // exactly as long as `expected` ends without growing it.
-            let full = len == block.bytes;
-            let room = if full { STREAM_CHUNK_ELEMENTS } else { block.bytes - len };
-            let mut lending = !full;
-            let into = if full { ReadInto::fresh() } else { ReadInto::lent(block.ptr + len, room, &mut lending) };
-            let mut started = stream.begin_read(room, into);
-            let packed = started.buffer.settle();
-            lending = false;
-            let landed = cm_packed_upper(packed);
-            let items = &started.items;
-            if landed > 0 {
-                if full {
-                    block = grown(block, len, landed);
-                    builtin::memory_copy(block.ptr + len, started.buffer.ptr, landed);
-                }
-                len += landed;
-            } else if !items.is_empty() {
-                let count = items.len();
-                if count > block.bytes - len {
-                    block = grown(block, len, count);
-                }
-                gc_array_to_memory(items.internal_raw_data_ref(), 0, block.ptr + len, count);
-                len += count;
-            }
-            if copy_result(packed) != CopyResult::Completed {
-                break;
-            }
+        let mut array = LinearArray::<u8> {
+            block: Block { ptr: builtin::realloc(0, 0, ALIGN, expected), bytes: expected },
+            len: 0,
+        };
+        while array.read_more(stream) == CopyResult::Completed {
         }
-        return LinearArray::<u8> { block, len };
+        return array;
+    }
+
+    /// One copy of what `stream` delivers next, appended. A host copy lands in
+    /// the block's room. A full block reads into memory of the copy's own, so a
+    /// stream exactly as long as the block ends without growing it.
+    fn read_more(&mut self, stream: &Stream<u8>) -> CopyResult {
+        let full = self.len == self.block.bytes;
+        let room = if full { STREAM_CHUNK_ELEMENTS } else { self.block.bytes - self.len };
+        let mut lending = !full;
+        let into = if full { ReadInto::fresh() } else { ReadInto::lent(self.block.ptr + self.len, room, &mut lending) };
+        let mut started = stream.begin_read(room, into);
+        let packed = started.buffer.settle();
+        lending = false;
+        let landed = cm_packed_upper(packed);
+        let items = &started.items;
+        if landed > 0 {
+            if full {
+                self.block = grown(&self.block, self.len, landed);
+                builtin::memory_copy(self.block.ptr + self.len, started.buffer.ptr, landed);
+            }
+            self.len += landed;
+        } else if !items.is_empty() {
+            let count = items.len();
+            if count > self.block.bytes - self.len {
+                self.block = grown(&self.block, self.len, count);
+            }
+            gc_array_to_memory(items.internal_raw_data_ref(), 0, self.block.ptr + self.len, count);
+            self.len += count;
+        }
+        return copy_result(packed);
     }
 }
 
 /// A block holding the `len` bytes `block` starts with and room for `more`
 /// after them, at least twice as large, so a stream of unknown length copies
 /// each byte a bounded number of times.
-fn grown(block: Block, len: i32, more: i32) -> Block {
+fn grown(block: &Block, len: i32, more: i32) -> Block {
     if more > i32::MAX - len {
         builtin::cold_path();
         panic("a stream runs past what linear memory can address");
@@ -299,6 +318,93 @@ fn grown(block: Block, len: i32, more: i32) -> Block {
     let moved = Block { ptr: builtin::realloc(0, 0, ALIGN, bytes), bytes };
     builtin::memory_copy(moved.ptr, block.ptr, len);
     return moved;
+}
+
+/// The room a buffer reading a stream takes at least, so a stream of small
+/// copies is read in few of them.
+global BUFFER_ROOM: i32 = 65536;
+
+/// Bytes in linear memory, read from a stream a part at a time, or held whole:
+/// what a parser reads a stream through with no byte lifted into the GC heap.
+/// `bytes()` holds what was read, and the part not yet consumed begins at
+/// `start()`. Both change only where `fill` reads more or `consume` drops some.
+pub affine struct LinearBuffer {
+    bytes: LinearArray<u8>,
+    start: i32,
+    /// The stream still to read; `None` once it ended, or for bytes held whole.
+    source: Option<Stream<u8>>,
+    /// The bytes dropped from the front of `bytes`.
+    dropped: i64,
+}
+
+impl LinearBuffer {
+    /// A buffer holding `bytes` and nothing more to read.
+    pub fn of(bytes: LinearArray<u8>) -> LinearBuffer {
+        return LinearBuffer { bytes, start: 0, source: null, dropped: 0 };
+    }
+
+    /// A buffer reading `stream`, which it drops once the stream ends or the
+    /// buffer drops.
+    pub fn of_stream(stream: Stream<u8>) -> LinearBuffer {
+        let bytes = LinearArray::<u8> { block: Block { ptr: builtin::realloc(0, 0, ALIGN, 0), bytes: 0 }, len: 0 };
+        return LinearBuffer { bytes, start: 0, source: Option::Some(stream), dropped: 0 };
+    }
+
+    /// What was read, from `start()` on not yet consumed.
+    pub fn bytes(&self) -> &LinearArray<u8> {
+        return &self.bytes;
+    }
+
+    /// Where in `bytes()` the part not yet consumed begins.
+    pub fn start(&self) -> i32 {
+        return self.start;
+    }
+
+    /// The bytes read and not yet consumed.
+    pub fn len(&self) -> i32 {
+        return self.bytes.len - self.start;
+    }
+
+    /// How far into the stream `start()` is.
+    pub fn position(&self) -> i64 {
+        return self.dropped + self.start as i64;
+    }
+
+    /// Read until `n` bytes are not yet consumed, or the stream ends. Answers
+    /// whether `n` are.
+    pub fn fill(&mut self, n: i32) -> bool
+        contract n >= 0
+    {
+        while self.len() < n && let Some(stream) = &self.source {
+            self.make_room(n);
+            if self.bytes.read_more(stream) != CopyResult::Completed {
+                self.source = null;
+            }
+        }
+        return self.len() >= n;
+    }
+
+    /// Drop the next `n` bytes.
+    pub fn consume(&mut self, n: i32)
+        contract 0 <= n <= self.bytes.len - self.start
+    {
+        self.start += n;
+    }
+
+    /// Move the bytes not yet consumed to the front of the block, and grow it to
+    /// hold `n` of them.
+    fn make_room(&mut self, n: i32) {
+        let kept = self.len();
+        if self.start > 0 {
+            builtin::memory_copy(self.bytes.block.ptr, self.bytes.block.ptr + self.start, kept);
+            self.dropped += self.start as i64;
+            self.start = 0;
+            self.bytes.len = kept;
+        }
+        if n > self.bytes.block.bytes {
+            self.bytes.block = grown(&self.bytes.block, kept, i32::max(n, BUFFER_ROOM) - kept);
+        }
+    }
 }
 
 impl<T: AnyBits> IndexValue<i32> for LinearArray<T> {

@@ -1,7 +1,113 @@
-use { LinearArray, ListArg } from "core:linear";
+use { LinearArray, LinearBuffer, ListArg } from "core:linear";
 use { f32x4 } from "core:simd";
 
 type Meters = f64;
+
+/// `n` bytes counting up from `from`, wrapping at a prime so no run repeats in
+/// step with a read.
+fn counting(from: i32, n: i32) -> List<u8> {
+    let mut bytes: List<u8> = [];
+    for let i of from..<from + n {
+        bytes.push((i % 251) as u8);
+    }
+    return bytes;
+}
+
+/// Serves `content` at most `step` bytes a read, the last read ending the stream.
+struct Trickle {
+    content: List<u8>,
+    at: i32,
+    step: i32,
+}
+
+impl Stream<u8> for Trickle {
+    fn begin_read(&mut self, this: &Stream<u8>, max: i32, into: ReadInto) -> StartedRead<u8> {
+        let _ = [this, into];
+        let end = i32::min(self.content.len(), self.at + i32::min(max, self.step));
+        let items = self.content[self.at..<end].to_list() as List<u8>;
+        self.at = end;
+        let result = if end == self.content.len() { CopyResult::Dropped } else { CopyResult::Completed };
+        resume StartedRead::settled(StreamChunk { items, result });
+    }
+
+    ..forward
+}
+
+test "read_stream reads a stream to its end" {
+    let [rx, tx] = Stream::<u8>::new();
+    tx.drop();
+    let mut source = Trickle { content: counting(0, 10000), at: 0, step: 3000 };
+    let array = with &mut source do {
+        LinearArray::<u8>::read_stream(&rx, 4096);
+    };
+    rx.drop();
+    assert array.to_list() == counting(0, 10000);
+}
+
+test "a buffer of an array holds its bytes and reads no more" {
+    let bytes: List<u8> = [1, 2, 3, 4];
+    let mut buffer = LinearBuffer::of(LinearArray::from_slice(&bytes));
+    assert buffer.fill(4);
+    assert !buffer.fill(5);
+    buffer.consume(3);
+    assert buffer.len() == 1;
+    assert buffer.bytes().at(buffer.start()) == 4;
+    assert buffer.position() == 3;
+}
+
+test "a buffer reads a stream a part at a time, wherever its reads fall" {
+    let [rx, tx] = Stream::<u8>::new();
+    tx.drop();
+    let mut source = Trickle { content: counting(0, 200500), at: 0, step: 7000 };
+    with &mut source do {
+        let mut buffer = LinearBuffer::of_stream(rx);
+        let mut seen = 0;
+        while buffer.fill(1000) {
+            let start = buffer.start();
+            assert buffer.bytes().to_list_of::<u8>(start, start + 1000) == counting(seen, 1000);
+            assert buffer.position() == seen as i64;
+            buffer.consume(1000);
+            seen += 1000;
+        }
+        assert seen == 200000;
+        assert buffer.len() == 500;
+        assert buffer.bytes().to_list_of::<u8>(buffer.start(), buffer.start() + 500) == counting(seen, 500);
+    };
+}
+
+test "a fill past the buffer's room grows it" {
+    let [rx, tx] = Stream::<u8>::new();
+    tx.drop();
+    let mut source = Trickle { content: counting(0, 150000), at: 0, step: 50000 };
+    with &mut source do {
+        let mut buffer = LinearBuffer::of_stream(rx);
+        assert buffer.fill(10);
+        buffer.consume(10);
+        assert buffer.fill(149990);
+        assert buffer.bytes().to_list_of::<u8>(buffer.start(), buffer.start() + 149990) == counting(10, 149990);
+    };
+}
+
+test "a buffer lends its own memory to a stream copy" {
+    let [rx, tx] = Stream::<u8>::new();
+    let writing = tx.start_write([1, 2, 3, 4, 5]);
+    let mut buffer = LinearBuffer::of_stream(rx);
+    assert buffer.fill(2);
+    assert buffer.len() == 5;
+    let [writer, _] = writing.finish();
+    writer.drop();
+    assert !buffer.fill(6);
+    assert buffer.bytes().to_list_of::<u8>(0, 5) == [1, 2, 3, 4, 5];
+}
+
+test "to_string_of reads a byte range as text" {
+    let source: ByteList = b"\xffhi\xc3\xa9";
+    let bytes = LinearArray::from_slice(&source);
+    assert bytes.to_string_of(1, 5).unwrap() == "hié";
+    assert bytes.to_string_of(1, 1).unwrap() == "";
+    assert bytes.to_string_of(0, 3).unwrap_err() == Utf8Error::invalid(0, 1);
+    assert bytes.to_string_of(1, 4).unwrap_err() == Utf8Error::incomplete(2);
+}
 
 test "filled writes every element, at each width" {
     let bytes = LinearArray::<i8>::filled(5, -3);
