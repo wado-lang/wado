@@ -5,6 +5,7 @@
 use fs from "core:fs";
 use { Preopens } from "core:fs";
 use { HashMap } from "core:collections";
+use { LinearBuffer } from "core:linear";
 use grog from "lib:grog";
 use scip from "./scip.proto"
     with {
@@ -67,8 +68,8 @@ pub struct SymbolIndex {
 pub fn load(paths: &List<String>) -> Result<SymbolIndex, String> with Preopens {
     let mut index = empty_index();
     for let path of paths {
-        let bytes = fs::read(path).map_err(|e| `${e}`)?;
-        index.add(&bytes).map_err(|e| `${path}: ${e}`)?;
+        let bytes = fs::read_linear(path).map_err(|e| `${e}`)?;
+        index.add(LinearBuffer::of(bytes)).map_err(|e| `${path}: ${e}`)?;
     }
     return Ok(index);
 }
@@ -84,17 +85,18 @@ pub fn empty_index() -> SymbolIndex {
 }
 
 impl SymbolIndex {
-    /// Add the encoded SCIP index `bytes`. It is read a document at a time: a
-    /// tree's index decoded whole is a live set the GC copies on every cycle.
-    /// On an error the index holds the documents read before it.
-    pub fn add(&mut self, bytes: &ByteList) -> Result<(), grog::DecodeError> {
-        let read = self.add_documents(bytes);
+    /// Add the encoded SCIP index `input` holds. It is read a document at a
+    /// time, out of linear memory: a tree's index decoded whole, or its bytes
+    /// held in the GC heap, is a live set the GC copies on every cycle. On an
+    /// error the index holds the documents read before it.
+    pub fn add(&mut self, input: LinearBuffer) -> Result<(), grog::DecodeError> {
+        let read = self.add_documents(input);
         self.index_names();
         return read;
     }
 
-    fn add_documents(&mut self, bytes: &ByteList) -> Result<(), grog::DecodeError> {
-        for let doc of scip::Index::documents_of(bytes) {
+    fn add_documents(&mut self, input: LinearBuffer) -> Result<(), grog::DecodeError> {
+        for let doc of scip::Index::documents_of(input) {
             self.add_document(&doc?);
         }
         return Ok(());

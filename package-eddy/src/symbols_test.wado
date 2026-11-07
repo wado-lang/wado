@@ -1,4 +1,5 @@
 use { from_string } from "core:json";
+use { LinearArray, LinearBuffer } from "core:linear";
 use { Value } from "core:value";
 use grog from "lib:grog";
 use scip from "./scip.proto"
@@ -8,11 +9,16 @@ use scip from "./scip.proto"
 use { SymbolIndex, empty_index } from "./symbols.wado";
 use { Workspace } from "./tools.wado";
 
+/// The encoded file `load` reads.
+fn held(bytes: &ByteList) -> LinearBuffer {
+    return LinearBuffer::of(LinearArray::from_slice(bytes));
+}
+
 /// The symbols of `indexes`, each added as the encoded file `load` reads.
 fn index_of(indexes: List<scip::Index>) -> SymbolIndex {
     let mut symbols = empty_index();
     for let index of indexes {
-        symbols.add(&grog::encode(&index)).unwrap();
+        symbols.add(held(&grog::encode(&index))).unwrap();
     }
     return symbols;
 }
@@ -168,7 +174,7 @@ test "an index cut short keeps the documents before the cut, by name too" {
     bytes.push(0x12);
     bytes.push(0x05);
     let mut symbols = empty_index();
-    assert symbols.add(&bytes).is_err();
+    assert symbols.add(held(&bytes)).is_err();
     let ws = Workspace { root: "src", symbols: Some(symbols) };
     assert ws.call(&"FindSymbol", &tool_input(`{"name": "area"}`)).unwrap() == "testdata/shapes.rs:6-8: method Circle::area\n    pub fn area(&self) -> f64\n";
 }

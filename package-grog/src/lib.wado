@@ -2,10 +2,14 @@
 //! generates from a `.proto` encodes and decodes through.
 
 use { TreeMap } from "core:collections";
+use { LinearArray, LinearBuffer } from "core:linear";
 
 /// The largest field number a tag carries, from the specification's
 /// "Assigning Field Numbers".
 internal global FIELD_NUMBER_MAX: i32 = 536870911;
+
+/// The most bytes a varint takes, holding a `u64`.
+global VARINT_MAX: i32 = 10;
 
 /// How deep messages and groups may nest before a decode gives up, as
 /// protobuf's own parsers default to.
@@ -47,8 +51,9 @@ fn bits_of(wire_type: WireType) -> u64 {
 
 /// Why an input is not a message of the type it was decoded as.
 pub struct DecodeError {
-    /// The byte offset the problem was found at.
-    pub offset: i32,
+    /// The byte offset the problem was found at, from the start of the input
+    /// or of the stream it was read off.
+    pub offset: i64,
     pub reason: String,
 }
 
@@ -72,7 +77,7 @@ pub trait Message with () {
     fn write(&self, w: &mut Writer);
 
     /// Decode the field `r` stands on. `false` hands it back as an unknown field.
-    fn merge_field(&mut self, number: i32, r: &mut Reader) -> Result<bool, DecodeError>;
+    fn merge_field<B: Input>(&mut self, number: i32, r: &mut Reader<B>) -> Result<bool, DecodeError>;
 
     /// The fields this message's schema does not declare, kept as they were read.
     fn unknown_fields(&mut self) -> &mut ByteList;
@@ -112,7 +117,7 @@ pub trait Scalar with () {
     fn put(w: &mut Writer, v: &Self::Value);
 
     /// `None` for a value the type does not hold: a closed enum's undeclared number.
-    fn take(r: &mut Reader) -> Result<Option<Self::Value>, DecodeError>;
+    fn take<B: Input>(r: &mut Reader<B>) -> Result<Option<Self::Value>, DecodeError>;
 }
 
 /// The whole encoding of `message`.
@@ -131,6 +136,15 @@ pub fn encode<M: Message>(message: &M) -> ByteList {
     return w.buf;
 }
 
+/// `message`'s encoding behind its length as a varint, as [`delimited`] reads it.
+pub fn encode_delimited<M: Message>(message: &M) -> ByteList {
+    let body = encode(message);
+    let mut out = List::<u8>::with_capacity(body.len() + VARINT_MAX) as ByteList;
+    push_varint(&mut out, body.len() as u64);
+    out.extend(&body);
+    return out;
+}
+
 /// A message of type `M` read out of `input`.
 pub fn decode<M: Message + Default, S: AsByteSlice>(input: S) -> Result<M, DecodeError> {
     let mut message = M::default();
@@ -141,24 +155,26 @@ pub fn decode<M: Message + Default, S: AsByteSlice>(input: S) -> Result<M, Decod
 /// Read `input` into `message` as protobuf merges: a scalar is replaced, a
 /// message merged, a repeated field appended to.
 pub fn merge<M: Message, S: AsByteSlice>(message: &mut M, input: S) -> Result<(), DecodeError> {
-    let mut r = Reader::new(input.as_byte_slice());
+    let bytes = input.as_byte_slice();
+    let mut r = Reader::new(bytes, 0, bytes.len(), 0);
     return merge_fields(message, &mut r, 0);
 }
 
-/// The values of the repeated message field numbered `number` in an encoded
-/// message, decoded one at a time, so a caller holds one value rather than the
-/// whole message. Only that field is checked: the others are skipped, not
+/// The values of the repeated message field numbered `number` in the encoded
+/// message `input` holds or reads, decoded one at a time, so a caller holds one
+/// value rather than the whole message, and reads a stream only as far as the
+/// value it decodes. Only that field is checked: the others are skipped, not
 /// decoded. A value of another wire type is skipped, as a decode keeps it as an
 /// unknown field.
-pub fn each<M: Message + Default, S: AsByteSlice>(input: S, number: i32, wire_type: WireType) -> Each<M>
+pub fn each<M: Message + Default>(input: LinearBuffer, number: i32, wire_type: WireType) -> Each<M>
     contract wire_type == WireType::Len || wire_type == WireType::SGroup
 {
-    return Each { r: Reader::new(input.as_byte_slice()), number, wire_type, done: false };
+    return Each { input, number, wire_type, done: false };
 }
 
 /// What [`each`] returns: after an error, nothing more.
-pub struct Each<M> {
-    r: Reader,
+pub affine struct Each<M> {
+    input: LinearBuffer,
     number: i32,
     wire_type: WireType,
     done: bool,
@@ -171,40 +187,136 @@ impl<M: Message + Default> Iterator for Each<M> {
         if self.done {
             return null;
         }
-        return match self.read() {
-            Ok(Some(m)) => Option::Some(Result::Ok(m)),
-            Ok(None) => {
-                self.done = true;
-                null;
-            },
-            Err(e) => {
-                self.done = true;
-                Option::Some(Result::Err(e));
-            },
-        };
+        let read = self.read();
+        self.done = !(read matches { Ok(Some(_)) });
+        return yielded(read);
     }
 }
 
 impl<M: Message + Default> Each<M> {
     fn read(&mut self) -> Result<Option<M>, DecodeError> {
-        let r = &mut self.r;
-        while r.next_field(0)? {
+        while let Some(size) = field_size(&mut self.input)? {
+            let mut r = reader_of(&self.input, size);
+            r.next_field(0)?;
+            let mut took: Option<M> = null;
             if r.number == self.number {
                 let mut m = M::default();
-                let took = if self.wire_type == WireType::Len { r.message(&mut m)? } else { r.group(&mut m)? };
-                if took {
-                    return Result::Ok(Option::Some(m));
+                let held = if self.wire_type == WireType::Len { r.message(&mut m)? } else { r.group(&mut m)? };
+                if held {
+                    took = Option::Some(m);
                 }
             }
-            r.skip_value()?;
+            if took matches { None } {
+                r.skip_value()?;
+            }
+            self.input.consume(size);
+            if took matches { Some(_) } {
+                return Result::Ok(took);
+            }
         }
         return Result::Ok(null);
     }
 }
 
+/// The messages `input` holds or reads one after another, each behind its
+/// length as a varint: how a stream carries several messages, since an
+/// encoding has no end of its own. [`encode_delimited`] writes one.
+pub fn delimited<M: Message + Default>(input: LinearBuffer) -> Delimited<M> {
+    return Delimited { input, done: false };
+}
+
+/// What [`delimited`] returns: after an error, nothing more.
+pub affine struct Delimited<M> {
+    input: LinearBuffer,
+    done: bool,
+}
+
+impl<M: Message + Default> Iterator for Delimited<M> {
+    type Item = Result<M, DecodeError>;
+
+    fn next(&mut self) -> Option<Result<M, DecodeError>> {
+        if self.done {
+            return null;
+        }
+        let read = self.read();
+        self.done = !(read matches { Ok(Some(_)) });
+        return yielded(read);
+    }
+}
+
+impl<M: Message + Default> Delimited<M> {
+    fn read(&mut self) -> Result<Option<M>, DecodeError> {
+        let input = &mut self.input;
+        if !input.fill(1) {
+            return Result::Ok(null);
+        }
+        input.fill(VARINT_MAX);
+        let mut prefix = reader_of(input, input.len());
+        let size = prefix.length_prefixed_size()?;
+        input.fill(size);
+        let mut r = reader_of(input, i32::min(size, input.len()));
+        let mut m = M::default();
+        r.merge_nested(&mut m)?;
+        input.consume(size);
+        return Result::Ok(Option::Some(m));
+    }
+}
+
+/// An iterator's answer to one read, which is its last but for a value.
+fn yielded<M>(read: Result<Option<M>, DecodeError>) -> Option<Result<M, DecodeError>> {
+    return match read {
+        Ok(Some(m)) => Option::Some(Result::Ok(m)),
+        Ok(None) => null,
+        Err(e) => Option::Some(Result::Err(e)),
+    };
+}
+
+/// A reader over the first `n` bytes `input` has not consumed, counting
+/// offsets from the start of what it reads.
+fn reader_of(input: &LinearBuffer, n: i32) -> Reader<&LinearArray<u8>> {
+    let start = input.start();
+    return Reader::new(input.bytes(), start, start + n, input.position() - start as i64);
+}
+
+/// The length of the field `input` starts with, which it then holds all of
+/// that the stream has; `None` at its end. A length the stream cuts short is
+/// left for the decode to refuse, as it refuses one cut short in place.
+fn field_size(input: &mut LinearBuffer) -> Result<Option<i32>, DecodeError> {
+    if !input.fill(1) {
+        return Result::Ok(null);
+    }
+    // A tag and a length, or a value other than a group, follow in this many.
+    input.fill(2 * VARINT_MAX);
+    loop {
+        let mut r = reader_of(input, input.len());
+        r.next_field(0)?;
+        if r.wire_type == WireType::Len {
+            let size = r.length_prefixed_size()?;
+            input.fill(size);
+            return Result::Ok(Option::Some(i32::min(size, input.len())));
+        }
+        // Only a group runs on past what the fill guarantees.
+        let group = r.wire_type == WireType::SGroup;
+        let held = input.len();
+        match r.skip_value() {
+            Ok(_) => {
+                return Result::Ok(Option::Some(r.pos - input.start()));
+            },
+            Err(e) => {
+                if group {
+                    input.fill(held * 2);
+                }
+                if input.len() == held {
+                    return Result::Err(e);
+                }
+            },
+        }
+    }
+}
+
 /// Read fields into `message` up to the reader's end, or for a group up to the
 /// end-group tag numbered `group`.
-fn merge_fields<M: Message>(message: &mut M, r: &mut Reader, group: i32) -> Result<(), DecodeError> {
+fn merge_fields<M: Message, B: Input>(message: &mut M, r: &mut Reader<B>, group: i32) -> Result<(), DecodeError> {
     while r.next_field(group)? {
         let [tag_start, value_start, number, wire_type] = [r.tag_start, r.value_start, r.number, r.wire_type];
         if !message.merge_field(number, r)? {
@@ -213,7 +325,7 @@ fn merge_fields<M: Message>(message: &mut M, r: &mut Reader, group: i32) -> Resu
             r.number = number;
             r.wire_type = wire_type;
             r.skip_value()?;
-            message.unknown_fields().extend_from_slice(r.input.slice(tag_start, r.pos) as Slice<u8>);
+            message.unknown_fields().extend(&r.input.bytes_between(tag_start, r.pos));
         }
         if !r.stray.is_empty() {
             message.unknown_fields().extend(&r.stray);
@@ -544,9 +656,64 @@ impl Writer {
     }
 }
 
+/// What a [`Reader`] reads: bytes in the GC heap, or in linear memory.
+pub trait Input with () {
+    fn size(&self) -> i32;
+
+    fn byte(&self, index: i32) -> u8
+        contract 0 <= index < self.size();
+
+    /// The bytes from `start` to `end`, copied.
+    fn bytes_between(&self, start: i32, end: i32) -> ByteList
+        contract 0 <= start <= end <= self.size();
+
+    /// The bytes from `start` to `end` as text, copied.
+    fn text_between(&self, start: i32, end: i32) -> Result<String, Utf8Error>
+        contract 0 <= start <= end <= self.size();
+}
+
+impl Input for ByteSlice {
+    fn size(&self) -> i32 {
+        return self.len();
+    }
+
+    fn byte(&self, index: i32) -> u8 {
+        return unchecked self[index];
+    }
+
+    fn bytes_between(&self, start: i32, end: i32) -> ByteList {
+        return self.slice(start, end).to_list() as ByteList;
+    }
+
+    fn text_between(&self, start: i32, end: i32) -> Result<String, Utf8Error> {
+        return String::try_from_utf8(self.slice(start, end));
+    }
+}
+
+impl Input for &LinearArray<u8> {
+    fn size(&self) -> i32 {
+        return self.len();
+    }
+
+    fn byte(&self, index: i32) -> u8 {
+        return unchecked self.at(index);
+    }
+
+    fn bytes_between(&self, start: i32, end: i32) -> ByteList {
+        return self.to_list_of::<u8>(start, end) as ByteList;
+    }
+
+    fn text_between(&self, start: i32, end: i32) -> Result<String, Utf8Error> {
+        return self.to_string_of(start, end);
+    }
+}
+
 /// A decode in progress, standing on the field whose tag it read last.
-pub struct Reader {
-    input: ByteSlice,
+pub struct Reader<B> {
+    input: B,
+    /// How far into the input or its stream `input` begins, so an error names
+    /// a position there.
+    origin: i64,
     pos: i32,
     /// Where the message being read ends.
     end: i32,
@@ -559,14 +726,18 @@ pub struct Reader {
     stray: ByteList,
 }
 
-impl Reader {
-    fn new(input: ByteSlice) -> Reader {
+impl<B: Input> Reader<B> {
+    /// A reader of `input` from `start` to `end`.
+    fn new(input: B, start: i32, end: i32, origin: i64) -> Reader<B>
+        contract 0 <= start <= end <= input.size()
+    {
         return Reader {
             input,
-            pos: 0,
-            end: input.len(),
-            tag_start: 0,
-            value_start: 0,
+            origin,
+            pos: start,
+            end,
+            tag_start: start,
+            value_start: start,
             number: 0,
             wire_type: WireType::Varint,
             depth: 0,
@@ -574,21 +745,38 @@ impl Reader {
         };
     }
 
+    fn offset(&self) -> i64 {
+        return self.origin + self.pos as i64;
+    }
+
     fn fail<T>(&self, reason: String) -> Result<T, DecodeError> {
-        return Result::Err(DecodeError { offset: self.pos, reason });
+        return Result::Err(DecodeError { offset: self.offset(), reason });
     }
 
     fn varint(&mut self) -> Result<u64, DecodeError> {
         let mut decoder = VarintDecoder::new();
         while self.pos < self.end {
-            let fed = decoder.feed(self.input[self.pos]);
+            // `end` never passes the input's size.
+            let fed = decoder.feed(unchecked self.input.byte(self.pos));
             self.pos += 1;
             if let Some(read) = fed {
-                let offset = self.pos;
+                let offset = self.offset();
                 return read.map_err(|reason| DecodeError { offset, reason });
             }
         }
         return self.fail("the input ends inside a varint");
+    }
+
+    /// The bytes a length prefix and the value behind it take, the prefix being
+    /// next. Past the 2 GiB a decode holds, it fails.
+    fn length_prefixed_size(&mut self) -> Result<i32, DecodeError> {
+        let start = self.pos;
+        let n = self.varint()?;
+        let prefix = self.pos - start;
+        if n > (i32::MAX - prefix) as u64 {
+            return self.fail("a length is past the 2 GiB a decode holds");
+        }
+        return Result::Ok(prefix + n as i32);
     }
 
     fn advance(&mut self, n: i32) -> Result<i32, DecodeError> {
@@ -602,8 +790,14 @@ impl Reader {
 
     fn fixed32(&mut self) -> Result<u32, DecodeError> {
         let at = self.advance(4)?;
+        // `advance` kept the four bytes inside `end`.
         let b = &self.input;
-        return Result::Ok(b[at] as u32 | b[at + 1] as u32 << 8 | b[at + 2] as u32 << 16 | b[at + 3] as u32 << 24);
+        return Result::Ok(
+            unchecked b.byte(at) as u32
+                | unchecked b.byte(at + 1) as u32 << 8
+                | unchecked b.byte(at + 2) as u32 << 16
+                | unchecked b.byte(at + 3) as u32 << 24,
+        );
     }
 
     fn fixed64(&mut self) -> Result<u64, DecodeError> {
@@ -621,10 +815,11 @@ impl Reader {
         return Result::Ok(n as i32);
     }
 
-    fn length_delimited(&mut self) -> Result<ByteSlice, DecodeError> {
+    /// Where a length-delimited value starts and ends.
+    fn length_delimited(&mut self) -> Result<[i32, i32], DecodeError> {
         let n = self.length()?;
         let at = self.advance(n)?;
-        return Result::Ok(self.input.slice(at, at + n));
+        return Result::Ok([at, at + n]);
     }
 
     fn read_tag(&mut self) -> Result<(), DecodeError> {
@@ -752,7 +947,7 @@ impl Reader {
     /// would have been.
     fn keep_unpacked(&mut self, element: WireType, start: i32) {
         push_varint(&mut self.stray, tag_of(self.number, element));
-        self.stray.extend_from_slice(self.input.slice(start, self.pos) as Slice<u8>);
+        self.stray.extend(&self.input.bytes_between(start, self.pos));
     }
 
     /// A message field, merged into what `slot` already holds.
@@ -903,7 +1098,7 @@ trait EntryValue with () {
 
     /// Read the value field into `v`, answering whether the type holds what
     /// was read.
-    fn read(r: &mut Reader, v: &mut Self::Value) -> Result<bool, DecodeError>;
+    fn read<B: Input>(r: &mut Reader<B>, v:&mut Self::Value) -> Result<bool, DecodeError>;
 }
 
 struct ScalarEntry<T> {
@@ -920,7 +1115,7 @@ impl<T: Scalar> EntryValue for ScalarEntry<T> {
         return T::zero();
     }
 
-    fn read(r: &mut Reader, v: &mut T::Value) -> Result<bool, DecodeError> {
+    fn read<B: Input>(r: &mut Reader<B>, v:&mut T::Value) -> Result<bool, DecodeError> {
         let Some(taken) = T::take(r)? else {
             return Result::Ok(false);
         };
@@ -943,7 +1138,7 @@ impl<M: Message + Default> EntryValue for MessageEntry<M> {
         return M::default();
     }
 
-    fn read(r: &mut Reader, v: &mut M) -> Result<bool, DecodeError> {
+    fn read<B: Input>(r: &mut Reader<B>, v:&mut M) -> Result<bool, DecodeError> {
         r.merge_nested(v)?;
         return Result::Ok(true);
     }
@@ -971,7 +1166,7 @@ impl Scalar for Int32 {
         w.varint(*v as i64 as u64);
     }
 
-    fn take(r: &mut Reader) -> Result<Option<i32>, DecodeError> {
+    fn take<B: Input>(r: &mut Reader<B>) ->Result<Option<i32>, DecodeError> {
         return Result::Ok(Option::Some(r.varint()? as i32));
     }
 }
@@ -998,7 +1193,7 @@ impl Scalar for Int64 {
         w.varint(*v as u64);
     }
 
-    fn take(r: &mut Reader) -> Result<Option<i64>, DecodeError> {
+    fn take<B: Input>(r: &mut Reader<B>) ->Result<Option<i64>, DecodeError> {
         return Result::Ok(Option::Some(r.varint()? as i64));
     }
 }
@@ -1025,7 +1220,7 @@ impl Scalar for UInt32 {
         w.varint(*v as u64);
     }
 
-    fn take(r: &mut Reader) -> Result<Option<u32>, DecodeError> {
+    fn take<B: Input>(r: &mut Reader<B>) ->Result<Option<u32>, DecodeError> {
         return Result::Ok(Option::Some(r.varint()? as u32));
     }
 }
@@ -1052,7 +1247,7 @@ impl Scalar for UInt64 {
         w.varint(*v);
     }
 
-    fn take(r: &mut Reader) -> Result<Option<u64>, DecodeError> {
+    fn take<B: Input>(r: &mut Reader<B>) ->Result<Option<u64>, DecodeError> {
         return Result::Ok(Option::Some(r.varint()?));
     }
 }
@@ -1096,7 +1291,7 @@ impl Scalar for SInt32 {
         w.varint(zigzag_32(*v));
     }
 
-    fn take(r: &mut Reader) -> Result<Option<i32>, DecodeError> {
+    fn take<B: Input>(r: &mut Reader<B>) ->Result<Option<i32>, DecodeError> {
         return Result::Ok(Option::Some(unzigzag_32(r.varint()?)));
     }
 }
@@ -1123,7 +1318,7 @@ impl Scalar for SInt64 {
         w.varint(zigzag_64(*v));
     }
 
-    fn take(r: &mut Reader) -> Result<Option<i64>, DecodeError> {
+    fn take<B: Input>(r: &mut Reader<B>) ->Result<Option<i64>, DecodeError> {
         return Result::Ok(Option::Some(unzigzag_64(r.varint()?)));
     }
 }
@@ -1150,7 +1345,7 @@ impl Scalar for Fixed32 {
         w.fixed32(*v);
     }
 
-    fn take(r: &mut Reader) -> Result<Option<u32>, DecodeError> {
+    fn take<B: Input>(r: &mut Reader<B>) ->Result<Option<u32>, DecodeError> {
         return Result::Ok(Option::Some(r.fixed32()?));
     }
 }
@@ -1177,7 +1372,7 @@ impl Scalar for Fixed64 {
         w.fixed64(*v);
     }
 
-    fn take(r: &mut Reader) -> Result<Option<u64>, DecodeError> {
+    fn take<B: Input>(r: &mut Reader<B>) ->Result<Option<u64>, DecodeError> {
         return Result::Ok(Option::Some(r.fixed64()?));
     }
 }
@@ -1204,7 +1399,7 @@ impl Scalar for SFixed32 {
         w.fixed32(*v as u32);
     }
 
-    fn take(r: &mut Reader) -> Result<Option<i32>, DecodeError> {
+    fn take<B: Input>(r: &mut Reader<B>) ->Result<Option<i32>, DecodeError> {
         return Result::Ok(Option::Some(r.fixed32()? as i32));
     }
 }
@@ -1231,7 +1426,7 @@ impl Scalar for SFixed64 {
         w.fixed64(*v as u64);
     }
 
-    fn take(r: &mut Reader) -> Result<Option<i64>, DecodeError> {
+    fn take<B: Input>(r: &mut Reader<B>) ->Result<Option<i64>, DecodeError> {
         return Result::Ok(Option::Some(r.fixed64()? as i64));
     }
 }
@@ -1258,7 +1453,7 @@ impl Scalar for Bool {
         w.varint(if *v { 1 } else { 0 });
     }
 
-    fn take(r: &mut Reader) -> Result<Option<bool>, DecodeError> {
+    fn take<B: Input>(r: &mut Reader<B>) ->Result<Option<bool>, DecodeError> {
         return Result::Ok(Option::Some(r.varint()? != 0));
     }
 }
@@ -1290,7 +1485,7 @@ impl Scalar for Float {
         w.fixed32(v.to_bits());
     }
 
-    fn take(r: &mut Reader) -> Result<Option<f32>, DecodeError> {
+    fn take<B: Input>(r: &mut Reader<B>) ->Result<Option<f32>, DecodeError> {
         return Result::Ok(Option::Some(f32::from_bits(r.fixed32()?)));
     }
 }
@@ -1321,7 +1516,7 @@ impl Scalar for Double {
         w.fixed64(v.to_bits());
     }
 
-    fn take(r: &mut Reader) -> Result<Option<f64>, DecodeError> {
+    fn take<B: Input>(r: &mut Reader<B>) ->Result<Option<f64>, DecodeError> {
         return Result::Ok(Option::Some(f64::from_bits(r.fixed64()?)));
     }
 }
@@ -1349,9 +1544,9 @@ impl Scalar for Str {
         w.length_delimited(v.as_byte_slice());
     }
 
-    fn take(r: &mut Reader) -> Result<Option<String>, DecodeError> {
-        let bytes = r.length_delimited()?;
-        let Ok(text) = String::try_from_utf8(bytes) else {
+    fn take<B: Input>(r: &mut Reader<B>) ->Result<Option<String>, DecodeError> {
+        let [start, end] = r.length_delimited()?;
+        let Ok(text) = r.input.text_between(start, end) else {
             return r.fail("a string field is not UTF-8");
         };
         return Result::Ok(Option::Some(text));
@@ -1380,8 +1575,9 @@ impl Scalar for Bytes {
         w.length_delimited(v.as_byte_slice());
     }
 
-    fn take(r: &mut Reader) -> Result<Option<ByteList>, DecodeError> {
-        return Result::Ok(Option::Some(r.length_delimited()?.to_list() as ByteList));
+    fn take<B: Input>(r: &mut Reader<B>) ->Result<Option<ByteList>, DecodeError> {
+        let [start, end] = r.length_delimited()?;
+        return Result::Ok(Option::Some(r.input.bytes_between(start, end)));
     }
 }
 
@@ -1408,7 +1604,7 @@ impl<E: Enumeration> Scalar for Enum<E> {
         Int32::put(w, &v.number());
     }
 
-    fn take(r: &mut Reader) -> Result<Option<E>, DecodeError> {
+    fn take<B: Input>(r: &mut Reader<B>) ->Result<Option<E>, DecodeError> {
         return Result::Ok(E::from_number(r.varint()? as i32));
     }
 }

@@ -59,6 +59,12 @@ pub fn emit(file: &ProtoFile, runtime: String) -> Result<String, EmitError> {
     if e.uses_map {
         w.line("use { TreeMap } from \"core:collections\";");
     }
+    for let plan of &messages {
+        if plan.reads_each() {
+            w.line("use { LinearBuffer } from \"core:linear\";");
+            break;
+        }
+    }
     w.line(`use ${RUNTIME} from "${runtime}";`);
     for let plan of &enums {
         w.blank();
@@ -266,6 +272,16 @@ impl MessagePlan {
 
     /// A function per repeated message field that reads its values out of an
     /// encoded message one at a time.
+    /// Whether a field is read one value at a time, which `write_each` writes.
+    fn reads_each(&self) -> bool {
+        for let slot of &self.slots {
+            if let Field([_, a]) = slot && a.element matches { Some(_) } {
+                return true;
+            }
+        }
+        return false;
+    }
+
     fn write_each(&self, w: &mut CodeWriter) {
         let mut opened = false;
         for let slot of &self.slots {
@@ -281,8 +297,8 @@ impl MessagePlan {
                 opened = true;
             }
             let wire = if a.put == Call::Groups { "SGroup" } else { "Len" };
-            w.begin(`pub fn ${field}_of<S: AsByteSlice>(input: S) -> ${RUNTIME}::Each<${element}>`);
-            w.line(`return ${RUNTIME}::each::<${element}, S>(input, ${a.number}, ${RUNTIME}::WireType::${wire});`);
+            w.begin(`pub fn ${field}_of(input: LinearBuffer) -> ${RUNTIME}::Each<${element}>`);
+            w.line(`return ${RUNTIME}::each::<${element}>(input, ${a.number}, ${RUNTIME}::WireType::${wire});`);
             w.end();
         }
         if opened {
@@ -312,7 +328,7 @@ impl MessagePlan {
         w.end();
         w.blank();
         w.begin(
-            `fn merge_field(&mut self, number: i32, r: &mut ${RUNTIME}::Reader) -> Result<bool, ${RUNTIME}::DecodeError>`,
+            `fn merge_field<B: ${RUNTIME}::Input>(&mut self, number: i32, r: &mut ${RUNTIME}::Reader<B>) -> Result<bool, ${RUNTIME}::DecodeError>`,
         );
         if !self.slots.is_empty() {
             w.begin("match number");
@@ -795,7 +811,7 @@ fn claim_field_name(
 
 /// A generated type's name, suffixed where it would shadow what the module imports.
 fn type_name_of(name: String) -> String {
-    if is_reserved(&name) || name == RUNTIME || name == "TreeMap" {
+    if is_reserved(&name) || name == RUNTIME || name == "TreeMap" || name == "LinearBuffer" {
         return `${name}_`;
     }
     return name;

@@ -1,5 +1,6 @@
 // Schemas compiled by Grog, encoded and decoded by its runtime.
 use { TreeMap } from "core:collections";
+use { LinearArray, LinearBuffer } from "core:linear";
 use grog from "lib:grog";
 use { Account, AccountAddress, AccountContact, Spread, SpreadPick, Status } from "./demo.proto"
     with {
@@ -29,6 +30,29 @@ fn unhex(text: String) -> ByteList {
         out.push(u8::from_str_radix(view.slice(i, i + 2), 16).unwrap());
     }
     return out;
+}
+
+fn held(bytes: &ByteList) -> LinearBuffer {
+    return LinearBuffer::of(LinearArray::from_slice(bytes));
+}
+
+/// Serves `content` three bytes a read, so every field straddles a read.
+struct Trickle {
+    content: ByteList,
+    at: i32,
+}
+
+impl Stream<u8> for Trickle {
+    fn begin_read(&mut self, this: &Stream<u8>, max: i32, into: ReadInto) -> StartedRead<u8> {
+        let _ = [this, into];
+        let end = i32::min(self.content.len(), self.at + i32::min(max, 3));
+        let items = self.content[self.at..<end].to_list() as List<u8>;
+        self.at = end;
+        let result = if end == self.content.len() { CopyResult::Dropped } else { CopyResult::Completed };
+        resume StartedRead::settled(StreamChunk { items, result });
+    }
+
+    ..forward
 }
 
 test "an empty proto3 message is no bytes" {
@@ -124,24 +148,84 @@ test "a repeated message field is read one value at a time" {
         address: Option::Some(AccountAddress { city: "Kyoto" }),
     };
     let mut read: List<AccountAddress> = [];
-    for let a of Account::history_of(&grog::encode(&account)) {
+    for let a of Account::history_of(held(&grog::encode(&account))) {
         read.push(a.unwrap());
     }
     assert read == account.history;
 }
 
+test "a repeated message is read one value at a time off a stream" {
+    let account = Account {
+        name: "a name longer than one read",
+        history: [
+            AccountAddress { city: "Osaka", zip: 5300001 },
+            AccountAddress { city: "Kyoto" },
+        ],
+        scores: [1, -1, 300],
+    };
+    let [rx, tx] = Stream::<u8>::new();
+    tx.drop();
+    let mut source = Trickle { content: grog::encode(&account), at: 0 };
+    let read: List<Result<AccountAddress, grog::DecodeError>> = with &mut source do {
+        Account::history_of(LinearBuffer::of_stream(rx)).collect();
+    };
+    assert read.len() == 2;
+    assert read[0].unwrap() == account.history[0];
+    assert read[1].unwrap() == account.history[1];
+}
+
 test "a repeated message read one at a time skips a value of another wire type" {
-    // Field 14 as a varint, then as the message `{ zip: 1 }`.
-    let read: List<Result<AccountAddress, grog::DecodeError>> = Account::history_of(&unhex("700572021001")).collect();
+    // Field 14 as a varint, then as the message `{ zip: 1 }`, around a fixed32
+    // and a fixed64 field.
+    let input = unhex("700535ffffffff72021001390000000000000000");
+    let read: List<Result<AccountAddress, grog::DecodeError>> = Account::history_of(held(&input)).collect();
     assert read.len() == 1;
     assert read[0].unwrap().zip == 1;
 }
 
 test "a repeated message read one at a time stops at a malformed input" {
-    let read: List<Result<AccountAddress, grog::DecodeError>> = Account::history_of(&unhex("7202100172")).collect();
+    let read: List<Result<AccountAddress, grog::DecodeError>> = Account::history_of(held(&unhex("7202100172"))).collect();
     assert read.len() == 2;
     assert read[0].unwrap().zip == 1;
-    assert read[1] matches { Err(_) };
+    assert read[1] matches { Err(e) && e.offset == 5 };
+}
+
+test "a value cut short off a stream is refused where it starts, as a decode refuses it" {
+    let [rx, tx] = Stream::<u8>::new();
+    tx.drop();
+    let mut source = Trickle { content: unhex("720210017205100110"), at: 0 };
+    let read: List<Result<AccountAddress, grog::DecodeError>> = with &mut source do {
+        Account::history_of(LinearBuffer::of_stream(rx)).collect();
+    };
+    assert read.len() == 2;
+    assert read[1] matches { Err(e) && e.offset == 6 };
+}
+
+test "messages one after another are read each behind its length" {
+    let first = AccountAddress { city: "Osaka" };
+    let second = AccountAddress {};
+    let third = AccountAddress { zip: 1 };
+    let mut input = grog::encode_delimited(&first);
+    input.extend(&grog::encode_delimited(&second));
+    input.extend(&grog::encode_delimited(&third));
+    assert input.to_hex() == "070a054f73616b6100021001";
+    let [rx, tx] = Stream::<u8>::new();
+    tx.drop();
+    let mut source = Trickle { content: input, at: 0 };
+    let read: List<Result<AccountAddress, grog::DecodeError>> = with &mut source do {
+        grog::delimited::<AccountAddress>(LinearBuffer::of_stream(rx)).collect();
+    };
+    assert read.len() == 3;
+    assert read[0].unwrap() == first;
+    assert read[1].unwrap() == second;
+    assert read[2].unwrap() == third;
+}
+
+test "a delimited message cut short is refused" {
+    let read: List<Result<AccountAddress, grog::DecodeError>> = grog::delimited::<AccountAddress>(held(&unhex("0210010310"))).collect();
+    assert read.len() == 2;
+    assert read[0].unwrap().zip == 1;
+    assert read[1] matches { Err(e) && e.offset == 4 };
 }
 
 test "a repeated group is read one value at a time" {
@@ -152,7 +236,26 @@ test "a repeated group is read one value at a time" {
             legacy::RecordTag {},
         ],
     };
-    let read: List<Result<legacy::RecordTag, grog::DecodeError>> = legacy::Record::tag_of(&grog::encode(&record)).collect();
+    let read: List<Result<legacy::RecordTag, grog::DecodeError>> = legacy::Record::tag_of(held(&grog::encode(&record))).collect();
+    assert read.len() == 2;
+    assert read[0].unwrap() == record.tag[0];
+    assert read[1].unwrap() == record.tag[1];
+}
+
+test "a repeated group is read one value at a time off a stream" {
+    let record = legacy::Record {
+        id: Option::Some(1),
+        tag: [
+            legacy::RecordTag { name: Option::Some("a name that spans reads") },
+            legacy::RecordTag {},
+        ],
+    };
+    let [rx, tx] = Stream::<u8>::new();
+    tx.drop();
+    let mut source = Trickle { content: grog::encode(&record), at: 0 };
+    let read: List<Result<legacy::RecordTag, grog::DecodeError>> = with &mut source do {
+        legacy::Record::tag_of(LinearBuffer::of_stream(rx)).collect();
+    };
     assert read.len() == 2;
     assert read[0].unwrap() == record.tag[0];
     assert read[1].unwrap() == record.tag[1];
