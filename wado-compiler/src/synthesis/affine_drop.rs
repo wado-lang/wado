@@ -5,7 +5,8 @@
 //! within one. A `return`, `break` or `continue` drops the same way each scope
 //! it leaves. No path is analysed: a local that a path moved is null on that
 //! path. A temporary that is only referenced has no other owner, so it is
-//! spilled into a local that drops when its statement ends.
+//! spilled into a local that drops when its statement ends, or its block where
+//! a `let` keeps the borrow.
 
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -1646,7 +1647,9 @@ fn elab_expr(expr: &mut TirExpr, consuming: bool, cx: &mut Cx) {
             op: TirUnaryOp::Deref,
             expr: inner,
         } => {
-            cx.extension = if extended { Extension::Place } else { Extension::None };
+            if extended {
+                cx.extension = Extension::Place;
+            }
             elab_expr(inner, false, cx);
         }
         // Casts and projections keep the surrounding ownership context:
@@ -1679,7 +1682,9 @@ fn elab_expr(expr: &mut TirExpr, consuming: bool, cx: &mut Cx) {
                 take_field(expr, cx);
             } else {
                 // Reading a field that owns nothing leaves the aggregate whole.
-                cx.extension = if extended { Extension::Place } else { Extension::None };
+                if extended {
+                    cx.extension = Extension::Place;
+                }
                 elab_expr(inner, false, cx);
             }
         }
@@ -2318,8 +2323,8 @@ fn is_temporary(expr: &TirExpr, cx: &Cx) -> bool {
 /// already. Returns the local.
 fn spill_temporary(expr: &mut TirExpr, extended: bool, cx: &mut Cx) -> TirExpr {
     let type_id = expr.type_id;
-    let owns_temporaries = cx.scopes.last().expect("a scope is open").temporaries
-        == TemporaryScope::Statement;
+    let owns_temporaries =
+        cx.scopes.last().expect("a scope is open").temporaries == TemporaryScope::Statement;
     let (local, name) = spill_as_local(expr, !(extended && owns_temporaries), cx);
     let value = std::mem::replace(expr, local_ref(local, &name, type_id));
     wrap_in_block(expr, |read| {

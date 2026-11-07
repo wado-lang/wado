@@ -530,8 +530,8 @@ enum Gone {
 
 /// A local a reference reaches into: the binding, the field path into it,
 /// which binding of it, since a loop binds its locals afresh each iteration,
-/// and how many `&mut` uses of it came before. A temporary is one too: the
-/// expression, and the region it lives as long as for its instance.
+/// and how many `&mut` uses of it came before. A temporary is one too: its
+/// expression, its instance the region it lives as long as.
 #[derive(Clone, PartialEq, Eq, Hash)]
 struct Owner {
     def: AstId,
@@ -2306,7 +2306,7 @@ fn keeps_whole(pattern: &Pattern) -> bool {
 
 /// How a `let` keeps what its initializer holds: the value itself, or a borrow
 /// of the place. Drop elaboration extends the same temporaries.
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 enum Extension {
     Value,
     Place,
@@ -2316,23 +2316,18 @@ enum Extension {
 /// Rust's temporary lifetime extension: the operand of a borrow the `let`
 /// keeps, through a literal's operands, a cast, a field read or a dereference.
 fn extended_temporaries(expr: &Expr, extension: Extension, out: &mut IndexSet<AstId>) {
-    if matches!(extension, Extension::Place) && is_temporary(expr) {
+    let place = extension == Extension::Place;
+    if place && is_temporary(expr) {
         out.insert(expr.id());
     }
     match expr {
         Expr::Unary(u) if matches!(u.op, ast::UnaryOp::Ref | ast::UnaryOp::MutRef) => {
             extended_temporaries(&u.expr, Extension::Place, out);
         }
-        Expr::Unary(u) if u.op == ast::UnaryOp::Deref => {
-            if matches!(extension, Extension::Place) {
-                extended_temporaries(&u.expr, Extension::Place, out);
-            }
+        Expr::Unary(u) if place && u.op == ast::UnaryOp::Deref => {
+            extended_temporaries(&u.expr, Extension::Place, out);
         }
-        Expr::FieldAccess(fa) => {
-            if matches!(extension, Extension::Place) {
-                extended_temporaries(&fa.expr, Extension::Place, out);
-            }
-        }
+        Expr::FieldAccess(fa) if place => extended_temporaries(&fa.expr, Extension::Place, out),
         Expr::Cast(c) => extended_temporaries(&c.expr, extension, out),
         Expr::StructLiteral(s) => {
             for field in &s.fields {
