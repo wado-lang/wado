@@ -20,8 +20,9 @@ use { Document } from "./document.wado";
 use { JsonTypes, Schema, SchemaObject, pointer_token } from "./schema.wado";
 
 /// A type whose JSON form a schema describes. Every value `core:json` writes
-/// for the type validates against the schema, and every document that
-/// validates decodes into the type.
+/// for the type validates against the schema. A document that validates may
+/// still not decode, where the type reads text the schema does not constrain,
+/// such as a date or base64url bytes.
 pub trait JsonSchema with () {
     fn json_schema(gen: &mut SchemaGenerator) -> Schema;
 }

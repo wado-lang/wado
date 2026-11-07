@@ -30,10 +30,12 @@ global SKIPPED_FILES: List<[String, String]> = [
 global VALUE_KEYWORDS: List<String> = ["const", "enum", "default", "examples"];
 
 export fn run() with (Stdout, Preopens) {
+    // Read before removing, so a missing suite leaves the generated tests.
+    let entries = fs::read_dir(&SUITE).unwrap();
     fs::remove_dir_all(&OUT).unwrap();
     fs::create_dir_all(&OUT).unwrap();
     let mut files: List<String> = [];
-    for let entry of fs::read_dir(&SUITE).unwrap() {
+    for let entry of entries {
         if fs::extension(&entry.name) matches { Some("json") } {
             files.push(entry.name);
         }

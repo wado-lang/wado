@@ -147,27 +147,25 @@ impl Display for Uri {
 
 /// `path` without its `.` and `..` segments (§5.2.4).
 fn remove_dot_segments(path: &String) -> String {
-    let mut input = *path;
-    let mut out = "";
+    let mut input = path.as_str_slice();
+    let mut out = String::with_capacity(path.len());
     while !input.is_empty() {
         if input.starts_with("../") {
-            input = input.substr_bytes(3, input.len());
-        } else if input.starts_with("./") {
-            input = input.substr_bytes(2, input.len());
-        } else if input.starts_with("/./") {
-            input = input.substr_bytes(2, input.len());
+            input = input.slice(3, input.len());
+        } else if input.starts_with("./") || input.starts_with("/./") {
+            input = input.slice(2, input.len());
         } else if input == "/." {
-            input = "/";
+            input = "/".as_str_slice();
         } else if input.starts_with("/../") || input == "/.." {
-            input = if input == "/.." { "/" } else { input.substr_bytes(3, input.len()) };
+            input = if input == "/.." { "/".as_str_slice() } else { input.slice(3, input.len()) };
             out.truncate(out.rfind("/").unwrap_or(0));
         } else if input == "." || input == ".." {
-            input = "";
+            break;
         } else {
             let from = if input.starts_with("/") { 1 } else { 0 };
-            let end = from + input.substr_bytes(from, input.len()).find("/").unwrap_or(input.len() - from);
-            out.push_str(input.substr_bytes(0, end));
-            input = input.substr_bytes(end, input.len());
+            let end = from + input.slice(from, input.len()).find("/").unwrap_or(input.len() - from);
+            out.push_str(input.slice(0, end));
+            input = input.slice(end, input.len());
         }
     }
     return out;
